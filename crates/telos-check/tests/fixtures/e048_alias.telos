@@ -1,0 +1,7 @@
+type Handler<T> = fn(T) -> Result<Unit, IoError>
+type Pair = (Int, Missing)
+type Count = Int
+
+fn run(h: Handler, n: Count<Int>, ok: Handler<Count>) -> Int {
+  return 0
+}

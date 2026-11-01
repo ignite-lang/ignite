@@ -1,0 +1,20 @@
+fn rd(s: TcpStream) -> Result<Input, IoError> requires [s.read] = s.read(1)
+
+fn make() -> (fn(s: TcpStream) -> Result<Input, IoError> requires [s.read]) = rd
+
+fn via_call(stream: TcpStream) -> Result<Input, IoError> requires [] {
+  let g = make()
+  return g(stream)
+}
+
+fn via_tuple(stream: TcpStream) -> Result<Input, IoError> requires [] {
+  let (g, n) = (make(), 1)
+  return g(stream)
+}
+
+const F: fn(s: TcpStream) -> Result<Input, IoError> requires [s.read] = rd
+
+fn via_const(stream: TcpStream) -> Result<Input, IoError> requires [] {
+  let g = F
+  return g(stream)
+}

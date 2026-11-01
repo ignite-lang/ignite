@@ -1,0 +1,82 @@
+package fixtures.tests
+
+import std.shapes.{Point, Shape, origin, dot}
+
+enum Event { Nothing, Byte(Byte), Word(Text) }
+
+fn split_once(text: Text, at: Int) -> Option<(Text, Text)> {
+  if at > text.len() {
+    return None
+  }
+  return Some((text, text))
+}
+
+fn decode(byte: Byte) -> (Int, Event) = (1, if byte == 255 { Nothing } else { Byte(byte) })
+
+fn to_text(event: Event) -> Text = match event {
+  Nothing => "nothing"
+  Byte(b) => "byte {b}"
+  Word(w) => w
+}
+
+fn parse(text: Text) -> Result<Int, IoError> = match Int.parse(text) {
+  Some(n) => Ok(n)
+  None => Err(IoError.new("not a number"))
+}
+
+fn echo(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  let input = stream.read(16)?
+  match input {
+    Data(bytes) => stream.write_all(bytes)?
+    Eof => {}
+  }
+  return Ok(())
+}
+
+fn checked(x: Int) -> Int {
+  assert x >= 0, "x is {x}"
+  return x
+}
+
+test fn sample() -> Event = Word("w")
+
+test type Case { input: Text, at: Int, expected: Option<(Text, Text)> }
+
+test const LIMIT: Int = 3
+
+test "split_once splits" {
+  assert split_once("a=b", 1) == Some(("a=b", "a=b"))
+  assert split_once("abc", 9) == None
+  assert None == split_once("abc", 9)
+  let case = Case { input = "x", at = 0, expected = Some(("x", "x")) }
+  assert split_once(case.input, case.at) == case.expected, "case {case.input}"
+}
+
+test "IAC IAC is a literal 255" {
+  let (_, event) = decode(255.to_byte()?)
+  assert event == Nothing, "first IAC must be swallowed"
+  assert sample() != event
+  assert [1, 2] == [1, 2]
+  assert origin() == Point { x = 0, y = 0 }
+  assert dot(origin()) != Shape.Empty
+  assert (1 == 1) && true
+}
+
+test "? takes Result and Option" {
+  let n = parse("42")?
+  let m = Int.parse("7")?
+  assert n + m == 49
+  assert checked(LIMIT) == LIMIT
+  if n > 100 {
+    return
+  }
+}
+
+test "a test may do IO and spawn" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  spawn echo(server)
+  client.write_all(b"hi")?
+  Stdout.write_all(b"done\n")?
+}

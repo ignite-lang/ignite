@@ -1,0 +1,5 @@
+fn show<T>(value: T) -> Text {
+  let copied = value.copy()
+  let length = value.len()
+  return value.to_text()
+}

@@ -1,0 +1,24 @@
+package fixtures.valid
+
+import std.io.IoError
+
+enum Shape { Dot, Line(Int) }
+
+type Point {
+  x: Int
+  y: Int
+}
+
+fn length(shape: Shape) -> Int {
+  return match shape {
+    Dot => 0
+    Line(n) => n
+  }
+}
+
+fn main() -> Result<Unit, IoError> requires [log] {
+  let p = Point { x = 1, y = 2 }
+  var total = p.x + p.y * 2
+  total = total + length(Line(3)); total = total - 1
+  return Ok(Unit)
+}

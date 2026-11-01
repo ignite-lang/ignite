@@ -1,0 +1,6 @@
+e031_unknown_name.telos:1:32: error[E031]: module `std.greeting` has no `Farewell`
+e031_unknown_name.telos:2:35: error[E031]: module `std.protocol.hello` does not export `send`; imports are not re-exported, import it from `std.greeting`
+e031_unknown_name.telos:3:21: error[E031]: module `std.greeting` has no `Option`
+e031_unknown_name.telos:4:8: error[E031]: cannot import from `app.util`: only standard-library (`std.*`) modules can be imported in this slice
+e031_unknown_name.telos:5:8: error[E031]: unknown module `std`
+e031_unknown_name.telos:6:8: error[E031]: `import Greeting` names no module; import names from a module, e.g. `import std.console.{Console}`

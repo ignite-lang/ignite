@@ -1,0 +1,58 @@
+fn fetch() -> Int requires [net] {
+  return 1
+}
+
+fn work() -> Result<Unit, IoError> requires [net] {
+  return Ok(Unit)
+}
+
+fn inferred() -> Int {
+  return fetch()
+}
+
+fn spawner() {
+  spawn work()
+}
+
+fn send(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {
+  return stream.write_all("hi".to_bytes())
+}
+
+fn forward(out: TcpStream) -> Result<Unit, IoError> = send(out)
+
+fn serve(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {
+  forward(stream)?
+  stream.forward()?
+  spawn stream.forward()
+  return send(stream)
+}
+
+fn ping(n: Int) -> Result<Unit, IoError> {
+  if n > 0 {
+    return pong(n - 1)
+  }
+  return Ok(Unit)
+}
+
+fn pong(n: Int) -> Result<Unit, IoError> {
+  Stdout.write_all("p".to_bytes())?
+  return ping(n)
+}
+
+fn play() -> Result<Unit, IoError> requires [stdout.write] {
+  return ping(3)
+}
+
+fn first(stream: TcpStream) -> Result<Input, IoError> requires [stream.read] {
+  let input = stream.read(1)?
+  return Ok(input)
+}
+
+fn double(n: Int) -> Int = n * 2
+
+fn run() -> Int requires [net] {
+  let n = double(2)
+  return 2.double() + n
+}
+
+const DOUBLED: Int = double(4)

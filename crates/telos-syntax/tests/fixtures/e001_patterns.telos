@@ -1,0 +1,7 @@
+fn f(o: Option<Int>) {
+  let Some(x) = o
+}
+
+fn g() {
+  let t = (1,)
+}

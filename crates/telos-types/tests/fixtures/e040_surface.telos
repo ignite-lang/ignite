@@ -1,0 +1,41 @@
+const LIMIT: Int = 10
+const NAME: Text = "x"
+const NONE: Option<Int> = None
+
+type Config {
+  port: Int = "2324"
+}
+
+fn patterns(n: Int, p: (Int, Bool), b: Byte) -> Int {
+  let a = match n {
+    true => 1
+    NAME => 2
+    NONE => 3
+    _ => 0
+  }
+  let c = match p {
+    (x, y, z) => 1
+    [x] => 2
+    () => 3
+    _ => 0
+  }
+  let d = match b {
+    LIMIT => 1
+    _ => 0
+  }
+  return a + c + d
+}
+
+fn tuples() -> (Int, Text) {
+  let (x, y) = 1
+  let t: (Int, Bool) = (1, "no")
+  return (1, 2)
+}
+
+fn returns(n: Int) -> Int {
+  let v = match n {
+    0 => return "zero"
+    _ => n
+  }
+  return v + "text".len() + ("a" + 1)
+}

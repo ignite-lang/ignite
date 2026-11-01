@@ -1,0 +1,10 @@
+type Point {
+  x: Int
+}
+
+fn f(a: Text, b: Bool, p: Point) -> Bool {
+  let c = a + a
+  let d = b < b
+  let e = -a
+  return p == p
+}

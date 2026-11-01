@@ -1,0 +1,78 @@
+package probe.params
+
+import std.json.{MAXIMUM_DEPTH}
+
+type Cfg {
+  depth: Int = MAXIMUM_DEPTH
+  name: Text = "x"
+}
+
+type Pair<A, B> {
+  first: A
+  second: B
+}
+
+fn both<T>(x: T) -> (T, T) = (x, x)
+
+fn pass<T>(x: T, f: fn(T) -> T) -> T = f(x)
+
+fn first<A, B>(p: Pair<A, B>) -> A = p.first
+
+fn double(n: Int) -> Int = n * 2
+
+fn use_first(p: Pair<Int, Text>) -> Int = pass(p.first, double)
+
+fn label<A>(p: Pair<A, Text>) -> Text = p.second
+
+fn labels(ps: List<Pair<Int, Text>>) -> List<Text> = ps.map(label)
+
+fn count(n: Int) -> Int {
+  var m = n
+  m = m + 1
+  m
+}
+
+fn grow(xs: List<Int>) -> List<Int> {
+  var xs = xs
+  xs.push(1)
+  xs
+}
+
+fn shadow(s: Text, n: Int) -> Bool {
+  let s = n
+  s == 1
+}
+
+fn cmp(a: Text, b: Text) -> Bool = a == b
+
+fn pick(xs: List<Text>, i: Int) -> Text = xs[i]
+
+fn tail_field(p: Pair<Int, Text>) -> Text = p.second
+
+fn join_all(parts: List<Text>, sep: Text) -> Text = parts.join(sep)
+
+fn to_t(b: Bytes) -> Text = b.to_text()
+
+fn cfg() -> Cfg = Cfg { name = "n" }
+
+fn generic_both(p: Pair<Int, Text>) -> (Pair<Int, Text>, Pair<Int, Text>) = both(p)
+
+fn apply_id<T>(x: T) -> T = pass(x, identity)
+
+fn identity<T>(x: T) -> T = x
+
+fn starts(t: Text, p: Text) -> Bool = t.starts_with(p)
+
+test "params" {
+  assert count(1) == 2
+  assert grow([0]) == [0, 1]
+  assert shadow("s", 1) == true
+  assert cmp("a", "a") == true
+  assert pick(["a", "b"], 1) == "b"
+  assert use_first(Pair { first = 2, second = "t" }) == 4
+  assert labels([Pair { first = 1, second = "one" }]) == ["one"]
+  assert cfg().depth == 64
+  assert apply_id("z") == "z"
+  assert join_all(["a", "b"], "-") == "a-b"
+  assert starts("abc", "ab") == true
+}

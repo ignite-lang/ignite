@@ -1,0 +1,15 @@
+type H {
+  run: fn(a: TcpStream, b: TcpStream) -> Result<Input, IoError> requires [a.read]
+}
+
+fn readit(x: TcpStream, y: TcpStream) -> Result<Input, IoError> requires [x.read] = x.read(10)
+
+fn swapped(h: H, p: TcpStream, q: TcpStream) -> Result<Input, IoError> requires [p.read] {
+  return h.run(q, p)
+}
+
+fn right(h: H, p: TcpStream, q: TcpStream) -> Result<Input, IoError> requires [p.read] {
+  return h.run(p, q)
+}
+
+fn make() -> H = H { run = readit }

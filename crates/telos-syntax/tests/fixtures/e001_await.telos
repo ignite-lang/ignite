@@ -1,0 +1,3 @@
+fn main() requires [stdin.read] {
+  let input = await Stdin.read(16)
+}

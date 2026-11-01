@@ -1,0 +1,20 @@
+type Counter {
+  value: Int
+  step: fn(Int) -> Int
+  bump: fn(Int) -> Int
+}
+
+fn bump(c: Counter) -> Int = c.value + 1
+
+fn len(c: Counter) -> Int = c.value
+
+fn half(n: Int) -> Int = n / 2
+
+fn use(c: Counter, t: Text) -> Int {
+  let a = c.step(1)
+  let b = c.bump()
+  let d = c.len()
+  let f = t.half()
+  let g = c.missing()
+  return a
+}

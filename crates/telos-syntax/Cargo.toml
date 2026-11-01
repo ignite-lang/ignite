@@ -1,0 +1,8 @@
+[package]
+name = "telos-syntax"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Telos lexer, parser, AST and diagnostics."
+
+[dependencies]

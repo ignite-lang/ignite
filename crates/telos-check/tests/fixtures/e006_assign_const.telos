@@ -1,0 +1,11 @@
+import std.greeting.{Greeting, DEFAULT_NAME, greet}
+
+const LIMIT: Int = 4096
+const BANNER: Greeting = greet("hi")
+
+fn grow() -> Int {
+  LIMIT = LIMIT + 1
+  BANNER.text = "changed"
+  DEFAULT_NAME = "you"
+  return LIMIT
+}

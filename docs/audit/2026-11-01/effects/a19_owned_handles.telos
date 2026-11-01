@@ -1,0 +1,19 @@
+fn serve(l: TcpListener) -> Result<Unit, IoError> requires [l.accept] {
+  let s = l.accept()?
+  s.write_all("x".to_bytes())?
+  let copy = [s]
+  copy[0].read(1)?
+  return s.close()
+}
+
+fn dial() -> Result<Unit, IoError> requires [net.connect] {
+  let s = TcpStream.connect("127.0.0.1", 1)?
+  let t = s
+  return t.close()
+}
+
+fn bind() -> Result<Unit, IoError> requires [net.listen] {
+  let l = TcpListener.bind("127.0.0.1", 0)?
+  let s = l.accept()?
+  return s.close()
+}

@@ -1,0 +1,12 @@
+[package]
+name = "telos-load"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Load generator for a Telnet terminald: request-response, pipelined and connect workloads."
+
+[[bin]]
+name = "telos-load"
+path = "src/main.rs"
+
+[dependencies]

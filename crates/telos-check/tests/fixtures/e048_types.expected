@@ -1,0 +1,6 @@
+e048_types.telos:2:10: error[E048]: `List` takes 1 type argument, found 2
+e048_types.telos:3:10: error[E048]: unknown type `Shape`
+e048_types.telos:6:18: error[E048]: `Option` takes 1 type argument, found 0
+e048_types.telos:6:29: error[E048]: `Result` takes 2 type arguments, found 1
+e048_types.telos:7:10: error[E048]: `Int` takes no type arguments, found 1
+e048_types.telos:12:11: error[E048]: unknown record type `Widget`

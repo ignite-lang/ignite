@@ -1,0 +1,6 @@
+protocol Echo {
+  fn serve(stream: TcpStream, app: Int) -> Result<Unit, IoError> requires [net] {
+    return Ok(Unit)
+  }
+  type Helper { x: Int }
+}

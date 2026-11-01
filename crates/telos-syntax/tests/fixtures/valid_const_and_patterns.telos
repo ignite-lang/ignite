@@ -1,0 +1,37 @@
+package fixtures.consts
+
+const MAXIMUM_LINE: Int = 4096
+const PROMPT: Text =
+  "> "
+const ORIGIN: Point = Point { x = 0, y = 0 }
+
+type Point {
+  x: Int
+  y: Int
+}
+
+enum Shape { Dot, Line(Int) }
+
+fn size(shape: Option<Shape>) -> Int {
+  return match shape {
+    Option.Some(Shape.Line(n)) => n
+    Option.Some(Shape.Dot) => 0
+    Option.None => MAXIMUM_LINE
+  }
+}
+
+fn count(points: List<Point>) -> Int {
+  var i = 0
+  while i < MAXIMUM_LINE {
+    i = i + 1
+  }
+  for p in (Point { x = 1, y = 1 }).copy_all() {
+    i = i + p.x
+  }
+  if (Point { x = 0, y = 0 }) == ORIGIN {
+    return i
+  }
+  return match (Point { x = 2, y = 2 }) {
+    other => other.x
+  }
+}

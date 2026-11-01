@@ -1,0 +1,15 @@
+type Holder {
+  items: List<TcpStream>
+}
+
+fn launder(s: TcpStream) -> Result<Input, IoError> requires [] {
+  var h = Holder { items = [] }
+  h.items.push(s)
+  return h.items[0].read(4096)
+}
+
+fn launder_index(s: TcpStream) -> Result<Input, IoError> requires [] {
+  var lists: List<List<TcpStream>> = [[]]
+  lists[0].push(s)
+  return lists[0][0].read(4096)
+}

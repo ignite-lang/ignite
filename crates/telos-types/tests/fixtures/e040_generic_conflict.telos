@@ -1,0 +1,21 @@
+type Pair<A, B> {
+  first: A
+  second: B
+}
+
+fn same<T>(a: T, b: T) -> T = a
+
+fn pure_only(f: fn(Int) -> Int) -> Int = f(1)
+
+fn effectful(f: fn(s: TcpStream) -> Int requires [s.write]) -> Int = 0
+
+fn conflicts() -> Int {
+  let n = same(1, "one")
+  let p: Pair<Int, Text> = Pair { first = "x", second = "y" }
+  let m: Text = same(1, 2)
+  return n
+}
+
+fn passes(f: fn(s: TcpStream) -> Int requires [s.write]) -> Int {
+  return pure_only(f)
+}

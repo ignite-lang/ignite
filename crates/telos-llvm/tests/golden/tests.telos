@@ -1,0 +1,47 @@
+package tests.inline
+
+type Pair { left: Int, right: Text }
+
+enum Shape { Dot, Circle(Int), Named(Text, List<Int>) }
+
+fn to_text(pair: Pair) -> Text = pair.right
+
+fn half(n: Int) -> Int {
+  assert n >= 0, "half of a negative number {n}"
+  return n / 2
+}
+
+fn parse(text: Text) -> Result<Int, IoError> {
+  match Int.parse(text) {
+    Some(n) => return Ok(n)
+    None => return Err(IoError.new("not a number"))
+  }
+}
+
+test fn pair(n: Int) -> Pair = Pair { left = n, right = "p" }
+
+test "integers compare" {
+  assert half(4) == 2
+  assert half(5) != 3, "rounds down"
+}
+
+test "text and records compare" {
+  let name = "telos"
+  assert name == "telos"
+  assert pair(1) == pair(1)
+  assert pair(1) != Pair { left = 1, right = "q" }
+}
+
+test "enums and tuples compare" {
+  assert Shape.Named("n", [1, 2]) == Shape.Named("n", [1, 2])
+  assert Shape.Circle(1) != Shape.Dot
+  assert (1, "a") == (1, "a")
+  assert [Some(1), None] == [Some(1), None]
+}
+
+test "question mark" {
+  let n = Int.parse("12")?
+  let m = parse("30")?
+  assert n + m == 42
+  assert true
+}

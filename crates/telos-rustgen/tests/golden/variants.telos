@@ -1,0 +1,13 @@
+package golden.variants
+
+import std.modes.{level, pick}
+import std.apply.describe
+
+fn program_level(n: Int) -> Int = level(Loud) + level(Quiet(n))
+
+fn quietness(loud: Bool) -> Int = match pick(loud) {
+  Loud => 0
+  Quiet(n) => n
+}
+
+fn both(loud: Bool) -> Text = describe(loud)

@@ -1,0 +1,35 @@
+package fixtures.protocol
+
+type Console {
+  prompt: Text
+  respond: fn(Text) -> Text
+}
+
+protocol Echo {
+  fn serve(stream: TcpStream, application: Console) -> Result<Unit, IoError> requires [stream.write] {
+    let respond = application.respond
+    (write_line(stream, respond(application.prompt)))?
+    return stream.close()
+  }
+
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {
+    return write_line(stream, "hi")
+  }
+}
+
+fn write_line(stream: TcpStream, text: Text) -> Result<Unit, IoError> requires [stream.write] {
+  return stream.write_all(text.concat("\r\n").to_bytes())
+}
+
+fn start(port: Int) -> Result<Unit, IoError> requires [net.listen, net.connect] {
+  let listener = (TcpListener.bind("127.0.0.1", port))?
+  let stream = (listener.accept())?
+  let console = Console { prompt = "> ", respond = identity }
+  spawn Echo.serve(stream, console)
+  let client = (TcpStream.connect("127.0.0.1", listener.local_port()))?
+  return Echo.connect(client)
+}
+
+fn identity(text: Text) -> Text {
+  return text
+}

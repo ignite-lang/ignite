@@ -1,0 +1,16 @@
+import std.greeting.{DEFAULT_NAME}
+
+const LIMIT: Int = 1
+const LIMIT: Int = 2
+
+fn LIMIT() -> Int {
+  return 3
+}
+
+const DEFAULT_NAME: Text = "me"
+const Text: Int = 0
+const Close: Int = 4
+const None: Int = 5
+const Process: Int = 6
+
+enum Key { Close, Open }

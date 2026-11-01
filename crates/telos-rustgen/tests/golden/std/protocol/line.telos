@@ -1,0 +1,45 @@
+package std.protocol.line
+
+import std.text.{Handler}
+import std.net.{TcpStream, Input}
+import std.io.IoError
+
+protocol Line {
+  fn serve(stream: TcpStream, handler: Handler) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+    let apply = handler.apply
+    loop {
+      let input = stream.read(1024)?
+      match input {
+        Eof => { return Ok(Unit) }
+        Data(bytes) => {
+          let reply = apply(bytes.to_text())
+          stream.write_all(reply.to_bytes())?
+        }
+      }
+    }
+  }
+
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, stream.write, stdin.read, stdout.write] {
+    spawn pump(stream)
+    loop {
+      let input = stream.read(1024)?
+      match input {
+        Eof => { return Ok(Unit) }
+        Data(bytes) => { Stdout.write_all(bytes)? }
+      }
+    }
+  }
+}
+
+fn pump(stream: TcpStream) -> Result<Unit, IoError> requires [stdin.read, stream.write] {
+  loop {
+    let input = Stdin.read(1024)?
+    match input {
+      Eof => {
+        stream.close()?
+        return Ok(Unit)
+      }
+      Data(bytes) => { stream.write_all(bytes)? }
+    }
+  }
+}

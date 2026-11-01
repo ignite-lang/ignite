@@ -1,0 +1,3 @@
+e016_fn_value.telos:7:10: error[E016]: missing effect `h.*` for `handle`; add it to the `requires` of `run`
+e016_fn_value.telos:11:10: error[E016]: missing effect `stream.write` for `f`; add it to the `requires` of `local`
+e016_fn_value.telos:15:10: error[E016]: missing effect `stdout.write` for `f`; add it to the `requires` of `ambient`

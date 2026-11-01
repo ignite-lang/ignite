@@ -1,0 +1,31 @@
+type Point {
+  x: Int
+  y: Int
+}
+
+fn origin() -> Point {
+  return Point { x = 0, y = 0, z = 0 }
+}
+
+fn twice() -> Point {
+  return Point { x = 0, x = 1, y = 2 }
+}
+
+fn partial() -> Point {
+  return Point { x = 0 }
+}
+
+type Config {
+  port: Int = 2324
+  host: Text = "127.0.0.1"
+  name: Text
+}
+
+fn config(name: Text) -> Config {
+  let defaults = Config { name }
+  return Config { port = 1, name = "x" }
+}
+
+fn bare() -> Config {
+  return Config { port = 1 }
+}

@@ -1,0 +1,45 @@
+import std.greeting.{greet, sample}
+
+test fn helper(x: Int) -> Int = x
+
+test type Fixture { value: Int }
+
+test enum Kind { Small, Large(Int) }
+
+test const LIMIT: Int = 3
+
+fn uses_fn() -> Int = helper(1)
+
+fn uses_value() -> fn(Int) -> Int = helper
+
+fn uses_const() -> Int = LIMIT
+
+fn uses_type(f: Fixture) -> Int = 0
+
+fn uses_literal() -> Int {
+  let f = Fixture { value = 1 }
+  return 0
+}
+
+fn uses_variant() -> Int {
+  let k = Small
+  let l = Kind.Large(1)
+  return 0
+}
+
+fn uses_pattern(x: Int) -> Bool = match x {
+  LIMIT => true
+  _ => false
+}
+
+type Holder { limit: Int = LIMIT }
+
+test fn build() -> Fixture = Fixture { value = helper(LIMIT) }
+
+test "tests may use test-only items" {
+  let kind = Kind.Large(LIMIT)
+  let f: Fixture = build()
+  let small = Small
+  assert helper(f.value) == 3
+  assert greet("x").text == "hello x"
+}

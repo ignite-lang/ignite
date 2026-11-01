@@ -1,0 +1,14 @@
+package std.text
+
+type Handler {
+  name: Text
+  apply: fn(Text) -> Text
+}
+
+enum Mode { Loud, Quiet }
+
+const SUFFIX: Text = "!"
+
+fn shout(line: Text) -> Text {
+  return line.concat(SUFFIX)
+}

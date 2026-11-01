@@ -1,0 +1,18 @@
+import std.greeting.{LOUDNESS}
+
+const SELF: Int = SELF + 1
+const A: Int = B * 2
+const B: Int = double(C)
+const C: Int = A - LOUDNESS
+const D: Int = A
+const FINE: Int = twice()
+
+fn double(x: Int) -> Int {
+  return x * 2
+}
+
+fn twice() -> Int {
+  return FINE_INPUT * 2
+}
+
+const FINE_INPUT: Int = 2

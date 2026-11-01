@@ -1,0 +1,5 @@
+const A: Text = "sum: {a +}"
+
+const B: Text = "{a b}"
+
+const C: Text = "fine {a}"

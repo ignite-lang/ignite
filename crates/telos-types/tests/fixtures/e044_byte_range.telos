@@ -1,0 +1,11 @@
+const BIG: Byte = 256
+
+fn f(b: Byte) -> Bool {
+  let negative: Byte = -1
+  let bytes: Bytes = [1, 2, 1000]
+  let small = match b {
+    999 => true
+    _ => false
+  }
+  return b == 300
+}

@@ -1,0 +1,3 @@
+e045_operators.telos:7:11: error[E045]: operator `<` is not defined for `Bool`
+e045_operators.telos:8:11: error[E045]: operator `-` is not defined for `Text`
+e045_operators.telos:9:10: error[E045]: operator `==` is not defined for `Point`

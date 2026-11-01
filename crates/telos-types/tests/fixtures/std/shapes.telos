@@ -1,0 +1,39 @@
+package std.shapes
+
+type Point {
+  x: Int
+  y: Int
+}
+
+enum Shape {
+  Dot(Point),
+  Line(Point, Point),
+  Empty
+}
+
+const ORIGIN: Int = 0
+const MARK: Byte = 42
+
+fn origin() -> Point {
+  return Point { x = ORIGIN, y = ORIGIN }
+}
+
+fn dot(point: Point) -> Shape = Dot(point)
+
+fn width(shape: Shape) -> Int {
+  return match shape {
+    Line(a, b) => b.x - a.x
+    _ => 0
+  }
+}
+
+type Pen {
+  width: Int = 1
+  color: Text = "black"
+}
+
+type Painter = fn(Shape) -> Bytes
+
+type Maybe<T> = Option<T>
+
+fn thicker(pen: Pen, by: Int) -> Pen = Pen { width = pen.width + by, color = pen.color }

@@ -1,0 +1,3 @@
+e006_assign_const.telos:7:3: error[E006]: cannot assign to constant `LIMIT`; a constant is a value, not a place
+e006_assign_const.telos:8:3: error[E006]: cannot assign to constant `BANNER`; a constant is a value, not a place
+e006_assign_const.telos:9:3: error[E006]: cannot assign to constant `DEFAULT_NAME`; a constant is a value, not a place

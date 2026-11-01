@@ -1,0 +1,1 @@
+e042_empty_list.telos:2:12: error[E042]: cannot infer the element type of `[]`; add a type annotation

@@ -1,0 +1,13 @@
+fn count() -> Int = 3
+
+fn check(x: Int) {
+  assert x
+  assert count() == 3
+}
+
+test "conditions are Bool" {
+  assert "yes"
+  assert count()
+  assert count() > 1, 42
+  assert count() == "three"
+}

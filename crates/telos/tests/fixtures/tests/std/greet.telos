@@ -1,0 +1,9 @@
+package std.greet
+
+fn greet(name: Text) -> Text = "hello {name}"
+
+test fn world() -> Text = "world"
+
+test "greets by name" {
+  assert greet(world()) == "hello world"
+}

@@ -1,0 +1,8 @@
+type Handler {
+  respond: fn(Text) -> Int
+}
+
+fn f(handler: Handler, n: Int) -> Int {
+  let width = n.width
+  return handler.respond("x")
+}

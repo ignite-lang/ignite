@@ -1,0 +1,42 @@
+package fixtures.store_effects
+
+type Todo {
+  id: Int
+  title: Text
+}
+
+type App {
+  todos: Store<Todo>
+}
+
+fn add(todos: Store<Todo>, title: Text) -> Int requires [todos.write] {
+  let id = todos.next_id()
+  todos.put(id, Todo { id = id, title = title })
+  return id
+}
+
+fn all(todos: Store<Todo>) -> List<Todo> requires [todos.read] = todos.values()
+
+fn titles(app: App) -> List<Text> requires [app.*] {
+  let store = app.todos
+  return store.values().map(title_of)
+}
+
+fn title_of(todo: Todo) -> Text = todo.title
+
+fn rename(app: App, id: Int) -> Option<Todo> requires [app.write] {
+  return app.todos.update(id, shout)
+}
+
+fn shout(todo: Todo) -> Todo = Todo { id = todo.id, title = todo.title }
+
+fn first(app: App) -> Option<Todo> requires [app.read] {
+  for todo in app.todos.values() {
+    return Some(todo)
+  }
+  return app.todos.get(1)
+}
+
+fn delayed(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {
+  return stream.set_idle_timeout(30000)
+}

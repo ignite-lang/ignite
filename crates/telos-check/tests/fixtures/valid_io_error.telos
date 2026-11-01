@@ -1,0 +1,26 @@
+package fixtures.errors
+
+const LIMIT: Int = 1024
+
+fn check(length: Int) -> Result<Unit, IoError> {
+  if length > LIMIT {
+    return Err(IoError.new("subnegotiation over ".concat(Int.to_text(LIMIT)).concat(" bytes")))
+  }
+  return Ok(Unit)
+}
+
+fn message() -> Text {
+  let error = IoError.new("boom")
+  return error.message
+}
+
+fn terminal() -> Result<Unit, IoError> requires [stdin.mode, process.exit] {
+  if (Stdin.is_terminal())? {
+    (Stdin.set_raw(true))?
+  }
+  (Stdin.set_raw(false))?
+  if LIMIT == 0 {
+    (Process.exit(0))?
+  }
+  return check(LIMIT + 1)
+}

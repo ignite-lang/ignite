@@ -1,0 +1,42 @@
+package fixtures.consts
+
+import std.greeting.{Greeting, DEFAULT_NAME, LOUDNESS, greet}
+
+const MAXIMUM_LINE: Int = HALF_LINE * 2
+const HALF_LINE: Int = 2048
+const PROMPT: Text = "terminal> ".concat(DEFAULT_NAME)
+const BANNER: Greeting = greet(PROMPT)
+const ORIGIN: Point = Point { x = 0, y = LOUDNESS }
+const SIZES: List<Int> = [HALF_LINE, MAXIMUM_LINE]
+const SHOUT: fn(Text) -> Greeting = greet
+const NOTHING: Option<Int> = None
+
+type Point {
+  x: Int
+  y: Int
+}
+
+fn fill(line: Bytes) -> Int {
+  var count = 0
+  while count < MAXIMUM_LINE {
+    count = count + line.len()
+  }
+  for size in SIZES {
+    count = count + size
+  }
+  if count > ORIGIN.y {
+    log(PROMPT.trim())
+  }
+  let shout = SHOUT
+  log(shout(BANNER.text).text)
+  return match NOTHING {
+    Some(n) => n
+    None => count + LOUDNESS
+  }
+}
+
+fn shadow() -> Int {
+  var MAXIMUM_LINE = 1
+  MAXIMUM_LINE = MAXIMUM_LINE + 1
+  return MAXIMUM_LINE
+}

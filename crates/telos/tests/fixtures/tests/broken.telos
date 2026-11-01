@@ -1,0 +1,5 @@
+package fixtures.broken
+
+test "does not type" {
+  assert 1 + "one" == 2
+}

@@ -1,0 +1,10 @@
+test fn doubled(x: Int) -> Int = x * 2
+
+test fn quadrupled(x: Int) -> Int = x.doubled().doubled()
+
+fn normal(x: Int) -> Int = x.doubled()
+
+test "a test may call it by UFCS" {
+  assert 2.doubled() == 4
+  assert 1.quadrupled() == 4
+}

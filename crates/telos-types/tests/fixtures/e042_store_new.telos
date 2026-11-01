@@ -1,0 +1,11 @@
+type Todo { id: Int }
+
+test fn count(s: Store<Todo>) -> Int = s.next_id()
+
+test "Store.new() takes its element type from the context" {
+  let s: Store<Todo> = Store.new()
+  assert count(s) == 1
+  assert count(Store.new()) == 1
+  let unknown = Store.new()
+  let wrong: List<Todo> = Store.new()
+}

@@ -1,0 +1,8 @@
+e046_match.telos:8:10: error[E046]: match does not cover `Command.Quit`
+e046_match.telos:15:3: error[E046]: match does not cover `Some(Command.Quit)`
+e046_match.telos:23:10: error[E046]: match on `Int` does not cover every value; add a `_` arm or a binding arm
+e046_match.telos:36:10: error[E046]: match on `Text` does not cover every value; add a `_` arm or a binding arm
+e046_match.telos:49:10: error[E046]: match does not cover `Ok(_)`
+e046_match.telos:56:10: error[E046]: match does not cover `Eof`
+e046_match.telos:71:3: error[E046]: match does not cover `true`, `false`
+e046_match.telos:79:10: error[E046]: match does not cover `Pair.Both(None, _)`

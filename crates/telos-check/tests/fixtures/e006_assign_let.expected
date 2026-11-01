@@ -1,0 +1,1 @@
+e006_assign_let.telos:3:3: error[E006]: cannot assign to immutable binding `total`; declare it with `var`

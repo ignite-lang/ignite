@@ -1,0 +1,13 @@
+fn one() -> Int = 1
+
+test "one" {
+  assert one() == 1
+}
+
+test "one" {
+  assert one() != 2
+}
+
+test "one again" {
+  assert one() == 1
+}

@@ -1,0 +1,1 @@
+e051_store_new.telos:4:30: error[E051]: `Store.new()` is test-only; a program's stores are `resource`s

@@ -1,0 +1,13 @@
+[package]
+name = "iotest"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+telos-io = { path = "/home/timo/projects/telos/crates/telos-io" }
+
+[[bin]]
+name = "iotest"
+path = "src/main.rs"

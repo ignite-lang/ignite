@@ -1,0 +1,12 @@
+package fixtures.slow
+
+test "fast" {
+  assert true
+}
+
+test "never ends" {
+  var n = 0
+  while true {
+    n = n + 1
+  }
+}

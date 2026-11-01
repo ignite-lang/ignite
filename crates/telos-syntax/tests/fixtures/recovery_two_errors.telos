@@ -1,0 +1,16 @@
+package fixtures.recovery
+
+fn broken(x Int) {
+  return x
+}
+
+enum Fine { A, B }
+
+type Also {
+  name: Text
+  age Int
+}
+
+fn ok() -> Int {
+  return 1
+}

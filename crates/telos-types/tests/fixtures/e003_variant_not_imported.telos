@@ -1,0 +1,21 @@
+import std.shapes.{width}
+
+// `Shape` is not imported: a bare variant of it resolves only where
+// `Shape` is the expected type.
+
+fn undecided() -> Int {
+  let s = Empty
+  return 0
+}
+
+fn constructed() -> Int {
+  let s = Dot(1)
+  return 0
+}
+
+fn unapplied() -> Int = width(Dot)
+
+fn scrutinee(n: Int) -> Int = match n {
+  Empty => 0
+  _ => 1
+}

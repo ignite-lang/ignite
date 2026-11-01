@@ -1,0 +1,21 @@
+protocol Empty {}
+
+protocol Broken {
+  fn listen(stream: TcpStream) -> Result<Unit, IoError> requires [net] {
+    return Ok(Unit)
+  }
+
+  fn serve(stream: TcpStream, application: Int) -> Result<Unit, IoError> {
+    return Ok(Unit)
+  }
+
+  fn connect(stream: TcpStream, extra: Int) -> Result<Unit, IoError> requires [net] {
+    return Ok(Unit)
+  }
+}
+
+protocol Echo {
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [net] {
+    return Echo.serve(stream, 1)
+  }
+}

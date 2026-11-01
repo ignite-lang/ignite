@@ -1,0 +1,21 @@
+package probe.recursive
+
+type Node {
+  value: Int
+  next: Option<Node>
+}
+
+enum Tree {
+  Leaf
+  Branch(Int, Tree, Tree)
+}
+
+fn sum(node: Node) -> Int = match node.next {
+  Some(rest) => node.value + sum(rest)
+  None => node.value
+}
+
+fn total(tree: Tree) -> Int = match tree {
+  Leaf => 0
+  Branch(v, l, r) => v + total(l) + total(r)
+}

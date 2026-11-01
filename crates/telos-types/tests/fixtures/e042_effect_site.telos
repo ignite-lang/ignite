@@ -1,0 +1,21 @@
+type Todo {
+  id: Int
+}
+
+type Holder {
+  todos: Store<Todo>
+  run: fn(s: TcpStream) -> Int requires [s.write]
+}
+
+fn first(holders: List<Holder>) -> Option<Todo> requires [holders.read] {
+  match holders.at(0) {
+    h => return h.todos.get(1),
+  }
+}
+
+fn call(holder: Option<Holder>, stream: TcpStream) -> Int requires [stream.write] {
+  return match holder {
+    Some(h) => h.run(stream),
+    None => 0,
+  }
+}

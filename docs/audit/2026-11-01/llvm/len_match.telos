@@ -1,0 +1,7 @@
+package audit.lenmatch
+
+test "len on a match expression" {
+  let o: Option<Text> = Some("hello")
+  let n = (match o { Some(t) => t, None => "" }).len()
+  assert n == 5
+}

@@ -1,0 +1,20 @@
+fn helper(stdin: TcpStream) -> Result<Input, IoError> requires [stdin.*] {
+  Stdin.read(1)?
+  return stdin.read(1)
+}
+
+fn outer(conn: TcpStream) -> Result<Input, IoError> requires [conn.*] = helper(conn)
+
+fn outer_literal(l: TcpListener) -> Result<Input, IoError> requires [l.accept] {
+  let s = l.accept()?
+  return helper(s)
+}
+
+protocol P {
+  fn serve(stream: TcpStream, stdin: Int) -> Result<Unit, IoError> requires [stdin.read] {
+    Stdin.read(stdin)?
+    return Ok(())
+  }
+}
+
+fn role_caller(s: TcpStream) -> Result<Unit, IoError> requires [] = P.serve(s, 1)

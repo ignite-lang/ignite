@@ -1,0 +1,24 @@
+type App<S> {
+  state: S
+  handle: fn(state: S, n: Int) -> Int requires [state.read]
+}
+
+fn write(stream: TcpStream, n: Int) -> Int requires [stream.write] {
+  return n
+}
+
+fn ambient(stream: TcpStream, n: Int) -> Int requires [stdout.write] {
+  return n
+}
+
+fn read(stream: TcpStream, n: Int) -> Int requires [stream.read] {
+  return n
+}
+
+fn make(stream: TcpStream) -> Int {
+  let wrong = App { state = stream, handle = write }
+  let outside = App { state = stream, handle = ambient }
+  let right = App { state = stream, handle = read }
+  let narrow: fn(s: TcpStream, n: Int) -> Int requires [s.*] = ambient
+  return 0
+}

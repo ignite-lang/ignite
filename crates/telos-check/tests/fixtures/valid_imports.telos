@@ -1,0 +1,18 @@
+package fixtures.imports
+
+import std.net.{TcpStream}
+import std.greeting.{Greeting, Mood, greet}
+import std.protocol.hello.Hello
+
+fn shout(name: Text) -> Greeting {
+  let greeting = greet(name)
+  return match greeting.mood {
+    Happy => Greeting { text = greeting.text.concat("!"), mood = Mood.Grumpy(1) }
+    Grumpy(level) => greeting
+  }
+}
+
+fn run(stream: TcpStream) -> Result<Unit, IoError> requires [stdin.read, stdout.write, stream.read, stream.write] {
+  spawn Hello.serve(stream, shout)
+  return Hello.connect(stream)
+}

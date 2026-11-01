@@ -1,0 +1,31 @@
+type Holder {
+  items: List<TcpStream>
+  one: Option<TcpStream>
+}
+
+fn via_append(s: List<TcpStream>) -> Result<Input, IoError> requires [] {
+  var l: List<TcpStream> = []
+  l.append(s)
+  return l[0].read(1)
+}
+
+fn via_concat(s: List<TcpStream>) -> Result<Input, IoError> requires [] {
+  let l: List<TcpStream> = []
+  return l.concat(s)[0].read(1)
+}
+
+fn via_field_assign(s: TcpStream) -> Result<Input, IoError> requires [] {
+  var h = Holder { items = [], one = None }
+  h.one = Some(s)
+  return match h.one {
+    Some(t) => t.read(1)
+    None => Err(IoError.new("x"))
+  }
+}
+
+fn via_copy(h: Holder) -> Result<Input, IoError> requires [] {
+  let c = h.copy()
+  return c.items[0].read(1)
+}
+
+fn via_slice(ls: List<TcpStream>) -> Result<Input, IoError> requires [] = ls.slice(0, 1)[0].read(1)

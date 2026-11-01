@@ -1,0 +1,18 @@
+package fixtures.valid_protocol
+
+type Console { prompt: Text, respond: fn(Text) -> Text, tick: fn() }
+
+protocol Echo {
+  fn serve(stream: TcpStream, app: Console) -> Result<Unit, IoError> requires [net] {
+    spawn pump(stream)
+    return Ok(Unit)
+  }
+
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [net] {
+    return Ok(Unit)
+  }
+}
+
+fn pump(stream: TcpStream) -> Result<Unit, IoError> requires [net] {
+  return Ok(Unit)
+}

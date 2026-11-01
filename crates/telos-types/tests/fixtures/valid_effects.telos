@@ -1,0 +1,32 @@
+import std.shapes.protocol.{Plot, Canvas}
+import std.shapes.{Shape}
+
+fn draw(shape: Shape) -> Bytes {
+  return match shape {
+    Shape.Empty => Bytes.empty()
+    _ => "shape".to_bytes()
+  }
+}
+
+fn run(port: Int) -> Result<Unit, IoError> requires [net.listen, net.connect, stdin.read, stdin.mode, stdout.write, process.exit] {
+  let listener = (TcpListener.bind("127.0.0.1", port))?
+  log("listening on ".concat(Int.to_text(listener.local_port())))
+  let stream = (listener.accept())?
+  spawn Plot.serve(stream, Canvas { draw = draw })
+  let client = (TcpStream.connect("127.0.0.1", port))?
+  (Plot.connect(client))?
+  let raw = (Stdin.is_terminal())?
+  (Stdin.set_raw(raw))?
+  let input = (Stdin.read(1))?
+  match input {
+    Data(bytes) => {
+      (Stdout.write_all(bytes))?
+    }
+    Eof => {
+      (Process.exit(0))?
+    }
+  }
+  let error = IoError.new("done")
+  log(error.message)
+  return Err(error)
+}

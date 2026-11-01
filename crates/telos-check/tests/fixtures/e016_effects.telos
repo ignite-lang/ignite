@@ -1,0 +1,39 @@
+protocol Pipe {
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read] {
+    let input = (stream.read(16))?
+    (Stdout.write_all("x".to_bytes()))?
+    return relay(stream)
+  }
+}
+
+fn relay(out: TcpStream) -> Result<Unit, IoError> requires [out.write, stdin.read] {
+  let input = (Stdin.read(16))?
+  return out.write_all("y".to_bytes())
+}
+
+fn alias(stream: TcpStream) -> Result<Unit, IoError> requires [stdin.read] {
+  let s = stream
+  (s.close())?
+  spawn relay(s)
+  return Ok(Unit)
+}
+
+fn owned(port: Int) -> Result<Unit, IoError> requires [net.connect] {
+  let stream = (TcpStream.connect("127.0.0.1", port))?
+  (stream.write_all("z".to_bytes()))?
+  (Stdin.set_raw(true))?
+  return relay(stream)
+}
+
+fn serve_one(listener: TcpListener) -> Result<Unit, IoError> requires [net.connect] {
+  let stream = (listener.accept())?
+  return Pipe.connect(stream)
+}
+
+fn reassigned(a: TcpStream, b: TcpStream, flag: Bool) -> Result<Unit, IoError> requires [a.write] {
+  var target = a
+  if flag {
+    target = b
+  }
+  return target.write_all("w".to_bytes())
+}

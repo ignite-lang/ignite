@@ -1,0 +1,49 @@
+package fixtures.store
+
+type Todo {
+  id: Int
+  title: Text
+  done: Bool
+}
+
+type App<S> {
+  state: S
+  handle: fn(state: S, title: Text) -> Int requires [state.*]
+}
+
+fn add(todos: Store<Todo>, title: Text) -> Int requires [todos.write] {
+  let id = todos.next_id()
+  todos.put(id, Todo { id = id, title = title, done = false })
+  return id
+}
+
+fn finish(todo: Todo) -> Todo = Todo { id = todo.id, title = todo.title, done = true }
+
+fn title_of(todo: Todo) -> Text = todo.title
+
+fn tick(todos: Store<Todo>, id: Int) -> Option<Todo> requires [todos.*] {
+  let removed: Option<Todo> = todos.remove(id + 1)
+  return todos.update(id, finish)
+}
+
+fn titles(todos: Store<Todo>) -> List<Text> requires [todos.read] {
+  let found = todos.get(1)
+  let all = todos.values()
+  return all.map(title_of)
+}
+
+fn app(todos: Store<Todo>) -> App<Store<Todo>> {
+  return App { state = todos, handle = add }
+}
+
+fn call<S>(app: App<S>, title: Text) -> Int requires [app.*] = app.handle(app.state, title)
+
+fn builtins(stream: TcpStream, b: Byte) -> Result<Unit, IoError> requires [stream.write] {
+  let n: Option<Int> = Int.parse("-12")
+  let i = b.to_int()
+  let back = i.to_byte()
+  let lengths: List<Int> = ["a", "bc"].map(len_of)
+  return stream.set_idle_timeout(30000)
+}
+
+fn len_of(text: Text) -> Int = text.len()

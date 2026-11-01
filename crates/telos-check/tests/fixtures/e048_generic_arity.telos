@@ -1,0 +1,16 @@
+type Pair<A, B> {
+  first: A
+  second: B
+}
+
+type Box<T, T> {
+  value: T
+}
+
+fn wrong(p: Pair<Int>, s: Store<Int, Int>, t: Store) -> U {
+  return p.first
+}
+
+fn scoped<A>(a: A) -> A = a
+
+fn leaked(b: A) -> Int = 1

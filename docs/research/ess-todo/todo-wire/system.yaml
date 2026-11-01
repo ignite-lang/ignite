@@ -1,0 +1,160 @@
+format: ess/32
+system: todo
+version: v1
+summary: A todo list kept in memory by one HTTP service.
+domains: [todo.list]
+domain: todo.list
+
+types:
+  - {name: todo.list.TodoId, kind: newtype, of: Integer}
+  - {name: todo.list.Title, kind: newtype, of: String}
+
+entities:
+  - name: todo.list.Todo
+    identity: {name: id, type: todo.list.TodoId}
+    fields:
+      - {name: title, type: todo.list.Title}
+      - {name: done, type: Boolean}
+    lifecycle: {initial: Kept, states: [Kept], terminal: [Kept]}
+
+errors:
+  - name: todo.list.TodoNotFound
+    summary: No todo has this id.
+    fields:
+      - {name: id, type: todo.list.TodoId}
+
+commands:
+  - name: todo.list.CreateTodo
+    input:
+      - {name: title, type: todo.list.Title}
+      - {name: done, type: Optional<Boolean>, presence: omitted_when_absent}
+    response:
+      - {name: id, type: todo.list.TodoId}
+      - {name: title, type: todo.list.Title}
+      - {name: done, type: Boolean}
+    outcomes:
+      - name: created-with-done
+        when: defined(done)
+        creates: todo.list.Todo
+        instance: id
+        returns: true
+        sets: {title: input.title, done: input.done}
+        emits: [todo.list.TodoCreated]
+        payload:
+          todo.list.TodoCreated: {id: {generated: true}, title: input.title}
+      - name: created
+        creates: todo.list.Todo
+        instance: id
+        returns: true
+        sets: {title: input.title, done: "false"}
+        emits: [todo.list.TodoCreated]
+        payload:
+          todo.list.TodoCreated: {id: {generated: true}, title: input.title}
+
+  - name: todo.list.GetTodo
+    input:
+      - {name: id, type: todo.list.TodoId}
+    response:
+      - {name: id, type: todo.list.TodoId}
+      - {name: title, type: todo.list.Title}
+      - {name: done, type: Boolean}
+    outcomes:
+      - name: not-found
+        unknown_instance: true
+        error: todo.list.TodoNotFound
+      - name: found
+        preserves: todo.list.Todo
+        instance: id
+        returns: true
+
+  - name: todo.list.UpdateTodo
+    input:
+      - {name: id, type: todo.list.TodoId}
+      - {name: title, type: Optional<todo.list.Title>, presence: omitted_when_absent}
+      - {name: done, type: Optional<Boolean>, presence: omitted_when_absent}
+    response:
+      - {name: id, type: todo.list.TodoId}
+      - {name: title, type: todo.list.Title}
+      - {name: done, type: Boolean}
+    outcomes:
+      - name: not-found
+        unknown_instance: true
+        error: todo.list.TodoNotFound
+      - name: updated-both
+        when: {all: ["defined(title)", "defined(done)"]}
+        updates: todo.list.Todo
+        instance: id
+        returns: true
+        sets: {title: input.title, done: input.done}
+        emits: [todo.list.TodoChanged]
+        payload:
+          todo.list.TodoChanged: {id: input.id}
+      - name: updated-title
+        when: {all: ["defined(title)", "not defined(done)"]}
+        updates: todo.list.Todo
+        instance: id
+        returns: true
+        sets: {title: input.title}
+        emits: [todo.list.TodoChanged]
+        payload:
+          todo.list.TodoChanged: {id: input.id}
+      - name: updated-done
+        when: {all: ["not defined(title)", "defined(done)"]}
+        updates: todo.list.Todo
+        instance: id
+        returns: true
+        sets: {done: input.done}
+        emits: [todo.list.TodoChanged]
+        payload:
+          todo.list.TodoChanged: {id: input.id}
+      - name: unchanged
+        when: {all: ["not defined(title)", "not defined(done)"]}
+        preserves: todo.list.Todo
+        instance: id
+        returns: true
+
+  - name: todo.list.DeleteTodo
+    input:
+      - {name: id, type: todo.list.TodoId}
+    outcomes:
+      - name: not-found
+        unknown_instance: true
+        error: todo.list.TodoNotFound
+      - name: deleted
+        deletes: todo.list.Todo
+        instance: id
+        emits: [todo.list.TodoDeleted]
+        payload:
+          todo.list.TodoDeleted: {id: input.id}
+
+events:
+  - name: todo.list.TodoCreated
+    fields:
+      - {name: id, type: todo.list.TodoId}
+      - {name: title, type: todo.list.Title}
+  - name: todo.list.TodoChanged
+    fields:
+      - {name: id, type: todo.list.TodoId}
+  - name: todo.list.TodoDeleted
+    fields:
+      - {name: id, type: todo.list.TodoId}
+
+views:
+  - name: todo.list.Todos
+    source: todo.list.Todo
+    consistency: read_your_writes
+    order_by: [id asc]
+    fields:
+      - {name: id, type: todo.list.TodoId}
+      - {name: title, type: todo.list.Title}
+      - {name: done, type: Boolean}
+      - {name: state, type: todo.list.Todo.State}
+
+components:
+  - component: todo-service
+    owns: {domains: [todo.list]}
+    accepts:
+      commands: [todo.list.CreateTodo, todo.list.GetTodo, todo.list.UpdateTodo, todo.list.DeleteTodo]
+    publishes:
+      events: [todo.list.TodoCreated, todo.list.TodoChanged, todo.list.TodoDeleted]
+    reached_by: network

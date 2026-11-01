@@ -1,0 +1,21 @@
+fn shadow(a: TcpStream, b: TcpStream) -> Result<Input, IoError> requires [a.read] {
+  let a = b
+  return a.read(10)
+}
+
+fn branches(a: TcpStream, b: TcpStream, flag: Bool) -> Result<Input, IoError> requires [a.read] {
+  var s = a
+  if flag {
+    s = b
+  }
+  return s.read(10)
+}
+
+fn loop_assign(a: TcpStream, b: TcpStream) -> Result<Input, IoError> requires [a.read] {
+  var s = a
+  loop {
+    s = b
+    break
+  }
+  return s.read(10)
+}

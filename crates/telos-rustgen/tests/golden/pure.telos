@@ -1,0 +1,37 @@
+package golden.pure
+
+fn add(a: Int, b: Int) -> Int {
+  a + b
+}
+
+fn clamp(x: Int, low: Int, high: Int) -> Int {
+  if x < low { return low }
+  if x > high { return high }
+  x
+}
+
+fn sum(values: List<Int>) -> Int {
+  var total = 0
+  for v in values {
+    total = total + v
+  }
+  return total
+}
+
+fn greet(name: Text) -> Text {
+  "hello, ".concat(name)
+}
+
+fn sign(x: Int) -> Int {
+  if x < 0 { -1 } else if x == 0 { 0 } else { 1 }
+}
+
+fn countdown(n: Int) -> List<Int> {
+  var out = List.empty()
+  var i = n
+  while i > 0 {
+    out.push(i)
+    i = i - 1
+  }
+  return out
+}

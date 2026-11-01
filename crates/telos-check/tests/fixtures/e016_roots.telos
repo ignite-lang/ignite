@@ -1,0 +1,93 @@
+package fixtures.roots
+
+type Conn {
+  stream: TcpStream
+}
+
+fn via_record(s: TcpStream) -> Result<Input, IoError> requires [stdin.read] {
+  let c = Conn { stream = s }
+  return c.stream.read(4096)
+}
+
+fn via_if(s: TcpStream, flag: Bool) -> Result<Input, IoError> requires [stdin.read] {
+  let t = if flag { s } else { s }
+  return t.read(4096)
+}
+
+fn via_block_local(s: TcpStream, flag: Bool) -> Result<Input, IoError> requires [stdin.read] {
+  let t = if flag {
+    let inner = s
+    inner
+  } else {
+    s
+  }
+  return t.read(4096)
+}
+
+fn via_match(s: TcpStream, flag: Bool) -> Result<Input, IoError> requires [stdin.read] {
+  let t = match flag {
+    true => s
+    false => s
+  }
+  return t.read(4096)
+}
+
+fn via_match_binding(o: Option<TcpStream>) -> Result<Input, IoError> requires [stdin.read] {
+  let t = match o {
+    Some(inner) => inner
+    None => return Err(IoError.new("none"))
+  }
+  return t.read(4096)
+}
+
+fn via_at(ls: List<TcpStream>) -> Result<Input, IoError> requires [stdin.read] {
+  let t = ls.at(0)
+  return t.read(4096)
+}
+
+fn via_at_write(ls: List<TcpStream>) -> Result<Unit, IoError> requires [stdin.read] {
+  return ls.at(0).write_all("x".to_bytes())
+}
+
+fn via_list(s: TcpStream) -> Result<Input, IoError> requires [stdin.read] {
+  let ls = [s]
+  return ls[0].read(4096)
+}
+
+fn via_some(s: TcpStream) -> Result<Input, IoError> requires [stdin.read] {
+  let o = Some(s)
+  return match o {
+    Some(t) => t.read(4096)
+    None => Err(IoError.new("none"))
+  }
+}
+
+fn first(s: TcpStream) -> TcpStream requires [] {
+  return s
+}
+
+fn first_eff(s: TcpStream) -> TcpStream requires [stdin.read] {
+  return s
+}
+
+fn via_requires_empty(s: TcpStream) -> Result<Input, IoError> requires [stdin.read] {
+  let t = first(s)
+  return t.read(4096)
+}
+
+fn via_requires_empty_ufcs(s: TcpStream) -> Result<Input, IoError> requires [stdin.read] {
+  return s.first().read(4096)
+}
+
+fn via_effectful(s: TcpStream) -> Result<Input, IoError> requires [stdin.read] {
+  let t = first_eff(s)
+  return t.read(4096)
+}
+
+fn length(text: Text) -> Int = text.len()
+
+fn owned(s: TcpStream, text: Text) -> Result<Unit, IoError> requires [s.write, net.connect] {
+  let n = length(text)
+  let conn = TcpStream.connect("127.0.0.1", n)?
+  return conn.write_all(text.to_bytes())
+}

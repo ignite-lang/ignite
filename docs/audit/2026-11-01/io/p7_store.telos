@@ -1,0 +1,23 @@
+package probe.store
+
+type Holder {
+  inner: Store<Holder>
+  n: Int
+}
+
+fn bump(h: Holder) -> Holder {
+  let _ = h.inner.get(1)
+  Holder { inner = h.inner, n = h.n + 1 }
+}
+
+fn shown(h: Option<Holder>) -> Int = match h {
+  Some(v) => v.n
+  None => -1
+}
+
+test "update reaching the same store" {
+  let s: Store<Holder> = Store.new()
+  s.put(1, Holder { inner = s, n = 0 })
+  let _ = s.update(1, bump)
+  assert shown(s.get(1)) == 1
+}

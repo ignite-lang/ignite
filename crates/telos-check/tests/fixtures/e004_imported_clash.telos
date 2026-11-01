@@ -1,0 +1,6 @@
+import std.greeting.{Greeting, Mood, greet}
+import std.greeting.greet
+
+fn greet(name: Text) -> Greeting {
+  return Greeting { text = name, mood = Happy }
+}

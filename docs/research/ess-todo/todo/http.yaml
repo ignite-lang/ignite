@@ -1,0 +1,22 @@
+type: ess-http/1
+specification: {system: todo, version: v1, source_digest: "sha256:89517bf2822d8c68add0d9581ada1e9d9008524b07241a9563c2935f82f1c1e2"}
+routes:
+  - view: todo.list.Todos
+    method: get
+    path: /todos
+  - command: todo.list.CreateTodo
+    method: post
+    path: /todos
+  - command: todo.list.GetTodo
+    method: get
+    path: /todos/{id}
+    parameters: {id: input.id}
+    request: {encoding: query, unknown: ignore}
+  - command: todo.list.UpdateTodo
+    method: patch
+    path: /todos/{id}
+    parameters: {id: input.id}
+  - command: todo.list.DeleteTodo
+    method: delete
+    path: /todos/{id}
+    parameters: {id: input.id}

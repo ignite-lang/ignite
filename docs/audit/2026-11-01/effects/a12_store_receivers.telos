@@ -1,0 +1,37 @@
+type Box<T> {
+  item: T
+}
+
+type Boxed<T> = Box<T>
+
+type S = Store<Int>
+
+fn via_generic(b: Box<Store<Int>>) -> Option<Int> requires [] = b.item.get(1)
+
+fn via_alias_generic(b: Boxed<Store<Int>>) -> Option<Int> requires [] = b.item.get(1)
+
+fn via_alias(s: S) -> Option<Int> requires [] = s.get(1)
+
+fn via_option(o: Option<Store<Int>>) -> Option<Int> requires [] = match o {
+  Some(st) => st.get(1)
+  None => None
+}
+
+fn via_tuple(s: Store<Int>) -> Option<Int> requires [] {
+  let (st, n) = (s, 1)
+  return st.get(n)
+}
+
+fn via_for(stores: List<Store<Int>>) -> Unit requires [] {
+  for s in stores {
+    s.put(1, 2)
+  }
+  return ()
+}
+
+fn via_values(outer: Store<Store<Int>>) -> Unit requires [outer.read] {
+  for s in outer.values() {
+    s.put(1, 2)
+  }
+  return ()
+}

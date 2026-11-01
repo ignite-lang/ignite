@@ -1,0 +1,2 @@
+e030_client_serve_only.telos:21:16: error[E030]: protocol `Ask` has no `serve` role; a `Service` component needs one
+e030_client_serve_only.telos:28:16: error[E030]: protocol `Answer` has no `connect` role; a `Client` component needs one

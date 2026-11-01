@@ -1,0 +1,33 @@
+package fixtures.patterns
+
+import std.greeting.{Greeting, Mood}
+
+enum Key { Byte(Int), Close, Interrupt }
+
+enum Local { Close, Echo(Text) }
+
+fn describe(key: Option<Key>, local: Local, mood: Mood) -> Text {
+  let first = match key {
+    Option.Some(Key.Byte(b)) => Int.to_text(b)
+    Option.Some(Key.Close) => "close"
+    Option.Some(Key.Interrupt) => "interrupt"
+    Option.None => "none"
+  }
+  let second = match local {
+    Local.Close => "local close"
+    Local.Echo(text) => text
+  }
+  let third = match mood {
+    Mood.Happy => "happy"
+    Mood.Grumpy(level) => Int.to_text(level)
+  }
+  return first.concat(second).concat(third)
+}
+
+fn outcome(result: Result<Input, IoError>) -> Int {
+  return match result {
+    Result.Ok(Input.Data(bytes)) => bytes.len()
+    Result.Ok(Input.Eof) => 0
+    Result.Err(error) => -1
+  }
+}

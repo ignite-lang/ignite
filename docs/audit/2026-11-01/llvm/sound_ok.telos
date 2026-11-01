@@ -1,0 +1,106 @@
+package audit.soundok
+
+type Box<T> { item: T }
+
+fn filler(i: Int) -> Text {
+  return "................................................................".concat(Int.to_text(i))
+}
+
+fn first(xs: List<Text>) -> Text = xs[0]
+
+fn wrap(x: Text) -> Option<Text> = Some(x)
+
+fn rewrap<T>(b: Box<T>) -> Box<T> = Box { item = b.item }
+
+fn bump(t: Text) -> Text = t.concat("x")
+
+test "callee results aliasing borrowed arguments survive releases" {
+  var xs: List<Text> = ["aaa"]
+  var last = ""
+  var i = 0
+  while i < 20000 {
+    let t = first(xs)
+    match wrap(t) {
+      Some(u) => { last = u }
+      None => {}
+    }
+    xs = [filler(i)]
+    i = i + 1
+  }
+  assert last.starts_with("....")
+  assert last.len() == 69
+  assert xs[0].len() == 69
+}
+
+test "break out of an inner loop with a carried variable" {
+  var acc = ""
+  var i = 0
+  while i < 300 {
+    var j = 0
+    loop {
+      acc = acc.concat("x")
+      j = j + 1
+      if j == 100 {
+        break
+      }
+    }
+    let junk = filler(i)
+    i = i + 1
+  }
+  assert acc.len() == 30000
+}
+
+test "generic instance carried across releases" {
+  var b: Box<List<Text>> = Box { item = ["aaa"] }
+  var i = 0
+  while i < 20000 {
+    b = rewrap(b)
+    let junk = filler(i)
+    i = i + 1
+  }
+  assert b.item[0] == "aaa"
+}
+
+test "store update allocating under the lock" {
+  let s: Store<Text> = Store.new()
+  s.put(1, "a")
+  var i = 0
+  while i < 70000 {
+    let r = s.update(1, bump)
+    i = i + 1
+  }
+  match s.get(1) {
+    Some(t) => { assert t.len() == 70001 }
+    None => { assert false }
+  }
+}
+
+test "for over a list the body reassigns" {
+  var xs: List<Text> = ["a", "b", "c"]
+  var seen = ""
+  for x in xs {
+    seen = seen.concat(x)
+    xs = [filler(xs.len())]
+  }
+  assert seen == "abc"
+}
+
+test "match on a place an arm mutates through a nested loop" {
+  var o: Option<Bytes> = Some(b"abc")
+  var i = 0
+  while i < 20000 {
+    match o {
+      Some(b) => {
+        var j = 0
+        while j < 2 {
+          o = Some(b"zzz")
+          j = j + 1
+        }
+        assert b.to_text() == "abc"
+      }
+      None => {}
+    }
+    o = Some(b"abc")
+    i = i + 1
+  }
+}

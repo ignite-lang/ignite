@@ -1,0 +1,8 @@
+fn f(x: Int) -> Int {
+  if x == Limit { y = 1 } {
+    return 1
+  }
+  return 0
+}
+
+const N Int = 1

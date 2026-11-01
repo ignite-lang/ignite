@@ -1,0 +1,14 @@
+fn one() -> Int = 1
+
+fn maybe() -> Option<Int> = Some(1)
+
+fn outside() -> Int {
+  let x = maybe()?
+  return x
+}
+
+test "? needs Result or Option" {
+  let x = one()?
+  let y: Text = maybe()?
+  return 1
+}

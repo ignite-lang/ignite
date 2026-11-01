@@ -1,0 +1,29 @@
+package std.shapes.protocol
+
+import std.net.{TcpStream}
+import std.io.IoError
+import std.shapes.{Shape, MARK}
+
+type Canvas {
+  draw: fn(Shape) -> Bytes
+}
+
+protocol Plot {
+  fn serve(stream: TcpStream, canvas: Canvas) -> Result<Unit, IoError> requires [stream.write] {
+    let draw = canvas.draw
+    (stream.write_all(draw(Shape.Empty)))?
+    return stream.close()
+  }
+
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read] {
+    let input = (stream.read(16))?
+    return match input {
+      Data(bytes) => Ok(Unit)
+      Eof => Err(IoError.new("empty"))
+    }
+  }
+}
+
+fn mark() -> Bytes {
+  return [MARK, MARK]
+}

@@ -1,0 +1,34 @@
+package fixtures.fn_values
+
+type Handler {
+  name: Text
+  run: fn(Int) -> Int
+}
+
+fn double(n: Int) -> Int {
+  return n * 2
+}
+
+fn apply(f: fn(Int) -> Int, n: Int) -> Int {
+  return f(n)
+}
+
+fn pick(first: Bool) -> fn(Int) -> Int {
+  if first { return double }
+  return negate
+}
+
+fn negate(n: Int) -> Int {
+  return -n
+}
+
+fn use_handler(handler: Handler) -> Int {
+  let run = handler.run
+  let chosen = pick(true)
+  let double = negate
+  return run(apply(double, chosen(1)))
+}
+
+fn handlers() -> List<Handler> {
+  return [Handler { name = "double", run = double }, Handler { name = "negate", run = negate }]
+}

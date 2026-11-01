@@ -1,0 +1,10 @@
+package std.apply
+
+import std.modes.{level, pick}
+
+fn louder(n: Int) -> Int = level(Loud) + level(Quiet(n))
+
+fn describe(loud: Bool) -> Text = match pick(loud) {
+  Loud => "loud"
+  Quiet(_) => "quiet"
+}

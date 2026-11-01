@@ -1,0 +1,18 @@
+type Handler {
+  run: fn(Int) -> Int
+}
+
+type Plain { a: Int, b: Option<List<Text>> }
+
+fn inc(x: Int) -> Int = x + 1
+
+test "equality needs values without functions or handles" {
+  let h = Handler { run = inc }
+  assert h == h
+  assert Some(IoError.new("x")) != None
+  assert Plain { a = 1, b = None } == Plain { a = 1, b = Some(["x"]) }
+  let p = Plain { a = 1, b = None }
+  if p == p {
+    return
+  }
+}

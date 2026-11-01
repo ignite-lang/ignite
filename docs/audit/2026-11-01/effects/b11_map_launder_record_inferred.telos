@@ -1,0 +1,21 @@
+type Conn {
+  stream: TcpStream
+}
+
+fn wrap(s: TcpStream) -> Conn = Conn { stream = s }
+
+fn via_map_record(ls: List<TcpStream>) -> Result<Input, IoError> requires [] {
+  let conns = ls.map(wrap)
+  return conns[0].stream.read(1)
+}
+
+fn via_map_for(ls: List<TcpStream>) -> Result<Unit, IoError> requires [] {
+  for c in ls.map(wrap) {
+    c.stream.write_all("x".to_bytes())?
+  }
+  return Ok(())
+}
+
+fn inner_read(ls: List<TcpStream>) -> Result<Input, IoError> = ls.map(wrap)[0].stream.read(1)
+
+fn via_inferred(ls: List<TcpStream>) -> Result<Input, IoError> requires [] = inner_read(ls)

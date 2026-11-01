@@ -1,0 +1,91 @@
+package fixtures.generics
+
+type Pair<A, B> {
+  first: A
+  second: B
+}
+
+enum Tree<T> {
+  Leaf,
+  Node(T, List<Tree<T>>),
+}
+
+type Named<T> = Pair<Text, T>
+
+type Handler<S> {
+  state: S
+  handle: fn(state: S, n: Int) -> Int requires [state.*]
+}
+
+fn swap<A, B>(p: Pair<A, B>) -> Pair<B, A> {
+  return Pair { first = p.second, second = p.first }
+}
+
+fn identity<T>(value: T) -> T = value
+
+fn depth<T>(tree: Tree<T>) -> Int {
+  return match tree {
+    Leaf => 0,
+    Node(_, children) => {
+      var most = 0
+      for child in children {
+        let d = depth(child)
+        if d > most {
+          most = d
+        }
+      }
+      1 + most
+    }
+  }
+}
+
+fn label<T>(named: Named<T>) -> Text = named.first
+
+fn first_or<T>(items: List<T>, fallback: T) -> T {
+  for item in items {
+    return item.copy()
+  }
+  return fallback
+}
+
+fn wrap<T>(value: T) -> Option<T> = Some(value)
+
+fn apply<T, U>(f: fn(T) -> U, value: T) -> U = f(value)
+
+fn run<S>(h: Handler<S>, n: Int) -> Int requires [h.*] {
+  let handle = h.handle
+  return handle(h.state, n) + h.handle(h.state, n)
+}
+
+fn count(stream: TcpStream, n: Int) -> Int requires [stream.write] {
+  return n
+}
+
+fn handler(stream: TcpStream) -> Handler<TcpStream> {
+  return Handler { state = stream, handle = count }
+}
+
+fn bump(stream: TcpStream) -> Int requires [stream.*] {
+  return run(handler(stream), 1)
+}
+
+fn double(n: Int) -> Int = n * 2
+
+fn use_all() -> Int {
+  let pair = Pair { first = 1, second = "one" }
+  let swapped: Pair<Text, Int> = swap(pair)
+  let tree = Node(1, [Node(2, [])])
+  let empty: Tree<Text> = Leaf
+  let named: Named<Bool> = Pair { first = "flag", second = true }
+  let text = label(named)
+  let n = identity(41) + depth(tree) + depth(empty)
+  let picked = first_or([1, 2], 3)
+  let maybe = wrap("x")
+  let none: Option<Int> = wrap(n)
+  let same: fn(Int) -> Int = identity
+  let applied = apply(double, 2) + same(1)
+  return match tree {
+    Tree.Node(value, _) => value + n + picked + applied + swapped.second,
+    Tree.Leaf => 0,
+  }
+}

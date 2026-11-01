@@ -1,0 +1,5 @@
+type A = List<B>
+type B = Option<A>
+type Self = (Int, Self)
+
+fn f(a: A, s: Self) -> Int = 0

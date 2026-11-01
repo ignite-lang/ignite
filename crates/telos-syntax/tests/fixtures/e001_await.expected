@@ -1,0 +1,1 @@
+e001_await.telos:2:15: error[E001]: remove `await`: effectful calls need no marker

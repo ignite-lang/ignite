@@ -1,0 +1,7 @@
+fn f() -> Int {
+  let n = None
+  let r = Ok(1)
+  let e = Err("bad")
+  let l = List.empty()
+  return 0
+}

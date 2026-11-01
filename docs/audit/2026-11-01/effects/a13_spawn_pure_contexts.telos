@@ -1,0 +1,19 @@
+fn worker(s: TcpStream) -> Result<Unit, IoError> = s.write_all("x".to_bytes())
+
+fn spawner(s: TcpStream) -> Result<Unit, IoError> requires [] {
+  spawn worker(s)
+  return Ok(())
+}
+
+fn spawner_ufcs(s: TcpStream) -> Result<Unit, IoError> requires [] {
+  spawn s.worker()
+  return Ok(())
+}
+
+type Cfg {
+  conn: Result<TcpStream, IoError> = TcpStream.connect("h", 1)
+}
+
+const S: Store<Int> = Store.new()
+
+const R: Result<Input, IoError> = Stdin.read(1)

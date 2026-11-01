@@ -1,0 +1,4 @@
+fn open() {
+  loop {
+    break
+  }

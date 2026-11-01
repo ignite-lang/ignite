@@ -1,0 +1,35 @@
+package std.protocol.hello
+
+import std.greeting.{Greeting, DEFAULT_NAME, send}
+
+protocol Hello {
+  fn serve(stream: TcpStream, application: fn(Text) -> Greeting) -> Result<Unit, IoError> requires [stdin.read, stream.write] {
+    let respond = application
+    spawn pump(stream)
+    return send(stream, respond(DEFAULT_NAME))
+  }
+
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, stdout.write] {
+    let input = (stream.read(64))?
+    match input {
+      Data(bytes) => {
+        (Stdout.write_all(bytes))?
+      }
+      Eof => {}
+    }
+    return Ok(Unit)
+  }
+}
+
+fn pump(stream: TcpStream) -> Result<Unit, IoError> requires [stdin.read, stream.write] {
+  loop {
+    match (Stdin.read(64))? {
+      Data(bytes) => {
+        (stream.write_all(bytes))?
+      }
+      Eof => {
+        return stream.close()
+      }
+    }
+  }
+}

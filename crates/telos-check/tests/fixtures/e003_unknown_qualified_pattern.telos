@@ -1,0 +1,24 @@
+import std.greeting.{Mood}
+
+enum Key { Byte(Int), Close }
+
+fn describe(key: Key, mood: Mood, value: Option<Int>) -> Int {
+  let a = match key {
+    Key.Escape => 1
+    Key.Byte(b, c) => b
+    Key.Close(x) => 2
+    Nope.Close => 3
+    _ => 4
+  }
+  let b = match mood {
+    Mood.Sad => 1
+    Mood.Grumpy => 2
+    _ => 3
+  }
+  return match value {
+    Option.Some(Key.Missing) => a
+    Option.Maybe(v) => b
+    Result.Ok => 0
+    _ => 5
+  }
+}

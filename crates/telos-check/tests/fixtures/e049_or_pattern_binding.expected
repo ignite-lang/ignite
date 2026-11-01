@@ -1,0 +1,3 @@
+e049_or_pattern_binding.telos:5:12: error[E049]: `r` is bound inside an or-pattern; an or-pattern cannot bind names, match the alternatives in separate arms
+e049_or_pattern_binding.telos:5:24: error[E049]: `r` is bound inside an or-pattern; an or-pattern cannot bind names, match the alternatives in separate arms
+e049_or_pattern_binding.telos:13:18: error[E049]: `n` is bound inside an or-pattern; an or-pattern cannot bind names, match the alternatives in separate arms

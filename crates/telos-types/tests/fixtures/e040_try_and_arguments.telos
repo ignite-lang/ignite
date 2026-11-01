@@ -1,0 +1,17 @@
+fn g() -> Result<Int, Text> {
+  return Ok(1)
+}
+
+fn twice(x: Int) -> Int {
+  return x * 2
+}
+
+fn f() -> Result<Int, IoError> {
+  let x = g()?
+  return Ok(twice(true))
+}
+
+fn h() -> Int {
+  let x = g()?
+  return x
+}

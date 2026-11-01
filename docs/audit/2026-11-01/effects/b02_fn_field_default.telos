@@ -1,0 +1,10 @@
+fn rd(s: TcpStream) -> Result<Input, IoError> requires [s.read] = s.read(1)
+
+type H {
+  run: fn(s: TcpStream) -> Result<Input, IoError> requires [s.read] = rd
+}
+
+fn via_default(stream: TcpStream) -> Result<Input, IoError> requires [] {
+  let h = H {}
+  return h.run(stream)
+}

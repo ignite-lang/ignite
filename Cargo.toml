@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/telos-syntax",
+    "crates/telos-check",
+    "crates/telos-rustgen",
+    "crates/telos-io",
+    "crates/telos",
+    "crates/telos-types",
+    "crates/telos-rt",
+    "crates/telos-llvm",
+    "crates/telos-load",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+telos-syntax = { path = "crates/telos-syntax" }
+telos-check = { path = "crates/telos-check" }
+telos-rustgen = { path = "crates/telos-rustgen" }
+telos-io = { path = "crates/telos-io" }
+telos = { path = "crates/telos" }
+telos-types = { path = "crates/telos-types" }
+telos-rt = { path = "crates/telos-rt" }
+telos-llvm = { path = "crates/telos-llvm" }
+clap = { version = "4.6", features = ["derive"] }
+nix = { version = "0.31", features = ["term", "fs"] }
+
+[profile.release.package.telos-rt]
+codegen-units = 1

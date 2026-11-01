@@ -1,0 +1,74 @@
+package probe.guarded
+
+const LIMIT: Int = 3
+const NAME: Text = "root"
+
+enum Cmd {
+  Say(Text)
+  Pair(Text, Int)
+  Nested((Text, Int))
+}
+
+fn depth_const(x: Option<Int>) -> Int = match x {
+  Some(LIMIT) => 1
+  Some(n) => n
+  None => 0
+}
+
+fn tuple_text_binding(p: (Text, Int)) -> Int = match p {
+  ("a", n) => n
+  (NAME, n) => n + 1
+  (_, n) => n * 2
+}
+
+fn list_binding(xs: List<Text>) -> Text = match xs {
+  [x, "end"] => x
+  ["start", y] => y
+  [only] => only
+  _ => ""
+}
+
+fn nested(c: Cmd) -> Int = match c {
+  Say("quit") => 0
+  Say(_) => 1
+  Pair("n", k) => k
+  Pair(_, k) => k + 1
+  Nested(("x", k)) => k
+  Nested((_, k)) => k * 10
+}
+
+fn or_text(t: Text) -> Int = match t {
+  "a" | "b" => 1
+  "c" => 2
+  _ => 3
+}
+
+fn early(xs: List<Int>) -> Int = match xs {
+  [a, 0] => return a
+  [a, b] => a + b
+  _ => 0
+}
+
+fn tuple_with_list(p: (Text, List<Text>)) -> Text = match p {
+  ("GET", [one]) => one
+  (verb, [first, _]) => verb + first
+  _ => ""
+}
+
+test "guarded arms" {
+  assert depth_const(Some(3)) == 1
+  assert depth_const(Some(5)) == 5
+  assert tuple_text_binding(("a", 2)) == 2
+  assert tuple_text_binding(("root", 2)) == 3
+  assert tuple_text_binding(("z", 2)) == 4
+  assert list_binding(["x", "end"]) == "x"
+  assert list_binding(["start", "y"]) == "y"
+  assert nested(Say("quit")) == 0
+  assert nested(Pair("n", 7)) == 7
+  assert nested(Nested(("x", 4))) == 4
+  assert nested(Nested(("y", 4))) == 40
+  assert or_text("b") == 1
+  assert early([9, 0]) == 9
+  assert tuple_with_list(("GET", ["a"])) == "a"
+  assert tuple_with_list(("P", ["a", "b"])) == "Pa"
+}

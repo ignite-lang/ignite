@@ -1,0 +1,16 @@
+enum Shape { Dot, Circle(Int), Square(Int) }
+
+fn size(shape: Shape) -> Int {
+  return match shape {
+    Circle(r) | Square(r) => r
+    Dot | Circle(_) => 0
+    _ => 1
+  }
+}
+
+fn pair(p: (Int, Bool)) -> Int {
+  return match p {
+    (0, true) | (n, false) => 1
+    _ => 2
+  }
+}

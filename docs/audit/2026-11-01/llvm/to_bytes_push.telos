@@ -1,0 +1,27 @@
+package audit.tobytes
+
+fn grow(x: Text) -> Int {
+  x.to_bytes().push(33)
+  return x.len()
+}
+
+fn filler(i: Int) -> Text {
+  return "................................................................".concat(Int.to_text(i))
+}
+
+test "to_bytes push on a borrowed parameter leaves the caller unchanged" {
+  var s = "abc"
+  let n = grow(s)
+  assert s == "abc", "s is {s} (len {s.len()}), callee saw len {n}"
+}
+
+test "to_bytes push in a loop keeps the text valid" {
+  var s = "abc"
+  var i = 0
+  while i < 20000 {
+    s.to_bytes().push(120)
+    let junk = filler(i)
+    i = i + 1
+  }
+  assert s.to_bytes().slice(0, 3).to_text() == "abc", "prefix is {s.to_bytes().slice(0, 3).to_text()} len {s.len()}"
+}

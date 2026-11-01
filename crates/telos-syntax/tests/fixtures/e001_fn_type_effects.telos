@@ -1,0 +1,6 @@
+type Handler {
+  handle: fn(state: Int, Text) -> Text requires [state.*]
+}
+
+fn run(app: Handler) requires [app.*.read] {
+}

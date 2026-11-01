@@ -1,0 +1,34 @@
+const LIMIT: Int = 10
+
+fn flag(on: Bool) -> Int {
+  return match on {
+    true => 1
+  }
+}
+
+fn pair(p: (Bool, Option<Int>)) -> Int {
+  return match p {
+    (true, _) => 1
+    (false, Some(n)) => n
+  }
+}
+
+fn list(l: List<Int>) -> Int {
+  return match l {
+    [] => 0
+    [x] => x
+  }
+}
+
+fn limit(n: Int) -> Int {
+  return match n {
+    LIMIT => 1
+    0 | 1 => 2
+  }
+}
+
+fn either(v: Option<Bool>) -> Int {
+  return match v {
+    Some(true) | None => 1
+  }
+}

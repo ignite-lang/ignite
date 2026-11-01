@@ -1,0 +1,6 @@
+package fixtures.unexpected
+
+fn f() -> Int {
+  let = 1
+  return 0
+}

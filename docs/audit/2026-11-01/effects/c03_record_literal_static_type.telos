@@ -1,0 +1,24 @@
+type Box<T> {
+  item: T
+}
+
+type H {
+  run: fn(s: TcpStream) -> Result<Input, IoError> requires [s.read]
+}
+
+fn rd(s: TcpStream) -> Result<Input, IoError> requires [s.read] = s.read(1)
+
+fn via_box(store: Store<Int>) -> Option<Int> requires [store.read] {
+  let b = Box { item = store }
+  return b.item.get(1)
+}
+
+fn via_literal(stream: TcpStream) -> Result<Input, IoError> requires [stream.read] {
+  let h = H { run = rd }
+  return h.run(stream)
+}
+
+fn annotated(stream: TcpStream) -> Result<Input, IoError> requires [stream.read] {
+  let h: H = H { run = rd }
+  return h.run(stream)
+}

@@ -1,0 +1,125 @@
+import std.shapes.{Point, Shape, Pen, Painter, Maybe, thicker}
+
+enum Action { Continue, Close }
+enum Flow { Continue, Stop }
+
+type Handler = fn(Int) -> Int
+type Pair<A, B> = (A, B)
+
+type Config {
+  port: Int = 2324
+  host: Text = "127.0.0.1"
+  name: Text
+  on_line: Handler = twice
+}
+
+const IAC: Byte = 255
+const QUIT: Text = "quit"
+
+fn twice(n: Int) -> Int = n * 2
+
+fn next(action: Action) -> Flow = match action {
+  Continue => Continue
+  Close => Stop
+}
+
+fn flows() -> List<Flow> {
+  let f: Flow = Continue
+  var all = [f, Stop]
+  all.push(Continue)
+  return all
+}
+
+fn swap(p: Pair<Int, Text>) -> (Text, Int) {
+  let (n, t) = p
+  return (t, n)
+}
+
+fn unit() -> Unit {
+  let u = ()
+  _ = twice(1)
+  let _ = u
+  return ()
+}
+
+fn render(n: Int, b: Byte, ok: Bool, t: Text, raw: Bytes) -> Text {
+  let line = "n={n} b={b} ok={ok} t={t} raw={raw} sum={n + 1} {{literal}}"
+  return line + "!" + t
+}
+
+fn configure(name: Text) -> Int {
+  let config = Config { name }
+  let other = Config { port = 1, name = "x", on_line = twice }
+  let pen = Pen { color = "red" }
+  let wide = pen.thicker(2)
+  return config.on_line(config.port) + other.port.twice() + wide.width
+}
+
+fn paint(p: Painter, m: Maybe<Int>) -> Bytes {
+  let s: Shape = Empty
+  let fallback = match m {
+    Some(n) => n
+    None => 0
+  }
+  return p(s)
+}
+
+fn first(values: List<Int>) -> Int {
+  let n = match values.len() {
+    0 => return 0
+    _ => values.at(0)
+  }
+  return n
+}
+
+fn classify(b: Byte, word: Text, flag: Bool, pair: (Bool, Int), opt: Option<Bool>) -> Int {
+  let a = match b {
+    IAC => 1
+    b'\n' | b' ' => 2
+    _ => 3
+  }
+  let c = match word {
+    QUIT => 1
+    _ => 0
+  }
+  let d = match flag {
+    true => 1
+    false => 0
+  }
+  let e = match pair {
+    (true, n) => n
+    (false, 0) => 0
+    (false, _) => 1
+  }
+  let f = match opt {
+    Some(false) | None => 0
+    Some(true) => 1
+  }
+  let g = match [1, 2] {
+    [] => 0
+    [x] => x
+    _ => 2
+  }
+  let h = match () {
+    () => 0
+  }
+  return a + c + d + e + f + g + h
+}
+
+fn total(bytes: Bytes) -> Int {
+  var sum = 0
+  for b in bytes {
+    sum = sum + b'a'.to_text().len() + b.to_text().len()
+  }
+  for b in b"hi\n" {
+    sum = sum + 1
+  }
+  return sum
+}
+
+fn nested(v: Option<(Bool, Int)>) -> Int {
+  return match v {
+    Some((false, _)) | None => 0
+    Some((true, n)) => n
+  }
+}

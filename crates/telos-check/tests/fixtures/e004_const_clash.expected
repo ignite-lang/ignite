@@ -1,0 +1,7 @@
+e004_const_clash.telos:4:7: error[E004]: duplicate definition of `LIMIT`
+e004_const_clash.telos:6:4: error[E004]: duplicate definition of `LIMIT`
+e004_const_clash.telos:10:7: error[E004]: duplicate definition of `DEFAULT_NAME`, which is imported from `std.greeting`
+e004_const_clash.telos:11:7: error[E004]: duplicate definition of builtin `Text`
+e004_const_clash.telos:12:7: error[E004]: constant `Close` has the name of a variant of `Key`
+e004_const_clash.telos:13:7: error[E004]: constant `None` has the name of a variant of `Option`
+e004_const_clash.telos:14:7: error[E004]: duplicate definition of builtin `Process`

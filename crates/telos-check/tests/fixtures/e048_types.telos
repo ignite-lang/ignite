@@ -1,0 +1,14 @@
+type Bag {
+  items: List<Int, Int>
+  label: Shape
+}
+
+fn first(values: Option) -> Result<Int> {
+  let n: Int<Text> = 1
+  return Ok(n)
+}
+
+fn make() -> Int {
+  let w = Widget { size = 1 }
+  return 0
+}

@@ -1,0 +1,12 @@
+fn echo(stream: TcpStream) -> Result<Unit, IoError> {
+  let input = stream.read(16)?
+  return stream.write_all("x".to_bytes())
+}
+
+fn greet() -> Result<Unit, IoError> = Stdout.write_all("hi".to_bytes())
+
+fn serve(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {
+  echo(stream)?
+  stream.echo()?
+  return greet()
+}

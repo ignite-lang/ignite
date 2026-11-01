@@ -1,0 +1,10 @@
+[package]
+name = "telos-types"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Telos type checker: a type for every expression, the resolved callee of every call."
+
+[dependencies]
+telos-syntax.workspace = true
+telos-check.workspace = true

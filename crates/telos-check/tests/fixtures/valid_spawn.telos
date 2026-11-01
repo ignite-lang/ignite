@@ -1,0 +1,21 @@
+package fixtures.spawn
+
+fn copy(from: TcpStream, to: TcpStream) -> Result<Unit, IoError> requires [from.read, to.write] {
+  loop {
+    match (from.read(1024))? {
+      Data(bytes) => {
+        (to.write_all(bytes))?
+      }
+      Eof => {
+        return Ok(Unit)
+      }
+    }
+  }
+}
+
+fn relay(a: TcpStream, b: TcpStream) -> Result<Unit, IoError> requires [a.read, a.write, b.read, b.write] {
+  spawn copy(a, b)
+  spawn copy(b, a)
+  let copy = 1
+  return Ok(Unit)
+}

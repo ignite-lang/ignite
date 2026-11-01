@@ -1,0 +1,9 @@
+fn one() -> Int = 1
+
+test "" {
+  assert one() == 1
+}
+
+test "one is {one()}" {
+  assert one() == 1
+}

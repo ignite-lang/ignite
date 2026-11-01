@@ -1,0 +1,13 @@
+test fn fresh() -> Store<Int> = Store.new()
+
+test fn poke(s: TcpStream) -> Result<Input, IoError> = s.read(1)
+
+fn use_fresh() -> Option<Int> requires [] = fresh().get(1)
+
+fn use_poke(s: TcpStream) -> Result<Input, IoError> requires [] = s.poke()
+
+test "ok" {
+  let s = fresh()
+  s.put(1, 2)
+  assert s.get(1) == Some(2)
+}

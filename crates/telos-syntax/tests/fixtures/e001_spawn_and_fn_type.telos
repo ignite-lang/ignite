@@ -1,0 +1,5 @@
+fn spawn_all() requires [net] {
+  spawn
+}
+
+type R { f: fn(Int -> Int }

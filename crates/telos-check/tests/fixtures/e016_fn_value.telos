@@ -1,0 +1,16 @@
+type Handler<S> {
+  state: S
+  handle: fn(state: S, n: Int) -> Int requires [state.*]
+}
+
+fn run<S>(h: Handler<S>) -> Int requires [stdin.read] {
+  return h.handle(h.state, 1)
+}
+
+fn local(f: fn(s: TcpStream) -> Int requires [s.write], stream: TcpStream) -> Int requires [stream.read] {
+  return f(stream)
+}
+
+fn ambient(f: fn() -> Int requires [stdout.write]) -> Int requires [f.read] {
+  return f()
+}

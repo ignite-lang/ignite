@@ -1,0 +1,19 @@
+import std.shapes.{Shape}
+
+enum Action { Continue, Close }
+enum Flow { Continue, Stop }
+enum Slot { Empty, Full(Int) }
+
+fn next(action: Action) -> Flow {
+  let undecided = Continue
+  return match action {
+    Continue => Continue
+    Close => Flow.Stop
+  }
+}
+
+fn slot() -> Int {
+  let s = Empty
+  let decided: Shape = Empty
+  return 0
+}

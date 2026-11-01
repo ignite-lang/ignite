@@ -1,0 +1,12 @@
+fn fetch() -> Int requires [net] {
+  return 1
+}
+
+const FETCHED: Int = fetch()
+const RAW: Result<Unit, IoError> = Stdin.set_raw(true)
+const TERMINAL: Result<Bool, IoError> = Stdin.is_terminal()
+const HANDLER: fn() -> Int = fetch
+const MADE: IoError = IoError.new("pure")
+const WRONG: IoError = IoError.new()
+const CALLED: Int = MADE(1)
+const UNKNOWN: Int = MISSING

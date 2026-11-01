@@ -1,0 +1,4 @@
+fn bump(n: Int) -> Int {
+  n = n + 1
+  return n
+}

@@ -1,0 +1,10 @@
+package std.modes
+
+enum Mode { Loud, Quiet(Int) }
+
+fn level(mode: Mode) -> Int = match mode {
+  Loud => 10
+  Quiet(n) => n
+}
+
+fn pick(loud: Bool) -> Mode = if loud { Loud } else { Quiet(1) }

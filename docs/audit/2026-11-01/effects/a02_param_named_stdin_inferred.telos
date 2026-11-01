@@ -1,0 +1,3 @@
+fn helper(stdin: Int) -> Result<Input, IoError> = Stdin.read(stdin)
+
+fn outer() -> Result<Input, IoError> requires [] = helper(1)

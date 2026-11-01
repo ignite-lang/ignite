@@ -1,0 +1,5 @@
+e030_protocol_roles.telos:1:10: error[E030]: protocol `Empty` declares no role; declare `serve` or `connect`
+e030_protocol_roles.telos:4:6: error[E030]: `listen` is not a protocol role; the roles are `serve` and `connect`, declare helpers as module-level functions
+e030_protocol_roles.telos:8:6: error[E030]: role `Broken.serve` must be effectful; add a `requires` clause
+e030_protocol_roles.telos:12:6: error[E030]: role `Broken.connect` takes 1 parameter (stream), found 2
+e030_protocol_roles.telos:19:17: error[E030]: protocol `Echo` has no role `serve`

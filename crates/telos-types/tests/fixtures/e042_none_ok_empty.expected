@@ -1,0 +1,4 @@
+e042_none_ok_empty.telos:2:11: error[E042]: cannot infer the type of `None`; add a type annotation
+e042_none_ok_empty.telos:3:11: error[E042]: cannot infer the error type of `Ok(..)`; add a type annotation
+e042_none_ok_empty.telos:4:11: error[E042]: cannot infer the success type of `Err(..)`; add a type annotation
+e042_none_ok_empty.telos:5:11: error[E042]: cannot infer the element type of `List.empty()`; add a type annotation

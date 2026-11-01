@@ -1,0 +1,4 @@
+fn f(t: Text, g: fn(Int) -> Int) -> Int {
+  let n = t.len(1)
+  return g(1, 2)
+}

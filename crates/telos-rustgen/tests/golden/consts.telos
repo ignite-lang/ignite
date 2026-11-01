@@ -1,0 +1,51 @@
+package golden.consts
+
+import std.text.{Mode, SUFFIX, shout}
+import std.io.IoError
+
+const LIMIT: Int = 4096
+const DOUBLE_LIMIT: Int = LIMIT * 2
+const GREETING: Text = "hello".concat(SUFFIX)
+const LOUD: Mode = Mode.Loud
+
+enum Verdict {
+  Accept(Int),
+  Reject(Text)
+}
+
+fn judge(size: Int) -> Verdict {
+  if size > LIMIT {
+    return Verdict.Reject("too long: ".concat(Int.to_text(size)))
+  }
+  return Verdict.Accept(DOUBLE_LIMIT - size)
+}
+
+fn describe(verdict: Verdict, mode: Mode) -> Text {
+  match verdict {
+    Verdict.Accept(room) => {
+      match mode {
+        Mode.Loud => shout(GREETING)
+        Mode.Quiet => Int.to_text(room)
+      }
+    }
+    Verdict.Reject(reason) => reason
+  }
+}
+
+fn admit(size: Int) -> Result<Int, IoError> {
+  match judge(size) {
+    Verdict.Accept(room) => Ok(room)
+    Verdict.Reject(reason) => Err(IoError.new(reason))
+  }
+}
+
+fn or_limit(value: Option<Int>) -> Int {
+  match value {
+    Option.Some(v) => v
+    Option.None => LIMIT
+  }
+}
+
+fn default_mode() -> Mode {
+  return LOUD
+}

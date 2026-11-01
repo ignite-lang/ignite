@@ -1,0 +1,15 @@
+type Todo { id: Int }
+
+fn counter() -> Int {
+  let s: Store<Todo> = Store.new()
+  s.next_id()
+}
+
+test fn fresh() -> Store<Todo> = Store.new()
+
+test "a test may create a store" {
+  let s: Store<Todo> = Store.new()
+  s.put(1, Todo { id = 1 })
+  let t = fresh()
+  assert t.next_id() == 1
+}

@@ -1,0 +1,5 @@
+fn readn(n: Int) -> Result<Input, IoError> requires [stdin.read] = Stdin.read(n)
+
+fn call(f: fn(stdin: Int) -> Result<Input, IoError> requires [stdin.read]) -> Result<Input, IoError> requires [] = f(1)
+
+fn outer() -> Result<Input, IoError> requires [] = call(readn)

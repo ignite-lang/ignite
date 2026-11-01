@@ -1,0 +1,9 @@
+fn via_option(o: Option<Store<Int>>) -> Option<Int> requires [] = match o {
+  Some(st) => st.get(1)
+  None => None
+}
+
+fn via_tuple(s: Store<Int>) -> Option<Int> requires [] {
+  let (st, n) = (s, 1)
+  return st.get(n)
+}

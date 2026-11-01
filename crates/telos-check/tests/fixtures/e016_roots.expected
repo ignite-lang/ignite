@@ -1,0 +1,12 @@
+e016_roots.telos:9:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_record`
+e016_roots.telos:14:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_if`
+e016_roots.telos:24:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_block_local`
+e016_roots.telos:32:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_match`
+e016_roots.telos:40:10: error[E016]: missing effect `o.read` for `t.read`; add it to the `requires` of `via_match_binding`
+e016_roots.telos:45:10: error[E016]: missing effect `ls.read` for `t.read`; add it to the `requires` of `via_at`
+e016_roots.telos:49:10: error[E016]: missing effect `ls.write` for `write_all`; add it to the `requires` of `via_at_write`
+e016_roots.telos:54:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_list`
+e016_roots.telos:60:16: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_some`
+e016_roots.telos:75:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_requires_empty`
+e016_roots.telos:79:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_requires_empty_ufcs`
+e016_roots.telos:84:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_effectful`

@@ -1,0 +1,19 @@
+import std.shapes.{width, origin, dot}
+import std.shapes.protocol.{Canvas}
+
+// `Shape` is not imported: each bare variant takes the enum of its
+// expected type (a parameter, a fn-typed field, an `if` arm, a scrutinee).
+
+fn widths() -> Int = width(Empty) + width(Dot(origin())) + width(Line(origin(), origin()))
+
+fn paint(canvas: Canvas) -> Bytes = canvas.draw(Empty)
+
+fn kind() -> Int = match dot(origin()) {
+  Dot(p) => p.x
+  Line(_, _) => 1
+  Empty => 2
+}
+
+fn pick(flag: Bool) -> Int = width(if flag { Empty } else { dot(origin()) })
+
+fn first(flag: Bool) -> Int = width(if flag { dot(origin()) } else { Empty })

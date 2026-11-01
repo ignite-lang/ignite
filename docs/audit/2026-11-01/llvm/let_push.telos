@@ -1,0 +1,22 @@
+package audit.letpush
+
+fn f() -> Int {
+  let l = [1]
+  l.push(2)
+  l.len()
+}
+
+fn g(words: List<Bytes>) -> Int {
+  var n = 0
+  for w in words {
+    w.push(1)
+    n = n + w.len()
+  }
+  n
+}
+
+fn h(o: Option<Bytes>) -> Int = match o {
+  Some(b) => { b.push(1)
+    b.len() }
+  None => 0
+}

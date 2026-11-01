@@ -1,0 +1,6 @@
+package probe.spawnvalue
+
+fn run_value(handler: fn(stream: TcpStream) -> Result<Unit, IoError> requires [stream.*], stream: TcpStream) -> Result<Unit, IoError> requires [handler.*, stream.*] {
+  spawn handler(stream)
+  Ok(Unit)
+}

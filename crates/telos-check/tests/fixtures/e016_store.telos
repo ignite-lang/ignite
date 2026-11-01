@@ -1,0 +1,17 @@
+type Todo {
+  id: Int
+}
+
+type App {
+  todos: Store<Todo>
+}
+
+fn add(todos: Store<Todo>) -> Int requires [todos.read] {
+  let id = todos.next_id()
+  todos.put(id, Todo { id = id })
+  return id
+}
+
+fn all(app: App) -> List<Todo> requires [app.write] = app.todos.values()
+
+fn delayed(stream: TcpStream) -> Result<Unit, IoError> = stream.set_idle_timeout(10)

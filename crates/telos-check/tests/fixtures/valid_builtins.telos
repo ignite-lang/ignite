@@ -1,0 +1,26 @@
+package fixtures.builtins
+
+import std.net.{TcpListener, TcpStream, Input}
+import std.io.IoError
+
+fn bytes() -> Bytes {
+  var out = Bytes.empty()
+  out.append(Bytes.of([1, 2, 3]))
+  let items: List<Text> = List.empty()
+  log(Int.to_text(items.len()))
+  return out
+}
+
+fn exchange(port: Int) -> Result<Unit, IoError> requires [net.listen, net.connect] {
+  let listener = (TcpListener.bind("127.0.0.1", port))?
+  let stream = (TcpStream.connect("127.0.0.1", listener.local_port()))?
+  let accepted = (listener.accept())?
+  (stream.write_all(bytes()))?
+  let input = (accepted.read(16))?
+  match input {
+    Data(received) => log(received.to_text())
+    Eof => log("eof")
+  }
+  (stream.close())?
+  return Ok(Unit)
+}

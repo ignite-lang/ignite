@@ -1,0 +1,2 @@
+e043_arguments.telos:2:11: error[E043]: wrong number of arguments to `len`: expected 0, found 1
+e043_arguments.telos:3:10: error[E043]: wrong number of arguments to `g`: expected 1, found 2

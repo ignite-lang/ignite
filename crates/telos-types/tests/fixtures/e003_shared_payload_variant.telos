@@ -1,0 +1,8 @@
+enum A { X(Int), Y }
+enum B { X(Int), Z }
+
+fn f() -> A {
+  return X
+}
+
+fn g() -> B = X(1)

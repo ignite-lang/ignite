@@ -1,0 +1,4 @@
+fn f() -> Int {
+  let xs = []
+  return 0
+}

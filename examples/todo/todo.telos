@@ -1,0 +1,151 @@
+package examples.todo
+
+import std.json.{Json, parse, text, bool}
+import std.protocol.http.{
+  Http, HttpApp, Request, Response, json, status_response, method_not_allowed, segments
+}
+
+// A todo list served over HTTP/1.1 with JSON bodies, kept in memory:
+//   GET /todos            every todo, in id order
+//   POST /todos           {"title": "milk"} creates one; 201 with the todo
+//   GET /todos/{id}       one todo, or 404
+//   PATCH /todos/{id}     {"title": .., "done": ..}, either optional
+//   DELETE /todos/{id}    204, or 404
+
+type Todo {
+  id: Int
+  title: Text
+  done: Bool = false
+}
+
+fn or<T>(value: Option<T>, fallback: T) -> T = match value {
+  Some(present) => present
+  None => fallback
+}
+
+fn to_json(todo: Todo) -> Json =
+  Object([("id", Number(todo.id)), ("title", Str(todo.title)), ("done", Bool(todo.done))])
+
+fn list(todos: Store<Todo>) -> Response = json(200, Array(todos.values().map(to_json)))
+
+fn create(todos: Store<Todo>, body: Text) -> Response = match parse(body) {
+  Ok(value) => match value.text("title") {
+    Some(title) => {
+      let todo = Todo { id = todos.next_id(), title, done = or(value.bool("done"), false) }
+      todos.put(todo.id, todo)
+      json(201, to_json(todo))
+    }
+    None => status_response(400)
+  }
+  Err(_) => status_response(400)
+}
+
+fn show(todos: Store<Todo>, id: Int) -> Response = match todos.get(id) {
+  Some(todo) => json(200, to_json(todo))
+  None => status_response(404)
+}
+
+fn patch(todos: Store<Todo>, id: Int, body: Text) -> Response = match (todos.get(id), parse(body)) {
+  (None, _) => status_response(404)
+  (Some(todo), Ok(value)) => {
+    let changed = Todo {
+      id
+      title = or(value.text("title"), todo.title)
+      done = or(value.bool("done"), todo.done)
+    }
+    todos.put(id, changed)
+    json(200, to_json(changed))
+  }
+  _ => status_response(400)
+}
+
+fn delete(todos: Store<Todo>, id: Int) -> Response = match todos.remove(id) {
+  Some(_) => status_response(204)
+  None => status_response(404)
+}
+
+fn handle(todos: Store<Todo>, request: Request) -> Response = match (request.method, request.segments()) {
+  ("GET", ["todos"]) => list(todos)
+  ("POST", ["todos"]) => create(todos, request.body)
+  (_, ["todos"]) => method_not_allowed("GET, POST")
+  (method, ["todos", id]) => match Int.parse(id) {
+    None => status_response(404)
+    Some(n) => match method {
+      "GET" => show(todos, n)
+      "PATCH" => patch(todos, n, request.body)
+      "DELETE" => delete(todos, n)
+      _ => method_not_allowed("GET, PATCH, DELETE")
+    }
+  }
+  _ => status_response(404)
+}
+
+system TodoService {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 8080 }
+  resource todos: Store<Todo>
+
+  component server: Service {
+    listener = ingress
+    protocol = Http
+    application = HttpApp { state = todos, handle }
+    executable = "todod"
+  }
+}
+
+// ---- tests ------------------------------------------------------------------
+
+test fn request(method: Text, path: Text, body: Text) -> Request =
+  Request { method, path, query = "", version = "HTTP/1.1", headers = [], body }
+
+// The status and body of the response to `method path` with `body`.
+test fn answer(todos: Store<Todo>, method: Text, path: Text, body: Text) -> (Int, Text) {
+  let response = handle(todos, request(method, path, body))
+  (response.status, response.body)
+}
+
+// The status of the response to `method path` with `body`.
+test fn status(todos: Store<Todo>, method: Text, path: Text, body: Text) -> Int =
+  handle(todos, request(method, path, body)).status
+
+test "to_json and or" {
+  let milk = Object([("id", Number(1)), ("title", Str("milk")), ("done", Bool(false))])
+  assert to_json(Todo { id = 1, title = "milk" }) == milk
+  assert or(Some(1), 2) == 1
+  assert or(None, "fallback") == "fallback"
+}
+
+test "handle creates, lists, reads, updates and deletes" {
+  let todos: Store<Todo> = Store.new()
+  assert answer(todos, "GET", "/todos", "") == (200, "[]")
+  assert answer(todos, "POST", "/todos", "{{\"title\":\"say \\\"hi\\\"\"}}") == (201, "{{\"id\":1,\"title\":\"say \\\"hi\\\"\",\"done\":false}}")
+  assert answer(todos, "POST", "/todos/", "{{\"title\":\"eggs\",\"done\":true}}") == (201, "{{\"id\":2,\"title\":\"eggs\",\"done\":true}}")
+  assert answer(todos, "GET", "/todos", "") == (200, "[{{\"id\":1,\"title\":\"say \\\"hi\\\"\",\"done\":false}},{{\"id\":2,\"title\":\"eggs\",\"done\":true}}]")
+  assert answer(todos, "GET", "/todos/2", "") == (200, "{{\"id\":2,\"title\":\"eggs\",\"done\":true}}")
+  assert answer(todos, "PATCH", "/todos/1", "{{\"done\":true}}") == (200, "{{\"id\":1,\"title\":\"say \\\"hi\\\"\",\"done\":true}}")
+  assert answer(todos, "PATCH", "/todos/1", "{{\"title\":\"tea\",\"id\":9}}") == (200, "{{\"id\":1,\"title\":\"tea\",\"done\":true}}")
+  assert answer(todos, "DELETE", "/todos/1", "") == (204, "")
+  assert answer(todos, "GET", "/todos/1", "") == (404, "Not Found\n")
+  assert answer(todos, "DELETE", "/todos/1", "") == (404, "Not Found\n")
+  assert answer(todos, "GET", "/todos", "") == (200, "[{{\"id\":2,\"title\":\"eggs\",\"done\":true}}]")
+}
+
+test "handle answers 400, 404 and 405" {
+  let todos: Store<Todo> = Store.new()
+  assert status(todos, "POST", "/todos", "{{not json") == 400
+  assert status(todos, "POST", "/todos", "{{\"done\":true}}") == 400
+  assert status(todos, "POST", "/todos", "{{\"title\":7}}") == 400
+  assert status(todos, "PATCH", "/todos/1", "{{}}") == 404
+  assert status(todos, "GET", "/", "") == 404
+  assert status(todos, "GET", "/nothing", "") == 404
+  assert status(todos, "GET", "/todos/abc", "") == 404
+  assert status(todos, "GET", "/todos/1/2", "") == 404
+  assert status(todos, "POST", "/todos", "{{\"title\":\"x\"}}") == 201
+  assert status(todos, "PATCH", "/todos/1", "[1") == 400
+  assert answer(todos, "GET", "/todos", "") == (200, "[{{\"id\":1,\"title\":\"x\",\"done\":false}}]")
+  let put = handle(todos, request("PUT", "/todos", ""))
+  assert put.status == 405
+  assert put.headers.at(1) == ("Allow", "GET, POST")
+  let post = handle(todos, request("POST", "/todos/1", ""))
+  assert post.status == 405
+  assert post.headers.at(1) == ("Allow", "GET, PATCH, DELETE")
+}

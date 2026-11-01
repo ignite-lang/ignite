@@ -1,0 +1,11 @@
+fn double(n: Int) -> Int {
+  return n * 2
+}
+
+fn start(stream: TcpStream, run: fn(Int) -> Int) -> Result<Unit, IoError> requires [stream.write] {
+  spawn double(1)
+  spawn stream.close()
+  spawn run(1)
+  spawn 1
+  return Ok(Unit)
+}

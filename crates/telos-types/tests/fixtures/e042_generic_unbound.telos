@@ -1,0 +1,15 @@
+enum Tree<T> {
+  Leaf,
+  Node(T, List<Tree<T>>),
+}
+
+fn empty<T>() -> List<T> = []
+
+fn identity<T>(value: T) -> T = value
+
+fn unbound() -> Int {
+  let items = empty()
+  let leaf = Leaf
+  let f = identity
+  return 0
+}

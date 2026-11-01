@@ -1,0 +1,14 @@
+fn same(s: Store<Int>) -> Store<Int> = s
+
+fn launder(stores: List<Store<Int>>) -> Option<Int> requires [] {
+  let copy: List<Store<Int>> = stores.map(same)
+  return copy[0].get(1)
+}
+
+fn launder_put(stores: List<Store<Int>>) -> Unit requires [] {
+  let copy: List<Store<Int>> = stores.map(same)
+  for s in copy {
+    s.put(1, 2)
+  }
+  return ()
+}

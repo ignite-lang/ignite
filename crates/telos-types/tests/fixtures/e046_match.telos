@@ -1,0 +1,82 @@
+enum Command {
+  Help,
+  Echo(Text),
+  Quit
+}
+
+fn name(command: Command) -> Text {
+  return match command {
+    Command.Help => "help"
+    Command.Echo(text) => text
+  }
+}
+
+fn statement(command: Option<Command>) {
+  match command {
+    Some(Command.Help) => {}
+    Some(Echo(_)) => {}
+    None => {}
+  }
+}
+
+fn digit(n: Int) -> Text {
+  return match n {
+    0 => "zero"
+    1 => "one"
+  }
+}
+
+fn flag(on: Bool) -> Int {
+  return match on {
+    _ => 1
+  }
+}
+
+fn word(t: Text) -> Int {
+  return match t {
+    "a" => 1
+  }
+}
+
+fn byte(b: Byte) -> Int {
+  return match b {
+    0 => 0
+    other => 1
+  }
+}
+
+fn literal_payload(result: Result<Int, IoError>) -> Int {
+  return match result {
+    Ok(0) => 0
+    Err(error) => 1
+  }
+}
+
+fn input(value: Input) -> Int {
+  return match value {
+    Data(bytes) => bytes.len()
+  }
+}
+
+fn covered(command: Command) -> Int {
+  return match command {
+    Help => 0
+    Echo("x") => 1
+    Echo(other) => 2
+    Command.Quit => 3
+  }
+}
+
+fn empty(on: Bool) {
+  match on {}
+}
+
+enum Pair {
+  Both(Option<Int>, Bool)
+}
+
+fn pair(p: Pair) -> Int {
+  return match p {
+    Pair.Both(Some(n), flag) => n
+  }
+}

@@ -1,0 +1,22 @@
+const limit: Int = 3
+const Top: Int = 9
+
+fn covered(n: Int) -> Int {
+  return match n {
+    limit => 1
+    Top => 2
+    other => other
+  }
+}
+
+fn open(n: Int) -> Int {
+  return match n {
+    limit => 1
+  }
+}
+
+fn open_tuple(p: (Int, Bool)) -> Int {
+  return match p {
+    (limit, _) => 1
+  }
+}

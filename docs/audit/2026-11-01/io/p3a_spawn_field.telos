@@ -1,0 +1,10 @@
+package probe.spawnfield
+
+type App {
+  handle: fn(stream: TcpStream) -> Result<Unit, IoError> requires [stream.*]
+}
+
+fn run_field(app: App, stream: TcpStream) -> Result<Unit, IoError> requires [app.*, stream.*] {
+  spawn app.handle(stream)
+  Ok(Unit)
+}

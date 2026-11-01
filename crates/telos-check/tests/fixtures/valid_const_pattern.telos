@@ -1,0 +1,15 @@
+import std.greeting.{LOUDNESS}
+
+const IAC: Int = 255
+
+fn classify(b: Int, value: Option<Int>) -> Int {
+  let first = match b {
+    IAC => 1
+    LOUDNESS => 2
+    _ => 3
+  }
+  return match value {
+    Some(IAC) => first
+    _ => 0
+  }
+}

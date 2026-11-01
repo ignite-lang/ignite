@@ -1,0 +1,8 @@
+const IAC: Int = 255
+
+fn classify(b: Int) -> Int {
+  return match b {
+    IAC(x) => 1
+    _ => 0
+  }
+}

@@ -1,0 +1,89 @@
+import std.shapes.{Point, Shape, ORIGIN, origin, width}
+
+type Pair {
+  left: Int
+  right: Text
+}
+
+fn bytes(b: Byte) -> Bool {
+  let n = 300
+  let small: Byte = 7
+  var total = 0
+  total = total + n
+  let list = [1, 2, b]
+  let more: Bytes = [255, 0]
+  let negative = -5
+  return b == 32 || 1 < b || small >= b && total > ORIGIN && list.at(0) == more.at(1)
+}
+
+fn choose(flag: Bool, x: Int) -> Option<Int> {
+  let none: Option<Int> = None
+  let names: List<Text> = []
+  var also: List<Int> = List.empty()
+  also.push(x)
+  let picked = if flag { Some(x) } else { None }
+  let label = match x {
+    0 => "zero"
+    1 => { "one" }
+    _ => names.join(", ")
+  }
+  if label.is_empty() {
+    return none
+  }
+  return picked
+}
+
+fn shapes() -> Int {
+  let p = origin()
+  var pair = Pair { left = p.x, right = "r" }
+  pair.left = 3
+  let s = Shape.Line(p, Point { x = 1, y = pair.left })
+  let d = Dot(p)
+  return width(s) + width(d)
+}
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+  return f(x)
+}
+
+fn twice(x: Int) -> Int {
+  return x * 2
+}
+
+fn values() -> Int {
+  let g = twice
+  return apply(g, 3) + apply(twice, ORIGIN)
+}
+
+fn loops(items: List<Text>) -> Int {
+  var count = 0
+  for item in items {
+    if item.starts_with("x") {
+      continue
+    }
+    count = count + item.len()
+  }
+  loop {
+    if count > 10 {
+      break
+    }
+    count = count + 1
+  }
+  return count
+}
+
+fn diverges(x: Int) -> Int {
+  loop {
+    if x > 0 {
+      return x
+    }
+  }
+}
+
+fn text(t: Text) -> Text {
+  let rest = match t.strip_prefix("a") {
+    Some(r) => r
+    None => t.copy()
+  }
+  return Int.to_text(rest.len()).concat(t.trim())
+}

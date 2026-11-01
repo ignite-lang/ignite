@@ -1,0 +1,45 @@
+type: ess-http/1
+specification: {system: todo, version: v1, source_digest: "sha256:e168de3c30c9210d9e96898ee55dcd83ae405fe0796d6370de542ea04f1235cf"}
+refusals:
+  malformed: {status: 400, body: {error: {literal: bad_request}}}
+routes:
+  - view: todo.list.Todos
+    method: get
+    path: /todos
+    body: array
+  - command: todo.list.CreateTodo
+    method: post
+    path: /todos
+    request: {encoding: json}
+    alike: [[created, created-with-done]]
+    outcomes:
+      created: {status: 201, body: response}
+      created-with-done: {status: 201, body: response}
+  - command: todo.list.GetTodo
+    method: get
+    path: /todos/{id}
+    parameters: {id: input.id}
+    request: {encoding: query, unknown: ignore}
+    outcomes:
+      found: {status: 200, body: response}
+      not-found: {status: 404, body: none}
+  - command: todo.list.UpdateTodo
+    method: patch
+    path: /todos/{id}
+    parameters: {id: input.id}
+    request: {encoding: json}
+    alike: [[updated-both, updated-title, updated-done, unchanged]]
+    outcomes:
+      updated-both: {status: 200, body: response}
+      updated-title: {status: 200, body: response}
+      updated-done: {status: 200, body: response}
+      unchanged: {status: 200, body: response}
+      not-found: {status: 404, body: none}
+  - command: todo.list.DeleteTodo
+    method: delete
+    path: /todos/{id}
+    parameters: {id: input.id}
+    request: {encoding: query, unknown: ignore}
+    outcomes:
+      deleted: {status: 204, body: none}
+      not-found: {status: 404, body: none}

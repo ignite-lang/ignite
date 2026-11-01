@@ -1,0 +1,17 @@
+package demo
+
+fn twice(x: Int) -> Int = x * 2
+
+test fn four() -> Int = 4
+
+test type Case { input: Int, output: Int }
+
+test enum Mode { Fast, Slow }
+
+test const CASES: Int = 2
+
+test "twice doubles" {
+  assert twice(2) == four()
+  assert twice(0) == 0, "zero stays zero"
+  assert twice(1) != 3
+}

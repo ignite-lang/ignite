@@ -1,0 +1,12 @@
+fn right(x: Int) -> Int requires [process.exit] {
+  let n = 1 + Process.exit(0)
+  return n
+}
+
+fn left(x: Int) -> Bool requires [process.exit] {
+  return Process.exit(0) < 1
+}
+
+fn both(x: Int) -> Int requires [process.exit] {
+  return x * Process.exit(1)
+}

@@ -1,0 +1,5 @@
+fn f() -> Int {
+  var n = 0
+  n = "zero"
+  return n
+}

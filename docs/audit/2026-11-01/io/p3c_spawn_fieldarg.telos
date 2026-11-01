@@ -1,0 +1,18 @@
+package probe.spawnfieldarg
+
+type Holder {
+  stream: TcpStream
+  label: Text
+}
+
+fn worker(stream: TcpStream, label: Text) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  let _ = stream.read(16)?
+  stream.write_all(label.to_bytes())?
+  stream.close()
+}
+
+fn run_field_arg(h: Holder) -> Result<Unit, IoError> requires [h.*] {
+  spawn worker(h.stream, h.label)
+  spawn h.stream.worker(h.label)
+  Ok(Unit)
+}
