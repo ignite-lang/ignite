@@ -1,8 +1,9 @@
 //! Plan admission: preparing a plan against this host's state, admitting a
-//! saved plan (identity, stale base, trusted payload, input pins, ownership),
-//! the operation receipts, and the retained context of an admitted plan.
+//! saved plan (identity, stale base, trusted payload, controller revisions,
+//! input pins, ownership), the operation receipts, and the retained context of
+//! an admitted plan.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -11,35 +12,43 @@ use ignite_eval::Json;
 
 use super::journal::{save_json, sync_directories};
 use super::{Host, Message, Reply, read_json};
-use crate::apply::{Failure, fail, object, plan::Plan, required, text};
+use crate::apply::plan::{InputKind, Plan};
+use crate::apply::{Failure, fail, object, required, text};
+
+/// Where a retained module of `plan` lives under `generation`.
+fn retained_path(
+    generation: &Path,
+    plan: &Plan,
+    input: &crate::apply::plan::Input,
+) -> Option<PathBuf> {
+    let (root, directory) = match input.kind {
+        InputKind::Std => (plan.std.as_deref()?, "std"),
+        InputKind::Source => (plan.source_root.as_path(), "source"),
+        _ => return None,
+    };
+    let relative = input.path.strip_prefix(root).ok()?;
+    Some(generation.join(directory).join(relative))
+}
+
+fn is_module(input: &crate::apply::plan::Input) -> bool {
+    matches!(input.kind, InputKind::Source | InputKind::Std)
+}
 
 /// Preserve the admitted source graph independently of its workspace spelling.
 /// Only these frozen modules and pinned artifacts may enter the live worker.
 fn retain_context(root: &Path, plan: &Plan) -> Result<(), Failure> {
     let generation = root.join("retained").join(&plan.id);
     std::fs::create_dir_all(&generation)?;
-    let source_root = plan
-        .source
-        .parent()
-        .ok_or_else(|| fail(2, "source has no directory"))?;
-    let std_root = std::fs::canonicalize(plan.std.clone().unwrap_or_else(crate::default_std_path))?;
-    for input in &plan.inputs {
-        if input.path.extension().and_then(|value| value.to_str()) != Some("ignite") {
-            continue;
-        }
-        let destination = if let Ok(relative) = input.path.strip_prefix(&std_root) {
-            generation.join("std").join(relative)
-        } else if let Ok(relative) = input.path.strip_prefix(source_root) {
-            generation.join("source").join(relative)
-        } else {
-            return Err(fail(
+    for input in plan.inputs.iter().filter(|input| is_module(input)) {
+        let destination = retained_path(&generation, plan, input).ok_or_else(|| {
+            fail(
                 2,
                 format!(
                     "source input is outside the retained graph: {}",
                     input.path.display()
                 ),
-            ));
-        };
+            )
+        })?;
         std::fs::create_dir_all(destination.parent().unwrap())?;
         std::fs::copy(&input.path, &destination)?;
         if crate::apply::digest::file(&destination)? != input.digest {
@@ -72,23 +81,23 @@ fn retain_context(root: &Path, plan: &Plan) -> Result<(), Failure> {
 }
 
 /// The admitted plan with its sources and artifacts at their retained paths,
-/// checked against the pins and the admitting compiler's bytes.
+/// checked against the pins.
+///
+/// Decision D2: a host binary other than the admitting one may open history.
+/// The admitting compiler's bytes are an admission pin
+/// ([`Plan::verify_inputs`]), not a startup condition; what a retained
+/// revision needs from this host is its reducer revision, because the host's
+/// evaluator re-steps the revision's `std.control` machines over the retained
+/// standard library. A differing reducer revision is refused here with the
+/// reason `reducer_revision_changed`.
 pub(super) fn retained_plan(root: &Path, plan: &Plan) -> Result<Plan, Failure> {
-    let executable = std::fs::canonicalize(std::env::current_exe()?)?;
-    let compiler = plan
-        .inputs
-        .iter()
-        .find(|input| input.path == executable)
-        .ok_or_else(|| {
-            fail(
-                3,
-                "admitted compiler identity unavailable at this host path",
-            )
-        })?;
-    if crate::apply::digest::file(&executable)? != compiler.digest {
+    if plan.reducer_revision != plan.host_reducer_revision() {
         return Err(fail(
             3,
-            "unsupported host compiler change; admitted controller bytes differ",
+            format!(
+                "reducer_revision_changed: revision {} was admitted under reducer revision {}; replan and apply",
+                plan.id, plan.reducer_revision
+            ),
         ));
     }
     let generation = root.join("retained").join(&plan.id);
@@ -98,6 +107,7 @@ pub(super) fn retained_plan(root: &Path, plan: &Plan) -> Result<Plan, Failure> {
             .file_name()
             .ok_or_else(|| fail(3, "retained source name missing"))?,
     );
+    frozen.source_root = generation.join("source");
     frozen.std = Some(generation.join("std"));
     for artifact in frozen.artifacts.values_mut() {
         artifact.path = generation
@@ -108,41 +118,14 @@ pub(super) fn retained_plan(root: &Path, plan: &Plan) -> Result<Plan, Failure> {
             return Err(fail(3, "retained artifact digest mismatch"));
         }
     }
-    let source_root = plan
-        .source
-        .parent()
-        .ok_or_else(|| fail(3, "retained source parent missing"))?;
-    let std_root = plan.std.clone().unwrap_or_else(crate::default_std_path);
-    for input in &plan.inputs {
-        if input.path.extension().and_then(|value| value.to_str()) != Some("ignite") {
-            continue;
-        }
-        let path = if let Ok(relative) = input.path.strip_prefix(&std_root) {
-            generation.join("std").join(relative)
-        } else if let Ok(relative) = input.path.strip_prefix(source_root) {
-            generation.join("source").join(relative)
-        } else {
-            return Err(fail(3, "retained input path mismatch"));
-        };
+    for input in plan.inputs.iter().filter(|input| is_module(input)) {
+        let path = retained_path(&generation, plan, input)
+            .ok_or_else(|| fail(3, "retained input path mismatch"))?;
         if crate::apply::digest::file(&path)? != input.digest {
             return Err(fail(3, "retained source digest mismatch"));
         }
     }
     Ok(frozen)
-}
-
-fn reducer_inputs(plan: &Plan) -> BTreeMap<PathBuf, String> {
-    let root = plan.std.clone().unwrap_or_else(crate::default_std_path);
-    plan.inputs
-        .iter()
-        .filter_map(|input| {
-            input
-                .path
-                .strip_prefix(&root)
-                .ok()
-                .map(|path| (path.to_path_buf(), input.digest.clone()))
-        })
-        .collect()
 }
 
 impl Host {
@@ -281,10 +264,11 @@ impl Host {
         if plan.base_revision != self.revision {
             return Err(fail(2, "stale base revision; prepare a fresh plan"));
         }
-        let trusted = read_json(&self.root.join("plans").join(format!("{}.json", plan.id)))?;
-        if trusted != payload {
+        let prepared = self.root.join("plans").join(format!("{}.json", plan.id));
+        if !prepared.is_file() || read_json(&prepared)? != payload {
             return Err(fail(2, "plan was not prepared by this host"));
         }
+        plan.verify_controller().map_err(|reason| fail(2, reason))?;
         plan.verify_inputs().map_err(|reason| fail(2, reason))?;
         plan.verify_ownership(&Json::Object(self.owned.clone()))
             .map_err(|reason| fail(2, reason))?;
@@ -309,8 +293,8 @@ impl Host {
             if self.owned.len() > 1
                 || self.owned.keys().any(|member| {
                     actions.iter().any(|action| {
-                        action.get("member").and_then(Json::as_str) == Some(member)
-                            && action.get("action").and_then(Json::as_str) == Some("unchanged")
+                        action.get("id").and_then(Json::as_str) == Some(member)
+                            && action.get("kind").and_then(Json::as_str) == Some("unchanged")
                     })
                 })
             {
@@ -350,7 +334,7 @@ impl Host {
                 let same_controller = previous_plan.as_ref().is_some_and(|old| {
                     crate::apply::plan::semantic_model(&old.model)
                         == crate::apply::plan::semantic_model(&plan.model)
-                        && reducer_inputs(old) == reducer_inputs(&plan)
+                        && old.reducer_revision == plan.reducer_revision
                 });
                 let ready_instance = owner.get("ready").and_then(Json::as_bool) == Some(true)
                     && owner
