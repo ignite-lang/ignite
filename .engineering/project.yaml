@@ -1,0 +1,9 @@
+version: aep.project/5
+protocol: adp/1
+profile: development.standard
+protocols: git+https://github.com/beyond10x/aep#81d80288038e85dd30a1c54ce9c7f25e38b42ae0
+planning_scope: "ignite"
+store:
+  git: {}
+summary: >-
+  Intent-oriented language: compiler, standard library and IO substrate
