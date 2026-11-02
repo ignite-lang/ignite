@@ -10,13 +10,14 @@ The roadmap in outline. The reasoning and the dependency analysis are in `docs/v
 |---|---|
 | slice 10, F1 system declaration | done 2026-11-02: 14.0 items 1 to 6 pass; 552 cargo tests, 97 inline tests per target |
 | rename to Ignite, `README.md`, commit, push to `https://github.com/ignite-lang/ignite` | done 2026-11-02, commit `60aef38` |
-| slice 11, F2 plan and explain (`docs/slice.md` section 15) | done 2026-11-02, uncommitted: 580 cargo tests, 102 inline tests per target; gate cold 64.8 to 54.5 s, warm 25.9 to 16.8 s; `todod` LLVM release 1.10 to 0.80 s |
-| slice 11b: four pre-existing backend bugs found by the evaluator (indexed `push` lost on the Rust target, enum map keys, handle types as fn values, std name collisions in generated Rust), warm test step | done 2026-11-02, uncommitted: 582 cargo tests; warm test step 16.1 to 10.8 s at load 6 to 9 (target under 8 s at load under 5 not measurable that night) |
+| slice 11, F2 plan and explain (`docs/slice.md` section 15) | done 2026-11-02, published in `9273349`: 580 cargo tests, 102 inline tests per target; gate cold 64.8 to 54.5 s, warm 25.9 to 16.8 s; `todod` LLVM release 1.10 to 0.80 s |
+| slice 11b: four pre-existing backend bugs found by the evaluator (indexed `push` lost on the Rust target, enum map keys, handle types as fn values, std name collisions in generated Rust), warm test step | done 2026-11-02, published in `9273349`: 582 cargo tests; warm test step 16.1 to 10.8 s at load 6 to 9 (target under 8 s at load under 5 not measurable that night) |
 | slice 12 contract (`docs/slice.md` section 16) | reviewed 2026-11-02 with 15 amendments |
-| slice 12, F3 run and control | done 2026-11-02, uncommitted: 16.0 items 1 to 11 and 13 pass; 636 cargo tests, 148 inline tests per target; item 12 (gate time) carried into 12b |
-| slice 12b: gate time back within 10 % of 11b (the frontend loads only the std modules a program reaches, rustgen emits a reachable-only `ignite-std`, `ignite_test.rs` cut back) | implementation and measurement complete 2026-11-02, uncommitted: 647 cargo tests, 148 inline tests per target; cold gate 57.14 → 66.11 s (1.157), warm 13.37 → 16.79 s (1.255) against 11b; timing exceptions and measured causes in `AGENTS.md`, baseline unchanged |
-| commit and push slices 11 to 12b | needs Timo's word |
-| slice 13 contract (`docs/slice.md` section 17), reviewed before agents are dispatched | after 12b |
+| slice 12, F3 run and control | done 2026-11-02, published in `9273349`: 16.0 items 1 to 11 and 13 pass; 636 cargo tests, 148 inline tests per target; item 12 (gate time) carried into 12b |
+| slice 12b: gate time back within 10 % of 11b (the frontend loads only the std modules a program reaches, rustgen emits a reachable-only `ignite-std`, `ignite_test.rs` cut back) | implementation and measurement complete 2026-11-02, published in `9273349`: 647 cargo tests, 148 inline tests per target; cold gate 57.14 → 66.11 s (1.157), warm 13.37 → 16.79 s (1.255) against 11b; timing exceptions and measured causes in `AGENTS.md`, baseline unchanged |
+| commit and push slices 11 to 12b | done 2026-11-02: `9273349` on `origin/main` |
+| slice 12c, restore the original performance budget | planned: [`docs/performance-plan.md`](docs/performance-plan.md); performance acceptance remains open |
+| slice 13 contract (`docs/slice.md` section 17), reviewed before agents are dispatched | after 12c performance acceptance |
 
 ## Slices
 
@@ -29,6 +30,7 @@ The roadmap in outline. The reasoning and the dependency analysis are in `docs/v
 | 10 | F1 system declaration | quantity literals, `resource`, `component name: Type { … }`, `contract`, `policy`, `assembly`, `module("…")`, `Map<K, V>`, named arguments, std types for contracts, policies, probes, deployment and CLI; T1 a failure ends its task, with file, line, column and operation on both targets; substrate items R2 to R5 | `ignite check examples/terminal/terminal.design.ignite` exit 0; both examples in component form with unchanged behaviour; `terminald` survives a failing handler | done 2026-11-02 |
 | 11 | F2 plan and explain | `ignite plan` emits the versioned system model (D7, deterministic JSON), `ignite explain`, assembly bindings resolved, pure evaluator with fuel (D5) | model byte-identical across runs and golden-tested; every property value evaluated | done 2026-11-02 |
 | 12 | F3 run and control | `ignite run <assembly>` and `ignite replay`: probes as protocol clients (one probe process per attempt), SLI windows and contract evaluation, `Restart` with backoff, `DrainRollout`, event journal with manual clock for tests, `event("…")` consequences; reducers in `std/control` stepped by the evaluator; signals and references get runtime behaviour | the terminal system runs under `ignite run`; a killed `terminald` restarts within the policy's backoff; a probe timeout is in the journal and the contract's standing; every test journal replays byte for byte | done 2026-11-02; gate time in 12b |
+| 12c | invariant 9 | remove repeated std preparation in tests, profile inline-test and frontend work, close cold/warm compiler costs | every required unit ≤1.10 of frozen 11b, warm workspace ≤10.8 s, unchanged behaviour and coverage | planned; `docs/performance-plan.md` |
 | 13 | F4 apply | `ignite apply` with plan diff, changes, deletion, recovery of a half-applied plan from the journal | a second `apply` is a no-op; an interrupted `apply` resumes | |
 | 14+ | B protocols P1 | `Pipe.pair()`, `ByteStream` bound, roles generic over the stream, in-process protocol tests | | |
 | | C actors P1 to P3 | `Address`, `ReplyTo`, `Outbox`, `Actor` kind, mailboxes, `std/actor`, `std/table`, `Topic`, `Sink`, `Supervisor`, todo example on an actor (D4) | | |
