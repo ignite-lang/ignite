@@ -74,6 +74,9 @@ mod builtins;
 mod exhaustive;
 mod typer;
 
+mod address;
+use address::AddressMap;
+
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 
@@ -1140,51 +1143,51 @@ impl EffectSet {
 #[derive(Clone, Debug, Default)]
 pub struct TypedProgram {
     pub module: String,
-    types: HashMap<usize, Ty>,
-    callees: HashMap<usize, Callee>,
+    types: AddressMap<Ty>,
+    callees: AddressMap<Callee>,
     bindings: HashMap<Span, Ty>,
     /// Constant patterns, keyed by pattern address.
-    pattern_consts: HashMap<usize, QualName>,
+    pattern_consts: AddressMap<QualName>,
     /// Resolved type expressions, keyed by `Type` address.
-    type_exprs: HashMap<usize, Ty>,
+    type_exprs: AddressMap<Ty>,
     exports: ModuleTypes,
     /// The modules this one was typed against, plus itself.
     modules: TypedModules,
     /// Type arguments of generic uses, keyed by expression address.
-    instances: HashMap<usize, Vec<Ty>>,
+    instances: AddressMap<Vec<Ty>>,
     /// The module's tests in declaration order.
     tests: Vec<TestInfo>,
     /// `==`/`!=` assert conditions, keyed by the condition's address.
-    assert_compares: HashMap<usize, AssertCompare>,
+    assert_compares: AddressMap<AssertCompare>,
     /// `?` inside test bodies, keyed by the `Try` expression's address.
-    test_tries: HashMap<usize, TestTry>,
+    test_tries: AddressMap<TestTry>,
     /// Closure literals, keyed by expression address.
-    closures: HashMap<usize, ClosureInfo>,
+    closures: AddressMap<ClosureInfo>,
     /// Bounds of range patterns, keyed by pattern address.
-    ranges: HashMap<usize, (i64, i64)>,
+    ranges: AddressMap<(i64, i64)>,
     /// Owners of the last field of assignment places, by place span.
     places: HashMap<Span, Ty>,
     /// Quantity literals, keyed by expression address.
-    quantities: HashMap<usize, (QuantityKind, i64)>,
+    quantities: AddressMap<(QuantityKind, i64)>,
     /// Calls with named arguments: parameter index to argument index.
-    named: HashMap<usize, Vec<usize>>,
+    named: AddressMap<Vec<usize>>,
     /// Brace literals, keyed by expression address.
-    braces: HashMap<usize, BraceKind>,
+    braces: AddressMap<BraceKind>,
     /// References, signals, system and protocol values, keyed by
     /// expression address (or by brace-key path address).
-    references: HashMap<usize, Reference>,
+    references: AddressMap<Reference>,
     /// `module("p")` calls, keyed by expression address.
-    module_records: HashMap<usize, ModuleRecord>,
+    module_records: AddressMap<ModuleRecord>,
     executables: Vec<ExecutableInfo>,
     /// Failure sites, keyed by expression address.
-    failures: HashMap<usize, FailureSite>,
+    failures: AddressMap<FailureSite>,
     /// The module's systems in declaration order (slice 11).
     systems: Vec<SystemInfo>,
     /// The module's assemblies in declaration order (slice 11).
     assemblies: Vec<AssemblyInfo>,
     /// Effect sets of property expressions, constant values and field
     /// defaults and their sub-expressions, keyed by expression address.
-    effects: HashMap<usize, EffectSet>,
+    effects: AddressMap<EffectSet>,
 }
 
 fn key(expr: &Expr) -> usize {

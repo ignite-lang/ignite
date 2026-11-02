@@ -3838,3 +3838,37 @@ but no longer add a separate sync; O30's sync after every effect, before its dis
 unchanged. The real-clock restart assertion remains 100 to 500 ms, and every test journal
 still replays. The syscall diagnostic is retained separately from readiness checks because
 tracing interfered with unrelated HTTP concurrency tests.
+
+### 16.23 Slice 12c: restore the original performance budget
+
+The implementation plan is `docs/performance-plan.md`. The 11b baseline is the exact
+recovered tree published as `bench/11b-recovered` (`df7ccb9`); `9273349` is the published
+12b comparison. Closure requires every required paired timing ratio at most 1.10, the
+10.8 s warm workspace-test limit under comparable load, unchanged diagnostic/golden
+behaviour, and all existing tests on both targets. A measured cause does not waive a miss.
+
+Additive test preparation contract: `ignite test --target both` prepares the source and
+standard-library type graph once, then builds and runs Rust followed by LLVM using that
+same immutable graph. Existing `--target rust` and `--target llvm` retain their behaviour;
+`ignite build` and `ignite run` keep their two native target choices. The public driver API
+adds `test_targets(files, options, targets)` beside `test`/`build_tests`, without adding a
+`Both` variant to the native `Target` type. Each target retains its own generated directory,
+Cargo/LLVM artifacts and isolated test children. The same filter, list, jobs, timeout,
+profile and tool options reach each target. Both suites run even if the first has failing
+tests, and the exit status is the maximum test status; a preparation/build diagnostic uses
+the existing diagnostic exit. Tests, reports and group ordering remain unchanged within
+each target. The standard-library and program ASTs and their pointer-keyed type maps stay
+alive together throughout both builds, and no persisted frontend cache is introduced.
+`task test-ignite` uses this combined path while continuing to run every std/example test
+on both native targets.
+
+The Rust generator may expose a reusable immutable lowered std template. Preparing it uses
+the existing typed emitter and fixed std source/test-selection options; every program still
+gets its own transitive pruning, rendering and substrate-specific Cargo metadata. Existing
+generation APIs retain their results. Mutable/custom test fixture roots always reload.
+LLVM layout memoization is private to an immutable emitter environment; public mutable
+`TypeEnv` instances and their clones continue to observe edits. Frontend address-map keys
+remain internal AST addresses; untrusted identifier maps retain their existing hashing.
+Evaluator worker reuse is scoped to one check/model operation, with fuel, allocations and
+frames reset separately for every property/hook call as before. O30 effect durability,
+manual-clock backoff, real-clock restart limits and journal replay remain unchanged.

@@ -153,3 +153,22 @@ fn type_names_in_symbols() {
     );
     assert_eq!(mangle(&Ty::Record(q("Point"))), "m.Point");
 }
+
+#[test]
+fn public_environments_observe_module_edits_after_layout_queries() {
+    let mut env = env();
+    let point = Ty::Record(q("Point"));
+    assert_eq!(env.layout(&point), l(24, 8));
+    let mut cloned = env.clone();
+    for current in [&mut env, &mut cloned] {
+        current.modules.get_mut("m").unwrap().records.insert(
+            "Point".to_string(),
+            vec![
+                ("blob".to_string(), Ty::Text),
+                ("flag".to_string(), Ty::Bool),
+            ],
+        );
+        assert_eq!(current.layout(&point), l(32, 8));
+        assert_eq!(current.record_layout(&q("Point")).0, vec![0, 24]);
+    }
+}

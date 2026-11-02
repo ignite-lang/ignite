@@ -38,8 +38,7 @@ tasks:
     cmds:
       - cargo build -q -p ignite
       - cargo build -q -p ignite-rt --features runner --target-dir {{.T}}/ignite-test/rt
-      - '{{.T}}/debug/ignite test {{.FILES}} {{.SELECT}} --out {{.T}}/ignite-test --target-dir {{.T}}/ignite-test/cargo'
-      - '{{.T}}/debug/ignite test {{.FILES}} {{.SELECT}} --target llvm --out {{.T}}/ignite-test --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a'
+      - '{{.T}}/debug/ignite test {{.FILES}} {{.SELECT}} --target both --out {{.T}}/ignite-test --target-dir {{.T}}/ignite-test/cargo --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a'
 
   check:
     desc: Format check and clippy with warnings denied

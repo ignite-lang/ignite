@@ -71,7 +71,15 @@ pub fn parse(tokens: &[Token]) -> Result<Program, Vec<Diagnostic>> {
 
 /// Parse a token stream with explicit options.
 pub fn parse_with(tokens: &[Token], options: ParseOptions) -> Result<Program, Vec<Diagnostic>> {
-    let mut tokens = split_greater_equal(tokens);
+    parse_owned(tokens.to_vec(), options)
+}
+
+/// Parse tokens whose storage belongs to the caller without copying their text.
+pub(crate) fn parse_owned(
+    tokens: Vec<Token>,
+    options: ParseOptions,
+) -> Result<Program, Vec<Diagnostic>> {
+    let mut tokens = split_greater_equal_owned(tokens);
     if tokens.last().is_none_or(|t| t.kind != TokenKind::Eof) {
         let end = tokens.last().map_or(0, |t| t.span.end);
         tokens.push(Token {
@@ -99,6 +107,13 @@ pub const MAX_NESTING: usize = 256;
 /// `type B<T>= T`). [`Parser::compare`] joins an adjacent `>` `=` back into
 /// `>=`.
 fn split_greater_equal(tokens: &[Token]) -> Vec<Token> {
+    split_greater_equal_owned(tokens.to_vec())
+}
+
+fn split_greater_equal_owned(tokens: Vec<Token>) -> Vec<Token> {
+    if !tokens.iter().any(|token| token.kind == TokenKind::GtEq) {
+        return tokens;
+    }
     let mut out = Vec::with_capacity(tokens.len());
     for token in tokens {
         if token.kind == TokenKind::GtEq {
@@ -112,7 +127,7 @@ fn split_greater_equal(tokens: &[Token]) -> Vec<Token> {
                 span: Span::new(mid, token.span.end),
             });
         } else {
-            out.push(token.clone());
+            out.push(token);
         }
     }
     out
@@ -128,7 +143,9 @@ struct Parser<'t> {
     tokens: &'t [Token],
     pos: usize,
     prev_end: usize,
-    /// `true` where newlines are insignificant (inside `( )` and `[ ]`).
+    /// Current newline mode, read for every token peek.
+    insignificant: bool,
+    /// Enclosing newline modes, restored when a bracket closes.
     modes: Vec<bool>,
     /// `true` while parsing an `if`/`while` condition, `match` scrutinee or
     /// `for` iterable outside any bracket: `Name {` is then not a record.
@@ -165,6 +182,7 @@ impl<'t> Parser<'t> {
             tokens,
             pos: 0,
             prev_end: 0,
+            insignificant: false,
             modes: Vec::new(),
             no_record: false,
             saved_no_record: Vec::new(),
@@ -197,17 +215,17 @@ impl<'t> Parser<'t> {
     /// Whether the raw next token is a line break: a postfix operator or
     /// `else` does not attach across it, inside `( )` and `[ ]` too.
     fn at_line_break(&self) -> bool {
-        self.tokens[self.pos].kind == TokenKind::Newline
+        matches!(self.tokens[self.pos].kind, TokenKind::Newline)
     }
 
     fn newlines_insignificant(&self) -> bool {
-        self.modes.last().copied().unwrap_or(false)
+        self.insignificant
     }
 
     fn peek_index(&self) -> usize {
         let mut i = self.pos;
         if self.newlines_insignificant() {
-            while self.tokens[i].kind == TokenKind::Newline {
+            while matches!(self.tokens[i].kind, TokenKind::Newline) {
                 i += 1;
             }
         }
@@ -252,7 +270,7 @@ impl<'t> Parser<'t> {
             }
             i += 1;
             if self.newlines_insignificant() {
-                while self.tokens[i].kind == TokenKind::Newline {
+                while matches!(self.tokens[i].kind, TokenKind::Newline) {
                     i += 1;
                 }
             }
@@ -292,7 +310,7 @@ impl<'t> Parser<'t> {
     }
 
     fn skip_newlines(&mut self) {
-        while self.tokens[self.pos].kind == TokenKind::Newline {
+        while matches!(self.tokens[self.pos].kind, TokenKind::Newline) {
             self.pos += 1;
         }
     }
@@ -380,7 +398,8 @@ impl<'t> Parser<'t> {
     fn open(&mut self, kind: &TokenKind, insignificant: bool) -> PResult<&'t Token> {
         let token = self.expect(kind)?;
         self.enter(token.span)?;
-        self.modes.push(insignificant);
+        self.modes.push(self.insignificant);
+        self.insignificant = insignificant;
         self.saved_no_record.push(self.no_record);
         self.no_record = false;
         Ok(token)
@@ -389,7 +408,7 @@ impl<'t> Parser<'t> {
     fn close(&mut self, kind: &TokenKind) -> PResult<&'t Token> {
         let token = self.expect(kind)?;
         self.leave();
-        self.modes.pop();
+        self.insignificant = self.modes.pop().unwrap_or(false);
         self.no_record = self.saved_no_record.pop().unwrap_or(false);
         Ok(token)
     }
@@ -397,6 +416,7 @@ impl<'t> Parser<'t> {
     /// Forget every open bracket after an error.
     fn reset_nesting(&mut self) {
         self.modes.clear();
+        self.insignificant = false;
         self.saved_no_record.clear();
         self.no_record = false;
         self.depth = 0;

@@ -1,0 +1,10 @@
+package fixtures.large_output
+
+import std.text.repeat
+
+test "large streams" {
+  let text = repeat("0123456789abcdef", 8192)
+  Stdout.write_all(text.to_bytes())?
+  log(text)
+  assert false
+}
