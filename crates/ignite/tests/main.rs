@@ -4,6 +4,7 @@
 //! `<file>::<test>`.
 
 mod apply;
+mod apply_host;
 mod build_cache;
 mod cli;
 mod common;

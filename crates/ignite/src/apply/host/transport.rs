@@ -1,10 +1,10 @@
 //! The host's edges: the exclusive state lock, the state identity, the
 //! control socket with its framing, and the stdin and signal controls.
 
-use std::fs::{File, OpenOptions};
+use std::fs::{DirBuilder, File, OpenOptions};
 use std::io::{self, Read, Write};
-use std::os::unix::fs::PermissionsExt;
-use std::os::unix::net::UnixListener;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::{
     Arc,
@@ -17,95 +17,155 @@ use ignite_eval::Json;
 use nix::fcntl::{Flock, FlockArg};
 
 use super::{Host, Message, Reply};
-use crate::apply::{Failure, PROTOCOL, fail, object, read_frame, required, text, write_frame};
+use crate::apply::{Failure, plan::Plan};
+use crate::apply::{
+    FrameError, Liveness, PROTOCOL, describe, envelope, fail, object, read_frame, text, write_frame,
+};
 use crate::run::control::Observation;
 
-/// Hold the state directory against a second host or run.
+/// The control socket's name in the state directory.
+const SOCKET: &str = "control.sock";
+/// The private directory the socket is bound in before it is renamed to
+/// `SOCKET`, so it is never reachable with wider permissions.
+const SOCKET_STAGING: &str = "control.d";
+/// The state identity's file name in the state directory.
+const IDENTITY: &str = "identity";
+
+/// Hold the state directory against a second host or run, then restrict
+/// the directory to its owner. A state owned by another user, a state a
+/// plain `ignite run` journals into, and a held lock are refused (exit 2)
+/// before anything in the directory changes.
 pub(super) fn lock(root: &Path) -> Result<Flock<File>, Failure> {
+    let metadata = std::fs::metadata(root)?;
+    let user = std::fs::metadata("/proc/self")?.uid();
+    if metadata.uid() != user {
+        return Err(fail(
+            2,
+            format!(
+                "state {} belongs to uid {}, not to this user (uid {user})",
+                root.display(),
+                metadata.uid()
+            ),
+        ));
+    }
+    let lock_path = root.join(crate::run::journal::LOCK);
     let lock_file = OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
-        .open(root.join("lock"))?;
-    Flock::lock(lock_file, FlockArg::LockExclusiveNonblock).map_err(|(_, error)| {
-        fail(
-            3,
-            format!("state is locked by another host or run: {error}"),
-        )
-    })
+        .open(&lock_path)?;
+    let lock = match Flock::lock(lock_file, FlockArg::LockExclusiveNonblock) {
+        Ok(lock) => lock,
+        Err((_, nix::errno::Errno::EWOULDBLOCK)) => {
+            return Err(fail(
+                2,
+                format!(
+                    "state {} is held by another `ignite host` or `ignite run` ({})",
+                    root.display(),
+                    lock_path.display()
+                ),
+            ));
+        }
+        Err((_, errno)) => return Err(fail(3, format!("{}: {errno}", lock_path.display()))),
+    };
+    if root.join(crate::run::journal::FILE).exists() {
+        return Err(fail(
+            2,
+            format!(
+                "state {} holds an `ignite run` journal; a host needs its own state directory",
+                root.display()
+            ),
+        ));
+    }
+    std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700))?;
+    Ok(lock)
 }
 
-/// The state identity, created on first start.
+/// Whether `id` can be a state identity this host wrote: 1 to 128 bytes of
+/// ASCII letters, digits, `:`, `-` and `_`.
+fn valid_identity(id: &str) -> bool {
+    (1..=128).contains(&id.len())
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b":-_".contains(&byte))
+}
+
+/// The state identity, created on first start: 32 random bytes in hex,
+/// written to a temporary file, synced, renamed into place and the
+/// directory synced, so a crash leaves either no identity or a whole one.
+/// An identity file that is not one is a storage failure (exit 3), never
+/// replaced.
 pub(super) fn identity(root: &Path) -> Result<String, Failure> {
-    let identity_path = root.join("identity");
-    Ok(if identity_path.exists() {
-        std::fs::read_to_string(&identity_path)?
-    } else {
-        let mut random = [0; 32];
-        File::open("/dev/urandom")?.read_exact(&mut random)?;
-        let id = crate::apply::digest::bytes(&random);
-        let mut file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&identity_path)?;
-        file.write_all(id.as_bytes())?;
-        file.sync_all()?;
-        File::open(root)?.sync_all()?;
-        id
-    })
+    let path = root.join(IDENTITY);
+    match std::fs::read_to_string(&path) {
+        Ok(id) if valid_identity(&id) => return Ok(id),
+        Ok(id) => {
+            return Err(fail(
+                3,
+                format!(
+                    "{} is no state identity ({} bytes); restore it or use a new state",
+                    path.display(),
+                    id.len()
+                ),
+            ));
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(fail(3, format!("{}: {error}", path.display()))),
+    }
+    let mut random = [0; 32];
+    File::open("/dev/urandom")?.read_exact(&mut random)?;
+    let id: String = std::iter::once("state:".to_string())
+        .chain(random.iter().map(|byte| format!("{byte:02x}")))
+        .collect();
+    let temporary = root.join(format!(".{IDENTITY}.{}.writing", std::process::id()));
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&temporary)?;
+    file.write_all(id.as_bytes())?;
+    file.sync_all()?;
+    drop(file);
+    std::fs::rename(&temporary, &path)?;
+    File::open(root)?.sync_all()?;
+    Ok(id)
 }
 
 /// Bind the control socket and accept clients until the returned flag is
 /// set; each connection carries one request frame and one response frame.
+/// The socket is bound inside a fresh owner-only directory, restricted to
+/// the owner there, and only then renamed over `<state>/control.sock`: a
+/// stale socket is replaced by the lock holder alone, in one step.
 pub(super) fn listen(
     root: &Path,
     tx: mpsc::Sender<Message>,
 ) -> Result<(PathBuf, Arc<AtomicBool>), Failure> {
-    let socket_path = root.join("control.sock");
-    if socket_path.exists() {
-        std::fs::remove_file(&socket_path)?;
+    let socket_path = root.join(SOCKET);
+    let staging = root.join(SOCKET_STAGING);
+    match std::fs::remove_dir_all(&staging) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(fail(3, format!("{}: {error}", staging.display()))),
     }
-    let (_state_directory, socket_address) = crate::apply::socket_address(root)?;
-    let listener = UnixListener::bind(socket_address)?;
-    std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))?;
+    DirBuilder::new().mode(0o700).create(&staging)?;
+    std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o700))?;
+    let listener = {
+        let (_staging_directory, address) = crate::apply::socket_address(&staging)?;
+        UnixListener::bind(address)?
+    };
+    std::fs::set_permissions(staging.join(SOCKET), std::fs::Permissions::from_mode(0o600))?;
+    std::fs::rename(staging.join(SOCKET), &socket_path)?;
+    std::fs::remove_dir(&staging)?;
+    File::open(root)?.sync_all()?;
     listener.set_nonblocking(true)?;
     let stopping = Arc::new(AtomicBool::new(false));
     let accept_stop = Arc::clone(&stopping);
     std::thread::spawn(move || {
         while !accept_stop.load(Ordering::Relaxed) {
             match listener.accept() {
-                Ok((mut stream, _)) => {
+                Ok((stream, _)) => {
                     let tx = tx.clone();
-                    std::thread::spawn(move || {
-                        let _ = stream.set_read_timeout(Some(Duration::from_secs(15)));
-                        let result = read_frame(&mut stream);
-                        let id = result
-                            .as_ref()
-                            .ok()
-                            .and_then(|request| request.get("requestId"))
-                            .and_then(Json::as_str)
-                            .unwrap_or("")
-                            .to_string();
-                        let result = result.map_err(Failure::from).and_then(|request| {
-                            let (reply, wait) = mpsc::channel();
-                            tx.send(Message::Request(request, reply))
-                                .map_err(|_| fail(3, "host queue closed"))?;
-                            wait.recv()
-                                .map_err(|_| fail(3, "host stopped before replying"))?
-                        });
-                        let (status, reason, payload) = match result {
-                            Ok(value) => (0, String::new(), value),
-                            Err(error) => (error.status, error.reason, Json::Null),
-                        };
-                        let response = object([
-                            ("version", text(PROTOCOL)),
-                            ("requestId", text(id)),
-                            ("status", Json::Int(i64::from(status))),
-                            ("reason", text(reason)),
-                            ("payload", payload),
-                        ]);
-                        let _ = write_frame(&mut stream, &response);
-                    });
+                    std::thread::spawn(move || serve(stream, &tx));
                 }
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                     std::thread::sleep(Duration::from_millis(10))
@@ -115,6 +175,49 @@ pub(super) fn listen(
         }
     });
     Ok((socket_path, stopping))
+}
+
+/// Answer one connection. Frames that are oversized, not UTF-8 JSON, or
+/// whose envelope fails `envelope` are answered with status 2 here, before
+/// the host queue sees them; the reply carries the request id when one
+/// could be read. A peer gone before a whole frame gets no reply.
+fn serve(mut stream: UnixStream, tx: &mpsc::Sender<Message>) {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(15)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(15)));
+    let (id, result) = match read_frame(&mut stream) {
+        Err(FrameError::Closed(_)) => return,
+        Err(error) => (String::new(), Err(fail(2, error.reason()))),
+        Ok(request) => match envelope(&request) {
+            Err((id, failure)) => (id, Err(failure)),
+            Ok(checked) => {
+                let id = checked.id.to_string();
+                let (reply, wait) = mpsc::channel();
+                let result = tx
+                    .send(Message::Request(request, reply))
+                    .map_err(|_| fail(3, "host queue closed"))
+                    .and_then(|()| {
+                        wait.recv()
+                            .map_err(|_| fail(3, "host stopped before replying"))?
+                    });
+                (id, result)
+            }
+        },
+    };
+    let (status, reason, payload) = match result {
+        Ok(value) => (0, String::new(), value),
+        Err(error) => (error.status, error.reason, Json::Null),
+    };
+    let response = object([
+        ("version", text(PROTOCOL)),
+        ("requestId", text(id)),
+        ("status", Json::Int(i64::from(status))),
+        ("reason", text(reason)),
+        ("payload", payload),
+    ]);
+    if let Err(error) = write_frame(&mut stream, &response) {
+        eprintln!("ignite host: control reply not sent: {error}");
+    }
+    let _ = stream.shutdown(std::net::Shutdown::Write);
 }
 
 /// Forward `stop`, `status` and interrupts from stdin and signals.
@@ -142,19 +245,44 @@ pub(super) fn watch_control(host: mpsc::Sender<Message>) -> Result<(), Failure> 
 }
 
 impl Host {
-    /// Check one request's envelope and route it; errors go to `reply`.
+    /// The inspect view of this host (17.1): the snapshot with its live
+    /// process, the readiness of the running revision and the next action.
+    pub(super) fn inspection(&self) -> Json {
+        let pid = std::process::id();
+        let (mut expected, mut ready): (Vec<_>, Vec<_>) =
+            self.runtime
+                .as_ref()
+                .map_or_else(Default::default, |runtime| {
+                    (
+                        runtime.expected.iter().cloned().collect(),
+                        runtime.ready.iter().cloned().collect(),
+                    )
+                });
+        expected.sort();
+        ready.sort();
+        describe(
+            &self.snapshot(true),
+            &self.root,
+            Some(Liveness {
+                pid,
+                start_time: super::controller::process_identity(i64::from(pid)),
+                expected,
+                ready,
+            }),
+        )
+    }
+
+    /// Route one request whose envelope `serve` checked; errors go to
+    /// `reply`. An apply of a plan this host has neither prepared nor
+    /// accepted is rejected here, before admission (exit 2).
     pub(super) fn request(
         &mut self,
         request: &Json,
         reply: &Reply,
         shutdown: bool,
     ) -> Result<(), Failure> {
-        if required(request, "version")? != PROTOCOL {
-            return Err(fail(2, "unsupported control protocol"));
-        }
-        required(request, "requestId")?;
-        let operation = required(request, "operation")?;
-        let identity = required(request, "stateIdentity")?;
+        let checked = envelope(request).map_err(|(_, failure)| failure)?;
+        let (operation, identity) = (checked.operation, checked.identity);
         if matches!(operation, "prepare" | "apply") && identity.is_empty() {
             return Err(fail(2, "request requires state identity"));
         }
@@ -164,19 +292,38 @@ impl Host {
         let payload = request.get("payload").cloned().unwrap_or(Json::Null);
         match operation {
             "snapshot" | "inspect" => {
-                let mut snapshot = self.snapshot(true);
+                let mut status = if operation == "inspect" {
+                    self.inspection()
+                } else {
+                    self.snapshot(true)
+                };
                 if let Some(id) = payload.as_str() {
                     if !self.receipts.contains_key(id) {
-                        return Err(fail(2, "unknown operation"));
+                        return Err(fail(2, format!("unknown operation {id}")));
                     }
-                    if let Json::Object(fields) = &mut snapshot {
+                    if let Json::Object(fields) = &mut status {
                         fields.insert("operation".into(), self.receipt(id));
                     }
                 }
-                let _ = reply.send(Ok(snapshot));
+                let _ = reply.send(Ok(status));
             }
             "prepare" if !shutdown => self.prepare(payload, reply.clone())?,
-            "apply" if !shutdown => self.apply(payload, reply.clone())?,
+            "apply" if !shutdown => {
+                let plan = Plan::parse(&payload).map_err(|reason| fail(2, reason))?;
+                let recorded = self.root.join("plans").join(format!("{}.json", plan.id));
+                if !self.receipts.contains_key(&plan.id)
+                    && (plan.id.contains('/') || !recorded.is_file())
+                {
+                    return Err(fail(
+                        2,
+                        format!(
+                            "plan {} was not prepared by this host; prepare it with `ignite plan --for-apply`",
+                            plan.id
+                        ),
+                    ));
+                }
+                self.apply(payload, reply.clone())?
+            }
             _ => return Err(fail(2, "unsupported operation or host is stopping")),
         }
         Ok(())

@@ -3999,6 +3999,24 @@ same serialized controller queue as adapter observations. There is one active ap
 state; another distinct apply is rejected as busy. Inspection and retries remain available.
 No remote listener or multi-user authorization model is added.
 
+As landed (U2): a frame is a 4-byte big-endian length and that many bytes of UTF-8 JSON, at
+most 16 MiB. A request is an object with `version` (`ignite-host-control/0.1`), `requestId`
+(1 to 128 bytes), `stateIdentity`, `operation` and `payload`; a reply carries `version`,
+the `requestId`, `status` (the 17.1 categories), `reason` and `payload`. An oversized,
+non-UTF-8, non-JSON or incomplete envelope, or another version, is answered with status 2
+before the host queue; the reply carries the request id when it could be read and the empty
+id otherwise, and the client reports such a reply as the host's rejection (exit 2). The host
+takes the lock before it changes anything, then restricts the state directory to mode 0700;
+a held lock or a state with a `run` journal is exit 2. The socket is bound in a fresh 0700
+directory, set to 0600 and renamed over `control.sock`. The identity is 32 random bytes in
+hex, written to a temporary file, synced, renamed and the directory synced; an identity file
+that is not one is exit 3 and is never replaced. An apply of a plan with neither a receipt
+nor `plans/<id>.json` is exit 2. `inspect` adds `host` (PID and start time), `currentOperation`,
+`actionProgress` (per member action of the desired plan: `done`, `pending` or `blocked`),
+`readiness` (expected and ready machines, `converged`) and `nextAction`; offline it sets
+`online` false, `host` null, `health` and `readiness` to `unknown: host offline`, and keeps
+each owner's last flag as `lastRecordedReady`.
+
 ### 17.3 Saved plan and identity
 
 Apply accepts a separate versioned `ignite-apply-plan/0.1` envelope, not

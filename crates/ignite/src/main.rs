@@ -167,19 +167,23 @@ enum Commands {
         #[arg(long, requires = "for_apply")]
         runtime: Option<PathBuf>,
     },
-    /// Own and supervise a local state directory until stopped.
+    /// Own and supervise a local state directory until stopped. Exit 2 when
+    /// another host or run holds the state, 3 on a host or storage failure.
     Host {
         #[arg(long)]
         state: PathBuf,
     },
     /// Apply a saved plan through its running local host and wait for completion.
+    /// Exit 0 completed, 1 failed or recovery required, 2 rejected, 3 host or
+    /// storage failure (`docs/slice.md` 17.1).
     Apply {
         /// Source-bound saved plan produced by `plan --for-apply`.
         file: PathBuf,
         #[arg(long)]
         state: PathBuf,
     },
-    /// Read host status or a durable snapshot labelled offline.
+    /// Read host status or a durable snapshot labelled offline. Exit 0 means
+    /// the status was read, not that an operation succeeded.
     Inspect {
         #[arg(long)]
         state: PathBuf,

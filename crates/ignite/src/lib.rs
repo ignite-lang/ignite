@@ -1500,12 +1500,25 @@ pub fn run(file: &Path, options: &RunOptions) -> Result<i32, Error> {
         None => DEFAULT_SETTLE,
     };
     let (executables, declared) = run_members(&model);
+    if state.join("host-journal.jsonl").exists() || state.join("identity").exists() {
+        return Err(run_diagnostic(
+            &loaded,
+            "E126",
+            format!(
+                "{} is the state of an `ignite host`; apply a plan to it with `ignite apply`, or run with another --state",
+                state.display()
+            ),
+        ));
+    }
     let mut journal =
         run::journal::Journal::open(&state, options.fresh).map_err(|error| match error {
             run::journal::JournalError::Locked(path) => run_diagnostic(
                 &loaded,
                 "E126",
-                format!("another `ignite run` holds {}", path.display()),
+                format!(
+                    "another `ignite run` or `ignite host` holds {}",
+                    path.display()
+                ),
             ),
             run::journal::JournalError::Io(error) => Error::Io {
                 path: state.clone(),
