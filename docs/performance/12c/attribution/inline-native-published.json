@@ -1,0 +1,38 @@
+[
+  {
+    "target": "rust",
+    "mode": "native",
+    "seconds": 0.13903015101095662,
+    "exit": 0
+  },
+  {
+    "target": "rust",
+    "mode": "list",
+    "seconds": 0.0009195409948006272,
+    "exit": 0
+  },
+  {
+    "target": "rust",
+    "mode": "native",
+    "seconds": 0.14009487099247053,
+    "exit": 0
+  },
+  {
+    "target": "rust",
+    "mode": "list",
+    "seconds": 0.0008826080011203885,
+    "exit": 0
+  },
+  {
+    "target": "rust",
+    "mode": "native",
+    "seconds": 0.13577678805449978,
+    "exit": 0
+  },
+  {
+    "target": "rust",
+    "mode": "list",
+    "seconds": 0.0008996319957077503,
+    "exit": 0
+  }
+]

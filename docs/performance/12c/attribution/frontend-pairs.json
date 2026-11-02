@@ -1,0 +1,422 @@
+[
+  {
+    "pair": 0,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08825543598504737,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 0,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06610433699097484,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 0,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08809208695311099,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 0,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06601239298470318,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 1,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.09888343198690563,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 1,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06392913701711223,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 1,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08651921100681648,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 1,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06641916802618653,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 2,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08671867498196661,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 2,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06347142503364012,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 2,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.0898668430163525,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 2,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06648681603837758,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 3,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08635352901183069,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 3,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06388497998705134,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 3,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08771230594720691,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 3,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06626599497394636,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 4,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08849238295806572,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 4,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06381796102505177,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 4,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08790838101413101,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 4,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06568211404373869,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 5,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08772650099126622,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 5,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06773759104544297,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 5,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08650134998606518,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 5,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06740418798290193,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 6,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08529061899753287,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 6,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.0649252210278064,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 6,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08866394404321909,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 6,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.0660251320223324,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 7,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08580334298312664,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 7,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06519113597460091,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 7,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08584294404136017,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 7,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06390385801205412,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 8,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08634242101106793,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 8,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06354846397880465,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 8,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08487231394974515,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 8,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06389352900441736,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 9,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08665710396599025,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 9,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06714640295831487,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 9,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08376256900373846,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 9,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06627855898113921,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 10,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08512200601398945,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 10,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.0646654250449501,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 10,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.09237654699245468,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 10,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06648400804260746,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 11,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08932259795255959,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 11,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06488620000891387,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 11,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08666238200385123,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 11,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06428080302430317,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 12,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08529643598012626,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 12,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06390647200169042,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 12,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08600944199133664,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 12,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06564118096139282,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 13,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.0873679089709185,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 13,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06574883300345391,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 13,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08602216897998005,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 13,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06576964701525867,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 14,
+    "label": "check",
+    "tree": "before",
+    "seconds": 0.08595795097062364,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 14,
+    "label": "check",
+    "tree": "candidate",
+    "seconds": 0.06454655004199594,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 14,
+    "label": "plan",
+    "tree": "before",
+    "seconds": 0.08970618096645921,
+    "load": 0.99951171875
+  },
+  {
+    "pair": 14,
+    "label": "plan",
+    "tree": "candidate",
+    "seconds": 0.06454839103389531,
+    "load": 0.99951171875
+  }
+]

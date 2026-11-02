@@ -1,0 +1,50 @@
+[
+  {
+    "i": 0,
+    "target": "rust",
+    "seconds": 3.2055309860152192,
+    "exit": 0
+  },
+  {
+    "i": 0,
+    "target": "llvm",
+    "seconds": 0.8796751539921388,
+    "exit": 0
+  },
+  {
+    "i": 1,
+    "target": "rust",
+    "seconds": 0.24683260900201276,
+    "exit": 0
+  },
+  {
+    "i": 1,
+    "target": "llvm",
+    "seconds": 0.3482852409943007,
+    "exit": 0
+  },
+  {
+    "i": 2,
+    "target": "rust",
+    "seconds": 0.24913302302593365,
+    "exit": 0
+  },
+  {
+    "i": 2,
+    "target": "llvm",
+    "seconds": 0.312767748022452,
+    "exit": 0
+  },
+  {
+    "i": 3,
+    "target": "rust",
+    "seconds": 0.24874974403064698,
+    "exit": 0
+  },
+  {
+    "i": 3,
+    "target": "llvm",
+    "seconds": 0.3165358640253544,
+    "exit": 0
+  }
+]

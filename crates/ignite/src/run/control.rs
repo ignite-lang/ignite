@@ -89,6 +89,8 @@ pub enum Observation {
     Control(String),
     /// SIGINT or SIGTERM reached the driver.
     Interrupt,
+    /// Internal fence after all member exits have been published at stop.
+    StopBoundary,
 }
 
 /// The in-flight count of the settle rule and the condition its changes

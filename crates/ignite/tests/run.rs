@@ -921,7 +921,18 @@ fn two_manual_runs_give_equal_journals_after_masking() {
         let code = run.stop();
         assert_eq!(code, 0, "stderr:\n{}", run.stderr());
         run.replay();
-        run.journal_lines()
+        let lines = run.journal_lines();
+        assert!(
+            lines
+                .iter()
+                .map(|line| Json::parse(line).unwrap())
+                .any(|record| {
+                    machine(&record) == "Terminal.server.supervisor"
+                        && matches!(event_variant(&record), Some("Exited" | "Signalled"))
+                }),
+            "the child's completion must be journaled before the closing segment"
+        );
+        lines
     };
     let first = scenario("item8-a");
     let second = scenario("item8-b");

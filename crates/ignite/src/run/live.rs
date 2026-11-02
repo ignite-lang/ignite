@@ -497,6 +497,7 @@ impl<'a, 'p> Live<'a, 'p> {
     /// lines and interrupts wait until the advance is done.
     fn observe(&mut self, observation: Observation, advancing: bool) -> io::Result<()> {
         match observation {
+            Observation::StopBoundary => Ok(()),
             Observation::Control(_) | Observation::Interrupt if advancing => {
                 self.deferred.push_back(observation);
                 Ok(())
@@ -842,6 +843,20 @@ impl<'a, 'p> Live<'a, 'p> {
                 .map(|(_, pid)| pid)
                 .collect();
             if live.is_empty() {
+                // Process waiters publish completion under the table lock
+                // before retiring their pid. Every final exit is therefore
+                // already queued when this snapshot becomes empty. Fence that
+                // finite prefix so new control input cannot extend shutdown.
+                let _ = self.tx.send(Observation::StopBoundary);
+                while let Ok(observation) = self.rx.try_recv() {
+                    match observation {
+                        Observation::StopBoundary => break,
+                        Observation::Exited { .. } | Observation::Signalled { .. } => {
+                            self.observe(observation, false)?;
+                        }
+                        _ => {}
+                    }
+                }
                 break;
             }
             let budget = if killed { AFTER_KILL } else { deadline };

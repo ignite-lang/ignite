@@ -1,8 +1,10 @@
 # Performance budget recovery
 
-Status: proposed implementation plan, 2026-11-02. Start from `9273349` (slices 11–12b
-published). This plan does not claim that any further speedup has been implemented.
-The next batch is 12c; complete its performance acceptance before starting slice 13.
+Status: implementation in progress, 2026-11-02. The first implementation checkpoint is
+`631be24`, based on published slices 11–12b (`9273349`). Its full correctness close passed,
+but cold validation then exposed a shutdown-journal race and registry contention; the
+failed measurements are retained in `docs/performance/12c/failed-checkpoint/`.
+Batch 12c remains open until every performance criterion below passes; do not start slice 13.
 
 ## Result required
 

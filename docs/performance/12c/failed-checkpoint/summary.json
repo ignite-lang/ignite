@@ -1,0 +1,166 @@
+{
+  "accepted": false,
+  "any_command_failed": true,
+  "candidate_failed": true,
+  "closure_controls_pass": true,
+  "commits": {
+    "baseline": "df7ccb9bed4440824a2d108fa112eba3fea25f99",
+    "candidate": "631be24151d61f093e0f98081d7ee3c20a388486",
+    "comparison": "92733498f8406d8f0663a571be85351c548ea99e"
+  },
+  "comparable_low_load": false,
+  "comparison_missing": [
+    "check",
+    "cold-clippy",
+    "cold-fmt",
+    "cold-inline",
+    "cold-workspace",
+    "file-ignite_test",
+    "gate-cold",
+    "gate-warm",
+    "no-run-touch",
+    "no-run-warm",
+    "plan",
+    "todod-llvm-dev",
+    "todod-llvm-release",
+    "todod-rust-dev",
+    "todod-rust-release",
+    "warm-clippy",
+    "warm-fmt",
+    "warm-inline",
+    "warm-workspace"
+  ],
+  "coverage_pass": false,
+  "frozen_baseline_matches": true,
+  "ignite_test_absolute_pass": false,
+  "missing": [
+    "check",
+    "cold-workspace",
+    "file-ignite_test",
+    "gate-cold",
+    "gate-warm",
+    "no-run-touch",
+    "no-run-warm",
+    "plan",
+    "todod-llvm-dev",
+    "todod-llvm-release",
+    "todod-rust-dev",
+    "todod-rust-release",
+    "warm-clippy",
+    "warm-fmt",
+    "warm-inline",
+    "warm-workspace"
+  ],
+  "over_budget": [],
+  "results": [
+    {
+      "baseline": "baseline",
+      "before": 0.7856684820144437,
+      "candidate": 0.5401794739882462,
+      "excluded": [],
+      "loads": [
+        20.90234375,
+        21.7841796875
+      ],
+      "ratio": 0.6875412293531656,
+      "unit": "cold-fmt",
+      "valid_pairs": 1
+    },
+    {
+      "baseline": "baseline",
+      "before": 7.737835552019533,
+      "candidate": 5.548349583987147,
+      "excluded": [],
+      "loads": [
+        20.90234375,
+        21.7841796875
+      ],
+      "ratio": 0.7170415482064694,
+      "unit": "cold-clippy",
+      "valid_pairs": 1
+    },
+    {
+      "baseline": "baseline",
+      "excluded": [
+        {
+          "exits": [
+            0,
+            101
+          ],
+          "loads": [
+            25.1201171875,
+            19.869140625
+          ],
+          "pair": "1793619692370165388-cold-1",
+          "reason": "command_failed"
+        }
+      ],
+      "unit": "cold-workspace",
+      "valid_pairs": 0
+    },
+    {
+      "baseline": "baseline",
+      "before": 12.02888785302639,
+      "candidate": 11.159119507006835,
+      "excluded": [],
+      "loads": [
+        19.17431640625,
+        20.34375
+      ],
+      "ratio": 0.9276933697739375,
+      "unit": "cold-inline",
+      "valid_pairs": 1
+    },
+    {
+      "baseline": "baseline",
+      "excluded": [
+        {
+          "exits": [
+            0,
+            1
+          ],
+          "loads": [
+            21.7841796875,
+            20.90234375
+          ],
+          "pair": "1793619692370165388-cold-1",
+          "reason": "command_failed"
+        }
+      ],
+      "unit": "gate-cold",
+      "valid_pairs": 0
+    },
+    {
+      "baseline": "comparison",
+      "excluded": [],
+      "unit": "cold-fmt",
+      "valid_pairs": 0
+    },
+    {
+      "baseline": "comparison",
+      "excluded": [],
+      "unit": "cold-clippy",
+      "valid_pairs": 0
+    },
+    {
+      "baseline": "comparison",
+      "excluded": [],
+      "unit": "cold-workspace",
+      "valid_pairs": 0
+    },
+    {
+      "baseline": "comparison",
+      "excluded": [],
+      "unit": "cold-inline",
+      "valid_pairs": 0
+    },
+    {
+      "baseline": "comparison",
+      "excluded": [],
+      "unit": "gate-cold",
+      "valid_pairs": 0
+    }
+  ],
+  "schema": "ignite-performance/1",
+  "warm_workspace_absolute_pass": false
+}

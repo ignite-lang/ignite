@@ -1,0 +1,18 @@
+thread 'drain::rollout_drains_the_old_process_and_starts_the_new_rust' (3842172) panicked at crates/ignite/tests/drain.rs:404:51:
+no event Started of Terminal.server.supervisor within 15s; seen 0 records, the last None
+stderr:
+note: building the generated Rust project in /home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-631be24151d6/tmp/run-build-design-rust; compiler messages refer to generated code
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+thread 'run::two_manual_runs_give_equal_journals_after_masking' (3855471) panicked at crates/ignite/tests/run.rs:928:5:
+assertion `left == right` failed: [
+    "{\"epoch\":{\"ns\":1767225600000000000,\"type\":\"Duration\"},\"formatVersion\":\"ignite-journal/0.1\",\"kind\":\"header\",\"model\":{\"assembly\":{\"defaults\":[],\"id\":\"local\",\"kind\":\"std.deploy.Deployment\",\"properties\":{\"bindings\":{\"entries\":[[{\"ref\":\"Terminal.client\",\"type\":\"Ref\"},{\"type\":\"std.deploy.Binding\",\"variant\":\"WorkstationExecutable\"}],[{\"ref\":\"Terminal.ingress\",\"type\":\"Ref\"},{\"type\":\"std.deploy.Binding\",\"variant\":\"LocalSocket\"}],[{\
+    "{\"at\":{\"ns\":0,\"type\":\"Duration\"},\"kind\":\"segment\",\"machine\":null,\"seq\":1,\"value\":{\"fields\":{\"clock\":\"manual\",\"declared\":[\"Terminal.client\"],\"generation\":1,\"start\":{\"ns\":0,\"type\":\"Duration\"},\"stop\":{\"type\":\"Option\",\"variant\":\"None\"}},\"type\":\"std.control.Segment\"}}",
+    "{\"at\":{\"ns\":0,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":2,\"value\":{\"fields\":{\"at\":{\"ns\":0,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1767225600000000000,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind\",\"variant\":\"Start\"}},\"type\":\"std.control.Event\"}}",
+    "{\"at\":{\"ns\":0,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":3,\"value\":{\"fields\":[1,{\"ns\":2674800000000000,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}",
+    "{\"at\":{\"ns\":0,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptFast.evaluator\",\"seq\":4,\"value\":{\"fields\":{\"at\":{\"ns\":0,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1767225600000000000,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind\",\"variant\":\"Start\"}},\"type\":\"std.control.Event\"}}",
+    "{\"at\":{\"ns\":0,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":5,\"value\":{\"fields\":{\"at\":{\"ns\":0,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1767225600000000000,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind\",\"variant\":\"Start\"}},\"type\":\"std.control.Event\"}}",
+    "{\"at\":{\"ns\":0,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.reachable.evaluator\",\"seq\":6,\"value\":{\"fields\":{\"at\":{\"ns\":0,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1767225600000000000,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind\",\"variant\":\"Start\"}},\"type\":\"std.control.Event\"}}",
