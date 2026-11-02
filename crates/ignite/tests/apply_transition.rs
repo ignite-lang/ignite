@@ -766,3 +766,333 @@ fn a_machine_that_gives_up_fails_the_operation_until_a_corrective_apply() {
     drop(occupied);
     host.stop();
 }
+
+/// The variant and first field (a pid) of a run journal's `event` record.
+fn event_of(record: &Json) -> Option<(String, i64)> {
+    if record.get("kind").and_then(Json::as_str) != Some("event") {
+        return None;
+    }
+    let kind = record.get("value")?.get("fields")?.get("kind")?;
+    Some((
+        kind.get("variant")?.as_str()?.to_string(),
+        kind.get("fields")?.as_array()?.first()?.as_i64()?,
+    ))
+}
+
+/// The pid a run journal's `effect` record sends SIGTERM.
+fn terminated(record: &Json) -> Option<i64> {
+    if record.get("kind").and_then(Json::as_str) != Some("effect") {
+        return None;
+    }
+    let value = record.get("value")?;
+    if value.get("variant")?.as_str()? != "Kill" {
+        return None;
+    }
+    let fields = value.get("fields")?.as_array()?;
+    (fields.get(2)?.as_i64()? == 15).then_some(fields.get(1)?.as_i64()?)
+}
+
+/// 17.4, replacement-first: a port change of the listener is no conflict,
+/// so the new server starts next to the old one, which keeps serving until
+/// the new one is ready and only then drains; the listener resource is not
+/// stopped while its server runs on it.
+#[test]
+fn a_port_change_starts_the_replacement_before_the_old_one_drains() {
+    let _builds = BUILDS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let flow = Flow::new("start-first");
+    let (old_port, new_port) = {
+        let a = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let b = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        (
+            a.local_addr().unwrap().port(),
+            b.local_addr().unwrap().port(),
+        )
+    };
+    let good = Revision {
+        port: old_port,
+        server: true,
+        probe: false,
+        escape: "Ctrl+]",
+        attempts: 1,
+    };
+    let moved = Revision {
+        port: new_port,
+        ..good
+    };
+    let mut host = Host::start(&flow, "host");
+    let (first, _) = flow.prepare("good", good);
+    flow.applied("apply-good", &first);
+    let old = owned_pid(&flow.inspect(), "Terminal.server").expect("owned server");
+    let (second, second_plan) = flow.prepare("moved", moved);
+    assert_eq!(kind(&second_plan, "Terminal.server"), "replace");
+    let (code, stdout, stderr) = try_apply(&flow, "apply-moved", &second, LIVE_TIMEOUT);
+    let trace: Vec<String> = flow
+        .run_records()
+        .iter()
+        .filter(|record| matches!(record.get("kind").and_then(Json::as_str), Some("effect")))
+        .map(Json::compact)
+        .collect();
+    assert_eq!(
+        code,
+        Some(0),
+        "stdout: {stdout}\nstderr: {stderr}\nsteps: {:?}\nrun effects: {trace:#?}",
+        flow.steps(&plan_id(&second_plan))
+    );
+    let receipt = Json::parse(&stdout).unwrap();
+    assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(2));
+    let status = flow.inspect();
+    let new = owned_pid(&status, "Terminal.server").expect("owned replacement");
+    assert_ne!(new, old);
+    assert!(alive(new) && !alive(old), "{}", status.compact());
+    assert!(std::net::TcpStream::connect(("127.0.0.1", new_port)).is_ok());
+    let effects = flow.effects(&plan_id(&second_plan));
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| effect.starts_with("StopMember")),
+        "{effects:?}"
+    );
+    assert!(
+        position(&effects, "CutOver Terminal.server") < position(&effects, "Commit"),
+        "{effects:?}"
+    );
+    let records = flow.run_records();
+    let ready = records
+        .iter()
+        .position(|record| event_of(record) == Some(("Ready".to_string(), new)))
+        .expect("the replacement's Ready");
+    let drained = records
+        .iter()
+        .position(|record| terminated(record) == Some(old))
+        .expect("the old server's SIGTERM");
+    assert!(
+        ready < drained,
+        "the old server drained before the new one was ready"
+    );
+    host.stop();
+}
+
+// Adversary (slice13/U4): the cases below attack D3 and replacement-first.
+
+/// `ignite apply PLAN` started and not awaited; its stdout and stderr files.
+fn spawn_apply(flow: &Flow, label: &str, plan: &Path) -> (Child, PathBuf, PathBuf) {
+    let stdout = flow.root.join(format!("{label}.stdout"));
+    let stderr = flow.root.join(format!("{label}.stderr"));
+    let child = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .args(["apply", plan.to_str().unwrap(), "--state"])
+        .arg(&flow.state)
+        .current_dir(repo())
+        .env("CARGO_INCREMENTAL", "0")
+        .env("CARGO_PROFILE_DEV_DEBUG", "line-tables-only")
+        .stdin(Stdio::null())
+        .stdout(File::create(&stdout).unwrap())
+        .stderr(File::create(&stderr).unwrap())
+        .spawn()
+        .expect("start CLI client");
+    (child, stdout, stderr)
+}
+
+/// `ignite apply PLAN` with a deadline: its exit code (`None` when it did not
+/// end in `timeout`, then it is killed), stdout and stderr.
+fn try_apply(
+    flow: &Flow,
+    label: &str,
+    plan: &Path,
+    timeout: Duration,
+) -> (Option<i32>, String, String) {
+    let (mut child, stdout, stderr) = spawn_apply(flow, label, plan);
+    let status = wait(&mut child, timeout);
+    if status.is_none() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    (status.and_then(|s| s.code()), read(&stdout), read(&stderr))
+}
+
+fn current_operation(status: &Json) -> (Option<String>, Option<String>) {
+    let current = status.get("currentOperation");
+    let field = |key: &str| {
+        current
+            .and_then(|c| c.get(key))
+            .and_then(Json::as_str)
+            .map(str::to_string)
+    };
+    (field("operationId"), field("state"))
+}
+
+/// D3 and 17.5 "No unrelated operation may overwrite unresolved recovery":
+/// while one corrective apply is in flight, a second plan prepared against
+/// the same committed revision is refused, so two operations never run at
+/// once.
+#[test]
+fn a_second_corrective_apply_is_refused_while_the_first_is_in_flight() {
+    let _builds = BUILDS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let flow = Flow::new("two-correctives");
+    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let broken = Revision {
+        port: occupied.local_addr().unwrap().port(),
+        server: true,
+        probe: false,
+        escape: "Ctrl+]",
+        attempts: 1,
+    };
+    let _host = Host::start(&flow, "host");
+    let (failing, _) = flow.prepare("occupied", broken);
+    flow.apply("apply-occupied", &failing, 1);
+    assert_eq!(
+        flow.inspect().get("recoveryReason").and_then(Json::as_str),
+        Some("gave_up")
+    );
+    // The first corrective restarts against the occupied port for tens of
+    // seconds; the second would succeed. Both are based on the committed
+    // revision 0; the second is prepared while the first is in flight
+    // (preparation pins the source file's bytes).
+    let (slow, slow_plan) = flow.prepare(
+        "slow-corrective",
+        Revision {
+            attempts: 30,
+            ..broken
+        },
+    );
+    let slow_id = plan_id(&slow_plan);
+    let (mut first, _, _) = spawn_apply(&flow, "apply-slow", &slow);
+    let deadline = Instant::now() + LIVE_TIMEOUT;
+    loop {
+        let (id, state) = current_operation(&flow.inspect());
+        if id.as_deref() == Some(slow_id.as_str())
+            && matches!(state.as_deref(), Some("accepted" | "applying"))
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "first corrective never in flight"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let (fast, fast_plan) = flow.prepare(
+        "fast-corrective",
+        Revision {
+            port: free_port(),
+            attempts: 10,
+            ..broken
+        },
+    );
+    let (code, stdout, stderr) = try_apply(&flow, "apply-fast", &fast, LIVE_TIMEOUT);
+    let status = flow.inspect();
+    let _ = first.kill();
+    let _ = first.wait();
+    assert_eq!(
+        code,
+        Some(2),
+        "a second operation was admitted while {slow_id} was in flight\nstdout: {stdout}\nstderr: {stderr}\nstatus: {}\nfast plan: {}",
+        status.compact(),
+        plan_id(&fast_plan)
+    );
+    assert!(
+        stderr.contains("active or unresolved operation"),
+        "{stderr}"
+    );
+    drop(occupied);
+}
+
+/// D3: the corrective apply that returns to the committed revision itself
+/// clears `gave_up`; it must not be a no-op that leaves the host in
+/// recovery with the failed operation current.
+#[test]
+fn a_corrective_apply_back_to_the_committed_revision_clears_gave_up() {
+    let _builds = BUILDS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let flow = Flow::new("revert");
+    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let idle = Revision {
+        port: occupied.local_addr().unwrap().port(),
+        server: false,
+        probe: false,
+        escape: "Ctrl+]",
+        attempts: 1,
+    };
+    let broken = Revision {
+        server: true,
+        ..idle
+    };
+    let _host = Host::start(&flow, "host");
+    let (committed, _) = flow.prepare("idle", idle);
+    let receipt = flow.applied("apply-idle", &committed);
+    assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(1));
+    let (failing, failing_plan) = flow.prepare("occupied", broken);
+    flow.apply("apply-occupied", &failing, 1);
+    let status = flow.inspect();
+    assert_eq!(
+        status.get("recoveryReason").and_then(Json::as_str),
+        Some("gave_up")
+    );
+    let (revert, _) = flow.prepare("revert", idle);
+    let receipt = flow.applied("apply-revert", &revert);
+    let status = flow.inspect();
+    assert_eq!(
+        status.get("recoveryReason"),
+        Some(&Json::Null),
+        "the corrective apply {} completed, the host still reports recovery of {}\nstatus: {}",
+        receipt.compact(),
+        plan_id(&failing_plan),
+        status.compact()
+    );
+    drop(occupied);
+}
+
+/// Replacement-first (17.4, row 9): a replacement that never becomes ready
+/// leaves the old instance serving, does not commit, and ends the operation
+/// as failed instead of waiting forever.
+#[test]
+fn a_replacement_that_never_becomes_ready_keeps_the_old_serving_and_fails() {
+    let _builds = BUILDS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let flow = Flow::new("never-ready");
+    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = free_port();
+    let good = Revision {
+        port,
+        server: true,
+        probe: false,
+        escape: "Ctrl+]",
+        attempts: 1,
+    };
+    let moved = Revision {
+        port: occupied.local_addr().unwrap().port(),
+        ..good
+    };
+    let _host = Host::start(&flow, "host");
+    let (first, _) = flow.prepare("good", good);
+    flow.applied("apply-good", &first);
+    let old = owned_pid(&flow.inspect(), "Terminal.server").expect("owned server");
+    let (second, second_plan) = flow.prepare("moved", moved);
+    assert_eq!(kind(&second_plan, "Terminal.server"), "replace");
+    let (code, stdout, stderr) = try_apply(&flow, "apply-moved", &second, LIVE_TIMEOUT);
+    let status = flow.inspect();
+    let effects = flow.effects(&plan_id(&second_plan));
+    assert!(alive(old), "the old server ended: {}", status.compact());
+    assert!(
+        std::net::TcpStream::connect(("127.0.0.1", port)).is_ok(),
+        "the old server stopped accepting: {effects:?}"
+    );
+    assert_eq!(
+        status.get("committedRevision").and_then(Json::as_i64),
+        Some(1),
+        "{}",
+        status.compact()
+    );
+    assert_eq!(
+        code,
+        Some(1),
+        "the operation neither completed nor failed in {LIVE_TIMEOUT:?}\neffects: {effects:?}\nstdout: {stdout}\nstderr: {stderr}\nstatus: {}",
+        status.compact()
+    );
+    drop(occupied);
+}

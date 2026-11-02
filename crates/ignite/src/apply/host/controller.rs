@@ -23,7 +23,23 @@
 //! ready (a supervisor's accepted `Ready`, a scheduler's first `signal`, an
 //! evaluator's first `standing`), `MemberGaveUp` at a supervisor's
 //! `Note("gave_up")`, `Converged` once every desired machine reports ready and
-//! no retiring instance is left.
+//! no retiring instance is left. An effect the driver cannot carry out is
+//! the reducer event `EffectFailed(reason, member)`, whose `Abandon` is
+//! journaled like every step before the operation fails: a replacement's
+//! listener that cannot be bound, a process that failed to spawn, a ready
+//! process whose artifact is not the admitted one, a run that ended.
+//!
+//! A cutover whose new instance listens on the same address and port as
+//! the old one drains the old listener first and then starts the
+//! replacement, which must become ready; a failure after the drain leaves
+//! the operation `recovery_required` with the state as it is. Any other
+//! cutover (another port, or no listener) starts the new instance first
+//! (`rollout <member> start_first`) and drains the old one only once the
+//! new one is ready, so a replacement that never becomes ready leaves the
+//! old instance serving. Before the first step the host binds every such
+//! new listener once and fails the operation with `listener_unavailable`
+//! when it cannot; like `gave_up`, that leaves the committed revision's
+//! instances as they were, and a corrective plan resolves it.
 //!
 //! The transition is differential when the running revision realizes the
 //! committed one, the plan's base. Otherwise (no running revision, or one
@@ -88,6 +104,55 @@ pub(super) struct Driving {
     deferred: BTreeSet<String>,
     /// The members whose instances stay at the switch.
     keep: BTreeSet<String>,
+    /// The cutover members whose new instance starts before the old drains.
+    start_first: BTreeSet<String>,
+    /// Member to the pid a start-first replacement displaced, restored as
+    /// the owned instance when the replacement ends before it was ready.
+    displaced: BTreeMap<String, i64>,
+    /// Member to the plan's action kind.
+    kinds: BTreeMap<String, String>,
+}
+
+/// Whether an operation failed with `reason` left the committed revision's
+/// instances as they were, so that a corrective plan resolves it (D3).
+pub(super) fn resolvable(reason: &str) -> bool {
+    matches!(reason, "gave_up" | "listener_unavailable")
+}
+
+/// The address and declared port of the listener `member` provisions in
+/// `model`.
+fn listener_of(model: &Json, member: &str) -> Option<(String, i64)> {
+    let resource = model
+        .get("edges")
+        .and_then(Json::as_array)
+        .into_iter()
+        .flatten()
+        .find(|edge| {
+            edge.get("kind").and_then(Json::as_str) == Some("provisioning")
+                && edge.get("to").and_then(Json::as_str) == Some(member)
+        })?
+        .get("from")
+        .and_then(Json::as_str)?;
+    let properties = declared(model, resource)?;
+    Some((
+        properties
+            .get("address")
+            .and_then(Json::as_str)
+            .unwrap_or("127.0.0.1")
+            .to_string(),
+        properties.get("port").and_then(Json::as_i64).unwrap_or(0),
+    ))
+}
+
+/// The properties of resource `id` in `model`.
+fn declared<'m>(model: &'m Json, id: &str) -> Option<&'m Json> {
+    model
+        .get("resources")
+        .and_then(Json::as_array)
+        .into_iter()
+        .flatten()
+        .find(|resource| resource.get("id").and_then(Json::as_str) == Some(id))?
+        .get("properties")
 }
 
 /// One member action as the reducer receives it.
@@ -137,6 +202,17 @@ fn transition_event(variant: &str, member: Option<&str>) -> Value {
         fields: member
             .map(|m| vec![Value::Text(m.to_string())])
             .unwrap_or_default(),
+    }
+}
+
+fn effect_failed_event(reason: &str, member: &str) -> Value {
+    Value::Enum {
+        name: QualName::new(CONTROL_MODULE, "TransitionEvent"),
+        variant: "EffectFailed".to_string(),
+        fields: vec![
+            Value::Text(reason.to_string()),
+            Value::Text(member.to_string()),
+        ],
     }
 }
 
@@ -222,7 +298,7 @@ impl Host {
             receipt.insert("reason".into(), text(reason));
             receipt.insert(
                 "nextAction".into(),
-                text(if reason == "gave_up" {
+                text(if resolvable(reason) {
                     "apply a corrective plan prepared against the committed revision"
                 } else {
                     "inspect retained ownership and journal before recovery"
@@ -285,6 +361,7 @@ impl Host {
             .map(str::to_string)
             .collect();
         let mut actions = Vec::new();
+        let mut kinds = BTreeMap::new();
         for entry in plan
             .actions
             .get("members")
@@ -294,6 +371,7 @@ impl Host {
         {
             let member = entry.get("id").and_then(Json::as_str).unwrap_or_default();
             let kind = entry.get("kind").and_then(Json::as_str).unwrap_or_default();
+            kinds.insert(member.to_string(), kind.to_string());
             let ownership = entry
                 .get("ownership")
                 .and_then(Json::as_str)
@@ -362,6 +440,28 @@ impl Host {
         } else {
             BTreeSet::new()
         };
+        // A cutover keeps its old listener only when the new instance would
+        // listen on the same one (module doc); the new listener of every
+        // other cutover must be bindable before anything is stopped.
+        let mut start_first = BTreeSet::new();
+        let mut unavailable = None;
+        let base_model = self.runtime.as_ref().map(|runtime| &runtime.model);
+        for action in actions.iter().filter(|a| a.cutover) {
+            let old = base_model.and_then(|model| listener_of(model, &action.member));
+            let new = listener_of(&frozen.model, &action.member);
+            if old.is_some() && old == new {
+                continue;
+            }
+            start_first.insert(action.member.clone());
+            if unavailable.is_none()
+                && let Some((address, port)) = &new
+                && let Ok(port) = u16::try_from(*port)
+                && port > 0
+                && std::net::TcpListener::bind((address.as_str(), port)).is_err()
+            {
+                unavailable = Some(action.member.clone());
+            }
+        }
         let value = {
             let modules = loaded.modules();
             let mut evaluator = Evaluator::new(&modules, Fuel::default());
@@ -407,12 +507,18 @@ impl Host {
             loaded,
             value,
             phase: "Planned".into(),
-            queue: VecDeque::from([transition_event("Begin", None)]),
+            queue: VecDeque::from([match &unavailable {
+                Some(member) => effect_failed_event("listener_unavailable", member),
+                None => transition_event("Begin", None),
+            }]),
             stopping: None,
             starting: None,
             switching: false,
             deferred,
             keep,
+            start_first,
+            displaced: BTreeMap::new(),
+            kinds,
         });
         self.drive()
     }
@@ -602,7 +708,15 @@ impl Host {
                     .insert(member.to_string(), minimum);
             }
             self.forget_ready(member);
-            self.send(format!("rollout {member}"))
+            let start_first = self
+                .transition
+                .as_ref()
+                .is_some_and(|driving| driving.start_first.contains(member));
+            self.send(if start_first {
+                format!("rollout {member} start_first")
+            } else {
+                format!("rollout {member}")
+            })
         } else {
             self.send(format!("start {member}"))
         }
@@ -665,6 +779,16 @@ impl Host {
         };
         let plan = driving.plan.clone();
         let deferred = driving.deferred.clone();
+        // A pinned port stays only for a listener the plan keeps as it was
+        // declared: a replaced listener gets its desired port.
+        let mut carried = carried;
+        carried.pinned.retain(|resource, port| {
+            driving.kinds.get(resource).map(String::as_str) != Some("replace")
+                && declared(&plan.model, resource)
+                    .and_then(|properties| properties.get("port"))
+                    .and_then(Json::as_i64)
+                    .is_none_or(|declared| declared == 0 || declared == i64::from(*port))
+        });
         self.runtime = None;
         self.start_runtime(
             plan,
@@ -863,11 +987,12 @@ impl Host {
         if shutdown {
             return Ok(());
         }
-        if let Some(driving) = self.transition.take() {
-            return self.reject_operation(
-                &driving.operation,
-                &format!("revision controller ended before convergence: {result:?}"),
-            );
+        let reason = format!("revision controller ended before convergence: {result:?}");
+        if self.effect_failed(&reason, "")? {
+            if let Some(driving) = self.transition.take() {
+                return self.reject_operation(&driving.operation, &reason);
+            }
+            return Ok(());
         }
         if self.recovery_reason.is_some() {
             return Ok(());
@@ -889,6 +1014,18 @@ impl Host {
             )?;
         }
         Ok(())
+    }
+
+    /// An effect of the transition in flight could not be carried out: step
+    /// `EffectFailed`, whose `Abandon` fails the operation after it is
+    /// journaled. False when no transition is in flight.
+    fn effect_failed(&mut self, reason: &str, member: &str) -> Result<bool, Failure> {
+        let Some(driving) = &mut self.transition else {
+            return Ok(false);
+        };
+        driving.queue.push_back(effect_failed_event(reason, member));
+        self.drive()?;
+        Ok(true)
     }
 
     pub(super) fn record(
@@ -925,7 +1062,7 @@ impl Host {
             && self
                 .recovery_reason
                 .as_deref()
-                .is_some_and(|reason| reason != "gave_up")
+                .is_some_and(|reason| !resolvable(reason))
         {
             return Err(fail(1, "effect dispatch blocked by unresolved recovery"));
         }
@@ -1024,6 +1161,11 @@ impl Host {
                         })
                 {
                     self.retiring.insert(old_pid.to_string(), previous.clone());
+                    if let Some(driving) = &mut self.transition
+                        && driving.start_first.contains(member)
+                    {
+                        driving.displaced.insert(member.to_string(), old_pid);
+                    }
                 }
                 let generation = fields
                     .and_then(|fields| fields.get(1))
@@ -1093,10 +1235,11 @@ impl Host {
                         };
                     if expected != Some(actual.as_str()) {
                         let id = self.active.clone().unwrap_or(id);
-                        self.reject_operation(
-                            &id,
-                            "ready process artifact differs from the admitted desired artifact",
-                        )?;
+                        let reason =
+                            "ready process artifact differs from the admitted desired artifact";
+                        if !self.effect_failed(reason, member)? {
+                            self.reject_operation(&id, reason)?;
+                        }
                         return Err(fail(1, "ready artifact identity mismatch"));
                     }
                 }
@@ -1109,9 +1252,30 @@ impl Host {
             }
         }
         if matches!(variant, Some("Exited" | "Signalled")) && matches_instance {
-            self.owned.remove(member);
+            let was_ready = self
+                .owned
+                .remove(member)
+                .and_then(|owner| owner.get("ready").and_then(Json::as_bool))
+                == Some(true);
             if let Some(runtime) = &mut self.runtime {
                 runtime.ready.remove(machine);
+            }
+            // A start-first replacement that ended before it was ready
+            // never displaced the old instance, which still serves.
+            let displaced = self
+                .transition
+                .as_ref()
+                .and_then(|driving| driving.displaced.get(member).copied())
+                .filter(|_| !was_ready);
+            if let Some(old) = displaced
+                && let Some(previous) = self.retiring.get(&old.to_string())
+                && previous
+                    .get("instance")
+                    .and_then(Json::as_str)
+                    .is_some_and(|instance| process_identity(old).as_deref() == Some(instance))
+            {
+                let previous = self.retiring.remove(&old.to_string()).unwrap();
+                self.owned.insert(member.to_string(), previous);
             }
         }
         if matches!(variant, Some("Exited" | "Signalled"))
@@ -1119,11 +1283,16 @@ impl Host {
         {
             self.retiring.remove(&pid.to_string());
         }
-        if variant == Some("SpawnFailed") && self.active.as_deref() == Some(operation) {
+        if variant == Some("SpawnFailed")
+            && (self.transition.is_some() || self.active.as_deref() == Some(operation))
+        {
             if let Some(runtime) = &mut self.runtime {
                 runtime.ready.remove(machine);
             }
-            self.reject_operation(operation, "a required owned process failed to start")?;
+            let reason = "a required owned process failed to start";
+            if !self.effect_failed(reason, member)? {
+                self.reject_operation(operation, reason)?;
+            }
         }
         Ok(())
     }

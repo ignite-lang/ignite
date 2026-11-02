@@ -12,7 +12,8 @@
 //! `AttemptDone` and `AttemptFailed` go to the scheduler that asked for
 //! the attempt, `Built`, `BuildFailed` and `Released` to the rollout
 //! machine that asked, `Timer` to its setter, `Control("rollout")` to
-//! `<member>.rollout`, `Control("stop")` to every `Supervise` and `Roll`
+//! `<member>.rollout` (`Control("rollout start_first")` for the control line
+//! `rollout <member> start_first`), `Control("stop")` to every `Supervise` and `Roll`
 //! machine. `status` and `advance` reach no machine.
 //!
 //! Time (16.4): under the real clock `at` is the segment's start plus the
@@ -509,6 +510,25 @@ impl<'a, 'p> Live<'a, 'p> {
             .unwrap_or(listener.port)
     }
 
+    /// Pin the port `member`'s ready process reported for its listener
+    /// (16.3), unless the listener is configured with another fixed port:
+    /// an instance a previous revision handed over still listens on that
+    /// revision's port, which is not the desired one.
+    fn pin(&mut self, member: &str, port: u16) {
+        let Some(listener) = self.members.listeners.get(member) else {
+            return;
+        };
+        let configured = self
+            .config
+            .ports
+            .get(&listener.resource)
+            .copied()
+            .unwrap_or(listener.port);
+        if configured == 0 || configured == port {
+            self.pinned.insert(listener.resource.clone(), port);
+        }
+    }
+
     /// `<address>:<port>` of the listener `member` provisions (16.9).
     fn endpoint_of(&self, member: &str) -> Option<String> {
         let listener = self.members.listeners.get(member)?;
@@ -763,9 +783,7 @@ impl<'a, 'p> Live<'a, 'p> {
             Observation::Ready {
                 member, pid, port, ..
             } => {
-                if let Some(listener) = self.members.listeners.get(&member) {
-                    self.pinned.insert(listener.resource.clone(), port);
-                }
+                self.pin(&member, port);
                 if let Some(instance) = self.instances.get_mut(&member)
                     && instance.pid == pid
                 {
@@ -877,10 +895,14 @@ impl<'a, 'p> Live<'a, 'p> {
                     return Ok(());
                 };
                 let id = format!("{member}.rollout");
+                let line = match words.next() {
+                    Some("start_first") => "rollout start_first",
+                    _ => "rollout",
+                };
                 match self.core.machine(&id) {
                     Some(machine) => self.feed_all(
                         &[machine],
-                        kind("Control", vec![Value::Text("rollout".to_string())]),
+                        kind("Control", vec![Value::Text(line.to_string())]),
                     ),
                     None => {
                         self.note(&format!("{member} has no rollout machine"));
@@ -1239,9 +1261,7 @@ impl<'a, 'p> Live<'a, 'p> {
                     instance.ready = true;
                     instance.port = port;
                 }
-                if let Some(listener) = self.members.listeners.get(&member) {
-                    self.pinned.insert(listener.resource.clone(), port);
-                }
+                self.pin(&member, port);
                 Ok(())
             }
             observation @ (Observation::Control(_) | Observation::Interrupt) => {

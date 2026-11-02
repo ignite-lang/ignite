@@ -257,9 +257,23 @@ impl Host {
             }
             return Ok(());
         }
-        // Decision D3: an operation a machine gave up on is resolved by a
-        // corrective plan whose base is the committed revision.
-        let corrective = self.recovery_reason.as_deref() == Some("gave_up")
+        // Decision D3: an operation a machine gave up on (or whose new
+        // listener could not be bound) is resolved by a corrective plan whose
+        // base is the committed revision, while that failed operation is the
+        // only one: no transition in flight, the active operation's receipt
+        // `recovery_required`.
+        let corrective = self.transition.is_none()
+            && self
+                .recovery_reason
+                .as_deref()
+                .is_some_and(super::controller::resolvable)
+            && self
+                .active
+                .as_ref()
+                .and_then(|id| self.receipts.get(id))
+                .and_then(|receipt| receipt.get("state"))
+                .and_then(Json::as_str)
+                == Some("recovery_required")
             && plan.base_revision == self.revision;
         if self.active.is_some() && !corrective {
             return Err(fail(2, "host has an active or unresolved operation"));
@@ -317,6 +331,18 @@ impl Host {
             ]),
         );
         if unchanged {
+            // A corrective plan back to the committed revision resolves the
+            // failed operation without a transition.
+            if corrective && let Some(failed) = self.active.take() {
+                self.recovery_reason = None;
+                self.append(
+                    "recoveryResolved",
+                    object([
+                        ("operationId", text(&plan.id)),
+                        ("resolvedOperationId", text(&failed)),
+                    ]),
+                )?;
+            }
             self.persist()?;
             let _ = reply.send(Ok(self.receipt(&plan.id)));
             return Ok(());
