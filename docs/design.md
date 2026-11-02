@@ -535,6 +535,8 @@ These are proposed command contracts. `run` is foreground development execution;
 
 Note (slice 11, 2026-11-02). `check`, `build` and `test` exist as `docs/slice.md` sections 1, 12 and 14 define them; `plan` and `explain` exist as `docs/slice.md` 15.7 and 15.8 define them: `ignite plan <file.ignite> [--assembly NAME] [--out FILE] [--fuel N] [--std PATH]` prints the system model of section 6.2, and `ignite explain <file.ignite> <path> [--assembly NAME] [--fuel N] [--std PATH]` takes the file as its first argument, unlike the line above, because no live system is inspected before slice 12. `fmt`, `run`, `apply` and `inspect` are still proposals.
 
+Note (slice 12, 2026-11-02). `run` exists as `docs/slice.md` 16.3 defines it: `ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target rust|llvm] [--clock real|manual] [--epoch RFC3339] [--port RESOURCE=PORT] [--json]` plans the assembly, builds its members, starts and supervises them, runs the probes and evaluates the contracts in the foreground, and journals every event, effect, standing and consequence under `<state>`; stdin takes `status`, `rollout <member>`, `stop` and, with the manual clock, `advance <quantity>`. `ignite replay <file.ignite> [--assembly NAME] [--state DIR]` re-derives every effect and standing from that journal and prints the final standings. The machines are the pure reducers of `std/control.ignite`, stepped in the evaluator (O27). `fmt`, `apply` and `inspect` are still proposals.
+
 ### 10.2 Application CLI declarations
 
 An application CLI is a component with an executable name, typed command tree, arguments, flags, handler bindings, terminal requirements, and exit-status mapping. The compiler generates parsing, help, and validation. It does not generate arbitrary handler behavior from a command name.
@@ -771,6 +773,8 @@ The local controller requires the following durable machines:
 Direct binding to the same address cannot support simultaneous old and candidate servers without a socket handoff or fronting acceptor. The local backend must implement one of those mechanisms for drain rollout. Until it does, planning rejects that rollout binding or requires an explicit stop-and-start strategy with declared disruption. It must not simulate zero-downtime behavior in its plan.
 
 In a distributed assembly, a fronting TCP endpoint may direct new connections to candidates while old connections remain on their existing instances. This increases capacity for new sessions; it does not move live sessions.
+
+Note (slice 12, 2026-11-02). Four of the five machines exist as pure reducers in `std/control.ignite`, stepped by `ignite run` (`docs/slice.md` 16.7 to 16.12): the server supervisor (`Supervise`), the probe scheduler (`Schedule`), the contract evaluator (`Evaluate`) and the rollout (`Roll`). The listener lifecycle is folded into the supervisor (O44): the child binds its listener and prints the ready line, the supervisor observes readiness and kills a child that reports none within the policy's `readiness_timeout`. A drain rollout on a directly bound address is the stop-and-start strategy of the paragraph above: the plan declares the disruption (O34) and the rollout machine journals it as `disruption <duration>` before retiring the old generation.
 
 ### 11.9 Native release
 

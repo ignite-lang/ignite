@@ -11,7 +11,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use ignite_syntax::ast::{Expr, ExprKind, Span, SystemDecl};
+use ignite_syntax::ast::{Decl, Expr, ExprKind, Span, SystemDecl};
 use ignite_syntax::diagnostic::Diagnostic;
 use ignite_types::{
     AssemblyInfo, ExecutableInfo, MemberDeclaration, MemberInfo, PropertySource, QualName,
@@ -21,10 +21,24 @@ use ignite_types::{
 
 use crate::eval::Limit;
 use crate::resolve::binding_fns;
-use crate::{EvalError, Evaluator, Module, ResolutionEntry, Value, resolve};
+use crate::{EvalError, Evaluator, Module, Modules, ResolutionEntry, Value, resolve};
 
 /// The `formatVersion` of the model (O13).
 pub const FORMAT_VERSION: &str = "ignite-model/0.1";
+
+/// The disruption a `Roll` machine declares (`docs/slice.md` 16.12, O34):
+/// the local backend has no socket handoff, so the plan says what a
+/// rollout costs instead of simulating zero downtime (design 11.8).
+pub const DISRUPTION: &str = "connections refused between listener close and rebind";
+
+/// The module of the reducer interface (16.6).
+pub const CONTROL_MODULE: &str = "std.control";
+
+/// `std.control.companions(machine) -> List<Machine>`: the machines a
+/// hook's result brings with it (a supervisor with a rollout policy brings
+/// the member's `Roll` machine), since a policy module below `std.control`
+/// cannot return a `Machine` itself (O45).
+const COMPANIONS: &str = "companions";
 
 /// The system model of one program (15.5).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,6 +56,12 @@ pub struct Model {
     /// std files as `std/<path>` (O21). The system's and the assembly's
     /// ids map to their declarations too.
     pub source_map: BTreeMap<String, String>,
+    /// The initial machines of the selected assembly (16.14), sorted by
+    /// id; empty without an assembly.
+    pub machines: Vec<ModelMachine>,
+    /// The signals the selected assembly produces (16.14), sorted by ref;
+    /// empty without an assembly.
+    pub observations: Vec<ModelObservation>,
 }
 
 /// One member entry of the model (15.5).
@@ -97,6 +117,16 @@ pub enum EdgeKind {
     Observes,
     /// From the resolution: a binding's key hosts an included member.
     Hosts,
+    /// A resource to the hosted executable component that binds it
+    /// (`Terminal.ingress` to `Terminal.server`; 16.14): the driver
+    /// resolves a component's endpoint through it (16.9).
+    Provisioning,
+    /// A hosted member to the member whose readiness it waits for: a
+    /// probe to its `Ref` target, a contract to its signal's producer
+    /// (16.14); the routing of lifecycle events reads it (16.8, A4).
+    Readiness,
+    /// A member to its supervisor machine (16.14).
+    Recovery,
 }
 
 impl EdgeKind {
@@ -106,6 +136,9 @@ impl EdgeKind {
             EdgeKind::References => "references",
             EdgeKind::Observes => "observes",
             EdgeKind::Hosts => "hosts",
+            EdgeKind::Provisioning => "provisioning",
+            EdgeKind::Readiness => "readiness",
+            EdgeKind::Recovery => "recovery",
         }
     }
 
@@ -116,6 +149,9 @@ impl EdgeKind {
             EdgeKind::References => "referenced by",
             EdgeKind::Observes => "observed by",
             EdgeKind::Hosts => "hosted by",
+            EdgeKind::Provisioning => "provisions",
+            EdgeKind::Readiness => "awaited by",
+            EdgeKind::Recovery => "recovers",
         }
     }
 }
@@ -130,6 +166,395 @@ impl Ord for EdgeKind {
     /// By name, as the JSON sorts.
     fn cmp(&self, other: &EdgeKind) -> std::cmp::Ordering {
         self.as_str().cmp(other.as_str())
+    }
+}
+
+/// One entry of the model's `machines` array (`docs/slice.md` 16.14): the
+/// initial `std.control.Machine` value a `machine` hook returned for a
+/// hosted member or contract, the member it belongs to, the signal refs it
+/// subscribes to and, for a `Roll` machine, its declared disruption
+/// (16.12, O34).
+///
+/// The hook is `K.machine(self, id: Text) -> std.control.Machine`, called
+/// with the member's id (`Terminal.server`) on the member's kind and on
+/// every record-typed property value whose type's module declares one
+/// (`std.policy.DrainRollout.machine` gives `Terminal.server.rollout`); the
+/// hook forms the machine id `<member>.<role>` in its payload's `id` field,
+/// which is where the model reads it (16.6).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelMachine {
+    /// `<member path>.<role>`, e.g. `Terminal.server.supervisor`.
+    pub id: String,
+    /// The initial `Machine` value.
+    pub machine: Value,
+    /// The member or contract id the machine belongs to.
+    pub member: String,
+    /// Signal refs, sorted: the `Signal` values among the member's
+    /// properties.
+    pub subscribes: Vec<String>,
+    /// [`DISRUPTION`] for a `Roll` machine.
+    pub disruption: Option<String>,
+}
+
+impl ModelMachine {
+    /// The `Machine` variant: `Supervise`, `Schedule`, `Evaluate` or
+    /// `Roll`.
+    pub fn variant(&self) -> &str {
+        match &self.machine {
+            Value::Enum { variant, .. } => variant,
+            _ => "",
+        }
+    }
+
+    /// The machine's state record, the variant's payload.
+    pub fn payload(&self) -> Option<&Value> {
+        match &self.machine {
+            Value::Enum { fields, .. } => fields.first(),
+            _ => None,
+        }
+    }
+
+    /// The `name` field of the payload, when it is a `Text`.
+    pub fn text_field(&self, name: &str) -> Option<&str> {
+        match self.payload()? {
+            Value::Record { fields, .. } => fields.iter().find_map(|(f, v)| match v {
+                Value::Text(text) if f == name => Some(text.as_str()),
+                _ => None,
+            }),
+            _ => None,
+        }
+    }
+}
+
+/// One entry of the model's `observations` array (16.14): a signal the
+/// assembly produces, its producer member, its element type and the
+/// producer's `interval` property (`Unit` when the producer has none).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelObservation {
+    /// The signal's ref text, e.g. `Terminal.promptProbe.attempts`.
+    pub reference: String,
+    pub producer: String,
+    /// The qualified element type, e.g. `std.sli.ProbeAttempt`.
+    pub element: String,
+    pub interval: Value,
+}
+
+/// The record or enum name of a kind; `None` for a builtin kind such as
+/// `TcpListener`, which declares no hooks.
+fn kind_name(kind: &Ty) -> Option<&QualName> {
+    match kind {
+        Ty::Record(q) | Ty::GenericRecord(q, _) | Ty::Enum(q) | Ty::GenericEnum(q, _) => Some(q),
+        _ => None,
+    }
+}
+
+/// The hook `<Owner>.<hook>` with `arity` parameters in `owner`'s module,
+/// when the module declares one (16.6: the compiler knows the hook names
+/// `machine` and `validate`, O18).
+fn hook_fn(modules: &Modules<'_>, owner: &QualName, hook: &str, arity: usize) -> Option<QualName> {
+    if owner.is_builtin() {
+        return None;
+    }
+    let module = modules.get(&owner.module)?;
+    let name = format!("{}.{hook}", owner.name);
+    let declared = module.program.decls.iter().any(|decl| {
+        matches!(decl, Decl::Fn(f) if f.qualified_name() == name && f.params.len() == arity && !f.test_only)
+    });
+    declared.then(|| QualName::new(owner.module.clone(), name))
+}
+
+/// The member's own record value as a hook receives it: every field of
+/// the kind in declaration order, an unset `Signal<T>` output as its
+/// reference (6.1).
+fn member_value(
+    program: &TypedProgram,
+    system: &SystemInfo,
+    info: &MemberInfo,
+    member: &ModelMember,
+) -> Option<Value> {
+    let name = kind_name(&info.kind)?;
+    let declared = program.record_fields(name)?;
+    let fields = declared
+        .iter()
+        .filter_map(|(field, _)| {
+            if let Some((_, value)) = member.properties.iter().find(|(f, _)| f == field) {
+                return Some((field.clone(), value.clone()));
+            }
+            member.outputs.iter().find(|(f, _)| f == field).map(|_| {
+                let reference = Reference::Signal {
+                    system: system.name.clone(),
+                    member: info.name.clone(),
+                    field: field.clone(),
+                };
+                (field.clone(), Value::Reference(reference))
+            })
+        })
+        .collect();
+    Some(Value::Record {
+        name: name.clone(),
+        fields,
+    })
+}
+
+/// The `Signal` references among `value`, as texts.
+fn signal_refs(value: &Value, out: &mut BTreeSet<String>) {
+    match value {
+        Value::Reference(reference @ Reference::Signal { .. }) => {
+            out.insert(reference.text());
+        }
+        Value::List(items) | Value::Tuple(items) | Value::Enum { fields: items, .. } => {
+            items.iter().for_each(|item| signal_refs(item, out));
+        }
+        Value::Record { fields, .. } => fields.iter().for_each(|(_, v)| signal_refs(v, out)),
+        Value::Map(entries) => entries.iter().for_each(|(k, v)| {
+            signal_refs(k, out);
+            signal_refs(v, out);
+        }),
+        _ => {}
+    }
+}
+
+/// Set field `field` of the payload record of `machine` to `value`.
+fn set_payload_field(machine: &mut Value, field: &str, value: Value) {
+    if let Value::Enum { fields, .. } = machine
+        && let Some(Value::Record { fields, .. }) = fields.first_mut()
+        && let Some((_, slot)) = fields.iter_mut().find(|(f, _)| f == field)
+    {
+        *slot = value;
+    }
+}
+
+/// The machines of `system` under the resolution `resolution` (16.14): the
+/// `machine` hooks evaluated for every hosted member and contract, sorted
+/// by id (see [`ModelMachine`]). A machine whose payload has `signal` and
+/// `interval` fields gets `interval` from the observation of that signal,
+/// because a contract's kind does not know its producer's interval.
+/// Diagnostics are E115, E117 or E118 at the member's declaration.
+pub fn machines(
+    evaluator: &mut Evaluator<'_>,
+    program: &TypedProgram,
+    system: &SystemInfo,
+    members: &[ModelMember],
+    resolution: &[ResolutionEntry],
+    observations: &[ModelObservation],
+) -> Result<Vec<ModelMachine>, Vec<Diagnostic>> {
+    let mut machines = Vec::new();
+    let mut diagnostics = Vec::new();
+    for info in &system.members {
+        let Some(member) = members.iter().find(|m| m.id == info.id) else {
+            continue;
+        };
+        let hosted = info.declaration == MemberDeclaration::Contract
+            || resolution.iter().any(|entry| entry.member == info.id);
+        if !hosted {
+            continue;
+        }
+        let modules = evaluator.modules();
+        let mut hooks: Vec<(QualName, Value)> = Vec::new();
+        if let Some(hook) = kind_name(&info.kind).and_then(|q| hook_fn(modules, q, "machine", 2))
+            && let Some(this) = member_value(program, system, info, member)
+        {
+            hooks.push((hook, this));
+        }
+        for (_, value) in &member.properties {
+            if let Value::Record { name, .. } = value
+                && let Some(hook) = hook_fn(modules, name, "machine", 2)
+            {
+                hooks.push((hook, value.clone()));
+            }
+        }
+        if hooks.is_empty() {
+            continue;
+        }
+        let mut subscribes = BTreeSet::new();
+        for (_, value) in &member.properties {
+            signal_refs(value, &mut subscribes);
+        }
+        let span = Span::new(info.offset, info.offset);
+        let companions = modules
+            .get(CONTROL_MODULE)
+            .filter(|module| {
+                module.program.decls.iter().any(|decl| {
+                    matches!(decl, Decl::Fn(f) if f.qualified_name() == COMPANIONS && f.params.len() == 1)
+                })
+            })
+            .map(|_| QualName::new(CONTROL_MODULE, COMPANIONS));
+        let mut results: Vec<(String, Value)> = Vec::new();
+        for (hook, this) in hooks {
+            let path = format!("{}.{}", info.id, hook.name);
+            let machine = match evaluator.call(&hook, vec![this, Value::Text(info.id.clone())]) {
+                Ok(machine) => machine,
+                Err(error) => {
+                    diagnostics.push(eval_diagnostic(&error, &path, span));
+                    continue;
+                }
+            };
+            if let Some(companions) = &companions {
+                match evaluator.call(companions, vec![machine.clone()]) {
+                    Ok(Value::List(items)) => {
+                        results.extend(items.into_iter().map(|m| (format!("{path} companion"), m)));
+                    }
+                    Ok(_) => {}
+                    Err(error) => diagnostics.push(eval_diagnostic(&error, &path, span)),
+                }
+            }
+            results.push((path, machine));
+        }
+        for (path, mut machine) in results {
+            let entry = ModelMachine {
+                id: String::new(),
+                machine: Value::Unit,
+                member: info.id.clone(),
+                subscribes: subscribes.iter().cloned().collect(),
+                disruption: None,
+            };
+            let probe = ModelMachine {
+                machine: machine.clone(),
+                ..entry.clone()
+            };
+            let Some(id) = probe.text_field("id").map(str::to_string) else {
+                diagnostics.push(Diagnostic::new(
+                    "E117",
+                    span,
+                    format!(
+                        "evaluating {path}: the machine `{}` has no `id` text in its state",
+                        probe.variant()
+                    ),
+                ));
+                continue;
+            };
+            if let Some(signal) = probe.text_field("signal").map(str::to_string)
+                && let Some(observation) = observations.iter().find(|o| o.reference == signal)
+            {
+                set_payload_field(&mut machine, "interval", observation.interval.clone());
+            }
+            let disruption = (probe.variant() == "Roll").then(|| DISRUPTION.to_string());
+            machines.push(ModelMachine {
+                id,
+                machine,
+                disruption,
+                ..entry
+            });
+        }
+    }
+    if !diagnostics.is_empty() {
+        return Err(diagnostics);
+    }
+    machines.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(machines)
+}
+
+/// The observations of `system` under `resolution` (16.14): one per
+/// `Signal<T>` output of a hosted member, sorted by ref, with the
+/// producer's `interval` property (`Unit` when it has none).
+pub fn observations(
+    _program: &TypedProgram,
+    _system: &SystemInfo,
+    members: &[ModelMember],
+    resolution: &[ResolutionEntry],
+) -> Result<Vec<ModelObservation>, Vec<Diagnostic>> {
+    let mut observations: Vec<ModelObservation> = resolution
+        .iter()
+        .filter_map(|entry| members.iter().find(|m| m.id == entry.member))
+        .flat_map(|member| {
+            let interval = member
+                .properties
+                .iter()
+                .find(|(f, _)| f == "interval")
+                .map_or(Value::Unit, |(_, v)| v.clone());
+            member
+                .outputs
+                .iter()
+                .map(move |(field, element)| ModelObservation {
+                    reference: format!("{}.{field}", member.id),
+                    producer: member.id.clone(),
+                    element: element.clone(),
+                    interval: interval.clone(),
+                })
+        })
+        .collect();
+    observations.sort_by(|a, b| a.reference.cmp(&b.reference));
+    Ok(observations)
+}
+
+/// The edge classes of 16.14 for `system` under `resolution`:
+/// `provisioning` from each resource a hosted executable binds (its
+/// [`ExecutableInfo::resources`]) to that executable, `readiness` from a
+/// hosted member to each member its `Ref` values name and from a contract
+/// to the producer of each `Signal` it names, `recovery` from a member to
+/// its `Supervise` machine.
+fn control_edges(
+    program: &TypedProgram,
+    system: &SystemInfo,
+    members: &[ModelMember],
+    resolution: &[ResolutionEntry],
+    machines: &[ModelMachine],
+    edges: &mut BTreeSet<Edge>,
+) {
+    let mut edge = |kind: EdgeKind, from: String, to: String| {
+        edges.insert(Edge { from, kind, to });
+    };
+    for entry in resolution {
+        let component = entry
+            .member
+            .strip_prefix(&format!("{}.", system.name))
+            .unwrap_or(&entry.member);
+        if let Some(executable) = program
+            .executables()
+            .iter()
+            .find(|e| e.system == system.name && e.component == component)
+        {
+            for (resource, _) in &executable.resources {
+                edge(
+                    EdgeKind::Provisioning,
+                    format!("{}.{resource}", system.name),
+                    entry.member.clone(),
+                );
+            }
+        }
+    }
+    for member in members {
+        let hosted = member.declaration == MemberDeclaration::Contract
+            || resolution.iter().any(|entry| entry.member == member.id);
+        if !hosted {
+            continue;
+        }
+        let mut targets = BTreeSet::new();
+        for (_, value) in &member.properties {
+            readiness_targets(value, &mut targets);
+        }
+        for target in targets {
+            edge(EdgeKind::Readiness, member.id.clone(), target);
+        }
+    }
+    for machine in machines {
+        if machine.variant() == "Supervise" {
+            edge(
+                EdgeKind::Recovery,
+                machine.member.clone(),
+                machine.id.clone(),
+            );
+        }
+    }
+}
+
+/// The members whose readiness `value` depends on: the member of each
+/// `Ref`, the producer of each `Signal`.
+fn readiness_targets(value: &Value, out: &mut BTreeSet<String>) {
+    match value {
+        Value::Reference(Reference::Member { system, member })
+        | Value::Reference(Reference::Signal { system, member, .. }) => {
+            out.insert(format!("{system}.{member}"));
+        }
+        Value::List(items) | Value::Tuple(items) | Value::Enum { fields: items, .. } => {
+            items.iter().for_each(|item| readiness_targets(item, out));
+        }
+        Value::Record { fields, .. } => fields.iter().for_each(|(_, v)| readiness_targets(v, out)),
+        Value::Map(entries) => entries.iter().for_each(|(k, v)| {
+            readiness_targets(k, out);
+            readiness_targets(v, out);
+        }),
+        _ => {}
     }
 }
 
@@ -265,6 +690,12 @@ struct Builder<'a, 'p> {
     source_map: BTreeMap<String, String>,
     edges: BTreeSet<Edge>,
     diagnostics: Vec<Diagnostic>,
+    /// The evaluated members of each system, by system name, for the
+    /// assembly's validation (16.17).
+    members: BTreeMap<String, Vec<ModelMember>>,
+    /// Of the last assembly that resolved (16.14).
+    machines: Vec<ModelMachine>,
+    observations: Vec<ModelObservation>,
 }
 
 impl<'a, 'p> Builder<'a, 'p> {
@@ -279,6 +710,9 @@ impl<'a, 'p> Builder<'a, 'p> {
             source_map: BTreeMap::new(),
             edges: BTreeSet::new(),
             diagnostics: Vec::new(),
+            members: BTreeMap::new(),
+            machines: Vec::new(),
+            observations: Vec::new(),
         }
     }
 
@@ -487,6 +921,12 @@ impl<'a, 'p> Builder<'a, 'p> {
             .filter_map(|member| self.member(system, decl, member, program.executables()))
             .collect();
         members.sort_by(|a, b| a.id.cmp(&b.id));
+        if let Err(diagnostics) =
+            crate::validate::validate_system(self.evaluator, program, system, &members)
+        {
+            self.diagnostics.extend(diagnostics);
+        }
+        self.members.insert(system.name.clone(), members.clone());
         members
     }
 
@@ -536,6 +976,21 @@ impl<'a, 'p> Builder<'a, 'p> {
             (Some(system), Some(bindings)) if resolvable => {
                 match resolve(self.evaluator, program, system, assembly, &bindings) {
                     Ok(entries) => {
+                        let members = self.members.get(&system.name).cloned().unwrap_or_default();
+                        if let Err(diagnostics) = crate::validate::validate(
+                            self.evaluator,
+                            program,
+                            system,
+                            &members,
+                            assembly,
+                            &entries,
+                        ) {
+                            self.diagnostics.extend(diagnostics);
+                            return None;
+                        }
+                        if !self.control(program, system, &members, &entries) {
+                            return None;
+                        }
                         for entry in &entries {
                             if entry.via != entry.member {
                                 self.edges.insert(Edge {
@@ -563,6 +1018,49 @@ impl<'a, 'p> Builder<'a, 'p> {
             defaults,
             resolution,
         })
+    }
+
+    /// The observations, machines and edge classes of 16.14 for `system`
+    /// under the resolution `entries`; `false` after a diagnostic.
+    fn control(
+        &mut self,
+        program: &TypedProgram,
+        system: &SystemInfo,
+        members: &[ModelMember],
+        entries: &[ResolutionEntry],
+    ) -> bool {
+        let observations = match observations(program, system, members, entries) {
+            Ok(observations) => observations,
+            Err(diagnostics) => {
+                self.diagnostics.extend(diagnostics);
+                return false;
+            }
+        };
+        let machines = match machines(
+            self.evaluator,
+            program,
+            system,
+            members,
+            entries,
+            &observations,
+        ) {
+            Ok(machines) => machines,
+            Err(diagnostics) => {
+                self.diagnostics.extend(diagnostics);
+                return false;
+            }
+        };
+        control_edges(
+            program,
+            system,
+            members,
+            entries,
+            &machines,
+            &mut self.edges,
+        );
+        self.machines = machines;
+        self.observations = observations;
+        true
     }
 }
 
@@ -740,6 +1238,19 @@ impl Model {
             "formatVersion".to_string(),
             Json::Str(FORMAT_VERSION.to_string()),
         );
+        top.insert(
+            "machines".to_string(),
+            Json::Array(self.machines.iter().map(ModelMachine::json).collect()),
+        );
+        top.insert(
+            "observations".to_string(),
+            Json::Array(
+                self.observations
+                    .iter()
+                    .map(ModelObservation::json)
+                    .collect(),
+            ),
+        );
         top.insert("policies".to_string(), members(MemberDeclaration::Policy));
         top.insert(
             "resources".to_string(),
@@ -810,6 +1321,40 @@ impl ModelAssembly {
             },
         );
         entry.insert("system".to_string(), Json::Str(self.system.clone()));
+        Json::Object(entry)
+    }
+}
+
+impl ModelMachine {
+    /// The model's entry: `disruption` only when declared (16.14).
+    pub fn json(&self) -> Json {
+        let mut entry = BTreeMap::new();
+        if let Some(disruption) = &self.disruption {
+            entry.insert("disruption".to_string(), Json::Str(disruption.clone()));
+        }
+        entry.insert("id".to_string(), Json::Str(self.id.clone()));
+        entry.insert("machine".to_string(), value_json(&self.machine));
+        entry.insert("member".to_string(), Json::Str(self.member.clone()));
+        entry.insert(
+            "subscribes".to_string(),
+            Json::Array(
+                self.subscribes
+                    .iter()
+                    .map(|s| Json::Str(s.clone()))
+                    .collect(),
+            ),
+        );
+        Json::Object(entry)
+    }
+}
+
+impl ModelObservation {
+    pub fn json(&self) -> Json {
+        let mut entry = BTreeMap::new();
+        entry.insert("element".to_string(), Json::Str(self.element.clone()));
+        entry.insert("interval".to_string(), value_json(&self.interval));
+        entry.insert("producer".to_string(), Json::Str(self.producer.clone()));
+        entry.insert("ref".to_string(), Json::Str(self.reference.clone()));
         Json::Object(entry)
     }
 }
@@ -1008,6 +1553,312 @@ impl Json {
     }
 }
 
+impl Json {
+    /// The compact text: no whitespace, keys in byte order, the string
+    /// escaping of [`Json::write`]. The form of a journal line (16.5).
+    pub fn compact(&self) -> String {
+        let mut out = String::new();
+        self.write_compact(&mut out);
+        out
+    }
+
+    fn write_compact(&self, out: &mut String) {
+        match self {
+            Json::Null => out.push_str("null"),
+            Json::Bool(true) => out.push_str("true"),
+            Json::Bool(false) => out.push_str("false"),
+            Json::Int(n) => out.push_str(&n.to_string()),
+            Json::Str(text) => write_string(out, text),
+            Json::Array(items) => {
+                out.push('[');
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        out.push(',');
+                    }
+                    item.write_compact(out);
+                }
+                out.push(']');
+            }
+            Json::Object(entries) => {
+                out.push('{');
+                for (i, (key, value)) in entries.iter().enumerate() {
+                    if i > 0 {
+                        out.push(',');
+                    }
+                    write_string(out, key);
+                    out.push(':');
+                    value.write_compact(out);
+                }
+                out.push('}');
+            }
+        }
+    }
+
+    /// One JSON value from `text`, numbers as exact `i64` (15.4, O17);
+    /// `Err` names the byte offset and what was expected. The inverse of
+    /// [`Json::write`] and [`Json::compact`] for every text they produce.
+    pub fn parse(text: &str) -> Result<Json, String> {
+        let mut parser = Parser { text, pos: 0 };
+        let value = parser.value()?;
+        parser.space();
+        if parser.pos != text.len() {
+            return Err(format!(
+                "byte {}: trailing characters after the value",
+                parser.pos
+            ));
+        }
+        Ok(value)
+    }
+
+    /// The value at `key` of an object.
+    pub fn get(&self, key: &str) -> Option<&Json> {
+        match self {
+            Json::Object(entries) => entries.get(key),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Json::Str(text) => Some(text),
+            _ => None,
+        }
+    }
+
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            Json::Int(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Json::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    pub fn as_array(&self) -> Option<&[Json]> {
+        match self {
+            Json::Array(items) => Some(items),
+            _ => None,
+        }
+    }
+
+    pub fn as_object(&self) -> Option<&BTreeMap<String, Json>> {
+        match self {
+            Json::Object(entries) => Some(entries),
+            _ => None,
+        }
+    }
+
+    /// One word for the value's kind, for error texts.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Json::Null => "null",
+            Json::Bool(_) => "a boolean",
+            Json::Int(_) => "an integer",
+            Json::Str(_) => "a string",
+            Json::Array(_) => "an array",
+            Json::Object(_) => "an object",
+        }
+    }
+}
+
+/// A recursive-descent parser over `text`; `pos` is a byte offset.
+struct Parser<'t> {
+    text: &'t str,
+    pos: usize,
+}
+
+impl Parser<'_> {
+    fn peek(&self) -> Option<u8> {
+        self.text.as_bytes().get(self.pos).copied()
+    }
+
+    fn space(&mut self) {
+        while matches!(self.peek(), Some(b' ' | b'\n' | b'\t' | b'\r')) {
+            self.pos += 1;
+        }
+    }
+
+    fn expect(&mut self, literal: &str) -> Result<(), String> {
+        if self.text[self.pos..].starts_with(literal) {
+            self.pos += literal.len();
+            Ok(())
+        } else {
+            Err(format!("byte {}: expected `{literal}`", self.pos))
+        }
+    }
+
+    fn value(&mut self) -> Result<Json, String> {
+        self.space();
+        match self.peek() {
+            None => Err(format!("byte {}: expected a value", self.pos)),
+            Some(b'n') => self.expect("null").map(|()| Json::Null),
+            Some(b't') => self.expect("true").map(|()| Json::Bool(true)),
+            Some(b'f') => self.expect("false").map(|()| Json::Bool(false)),
+            Some(b'"') => self.string().map(Json::Str),
+            Some(b'[') => {
+                self.pos += 1;
+                let mut items = Vec::new();
+                self.space();
+                if self.peek() == Some(b']') {
+                    self.pos += 1;
+                    return Ok(Json::Array(items));
+                }
+                loop {
+                    items.push(self.value()?);
+                    self.space();
+                    match self.peek() {
+                        Some(b',') => self.pos += 1,
+                        Some(b']') => {
+                            self.pos += 1;
+                            return Ok(Json::Array(items));
+                        }
+                        _ => return Err(format!("byte {}: expected `,` or `]`", self.pos)),
+                    }
+                }
+            }
+            Some(b'{') => {
+                self.pos += 1;
+                let mut entries = BTreeMap::new();
+                self.space();
+                if self.peek() == Some(b'}') {
+                    self.pos += 1;
+                    return Ok(Json::Object(entries));
+                }
+                loop {
+                    self.space();
+                    if self.peek() != Some(b'"') {
+                        return Err(format!("byte {}: expected a key", self.pos));
+                    }
+                    let at = self.pos;
+                    let key = self.string()?;
+                    self.space();
+                    self.expect(":")?;
+                    let value = self.value()?;
+                    if entries.insert(key.clone(), value).is_some() {
+                        return Err(format!("byte {at}: duplicate key `{key}`"));
+                    }
+                    self.space();
+                    match self.peek() {
+                        Some(b',') => self.pos += 1,
+                        Some(b'}') => {
+                            self.pos += 1;
+                            return Ok(Json::Object(entries));
+                        }
+                        _ => return Err(format!("byte {}: expected `,` or `}}`", self.pos)),
+                    }
+                }
+            }
+            Some(b'-' | b'0'..=b'9') => self.number(),
+            Some(other) => Err(format!(
+                "byte {}: unexpected `{}`",
+                self.pos,
+                char::from(other)
+            )),
+        }
+    }
+
+    fn number(&mut self) -> Result<Json, String> {
+        let start = self.pos;
+        if self.peek() == Some(b'-') {
+            self.pos += 1;
+        }
+        while matches!(self.peek(), Some(b'0'..=b'9')) {
+            self.pos += 1;
+        }
+        if matches!(self.peek(), Some(b'.' | b'e' | b'E')) {
+            return Err(format!("byte {start}: a number must be an integer"));
+        }
+        let digits = &self.text[start..self.pos];
+        digits
+            .parse::<i64>()
+            .map(Json::Int)
+            .map_err(|_| format!("byte {start}: `{digits}` is not an i64"))
+    }
+
+    /// A string starting at the opening `"`.
+    fn string(&mut self) -> Result<String, String> {
+        self.pos += 1;
+        let mut out = String::new();
+        loop {
+            let start = self.pos;
+            loop {
+                match self.peek() {
+                    Some(b'"' | b'\\') | None => break,
+                    Some(b) if b < 0x20 => {
+                        return Err(format!("byte {}: control character in a string", self.pos));
+                    }
+                    Some(_) => self.pos += 1,
+                }
+            }
+            out.push_str(&self.text[start..self.pos]);
+            match self.peek() {
+                None => return Err(format!("byte {}: unterminated string", self.pos)),
+                Some(b'"') => {
+                    self.pos += 1;
+                    return Ok(out);
+                }
+                Some(_) => {
+                    let at = self.pos;
+                    self.pos += 1;
+                    let Some(escape) = self.peek() else {
+                        return Err(format!("byte {at}: unterminated escape"));
+                    };
+                    self.pos += 1;
+                    match escape {
+                        b'"' => out.push('"'),
+                        b'\\' => out.push('\\'),
+                        b'/' => out.push('/'),
+                        b'n' => out.push('\n'),
+                        b't' => out.push('\t'),
+                        b'r' => out.push('\r'),
+                        b'b' => out.push('\u{8}'),
+                        b'f' => out.push('\u{c}'),
+                        b'u' => {
+                            let code = self.hex4()?;
+                            let c = if (0xD800..0xDC00).contains(&code) {
+                                self.expect("\\u")?;
+                                let low = self.hex4()?;
+                                if !(0xDC00..0xE000).contains(&low) {
+                                    return Err(format!("byte {at}: invalid surrogate pair"));
+                                }
+                                0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00)
+                            } else {
+                                code
+                            };
+                            out.push(
+                                char::from_u32(c)
+                                    .ok_or_else(|| format!("byte {at}: invalid code point"))?,
+                            );
+                        }
+                        other => {
+                            return Err(format!(
+                                "byte {at}: unknown escape `\\{}`",
+                                char::from(other)
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn hex4(&mut self) -> Result<u32, String> {
+        let hex = self
+            .text
+            .get(self.pos..self.pos + 4)
+            .ok_or_else(|| format!("byte {}: truncated `\\u` escape", self.pos))?;
+        let code = u32::from_str_radix(hex, 16)
+            .map_err(|_| format!("byte {}: `\\u{hex}` is not hexadecimal", self.pos))?;
+        self.pos += 4;
+        Ok(code)
+    }
+}
+
 fn pad(out: &mut String, indent: usize) {
     for _ in 0..indent {
         out.push_str("  ");
@@ -1057,5 +1908,7 @@ pub fn model(
         assembly,
         edges: builder.edges.into_iter().collect(),
         source_map: builder.source_map,
+        machines: builder.machines,
+        observations: builder.observations,
     })
 }

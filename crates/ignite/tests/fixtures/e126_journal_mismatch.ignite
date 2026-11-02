@@ -1,0 +1,34 @@
+// ignite run
+package fixture_e126
+
+import std.deploy.{Deployment, nativeProcess}
+import std.control.{Machine, Supervisor}
+import std.policy.{Restart, fixed}
+
+// E126 (`docs/slice.md` 16.17): a run whose state directory holds a
+// journal written for another model. The test writes that journal first;
+// the mismatch is reported before anything is built.
+
+type Daemon {
+  name: Text
+}
+
+fn Daemon.main(self: Daemon) -> Result<Unit, IoError> = Ok(Unit)
+
+fn Daemon.machine(self: Daemon, id: Text) -> Machine = Machine.Supervise(Supervisor {
+  id = "{id}.supervisor"
+  member = id
+  restart = Restart { backoff = fixed(100 ms), maximum_attempts = 1, interval = 1 minutes }
+  has_listener = false
+})
+
+system S {
+  component daemon: Daemon { name = "d" }
+}
+
+assembly local: Deployment {
+  system = S
+  bindings = {
+    S.daemon = nativeProcess(includes = [])
+  }
+}

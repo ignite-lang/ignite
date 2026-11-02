@@ -1,0 +1,40 @@
+package fixture_e120
+
+type Worker {
+  name: Text
+  limit: Int = 1
+  attempts: Signal<Int>
+}
+
+fn Worker.validate(self: Worker) -> List<Text> = if self.limit < 1 {
+  ["limit must be at least 1"]
+} else {
+  []
+}
+
+type Tuning {
+  initial: Duration
+  maximum: Duration
+}
+
+fn Tuning.validate(self: Tuning) -> List<Text> {
+  var reasons: List<Text> = []
+  if self.initial > self.maximum {
+    reasons.push("initial delay is above the maximum")
+  }
+  if self.maximum <= 0 ms {
+    reasons.push("maximum must be positive")
+  }
+  reasons
+}
+
+type Tuned {
+  name: Text
+  tuning: Tuning
+}
+
+system S {
+  component w: Worker { name = "w", limit = 0 }
+  component fine: Worker { name = "fine" }
+  component t: Tuned { name = "t", tuning = Tuning { initial = 2 seconds, maximum = 0 ms } }
+}

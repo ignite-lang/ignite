@@ -4,7 +4,7 @@ Terminal: system (terminal.design.ignite:12:1)
   contract Terminal.customerAccess: std.contract.SLA
   resource Terminal.ingress: TcpListener
   contract Terminal.promptFast: std.contract.ThresholdCompliance
-  component Terminal.promptProbe: std.probe.TelnetPrompt
+  component Terminal.promptProbe: std.probe.TelnetPrompt, executable promptProbe
   contract Terminal.reachable: std.contract.Availability
   component Terminal.server: std.protocol.telnet.TelnetServer, executable terminald
 assembly local: std.deploy.Deployment

@@ -88,11 +88,29 @@ fn is_process(binding: Binding) -> Bool = match binding {
   LocalSocket => false
 }
 
+// The fns the hosted kind must declare for `ignite run` to run its member
+// under `binding` (`docs/slice.md` 16.17, E129): a native process and a
+// scheduled probe host start and supervise their member, so its kind
+// needs `main` and `machine`; a workstation executable is built, not
+// run, and a local socket runs nothing. A binding with entries runs its
+// member, which is what E121 and E122 mean by "run".
+fn entries(binding: Binding) -> List<Text> = match binding {
+  NativeProcess(_) | ScheduledProbeHost => ["main", "machine"]
+  WorkstationExecutable | LocalSocket => []
+}
+
 test "bindings are built by name" {
   assert is_process(nativeProcess(includes = []))
   assert is_process(workstationExecutable())
   assert is_process(scheduledProbeHost())
   assert !is_process(localSocket())
+}
+
+test "a native process and a probe host run their member and need main and machine" {
+  assert entries(nativeProcess(includes = [])) == ["main", "machine"]
+  assert entries(scheduledProbeHost()) == ["main", "machine"]
+  assert entries(workstationExecutable()) == []
+  assert entries(localSocket()) == []
 }
 
 test "only a native process includes other members" {

@@ -574,6 +574,14 @@ pub enum Builtin {
     IoErrorWithExitCode,
     /// `module("p")`: the record of [`TypedProgram::module_record`].
     ModuleRecord,
+    /// `Clock.monotonic() -> Duration`: the time since an arbitrary start
+    /// of the process, never decreasing (`docs/slice.md` 16.13); effect
+    /// `clock.read`.
+    ClockMonotonic,
+    /// `Endpoint.of(ref: Ref<K>) -> Result<std.net.Endpoint, IoError>`:
+    /// the `--ref path=address:port` argument for the reference's text
+    /// (`docs/slice.md` 16.9, 16.13); effect `process.args`.
+    EndpointOf,
 }
 
 /// What a `Call` or `Method` expression calls.

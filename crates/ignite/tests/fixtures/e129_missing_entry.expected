@@ -1,0 +1,3 @@
+e129_missing_entry.ignite:49:5: error[E129]: `S.w` is hosted by a binding that runs it, but its kind `fixture_e129.Worker` declares no `Worker.machine`
+e129_missing_entry.ignite:50:5: error[E129]: `S.v` is hosted by a binding that runs it, but its kind `fixture_e129.Watcher` declares no `Watcher.main`
+e129_missing_entry.ignite:50:5: error[E129]: `S.v` is hosted by a binding that runs it, but its kind `fixture_e129.Watcher` declares no `Watcher.machine`

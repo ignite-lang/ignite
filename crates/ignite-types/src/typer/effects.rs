@@ -41,6 +41,8 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         StdoutWriteAll => (Effect::Ambient("stdout.write"), "Stdout.write_all"),
         ProcessExit => (Effect::Ambient("process.exit"), "Process.exit"),
         StoreNew => (Effect::Ambient("store.new"), "Store.new"),
+        ClockMonotonic => (Effect::Ambient("clock.read"), "Clock.monotonic"),
+        EndpointOf => (Effect::Ambient("process.args"), "Endpoint.of"),
         TcpListenerAccept => (Effect::Receiver("accept"), "accept"),
         TcpStreamRead => (Effect::Receiver("read"), "read"),
         TcpStreamWriteAll => (Effect::Receiver("write"), "write_all"),

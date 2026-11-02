@@ -347,6 +347,105 @@ fn target_bugs_of_slice_11b_are_fixed() {
     });
 }
 
+/// The substrate builtin `Clock.monotonic` of slice 12 (`docs/slice.md`
+/// 16.13) under `ignite test` on both targets.
+#[test]
+fn substrate_builtins_run_on_both_targets() {
+    on_both_targets(|target| {
+        let run = ignite_test(target, &[&fixture("builtins.ignite")]);
+        assert_eq!(run.status, 0, "{target}: {}\n{}", run.stdout, run.stderr);
+        assert!(
+            run.stdout.starts_with("running 1 test\n"),
+            "{target}: {}",
+            run.stdout
+        );
+        assert!(
+            run.stdout
+                .contains("test result: ok. 1 passed; 0 failed; 0 filtered out;"),
+            "{target}: {}",
+            run.stdout
+        );
+    });
+}
+
+/// `Endpoint.of` on both targets (`docs/slice.md` 16.13, 16.9): the
+/// `prober` of `fixtures/tests/builtins.ignite` fails without a `--ref`
+/// binding and prints the endpoint of one.
+#[test]
+fn endpoint_of_reads_the_ref_binding_on_both_targets() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tests/builtins.ignite");
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = ["rust", "llvm"]
+            .into_iter()
+            .map(|target| {
+                let source = &source;
+                scope.spawn(move || {
+                    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+                        .join(format!("builtins-{target}"));
+                    let _ = std::fs::remove_dir_all(&dir);
+                    let mut build = Command::new(env!("CARGO_BIN_EXE_ignite"));
+                    build
+                        .arg("build")
+                        .arg(source)
+                        .args(["--target", target, "--out"])
+                        .arg(dir.join("out"));
+                    if target == "llvm" {
+                        build.arg("--runtime").arg(common::runtime_archive());
+                    } else {
+                        build.arg("--target-dir").arg(out_dir().join("cargo"));
+                    }
+                    let output = build.output().expect("run ignite build");
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    assert!(
+                        output.status.success(),
+                        "{target}: {stdout}\n{}",
+                        String::from_utf8_lossy(&output.stderr)
+                    );
+                    let prober = stdout
+                        .lines()
+                        .filter_map(|line| line.strip_prefix("built "))
+                        .find(|path| path.ends_with("/prober"))
+                        .unwrap_or_else(|| panic!("{target}: no prober in\n{stdout}"));
+                    let unbound = Command::new(prober).output().unwrap();
+                    assert_eq!(unbound.status.code(), Some(1), "{target}");
+                    assert_eq!(
+                        String::from_utf8_lossy(&unbound.stderr),
+                        "error: no binding for Probes.server\n",
+                        "{target}"
+                    );
+                    assert!(unbound.stdout.is_empty(), "{target}");
+                    let bound = Command::new(prober)
+                        .args(["--ref", "Probes.server=127.0.0.1:4242"])
+                        .output()
+                        .unwrap();
+                    assert_eq!(
+                        bound.status.code(),
+                        Some(0),
+                        "{target}: {}",
+                        String::from_utf8_lossy(&bound.stderr)
+                    );
+                    assert_eq!(
+                        String::from_utf8_lossy(&bound.stdout),
+                        "127.0.0.1:4242\n",
+                        "{target}"
+                    );
+                    let malformed = Command::new(prober)
+                        .args(["--ref", "Probes.server"])
+                        .output()
+                        .unwrap();
+                    assert_eq!(malformed.status.code(), Some(2), "{target}");
+                })
+            })
+            .collect();
+        let failed = handles
+            .into_iter()
+            .map(|h| h.join())
+            .filter(Result::is_err)
+            .count();
+        assert_eq!(failed, 0, "{failed} target(s) failed");
+    });
+}
+
 /// The newest `libignite_rt-*.a` beside the test executable that has the
 /// test runner. This crate depends on `ignite-rt` with the feature
 /// `runner`, but a `cargo build -p ignite-rt` into the same target

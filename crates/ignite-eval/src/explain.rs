@@ -8,22 +8,30 @@
 //! name (`Rolling(30 days)`, `WorkstationExecutable`, as the goldens of
 //! 15.8 show), `module("p")` for a module record and a fn by its
 //! qualified name.
+//!
+//! A machine id (`Terminal.server.rollout`, 16.14) is explained before a
+//! property path of the same text: the machine's state fields and its
+//! `disruption` (16.12); the property stays visible in its member's
+//! explanation.
 
 use ignite_syntax::ast::Span;
 use ignite_syntax::diagnostic::Diagnostic;
 use ignite_types::MemberDeclaration;
 
-use crate::{Model, ModelAssembly, ModelMember, Value};
+use crate::{Model, ModelAssembly, ModelMachine, ModelMember, Value};
 
 /// The explanation of `path` (`Terminal`, `Terminal.reachable`,
-/// `Terminal.server.recovery`, `local`) in `model`; E119 when the path
-/// names none of these.
+/// `Terminal.server.recovery`, `Terminal.server.supervisor`, `local`) in
+/// `model`; E119 when the path names none of these.
 pub fn explain(model: &Model, path: &str) -> Result<String, Diagnostic> {
     if path == model.system_id {
         return Ok(system(model));
     }
     if let Some(assembly) = model.assembly.as_ref().filter(|a| a.id == path) {
         return Ok(assembly_text(model, assembly));
+    }
+    if let Some(machine) = model.machines.iter().find(|m| m.id == path) {
+        return Ok(machine_text(machine));
     }
     if let Some(member) = model.member(path) {
         return Ok(member_text(model, member));
@@ -115,8 +123,35 @@ fn member_text(model: &Model, member: &ModelMember) -> String {
         }
         out.push('\n');
     }
+    for machine in model.machines.iter().filter(|m| m.member == member.id) {
+        out.push_str(&format!("machine {}: {}\n", machine.id, machine.variant()));
+    }
     if member.declaration == MemberDeclaration::Contract {
-        out.push_str("standing: not evaluated before slice 12\n");
+        out.push_str("standing: evaluated at run time (ignite run, ignite replay)\n");
+    }
+    out
+}
+
+/// The machine form of 16.14: variant and member, the state fields of the
+/// payload in declaration order, the subscribed signals and the declared
+/// disruption (16.12).
+fn machine_text(machine: &ModelMachine) -> String {
+    let mut out = format!(
+        "{}: machine {} of {}\n",
+        machine.id,
+        machine.variant(),
+        machine.member
+    );
+    if let Some(Value::Record { fields, .. }) = machine.payload() {
+        for (field, value) in fields {
+            out.push_str(&format!("  {field} = {}\n", render(value)));
+        }
+    }
+    for signal in &machine.subscribes {
+        out.push_str(&format!("subscribes {signal}\n"));
+    }
+    if let Some(disruption) = &machine.disruption {
+        out.push_str(&format!("disruption: {disruption}\n"));
     }
     out
 }

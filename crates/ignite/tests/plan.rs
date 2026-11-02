@@ -127,6 +127,8 @@ fn design_model_is_canonical_and_every_value_is_encoded_as_15_4_says() {
             "contracts",
             "edges",
             "formatVersion",
+            "machines",
+            "observations",
             "policies",
             "resources",
             "sourceMap",
@@ -219,7 +221,18 @@ fn design_model_is_canonical_and_every_value_is_encoded_as_15_4_says() {
         let edge = edge.object();
         assert_eq!(keys(edge), ["from", "kind", "to"]);
         let kind = edge["kind"].string();
-        assert!(["uses", "references", "observes", "hosts"].contains(&kind));
+        assert!(
+            [
+                "uses",
+                "references",
+                "observes",
+                "hosts",
+                "provisioning",
+                "readiness",
+                "recovery"
+            ]
+            .contains(&kind)
+        );
         let current = (edge["from"].string(), kind, edge["to"].string());
         assert!(current > previous, "edges not sorted at {current:?}");
         previous = current;
@@ -327,11 +340,13 @@ fn fixtures_match_expected() {
         .map(|entry| entry.unwrap().path())
         .filter(|path| {
             let name = path.file_name().unwrap().to_string_lossy();
-            name.starts_with("e11") && name.ends_with(".ignite")
+            (name.starts_with("e11") || name.starts_with("e12"))
+                && name.ends_with(".ignite")
+                && !["e125", "e126", "e127", "e128"].contains(&&name[..4])
         })
         .collect();
     fixtures.sort();
-    assert!(fixtures.len() >= 6, "{fixtures:?}");
+    assert!(fixtures.len() >= 12, "{fixtures:?}");
     for fixture in fixtures {
         let name = fixture.file_name().unwrap().to_str().unwrap();
         let source = std::fs::read_to_string(&fixture).unwrap();
@@ -391,12 +406,12 @@ fn e114_covers_an_unknown_assembly_name_and_check_passes() {
     ));
     assert!(
         explained.starts_with(
-            "hosted: assembly std.deploy.Deployment of S (e114_assembly_selection.ignite:34:1)\n"
+            "hosted: assembly std.deploy.Deployment of S (e114_assembly_selection.ignite:36:1)\n"
         ),
         "{explained}"
     );
     assert!(
-        explained.contains("  S.watch = ScheduledProbeHost\n"),
+        explained.contains("  S.watch = ScheduledProbeHost, executable watch\n"),
         "{explained}"
     );
 }

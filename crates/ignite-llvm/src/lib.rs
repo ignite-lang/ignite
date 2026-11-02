@@ -488,15 +488,25 @@ fn component_value(
     endpoints: &[(String, Val)],
 ) -> Val {
     let declared = l.env.fields_of(kind);
+    let signals: Vec<String> = match kind {
+        Ty::Record(name) | Ty::GenericRecord(name, _) => l
+            .env
+            .record(name)
+            .iter()
+            .filter(|(_, t)| matches!(t, Ty::Signal(_)))
+            .map(|(n, _)| n.clone())
+            .collect(),
+        _ => Vec::new(),
+    };
     let mut fixed: Vec<(String, Val)> = Vec::new();
-    for (field, ty) in &declared {
+    for (field, _) in &declared {
         if decl.properties.iter().any(|p| p.name.name == *field) {
             continue;
         }
         if field == "executable" {
             let v = l.text_literal(decl.name.name.as_bytes());
             fixed.push((field.clone(), v));
-        } else if let Ty::Signal(_) = ty {
+        } else if signals.contains(field) {
             let text = format!("{system}.{}.{field}", decl.name.name);
             let v = l.text_literal(text.as_bytes());
             fixed.push((field.clone(), v));

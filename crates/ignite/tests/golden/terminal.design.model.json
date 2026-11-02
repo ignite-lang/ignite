@@ -205,15 +205,18 @@
     },
     {
       "declaration": "component",
-      "defaults": [],
-      "executable": null,
+      "defaults": [
+        "executable"
+      ],
+      "executable": "promptProbe",
       "id": "Terminal.promptProbe",
       "kind": "std.probe.TelnetPrompt",
       "outputs": {
-        "attempts": "std.probe.ProbeAttempt"
+        "attempts": "std.sli.ProbeAttempt"
       },
       "properties": {
         "close_after_probe": true,
+        "executable": "promptProbe",
         "expected_prompt": "terminal> ",
         "interval": {
           "ns": 10000000000,
@@ -275,7 +278,11 @@
               "ns": 300000000000,
               "type": "Duration"
             },
-            "maximum_attempts": 10
+            "maximum_attempts": 10,
+            "readiness_timeout": {
+              "ns": 10000000000,
+              "type": "Duration"
+            }
           },
           "type": "std.policy.Restart"
         },
@@ -317,7 +324,9 @@
   "contracts": [
     {
       "declaration": "contract",
-      "defaults": [],
+      "defaults": [
+        "minimum_completeness"
+      ],
       "executable": null,
       "id": "Terminal.customerAccess",
       "kind": "std.contract.SLA",
@@ -332,11 +341,15 @@
         },
         "exclusions": [],
         "good": "prompt_received_before_timeout",
+        "minimum_completeness": {
+          "ppm": 900000,
+          "type": "Ratio"
+        },
         "period": {
           "fields": [
             "Europe/Berlin"
           ],
-          "type": "std.contract.Window",
+          "type": "std.sli.Window",
           "variant": "CalendarMonth"
         },
         "signal": {
@@ -351,13 +364,19 @@
     },
     {
       "declaration": "contract",
-      "defaults": [],
+      "defaults": [
+        "minimum_completeness"
+      ],
       "executable": null,
       "id": "Terminal.promptFast",
       "kind": "std.contract.ThresholdCompliance",
       "outputs": {},
       "properties": {
         "good": "prompt_received_within_threshold",
+        "minimum_completeness": {
+          "ppm": 900000,
+          "type": "Ratio"
+        },
         "missing_data": "insufficient_evidence",
         "signal": {
           "ref": "Terminal.promptProbe.attempts",
@@ -378,20 +397,26 @@
               "type": "Duration"
             }
           ],
-          "type": "std.contract.Window",
+          "type": "std.sli.Window",
           "variant": "Rolling"
         }
       }
     },
     {
       "declaration": "contract",
-      "defaults": [],
+      "defaults": [
+        "minimum_completeness"
+      ],
       "executable": null,
       "id": "Terminal.reachable",
       "kind": "std.contract.Availability",
       "outputs": {},
       "properties": {
         "good": "prompt_received_before_timeout",
+        "minimum_completeness": {
+          "ppm": 900000,
+          "type": "Ratio"
+        },
         "missing_data": "insufficient_evidence",
         "signal": {
           "ref": "Terminal.promptProbe.attempts",
@@ -408,7 +433,7 @@
               "type": "Duration"
             }
           ],
-          "type": "std.contract.Window",
+          "type": "std.sli.Window",
           "variant": "Rolling"
         }
       }
@@ -421,9 +446,29 @@
       "to": "Terminal.promptProbe.attempts"
     },
     {
+      "from": "Terminal.customerAccess",
+      "kind": "readiness",
+      "to": "Terminal.promptProbe"
+    },
+    {
+      "from": "Terminal.ingress",
+      "kind": "provisioning",
+      "to": "Terminal.server"
+    },
+    {
       "from": "Terminal.promptFast",
       "kind": "observes",
       "to": "Terminal.promptProbe.attempts"
+    },
+    {
+      "from": "Terminal.promptFast",
+      "kind": "readiness",
+      "to": "Terminal.promptProbe"
+    },
+    {
+      "from": "Terminal.promptProbe",
+      "kind": "readiness",
+      "to": "Terminal.server"
     },
     {
       "from": "Terminal.promptProbe",
@@ -436,9 +481,19 @@
       "to": "Terminal.promptProbe.attempts"
     },
     {
+      "from": "Terminal.reachable",
+      "kind": "readiness",
+      "to": "Terminal.promptProbe"
+    },
+    {
       "from": "Terminal.server",
       "kind": "hosts",
       "to": "Terminal.console"
+    },
+    {
+      "from": "Terminal.server",
+      "kind": "recovery",
+      "to": "Terminal.server.supervisor"
     },
     {
       "from": "Terminal.server",
@@ -452,6 +507,422 @@
     }
   ],
   "formatVersion": "ignite-model/0.1",
+  "machines": [
+    {
+      "id": "Terminal.customerAccess.evaluator",
+      "machine": {
+        "fields": [
+          {
+            "fields": {
+              "buckets": [],
+              "consequence": {
+                "fields": [
+                  "access_commitment_breached"
+                ],
+                "type": "Option",
+                "variant": "Some"
+              },
+              "contract": "Terminal.customerAccess",
+              "current": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "epoch": {
+                "ns": 0,
+                "type": "Duration"
+              },
+              "fired": [],
+              "good": "prompt_received_before_timeout",
+              "horizon": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "id": "Terminal.customerAccess.evaluator",
+              "interval": {
+                "ns": 10000000000,
+                "type": "Duration"
+              },
+              "minimum_completeness": {
+                "ppm": 900000,
+                "type": "Ratio"
+              },
+              "missing_data": {
+                "type": "std.sli.MissingData",
+                "variant": "InsufficientEvidence"
+              },
+              "period_timer": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "signal": "Terminal.promptProbe.attempts",
+              "sum_executed": 0,
+              "sum_good": 0,
+              "target": {
+                "ppm": 995000,
+                "type": "Ratio"
+              },
+              "threshold": {
+                "ns": 0,
+                "type": "Duration"
+              },
+              "window": {
+                "fields": [
+                  "Europe/Berlin"
+                ],
+                "type": "std.sli.Window",
+                "variant": "CalendarMonth"
+              }
+            },
+            "type": "std.control.Evaluator"
+          }
+        ],
+        "type": "std.control.Machine",
+        "variant": "Evaluate"
+      },
+      "member": "Terminal.customerAccess",
+      "subscribes": [
+        "Terminal.promptProbe.attempts"
+      ]
+    },
+    {
+      "id": "Terminal.promptFast.evaluator",
+      "machine": {
+        "fields": [
+          {
+            "fields": {
+              "buckets": [],
+              "consequence": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "contract": "Terminal.promptFast",
+              "current": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "epoch": {
+                "ns": 0,
+                "type": "Duration"
+              },
+              "fired": [],
+              "good": "prompt_received_within_threshold",
+              "horizon": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "id": "Terminal.promptFast.evaluator",
+              "interval": {
+                "ns": 10000000000,
+                "type": "Duration"
+              },
+              "minimum_completeness": {
+                "ppm": 900000,
+                "type": "Ratio"
+              },
+              "missing_data": {
+                "type": "std.sli.MissingData",
+                "variant": "InsufficientEvidence"
+              },
+              "period_timer": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "signal": "Terminal.promptProbe.attempts",
+              "sum_executed": 0,
+              "sum_good": 0,
+              "target": {
+                "ppm": 990000,
+                "type": "Ratio"
+              },
+              "threshold": {
+                "ns": 200000000,
+                "type": "Duration"
+              },
+              "window": {
+                "fields": [
+                  {
+                    "ns": 3600000000000,
+                    "type": "Duration"
+                  }
+                ],
+                "type": "std.sli.Window",
+                "variant": "Rolling"
+              }
+            },
+            "type": "std.control.Evaluator"
+          }
+        ],
+        "type": "std.control.Machine",
+        "variant": "Evaluate"
+      },
+      "member": "Terminal.promptFast",
+      "subscribes": [
+        "Terminal.promptProbe.attempts"
+      ]
+    },
+    {
+      "id": "Terminal.promptProbe.scheduler",
+      "machine": {
+        "fields": [
+          {
+            "fields": {
+              "deadline_timer": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "id": "Terminal.promptProbe.scheduler",
+              "in_flight": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "interval": {
+                "ns": 10000000000,
+                "type": "Duration"
+              },
+              "member": "Terminal.promptProbe",
+              "next_id": 1,
+              "signal": "Terminal.promptProbe.attempts",
+              "slot": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "slot_timer": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "target": "Terminal.server",
+              "target_ready": false,
+              "timeout": {
+                "ns": 2000000000,
+                "type": "Duration"
+              }
+            },
+            "type": "std.control.ProbeScheduler"
+          }
+        ],
+        "type": "std.control.Machine",
+        "variant": "Schedule"
+      },
+      "member": "Terminal.promptProbe",
+      "subscribes": []
+    },
+    {
+      "id": "Terminal.reachable.evaluator",
+      "machine": {
+        "fields": [
+          {
+            "fields": {
+              "buckets": [],
+              "consequence": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "contract": "Terminal.reachable",
+              "current": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "epoch": {
+                "ns": 0,
+                "type": "Duration"
+              },
+              "fired": [],
+              "good": "prompt_received_before_timeout",
+              "horizon": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "id": "Terminal.reachable.evaluator",
+              "interval": {
+                "ns": 10000000000,
+                "type": "Duration"
+              },
+              "minimum_completeness": {
+                "ppm": 900000,
+                "type": "Ratio"
+              },
+              "missing_data": {
+                "type": "std.sli.MissingData",
+                "variant": "InsufficientEvidence"
+              },
+              "period_timer": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "signal": "Terminal.promptProbe.attempts",
+              "sum_executed": 0,
+              "sum_good": 0,
+              "target": {
+                "ppm": 999000,
+                "type": "Ratio"
+              },
+              "threshold": {
+                "ns": 0,
+                "type": "Duration"
+              },
+              "window": {
+                "fields": [
+                  {
+                    "ns": 2592000000000000,
+                    "type": "Duration"
+                  }
+                ],
+                "type": "std.sli.Window",
+                "variant": "Rolling"
+              }
+            },
+            "type": "std.control.Evaluator"
+          }
+        ],
+        "type": "std.control.Machine",
+        "variant": "Evaluate"
+      },
+      "member": "Terminal.reachable",
+      "subscribes": [
+        "Terminal.promptProbe.attempts"
+      ]
+    },
+    {
+      "disruption": "connections refused between listener close and rebind",
+      "id": "Terminal.server.rollout",
+      "machine": {
+        "fields": [
+          {
+            "fields": {
+              "deadline_timer": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "generation": 1,
+              "id": "Terminal.server.rollout",
+              "member": "Terminal.server",
+              "new_pid": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "old_pid": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "policy": {
+                "fields": {
+                  "deadline": {
+                    "ns": 120000000000,
+                    "type": "Duration"
+                  },
+                  "on_deadline": "disconnect_remaining"
+                },
+                "type": "std.policy.DrainRollout"
+              },
+              "released_at": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "state": {
+                "type": "std.control.RolloutState",
+                "variant": "Idle"
+              }
+            },
+            "type": "std.control.Rollout"
+          }
+        ],
+        "type": "std.control.Machine",
+        "variant": "Roll"
+      },
+      "member": "Terminal.server",
+      "subscribes": []
+    },
+    {
+      "id": "Terminal.server.supervisor",
+      "machine": {
+        "fields": [
+          {
+            "fields": {
+              "attempt": 0,
+              "failures": [],
+              "generation": 1,
+              "has_listener": true,
+              "id": "Terminal.server.supervisor",
+              "kill_requested": false,
+              "member": "Terminal.server",
+              "pid": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "restart": {
+                "fields": {
+                  "backoff": {
+                    "fields": [
+                      {
+                        "ns": 100000000,
+                        "type": "Duration"
+                      },
+                      {
+                        "ns": 10000000000,
+                        "type": "Duration"
+                      }
+                    ],
+                    "type": "std.policy.Backoff",
+                    "variant": "Exponential"
+                  },
+                  "interval": {
+                    "ns": 300000000000,
+                    "type": "Duration"
+                  },
+                  "maximum_attempts": 10,
+                  "readiness_timeout": {
+                    "ns": 10000000000,
+                    "type": "Duration"
+                  }
+                },
+                "type": "std.policy.Restart"
+              },
+              "rollout": {
+                "fields": [
+                  {
+                    "fields": {
+                      "deadline": {
+                        "ns": 120000000000,
+                        "type": "Duration"
+                      },
+                      "on_deadline": "disconnect_remaining"
+                    },
+                    "type": "std.policy.DrainRollout"
+                  }
+                ],
+                "type": "Option",
+                "variant": "Some"
+              },
+              "state": {
+                "type": "std.control.SupervisorState",
+                "variant": "Stopped"
+              },
+              "timer": {
+                "type": "Option",
+                "variant": "None"
+              }
+            },
+            "type": "std.control.Supervisor"
+          }
+        ],
+        "type": "std.control.Machine",
+        "variant": "Supervise"
+      },
+      "member": "Terminal.server",
+      "subscribes": []
+    }
+  ],
+  "observations": [
+    {
+      "element": "std.sli.ProbeAttempt",
+      "interval": {
+        "ns": 10000000000,
+        "type": "Duration"
+      },
+      "producer": "Terminal.promptProbe",
+      "ref": "Terminal.promptProbe.attempts"
+    }
+  ],
   "policies": [],
   "resources": [
     {
@@ -486,6 +957,7 @@
     "Terminal.customerAccess.consequence": "terminal.design.ignite:104:19",
     "Terminal.customerAccess.exclusions": "terminal.design.ignite:103:18",
     "Terminal.customerAccess.good": "terminal.design.ignite:100:12",
+    "Terminal.customerAccess.minimum_completeness": "std/contract.ignite:97:33",
     "Terminal.customerAccess.period": "terminal.design.ignite:102:14",
     "Terminal.customerAccess.signal": "terminal.design.ignite:99:14",
     "Terminal.customerAccess.target": "terminal.design.ignite:101:14",
@@ -496,6 +968,7 @@
     "Terminal.ingress.port": "terminal.design.ignite:15:12",
     "Terminal.promptFast": "terminal.design.ignite:89:3",
     "Terminal.promptFast.good": "terminal.design.ignite:91:12",
+    "Terminal.promptFast.minimum_completeness": "std/contract.ignite:63:33",
     "Terminal.promptFast.missing_data": "terminal.design.ignite:95:20",
     "Terminal.promptFast.signal": "terminal.design.ignite:90:14",
     "Terminal.promptFast.target": "terminal.design.ignite:93:14",
@@ -503,12 +976,14 @@
     "Terminal.promptFast.window": "terminal.design.ignite:94:14",
     "Terminal.promptProbe": "terminal.design.ignite:73:3",
     "Terminal.promptProbe.close_after_probe": "terminal.design.ignite:78:25",
+    "Terminal.promptProbe.executable": "terminal.design.ignite:73:3",
     "Terminal.promptProbe.expected_prompt": "terminal.design.ignite:77:23",
     "Terminal.promptProbe.interval": "terminal.design.ignite:75:16",
     "Terminal.promptProbe.target": "terminal.design.ignite:74:14",
     "Terminal.promptProbe.timeout": "terminal.design.ignite:76:15",
     "Terminal.reachable": "terminal.design.ignite:81:3",
     "Terminal.reachable.good": "terminal.design.ignite:83:12",
+    "Terminal.reachable.minimum_completeness": "std/contract.ignite:37:33",
     "Terminal.reachable.missing_data": "terminal.design.ignite:86:20",
     "Terminal.reachable.signal": "terminal.design.ignite:82:14",
     "Terminal.reachable.target": "terminal.design.ignite:84:14",

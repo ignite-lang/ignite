@@ -492,6 +492,8 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `void tcp_own(i64 stream)` | mark `stream` as owned by the current task: a failure of the task releases it (section 4) |
 | `i32 text_cmp(Text* a, Text* b)` | -1, 0 or 1: bytewise order of the UTF-8, the key order of `Map<Text, V>` (section 3) |
 | `void quantity_debug(Text* out, i32 kind, i64 value)` | the debug text of a quantity, `kind` 0 `Duration`, 1 `ByteSize`, 2 `Ratio` (`ignite_io::quantity_debug`) |
+| `i64 clock_monotonic()` | `Clock.monotonic()` (`docs/slice.md` 16.13): nanoseconds since an arbitrary start of the process, never decreasing (`ignite_io::clock::monotonic`); declared only in a module that calls it, so other modules' IR is unchanged |
+| `i32 endpoint_of(Text* reference, Endpoint* out, IoError* err)` | `Endpoint.of(ref)` (`docs/slice.md` 16.9, 16.13): the `--ref <path>=<address>:<port>` argument `init` stored whose path is `reference`, as `std.net.Endpoint` (`{ Text address, i64 port }`, the address in the task's arena); no binding is the error `no binding for <path>`, a malformed `--ref` an error with exit code 2 (`ignite_io::args::endpoint_from_args`); declared only in a module that calls it |
 | `void test_main(IgniteTest* table, i64 count)` | `ignite_io::test_main_with` over the `count` entries at `table` and the arguments `init` stored: the runner of `docs/slice.md` section 12.7. Only with the feature `runner` (below) |
 
 `ignite-rt` is an adapter: every `tcp_*`, `stdin_*` and `stdout_*` function, `exit`, `log`

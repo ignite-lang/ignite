@@ -1312,6 +1312,7 @@ impl<'a> Typer<'a> {
                 Decl::Fn(f) => {
                     if let Some(sig) = self.own.fns.get(&f.qualified_name()).cloned() {
                         self.with_local_inference(&|t| t.function(f, &sig));
+                        self.hook_signature(f);
                     }
                 }
                 Decl::Protocol(protocol) => {
@@ -1511,7 +1512,7 @@ impl<'a> Typer<'a> {
             Ty::Int => Some(Builtin::IntToTextMethod),
             Ty::Byte => Some(Builtin::ByteToText),
             Ty::Bool => Some(Builtin::BoolToText),
-            Ty::Text => Some(Builtin::TextToText),
+            Ty::Text | Ty::Ref(_) | Ty::Signal(_) => Some(Builtin::TextToText),
             Ty::List(element) if **element == Ty::Byte => Some(Builtin::BytesToText),
             Ty::IoError => return Some(Show::IoErrorMessage),
             _ => None,

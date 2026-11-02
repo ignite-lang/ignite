@@ -2,7 +2,27 @@
 //! their debug text (section 13.6, 14.1 quantities in literal form). The
 //! model encodes a [`Value`] as the JSON of the 15.4 table. Owner: P2.
 
-use ignite_types::{QualName, QuantityKind, Reference};
+use std::collections::BTreeMap;
+
+use ignite_types::{QualName, QuantityKind, Reference, Ty, TypedProgram};
+
+use crate::model::Json;
+
+/// Why a JSON text is no value of the type it was decoded as
+/// (`docs/slice.md` 16.16, the inverse of 15.4): the first part that does
+/// not fit, for the probe adapter's `AttemptFailed` reason and E127.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DecodeError {
+    pub message: String,
+}
+
+impl std::fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for DecodeError {}
 
 /// One Ignite value. Records and enums carry the qualified name of their
 /// type as the typer prints it (`std.policy.Restart`); the builtin enums
@@ -67,6 +87,24 @@ pub enum Value {
 }
 
 impl Value {
+    /// The value the JSON text `json` encodes as a value of type `ty` in
+    /// the encoding of `docs/slice.md` 15.4 (16.16): the driver decodes a
+    /// probe's stdout line by the signal's element type, and replay
+    /// decodes the journal's `event` records. `types` is any typed program
+    /// that was typed against the modules declaring the records and enums
+    /// in `ty` (it gives the field order and the payload types, which the
+    /// JSON does not carry). A text that is no such value is `Err`, naming
+    /// the first part that does not fit.
+    pub fn decode(json: &str, ty: &Ty, types: &TypedProgram) -> Result<Value, DecodeError> {
+        let parsed = Json::parse(json).map_err(|message| DecodeError { message })?;
+        Value::decode_json(&parsed, ty, types)
+    }
+
+    /// [`Value::decode`] of a parsed JSON value.
+    pub fn decode_json(json: &Json, ty: &Ty, types: &TypedProgram) -> Result<Value, DecodeError> {
+        decode(json, ty, types, "value")
+    }
+
     /// `Some(v)`.
     pub fn some(value: Value) -> Value {
         Value::Enum {
@@ -254,6 +292,265 @@ impl Value {
                 write_text(message, out);
                 out.push(')');
             }
+        }
+    }
+}
+
+/// The value of type `ty` that `json` encodes; `path` locates `json` in
+/// the error text (`value.fields.latency`).
+fn decode(json: &Json, ty: &Ty, types: &TypedProgram, path: &str) -> Result<Value, DecodeError> {
+    let fail = |message: String| DecodeError {
+        message: format!("{path}: {message}"),
+    };
+    let expected = |what: &str| fail(format!("expected {what}, found {}", json.kind()));
+    let tagged = |tag: &str| -> Result<&BTreeMap<String, Json>, DecodeError> {
+        let object = json
+            .as_object()
+            .ok_or_else(|| expected(&format!("a `{tag}` object")))?;
+        match object.get("type").and_then(Json::as_str) {
+            Some(found) if found == tag => Ok(object),
+            Some(found) => Err(fail(format!("expected type `{tag}`, found `{found}`"))),
+            None => Err(fail(format!("expected type `{tag}`, found no `type` key"))),
+        }
+    };
+    let text_of = |object: &BTreeMap<String, Json>, key: &str| -> Result<String, DecodeError> {
+        object
+            .get(key)
+            .and_then(Json::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| fail(format!("expected a `{key}` string")))
+    };
+    let items = |object: &BTreeMap<String, Json>, key: &str| -> Result<Vec<Json>, DecodeError> {
+        match object.get(key) {
+            Some(Json::Array(items)) => Ok(items.clone()),
+            Some(other) => Err(fail(format!(
+                "expected `{key}` to be an array, found {}",
+                other.kind()
+            ))),
+            None => Ok(Vec::new()),
+        }
+    };
+    let payload = |items: &[Json], tys: &[Ty], what: &str| -> Result<Vec<Value>, DecodeError> {
+        if items.len() != tys.len() {
+            return Err(fail(format!(
+                "{what} takes {} values, found {}",
+                tys.len(),
+                items.len()
+            )));
+        }
+        items
+            .iter()
+            .zip(tys)
+            .enumerate()
+            .map(|(i, (item, ty))| decode(item, ty, types, &format!("{path}[{i}]")))
+            .collect()
+    };
+    let qualified = |text: &str| -> QualName {
+        match text.rsplit_once('.') {
+            Some((module, name)) => QualName::new(module, name),
+            None => QualName::builtin(text),
+        }
+    };
+    match ty {
+        Ty::Unit => match json {
+            Json::Null => Ok(Value::Unit),
+            _ => Err(expected("null")),
+        },
+        Ty::Bool => json
+            .as_bool()
+            .map(Value::Bool)
+            .ok_or_else(|| expected("a boolean")),
+        Ty::Int => json
+            .as_i64()
+            .map(Value::Int)
+            .ok_or_else(|| expected("an integer")),
+        Ty::Text => json
+            .as_str()
+            .map(|t| Value::Text(t.to_string()))
+            .ok_or_else(|| expected("a string")),
+        Ty::Byte => {
+            let object = tagged("Byte")?;
+            let value = object.get("value").and_then(Json::as_i64);
+            match value {
+                Some(n) if (0..=255).contains(&n) => Ok(Value::Byte(n as u8)),
+                _ => Err(fail("expected a `value` in 0..=255".to_string())),
+            }
+        }
+        Ty::List(element) => {
+            let items = json.as_array().ok_or_else(|| expected("an array"))?;
+            items
+                .iter()
+                .enumerate()
+                .map(|(i, item)| decode(item, element, types, &format!("{path}[{i}]")))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Value::List)
+        }
+        Ty::Option(inner) => {
+            let object = tagged("Option")?;
+            match text_of(object, "variant")?.as_str() {
+                "Some" => Ok(Value::some(
+                    payload(
+                        &items(object, "fields")?,
+                        std::slice::from_ref(inner),
+                        "`Some`",
+                    )?
+                    .remove(0),
+                )),
+                "None" => Ok(Value::none()),
+                other => Err(fail(format!("`Option` has no variant `{other}`"))),
+            }
+        }
+        Ty::Result(ok, err) => {
+            let object = tagged("Result")?;
+            match text_of(object, "variant")?.as_str() {
+                "Ok" => Ok(Value::ok(
+                    payload(&items(object, "fields")?, std::slice::from_ref(ok), "`Ok`")?.remove(0),
+                )),
+                "Err" => Ok(Value::err(
+                    payload(
+                        &items(object, "fields")?,
+                        std::slice::from_ref(err),
+                        "`Err`",
+                    )?
+                    .remove(0),
+                )),
+                other => Err(fail(format!("`Result` has no variant `{other}`"))),
+            }
+        }
+        Ty::Tuple(tys) => {
+            let object = tagged("Tuple")?;
+            payload(&items(object, "items")?, tys, "the tuple").map(Value::Tuple)
+        }
+        Ty::Record(q) | Ty::GenericRecord(q, _) => {
+            let object = tagged(&q.to_string())?;
+            let given = object
+                .get("fields")
+                .and_then(Json::as_object)
+                .ok_or_else(|| fail("expected a `fields` object".to_string()))?;
+            let declared = types
+                .record_fields(q)
+                .ok_or_else(|| fail(format!("unknown record `{q}`")))?;
+            let args: &[Ty] = match ty {
+                Ty::GenericRecord(_, args) => args,
+                _ => &[],
+            };
+            let params = types.type_params(q).unwrap_or(&[]);
+            let mut fields = Vec::with_capacity(declared.len());
+            for (field, field_ty) in declared {
+                let item = given
+                    .get(field)
+                    .ok_or_else(|| fail(format!("record `{q}` lacks the field `{field}`")))?;
+                let field_ty = if args.is_empty() {
+                    field_ty.clone()
+                } else {
+                    field_ty.substitute(params, args)
+                };
+                fields.push((
+                    field.clone(),
+                    decode(item, &field_ty, types, &format!("{path}.{field}"))?,
+                ));
+            }
+            if let Some(extra) = given
+                .keys()
+                .find(|k| !declared.iter().any(|(f, _)| f == *k))
+            {
+                return Err(fail(format!("record `{q}` has no field `{extra}`")));
+            }
+            Ok(Value::Record {
+                name: q.clone(),
+                fields,
+            })
+        }
+        Ty::Enum(q) | Ty::GenericEnum(q, _) => {
+            let object = tagged(&q.to_string())?;
+            let variant = text_of(object, "variant")?;
+            let (_, tys) = types
+                .variant(ty, &variant)
+                .ok_or_else(|| fail(format!("enum `{q}` has no variant `{variant}`")))?;
+            let fields = payload(&items(object, "fields")?, &tys, &format!("`{variant}`"))?;
+            Ok(Value::Enum {
+                name: q.clone(),
+                variant,
+                fields,
+            })
+        }
+        Ty::Input => {
+            let object = tagged("Input")?;
+            let variant = text_of(object, "variant")?;
+            let (_, tys) = types
+                .variant(ty, &variant)
+                .ok_or_else(|| fail(format!("`Input` has no variant `{variant}`")))?;
+            let fields = payload(&items(object, "fields")?, &tys, &format!("`{variant}`"))?;
+            Ok(Value::Enum {
+                name: QualName::builtin("Input"),
+                variant,
+                fields,
+            })
+        }
+        Ty::Map(key_ty, value_ty) => {
+            let object = tagged("Map")?;
+            let entries = items(object, "entries")?;
+            entries
+                .iter()
+                .enumerate()
+                .map(|(i, entry)| {
+                    let pair = entry.as_array().filter(|p| p.len() == 2).ok_or_else(|| {
+                        fail(format!("entry {i}: expected a `[key, value]` pair"))
+                    })?;
+                    Ok((
+                        decode(&pair[0], key_ty, types, &format!("{path}[{i}].key"))?,
+                        decode(&pair[1], value_ty, types, &format!("{path}[{i}].value"))?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map(Value::Map)
+        }
+        Ty::Quantity(kind) => {
+            let object = tagged(kind.name())?;
+            let unit = match kind {
+                QuantityKind::Duration => "ns",
+                QuantityKind::ByteSize => "bytes",
+                QuantityKind::Ratio => "ppm",
+            };
+            object
+                .get(unit)
+                .and_then(Json::as_i64)
+                .map(|n| Value::Quantity(*kind, n))
+                .ok_or_else(|| fail(format!("expected an integer `{unit}`")))
+        }
+        Ty::Ref(_) => {
+            let text = text_of(tagged("Ref")?, "ref")?;
+            let (system, member) = text
+                .split_once('.')
+                .ok_or_else(|| fail(format!("`{text}` is no `System.member` reference")))?;
+            Ok(Value::Reference(Reference::Member {
+                system: system.to_string(),
+                member: member.to_string(),
+            }))
+        }
+        Ty::Signal(_) => {
+            let text = text_of(tagged("Signal")?, "ref")?;
+            let parts: Vec<&str> = text.split('.').collect();
+            if parts.len() != 3 {
+                return Err(fail(format!("`{text}` is no `System.member.field` signal")));
+            }
+            Ok(Value::Reference(Reference::Signal {
+                system: parts[0].to_string(),
+                member: parts[1].to_string(),
+                field: parts[2].to_string(),
+            }))
+        }
+        Ty::SystemRef => Ok(Value::Reference(Reference::System(text_of(
+            tagged("SystemRef")?,
+            "ref",
+        )?))),
+        Ty::Protocol => Ok(Value::Reference(Reference::Protocol(qualified(&text_of(
+            tagged("Protocol")?,
+            "ref",
+        )?)))),
+        Ty::Fn(..) | Ty::EffectFn(..) => Ok(Value::Fn(qualified(&text_of(tagged("Fn")?, "fn")?))),
+        Ty::TcpListener | Ty::TcpStream | Ty::IoError | Ty::Store(_) | Ty::Never | Ty::Param(_) => {
+            Err(fail(format!("a value of type `{ty}` cannot be decoded")))
         }
     }
 }

@@ -1,0 +1,39 @@
+package tests.builtins
+
+import std.net.Endpoint
+
+// Slice 12 (`docs/slice.md` 16.13): the substrate builtins `Clock.monotonic`
+// and `Endpoint.of`. `ignite test` runs the inline test on both targets;
+// `ignite build` emits `server` and `prober`, and the e2e test runs `prober`
+// without a `--ref` binding (exit 1, "no binding for Probes.server") and
+// with one (it prints the endpoint). A `Ref<K>` value exists only inside a
+// `system` (O2), so `Endpoint.of` is reached through a component's `main`.
+
+type Target {
+  port: Int
+}
+
+fn Target.main(self: Target) -> Result<Unit, IoError> = Ok(Unit)
+
+type Prober {
+  target: Ref<Target>
+}
+
+fn Prober.main(self: Prober) -> Result<Unit, IoError> {
+  let endpoint = Endpoint.of(self.target)?
+  Stdout.write_all("{endpoint.address}:{endpoint.port}\n".to_bytes())
+}
+
+system Probes {
+  component server: Target { port = 1 }
+  component prober: Prober { target = server }
+}
+
+fn elapsed(from: Duration) -> Duration = Clock.monotonic() - from
+
+test "Clock.monotonic: two reads are ordered" {
+  let first = Clock.monotonic()
+  let second = Clock.monotonic()
+  assert second >= first
+  assert elapsed(first) >= 0 ns
+}

@@ -1,7 +1,8 @@
 //! `Value` (`docs/slice.md` sections 15.3 and 15.4): debug text of
-//! section 13.6, node counts of O14 and what the model can encode.
+//! section 13.6, node counts of O14, what the model can encode, and
+//! `Json::parse` as the inverse of `Json::compact` (15.4, O17).
 
-use ignite_eval::Value;
+use ignite_eval::{Json, Value};
 use ignite_types::{QualName, QuantityKind, Reference};
 
 fn record(name: &str, fields: Vec<(&str, Value)>) -> Value {
@@ -195,4 +196,37 @@ fn closures_and_io_errors_are_unencodable() {
         Value::Map(vec![(text("k"), Value::some(Value::Int(1)))]).encodable(),
         Ok(())
     );
+}
+
+#[test]
+fn json_parse_is_the_inverse_of_compact() {
+    let texts = [
+        r#"{"a":[1,-2,true,false,null,"x\"y\\z\n\u0001"],"b":{"c":"é😀"}}"#,
+        "[]",
+        "{}",
+        r#""plain""#,
+        "0",
+        "-9223372036854775808",
+    ];
+    for text in texts {
+        let json = Json::parse(text).unwrap_or_else(|e| panic!("{text}: {e}"));
+        assert_eq!(Json::parse(&json.compact()).unwrap(), json, "{text}");
+    }
+    assert_eq!(
+        Json::parse(" { \"k\" : [ 1 , 2 ] } ").unwrap().compact(),
+        r#"{"k":[1,2]}"#
+    );
+    for bad in [
+        "",
+        "{",
+        "[1,]",
+        r#"{"a":1,"a":2}"#,
+        "1.5",
+        "1e3",
+        "tru",
+        r#""\x""#,
+        "[1] x",
+    ] {
+        assert!(Json::parse(bad).is_err(), "{bad:?} parsed");
+    }
 }

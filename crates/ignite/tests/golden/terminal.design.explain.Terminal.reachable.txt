@@ -4,5 +4,8 @@ Terminal.reachable: contract std.contract.Availability (terminal.design.ignite:8
   target = 99.9%
   window = Rolling(30 days)
   missing_data = "insufficient_evidence"
+  minimum_completeness = 90% (default)
 observes Terminal.promptProbe.attempts
-standing: not evaluated before slice 12
+readiness Terminal.promptProbe
+machine Terminal.reachable.evaluator: Evaluate
+standing: evaluated at run time (ignite run, ignite replay)

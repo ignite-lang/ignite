@@ -1,0 +1,1568 @@
+package std.control
+
+import std.sli.{ProbeAttempt, Window, MissingData, satisfies, meets}
+import std.policy.{Restart, DrainRollout, OnDeadline, delay, allows, on_deadline}
+import std.time.{month_start, next_month_start}
+
+// The reducer interface of `ignite run` (`docs/slice.md` 16.6, actors.md
+// R8): a machine is a value, an event is a value, and `step` is a pure fn
+// from both to the next machine and the effects to dispatch. The driver in
+// `crates/ignite/src/run/` knows these types, the hook names `machine`
+// and `validate` and the fns `step` and `companions`, nothing else (vision
+// invariant 6). Reducers read no clock: every event carries `at`, a
+// Duration since the journal's epoch.
+//
+// Layering (16.6, O45): this module is below every kind whose `machine`
+// hook returns `Machine` (`std.probe`, `std.contract`,
+// `std.protocol.telnet`). It imports only leaf modules: `std.sli` for the
+// vocabulary the reducers consume, `std.policy` for the policies they
+// apply, `std.time` for calendar boundaries. Importing a kind's module
+// here is an import cycle (E032), which is also why the four reducers
+// live in this file: a module that declared one would have to import
+// `Event` and `Effect` from here while being imported by `step`.
+
+// The machines of slice 12, one per hosted member or contract (O39: a
+// closed set, no user-defined machine). Ids are `<member path>.<role>`:
+// `Terminal.server.supervisor`, `Terminal.promptProbe.scheduler`,
+// `Terminal.reachable.evaluator`, `Terminal.server.rollout`.
+enum Machine {
+  Supervise(Supervisor),
+  Schedule(ProbeScheduler),
+  Evaluate(Evaluator),
+  Roll(Rollout)
+}
+
+// What one step produced: the machine after the event and the effects to
+// dispatch, in order.
+type Step {
+  machine: Machine
+  effects: List<Effect>
+}
+
+// An event the driver routes to a machine (16.6, 16.9): what happened and
+// when, as a Duration since the journal's epoch (16.4).
+type Event {
+  at: Duration
+  kind: EventKind
+}
+
+// The kinds of event. `Start` carries the journal's epoch (a Duration
+// since 1970-01-01T00:00:00Z) and reaches every machine at every segment
+// start. Process lifecycle events carry the pid they concern and go to the
+// member's supervisor, its rollout machine and every scheduler probing
+// that member (A4); `Timer` returns to the machine that set it; `Emitted`
+// reaches every subscriber of the signal; `Control` carries a control
+// line (16.3).
+enum EventKind {
+  Start(Duration),
+  Started(Int, Int),
+  Ready(Int),
+  Exited(Int, Int),
+  Signalled(Int, Int),
+  SpawnFailed(Text),
+  AttemptDone(Int, ProbeAttempt),
+  AttemptFailed(Int, Text),
+  Timer(Int),
+  Emitted(Text, ProbeAttempt),
+  Built(Int),
+  BuildFailed(Text),
+  Released,
+  Control(Text)
+}
+
+// An effect a reducer asks the driver to dispatch (16.6). Members and
+// signals are named by their path text (`Terminal.server`,
+// `Terminal.promptProbe.attempts`). `Spawn(member, generation)` starts the
+// member's executable of that generation; `Kill(member, pid, signal)`
+// sends a POSIX signal to one process of the member; `Attempt(member, id)`
+// runs one probe attempt and `Abort(member, id)` ends its process. Timers
+// are numbered by the machine that sets them and fire as `Timer(id)` at
+// the absolute instant `SetTimer` names.
+enum Effect {
+  Spawn(Text, Int),
+  Kill(Text, Int, Int),
+  Attempt(Text, Int),
+  Abort(Text, Int),
+  SetTimer(Int, Duration),
+  CancelTimer(Int),
+  Emit(Text, ProbeAttempt),
+  Publish(Standing),
+  Fire(Fired),
+  Build(Text),
+  AwaitRelease(Text),
+  Note(Text)
+}
+
+// The states of a supervisor (design 11.8, 16.7).
+enum SupervisorState {
+  Starting,
+  Running,
+  Backoff,
+  Failed,
+  Draining,
+  Stopped
+}
+
+// The supervisor of one `NativeProcess` member (16.7): starts it, awaits
+// its `listening on` line, restarts it under its `Restart` policy and
+// gives up when the policy does. `rollout` is the member's `DrainRollout`
+// policy when it has one; `companions` turns it into the member's rollout
+// machine.
+type Supervisor {
+  id: Text
+  member: Text
+  restart: Restart
+  rollout: Option<DrainRollout> = None
+  has_listener: Bool = true
+  state: SupervisorState = Stopped
+  generation: Int = 1
+  pid: Option<Int> = None
+  failures: List<Duration> = []
+  attempt: Int = 0
+  timer: Option<Int> = None
+  kill_requested: Bool = false
+}
+
+// The scheduler of one probe member (16.8): one attempt per `interval`
+// from the target's first `Ready` on, each with a deadline of `timeout`.
+type ProbeScheduler {
+  id: Text
+  member: Text
+  target: Text
+  signal: Text
+  interval: Duration
+  timeout: Duration
+  target_ready: Bool = false
+  next_id: Int = 1
+  slot: Option<Duration> = None
+  in_flight: Option<Int> = None
+  deadline_timer: Option<Int> = None
+  slot_timer: Option<Int> = None
+}
+
+// Counts of one bucket of a window (16.10, O33): the attempts whose slot
+// fell in `[from, from + width)`.
+type Bucket {
+  from: Duration
+  good: Int = 0
+  executed: Int = 0
+}
+
+// The evaluator of one contract (16.10, 16.11): classifies each emission
+// of its signal, keeps the window's counts and publishes a `Standing` at
+// every emission and period boundary; an `SLA` also fires its consequence
+// at a period close that is `Violated`. `interval` is the signal's, set by
+// the driver from the model's `observations`; `epoch` comes from `Start`.
+// `buckets` are the closed buckets of the window, `current` the open one,
+// `sum_good` and `sum_executed` their totals.
+type Evaluator {
+  id: Text
+  contract: Text
+  signal: Text
+  interval: Duration = 0 ms
+  good: Text
+  threshold: Duration = 0 ms
+  target: Ratio
+  window: Window
+  missing_data: MissingData
+  minimum_completeness: Ratio
+  consequence: Option<Text> = None
+  epoch: Duration = 0 ms
+  horizon: Option<Duration> = None
+  buckets: List<Bucket> = []
+  current: Option<Bucket> = None
+  sum_good: Int = 0
+  sum_executed: Int = 0
+  period_timer: Option<Int> = None
+  fired: List<Duration> = []
+}
+
+// The standing of a contract (16.10): the status over `from` to `to`,
+// the counts it rests on, how complete the evidence is and how much of
+// the window lies inside the evidence horizon. `calculation` is
+// `ignite-sli/0.1`; `version` is the journal `seq` of the record, which
+// the driver fills.
+type Standing {
+  contract: Text
+  status: Status
+  good: Int
+  executed: Int
+  expected: Int
+  completeness: Ratio
+  from: Duration
+  to: Duration
+  coverage: Ratio
+  calculation: Text = "ignite-sli/0.1"
+  version: Int = 0
+}
+
+// The three statuses of design 4.1.
+enum Status {
+  Compliant,
+  Violated,
+  InsufficientEvidence
+}
+
+// A consequence that fired (16.11): one per contract and period, keyed by
+// `(contract, period_from)`; `standing_seq` is the journal `seq` of the
+// standing it rests on, which the driver fills.
+type Fired {
+  contract: Text
+  consequence: Text
+  period_from: Duration
+  period_to: Duration
+  standing_seq: Int
+}
+
+// The states of a rollout (16.12).
+enum RolloutState {
+  Idle,
+  Building,
+  Draining,
+  Starting,
+  Retiring,
+  Done,
+  Aborted
+}
+
+// The rollout of one member under its `DrainRollout` policy (16.12):
+// build the next generation, drain the old process, start the new one,
+// retire the old one at the deadline. `old_pid` is the process serving
+// when the rollout starts, `new_pid` the one it starts.
+type Rollout {
+  id: Text
+  member: Text
+  policy: DrainRollout
+  state: RolloutState = Idle
+  generation: Int = 1
+  old_pid: Option<Int> = None
+  new_pid: Option<Int> = None
+  released_at: Option<Duration> = None
+  deadline_timer: Option<Int> = None
+}
+
+// One record of the journal's `segment` kind (16.5): a run's start,
+// resume or stop, the clock mode, the generation, and the declared
+// members the run cannot build (A10).
+type Segment {
+  start: Duration
+  stop: Option<Duration> = None
+  clock: Text
+  generation: Int
+  declared: List<Text> = []
+}
+
+const SIGKILL: Int = 9
+const SIGTERM: Int = 15
+
+// Timer ids, per machine (16.6): the supervisor's backoff and readiness
+// timers, the scheduler's slot timer (its deadline timers carry the
+// attempt id, from 1), the evaluator's period timer, the rollout's
+// deadline.
+const BACKOFF_TIMER: Int = 1
+const READINESS_TIMER: Int = 2
+const SLOT_TIMER: Int = 0
+const PERIOD_TIMER: Int = 1
+const DEADLINE_TIMER: Int = 1
+
+// A rolling window keeps its counts in buckets of
+// `max(interval, span / 10,000)` (O33).
+const BUCKETS_PER_WINDOW: Int = 10000
+
+// Step `machine` over `event`: the machine after it and the effects to
+// dispatch. Pure; the driver journals the event before and every effect
+// after (16.2).
+fn step(machine: Machine, event: Event) -> Step = match machine {
+  Supervise(supervisor) => supervise(supervisor, event)
+  Schedule(scheduler) => schedule(scheduler, event)
+  Evaluate(evaluator) => evaluate(evaluator, event)
+  Roll(rollout) => roll(rollout, event)
+}
+
+// The machines a hook's machine brings with it: a supervisor whose member
+// has a `DrainRollout` policy brings the member's rollout machine (16.12).
+// The driver calls it for every machine a `machine` hook returned.
+fn companions(machine: Machine) -> List<Machine> = match machine {
+  Supervise(supervisor) => match supervisor.rollout {
+    Some(drain) => [Roll(Rollout { id = "{supervisor.member}.rollout", member = supervisor.member, policy = drain })]
+    None => []
+  }
+  _ => []
+}
+
+fn unchanged(machine: Machine) -> Step = Step { machine, effects = [] }
+
+fn supervised(supervisor: Supervisor, effects: List<Effect>) -> Step =
+  Step { machine = Supervise(supervisor), effects }
+
+fn scheduled(scheduler: ProbeScheduler, effects: List<Effect>) -> Step =
+  Step { machine = Schedule(scheduler), effects }
+
+fn evaluated(evaluator: Evaluator, effects: List<Effect>) -> Step =
+  Step { machine = Evaluate(evaluator), effects }
+
+fn rolled(rollout: Rollout, effects: List<Effect>) -> Step =
+  Step { machine = Roll(rollout), effects }
+
+// Supervisor (16.7). A `Start` spawns the member afresh, whatever the
+// state: no process and no timer survives a run. `Started` adopts the pid
+// (also a new generation a rollout started) and arms the readiness timer;
+// `Ready` disarms it. An exit or signal of the supervised pid that no
+// `Kill` of this machine requested is a failure, exit 0 included; so is
+// a missing `Ready` at the readiness timeout and a `SpawnFailed`. Events
+// of any other pid are not this process's and are ignored.
+fn supervise(s: Supervisor, event: Event) -> Step {
+  let at = event.at
+  match event.kind {
+    Start(_) => {
+      var next = s
+      next.state = Starting
+      next.pid = None
+      next.failures = []
+      next.attempt = 0
+      next.timer = None
+      next.kill_requested = false
+      supervised(next, [Spawn(s.member, s.generation)])
+    }
+    Started(pid, generation) => match s.state {
+      Stopped | Failed => unchanged(Supervise(s))
+      _ => {
+        var next = s
+        next.pid = Some(pid)
+        next.generation = generation
+        next.kill_requested = false
+        var effects = []
+        if s.timer == Some(READINESS_TIMER) {
+          effects.push(CancelTimer(READINESS_TIMER))
+        }
+        if s.has_listener {
+          next.state = Starting
+          next.timer = Some(READINESS_TIMER)
+          effects.push(SetTimer(READINESS_TIMER, at + s.restart.readiness_timeout))
+        } else {
+          next.state = Running
+          next.timer = None
+        }
+        supervised(next, effects)
+      }
+    }
+    Ready(pid) => if s.pid == Some(pid) && s.state == Starting {
+      var next = s
+      next.state = Running
+      next.timer = None
+      if s.timer == Some(READINESS_TIMER) {
+        supervised(next, [CancelTimer(READINESS_TIMER)])
+      } else {
+        supervised(next, [])
+      }
+    } else {
+      unchanged(Supervise(s))
+    }
+    Exited(pid, _) => if s.pid == Some(pid) { ended(s, at) } else { unchanged(Supervise(s)) }
+    Signalled(pid, _) => if s.pid == Some(pid) { ended(s, at) } else { unchanged(Supervise(s)) }
+    SpawnFailed(_) => if s.state == Starting && s.pid == None { failure(s, at, []) } else { unchanged(Supervise(s)) }
+    Timer(id) => if s.timer != Some(id) {
+      unchanged(Supervise(s))
+    } else if id == BACKOFF_TIMER && s.state == Backoff {
+      var next = s
+      next.state = Starting
+      next.timer = None
+      supervised(next, [Spawn(s.member, s.generation)])
+    } else if id == READINESS_TIMER && s.state == Starting {
+      var next = s
+      next.timer = None
+      next.kill_requested = true
+      var effects = [Note("readiness timeout")]
+      match s.pid {
+        Some(pid) => effects.push(Kill(s.member, pid, SIGKILL))
+        None => {}
+      }
+      failure(next, at, effects)
+    } else {
+      unchanged(Supervise(s))
+    }
+    Control(line) => if line == "stop" { stop(s) } else { unchanged(Supervise(s)) }
+    _ => unchanged(Supervise(s))
+  }
+}
+
+// The supervised process ended: the end of a drain, a kill this machine
+// requested, or a failure.
+fn ended(s: Supervisor, at: Duration) -> Step {
+  var next = s
+  next.pid = None
+  match s.state {
+    Draining => {
+      next.state = Stopped
+      next.kill_requested = false
+      next.timer = None
+      supervised(next, [])
+    }
+    Starting | Running => if s.kill_requested {
+      next.kill_requested = false
+      supervised(next, [])
+    } else {
+      failure(next, at, [])
+    }
+    Backoff | Failed | Stopped => {
+      next.kill_requested = false
+      supervised(next, [])
+    }
+  }
+}
+
+// One failure at `at` (16.7): the attempt number is the number of
+// failures within the trailing `interval`, this one included. Allowed
+// attempts go to `Backoff` with a timer at `at + delay`; otherwise the
+// machine is `Failed` and the run goes on (O38). `before` are effects to
+// dispatch first.
+fn failure(s: Supervisor, at: Duration, before: List<Effect>) -> Step {
+  var effects = before
+  if s.timer == Some(READINESS_TIMER) {
+    effects.push(CancelTimer(READINESS_TIMER))
+  }
+  var recent = []
+  for f in s.failures {
+    if at - f < s.restart.interval {
+      recent.push(f)
+    }
+  }
+  recent.push(at)
+  let n = recent.len()
+  var next = s
+  next.failures = recent
+  next.attempt = n
+  if allows(s.restart, n) {
+    let d = delay(s.restart.backoff, n)
+    next.state = Backoff
+    next.timer = Some(BACKOFF_TIMER)
+    effects.push(Note("restart attempt {n} delay {d.debug()}"))
+    effects.push(SetTimer(BACKOFF_TIMER, at + d))
+  } else {
+    next.state = Failed
+    next.timer = None
+    effects.push(Note("gave_up"))
+  }
+  supervised(next, effects)
+}
+
+// The control line `stop`: a running process is drained with SIGTERM and
+// its exit is no failure; a pending restart is cancelled; a failed member
+// stays failed, so the run exits 1 (O38).
+fn stop(s: Supervisor) -> Step = match s.state {
+  Starting | Running => {
+    var next = s
+    next.timer = None
+    var effects = []
+    if s.timer == Some(READINESS_TIMER) {
+      effects.push(CancelTimer(READINESS_TIMER))
+    }
+    match s.pid {
+      Some(pid) => {
+        next.state = Draining
+        next.kill_requested = true
+        effects.push(Kill(s.member, pid, SIGTERM))
+      }
+      None => { next.state = Stopped }
+    }
+    supervised(next, effects)
+  }
+  Backoff => {
+    var next = s
+    next.state = Stopped
+    next.timer = None
+    supervised(next, [CancelTimer(BACKOFF_TIMER)])
+  }
+  Draining | Stopped | Failed => unchanged(Supervise(s))
+}
+
+// Probe scheduler (16.8). Slots open every `interval` from the target's
+// first `Ready` on (O40); each slot dispatches one attempt with a deadline
+// of `timeout`. A result before the deadline is emitted; the deadline
+// aborts the attempt and emits a bad attempt with `latency = timeout`; a
+// failed attempt (no executable, exit status, undecodable line) is
+// missing evidence and emits nothing. `Start` forgets the schedule, since
+// no timer survives a run: the target's next `Ready` reopens it.
+fn schedule(p: ProbeScheduler, event: Event) -> Step {
+  let at = event.at
+  match event.kind {
+    Start(_) => {
+      var next = p
+      next.target_ready = false
+      next.slot = None
+      next.in_flight = None
+      next.deadline_timer = None
+      next.slot_timer = None
+      scheduled(next, [])
+    }
+    Ready(_) => if p.target_ready {
+      unchanged(Schedule(p))
+    } else {
+      var next = p
+      next.target_ready = true
+      open_slot(next, at)
+    }
+    Timer(id) => if p.slot_timer == Some(id) {
+      open_slot(p, at)
+    } else if p.deadline_timer == Some(id) && p.in_flight == Some(id) {
+      var next = p
+      next.in_flight = None
+      next.deadline_timer = None
+      scheduled(next, [
+        Abort(p.member, id),
+        Note("probe timeout"),
+        Emit(p.signal, ProbeAttempt { received = false, latency = p.timeout })
+      ])
+    } else {
+      unchanged(Schedule(p))
+    }
+    AttemptDone(id, attempt) => if p.in_flight == Some(id) {
+      var next = p
+      next.in_flight = None
+      next.deadline_timer = None
+      scheduled(next, [CancelTimer(id), Emit(p.signal, attempt)])
+    } else {
+      scheduled(p, [Note("late attempt {id} ignored")])
+    }
+    AttemptFailed(id, _) => if p.in_flight == Some(id) {
+      var next = p
+      next.in_flight = None
+      next.deadline_timer = None
+      scheduled(next, [CancelTimer(id), Note("missing")])
+    } else {
+      scheduled(p, [Note("late attempt {id} ignored")])
+    }
+    _ => unchanged(Schedule(p))
+  }
+}
+
+// A slot at `at`: dispatch an attempt unless one is still in flight, and
+// arm the next slot.
+fn open_slot(p: ProbeScheduler, at: Duration) -> Step {
+  var next = p
+  next.slot = Some(at)
+  next.slot_timer = Some(SLOT_TIMER)
+  var effects = []
+  match p.in_flight {
+    None => {
+      let id = p.next_id
+      next.next_id = id + 1
+      next.in_flight = Some(id)
+      next.deadline_timer = Some(id)
+      effects.push(Attempt(p.member, id))
+      effects.push(SetTimer(id, at + p.timeout))
+    }
+    Some(id) => effects.push(Note("slot skipped: attempt {id} in flight"))
+  }
+  effects.push(SetTimer(SLOT_TIMER, at + p.interval))
+  scheduled(next, effects)
+}
+
+// Contract evaluator (16.10, 16.11). Every emission of its signal is
+// classified by `satisfies`, counted in the bucket of its slot and
+// followed by a `Standing` of the window; a `CalendarMonth` window also
+// publishes the closed period at each boundary, fires the consequence of
+// a violated period once and withholds it with a note on insufficient
+// evidence.
+fn evaluate(e: Evaluator, event: Event) -> Step {
+  let at = event.at
+  match event.kind {
+    Start(epoch) => {
+      var next = e
+      next.epoch = epoch
+      arm_period(next, at)
+    }
+    Emitted(signal, attempt) => if signal == e.signal {
+      emission(e, at, attempt)
+    } else {
+      unchanged(Evaluate(e))
+    }
+    Timer(id) => if e.period_timer == Some(id) {
+      close_period(e, at)
+    } else {
+      unchanged(Evaluate(e))
+    }
+    _ => unchanged(Evaluate(e))
+  }
+}
+
+// Arm the timer at the next period boundary of a calendar window.
+fn arm_period(e: Evaluator, at: Duration) -> Step = match e.window {
+  CalendarMonth(zone) => match next_month_start(zone, e.epoch + at) {
+    Some(boundary) => {
+      var next = e
+      next.period_timer = Some(PERIOD_TIMER)
+      evaluated(next, [SetTimer(PERIOD_TIMER, boundary - e.epoch)])
+    }
+    None => {
+      var next = e
+      next.period_timer = None
+      evaluated(next, [Note("unknown time zone {zone}: no period boundary")])
+    }
+  }
+  Rolling(_) => evaluated(e, [])
+}
+
+// The width of a rolling window's buckets (O33).
+fn bucket_width(span: Duration, interval: Duration) -> Duration {
+  let tenth = span / BUCKETS_PER_WINDOW
+  if interval >= tenth && interval > 0 ms {
+    interval
+  } else if tenth > 0 ms {
+    tenth
+  } else {
+    1 ms
+  }
+}
+
+// The instant an emission's attempt was dispatched: its `at` less the
+// probe's own latency (a timeout emission arrives `timeout` after its
+// slot), never before the epoch.
+fn slot_of(at: Duration, attempt: ProbeAttempt) -> Duration =
+  if attempt.latency >= at { 0 ms } else { at - attempt.latency }
+
+// One emission at `at`: count it, drop buckets that left the window,
+// publish the standing.
+fn emission(e: Evaluator, at: Duration, attempt: ProbeAttempt) -> Step {
+  let slot = slot_of(at, attempt)
+  var next = e
+  let horizon = match e.horizon {
+    Some(h) => h
+    None => slot
+  }
+  next.horizon = Some(horizon)
+  let good = if satisfies(attempt, e.good, e.threshold) { 1 } else { 0 }
+  next = count(next, slot, good)
+  next = expire(next, at)
+  let standing = standing_at(next, at, slot + e.interval / 2)
+  evaluated(next, [Publish(standing)])
+}
+
+// Count one attempt of `slot` with `good` (0 or 1) in the open bucket, or
+// open a new one when the slot lies past it. A calendar window keeps one
+// bucket per period.
+fn count(e: Evaluator, slot: Duration, good: Int) -> Evaluator {
+  var next = e
+  next.sum_good = e.sum_good + good
+  next.sum_executed = e.sum_executed + 1
+  match e.current {
+    None => { next.current = Some(Bucket { from = slot, good, executed = 1 }) }
+    Some(open) => {
+      let width = match e.window {
+        Rolling(span) => bucket_width(span, e.interval)
+        CalendarMonth(_) => 0 ms
+      }
+      if width > 0 ms && slot >= open.from + width {
+        var closed = e.buckets
+        closed.push(open)
+        next.buckets = closed
+        next.current = Some(Bucket { from = slot, good, executed = 1 })
+      } else {
+        next.current = Some(Bucket { from = open.from, good = open.good + good, executed = open.executed + 1 })
+      }
+    }
+  }
+  next
+}
+
+// Drop the closed buckets of a rolling window that lie entirely before
+// `at - span`, and their counts.
+fn expire(e: Evaluator, at: Duration) -> Evaluator = match e.window {
+  CalendarMonth(_) => e
+  Rolling(span) => {
+    let width = bucket_width(span, e.interval)
+    let start = at - span
+    var i = 0
+    var good = 0
+    var executed = 0
+    while i < e.buckets.len() && e.buckets[i].from + width <= start {
+      good = good + e.buckets[i].good
+      executed = executed + e.buckets[i].executed
+      i = i + 1
+    }
+    if i == 0 {
+      e
+    } else {
+      var next = e
+      next.buckets = e.buckets.slice(i, e.buckets.len())
+      next.sum_good = e.sum_good - good
+      next.sum_executed = e.sum_executed - executed
+      next
+    }
+  }
+}
+
+// The window's start and length at `at`: the last `span` for a rolling
+// window, the calendar period containing the instant for a calendar
+// window (an unknown zone gives an empty period).
+fn window_at(e: Evaluator, at: Duration) -> (Duration, Duration) = match e.window {
+  Rolling(span) => (at - span, span)
+  CalendarMonth(zone) => {
+    let instant = e.epoch + at
+    match (month_start(zone, instant), next_month_start(zone, instant)) {
+      (Some(start), Some(end)) => (start - e.epoch, end - start)
+      _ => (at, 0 ms)
+    }
+  }
+}
+
+fn later(a: Duration, b: Duration) -> Duration = if a > b { a } else { b }
+
+// The standing of the open window at `at`, with the expected slots counted
+// up to `slot_to`.
+fn standing_at(e: Evaluator, at: Duration, slot_to: Duration) -> Standing {
+  let (window_from, window_length) = window_at(e, at)
+  let horizon = match e.horizon {
+    Some(h) => h
+    None => at
+  }
+  let from = later(window_from, horizon)
+  let expected = expected_slots(horizon, e.interval, from, slot_to)
+  standing(e.contract, e.target, e.missing_data, e.minimum_completeness, e.sum_good, e.sum_executed, expected, from, at, ratio(at - from, window_length))
+}
+
+// The period boundary at `at` of a calendar window: publish the closed
+// period, fire or withhold the consequence, forget the period's counts and
+// arm the next boundary.
+fn close_period(e: Evaluator, at: Duration) -> Step = match e.window {
+  Rolling(_) => unchanged(Evaluate(e))
+  CalendarMonth(zone) => {
+    let boundary = e.epoch + at
+    let period_from = match month_start(zone, boundary - 1 ns) {
+      Some(start) => start - e.epoch
+      None => at
+    }
+    let horizon = match e.horizon {
+      Some(h) => h
+      None => at
+    }
+    let from = later(period_from, horizon)
+    let expected = expected_slots(horizon, e.interval, from, at - 1 ns)
+    let closed = standing(e.contract, e.target, e.missing_data, e.minimum_completeness, e.sum_good, e.sum_executed, expected, from, at, ratio(at - from, at - period_from))
+    var next = e
+    var effects = [Publish(closed)]
+    match e.consequence {
+      Some(name) => match closed.status {
+        Violated => if !contains(e.fired, period_from) {
+          var fired = e.fired
+          fired.push(period_from)
+          next.fired = fired
+          effects.push(Fire(Fired {
+            contract = e.contract
+            consequence = name
+            period_from
+            period_to = at
+            standing_seq = 0
+          }))
+        }
+        Status.InsufficientEvidence => effects.push(Note("consequence withheld: insufficient evidence"))
+        Compliant => {}
+      }
+      None => {}
+    }
+    next.buckets = []
+    next.current = None
+    next.sum_good = 0
+    next.sum_executed = 0
+    next.period_timer = None
+    let armed = arm_period(next, at)
+    effects.append(armed.effects)
+    Step { machine = armed.machine, effects }
+  }
+}
+
+fn contains(items: List<Duration>, item: Duration) -> Bool {
+  for candidate in items {
+    if candidate == item {
+      return true
+    }
+  }
+  false
+}
+
+fn ceil_div(a: Int, b: Int) -> Int = (a + b - 1) / b
+
+// The slots `horizon + k * interval` with `from <= slot <= to`: what the
+// probe was expected to execute in that span (11.7, O40). An interval of
+// zero (unknown producer) expects nothing.
+fn expected_slots(horizon: Duration, interval: Duration, from: Duration, to: Duration) -> Int {
+  if interval <= 0 ms || to < from || to < horizon {
+    return 0
+  }
+  let first = if from <= horizon { 0 } else { ceil_div((from - horizon).to_ns(), interval.to_ns()) }
+  let last = (to - horizon).to_ns() / interval.to_ns()
+  if last < first { 0 } else { last - first + 1 }
+}
+
+// `part` of `whole` as a Ratio, clamped to [0 %, 100 %]; an empty whole is
+// fully covered by nothing.
+fn ratio(part: Duration, whole: Duration) -> Ratio {
+  if whole <= 0 ms || part <= 0 ms {
+    return 0%
+  }
+  if part >= whole {
+    return 100%
+  }
+  let whole_ms = whole.to_ms()
+  if whole_ms == 0 {
+    return 100%
+  }
+  (part.to_ms() * 1000000 / whole_ms) * 0.0001%
+}
+
+// The evaluation entry (16.10): the status of `good` of `executed`
+// attempts where `expected` were due, in this order: the missing slots
+// are filled by the `missing_data` rule (`counts_as_good`,
+// `counts_as_bad`); no executed attempt is `InsufficientEvidence`; so is
+// completeness under `minimum_completeness` when missing data is
+// insufficient evidence; then `meets` decides. `good` and `executed` in
+// the record are the filled counts the status rests on; `completeness` is
+// the executed share of the expected slots before filling. `expected` is
+// never below `executed`.
+fn standing(path: Text, target: Ratio, missing_data: MissingData, minimum_completeness: Ratio, good: Int, executed: Int, expected: Int, from: Duration, to: Duration, coverage: Ratio) -> Standing {
+  let due = if expected < executed { executed } else { expected }
+  let missing = due - executed
+  let completeness = if due == 0 { 0% } else { (executed * 1000000 / due) * 0.0001% }
+  let (filled_good, filled_executed) = match missing_data {
+    MissingData.InsufficientEvidence => (good, executed)
+    CountsAsGood => (good + missing, executed + missing)
+    CountsAsBad => (good, executed + missing)
+  }
+  let status = if filled_executed == 0 {
+    Status.InsufficientEvidence
+  } else if missing_data == MissingData.InsufficientEvidence && completeness < minimum_completeness {
+    Status.InsufficientEvidence
+  } else if meets(target, filled_good, filled_executed) {
+    Compliant
+  } else {
+    Violated
+  }
+  Standing {
+    contract = path
+    status
+    good = filled_good
+    executed = filled_executed
+    expected = due
+    completeness
+    from
+    to
+    coverage
+  }
+}
+
+// Rollout (16.12): `rollout <member>` builds the next generation, drains
+// the old process with SIGTERM, waits for its `released` line, starts the
+// new generation and awaits its readiness; the disruption is the interval
+// from `Released` to the new `Ready`. The old process retires when it
+// exits; at the deadline `on_deadline` applies to what remains. A failed
+// build aborts before the drain and the old process keeps serving. The
+// member's lifecycle events reach this machine too, so it knows the
+// serving pid while idle.
+fn roll(r: Rollout, event: Event) -> Step {
+  let at = event.at
+  match event.kind {
+    Started(pid, generation) => match r.state {
+      Starting | Retiring => if generation == r.generation {
+        var next = r
+        next.new_pid = Some(pid)
+        rolled(next, [])
+      } else {
+        unchanged(Roll(r))
+      }
+      _ => {
+        var next = r
+        next.old_pid = Some(pid)
+        next.generation = generation
+        rolled(next, [])
+      }
+    }
+    Ready(pid) => if r.state == Starting && r.new_pid == Some(pid) {
+      var next = r
+      var effects = []
+      match r.released_at {
+        Some(released) => effects.push(Note("disruption {(at - released).debug()}"))
+        None => {}
+      }
+      match r.old_pid {
+        Some(_) => { next.state = Retiring }
+        None => {
+          next.state = Done
+          next.old_pid = Some(pid)
+          next.new_pid = None
+          match r.deadline_timer {
+            Some(id) => {
+              effects.push(CancelTimer(id))
+              next.deadline_timer = None
+            }
+            None => {}
+          }
+        }
+      }
+      rolled(next, effects)
+    } else {
+      unchanged(Roll(r))
+    }
+    Exited(pid, _) => retired(r, pid)
+    Signalled(pid, _) => retired(r, pid)
+    Control(line) => if line == "rollout" {
+      match r.state {
+        Idle | Done | Aborted => {
+          var next = r
+          next.state = Building
+          next.released_at = None
+          next.new_pid = None
+          rolled(next, [Build(r.member)])
+        }
+        _ => rolled(r, [Note("rollout already in progress")])
+      }
+    } else if line == "stop" {
+      match r.deadline_timer {
+        Some(id) => {
+          var next = r
+          next.deadline_timer = None
+          rolled(next, [CancelTimer(id)])
+        }
+        None => unchanged(Roll(r))
+      }
+    } else {
+      unchanged(Roll(r))
+    }
+    Built(generation) => if r.state == Building {
+      var next = r
+      next.generation = generation
+      match r.old_pid {
+        Some(pid) => {
+          next.state = Draining
+          next.deadline_timer = Some(DEADLINE_TIMER)
+          rolled(next, [
+            Kill(r.member, pid, SIGTERM),
+            AwaitRelease(r.member),
+            SetTimer(DEADLINE_TIMER, at + r.policy.deadline)
+          ])
+        }
+        None => {
+          next.state = Starting
+          rolled(next, [Spawn(r.member, generation)])
+        }
+      }
+    } else {
+      unchanged(Roll(r))
+    }
+    BuildFailed(reason) => if r.state == Building {
+      var next = r
+      next.state = Aborted
+      rolled(next, [Note("rollout aborted: {reason}")])
+    } else {
+      unchanged(Roll(r))
+    }
+    Released => if r.state == Draining {
+      var next = r
+      next.state = Starting
+      next.released_at = Some(at)
+      rolled(next, [Spawn(r.member, r.generation)])
+    } else {
+      unchanged(Roll(r))
+    }
+    Timer(id) => if r.deadline_timer == Some(id) {
+      var next = r
+      next.deadline_timer = None
+      match r.old_pid {
+        Some(pid) => match on_deadline(r.policy.on_deadline) {
+          Some(DisconnectRemaining) => {
+            next.old_pid = None
+            if r.state == Retiring {
+              next.state = Done
+              next.old_pid = r.new_pid
+              next.new_pid = None
+            }
+            rolled(next, [Kill(r.member, pid, SIGKILL), Note("retired forced")])
+          }
+          None => rolled(next, [Note("unknown on_deadline {r.policy.on_deadline}: the old process keeps running")])
+        }
+        None => rolled(next, [])
+      }
+    } else {
+      unchanged(Roll(r))
+    }
+    _ => unchanged(Roll(r))
+  }
+}
+
+// The old process of a rollout ended: `retired`, and the rollout is done
+// once the new one is ready. Any other pid is not the rollout's concern.
+fn retired(r: Rollout, pid: Int) -> Step = match r.state {
+  Draining | Starting | Retiring => if r.old_pid == Some(pid) {
+    var next = r
+    next.old_pid = None
+    var effects = [Note("retired")]
+    if r.state == Retiring {
+      next.state = Done
+      next.old_pid = r.new_pid
+      next.new_pid = None
+      match r.deadline_timer {
+        Some(id) => {
+          effects.push(CancelTimer(id))
+          next.deadline_timer = None
+        }
+        None => {}
+      }
+    }
+    rolled(next, effects)
+  } else if r.new_pid == Some(pid) {
+    var next = r
+    next.new_pid = None
+    rolled(next, [])
+  } else {
+    unchanged(Roll(r))
+  }
+  _ => if r.old_pid == Some(pid) {
+    var next = r
+    next.old_pid = None
+    rolled(next, [])
+  } else {
+    unchanged(Roll(r))
+  }
+}
+
+// Tests: synthetic event lists with chosen `at` values, no clock (16.4).
+
+test fn at(ms: Int, kind: EventKind) -> Event = Event { at = ms * 1 ms, kind }
+
+test fn server() -> Supervisor = Supervisor {
+  id = "T.server.supervisor"
+  member = "T.server"
+  restart = Restart { maximum_attempts = 10, interval = 5 minutes }
+}
+
+test fn probe() -> ProbeScheduler = ProbeScheduler {
+  id = "T.probe.scheduler"
+  member = "T.probe"
+  target = "T.server"
+  signal = "T.probe.attempts"
+  interval = 10 seconds
+  timeout = 2 seconds
+}
+
+test fn reachable() -> Evaluator = Evaluator {
+  id = "T.reachable.evaluator"
+  contract = "T.reachable"
+  signal = "T.probe.attempts"
+  interval = 10 seconds
+  good = "prompt_received_before_timeout"
+  target = 99.9%
+  window = Rolling(30 days)
+  missing_data = MissingData.InsufficientEvidence
+  minimum_completeness = 90%
+}
+
+test fn sla() -> Evaluator = Evaluator {
+  id = "T.customerAccess.evaluator"
+  contract = "T.customerAccess"
+  signal = "T.probe.attempts"
+  interval = 10 seconds
+  good = "prompt_received_before_timeout"
+  target = 99.5%
+  window = CalendarMonth("Europe/Berlin")
+  missing_data = MissingData.InsufficientEvidence
+  minimum_completeness = 90%
+  consequence = Some("access_commitment_breached")
+}
+
+test fn good(latency: Duration) -> ProbeAttempt = ProbeAttempt { received = true, latency }
+
+test fn bad() -> ProbeAttempt = ProbeAttempt { received = false, latency = 2 seconds }
+
+// Step `machine` through `events`, collecting every effect.
+test fn run(machine: Machine, events: List<Event>) -> (Machine, List<Effect>) {
+  var current = machine
+  var effects = []
+  for event in events {
+    let result = step(current, event)
+    current = result.machine
+    effects.append(result.effects)
+  }
+  (current, effects)
+}
+
+test fn supervisor_of(machine: Machine) -> Supervisor = match machine {
+  Supervise(s) => s
+  _ => server()
+}
+
+test fn scheduler_of(machine: Machine) -> ProbeScheduler = match machine {
+  Schedule(p) => p
+  _ => probe()
+}
+
+test fn evaluator_of(machine: Machine) -> Evaluator = match machine {
+  Evaluate(e) => e
+  _ => reachable()
+}
+
+test fn standings(effects: List<Effect>) -> List<Standing> {
+  var out = []
+  for effect in effects {
+    match effect {
+      Publish(s) => out.push(s)
+      _ => {}
+    }
+  }
+  out
+}
+
+test fn fired(effects: List<Effect>) -> List<Fired> {
+  var out = []
+  for effect in effects {
+    match effect {
+      Fire(f) => out.push(f)
+      _ => {}
+    }
+  }
+  out
+}
+
+test fn notes(effects: List<Effect>) -> List<Text> {
+  var out = []
+  for effect in effects {
+    match effect {
+      Note(text) => out.push(text)
+      _ => {}
+    }
+  }
+  out
+}
+
+test "a supervisor spawns at start, arms readiness at started and runs at ready" {
+  let (m1, e1) = run(Supervise(server()), [at(0, Start(1767225600 seconds))])
+  assert e1 == [Spawn("T.server", 1)]
+  assert supervisor_of(m1).state == Starting
+  let (m2, e2) = run(m1, [at(10, Started(42, 1))])
+  assert e2 == [SetTimer(READINESS_TIMER, 10010 ms)]
+  assert supervisor_of(m2).pid == Some(42)
+  let (m3, e3) = run(m2, [at(20, Ready(42))])
+  assert e3 == [CancelTimer(READINESS_TIMER)]
+  assert supervisor_of(m3).state == Running
+  assert supervisor_of(m3).timer == None
+  assert run(m3, [at(30, Ready(7)), at(31, Exited(7, 0)), at(32, Signalled(7, 9))]) == (m3, [])
+}
+
+test "an unrequested exit restarts with the policy's backoff" {
+  let (running, _) = run(Supervise(server()), [at(0, Start(0 ms)), at(0, Started(42, 1)), at(5, Ready(42))])
+  let (backoff, e1) = run(running, [at(1000, Signalled(42, 9))])
+  assert e1 == [Note("restart attempt 1 delay 100 ms"), SetTimer(BACKOFF_TIMER, 1100 ms)]
+  assert supervisor_of(backoff).state == Backoff
+  assert supervisor_of(backoff).attempt == 1
+  assert supervisor_of(backoff).pid == None
+  assert run(backoff, [at(1099, Timer(READINESS_TIMER))]).1 == []
+  let (starting, e2) = run(backoff, [at(1100, Timer(BACKOFF_TIMER))])
+  assert e2 == [Spawn("T.server", 1)]
+  assert supervisor_of(starting).state == Starting
+  let (running2, _) = run(starting, [at(1100, Started(43, 1)), at(1105, Ready(43))])
+  let (_, e3) = run(running2, [at(2000, Exited(43, 0))])
+  assert e3 == [Note("restart attempt 2 delay 200 ms"), SetTimer(BACKOFF_TIMER, 2200 ms)]
+}
+
+test "restarts exhausted inside the interval give up and the machine stays failed" {
+  var s = server()
+  s.restart = Restart { maximum_attempts = 2 }
+  let (running, _) = run(Supervise(s), [at(0, Start(0 ms)), at(0, Started(1, 1)), at(0, Ready(1))])
+  let (b1, _) = run(running, [at(1000, Exited(1, 1))])
+  let (r2, _) = run(b1, [at(1100, Timer(BACKOFF_TIMER)), at(1100, Started(2, 1)), at(1100, Ready(2))])
+  let (b2, e2) = run(r2, [at(2000, Exited(2, 1))])
+  assert e2 == [Note("restart attempt 2 delay 200 ms"), SetTimer(BACKOFF_TIMER, 2200 ms)]
+  let (r3, _) = run(b2, [at(2200, Timer(BACKOFF_TIMER)), at(2200, Started(3, 1)), at(2200, Ready(3))])
+  let (failed, e3) = run(r3, [at(3000, Exited(3, 1))])
+  assert e3 == [Note("gave_up")]
+  assert supervisor_of(failed).state == Failed
+  assert supervisor_of(failed).attempt == 3
+  assert run(failed, [at(4000, Timer(BACKOFF_TIMER)), at(4000, Started(9, 1)), at(5000, Control("stop"))]) == (failed, [])
+}
+
+test "failures outside the restart interval are forgotten" {
+  var s = server()
+  s.restart = Restart { maximum_attempts = 1, interval = 1 minute }
+  let (running, _) = run(Supervise(s), [at(0, Start(0 ms)), at(0, Started(1, 1)), at(0, Ready(1))])
+  let (b1, e1) = run(running, [at(1000, Exited(1, 1))])
+  assert e1 == [Note("restart attempt 1 delay 100 ms"), SetTimer(BACKOFF_TIMER, 1100 ms)]
+  let (r2, _) = run(b1, [at(1100, Timer(BACKOFF_TIMER)), at(1100, Started(2, 1)), at(1100, Ready(2))])
+  let (_, e2) = run(r2, [at(61001, Exited(2, 1))])
+  assert e2 == [Note("restart attempt 1 delay 100 ms"), SetTimer(BACKOFF_TIMER, 61101 ms)]
+  let (_, e3) = run(r2, [at(60000, Exited(2, 1))])
+  assert e3 == [Note("gave_up")]
+}
+
+test "no ready before the readiness timeout kills the process and counts a failure" {
+  let (starting, _) = run(Supervise(server()), [at(0, Start(0 ms)), at(0, Started(42, 1))])
+  let (backoff, e1) = run(starting, [at(10000, Timer(READINESS_TIMER))])
+  assert e1 == [Note("readiness timeout"), Kill("T.server", 42, SIGKILL), Note("restart attempt 1 delay 100 ms"), SetTimer(BACKOFF_TIMER, 10100 ms)]
+  assert supervisor_of(backoff).state == Backoff
+  assert supervisor_of(backoff).kill_requested
+  let (cleared, e2) = run(backoff, [at(10001, Signalled(42, 9))])
+  assert e2 == []
+  assert supervisor_of(cleared).pid == None
+  assert !supervisor_of(cleared).kill_requested
+  assert supervisor_of(cleared).state == Backoff
+  var short = server()
+  short.restart = Restart { readiness_timeout = 500 ms }
+  assert run(Supervise(short), [at(0, Start(0 ms)), at(7, Started(1, 1))]).1 == [Spawn("T.server", 1), SetTimer(READINESS_TIMER, 507 ms)]
+}
+
+test "stop drains the process and its exit is no failure" {
+  let (running, _) = run(Supervise(server()), [at(0, Start(0 ms)), at(0, Started(42, 1)), at(0, Ready(42))])
+  let (draining, e1) = run(running, [at(500, Control("stop"))])
+  assert e1 == [Kill("T.server", 42, SIGTERM)]
+  assert supervisor_of(draining).state == Draining
+  let (stopped, e2) = run(draining, [at(600, Exited(42, 0))])
+  assert e2 == []
+  assert supervisor_of(stopped).state == Stopped
+  assert supervisor_of(stopped).pid == None
+  let (backoff, _) = run(running, [at(500, Exited(42, 3))])
+  let (stopped2, e3) = run(backoff, [at(550, Control("stop"))])
+  assert e3 == [CancelTimer(BACKOFF_TIMER)]
+  assert supervisor_of(stopped2).state == Stopped
+  let (starting, _) = run(Supervise(server()), [at(0, Start(0 ms)), at(0, Started(42, 1))])
+  assert run(starting, [at(1, Control("stop"))]).1 == [CancelTimer(READINESS_TIMER), Kill("T.server", 42, SIGTERM)]
+  assert run(running, [at(1, Control("status"))]) == (running, [])
+}
+
+test "a failed spawn is a failure" {
+  let (starting, _) = run(Supervise(server()), [at(0, Start(0 ms))])
+  let (_, e) = run(starting, [at(1, SpawnFailed("no such file"))])
+  assert e == [Note("restart attempt 1 delay 100 ms"), SetTimer(BACKOFF_TIMER, 101 ms)]
+}
+
+test "a new generation started by a rollout is adopted and the old exit is ignored" {
+  let (running, _) = run(Supervise(server()), [at(0, Start(0 ms)), at(0, Started(42, 1)), at(0, Ready(42))])
+  let (adopted, e1) = run(running, [at(1000, Started(50, 2))])
+  assert e1 == [SetTimer(READINESS_TIMER, 11000 ms)]
+  assert supervisor_of(adopted).pid == Some(50)
+  assert supervisor_of(adopted).generation == 2
+  assert supervisor_of(adopted).state == Starting
+  let (running2, e2) = run(adopted, [at(1010, Ready(50)), at(5000, Exited(42, 0))])
+  assert e2 == [CancelTimer(READINESS_TIMER)]
+  assert supervisor_of(running2).state == Running
+  let (_, e3) = run(running2, [at(6000, Exited(50, 1)), at(6100, Timer(BACKOFF_TIMER))])
+  assert e3 == [Note("restart attempt 1 delay 100 ms"), SetTimer(BACKOFF_TIMER, 6100 ms), Spawn("T.server", 2)]
+}
+
+test "a member without a listener is ready at started" {
+  var s = server()
+  s.has_listener = false
+  let (running, e) = run(Supervise(s), [at(0, Start(0 ms)), at(0, Started(42, 1))])
+  assert e == [Spawn("T.server", 1)]
+  assert supervisor_of(running).state == Running
+}
+
+test "a supervisor with a rollout policy brings the member's rollout machine" {
+  var s = server()
+  assert companions(Supervise(s)) == []
+  s.rollout = Some(DrainRollout { deadline = 30 seconds })
+  assert companions(Supervise(s)) == [Roll(Rollout { id = "T.server.rollout", member = "T.server", policy = DrainRollout { deadline = 30 seconds } })]
+  assert companions(Schedule(probe())) == []
+  assert companions(Evaluate(reachable())) == []
+}
+
+test "slots open at the target's first ready and every interval after" {
+  let (idle, e0) = run(Schedule(probe()), [at(0, Start(0 ms)), at(0, Started(42, 1))])
+  assert e0 == []
+  let (first, e1) = run(idle, [at(1000, Ready(42))])
+  assert e1 == [Attempt("T.probe", 1), SetTimer(1, 3000 ms), SetTimer(SLOT_TIMER, 11000 ms)]
+  assert scheduler_of(first).in_flight == Some(1)
+  assert scheduler_of(first).slot == Some(1 second)
+  let (done, e2) = run(first, [at(1000, AttemptDone(1, good(3 ms)))])
+  assert e2 == [CancelTimer(1), Emit("T.probe.attempts", good(3 ms))]
+  assert scheduler_of(done).in_flight == None
+  let (second, e3) = run(done, [at(5000, Ready(43)), at(11000, Timer(SLOT_TIMER))])
+  assert e3 == [Attempt("T.probe", 2), SetTimer(2, 13000 ms), SetTimer(SLOT_TIMER, 21000 ms)]
+  assert scheduler_of(second).next_id == 3
+}
+
+test "the deadline aborts the attempt and emits a bad attempt with the timeout as latency" {
+  let (first, _) = run(Schedule(probe()), [at(1000, Ready(42))])
+  let (timed_out, e1) = run(first, [at(3000, Timer(1))])
+  assert e1 == [Abort("T.probe", 1), Note("probe timeout"), Emit("T.probe.attempts", bad())]
+  assert scheduler_of(timed_out).in_flight == None
+  let (_, e2) = run(timed_out, [at(3500, AttemptDone(1, good(2500 ms)))])
+  assert e2 == [Note("late attempt 1 ignored")]
+  assert run(timed_out, [at(3600, Timer(1))]).1 == []
+}
+
+test "a failed attempt is missing evidence, not a bad attempt" {
+  let (first, _) = run(Schedule(probe()), [at(1000, Ready(42))])
+  let (_, e) = run(first, [at(1001, AttemptFailed(1, "exit status 1"))])
+  assert e == [CancelTimer(1), Note("missing")]
+  assert run(first, [at(1001, AttemptFailed(7, "exit status 1"))]).1 == [Note("late attempt 7 ignored")]
+}
+
+test "start forgets the schedule until the target is ready again" {
+  let (first, _) = run(Schedule(probe()), [at(1000, Ready(42))])
+  let (reset, e1) = run(first, [at(0, Start(0 ms))])
+  assert e1 == []
+  assert !scheduler_of(reset).target_ready
+  assert scheduler_of(reset).in_flight == None
+  let (_, e2) = run(reset, [at(100, Ready(44))])
+  assert e2 == [Attempt("T.probe", 2), SetTimer(2, 2100 ms), SetTimer(SLOT_TIMER, 10100 ms)]
+}
+
+// Design section 4.1: "Zero traffic does not automatically prove
+// compliance." (16.0 item 4, O32)
+test "zero executed attempts are insufficient evidence, never compliant" {
+  let none = standing("T.reachable", 99.9%, MissingData.InsufficientEvidence, 90%, 0, 0, 0, 0 ms, 0 ms, 0%)
+  assert none.status == Status.InsufficientEvidence
+  assert none.good == 0 && none.executed == 0 && none.expected == 0
+  assert none.completeness == 0%
+  assert standing("T.reachable", 0%, MissingData.InsufficientEvidence, 0%, 0, 0, 0, 0 ms, 0 ms, 0%).status == Status.InsufficientEvidence
+  assert standing("T.reachable", 99.9%, MissingData.InsufficientEvidence, 90%, 0, 0, 5, 0 ms, 50 seconds, 100%).status == Status.InsufficientEvidence
+  assert standing("T.reachable", 99.9%, CountsAsBad, 90%, 0, 0, 5, 0 ms, 50 seconds, 100%).status == Violated
+  assert standing("T.reachable", 99.9%, CountsAsGood, 90%, 0, 0, 5, 0 ms, 50 seconds, 100%).status == Compliant
+  let (_, effects) = run(Evaluate(reachable()), [at(0, Start(0 ms))])
+  assert standings(effects) == []
+}
+
+test "a missing attempt is missing evidence: completeness under the minimum is insufficient" {
+  let half = standing("T.reachable", 99.9%, MissingData.InsufficientEvidence, 90%, 1, 1, 2, 0 ms, 10 seconds, 100%)
+  assert half.status == Status.InsufficientEvidence
+  assert half.completeness == 50%
+  assert half.good == 1 && half.executed == 1 && half.expected == 2
+  let nine = standing("T.reachable", 99.9%, MissingData.InsufficientEvidence, 90%, 9, 9, 10, 0 ms, 90 seconds, 100%)
+  assert nine.status == Compliant && nine.completeness == 90%
+  let eight = standing("T.reachable", 99.9%, MissingData.InsufficientEvidence, 90%, 8, 8, 10, 0 ms, 90 seconds, 100%)
+  assert eight.status == Status.InsufficientEvidence && eight.completeness == 80%
+  let counted_bad = standing("T.reachable", 99.9%, CountsAsBad, 90%, 8, 8, 10, 0 ms, 90 seconds, 100%)
+  assert counted_bad.status == Violated && counted_bad.good == 8 && counted_bad.executed == 10 && counted_bad.completeness == 80%
+  let counted_good = standing("T.reachable", 99.9%, CountsAsGood, 90%, 8, 8, 10, 0 ms, 90 seconds, 100%)
+  assert counted_good.status == Compliant && counted_good.good == 10 && counted_good.executed == 10
+  assert standing("T.reachable", 99.9%, MissingData.InsufficientEvidence, 90%, 3, 3, 1, 0 ms, 0 ms, 0%).expected == 3
+}
+
+test "a violated share is violated whatever its coverage" {
+  let s = standing("T.reachable", 99.9%, MissingData.InsufficientEvidence, 90%, 1, 2, 2, 0 ms, 12 seconds, 0.0004%)
+  assert s.status == Violated
+  assert s.completeness == 100% && s.coverage == 0.0004%
+  assert s.calculation == "ignite-sli/0.1" && s.version == 0
+}
+
+test "expected slots are counted from the horizon within the span" {
+  assert expected_slots(0 ms, 10 seconds, 0 ms, 5 seconds) == 1
+  assert expected_slots(0 ms, 10 seconds, 0 ms, 15 seconds) == 2
+  assert expected_slots(0 ms, 10 seconds, 10 seconds, 15 seconds) == 1
+  assert expected_slots(0 ms, 10 seconds, 11 seconds, 15 seconds) == 0
+  assert expected_slots(3 seconds, 10 seconds, 0 ms, 2 seconds) == 0
+  assert expected_slots(0 ms, 0 ms, 0 ms, 1 hour) == 0
+  assert expected_slots(0 ms, 10 seconds, 600 seconds, 600 seconds - 1 ns) == 0
+  assert expected_slots(0 ms, 10 seconds, 0 ms, 600 seconds - 1 ns) == 60
+  assert bucket_width(30 days, 10 seconds) == 259200 ms
+  assert bucket_width(1 hour, 10 seconds) == 10 seconds
+  assert bucket_width(1 hour, 0 ms) == 360 ms
+  assert ratio(12 seconds, 30 days).ppm() == 4
+  assert ratio(1 hour, 1 hour) == 100%
+  assert ratio(2 hours, 1 hour) == 100%
+  assert ratio(0 ms, 1 hour) == 0%
+  assert ratio(1 hour, 0 ms) == 0%
+}
+
+test "a probe timeout violates reachability over the rolling window" {
+  let (first, e1) = run(Evaluate(reachable()), [at(0, Start(0 ms)), at(0, Emitted("T.probe.attempts", good(3 ms)))])
+  assert standings(e1) == [Standing { contract = "T.reachable", status = Compliant, good = 1, executed = 1, expected = 1, completeness = 100%, from = 0 ms, to = 0 ms, coverage = 0% }]
+  let (second, e2) = run(first, [at(12000, Emitted("T.probe.attempts", bad()))])
+  let violated = standings(e2).at(0)
+  assert violated.status == Violated
+  assert violated.good == 1 && violated.executed == 2 && violated.expected == 2
+  assert violated.completeness == 100%
+  assert violated.from == 0 ms && violated.to == 12 seconds
+  assert violated.coverage.ppm() == 4
+  assert evaluator_of(second).horizon == Some(0 ms)
+  assert run(second, [at(13000, Emitted("T.other", good(1 ms)))]) == (second, [])
+}
+
+test "the rolling window forgets buckets that left it" {
+  var e = reachable()
+  e.window = Rolling(1 hour)
+  e.missing_data = CountsAsGood
+  let (m1, e1) = run(Evaluate(e), [at(2000, Emitted("T.probe.attempts", bad()))])
+  let s1 = standings(e1).at(0)
+  assert s1.status == Violated && s1.good == 0 && s1.executed == 1 && s1.expected == 1
+  assert evaluator_of(m1).horizon == Some(0 ms)
+  let (m2, e2) = run(m1, [at(3600000, Emitted("T.probe.attempts", good(1 ms)))])
+  let s2 = standings(e2).at(0)
+  assert s2.expected == 361 && s2.executed == 361 && s2.good == 360
+  assert s2.status == Violated
+  assert s2.completeness.ppm() == 5540
+  assert s2.coverage == 100%
+  assert evaluator_of(m2).buckets.len() == 1
+  let (m3, e3) = run(m2, [at(3610000, Emitted("T.probe.attempts", good(1 ms)))])
+  let s3 = standings(e3).at(0)
+  assert evaluator_of(m3).buckets.len() == 1
+  assert evaluator_of(m3).sum_executed == 2 && evaluator_of(m3).sum_good == 2
+  assert s3.from == 10 seconds && s3.expected == 361 && s3.good == 361 && s3.status == Compliant
+}
+
+test "a calendar period closes at the zone's month boundary and fires its consequence once" {
+  let epoch = 1793487000 seconds
+  let (armed, e0) = run(Evaluate(sla()), [at(0, Start(epoch))])
+  assert e0 == [SetTimer(PERIOD_TIMER, 10 minutes)]
+  assert evaluator_of(armed).epoch == epoch
+  let (observed, e1) = run(armed, [at(0, Emitted("T.probe.attempts", good(2 ms))), at(12000, Emitted("T.probe.attempts", bad()))])
+  let open = standings(e1).at(1)
+  assert open.status == Violated && open.from == 0 ms && open.to == 12 seconds
+  assert open.coverage.ppm() == 4
+  var events = []
+  var k = 2
+  while k < 60 {
+    events.push(at(k * 10000, Emitted("T.probe.attempts", good(1 ms))))
+    k = k + 1
+  }
+  let (observed2, _) = run(observed, events)
+  let (closed, e2) = run(observed2, [at(600000, Timer(PERIOD_TIMER))])
+  let period = standings(e2).at(0)
+  assert period.status == Violated && period.good == 59 && period.executed == 60 && period.expected == 60
+  assert period.from == 0 ms && period.to == 10 minutes
+  assert period.coverage.ppm() == 223
+  let period_from = 1790805600 seconds - epoch
+  assert fired(e2) == [Fired { contract = "T.customerAccess", consequence = "access_commitment_breached", period_from, period_to = 10 minutes, standing_seq = 0 }]
+  assert e2.at(e2.len() - 1) == SetTimer(PERIOD_TIMER, 1796079600 seconds - epoch)
+  assert evaluator_of(closed).fired == [period_from]
+  assert evaluator_of(closed).sum_executed == 0 && evaluator_of(closed).current == None
+  var again = evaluator_of(observed2)
+  again.fired = [period_from]
+  let (_, e3) = run(Evaluate(again), [at(600000, Timer(PERIOD_TIMER))])
+  assert fired(e3) == [] && standings(e3).at(0).status == Violated
+  let (_, e4) = run(closed, [at(2592600000, Timer(PERIOD_TIMER))])
+  assert standings(e4).at(0).status == Status.InsufficientEvidence
+  assert standings(e4).at(0).from == 10 minutes
+  assert notes(e4) == ["consequence withheld: insufficient evidence"]
+  assert fired(e4) == []
+  assert e4.at(e4.len() - 1) == SetTimer(PERIOD_TIMER, 1798758000 seconds - epoch)
+}
+
+test "a compliant period fires nothing and a contract without a consequence notes nothing" {
+  let epoch = 1793487000 seconds
+  var events = [at(0, Start(epoch))]
+  var k = 0
+  while k < 60 {
+    events.push(at(k * 10000, Emitted("T.probe.attempts", good(1 ms))))
+    k = k + 1
+  }
+  events.push(at(600000, Timer(PERIOD_TIMER)))
+  let (_, effects) = run(Evaluate(sla()), events)
+  let closing = standings(effects).at(60)
+  assert closing.status == Compliant && closing.good == 60 && closing.executed == 60 && closing.completeness == 100%
+  assert fired(effects) == [] && notes(effects) == []
+  var plain = sla()
+  plain.consequence = None
+  let (_, silent) = run(Evaluate(plain), [at(0, Start(epoch)), at(600000, Timer(PERIOD_TIMER))])
+  assert standings(silent).at(0).status == Status.InsufficientEvidence
+  assert notes(silent) == [] && fired(silent) == []
+}
+
+test "period boundaries follow the zone through months with a summer time change" {
+  let march_epoch = 1772319600 seconds
+  let (armed, e0) = run(Evaluate(sla()), [at(0, Start(march_epoch))])
+  assert e0 == [SetTimer(PERIOD_TIMER, 31 days - 1 hour)]
+  let (_, e1) = run(armed, [at(0, Emitted("T.probe.attempts", good(1 ms))), at(1337400000, Emitted("T.probe.attempts", good(1 ms)))])
+  assert standings(e1).at(1).coverage == 50%
+  let (_, e2) = run(Evaluate(sla()), [at(0, Start(1790805600 seconds))])
+  assert e2 == [SetTimer(PERIOD_TIMER, 31 days + 1 hour)]
+  var utc = sla()
+  utc.window = CalendarMonth("UTC")
+  let (_, e3) = run(Evaluate(utc), [at(0, Start(1790812800 seconds))])
+  assert e3 == [SetTimer(PERIOD_TIMER, 31 days)]
+  var unknown = sla()
+  unknown.window = CalendarMonth("Mars/Olympus")
+  assert run(Evaluate(unknown), [at(0, Start(0 ms))]).1 == [Note("unknown time zone Mars/Olympus: no period boundary")]
+}
+
+// A7 (16.10): a 30-day rolling window at five-second slots holds 10,000
+// emissions in 193 buckets of 259.2 s; the evaluator-side timing is P3's
+// test over `a7_machine` and `a7_event` of the trace fixture.
+test "ten thousand emissions into a thirty-day window at five-second slots" {
+  var e = reachable()
+  e.interval = 5 seconds
+  var machine = Evaluate(e)
+  var i = 0
+  var published = 0
+  while i < 10000 {
+    let result = step(machine, at(i * 5000, Emitted("T.probe.attempts", good(1 ms))))
+    machine = result.machine
+    published = published + standings(result.effects).len()
+    i = i + 1
+  }
+  let final = evaluator_of(machine)
+  assert published == 10000
+  assert final.sum_executed == 10000 && final.sum_good == 10000
+  assert final.buckets.len() == 192
+  let last = standings(step(machine, at(50000000, Emitted("T.probe.attempts", good(1 ms)))).effects).at(0)
+  assert last.status == Compliant && last.executed == 10001 && last.expected == 10001 && last.completeness == 100%
+  assert last.coverage.ppm() == 19290
+}
+test fn rollout() -> Machine = Roll(Rollout { id = "T.server.rollout", member = "T.server", policy = DrainRollout { deadline = 30 seconds } })
+
+test fn rollout_of(machine: Machine) -> Rollout = match machine {
+  Roll(r) => r
+  _ => Rollout { id = "", member = "", policy = DrainRollout {} }
+}
+
+test "a rollout builds, drains the old generation, starts the new one and retires the old" {
+  let (idle, e0) = run(rollout(), [at(0, Start(0 ms)), at(0, Started(42, 1)), at(5, Ready(42))])
+  assert e0 == []
+  assert rollout_of(idle).old_pid == Some(42) && rollout_of(idle).state == Idle
+  let (building, e1) = run(idle, [at(1000, Control("rollout"))])
+  assert e1 == [Build("T.server")]
+  assert rollout_of(building).state == Building
+  assert run(building, [at(1001, Control("rollout"))]).1 == [Note("rollout already in progress")]
+  let (draining, e2) = run(building, [at(1500, Built(2))])
+  assert e2 == [Kill("T.server", 42, SIGTERM), AwaitRelease("T.server"), SetTimer(DEADLINE_TIMER, 31500 ms)]
+  assert rollout_of(draining).state == Draining && rollout_of(draining).generation == 2
+  let (starting, e3) = run(draining, [at(1600, Released)])
+  assert e3 == [Spawn("T.server", 2)]
+  assert rollout_of(starting).state == Starting && rollout_of(starting).released_at == Some(1600 ms)
+  let (retiring, e4) = run(starting, [at(1650, Started(50, 2)), at(1700, Ready(50))])
+  assert e4 == [Note("disruption 100 ms")]
+  assert rollout_of(retiring).state == Retiring && rollout_of(retiring).new_pid == Some(50) && rollout_of(retiring).old_pid == Some(42)
+  let (done, e5) = run(retiring, [at(5000, Exited(42, 0))])
+  assert e5 == [Note("retired"), CancelTimer(DEADLINE_TIMER)]
+  assert rollout_of(done).state == Done && rollout_of(done).old_pid == Some(50) && rollout_of(done).new_pid == None
+  assert rollout_of(done).deadline_timer == None
+  assert run(done, [at(6000, Timer(DEADLINE_TIMER)), at(6001, Exited(42, 0))]) == (done, [])
+  let (again, e6) = run(done, [at(7000, Control("rollout")), at(7100, Built(3))])
+  assert e6 == [Build("T.server"), Kill("T.server", 50, SIGTERM), AwaitRelease("T.server"), SetTimer(DEADLINE_TIMER, 37100 ms)]
+  assert rollout_of(again).generation == 3
+}
+
+test "an old process still running at the deadline is disconnected and retired forced" {
+  let (retiring, _) = run(rollout(), [at(0, Started(42, 1)), at(1000, Control("rollout")), at(1500, Built(2)), at(1600, Released), at(1650, Started(50, 2)), at(1700, Ready(50))])
+  let (done, e1) = run(retiring, [at(31500, Timer(DEADLINE_TIMER))])
+  assert e1 == [Kill("T.server", 42, SIGKILL), Note("retired forced")]
+  assert rollout_of(done).state == Done && rollout_of(done).old_pid == Some(50) && rollout_of(done).new_pid == None
+  assert run(done, [at(31501, Signalled(42, 9))]) == (done, [])
+  let (draining, _) = run(rollout(), [at(0, Started(42, 1)), at(1000, Control("rollout")), at(1500, Built(2))])
+  let (still_draining, e2) = run(draining, [at(31500, Timer(DEADLINE_TIMER))])
+  assert e2 == [Kill("T.server", 42, SIGKILL), Note("retired forced")]
+  assert rollout_of(still_draining).state == Draining && rollout_of(still_draining).old_pid == None
+  assert run(still_draining, [at(31600, Released)]).1 == [Spawn("T.server", 2)]
+}
+
+test "a failed build aborts the rollout and the old process keeps serving" {
+  let (building, _) = run(rollout(), [at(0, Started(42, 1)), at(1000, Control("rollout"))])
+  let (aborted, e1) = run(building, [at(1500, BuildFailed("rustc exited 1"))])
+  assert e1 == [Note("rollout aborted: rustc exited 1")]
+  assert rollout_of(aborted).state == Aborted && rollout_of(aborted).old_pid == Some(42)
+  assert run(aborted, [at(1600, Released), at(1700, Timer(DEADLINE_TIMER))]) == (aborted, [])
+  let (gone, e2) = run(aborted, [at(2000, Exited(42, 1))])
+  assert e2 == [] && rollout_of(gone).old_pid == None
+  assert run(aborted, [at(3000, Control("rollout"))]).1 == [Build("T.server")]
+}
+
+test "stop cancels a rollout's deadline and a rollout without a known process only starts" {
+  let (draining, _) = run(rollout(), [at(0, Started(42, 1)), at(1000, Control("rollout")), at(1500, Built(2))])
+  let (stopped, e1) = run(draining, [at(2000, Control("stop"))])
+  assert e1 == [CancelTimer(DEADLINE_TIMER)]
+  assert rollout_of(stopped).deadline_timer == None
+  assert run(stopped, [at(2001, Control("stop"))]) == (stopped, [])
+  let (fresh, e2) = run(rollout(), [at(0, Control("rollout")), at(100, Built(1))])
+  assert e2 == [Build("T.server"), Spawn("T.server", 1)]
+  assert rollout_of(fresh).state == Starting
+  let (done, e3) = run(fresh, [at(150, Started(7, 1)), at(200, Ready(7))])
+  assert e3 == []
+  assert rollout_of(done).state == Done && rollout_of(done).old_pid == Some(7)
+}

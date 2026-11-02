@@ -1,30 +1,22 @@
 package std.probe
 
-import std.protocol.telnet.TelnetServer
+import std.sli.ProbeAttempt
+import std.protocol.telnet.{TelnetServer, await_prompt}
+import std.control.{Machine, ProbeScheduler}
+import std.net.Endpoint
+import std.io.IoError
 
 // Probes of a running system (design section 11.3). A probe is a component
-// without `main`: slice 10 checks its declaration and types its output
-// signal; a scheduler that runs it is slice 12.
-
-// One attempt of a prompt probe: whether the prompt arrived before the
-// probe's timeout, and how long it took.
-type ProbeAttempt {
-  received: Bool
-  latency: Duration
-}
-
-// The outcome a contract names in `good` for `attempt`:
-// `prompt_received_before_timeout` holds when the prompt arrived,
-// `prompt_received_within_threshold` when it arrived in at most
-// `threshold`. An unknown outcome name holds for no attempt.
-fn satisfies(attempt: ProbeAttempt, good: Text, threshold: Duration) -> Bool = match good {
-  "prompt_received_before_timeout" => attempt.received
-  "prompt_received_within_threshold" => attempt.received && attempt.latency <= threshold
-  _ => false
-}
+// with two entries for `ignite run` (`docs/slice.md` 16.8): `main` runs
+// one attempt as a short-lived process, and `machine` returns the
+// scheduler that dispatches one such process per slot. The sample it
+// emits, `ProbeAttempt`, and the outcome classification `satisfies` live
+// in `std.sli` (16.6).
 
 // Connect to a Telnet server every `interval`, wait up to `timeout` for
-// `expected_prompt`, and report each attempt on `attempts`.
+// `expected_prompt`, and report each attempt on `attempts`. `executable`
+// defaults to the component name (6.1); `ignite build` emits it like any
+// kind with `main` (O42).
 type TelnetPrompt {
   target: Ref<TelnetServer>
   interval: Duration = 10 seconds
@@ -32,28 +24,73 @@ type TelnetPrompt {
   expected_prompt: Text
   close_after_probe: Bool = true
   attempts: Signal<ProbeAttempt>
+  executable: Text
 }
+
+// One attempt (16.8): resolve the target through the run's `--ref`
+// binding, connect, read through the option negotiation until the prompt,
+// measure the latency from the start of the attempt, close if asked, and
+// print one line, the model encoding of the `ProbeAttempt` (15.4). A
+// refused or reset connection, a closed stream before the prompt and a
+// read past `timeout` are bad attempts (`received = false`). Exit 0 in
+// every case; the driver's deadline ends an attempt that hangs.
+fn TelnetPrompt.main(self: TelnetPrompt) -> Result<Unit, IoError> {
+  let started = Clock.monotonic()
+  let endpoint = Endpoint.of(self.target)?
+  let attempt = match TcpStream.connect(endpoint.address, endpoint.port) {
+    Err(_) => ProbeAttempt { received = false, latency = Clock.monotonic() - started }
+    Ok(stream) => {
+      stream.set_idle_timeout(self.timeout.to_ms())?
+      let received = match await_prompt(stream, self.expected_prompt) {
+        Ok(_) => true
+        Err(_) => false
+      }
+      let latency = Clock.monotonic() - started
+      if self.close_after_probe {
+        _ = stream.close()
+      }
+      ProbeAttempt { received, latency }
+    }
+  }
+  Stdout.write_all(encode_attempt(attempt).to_bytes())
+}
+
+// The scheduler of this probe (16.8): one attempt per `interval` from the
+// target's first readiness, each with a deadline of `timeout`.
+fn TelnetPrompt.machine(self: TelnetPrompt, id: Text) -> Machine = Machine.Schedule(ProbeScheduler {
+  id = "{id}.scheduler"
+  member = id
+  target = self.target.to_text()
+  signal = self.attempts.to_text()
+  interval = self.interval
+  timeout = self.timeout
+})
+
+// The declaration rules of a probe (E120): a prompt to wait for. The
+// timing rules (positive `interval` and `timeout`, `timeout < interval`)
+// are the compiler's E123.
+fn TelnetPrompt.validate(self: TelnetPrompt) -> List<Text> = if self.expected_prompt.is_empty() {
+  ["expected_prompt is empty: every connection would count as a received prompt"]
+} else {
+  []
+}
+
+// The model encoding (15.4) of an attempt, keys in byte order, one line:
+// what the driver decodes with the signal's element type.
+fn encode_attempt(attempt: ProbeAttempt) -> Text =
+  "{{\"fields\":{{\"latency\":{{\"ns\":{attempt.latency.to_ns()},\"type\":\"Duration\"}},\"received\":{attempt.received}}},\"type\":\"std.sli.ProbeAttempt\"}}\n"
 
 // Whether `text` starts with the probe's expected prompt.
 fn prompt_seen(expected_prompt: Text, text: Text) -> Bool = text.starts_with(expected_prompt)
-
-test "an attempt satisfies the outcomes it earned" {
-  let fast = ProbeAttempt { received = true, latency = 50 ms }
-  let slow = ProbeAttempt { received = true, latency = 900 ms }
-  let missed = ProbeAttempt { received = false, latency = 2 seconds }
-  assert satisfies(fast, "prompt_received_before_timeout", 200 ms)
-  assert satisfies(fast, "prompt_received_within_threshold", 200 ms)
-  assert satisfies(slow, "prompt_received_before_timeout", 200 ms)
-  assert !satisfies(slow, "prompt_received_within_threshold", 200 ms)
-  assert satisfies(slow, "prompt_received_within_threshold", 900 ms)
-  assert !satisfies(missed, "prompt_received_before_timeout", 200 ms)
-  assert !satisfies(missed, "prompt_received_within_threshold", 5 seconds)
-  assert !satisfies(fast, "unknown", 5 seconds)
-}
 
 test "the prompt is seen at the start of the server's text" {
   assert prompt_seen("terminal> ", "terminal> ")
   assert prompt_seen("terminal> ", "terminal> help")
   assert !prompt_seen("terminal> ", "terminal>")
   assert !prompt_seen("terminal> ", "  terminal> ")
+}
+
+test "an attempt is printed in the model encoding" {
+  assert encode_attempt(ProbeAttempt { received = true, latency = 12 ms }) == "{{\"fields\":{{\"latency\":{{\"ns\":12000000,\"type\":\"Duration\"}},\"received\":true}},\"type\":\"std.sli.ProbeAttempt\"}}\n"
+  assert encode_attempt(ProbeAttempt { received = false, latency = 2 seconds }) == "{{\"fields\":{{\"latency\":{{\"ns\":2000000000,\"type\":\"Duration\"}},\"received\":false}},\"type\":\"std.sli.ProbeAttempt\"}}\n"
 }

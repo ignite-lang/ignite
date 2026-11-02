@@ -1163,6 +1163,12 @@ impl<'p> Evaluator<'p> {
                 Ok((Value::bytes(t.as_bytes()), t.len() as u64 + 1))
             }
             (Builtin::TextToText, Value::Text(t)) => plain(Value::Text(t.clone())),
+            (Builtin::TextToText, Value::Reference(reference)) => {
+                plain(Value::Text(reference.text()))
+            }
+            (Builtin::TextToText, Value::Member { system, member }) => {
+                plain(Value::Text(format!("{system}.{member}")))
+            }
             (Builtin::IntToTextMethod, Value::Int(n)) => plain(Value::Text(n.to_string())),
             (Builtin::ByteToText, Value::Byte(b)) => plain(Value::Text(b.to_string())),
             (Builtin::BoolToText, Value::Bool(b)) => plain(Value::Text(b.to_string())),
@@ -1967,6 +1973,12 @@ impl<'p> Evaluator<'p> {
             (Some(Show::Builtin(Builtin::ByteToText)), Value::Byte(b)) => b.to_string(),
             (Some(Show::Builtin(Builtin::BoolToText)), Value::Bool(b)) => b.to_string(),
             (Some(Show::Builtin(Builtin::TextToText)), Value::Text(t)) => t.clone(),
+            (Some(Show::Builtin(Builtin::TextToText)), Value::Reference(reference)) => {
+                reference.text()
+            }
+            (Some(Show::Builtin(Builtin::TextToText)), Value::Member { system, member }) => {
+                format!("{system}.{member}")
+            }
             (Some(Show::Builtin(Builtin::BytesToText)), Value::List(items)) => {
                 String::from_utf8_lossy(&bytes_of(items)?).into_owned()
             }
@@ -2048,6 +2060,8 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::ProcessExit
             | Builtin::Log
             | Builtin::ModuleRecord
+            | Builtin::ClockMonotonic
+            | Builtin::EndpointOf
     )
 }
 

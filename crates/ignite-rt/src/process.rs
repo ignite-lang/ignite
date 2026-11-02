@@ -11,7 +11,7 @@ use std::sync::{Once, PoisonError, RwLock};
 use ignite_io::IoError;
 use nix::sys::signal::{SigHandler, Signal, signal};
 
-use crate::{IgniteIoError, IgniteList, bytes, get, put, status};
+use crate::{IgniteEndpoint, IgniteIoError, IgniteList, bytes, get, put, status};
 
 /// Exit status of a panic (`docs/llvm.md` section 4).
 const PANIC_EXIT_CODE: i32 = 101;
@@ -83,6 +83,7 @@ pub(crate) fn die(message: &str) -> ! {
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_init(argc: i32, argv: *const *const c_char) {
     store_args(decode_args(argc, argv));
+    ignite_io::drain();
     HOOKS.call_once(|| {
         // SAFETY: ignoring a signal installs no handler code.
         let _ = unsafe { signal(Signal::SIGPIPE, SigHandler::SigIgn) };
@@ -127,15 +128,47 @@ pub extern "C" fn ignite_rt_args_port(
     status(result.map(|port| port.unwrap_or(0)), out_port, err)
 }
 
+/// `i32 endpoint_of(Text* reference, Endpoint* out, IoError* err)`: the
+/// `--ref <path>=<address>:<port>` argument `init` stored whose path is
+/// `reference` (`docs/slice.md` 16.9, 16.13), as an `Endpoint` whose
+/// address is allocated in the task's arena. No such binding is the error
+/// `no binding for <path>` (exit code 1); a malformed `--ref` is an error
+/// with exit code 2 (`ignite_io::args::endpoint_from_args`).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_endpoint_of(
+    reference: *const IgniteList,
+    out: *mut IgniteEndpoint,
+    err: *mut IgniteIoError,
+) -> i32 {
+    let reference = String::from_utf8_lossy(bytes(reference)).into_owned();
+    let result = ignite_io::args::endpoint_from_args(args().into_iter(), &reference);
+    status(
+        result.map(|(address, port)| IgniteEndpoint {
+            address: IgniteList::from_bytes(address.as_bytes()),
+            port,
+        }),
+        out,
+        err,
+    )
+}
+
 /// `void exit(i32 code)`: `ignite_io::exit`: restore the terminal, flush
-/// standard output, exit.
+/// standard output, exit. Called by the generated main when `K.main`
+/// returns `Ok`; while the process drains (`docs/slice.md` 16.13) it
+/// waits for the live tasks first and exits 0, as `ignite_io::run` does.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_exit(code: i32) -> ! {
+    if ignite_io::draining() {
+        drained();
+    }
     ignite_io::exit(code)
 }
 
 /// `void fail(IoError* error)`: `error: <message>` to stderr, restore the
-/// terminal, exit with the error's exit code.
+/// terminal, exit with the error's exit code. Called by the generated main
+/// when `K.main` returns `Err`; while the process drains, an error other
+/// than `draining` (the refused `accept`) is printed, then the live tasks
+/// are waited for and the status is 0 (16.13).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
     let (message, code) = match get(error) {
@@ -143,10 +176,24 @@ pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
         Some(error) => (unsafe { error.message.as_bytes() }, error.exit_code),
         None => (&b""[..], 1),
     };
+    if ignite_io::draining() {
+        if message != ignite_io::DRAINING.as_bytes() {
+            let mut line = b"error: ".to_vec();
+            line.extend_from_slice(message);
+            stderr_line(&line);
+        }
+        drained();
+    }
     let mut line = b"error: ".to_vec();
     line.extend_from_slice(message);
     stderr_line(&line);
     ignite_io::exit(code)
+}
+
+/// The end of a drained process: wait for the live tasks, exit 0.
+fn drained() -> ! {
+    ignite_io::wait_for_tasks();
+    ignite_io::exit(0)
 }
 
 /// `void panic(Text* message)`: `panic: <message>` to stderr, terminal
@@ -221,6 +268,52 @@ mod tests {
             assert_eq!(code, 2, "{bad:?}");
             assert!(message.contains("--port"), "{message}");
         }
+    }
+
+    fn endpoint(args: &[&str], reference: &str) -> Result<(String, i64), (String, i32)> {
+        store_args(
+            std::iter::once("prog")
+                .chain(args.iter().copied())
+                .map(String::from)
+                .collect(),
+        );
+        let mut out = IgniteEndpoint {
+            address: IgniteList::from_bytes(b"untouched"),
+            port: -7,
+        };
+        let mut err = IgniteIoError {
+            message: IgniteList::from_bytes(b"untouched"),
+            exit_code: -1,
+        };
+        let text = IgniteList::from_bytes(reference.as_bytes());
+        let code = ignite_rt_endpoint_of(&text, &mut out, &mut err);
+        // SAFETY: both lists were written by the runtime in this task's arena.
+        let read = |list: &IgniteList| String::from_utf8(unsafe { list.as_bytes() }.to_vec());
+        if code == 0 {
+            Ok((read(&out.address).unwrap(), out.port))
+        } else {
+            assert_eq!(code, 1);
+            Err((read(&err.message).unwrap(), err.exit_code))
+        }
+    }
+
+    #[test]
+    fn endpoint_of_reads_the_ref_binding() {
+        assert_eq!(
+            endpoint(
+                &["--port", "0", "--ref", "Terminal.server=127.0.0.1:2323"],
+                "Terminal.server"
+            ),
+            Ok(("127.0.0.1".to_string(), 2323))
+        );
+        assert_eq!(
+            endpoint(&[], "Terminal.server"),
+            Err(("no binding for Terminal.server".to_string(), 1))
+        );
+        let (message, code) =
+            endpoint(&["--ref", "Terminal.server=x"], "Terminal.server").unwrap_err();
+        assert_eq!(code, 2);
+        assert!(message.starts_with("--ref"), "{message}");
     }
 
     #[test]

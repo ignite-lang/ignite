@@ -1,0 +1,13 @@
+package fixture_e123
+
+type Pinger {
+  interval: Duration = 10 seconds
+  timeout: Duration = 2 seconds
+  attempts: Signal<Int>
+}
+
+system S {
+  component slow: Pinger { interval = 1 second, timeout = 1 second }
+  component stopped: Pinger { interval = 0 ms, timeout = 0 ms }
+  component fine: Pinger {}
+}

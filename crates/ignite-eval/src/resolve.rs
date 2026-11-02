@@ -34,6 +34,39 @@ pub fn binding_fns(
     assembly: &AssemblyInfo,
     modules: &Modules<'_>,
 ) -> Option<(QualName, QualName)> {
+    let binding = binding_type(program, assembly)?;
+    let module = modules.get(&binding.module)?;
+    if !declares_free_fn(module.program, "admits", 2)
+        || !declares_free_fn(module.program, "includes", 1)
+    {
+        return None;
+    }
+    Some((
+        QualName::new(binding.module.clone(), "admits"),
+        QualName::new(binding.module.clone(), "includes"),
+    ))
+}
+
+/// The `entries` fn of `assembly`'s binding type (`docs/slice.md` 16.17,
+/// O18): `fn entries(binding: B) -> List<Text>`, the fns the hosted kind
+/// must declare for the binding to run it (`main`, `machine`). A binding
+/// with a non-empty list runs its member; E121, E122 and E129 rest on it.
+/// `None` when the module declares no such fn, and the three codes are
+/// not checked.
+pub fn entries_fn(
+    program: &TypedProgram,
+    assembly: &AssemblyInfo,
+    modules: &Modules<'_>,
+) -> Option<QualName> {
+    let binding = binding_type(program, assembly)?;
+    let module = modules.get(&binding.module)?;
+    declares_free_fn(module.program, "entries", 1)
+        .then(|| QualName::new(binding.module.clone(), "entries"))
+}
+
+/// The binding type `B` of an assembly kind with a field
+/// `bindings: Map<Ref, B>`.
+fn binding_type<'t>(program: &'t TypedProgram, assembly: &AssemblyInfo) -> Option<&'t QualName> {
     let kind = match &assembly.kind {
         Ty::Record(q) | Ty::GenericRecord(q, _) => q,
         _ => return None,
@@ -46,26 +79,45 @@ pub fn binding_fns(
     if !matches!(**key, Ty::Ref(_)) {
         return None;
     }
-    let binding = match &**binding {
-        Ty::Enum(q) | Ty::Record(q) | Ty::GenericEnum(q, _) | Ty::GenericRecord(q, _) => q,
-        _ => return None,
-    };
-    let module = modules.get(&binding.module)?;
-    let declares = |name: &str, arity: usize| {
-        module.program.decls.iter().any(|decl| match decl {
-            Decl::Fn(f) => {
-                f.name.name == name && f.owner.is_none() && !f.test_only && f.params.len() == arity
-            }
-            _ => false,
-        })
-    };
-    if !declares("admits", 2) || !declares("includes", 1) {
-        return None;
+    match &**binding {
+        Ty::Enum(q) | Ty::Record(q) | Ty::GenericEnum(q, _) | Ty::GenericRecord(q, _) => Some(q),
+        _ => None,
     }
-    Some((
-        QualName::new(binding.module.clone(), "admits"),
-        QualName::new(binding.module.clone(), "includes"),
-    ))
+}
+
+/// Whether `program` declares a free, non-test fn `name` with `arity`
+/// parameters.
+fn declares_free_fn(program: &ignite_syntax::ast::Program, name: &str, arity: usize) -> bool {
+    program.decls.iter().any(|decl| match decl {
+        Decl::Fn(f) => {
+            f.name.name == name && f.owner.is_none() && !f.test_only && f.params.len() == arity
+        }
+        _ => false,
+    })
+}
+
+/// The span of each key of `assembly`'s `bindings` literal by member id,
+/// and the fallback span (the `bindings` property, else the assembly) for
+/// a key that has none.
+pub(crate) fn binding_key_spans(
+    evaluator: &Evaluator<'_>,
+    program: &TypedProgram,
+    assembly: &AssemblyInfo,
+) -> (BTreeMap<String, Span>, Span) {
+    let ast = evaluator
+        .modules()
+        .get(&program.module)
+        .map(|module| module.program);
+    let bindings_expr = ast.and_then(|ast| assembly.property(ast, "bindings"));
+    let fallback = bindings_expr.map_or(Span::new(assembly.offset, assembly.offset), |e| e.span);
+    let key_spans = match bindings_expr.map(|e| &e.kind) {
+        Some(ExprKind::Brace { entries }) => entries
+            .iter()
+            .map(|entry| (entry.key.dotted(), entry.key.span))
+            .collect(),
+        _ => BTreeMap::new(),
+    };
+    (key_spans, fallback)
 }
 
 /// The `std.deploy.Member` record `admits` is asked about (15.6).
@@ -120,19 +172,7 @@ pub fn resolve(
     let Value::Map(entries) = bindings else {
         return Ok(Vec::new());
     };
-    let ast = evaluator
-        .modules()
-        .get(&program.module)
-        .map(|module| module.program);
-    let bindings_expr = ast.and_then(|ast| assembly.property(ast, "bindings"));
-    let fallback = bindings_expr.map_or(Span::new(assembly.offset, assembly.offset), |e| e.span);
-    let key_spans: BTreeMap<String, Span> = match bindings_expr.map(|e| &e.kind) {
-        Some(ExprKind::Brace { entries }) => entries
-            .iter()
-            .map(|entry| (entry.key.dotted(), entry.key.span))
-            .collect(),
-        _ => BTreeMap::new(),
-    };
+    let (key_spans, fallback) = binding_key_spans(evaluator, program, assembly);
     let span_of = |key: &str| key_spans.get(key).copied().unwrap_or(fallback);
     let mut diagnostics = Vec::new();
     // Key id to its binding, in key order.

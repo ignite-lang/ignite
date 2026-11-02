@@ -5,6 +5,9 @@
 
 mod cli;
 mod common;
+mod control_trace;
+mod decode;
+mod drain;
 mod eval;
 mod failover;
 mod generics;
@@ -13,6 +16,7 @@ mod llvm;
 mod llvm_build;
 mod llvm_memory;
 mod plan;
+mod run;
 mod siblings;
 mod slice10_llvm;
 mod slice9;

@@ -94,6 +94,7 @@ const SUBSTRATE_NAMES: &[&str] = &[
     "Input",
     "Data",
     "Eof",
+    "Exposure",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -2284,7 +2285,10 @@ impl<'a> Generator<'a> {
                             format!("{path}({})", self.variant_args(expr, args).join(", "))
                         }
                         None if self.calls_fn(expr, id) => {
-                            let target = self.name(id);
+                            let target = match self.callee(expr) {
+                                Some(Callee::Fn(q)) if !q.name.contains('.') => self.fn_path(q),
+                                _ => self.name(id),
+                            };
                             self.fn_call(expr, target, None, args)
                         }
                         None => self.call(expr, callee, args),
@@ -2880,6 +2884,14 @@ impl<'a> Generator<'a> {
                 format!("{}.to_string()", wrap(&args[0], value.clone()))
             }
             ("Process", "exit", [code]) => format!("ignite_io::exit(({code}) as i32)"),
+            ("Clock", "monotonic", []) => "ignite_io::clock::monotonic()".to_string(),
+            ("Endpoint", "of", [reference]) => {
+                let endpoint = self.enum_name(&QualName::new("std.net", "Endpoint"));
+                format!(
+                    "ignite_io::endpoint_of({}).map(|(address, port)| {endpoint} {{ address, port }})",
+                    borrow(&args[0], reference.clone())
+                )
+            }
             ("Int", "parse", [text]) => format!(
                 "Some({text}).filter(|t: &String| !t.starts_with('+')).and_then(|t| t.parse::<i64>().ok())"
             ),

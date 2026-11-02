@@ -1,0 +1,3 @@
+e109_hook_signature.ignite:7:11: error[E109]: `Worker.machine` is a hook of `ignite run` and must have the signature `fn Worker.machine(self: Worker, id: Text) -> Machine`, found `fn(Worker) -> Int`
+e109_hook_signature.ignite:9:11: error[E109]: `Worker.validate` is a hook of `ignite run` and must have the signature `fn Worker.validate(self: Worker) -> List<Text>`, found `fn(Worker, Bool) -> List<Text>`
+e109_hook_signature.ignite:15:10: error[E109]: `Quiet.validate` is a hook of `ignite run` and must have the signature `fn Quiet.validate(self: Quiet) -> List<Text>`, found `fn(Quiet) -> List<Text>` and it must be pure

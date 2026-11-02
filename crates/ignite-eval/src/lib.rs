@@ -7,7 +7,11 @@
 //!
 //! Frozen skeleton (slice 11, P1): add, do not rename. `eval.rs` and
 //! `value.rs` are P2's, `model.rs`, `resolve.rs` and `explain.rs` P3's
-//! (`docs/slice.md` section 15.11).
+//! (`docs/slice.md` section 15.11). Slice 12 (section 16.18): `ignite run`
+//! and `ignite replay` step the `std.control` reducers through
+//! [`Evaluator::call`]; `model.rs`, `value.rs`, `eval.rs` and `explain.rs`
+//! are P3's, `resolve.rs` and `validate.rs` P1's. Still linked by no
+//! backend and no compiled program.
 
 use std::collections::BTreeMap;
 
@@ -19,13 +23,19 @@ mod eval;
 mod explain;
 mod model;
 mod resolve;
+mod validate;
 mod value;
 
 pub use eval::{EvalError, Evaluator, Fuel, Limit};
 pub use explain::explain;
-pub use model::{Edge, EdgeKind, FORMAT_VERSION, Model, ModelAssembly, ModelMember, model};
+pub use model::{
+    CONTROL_MODULE, DISRUPTION, Edge, EdgeKind, FORMAT_VERSION, Json, Model, ModelAssembly,
+    ModelMachine, ModelMember, ModelObservation, machines, model, observations, type_name,
+    value_json,
+};
 pub use resolve::{ResolutionEntry, resolve};
-pub use value::Value;
+pub use validate::{validate, validate_system};
+pub use value::{DecodeError, Value};
 
 /// One module as the evaluator sees it: its path, source (for the
 /// positions of failure reports and the model's `sourceMap`), AST and

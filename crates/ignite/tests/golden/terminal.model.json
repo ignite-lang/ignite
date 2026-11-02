@@ -99,7 +99,11 @@
               "ns": 300000000000,
               "type": "Duration"
             },
-            "maximum_attempts": 10
+            "maximum_attempts": 10,
+            "readiness_timeout": {
+              "ns": 10000000000,
+              "type": "Duration"
+            }
           },
           "type": "std.policy.Restart"
         },
@@ -157,6 +161,8 @@
     }
   ],
   "formatVersion": "ignite-model/0.1",
+  "machines": [],
+  "observations": [],
   "policies": [],
   "resources": [
     {
@@ -199,10 +205,10 @@
     "Terminal.server.application": "terminal.ignite:28:19",
     "Terminal.server.executable": "terminal.ignite:29:18",
     "Terminal.server.listener": "terminal.ignite:27:16",
-    "Terminal.server.protocol": "std/protocol/telnet.ignite:130:29",
-    "Terminal.server.recovery": "std/protocol/telnet.ignite:132:23",
-    "Terminal.server.rollout": "std/protocol/telnet.ignite:133:27",
-    "Terminal.server.sessions": "std/protocol/telnet.ignite:131:29"
+    "Terminal.server.protocol": "std/protocol/telnet.ignite:134:29",
+    "Terminal.server.recovery": "std/protocol/telnet.ignite:136:23",
+    "Terminal.server.rollout": "std/protocol/telnet.ignite:137:27",
+    "Terminal.server.sessions": "std/protocol/telnet.ignite:135:29"
   },
   "systemId": "Terminal"
 }

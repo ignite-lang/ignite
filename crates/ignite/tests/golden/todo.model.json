@@ -44,6 +44,8 @@
     }
   ],
   "formatVersion": "ignite-model/0.1",
+  "machines": [],
+  "observations": [],
   "policies": [],
   "resources": [
     {

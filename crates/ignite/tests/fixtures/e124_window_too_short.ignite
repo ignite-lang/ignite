@@ -1,0 +1,20 @@
+package fixture_e124
+
+import std.sli.Window
+
+type Pinger {
+  interval: Duration = 10 seconds
+  attempts: Signal<Int>
+}
+
+type Uptime {
+  signal: Signal<Int>
+  window: Window
+}
+
+system S {
+  component ping: Pinger { interval = 10 seconds }
+  contract up: Uptime { signal = ping.attempts, window = rolling(5 seconds) }
+  contract fine: Uptime { signal = ping.attempts, window = rolling(10 seconds) }
+  contract monthly: Uptime { signal = ping.attempts, window = calendar_month("UTC") }
+}
