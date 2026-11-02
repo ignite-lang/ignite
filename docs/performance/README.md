@@ -15,7 +15,7 @@ Git index. All commands are sequential; coordinate with other build owners on a 
   implementation commit. All 741 source files match the earlier measurement manifest.
 - `baselines/11b-source.json` is that original SHA256 manifest, retained byte for byte;
   `baselines/11b.json` records the Git identity and manifest checksum.
-- `9273349` is the published 12b checkpoint, kept as branch `bench/12b-checkpoint`; after the
+- `9273349` is the published 12b checkpoint, kept as tag `bench-12b-checkpoint`; after the
   commit-message rewrite `28dfc75` on `main` has the same tree. The candidate must be a committed, frozen source
   revision; uncommitted edits cannot enter a Git archive. Commit a checkpoint before measuring.
 

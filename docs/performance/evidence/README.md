@@ -30,8 +30,8 @@ taken before an edit; their final state is in the history of `main`.
 | cited as | ref | verification |
 |---|---|---|
 | `s12-before`, the slice-12 start tree (`docs/slice.md` 16.1, `docs/performance-plan.md` 0) | branch `bench/11b-recovered`, `afa82aa` | all 741 files byte-identical to the scratch copy (`git hash-object`, 2026-11-02) |
-| `s12-p4-after2`, the slice-12 close tree (AGENTS.md slice 12 and 12b tables) | branch `bench/12-close-recovered`, `d3a0d14` | built from the scratch copy without `.idea/`, `.claude/`, `target/`; 786 files |
-| `9273349`, the published 12b checkpoint (`docs/performance/README.md`, 12c records) | branch `bench/12b-checkpoint`, `9273349` | main's history was rewritten after publication; `28dfc75` on `main` has the same tree |
+| `s12-p4-after2`, the slice-12 close tree (AGENTS.md slice 12 and 12b tables) | tag `bench-12-close`, `d3a0d14` | built from the scratch copy without `.idea/`, `.claude/`, `target/`; 786 files |
+| `9273349`, the published 12b checkpoint (`docs/performance/README.md`, 12c records) | tag `bench-12b-checkpoint`, `9273349` | main's history was rewritten after publication; `28dfc75` on `main` has the same tree |
 
 ## Already lost
 
