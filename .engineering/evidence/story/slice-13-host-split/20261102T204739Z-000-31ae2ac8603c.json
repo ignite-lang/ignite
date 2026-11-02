@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-02T20:47:39Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-13-host-split",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "commit 7ee4c46: cargo test -p ignite --test main apply:: on feat/slice13-local-apply, 5 passed 0 failed, 2026-11-02 21:36"
+  }
+}

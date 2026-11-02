@@ -39,6 +39,7 @@ the IO substrate (Rust) that compiled programs link.
 | `docs/vision.md` | direction: target architecture, sequencing of waves and slices, contradictions between documents, open and taken decisions |
 | `PLAN.md` | the roadmap in outline: slices, waves, state; reasoning stays in `docs/vision.md` |
 | `docs/` | design document, slice contract, `llvm.md` (LLVM target); `friction.md` (language friction backlog); research: `research/lean.md`, `research/ess.md` (comparisons); future designs, not implemented: `wasm.md` (WebAssembly target, runtime in Ignite, hot reload), `actors.md` (typed actors, pub/sub, supervision), `protocols.md` (RFC-bound protocols, pluggable transports) |
+| `.engineering/` | AEP planning store (`aep plan artifact list`): epics and stories of live work, from slice 13 on; slices 1 to 12c stay in `PLAN.md` |
 
 Rules of the layout:
 
