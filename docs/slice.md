@@ -3861,6 +3861,14 @@ recovered tree published as `bench/11b-recovered` (`df7ccb9`); `9273349` is the 
 10.8 s warm workspace-test limit under comparable load, unchanged diagnostic/golden
 behaviour, and all existing tests on both targets. A measured cause does not waive a miss.
 
+Run/drain test setup includes all initial build and Cargo-lock waiting inside
+the measured workspace test. The first stdout `segment` marks completion of
+build/copy and entry into the live controller; the on-disk header alone does
+not. Helpers bound that setup phase at 60 seconds, retain the first segment
+for normal consumption, and then use the existing 15-second live record/event/
+exit waits. The real restart assertion remains 100–500 ms. This introduces no
+extra warmup command, skipped build, or work outside the measured gate.
+
 Additive test preparation contract: `ignite test --target=all` prepares the source and
 standard-library type graph once, then builds and runs every supported target using that
 same immutable graph, in native CLI target order (currently Rust then LLVM). `all` enumerates

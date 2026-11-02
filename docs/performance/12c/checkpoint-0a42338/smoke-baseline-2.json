@@ -1,0 +1,93 @@
+{
+  "assembly": null,
+  "components": [
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": "todod",
+      "id": "TodoService.server",
+      "kind": "std.protocol.http.HttpServer<Store<examples.todo.Todo>>",
+      "outputs": {},
+      "properties": {
+        "application": {
+          "fields": {
+            "handle": {
+              "fn": "examples.todo.handle",
+              "type": "Fn"
+            },
+            "state": {
+              "ref": "TodoService.todos",
+              "type": "Ref"
+            }
+          },
+          "type": "std.protocol.http.HttpApp"
+        },
+        "executable": "todod",
+        "listener": {
+          "ref": "TodoService.ingress",
+          "type": "Ref"
+        }
+      }
+    }
+  ],
+  "contracts": [],
+  "edges": [
+    {
+      "from": "TodoService.server",
+      "kind": "uses",
+      "to": "TodoService.ingress"
+    },
+    {
+      "from": "TodoService.server",
+      "kind": "uses",
+      "to": "TodoService.todos"
+    }
+  ],
+  "formatVersion": "ignite-model/0.1",
+  "policies": [],
+  "resources": [
+    {
+      "declaration": "resource",
+      "defaults": [
+        "backlog",
+        "exposure"
+      ],
+      "executable": null,
+      "id": "TodoService.ingress",
+      "kind": "TcpListener",
+      "outputs": {},
+      "properties": {
+        "address": "127.0.0.1",
+        "backlog": 128,
+        "exposure": {
+          "type": "Exposure",
+          "variant": "Loopback"
+        },
+        "port": 8080
+      }
+    },
+    {
+      "declaration": "resource",
+      "defaults": [],
+      "executable": null,
+      "id": "TodoService.todos",
+      "kind": "Store<examples.todo.Todo>",
+      "outputs": {},
+      "properties": {}
+    }
+  ],
+  "sourceMap": {
+    "TodoService": "todo.ignite:80:1",
+    "TodoService.ingress": "todo.ignite:81:3",
+    "TodoService.ingress.address": "todo.ignite:81:45",
+    "TodoService.ingress.backlog": "todo.ignite:81:3",
+    "TodoService.ingress.exposure": "todo.ignite:81:3",
+    "TodoService.ingress.port": "todo.ignite:81:65",
+    "TodoService.server": "todo.ignite:84:3",
+    "TodoService.server.application": "todo.ignite:86:19",
+    "TodoService.server.executable": "todo.ignite:87:18",
+    "TodoService.server.listener": "todo.ignite:85:16",
+    "TodoService.todos": "todo.ignite:82:3"
+  },
+  "systemId": "TodoService"
+}

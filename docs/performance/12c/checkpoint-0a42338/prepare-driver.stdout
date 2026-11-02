@@ -1,0 +1,19 @@
+{"label": "baseline", "unit": "prepare-fmt", "pair": "prepare-1793632446315256897", "seconds": 0.5052926759817638, "exit": 0, "load_before": 8.716796875}
+{"label": "baseline", "unit": "prepare-clippy", "pair": "prepare-1793632446315256897", "seconds": 3.7922370610176586, "exit": 0, "load_before": 8.716796875}
+{"label": "baseline", "unit": "prepare-workspace", "pair": "prepare-1793632446315256897", "seconds": 17.150433831033297, "exit": 0, "load_before": 8.716796875}
+{"label": "baseline", "unit": "prepare-inline", "pair": "prepare-1793632446315256897", "seconds": 3.169298376014922, "exit": 0, "load_before": 23.9111328125}
+{"label": "baseline", "unit": "gate-prepare", "pair": "prepare-1793632446315256897", "seconds": 24.618651292985305, "exit": 0, "load_before": 8.716796875}
+{"label": "baseline", "unit": "runtime-release", "pair": "prepare-1793632446315256897", "seconds": 0.43931758200051263, "exit": 0, "load_before": 23.9111328125}
+{"label": "candidate", "unit": "prepare-fmt", "pair": "prepare-1793632446315256897", "seconds": 0.7382205870235339, "exit": 0, "load_before": 24.15869140625}
+{"label": "candidate", "unit": "prepare-clippy", "pair": "prepare-1793632446315256897", "seconds": 9.30416849500034, "exit": 0, "load_before": 24.15869140625}
+{"label": "candidate", "unit": "prepare-workspace", "pair": "prepare-1793632446315256897", "seconds": 62.315042834030464, "exit": 101, "load_before": 26.39892578125}
+{"label": "candidate", "unit": "prepare-inline", "pair": "prepare-1793632446315256897", "seconds": 5.867870002985001, "exit": 0, "load_before": 34.68701171875}
+{"label": "candidate", "unit": "gate-prepare", "pair": "prepare-1793632446315256897", "seconds": 78.22675814497052, "exit": 1, "load_before": 24.15869140625}
+{"label": "candidate", "unit": "runtime-release", "pair": "prepare-1793632446315256897", "seconds": 8.246944373007864, "exit": 0, "load_before": 33.1103515625}
+{"label": "comparison", "unit": "prepare-fmt", "pair": "prepare-1793632446315256897", "seconds": 0.8825225009932183, "exit": 0, "load_before": 31.923828125}
+{"label": "comparison", "unit": "prepare-clippy", "pair": "prepare-1793632446315256897", "seconds": 3.581916122988332, "exit": 0, "load_before": 31.923828125}
+{"label": "comparison", "unit": "prepare-workspace", "pair": "prepare-1793632446315256897", "seconds": 14.489165144972503, "exit": 0, "load_before": 30.248046875}
+{"label": "comparison", "unit": "prepare-inline", "pair": "prepare-1793632446315256897", "seconds": 1.6948788249865174, "exit": 0, "load_before": 28.64697265625}
+{"label": "comparison", "unit": "gate-prepare", "pair": "prepare-1793632446315256897", "seconds": 20.64942811796209, "exit": 0, "load_before": 31.923828125}
+{"label": "comparison", "unit": "runtime-release", "pair": "prepare-1793632446315256897", "seconds": 0.04011193697806448, "exit": 0, "load_before": 28.64697265625}
+Candidate failure during preparation; fix and freeze a new candidate

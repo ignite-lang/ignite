@@ -79,6 +79,7 @@ struct Run {
     child: Child,
     stdin: Option<ChildStdin>,
     lines: Receiver<String>,
+    pending_initial: Option<String>,
     stderr: Arc<Mutex<String>>,
     /// Every record consumed so far, in order.
     seen: Vec<Json>,
@@ -143,16 +144,21 @@ impl Run {
                 }
             }
         });
-        Run {
+        let mut run = Run {
             child,
             stdin,
             lines,
+            pending_initial: None,
             stderr,
             seen: Vec::new(),
             state,
             file: file.to_path_buf(),
             extra: args.iter().map(|a| a.to_string()).collect(),
-        }
+        };
+        run.pending_initial = Some(common::wait_run_initial_segment(&run.lines, || {
+            run.stderr()
+        }));
+        run
     }
 
     fn design(target: &str, name: &str, args: &[&str]) -> Run {
@@ -174,7 +180,12 @@ impl Run {
 
     /// The next record, within [`TIMEOUT`].
     fn next(&mut self) -> Json {
-        match self.lines.recv_timeout(TIMEOUT) {
+        match self
+            .pending_initial
+            .take()
+            .map(Ok)
+            .unwrap_or_else(|| self.lines.recv_timeout(TIMEOUT))
+        {
             Ok(line) => {
                 let json = Json::parse(&line).unwrap_or_else(|e| panic!("{line}: {e}"));
                 self.seen.push(json.clone());
