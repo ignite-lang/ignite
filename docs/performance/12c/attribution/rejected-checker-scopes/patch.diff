@@ -1,0 +1,92 @@
+--- a/crates/ignite-check/src/lib.rs
++++ b/crates/ignite-check/src/lib.rs
+@@ -72,7 +72,7 @@
+ //!   `E031`, and the import-cycle check `E032`.
+ 
+ use std::borrow::Cow;
+-use std::collections::{BTreeMap, BTreeSet};
++use std::collections::{BTreeMap, BTreeSet, HashMap};
+ 
+ use ignite_syntax::ast::{
+     Block, Closure, Decl, Expr, ExprKind, FieldInit, FnDecl, Ident, Import, Path, Pattern,
+@@ -511,7 +511,7 @@
+ struct Checker {
+     symbols: Symbols,
+     diagnostics: Vec<Diagnostic>,
+-    scopes: Vec<BTreeMap<String, Local>>,
++    scopes: Vec<HashMap<String, Local>>,
+     ctx: Ctx,
+     /// The `requires` entries of the function being walked.
+     requires: BTreeSet<String>,
+@@ -1478,7 +1478,7 @@
+         self.inferred.clear();
+         self.performs = false;
+         self.fn_name = format!("test \"{}\"", test.name.name);
+-        self.scopes.push(BTreeMap::new());
++        self.scopes.push(HashMap::new());
+         self.block(&test.body);
+         self.scopes.pop();
+         self.inferred.clear();
+@@ -1624,7 +1624,7 @@
+         self.inferred.clear();
+         self.performs = false;
+         self.fn_name = display;
+-        self.scopes.push(BTreeMap::new());
++        self.scopes.push(HashMap::new());
+         for param in &decl.params {
+             let roots = BTreeSet::from([param.name.name.clone()]);
+             self.bind_typed(&param.name, Binding::Param, roots, Some(param.ty.clone()));
+@@ -1720,7 +1720,7 @@
+     /// local bindings.
+     fn pure_value(&mut self, ctx: Ctx, value: &Expr) {
+         self.ctx = ctx;
+-        self.scopes.push(BTreeMap::new());
++        self.scopes.push(HashMap::new());
+         self.expr(value);
+         self.scopes.pop();
+         self.ctx = Ctx::None;
+@@ -2115,7 +2115,7 @@
+     }
+ 
+     fn block(&mut self, block: &Block) {
+-        self.scopes.push(BTreeMap::new());
++        self.scopes.push(HashMap::new());
+         for stmt in &block.stmts {
+             self.stmt(stmt);
+         }
+@@ -2233,7 +2233,7 @@
+             StmtKind::Loop { body } => self.block(body),
+             StmtKind::For { name, iter, body } => {
+                 self.expr(iter);
+-                self.scopes.push(BTreeMap::new());
++                self.scopes.push(HashMap::new());
+                 let roots = self.roots(iter);
+                 let element = self
+                     .static_type(iter)
+@@ -2249,7 +2249,7 @@
+                 body,
+             } => {
+                 self.expr(iter);
+-                self.scopes.push(BTreeMap::new());
++                self.scopes.push(HashMap::new());
+                 let roots = self.roots(iter);
+                 self.pattern(pattern, &roots, Binding::Loop);
+                 self.block(body);
+@@ -2319,7 +2319,7 @@
+                 self.expr(scrutinee);
+                 let roots = self.roots(scrutinee);
+                 for arm in arms {
+-                    self.scopes.push(BTreeMap::new());
++                    self.scopes.push(HashMap::new());
+                     self.pattern(&arm.pattern, &roots, Binding::Pattern);
+                     self.expr(&arm.body);
+                     let tail = self.roots(&arm.body);
+@@ -2513,7 +2513,7 @@
+         let inferred = std::mem::take(&mut self.inferred);
+         let performs = std::mem::replace(&mut self.performs, false);
+         self.closure_scopes.push(self.scopes.len());
+-        self.scopes.push(BTreeMap::new());
++        self.scopes.push(HashMap::new());
+         let mut seen: Vec<&str> = Vec::new();
+         for param in &closure.params {
+             if seen.contains(&param.name.name.as_str()) && param.name.name != "_" {

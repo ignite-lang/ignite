@@ -1,0 +1,4 @@
+{"label": "unit-observable", "command": ["cargo", "test", "-p", "ignite", "--lib"], "exit": 0, "seconds": 1.5085055139497854, "load_before": 4.72021484375, "load_after": 4.72021484375}
+{"label": "run-integration", "command": ["cargo", "test", "-p", "ignite", "--test", "main", "run::"], "exit": 0, "seconds": 6.155116923968308, "load_before": 4.72021484375, "load_after": 4.84375}
+{"label": "drain-integration", "command": ["cargo", "test", "-p", "ignite", "--test", "main", "drain::"], "exit": 0, "seconds": 1.3068157650413923, "load_before": 4.84375, "load_after": 4.84375}
+{"label": "clippy", "command": ["cargo", "clippy", "-p", "ignite", "--all-targets", "--", "-D", "warnings"], "exit": 0, "seconds": 2.7396647459827363, "load_before": 4.84375, "load_after": 4.8564453125}

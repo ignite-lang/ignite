@@ -1,0 +1,30 @@
+{
+  "command": [
+    "valgrind",
+    "--tool=callgrind",
+    "--error-exitcode=97",
+    "--callgrind-out-file=/home/timo/.cache/scratch/ignite-perf12c/design-c6-cpu/design-check.callgrind",
+    "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/debug/ignite",
+    "check",
+    "examples/terminal/terminal.design.ignite"
+  ],
+  "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-c6b22cf148f1",
+  "cli_sha256": "78da42d0bfb391924fcbf34b85fbce3c78ed8985d3d6ad79229ff294222dd56e",
+  "manifest": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/evidence-v5/source-candidate.json",
+  "manifest_sha256": "8462c05d6e85b4aff7c809d9b2dc2bb864e9568cb1d24cc7b3d777474b598f0a",
+  "source_files": 1410,
+  "diagnostic_only": true,
+  "load_before": [
+    33.01904296875,
+    22.74169921875,
+    16.22021484375
+  ],
+  "exit": 0,
+  "seconds_diagnostic_only": 12.893958933011163,
+  "load_after": [
+    39.59130859375,
+    24.671875,
+    16.955078125
+  ],
+  "cli_sha256_after": "78da42d0bfb391924fcbf34b85fbce3c78ed8985d3d6ad79229ff294222dd56e"
+}

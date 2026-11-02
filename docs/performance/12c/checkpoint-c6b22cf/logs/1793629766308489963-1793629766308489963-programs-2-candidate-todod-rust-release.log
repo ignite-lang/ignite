@@ -1,0 +1,12 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/programs/1793629766308489963/2-candidate-rust-release; compiler messages refer to generated code
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+   Compiling nix v0.31.3
+   Compiling ignite-io v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-c6b22cf148f1/crates/ignite-io)
+   Compiling ignite-std v0.0.0-9209a9a848b0ddef (/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/programs/1793629766308489963/2-candidate-rust-release/std)
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/programs/1793629766308489963/2-candidate-rust-release)
+    Finished `release` profile [optimized] target(s) in 4.35s
+built /home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/programs/1793629766308489963/2-candidate-rust-release-cargo/release/todod

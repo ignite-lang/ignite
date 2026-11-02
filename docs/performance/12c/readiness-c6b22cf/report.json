@@ -1,0 +1,34 @@
+{
+  "candidate": "c6b22cf148f1402499a4279975b52494106bd68a",
+  "target": "llvm",
+  "cli": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/debug/ignite",
+  "cli_sha256": "78da42d0bfb391924fcbf34b85fbce3c78ed8985d3d6ad79229ff294222dd56e",
+  "runtime": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/ignite-test/rt/debug/libignite_rt.a",
+  "runtime_sha256": "6ec7027440eb56ee8987b05737bacc3f73930c51736cb7e195112e63fc8aba8c",
+  "source_manifest_sha256": "8462c05d6e85b4aff7c809d9b2dc2bb864e9568cb1d24cc7b3d777474b598f0a",
+  "scenarios": {
+    "manual": {
+      "manual_restart_ns": 100000000,
+      "second_backoff_ms": 200,
+      "echo": true,
+      "stopped": true,
+      "replay": true
+    },
+    "real": {
+      "real_restart_ns": 118879906,
+      "stopped": true,
+      "replay": true
+    },
+    "probe": {
+      "timeout_at_ns": 10000000000,
+      "violated_good": 1,
+      "violated_executed": 2,
+      "recovered_signal_at_ns": 20000000000,
+      "rolling_violation_retained": true,
+      "consequence_once": true,
+      "stopped": true,
+      "replay": true
+    }
+  },
+  "accepted": true
+}

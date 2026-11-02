@@ -1,0 +1,410 @@
+[
+  {
+    "phase": "warmup",
+    "pair": 0,
+    "label": "before",
+    "unit": "check",
+    "seconds": 0.07536529202479869,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-before",
+      "check",
+      "examples/terminal/terminal.design.ignite"
+    ],
+    "cpu_seconds": 0.07458999999999971
+  },
+  {
+    "phase": "warmup",
+    "pair": 0,
+    "label": "after",
+    "unit": "check",
+    "seconds": 0.07456602901220322,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-after",
+      "check",
+      "examples/terminal/terminal.design.ignite"
+    ],
+    "cpu_seconds": 0.0733830000000002
+  },
+  {
+    "phase": "warmup",
+    "pair": 0,
+    "label": "before",
+    "unit": "plan",
+    "seconds": 0.0753848259919323,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-before",
+      "plan",
+      "examples/terminal/terminal.design.ignite",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/warmup-0-plan-before.json"
+    ],
+    "cpu_seconds": 0.07478099999999976,
+    "output_sha256": "39277a6fb4b599d197cf0419028da03264eafec3707c9a24b06ee1836eb61aab"
+  },
+  {
+    "phase": "warmup",
+    "pair": 0,
+    "label": "after",
+    "unit": "plan",
+    "seconds": 0.06929906801087782,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-after",
+      "plan",
+      "examples/terminal/terminal.design.ignite",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/warmup-0-plan-after.json"
+    ],
+    "cpu_seconds": 0.06862199999999996,
+    "output_sha256": "39277a6fb4b599d197cf0419028da03264eafec3707c9a24b06ee1836eb61aab"
+  },
+  {
+    "phase": "measured",
+    "pair": 1,
+    "label": "before",
+    "unit": "check",
+    "seconds": 0.07866517500951886,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-before",
+      "check",
+      "examples/terminal/terminal.design.ignite"
+    ],
+    "cpu_seconds": 0.07762400000000014
+  },
+  {
+    "phase": "measured",
+    "pair": 1,
+    "label": "after",
+    "unit": "check",
+    "seconds": 0.06947225204203278,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-after",
+      "check",
+      "examples/terminal/terminal.design.ignite"
+    ],
+    "cpu_seconds": 0.06872299999999987
+  },
+  {
+    "phase": "measured",
+    "pair": 1,
+    "label": "after",
+    "unit": "plan",
+    "seconds": 0.06899380398681387,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-after",
+      "plan",
+      "examples/terminal/terminal.design.ignite",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/measured-1-plan-after.json"
+    ],
+    "cpu_seconds": 0.0683419999999999,
+    "output_sha256": "39277a6fb4b599d197cf0419028da03264eafec3707c9a24b06ee1836eb61aab"
+  },
+  {
+    "phase": "measured",
+    "pair": 1,
+    "label": "before",
+    "unit": "plan",
+    "seconds": 0.07396944100037217,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-before",
+      "plan",
+      "examples/terminal/terminal.design.ignite",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/measured-1-plan-before.json"
+    ],
+    "cpu_seconds": 0.07320500000000019,
+    "output_sha256": "39277a6fb4b599d197cf0419028da03264eafec3707c9a24b06ee1836eb61aab"
+  },
+  {
+    "phase": "measured",
+    "pair": 2,
+    "label": "after",
+    "unit": "check",
+    "seconds": 0.0704996109707281,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-after",
+      "check",
+      "examples/terminal/terminal.design.ignite"
+    ],
+    "cpu_seconds": 0.06936000000000009
+  },
+  {
+    "phase": "measured",
+    "pair": 2,
+    "label": "before",
+    "unit": "check",
+    "seconds": 0.07632340199779719,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-before",
+      "check",
+      "examples/terminal/terminal.design.ignite"
+    ],
+    "cpu_seconds": 0.07542699999999991
+  },
+  {
+    "phase": "measured",
+    "pair": 2,
+    "label": "before",
+    "unit": "plan",
+    "seconds": 0.07378410000819713,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-before",
+      "plan",
+      "examples/terminal/terminal.design.ignite",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/measured-2-plan-before.json"
+    ],
+    "cpu_seconds": 0.07292599999999982,
+    "output_sha256": "39277a6fb4b599d197cf0419028da03264eafec3707c9a24b06ee1836eb61aab"
+  },
+  {
+    "phase": "measured",
+    "pair": 2,
+    "label": "after",
+    "unit": "plan",
+    "seconds": 0.07318797899642959,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-after",
+      "plan",
+      "examples/terminal/terminal.design.ignite",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/measured-2-plan-after.json"
+    ],
+    "cpu_seconds": 0.07238600000000028,
+    "output_sha256": "39277a6fb4b599d197cf0419028da03264eafec3707c9a24b06ee1836eb61aab"
+  },
+  {
+    "phase": "measured",
+    "pair": 3,
+    "label": "before",
+    "unit": "check",
+    "seconds": 0.07654967397684231,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-before",
+      "check",
+      "examples/terminal/terminal.design.ignite"
+    ],
+    "cpu_seconds": 0.07571700000000003
+  },
+  {
+    "phase": "measured",
+    "pair": 3,
+    "label": "after",
+    "unit": "check",
+    "seconds": 0.07530445297015831,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-after",
+      "check",
+      "examples/terminal/terminal.design.ignite"
+    ],
+    "cpu_seconds": 0.07453500000000002
+  },
+  {
+    "phase": "measured",
+    "pair": 3,
+    "label": "after",
+    "unit": "plan",
+    "seconds": 0.08283455797936767,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-after",
+      "plan",
+      "examples/terminal/terminal.design.ignite",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/measured-3-plan-after.json"
+    ],
+    "cpu_seconds": 0.08203199999999988,
+    "output_sha256": "39277a6fb4b599d197cf0419028da03264eafec3707c9a24b06ee1836eb61aab"
+  },
+  {
+    "phase": "measured",
+    "pair": 3,
+    "label": "before",
+    "unit": "plan",
+    "seconds": 0.07525534898741171,
+    "exit": 0,
+    "load_before": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "load_after": [
+      10.8466796875,
+      9.28857421875,
+      15.677734375
+    ],
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-before",
+      "plan",
+      "examples/terminal/terminal.design.ignite",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/measured-3-plan-before.json"
+    ],
+    "cpu_seconds": 0.074322,
+    "output_sha256": "39277a6fb4b599d197cf0419028da03264eafec3707c9a24b06ee1836eb61aab"
+  }
+]

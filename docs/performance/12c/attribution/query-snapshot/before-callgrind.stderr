@@ -1,0 +1,11 @@
+==2588837== Callgrind, a call-graph generating cache profiler
+==2588837== Copyright (C) 2002-2017, and GNU GPL'd, by Josef Weidendorfer et al.
+==2588837== Using Valgrind-3.25.1 and LibVEX; rerun with -h for copyright info
+==2588837== Command: /home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-before check examples/terminal/terminal.design.ignite
+==2588837== 
+==2588837== For interactive control, run 'callgrind_control -h'.
+==2588837== 
+==2588837== Events    : Ir
+==2588837== Collected : 359567786
+==2588837== 
+==2588837== I   refs:      359,567,786

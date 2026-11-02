@@ -1,0 +1,469 @@
+{
+  "accepted": false,
+  "any_command_failed": true,
+  "candidate_failed": true,
+  "closure_controls_pass": true,
+  "commits": {
+    "baseline": "df7ccb9bed4440824a2d108fa112eba3fea25f99",
+    "candidate": "c6b22cf148f1402499a4279975b52494106bd68a",
+    "comparison": "92733498f8406d8f0663a571be85351c548ea99e"
+  },
+  "comparable_low_load": false,
+  "comparison_missing": [
+    "cold-clippy",
+    "cold-fmt",
+    "cold-inline",
+    "cold-workspace",
+    "file-ignite_test",
+    "file-rustgen",
+    "gate-cold",
+    "gate-warm",
+    "no-run-touch",
+    "no-run-warm",
+    "warm-clippy",
+    "warm-fmt",
+    "warm-inline",
+    "warm-workspace"
+  ],
+  "coverage_pass": false,
+  "frozen_baseline_matches": true,
+  "ignite_test_absolute_pass": true,
+  "missing": [
+    "cold-clippy",
+    "cold-fmt",
+    "cold-inline",
+    "cold-workspace",
+    "file-ignite_test",
+    "file-rustgen",
+    "gate-cold",
+    "gate-warm",
+    "no-run-touch",
+    "no-run-warm",
+    "warm-workspace"
+  ],
+  "over_budget": [
+    "check",
+    "plan"
+  ],
+  "results": [
+    {
+      "baseline": "baseline",
+      "before": 0.060721875983290374,
+      "candidate": 0.06655034696450457,
+      "excluded": [],
+      "loads": [
+        9.08544921875,
+        9.5283203125
+      ],
+      "ratio": 1.1035337409246604,
+      "unit": "check",
+      "valid_pairs": 15
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.061611087003257126,
+      "candidate": 0.0679310470004566,
+      "excluded": [],
+      "loads": [
+        9.08544921875,
+        9.5283203125
+      ],
+      "ratio": 1.1096989037744789,
+      "unit": "plan",
+      "valid_pairs": 15
+    },
+    {
+      "baseline": "baseline",
+      "before": 3.329183309979271,
+      "candidate": 3.6903575970209204,
+      "excluded": [],
+      "loads": [
+        7.41845703125,
+        8.79443359375
+      ],
+      "ratio": 1.0714177123937971,
+      "unit": "todod-rust-dev",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.35005828796420246,
+      "candidate": 0.2849140060134232,
+      "excluded": [],
+      "loads": [
+        6.8125,
+        8.9404296875
+      ],
+      "ratio": 0.8139044719391388,
+      "unit": "todod-llvm-dev",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 4.396556346968282,
+      "candidate": 4.477055701019708,
+      "excluded": [],
+      "loads": [
+        6.7470703125,
+        9.265625
+      ],
+      "ratio": 1.0373690434762035,
+      "unit": "todod-rust-release",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.8751560070086271,
+      "candidate": 0.796621595043689,
+      "excluded": [],
+      "loads": [
+        6.3916015625,
+        8.68896484375
+      ],
+      "ratio": 0.9244139107657847,
+      "unit": "todod-llvm-release",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.5729453579988331,
+      "candidate": 0.3093598569976166,
+      "excluded": [],
+      "loads": [
+        17.7626953125,
+        24.40576171875
+      ],
+      "ratio": 0.44840027598905935,
+      "unit": "warm-fmt",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 3.670937987975776,
+      "candidate": 3.846682968956884,
+      "excluded": [],
+      "loads": [
+        17.7626953125,
+        24.40576171875
+      ],
+      "ratio": 1.0279156242390335,
+      "unit": "warm-clippy",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 16.638451459497446,
+      "candidate": 17.617257990990765,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            101
+          ],
+          "loads": [
+            22.01513671875,
+            20.16455078125
+          ],
+          "pair": "1793630147136957551-warm-3",
+          "reason": "command_failed"
+        }
+      ],
+      "loads": [
+        19.22314453125,
+        24.40576171875
+      ],
+      "ratio": 1.0899474470995878,
+      "unit": "warm-workspace",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.9150508500169963,
+      "candidate": 0.9912384239723906,
+      "excluded": [],
+      "loads": [
+        20.37451171875,
+        24.66796875
+      ],
+      "ratio": 1.0307531360841309,
+      "unit": "warm-inline",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 21.91666243749205,
+      "candidate": 22.29912195148063,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            1
+          ],
+          "loads": [
+            21.40673828125,
+            20.78857421875
+          ],
+          "pair": "1793630147136957551-warm-3",
+          "reason": "command_failed"
+        }
+      ],
+      "loads": [
+        17.7626953125,
+        24.40576171875
+      ],
+      "ratio": 1.0348459072022318,
+      "unit": "gate-warm",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.03435609600273892,
+      "candidate": 0.030421183008002117,
+      "excluded": [],
+      "loads": [
+        20.37451171875,
+        24.66796875
+      ],
+      "ratio": 0.888492692401486,
+      "unit": "no-run-warm",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "baseline",
+      "before": 2.528898285498144,
+      "candidate": 2.754841777990805,
+      "excluded": [],
+      "loads": [
+        20.37451171875,
+        24.66796875
+      ],
+      "ratio": 1.0894908529301215,
+      "unit": "no-run-touch",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "baseline",
+      "before": 6.120709328504745,
+      "candidate": 2.2948713829682674,
+      "excluded": [],
+      "loads": [
+        20.37451171875,
+        25.17529296875
+      ],
+      "ratio": 0.37772639028726823,
+      "unit": "file-ignite_test",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "baseline",
+      "before": 2.0698576965369284,
+      "candidate": 1.9608709975145757,
+      "excluded": [],
+      "loads": [
+        19.30322265625,
+        23.9599609375
+      ],
+      "ratio": 0.9471153232576965,
+      "unit": "file-rustgen",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "comparison",
+      "before": 0.08780832902994007,
+      "candidate": 0.06655034696450457,
+      "excluded": [],
+      "loads": [
+        9.08544921875,
+        9.5283203125
+      ],
+      "ratio": 0.7635126420996351,
+      "unit": "check",
+      "valid_pairs": 15
+    },
+    {
+      "baseline": "comparison",
+      "before": 0.08873243897687644,
+      "candidate": 0.0679310470004566,
+      "excluded": [],
+      "loads": [
+        9.08544921875,
+        9.5283203125
+      ],
+      "ratio": 0.7660121981921323,
+      "unit": "plan",
+      "valid_pairs": 15
+    },
+    {
+      "baseline": "comparison",
+      "before": 3.4569692660006694,
+      "candidate": 3.6903575970209204,
+      "excluded": [],
+      "loads": [
+        7.14453125,
+        8.79443359375
+      ],
+      "ratio": 1.0135989999587038,
+      "unit": "todod-rust-dev",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "comparison",
+      "before": 0.3378974079969339,
+      "candidate": 0.2849140060134232,
+      "excluded": [],
+      "loads": [
+        6.8125,
+        8.9404296875
+      ],
+      "ratio": 0.8431967788755826,
+      "unit": "todod-llvm-dev",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "comparison",
+      "before": 4.538281630026177,
+      "candidate": 4.477055701019708,
+      "excluded": [],
+      "loads": [
+        6.68701171875,
+        9.265625
+      ],
+      "ratio": 0.9709435738424802,
+      "unit": "todod-rust-release",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "comparison",
+      "before": 0.8241825989680365,
+      "candidate": 0.796621595043689,
+      "excluded": [],
+      "loads": [
+        6.3916015625,
+        8.68896484375
+      ],
+      "ratio": 0.9650330124661597,
+      "unit": "todod-llvm-release",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "comparison",
+      "before": 0.6185392299958039,
+      "candidate": 0.27400516549823806,
+      "excluded": [],
+      "loads": [
+        19.30322265625,
+        23.9599609375
+      ],
+      "ratio": 0.44204638175532274,
+      "unit": "warm-fmt",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "comparison",
+      "before": 3.986789670510916,
+      "candidate": 3.494851026975084,
+      "excluded": [],
+      "loads": [
+        19.30322265625,
+        23.9599609375
+      ],
+      "ratio": 0.8895438507405987,
+      "unit": "warm-clippy",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "comparison",
+      "before": 18.55265715200221,
+      "candidate": 17.617257990990765,
+      "excluded": [],
+      "loads": [
+        19.27880859375,
+        22.361328125
+      ],
+      "ratio": 0.9441795329471601,
+      "unit": "warm-workspace",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "comparison",
+      "before": 2.064579023484839,
+      "candidate": 0.9116119934769813,
+      "excluded": [],
+      "loads": [
+        20.37451171875,
+        22.6689453125
+      ],
+      "ratio": 0.4482970713371156,
+      "unit": "warm-inline",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "comparison",
+      "before": 25.223879625991685,
+      "candidate": 22.29912195148063,
+      "excluded": [],
+      "loads": [
+        19.30322265625,
+        23.9599609375
+      ],
+      "ratio": 0.880163028345483,
+      "unit": "gate-warm",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "comparison",
+      "before": 0.04360454899142496,
+      "candidate": 0.030421183008002117,
+      "excluded": [],
+      "loads": [
+        20.37451171875,
+        22.6689453125
+      ],
+      "ratio": 0.6963432372362135,
+      "unit": "no-run-warm",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "comparison",
+      "before": 4.045072184497258,
+      "candidate": 2.754841777990805,
+      "excluded": [],
+      "loads": [
+        20.37451171875,
+        22.6689453125
+      ],
+      "ratio": 0.6858869953933553,
+      "unit": "no-run-touch",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "comparison",
+      "before": 2.5550888079742435,
+      "candidate": 2.2948713829682674,
+      "excluded": [],
+      "loads": [
+        20.37451171875,
+        24.29736328125
+      ],
+      "ratio": 0.8987554443396567,
+      "unit": "file-ignite_test",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "comparison",
+      "before": 4.937320411991095,
+      "candidate": 1.9608709975145757,
+      "excluded": [],
+      "loads": [
+        19.30322265625,
+        24.35400390625
+      ],
+      "ratio": 0.39664004482061443,
+      "unit": "file-rustgen",
+      "valid_pairs": 2
+    }
+  ],
+  "rustgen_11b_pass": false,
+  "schema": "ignite-performance/1",
+  "warm_workspace_absolute_pass": false
+}

@@ -1,0 +1,32 @@
+{
+  "profile": "design-check.callgrind",
+  "instructions": 359394918,
+  "diagnostic_only": true,
+  "hotspots_inclusive_not_additive": [
+    {
+      "owner": "ignite_check::Checker::local",
+      "instructions": 14100366,
+      "calls": 14114,
+      "share": 0.03923362655895986
+    },
+    {
+      "owner": "ignite_types::ModuleTypes::clone",
+      "instructions": 10555354,
+      "share": 0.029369792034733222
+    },
+    {
+      "owner": "ignite_syntax::SourceFile::line_col",
+      "instructions": 1578009,
+      "calls": 55,
+      "share": 0.004390738212942677
+    }
+  ],
+  "proposal": {
+    "file": "crates/ignite-check/src/lib.rs",
+    "change": "Only private Checker.scopes: Vec<HashMap<String, Local>> using standard RandomState, and 8 constructors. Preserve outer Vec traversal and all public BTreeMap tables.",
+    "semantics": "Each scope is only inserted/looked up/mutated/tested for membership, never enumerated. Insertion replacement and outer lexical precedence unchanged.",
+    "validation": "Bounded frozen before/after check+plan diagnostic pairs; checker fixtures and public diagnostic/source/model parity; retain only measured improvement.",
+    "implemented": false
+  },
+  "line_table_rejected_as_P3_fix": "Only design+std.contract total10682 bytes. 0.44% whole line_col inclusive. Existing LLVM-wide profile did not describe this successful design path."
+}

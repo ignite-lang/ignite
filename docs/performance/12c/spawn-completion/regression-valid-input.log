@@ -1,0 +1,9 @@
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.16s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/ignite-7066fbb78e702281)
+
+running 1 test
+test run::live::tests::timer_spawn_completion_precedes_a_held_probe_result ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.09s
+

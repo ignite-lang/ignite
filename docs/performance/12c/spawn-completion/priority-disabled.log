@@ -1,0 +1,50 @@
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.25s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/ignite-7066fbb78e702281)
+
+running 1 test
+test run::live::tests::timer_spawn_completion_precedes_a_held_probe_result ... FAILED
+
+failures:
+
+---- run::live::tests::timer_spawn_completion_precedes_a_held_probe_result stdout ----
+25 100 ms event Terminal.server.supervisor: Timer(1)
+26 100 ms effect Terminal.server.supervisor: Spawn("Terminal.server", 1)
+27 100 ms event Terminal.promptProbe.scheduler: AttemptDone(1, { latency: 0 ns, received: false })
+28 100 ms effect Terminal.promptProbe.scheduler: CancelTimer(1)
+29 100 ms effect Terminal.promptProbe.scheduler: Emit("Terminal.promptProbe.attempts", { latency: 0 ns, received: false })
+30 100 ms signal Terminal.promptProbe.scheduler: { ref: "Terminal.promptProbe.attempts", value: { latency: 0 ns, received: false } }
+31 100 ms event Terminal.customerAccess.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 0 ns, received: false })
+32 100 ms effect Terminal.customerAccess.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.customerAccess", coverage: 0%, executed: 1, expected: 1, from: 100 ms, good: 0, status: Violated, to: 100 ms, version: 33 })
+33 100 ms standing Terminal.customerAccess.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.customerAccess", coverage: 0%, executed: 1, expected: 1, from: 100 ms, good: 0, status: Violated, to: 100 ms, version: 33 }
+34 100 ms event Terminal.promptFast.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 0 ns, received: false })
+35 100 ms effect Terminal.promptFast.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 0%, executed: 1, expected: 1, from: 100 ms, good: 0, status: Violated, to: 100 ms, version: 36 })
+36 100 ms standing Terminal.promptFast.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 0%, executed: 1, expected: 1, from: 100 ms, good: 0, status: Violated, to: 100 ms, version: 36 }
+37 100 ms event Terminal.reachable.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 0 ns, received: false })
+38 100 ms effect Terminal.reachable.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0%, executed: 1, expected: 1, from: 100 ms, good: 0, status: Violated, to: 100 ms, version: 39 })
+39 100 ms standing Terminal.reachable.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0%, executed: 1, expected: 1, from: 100 ms, good: 0, status: Violated, to: 100 ms, version: 39 }
+40 100 ms event Terminal.server.supervisor: Started(2383180, 1)
+41 100 ms effect Terminal.server.supervisor: SetTimer(2, 10100 ms)
+42 100 ms event Terminal.server.rollout: Started(2383180, 1)
+43 100 ms event Terminal.promptProbe.scheduler: Started(2383180, 1)
+44 100 ms event Terminal.server.rollout: Control("stop")
+45 100 ms event Terminal.server.supervisor: Control("stop")
+46 100 ms effect Terminal.server.supervisor: CancelTimer(2)
+47 100 ms effect Terminal.server.supervisor: Kill("Terminal.server", 2383180, 15)
+ignite run: kill 15 of Terminal.server pid 2383180: no live child with pid 2383180
+48 100 ms event Terminal.server.supervisor: Exited(2383180, 0)
+49 100 ms event Terminal.server.rollout: Exited(2383180, 0)
+50 100 ms event Terminal.promptProbe.scheduler: Exited(2383180, 0)
+51 100 ms segment: { clock: "manual", declared: [], generation: 1, start: 0 ns, stop: Some(100 ms) }
+
+thread 'run::live::tests::timer_spawn_completion_precedes_a_held_probe_result' (2383161) panicked at crates/ignite/src/run/live.rs:1078:9:
+complete lifecycle acknowledgement before probe fanout
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    run::live::tests::timer_spawn_completion_precedes_a_held_probe_result
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `-p ignite --lib`

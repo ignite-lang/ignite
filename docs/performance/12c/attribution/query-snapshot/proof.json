@@ -1,0 +1,127 @@
+{
+  "status": "retained; focused parity verified; official gate and matched acceptance measurements pending",
+  "source_head": "c6b22cf148f1402499a4279975b52494106bd68a",
+  "before_after_source_change": [
+    "crates/ignite-types/src/lib.rs"
+  ],
+  "source_manifests": [
+    "source-before.json",
+    "source-after.json"
+  ],
+  "ownership_test": "surface::imported_queries_survive_input_mutation_and_drop",
+  "initial_fixture_correction": {
+    "log": "ownership-test.log",
+    "issue": "Test declared identity as a protocol role; language supports serve/connect and requires effectfulness.",
+    "fix": "Changed fixture to generic effectful serve(stream, application) and updated role query; production patch unchanged.",
+    "passing_log": "ownership-test-corrected.log"
+  },
+  "instruction_diagnostic": {
+    "before": {
+      "total_instructions": 359567786,
+      "cli_sha256": "343b087eb58aa8d3dd3844c493c694f3a53a51dd841f9a2d8f0b093e89ce4534",
+      "functions": [
+        {
+          "name": "<ignite_types::ModuleTypes as core::clone::Clone>::clone",
+          "self": 20875,
+          "inclusive": 10552938,
+          "calls": 167
+        },
+        {
+          "name": "<ignite_types::FnSig as core::clone::Clone>::clone",
+          "self": 110976,
+          "inclusive": 5151047,
+          "calls": 3264
+        },
+        {
+          "name": "ignite_types::type_module",
+          "self": 7008,
+          "inclusive": 134054514,
+          "calls": 16
+        }
+      ]
+    },
+    "after": {
+      "total_instructions": 349961814,
+      "cli_sha256": "a1d9e0afd75189fc6045999b8c4995d1e0ab80aafe1e1c443ef0c7880072d501",
+      "functions": [
+        {
+          "name": "<ignite_types::ModuleTypes as core::clone::Clone>::clone",
+          "self": 3875,
+          "inclusive": 2271079,
+          "calls": 31
+        },
+        {
+          "name": "<ignite_types::FnSig as core::clone::Clone>::clone",
+          "self": 61404,
+          "inclusive": 2793265,
+          "calls": 1806
+        },
+        {
+          "name": "<ignite_types::ModuleTypes>::query_snapshot",
+          "self": 14144,
+          "inclusive": 2594352,
+          "calls": 136
+        },
+        {
+          "name": "ignite_types::type_module",
+          "self": 7168,
+          "inclusive": 128475365,
+          "calls": 16
+        }
+      ]
+    }
+  },
+  "normal_timing_diagnostic": {
+    "check": {
+      "before": 0.07654967397684231,
+      "after": 0.0704996109707281,
+      "median_saved_seconds": 0.005823791027069092,
+      "raw_pairs": 3,
+      "before_cpu_seconds": 0.07571700000000003,
+      "after_cpu_seconds": 0.06936000000000009
+    },
+    "plan": {
+      "before": 0.07396944100037217,
+      "after": 0.07318797899642959,
+      "median_saved_seconds": 0.0005961210117675364,
+      "raw_pairs": 3,
+      "before_cpu_seconds": 0.07320500000000019,
+      "after_cpu_seconds": 0.07238600000000028
+    }
+  },
+  "canonical_plan_sha256": [
+    "39277a6fb4b599d197cf0419028da03264eafec3707c9a24b06ee1836eb61aab"
+  ],
+  "focused_results": {
+    "ignite-types": "40 passed,0 ignored",
+    "ignite-eval": "10 passed",
+    "ignite-llvm": "15 passed",
+    "ignite-rustgen": "84 passed,1 existing ignored",
+    "CLI plan": "11 passed",
+    "CLI eval": "8 passed",
+    "inline Rust": "148 passed",
+    "inline LLVM": "148 passed"
+  },
+  "logs": [
+    "ownership-test.log",
+    "ownership-test-corrected.log",
+    "before-build.log",
+    "after-build.log",
+    "before-callgrind.stdout",
+    "before-callgrind.stderr",
+    "after-callgrind.stdout",
+    "after-callgrind.stderr",
+    "components.log",
+    "cli-plan.log",
+    "cli-eval.log",
+    "inline.log"
+  ],
+  "raw_profiles": {
+    "before.callgrind": "44a4ca089770e5680f91211bc8f38a5491d197baa3681c17d3568f8ccd2f0924",
+    "after.callgrind": "dbc3866c13f8dba9d1768b8263caa2d09a3923fdf2623accf000ace47e127de9"
+  },
+  "repo_copy_exclude": [
+    "ignite-before",
+    "ignite-after"
+  ]
+}

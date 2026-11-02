@@ -1,0 +1,299 @@
+{
+  "restart_journal_ns": 115849199,
+  "fdatasync_count": 21,
+  "fdatasync_sum_seconds": 0.164372,
+  "fdatasync_max_seconds": 0.019238,
+  "terminal_execs": [
+    {
+      "tid": 1733573,
+      "start": 1793630752.407017,
+      "seconds": 0.000705,
+      "line": "1733573 1793630752.407017 execve(\"/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/bin/1/terminald\", [\"/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/bin/1/terminald\", \"--port\", \"0\"], 0x7ffdddb4ef00 /* 144 vars */) = 0 <0.000705>"
+    },
+    {
+      "tid": 1733863,
+      "start": 1793630752.593267,
+      "seconds": 0.000981,
+      "line": "1733863 1793630752.593267 execve(\"/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/bin/1/terminald\", [\"/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/bin/1/terminald\", \"--port\", \"36851\"], 0x7ffdddb4ef00 /* 144 vars */) = 0 <0.000981>"
+    }
+  ],
+  "syncs": [
+    {
+      "tid": 1733213,
+      "wall": 1793630752.318675,
+      "seq": null,
+      "line": "1733213 1793630752.318675 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.019238>",
+      "seconds": 0.019238
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.353832,
+      "seq": 1,
+      "line": "1733213 1793630752.353832 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.010033>",
+      "seconds": 0.010033
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.366477,
+      "seq": 3,
+      "line": "1733213 1793630752.366477 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.008422>",
+      "seconds": 0.008422
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.397106,
+      "seq": 9,
+      "line": "1733213 1793630752.397106 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>",
+      "seconds": 0.007593
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.419254,
+      "seq": 11,
+      "line": "1733213 1793630752.419254 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.008292>",
+      "seconds": 0.008292
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.440618,
+      "seq": 15,
+      "line": "1733213 1793630752.440618 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>",
+      "seconds": 0.007787
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.452575,
+      "seq": 18,
+      "line": "1733213 1793630752.452575 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>",
+      "seconds": 0.009038
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.464516,
+      "seq": 19,
+      "line": "1733213 1793630752.464516 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>",
+      "seconds": 0.006516
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.472037,
+      "seq": 20,
+      "line": "1733213 1793630752.472037 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006709>",
+      "seconds": 0.006709
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.480522,
+      "seq": 22,
+      "line": "1733213 1793630752.480522 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>",
+      "seconds": 0.006863
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.487826,
+      "seq": 23,
+      "line": "1733213 1793630752.487826 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006244>",
+      "seconds": 0.006244
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.505304,
+      "seq": 27,
+      "line": "1733213 1793630752.505304 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006531>",
+      "seconds": 0.006531
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.512397,
+      "seq": 28,
+      "line": "1733213 1793630752.512397 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.005360>",
+      "seconds": 0.00536
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.519244,
+      "seq": 31,
+      "line": "1733213 1793630752.519244 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006659>",
+      "seconds": 0.006659
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.52989,
+      "seq": 34,
+      "line": "1733213 1793630752.529890 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006410>",
+      "seconds": 0.00641
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.53787,
+      "seq": 37,
+      "line": "1733213 1793630752.537870 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>",
+      "seconds": 0.006245
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.5805,
+      "seq": 40,
+      "line": "1733213 1793630752.580500 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>",
+      "seconds": 0.005501
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.596691,
+      "seq": 42,
+      "line": "1733213 1793630752.596691 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.008278>",
+      "seconds": 0.008278
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.609382,
+      "seq": 46,
+      "line": "1733213 1793630752.609382 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006053>",
+      "seconds": 0.006053
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.622533,
+      "seq": 51,
+      "line": "1733213 1793630752.622533 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>",
+      "seconds": 0.009269
+    },
+    {
+      "tid": 1733213,
+      "wall": 1793630752.638119,
+      "seq": 55,
+      "line": "1733213 1793630752.638119 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>",
+      "seconds": 0.007331
+    }
+  ],
+  "journal_writes": {
+    "21": {
+      "tid": 1733213,
+      "wall": 1793630752.4802,
+      "line": "1733213 1793630752.480200 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":125537430,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.server.supervisor\\\",\\\"seq\\\":21,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":125537430,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[1733573,9],\\\"type\\\":\\\"std.control.EventKind\\\",\\\"variant\\\":\\\"Signalled\\\"}},\\\"type\\\":\\\"s\"..., 276) = 276 <0.000017>"
+    },
+    "22": {
+      "tid": 1733213,
+      "wall": 1793630752.480468,
+      "line": "1733213 1793630752.480468 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":125537430,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"effect\\\",\\\"machine\\\":\\\"Terminal.server.supervisor\\\",\\\"seq\\\":22,\\\"value\\\":{\\\"fields\\\":[\\\"restart attempt 1 delay 100 ms\\\"],\\\"type\\\":\\\"std.control.Effect\\\",\\\"variant\\\":\\\"Note\\\"}}\\n\", 205 <unfinished ...>"
+    },
+    "23": {
+      "tid": 1733213,
+      "wall": 1793630752.487777,
+      "line": "1733213 1793630752.487777 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":125537430,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"effect\\\",\\\"machine\\\":\\\"Terminal.server.supervisor\\\",\\\"seq\\\":23,\\\"value\\\":{\\\"fields\\\":[1,{\\\"ns\\\":225537430,\\\"type\\\":\\\"Duration\\\"}],\\\"type\\\":\\\"std.control.Effect\\\",\\\"variant\\\":\\\"SetTimer\\\"}}\\n\", 213) = 213 <0.000016>"
+    },
+    "24": {
+      "tid": 1733213,
+      "wall": 1793630752.495223,
+      "line": "1733213 1793630752.495223 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":125537430,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.server.rollout\\\",\\\"seq\\\":24,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":125537430,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[1733573,9],\\\"type\\\":\\\"std.control.EventKind\\\",\\\"variant\\\":\\\"Signalled\\\"}},\\\"type\\\":\\\"std.\"..., 273) = 273 <0.000013>"
+    },
+    "25": {
+      "tid": 1733213,
+      "wall": 1793630752.4961,
+      "line": "1733213 1793630752.496100 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":125537430,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.promptProbe.scheduler\\\",\\\"seq\\\":25,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":125537430,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[1733573,9],\\\"type\\\":\\\"std.control.EventKind\\\",\\\"variant\\\":\\\"Signalled\\\"}},\\\"type\"..., 280) = 280 <0.000012>"
+    },
+    "26": {
+      "tid": 1733213,
+      "wall": 1793630752.504855,
+      "line": "1733213 1793630752.504855 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.promptProbe.scheduler\\\",\\\"seq\\\":26,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[1,{\\\"fields\\\":{\\\"latency\\\":{\\\"ns\\\":137446,\\\"type\\\":\\\"Duration\\\"},\\\"received\\\":false\"..., 376) = 376 <0.000016>"
+    },
+    "27": {
+      "tid": 1733213,
+      "wall": 1793630752.50525,
+      "line": "1733213 1793630752.505250 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"effect\\\",\\\"machine\\\":\\\"Terminal.promptProbe.scheduler\\\",\\\"seq\\\":27,\\\"value\\\":{\\\"fields\\\":[1],\\\"type\\\":\\\"std.control.Effect\\\",\\\"variant\\\":\\\"CancelTimer\\\"}}\\n\", 185) = 185 <0.000012>"
+    },
+    "28": {
+      "tid": 1733213,
+      "wall": 1793630752.512353,
+      "line": "1733213 1793630752.512353 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"effect\\\",\\\"machine\\\":\\\"Terminal.promptProbe.scheduler\\\",\\\"seq\\\":28,\\\"value\\\":{\\\"fields\\\":[\\\"Terminal.promptProbe.attempts\\\",{\\\"fields\\\":{\\\"latency\\\":{\\\"ns\\\":137446,\\\"type\\\":\\\"Duration\\\"},\\\"received\\\":false},\\\"type\\\":\\\"std.sli.ProbeAtte\"..., 310) = 310 <0.000013>"
+    },
+    "29": {
+      "tid": 1733213,
+      "wall": 1793630752.518295,
+      "line": "1733213 1793630752.518295 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"signal\\\",\\\"machine\\\":\\\"Terminal.promptProbe.scheduler\\\",\\\"seq\\\":29,\\\"value\\\":{\\\"ref\\\":\\\"Terminal.promptProbe.attempts\\\",\\\"value\\\":{\\\"fields\\\":{\\\"latency\\\":{\\\"ns\\\":137446,\\\"type\\\":\\\"Duration\\\"},\\\"received\\\":false},\\\"type\\\":\\\"std.sli.Probe\"..., 268) = 268 <0.000013>"
+    },
+    "30": {
+      "tid": 1733213,
+      "wall": 1793630752.518752,
+      "line": "1733213 1793630752.518752 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.customerAccess.evaluator\\\",\\\"seq\\\":30,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[\\\"Terminal.promptProbe.attempts\\\",{\\\"fields\\\":{\\\"latency\\\":{\\\"ns\\\":137446,\\\"t\"..., 405) = 405 <0.000010>"
+    },
+    "31": {
+      "tid": 1733213,
+      "wall": 1793630752.519198,
+      "line": "1733213 1793630752.519198 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"effect\\\",\\\"machine\\\":\\\"Terminal.customerAccess.evaluator\\\",\\\"seq\\\":31,\\\"value\\\":{\\\"fields\\\":[{\\\"fields\\\":{\\\"calculation\\\":\\\"ignite-sli/0.1\\\",\\\"completeness\\\":{\\\"ppm\\\":1000000,\\\"type\\\":\\\"Ratio\\\"},\\\"contract\\\":\\\"Terminal.customerAccess\\\",\"..., 565) = 565 <0.000013>"
+    },
+    "32": {
+      "tid": 1733213,
+      "wall": 1793630752.526464,
+      "line": "1733213 1793630752.526464 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"standing\\\",\\\"machine\\\":\\\"Terminal.customerAccess.evaluator\\\",\\\"seq\\\":32,\\\"value\\\":{\\\"fields\\\":{\\\"calculation\\\":\\\"ignite-sli/0.1\\\",\\\"completeness\\\":{\\\"ppm\\\":1000000,\\\"type\\\":\\\"Ratio\\\"},\\\"contract\\\":\\\"Terminal.customerAccess\\\",\\\"coverage\"..., 506) = 506 <0.000276>"
+    },
+    "33": {
+      "tid": 1733213,
+      "wall": 1793630752.528236,
+      "line": "1733213 1793630752.528236 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.promptFast.evaluator\\\",\\\"seq\\\":33,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[\\\"Terminal.promptProbe.attempts\\\",{\\\"fields\\\":{\\\"latency\\\":{\\\"ns\\\":137446,\\\"type\\\"\"..., 401) = 401 <0.000009>"
+    },
+    "34": {
+      "tid": 1733213,
+      "wall": 1793630752.529843,
+      "line": "1733213 1793630752.529843 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"effect\\\",\\\"machine\\\":\\\"Terminal.promptFast.evaluator\\\",\\\"seq\\\":34,\\\"value\\\":{\\\"fields\\\":[{\\\"fields\\\":{\\\"calculation\\\":\\\"ignite-sli/0.1\\\",\\\"completeness\\\":{\\\"ppm\\\":1000000,\\\"type\\\":\\\"Ratio\\\"},\\\"contract\\\":\\\"Terminal.promptFast\\\",\\\"coverag\"..., 557) = 557 <0.000013>"
+    },
+    "35": {
+      "tid": 1733213,
+      "wall": 1793630752.536709,
+      "line": "1733213 1793630752.536709 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"standing\\\",\\\"machine\\\":\\\"Terminal.promptFast.evaluator\\\",\\\"seq\\\":35,\\\"value\\\":{\\\"fields\\\":{\\\"calculation\\\":\\\"ignite-sli/0.1\\\",\\\"completeness\\\":{\\\"ppm\\\":1000000,\\\"type\\\":\\\"Ratio\\\"},\\\"contract\\\":\\\"Terminal.promptFast\\\",\\\"coverage\\\":{\\\"ppm\\\"\"..., 498 <unfinished ...>"
+    },
+    "36": {
+      "tid": 1733213,
+      "wall": 1793630752.537058,
+      "line": "1733213 1793630752.537058 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.reachable.evaluator\\\",\\\"seq\\\":36,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[\\\"Terminal.promptProbe.attempts\\\",{\\\"fields\\\":{\\\"latency\\\":{\\\"ns\\\":137446,\\\"type\\\":\"..., 400) = 400 <0.000554>"
+    },
+    "37": {
+      "tid": 1733213,
+      "wall": 1793630752.537826,
+      "line": "1733213 1793630752.537826 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"effect\\\",\\\"machine\\\":\\\"Terminal.reachable.evaluator\\\",\\\"seq\\\":37,\\\"value\\\":{\\\"fields\\\":[{\\\"fields\\\":{\\\"calculation\\\":\\\"ignite-sli/0.1\\\",\\\"completeness\\\":{\\\"ppm\\\":1000000,\\\"type\\\":\\\"Ratio\\\"},\\\"contract\\\":\\\"Terminal.reachable\\\",\\\"coverage\\\"\"..., 555) = 555 <0.000019>"
+    },
+    "38": {
+      "tid": 1733213,
+      "wall": 1793630752.544878,
+      "line": "1733213 1793630752.544878 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":142717287,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"standing\\\",\\\"machine\\\":\\\"Terminal.reachable.evaluator\\\",\\\"seq\\\":38,\\\"value\\\":{\\\"fields\\\":{\\\"calculation\\\":\\\"ignite-sli/0.1\\\",\\\"completeness\\\":{\\\"ppm\\\":1000000,\\\"type\\\":\\\"Ratio\\\"},\\\"contract\\\":\\\"Terminal.reachable\\\",\\\"coverage\\\":{\\\"ppm\\\":0\"..., 496) = 496 <0.000015>"
+    },
+    "39": {
+      "tid": 1733213,
+      "wall": 1793630752.580164,
+      "line": "1733213 1793630752.580164 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":225537430,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.server.supervisor\\\",\\\"seq\\\":39,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":225537430,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[1],\\\"type\\\":\\\"std.control.EventKind\\\",\\\"variant\\\":\\\"Timer\\\"}},\\\"type\\\":\\\"std.control.E\"..., 264) = 264 <0.000011>"
+    },
+    "40": {
+      "tid": 1733213,
+      "wall": 1793630752.58045,
+      "line": "1733213 1793630752.580450 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":225537430,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"effect\\\",\\\"machine\\\":\\\"Terminal.server.supervisor\\\",\\\"seq\\\":40,\\\"value\\\":{\\\"fields\\\":[\\\"Terminal.server\\\",1],\\\"type\\\":\\\"std.control.Effect\\\",\\\"variant\\\":\\\"Spawn\\\"}}\\n\", 193 <unfinished ...>"
+    },
+    "41": {
+      "tid": 1733213,
+      "wall": 1793630752.596335,
+      "line": "1733213 1793630752.596335 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":241386629,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.server.supervisor\\\",\\\"seq\\\":41,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":241386629,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[1733863,1],\\\"type\\\":\\\"std.control.EventKind\\\",\\\"variant\\\":\\\"Started\\\"}},\\\"type\\\":\\\"std\"..., 274) = 274 <0.000017>"
+    },
+    "42": {
+      "tid": 1733213,
+      "wall": 1793630752.596651,
+      "line": "1733213 1793630752.596651 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":241386629,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"effect\\\",\\\"machine\\\":\\\"Terminal.server.supervisor\\\",\\\"seq\\\":42,\\\"value\\\":{\\\"fields\\\":[2,{\\\"ns\\\":10241386629,\\\"type\\\":\\\"Duration\\\"}],\\\"type\\\":\\\"std.control.Effect\\\",\\\"variant\\\":\\\"SetTimer\\\"}}\\n\", 215) = 215 <0.000010>"
+    },
+    "43": {
+      "tid": 1733213,
+      "wall": 1793630752.606264,
+      "line": "1733213 1793630752.606264 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":241386629,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.server.rollout\\\",\\\"seq\\\":43,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":241386629,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[1733863,1],\\\"type\\\":\\\"std.control.EventKind\\\",\\\"variant\\\":\\\"Started\\\"}},\\\"type\\\":\\\"std.co\"..., 271) = 271 <0.000013>"
+    },
+    "44": {
+      "tid": 1733213,
+      "wall": 1793630752.607544,
+      "line": "1733213 1793630752.607544 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":241386629,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.promptProbe.scheduler\\\",\\\"seq\\\":44,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":241386629,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[1733863,1],\\\"type\\\":\\\"std.control.EventKind\\\",\\\"variant\\\":\\\"Started\\\"}},\\\"type\\\":\"..., 278) = 278 <0.000012>"
+    },
+    "45": {
+      "tid": 1733213,
+      "wall": 1793630752.608939,
+      "line": "1733213 1793630752.608939 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, \"{\\\"at\\\":{\\\"ns\\\":254217101,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":\\\"event\\\",\\\"machine\\\":\\\"Terminal.server.supervisor\\\",\\\"seq\\\":45,\\\"value\\\":{\\\"fields\\\":{\\\"at\\\":{\\\"ns\\\":254217101,\\\"type\\\":\\\"Duration\\\"},\\\"kind\\\":{\\\"fields\\\":[1733863],\\\"type\\\":\\\"std.control.EventKind\\\",\\\"variant\\\":\\\"Ready\\\"}},\\\"type\\\":\\\"std.con\"..., 270) = 270 <0.000012>"
+    }
+  },
+  "new_exec_start_to_started_journal_write_seconds": 0.0030679702758789062,
+  "new_exec_end_to_started_journal_write_seconds": 0.002086970275878906,
+  "signalled_journal_write_to_exec_end_seconds": 0.11404800415039062
+}

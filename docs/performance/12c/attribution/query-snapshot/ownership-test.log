@@ -1,0 +1,19 @@
+
+running 1 test
+surface::imported_queries_survive_input_mutation_and_drop --- FAILED
+
+failures:
+
+---- surface::imported_queries_survive_input_mutation_and_drop stdout ----
+
+thread 'surface::imported_queries_survive_input_mutation_and_drop' (2527743) panicked at crates/ignite-types/tests/surface.rs:324:67:
+called `Result::unwrap()` on an `Err` value: [Diagnostic { code: "E030", message: "`identity` is not a protocol role; the roles are `serve` and `connect`, declare helpers as module-level functions", span: Span { start: 322, end: 330 } }]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    surface::imported_queries_survive_input_mutation_and_drop
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 39 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p ignite-types --test main`

@@ -1,0 +1,16 @@
+{
+  "check": {
+    "before": 0.12056522798957303,
+    "after": 0.12267308501759544,
+    "median_saved_seconds": -8.85501503944397e-06,
+    "raw_pairs": 3
+  },
+  "plan": {
+    "before": 0.12476371496450156,
+    "after": 0.11601389199495316,
+    "median_saved_seconds": 0.008749822969548404,
+    "raw_pairs": 3
+  },
+  "decision": "Reverted: check did not show >=1ms gain and median regressed. Host load49.98 makes walltime attribution weak; no repeats performed.",
+  "source_restored": true
+}

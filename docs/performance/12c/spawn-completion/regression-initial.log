@@ -1,0 +1,40 @@
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.36s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/ignite-7066fbb78e702281)
+
+running 1 test
+test run::live::tests::timer_spawn_completion_precedes_a_held_probe_result ... FAILED
+
+failures:
+
+---- run::live::tests::timer_spawn_completion_precedes_a_held_probe_result stdout ----
+25 100 ms event Terminal.server.supervisor: Timer(1)
+26 100 ms effect Terminal.server.supervisor: Spawn("Terminal.server", 1)
+27 100 ms event Terminal.server.supervisor: Started(2305365, 1)
+28 100 ms effect Terminal.server.supervisor: SetTimer(2, 10100 ms)
+29 100 ms event Terminal.server.rollout: Started(2305365, 1)
+30 100 ms event Terminal.promptProbe.scheduler: Started(2305365, 1)
+31 100 ms event Terminal.promptProbe.scheduler: AttemptFailed(1, "undecodable probe line: value: expected type `std.sli.ProbeAttempt`, found no `type` key")
+32 100 ms effect Terminal.promptProbe.scheduler: CancelTimer(1)
+33 100 ms effect Terminal.promptProbe.scheduler: Note("missing")
+34 100 ms event Terminal.server.rollout: Control("stop")
+35 100 ms event Terminal.server.supervisor: Control("stop")
+36 100 ms effect Terminal.server.supervisor: CancelTimer(2)
+37 100 ms effect Terminal.server.supervisor: Kill("Terminal.server", 2305365, 15)
+ignite run: kill 15 of Terminal.server pid 2305365: no live child with pid 2305365
+38 100 ms event Terminal.server.supervisor: Exited(2305365, 0)
+39 100 ms event Terminal.server.rollout: Exited(2305365, 0)
+40 100 ms event Terminal.promptProbe.scheduler: Exited(2305365, 0)
+41 100 ms segment: { clock: "manual", declared: [], generation: 1, start: 0 ns, stop: Some(100 ms) }
+
+thread 'run::live::tests::timer_spawn_completion_precedes_a_held_probe_result' (2305138) panicked at crates/ignite/src/run/live.rs:1078:14:
+called `Option::unwrap()` on a `None` value
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    run::live::tests::timer_spawn_completion_precedes_a_held_probe_result
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `-p ignite --lib`
