@@ -1,19 +1,19 @@
-# Telos on WebAssembly: components, a runtime in Telos, hot reload
+# Ignite on WebAssembly: components, a runtime in Ignite, hot reload
 
 **Status:** future design, not a slice contract. Nothing here is implemented.
 **Date:** 1 November 2026
-**Scope:** compiling Telos components to WebAssembly, running them on a WebAssembly runtime
-written in Telos, and replacing single components in a running system.
+**Scope:** compiling Ignite components to WebAssembly, running them on a WebAssembly runtime
+written in Ignite, and replacing single components in a running system.
 
 Direction (Timo, 2026-11-01): whole systems, services or components compile to WebAssembly and
-run on a runtime. The runtime is written in Telos. The goal is to compile components on the fly
+run on a runtime. The runtime is written in Ignite. The goal is to compile components on the fly
 and hot-reload them: a watcher, a running application, and a reload of the components that
 changed.
 
 This document decides. Each section states the chosen design, the alternatives it rejects and
-why. References to Telos cite `docs/Telos_Design.md` as "design §n", `docs/slice.md` as
+why. References to Ignite cite `design.md` as "design §n", `docs/slice.md` as
 "slice §n", `docs/llvm.md` as "llvm §n", or a file and line. External facts carry the IDs of
-section 13. Where a proposal conflicts with a stated Telos decision, it is marked **Conflict**,
+section 13. Where a proposal conflicts with a stated Ignite decision, it is marked **Conflict**,
 and section 12 collects these conflicts. Actor state, `code_change`-style migration of actor
 state, and supervision are in `docs/actors.md` (written in parallel). This document covers the
 component swap mechanism only.
@@ -23,19 +23,19 @@ component swap mechanism only.
 ### 1.1 The dev loop
 
 ```bash
-$ telos run --watch examples/todo/todo.telos
+$ ignite run --watch examples/todo/todo.ignite
 listening on 127.0.0.1:8080
-watching examples/todo/todo.telos and std/: components server (v1), server.application (v1)
-# edit `handle` in todo.telos, save
+watching examples/todo/todo.ignite and std/: components server (v1), server.application (v1)
+# edit `handle` in todo.ignite, save
 reloaded server.application v2 (3f9c0a…) in 180 ms; store todos kept (3 values)
 # edit `type Todo` without a migration, save
-examples/todo/todo.telos:15:1: error[E080]: `Todo` changed its stored shape; `todos` holds 3 values of the old shape; declare `migrate` on resource `todos`
+examples/todo/todo.ignite:15:1: error[E080]: `Todo` changed its stored shape; `todos` holds 3 values of the old shape; declare `migrate` on resource `todos`
 server.application v2 keeps running
 ```
 
 The loop has five steps:
 
-1. **Change.** The watcher in the `telos` driver sees a write to the program file or to a file
+1. **Change.** The watcher in the `ignite` driver sees a write to the program file or to a file
    under `std/`.
 2. **Check.** The frontend checks the whole program again (parse, check, type; slice §1). Any
    diagnostic stops the step. The running version stays and the driver prints the diagnostic.
@@ -43,15 +43,15 @@ The loop has five steps:
    compiles only the components whose hash changed, plus the dependents whose interface
    changed.
 4. **Ship.** It sends the new component bytes over a loopback control connection to the running
-   runtime process, `telos-wasmrt`.
+   runtime process, `ignite-wasmrt`.
 5. **Swap.** The runtime decodes and validates the component, checks its interface and state
    schema, links it, and swaps it at the next swap point (section 5.4). It answers `reloaded`
    or `refused: <reason>`.
 
-`telos run` is the design's foreground development command (design §10.1, `Telos_Design.md:519`,
-`:527`). `--watch` extends it. The command uses an implicit development assembly that places
-every component in one local `telos-wasmrt` process. Assemblies are design §5 and
-`Telos_Design.md:661-671`; they are not in a slice yet.
+`ignite run` is the design's foreground development command (design §10.1).
+`--watch` extends it. The command uses an implicit development assembly that places
+every component in one local `ignite-wasmrt` process. Assemblies are design §5 and the
+`assembly local` declaration of design §11.3; they are not in a slice yet.
 
 ### 1.2 Latency budget
 
@@ -68,19 +68,19 @@ the steps depend on the compilation path of section 2.
 | wait for the swap point | one in-flight request | same |
 | **total** | **≤ 300 ms** | **≤ 150 ms** |
 
-**Conflict** with design §1.5 (`Telos_Design.md:81`): "Set numeric performance budgets only
+**Conflict** with design §1.5: "Set numeric performance budgets only
 after the first baseline exists." These numbers are therefore targets. The phase 1 measurement
 replaces them before any phase gate uses them.
 
 ### 1.3 Goals
 
-- **G1. Same semantics.** Telos semantics on wasm are the same as on the Rust and LLVM targets
-  (design §8.3, `Telos_Design.md:362`). Hot reload is an operation on a running system, like a
+- **G1. Same semantics.** Ignite semantics on wasm are the same as on the Rust and LLVM targets
+  (design §8.3). Hot reload is an operation on a running system, like a
   rollout; it is not a language feature.
 - **G2. Authority by imports.** A component's authority is its import list. The list is derived
   from the effects the checker computed (slice §5).
-- **G3. A runtime in Telos.** The runtime is Telos, compiled natively by the LLVM target. The
-  only Rust it runs is the substrate (`AGENTS.md:28-29`).
+- **G3. A runtime in Ignite.** The runtime is Ignite, compiled natively by the LLVM target. The
+  only Rust it runs is the substrate (`AGENTS.md`, Layout, first rule).
 - **G4. Reloads keep data.** A reload keeps resource data and open sessions.
 
 ### 1.4 Non-goals
@@ -89,7 +89,7 @@ replaces them before any phase gate uses them.
 - Running arbitrary third-party components or WASI programs. This is a later interop phase
   (section 11, Q8).
 - Replacing native targets for releases. Releases stay native (design §11.9).
-- Moving live TCP connections between processes (design §11.4, `Telos_Design.md:692`).
+- Moving live TCP connections between processes (design §11.4).
 - Reloading the runtime itself. Changing it means a restart.
 - A JIT before phase 6.
 - WasmGC.
@@ -100,13 +100,13 @@ replaces them before any phase gate uses them.
 
 | question | chosen | rejected | why |
 |---|---|---|---|
-| first wasm path | reuse `telos-llvm` with a wasm32 data layout; `clang --target=wasm32-unknown-unknown`, `wasm-ld`, then `wasm-tools component new` | direct emitter first | It reuses the lowering, regions and glue of llvm §3–4 that the tests already exercise, so wasm is running in weeks rather than months. |
-| guest support code | arena slow path and spawn glue emitted as IR by `telos-llvm` (`llvm.wasm.memory.grow`) | `telos-rt` compiled for wasm32 | No hand-written Rust inside the guest; `telos-rt` depends on `telos-io` and `std::net`. |
-| clang triple | `wasm32-unknown-unknown` with Telos's own imports | `wasm32-wasip1`/`wasip2` [W11, W13, W14] | Telos code needs no libc. A WASI triple would bring a second IO path that bypasses `telos-io` (**Conflict** with `AGENTS.md:31`, "the substrate is implemented once"). |
-| second path | a direct wasm emitter written in Telos (phase 5) | an emitter written in Rust | The emitter is the first backend piece toward self-hosting (design §12.4). It compiles inside the runtime process with no clang, which is what makes on-the-fly compiles cheap. |
-| input of the Telos emitter | a serialized Telos Code IR that the Rust frontend writes (`telos emit --code-ir`) | re-parsing in Telos | The frontend is Rust until milestone M6 (design §12.2). Code IR is the layer the design already names (design §8.5, `Telos_Design.md:397`). |
+| first wasm path | reuse `ignite-llvm` with a wasm32 data layout; `clang --target=wasm32-unknown-unknown`, `wasm-ld`, then `wasm-tools component new` | direct emitter first | It reuses the lowering, regions and glue of llvm §3–4 that the tests already exercise, so wasm is running in weeks rather than months. |
+| guest support code | arena slow path and spawn glue emitted as IR by `ignite-llvm` (`llvm.wasm.memory.grow`) | `ignite-rt` compiled for wasm32 | No hand-written Rust inside the guest; `ignite-rt` depends on `ignite-io` and `std::net`. |
+| clang triple | `wasm32-unknown-unknown` with Ignite's own imports | `wasm32-wasip1`/`wasip2` [W11, W13, W14] | Ignite code needs no libc. A WASI triple would bring a second IO path that bypasses `ignite-io` (**Conflict** with `AGENTS.md`, Layout, second rule: "the substrate is implemented once"). |
+| second path | a direct wasm emitter written in Ignite (phase 5) | an emitter written in Rust | The emitter is the first backend piece toward self-hosting (design §12.4). It compiles inside the runtime process with no clang, which is what makes on-the-fly compiles cheap. |
+| input of the Ignite emitter | a serialized Ignite Code IR that the Rust frontend writes (`ignite emit --code-ir`) | re-parsing in Ignite | The frontend is Rust until milestone M6 (design §12.2). Code IR is the layer the design already names (design §8.5). |
 
-Sequence: LLVM path (phase 1) → Telos interpreter (phase 2) → reload (phases 3, 4) → direct
+Sequence: LLVM path (phase 1) → Ignite interpreter (phase 2) → reload (phases 3, 4) → direct
 emitter (phase 5) → baseline compiler (phase 6). The LLVM path stays as the reference: the
 emitter's output must behave like it on the same tests.
 
@@ -114,43 +114,43 @@ emitter's output must behave like it on the same tests.
 
 The guest feature set is LLVM's fixed `lime1` CPU: MVP plus mutable-globals, bulk-memory-opt,
 multivalue, sign-ext, nontrapping-fptoint, extended-const and call-indirect-overlong [W12]. The
-Telos interpreter implements this set and nothing more. The set is frozen, so the runtime has a
+Ignite interpreter implements this set and nothing more. The set is frozen, so the runtime has a
 target that does not move. Newer features go into later CPUs such as `lime2`, not into `lime1`
 [W12].
 
 | Wasm 3.0 / proposal feature [W1, W2, W5] | decision | why |
 |---|---|---|
-| GC (3.0) | rejected | Telos values are arena-allocated with value semantics (llvm §4), not GC references. Wasmtime's baseline compiler Winch lacks GC [W16]. |
-| exception handling (3.0) | rejected | Telos has `Result` and no exceptions. A trap ends the task (section 8). |
-| tail calls (3.0) | not needed | No Telos construct requires them. |
+| GC (3.0) | rejected | Ignite values are arena-allocated with value semantics (llvm §4), not GC references. Wasmtime's baseline compiler Winch lacks GC [W16]. |
+| exception handling (3.0) | rejected | Ignite has `Result` and no exceptions. A trap ends the task (section 8). |
+| tail calls (3.0) | not needed | No Ignite construct requires them. |
 | memory64 (3.0) | rejected | Each task has its own instance (section 7). 4 GiB per task is enough. |
 | multiple memories (3.0) | rejected | The scratch arena is a second chunk list in the same memory (section 2.3). |
-| threads (Phase 4, not in 3.0) | rejected | Telos tasks share nothing, so one instance per task needs no shared memory. Threads are Tier 2 in Wasmtime and unsupported on Pulley [W16]. `wasi-threads` is legacy [W28]; shared-everything-threads is Phase 1 [W5, W29]. |
+| threads (Phase 4, not in 3.0) | rejected | Ignite tasks share nothing, so one instance per task needs no shared memory. Threads are Tier 2 in Wasmtime and unsupported on Pulley [W16]. `wasi-threads` is legacy [W28]; shared-everything-threads is Phase 1 [W5, W29]. |
 | stack switching (Phase 3) | rejected for now | Not standardized, and in progress on x86_64 Cranelift only [W5, W6, W16]. Suspension happens in the host (section 7). |
 
 ### 2.3 Mapping existing pieces onto wasm
 
 | piece (native) | on wasm |
 |---|---|
-| task arena, 64 KiB chunks, bump state (llvm §4, §5) | The instance's linear memory is the task's arena. Chunks are carved from memory, and the slow path calls `memory.grow`. `@telos.alloc`, `arena_mark`, `arena_release` and `arena_due` stay inline helpers in IR. |
+| task arena, 64 KiB chunks, bump state (llvm §4, §5) | The instance's linear memory is the task's arena. Chunks are carved from memory, and the slow path calls `memory.grow`. `@ignite.alloc`, `arena_mark`, `arena_release` and `arena_due` stay inline helpers in IR. |
 | scratch arena (llvm §4) | A second chunk list in the same memory. |
-| loop regions (llvm §4, `crates/telos-llvm/src/region.rs`) | Unchanged. They are IR, so they compile to wasm as they are. |
+| loop regions (llvm §4, `crates/ignite-llvm/src/region.rs`) | Unchanged. They are IR, so they compile to wasm as they are. |
 | `Text`, `List<T>` `{ptr, i64 len, i64 cap}` (llvm §3) | `{i32 ptr, i64 len, i64 cap}`: 24 bytes, alignment 8. `len` stays `Int`. |
-| handle table, generation in the high bits (llvm §5, `crates/telos-rt/src/net.rs:16-18`) | It moves to the runtime as one table per instance (the canonical ABI's per-instance handle table [W9]). The guest sees an `i32` resource index; a stale or forged index traps. |
-| `spawn` handshake (llvm §4, `telos_rt_spawn`) | Import `telos:task/spawn(entry, env-ptr, env-len)`. Per-type `pack.<T>`/`unpack.<T>` glue writes the arguments to a flat buffer. The runtime copies the buffer into a new instance of the same module version, whose start export unpacks it. |
+| handle table, generation in the high bits (llvm §5; module doc and `encode` in `crates/ignite-rt/src/net.rs`) | It moves to the runtime as one table per instance (the canonical ABI's per-instance handle table [W9]). The guest sees an `i32` resource index; a stale or forged index traps. |
+| `spawn` handshake (llvm §4, `ignite_rt_spawn`) | Import `ignite:task/spawn(entry, env-ptr, env-len)`. Per-type `pack.<T>`/`unpack.<T>` glue writes the arguments to a flat buffer. The runtime copies the buffer into a new instance of the same module version, whose start export unpacks it. |
 | generics, monomorphized per instance (slice §11.1) | Unchanged. WIT has no user generics, so each instance that crosses a boundary gets a WIT name such as `pair-s64-string`. |
-| `Store<T>` (slice §11.3, `crates/telos-io/src/store.rs:18`) | It lives in the runtime as a resource (section 5.2). |
-| generated `main` (slice §6.1, llvm §6) | No main per executable. The runtime reads the system manifest, binds listeners and runs the accept loops in Telos (section 4.1). |
+| `Store<T>` (slice §11.3; `Store` in `crates/ignite-io/src/store.rs`) | It lives in the runtime as a resource (section 5.2). |
+| generated `main` (slice §6.1, llvm §6) | No main per executable. The runtime reads the system manifest, binds listeners and runs the accept loops in Ignite (section 4.1). |
 
 ## 3 Unit of compilation and isolation
 
 ### 3.1 The cut
 
-There is one wasm component per Telos component, in the Component Model sense: shared-nothing,
+There is one wasm component per Ignite component, in the Component Model sense: shared-nothing,
 importing and exporting only typed functions and resources [W7]. In the slice-7 surface, the
-`application` of a `Service` is a value inside `server` (`examples/terminal/terminal.telos:52-57`).
+`application` of a `Service` is a value inside `server` (component `server` of `system Terminal` in `examples/terminal/terminal.ignite`).
 In design §11.3 it is a component of its own: `component console: CommandConsole`, with
-`application = console` (`Telos_Design.md:573-582`). The wasm target follows the design. A
+`application = console` (components `console` and `server` of design §11.3). The wasm target follows the design. A
 `Service` therefore yields two components:
 
 - `server`: the protocol role (`Telnet.serve`, `Http.serve`) and everything reachable from it.
@@ -167,24 +167,24 @@ yields one component.
 | rejected | why |
 |---|---|
 | one component per system component, with the application linked in | Only drain swaps would then be possible. The application change, the common dev edit, would wait for every session to close. |
-| one component per fn or module | Every call would cross the canonical ABI. The program is one file anyway (slice §4.1, `docs/slice.md:217`). |
-| Telos-private boundary ABI using llvm §3 layouts | It is the same copy work as the canonical ABI, but unspecified and without interop. Wasmtime implements the canonical ABI for phase 1 [W20]. |
+| one component per fn or module | Every call would cross the canonical ABI. The program is one file anyway (slice §4.1 "Imports and the standard library"). |
+| Ignite-private boundary ABI using llvm §3 layouts | It is the same copy work as the canonical ABI, but unspecified and without interop. Wasmtime implements the canonical ABI for phase 1 [W20]. |
 
 ### 3.2 Imports come from effects
 
-`telos-check` already computes each function's declared or inferred effect set (slice §5, §5.1).
+`ignite-check` already computes each function's declared or inferred effect set (slice §5, §5.1).
 The roots of a component (its protocol role, or its exported application functions) determine
 its imports. Each effect maps to the import interface that performs it:
 
 | effect | import |
 |---|---|
-| `r.read`, `r.write`, `r.accept` on a stream or listener | `telos:io/tcp.{read, write-all, close, accept, set-idle-timeout}`, the subset needed |
-| `net.listen`, `net.connect` | `telos:io/net.{bind, connect}` |
-| `stdin.read`, `stdin.mode`, `stdout.write` | `telos:io/stdio.{…}` |
-| `process.exit` | `telos:io/process.exit` |
-| `s.read`, `s.write` on a `Store<T>` | `telos:store/<T>.{get, values}`, `{next-id, put, remove, update}` |
-| `spawn` | `telos:task/spawn` |
-| none (the free function `log`, slice §6) | `telos:io/log`, always granted |
+| `r.read`, `r.write`, `r.accept` on a stream or listener | `ignite:io/tcp.{read, write-all, close, accept, set-idle-timeout}`, the subset needed |
+| `net.listen`, `net.connect` | `ignite:io/net.{bind, connect}` |
+| `stdin.read`, `stdin.mode`, `stdout.write` | `ignite:io/stdio.{…}` |
+| `process.exit` | `ignite:io/process.exit` |
+| `s.read`, `s.write` on a `Store<T>` | `ignite:store/<T>.{get, values}`, `{next-id, put, remove, update}` |
+| `spawn` | `ignite:task/spawn` |
+| none (the free function `log`, slice §6) | `ignite:io/log`, always granted |
 
 Effects rooted at a parameter (`stream.read`) grant the import, but only the handles the
 instance holds can be used. Handles reach an instance only as arguments of its exports or as
@@ -194,20 +194,20 @@ E083 is a runtime refusal and a compiler bug, since the generator derived both f
 
 For the examples: terminal's `server.application` imports only `log`, because `execute` is pure.
 The Telnet `server` imports `tcp.{read, write-all, close}`, matching `requires [stream.read,
-stream.write]` (`std/protocol/telnet.telos:18`). todo's `server.application` imports
+stream.write]` (role `serve` of `protocol Telnet` in `std/protocol/telnet.ignite`). todo's `server.application` imports
 `store/todo` only, so it cannot open a socket.
 
 ### 3.3 Exports
 
 | component | exports |
 |---|---|
-| `server` (protocol) | `serve: func(stream: own<tcp-stream>, application: <data fields>) -> result<_, io-error>`, plus `telos-spawn-entry` |
+| `server` (protocol) | `serve: func(stream: own<tcp-stream>, application: <data fields>) -> result<_, io-error>`, plus `ignite-spawn-entry` |
 | `server.application` | one function per cut point (`respond: func(line: string) -> reply`, `handle: func(state: borrow<store-todo>, request: request) -> response`), `application-data: func() -> <data fields>`, and the declared `migrate` functions (section 5.3) |
 | `client` | `connect: func(stream: own<tcp-stream>) -> result<_, io-error>` |
 
 ### 3.4 Types in WIT and the canonical ABI
 
-| Telos (slice §6, llvm §3) | WIT [W8] | canonical ABI notes [W9] |
+| Ignite (slice §6, llvm §3) | WIT [W8] | canonical ABI notes [W9] |
 |---|---|---|
 | `Int` | `s64` | |
 | `Byte` | `u8` | |
@@ -226,23 +226,23 @@ stream.write]` (`std/protocol/telnet.telos:18`). todo's `server.application` imp
 | `IoError` | `record io-error { message: string, exit-code: s32 }` | |
 | `Input` | `variant input { data(list<u8>), eof }` | |
 | `fn(..)` value | not a WIT type; a cut point becomes an import binding (section 3.1) | |
-| recursive type (`enum Json`, std `json.telos`) | `list<u8>` holding a Telos encoding | WIT's documented types include no recursive definitions [W8]. Non-interop; section 11, Q4. |
+| recursive type (`enum Json`, std `json.ignite`) | `list<u8>` holding a Ignite encoding | WIT's documented types include no recursive definitions [W8]. Non-interop; section 11, Q4. |
 
 The guest's lift and lower glue is generated per type, next to the existing `copy.<T>` glue
 (llvm §4). It converts between llvm §3 layouts and canonical ABI layouts. Strings and lists are
 copied into the callee's arena through the canonical `realloc` option, and nothing is freed
 after the call: the caller's loop region releases it (llvm §4).
 
-### 3.5 The `telos:*` world
+### 3.5 The `ignite:*` world
 
-The interfaces `telos:io`, `telos:store` and `telos:task` describe `telos-io` (slice §7) one
+The interfaces `ignite:io`, `ignite:store` and `ignite:task` describe `ignite-io` (slice §7) one
 operation for one operation, as synchronous functions. Phase 1 defines them, and every later
 phase implements the same WIT. This document rejects the Component Model async ABI of WASI
 0.3 (`async func`, `stream<T>`, `future<T>` [W10]) for the internal boundary: guest tasks
 suspend in the host (section 7), and async lowering in the guest would add a second suspension
 mechanism. It is adopted only at an interop boundary (section 11, Q8).
 
-## 4 The runtime written in Telos
+## 4 The runtime written in Ignite
 
 ### 4.1 Layers
 
@@ -251,25 +251,25 @@ mechanism. It is adopted only at an interop boundary (section 11, Q8).
 | decoder | `std.wasm.decode` | Reads the binary format into module records: types, imports, functions, tables, memory, globals, exports, data, code. For components it reads a subset: one core module, function and resource imports and exports, the canonical options `memory`, `realloc` and `string-encoding=utf8`. Anything else is refused with a message. |
 | validator | `std.wasm.validate` | Follows the spec's validation algorithm [W4]. It validates eagerly, before linking. The spec allows lazy per-function validation [W3]; eager validation is chosen so that a bad build is refused before the swap rather than trapping mid-request. |
 | translator and interpreter | `std.wasm.exec` | Translates validated code into compact internal code with resolved branch targets and stack heights, then dispatches it in a loop. WAMR likewise ships a fast interpreter beside its classic one [W22], and wasmi is an interpreter with fuel metering [W23]. Fuel is counted at branches and calls. |
-| canonical ABI | `std.wasm.canon` | Lifts and lowers WIT values between guest memories, and between guest memory and host Telos values, driven by type descriptors from the component's type section. |
+| canonical ABI | `std.wasm.canon` | Lifts and lowers WIT values between guest memories, and between guest memory and host Ignite values, driven by type descriptors from the component's type section. |
 | linker | `std.wasm.link` | Resolves imports against host functions and against other instances' exports (protocol → application). It checks import lists against the manifest (section 3.2) and produces a pre-linked version, the analogue of Wasmtime's `instantiate_pre` [W20]. |
 | instance manager | `std.wasm.instances` | Holds versions per component, instantiates one instance per task (section 7), and runs the swap state machine and rollback (section 5). |
-| scheduler | none of its own | A guest task is a runtime Telos task (section 7). |
-| host bridge | `std.wasm.host` | One Telos function per `telos:*` import. It lifts the arguments, calls the Telos builtin (`stream.read(n)`, `todos.get(id)`) and lowers the result. |
-| system host | `runtime/wasmrt/wasmrt.telos` | Reads the system manifest, binds listeners, runs the accept loops of slice §6.1 in Telos, and serves the control connection. |
+| scheduler | none of its own | A guest task is a runtime Ignite task (section 7). |
+| host bridge | `std.wasm.host` | One Ignite function per `ignite:*` import. It lifts the arguments, calls the Ignite builtin (`stream.read(n)`, `todos.get(id)`) and lowers the result. |
+| system host | `runtime/wasmrt/wasmrt.ignite` | Reads the system manifest, binds listeners, runs the accept loops of slice §6.1 in Ignite, and serves the control connection. |
 
 Tiering follows the existing runtimes: Wasmtime has the Pulley interpreter, the Winch baseline
 compiler and Cranelift [W16, W18, W19]; Wasmer has Singlepass, Cranelift and LLVM [W21]; WAMR
-has interpreters, AOT and a Fast-JIT-to-LLVM tier-up [W22]. The Telos runtime starts with an
+has interpreters, AOT and a Fast-JIT-to-LLVM tier-up [W22]. The Ignite runtime starts with an
 interpreter. Its compiled tier (phase 6) goes through LLVM rather than single-pass machine code
-as Winch does [W19], because Telos already owns an LLVM lowering.
+as Winch does [W19], because Ignite already owns an LLVM lowering.
 
 The libraries live in `std/wasm/` because a program is one file plus the standard library
-(`docs/slice.md:217-218`). A `system` cannot live in a std module (E020, `docs/slice.md:756`),
+(`docs/slice.md` §4.1 "Imports and the standard library"). A `system` cannot live in a std module (E020, `docs/slice.md` §8 "Diagnostics"),
 so the runtime's own system is a program under a new `runtime/` directory. `AGENTS.md`'s layout
 table gains it when it lands.
 
-```telos
+```ignite
 package runtime.wasmrt
 
 import std.wasm.host.{Control, Runtime}
@@ -281,7 +281,7 @@ system WasmRuntime {
     listener = control
     protocol = Control
     application = Runtime { versions }
-    executable = "telos-wasmrt"
+    executable = "ignite-wasmrt"
   }
 }
 ```
@@ -293,7 +293,7 @@ bound by `Runtime` through `TcpListener.bind` (effect `net.listen`) from the man
 
 The interpreter core uses the gap features of section 4.3 (marked G1, G2, G4):
 
-```telos
+```ignite
 const OP_BR: Int = 0x0C
 const OP_I32_ADD: Int = 0x6A
 const OP_I32_LOAD: Int = 0x28
@@ -332,43 +332,43 @@ fn run(code: Buffer, stack: Buffer, memory: Buffer, start: Int, base: Int, fuel:
 
 ### 4.2 What stays in the substrate
 
-Everything that touches the operating system stays in `telos-io`, unchanged in kind: sockets,
+Everything that touches the operating system stays in `ignite-io`, unchanged in kind: sockets,
 standard input and output, the terminal mode, process exit, tasks and (from slice 5) the tokio
-event loop (`AGENTS.md:31-39`). The runtime reaches it through ordinary Telos builtins, compiled
-by the LLVM target into calls of `telos-rt`, which calls `telos-io` (llvm §5). The chain is
-guest import → Telos host bridge → builtin → `telos-rt` → `telos-io`, so there is still one
+event loop (`AGENTS.md`, Layout, second rule). The runtime reaches it through ordinary Ignite builtins, compiled
+by the LLVM target into calls of `ignite-rt`, which calls `ignite-io` (llvm §5). The chain is
+guest import → Ignite host bridge → builtin → `ignite-rt` → `ignite-io`, so there is still one
 substrate. The phase 6 baseline compiler adds one substrate operation, loading a shared object
-(section 4.3, G7). Nothing named wasm enters `crates/` except `telos-llvm`'s wasm32 layout mode,
+(section 4.3, G7). Nothing named wasm enters `crates/` except `ignite-llvm`'s wasm32 layout mode,
 the driver's `--target wasm`, and the phase 1 scaffold host.
 
 ### 4.3 Language gaps
 
 | gap | needed for | design | slice |
 |---|---|---|---|
-| G1 machine scalars | i32 and f32/f64 arithmetic | Builtin types `I32`, `F32`, `F64` (`Int` is i64). Wrapping and bit methods named after the wasm operators: `wrapping_add`, `and`, `or`, `xor`, `shl`, `shr_s`, `shr_u`, `rotl`, `clz`, `ctz`, `popcnt`, `lt_u`, `div_s`, `div_u`. Conversions `to_unsigned`, `reinterpret`, `trunc_sat`. IEEE semantics per design §6.3 (`Telos_Design.md:300`). Methods first; operators `& \| ^ << >>` later. | 9 |
-| G2 `Buffer` | linear memory, the value stack, internal code | A builtin handle type like `Store`: copies share storage, and the storage lives outside the arenas (malloc'd, freed when the last handle drops). Bounds-checked little-endian `load_*`/`store_*` for every width, plus `len`, `grow`, `copy`, `fill`. The LLVM target lowers the accesses inline (no `telos-rt` call per access); the Rust target uses a `telos-io` type. Effects `b.read`, `b.write`. | 9 |
-| G3 indexed assignment | translator tables, local slots | `xs[i] = e` on a `var` list, in place. `place` is `ident ('.' ident)*` today (`docs/slice.md:112`). | 10 |
+| G1 machine scalars | i32 and f32/f64 arithmetic | Builtin types `I32`, `F32`, `F64` (`Int` is i64). Wrapping and bit methods named after the wasm operators: `wrapping_add`, `and`, `or`, `xor`, `shl`, `shr_s`, `shr_u`, `rotl`, `clz`, `ctz`, `popcnt`, `lt_u`, `div_s`, `div_u`. Conversions `to_unsigned`, `reinterpret`, `trunc_sat`. IEEE semantics per design §6.3. Methods first; operators `& \| ^ << >>` later. | 9 |
+| G2 `Buffer` | linear memory, the value stack, internal code | A builtin handle type like `Store`: copies share storage, and the storage lives outside the arenas (malloc'd, freed when the last handle drops). Bounds-checked little-endian `load_*`/`store_*` for every width, plus `len`, `grow`, `copy`, `fill`. The LLVM target lowers the accesses inline (no `ignite-rt` call per access); the Rust target uses a `ignite-io` type. Effects `b.read`, `b.write`. | 9 |
+| G3 indexed assignment | translator tables, local slots | `xs[i] = e` on a `var` list, in place. `place` is `ident ('.' ident)*` today (`docs/slice.md` §3 "Grammar", rule `place`). | 10 |
 | G4 dense `match` on `Int` | dispatch loop | Codegen only: a `match` on constant patterns of `Int` or `Byte` lowers to LLVM `switch` (jump table) without copying the scrutinee. | 10 |
-| G5 multi-module programs | moving `std/wasm` out of std | Lift E031 for non-std imports (`docs/slice.md:217`). | 11 |
-| G6 task yield | fuel-based preemption on tokio | `Task.yield_now()`, effect `task.yield`. Threads (slice 4) do not need it; cooperative tokio tasks (slice 5) do. | 5 |
-| G7 load native code | phase 6 baseline compiler | Substrate `Native.load(bytes)` and `call`: `dlopen` plus a symbol table, in `telos-io`. Trusted (section 8). | phase 6 |
+| G5 multi-module programs | moving `std/wasm` out of std | Lift E031 for non-std imports (`docs/slice.md` §4.1 "Imports and the standard library"). | 11 |
+| G6 task yield | fuel-based preemption on tokio | `Task.yield_now()`, effect `task.yield`. Threads (slice 4) do not need it; cooperative tokio tasks (slice 5) do. Tests need none either: slice 8 landed (`docs/slice.md` §12 "Slice 8: tests"), and `ignite test` runs each test as a child process with a timeout (§12.7 "Runner ABI"). | 5 |
+| G7 load native code | phase 6 baseline compiler | Substrate `Native.load(bytes)` and `call`: `dlopen` plus a symbol table, in `ignite-io`. Trusted (section 8). | phase 6 |
 
-**Conflict** with llvm §4 (`docs/llvm.md:209-210`): "Releasing is sound because values never
+**Conflict** with llvm §4 "Values and memory": "Releasing is sound because values never
 share buffers (value semantics)". `Buffer` shares storage. Two things keep the region rule
 sound: the storage is outside every arena, and the handle is copied like `TcpStream` (8 bytes,
 no buffer of its own). Value semantics stays the rule for every other type. `Store<T>` already
-has this shape (`crates/telos-io/src/store.rs:27-28`, `Clone` shares the map).
+has this shape (`impl Clone for Store` in `crates/ignite-io/src/store.rs` shares the map).
 
-**Conflict** with design §12.6 (`Telos_Design.md:900`): "Avoid expanding the language solely to
-eliminate a stable host dependency." Writing a runtime in Telos does expand the language. G1–G4
+**Conflict** with design §12.6: "Avoid expanding the language solely to
+eliminate a stable host dependency." Writing a runtime in Ignite does expand the language. G1–G4
 are not solely for the runtime: the self-hosted compiler's byte encoders and code emitters
 (design §12.4) need the same features. Timo's request (2026-11-01) makes the runtime a goal of
 its own.
 
 ### 4.4 Bootstrap
 
-`telos build --target llvm runtime/wasmrt/wasmrt.telos` produces `telos-wasmrt`. The driver
-finds it the way it finds `libtelos_rt.a`, next to the running executable (llvm §1). The
+`ignite build --target llvm runtime/wasmrt/wasmrt.ignite` produces `ignite-wasmrt`. The driver
+finds it the way it finds `libignite_rt.a`, next to the running executable (llvm §1). The
 compiler that builds the runtime is the Rust seed S0 (design §12.5). Once the compiler is
 self-hosted it is C1 or later. No wasm runtime is ever needed to build the wasm runtime.
 
@@ -376,7 +376,7 @@ self-hosted it is C1 or later. No wasm runtime is ever needed to build the wasm 
 
 ### 5.1 What an instance holds
 
-Telos has no mutable globals. Constants are pure functions (slice §4.3, `docs/slice.md:240-243`)
+Ignite has no mutable globals. Constants are pure functions (slice §4.3 "Constants")
 and the grammar has no global variable (slice §3). Resources are created by the system, not by a
 component (slice §11.4). An instance's linear memory therefore holds only the arena of the task
 it runs: values of in-flight calls and locals. Between two calls into an application component,
@@ -387,7 +387,7 @@ would break it. Actors (`docs/actors.md`) hold state, and that document owns its
 ### 5.2 Resources live in the runtime
 
 A `Store<T>` resource is a `Store<Bytes>` inside the runtime, keyed by the system's resource
-name (`examples/todo/todo.telos:85`). Each value is held in a *stored encoding*: the canonical
+name (resource `todos` of `system TodoService` in `examples/todo/todo.ignite`). Each value is held in a *stored encoding*: the canonical
 ABI layout of `T`'s WIT type, with pointers replaced by inline length-prefixed payloads, so the
 bytes are self-contained. `std.wasm.canon` converts between guest memory and the stored
 encoding by type descriptor. The runtime tags the store with the WIT type hash of `T`. A reload
@@ -412,7 +412,7 @@ The driver fetches the running type with `status`.
 A rename is a removal plus an addition, as with identities in design §3.4. A migration is a
 pure function declared in source and named by the resource:
 
-```telos
+```ignite
 type TodoV1 { id: Int, title: Text, done: Bool }
 
 enum State { Open, Done }
@@ -433,11 +433,11 @@ system TodoService {
 }
 ```
 
-The resource grammar already allows properties (`docs/slice.md:141-142`). New rules:
+The resource grammar already allows properties (`docs/slice.md` §3 "Grammar", rule `resource`). New rules:
 
 - `migrate` must be a pure fn `fn(Old) -> T` (E010 for an effectful one, as for defaults).
 - `Old`'s WIT type must equal the running store's type hash: E081 ``migration source `TodoV1`
-  does not match the running shape of `todos` ``, with the running shape printed as Telos.
+  does not match the running shape of `todos` ``, with the running shape printed as Ignite.
 
 So the migration is type-checked against what is actually running, not against an old source
 file. It is exported by the application component (section 3.3) and runs in a fresh instance,
@@ -445,7 +445,7 @@ value by value, during the swap of section 5.4. When the reload commits, `migrat
 can be deleted from the source. A native build (Rust or LLVM target) ignores `migrate`, since a
 new process starts with empty stores.
 
-The design keeps the general model in §7.3 (`Telos_Design.md:318-329`): "A schema migration
+The design keeps the general model in §7.3: "A schema migration
 may require forward recovery rather than rollback. Old binaries refuse state they cannot
 interpret." Actor state migration (`code_change`) is `docs/actors.md`; it should reuse E080 and
 E081 and the stored encoding.
@@ -470,16 +470,16 @@ follows:
 5. Switch the version and reopen admission.
 
 The old and new versions never touch one store with different schemas at the same time. Design
-§2 (`Telos_Design.md:101`) allows two versions against the same resources only under "an
+§2 allows two versions against the same resources only under "an
 explicitly supported coordination model". The coordination model here: store operations are
 serialized by the runtime, and versions coexist only while the store schema is unchanged.
 
 **Drain swap (protocol components).** This reuses the design's admission handoff and old-session
-drain (design §11.8, `Telos_Design.md:756-764`; `DrainRollout`, `Telos_Design.md:605-608`). The
+drain (design §11.8; `DrainRollout` in design §11.3). The
 runtime owns the listener and the accept loop, so it is the fronting acceptor that design §11.8
 requires: new connections instantiate the new protocol version, and open sessions keep their old
 instance until they end or the drain deadline passes (`on_deadline = "disconnect_remaining"`, a
-forced close classified as in design §11.10, `Telos_Design.md:784`). Like Erlang, which keeps a
+forced close classified as in design §11.10). Like Erlang, which keeps a
 current and an old version of a module and purges the old one on the next load [W25], at most
 two versions of a component run at once. A third load while the old one still drains closes the
 oldest sessions first, with the forced-close classification. Unlike Erlang, the switch does not
@@ -501,7 +501,7 @@ depend on fully qualified calls [W25]: the swap points are fixed by the cut and 
 
 The interface of a cut point is its WIT signature, normalized and hashed. The canonical ABI
 lays out each value by its type [W9], and instantiation type-checks the supplied imports against
-the declared ones [W15]. Telos therefore counts only an unchanged interface hash as compatible. An unchanged hash means only one side is reloaded. Any change is breaking: for example,
+the declared ones [W15]. Ignite therefore counts only an unchanged interface hash as compatible. An unchanged hash means only one side is reloaded. Any change is breaking: for example,
 `Reply` in `std.console` gaining a field changes both `server` and `server.application`. A
 breaking change makes a coordinated reload:
 
@@ -528,13 +528,13 @@ The runtime then:
 
 1. Switches the cut points back to `previous`. A drain swap redirects only new admissions.
 2. When a migration ran, restores the snapshot of section 5.4 and reports the number of writes
-   discarded. This is the development mode's choice. Under `telos apply` it would contradict the
+   discarded. This is the development mode's choice. Under `ignite apply` it would contradict the
    forward-recovery rule of design §7.3, so a non-development host instead reports "recovery
-   required" (design §7.4, `Telos_Design.md:333`) and keeps the new version.
+   required" (design §7.4) and keeps the new version.
 3. Marks the version rejected, so that the same hash is not loaded again until the source
    changes.
 
-Design §4.2 (`Telos_Design.md:234`) applies: rollback is a state transition with its own
+Design §4.2 applies: rollback is a state transition with its own
 failure cases. A rollback that cannot restore (the snapshot is lost because the runtime was
 restarted) reports and stops admission to the component.
 
@@ -546,22 +546,22 @@ this. Reload is outside the language: in a trace, each version segment must be e
 native run of that version. A store migration is a step between segments.
 
 Task failure is one existing divergence. On the Rust target, a panic ends its task's thread
-(`docs/slice.md:711-712`). On the LLVM target, `telos_rt_panic` exits the process with status
-101 (`docs/llvm.md:241-242`). The wasm target follows the Rust target: a trap ends the task.
+(`docs/slice.md` §7, "Substrate `ignite-io`"). On the LLVM target, `ignite_rt_panic` exits the process with status
+101 (`docs/llvm.md` §4 "Values and memory"). The wasm target follows the Rust target: a trap ends the task.
 Section 11, Q1 asks for one rule for all three targets.
 
 ## 6 Watcher and incremental compile
 
 | question | chosen | rejected | why |
 |---|---|---|---|
-| where the watcher runs | the `telos` driver (Rust); file events through a notify library | the runtime | The compiler is Rust until M6, and the runtime then needs no file system authority. |
+| where the watcher runs | the `ignite` driver (Rust); file events through a notify library | the runtime | The compiler is Rust until M6, and the runtime then needs no file system authority. |
 | frontend granularity | whole program plus std on every change | per-module incremental checking | The frontend runs in milliseconds on these sizes, and slice §1 checks a program completely before any target runs. |
 | backend granularity | per component | per module or per fn | The component is the unit of swap. |
 
 **Dependency tracking.** After typing, the driver computes each component's *reachable set*:
 every function, constant, field default, record, enum and alias, after monomorphization,
 reachable from its roots (section 3.1). The modules involved are the program and any std module
-that contributes a definition. A change in `std/text.telos` affects exactly the components whose
+that contributes a definition. A change in `std/text.ignite` affects exactly the components whose
 reachable set includes a changed definition, not every component that imports the module.
 
 **Cache key** (SHA-256 over):
@@ -575,9 +575,9 @@ reachable set includes a changed definition, not every component that imports th
 
 A comment-only edit is a cache hit, so no reload happens. As in Unison, where a definition is
 identified by a hash of its syntax tree and a cache keyed that way "is never invalidated" [W27],
-the key covers content only. Unlike Unison, names are part of the content: Telos symbols are
-named in the IR (`docs/llvm.md:158`). Artifacts are kept in `target/telos-wasm/<system>/cache/
-<key>.wasm`, as the LLVM target's stamps already are (`docs/llvm.md:40-47`). The key doubles as
+the key covers content only. Unlike Unison, names are part of the content: Ignite symbols are
+named in the IR (`docs/llvm.md` §3 "Representation", symbol names). Artifacts are kept in `target/ignite-wasm/<system>/cache/
+<key>.wasm`, as the LLVM target's stamps already are (`docs/llvm.md` §1 "Pipeline"). The key doubles as
 the version identity the runtime reports. The runtime's version number is a counter per
 component.
 
@@ -585,16 +585,16 @@ component.
 
 | question | chosen | rejected | why |
 |---|---|---|---|
-| tasks in a component | one instance per Telos task | wasm threads with shared memory; one instance with green threads on stack switching | Telos tasks share no values (spawn deep-copies, llvm §4), so separate memories lose nothing. Threads are Tier 2 and unsupported on Pulley, and stack switching is Phase 3 [W5, W16]. |
+| tasks in a component | one instance per Ignite task | wasm threads with shared memory; one instance with green threads on stack switching | Ignite tasks share no values (spawn deep-copies, llvm §4), so separate memories lose nothing. Threads are Tier 2 and unsupported on Pulley, and stack switching is Phase 3 [W5, W16]. |
 | guest suspension | in the host: a guest task is a runtime task | CPS or state-machine lowering in the guest; Asyncify [W24]; stack switching | The interpreter's guest stack is data in `Buffer`s, so suspending the runtime task suspends the guest. One mechanism serves native and wasm. |
-| async boundary | synchronous `telos:*` imports | CM async, `stream<T>`/`future<T>` [W10] | The guest never needs to see readiness or completion. |
+| async boundary | synchronous `ignite:*` imports | CM async, `stream<T>`/`future<T>` [W10] | The guest never needs to see readiness or completion. |
 
-**Interpreter tier.** Each guest task runs `run` (section 4.1) inside one runtime Telos task.
+**Interpreter tier.** Each guest task runs `run` (section 4.1) inside one runtime Ignite task.
 When the guest calls an import such as `tcp.read`, the host bridge calls `stream.read(n)`:
 
-- **Slice 4:** it blocks that task's OS thread, as any Telos task does (slice §7).
-- **Slice 5:** tokio is the event loop inside `telos-io`, and the LLVM target lowers Telos tasks
-  to coroutines run as tokio tasks (`AGENTS.md:36-39`). The runtime is an LLVM-target program, so
+- **Slice 4:** it blocks that task's OS thread, as any Ignite task does (slice §7).
+- **Slice 5:** tokio is the event loop inside `ignite-io`, and the LLVM target lowers Ignite tasks
+  to coroutines run as tokio tasks (`AGENTS.md`, Layout, second rule). The runtime is an LLVM-target program, so
   its tasks, and the guests inside them, suspend that way with no extra work.
 
 A guest that computes without calling an import would never suspend under tokio. The
@@ -603,7 +603,7 @@ interpreter therefore calls `Task.yield_now()` (G6) every 10 000 fuel units.
 **Compiled tier (phase 6).** Guest code compiled to native code cannot suspend inside the
 runtime's coroutine frame. Each compiled guest task runs on a bounded worker thread, and host
 imports block on the event loop from there. This is design §8.7's "blocking FFI runs on bounded
-workers" (`Telos_Design.md:439`). Coroutine lowering of guest code is rejected until a
+workers". Coroutine lowering of guest code is rejected until a
 measurement shows the worker pool to be the bottleneck.
 
 **Phase 1 (Wasmtime scaffold).** One Wasmtime `Store` per task, which isolates the task and
@@ -617,7 +617,7 @@ async support.
   configurable per component) and a maximum call depth, so a guest traps instead of exhausting
   the host stack.
 - **Authority.** Imports are the authority (section 3.2). Handles are per-instance indices with
-  a generation, as in the native handle table (`crates/telos-rt/src/net.rs:16-18`). An instance
+  a generation, as in the native handle table (module doc and `encode` in `crates/ignite-rt/src/net.rs`). An instance
   can use only the handles it was given.
 - **Limits.**
   - The interpreter uses fuel: deterministic, matching design §6.3's determinism relative to
@@ -630,16 +630,15 @@ async support.
   - The compiled tier uses epoch checks at loop headers, since fuel there costs more [W17].
 - **Containment.** A trap ends its task only. Its instance is discarded and the error is logged
   as `session ended with error: trap: <kind>` (slice §6.1). Repeated traps go to the component's
-  `Restart` policy (design §11.3, `Telos_Design.md:599-603`). Past `maximum_attempts` within the
+  `Restart` policy (`recovery = Restart` in design §11.3). Past `maximum_attempts` within the
   `interval`, the component is failed. If its failures started after a swap, it is rolled back
   (section 5.6); otherwise its listener stops admitting and the runtime reports. Supervision
   trees and restart strategies above the component level are in `docs/actors.md`.
 - **Control channel.** It is loopback only. A per-run token, written by the driver to the
   runtime's standard input at start, must be the first line of every connection.
 - **Trust.** The sandbox is only as sound as the runtime that enforces it. Design §8.5 forbids
-  calling Telos memory-safe without evidence (`Telos_Design.md:401`). Design §8.8 requires an
-  isolation mechanism for untrusted modules, "such as a separate process"
-  (`Telos_Design.md:458`). Wasm instance isolation is proposed as such a mechanism. Until the
+  calling Ignite memory-safe without evidence. Design §8.8 requires an
+  isolation mechanism for untrusted modules, "such as a separate process". Wasm instance isolation is proposed as such a mechanism. Until the
   runtime has fuzzing and spec-suite evidence (section 9), untrusted components still run in a
   separate runtime process per trust domain. Phase 6's natively compiled code is generated by the
   trusted translator with explicit bounds checks; `Native.load` is trusted substrate code.
@@ -648,11 +647,11 @@ async support.
 
 | suite | what | from phase |
 |---|---|---|
-| inline `test` blocks (slice 8, planned; no contract in `docs/slice.md` yet) | `telos test --target wasm` compiles each test block into an export of a test component and runs it on the runtime. The results must equal those of the native targets. | 1 |
-| end-to-end, all targets | `crates/telos/tests/terminal.rs` and `todo.rs` gain `TARGET=wasm`; every case passes unchanged (slice §9, §11.6) | 1 |
+| inline `test` blocks and `assert` (slice 8, landed: `docs/slice.md` §12 "Slice 8: tests"; `crates/ignite/tests/ignite_test.rs`) | `ignite test --target wasm` compiles each test block into an export of a test component and runs it on the runtime, with the runner flags and exit statuses of §12.7 "Runner ABI" (0 passes, 101 for a failed `assert`, a failed `?` or a panic). The results must equal those of `ignite test --target rust` and `--target llvm`. | 1 |
+| end-to-end, all targets | `crates/ignite/tests/terminal.rs` and `todo.rs` gain `TARGET=wasm`; every case passes unchanged (slice §9, §11.6) | 1 |
 | authority | A fixture whose `respond` is pure yields an application component with no `tcp` import. A hand-edited component that adds `net.connect` is refused (E083). | 1 |
 | spec conformance | the official testsuite [W31], converted from `.wast` by external tooling at test time, restricted to `lime1` [W12] | 2 |
-| differential | the same components on `telos-wasmrt` and the Wasmtime scaffold: equal outputs and equal trap kinds | 2 |
+| differential | the same components on `ignite-wasmrt` and the Wasmtime scaffold: equal outputs and equal trap kinds | 2 |
 | reload: stateless | A Telnet session is open; `respond`'s text changes; the next line has the new text and the session stays open. | 3 |
 | reload: in flight | 16 keep-alive connections send continuously during 20 reloads of `handle`: zero failed requests, and every response comes from the old or the new version. | 3 |
 | reload: state | Create 3 todos and reload: `GET /todos` returns the same 3. Add `priority: Int = 0`: automatic. Change `done` to `state` with `migrate`: migrated values. Change without `migrate`: E080, and the old version keeps serving. | 4 |
@@ -668,12 +667,12 @@ Sizes are rough line counts of new code, to compare phases. They are not estimat
 | phase | deliverable | acceptance test | size | depends on |
 |---|---|---|---|---|
 | P0 | slices 9 and 10: G1–G4 on both native targets | fixtures for each new builtin and diagnostic; a `match` over 200 `Int` constants lowers to one `switch` (IR golden); `Buffer` load/store round-trips on both targets | 2–3k Rust | slice 8 |
-| **P1** | `telos build --target wasm` through `telos-llvm` (wasm32 layout, guest arena in IR, lift/lower and pack glue, WIT emission, `wasm-tools component new` [W32]) and `telos-wasmhost`, a Wasmtime embedding whose host functions call `telos-io` | `crates/telos/tests/terminal.rs` and `todo.rs` pass with `TARGET=wasm` on the scaffold host; the terminal application component's import list is `telos:io/log` only; the authority fixture of section 9 is refused | 2–3k Rust | none |
-| P2 | `std/wasm/*` and `runtime/wasmrt`: decoder, validator, interpreter, canonical ABI subset, linker, host bridge | spec testsuite (`lime1` subset) passes; P1's suites pass on `telos-wasmrt`; differential against the scaffold; throughput of `todod` measured against the LLVM target (decides Q2) | 7–10k Telos | P0, P1 |
-| P3 | `telos run --watch`, control channel, per-component cache, quiescent swap of application components | the stateless and in-flight reload tests; save-to-reload latency measured, and section 1.2 replaced by the measurement | 1.5k Telos, 1k Rust | P2 |
-| P4 | stored encoding, `migrate`, E080 and E081, snapshot and rollback, drain swap, coordinated reload | the state, rollback and drain tests | 1.5–2k Telos, 0.5k Rust | P3 |
-| P5 | Code IR serialization (Rust frontend) and a direct wasm emitter in Telos, run inside the runtime | P1–P4 suites with the emitter and no clang; reload latency at most half of P3's | 1.5k Rust, 5–7k Telos | P1 (ABI), Q3 |
-| P6 | baseline compiler: validated wasm → LLVM IR with bounds checks and epoch checks → shared object → `Native.load` (G7); interpreter as first tier | tier equivalence; `todod` throughput at least 5× the interpreter's | 4–6k Telos, 0.3k Rust | P2 |
+| **P1** | `ignite build --target wasm` through `ignite-llvm` (wasm32 layout, guest arena in IR, lift/lower and pack glue, WIT emission, `wasm-tools component new` [W32]) and `ignite-wasmhost`, a Wasmtime embedding whose host functions call `ignite-io` | `crates/ignite/tests/terminal.rs` and `todo.rs` pass with `TARGET=wasm` on the scaffold host; the terminal application component's import list is `ignite:io/log` only; the authority fixture of section 9 is refused | 2–3k Rust | none |
+| P2 | `std/wasm/*` and `runtime/wasmrt`: decoder, validator, interpreter, canonical ABI subset, linker, host bridge | spec testsuite (`lime1` subset) passes; P1's suites pass on `ignite-wasmrt`; differential against the scaffold; throughput of `todod` measured against the LLVM target (decides Q2) | 7–10k Ignite | P0, P1 |
+| P3 | `ignite run --watch`, control channel, per-component cache, quiescent swap of application components | the stateless and in-flight reload tests; save-to-reload latency measured, and section 1.2 replaced by the measurement | 1.5k Ignite, 1k Rust | P2 |
+| P4 | stored encoding, `migrate`, E080 and E081, snapshot and rollback, drain swap, coordinated reload | the state, rollback and drain tests | 1.5–2k Ignite, 0.5k Rust | P3 |
+| P5 | Code IR serialization (Rust frontend) and a direct wasm emitter in Ignite, run inside the runtime | P1–P4 suites with the emitter and no clang; reload latency at most half of P3's | 1.5k Rust, 5–7k Ignite | P1 (ABI), Q3 |
+| P6 | baseline compiler: validated wasm → LLVM IR with bounds checks and epoch checks → shared object → `Native.load` (G7); interpreter as first tier | tier equivalence; `todod` throughput at least 5× the interpreter's | 4–6k Ignite, 0.3k Rust | P2 |
 
 **What unblocks what.**
 
@@ -683,35 +682,35 @@ Sizes are rough line counts of new code, to compare phases. They are not estimat
 - P2 → P3 → P4 is the reload line.
 - P5 and P6 are independent of each other and of P3/P4.
 
-**Conflict** with `AGENTS.md:28-29` ("the only hand-written Rust a compiled program runs is
-`crates/telos-io` … or `crates/telos-rt`"). P1's `telos-wasmhost` runs Wasmtime. It is a
+**Conflict** with `AGENTS.md`, Layout, first rule ("the only hand-written Rust a compiled program runs is
+`crates/ignite-io` … or `crates/ignite-rt`"). P1's `ignite-wasmhost` runs Wasmtime. It is a
 scaffold: from P2 on it is used only as the differential oracle in tests and is never the host
-that `telos run` starts.
+that `ignite run` starts.
 
 ## 11 Risks and open questions
 
 | # | question | waits on |
 |---|---|---|
-| Q1 | Task failure diverges: the Rust target ends the task (`docs/slice.md:711-712`), LLVM exits 101 (`docs/llvm.md:241-242`), wasm ends the task. Which is the language rule? | the slice that settles task failure, before P2's equivalence gate |
-| Q2 | Is an interpreter written in Telos fast enough for the dev loop? Pulley, a tuned interpreter, expects about 10× below native [W18]. | P2's `todod` throughput measurement. If it is below 1/50 of native, P6 moves before P5. |
-| Q3 | What is the Telos Code IR, and how is it serialized? | design §8.5 Code IR definition (M3/M5) |
+| Q1 | Task failure diverges: the Rust target ends the task (`docs/slice.md` §7), LLVM exits 101 (`docs/llvm.md` §4), wasm ends the task. Which is the language rule? | the slice that settles task failure, before P2's equivalence gate |
+| Q2 | Is an interpreter written in Ignite fast enough for the dev loop? Pulley, a tuned interpreter, expects about 10× below native [W18]. | P2's `todod` throughput measurement. If it is below 1/50 of native, P6 moves before P5. |
+| Q3 | What is the Ignite Code IR, and how is it serialized? | design §8.5 Code IR definition (M3/M5) |
 | Q4 | Recursive types cross a boundary as an opaque `list<u8>` (section 3.4). Is that acceptable, or should crossing be refused? | P1 interface review; any recursive-type support in WIT [W8] |
 | Q5 | `Buffer`'s shared-handle semantics against value semantics (section 4.3) | Timo's language decision for slice 9 |
 | Q6 | Store migration and actor `code_change` must share one encoding and one diagnostic set | `docs/actors.md` settling its migration model, before P4 |
-| Q7 | Assemblies: how does a non-development assembly place components on `telos-wasmrt` (design §5, §11.3 `assembly local`)? | the slice that introduces assemblies |
+| Q7 | Assemblies: how does a non-development assembly place components on `ignite-wasmrt` (design §5, §11.3 `assembly local`)? | the slice that introduces assemblies |
 | Q8 | Interop: when do foreign components and WASI 0.3 (`async func`, `stream<T>`, `future<T>` [W10]) enter, and with them the full component binary format? | a concrete foreign component to run; after P4 |
 
 ## 12 Conflicts with stated decisions
 
 | proposal | conflicts with | resolution here |
 |---|---|---|
-| latency targets in section 1.2 | design §1.5, `Telos_Design.md:81` | targets only; replaced by the P1/P3 measurement |
-| `Buffer` shares storage | llvm §4, `docs/llvm.md:209-210` | storage outside arenas, handle copied like `TcpStream` |
-| runtime in Telos expands the language | design §12.6, `Telos_Design.md:900` | G1–G4 also serve the self-hosted compiler; Timo's direction |
-| Wasmtime scaffold host | `AGENTS.md:28-29` | P1 only; a test oracle afterwards |
-| WASI triple rejected | would conflict with `AGENTS.md:31` | `wasm32-unknown-unknown` with `telos:*` imports |
-| two versions share a store during a drain | design §2, `Telos_Design.md:101` | allowed only with an unchanged schema; runtime-serialized operations |
-| snapshot rollback after a migration | design §7.3, `Telos_Design.md:329` | development mode only; elsewhere forward recovery and "recovery required" |
+| latency targets in section 1.2 | design §1.5 | targets only; replaced by the P1/P3 measurement |
+| `Buffer` shares storage | llvm §4 | storage outside arenas, handle copied like `TcpStream` |
+| runtime in Ignite expands the language | design §12.6 | G1–G4 also serve the self-hosted compiler; Timo's direction |
+| Wasmtime scaffold host | `AGENTS.md`, Layout, first rule | P1 only; a test oracle afterwards |
+| WASI triple rejected | would conflict with `AGENTS.md`, Layout, second rule | `wasm32-unknown-unknown` with `ignite:*` imports |
+| two versions share a store during a drain | design §2 | allowed only with an unchanged schema; runtime-serialized operations |
+| snapshot rollback after a migration | design §7.3 | development mode only; elsewhere forward recovery and "recovery required" |
 
 ## 13 References
 

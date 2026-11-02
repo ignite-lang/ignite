@@ -6,7 +6,7 @@ edition = "2024"
 [workspace]
 
 [dependencies]
-telos-io = { path = "/home/timo/projects/telos/crates/telos-io" }
+ignite-io = { path = "../../../../../crates/ignite-io" }
 
 [[bin]]
 name = "iotest"

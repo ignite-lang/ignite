@@ -1,0 +1,4 @@
+e013_spawn_not_effectful_call.ignite:6:3: error[E013]: `spawn` needs a call to an effectful function or protocol role
+e013_spawn_not_effectful_call.ignite:7:3: error[E013]: `spawn` of a substrate operation; spawn a call to an effectful function or protocol role
+e013_spawn_not_effectful_call.ignite:8:3: error[E013]: `spawn` needs a call to an effectful function or protocol role
+e013_spawn_not_effectful_call.ignite:9:3: error[E013]: `spawn` needs a call to an effectful function or protocol role

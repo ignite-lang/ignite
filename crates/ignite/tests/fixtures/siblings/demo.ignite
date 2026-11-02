@@ -1,0 +1,44 @@
+package demo
+
+import std.net.Endpoint
+
+type Ops {
+  greeting: fn() -> Text
+}
+
+fn ops() -> Module<Ops> = module("demo.ops")
+
+protocol Echo {
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {
+    let m = ops()
+    let hello = m.greeting
+    return stream.write_all(hello().to_bytes())
+  }
+}
+
+test "module greeting" {
+  let m = ops()
+  let hello = m.greeting
+  assert hello() == "hello"
+}
+
+type Dialer {
+  target: Endpoint
+  executable: Text
+}
+
+fn Dialer.main(self: Dialer) -> Result<Unit, IoError> {
+  let stream = match TcpStream.connect(self.target.address, self.target.port) {
+    Ok(stream) => stream
+    Err(error) => return Err(error.with_exit_code(3))
+  }
+  match Echo.connect(stream) {
+    Ok(_) => Ok(())
+    Err(error) => Err(error.with_exit_code(4))
+  }
+}
+
+system Demo {
+  resource target: TcpListener { address = "127.0.0.1", port = 7 }
+  component client: Dialer { target = target, executable = "demo" }
+}

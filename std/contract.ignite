@@ -1,0 +1,106 @@
+package std.contract
+
+import std.probe.ProbeAttempt
+
+// Contracts over a probe's attempts (design section 11.3): what fraction
+// of attempts must be good, over which window, and what happens to
+// attempts the probe never made. Slice 10 checks the declarations and
+// gives the compliance arithmetic; evaluation over live signals is slice
+// 12.
+
+// The span a contract is judged over.
+enum Window {
+  Rolling(Duration),
+  CalendarMonth(Text)
+}
+
+// The last `span` of time, ending now.
+fn rolling(span: Duration) -> Window = Rolling(span)
+
+// Whole calendar months in the IANA time zone `time_zone`.
+fn calendar_month(time_zone: Text) -> Window = CalendarMonth(time_zone)
+
+// What a breached SLA causes.
+enum Consequence {
+  Event(Text)
+}
+
+// The named event is raised.
+fn event(name: Text) -> Consequence = Event(name)
+
+// How attempts the probe never made count. The declarations write it as
+// text (`missing_data = "insufficient_evidence"`); `missing_data` reads it.
+enum MissingData {
+  InsufficientEvidence,
+  CountsAsGood,
+  CountsAsBad
+}
+
+fn missing_data(text: Text) -> Option<MissingData> = match text {
+  "insufficient_evidence" => Some(InsufficientEvidence)
+  "counts_as_good" => Some(CountsAsGood)
+  "counts_as_bad" => Some(CountsAsBad)
+  _ => None
+}
+
+// At least `target` of the attempts in `window` are `good`.
+type Availability {
+  signal: Signal<ProbeAttempt>
+  good: Text
+  target: Ratio
+  window: Window
+  missing_data: Text = "insufficient_evidence"
+}
+
+// At least `target` of the attempts in `window` are `good` within
+// `threshold`.
+type ThresholdCompliance {
+  signal: Signal<ProbeAttempt>
+  good: Text
+  threshold: Duration
+  target: Ratio
+  window: Window
+  missing_data: Text = "insufficient_evidence"
+}
+
+// A commitment to a customer: `target` of the attempts in each `period`
+// are `good`, with `exclusions` (named maintenance windows) left out, else
+// `consequence`.
+type SLA {
+  signal: Signal<ProbeAttempt>
+  good: Text
+  target: Ratio
+  period: Window
+  exclusions: List<Text> = []
+  consequence: Consequence
+}
+
+// Whether `good` of `total` attempts reach `target`; no attempts reach
+// every target.
+fn meets(target: Ratio, good: Int, total: Int) -> Bool =
+  total == 0 || good * 1000000 >= target.ppm() * total
+
+test "windows and consequences are built by name" {
+  assert rolling(30 days) == Rolling(30 days)
+  assert calendar_month("Europe/Berlin") == CalendarMonth("Europe/Berlin")
+  assert event("access_commitment_breached") == Event("access_commitment_breached")
+}
+
+test "missing_data reads the closed set" {
+  assert missing_data("insufficient_evidence") == Some(InsufficientEvidence)
+  assert missing_data("counts_as_good") == Some(CountsAsGood)
+  assert missing_data("counts_as_bad") == Some(CountsAsBad)
+  assert missing_data("") == None
+  assert missing_data("Insufficient_Evidence") == None
+}
+
+test "meets compares good attempts against the target in ppm" {
+  assert (99.9%).ppm() == 999000
+  assert meets(99.9%, 999, 1000)
+  assert !meets(99.9%, 998, 1000)
+  assert meets(99%, 99, 100)
+  assert !meets(99%, 98, 100)
+  assert meets(100%, 0, 0)
+  assert !meets(100%, 999, 1000)
+  assert meets(0%, 0, 1000)
+}

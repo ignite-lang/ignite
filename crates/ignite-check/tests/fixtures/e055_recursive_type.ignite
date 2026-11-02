@@ -1,0 +1,66 @@
+package fixtures.recursive
+
+type Node {
+  value: Int
+  next: Node
+}
+
+enum Expr {
+  Lit(Int),
+  Add(Expr, Expr),
+}
+
+type Chain {
+  next: Option<Chain>
+}
+
+type Ping {
+  pong: Pong
+}
+
+type Pong {
+  ping: (Int, Ping)
+}
+
+type Pair<A, B> {
+  first: A
+  second: B
+}
+
+type Wrapped {
+  pair: Pair<Int, Wrapped>
+}
+
+type Bag<T> {
+  items: List<T>
+}
+
+type Forest {
+  trees: List<Forest>
+  bag: Bag<Forest>
+  pick: fn(Int) -> Forest
+}
+
+enum Tree<T> {
+  Leaf,
+  Node(T, Tree<T>),
+}
+
+type Holder {
+  tree: Tree<Holder>
+}
+
+type Alias = Option<Looped>
+
+type Looped {
+  inner: Alias
+}
+
+type Outer {
+  inner: Inner
+}
+
+enum Inner {
+  Wrap(Outer),
+  Empty,
+}

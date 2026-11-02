@@ -1,0 +1,11 @@
+type Box {
+  n: Int
+}
+
+fn len(items: List<Int>) -> Int = 0
+
+fn pick(pair: (Int, Text)) -> Int {
+  let x = pair.2
+  let y = pair.0.0
+  return pair.0
+}

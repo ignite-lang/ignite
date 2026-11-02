@@ -1,0 +1,18 @@
+fn f(words: List<Bytes>, o: Option<Bytes>, t: Text) -> Int {
+  let l = [1]
+  l.push(2)
+  for w in words {
+    w.append([1])
+  }
+  match o {
+    Some(b) => b.clear()
+    None => {}
+  }
+  t.to_bytes().push(1)
+  var ok = [1]
+  ok.push(2)
+  var nested: List<List<Int>> = [[]]
+  nested[0].push(1)
+  words.push([2])
+  return l.len()
+}

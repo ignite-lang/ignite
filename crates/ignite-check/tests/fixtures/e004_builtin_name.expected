@@ -1,0 +1,2 @@
+e004_builtin_name.ignite:1:6: error[E004]: duplicate definition of builtin `Tuple`
+e004_builtin_name.ignite:3:6: error[E004]: duplicate definition of builtin `Bytes`

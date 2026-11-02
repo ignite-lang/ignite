@@ -1,0 +1,2 @@
+recovery_two_errors.ignite:3:13: error[E001]: expected `:`, found identifier `Int`
+recovery_two_errors.ignite:11:7: error[E001]: expected `:`, found identifier `Int`

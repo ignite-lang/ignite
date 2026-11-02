@@ -1,0 +1,3 @@
+e003_associated_owner.ignite:1:4: error[E003]: `Missing` is no record or enum of this module; an associated fn needs one
+e003_associated_owner.ignite:3:4: error[E003]: `Text` is no record or enum of this module; an associated fn needs one
+e003_associated_owner.ignite:9:28: error[E003]: `Point` has no static function `origin`

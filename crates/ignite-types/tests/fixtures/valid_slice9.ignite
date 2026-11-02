@@ -1,0 +1,126 @@
+import std.shapes.*
+
+type Todo {
+  id: Int
+  title: Text
+  done: Bool
+}
+
+enum Tree<T> {
+  Leaf,
+  Node(T, Tree<T>),
+}
+
+type Chain {
+  value: Int
+  next: Option<Chain>
+}
+
+const LOW: Byte = 48
+const HIGH: Byte = 57
+const NEG: Int = -10
+const ALSO: Int = NEG
+
+fn Todo.new(id: Int, title: Text) -> Todo = Todo { id = id, title = title, done = false }
+
+fn Todo.finish(todo: Todo) -> Todo = Todo { done = true, ..todo }
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int = f(x)
+
+fn twice(f: fn(Int) -> Int) -> fn(Int) -> Int = |x| f(f(x))
+
+fn digit(b: Byte) -> Int {
+  return match b {
+    LOW..=HIGH => (b - LOW).to_int()
+    b'a'..=b'f' => 10
+    _ => -1
+  }
+}
+
+fn sign(n: Int) -> Int {
+  return match n {
+    ALSO..=-1 => -1
+    0 => 0
+    1..=9223372036854775807 => 1
+    _ => -2
+  }
+}
+
+fn size(tree: Tree<Int>) -> Int {
+  return match tree {
+    Leaf => 0
+    Node(_, rest) => 1 + size(rest)
+  }
+}
+
+fn first_even(items: List<Int>) -> Int {
+  var found = -1
+  for item in items {
+    let even = match item % 2 {
+      0 => item
+      _ => continue
+    }
+    found = match found {
+      -1 => even
+      _ => break
+    }
+  }
+  return found
+}
+
+fn texts(name: Text) -> Text {
+  let quoted = "say {"hi " + name}"
+  let raw = r"C:\path {x}"
+  let hashed = r#"a "quoted" word"#
+  let smile = "\u{1F600}"
+  return quoted + raw + hashed + smile
+}
+
+fn debugs(todo: Todo, tree: Tree<Int>, pair: (Int, Text)) -> Text {
+  return todo.debug() + tree.debug() + pair.debug() + [1, 2].debug() + Some(origin()).debug()
+}
+
+fn equal(a: Todo, b: Todo, s: Shape, t: Tree<Int>) -> Bool {
+  return a == b && s != Empty && t == Node(1, Leaf) && [a] == [b] && (1, "x") == (1, "x")
+}
+
+fn closures(base: Int) -> Int {
+  let add = |x: Int| x + base
+  let double: fn(Int) -> Int = |x| x * 2
+  let block = |x: Int| {
+    let y = x + 1
+    y * base
+  }
+  let nothing = || base
+  let four = twice(double)
+  return apply(add, 1) + double(2) + block(3) + nothing() + four(1) + apply(|n| n - base, 5)
+}
+
+fn tuples(pair: (Int, (Text, Bool))) -> Bool {
+  let n = pair.0
+  let t = pair.1.0
+  return pair.1.1 && n > t.len()
+}
+
+fn chain(c: Chain) -> Int {
+  return match c.next {
+    Some(next) => c.value + chain(next)
+    None => c.value
+  }
+}
+
+fn todos() -> Todo {
+  let t = Todo.new(1, "milk")
+  let make = Todo.new
+  return Todo.finish(make(2, t.title))
+}
+
+fn shapes(p: Point) -> Int = width(Line(p, origin()))
+
+fn map_one<T, U>(x: T, f: fn(T) -> U) -> U = f(x)
+
+fn inferred(names: List<Text>, prefix: Text) -> Int {
+  let joined = names.map(|n| prefix + n)
+  let sizes = joined.map(|n| n.len())
+  return map_one(sizes.len(), |n| n + 1) + map_one(prefix, |p| p.len())
+}

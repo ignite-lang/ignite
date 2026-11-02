@@ -1,0 +1,10 @@
+e051_test_only.ignite:1:29: error[E051]: `sample` is test-only in `std.greeting`; test-only items are not exported
+e051_test_only.ignite:11:23: error[E051]: `helper` is test-only; only tests and other test-only items can use it
+e051_test_only.ignite:13:37: error[E051]: `helper` is test-only; only tests and other test-only items can use it
+e051_test_only.ignite:15:26: error[E051]: `LIMIT` is test-only; only tests and other test-only items can use it
+e051_test_only.ignite:17:17: error[E051]: `Fixture` is test-only; only tests and other test-only items can use it
+e051_test_only.ignite:20:11: error[E051]: `Fixture` is test-only; only tests and other test-only items can use it
+e051_test_only.ignite:25:11: error[E051]: variant `Small` belongs to test-only enum `Kind`; only tests and other test-only items can use it
+e051_test_only.ignite:26:11: error[E051]: `Kind` is test-only; only tests and other test-only items can use it
+e051_test_only.ignite:31:3: error[E051]: `LIMIT` is test-only; only tests and other test-only items can use it
+e051_test_only.ignite:35:28: error[E051]: `LIMIT` is test-only; only tests and other test-only items can use it

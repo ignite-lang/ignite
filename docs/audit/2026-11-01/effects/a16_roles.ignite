@@ -1,0 +1,20 @@
+fn chat(s: TcpStream) -> Result<Unit, IoError> = s.write_all("hi".to_bytes())
+
+protocol Echo {
+  fn serve(listener: TcpListener) -> Result<Unit, IoError> requires [listener.accept] {
+    let s = listener.accept()?
+    chat(s)?
+    s.chat()?
+    spawn chat(s)
+    return Ok(())
+  }
+
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [] {
+    return chat(stream)
+  }
+}
+
+fn caller(l: TcpListener, s: TcpStream) -> Result<Unit, IoError> requires [] {
+  Echo.serve(l)?
+  return Echo.connect(s)
+}

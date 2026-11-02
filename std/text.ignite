@@ -1,0 +1,302 @@
+package std.text
+
+import std.option.{unwrap_or, map}
+
+// Text operations written in Ignite, called by uniform function call syntax
+// once imported: `import std.text.*` makes `line.split(" ")` work. Offsets
+// are byte offsets into the UTF-8 encoding and needles match byte for
+// byte. Case and whitespace rules are ASCII only. The builtins `len`,
+// `is_empty`, `trim`, `starts_with`, `strip_prefix` and `concat` are not
+// repeated here.
+
+// ASCII whitespace: space, tab, LF, VT, FF, CR.
+fn is_whitespace(b: Byte) -> Bool = match b {
+  b' ' | b'\t' | b'\n' | b'\v' | b'\f' | b'\r' => true
+  _ => false
+}
+
+fn is_digit(b: Byte) -> Bool = match b {
+  b'0'..=b'9' => true
+  _ => false
+}
+
+// The value of a decimal digit byte, `None` for any other byte.
+fn digit_value(b: Byte) -> Option<Int> = match b {
+  b'0'..=b'9' => Some((b - b'0').to_int())
+  _ => None
+}
+
+test "digit_value reads decimal digits only" {
+  assert digit_value(b'0') == Some(0)
+  assert digit_value(b'7') == Some(7)
+  assert digit_value(b'9') == Some(9)
+  assert digit_value(b'/') == None
+  assert digit_value(b':') == None
+  assert digit_value(b'a') == None
+  assert digit_value(0xC3) == None
+  assert is_digit(b'5') && !is_digit(b'x')
+}
+
+test "is_whitespace is ASCII whitespace" {
+  for b in b" \t\n\v\f\r" {
+    assert is_whitespace(b), "byte {b}"
+  }
+  assert !is_whitespace(b'x')
+  assert !is_whitespace(0)
+  assert !is_whitespace(0xA0)
+}
+
+// Bytes `start` to `end` (exclusive) of `text`. Offsets inside a UTF-8
+// character give U+FFFD for the broken character.
+fn slice(text: Text, start: Int, end: Int) -> Text = text.to_bytes().slice(start, end).to_text()
+
+test "slice takes byte offsets" {
+  assert slice("hello", 1, 4) == "ell"
+  assert "hello".slice(0, 5) == "hello"
+  assert slice("hello", 2, 2) == ""
+  assert slice("", 0, 0) == ""
+  assert slice("aéb", 1, 3) == "é"
+  assert slice("é", 0, 1) == "\u{FFFD}"
+}
+
+// Whether `needle` occurs in `bytes` at offset `at`.
+fn bytes_match_at(bytes: Bytes, needle: Bytes, at: Int) -> Bool {
+  if at < 0 || at + needle.len() > bytes.len() {
+    return false
+  }
+  var i = 0
+  while i < needle.len() {
+    if bytes.at(at + i) != needle.at(i) {
+      return false
+    }
+    i = i + 1
+  }
+  true
+}
+
+// The offset of the first `needle` in `bytes` at or after `start`.
+fn bytes_find_from(bytes: Bytes, needle: Bytes, start: Int) -> Option<Int> {
+  var at = start
+  while at + needle.len() <= bytes.len() {
+    if bytes_match_at(bytes, needle, at) {
+      return Some(at)
+    }
+    at = at + 1
+  }
+  None
+}
+
+// The byte offset of the first `needle` in `text` at or after `start`.
+fn find_from(text: Text, needle: Text, start: Int) -> Option<Int> =
+  bytes_find_from(text.to_bytes(), needle.to_bytes(), start)
+
+// The byte offset of the first `needle` in `text`. "a=b".find("=") is Some(1).
+fn find(text: Text, needle: Text) -> Option<Int> = find_from(text, needle, 0)
+
+fn contains(text: Text, needle: Text) -> Bool = find(text, needle) != None
+
+fn ends_with(text: Text, suffix: Text) -> Bool {
+  let bytes = text.to_bytes()
+  bytes_match_at(bytes, suffix.to_bytes(), bytes.len() - suffix.len())
+}
+
+// `text` without `suffix`, `None` when it does not end with it.
+fn strip_suffix(text: Text, suffix: Text) -> Option<Text> = if ends_with(text, suffix) {
+  Some(slice(text, 0, text.len() - suffix.len()))
+} else {
+  None
+}
+
+test "find returns the first byte offset" {
+  assert find("a=b=c", "=") == Some(1)
+  assert "a=b=c".find_from("=", 2) == Some(3)
+  assert find_from("a=b=c", "=", 4) == None
+  assert find_from("abc", "c", 9) == None
+  assert find("abc", "x") == None
+  assert find("abc", "") == Some(0)
+  assert find("", "") == Some(0)
+  assert find("", "a") == None
+  assert find("ab", "abc") == None
+  assert find("abc", "c") == Some(2)
+  assert find("é=€", "€") == Some(3)
+}
+
+test "contains, ends_with and strip_suffix" {
+  assert "hello world".contains("o w")
+  assert !"hello".contains("hello!")
+  assert contains("", "")
+  assert ends_with("index.html", ".html")
+  assert !ends_with("a", "ab")
+  assert ends_with("", "")
+  assert ends_with("x", "")
+  assert ends_with("naïve", "ïve")
+  assert !ends_with("html.x", "html")
+  assert strip_suffix("report.json", ".json") == Some("report")
+  assert strip_suffix("report", ".json") == None
+  assert strip_suffix(".json", ".json") == Some("")
+  assert strip_suffix("a€", "€") == Some("a")
+}
+
+// The pieces between the separators: "a,b,,c".split(",") is
+// ["a", "b", "", "c"]; "".split(",") is [""]. An empty separator gives
+// `[text]`.
+fn split(text: Text, separator: Text) -> List<Text> {
+  let bytes = text.to_bytes()
+  let needle = separator.to_bytes()
+  if needle.is_empty() {
+    return [text]
+  }
+  var pieces = []
+  var start = 0
+  loop {
+    match bytes_find_from(bytes, needle, start) {
+      Some(at) => {
+        pieces.push(bytes.slice(start, at).to_text())
+        start = at + needle.len()
+      }
+      None => {
+        pieces.push(bytes.slice(start, bytes.len()).to_text())
+        return pieces
+      }
+    }
+  }
+}
+
+// The text before and after the first `separator`:
+// "Host: x".split_once(": ") is Some(("Host", "x")).
+fn split_once(text: Text, separator: Text) -> Option<(Text, Text)> =
+  find(text, separator).map(|at| (slice(text, 0, at), slice(text, at + separator.len(), text.len())))
+
+test "split keeps empty pieces" {
+  assert split("a,b,,c", ",") == ["a", "b", "", "c"]
+  assert "".split(",") == [""]
+  assert split(",a", ",") == ["", "a"]
+  assert split("a,", ",") == ["a", ""]
+  assert split(",", ",") == ["", ""]
+  assert split("a--b--", "--") == ["a", "b", ""]
+  assert split("aaa", "aa") == ["", "a"]
+  assert split("abc", "") == ["abc"]
+  assert split("abc", "abcd") == ["abc"]
+  assert split("ä|ö|ü", "|") == ["ä", "ö", "ü"]
+  assert split("x€y€", "€") == ["x", "y", ""]
+}
+
+test "split_once splits at the first separator" {
+  assert split_once("a=b=c", "=") == Some(("a", "b=c"))
+  assert split_once("abc", "=") == None
+  assert "Host: example: 1".split_once(": ") == Some(("Host", "example: 1"))
+  assert split_once("=x", "=") == Some(("", "x"))
+  assert split_once("x=", "=") == Some(("x", ""))
+  assert split_once("", "=") == None
+  assert split_once("ä→ö", "→") == Some(("ä", "ö"))
+}
+
+// `text` with every `from` replaced by `to`; an empty `from` changes nothing.
+fn replace(text: Text, from: Text, to: Text) -> Text =
+  if from.is_empty() { text } else { split(text, from).join(to) }
+
+test "replace replaces every occurrence" {
+  assert "a.b.c".replace(".", "::") == "a::b::c"
+  assert replace("abc", "", "x") == "abc"
+  assert replace("", "a", "b") == ""
+  assert replace(".a.", ".", "") == "a"
+  assert replace("aaa", "aa", "b") == "ba"
+  assert replace("grüße", "ü", "ue") == "grueße"
+  assert replace("abc", "x", "y") == "abc"
+}
+
+fn trim_start(text: Text) -> Text {
+  let bytes = text.to_bytes()
+  var start = 0
+  while start < bytes.len() && is_whitespace(bytes.at(start)) {
+    start = start + 1
+  }
+  bytes.slice(start, bytes.len()).to_text()
+}
+
+fn trim_end(text: Text) -> Text {
+  let bytes = text.to_bytes()
+  var end = bytes.len()
+  while end > 0 && is_whitespace(bytes.at(end - 1)) {
+    end = end - 1
+  }
+  bytes.slice(0, end).to_text()
+}
+
+test "trim_start and trim_end drop ASCII whitespace" {
+  assert "  x y \t\r\n".trim_start() == "x y \t\r\n"
+  assert " \t x y  \n".trim_end() == " \t x y"
+  assert trim_start("") == ""
+  assert trim_end("") == ""
+  assert trim_start(" \t\n\v\f\r") == ""
+  assert trim_end(" \t\n\v\f\r") == ""
+  assert trim_start("x ") == "x "
+  assert trim_end(" x") == " x"
+  assert trim_end("é \n") == "é"
+  assert trim_start("\n€") == "€"
+}
+
+// ASCII letters in lower case; every other byte unchanged.
+fn to_lower(text: Text) -> Text = text.to_bytes().map(|b| if b >= b'A' && b <= b'Z' { b + 32 } else { b }).to_text()
+
+// ASCII letters in upper case; every other byte unchanged.
+fn to_upper(text: Text) -> Text = text.to_bytes().map(|b| if b >= b'a' && b <= b'z' { b - 32 } else { b }).to_text()
+
+// Equal after ASCII case folding: header names, `Content-Length` and
+// `content-length`.
+fn equals_ignore_case(a: Text, b: Text) -> Bool = to_lower(a) == to_lower(b)
+
+test "case mapping is ASCII only" {
+  assert "MiXeD 42 Ä".to_lower() == "mixed 42 Ä"
+  assert "MiXeD 42 ä".to_upper() == "MIXED 42 ä"
+  assert to_lower("") == ""
+  assert to_upper("") == ""
+  assert to_lower(r"@[`{AZ") == r"@[`{az"
+  assert to_upper(r"@[`{az") == r"@[`{AZ"
+  assert "Content-Length".equals_ignore_case("content-length")
+  assert !equals_ignore_case("a", "b")
+  assert !equals_ignore_case("Ä", "ä")
+  assert equals_ignore_case("", "")
+}
+
+// The lines of `text`, split at LF with a CR before it dropped. A final
+// line break does not start another line: "a\r\nb\n".lines() is ["a", "b"].
+fn lines(text: Text) -> List<Text> {
+  let out = split(text, "\n").map(|line| strip_suffix(line, "\r").unwrap_or(line))
+  if !out.is_empty() && out.at(out.len() - 1).is_empty() {
+    return out.slice(0, out.len() - 1)
+  }
+  out
+}
+
+test "lines splits at LF and drops CR before it" {
+  assert "GET / HTTP/1.1\r\nHost: x\r\n\r\n".lines() == ["GET / HTTP/1.1", "Host: x", ""]
+  assert lines("one\ntwo") == ["one", "two"]
+  assert lines("a\r\nb\n") == ["a", "b"]
+  assert lines("") == []
+  assert lines("\n") == [""]
+  assert lines("\n\nx") == ["", "", "x"]
+  assert lines("a\rb") == ["a\rb"]
+  assert lines("ä\r\nö") == ["ä", "ö"]
+}
+
+// `count` copies of `text`.
+fn repeat(text: Text, count: Int) -> Text {
+  let piece = text.to_bytes()
+  var out = Bytes.empty()
+  var i = 0
+  while i < count {
+    out.append(piece)
+    i = i + 1
+  }
+  out.to_text()
+}
+
+test "repeat concatenates copies" {
+  assert "ab".repeat(3) == "ababab"
+  assert repeat("x", 1) == "x"
+  assert repeat("x", 0) == ""
+  assert repeat("x", -1) == ""
+  assert repeat("", 5) == ""
+  assert repeat("é", 2) == "éé"
+}

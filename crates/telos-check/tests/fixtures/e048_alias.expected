@@ -1,3 +1,0 @@
-e048_alias.telos:2:19: error[E048]: unknown type `Missing`
-e048_alias.telos:5:11: error[E048]: `Handler` takes 1 type argument, found 0
-e048_alias.telos:5:23: error[E048]: `Count` takes no type arguments, found 1

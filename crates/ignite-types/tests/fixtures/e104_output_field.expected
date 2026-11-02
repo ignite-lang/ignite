@@ -1,0 +1,1 @@
+e104_output_field.ignite:11:5: error[E104]: output field `attempts` of `Probe` cannot be set

@@ -1,0 +1,25 @@
+type Holder {
+  items: List<TcpStream>
+}
+
+type Nest {
+  h: Holder
+}
+
+fn via_nested(s: TcpStream) -> Result<Input, IoError> requires [] {
+  var n = Nest { h = Holder { items = [] } }
+  n.h.items.push(s)
+  return n.h.items[0].read(1)
+}
+
+fn via_append_field(ls: List<TcpStream>) -> Result<Input, IoError> requires [] {
+  var h = Holder { items = [] }
+  h.items.append(ls)
+  return h.items[0].read(1)
+}
+
+fn via_param_holder(h: Holder, s: TcpStream) -> Result<Input, IoError> requires [h.read] {
+  var mine = h
+  mine.items.push(s)
+  return mine.items[0].read(1)
+}

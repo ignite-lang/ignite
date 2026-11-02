@@ -1,0 +1,2 @@
+e046_const_pattern.ignite:13:10: error[E046]: match on `Int` does not cover every value; add a `_` arm or a binding arm
+e046_const_pattern.ignite:19:10: error[E046]: match does not cover `(_, _)`

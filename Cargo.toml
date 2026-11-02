@@ -1,15 +1,15 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/telos-syntax",
-    "crates/telos-check",
-    "crates/telos-rustgen",
-    "crates/telos-io",
-    "crates/telos",
-    "crates/telos-types",
-    "crates/telos-rt",
-    "crates/telos-llvm",
-    "crates/telos-load",
+    "crates/ignite-syntax",
+    "crates/ignite-check",
+    "crates/ignite-rustgen",
+    "crates/ignite-io",
+    "crates/ignite",
+    "crates/ignite-types",
+    "crates/ignite-rt",
+    "crates/ignite-llvm",
+    "crates/ignite-load",
 ]
 
 [workspace.package]
@@ -18,16 +18,16 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-telos-syntax = { path = "crates/telos-syntax" }
-telos-check = { path = "crates/telos-check" }
-telos-rustgen = { path = "crates/telos-rustgen" }
-telos-io = { path = "crates/telos-io" }
-telos = { path = "crates/telos" }
-telos-types = { path = "crates/telos-types" }
-telos-rt = { path = "crates/telos-rt" }
-telos-llvm = { path = "crates/telos-llvm" }
+ignite-syntax = { path = "crates/ignite-syntax" }
+ignite-check = { path = "crates/ignite-check" }
+ignite-rustgen = { path = "crates/ignite-rustgen" }
+ignite-io = { path = "crates/ignite-io" }
+ignite = { path = "crates/ignite" }
+ignite-types = { path = "crates/ignite-types" }
+ignite-rt = { path = "crates/ignite-rt" }
+ignite-llvm = { path = "crates/ignite-llvm" }
 clap = { version = "4.6", features = ["derive"] }
 nix = { version = "0.31", features = ["term", "fs"] }
 
-[profile.release.package.telos-rt]
+[profile.release.package.ignite-rt]
 codegen-units = 1

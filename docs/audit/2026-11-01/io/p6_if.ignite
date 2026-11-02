@@ -1,0 +1,36 @@
+package probe.ifs
+
+type U = Unit
+
+fn side(flag: Bool) -> Unit {
+  if flag { log("yes") }
+}
+
+fn tail_alias(flag: Bool) -> U {
+  if flag { log("yes") }
+}
+
+fn value_pos(flag: Bool) -> Unit {
+  let x = if flag { log("a") }
+  x
+}
+
+fn arm_if(o: Option<Bool>) -> Int = match o {
+  Some(flag) => if flag { 1 } else { 2 }
+  None => if true { 3 } else { 4 }
+}
+
+fn chain(n: Int) -> Unit {
+  let _ = if n > 1 { log("big") } else if n > 0 { log("one") }
+}
+
+fn ret_in_if(n: Int) -> Int {
+  let r = if n > 1 { return 10 } else { n }
+  r + 1
+}
+
+test "ifs" {
+  assert arm_if(Some(true)) == 1
+  assert ret_in_if(5) == 10
+  assert ret_in_if(0) == 1
+}

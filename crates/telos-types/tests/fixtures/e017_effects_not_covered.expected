@@ -1,3 +1,0 @@
-e017_effects_not_covered.telos:19:46: error[E017]: effectful function `write` does not fit `fn(state: TcpStream, n: Int) -> Int requires [state.read]`: its effect `stream.write` is not covered by the type's `requires`
-e017_effects_not_covered.telos:20:48: error[E017]: effectful function `ambient` does not fit `fn(state: TcpStream, n: Int) -> Int requires [state.read]`: its effect `stdout.write` is not covered by the type's `requires`
-e017_effects_not_covered.telos:22:64: error[E017]: effectful function `ambient` does not fit `fn(s: TcpStream, n: Int) -> Int requires [s.*]`: its effect `stdout.write` is not covered by the type's `requires`

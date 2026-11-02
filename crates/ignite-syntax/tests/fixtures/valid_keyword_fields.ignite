@@ -1,0 +1,14 @@
+type Binding {
+  system: Text
+  component: Int
+  contract: Bool = true
+  policy: Int = 0
+  assembly: Text = ""
+  resource: Int = 0
+}
+
+fn make(name: Text) -> Binding = Binding { system = name, component = 1 }
+
+fn read(b: Binding) -> Text = b.system
+
+fn count(b: Binding) -> Int = b.component + b.policy + b.resource

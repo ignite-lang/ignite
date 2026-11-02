@@ -1,0 +1,16 @@
+fn apply(f: fn(Int) -> Int, x: Int) -> Int = f(x)
+
+fn read_with(f: fn(n: Int) -> Int requires [n.read], x: Int) -> Int = 0
+
+fn send(conn: TcpStream) -> Int requires [conn.write, stdout.write] {
+  let pure = apply(|x: Int| {
+    let r = conn.write_all([1])
+    x
+  }, 1)
+  let narrow = read_with(|n: Int| {
+    let r = Stdout.write_all([1])
+    n
+  }, 1)
+  let fine = read_with(|n: Int| n, 1)
+  return pure + narrow + fine
+}

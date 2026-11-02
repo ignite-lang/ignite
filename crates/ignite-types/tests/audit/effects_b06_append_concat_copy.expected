@@ -1,0 +1,5 @@
+effects_b06_append_concat_copy.ignite:9:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_append`
+effects_b06_append_concat_copy.ignite:14:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_concat`
+effects_b06_append_concat_copy.ignite:21:16: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_field_assign`
+effects_b06_append_concat_copy.ignite:28:10: error[E016]: missing effect `h.read` for `read`; add it to the `requires` of `via_copy`
+effects_b06_append_concat_copy.ignite:31:75: error[E016]: missing effect `ls.read` for `read`; add it to the `requires` of `via_slice`

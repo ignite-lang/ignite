@@ -1,0 +1,19 @@
+package audit.forpush2
+
+fn filler(i: Int) -> Text {
+  return "................................................................".concat(Int.to_text(i))
+}
+
+test "push on a for element keeps the list valid" {
+  var words: List<Bytes> = [b"aaa", b"bbb", b"ccc"]
+  var i = 0
+  for w in words {
+    w.push(120)
+    w.push(121)
+    let junk = filler(i)
+    i = i + 1
+  }
+  let after = filler(99)
+  assert words.len() == 3
+  assert words[0].to_text() == "aaa", "words[0] is {words[0].to_text()}, words[1] is {words[1].to_text()}"
+}

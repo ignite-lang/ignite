@@ -1,0 +1,72 @@
+package golden.modules
+
+import std.text.{Handler, Mode, shout}
+import std.protocol.line.Line
+import std.net.{TcpStream, Endpoint}
+import std.io.IoError
+
+fn quiet(line: Text) -> Text {
+  return line.trim()
+}
+
+fn pick(mode: Mode) -> fn(Text) -> Text {
+  match mode {
+    Loud => shout
+    Quiet => quiet
+  }
+}
+
+fn apply_twice(f: fn(Text) -> Text, line: Text) -> Text {
+  return f(f(line))
+}
+
+fn relay(stream: TcpStream, handler: Handler) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  let copy = handler
+  spawn Line.serve(stream, copy)
+  spawn relay_log(stream, handler.name)
+  return Line.serve(stream, handler)
+}
+
+fn relay_log(stream: TcpStream, name: Text) -> Result<Unit, IoError> requires [stream.write] {
+  log(name)
+  return Ok(Unit)
+}
+
+type Echod {
+  listener: TcpListener
+  application: Handler
+  executable: Text
+}
+
+fn Echod.main(self: Echod) -> Result<Unit, IoError> {
+  loop {
+    let stream = self.listener.accept()?
+    spawn Line.serve(stream, self.application)
+  }
+}
+
+type Echo {
+  target: Endpoint
+  executable: Text
+}
+
+fn Echo.main(self: Echo) -> Result<Unit, IoError> {
+  let stream = match TcpStream.connect(self.target.address, self.target.port) {
+    Ok(stream) => stream
+    Err(error) => return Err(error.with_exit_code(3))
+  }
+  match Line.connect(stream) {
+    Ok(_) => Ok(Unit)
+    Err(error) => Err(error.with_exit_code(4))
+  }
+}
+
+system Echoing {
+  resource front: TcpListener { address = "127.0.0.1", port = 7000 }
+  component server: Echod {
+    listener = front
+    application = Handler { name = "shout", apply = pick(Loud) }
+    executable = "echod"
+  }
+  component client: Echo { target = front, executable = "echo" }
+}

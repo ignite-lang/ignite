@@ -1,0 +1,5 @@
+e102_module.ignite:16:27: error[E102]: fn `origin` of module `std.shapes` has type `fn() -> Point`, field `origin` of `Bad` needs `fn() -> Int`
+e102_module.ignite:16:27: error[E102]: module `std.shapes` has no fn `missing` for field `missing` of `Bad`
+e102_module.ignite:16:27: error[E102]: field `count` of `Bad` has type `Int`; `module(..)` fills only fields of fn type
+e102_module.ignite:18:38: error[E102]: module `std.nowhere` not found; `module(..)` names a standard-library module or a sibling file `<name>.ignite` of the program's package
+e102_module.ignite:21:11: error[E042]: cannot infer the record type of `module(..)`; it takes it from the expected type `Module<I>`

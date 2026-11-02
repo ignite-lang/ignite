@@ -1,0 +1,70 @@
+package std.cli
+
+// A command-line application (design section 11.3, decisions O6 and O9):
+// a set of commands, each with its arguments and a handler module. Slice
+// 10 checks the declarations; the buildable client is
+// `std.protocol.telnet.TelnetClient`.
+
+// What an argument is.
+enum ArgKind {
+  Endpoint(Protocol),
+  Plain
+}
+
+// An endpoint of a server speaking the protocol, written `host:port`.
+fn endpoint(speaking: Protocol) -> ArgKind = Endpoint(speaking)
+
+// Any text.
+fn text() -> ArgKind = Plain
+
+// The usage text of an argument of kind `kind` named `name`.
+fn describe(name: Text, kind: ArgKind) -> Text = match kind {
+  Endpoint(_) => "<{name}: host:port>"
+  Plain => "<{name}>"
+}
+
+type Argument {
+  name: Text
+  kind: ArgKind = Plain
+}
+
+// What a command's handler module provides: the session a command runs
+// over a connected stream, with the terminal and the process at hand.
+type SessionHandler {
+  connect: fn(stream: TcpStream) -> Result<Unit, IoError> requires [stream.*, stdin.*, stdout.*, process.*]
+}
+
+// One command of the application. `terminal` and `escape` are closed sets
+// written as text in slice 10.
+type Command {
+  arguments: List<Argument> = []
+  handler: Module<SessionHandler>
+  terminal: Text = "interactive"
+  escape: Text = "Ctrl+]"
+}
+
+// The application: its executable and its commands by name.
+type Application {
+  executable: Text
+  commands: Map<Text, Command>
+}
+
+// The usage line of command `name` with `arguments`.
+fn usage(name: Text, arguments: List<Argument>) -> Text {
+  var line = name
+  for argument in arguments {
+    line = line + " " + describe(argument.name, argument.kind)
+  }
+  line
+}
+
+test "arguments describe themselves" {
+  assert describe("file", text()) == "<file>"
+  assert describe("endpoint", Plain) == "<endpoint>"
+  assert Argument { name = "x" }.kind == Plain
+}
+
+test "usage joins the command and its arguments" {
+  assert usage("connect", []) == "connect"
+  assert usage("copy", [Argument { name = "from" }, Argument { name = "to" }]) == "copy <from> <to>"
+}

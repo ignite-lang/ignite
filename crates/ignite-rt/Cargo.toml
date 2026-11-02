@@ -1,0 +1,21 @@
+[package]
+name = "ignite-rt"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Ignite runtime for the LLVM target: the ignite-io substrate behind a C ABI."
+autotests = false
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+ignite-io.workspace = true
+nix = { workspace = true, features = ["signal"] }
+
+[features]
+runner = ["ignite-io/runner"]
+
+[[test]]
+name = "main"
+path = "tests/main.rs"

@@ -1,4 +1,4 @@
-# Telos protocols: RFC bindings, pluggable transports and streams
+# Ignite protocols: RFC bindings, pluggable transports and streams
 
 **Status:** future design, proposal; nothing here is implemented. **Date:** 1 November 2026.
 **Scope:** the stack of transports, streams, connections, protocols, exchanges and applications;
@@ -7,17 +7,18 @@ compilation on both targets; a phased roadmap.
 
 Origin (Timo, 1 November 2026): HTTP is "just one protocol, whereas TCP is a transport"; transport,
 protocol, stream, request and response are decoupled and "completely pluggable"; and, following the
-intent claim (`Telos_Design.md:9`), "whatever is claimed by the RFC is then put into the primitives
-of telos".
+intent claim (design, opening paragraph), "whatever is claimed by the RFC is then put into the
+primitives of ignite".
 
 The document decides: each question gets the chosen design, the rejected alternatives and one line
-on why. Citations: "design §n" or `Telos_Design.md:line`; "slice §n" or `slice.md:line`; "wasm §n",
-"actors §n", "llvm §n" for the companion designs; `file:line` for code; `[Pn]` for the external
-sources of section 9. Proposals that contradict a stated decision are marked **Conflict**.
+on why. Citations: "design §n" for `design.md`; "slice §n" for `slice.md`; "wasm §n",
+"actors §n", "llvm §n" for the companion designs; a file and a symbol (fn, type, constant, role)
+for code, never a line number; `[Pn]` for the external sources of section 9. Proposals that
+contradict a stated decision are marked **Conflict**.
 
-State on 1 November 2026: `std/protocol/http.telos` is in place (367 lines). Both protocols' roles
-take a `TcpStream` (slice §4.2, `slice.md:250`), and type parameters have no bounds
-(`slice.md:1048`).
+State on 1 November 2026: `std/protocol/http.ignite` is in place (678 lines including 30 inline
+`test` items). The lexer has 29 keywords. Both protocols' roles take a `TcpStream` (slice §4.2
+Protocols), and type parameters have no bounds (slice §11.1 Generics).
 
 ## 0 Decisions at a glance
 
@@ -26,31 +27,31 @@ take a `TcpStream` (slice §4.2, `slice.md:250`), and type parameters have no bo
 | D1 | Stack | Six concepts: transport, stream, connection, protocol, exchange or session, application. A protocol sees only a stream. An application sees only its protocol's request, response or session types. |
 | D2 | Pluggability | Interfaces with bounded generics, monomorphized: `fn serve<S: ByteStream>(..)`. Phase 1 ships the bound with one compiler-known interface, `ByteStream`. Phase 4 makes `interface` and `impl` user-declarable, with associated types. |
 | D3 | Choosing the stack | A system names a transport value, e.g. `transport = Tls { inner = Tcp { port = 8443 } }`. The checker matches the transport's stream type against the protocol's bound before any effect. |
-| D4 | RFC catalogues | `std/rfc/rfcNNNN.telos` holds an RFC's requirements as `Requirement` constants extracted from the RFCXML `<bcp14>` marks, and its collected ABNF verbatim. |
-| D5 | Linking | `protocol Http conforms [RFC9112]`, `fn .. satisfies [R..]`, `test ".." verifies [R..]`. A MUST in scope must be satisfied, declared unsupported with a reason, or not applicable; otherwise E090. `telos conformance` prints the matrix. |
+| D4 | RFC catalogues | `std/rfc/rfcNNNN.ignite` holds an RFC's requirements as `Requirement` constants extracted from the RFCXML `<bcp14>` marks, and its collected ABNF verbatim. |
+| D5 | Linking | `protocol Http conforms [RFC9112]`, `fn .. satisfies [R..]`, `test ".." verifies [R..]`. A MUST in scope must be satisfied, declared unsupported with a reason, or not applicable; otherwise E090. `ignite conformance` prints the matrix. |
 | D6 | Wire formats | `grammar` blocks in RFC 5234 ABNF compile to pure, incremental, bounded parsers and printers bound to records. Context-dependent framing is a pure transition function. Binary layouts in the EverParse 3D style come later. |
-| D7 | State machines | A pure `step(state, input) -> (state, outputs)` over an enum, like today's `decode`. Convergence is checked by `std.check.explore` under `telos test`. No `machine` keyword. |
+| D7 | State machines | A pure `step(state, input) -> (state, outputs)` over an enum, like today's `decode`. Convergence is checked by `std.check.explore` under `ignite test`. No `machine` keyword. |
 | D8 | Limits | Every limit an RFC leaves open is a defaulted field of the protocol's `Limits` record, linked to the requirement that bounds it. |
-| D9 | TLS | A sans-IO engine (rustls) in the substrate. The `Tls<T>` layer that drives it over any inner stream is Telos. A Telos TLS implementation is not planned. |
+| D9 | TLS | A sans-IO engine (rustls) in the substrate. The `Tls<T>` layer that drives it over any inner stream is Ignite. A Ignite TLS implementation is not planned. |
 | D10 | Phase 1 | After slice 8: an in-memory `Pipe`, the `ByteStream` bound, generic roles, and `test` blocks running Telnet and HTTP over TCP and over a pipe. |
 
 ## 1 The abstraction stack
 
 ### 1.1 Concepts
 
-| Concept | Meaning | Telos form | Today |
+| Concept | Meaning | Ignite form | Today |
 |---|---|---|---|
 | Transport | Makes connections (listen, accept, connect); owns addresses and credentials | A descriptor value whose type implements `Transport`: `Tcp` [P8], `Unix`, `Pipe`, `Tls<T>`, later `Quic` | the `TcpListener` resource kind (slice §6.1) |
 | Stream | What a connection carries | Interfaces `ByteStream` (ordered reliable bytes), `MessageStream<M>` (framed messages, e.g. WebSocket), `Multiplexed` (QUIC) | builtin `TcpStream` |
-| Connection | One established stream plus facts about it | The stream value; `info(stream) -> ConnectionInfo { secure, peer, local, alpn }`, pure like `local_port` (`slice.md:377`) | `local_port` |
+| Connection | One established stream plus facts about it | The stream value; `info(stream) -> ConnectionInfo { secure, peer, local, alpn }`, pure like `local_port` (slice §5.1 Effect sets) | `local_port` |
 | Protocol | Wire format, state machine and roles, bound to RFCs | `protocol P conforms [..] { roles }`, generic over a stream bound | `protocol Telnet`, `protocol Http` |
-| Exchange or session | What a protocol offers an application | Request/response: `Exchange<Q, R, S>`, one call per request. Session: a protocol-specific record of callbacks | `HttpApp<S>` (`http.telos:46`), `Console` (`std/console.telos:8`) |
+| Exchange or session | What a protocol offers an application | Request/response: `Exchange<Q, R, S>`, one call per request. Session: a protocol-specific record of callbacks | `HttpApp<S>` (`std/protocol/http.ignite`), `Console` (`std/console.ignite`) |
 | Application | The value a role calls | A record whose fn fields are wasm's cut points (wasm §3.1) | `HttpApp { state = todos, handle }` |
 
 HTTP shows why exchange and protocol are separate. RFC 9110 defines the aspects "shared by all
 versions" [P4]. RFC 9112 maps them onto a byte stream [P5]. RFC 9114 is "a mapping of HTTP
-semantics over QUIC" [P6]. In Telos, `Request`, `Response` and `HttpApp` move to `std/http.telos`
-(RFC 9110). `protocol Http` in `std/protocol/http.telos` is the RFC 9112 mapping, and a later
+semantics over QUIC" [P6]. In Ignite, `Request`, `Response` and `HttpApp` move to `std/http.ignite`
+(RFC 9110). `protocol Http` in `std/protocol/http.ignite` is the RFC 9112 mapping, and a later
 `protocol Http3` is the RFC 9114 mapping. An application written against `HttpApp<S>` runs on
 either without change.
 
@@ -59,7 +60,7 @@ either without change.
 Proposed syntax. `Self` is the implementing type. Methods name their effects on parameters, as
 declared fns do (slice §5.1), so roots and E016 work as they do today.
 
-```telos
+```ignite
 package std.transport.stream
 
 type ConnectionInfo { secure: Bool = false, peer: Text = "", local: Text = "", alpn: Text = "" }
@@ -102,12 +103,12 @@ protocol Http conforms [RFC9112] {
 
 `accept` runs in the accept loop and is cheap; `open` runs in the connection's task and does the
 expensive part, such as a TLS handshake. Credentials are descriptor fields, so reading them is an
-effect rooted at `transport` (`Telos_Design.md:146`), with no ambient `secrets` effect.
+effect rooted at `transport` (design §3.3, `SecretRef<T>`), with no ambient `secrets` effect.
 `MessageStream<M>` has `receive`, `send` and `close` with the same roots. `Exchange` has the shape of
 tower's `Service`, "an asynchronous function from a `Request` to a
 `Response`" [P26], without `poll_ready`, because back-pressure belongs to the substrate (slice §7).
 Roles gain a `limits` parameter (section 3.6). Slice §4.2's fixed role signatures and E030 change
-with them, as `slice.md:260` anticipates.
+with them, as slice §4.2's last rule anticipates.
 
 ### 1.3 Composition
 
@@ -123,11 +124,11 @@ TLS can layer over any of these streams because "the only requirement from the u
 is a reliable, in-order data stream" [P9]. HTTP/3 is a different protocol, not HTTP/1.1 over another
 transport. It frames each QUIC stream "similar to the HTTP/2 framing" and delegates flow control to
 QUIC [P6]. So `Http3`'s role takes `C: Multiplexed`, and binding it to `Tcp` is a type error (E096).
-That fulfils PRD01's "incompatible bindings fail before effects" (`Telos_Design.md:57`).
+That fulfils PRD01's "incompatible bindings fail before effects" (design §1.3).
 
 **Rejected:** one protocol abstraction over HTTP/1.1, HTTP/2 and HTTP/3 (their framing differs
 [P6]; what they share, the exchange, is shared already); Netty-style handler pipelines assembled at
-run time [P28] (Telos fixes and checks the stack at build time).
+run time [P28] (Ignite fixes and checks the stack at build time).
 
 ## 2 Pluggability
 
@@ -135,19 +136,19 @@ run time [P28] (Telos fixes and checks the stack at build time).
 
 | Option | Verdict | Why |
 |---|---|---|
-| Interfaces and bounded generics, monomorphized | **chosen** | Design §3.2 lists `Interface` as a declaration primitive (`Telos_Design.md:123`); design §3.5 asks for "generics with a limited constraint system" (`:159`); design §8.6 already names "Listener and byte-stream interfaces" as the TCP surface (`:409`). Both targets already monomorphize (slice §11.1), so no layer costs a dynamic call. |
+| Interfaces and bounded generics, monomorphized | **chosen** | Design §3.2 lists `Interface` as a declaration primitive; design §3.5 asks for "generics with a limited constraint system"; design §8.6 (version 0.2) named "Listener and byte-stream interfaces" as the TCP surface. Both targets already monomorphize (slice §11.1), so no layer costs a dynamic call. |
 | Records of effectful fns as dictionaries (possible since slice 7) | rejected for streams and transports, kept for applications | The dictionary is threaded by hand, every read is an indirect call, and a record cannot say that `Tls<Tcp>`'s stream type follows from `Tcp`'s. At the application edge fn fields are wanted, because they are wasm's cut points (wasm §3.1). |
-| Functors, as in MirageOS, where conduit's TLS functor applies `Tls_mirage.Make` to an inner flow [P29] | rejected | Telos modules are files, and a program is one file plus std (`slice.md:241`). There is no module language to apply functors in. Generic impls give the same composition. |
-| Compiler-known kinds only | rejected as the end state, used as phase 1's step | Every transport would be a compiler change, against design §9.1 ("Adapter … No" compiler change, `Telos_Design.md:495`) and the package-author job (`:49`). |
+| Functors, as in MirageOS, where conduit's TLS functor applies `Tls_mirage.Make` to an inner flow [P29] | rejected | Ignite modules are files, and a program is one file plus std (slice §4.1 Imports and the standard library). There is no module language to apply functors in. Generic impls give the same composition. |
+| Compiler-known kinds only | rejected as the end state, used as phase 1's step | Every transport would be a compiler change, against design §9.1 ("Adapter … No" compiler change) and the package-author job of design §1.2. |
 
 Go does this with run-time interfaces: `net.Conn` is "a generic stream-oriented network connection"
 [P30], and `Server.Serve` takes any `net.Listener` [P31]. hyper does it with static bounds:
-`serve_connection` requires `I: Read + Write + Unpin` [P27]. Telos takes hyper's static form, which
+`serve_connection` requires `I: Read + Write + Unpin` [P27]. Ignite takes hyper's static form, which
 the throughput work of section 6.3 favours.
 
 ### 2.2 Interfaces and impls
 
-```telos
+```ignite
 impl<S: ByteStream> ByteStream for TlsStream<S> {
   fn read(stream: TlsStream<S>, maximum: Int) -> IoResult<Input> requires [stream.read] = ..
   ..
@@ -158,9 +159,8 @@ impl Transport for Tcp { type Listener = TcpListener  type Accepted = TcpStream 
 - **Grammar.** Type parameters take bounds: `'<' ident (':' bound ('+' bound)*)? .. '>'`. Two new
   declarations, `interface Name tparams? { assoc* fnsig* }` and
   `impl tparams? Name<args>? for type { .. }`. New keywords `interface` and `impl`; `Self` is a type
-  name. That is 27 keywords against slice §2's 25 (`slice.md:71`), inside the 30–50 budget
-  (`Telos_Design.md:81`).
-- **Method calls.** Slice §4.8's resolution order (`slice.md:312-327`) gains a fourth step: a
+  name. That is 31 keywords against slice §2's 29, inside the 30–50 budget (design §1.5).
+- **Method calls.** Slice §4.8's resolution order gains a fourth step: a
   method of an interface that bounds the receiver's type parameter, or of an impl for the
   receiver's type. Calls stay UFCS, `stream.read(n)`.
 - **Effects.** An impl method may need at most what its interface method declares, mapped by
@@ -174,7 +174,7 @@ impl Transport for Tcp { type Listener = TcpListener  type Accepted = TcpStream 
 
 ### 2.3 Choosing the stack in a system
 
-```telos
+```ignite
 system TodoService {
   resource ingress: Listener {
     transport = Tls { inner = Tcp { address = "127.0.0.1", port = 8443 }, identity = secret("todo-tls") }
@@ -191,39 +191,39 @@ system TodoService {
   port }` stays as shorthand for `Listener { transport = Tcp { .. } }`.
 - The checker instantiates the role with `T` = the transport's `Stream` and checks the bound (E096
   before any build). `limits` defaults to `HttpLimits {}`.
-- `secret("..")` is design §3.3's `SecretRef<T>` (`Telos_Design.md:146`). Until secrets exist, P4
+- `secret("..")` is design §3.3's `SecretRef<T>`. Until secrets exist, P4
   reads `--tls-cert` and `--tls-key`, as `--port` works today (slice §6.1).
 - The main calls `listen` once and `accept` in its loop; each spawned task calls `open`, then the
-  role. `telos-io::run` and `spawn` keep owning entry and threads (AGENTS.md, Lifecycle ownership).
+  role. `ignite-io::run` and `spawn` keep owning entry and threads (AGENTS.md, Lifecycle ownership).
 
 **Rejected:** putting `transport` on the component. The listener is the thing with an address and a
-lifecycle, and two components may share it during a drain rollout (`Telos_Design.md:762`).
+lifecycle, and two components may share it during a drain rollout (design §11.8 Lowered control behavior).
 
 ### 2.4 Effects and authority through the layers
 
 | Layer | Effects | Granted by |
 |---|---|---|
-| Transport `listen`, `connect` | `transport.*`, `net.listen` or `net.connect` | the generated main, a root of the effect graph (`slice.md:408`) |
+| Transport `listen`, `connect` | `transport.*`, `net.listen` or `net.connect` | the generated main, a root of the effect graph (slice §5.1 Effect sets, "Roots") |
 | Transport `accept`, `open` | `listener.accept`, `transport.*`, `accepted.*` | the main and its task |
 | Protocol role | `stream.read`, `stream.write`, `application.*` | the main, through the role's `requires` (E030 if missing) |
-| Application | what its fn fields declare, e.g. `[state.*]` | the role, through `Exchange`'s effectful fn type (`slice.md:1060`) |
+| Application | what its fn fields declare, e.g. `[state.*]` | the role, through `Exchange`'s effectful fn type (slice §11.2 Effectful fn types) |
 
 Effects stay on parameters at every layer, so the existing root rules carry them through. On wasm a
 component's imports are derived from its effects (wasm §3.2). The todo application component still
 imports only its store, whatever transport the system names. A Telnet component tested over a pipe
-imports `telos:io/pipe` and nothing that touches the network.
+imports `ignite:io/pipe` and nothing that touches the network.
 
 ## 3 RFC binding
 
 ### 3.1 Catalogues
 
-**Decision.** Each RFC a protocol binds to gets one module, `std/rfc/rfcNNNN.telos`, holding:
+**Decision.** Each RFC a protocol binds to gets one module, `std/rfc/rfcNNNN.ignite`, holding:
 
 - one `Requirement` constant per requirement;
 - a `Spec` constant listing them, with the URL and a digest of the source they were extracted from;
 - the RFC's collected ABNF, verbatim, in a `grammar` block (section 3.4).
 
-```telos
+```ignite
 package std.rfc
 
 enum Level { Must, MustNot, Required, Shall, ShallNot, Should, ShouldNot, Recommended,
@@ -243,20 +243,20 @@ const R3_0_4: Requirement = Requirement { rfc = 9112, section = "3", ordinal = 4
 
 Requirement ids in this document are illustrative; the importer assigns the real ones.
 
-- **Extraction.** `telos rfc import 9112` reads RFCXML and makes one requirement per sentence that
+- **Extraction.** `ignite rfc import 9112` reads RFCXML and makes one requirement per sentence that
   contains a `<bcp14>` mark (RFC 7991 §2.9 [P14]); keywords count "only when they are in all
-  capitals" (RFC 8174 [P13]). Existing extractors work by keyword on text [P15] or XML [P16]; Telos
+  capitals" (RFC 8174 [P13]). Existing extractors work by keyword on text [P15] or XML [P16]; Ignite
   uses XML wherever it exists.
 - **Ids** are `R<section>_<ordinal>`; a module may alias one (`const BARE_CR: Requirement = R2_2_3`).
   The importer guesses the party ("A server MUST") and a human reviews it.
 - **Prose RFCs.** RFC 854 (1983), 855 [P2] and 1143 [P3] predate BCP 14 and RFCXML. Their catalogues are
   hand-written with `source = Prose`, quoting the text, e.g. "only the IAC need be doubled to be
   sent as data" [P1].
-- **Literal data only** (E091). `telos rfc check` compares the digest with the current source.
+- **Literal data only** (E091). `ignite rfc check` compares the digest with the current source.
 
 **Rejected:** section annotations such as `@rfc("9112", "2.2")` (nothing could count what is
 unimplemented); a `spec` declaration form (requirements are data, and protocol packages must
-"compile into existing … forms", `Telos_Design.md:206`); hand-written lists where XML exists (drift).
+"compile into existing … forms", design §3.6); hand-written lists where XML exists (drift).
 
 ### 3.2 Linking
 
@@ -270,7 +270,7 @@ unimplemented); a `spec` declaration form (requirements are data, and protocol p
 
 Each requirement in scope at MUST, MUST NOT, REQUIRED, SHALL or SHALL NOT level needs exactly one of
 three statuses: satisfied by a declaration, unsupported, or not applicable. A missing status is
-E090 in `telos check`. A SHOULD or MAY with no status shows as `unclassified` and is not an error.
+E090 in `ignite check`. A SHOULD or MAY with no status shows as `unclassified` and is not an error.
 Naming a requirement outside the protocol's specs is E092. The clause names are contextual words,
 not keywords.
 
@@ -278,9 +278,9 @@ not keywords.
 
 ### 3.3 The conformance matrix
 
-`telos conformance <file>` prints one row per requirement in scope. Verdicts follow ESS's runners:
+`ignite conformance <file>` prints one row per requirement in scope. Verdicts follow ESS's runners:
 a skip is not a failure, and any skip makes the result inconclusive (compare-ess.md §4, citing ESS
-`runners.md:107-110`).
+`runners.md`, "Hold your own implementation to the suite").
 
 | Verdict | When |
 |---|---|
@@ -295,7 +295,7 @@ The claim holds when no MUST-level row is fail, gap or inconclusive. Today's HTT
 hold it. RFC 9112 says "A recipient MUST be able to parse and decode the chunked transfer coding"
 (§7.1), and that a server MUST answer 400 to an HTTP/1.1 request lacking Host (§3.2) [P5]. The
 current server answers any `Transfer-Encoding` with 501 and does not check Host
-(`http.telos:8-23`, `:285-288`). Illustrative output:
+(the module comment of `std/protocol/http.ignite`, `next_request`, `parse_head`). Illustrative output:
 
 ```
 rfc9112 HTTP/1.1, parties Server Recipient Any, sections 2-9
@@ -307,8 +307,8 @@ R7_1_1  7.1  MUST         gap        "only Content-Length framing; 501 otherwise
 claim conformance to rfc9112: no (2 gaps, 0 failures, 1 inconclusive)
 ```
 
-Diagnostics. E090–E098 avoids slice §8, wasm's E080–E083 and actors' E050–E054. Actors' E054 already
-collides with slice §8's E054 (nesting limit); that is for actors.md to fix.
+Diagnostics. E090–E098 lie in the range `vision.md` §7 (T4) gives this document, E090 to E099,
+and avoid slice §8, wasm's E080–E083 and actors' E060–E064.
 
 | Code | Meaning |
 |---|---|
@@ -326,10 +326,10 @@ collides with slice §8's E054 (nesting limit); that is for actors.md to fix.
 
 **Decision:** one form per notation the RFCs use.
 
-| RFC notation | Telos form | Phase | Example |
+| RFC notation | Ignite form | Phase | Example |
 |---|---|---|---|
 | ABNF: RFC 5234 [P10], RFC 7405 case-sensitive strings [P11], RFC 9110's `#rule` lists [P4] | `grammar` block, verbatim, plus `matches` records | 3 | HTTP/1.1 head, chunked framing |
-| Prose about escape bytes | pure transition function (section 3.5) | today | Telnet IAC framing (`telnet.telos:119-144`) |
+| Prose about escape bytes | pure transition function (section 3.5) | today | Telnet IAC framing (`decode` in `std/protocol/telnet.ignite`) |
 | Binary layouts with dependent lengths | `layout` declarations in the style of EverParse 3D: fixed-width integers, constraints in braces, `where` clauses, tagged unions [P19] | 6 | WebSocket [P34], HTTP/2, QUIC |
 
 **`grammar`.** Inside `grammar Name uses Other.{rule, ..} { .. }` the lexer reads ABNF lines until a
@@ -343,7 +343,7 @@ consumed)`, `More(state)` or `Invalid(rule, offset)`, which resumes across reads
 proceed "fully incrementally" [P18]. It also gets a printer, `print_r(value: R) -> Result<Bytes,
 PrintError>`, that emits only what the grammar accepts: Nail's "semantic bijection" [P20], tested
 (section 3.7). Header injection becomes impossible by construction, replacing `checked`
-(`http.telos:109-117`). Both are ordinary fns and enums produced by elaboration, like slice §10.1's
+(`std/protocol/http.ignite`). Both are ordinary fns and enums produced by elaboration, like slice §10.1's
 desugarings, so the backends see nothing new and design §3.6's rule holds.
 
 **Accepted subset.** ABNF describes languages; it does not specify parsers. The compiler accepts a
@@ -353,18 +353,18 @@ alternatives. What ABNF cannot say stays outside it. RFC 9112 §6.3 body length 
 values [P5], so framing is a transition function. A chunk's data length is a dependent binding,
 `data: Bytes from chunk-data length size`, in 3D's style.
 
-**Rejected:** hand-written parsers only, as today (`parse_head`, `http.telos:203`, names no rule
-and nothing compares it with the grammar); Kaitai Struct [P17] (a YAML language outside Telos's
+**Rejected:** hand-written parsers only, as today (`parse_head` in `std/protocol/http.ignite` names no rule
+and nothing compares it with the grammar); Kaitai Struct [P17] (a YAML language outside Ignite's
 checker); parser combinators such as Hammer [P21] (no line-for-line match with the RFC, and resuming
-across reads needs state Telos code cannot hold).
+across reads needs state Ignite code cannot hold).
 
 ### 3.5 State machines
 
 **Decision.** A protocol state machine is a pure `step(state, input) -> (state, outputs)` over an
-enum, the shape of today's `decode` (`telnet.telos:119`). E046 already guarantees that every state
-handles every input. Exploration is a library function in `std/check/explore.telos`:
+enum, the shape of today's `decode` (`std/protocol/telnet.ignite`). E046 already guarantees that every state
+handles every input. Exploration is a library function in `std/check/explore.ignite`:
 
-```telos
+```ignite
 type Machine<S, I, O> { initial: S, step: fn(state: S, input: I) -> (S, List<O>) }
 type Bounds { depth: Int = 16, channel: Int = 4, states: Int = 100000 }
 type Report<S> { explored: Int, loops: List<List<S>>, stuck: List<S>, violations: List<S>, exhausted: Bool }
@@ -377,9 +377,9 @@ states and states violating `holds`. It needs the phase-4 `Eq` bound. A clean ru
 its bounds, not a proof, so the report carries `explored` and `exhausted`, as ESS's protocol checker
 reports its bounds and counts (ESS `docs/design/protocol-specification.md`, "Checking and evidence").
 
-**Rejected:** a `machine` keyword (the function is the machine; `match` and E046 give what a 13th
-declaration form would, `Telos_Design.md:132`); a separate model in P [P22] or TLA+ [P23] (it
-drifts from the code; Telos explores the code itself).
+**Rejected:** a `machine` keyword (the function is the machine; `match` and E046 give what a further
+declaration form would, design §3.2); a separate model in P [P22] or TLA+ [P23] (it
+drifts from the code; Ignite explores the code itself).
 
 ### 3.6 Limits
 
@@ -387,7 +387,7 @@ drifts from the code; Telos explores the code itself).
 `satisfies` link where an RFC states a minimum. Roles read limits only from this record, and a
 system may override any field (section 2.3).
 
-```telos
+```ignite
 type HttpLimits {
   request_line: Int = 8000 satisfies [R3_0_4]
   field_section: Int = 8192
@@ -399,19 +399,20 @@ type HttpLimits {
 type TelnetLimits { maximum_line: Int = 4096, maximum_subnegotiation: Int = 1024, idle_timeout_ms: Int = 600000 }
 ```
 
-`telos conformance` checks each `minimum` against the default and against every system's override.
-Today there is one head limit, `MAXIMUM_HEAD = 8192` (`http.telos:51`), covering request line and
+`ignite conformance` checks each `minimum` against the default and against every system's override.
+Today there is one head limit, `MAXIMUM_HEAD = 8192` (`std/protocol/http.ignite`), covering request line and
 fields together. The split turns RFC 9112's RECOMMENDED 8000-octet request line [P5] into a checked
 value. RFC 9110 sets no field limit and requires a 4xx when a server refuses [P4]; 431 is
 RFC 6585's [P35]. hyper exposes the same knobs (`max_buf_size`, `max_headers`,
 `header_read_timeout`) [P27].
 
-**Rejected:** module constants, as today (`telnet.telos:89-92`). A system cannot override them, and
+**Rejected:** module constants, as today (`MAXIMUM_SUBNEGOTIATION` and `IDLE_TIMEOUT_MS` in
+`std/protocol/telnet.ignite`). A system cannot override them, and
 they link to no requirement.
 
 ### 3.7 Conformance tests
 
-Slice 8 brings `test "name" { .. }`, `assert` and `telos test`. This document assumes a test body
+Slice 8 brings `test "name" { .. }`, `assert` and `ignite test`. This document assumes a test body
 behaves like a fn returning `IoResult<Unit>`.
 
 | Source | What | Phase |
@@ -424,48 +425,48 @@ behaves like a fn returning `IoResult<Unit>`.
 **ESS** checks another layer: the application contract, routes bound by `ess-http/1`, run against
 `todod` through a target adapter (compare-ess.md §3, option (c)). Its protocol format excludes
 byte-level parsing as "outside this format's admitted capability" (ESS
-`docs/design/protocol-specification.md`). Telos takes its verdict rules, later perhaps its traces (Q7).
+`docs/design/protocol-specification.md`). Ignite takes its verdict rules, later perhaps its traces (Q7).
 
 ## 4 What lives where
 
 | Place | Holds | Rule |
 |---|---|---|
-| `crates/telos-io` | Leaf transports: TCP (today), Unix sockets and `Pipe` (phase 1 and 4); TLS engine (rustls, phase 4); later QUIC | written once for every target (AGENTS.md:31); no application protocol (AGENTS.md:41) |
-| `crates/telos-rt` | C ABI adapter and handle kinds for new substrate types (llvm §5) | no IO of its own |
-| `crates/telos` | `telos test`, `telos conformance`, `telos rfc import`, `telos rfc check` | generic; no RFC number in Rust |
-| `std/transport/` | `stream.telos`, `transport.telos`, `tcp.telos`, `unix.telos`, `pipe.telos`, `tls.telos` (`Tls<T>`, `TlsStream<S>`) | Telos |
-| `std/protocol/` | `telnet.telos`, `http.telos` (RFC 9112), later `websocket.telos`, `http3.telos` | Telos |
-| `std/http.telos` | RFC 9110: `Request`, `Response`, methods, status codes, `Exchange`, `HttpApp` | Telos |
-| `std/rfc/` | `rfc.telos`, `rfc5234.telos`, `rfc854.telos`, `rfc855.telos`, `rfc1143.telos`, `rfc9110.telos`, `rfc9112.telos` | literal data and verbatim ABNF only |
-| `std/check/` | `explore.telos` | Telos |
+| `crates/ignite-io` | Leaf transports: TCP (today), Unix sockets and `Pipe` (phase 1 and 4); TLS engine (rustls, phase 4); later QUIC | written once for every target; no application protocol (both in AGENTS.md, Rules of the layout) |
+| `crates/ignite-rt` | C ABI adapter and handle kinds for new substrate types (llvm §5) | no IO of its own |
+| `crates/ignite` | `ignite test`, `ignite conformance`, `ignite rfc import`, `ignite rfc check` | generic; no RFC number in Rust |
+| `std/transport/` | `stream.ignite`, `transport.ignite`, `tcp.ignite`, `unix.ignite`, `pipe.ignite`, `tls.ignite` (`Tls<T>`, `TlsStream<S>`) | Ignite |
+| `std/protocol/` | `telnet.ignite`, `http.ignite` (RFC 9112), later `websocket.ignite`, `http3.ignite` | Ignite |
+| `std/http.ignite` | RFC 9110: `Request`, `Response`, methods, status codes, `Exchange`, `HttpApp` | Ignite |
+| `std/rfc/` | `rfc.ignite`, `rfc5234.ignite`, `rfc854.ignite`, `rfc855.ignite`, `rfc1143.ignite`, `rfc9110.ignite`, `rfc9112.ignite` | literal data and verbatim ABNF only |
+| `std/check/` | `explore.ignite` | Ignite |
 
 **TLS.** rustls "does not take care of network IO"; ciphertext enters through `read_tls` and leaves
 through `write_tls` [P32]. That makes it an engine rather than a socket. The substrate exposes it as
 an opaque `TlsEngine` handle with bytes-in, bytes-out operations. `Tls<T>` in
-`std/transport/tls.telos` drives it over any inner `ByteStream` (TCP, Unix, or a pipe in a test).
+`std/transport/tls.ignite` drives it over any inner `ByteStream` (TCP, Unix, or a pipe in a test).
 
-**Resolved** (Timo, 2026-11-01, option A): AGENTS.md now reads "The substrate knows sockets and TLS sessions, not application protocols"; rustls goes in `crates/telos-io`.
+**Resolved** (Timo, 2026-11-01, option A): AGENTS.md now reads "The substrate knows sockets and TLS sessions, not application protocols"; rustls goes in `crates/ignite-io`.
 Proposed reading: the substrate holds sockets and security engines, never an application protocol.
-Design §8.6 already puts "TLS integration" in the runtime adapter (`Telos_Design.md:410`), and design
-§12 calls porting TLS libraries a separate investment (`:900`). rustls replaces nothing, and its
+Design §8.6 already put "TLS integration" in the runtime adapter (version 0.2), and design
+§12.6 calls porting TLS libraries a separate investment. rustls replaces nothing, and its
 commit says so (AGENTS.md, Conventions).
 
-A TLS written in Telos is not planned. Verified implementations exist: Project Everest combines
-miTLS, HACL* and EverCrypt [P24], and HACL* compiles verified code to C [P25]. A Telos TLS would be
+A TLS written in Ignite is not planned. Verified implementations exist: Project Everest combines
+miTLS, HACL* and EverCrypt [P24], and HACL* compiles verified code to C [P25]. A Ignite TLS would be
 unverified cryptography in a language with no constant-time guarantee.
 
 **Rejected:** a compiler-known `TlsListener` kind (it cannot wrap a pipe or a Unix socket, and
-every later wrapper would be a compiler change); a Telos TLS over HACL* primitives now (it costs
+every later wrapper would be a compiler change); a Ignite TLS over HACL* primitives now (it costs
 more than everything else here, for nothing rustls lacks).
 
 ## 5 Worked examples
 
 ### 5.1 Telnet
 
-Today (`telnet.telos:13-26`, `:119-144`) the roles take a `TcpStream` and the limits are constants.
+Today (`protocol Telnet` and `decode` in `std/protocol/telnet.ignite`) the roles take a `TcpStream` and the limits are constants.
 `decode` refuses every option:
 
-```telos
+```ignite
 fn serve(stream: TcpStream, application: Console) -> IoResult<Unit> requires [stream.read, stream.write] {
   stream.set_idle_timeout(IDLE_TIMEOUT_MS)?
   ..
@@ -479,7 +480,7 @@ The proposal, from phases 1, 2 and 5: the roles are generic over the stream and 
 record, RFC 1143's Q method is a pair of transition functions, and each claim names its
 requirement.
 
-```telos
+```ignite
 protocol Telnet conforms [RFC854, RFC855, RFC1143] {
   fn serve<S: ByteStream>(stream: S, limits: TelnetLimits, application: Console)
     -> IoResult<Unit> requires [stream.read, stream.write] {
@@ -523,7 +524,7 @@ DONT. Today's `decode` is the special case `wanted = false` with every option in
 `(Yes, _) => (Yes, Silent)` is RFC 854's rule that a request to enter a mode already in effect
 "should not be acknowledged" [P1].
 
-```telos
+```ignite
 test "DO ECHO is refused and IAC IAC is data" verifies [NO_ACK_CURRENT_MODE, IAC_DOUBLED] {
   let (client, server) = Pipe.pair()
   spawn Telnet.serve(server, TelnetLimits {}, Console { prompt = "> ", respond = echo, maximum_line = 80 })
@@ -534,7 +535,7 @@ test "DO ECHO is refused and IAC IAC is data" verifies [NO_ACK_CURRENT_MODE, IAC
 }
 ```
 
-`read_text` and `read_bytes` read exactly n bytes or fail (`std/transport/pipe.telos`). A second
+`read_text` and `read_bytes` read exactly n bytes or fail (`std/transport/pipe.ignite`). A second
 test, "Q method converges", runs `explore` over two peers built from `on_enable` and `on_disable`
 and asserts no loops, no violations and unexhausted bounds (phase 5).
 
@@ -542,7 +543,7 @@ and asserts no loops, no violations and unexhausted bounds (phase 5).
 
 The catalogue holds RFC 9112's ABNF verbatim [P5] (excerpt):
 
-```telos
+```ignite
 grammar Rfc9112 uses Rfc9110.{token, field-name, field-value, OWS}, Rfc5234.{CRLF, SP, HEXDIG} {
 HTTP-message   = start-line CRLF *( field-line CRLF ) CRLF [ message-body ]
 start-line     = request-line / status-line
@@ -558,7 +559,7 @@ last-chunk     = 1*("0") [ chunk-ext ] CRLF
 
 The protocol binds records to the grammar and adds one local rule composed from RFC rules:
 
-```telos
+```ignite
 grammar Head uses Rfc9112.{request-line, field-line, CRLF} {
 request-head   = request-line CRLF *( field-line CRLF ) CRLF
 }
@@ -594,19 +595,19 @@ fn framing(head: RequestHead, limits: HttpLimits) -> Framing satisfies [R3_2_4, 
 
 `[_, _, ..]` is a rest pattern that slice §3 lacks; until then that arm is a `len()` test. The
 generated parser replaces about 120 lines (`parse_head`, `is_token`, `is_token_byte`,
-`is_field_value`, `is_target`, `read_head`, `checked`; `http.telos:109-117`, `:166-255`). RFC 9112
+`is_field_value`, `is_target`, `read_head`, `checked`, all in `std/protocol/http.ignite`). RFC 9112
 §5.1's ban on whitespace before the colon (400) [P5] needs no check: `field-name` is a `token` and
 no `OWS` precedes `":"`; the generated mutation `"Host : x"` is expected `Invalid`. `R6_3_5` is
 §6.3's 400-and-close for a final coding other than chunked [P5].
 
 ### 5.3 The todo service with a transport swap
 
-`examples/todo/todo.telos:15-81` (types, `handle`, CRUD) stays as it is. Only its imports of
+`examples/todo/todo.ignite` from `Todo` to `handle` (types, `handle`, CRUD) stays as it is. Only its imports of
 `HttpApp`, `Request` and `Response` move to `std.http`. The application runs in three bindings: the
-present system (`todo.telos:83-93`, `TcpListener` on port 8080); TLS, by replacing the resource line
+present system (`system TodoService`, `TcpListener` on port 8080); TLS, by replacing the resource line
 with section 2.3's `Listener { transport = Tls { .. } }`; and a test with no listener at all:
 
-```telos
+```ignite
 test "create and read back over a pipe" verifies [R9_3_2] {
   let (client, server) = Pipe.pair()
   let todos: Store<Todo> = Store.new()
@@ -621,7 +622,7 @@ test "create and read back over a pipe" verifies [R9_3_2] {
 ```
 
 `R9_3_2` is §9.3's persistence rule [P5]. `Store.new()` is allowed only in tests (E097), because
-stores are otherwise system resources (`slice.md:1092`). `received_batches()` is a test method of
+stores are otherwise system resources (slice §11.3 `Store<T>`). `received_batches()` is a test method of
 the pipe that counts the deliveries caused by the peer's flushes. It is 1 because the server wrote
 both answers before its next wait (section 6.3). `handle`, `Todo` and the application's wasm
 component are the same in all three bindings (wasm §3.2).
@@ -632,33 +633,33 @@ component are the same in all three bindings (wasm §3.2).
 
 An interface becomes a trait, `pub trait ByteStream: Clone + Send + Sync + 'static`, and a bound
 becomes `<S: ByteStream + Clone + Send + Sync + 'static>` (slice §6's bounds plus the trait).
-Builtin impls are `impl ByteStream for telos_io::TcpStream` (and `PipeStream`) in `telos-io`,
+Builtin impls are `impl ByteStream for ignite_io::TcpStream` (and `PipeStream`) in `ignite-io`,
 delegating to the inherent methods. Associated types and generic impls map one to one. A call on a
 bounded `S` is `ByteStream::read(&stream, n)`, statically dispatched; rustc monomorphizes
 `serve::<TcpStream>`, and the program crate contains no `dyn`. `grammar` and `matches` are
 elaborated before generation. `conforms`, `satisfies`, `verifies` and catalogues emit nothing; only
-`telos conformance` reads them. Tests compile into a separate crate (slice 8), so `PipeStream`
+`ignite conformance` reads them. Tests compile into a separate crate (slice 8), so `PipeStream`
 instances never reach `todod`.
 
 ### 6.2 LLVM target
 
 Instances already exist: one function per instance (slice §11.1). A bound adds one step. After the
 instance is substituted, a call of an interface method on `S` resolves to the concrete type's impl:
-a direct call to `telos_rt_tcp_read`, or to the Telos function for `TlsStream<TcpStream>`. There
+a direct call to `ignite_rt_tcp_read`, or to the Ignite function for `TlsStream<TcpStream>`. There
 are no vtables. An associated type is substituted like a type argument. `PipeStream` becomes one
-more handle kind in `telos-rt`'s table (llvm §5).
+more handle kind in `ignite-rt`'s table (llvm §5).
 
 ### 6.3 Throughput: one write per reply
 
 The measured baseline before coalescing made "exactly 2 sendto per reply" on both targets
 (throughput baseline, "Syscalls per 1000 replies"). Telnet now writes reply and prompt in one
-`write_all` (`telnet.telos:329-346`), and the substrate sends a buffer only before its writer waits,
-ends or flushes, so pipelined answers leave in one system call (`slice.md:730-748`). Rules that keep
+`write_all` (`answer_line` in `std/protocol/telnet.ignite`), and the substrate sends a buffer only before its writer waits,
+ends or flushes, so pipelined answers leave in one system call (slice §7, "Write coalescing"). Rules that keep
 this:
 
 - **Protocols.** A role builds a whole reply and writes it once; generated printers return `Bytes`.
-- **Layers.** A Telos layer keeps no bytes across `write_all`: `TlsStream.write_all` encrypts one
-  record and hands it on at once. A layer buffering in Telos would deadlock request/response, since
+- **Layers.** A Ignite layer keeps no bytes across `write_all`: `TlsStream.write_all` encrypts one
+  record and hands it on at once. A layer buffering in Ignite would deadlock request/response, since
   the substrate cannot flush what it does not hold. No `flush` in the interface: every protocol would
   have to call it in the right place.
 - **Pipes.** `PipeStream` coalesces as `TcpStream` does, so `received_batches` (section 5.3) checks
@@ -668,9 +669,9 @@ this:
 
 ### 6.4 Slice 5, wasm and actors
 
-Slice 5 makes the substrate async and Rust-target fns futures (AGENTS.md:36-39). Interface methods
+Slice 5 makes the substrate async and Rust-target fns futures (AGENTS.md, Rules of the layout). Interface methods
 then lower to async trait methods, with the source unchanged (Q6). On wasm each instance of a
-generic role is its own export, and `TlsEngine` maps to a `telos:io/tls` import (wasm §3.2). Actors
+generic role is its own export, and `TlsEngine` maps to a `ignite:io/tls` import (wasm §3.2). Actors
 stay behind the application edge, where the protocol is "the byte-level edge" (actors §2.2).
 
 ## 7 Phased roadmap
@@ -679,31 +680,31 @@ Sizes as in actors §11. wasm §10 reserves slices 9 to 11, so phase 1 is propos
 
 | Phase | Deliverable | Acceptance test | Size | Needs |
 |---|---|---|---|---|
-| **P1** Pipe and the stream bound | `Pipe.pair()` and `PipeStream` in `telos-io` and `telos-rt`, coalescing as TCP, with `received_batches`; bound syntax with one builtin interface, `ByteStream` (from `std.net`); `Telnet` and `Http` roles generic over `S: ByteStream`, taking a `limits` record; `Store.new()` in tests (E097); E096. Moving HTTP to `std/protocol/http.telos` is already done. | `telos test std/protocol/telnet.telos` and `telos test std/protocol/http.telos` pass on both targets. Telnet over a pipe: slice §9 item 4's transcript, `IAC DO ECHO` answered `IAC WONT ECHO`, `IAC IAC` as one literal byte, and an oversized subnegotiation closing the session. HTTP over a pipe: 3 pipelined requests answered in 1 batch, plus the 400, 413 and 431 cases. `crates/telos/tests/terminal.rs` and `todo.rs` pass unchanged over TCP. The Rust golden shows `Telnet::serve::<telos_io::TcpStream>` and no `dyn`. | S | slice 8 (`test`, `assert`, `telos test`) |
-| P2 Catalogues and matrix | `std/rfc/rfc.telos`; `telos rfc import` and `check`; catalogues for RFC 854, 855 and 1143 (prose), 9112 §2–§9 and the 9110 server subset; `conforms`, `scope`, `satisfies`, `verifies`, the statuses; literal-constant evaluation; `telos conformance`; E090–E092 | Removing one `satisfies` from a MUST makes `telos check` fail with E090. The HTTP matrix lists the §7.1 and §3.2 gaps and claims nothing. The Telnet matrix claims RFC 854 for an NVT that refuses every option. | M | P1 |
-| P3 ABNF grammars | `grammar`, `matches`, `from`, `as hex`, `length`; generated parsers, printers and tests; HTTP head and chunked body; Host check; split `HttpLimits`; E093–E095 | The hand-written head functions are gone from `http.telos`; `todo.rs` passes on both targets with chunked bodies; the RFC 9112 matrix has no MUST gap in §2–§7; pipelined `todod` throughput is within 10 % of P1's. | L | P2 |
-| P4 Interfaces and transports | user `interface` and `impl`, associated types, generic impls, `Eq`; `std/transport/*`; `Listener { transport = .. }`; `TlsEngine` and Unix sockets in `telos-io`; E098 | `todo.rs` passes over TCP, TLS and a Unix socket, with `todo.telos` differing only in the `ingress` line. A stream-kind mismatch is E096. The application's wasm imports do not change. | L | P1; decision on Q1 |
+| **P1** Pipe and the stream bound | `Pipe.pair()` and `PipeStream` in `ignite-io` and `ignite-rt`, coalescing as TCP, with `received_batches`; bound syntax with one builtin interface, `ByteStream` (from `std.net`); `Telnet` and `Http` roles generic over `S: ByteStream`, taking a `limits` record; `Store.new()` in tests (E097); E096. Moving HTTP to `std/protocol/http.ignite` is already done. | `ignite test std/protocol/telnet.ignite` and `ignite test std/protocol/http.ignite` pass on both targets. Telnet over a pipe: slice §9 item 4's transcript, `IAC DO ECHO` answered `IAC WONT ECHO`, `IAC IAC` as one literal byte, and an oversized subnegotiation closing the session. HTTP over a pipe: 3 pipelined requests answered in 1 batch, plus the 400, 413 and 431 cases. `crates/ignite/tests/terminal.rs` and `todo.rs` pass unchanged over TCP. The Rust golden shows `Telnet::serve::<ignite_io::TcpStream>` and no `dyn`. | S | slice 8 (`test`, `assert`, `ignite test`) |
+| P2 Catalogues and matrix | `std/rfc/rfc.ignite`; `ignite rfc import` and `check`; catalogues for RFC 854, 855 and 1143 (prose), 9112 §2–§9 and the 9110 server subset; `conforms`, `scope`, `satisfies`, `verifies`, the statuses; literal-constant evaluation; `ignite conformance`; E090–E092 | Removing one `satisfies` from a MUST makes `ignite check` fail with E090. The HTTP matrix lists the §7.1 and §3.2 gaps and claims nothing. The Telnet matrix claims RFC 854 for an NVT that refuses every option. | M | P1 |
+| P3 ABNF grammars | `grammar`, `matches`, `from`, `as hex`, `length`; generated parsers, printers and tests; HTTP head and chunked body; Host check; split `HttpLimits`; E093–E095 | The hand-written head functions are gone from `http.ignite`; `todo.rs` passes on both targets with chunked bodies; the RFC 9112 matrix has no MUST gap in §2–§7; pipelined `todod` throughput is within 10 % of P1's. | L | P2 |
+| P4 Interfaces and transports | user `interface` and `impl`, associated types, generic impls, `Eq`; `std/transport/*`; `Listener { transport = .. }`; `TlsEngine` and Unix sockets in `ignite-io`; E098 | `todo.rs` passes over TCP, TLS and a Unix socket, with `todo.ignite` differing only in the `ingress` line. A stream-kind mismatch is E096. The application's wasm imports do not change. | L | P1; decision on Q1 |
 | P5 Exploration, Q method | `std.check.explore`; Telnet negotiation by RFC 1143, supporting ECHO and SUPPRESS-GO-AHEAD and refusing the rest | "Q method converges" passes without exhausting its bounds. Deleting the `WantYes(Opposite)` arm makes it fail. Slice §9 items 4 to 9 still pass. | M | P4 (`Eq`) |
 | P6 Messages and layouts | `MessageStream<M>`; `layout`; WebSocket [P34] as a protocol over an HTTP/1.1 upgrade and as a message-stream transport | A Telnet session over WebSocket over TLS over TCP passes P1's transcript. | L | P4 |
-| P7 QUIC and HTTP/3 | QUIC engine in `telos-io`, `Multiplexed`; `Http3` with QPACK [P33] in Telos | `todo.rs` passes over HTTP/3 with the same `handle`. | L+ | slice 5, P6 |
+| P7 QUIC and HTTP/3 | QUIC engine in `ignite-io`, `Multiplexed`; `Http3` with QPACK [P33] in Ignite | `todo.rs` passes over HTTP/3 with the same `handle`. | L+ | slice 5, P6 |
 
 P1 fits soon after slice 8. It adds one bound and one substrate type and edits two std files; no
 system syntax changes. It fixes the names `ByteStream`, `read`, `write_all`, `close` and
-`set_idle_timeout`, which phase 4 then declares in Telos. Protocol code written in P1 therefore
+`set_idle_timeout`, which phase 4 then declares in Ignite. Protocol code written in P1 therefore
 compiles unchanged later, apart from one import line.
 
 ## 8 Risks and open questions
 
 | # | Risk or question | Handling |
 |---|---|---|
-| Q1 | **Conflict** with AGENTS.md:41: a TLS engine (later QUIC) in `crates/telos-io` is a protocol in the substrate. | Proposed rule: "the substrate knows sockets and security engines, not application protocols". Resolved by Timo on 2026-11-01: option A, rule changed in AGENTS.md. |
+| Q1 | **Conflict** with AGENTS.md, Rules of the layout ("not protocols"): a TLS engine (later QUIC) in `crates/ignite-io` is a protocol in the substrate. | Proposed rule: "the substrate knows sockets and security engines, not application protocols". Resolved by Timo on 2026-11-01: option A, rule changed in AGENTS.md. |
 | Q2 | ABNF describes languages: ambiguity, `obs-fold`, `obs-text` and context-dependent lengths may leave too little for a generated parser. | E093 makes the gaps visible, and obsolete forms become `unsupported` rows. P3 starts by measuring how much of RFC 9112 compiles. |
-| Q3 | A generated parser may be slower than today's `bytes_find_from` scan for `\r\n\r\n` (`http.telos:242`). | Run scanning, and P3's 10 % gate. Fallback: a hand-written scan delimits the head, and the generated parser validates it. |
+| Q3 | A generated parser may be slower than today's `bytes_find_from` scan for `\r\n\r\n` (`read_head` in `std/protocol/http.ignite`). | Run scanning, and P3's 10 % gate. Fallback: a hand-written scan delimits the head, and the generated parser validates it. |
 | Q4 | Catalogues are large and partly hand-classified; a `satisfies` is only a claim. | Scopes keep claims small. A claim without a passing test is inconclusive. Mutation audits of `verifies` tests follow ESS (compare-ess.md §4). |
-| Q5 | Keywords grow from 25 to 29 (`interface`, `impl`, `grammar`, `test`), and design §3.6 asks for existing forms (`Telos_Design.md:206`). | Not a conflict: grammars, catalogues and claims elaborate into fns, enums and constants, and 29 is under the budget (`:81`). |
+| Q5 | Keywords grow from 29 to 32 (`interface`, `impl`, `grammar`; `test` is one since slice 8), and design §3.6 asks for existing forms. | Not a conflict: grammars, catalogues and claims elaborate into fns, enums and constants, and 32 is inside the 30–50 budget (design §1.5). |
 | Q6 | Slice 5 makes interface methods async; async trait methods with `Send` bounds are the least settled part of the Rust target. | P4 lands before or with slice 5's lowering. If they collide, the Rust target emits concrete instances itself, as the LLVM target does. |
 | Q7 | Should `explore` emit ESS's `ess-prototrace/1` traces? | Decide after P5, if ESS adopts byte-level protocol targets. |
-| Q8 | Design §8.6 names libuv and llhttp as candidates (`Telos_Design.md:411`). | Superseded by `slice.md:11` (protocols in Telos) and AGENTS.md:36-39 (tokio). Update design §8.6 when this design is accepted. |
+| Q8 | Design §8.6 (version 0.2) named libuv and llhttp as candidates. | Superseded by the direction paragraph at the top of `slice.md` (protocols in Ignite) and AGENTS.md, Rules of the layout (tokio). Design §8.6 says so since version 0.3. |
 
 ## 9 References
 

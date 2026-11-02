@@ -1,0 +1,2 @@
+e045_param_eq.ignite:1:35: error[E045]: operator `==` is not defined for `T`: it holds a function, handle, store, `IoError` or type parameter
+e045_param_eq.ignite:3:30: error[E045]: operator `+` is not defined for `T`

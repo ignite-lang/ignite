@@ -1,0 +1,2 @@
+effects_b07_role_helper.ignite:5:12: error[E016]: missing effect `stream.write` for `chat`; add it to the `requires` of `Echo.serve`
+effects_b07_role_helper.ignite:17:10: error[E016]: missing effect `s.write` for `Echo.connect`; add it to the `requires` of `caller`

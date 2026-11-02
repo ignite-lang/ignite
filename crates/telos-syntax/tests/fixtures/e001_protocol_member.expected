@@ -1,1 +1,0 @@
-e001_protocol_member.telos:5:3: error[E001]: expected `fn` or `}` in a protocol, found `type`

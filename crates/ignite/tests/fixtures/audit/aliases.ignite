@@ -1,0 +1,89 @@
+// A `var` bound to a value that aliases another variable's memory is a
+// copy: pushing to it leaves the source unchanged (vision 10.1, M1 to M3).
+
+type Bag {
+  items: List<Int>
+}
+
+fn filler(i: Int) -> Text = "................................................................".concat(Int.to_text(i))
+
+fn grow(x: Text) -> Int {
+  var b = x.to_bytes()
+  b.push(33)
+  return x.len()
+}
+
+fn grow_each(xs: List<List<Int>>) -> Int {
+  var total = 0
+  for x in xs {
+    var y = x
+    y.push(9)
+    total = total + y.len()
+  }
+  return total
+}
+
+test "var to_bytes alias in a callee" {
+  var s = "abc"
+  let n = grow(s)
+  assert n == 3
+  assert s == "abc"
+}
+
+test "var to_bytes alias single call" {
+  let x = "abc"
+  var b = x.to_bytes()
+  b.push(33)
+  assert x == "abc"
+  assert x.len() == 3
+  assert b.to_text() == "abc!"
+}
+
+test "var to_bytes alias in a loop" {
+  var s = "abc"
+  var i = 0
+  while i < 20000 {
+    var b = s.to_bytes()
+    b.push(120)
+    let junk = filler(i)
+    i = i + 1
+  }
+  assert s == "abc"
+  assert s.to_bytes().slice(0, 3).to_text() == "abc"
+}
+
+test "var of a for element" {
+  let xs = [[1], [2, 3]]
+  assert grow_each(xs) == 5
+  assert xs == [[1], [2, 3]]
+  for x in xs {
+    var y = x
+    y.push(7)
+    y.append([8])
+  }
+  assert xs == [[1], [2, 3]]
+}
+
+test "var of a match payload" {
+  let o: Option<List<Int>> = Some([1])
+  match o {
+    Some(b) => {
+      var c = b
+      c.push(2)
+      assert c == [1, 2]
+    }
+    None => {}
+  }
+  assert o == Some([1])
+}
+
+test "var of a field and of an element" {
+  let bag = Bag { items = [1] }
+  var items = bag.items
+  items.push(2)
+  assert bag.items == [1]
+  let rows = [[1], [2]]
+  var row = rows[0]
+  row.clear()
+  assert rows == [[1], [2]]
+}

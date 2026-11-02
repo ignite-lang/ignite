@@ -1,0 +1,6 @@
+e101_quantity_mix.ignite:2:13: error[E101]: operator `+` mixes `Duration` and `ByteSize`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+e101_quantity_mix.ignite:3:17: error[E101]: operator `*` mixes `Duration` and `ByteSize`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+e101_quantity_mix.ignite:4:17: error[E101]: operator `/` mixes `Int` and `Duration`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+e101_quantity_mix.ignite:5:19: error[E045]: operator `%` is not defined for `Duration`
+e101_quantity_mix.ignite:6:17: error[E101]: operator `-` mixes `Duration` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+e101_quantity_mix.ignite:7:10: error[E101]: operator `<` mixes `Duration` and `ByteSize`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)

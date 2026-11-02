@@ -1,0 +1,33 @@
+package fixtures.main_signature
+
+type Worker {
+  name: Text
+}
+
+fn Worker.main(self: Worker) -> Int = 0
+
+type Daemon {
+  name: Text
+}
+
+fn Daemon.main(self: Daemon, extra: Int) -> Result<Unit, IoError> = Ok(Unit)
+
+type Runner {
+  name: Text
+}
+
+fn Runner.main(self: Runner) -> Result<Unit, IoError> = Ok(Unit)
+
+system S {
+  component w: Worker {
+    name = "w"
+  }
+
+  component d: Daemon {
+    name = "d"
+  }
+
+  component r: Runner {
+    name = "r"
+  }
+}

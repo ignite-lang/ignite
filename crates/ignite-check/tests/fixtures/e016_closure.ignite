@@ -1,0 +1,22 @@
+import std.greeting.{greet, send}
+
+fn creates(stream: TcpStream) -> Int requires [stream.read] {
+  let f = |x: Int| {
+    let r = send(stream, greet("a"))
+    x
+  }
+  return 0
+}
+
+fn ambient() -> Int requires [stdin.read] {
+  let f = || {
+    let r = Stdout.write_all([1])
+    1
+  }
+  return 0
+}
+
+fn call_bound(s: TcpStream) -> Result<Unit, IoError> requires [s.read] {
+  let f = |t: TcpStream| send(t, greet("a"))
+  return f(s)
+}

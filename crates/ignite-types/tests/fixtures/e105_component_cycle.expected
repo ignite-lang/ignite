@@ -1,0 +1,1 @@
+e105_component_cycle.ignite:9:13: error[E105]: components use each other through bare names: a -> b -> a; a component embeds the values it names, so the chain must end

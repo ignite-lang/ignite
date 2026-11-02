@@ -1,0 +1,15 @@
+package fixtures.required_field
+
+type Probe {
+  target: Text
+  attempts: Signal<Int>
+}
+
+system S {
+  resource ingress: TcpListener {
+    port = 7071
+  }
+
+  component probe: Probe {
+  }
+}

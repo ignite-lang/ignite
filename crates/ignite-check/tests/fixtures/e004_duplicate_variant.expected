@@ -1,0 +1,1 @@
+e004_duplicate_variant.ignite:1:26: error[E004]: duplicate variant `Red` in enum `Color`

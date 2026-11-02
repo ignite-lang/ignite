@@ -1,0 +1,8 @@
+fn f(d: Duration, b: ByteSize) -> Bool {
+  let sum = d + b
+  let product = d * b
+  let inverse = 2 / d
+  let remainder = d % 2
+  let shorter = d - 1
+  return d < b
+}

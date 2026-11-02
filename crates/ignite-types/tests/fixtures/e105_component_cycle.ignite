@@ -1,0 +1,23 @@
+package fixtures.component_cycle
+
+type Node {
+  name: Text
+  next: Option<Node>
+}
+
+system S {
+  component a: Node {
+    name = "a"
+    next = Some(b)
+  }
+
+  component b: Node {
+    name = "b"
+    next = Some(a)
+  }
+
+  component c: Node {
+    name = "c"
+    next = None
+  }
+}

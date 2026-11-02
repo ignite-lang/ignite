@@ -1,0 +1,10 @@
+fn area(width: Int, height: Int) -> Int = width * height
+
+fn f(g: fn(Int, Int) -> Int) -> Int {
+  let a = area(width = 2, depth = 3)
+  let b = area(width = 2, width = 3)
+  let c = area(height = 2, 3)
+  let d = g(width = 2, height = 3)
+  let e = [1].at(index = 0)
+  return a + b + c + d + e
+}

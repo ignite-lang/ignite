@@ -1,0 +1,51 @@
+package fixtures.system_store
+
+type Todo {
+  id: Int
+  title: Text
+}
+
+type App<S> {
+  state: S
+  handle: fn(state: S, stream: TcpStream) -> Result<Unit, IoError> requires [state.*, stream.*]
+}
+
+protocol Serve {
+  fn serve<S>(stream: TcpStream, application: App<S>) -> Result<Unit, IoError> requires [stream.*, application.*] {
+    return application.handle(application.state, stream)
+  }
+}
+
+fn respond(todos: Store<Todo>, stream: TcpStream) -> Result<Unit, IoError> requires [todos.write, stream.write] {
+  let id = todos.next_id()
+  todos.put(id, Todo { id = id, title = "milk" })
+  return stream.write_all(Int.to_text(id).to_bytes())
+}
+
+type Server<S> {
+  listener: TcpListener
+  application: App<S>
+  executable: Text
+}
+
+fn Server.main<S>(self: Server<S>) -> Result<Unit, IoError> {
+  loop {
+    let stream = self.listener.accept()?
+    spawn Serve.serve(stream, self.application)
+  }
+}
+
+system Todos {
+  resource ingress: TcpListener {
+    address = "127.0.0.1"
+    port = 7071
+  }
+
+  resource todos: Store<Todo>
+
+  component server: Server {
+    listener = ingress
+    application = App { state = todos, handle = respond }
+    executable = "todod"
+  }
+}

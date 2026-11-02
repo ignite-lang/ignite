@@ -1,0 +1,2 @@
+e001_spawn_and_fn_type.ignite:2:8: error[E001]: expected expression, found newline
+e001_spawn_and_fn_type.ignite:5:20: error[E001]: expected `)`, found `->`

@@ -1,0 +1,1 @@
+e040_var_assign.ignite:3:7: error[E040]: type mismatch: expected `Int`, found `Text`

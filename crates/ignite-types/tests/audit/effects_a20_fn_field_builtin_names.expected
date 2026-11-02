@@ -1,0 +1,1 @@
+effects_a20_fn_field_builtin_names.ignite:16:10: error[E016]: missing effect `stream.read` for `f`; add it to the `requires` of `bound`

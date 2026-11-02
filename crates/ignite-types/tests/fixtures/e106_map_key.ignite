@@ -1,0 +1,6 @@
+import std.shapes.{Point, Shape}
+
+fn f(by_point: Map<Point, Int>, by_shape: Map<Shape, Int>, by_text: Map<Text, Int>) -> Int {
+  let by_list: Map<List<Int>, Int> = Map.empty()
+  return by_text.len()
+}

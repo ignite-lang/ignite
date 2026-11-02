@@ -1,0 +1,1 @@
+fn contract() -> Int = 1

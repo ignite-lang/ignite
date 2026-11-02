@@ -1,0 +1,9 @@
+e003_unknown_qualified_pattern.ignite:7:9: error[E003]: enum `Key` has no variant `Escape`
+e003_unknown_qualified_pattern.ignite:8:5: error[E003]: wrong number of payload patterns for `Byte`: expected 1, found 2
+e003_unknown_qualified_pattern.ignite:9:5: error[E003]: wrong number of payload patterns for `Close`: expected 0, found 1
+e003_unknown_qualified_pattern.ignite:10:5: error[E003]: unknown enum `Nope`
+e003_unknown_qualified_pattern.ignite:14:10: error[E003]: enum `Mood` has no variant `Sad`
+e003_unknown_qualified_pattern.ignite:15:5: error[E003]: wrong number of payload patterns for `Grumpy`: expected 1, found 0
+e003_unknown_qualified_pattern.ignite:19:21: error[E003]: enum `Key` has no variant `Missing`
+e003_unknown_qualified_pattern.ignite:20:12: error[E003]: enum `Option` has no variant `Maybe`
+e003_unknown_qualified_pattern.ignite:21:5: error[E003]: wrong number of payload patterns for `Ok`: expected 1, found 0

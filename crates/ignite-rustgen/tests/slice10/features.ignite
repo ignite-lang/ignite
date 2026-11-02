@@ -1,0 +1,126 @@
+package fixtures.features
+
+import std.io.IoError
+import std.result.*
+
+// Slice 10 on the Rust target (`docs/slice.md` 14.1 to 14.3, O12): every
+// test here passes; `failures.ignite` holds the ones that must fail.
+
+type Todo {
+  id: Int
+  title: Text
+  done: Bool = false
+}
+
+fn make(id: Int, title: Text, done: Bool) -> Todo = Todo { id = id, title = title, done = done }
+
+fn pick(first: Text, second: Text, third: Text) -> Text = first + second + third
+
+fn failing() -> Result<Int, IoError> = Err(IoError.new("nope").with_exit_code(3))
+
+test "quantity values and operations" {
+  let d = 15 minutes
+  assert d == 900 seconds
+  assert d.to_ms() == 900000
+  assert d.to_ns() == 900000000000
+  assert (100 ms).to_ns() == 100000000
+  assert d * 2 == 30 minutes
+  assert 2 * d == 30 minutes
+  assert d / 3 == 5 minutes
+  assert d + 1 second > d
+  assert d - 15 minutes == 0 seconds
+  assert 1 hour > 59 minutes
+  assert (16 KiB).to_int() == 16384
+  assert (16 KB).to_int() == 16000
+  assert (1 MiB).to_int() == 1048576
+  let r = 99.9%
+  assert r.ppm() == 999000
+  assert (50%).ppm() == 500000
+  assert (0.25%).ppm() == 2500
+}
+
+test "quantity debug text uses the largest exact unit" {
+  assert (15 minutes).debug() == "15 minutes"
+  assert (1 minute).debug() == "1 minute"
+  assert (1500 ms).debug() == "1500 ms"
+  assert (2 hours).debug() == "2 hours"
+  assert (3 days).debug() == "3 days"
+  assert (0 seconds).debug() == "0 ns"
+  assert (2048 bytes).debug() == "2 KiB"
+  assert (1 byte).debug() == "1 byte"
+  assert (3000 bytes).debug() == "3000 bytes"
+  assert (50%).debug() == "50%"
+  assert (99.9%).debug() == "99.9%"
+  assert (0.25%).debug() == "0.25%"
+}
+
+test "named arguments are reordered to the parameters" {
+  assert make(1, done = true, title = "milk") == Todo { id = 1, title = "milk", done = true }
+  assert make(2, title = "eggs", done = false) == Todo { id = 2, title = "eggs" }
+  assert make(id = 3, title = "tea", done = false).id == 3
+  assert pick("a", third = "c", second = "b") == "abc"
+  assert 4.make(done = false, title = "ufcs") == Todo { id = 4, title = "ufcs" }
+}
+
+test "brace literal of a record uses the defaults" {
+  let todo: Todo = { id = 1, title = "milk" }
+  assert todo == Todo { id = 1, title = "milk", done = false }
+  assert todo.done == false
+}
+
+test "map literal and lookups" {
+  let m: Map<Text, Int> = { a = 1, b = 2 }
+  assert m.get("a") == Some(1)
+  assert m.get("z") == None
+  assert m.len() == 2
+  assert m.contains("b")
+  assert !m.contains("c")
+  assert m.keys() == ["a", "b"]
+  assert m.debug() == r#"{"a": 1, "b": 2}"#
+  let empty: Map<Text, Int> = Map.empty()
+  assert empty.len() == 0
+  assert empty.debug() == "{{}}"
+}
+
+test "map mutation has value semantics" {
+  var m: Map<Int, Text> = Map.empty()
+  m.put(2, "two")
+  m.put(1, "one")
+  let copy = m
+  m.put(3, "three")
+  assert copy.len() == 2
+  assert m.len() == 3
+  assert m.remove(1) == Some("one")
+  assert m.remove(1) == None
+  assert m.keys() == [2, 3]
+  assert m.debug() == r#"{2: "two", 3: "three"}"#
+  m.put(2, "zwei")
+  assert m.get(2) == Some("zwei")
+  assert m.len() == 2
+}
+
+test "for over a map visits pairs in key order" {
+  let m: Map<Text, Int> = { b = 2, a = 1, c = 3 }
+  var keys = ""
+  var sum = 0
+  for (k, v) in m {
+    keys = keys + k
+    sum = sum + v
+  }
+  assert keys == "abc"
+  assert sum == 6
+}
+
+test "maps compare structurally" {
+  let m: Map<Text, Int> = { a = 1, b = 2 }
+  let n: Map<Text, Int> = { b = 2, a = 1 }
+  let o: Map<Text, Int> = { a = 1 }
+  assert m == n
+  assert m != o
+  let bools: Map<Bool, List<Int>> = Map.empty()
+  assert bools.debug() == "{{}}"
+}
+
+test "with_exit_code keeps the error" {
+  assert failing().ok() == None
+}

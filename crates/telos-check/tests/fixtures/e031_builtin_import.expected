@@ -1,2 +1,0 @@
-e031_builtin_import.telos:1:28: error[E031]: `std.net` has no builtin `Socket`
-e031_builtin_import.telos:2:15: error[E031]: `std.io` has no builtin `Console`

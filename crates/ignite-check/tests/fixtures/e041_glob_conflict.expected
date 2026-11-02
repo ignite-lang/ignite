@@ -1,0 +1,1 @@
+e041_glob_conflict.ignite:6:22: error[E041]: `greet` is provided by the glob imports of `std.greeting`, `std.salute`; import it explicitly

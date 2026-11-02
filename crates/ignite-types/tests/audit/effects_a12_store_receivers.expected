@@ -1,0 +1,5 @@
+effects_a12_store_receivers.ignite:9:65: error[E016]: missing effect `b.read` for `get`; add it to the `requires` of `via_generic`
+effects_a12_store_receivers.ignite:11:73: error[E016]: missing effect `b.read` for `get`; add it to the `requires` of `via_alias_generic`
+effects_a12_store_receivers.ignite:13:49: error[E016]: missing effect `s.read` for `s.get`; add it to the `requires` of `via_alias`
+effects_a12_store_receivers.ignite:27:5: error[E016]: missing effect `stores.write` for `s.put`; add it to the `requires` of `via_for`
+effects_a12_store_receivers.ignite:34:5: error[E016]: missing effect `outer.write` for `s.put`; add it to the `requires` of `via_values`

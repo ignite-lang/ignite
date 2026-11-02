@@ -1,0 +1,17 @@
+type H {
+  map: fn(s: TcpStream) -> Result<Input, IoError> requires [s.read]
+  at: fn(s: TcpStream) -> Result<Input, IoError> requires [s.read]
+}
+
+fn rd(s: TcpStream) -> Result<Input, IoError> requires [s.read] = s.read(1)
+
+fn make() -> H = H { map = rd, at = rd }
+
+fn call_map(h: H, stream: TcpStream) -> Result<Input, IoError> requires [] = h.map(stream)
+
+fn call_at(h: H, stream: TcpStream) -> Result<Input, IoError> requires [] = h.at(stream)
+
+fn bound(h: H, stream: TcpStream) -> Result<Input, IoError> requires [] {
+  let f = h.map
+  return f(stream)
+}

@@ -1,0 +1,2 @@
+e104_required_field.ignite:9:3: error[E104]: required field `address` of `TcpListener` is missing
+e104_required_field.ignite:13:3: error[E104]: required field `target` of `Probe` is missing

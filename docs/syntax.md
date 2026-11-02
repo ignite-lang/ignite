@@ -1,595 +1,410 @@
-# Telos syntax: less ceremony, same explicitness
+proposal, not scheduled
 
-Status: design proposal, 2026-11-01. Nothing here is implemented. It builds on slice 9 as
-decided (closures, raw strings, globs, range patterns, tuple `.0`, structural `==`, associated
-fns, `std/option.telos`, `std/result.telos`) and treats those decisions as landed. It proposes
-the items of a syntax slice, called slice 10 here; section 7.4 settles the clash with
-`wasm.md`'s use of that number.
+# Ignite syntax: less ceremony, same explicitness
+
+Status: proposal drafted 2026-11-01. Nothing here is implemented or scheduled. Under
+`vision.md` §7 T2 a future design stays a proposal until a wave adopts it, and `vision.md` §4.1
+plans no sugar slice before the system-declaration slice (slice 10, wave F1): a sugar item
+enters a slice only when that slice's declarations need it. Section 7 lists what slice 10
+would need from here; section 8 is a candidate contract for a later sugar slice.
+
+The proposal builds on slice 9 as decided and treats it as landed: closures `|x| e`, record
+update `R { f = e, ..base }`, raw strings, glob imports, range patterns, tuple `.0`, structural
+`==`, `break` as an expression, associated fns, `std/option.ignite`, `std/result.ignite`.
 
 Timo's request: "make a design to improve syntax in general and make it more sugary and less
 verbose".
 
 ## 1 Scope and rules
 
-### 1.1 Constraints this design must keep
+### 1.1 Constraints
 
 | constraint | source |
 |---|---|
-| 30 to 50 reserved words; about 120 standard definitions around version 1 | `Telos_Design.md` §1.5 (line 81), §3.6 (line 206) |
-| defer macros, implicit conversions, unrestricted reflection and user-defined syntax | `Telos_Design.md` §3.5 (line 159) |
-| runtime effects require declared capabilities; an effect is never hidden | `Telos_Design.md` §3.1; `slice.md` §5 |
-| 29 reserved words today, `true` and `false` included | `crates/telos-syntax/src/lexer.rs` keyword table; `vision.md` §2 |
-| a fn value that crosses a component cut is a named module-level fn, never a closure | `wasm.md` §3.1, E082 |
-| roles become generic over a stream bound with a `Limits` record | `protocols.md` §2.2, §4; `vision.md` §4 wave B |
-| actors are pure `handle(state, msg) -> Step<S>` reducers that rebuild their state record | `actors.md` §3, §9.2 to §9.3 |
-| postfix `.`, `(`, `[`, `?` start on the operand's line; `else` follows `}` on its line; arms and statements are separated by `,` or a newline | `slice.md` §3 (line 82), grammar at lines 88 to 158 |
+| 30 to 50 reserved words; about 120 standard definitions around version 1 | `design.md` §1.5 (line 82), §3.6 (line 210) |
+| defer macros, implicit conversions, unrestricted reflection, user-defined syntax | `design.md` §3.5 (line 163) |
+| runtime effects need declared capabilities; no effect is hidden | `design.md` §3.1; `slice.md` §5 |
+| 29 reserved words today, `true` and `false` included | `crates/ignite-syntax/src/lexer.rs` keyword table |
+| a fn value crossing a component cut is a named module-level fn, never a closure | `wasm.md` §3.1, E082 |
+| roles become generic over a stream bound with a `Limits` record | `protocols.md` §2.2, §4 |
+| actors are pure `handle(state, msg) -> Step<S>` reducers | `actors.md` §3, §9 |
+| postfix `.`, `(`, `[`, `?` start on the operand's line; `else` follows `}`; `,` or newline separates arms and statements | `slice.md` §3 (line 82), grammar lines 88 to 158 |
 
-### 1.2 Acceptance rules for a proposal
+### 1.2 When a proposal is taken
 
-A proposal is taken when all five hold:
-
-1. It is a pure desugar, or a small typed node whose lowering exists in both backends already.
-2. It removes lines or tokens that the measurement in section 2 counts, or a future design
-   (protocols, actors, wasm) asks for it.
-3. It hides no effect, no authority root and no conversion. Every call that performs IO stays a
-   visible call with its receiver.
-4. It costs at most one reserved word, and the language stays within 30 to 50 reserved words.
-5. A reader who knows Rust, Kotlin, Swift or Gleam reads it without the manual.
+1. It is a pure desugar, or a small typed node whose lowering both backends already have.
+2. It removes lines or tokens counted in section 2, or a future design asks for it.
+3. It hides no effect, no authority root and no conversion.
+4. It costs at most one reserved word.
+5. A reader of Rust, Kotlin, Swift or Gleam reads it without the manual.
 
 ## 2 Measurement
 
 ### 2.1 Corpus
 
-The script `syntax-scratch/measure.py` (under this session's scratch directory, run as
-`python3 -I measure.py <repo>`) strips comments, tokenizes with one regular expression
-(string, byte and number literals count as one token) and runs 29 pattern detectors. Corpus:
-the seven files Telos has plus the design example.
+`measure.py` (session scratch directory, run as `python3 -I measure.py <repo>`) strips
+comments, tokenizes with one regular expression (a literal is one token) and runs 29 pattern
+detectors.
 
 | file | lines | blank | comment | code | tokens | test lines |
 |---|---|---|---|---|---|---|
-| `std/text.telos` | 334 | 36 | 28 | 270 | 2258 | 157 |
-| `std/json.telos` | 608 | 51 | 37 | 520 | 4469 | 179 |
-| `std/console.telos` | 109 | 14 | 12 | 83 | 557 | 40 |
-| `std/protocol/telnet.telos` | 602 | 47 | 60 | 495 | 3992 | 189 |
-| `std/protocol/http.telos` | 678 | 65 | 61 | 552 | 4126 | 251 |
-| `examples/terminal/terminal.telos` | 96 | 13 | 2 | 81 | 608 | 29 |
-| `examples/todo/todo.telos` | 151 | 20 | 9 | 122 | 1332 | 48 |
-| `examples/terminal/terminal.design.telos` | 118 | 14 | 0 | 104 | 434 | 0 |
+| `std/text.ignite` | 334 | 36 | 28 | 270 | 2258 | 157 |
+| `std/json.ignite` | 608 | 51 | 37 | 520 | 4469 | 179 |
+| `std/console.ignite` | 109 | 14 | 12 | 83 | 557 | 40 |
+| `std/protocol/telnet.ignite` | 602 | 47 | 60 | 495 | 3992 | 189 |
+| `std/protocol/http.ignite` | 678 | 65 | 61 | 552 | 4126 | 251 |
+| `examples/terminal/terminal.ignite` | 96 | 13 | 2 | 81 | 608 | 29 |
+| `examples/todo/todo.ignite` | 151 | 20 | 9 | 122 | 1332 | 48 |
+| `examples/terminal/terminal.design.ignite` | 118 | 14 | 0 | 104 | 434 | 0 |
 | total | 2696 | 260 | 209 | 2227 | 17776 | 893 |
 
 ### 2.2 The ten most frequent verbose patterns
 
-"Saved" is what the pattern costs over the shortest form a proposal in section 4 allows. Line
-counts are measured per site; token counts are per site times the tokens dropped.
+"Saved" is the cost over the shortest form a proposal of section 4 allows, summed per site.
 
 | # | pattern | sites | saved | example | proposal |
 |---|---|---|---|---|---|
-| 1 | three-line early exit `if c {` / `return x` / `}` | 39 | 78 lines | `std/text.telos:68` | S0 |
-| 2 | two-arm `match` with a default arm that yields `None`, `false` or `{}` | 21 | 63 lines | `std/json.telos:534` (`as_text`) | P1, P3 |
-| 3 | `None => None` or `_ => None` arm that only forwards absence | 16 | 16 lines, 64 tokens | `std/text.telos:177` | P3 |
-| 4 | accumulator loop `var out = …` / `for` / `out.append` / `out` | 5 | 29 lines | `std/text.telos:255`, `telnet.telos:270` | P6 |
-| 5 | counter `while`: `var i = 0` / `while i < n` / `i = i + 1` | 10 | 20 lines, 80 tokens | `std/text.telos:76` | P5 |
-| 6 | `x = x + e` | 25 | 50 tokens | `std/text.telos:76` | P6 |
-| 7 | run of `push`/`append` after a `var` | 9 | 15 lines | `telnet.telos:251` | P6 |
-| 8 | pair literal `("key", value)` in a list | 44 | 88 tokens | `std/json.telos:97` | P11 |
-| 9 | `for pair in xs` / `let (a, b) = pair` | 7 | 7 lines, 28 tokens | `std/json.telos:79`, `http.telos:110` | P5 |
-| 10 | empty arm `_ => {}` or `Nothing => {}` | 9 | 9 lines | `std/json.telos:202`, `telnet.telos:155` | P1 |
+| 1 | three-line early exit `if c {` / `return x` / `}` | 39 | 78 lines | `std/text.ignite:68` | S0 |
+| 2 | two-arm `match` whose default arm yields `None`, `false` or `{}` | 21 | 63 lines | `std/json.ignite:534` | P1, P3 |
+| 3 | `None => None` or `_ => None` forwarding absence | 16 | 16 lines, 64 tokens | `std/text.ignite:177` | P3 |
+| 4 | accumulator loop: `var out`, `for`, `append`, `out` | 5 | 29 lines | `std/text.ignite:255` | P6 |
+| 5 | counter `while`: `var i = 0`, `while i < n`, `i = i + 1` | 10 | 20 lines, 80 tokens | `std/text.ignite:76` | P5 |
+| 6 | `x = x + e` | 25 | 50 tokens | `std/text.ignite:76` | P6 |
+| 7 | run of `push`/`append` after a `var` | 9 | 15 lines | `telnet.ignite:251` | P6 |
+| 8 | pair literal `("key", value)` in a list | 44 | 88 tokens | `std/json.ignite:97` | P11 |
+| 9 | `for pair in xs` then `let (a, b) = pair` | 7 | 7 lines, 28 tokens | `http.ignite:110` | P5 |
+| 10 | empty arm `_ => {}` or `Nothing => {}` | 9 | 9 lines | `std/json.ignite:202` | P1 |
 
-Counted, but not a target of this design:
-
-| pattern | sites | why not |
-|---|---|---|
-| `\"` and `{{` escapes in test strings | 75 lines, 336 escapes | raw strings, slice 9 row 2 |
-| `.to_bytes()` / `.to_text()` | 64 | conversions stay explicit (`Telos_Design.md` §3.5) |
-| runs of 3 or more `assert`s on one callee | 52 runs, 345 asserts | one line per case already; slice §12.5 prints the failing source text |
-| `match stream.read(4096)? {` read loops | 9 | belongs to `protocols.md` P1 (generic roles over `ByteStream`) |
-| `requires [stream.read, stream.write]` | 4 | section 5, row "grouped `requires`" |
+Counted but not targeted: 75 lines with 336 `\"` and `{{` escapes (raw strings, slice 9);
+64 `.to_bytes()`/`.to_text()` conversions (explicit by `design.md` §3.5); 52 runs of three
+or more `assert`s on one callee, 345 asserts (one line per case already; slice §12.5 prints the
+failing source); 9 `match stream.read(4096)? {` loops (owned by `protocols.md` P1).
 
 ## 3 Comparable sugar
 
-Every row was checked against the page on 2026-11-01 unless the last column says otherwise.
+"y" in the last column: the page was read on 2026-11-01; "n": cited from the documented
+feature, page not fetched (the Swift book renders client-side).
 
-| language | feature | what it does | URL | for Telos |
-|---|---|---|---|---|
-| Rust | let-else | `let P = e else { diverge }`; the else block has the never type; the initializer may not end in `}` or be `&&`/`\|\|` | https://doc.rust-lang.org/reference/statements.html#let-statements | P2, taken as is |
-| Rust | let chains | `if let P = e && c` in `if` and `while`, stable in 1.88, edition 2024 only | https://blog.rust-lang.org/2025/06/26/Rust-1.88.0/ | the Rust lowering of P1 |
-| Rust | `?` | early return of `Err` or `None` | https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-question-mark-operator (not fetched) | P3 |
-| Rust | functional record update | `S { f: e, ..base }` | https://doc.rust-lang.org/reference/expressions/struct-expr.html#functional-update-syntax (not fetched) | P7 |
-| Rust | if-let guards | unstable, tracking issue | https://github.com/rust-lang/rust/issues/51114 (not fetched) | why P4's guards bind nothing |
-| C# | `is` pattern | `e is P` is a Bool; `if (x is int a && y is int b)` binds `a`, `b` in the true branch; list patterns with `..` | https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/is | P1, P9 |
-| Kotlin | scope functions | "execute a block of code within the context of an object": `let`, `run`, `with`, `apply`, `also` | https://kotlinlang.org/docs/scope-functions.html | rejected (section 5) |
-| Kotlin | trailing lambdas, `it` | the last fn argument outside the parentheses; `it` names a single parameter | https://kotlinlang.org/docs/lambdas.html (not fetched) | rejected |
-| Kotlin | data-class `copy` | `p.copy(age = 3)` | https://kotlinlang.org/docs/data-classes.html (not fetched) | P7 in record form |
-| Swift | `guard let … else` | the else clause must leave the scope | https://docs.swift.org/swift-book/documentation/the-swift-programming-language/controlflow/ (renders client-side; not fetched) | P2 |
-| Swift | dictionary literal | `["a": 1]` | https://docs.swift.org/swift-book/documentation/the-swift-programming-language/collectiontypes/ (not fetched) | P11 |
-| Gleam | `use` | "All the code below the `use` becomes an anonymous function" | https://tour.gleam.run/advanced-features/use/ | rejected |
-| Gleam | record update | "create a new record from an existing one of the same type" | https://tour.gleam.run/data-types/record-updates/ | P7 |
-| Gleam | labelled arguments | call by label, any order | https://tour.gleam.run/functions/labelled-arguments/ (not fetched) | P10 |
-| Elixir | `\|>`, `with` | pipe into the first argument; chain of pattern matches with one `else` | https://hexdocs.pm/elixir/Kernel.html, https://hexdocs.pm/elixir/Kernel.SpecialForms.html (not fetched) | rejected; P2 covers `with` |
-| F# | computation expressions | builder-defined `let!`, `return` | https://learn.microsoft.com/en-us/dotnet/fsharp/language-reference/computation-expressions (not fetched) | rejected |
-| OCaml | binding operators | `let*` bound to a user monad | https://ocaml.org/manual/5.2/bindingops.html (not fetched) | rejected |
-| Roc | `?`, `!` suffix | `?` returns the `Err`; effectful fns end in `!` by convention; backpassing is gone from the tutorial | https://www.roc-lang.org/tutorial | P3; backpassing rejected |
-| Roc | record builders | `<-` kept after backpassing was removed | https://roc-lang.github.io/zulip-export/stream/383402-API-design/topic/record.20builder.20syntax.html | rejected |
-| Koka | effect handlers | `with handler { … }` | https://koka-lang.github.io/koka/doc/book.html#sec-handlers | rejected |
-| Pkl | amending | `(base) { field = … }` | https://pkl-lang.org/main/current/language-reference/index.html#amending-objects | covered by field defaults and P7 |
-| CUE | defaults | `*` marks a preferred value | https://cuelang.org/docs/tour/types/defaults/ | covered by field defaults (slice §4.7) |
+| language | feature | behaviour | URL | used for | read |
+|---|---|---|---|---|---|
+| Rust | let-else | else block has the never type; initializer may not end in `}` or be `&&`/`\|\|` | https://doc.rust-lang.org/reference/statements.html#let-statements | P2 | y |
+| Rust | let chains | `if let P = e && c` in `if`, `while`; Rust 1.88, edition 2024 | https://blog.rust-lang.org/2025/06/26/Rust-1.88.0/ | P1 lowering | y |
+| Rust | `?` | early return of `Err` or `None` | https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-question-mark-operator | P3 | n |
+| Rust | if-let guards | unstable | https://github.com/rust-lang/rust/issues/51114 | P4 binds nothing | n |
+| C# | `is` pattern | Bool; `x is int a && y is int b` binds in the true branch; list patterns with `..` | https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/is | P1, P9 | y |
+| Kotlin | scope functions | "execute a block of code within the context of an object" | https://kotlinlang.org/docs/scope-functions.html | rejected | y |
+| Kotlin | trailing lambdas, `it` | last fn argument outside the parentheses | https://kotlinlang.org/docs/lambdas.html | rejected | n |
+| Swift | `guard let … else` | else must leave the scope | https://docs.swift.org/swift-book/documentation/the-swift-programming-language/controlflow/ | P2 | n |
+| Swift | dictionary literal | `["a": 1]` | https://docs.swift.org/swift-book/documentation/the-swift-programming-language/collectiontypes/ | P11 | n |
+| Gleam | `use` | "All the code below the `use` becomes an anonymous function" | https://tour.gleam.run/advanced-features/use/ | rejected | y |
+| Gleam | labelled arguments | call by label | https://tour.gleam.run/functions/labelled-arguments/ | P10 | n |
+| Elixir | `\|>`, `with` | pipe into the first argument; chained matches with one `else` | https://hexdocs.pm/elixir/Kernel.SpecialForms.html | rejected; P2 covers `with` | n |
+| F#, OCaml | computation expressions, `let*` | user-defined binding | https://learn.microsoft.com/en-us/dotnet/fsharp/language-reference/computation-expressions, https://ocaml.org/manual/5.2/bindingops.html | rejected | n |
+| Roc | `?`, `!` suffix | `?` returns the `Err`; backpassing absent from the tutorial | https://www.roc-lang.org/tutorial | P3; backpassing rejected | y |
+| Roc | record builders | `<-` kept after backpassing went | https://roc-lang.github.io/zulip-export/stream/383402-API-design/topic/record.20builder.20syntax.html | rejected | y |
+| Koka | effect handlers | `with handler { … }` | https://koka-lang.github.io/koka/doc/book.html#sec-handlers | rejected | y |
+| Pkl | amending | `(base) { field = … }` | https://pkl-lang.org/main/current/language-reference/index.html#amending-objects | field defaults, record update | y |
+| CUE | defaults | `*` marks the preferred value | https://cuelang.org/docs/tour/types/defaults/ | field defaults | y |
 
-Lesson across the table: the languages that removed nesting without hiding control flow did it
-with three devices, and Telos lacks all three: a Bool pattern test (C# `is`, Rust `matches!`),
-a binding that exits on mismatch (Rust let-else, Swift `guard`), and guards on match arms. The
-devices that hide control flow inside a closure (Gleam `use`, Roc backpassing, F# builders,
-Kotlin trailing lambdas) are the ones Roc removed and the ones `wasm.md` E082 cannot lower at a
-component edge.
+What the table says: languages that removed nesting without hiding control flow used three
+devices, all missing in Ignite: a Bool pattern test (C# `is`), a binding that exits on mismatch
+(Rust let-else, Swift `guard`) and match guards. The devices that move control flow into a
+closure (Gleam `use`, Roc backpassing, F# builders, Kotlin trailing lambdas) are the ones Roc
+dropped and the ones `wasm.md` E082 cannot lower at a component edge.
 
 ## 4 Proposals
 
-Each proposal gives the syntax, one before/after from the corpus, the typing and desugaring
-rule, the cost per compiler layer and the interaction with effects. Costs are estimates of
-changed Rust lines: S under 100, M 100 to 300, per crate.
+Cost is estimated changed Rust lines per crate: S under 100, M 100 to 300. Section 9 shows
+each proposal in the rewritten todo and telnet code.
 
-### S0 One-line early exits (style, no compiler change)
+### S0 One-line early exits (convention, no compiler change)
 
-`if c { return x }` is already legal: a block holds one statement without a separator (slice
-§3 grammar, `block`). The corpus writes 39 of them in three lines.
+`if c { return x }` is legal today: a block holds one statement without a separator (slice §3,
+`block`). The corpus writes 39 of them on three lines (`std/text.ignite:68` to 70). Rule for std
+and examples: a block of one `return`, `break`, `continue` or call that fits in 100 columns
+stays on its line. 78 lines. No effect change.
 
-Before (`std/text.telos:68`), 3 lines:
+### P1 `e is P`, a Bool pattern test
 
-```telos
-  if at < 0 || at + needle.len() > bytes.len() {
-    return false
-  }
-```
+Syntax: `compare := additive (cmp additive | 'is' pattern)?`; `is` binds tighter than `==`,
+`&&`, `||` and looser than `+`. New reserved word `is` (29 to 30); the corpus has `is` only in
+strings and comments (`grep -rnw is std examples`).
 
-After, 1 line: `  if at < 0 || at + needle.len() > bytes.len() { return false }`
-
-Rule for std and examples: a block of one `return`, `break`, `continue` or one call statement
-under 100 columns stays on its line. 78 lines, no cost, no effect change. A later `telos fmt`
-enforces it.
-
-### P1 `e is P`: a Bool pattern test
-
-Syntax: `compare := additive (cmp additive | 'is' pattern)?`. `is` binds tighter than `==`,
-`&&` and `||` and looser than `+`. New reserved word `is` (29 to 30); the corpus uses `is` only
-inside test names and comments (`grep -nw is`).
-
-Before (`std/json.telos:534`) and after:
-
-```telos
-fn as_text(value: Json) -> Option<Text> = match value {
+```ignite
+fn as_text(value: Json) -> Option<Text> = match value {      // std/json.ignite:534, 4 lines
   Str(text) => Some(text)
   _ => None
 }
-
 fn as_text(value: Json) -> Option<Text> = if value is Str(text) { Some(text) } else { None }
 ```
 
-Other sites: `is_whitespace` (`std/text.telos:11`) becomes
+Other sites: `is_whitespace` (`std/text.ignite:11`) becomes
 `b is b' ' | b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r'`; the `_ => {}` arm at
-`std/json.telos:200` to 203 becomes `if bytes.at(i) is b'.' | b'e' | b'E' { return Err(…) }`;
-the test at `http.telos:605` to 612 becomes
-`assert next_of(padded(…, 8192))? is Got(_, rest) && rest.is_empty()`.
+`std/json.ignite:200` becomes `if bytes.at(i) is b'.' | b'e' | b'E' { return Err(…) }`; the
+test at `http.ignite:605` to 612 (8 lines) becomes `assert next_of(…)? is Got(_, rest) &&
+rest.is_empty()`; todo's `delete` drops from 4 lines to 2. About 39 lines.
 
-Typing:
-
-- `e is P` has type `Bool`. `P` is checked against `e`'s type exactly as a match arm pattern
-  (E040, E003, constant patterns per slice §4.3, range patterns per slice 9 row 8).
-- Bindings of `P` are in scope where the test is known true: the right operand of an `&&`
-  whose left operand contains the test as a conjunct, the then-block of `if`, and the body of
-  `while`. They are not in scope under `!`, after `||`, in `else`, or after the statement.
-  A use outside is E003 (unknown name).
-- `assert e is P` works without a rule of its own, and a failure prints `e`'s debug text
-  (slice 9 row 11).
+Typing: `Bool`. `P` is checked as a match-arm pattern (E040, E003, constant and range
+patterns). Its bindings are in scope where the test is known true: the right operand of an
+`&&` that has the test as a conjunct, the then-block of `if`, the body of `while`. Not under
+`!`, after `||`, in `else`, or after the statement; a use there is E003. `assert e is P`
+needs no rule; a failure prints `e`'s debug text (slice 9 row 11).
 
 Desugar: `if e is P && c { A } else { B }` is `match e { P => if c { A } else { B }, _ => B }`
-with `B` emitted once behind a label. As a value, `e is P` is `match e { P => true, _ => false }`.
+with `B` emitted once; as a value, `match e { P => true, _ => false }`.
 
-| layer | change | size |
-|---|---|---|
-| `telos-syntax` | `Is(expr, pattern)` node; `is` keyword | S |
-| `telos-check` | condition scopes for the bindings | S |
-| `telos-types` | Bool type, pattern check reused | S |
-| `telos-rustgen` | `if let P = e && c` (let chains), `while let`, `matches!(e, P)` for a bare value | S |
-| `telos-llvm` | the arm pattern test, branching to then or else | S to M |
-
-Effects: `e` is evaluated once, with its own effects. Nothing else runs. No authority change.
+Cost: syntax S (node, keyword), check S (condition scopes), types S, rustgen S (let chains,
+`while let`, `matches!`), llvm S to M (arm pattern test feeding a branch). Effects: `e` once,
+with its own effects; nothing else runs.
 
 ### P2 `let … else`
 
 Syntax: `stmt := 'let' pattern (':' type)? '=' expr 'else' block`. Only here may a `let`
-pattern be refutable; elsewhere a refutable `let` pattern stays E001 (slice §8).
+pattern be refutable; elsewhere that stays E001 (slice §8).
 
-Before (`examples/todo/todo.telos:31` to 41), 11 lines:
+Todo's `create` drops from 11 lines to 7 (section 9.1):
+`let Ok(value) = parse(body) else { return status_response(400) }`. Also `http.ignite:444`
+(`let request = match parse_head(…) { Some(parsed) => parsed, None => return … }`, 4 lines to
+1) and `std/json.ignite:520` (`member`, with P5: 12 lines to 6). About 12 lines.
 
-```telos
-fn create(todos: Store<Todo>, body: Text) -> Response = match parse(body) {
-  Ok(value) => match value.text("title") {
-    Some(title) => {
-      let todo = Todo { id = todos.next_id(), title, done = or(value.bool("done"), false) }
-      todos.put(todo.id, todo)
-      json(201, to_json(todo))
-    }
-    None => status_response(400)
-  }
-  Err(_) => status_response(400)
-}
-```
+Typing: the else block has type Never (slice 9 row 4), otherwise E070. An initializer that
+ends in `}` or whose top operator is `&&` or `||` is E001 with the hint "parenthesize", as in
+Rust, so `else` never attaches to an inner `if`. Bindings are immutable and scope over the
+rest of the block.
 
-After, 7 lines:
-
-```telos
-fn create(todos: Store<Todo>, body: Text) -> Response {
-  let Ok(value) = parse(body) else { return status_response(400) }
-  let Some(title) = value.text("title") else { return status_response(400) }
-  let todo = Todo { id = todos.next_id(), title, done = value.bool("done").unwrap_or(false) }
-  todos.put(todo.id, todo)
-  Response.json(201, to_json(todo))
-}
-```
-
-Also `http.telos:444` to 447 (`let request = match parse_head(…) { Some(parsed) => parsed
-None => return … }`, 4 lines to 1) and `json.telos:520` (`member`, together with P5, 12 to 6).
-
-Typing: the else block must have type Never (slice 9 row 4: `return`, `break`, `continue`
-and blocks ending in them); otherwise E070. An initializer that ends in `}` (an `if`, `match`,
-block or record literal) or whose top operator is `&&` or `||` is E001 with the hint
-"parenthesize the initializer", as in Rust, so `else` never attaches to the wrong `if`. The
-bindings are in scope for the rest of the block, immutable (E006 on assignment).
-
-Desugar: `let P = e else { D }` followed by `rest` is `match e { P => { rest }, _ => D }`.
-
-| layer | change | size |
-|---|---|---|
-| `telos-syntax` | `else` after a `let` initializer; the `}` and `&&` restriction | S |
-| `telos-check` | refutable pattern allowed here; scope of the rest of the block | S |
-| `telos-types` | Never check on the block, E070 | S |
-| `telos-rustgen` | Rust `let P = e else { D };`, one to one | S |
-| `telos-llvm` | pattern test, diverging block on failure | S |
-
-Effects: the else block's effects are the function's, as for any statement. The construct
-replaces nested matches with the same control flow, written top to bottom.
+Desugar: `let P = e else { D }` then `rest` is `match e { P => { rest }, _ => D }`. Cost:
+syntax S, check S, types S (E070), rustgen S (Rust `let … else` one to one), llvm S. Effects:
+those of the else block, as for any statement; control flow reads top to bottom instead of
+nesting.
 
 ### P3 `?` on `Option`
 
-Today `?` applies to `Result` only and reports E040 "`?` needs a function returning `Result`"
-outside one (`crates/telos-types/src/typer.rs`, `try_`). Tests already accept it on `Option`
-(slice §12.3).
+Today `?` needs a `Result` fn (E040 in `crates/ignite-types/src/typer.rs`, `try_`); tests
+accept it on `Option` (slice §12.3). Rule: in a fn or closure returning `Option<U>`, `e?` with
+`e: Option<T>` has type `T` and returns `None`. Mixing `Option` and `Result` stays E040; there
+is no conversion. In a closure `?` returns from the closure.
 
-Rule: in a fn or closure whose return type is `Option<U>`, `e?` with `e: Option<T>` has type
-`T` and returns `None` on `None`. `?` on `Option` in a `Result` fn, or the reverse, stays E040
-with the message naming both types; there is no conversion. In a closure, `?` returns from the
-closure, as in Rust.
-
-Before (`std/json.telos:555`), 4 lines, and the same for `int` and `bool`:
-
-```telos
-fn text(value: Json, name: Text) -> Option<Text> = match member(value, name) {
+```ignite
+fn text(value: Json, name: Text) -> Option<Text> = match member(value, name) {   // json:555
   Some(Str(t)) => Some(t)
   _ => None
 }
+fn text(value: Json, name: Text) -> Option<Text> = member(value, name)?.as_text()
 ```
 
-After, 1 line: `fn text(value: Json, name: Text) -> Option<Text> = member(value, name)?.as_text()`
-
-Other sites: `split_once` (`std/text.telos:175`), `hex4` (`std/json.telos:268`, 10 lines to
-4: `Some((hex_value(w.at(at))?, hex_value(w.at(at + 1))?, …))`), `unicode_escape`
-(`json.telos:281`), `parse_head` (`http.telos:305`). About 21 lines.
-
-Cost: `telos-types` S (accept `Option` in `try_`); `telos-rustgen` none (Rust's `?` already
-does it); `telos-llvm` S (the `None` early-return path beside the `Err` one). Effects: none;
-`?` is control flow on a value.
+Also `int`, `bool` (`json:561`, 567), `split_once` (`text:175`), `hex4` (`json:268`, 10 lines
+to 4), `unicode_escape`, `parse_head` (`http:305`). About 21 lines. Cost: types S, rustgen
+none, llvm S. Effects: none.
 
 ### P4 Match guards
 
-Syntax: `arm := pattern ('if' expr)? '=>' (block | expr)`.
+Syntax: `arm := pattern ('if' expr)? '=>' (block | expr)`. Example: the `Subnegotiation`
+arm of `decode` (`telnet.ignite:136` to 142), 7 lines to 3 (section 9.2).
 
-Before (`telnet.telos:136` to 142), 7 lines:
+Typing: the guard is `Bool` and sees the arm's bindings. It is pure: an effectful call or `?`
+in it is E072, so testing patterns never performs IO and the order in which a backend tests
+arms stays unobservable. A guarded arm does not count for E046. An `is` in a guard binds
+nothing for the arm, because Rust, the first target, has no stable if-let guards; such a use
+is E003. A guard on an or-pattern is tested once for the arm.
 
-```telos
-  (Subnegotiation(count), _) => if count + 1 > MAXIMUM_SUBNEGOTIATION {
-    (Ground, SubnegotiationTooLong)
-  } else if b == IAC {
-    (SubnegotiationInterpret(count + 1), Nothing)
-  } else {
-    (Subnegotiation(count + 1), Nothing)
-  }
-```
-
-After, 3 lines:
-
-```telos
-  (Subnegotiation(count), _) if count + 1 > MAXIMUM_SUBNEGOTIATION => (Ground, SubnegotiationTooLong)
-  (Subnegotiation(count), IAC) => (SubnegotiationInterpret(count + 1), Nothing)
-  (Subnegotiation(count), _) => (Subnegotiation(count + 1), Nothing)
-```
-
-Typing: the guard is `Bool` (E040) and sees the arm's bindings. A guard is pure: an
-effectful call or `?` in it is E072. A guarded arm does not count toward exhaustiveness
-(E046). An `is` inside a guard binds nothing that flows into the arm, because Rust, the first
-target, has no stable if-let guards (rust-lang/rust#51114); a binding so used is E003. An
-or-pattern with a guard tests the guard once for the whole arm, as in Rust.
-
-Desugar: no pure desugar without duplicating the remaining arms; it is a node.
-`telos-syntax` S, `telos-types` S (exhaustiveness skips guarded arms), `telos-rustgen` S
-(native `P if g =>`), `telos-llvm` S to M (a failed guard jumps to the next arm's test). About
-12 lines across the corpus (`decode`, `apply_key`, `encode_input`).
-
-Effects: purity of guards keeps a property the language has today: testing patterns never
-performs IO, so the order in which a backend tests arms is not observable.
+Not a pure desugar (it would duplicate the remaining arms). Cost: syntax S, types S
+(exhaustiveness skips guarded arms), rustgen S (native), llvm S to M (failed guard jumps to the
+next arm's test). About 12 lines (`decode`, `apply_key`, `encode_input`).
 
 ### P5 `for` patterns and integer ranges
 
 Syntax: `'for' pattern 'in' (expr | expr ('..' | '..=') expr) block`. The pattern is a `let`
-pattern (a name always binds, slice §4.3) and must be irrefutable (E071).
+pattern (a name always binds, slice §4.3) and irrefutable (E071).
 
-Before (`http.telos:110`) and after:
-
-```telos
-  for pair in response.headers {
+```ignite
+  for pair in response.headers {          // http.ignite:110
     let (name, value) = pair
   for (name, value) in response.headers {
 ```
 
-Before (`telnet.telos:283` to 286) and after:
+Typing: `Int` bounds (E040) evaluated once before the loop; `a..b` half-open, `a..=b` closed.
+A range is not a value: `..` outside a `for` head or a pattern is E073, so std gains no
+`Range` type and the definition budget does not move.
 
-```telos
-  var i = 0
-  while i < bytes.len() {
-    let b = bytes.at(i)
-    i = i + 1
-  for i in 0..bytes.len() {
-```
-
-Typing: both bounds `Int` (E040), evaluated once, before the loop. `a..b` is half-open,
-`a..=b` closed. A range is not a value: `..` outside a `for` head and outside a pattern is
-E073, so `std` gains no `Range` type and the definition budget does not move.
-
-Desugar of `for i in a..b { body }`:
-
-```telos
-{
-  var next = a
-  let end = b
-  while next < end {
-    let i = next
-    next = next + 1
-    body
-  }
-}
-```
-
-The increment comes before `body`, so `continue` in `body` cannot skip it. `i` is a fresh
-immutable binding per iteration (E006 on assignment), which also keeps the loop clear of the
-`for`-binding aliasing defects of `vision.md` §10.1 M2.
-
-Cost: `telos-syntax` S; `telos-check` S (pattern bindings); `telos-types` S; both backends
-none if the desugar runs before them, or S for a native Rust `for i in a..b`. About 27 lines
-(10 counter loops, 7 destructuring loops). Effects: none.
+Desugar of `for i in a..b { body }`: `{ var n = a; let end = b; while n < end { let i = n;
+n = n + 1; body } }`. The increment precedes `body`, so `continue` cannot skip it, and `i` is a
+fresh immutable binding per iteration (E006 on assignment), clear of the `for`-binding
+aliasing defect M2 of `vision.md` §10.1. Cost: syntax S, check S, types S, backends none. About
+27 lines (10 counter loops, 7 destructuring loops).
 
 ### P6 Compound assignment and concatenation
 
-Syntax: `stmt := place ('+=' | '-=') expr`. `+` gains `List<T> + List<T>` and
-`Bytes + Bytes` (concatenation; today E045).
+Syntax: `stmt := place ('+=' | '-=') expr`; `+` also concatenates `List<T>` and `Bytes`
+(today E045). `render` (`telnet.ignite:270`) drops from 8 lines to 5:
+`for line in reply.lines { out += line.to_bytes() + b"\r\n" }`; `apply_key`'s default arm
+(6 lines) becomes `_ => (line + [b], Show([b]))`.
 
-Before (`telnet.telos:270` to 276), 8 lines with the comment, and after, 5:
+Typing: `p += e` is `p = p + e` with `p` evaluated once, for the types `+` allows (`Int`,
+`Byte`, `Text`, `List<T>`, `Bytes`); `-=` for `Int` and `Byte`. A `let` binding or constant on
+the left is E006. On a `var` place of `List`, `Bytes` or `Text` both backends append in place
+(`extend_from_slice`, `push_str`, the arena regrow path); the value equals the copy because
+the function owns the place. Cost: syntax S, types S, rustgen S, llvm S to M. About 15 lines
+and 50 tokens. Effects: none.
 
-```telos
-fn render(reply: Reply) -> Bytes {
-  var out = Bytes.empty()
-  for line in reply.lines {
-    out.append(line.to_bytes())
-    out.append(b"\r\n")
-  }
-  out
-}
+### P8 Visibility (for question Q2)
 
-fn render(reply: Reply) -> Bytes {
-  var out = Bytes.empty()
-  for line in reply.lines { out += line.to_bytes() + b"\r\n" }
-  out
-}
-```
-
-And the default arm of `apply_key` (`telnet.telos:381` to 386, 6 lines) becomes
-`_ => (line + [b], Show([b]))`.
-
-Typing: `p += e` is `p = p + e` with `p` evaluated once; the operand types are those `+`
-allows (`Int`, `Byte`, `Text`, `List<T>`, `Bytes`); `-=` is `Int` and `Byte`. Assignment to a
-`let` binding or constant is E006, as for `=`. Overflow rules for `Int` and `Byte` are those of
-`+`.
-
-Lowering: on a `var` place of `List`, `Bytes` or `Text`, both backends append in place
-(`extend_from_slice`, `push_str`; the LLVM arena's regrow path), which is the same value as
-the copy because the place is owned by the function. `xs + ys` elsewhere builds a new value.
-Cost: `telos-syntax` S, `telos-types` S, `telos-rustgen` S, `telos-llvm` S to M (concat on
-arena lists). About 15 lines and 50 tokens. Effects: none; `+=` is not a capability operation.
-
-### P7 Record update `R { f = e, ..base }`
-
-Slice 9 row 9 already requires `Store.update(id, |t| Todo { done = flag, ..t })`, but no row
-states the rule. This fixes it, whether it lands in slice 9 or here.
-
-Syntax: `primary := ident '{' (init sep)* ('..' expr sep?)? '}'`; the `..base` entry comes
-last.
-
-Before (`actors.md` §9.2, lines 408 to 422), and after:
-
-```telos
-    let next = Todos { table = state.table.put(id, changed), changes = state.changes }
-    let next = Todos { table = state.table.put(id, changed), ..state }
-```
-
-Typing: `base` has type `R` (E040), with the same type arguments for a generic record. Listed
-fields follow E047 (unknown, duplicate). Every field not listed is taken from `base`; field
-defaults (slice §4.7) do not apply when a base is given. Punning works: `Todo { title, ..t }`.
-The record type cannot change: a `TodoV1` to `Todo` migration (`wasm.md` §5.3) stays a fn.
-
-Desugar: `R { f = e, ..b }` is `{ let f1 = e; let b1 = b; R { f = f1, g = b1.g, … } }`,
-evaluating in source order. Cost: `telos-syntax` S, `telos-types` S, `telos-rustgen` S (Rust
-`..b1`, cloning `b1` when it is used later), `telos-llvm` S (field copy glue exists). Effects:
-those of `e` and `base`; the copy itself is pure.
-
-### P8 Visibility (proposal for an open question)
-
-Slice §4.1: every module item is exported. The 5 std modules export 136 items; about 46 are
-used outside their module. Six names collide between std modules (`IoResult`, `render`,
+Every module item is exported (slice §4.1). The five std modules export 136 items; about 46
+are used outside their module. Six names collide between modules (`IoResult`, `render`,
 `session`, `IDLE_TIMEOUT_MS` in telnet and http; `is_space`, `skip_space` in console and
-json), and slice 9 row 6 makes two globs that both provide a used name E041. Private by default
-with a contextual `pub` (Rust, Gleam) costs 46 `pub` tokens and puts std at about 46
-definitions against the budget of 120. It is not sugar and it adds tokens, so it is question
-Q2 rather than a contract item.
+json), and two globs providing a used name are E041 (slice 9 row 6). Private by default with a
+contextual `pub` costs 46 tokens and brings std to about 46 definitions against the budget of
+120. It adds tokens rather than removing them, so it is a question, not a contract item.
 
 ### P9 Rest patterns in list patterns
 
-Syntax: in a list pattern, one `..` anywhere, or one `..name` as the last element:
-`[_, _, ..]`, `[first, ..rest]`, `[.., last]`.
+Syntax: one `..` anywhere in a list pattern, or one `..name` as the last element:
+`[_, _, ..]`, `[first, ..rest]`, `[.., last]`. Wanted by `protocols.md` line 585
+(`([_, _, ..], _, _) => Reject(400)`) and line 596, and by `vision.md` §5.
 
-Wanted by `protocols.md` line 584 (`([_, _, ..], _, _) => Reject(400)`; line 595: "a rest
-pattern that slice §3 lacks") and `vision.md` §4 wave A.
-
-Typing: `..name` binds a `List<T>` (or `Bytes` where list patterns match `Bytes`) holding the
-remaining elements. A second `..`, or `..name` not last, is E076. Exhaustiveness: a list
-pattern with `k` fixed elements and a rest covers every length `>= k`; exact-length patterns
-cover their length, so `[]` with `[_, ..]` is exhaustive.
-
-Lowering: length test `len >= k`, element tests by index, `rest` as `slice(k, len)`. Cost:
-`telos-syntax` S, `telos-types` M (exhaustiveness over length sets), backends S each. Effects:
-none.
+Typing: `..name` binds the remaining elements as `List<T>` (or `Bytes` where list patterns
+match `Bytes`). A second `..`, or `..name` not last, is E076. A pattern with `k` fixed
+elements and a rest covers every length `>= k`, so `[]` with `[_, ..]` is exhaustive.
+Lowering: `len >= k`, element tests by index, `rest` as `slice(k, len)`. Cost: syntax S,
+types M (length sets for E046), backends S. No corpus lines today.
 
 ### P10 Parameter defaults and named arguments
 
-Syntax: `param := ident ':' type ('=' expr)?`; `args := (expr ',')* (ident '=' expr ',')*`.
-The design already writes named arguments: `stream.read(maximum = 4096 bytes)`
-(`Telos_Design.md:448`), `nativeProcess(includes = […])` (`:665`).
+Syntax: `param := ident ':' type ('=' expr)?`; arguments are positional, then `name = expr`.
+The design writes a named argument already: `nativeProcess(includes = [Terminal.console])`
+(`design.md:668` to 670, `terminal.design.ignite:112` to 114).
 
-Before (`examples/todo/todo.telos:97` and 119):
+Examples: todo's test helpers take `body: Text = ""`, dropping `, ""` from 13 calls
+(section 9.1); `find` and `find_from` (`std/text.ignite:94`, 98) merge into
+`fn find(text: Text, needle: Text, start: Int = 0)`.
 
-```telos
-test fn request(method: Text, path: Text, body: Text) -> Request =
-  assert answer(todos, "GET", "/todos", "") == (200, "[]")
-test fn request(method: Text, path: Text, body: Text = "") -> Request =
-  assert answer(todos, "GET", "/todos") == (200, "[]")
-```
+Typing: defaulted parameters come last; a default is pure under the field-default rules
+(slice §4.7, E010). Named arguments follow positional ones, each naming a parameter once. An
+unknown or repeated name, a positional argument after a named one, or a required parameter
+after a defaulted one is E074. A UFCS receiver is the first positional argument. Fn types
+carry no defaults: a call through a fn value with a named or omitted argument is E075, so
+`wasm.md` E082 is unaffected. Protocol roles take no defaults (E075).
 
-Other site: `find` and `find_from` (`std/text.telos:94`, 98) merge into
-`fn find(text: Text, needle: Text, start: Int = 0)`, one definition less.
+Desugar at the call site: fill defaults, order arguments; backends see plain calls. Cost:
+syntax S, check S, types S. Effects: none hidden, because defaults are pure.
 
-Typing: defaulted parameters come after the others; a default is pure and follows the field
-default rules (slice §4.7, E010). At a call, positional arguments come first, then named ones
-in any order, each naming a parameter once. An unknown name, a repeat, a positional argument
-after a named one, or a required parameter after a defaulted one is E074. The receiver of a
-UFCS call is the first positional argument. Fn types carry no defaults and no names for calls:
-calling a fn value with fewer arguments than its type, or with a named argument, is E075.
-Protocol roles take no defaults (E030), because components call them by position.
-
-Desugar: at each call, fill the omitted defaults and order the arguments; the backends see
-plain calls. Cost: `telos-syntax` S, `telos-check` S, `telos-types` S, backends none. Effects:
-none hidden, because defaults are pure. `wasm.md` E082 is unaffected: a fn value has no
-defaults.
+Scheduled (steering session, 2026-11-01): slice 10 takes named arguments without defaults,
+`f(a, b, name = e)`, positional arguments first, only on fns declared in Ignite, not through fn
+values or on protocol roles. Defaults stay unscheduled.
 
 ### P11 Pair-list literals `["key": value]`
 
-Syntax: `primary := '[' expr ':' expr (',' expr ':' expr)* ']'`. Mixing pair and plain
-elements is E001.
+`[k: v, …]` is `[(k, v), …]`, type `List<(K, V)>`; mixing pair and plain elements is E001.
+When `Map<K, V>` arrives (`vision.md` §5; `design.md` §3.3) the same literal builds a
+`Map` where one is expected, so the form is reserved for both. Todo's `to_json` becomes
+`Object(["id": Number(todo.id), "title": Str(todo.title), "done": Bool(todo.done)])`. Cost:
+syntax S. 44 sites, 88 tokens. Effects: none.
 
-Before (`examples/todo/todo.telos:27`) and after:
-
-```telos
-  Object([("id", Number(todo.id)), ("title", Str(todo.title)), ("done", Bool(todo.done))])
-  Object(["id": Number(todo.id), "title": Str(todo.title), "done": Bool(todo.done)])
-```
-
-Typing and desugar: `[k: v, …]` is `[(k, v), …]` of type `List<(K, V)>`. When `Map<K, V>`
-arrives (`vision.md` §5, wave A; `Telos_Design.md` §3.3) the same literal builds a `Map` where
-the expected type is one, so the syntax is reserved for both now. Cost: `telos-syntax` S only.
-44 sites, 88 tokens (JSON objects, HTTP headers, test fixtures). Effects: none.
+Not proposed: record update `R { f = e, ..base }` is in slice 9 (decision row 9 uses
+`Todo { done = flag, ..t }`); it shortens every actor reducer of `actors.md` §9.2 to §9.3
+(`Todos { table = …, changes = state.changes }` becomes `Todos { table = …, ..state }`).
 
 ## 5 Rejected
 
 | candidate | reason |
 |---|---|
-| pipe `\|>` (Elixir, F#, Gleam) | UFCS already is the pipe: `x.f(a).g(b)` (slice §4.8); a second spelling of one call adds a token and no power |
-| implicit `it` or `_` lambdas (Kotlin, Scala) | saves `\|x\|` and hides which value a body refers to; slice 9 closures are short enough |
-| trailing closures, Gleam `use`, Roc backpassing | hide control flow in a closure; Roc removed backpassing; a closure cannot cross a component cut (`wasm.md` E082); `?` already gives direct style |
-| list comprehensions | closures with std `map` and `filter` cover them without a new form |
-| format specs in interpolation (`{x:>8}`) | a library fn (`pad_left`) does it; no corpus site needs one |
-| multi-scrutinee `match a, b` | clashes with `,` as the arm separator (slice §3); the tuple form `match (a, b)` works today |
-| safe navigation `?.` | P3 plus `option.map` covers it without a second absence operator |
-| `defer` | a reserved word for 2 sites (`telnet.telos:24`, `http.telos` session close); the role closing its stream is what tests rely on |
-| Kotlin scope functions, `with` blocks | an implicit receiver hides which handle an effect uses; authority must be readable at the call |
-| computation expressions, `do`, OCaml `let*` | user-defined control flow is deferred (`Telos_Design.md` §3.5); `docs/research/lean.md` §4 rejects monadic `do` |
-| Koka effect handlers | Telos effects are capabilities on roots (slice §5), not algebraic effects to intercept |
-| Pkl amending, CUE unification for `system` | field defaults (slice §4.7) and P7 give the same shortening without a second evaluation model |
-| inline anonymous resources in components | a resource has an identity the graph names (`protocols.md` §2.3, `Telos_Design.md` §3.4) |
-| table-test sugar | each case is one `assert` line already, and a failure prints the source text (slice §12.5) |
-| leading-dot continuation lines | conflicts with the rule that a postfix `.` starts on the operand's line (slice §3, line 82); revisit with a formatter |
-| `const` type inference from the literal | 15 sites, 30 tokens; a constant's type is part of an exported API |
-| quantity literals (`4096 bytes`) | in the design (`Telos_Design.md` §3.3), owned by wave F (`vision.md` §4), not syntax sugar |
-| grouped `requires [stream.{read, write}]` | 4 sites; `requires` is inferred since slice 6 and written only on roles |
-| implicit conversions (`Text` to `Bytes`) | 64 explicit sites are the price of no implicit conversions (`Telos_Design.md` §3.5) |
+| pipe `\|>` | UFCS already is the pipe, `x.f(a).g(b)` (slice §4.8); a second spelling of one call |
+| implicit `it` or `_` lambdas | hide which value a body refers to; slice 9 closures are short already |
+| trailing closures, Gleam `use`, Roc backpassing | move control flow into a closure; Roc removed backpassing; closures cannot cross a component cut (E082); `?` gives direct style |
+| comprehensions | closures with std `map` and `filter` cover them |
+| format specs in interpolation | a library fn (`pad_left`) does it; no corpus site needs one |
+| multi-scrutinee `match a, b` | clashes with `,` as arm separator (slice §3); `match (a, b)` works |
+| `?.` | P3 plus `option.map` covers it |
+| `defer` | a reserved word for 2 sites (`telnet.ignite:24`, http's session close) |
+| Kotlin scope functions, `with` | an implicit receiver hides which handle an effect uses |
+| computation expressions, `do`, `let*` | user-defined control flow is deferred (`design.md` §3.5); `docs/research/lean.md` §4 |
+| Koka handlers | Ignite effects are capabilities on roots (slice §5), not algebraic effects |
+| Pkl amending, CUE unification | field defaults (slice §4.7) and record update give the same shortening |
+| inline anonymous resources | a resource has an identity the graph names (`protocols.md` §2.3, `design.md` §3.4) |
+| table-test sugar | one `assert` line per case already; failures print the source (slice §12.5) |
+| leading-dot continuation lines | clashes with postfix `.` on the operand's line (slice §3, line 82) |
+| `const` type inference | 15 sites, 30 tokens; a constant's type is exported API |
+| grouped `requires [stream.{read, write}]` | 4 sites; `requires` is inferred and written only on roles |
+| implicit conversions | the 64 explicit sites are the price of none (`design.md` §3.5) |
 | range slicing `xs[a..b]` | waits for `Buffer` and indexed places (`wasm.md` G2, G3); `.slice(a, b)` exists |
 
 ## 6 Priority
 
-Lines saved are across the corpus of section 2.1, measured for S0 and estimated from the
-detector lists for the others. Cost is the sum over layers from section 4.
+Lines saved across the corpus of section 2.1: measured for S0, estimated from the detector
+lists for the rest.
 
-| rank | item | lines saved | tokens saved | cost | reason for the rank |
+| rank | item | lines | tokens | cost | why this rank |
 |---|---|---|---|---|---|
 | 1 | S0 one-line early exits | 78 | 0 | none | largest saving, no compiler work |
-| 2 | P1 `is` | 39 | about 120 | 5 × S | second largest; also gives `assert e is P` |
-| 3 | P5 `for` patterns, ranges | 27 | 108 | 3 × S | removes the counter-loop bug class (`continue` skipping `i = i + 1`) |
-| 4 | P3 `?` on `Option` | 21 | 64 | 2 × S | one rule in the typer |
-| 5 | P6 `+=`, `+` on lists | 15 | 50 | 4 × S | also the in-place append that the LLVM audit wants explicit (`vision.md` §10.1) |
-| 6 | P2 let-else | 12 | about 40 | 5 × S | flattens the nested matches of todo and http |
-| 7 | P4 match guards | 12 | about 30 | 4 × S | needed by state machines (`decode`) and actors' `handle` |
-| 8 | P7 record update | 2 now | — | 4 × S | already required by slice 9 row 9; every actor reducer (`actors.md` §9) |
-| 9 | P10 defaults, named args | 3 | 26 | 3 × S | the design's own call syntax (`Telos_Design.md:448`) |
-| 10 | P11 pair-list literals | 0 | 88 | 1 × S | JSON and headers; reserves the `Map` literal |
-| 11 | P9 rest patterns | 0 now | — | S + M | `protocols.md` P1 needs it |
+| 2 | P1 `is` | 39 | about 120 | 5 × S | also gives `assert e is P` |
+| 3 | P5 `for` patterns, ranges | 27 | 108 | 3 × S | removes the `continue`-skips-increment bug class |
+| 4 | P3 `?` on `Option` | 21 | 64 | 2 × S | one typer rule |
+| 5 | P6 `+=`, `+` on lists | 15 | 50 | 4 × S | in-place append made explicit (`vision.md` §10.1) |
+| 6 | P2 let-else | 12 | about 40 | 5 × S | flattens todo's and http's nested matches |
+| 7 | P4 match guards | 12 | about 30 | 4 × S | state machines (`decode`), actors' `handle` |
+| 8 | P10 defaults, named args | 3 | 26 | 3 × S | the design's call syntax; needed by slice 10 (section 7) |
+| 9 | P11 pair-list literals | 0 | 88 | S | JSON and headers; reserves the `Map` literal |
+| 10 | P9 rest patterns | 0 | — | S + M | `protocols.md` P1 |
 | — | P8 visibility | 0 | −46 | M | question Q2 |
 
-Total of ranks 1 to 11: about 209 lines of 2696 (7.8 %), 78 of them without compiler work.
-Reserved words: 29 to 30 (`is`); `pub` would be contextual.
+Total of ranks 1 to 10: about 207 of 2696 lines (7.7 %), 78 of them without compiler work.
+Reserved words: 29 to 30 (`is`).
 
-## 7 Slice 10 contract draft
+## 7 What the system-declaration slice would need
 
-### 7.1 Grammar delta against slice §3
+Slice 10 (`vision.md` §4.1, wave F1) adds quantity literals with units, `resource`,
+`component name: Type { … }`, `contract`, `assembly` and `module("…")` references; its
+acceptance is `ignite check examples/terminal/terminal.design.ignite` exit 0. Read against that
+file, it needs three items of the kind this document is about. None of P1 to P6, P9 or P11 is
+needed there; S0 does not apply to declarations.
+
+| need | where | item | note |
+|---|---|---|---|
+| named arguments | `nativeProcess(includes = [Terminal.console])`, `terminal.design.ignite:112`; `exponential(100 ms, 10 seconds)` (line 47) is positional | P10, named arguments only | defaults are not needed; the alternative is a record argument `NativeProcess { includes = … }` (question Q5) |
+| record literal typed by the expected type, `{ field = … }` | `sessions = { maximum = 1000 … }` (line 38), `commands = { connect = Command { … } }` (line 60) | not in section 4 | like variant inference (slice §10): the property's declared type names the record; `{` in property position cannot be a block, because blocks follow only `fn`, `if`, `match`, loops (slice §3) |
+| keyed literal with path keys | `bindings = { Terminal.ingress = localSocket() … }` (line 110) | related to P11 | a map from component references to bindings, written with `=` in the design; P11's `:` form and this form should be one decision (question Q4) |
+
+Quantity literals (`4096 bytes`, `99.9%`, `15 minutes`) are slice 10's own content, not sugar,
+and are not proposed here.
+
+## 8 Candidate contract for a later sugar slice
+
+Not scheduled. A slice that adopts any part copies that part into `docs/slice.md` (T2).
+
+### 8.1 Grammar delta against slice §3
 
 ```
 stmt       += 'let' pattern (':' type)? '=' expr 'else' block       P2; expr not ending in '}', not && or ||
             | place ('+=' | '-=') expr                              P6
-            | 'for' pattern 'in' (expr | expr ('..' | '..=') expr) block   P5 (replaces 'for' ident)
+            | 'for' pattern 'in' (expr | expr ('..' | '..=') expr) block   P5, replaces 'for' ident
 compare    := additive (('<' | '>' | '<=' | '>=') additive | 'is' pattern)?   P1
 param      := ident ':' type ('=' expr)?                            P10
 args       := (expr (',' expr)*)? (',' ident '=' expr)*             P10; or only named
-primary    += ident '{' (init sep)* ('..' expr sep?)? '}'           P7, record update
-            | '[' expr ':' expr (',' expr ':' expr)* ']'            P11
+primary    += '[' expr ':' expr (',' expr ':' expr)* ']'            P11
 arm        := pattern ('if' expr)? '=>' (block | expr)              P4
 alt        += '[' (pattern ',')* ('..' ident? | pattern) (',' pattern)* ']'   P9, one '..'
 ```
 
-Keyword table: add `is`. Contextual words: none new.
+Keyword table: add `is`.
 
-### 7.2 Rules
+### 8.2 Rules
 
-| id | rule | section |
+| id | rule | from |
 |---|---|---|
-| R1 | `e is P` is `Bool`; bindings flow into `&&` right operands, `if` then-blocks and `while` bodies, nowhere else | 4 P1 |
-| R2 | `let P = e else B`: `B` has type Never; bindings scope over the rest of the block | 4 P2 |
-| R3 | `?` on `Option<T>` in a fn or closure returning `Option<U>`; no conversion between `Option` and `Result` | 4 P3 |
-| R4 | match guards are pure `Bool`; guarded arms do not count for E046; `is` in a guard binds nothing for the arm | 4 P4 |
-| R5 | `for` patterns are irrefutable `let` patterns; `a..b` and `a..=b` only in `for` heads, `Int` bounds evaluated once; the counter is a fresh immutable binding | 4 P5 |
-| R6 | `p += e` is `p = p + e` with `p` evaluated once; `+` concatenates `List<T>` and `Bytes`; in-place append on `var` places | 4 P6 |
-| R7 | `R { …, ..b }`: `b: R`; unlisted fields from `b`; source-order evaluation; defaults unused | 4 P7 |
-| R8 | list rest patterns: one `..`, `..name` last, binds the tail; length-set exhaustiveness | 4 P9 |
-| R9 | trailing pure parameter defaults; named arguments after positional ones; none through fn values or on roles | 4 P10 |
-| R10 | `[k: v, …]` is `List<(K, V)>` until `Map` exists | 4 P11 |
-| R11 | std and examples follow S0 | 4 S0 |
+| R1 | `e is P` is `Bool`; bindings flow into `&&` right operands, `if` then-blocks, `while` bodies only | P1 |
+| R2 | `let P = e else B`: `B` is Never; bindings scope over the rest of the block | P2 |
+| R3 | `?` on `Option<T>` in a fn or closure returning `Option<U>`; no `Option`/`Result` conversion | P3 |
+| R4 | guards are pure `Bool`; guarded arms do not count for E046; `is` in a guard binds nothing for the arm | P4 |
+| R5 | `for` patterns are irrefutable `let` patterns; ranges only in `for` heads, `Int` bounds evaluated once; fresh immutable counter | P5 |
+| R6 | `p += e` is `p = p + e`, `p` evaluated once; `+` concatenates `List<T>` and `Bytes`; in place on `var` places | P6 |
+| R7 | one `..` per list pattern, `..name` last, binding the tail; length-set exhaustiveness | P9 |
+| R8 | trailing pure defaults; named arguments after positional ones; none through fn values or on roles | P10 |
+| R9 | `[k: v, …]` is `List<(K, V)>` until `Map` exists | P11 |
+| R10 | std and examples follow S0 | S0 |
 
-### 7.3 Diagnostics
+### 8.3 Diagnostics
 
-`vision.md` §6 (X6) moves the actors' codes to E060 to E064, `wasm.md` takes E080 to E083 and
-`protocols.md` E090 to E098. This slice takes E070 to E076.
+`vision.md` §6 (X6) gives the actors E060 to E064; `wasm.md` takes E080 to E083 and
+`protocols.md` E090 to E098. This proposal takes E070 to E076.
 
 | code | meaning | layer |
 |---|---|---|
@@ -598,80 +413,50 @@ Keyword table: add `is`. Contextual words: none new.
 | E072 | an effectful call or `?` in a match guard | types |
 | E073 | a range `..` or `..=` outside a `for` head or a pattern | syntax |
 | E074 | a named argument that names no parameter or repeats one; a positional argument after a named one; a required parameter after a defaulted one | check |
-| E075 | a named or omitted argument in a call through a fn value; a default on a protocol role (also E030) | types |
+| E075 | a named or omitted argument in a call through a fn value; a default on a protocol role | types |
 | E076 | a second `..` in a list pattern, or `..name` not last | syntax |
 
-Reused: E001 (initializer ending in `}` before `else`; mixed pair and plain list elements),
-E003 (an `is` binding used out of scope), E006 (`+=` on a `let` binding), E040, E045 (`+` on
-other types), E046, E047.
+Reused: E001 (initializer ending in `}` before `else`; mixed list elements), E003 (`is`
+binding out of scope), E006 (`+=` on a `let` binding), E040, E045, E046, E047.
 
-### 7.4 Acceptance
+### 8.4 Acceptance
 
-1. `examples/todo/todo.telos` is the section 8.1 text and passes its tests on both targets.
-2. `std/protocol/telnet.telos` lines 115 to 175, 268 to 296 and 356 to 387 are the section
-   8.2 text, and `task gate` passes.
-3. Each code E070 to E076 has a fixture (AGENTS.md, conventions).
+1. `examples/todo/todo.ignite` is the text of section 9.1 and passes its tests on both targets.
+2. The telnet codec is the text of section 9.2, and `task gate` passes.
+3. Each of E070 to E076 has a fixture (`AGENTS.md`, conventions).
 4. A golden file per backend for `is` in `if`, `while` and value position, let-else, a guarded
    match, a `for` range with `continue`, and `+=` on a `List` var.
-5. The corpus of section 2.1, counted with the same script, shrinks by at least 150 lines
-   against the post-slice-9 count.
+5. The corpus of section 2.1, counted by the same script, shrinks by at least 150 lines
+   against its count after slice 9.
 
-Numbering: `wasm.md` §4.3 (lines 350, 351) and its plan (line 670) assign G1 to G4 to "slices
-9 and 10". Decision taken here: this syntax slice is slice 10, and wasm's G1 to G4 move to the
-slice after it; the place grammar change of P6 is where G3 `xs[i] = e` attaches.
+`wasm.md` §4.3 (lines 350, 351) and its plan (line 669) put G1 to G4 in "slices 9 and 10";
+`vision.md` §4.1 now gives slice 10 to F1 and places wasm in slices 14 and later. This proposal
+claims no slice number.
 
-## 8 Rewrites
+## 9 Rewrites
 
-Line counts are `wc -l` of the full text. The slice-10 versions also use slice 9 features
-(raw strings, `unwrap_or`, `Response.json`, globs, closures, `.1`, `!=`, range patterns); the
-credit column separates them.
+Line counts are `wc -l`. The rewrites also use slice 9 features (raw strings, `unwrap_or`,
+`Response.json`, globs, closures, record update, `.1`, `!=`, range patterns); the credit
+columns separate them.
 
-### 8.1 `examples/todo/todo.telos`: 151 lines to 133
+### 9.1 `examples/todo/todo.ignite`: 151 lines to 133
 
 | part | current | proposed | credit |
 |---|---|---|---|
 | imports | 4 | 3 | slice 9 glob and `std.option` |
 | `or` and its blank line | 5 | 0 | slice 9 `unwrap_or` |
-| `create` | 11 | 7 | P2 |
-| `patch` | 13 | 11 | P2, P7, slice 9 closure and atomic `update` |
-| `delete` | 4 | 2 | P1 |
-| `handle` | 15 | 13 | possible today: one `match (method, Int.parse(id))` |
+| `create` (`todo.ignite:31`) | 11 | 7 | P2 |
+| `patch` (`:48`) | 13 | 11 | P2, P1; atomic `update` with record update from slice 9 |
+| `delete` (`:62`) | 4 | 2 | P1 |
+| `handle` (`:67`) | 15 | 13 | possible today: one `match (method, Int.parse(id))` |
 | test `to_json and or` | 6 | 4 | slice 9 (`or` gone) |
-| test bodies | | | raw strings (slice 9), defaulted `body` (P10), pair literals (P11): tokens, not lines |
-| total | 151 lines, 1332 tokens | 133 lines, 1263 tokens | 8 lines slice 10, 8 slice 9, 2 today |
+| test bodies | | | raw strings (slice 9), defaulted `body` (P10), pair literals (P11): tokens only |
+| total | 151 lines, 1332 tokens | 133 lines, 1263 tokens | 8 lines this proposal, 8 slice 9, 2 today |
 
-Current, the parts that change (`todo.telos:21` to 24, 48 to 65; `create` is in section 4 P2):
-
-```telos
-fn or<T>(value: Option<T>, fallback: T) -> T = match value {
-  Some(present) => present
-  None => fallback
-}
-
-fn patch(todos: Store<Todo>, id: Int, body: Text) -> Response = match (todos.get(id), parse(body)) {
-  (None, _) => status_response(404)
-  (Some(todo), Ok(value)) => {
-    let changed = Todo {
-      id
-      title = or(value.text("title"), todo.title)
-      done = or(value.bool("done"), todo.done)
-    }
-    todos.put(id, changed)
-    json(200, to_json(changed))
-  }
-  _ => status_response(400)
-}
-
-fn delete(todos: Store<Todo>, id: Int) -> Response = match todos.remove(id) {
-  Some(_) => status_response(204)
-  None => status_response(404)
-}
-```
-
-Proposed, the whole file. `patch` keeps "404 before 400" (current arm order, line 49) and is
+`patch` keeps "404 before 400" (the current `(None, _)` arm comes first, line 49) and becomes
 atomic through `update`; a todo deleted between `get` and `update` answers 404.
 
-```telos
+```ignite
 package examples.todo
 
 import std.json.{Json, parse, text, bool}
@@ -807,166 +592,135 @@ test "handle answers 400, 404 and 405" {
 }
 ```
 
-### 8.2 `std/protocol/telnet.telos`, the codec: 124 lines to 96
+### 9.2 `std/protocol/telnet.ignite`, the codec: 124 lines to 96
 
-The part is `telnet.telos:115` to 175 (`decode`, `feed`, `events`, `filled`), 268 to 296
+The part is `telnet.ignite:115` to 175 (`decode`, `feed`, `events`, `filled`), 268 to 296
 (`render`, `encode_input`) and 356 to 387 (`erase_last`, `apply_key`), comments included,
-joined by two blank lines. Tokens 830 to 784.
+joined by one blank line each. Tokens 830 to 787. Credit: P4 −7 (`decode` 4, `apply_key` 2,
+`encode_input` 1), P6 −8 (`render` 3; `apply_key`'s default arm 5, with a slice 9 range
+pattern), P5 −3 (`encode_input`), S0 −4 (`filled`, `erase_last`), slice 9 −6 (`feed` through
+`!=`, `events` through `.1`). Current and proposed side by side as a unified diff, one line of
+context:
 
-| fn | current | proposed | credit |
-|---|---|---|---|
-| `decode` | 30 | 26 | P4 |
-| `feed` | 15 | 12 | S0 and slice 9 `!=` (the `Nothing => {}` match) |
-| `events` | 5 | 2 | slice 9 `.1` |
-| `filled` | 8 | 6 | P5 range, S0 |
-| `render` | 9 | 6 | P6 |
-| `encode_input` | 20 | 16 | P5 (−3), P4 (−1) |
-| `erase_last` | 8 | 6 | S0, P1 with a slice 9 range pattern, P6 `-=` |
-| `apply_key` | 23 | 16 | P4 (−2 net), P6 with a slice 9 range pattern (−5) |
-| total | 124 | 96 | 15 slice 10, 7 S0, 6 slice 9 |
-
-Current, the functions that change beyond `decode` (whose change is in section 4 P4):
-
-```telos
-test fn feed(state: Decoder, bytes: Bytes) -> (Decoder, List<Event>) {
-  var at = state
-  var events: List<Event> = List.empty()
-  for b in bytes {
-    let (next, event) = decode(at, b)
-    at = next
-    match event {
-      Nothing => {}
-      _ => events.push(event)
-    }
-  }
-  (at, events)
-}
-
-test fn events(bytes: Bytes) -> List<Event> {
-  let (_, out) = feed(Ground, bytes)
-  out
-}
-
-test fn filled(count: Int, b: Byte) -> Bytes {
-  var out = Bytes.empty()
-  while out.len() < count {
-    out.push(b)
-  }
-  out
-}
-
-fn encode_input(bytes: Bytes) -> Bytes {
-  var out = Bytes.empty()
-  var i = 0
-  while i < bytes.len() {
-    let b = bytes.at(i)
-    i = i + 1
-    match b {
-      b'\n' => out.append(b"\r\n")
-      b'\r' => if i >= bytes.len() || bytes.at(i) != b'\n' {
-        out.append(b"\r\0")
-      }
-      IAC => out.append([IAC, IAC])
-      _ => out.push(b)
-    }
-  }
-  out
-}
-
-fn erase_last(line: Bytes) -> Bytes {
-  var end = line.len() - 1
-  while end > 0 && line.at(end) >= 128 && line.at(end) < 192 {
-    end = end - 1
-  }
-  line.slice(0, end)
-}
-
-fn apply_key(line: Bytes, b: Byte) -> (Bytes, Edit) = match b {
-  b'\r' | b'\n' => (Bytes.empty(), Enter(line))
-  BACKSPACE | DELETE => if line.is_empty() {
-    (line, Unchanged)
-  } else {
-    (erase_last(line), Show(b"\x08 \x08"))
-  }
-  CONTROL_C => (Bytes.empty(), Interrupt)
-  CONTROL_D => if line.is_empty() { (line, EndOfInput) } else { (line, Unchanged) }
-  ESCAPE => (line, Escape)
-  _ => if b < b' ' {
-    (line, Unchanged)
-  } else {
-    var longer = line
-    longer.push(b)
-    (longer, Show([b]))
-  }
-}
-```
-
-Proposed (`render` is in section 4 P6; doc comments unchanged and left out here):
-
-```telos
-test fn feed(state: Decoder, bytes: Bytes) -> (Decoder, List<Event>) {
-  var at = state
-  var events: List<Event> = []
-  for b in bytes {
-    let (next, event) = decode(at, b)
-    at = next
-    if event != Nothing { events.push(event) }
-  }
-  (at, events)
-}
-
-test fn events(bytes: Bytes) -> List<Event> = feed(Ground, bytes).1
-
-test fn filled(count: Int, b: Byte) -> Bytes {
-  var out = Bytes.empty()
-  for _ in 0..count { out.push(b) }
-  out
-}
-
-fn encode_input(bytes: Bytes) -> Bytes {
-  var out = Bytes.empty()
-  for i in 0..bytes.len() {
-    match bytes.at(i) {
-      b'\n' => out.append(b"\r\n")
-      b'\r' if i + 1 == bytes.len() || bytes.at(i + 1) != b'\n' => out.append(b"\r\0")
-      b'\r' => {}
-      IAC => out.append([IAC, IAC])
-      other => out.push(other)
-    }
-  }
-  out
-}
-
-fn erase_last(line: Bytes) -> Bytes {
-  var end = line.len() - 1
-  while end > 0 && line.at(end) is 0x80..=0xBF { end -= 1 }
-  line.slice(0, end)
-}
-
-fn apply_key(line: Bytes, b: Byte) -> (Bytes, Edit) = match b {
-  b'\r' | b'\n' => (Bytes.empty(), Enter(line))
-  BACKSPACE | DELETE if line.is_empty() => (line, Unchanged)
-  BACKSPACE | DELETE => (erase_last(line), Show(b"\x08 \x08"))
-  CONTROL_C => (Bytes.empty(), Interrupt)
-  CONTROL_D if line.is_empty() => (line, EndOfInput)
-  CONTROL_D => (line, Unchanged)
-  ESCAPE => (line, Escape)
-  0x00..=0x1F => (line, Unchanged)
-  _ => (line + [b], Show([b]))
-}
+```diff
+--- current
++++ proposed
+@@ -20,9 +20,5 @@
+   (Negotiation(_), _) => (Ground, Nothing)
+-  (Subnegotiation(count), _) => if count + 1 > MAXIMUM_SUBNEGOTIATION {
+-    (Ground, SubnegotiationTooLong)
+-  } else if b == IAC {
+-    (SubnegotiationInterpret(count + 1), Nothing)
+-  } else {
+-    (Subnegotiation(count + 1), Nothing)
+-  }
++  (Subnegotiation(count), _) if count + 1 > MAXIMUM_SUBNEGOTIATION => (Ground, SubnegotiationTooLong)
++  (Subnegotiation(count), IAC) => (SubnegotiationInterpret(count + 1), Nothing)
++  (Subnegotiation(count), _) => (Subnegotiation(count + 1), Nothing)
+   (SubnegotiationInterpret(_), SE) => (Ground, Nothing)
+@@ -39,6 +35,3 @@
+     at = next
+-    match event {
+-      Nothing => {}
+-      _ => events.push(event)
+-    }
++    if event != Nothing { events.push(event) }
+   }
+@@ -48,6 +41,3 @@
+ // The events of `bytes` decoded from `Ground`.
+-test fn events(bytes: Bytes) -> List<Event> {
+-  let (_, out) = feed(Ground, bytes)
+-  out
+-}
++test fn events(bytes: Bytes) -> List<Event> = feed(Ground, bytes).1
+ 
+@@ -56,5 +46,3 @@
+   var out = Bytes.empty()
+-  while out.len() < count {
+-    out.push(b)
+-  }
++  for _ in 0..count { out.push(b) }
+   out
+@@ -65,6 +53,3 @@
+   var out = Bytes.empty()
+-  for line in reply.lines {
+-    out.append(line.to_bytes())
+-    out.append(b"\r\n")
+-  }
++  for line in reply.lines { out += line.to_bytes() + b"\r\n" }
+   out
+@@ -76,13 +61,9 @@
+   var out = Bytes.empty()
+-  var i = 0
+-  while i < bytes.len() {
+-    let b = bytes.at(i)
+-    i = i + 1
+-    match b {
++  for i in 0..bytes.len() {
++    match bytes.at(i) {
+       b'\n' => out.append(b"\r\n")
+-      b'\r' => if i >= bytes.len() || bytes.at(i) != b'\n' {
+-        out.append(b"\r\0")
+-      }
++      b'\r' if i + 1 == bytes.len() || bytes.at(i + 1) != b'\n' => out.append(b"\r\0")
++      b'\r' => {}
+       IAC => out.append([IAC, IAC])
+-      _ => out.push(b)
++      other => out.push(other)
+     }
+@@ -95,5 +76,3 @@
+   var end = line.len() - 1
+-  while end > 0 && line.at(end) >= 128 && line.at(end) < 192 {
+-    end = end - 1
+-  }
++  while end > 0 && line.at(end) is 0x80..=0xBF { end -= 1 }
+   line.slice(0, end)
+@@ -108,17 +87,10 @@
+   b'\r' | b'\n' => (Bytes.empty(), Enter(line))
+-  BACKSPACE | DELETE => if line.is_empty() {
+-    (line, Unchanged)
+-  } else {
+-    (erase_last(line), Show(b"\x08 \x08"))
+-  }
++  BACKSPACE | DELETE if line.is_empty() => (line, Unchanged)
++  BACKSPACE | DELETE => (erase_last(line), Show(b"\x08 \x08"))
+   CONTROL_C => (Bytes.empty(), Interrupt)
+-  CONTROL_D => if line.is_empty() { (line, EndOfInput) } else { (line, Unchanged) }
++  CONTROL_D if line.is_empty() => (line, EndOfInput)
++  CONTROL_D => (line, Unchanged)
+   ESCAPE => (line, Escape)
+-  _ => if b < b' ' {
+-    (line, Unchanged)
+-  } else {
+-    var longer = line
+-    longer.push(b)
+-    (longer, Show([b]))
+-  }
++  0x00..=0x1F => (line, Unchanged)
++  _ => (line + [b], Show([b]))
+ }
 ```
 
 Behaviour is unchanged: `encode_input`'s CR test reads the next byte at `i + 1` because the
-range counter is not advanced inside the body; `apply_key`'s `0x00..=0x1F` is `b < b' '`
-after the named control keys, and those keys stay earlier arms.
+range counter is not advanced inside the body, and `0x00..=0x1F` is the old `b < b' '` test
+after the named control keys, which stay earlier arms.
 
-## 9 Open questions
+## 10 Open questions
 
 | # | question | default if unanswered |
 |---|---|---|
-| Q1 | Should `is` be a reserved word, or should P1 use `matches(e, P)`, which needs a pattern argument and is a form of its own anyway? | reserved `is` (29 to 30 words) |
-| Q2 | Visibility (P8): private by default with a contextual `pub`, everything public as now, or Dart-style `_name` privacy? It decides the std definition count (136 now, budget 120) and the glob collisions of six names | keep everything public; rename the six colliding names |
-| Q3 | Should match guards (P4) allow effectful calls, as Rust does, instead of E072? | pure guards |
-| Q4 | Record update (P7): slice 9 needs it for todo's PATCH. Does the slice 9 agent own it, with this section as its rule? | yes; this document's R7 is the rule |
-| Q5 | Numbering: this syntax slice as slice 10, and wasm's G1 to G4 as the next slice, or the reverse? | syntax first (section 7.4) |
-| Q6 | Does S0 become a formatter (`telos fmt`) in slice 10, or stay a written convention? | written convention; a formatter later |
+| Q1 | `is` as a reserved word (P1), or a `matches(e, P)` form, which takes a pattern argument and so is special syntax anyway? | reserved `is` (29 to 30 words) |
+| Q2 | Visibility (P8): private by default with a contextual `pub`, all public as now, or `_name` privacy? It decides the std definition count (136, budget 120) and six glob collisions | all public; rename the six colliding names |
+| Q3 | Match guards with effectful calls, as Rust allows, instead of E072? | pure guards |
+| Q4 | For slice 10: does `bindings = { Terminal.ingress = … }` (design line 110) become a map literal, and is it the same form as P11's `["k": v]` or replaces it? | slice 10 decides `{ path = expr }` for maps keyed by references; P11 stays `:` for value keys |
+| Q5 | For slice 10: named arguments (P10) for `nativeProcess(includes = …)`, or a record argument? | named arguments without defaults |
+| Q6 | S0 as a `ignite fmt` rule, or a written convention only? | written convention until a formatter exists |
+
+Q4, answered by the steering session on 2026-11-01:
+
+- `Map<K, V>` (`design.md` §3.3) arrives in slice 10 with `get`, `put`, `remove`, `keys`,
+  `len` and iteration in key order, on both targets.
+- In slice 10 the brace literal `{ k = e, … }` takes its type from the expected type: a record
+  type, or a `Map` with `Text` keys for identifier keys and with reference keys for component
+  references.
+- P11's `["k": v]` stays unscheduled.

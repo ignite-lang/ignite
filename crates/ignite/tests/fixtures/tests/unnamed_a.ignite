@@ -1,0 +1,6 @@
+// A program without a `package` line, like `unnamed_b.ignite`: both are
+// package `program` (ignite_test.rs, each_unnamed_file_runs_its_own_tests).
+
+test "first file" {
+  assert 1 == 1
+}

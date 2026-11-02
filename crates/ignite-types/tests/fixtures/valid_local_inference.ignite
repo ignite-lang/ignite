@@ -1,0 +1,39 @@
+fn total(items: List<Int>) -> Int {
+  var sum = 0
+  for item in items {
+    sum = sum + item
+  }
+  return sum
+}
+
+fn pushed() -> Int {
+  var xs = []
+  xs.push(1)
+  var ys = List.empty()
+  ys.push("a")
+  return xs.len() + ys.len()
+}
+
+fn passed() -> Int {
+  let xs = List.empty()
+  return total(xs)
+}
+
+fn returned() -> Option<Text> {
+  let none = None
+  return none
+}
+
+fn assigned(flag: Bool) -> Result<Int, Text> {
+  var r = Ok(1)
+  if flag {
+    r = Err("no")
+  }
+  return r
+}
+
+test "later uses decide" {
+  var seen = []
+  seen.push(true)
+  assert seen.len() == 1
+}

@@ -1,0 +1,75 @@
+package examples.components
+
+import std.io.IoError
+import std.net.{TcpStream, Endpoint}
+
+// Slice 10 (`docs/slice.md` 14.4, 14.5): component kinds are record types.
+// `Greeter` is executable through `Greeter.main`; `Banner` is a value
+// embedded in it. The generated main creates the store, binds the listener
+// with `--port`, builds `banner` then `server`, calls `Greeter.main(server)`
+// and maps its `Err` to the exit code. `Pinger` names the listener as its
+// `Endpoint` target (14.14 item 5): its main builds the endpoint with the
+// `--port` override and binds nothing.
+
+type Banner {
+  text: Text
+  width: ByteSize = 80 bytes
+}
+
+type Greeter {
+  listener: TcpListener
+  seen: Store<Text>
+  banner: Banner
+  idle: Duration = 30 seconds
+  executable: Text = "greeter"
+}
+
+fn Greeter.main(self: Greeter) -> Result<Unit, IoError> {
+  let stream = self.listener.accept()?
+  let id = self.seen.next_id()
+  self.seen.put(id, self.banner.text)
+  stream.write_all((self.banner.text + " {self.banner.width.debug()} {self.idle.debug()}\n").to_bytes())?
+  match stream.read(4096)? {
+    Eof => Ok(())
+    Data(bytes) => if bytes.to_text().trim() == "fail" {
+      Err(IoError.new("asked to fail").with_exit_code(3))
+    } else {
+      Ok(())
+    }
+  }
+}
+
+type Pinger {
+  target: Endpoint
+  executable: Text = "ping"
+}
+
+fn Pinger.main(self: Pinger) -> Result<Unit, IoError> {
+  let stream = TcpStream.connect(self.target.address, self.target.port)?
+  match stream.read(4096)? {
+    Eof => Err(IoError.new("no banner"))
+    Data(bytes) => {
+      stream.write_all("hello\n".to_bytes())?
+      Ok(())
+    }
+  }
+}
+
+system Greeting {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 2500 }
+  resource seen: Store<Text>
+
+  component banner: Banner { text = "hello" }
+
+  component server: Greeter {
+    listener = ingress
+    seen = seen
+    banner = banner
+    executable = "greeterd"
+  }
+
+  component client: Pinger {
+    target = ingress
+    executable = "pinger"
+  }
+}

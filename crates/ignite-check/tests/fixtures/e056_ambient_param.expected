@@ -1,0 +1,4 @@
+e056_ambient_param.ignite:1:11: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it
+e056_ambient_param.ignite:4:11: error[E056]: parameter `net` is named like the ambient capability `net`; rename it
+e056_ambient_param.ignite:7:10: error[E056]: parameter `process` is named like the ambient capability `process`; rename it
+e056_ambient_param.ignite:8:12: error[E056]: parameter `stdout` is named like the ambient capability `stdout`; rename it

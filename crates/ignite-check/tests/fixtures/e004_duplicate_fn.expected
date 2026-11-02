@@ -1,0 +1,1 @@
+e004_duplicate_fn.ignite:5:4: error[E004]: duplicate definition of `twice`

@@ -1,0 +1,19 @@
+fn shout(t: Int) -> Int requires [stdout.write] {
+  Stdout.write_all("x".to_bytes())
+  return t
+}
+
+fn update(s: Store<Int>) -> Option<Int> requires [s.write] = s.update(1, shout)
+
+fn mapped(l: List<Int>) -> List<Int> requires [] = l.map(shout)
+
+fn apply(f: fn(Int) -> Int, n: Int) -> Int = f(n)
+
+fn pass() -> Int requires [] = apply(shout, 1)
+
+fn pass_param(f: fn(n: Int) -> Int requires [stdout.write]) -> Int requires [] = apply(f, 1)
+
+fn narrow(f: fn(n: Int) -> Int requires [stdout.write]) -> Int requires [] {
+  let g: fn(n: Int) -> Int requires [] = f
+  return g(1)
+}

@@ -1,5 +1,0 @@
-e040_generic_conflict.telos:13:19: error[E040]: type mismatch: expected `Int`, found `Text`
-e040_generic_conflict.telos:14:43: error[E040]: type mismatch: expected `Int`, found `Text`
-e040_generic_conflict.telos:15:22: error[E040]: type mismatch: expected `Text`, found `Int`
-e040_generic_conflict.telos:15:25: error[E040]: type mismatch: expected `Text`, found `Int`
-e040_generic_conflict.telos:20:20: error[E040]: type mismatch: expected `fn(Int) -> Int`, found `fn(s: TcpStream) -> Int requires [s.write]`

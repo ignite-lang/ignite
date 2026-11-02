@@ -1,0 +1,13 @@
+fn send(out: TcpStream, other: TcpStream) -> Result<Unit, IoError> requires [other.write] = other.write_all("x".to_bytes())
+
+fn wrong(a: TcpStream, b: TcpStream) -> Result<Unit, IoError> requires [a.write] = a.send(b)
+
+fn right(a: TcpStream, b: TcpStream) -> Result<Unit, IoError> requires [a.write] = b.send(a)
+
+type Conn {
+  stream: TcpStream
+}
+
+fn ping(s: TcpStream) -> Result<Unit, IoError> requires [s.write] = s.write_all("p".to_bytes())
+
+fn via_field(c: Conn) -> Result<Unit, IoError> requires [] = c.stream.ping()

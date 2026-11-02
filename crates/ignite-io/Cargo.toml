@@ -1,0 +1,17 @@
+[package]
+name = "ignite-io"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Ignite IO substrate: TCP listener and stream, standard input and output, terminal mode, tasks, runtime entry point. Blocking std::net and std::thread; both targets call it."
+autotests = false
+
+[dependencies]
+nix.workspace = true
+
+[features]
+runner = []
+
+[[test]]
+name = "main"
+path = "tests/main.rs"

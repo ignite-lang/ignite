@@ -1,0 +1,21 @@
+const TOP: Int = 5
+const BASE: Int = 1 + 2
+
+fn f(n: Int, t: Text, b: Byte) -> Int {
+  let a = match n {
+    9..=TOP => 1
+    _ => 0
+  }
+  let c = match n {
+    BASE..=9 => 1
+    _ => 0
+  }
+  let d = match t {
+    1..=2 => 1
+    _ => 0
+  }
+  return match b {
+    0..=300 => 1
+    _ => 0
+  }
+}

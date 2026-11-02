@@ -1,0 +1,23 @@
+fn bytes(b: Byte) -> Int {
+  let full = match b {
+    0..=127 => 1
+    128..=255 => 2
+  }
+  return match b {
+    0..=9 => 1
+    b'a'..=b'z' => 2
+    200 => 3
+  }
+}
+
+fn ints(n: Int) -> Int {
+  let all = match n {
+    -9223372036854775808..=-1 => 1
+    0 => 0
+    1..=9223372036854775807 => 2
+  }
+  return match (n, n > 0) {
+    (0..=5, true) => 1
+    (_, false) => 2
+  }
+}

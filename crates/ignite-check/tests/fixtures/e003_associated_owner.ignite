@@ -1,0 +1,9 @@
+fn Missing.make() -> Int = 0
+
+fn Text.size(t: Text) -> Int = 0
+
+type Point {
+  x: Int
+}
+
+fn use_it() -> Int = Point.origin()

@@ -123,6 +123,77 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "ignite"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "ignite-check",
+ "ignite-llvm",
+ "ignite-rt",
+ "ignite-rustgen",
+ "ignite-syntax",
+ "ignite-types",
+ "nix",
+]
+
+[[package]]
+name = "ignite-check"
+version = "0.1.0"
+dependencies = [
+ "ignite-syntax",
+]
+
+[[package]]
+name = "ignite-io"
+version = "0.1.0"
+dependencies = [
+ "nix",
+]
+
+[[package]]
+name = "ignite-llvm"
+version = "0.1.0"
+dependencies = [
+ "ignite-check",
+ "ignite-rt",
+ "ignite-syntax",
+ "ignite-types",
+]
+
+[[package]]
+name = "ignite-load"
+version = "0.1.0"
+
+[[package]]
+name = "ignite-rt"
+version = "0.1.0"
+dependencies = [
+ "ignite-io",
+ "nix",
+]
+
+[[package]]
+name = "ignite-rustgen"
+version = "0.1.0"
+dependencies = [
+ "ignite-check",
+ "ignite-syntax",
+ "ignite-types",
+]
+
+[[package]]
+name = "ignite-syntax"
+version = "0.1.0"
+
+[[package]]
+name = "ignite-types"
+version = "0.1.0"
+dependencies = [
+ "ignite-check",
+ "ignite-syntax",
+]
+
+[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -185,77 +256,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "telos"
-version = "0.1.0"
-dependencies = [
- "clap",
- "nix",
- "telos-check",
- "telos-llvm",
- "telos-rt",
- "telos-rustgen",
- "telos-syntax",
- "telos-types",
-]
-
-[[package]]
-name = "telos-check"
-version = "0.1.0"
-dependencies = [
- "telos-syntax",
-]
-
-[[package]]
-name = "telos-io"
-version = "0.1.0"
-dependencies = [
- "nix",
-]
-
-[[package]]
-name = "telos-llvm"
-version = "0.1.0"
-dependencies = [
- "telos-check",
- "telos-rt",
- "telos-syntax",
- "telos-types",
-]
-
-[[package]]
-name = "telos-load"
-version = "0.1.0"
-
-[[package]]
-name = "telos-rt"
-version = "0.1.0"
-dependencies = [
- "nix",
- "telos-io",
-]
-
-[[package]]
-name = "telos-rustgen"
-version = "0.1.0"
-dependencies = [
- "telos-check",
- "telos-syntax",
- "telos-types",
-]
-
-[[package]]
-name = "telos-syntax"
-version = "0.1.0"
-
-[[package]]
-name = "telos-types"
-version = "0.1.0"
-dependencies = [
- "telos-check",
- "telos-syntax",
 ]
 
 [[package]]

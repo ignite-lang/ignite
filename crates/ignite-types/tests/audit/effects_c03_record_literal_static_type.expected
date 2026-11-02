@@ -1,0 +1,2 @@
+effects_c03_record_literal_static_type.ignite:13:10: error[E042]: cannot check the effects of `get`: the type of its receiver is not declared; annotate the binding
+effects_c03_record_literal_static_type.ignite:18:10: error[E042]: cannot check the effects of `run`: the type of its receiver is not declared; annotate the binding

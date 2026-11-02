@@ -1,0 +1,1 @@
+e001_integer_out_of_range.ignite:2:10: error[E001]: integer literal `9223372036854775808` does not fit in 64 bits; only `-9223372036854775808` does

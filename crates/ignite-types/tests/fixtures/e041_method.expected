@@ -1,0 +1,2 @@
+e041_method.ignite:2:18: error[E041]: `Bytes` has no method `join`
+e041_method.ignite:3:12: error[E041]: `Text` has no method `size`

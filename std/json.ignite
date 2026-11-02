@@ -1,0 +1,550 @@
+package std.json
+
+import std.text.{digit_value, repeat}
+import std.option.and_then
+
+// JSON values (RFC 8259) with integer numbers: `encode` writes the compact
+// form, `parse` reads one value surrounded by optional whitespace, and the
+// accessors read object members (`body.text("title")`). Numbers are `Int`;
+// a fraction or an exponent is a parse error, and so is a number of more
+// than 18 digits. Strings are decoded completely, `\uXXXX` with surrogate
+// pairs included; a lone surrogate is an error.
+
+enum Json {
+  Null,
+  Bool(Bool),
+  Number(Int),
+  Str(Text),
+  Array(List<Json>),
+  Object(List<(Text, Json)>)
+}
+
+// Why `parse` failed and at which byte offset of its input.
+type JsonError {
+  message: Text
+  offset: Int
+}
+
+// A value and the offset just after it.
+type Parsed = Result<(Json, Int), JsonError>
+
+const MAXIMUM_DIGITS: Int = 18
+const MAXIMUM_DEPTH: Int = 64
+
+// ---- encoding ---------------------------------------------------------------
+
+fn hex_digit(n: Byte) -> Byte = if n < 10 { b'0' + n } else { b'a' + n - 10 }
+
+// `text` as a JSON string literal: quote, backslash and the control
+// characters escaped, every other character as it is.
+fn quote(text: Text) -> Text {
+  var out = b"\""
+  for b in text.to_bytes() {
+    match b {
+      b'"' => out.append(br#"\""#)
+      b'\\' => out.append(br"\\")
+      b'\n' => out.append(br"\n")
+      b'\r' => out.append(br"\r")
+      b'\t' => out.append(br"\t")
+      0x08 => out.append(br"\b")
+      0x0c => out.append(br"\f")
+      0..=0x1f => {
+        out.append(br"\u00")
+        out.push(hex_digit(b / 16))
+        out.push(hex_digit(b % 16))
+      }
+      _ => out.push(b)
+    }
+  }
+  out.push(b'"')
+  out.to_text()
+}
+
+// The compact JSON text of `value`: no whitespace, members in their order.
+fn encode(value: Json) -> Text = match value {
+  Null => "null"
+  Bool(b) => b.to_text()
+  Number(n) => n.to_text()
+  Str(text) => quote(text)
+  Array(items) => "[{items.map(encode).join(",")}]"
+  Object(members) => "{{" + members.map(|m| quote(m.0) + ":" + encode(m.1)).join(",") + "}}"
+}
+
+test "encode writes every kind compactly" {
+  assert encode(Null) == "null"
+  assert encode(Bool(true)) == "true"
+  assert encode(Bool(false)) == "false"
+  assert encode(Number(0)) == "0"
+  assert encode(Number(-12)) == "-12"
+  assert encode(Number(999999999999999999)) == "999999999999999999"
+  assert encode(Str("")) == r#""""#
+  assert encode(Array([])) == "[]"
+  assert encode(Object([])) == r"{}"
+  assert encode(Array([Number(1), Array([Null]), Object([("a", Bool(true))])])) == r#"[1,[null],{"a":true}]"#
+  let todo = Object([("id", Number(1)), ("title", Str(r#"say "hi""#)), ("done", Bool(false))])
+  assert encode(todo) == r#"{"id":1,"title":"say \"hi\"","done":false}"#
+}
+
+test "encode escapes quote, backslash and control characters" {
+  assert quote(r#"a"b\c/d"#) == r#""a\"b\\c/d""#
+  assert quote("\n\r\t\u{8}\u{c}") == r#""\n\r\t\b\f""#
+  assert quote("\0\u{1}\u{1f}") == r#""\u0000\u0001\u001f""#
+  assert quote(" \u{7f}") == "\" \u{7f}\""
+  assert quote("é€\u{1F600}") == "\"é€\u{1F600}\""
+  assert encode(Object([(r#"k""#, Str("v"))])) == r#"{"k\"":"v"}"#
+}
+
+// ---- parsing ----------------------------------------------------------------
+
+fn error(message: Text, offset: Int) -> JsonError = JsonError { message, offset }
+
+fn smaller(a: Int, b: Int) -> Int = if a < b { a } else { b }
+
+fn is_space(b: Byte) -> Bool = match b {
+  b' ' | b'\t' | b'\n' | b'\r' => true
+  _ => false
+}
+
+fn skip_space(bytes: Bytes, at: Int) -> Int {
+  var i = at
+  while i < bytes.len() && is_space(bytes.at(i)) {
+    i = i + 1
+  }
+  i
+}
+
+// The one JSON value of `text`, with whitespace allowed around it.
+fn parse(text: Text) -> Result<Json, JsonError> {
+  let bytes = text.to_bytes()
+  let (value, end) = parse_value(bytes, skip_space(bytes, 0), 0)?
+  let rest = skip_space(bytes, end)
+  if rest < bytes.len() {
+    return Err(error("unexpected character after the value", rest))
+  }
+  Ok(value)
+}
+
+// The value starting at `at`, which is not whitespace; `depth` counts the
+// arrays and objects around it.
+fn parse_value(bytes: Bytes, at: Int, depth: Int) -> Parsed {
+  if at >= bytes.len() {
+    return Err(error("unexpected end of input", at))
+  }
+  match bytes.at(at) {
+    b'n' => parse_word(bytes, at, "null", Null)
+    b't' => parse_word(bytes, at, "true", Bool(true))
+    b'f' => parse_word(bytes, at, "false", Bool(false))
+    b'"' => {
+      let (text, end) = parse_string(bytes, at)?
+      Ok((Str(text), end))
+    }
+    b'[' => parse_array(bytes, at, depth + 1)
+    b'{' => parse_object(bytes, at, depth + 1)
+    b'-' | b'0'..=b'9' => parse_number(bytes, at)
+    _ => Err(error("unexpected character", at))
+  }
+}
+
+fn parse_word(bytes: Bytes, at: Int, word: Text, value: Json) -> Parsed {
+  let end = at + word.len()
+  if end > bytes.len() || bytes.slice(at, end).to_text() != word {
+    return Err(error("unexpected character", at))
+  }
+  Ok((value, end))
+}
+
+fn parse_number(bytes: Bytes, at: Int) -> Parsed {
+  let negative = bytes.at(at) == b'-'
+  let start = if negative { at + 1 } else { at }
+  var i = start
+  var value = 0
+  while i < bytes.len() {
+    let digit = match digit_value(bytes.at(i)) {
+      Some(digit) => digit
+      None => break
+    }
+    if i - start == MAXIMUM_DIGITS {
+      return Err(error("number longer than {MAXIMUM_DIGITS} digits", start))
+    }
+    value = value * 10 + digit
+    i = i + 1
+  }
+  if i == start {
+    return Err(error("expected a digit", i))
+  }
+  if i - start > 1 && bytes.at(start) == b'0' {
+    return Err(error("leading zero in a number", start))
+  }
+  if i < bytes.len() {
+    match bytes.at(i) {
+      b'.' | b'e' | b'E' => return Err(error("only integer numbers are supported", i))
+      _ => {}
+    }
+  }
+  Ok((Number(if negative { -value } else { value }), i))
+}
+
+// The string whose opening quote is at `at`: its text and the offset after
+// the closing quote.
+fn parse_string(bytes: Bytes, at: Int) -> Result<(Text, Int), JsonError> {
+  var out = Bytes.empty()
+  var i = at + 1
+  loop {
+    if i >= bytes.len() {
+      return Err(error("unterminated string", at))
+    }
+    match bytes.at(i) {
+      b'"' => return Ok((out.to_text(), i + 1))
+      b'\\' => match escape(bytes.slice(i, smaller(i + 12, bytes.len()))) {
+        Some((decoded, length)) => {
+          out.append(decoded)
+          i = i + length
+        }
+        None => return Err(error("invalid escape", i))
+      }
+      0..=0x1f => return Err(error("control character in a string", i))
+      b => {
+        out.push(b)
+        i = i + 1
+      }
+    }
+  }
+}
+
+// The escape at the start of `w` (a backslash and up to 11 more bytes):
+// its UTF-8 bytes and its length in `w`.
+fn escape(w: Bytes) -> Option<(Bytes, Int)> {
+  if w.len() < 2 {
+    return None
+  }
+  match w.at(1) {
+    b'"' => Some((b"\"", 2))
+    b'\\' => Some((b"\\", 2))
+    b'/' => Some((b"/", 2))
+    b'b' => Some((b"\x08", 2))
+    b'f' => Some((b"\x0c", 2))
+    b'n' => Some((b"\n", 2))
+    b'r' => Some((b"\r", 2))
+    b't' => Some((b"\t", 2))
+    b'u' => unicode_escape(w)
+    _ => None
+  }
+}
+
+fn hex_value(b: Byte) -> Option<Byte> = match b {
+  b'0'..=b'9' => Some(b - b'0')
+  b'a'..=b'f' => Some(b - b'a' + 10)
+  b'A'..=b'F' => Some(b - b'A' + 10)
+  _ => None
+}
+
+// The four hex digits of `w` at `at`, as values 0 to 15.
+fn hex4(w: Bytes, at: Int) -> Option<(Byte, Byte, Byte, Byte)> {
+  if at + 4 > w.len() {
+    return None
+  }
+  match (hex_value(w.at(at)), hex_value(w.at(at + 1)), hex_value(w.at(at + 2)), hex_value(w.at(at + 3))) {
+    (Some(a), Some(b), Some(c), Some(d)) => Some((a, b, c, d))
+    _ => None
+  }
+}
+
+// `\uXXXX` at the start of `w`, followed by a second `\uXXXX` when the
+// first is a high surrogate (D800 to DBFF). The code point is never formed
+// as a number: its UTF-8 bytes are assembled from the hex digits.
+fn unicode_escape(w: Bytes) -> Option<(Bytes, Int)> = match hex4(w, 2) {
+  None | Some((13, 12..=15, _, _)) => None
+  Some((13, 8..=11, _, _)) => surrogate_escape(w)
+  Some((n1, n2, n3, n4)) => Some((basic_plane(n1, n2, n3, n4), 6))
+}
+
+// A high surrogate `\uXXXX` at the start of `w` and the low surrogate
+// (DC00 to DFFF) `\uXXXX` that must follow it.
+fn surrogate_escape(w: Bytes) -> Option<(Bytes, Int)> {
+  if w.len() < 12 || w.at(6) != b'\\' || w.at(7) != b'u' {
+    return None
+  }
+  match (hex4(w, 2), hex4(w, 8)) {
+    (Some((_, n2, n3, n4)), Some((13, m2, m3, m4))) => if m2 >= 12 {
+      Some((surrogate_pair(n2 - 8, n3, n4, m2 - 12, m3, m4), 12))
+    } else {
+      None
+    }
+    _ => None
+  }
+}
+
+// UTF-8 of the code point with hex digits n1 n2 n3 n4 (not a surrogate).
+fn basic_plane(n1: Byte, n2: Byte, n3: Byte, n4: Byte) -> Bytes = match (n1, n2, n3) {
+  (0, 0, 0..=7) => [n3 * 16 + n4]
+  (0, 0..=7, _) => [0xC0 + n2 * 4 + n3 / 4, 0x80 + n3 % 4 * 16 + n4]
+  _ => [0xE0 + n1, 0x80 + n2 * 4 + n3 / 4, 0x80 + n3 % 4 * 16 + n4]
+}
+
+// UTF-8 of the code point of a surrogate pair. The high surrogate's ten
+// bits are a (2), b (4), c (4); the low one's d (2), e (4), f (4). The code
+// point is 0x10000 + abcdef, so its plane is 1 + a b/4.
+fn surrogate_pair(a: Byte, b: Byte, c: Byte, d: Byte, e: Byte, f: Byte) -> Bytes {
+  let plane = 1 + a * 4 + b / 4
+  [
+    0xF0 + plane / 4,
+    0x80 + plane % 4 * 16 + b % 4 * 4 + c / 4,
+    0x80 + c % 4 * 16 + d * 4 + e / 4,
+    0x80 + e % 4 * 16 + f
+  ]
+}
+
+fn parse_array(bytes: Bytes, at: Int, depth: Int) -> Parsed {
+  if depth > MAXIMUM_DEPTH {
+    return Err(error("nested deeper than {MAXIMUM_DEPTH}", at))
+  }
+  var items = []
+  var i = skip_space(bytes, at + 1)
+  if i < bytes.len() && bytes.at(i) == b']' {
+    return Ok((Array(items), i + 1))
+  }
+  loop {
+    let (item, end) = parse_value(bytes, i, depth)?
+    items.push(item)
+    i = skip_space(bytes, end)
+    if i >= bytes.len() {
+      return Err(error("unexpected end of input", i))
+    }
+    match bytes.at(i) {
+      b',' => {
+        i = skip_space(bytes, i + 1)
+      }
+      b']' => return Ok((Array(items), i + 1))
+      _ => return Err(error("expected `,` or `]`", i))
+    }
+  }
+}
+
+fn parse_object(bytes: Bytes, at: Int, depth: Int) -> Parsed {
+  if depth > MAXIMUM_DEPTH {
+    return Err(error("nested deeper than {MAXIMUM_DEPTH}", at))
+  }
+  var members = []
+  var i = skip_space(bytes, at + 1)
+  if i < bytes.len() && bytes.at(i) == b'}' {
+    return Ok((Object(members), i + 1))
+  }
+  loop {
+    if i >= bytes.len() || bytes.at(i) != b'"' {
+      return Err(error("expected a member name", i))
+    }
+    let (name, after_name) = parse_string(bytes, i)?
+    i = skip_space(bytes, after_name)
+    if i >= bytes.len() || bytes.at(i) != b':' {
+      return Err(error("expected `:`", i))
+    }
+    let (item, end) = parse_value(bytes, skip_space(bytes, i + 1), depth)?
+    members.push((name, item))
+    i = skip_space(bytes, end)
+    if i >= bytes.len() {
+      return Err(error("unexpected end of input", i))
+    }
+    match bytes.at(i) {
+      b',' => {
+        i = skip_space(bytes, i + 1)
+      }
+      b'}' => return Ok((Object(members), i + 1))
+      _ => return Err(error(r"expected `,` or `}`", i))
+    }
+  }
+}
+
+// The error of parsing `input`, `None` when it parses.
+test fn failure(input: Text) -> Option<JsonError> = match parse(input) {
+  Ok(_) => None
+  Err(e) => Some(e)
+}
+
+// The bytes of the one string `input` parses to.
+test fn string_bytes(input: Text) -> Option<Bytes> = match parse(input) {
+  Ok(Str(text)) => Some(text.to_bytes())
+  _ => None
+}
+
+test fn at(message: Text, offset: Int) -> Option<JsonError> = Some(JsonError { message, offset })
+
+test "parse reads every kind of value" {
+  assert parse("null")? == Null
+  assert parse("true")? == Bool(true)
+  assert parse("false")? == Bool(false)
+  assert parse("0")? == Number(0)
+  assert parse("-0")? == Number(0)
+  assert parse("42")? == Number(42)
+  assert parse("-12")? == Number(-12)
+  assert parse(r#""milk""#)? == Str("milk")
+  assert parse("[]")? == Array([])
+  assert parse(r"{}")? == Object([])
+  assert parse(r#"[1, "a", [true], {}]"#)? == Array([Number(1), Str("a"), Array([Bool(true)]), Object([])])
+  let body = r#" { "id" : 1, "title":"milk", "done":false, "tags":[ ], "x":null } "#
+  let expected = Object([
+    ("id", Number(1)),
+    ("title", Str("milk")),
+    ("done", Bool(false)),
+    ("tags", Array([])),
+    ("x", Null)
+  ])
+  assert parse(body)? == expected
+  assert parse("\t\r\n 7 \n")? == Number(7)
+}
+
+test "parse decodes escapes" {
+  assert parse(r#""a\"b\\c\/\n\t\b\f\r""#)? == Str("a\"b\\c/\n\t\u{8}\u{c}\r")
+  assert parse(r#""Aé€😀\u0001""#)? == Str("A\u{e9}\u{20AC}\u{1F600}\u{1}")
+  assert string_bytes(r#""\u0000""#) == Some(b"\0")
+  assert string_bytes(r#""\u007f""#) == Some(b"\x7f")
+  assert string_bytes(r#""\u0080""#) == Some(b"\xc2\x80")
+  assert string_bytes(r#""߿""#) == Some(b"\xdf\xbf")
+  assert string_bytes(r#""ࠀ""#) == Some(b"\xe0\xa0\x80")
+  assert string_bytes(r#""￿""#) == Some(b"\xef\xbf\xbf")
+  assert string_bytes(r#""𐀀""#) == Some(b"\xf0\x90\x80\x80")
+  assert string_bytes(r#""􏿿""#) == Some(b"\xf4\x8f\xbf\xbf")
+  assert string_bytes(r#""😀""#) == Some("\u{1F600}".to_bytes())
+  assert parse(r#""é€ and 😀 raw""#)? == Str("é€ and 😀 raw")
+}
+
+test "a lone or broken surrogate is an invalid escape" {
+  let invalid = at("invalid escape", 1)
+  assert failure(r#""\ud800""#) == invalid
+  assert failure(r#""\udc00""#) == invalid
+  assert failure(r#""\udfff\ud800""#) == invalid
+  assert failure(r#""\ud800A""#) == invalid
+  assert failure(r#""\ud800\ud800""#) == invalid
+  assert failure(r#""\ud800x""#) == invalid
+  assert failure(r#""\ud800\"#) == invalid
+  assert failure(r#""\u12""#) == invalid
+  assert failure(r#""\u12G4""#) == invalid
+  assert failure(r#""\q""#) == invalid
+  assert failure(r#""ab\x""#) == at("invalid escape", 3)
+}
+
+test "numbers are integers of at most 18 digits" {
+  assert parse("999999999999999999")? == Number(999999999999999999)
+  assert parse("-999999999999999999")? == Number(-999999999999999999)
+  assert parse("[123456789012345678]")? == Array([Number(123456789012345678)])
+  assert failure("1234567890123456789") == at("number longer than 18 digits", 0)
+  assert failure("-1234567890123456789") == at("number longer than 18 digits", 1)
+  let fraction = "only integer numbers are supported"
+  assert failure("1.5") == at(fraction, 1)
+  assert failure("1e5") == at(fraction, 1)
+  assert failure("-20E3") == at(fraction, 3)
+  assert failure("[0.0]") == at(fraction, 2)
+  assert failure("0123") == at("leading zero in a number", 0)
+  assert failure("-01") == at("leading zero in a number", 1)
+  assert failure("-") == at("expected a digit", 1)
+  assert failure("-a") == at("expected a digit", 1)
+  assert failure("+1") == at("unexpected character", 0)
+}
+
+test "nesting is limited to 64 levels" {
+  assert failure("[".repeat(64) + "1" + "]".repeat(64)) == None
+  assert failure("[".repeat(65) + "1" + "]".repeat(65)) == at("nested deeper than 64", 64)
+  let objects = r#"{"a":"#.repeat(65) + "1" + r"}".repeat(65)
+  assert failure(objects) == at("nested deeper than 64", 320)
+}
+
+test "malformed input is an error at its offset" {
+  assert failure("") == at("unexpected end of input", 0)
+  assert failure("   ") == at("unexpected end of input", 3)
+  assert failure("[1,]") == at("unexpected character", 3)
+  assert failure("[1") == at("unexpected end of input", 2)
+  assert failure("[1 2]") == at("expected `,` or `]`", 3)
+  assert failure(r#"{"a" 1}"#) == at("expected `:`", 5)
+  assert failure(r"{1:2}") == at("expected a member name", 1)
+  assert failure(r#"{"a":1,}"#) == at("expected a member name", 7)
+  assert failure(r#"{"a":1 "b":2}"#) == at(r"expected `,` or `}`", 7)
+  assert failure(r#"{"a":1"#) == at("unexpected end of input", 6)
+  assert failure(r#""open"#) == at("unterminated string", 0)
+  assert failure("\"tab\there\"") == at("control character in a string", 4)
+  assert failure("nul") == at("unexpected character", 0)
+  assert failure("nulls") == at("unexpected character after the value", 4)
+  assert failure("[1] 2") == at("unexpected character after the value", 4)
+  assert failure("True") == at("unexpected character", 0)
+}
+
+// ---- access -----------------------------------------------------------------
+
+// The first member `name` of an object; `None` when there is none or
+// `value` is not an object.
+fn get(value: Json, name: Text) -> Option<Json> = match value {
+  Object(members) => {
+    for member in members {
+      if member.0 == name {
+        return Some(member.1)
+      }
+    }
+    None
+  }
+  _ => None
+}
+
+fn as_text(value: Json) -> Option<Text> = match value {
+  Str(text) => Some(text)
+  _ => None
+}
+
+fn as_int(value: Json) -> Option<Int> = match value {
+  Number(n) => Some(n)
+  _ => None
+}
+
+fn as_bool(value: Json) -> Option<Bool> = match value {
+  Bool(b) => Some(b)
+  _ => None
+}
+
+fn as_list(value: Json) -> Option<List<Json>> = match value {
+  Array(items) => Some(items)
+  _ => None
+}
+
+// Member `name` when it is a string: `body.text("title")`.
+fn text(value: Json, name: Text) -> Option<Text> = value.get(name).and_then(as_text)
+
+// Member `name` when it is a number.
+fn int(value: Json, name: Text) -> Option<Int> = value.get(name).and_then(as_int)
+
+// Member `name` when it is `true` or `false`.
+fn bool(value: Json, name: Text) -> Option<Bool> = value.get(name).and_then(as_bool)
+
+test "the accessors read members of the right kind" {
+  let body = parse(r#"{"title":"milk","done":true,"id":7,"tags":["a"],"id":8}"#)?
+  assert body.text("title") == Some("milk")
+  assert body.bool("done") == Some(true)
+  assert body.int("id") == Some(7)
+  assert body.text("id") == None
+  assert body.int("title") == None
+  assert body.bool("missing") == None
+  assert body.get("tags") == Some(Array([Str("a")]))
+  assert Array([]).get("tags") == None
+  assert text(Str("title"), "title") == None
+  assert as_text(Str("x")) == Some("x")
+  assert as_text(Null) == None
+  assert as_int(Number(-3)) == Some(-3)
+  assert as_int(Str("3")) == None
+  assert as_bool(Bool(false)) == Some(false)
+  assert as_bool(Null) == None
+  assert as_list(Array([Null])) == Some([Null])
+  assert as_list(Object([])) == None
+}
+
+test "encode and parse round trip" {
+  let value = Object([
+    ("name", Str("Ä \"q\" \\ \n\u{1} \u{1F600}")),
+    ("n", Number(-123456789012345678)),
+    ("list", Array([Null, Bool(true), Array([]), Object([("", Str(""))])]))
+  ])
+  assert parse(encode(value))? == value
+  for compact in [
+    r#"{"id":1,"title":"milk","done":false,"tags":[],"x":null}"#,
+    r#"[-12,0,true,[[]],{},"a\"b\\c/\n\t\b\f\r"]"#,
+    r#""\u0001\u001f""#
+  ] {
+    assert encode(parse(compact)?) == compact
+  }
+  assert encode(parse(r#""Aé€😀""#)?) == r#""Aé€😀""#
+}

@@ -1,0 +1,43 @@
+package golden.exits
+
+import std.net.Endpoint
+
+protocol Exiting {
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, process.exit] {
+    let input = stream.read(16)?
+    match input {
+      Eof => Process.exit(5)
+      Data(_) => Process.exit(6)
+    }
+  }
+}
+
+fn stop(code: Int) -> Result<Unit, IoError> {
+  log("stopping")
+  Process.exit(code)
+}
+
+fn stop_tried() -> Int {
+  Process.exit(7)?
+}
+
+type Exiter {
+  target: Endpoint
+  executable: Text
+}
+
+fn Exiter.main(self: Exiter) -> Result<Unit, IoError> {
+  let stream = match TcpStream.connect(self.target.address, self.target.port) {
+    Ok(stream) => stream
+    Err(error) => return Err(error.with_exit_code(3))
+  }
+  match Exiting.connect(stream) {
+    Ok(_) => Ok(Unit)
+    Err(error) => Err(error.with_exit_code(4))
+  }
+}
+
+system Exits {
+  resource back: TcpListener { address = "127.0.0.1", port = 7002 }
+  component exiter: Exiter { target = back, executable = "exiter" }
+}

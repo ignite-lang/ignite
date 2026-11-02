@@ -1,4 +1,0 @@
-e003_variant_not_imported.telos:7:11: error[E003]: unknown name `Empty`; a variant of an enum that is not imported is only resolved where that enum is the expected type
-e003_variant_not_imported.telos:12:11: error[E003]: unknown name `Dot`; a variant of an enum that is not imported is only resolved where that enum is the expected type
-e003_variant_not_imported.telos:16:31: error[E003]: variant `Dot` takes 1 payload value; call it
-e003_variant_not_imported.telos:19:3: error[E003]: unknown variant `Empty`; a variant of an enum that is not imported is only resolved against the scrutinee's type

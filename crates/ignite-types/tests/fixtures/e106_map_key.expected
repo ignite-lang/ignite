@@ -1,0 +1,3 @@
+e106_map_key.ignite:3:20: error[E106]: `Point` cannot be a `Map` key; keys are `Int`, `Byte`, `Text`, `Bool`, an enum without payloads or `Ref`
+e106_map_key.ignite:3:47: error[E106]: `Shape` cannot be a `Map` key; keys are `Int`, `Byte`, `Text`, `Bool`, an enum without payloads or `Ref`
+e106_map_key.ignite:4:20: error[E106]: `List<Int>` cannot be a `Map` key; keys are `Int`, `Byte`, `Text`, `Bool`, an enum without payloads or `Ref`

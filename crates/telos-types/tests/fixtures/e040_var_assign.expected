@@ -1,1 +1,0 @@
-e040_var_assign.telos:3:7: error[E040]: type mismatch: expected `Int`, found `Text`

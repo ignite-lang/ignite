@@ -1,0 +1,57 @@
+package std.deploy
+
+// Where the members of a system run (design section 11.3): an assembly
+// binds each resource and component to a place. Slice 10 checks the
+// declarations (`ignite build` does not read assemblies, `docs/slice.md`
+// section 14.7); slice 11 resolves them.
+
+// The place a member is bound to.
+enum Binding {
+  LocalSocket,
+  NativeProcess(List<Ref>),
+  WorkstationExecutable,
+  ScheduledProbeHost
+}
+
+// A listener bound to a socket on this machine.
+fn localSocket() -> Binding = LocalSocket
+
+// A component run as a native process that also hosts `includes`.
+fn nativeProcess(includes: List<Ref>) -> Binding = NativeProcess(includes)
+
+// A component installed as an executable on a workstation.
+fn workstationExecutable() -> Binding = WorkstationExecutable
+
+// A probe run by the host that schedules probes.
+fn scheduledProbeHost() -> Binding = ScheduledProbeHost
+
+// A system and the binding of each of its members.
+type Deployment {
+  system: SystemRef
+  bindings: Map<Ref, Binding>
+}
+
+// The members a binding hosts beside the one it binds.
+fn includes(binding: Binding) -> List<Ref> = match binding {
+  NativeProcess(members) => members
+  _ => []
+}
+
+// Whether the binding runs code of its own.
+fn is_process(binding: Binding) -> Bool = match binding {
+  NativeProcess(_) | WorkstationExecutable | ScheduledProbeHost => true
+  LocalSocket => false
+}
+
+test "bindings are built by name" {
+  assert is_process(nativeProcess(includes = []))
+  assert is_process(workstationExecutable())
+  assert is_process(scheduledProbeHost())
+  assert !is_process(localSocket())
+}
+
+test "only a native process includes other members" {
+  assert includes(nativeProcess(includes = [])).len() == 0
+  assert includes(localSocket()).len() == 0
+  assert includes(workstationExecutable()).len() == 0
+}

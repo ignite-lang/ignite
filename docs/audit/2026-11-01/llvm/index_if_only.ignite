@@ -1,0 +1,9 @@
+package audit.indexifonly
+
+test "index on an if expression" {
+  let xs = ["a", "b"]
+  let ys = ["c", "d"]
+  let c = true
+  let y = (if c { xs } else { ys })[0]
+  assert y == "a", "y is {y} len {y.len()}"
+}

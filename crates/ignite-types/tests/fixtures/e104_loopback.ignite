@@ -1,0 +1,29 @@
+package fixtures.loopback
+
+import std.net.{Exposure}
+
+system S {
+  resource ingress: TcpListener {
+    address = "0.0.0.0"
+    port = 7071
+    exposure = Loopback
+  }
+
+  resource other: TcpListener {
+    address = "10.0.0.1"
+    port = 7072
+    exposure = Exposure.Loopback
+  }
+
+  resource fine: TcpListener {
+    address = "127.0.0.1"
+    port = 7073
+    exposure = Loopback
+  }
+
+  resource open: TcpListener {
+    address = "0.0.0.0"
+    port = 7074
+    exposure = Public
+  }
+}

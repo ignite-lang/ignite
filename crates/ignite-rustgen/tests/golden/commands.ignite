@@ -1,0 +1,76 @@
+package examples.terminal.commands
+
+import std.console.{Reply, Action, first_word, rest_after_word}
+
+// The terminal's commands, design section 3.5: the module the console of
+// `terminal.ignite` names with `module("examples.terminal.commands")`. Its
+// public `respond` fills `std.console.ConsoleCommands`. The Telnet
+// session, line handling and option refusal come from std.protocol.telnet.
+
+enum Command {
+  Help,
+  Echo(Text),
+  Status,
+  Quit
+}
+
+fn answer(command: Command) -> Reply = match command {
+  Help => Reply { lines = ["help", "echo <text>", "status", "quit"] }
+  Echo(text) => Reply { lines = [text] }
+  Status => Reply { lines = ["ready"] }
+  Quit => Reply { lines = ["bye"], action = Close }
+}
+
+fn parse(line: Text) -> Option<Command> = match first_word(line) {
+  "help" => Some(Help)
+  "status" => Some(Status)
+  "quit" => Some(Quit)
+  "echo" => Some(Echo(rest_after_word(line)))
+  _ => None
+}
+
+// The reply to one input line: the command's answer, nothing for a blank
+// line, a note for an unknown command.
+fn respond(line: Text) -> Reply {
+  let trimmed = line.trim()
+  if trimmed.is_empty() {
+    Reply { lines = [] }
+  } else {
+    match parse(trimmed) {
+      Some(command) => answer(command)
+      None => Reply { lines = ["unknown command: {first_word(trimmed)}"] }
+    }
+  }
+}
+
+test "parse reads the four commands by their first word" {
+  assert parse("help") == Some(Help)
+  assert parse("status") == Some(Status)
+  assert parse("quit") == Some(Quit)
+  assert parse("quit now") == Some(Quit)
+  assert parse("echo hello world") == Some(Echo("hello world"))
+  assert parse("echo") == Some(Echo(""))
+  assert parse("echo  two") == Some(Echo(" two"))
+  assert parse("echo\tgrüß") == Some(Echo("grüß"))
+  assert parse("HELP") == None
+  assert parse("helpme") == None
+  assert parse("") == None
+}
+
+test "answer replies to each command" {
+  assert answer(Help) == Reply { lines = ["help", "echo <text>", "status", "quit"] }
+  assert answer(Echo("hi")) == Reply { lines = ["hi"] }
+  assert answer(Echo("")) == Reply { lines = [""] }
+  assert answer(Status) == Reply { lines = ["ready"] }
+  assert answer(Quit) == Reply { lines = ["bye"], action = Close }
+}
+
+test "respond trims the line and names unknown commands" {
+  assert respond("  status \r") == Reply { lines = ["ready"] }
+  assert respond("echo  a  b ") == Reply { lines = [" a  b"] }
+  assert respond("quit") == Reply { lines = ["bye"], action = Close }
+  assert respond("") == Reply { lines = [] }
+  assert respond(" \t ") == Reply { lines = [] }
+  assert respond("frobnicate now") == Reply { lines = ["unknown command: frobnicate"] }
+  assert respond(" Status") == Reply { lines = ["unknown command: Status"] }
+}

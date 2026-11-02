@@ -1,0 +1,12 @@
+fn quit(process: Int) -> Result<Unit, IoError> requires [process.exit] = Process.exit(process)
+
+fn dial(net: Text) -> Result<TcpStream, IoError> requires [net.connect] = TcpStream.connect(net, 80)
+
+fn say(stdout: Text) -> Result<Unit, IoError> requires [stdout.write] = Stdout.write_all(stdout.to_bytes())
+
+fn outer() -> Result<Unit, IoError> requires [] {
+  let s = dial("127.0.0.1")?
+  s.write_all("x".to_bytes())?
+  say("hi")?
+  return quit(0)
+}

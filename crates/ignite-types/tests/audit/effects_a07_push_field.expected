@@ -1,0 +1,2 @@
+effects_a07_push_field.ignite:8:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `launder`
+effects_a07_push_field.ignite:14:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `launder_index`

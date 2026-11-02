@@ -1,0 +1,6 @@
+package std.net
+
+type Endpoint {
+  address: Text
+  port: Int
+}

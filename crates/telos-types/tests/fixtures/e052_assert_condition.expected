@@ -1,5 +1,0 @@
-e052_assert_condition.telos:4:10: error[E052]: `assert` needs a `Bool` condition, found `Int`
-e052_assert_condition.telos:9:10: error[E052]: `assert` needs a `Bool` condition, found `Text`
-e052_assert_condition.telos:10:10: error[E052]: `assert` needs a `Bool` condition, found `Int`
-e052_assert_condition.telos:11:23: error[E040]: type mismatch: expected `Text`, found `Int`
-e052_assert_condition.telos:12:21: error[E040]: type mismatch: expected `Int`, found `Text`

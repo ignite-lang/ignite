@@ -1,0 +1,15 @@
+package audit.indexif
+
+test "index on an if expression" {
+  let xs = ["a", "b"]
+  let ys = ["c", "d"]
+  let c = true
+  let y = (if c { xs } else { ys })[0]
+  assert y == "a"
+}
+
+test "len on a match expression" {
+  let o: Option<Text> = Some("hello")
+  let n = (match o { Some(t) => t, None => "" }).len()
+  assert n == 5
+}

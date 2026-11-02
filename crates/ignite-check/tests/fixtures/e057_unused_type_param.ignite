@@ -1,0 +1,29 @@
+package probe.unused
+
+type Marker<T> {
+  n: Int
+}
+
+enum Tag<T> {
+  A
+  B
+}
+
+type Alias<T> = Int
+
+fn n<T>(m: Marker<T>) -> Int = m.n
+
+fn a<T>(t: Tag<T>) -> Bool = match t {
+  A => true
+  B => false
+}
+
+fn k<T>(x: Alias<T>) -> Int = x
+
+type Used<T> {
+  items: List<T>
+}
+
+enum Phantom<A, B> {
+  One(A)
+}

@@ -1,0 +1,2 @@
+e045_operators.ignite:7:11: error[E045]: operator `<` is not defined for `Bool`
+e045_operators.ignite:8:11: error[E045]: operator `-` is not defined for `Text`

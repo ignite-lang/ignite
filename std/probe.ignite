@@ -1,0 +1,59 @@
+package std.probe
+
+import std.protocol.telnet.TelnetServer
+
+// Probes of a running system (design section 11.3). A probe is a component
+// without `main`: slice 10 checks its declaration and types its output
+// signal; a scheduler that runs it is slice 12.
+
+// One attempt of a prompt probe: whether the prompt arrived before the
+// probe's timeout, and how long it took.
+type ProbeAttempt {
+  received: Bool
+  latency: Duration
+}
+
+// The outcome a contract names in `good` for `attempt`:
+// `prompt_received_before_timeout` holds when the prompt arrived,
+// `prompt_received_within_threshold` when it arrived in at most
+// `threshold`. An unknown outcome name holds for no attempt.
+fn satisfies(attempt: ProbeAttempt, good: Text, threshold: Duration) -> Bool = match good {
+  "prompt_received_before_timeout" => attempt.received
+  "prompt_received_within_threshold" => attempt.received && attempt.latency <= threshold
+  _ => false
+}
+
+// Connect to a Telnet server every `interval`, wait up to `timeout` for
+// `expected_prompt`, and report each attempt on `attempts`.
+type TelnetPrompt {
+  target: Ref<TelnetServer>
+  interval: Duration = 10 seconds
+  timeout: Duration = 2 seconds
+  expected_prompt: Text
+  close_after_probe: Bool = true
+  attempts: Signal<ProbeAttempt>
+}
+
+// Whether `text` starts with the probe's expected prompt.
+fn prompt_seen(expected_prompt: Text, text: Text) -> Bool = text.starts_with(expected_prompt)
+
+test "an attempt satisfies the outcomes it earned" {
+  let fast = ProbeAttempt { received = true, latency = 50 ms }
+  let slow = ProbeAttempt { received = true, latency = 900 ms }
+  let missed = ProbeAttempt { received = false, latency = 2 seconds }
+  assert satisfies(fast, "prompt_received_before_timeout", 200 ms)
+  assert satisfies(fast, "prompt_received_within_threshold", 200 ms)
+  assert satisfies(slow, "prompt_received_before_timeout", 200 ms)
+  assert !satisfies(slow, "prompt_received_within_threshold", 200 ms)
+  assert satisfies(slow, "prompt_received_within_threshold", 900 ms)
+  assert !satisfies(missed, "prompt_received_before_timeout", 200 ms)
+  assert !satisfies(missed, "prompt_received_within_threshold", 5 seconds)
+  assert !satisfies(fast, "unknown", 5 seconds)
+}
+
+test "the prompt is seen at the start of the server's text" {
+  assert prompt_seen("terminal> ", "terminal> ")
+  assert prompt_seen("terminal> ", "terminal> help")
+  assert !prompt_seen("terminal> ", "terminal>")
+  assert !prompt_seen("terminal> ", "  terminal> ")
+}

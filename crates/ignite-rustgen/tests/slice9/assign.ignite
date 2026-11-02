@@ -1,0 +1,27 @@
+import std.boxes.{Link, length}
+
+// An assignment boxes its value by the type that owns the field
+// (`TypedProgram::place_owner`), not by the field's name: `next` is boxed
+// in `Link`, declared in another module, and plain in `Hop`.
+
+type Hop {
+  value: Int
+  next: Option<Int>
+}
+
+type Holder {
+  link: Link
+}
+
+test "assignments to boxed and plain fields of one name" {
+  var link = Link { value = 1, next = None }
+  link.next = Some(Link { value = 2, next = None })
+  assert length(link) == 2
+  var hop = Hop { value = 1, next = Some(1) }
+  hop.next = None
+  assert hop == Hop { value = 1, next = None }
+  var holder = Holder { link }
+  holder.link.next = None
+  assert length(holder.link) == 1
+  assert length(link) == 2
+}

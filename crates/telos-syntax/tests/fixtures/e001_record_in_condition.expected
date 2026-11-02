@@ -1,2 +1,0 @@
-e001_record_in_condition.telos:2:27: error[E001]: expected `;`, newline or `}`, found `{`
-e001_record_in_condition.telos:8:9: error[E001]: expected `:`, found identifier `Int`

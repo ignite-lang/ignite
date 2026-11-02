@@ -1,0 +1,44 @@
+import std.greeting.*
+import std.salute.{wave}
+
+type Counter {
+  n: Int
+  label: Text
+}
+
+const LOW: Int = 1
+
+fn Counter.zero() -> Counter = Counter { n = 0, label = "" }
+
+fn Counter.bump(c: Counter) -> Counter = Counter { n = c.n + 1, ..c }
+
+fn uses(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {
+  let g = greet(DEFAULT_NAME)
+  let m = Mood.calm()
+  let c = Counter.bump(Counter.zero())
+  let make = Counter.zero
+  let send_it = |x: Greeting| send(stream, x)
+  return send_it(g)
+}
+
+fn captures(base: Int) -> Int {
+  var total = base
+  let add = |x: Int| x + total + wave()
+  total = 3
+  return add(1)
+}
+
+fn on_param(s: TcpStream) -> Result<Unit, IoError> requires [s.write] {
+  let f = |t: TcpStream| send(t, greet("a"))
+  return f(s)
+}
+
+fn shapes(n: Int, pair: (Int, Text)) -> Int {
+  for i in [1, 2] {
+    let x = match i {
+      LOW..=1 => continue
+      _ => break
+    }
+  }
+  return pair.0
+}

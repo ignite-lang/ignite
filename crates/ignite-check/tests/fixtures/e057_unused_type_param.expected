@@ -1,0 +1,4 @@
+e057_unused_type_param.ignite:3:13: error[E057]: type parameter `T` of `Marker` is never used; remove it or use it in a field
+e057_unused_type_param.ignite:7:10: error[E057]: type parameter `T` of `Tag` is never used; remove it or use it in a field
+e057_unused_type_param.ignite:12:12: error[E057]: type parameter `T` of `Alias` is never used; remove it or use it in a field
+e057_unused_type_param.ignite:27:17: error[E057]: type parameter `B` of `Phantom` is never used; remove it or use it in a field

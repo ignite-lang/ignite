@@ -1,0 +1,4 @@
+e015_const_cycle.ignite:3:7: error[E015]: constant `SELF` refers to itself: `SELF` -> `SELF`
+e015_const_cycle.ignite:4:7: error[E015]: constant `A` refers to itself: `A` -> `B` -> `C` -> `A`
+e015_const_cycle.ignite:5:7: error[E015]: constant `B` refers to itself: `B` -> `C` -> `A` -> `B`
+e015_const_cycle.ignite:6:7: error[E015]: constant `C` refers to itself: `C` -> `A` -> `B` -> `C`

@@ -1,2 +1,0 @@
-e004_builtin_name.telos:1:6: error[E004]: duplicate definition of builtin `Tuple`
-e004_builtin_name.telos:3:6: error[E004]: duplicate definition of builtin `Bytes`

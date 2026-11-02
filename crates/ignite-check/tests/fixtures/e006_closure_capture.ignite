@@ -1,0 +1,11 @@
+fn f() -> Int {
+  var n = 0
+  var items: List<Int> = []
+  let g = |x: Int| {
+    n = x
+    items.push(x)
+    items.clear()
+    x
+  }
+  return g(1)
+}

@@ -1,0 +1,6 @@
+e010_effectful_in_const.ignite:5:22: error[E010]: effectful call `fetch` outside an effectful function: the value of constant `FETCHED` is pure
+e010_effectful_in_const.ignite:6:36: error[E010]: effectful call `Stdin.set_raw` outside an effectful function: the value of constant `RAW` is pure
+e010_effectful_in_const.ignite:7:41: error[E010]: effectful call `Stdin.is_terminal` outside an effectful function: the value of constant `TERMINAL` is pure
+e010_effectful_in_const.ignite:10:24: error[E003]: wrong number of arguments to `IoError.new`: expected 1, found 0
+e010_effectful_in_const.ignite:11:21: error[E003]: constant `MADE` is not callable; bind it first: `let f = MADE`
+e010_effectful_in_const.ignite:12:22: error[E003]: unknown name `MISSING`

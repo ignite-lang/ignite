@@ -1,0 +1,12 @@
+fn apply(f: fn(Int) -> Int, x: Int) -> Int = f(x)
+
+fn untyped() -> Int {
+  let f = |x| x + 1
+  return apply(|y| y * 2, 3)
+}
+
+fn wrong() -> Int {
+  return apply(|y: Text| 2, 3)
+}
+
+fn debug_param<T>(items: List<T>) -> Text = items.debug()

@@ -1,0 +1,2 @@
+e004_associated_duplicate.ignite:3:10: error[E004]: `Red` is both a variant and an associated fn of `Light`
+e004_associated_duplicate.ignite:7:10: error[E004]: duplicate definition of `Light.next`

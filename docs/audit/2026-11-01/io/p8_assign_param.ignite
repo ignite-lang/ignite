@@ -1,0 +1,16 @@
+package probe.assign
+
+fn inc(n: Int) -> Int {
+  n = n + 1
+  n
+}
+
+fn fill(xs: List<Int>) -> List<Int> {
+  xs.push(1)
+  xs
+}
+
+test "assign to parameters" {
+  assert inc(1) == 2
+  assert fill([]) == [1]
+}

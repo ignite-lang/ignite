@@ -1,0 +1,6 @@
+e031_unknown_name.ignite:1:32: error[E031]: module `std.greeting` has no `Farewell`
+e031_unknown_name.ignite:2:35: error[E031]: module `std.protocol.hello` does not export `send`; imports are not re-exported, import it from `std.greeting`
+e031_unknown_name.ignite:3:21: error[E031]: module `std.greeting` has no `Option`
+e031_unknown_name.ignite:4:8: error[E031]: cannot import from `app.util`: only standard-library (`std.*`) modules and the sibling modules of the program's package can be imported
+e031_unknown_name.ignite:5:8: error[E031]: unknown module `std`
+e031_unknown_name.ignite:6:8: error[E031]: `import Greeting` names no module; import names from a module, e.g. `import std.console.{Console}`

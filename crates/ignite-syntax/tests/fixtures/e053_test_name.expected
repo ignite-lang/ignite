@@ -1,0 +1,2 @@
+e053_test_name.ignite:3:6: error[E053]: a test name cannot be empty; describe what the test checks
+e053_test_name.ignite:7:6: error[E053]: a test name cannot be interpolated; write a plain string literal

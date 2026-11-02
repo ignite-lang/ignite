@@ -1,0 +1,1 @@
+e003_shared_payload_variant.ignite:5:10: error[E003]: variant `X` takes 1 payload value; call it

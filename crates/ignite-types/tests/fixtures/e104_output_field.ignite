@@ -1,0 +1,13 @@
+package fixtures.output_field
+
+type Probe {
+  target: Text
+  attempts: Signal<Int>
+}
+
+system S {
+  component probe: Probe {
+    target = "server"
+    attempts = 3
+  }
+}

@@ -1,0 +1,32 @@
+package fixtures.failures
+
+// Slice 10 on the Rust target (`docs/slice.md` 14.8): every test here
+// fails with one report naming the operation and the Ignite position.
+
+fn int(text: Text) -> Int = match Int.parse(text) {
+  Some(n) => n
+  None => 0
+}
+
+test "slice" {
+  let items = [1, 2, 3]
+  assert items.slice(1, 5) == []
+}
+
+test "at" {
+  let items = [1]
+  assert items.at(int("3")) == 0
+}
+
+test "div" {
+  assert int("1") / int("0") == 0
+}
+
+test "quantity overflow" {
+  let d = 9223372036854775807 ns
+  assert d + 1 ns == d
+}
+
+test "neg" {
+  assert -int("-9223372036854775808") == 0
+}

@@ -1,8 +1,0 @@
-e055_recursive_type.telos:3:6: error[E055]: recursive type `Node` contains itself without `List` indirection; hold the nested `Node` values in a `List`
-e055_recursive_type.telos:8:6: error[E055]: recursive type `Expr` contains itself without `List` indirection; hold the nested `Expr` values in a `List`
-e055_recursive_type.telos:13:6: error[E055]: recursive type `Chain` contains itself without `List` indirection; hold the nested `Chain` values in a `List`
-e055_recursive_type.telos:17:6: error[E055]: recursive type `Ping` contains itself without `List` indirection; hold the nested `Ping` values in a `List`
-e055_recursive_type.telos:21:6: error[E055]: recursive type `Pong` contains itself without `List` indirection; hold the nested `Pong` values in a `List`
-e055_recursive_type.telos:30:6: error[E055]: recursive type `Wrapped` contains itself without `List` indirection; hold the nested `Wrapped` values in a `List`
-e055_recursive_type.telos:49:6: error[E055]: recursive type `Holder` contains itself without `List` indirection; hold the nested `Holder` values in a `List`
-e055_recursive_type.telos:55:6: error[E055]: recursive type `Looped` contains itself without `List` indirection; hold the nested `Looped` values in a `List`

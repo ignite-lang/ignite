@@ -1,2 +1,0 @@
-e001_fn_type_effects.telos:2:26: error[E001]: name every parameter of a fn type or none
-e001_fn_type_effects.telos:5:37: error[E001]: expected `]`, found `.`

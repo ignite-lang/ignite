@@ -1,4 +1,0 @@
-e015_const_cycle.telos:3:7: error[E015]: constant `SELF` refers to itself: `SELF` -> `SELF`
-e015_const_cycle.telos:4:7: error[E015]: constant `A` refers to itself: `A` -> `B` -> `C` -> `A`
-e015_const_cycle.telos:5:7: error[E015]: constant `B` refers to itself: `B` -> `C` -> `A` -> `B`
-e015_const_cycle.telos:6:7: error[E015]: constant `C` refers to itself: `C` -> `A` -> `B` -> `C`

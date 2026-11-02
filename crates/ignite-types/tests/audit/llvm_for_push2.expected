@@ -1,0 +1,2 @@
+llvm_for_push2.ignite:11:5: error[E006]: cannot `push` through the `for` element `w`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+llvm_for_push2.ignite:12:5: error[E006]: cannot `push` through the `for` element `w`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first

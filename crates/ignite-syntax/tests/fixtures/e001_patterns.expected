@@ -1,0 +1,2 @@
+e001_patterns.ignite:2:7: error[E001]: the pattern of `let` or `var` is a name, `_` or a tuple of those
+e001_patterns.ignite:6:11: error[E001]: a tuple has at least two elements; drop the `,` to group an expression

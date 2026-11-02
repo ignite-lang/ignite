@@ -1,0 +1,93 @@
+package fixtures.system
+
+import std.net.{Endpoint, Exposure}
+import std.shapes.{Point}
+
+type Commands {
+  origin: fn() -> Point
+}
+
+type TelnetServer {
+  listener: TcpListener
+  commands: Module<Commands>
+  sessions: Map<Text, Int>
+  executable: Text = "terminald"
+}
+
+fn TelnetServer.main(self: TelnetServer) -> Result<Unit, IoError> {
+  let stream = (self.listener.accept())?
+  let origin = self.commands.origin
+  let count = self.sessions.len() + origin().x
+  return stream.close()
+}
+
+type Prompt {
+  target: Ref<TelnetServer>
+  endpoint: Endpoint
+  interval: Duration
+  attempts: Signal<Int>
+}
+
+type Window {
+  span: Duration
+}
+
+fn rolling(span: Duration) -> Window = Window { span = span }
+
+type Availability {
+  signal: Signal<Int>
+  window: Window
+  target: Ratio
+}
+
+type Restart {
+  maximum: Int
+  backoff: Duration
+  budget: ByteSize = 1 MiB
+}
+
+type Deployment {
+  system: SystemRef
+  bindings: Map<Ref, Text>
+}
+
+system Terminal {
+  resource ingress: TcpListener {
+    address = "127.0.0.1"
+    port = 2323
+    exposure = Exposure.Loopback
+  }
+
+  resource sessions: Store<Window>
+
+  component server: TelnetServer {
+    listener = ingress
+    commands = module("std.shapes")
+    sessions = { admin = 1, guest = 2 }
+  }
+
+  component probe: Prompt {
+    target = server
+    endpoint = ingress
+    interval = 30 seconds
+  }
+
+  contract uptime: Availability {
+    signal = probe.attempts
+    window = rolling(span = 30 days)
+    target = 99.9%
+  }
+
+  policy recovery: Restart {
+    maximum = 3
+    backoff = 100 ms * 2
+  }
+}
+
+assembly local: Deployment {
+  system = Terminal
+  bindings = {
+    Terminal.ingress = "socket"
+    Terminal.server = "process"
+  }
+}

@@ -1,0 +1,10 @@
+fn helper(stdin: Int) -> Int requires [stdin.read] = stdin
+
+type App {
+  run: fn(net: Int) -> Int
+}
+
+fn outer(process: Int) -> Int {
+  let f = |stdout: Int| stdout
+  return f(process)
+}

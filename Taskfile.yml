@@ -5,12 +5,12 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 vars:
-  EXAMPLE: examples/terminal/terminal.telos
-  OUT: target/telos/terminal
-  OUT_LLVM: target/telos-llvm/terminal
-  TODO: examples/todo/todo.telos
-  TODO_OUT: target/telos/todo
-  TODO_OUT_LLVM: target/telos-llvm/todo
+  EXAMPLE: examples/terminal/terminal.ignite
+  OUT: target/ignite/terminal
+  OUT_LLVM: target/ignite-llvm/terminal
+  TODO: examples/todo/todo.ignite
+  TODO_OUT: target/ignite/todo
+  TODO_OUT_LLVM: target/ignite-llvm/todo
 
 tasks:
   default:
@@ -18,27 +18,28 @@ tasks:
       - task --list
 
   build:
-    desc: Build every crate and the telos CLI
+    desc: Build every crate and the ignite CLI
     cmds:
       - cargo build --workspace
 
   test:
-    desc: Run every unit, fixture, golden and end-to-end test, then the inline Telos tests
+    desc: Run every unit, fixture, golden and end-to-end test, then the inline Ignite tests
     cmds:
       - cargo test --workspace
-      - task: test-telos
+      - task: test-ignite
 
-  test-telos:
-    desc: Run the inline Telos tests of std/ and examples/ on both targets (FILTER=text selects tests)
+  test-ignite:
+    desc: Run the inline Ignite tests of std/ and examples/ on both targets (FILTER=text selects tests)
     vars:
       FILES:
-        sh: find std examples -name '*.telos' ! -name '*.design.telos' | sort | tr '\n' ' '
+        sh: find std examples -name '*.ignite' ! -name '*.design.ignite' | sort | tr '\n' ' '
       SELECT: '{{if .FILTER}}"{{.FILTER}}"{{end}}'
+      T: '{{.CARGO_TARGET_DIR | default "target"}}'
     cmds:
-      - cargo build -q -p telos
-      - cargo build -q -p telos-rt --features runner --target-dir target/telos-test/rt
-      - target/debug/telos test {{.FILES}} {{.SELECT}} --out target/telos-test --target-dir target/telos-test/cargo
-      - target/debug/telos test {{.FILES}} {{.SELECT}} --target llvm --out target/telos-test --runtime target/telos-test/rt/debug/libtelos_rt.a
+      - cargo build -q -p ignite
+      - cargo build -q -p ignite-rt --features runner --target-dir {{.T}}/ignite-test/rt
+      - '{{.T}}/debug/ignite test {{.FILES}} {{.SELECT}} --out {{.T}}/ignite-test --target-dir {{.T}}/ignite-test/cargo'
+      - '{{.T}}/debug/ignite test {{.FILES}} {{.SELECT}} --target llvm --out {{.T}}/ignite-test --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a'
 
   check:
     desc: Format check and clippy with warnings denied
@@ -58,28 +59,32 @@ tasks:
       - task: test
 
   compile:
-    desc: Compile the terminal example with telos into target/telos/terminal
+    desc: Compile the terminal example with ignite into target/ignite/terminal
     cmds:
-      - cargo run -q -p telos -- build {{.EXAMPLE}} --out {{.OUT}} --target-dir target
+      - cargo run -q -p ignite -- build {{.EXAMPLE}} --out {{.OUT}} --target-dir target
 
   compile-llvm:
-    desc: Compile the terminal example with telos --target llvm into target/telos-llvm/terminal
+    desc: Compile the terminal example with ignite --target llvm into target/ignite-llvm/terminal
+    vars:
+      T: '{{.CARGO_TARGET_DIR | default "target"}}'
     cmds:
-      - cargo build -q -p telos
-      - cargo build -q -p telos-rt --features runner --target-dir target/telos-test/rt
-      - cargo run -q -p telos -- build {{.EXAMPLE}} --target llvm --out {{.OUT_LLVM}}
+      - cargo build -q -p ignite
+      - cargo build -q -p ignite-rt --features runner --target-dir {{.T}}/ignite-test/rt
+      - cargo run -q -p ignite -- build {{.EXAMPLE}} --target llvm --out {{.OUT_LLVM}} --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a
 
   compile-todo:
-    desc: Compile the todo example with telos into target/telos/todo
+    desc: Compile the todo example with ignite into target/ignite/todo
     cmds:
-      - cargo run -q -p telos -- build {{.TODO}} --out {{.TODO_OUT}} --target-dir target
+      - cargo run -q -p ignite -- build {{.TODO}} --out {{.TODO_OUT}} --target-dir target
 
   compile-todo-llvm:
-    desc: Compile the todo example with telos --target llvm into target/telos-llvm/todo
+    desc: Compile the todo example with ignite --target llvm into target/ignite-llvm/todo
+    vars:
+      T: '{{.CARGO_TARGET_DIR | default "target"}}'
     cmds:
-      - cargo build -q -p telos
-      - cargo build -q -p telos-rt --features runner --target-dir target/telos-test/rt
-      - cargo run -q -p telos -- build {{.TODO}} --target llvm --out {{.TODO_OUT_LLVM}}
+      - cargo build -q -p ignite
+      - cargo build -q -p ignite-rt --features runner --target-dir {{.T}}/ignite-test/rt
+      - cargo run -q -p ignite -- build {{.TODO}} --target llvm --out {{.TODO_OUT_LLVM}} --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a
 
   todo-server:
     desc: Run the compiled todod on 127.0.0.1:8080 (PORT=n to override, TARGET=llvm for the LLVM build)
@@ -92,16 +97,16 @@ tasks:
   bench:
     desc: Print terminald sizes, build times and startup time of both targets and profiles
     cmds:
-      - cargo test -q -p telos --test llvm_build -- --ignored --exact bench --nocapture
+      - cargo test -q -p ignite --test main -- --ignored --exact llvm_build::bench --nocapture
 
   bench-throughput:
     desc: Build both targets' release terminald and print the throughput matrix (CELLS=rr:16,pipe:256 and RUNS=n narrow it)
     cmds:
-      - cargo build -q --release -p telos-rt -p telos-load
-      - cargo build -q -p telos
-      - target/debug/telos build {{.EXAMPLE}} --release --out target/bench/rust --target-dir target/bench/rust-target
-      - target/debug/telos build {{.EXAMPLE}} --target llvm --release --runtime target/release/libtelos_rt.a --out target/bench/llvm
-      - target/release/telos-load matrix --server rust=target/bench/rust-target/release/terminald --server llvm=target/bench/llvm/bin/terminald --runs {{.RUNS | default "3"}} {{if .CELLS}}--cells {{.CELLS}}{{end}} --out target/bench/throughput.jsonl
+      - cargo build -q --release -p ignite-rt -p ignite-load
+      - cargo build -q -p ignite
+      - target/debug/ignite build {{.EXAMPLE}} --release --out target/bench/rust --target-dir target/bench/rust-target
+      - target/debug/ignite build {{.EXAMPLE}} --target llvm --release --runtime target/release/libignite_rt.a --out target/bench/llvm
+      - target/release/ignite-load matrix --server rust=target/bench/rust-target/release/terminald --server llvm=target/bench/llvm/bin/terminald --runs {{.RUNS | default "3"}} {{if .CELLS}}--cells {{.CELLS}}{{end}} --out target/bench/throughput.jsonl
 
   server:
     desc: Run the compiled terminald on 127.0.0.1:2323 (PORT=n to override, TARGET=llvm for the LLVM build)

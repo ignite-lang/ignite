@@ -1,0 +1,13 @@
+[package]
+name = "ignite-syntax"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Ignite lexer, parser, AST and diagnostics."
+autotests = false
+
+[dependencies]
+
+[[test]]
+name = "main"
+path = "tests/main.rs"

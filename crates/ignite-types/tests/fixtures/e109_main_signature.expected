@@ -1,0 +1,2 @@
+e109_main_signature.ignite:22:16: error[E109]: `Worker.main` must have the signature `fn Worker.main(self: Worker) -> Result<Unit, IoError>`, found `fn(Worker) -> Int`
+e109_main_signature.ignite:26:16: error[E109]: `Daemon.main` must have the signature `fn Daemon.main(self: Daemon) -> Result<Unit, IoError>`, found `fn(Daemon, Int) -> Result<Unit, IoError>`

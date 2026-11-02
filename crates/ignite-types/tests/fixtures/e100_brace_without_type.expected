@@ -1,0 +1,1 @@
+e100_brace_without_type.ignite:2:11: error[E100]: a brace literal `{ .. }` needs an expected type (a record or a `Map`); write the type name before `{` or annotate the binding

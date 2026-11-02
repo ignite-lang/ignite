@@ -1,0 +1,1 @@
+e003_wrong_arity.ignite:6:10: error[E003]: wrong number of arguments to `add`: expected 2, found 3

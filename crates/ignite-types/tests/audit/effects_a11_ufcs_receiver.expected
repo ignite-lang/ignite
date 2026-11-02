@@ -1,0 +1,2 @@
+effects_a11_ufcs_receiver.ignite:3:84: error[E016]: missing effect `b.write` for `send`; add it to the `requires` of `wrong`
+effects_a11_ufcs_receiver.ignite:13:62: error[E016]: missing effect `c.write` for `ping`; add it to the `requires` of `via_field`

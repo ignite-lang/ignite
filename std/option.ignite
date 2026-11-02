@@ -1,0 +1,63 @@
+package std.option
+
+// Operations on `Option<T>`, called by uniform function call syntax once
+// imported: `import std.option.{unwrap_or}` makes `value.bool("done")
+// .unwrap_or(false)` work. `==` and `!=` are builtin.
+
+// The value, or `fallback` when there is none.
+fn unwrap_or<T>(value: Option<T>, fallback: T) -> T = match value {
+  Some(present) => present
+  None => fallback
+}
+
+// `f` applied to the value, if there is one.
+fn map<T, U>(value: Option<T>, f: fn(T) -> U) -> Option<U> = match value {
+  Some(present) => Some(f(present))
+  None => None
+}
+
+// `f` applied to the value, if there is one; `None` when `f` gives none.
+fn and_then<T, U>(value: Option<T>, f: fn(T) -> Option<U>) -> Option<U> = match value {
+  Some(present) => f(present)
+  None => None
+}
+
+fn is_some<T>(value: Option<T>) -> Bool = match value {
+  Some(_) => true
+  None => false
+}
+
+fn is_none<T>(value: Option<T>) -> Bool = !is_some(value)
+
+// `Ok` with the value, or `Err(error)` when there is none.
+fn ok_or<T, E>(value: Option<T>, error: E) -> Result<T, E> = match value {
+  Some(present) => Ok(present)
+  None => Err(error)
+}
+
+test "unwrap_or gives the value or the fallback" {
+  assert Some(1).unwrap_or(2) == 1
+  let none: Option<Text> = None
+  assert none.unwrap_or("fallback") == "fallback"
+  assert unwrap_or(Some([1]), []) == [1]
+}
+
+test "map and and_then apply a fn to the value" {
+  let offset = 10
+  assert Some(1).map(|n| n + offset) == Some(11)
+  let none: Option<Int> = None
+  assert none.map(|n| n + offset) == None
+  assert Some(2).map(|n| "n={n}") == Some("n=2")
+  let half = |n: Int| if n % 2 == 0 { Some(n / 2) } else { None }
+  assert Some(4).and_then(half) == Some(2)
+  assert Some(3).and_then(half) == None
+  assert none.and_then(half) == None
+}
+
+test "is_some, is_none and ok_or" {
+  assert Some(0).is_some() && !Some(0).is_none()
+  let none: Option<Int> = None
+  assert none.is_none() && !none.is_some()
+  assert Some(1).ok_or("missing") == Ok(1)
+  assert none.ok_or("missing") == Err("missing")
+}

@@ -1,0 +1,85 @@
+package fixtures.overflow
+
+// Integer overflow and division failures (crates/ignite/tests/ignite_test.rs,
+// docs/vision.md T6): every test fails with the same report on both
+// targets, in dev and in release. Operands come from `Int.parse` and
+// `Bytes` so no compiler sees them as constants.
+
+fn int(text: Text) -> Int = match Int.parse(text) {
+  Some(n) => n
+  None => 0
+}
+
+fn byte(n: Int) -> Byte = Bytes.of([0, 1, 2, 16, 255])[n]
+
+test "int add" {
+  let n = int("9223372036854775807") + int("1")
+  assert n == 0
+}
+
+test "int sub" {
+  let n = int("-9223372036854775808") - int("1")
+  assert n == 0
+}
+
+test "int mul" {
+  let n = int("4611686018427387904") * int("2")
+  assert n == 0
+}
+
+test "int neg" {
+  let n = -int("-9223372036854775808")
+  assert n == 0
+}
+
+test "int div by zero" {
+  let n = int("1") / int("0")
+  assert n == 0
+}
+
+test "int div overflow" {
+  let n = int("-9223372036854775808") / int("-1")
+  assert n == 0
+}
+
+test "int rem by zero" {
+  let n = int("1") % int("0")
+  assert n == 0
+}
+
+test "int rem overflow" {
+  let n = int("-9223372036854775808") % int("-1")
+  assert n == 0
+}
+
+test "byte add" {
+  let b = byte(4) + byte(1)
+  assert b == 0
+}
+
+test "byte sub" {
+  let b = byte(0) - byte(1)
+  assert b == 0
+}
+
+test "byte mul" {
+  let b = byte(3) * byte(3)
+  assert b == 0
+}
+
+test "byte div by zero" {
+  let b = byte(1) / byte(0)
+  assert b == 0
+}
+
+test "byte rem by zero" {
+  let b = byte(1) % byte(0)
+  assert b == 0
+}
+
+test "in range passes" {
+  assert int("9223372036854775806") + int("1") == int("9223372036854775807")
+  assert int("-9223372036854775807") / int("-1") == int("9223372036854775807")
+  assert byte(4) - byte(4) == byte(0)
+  assert -int("7") % int("3") == -1
+}

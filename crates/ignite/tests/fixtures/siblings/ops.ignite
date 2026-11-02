@@ -1,0 +1,3 @@
+package demo.ops
+
+fn greeting() -> Text = "hello"

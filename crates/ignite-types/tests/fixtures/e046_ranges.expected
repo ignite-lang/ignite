@@ -1,0 +1,2 @@
+e046_ranges.ignite:6:10: error[E046]: match does not cover `10..=96`, `123..=199`, `201..=255`
+e046_ranges.ignite:19:10: error[E046]: match does not cover `(-9223372036854775808..=-1, true)`, `(6..=9223372036854775807, true)`

@@ -1,2 +1,0 @@
-e001_interpolation.telos:1:27: error[E001]: unexpected `}` in string, expected expression
-e001_interpolation.telos:3:21: error[E001]: expected `}` after the interpolated expression, found identifier `b`

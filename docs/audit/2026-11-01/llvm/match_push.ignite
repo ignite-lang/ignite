@@ -1,0 +1,22 @@
+package audit.matchpush
+
+fn filler(i: Int) -> Text {
+  return "................................................................".concat(Int.to_text(i))
+}
+
+test "push on a match binding keeps the option valid" {
+  var o: Option<Bytes> = Some(b"abc")
+  var i = 0
+  while i < 3 {
+    match o {
+      Some(b) => { b.push(120) }
+      None => {}
+    }
+    let junk = filler(i)
+    i = i + 1
+  }
+  match o {
+    Some(b) => { assert b.to_text() == "abc", "payload is {b.to_text()}" }
+    None => { assert false }
+  }
+}

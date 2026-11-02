@@ -1,0 +1,10 @@
+fn same(s: TcpStream) -> TcpStream = s
+
+fn launder(ls: List<TcpStream>) -> Result<Input, IoError> requires [] {
+  let copy = ls.map(same)
+  return copy[0].read(4096)
+}
+
+fn launder_at(ls: List<TcpStream>) -> Result<Unit, IoError> requires [] {
+  return ls.map(same).at(0).write_all("x".to_bytes())
+}

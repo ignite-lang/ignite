@@ -1,0 +1,28 @@
+fn id<T>(x: T) -> T = x
+
+type Box<T> {
+  item: T
+}
+
+fn unbox<T>(b: Box<T>) -> T = b.item
+
+enum Wrap<T> {
+  W(T)
+}
+
+fn unwrap<T>(w: Wrap<T>) -> T = match w {
+  W(x) => x
+}
+
+fn via_id(s: TcpStream) -> Result<Input, IoError> requires [] = id(s).read(1)
+
+fn via_box(s: TcpStream) -> Result<Input, IoError> requires [] {
+  let b = Box { item = s }
+  return unbox(b).read(1)
+}
+
+fn via_enum(s: TcpStream) -> Result<Input, IoError> requires [] {
+  let w = W(s)
+  let t = unwrap(w)
+  return t.read(1)
+}

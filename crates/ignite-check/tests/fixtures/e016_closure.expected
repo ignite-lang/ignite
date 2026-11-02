@@ -1,0 +1,3 @@
+e016_closure.ignite:4:11: error[E016]: missing effect `stream.write` for `closure`; add it to the `requires` of `creates`
+e016_closure.ignite:12:11: error[E016]: missing effect `stdout.write` for `closure`; add it to the `requires` of `ambient`
+e016_closure.ignite:21:10: error[E016]: missing effect `s.write` for `f`; add it to the `requires` of `call_bound`

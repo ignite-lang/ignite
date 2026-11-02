@@ -1,0 +1,1 @@
+effects_b02_fn_field_default.ignite:9:10: error[E042]: cannot check the effects of `run`: the type of its receiver is not declared; annotate the binding

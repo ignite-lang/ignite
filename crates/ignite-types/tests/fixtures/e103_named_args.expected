@@ -1,0 +1,6 @@
+e103_named_args.ignite:4:27: error[E103]: `area` has no parameter `depth`; its parameters are `width`, `height`
+e103_named_args.ignite:5:27: error[E103]: argument `width` of `area` is given twice
+e103_named_args.ignite:6:28: error[E103]: positional argument after a named argument in the call of `area`; named arguments come last
+e103_named_args.ignite:7:13: error[E103]: named argument `width` is only allowed in a direct call of a fn declared in Ignite, not through a fn value, closure, role or builtin
+e103_named_args.ignite:7:24: error[E103]: named argument `height` is only allowed in a direct call of a fn declared in Ignite, not through a fn value, closure, role or builtin
+e103_named_args.ignite:8:18: error[E103]: named argument `index` is only allowed in a direct call of a fn declared in Ignite, not through a fn value, closure, role or builtin

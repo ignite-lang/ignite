@@ -1,0 +1,87 @@
+package probe.generics
+
+type Box<T> {
+  items: List<T> = []
+  n: Int = 0
+}
+
+enum Shape<T> {
+  Dot(T)
+  Line(T, T)
+  Nothing
+}
+
+type Handler {
+  f: fn(Int) -> Int = double
+  name: Text = "d"
+}
+
+fn double(n: Int) -> Int = n * 2
+
+fn pick() -> fn(Int) -> Int = double
+
+fn empty_box<T>() -> Box<T> = Box { }
+
+fn nothing<T>() -> Shape<T> = Nothing
+
+fn line_text(s: Shape<Text>) -> Text = match s {
+  Line("a", b) => b
+  Line(a, _) => a
+  Dot("x") => "dot-x"
+  Dot(t) => t
+  Nothing => ""
+}
+
+fn line_any<T>(s: Shape<T>) -> Option<T> = match s {
+  Line(a, _) => Some(a)
+  Dot(a) => Some(a)
+  Nothing => None
+}
+
+fn count<T>(s: Shape<T>) -> Int = match s {
+  Line(_, _) => 2
+  Dot(_) => 1
+  Nothing => 0
+}
+
+
+
+fn run(h: Handler, x: Int) -> Int = h.f(x)
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int = f(x)
+
+fn or_depth(o: Option<Text>) -> Int = match o {
+  Some("a") | Some("b") => 1
+  Some(_) => 2
+  None => 0
+}
+
+fn first_byte(b: Bytes) -> Int = match b {
+  [255, rest] => rest.to_int()
+  [x] => x.to_int()
+  _ => -1
+}
+
+fn swap_var(p: (Int, Int)) -> (Int, Int) {
+  var (a, b) = p
+  a = a + b
+  (b, a)
+}
+
+test "generics" {
+  let b: Box<Int> = Box { n = 2 }
+  assert b.items == []
+  let e: Box<Text> = empty_box()
+  assert e.n == 0
+  let n: Shape<Int> = nothing()
+  assert count(n) == 0
+  assert line_text(Line("a", "b")) == "b"
+  assert line_text(Line("z", "b")) == "z"
+  assert line_text(Dot("x")) == "dot-x"
+  assert line_any(Dot(3)) == Some(3)
+  assert run(Handler { }, 4) == 8
+  assert apply(pick(), 5) == 10
+  assert or_depth(Some("b")) == 1
+  assert first_byte(Bytes.of([255, 7])) == 7
+  assert swap_var((1, 2)) == (2, 3)
+}

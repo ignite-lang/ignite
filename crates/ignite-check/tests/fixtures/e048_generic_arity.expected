@@ -1,0 +1,6 @@
+e048_generic_arity.ignite:6:13: error[E004]: duplicate type parameter `T` of `Box`
+e048_generic_arity.ignite:10:13: error[E048]: `Pair` takes 2 type arguments, found 1
+e048_generic_arity.ignite:10:27: error[E048]: `Store` takes 1 type argument, found 2
+e048_generic_arity.ignite:10:47: error[E048]: `Store` takes 1 type argument, found 0
+e048_generic_arity.ignite:10:57: error[E048]: unknown type `U`
+e048_generic_arity.ignite:16:14: error[E048]: unknown type `A`

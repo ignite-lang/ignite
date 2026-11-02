@@ -1,0 +1,29 @@
+package audit.laterarg
+
+type Ops { f: fn(Text) -> Text }
+
+fn pick(a: Text, n: Int) -> Text = a
+
+fn two(a: Text, b: Text) -> Text = a.concat(b)
+
+fn shout(t: Text) -> Text = t.concat("!")
+
+test "later argument that modifies the borrowed place" {
+  var x = "abc"
+  let r = x.pick(if true { x = "zzz"; 1 } else { 2 })
+  assert r == "abc"
+  let r2 = two(x, if true { x = "qqq"; "!" } else { "?" })
+  assert r2 == "zzz!"
+  assert x == "qqq"
+}
+
+test "fn field call and fn pointer call copy their arguments" {
+  let ops = Ops { f = shout }
+  var x = "abc"
+  let g = shout
+  let a = ops.f(x)
+  let b = g(x)
+  assert a == "abc!"
+  assert b == "abc!"
+  assert x == "abc"
+}

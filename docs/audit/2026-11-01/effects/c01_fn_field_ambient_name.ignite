@@ -1,0 +1,13 @@
+type H {
+  run: fn(stdin: Int) -> Result<Input, IoError> requires [stdin.read]
+}
+
+fn h(stdin: Int) -> Result<Input, IoError> requires [stdin.read] = Stdin.read(stdin)
+
+fn make() -> H = H { run = h }
+
+fn outer(hh: H) -> Result<Input, IoError> requires [] = hh.run(1)
+
+fn outer_local(f: fn(stdin: Int) -> Result<Input, IoError> requires [stdin.read]) -> Result<Input, IoError> requires [] = f(1)
+
+fn wire() -> Result<Input, IoError> requires [] = outer_local(h)

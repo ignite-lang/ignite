@@ -1,0 +1,19 @@
+[package]
+name = "ignite-llvm"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Ignite LLVM target: typed AST to LLVM IR text."
+autotests = false
+
+[dependencies]
+ignite-syntax.workspace = true
+ignite-check.workspace = true
+ignite-types.workspace = true
+
+[dev-dependencies]
+ignite-rt.workspace = true
+
+[[test]]
+name = "main"
+path = "tests/main.rs"

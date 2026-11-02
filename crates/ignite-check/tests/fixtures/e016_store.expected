@@ -1,0 +1,3 @@
+e016_store.ignite:10:12: error[E016]: missing effect `todos.write` for `todos.next_id`; add it to the `requires` of `add`
+e016_store.ignite:11:3: error[E016]: missing effect `todos.write` for `todos.put`; add it to the `requires` of `add`
+e016_store.ignite:15:55: error[E016]: missing effect `app.read` for `values`; add it to the `requires` of `all`

@@ -1,2 +1,0 @@
-e005_ambiguous_variant.telos:8:19: error[E005]: ambiguous variant `Continue`: declared by `Action`, `Flow`; qualify it, e.g. `Action.Continue`
-e005_ambiguous_variant.telos:16:11: error[E005]: ambiguous variant `Empty`: declared by `Shape`, `Slot`; qualify it, e.g. `Shape.Empty`

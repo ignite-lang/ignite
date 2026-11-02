@@ -1,40 +1,40 @@
-# Telos slice 1: language subset, standard library, substrate and Rust lowering
+# Ignite slices 1 to 10: language subset, standard library, substrate and lowering
 
 Status: implementation contract for the compiler slice, 2026-11-01. It narrows
-`Telos_Design.md` to what `examples/terminal/terminal.telos` and `std/` need. Where the two
+`design.md` to what `examples/terminal/terminal.ignite` and `std/` need. Where the two
 differ, this file wins for the slice and the design keeps the long-term intent.
 
 Direction (Timo, 2026-11-01): `crates/` holds a compiler written in Rust (lexer, parser, AST,
 checker, Rust code generator) and the IO substrate. The first target emits Rust; LLVM is a
-later target. Programs are linked against a standard library written in Telos (`std/`).
+later target. Programs are linked against a standard library written in Ignite (`std/`).
 `protocol` is a primitive of the language; protocols (Telnet now, HTTP/1 and HTTP/2 later) are
-declared in Telos in the standard library. The only hand-written Rust a program runs is the
-substrate `crates/telos-io`: TCP streams, stdin/stdout byte streams, the runtime and process
+declared in Ignite in the standard library. The only hand-written Rust a program runs is the
+substrate `crates/ignite-io`: TCP streams, stdin/stdout byte streams, the runtime and process
 arguments. Nothing named telnet lives under `crates/`.
 
 Slice 0 (server only, Telnet in the example, hand-written reference client and server) is
-superseded. Its reference crates are archived in `target/archive/terminal-reference.tar.gz`.
+superseded.
 
 ## 1 Pipeline
 
 ```
-std/**/*.telos  --parse, check, type--> modules --rustgen--> telos-std crate --+
-terminal.telos  --parse, check, type (with std exports)--> --rustgen--> program crate --cargo build--> terminald, tn
-                                                                  telos-io (substrate) --+
+std/**/*.ignite  --parse, check, type--> modules --rustgen--> ignite-std crate --+
+terminal.ignite  --parse, check, type (with std exports)--> --rustgen--> program crate --cargo build--> terminald, tn
+                                                                  ignite-io (substrate) --+
 ```
 
 | stage | crate | output |
 |---|---|---|
-| lex, parse | `crates/telos-syntax` | `ast::Program`, diagnostics with spans |
-| check | `crates/telos-check` | name resolution against imported modules, effect rules, protocol roles |
-| type | `crates/telos-types` | a type for every expression (`docs/llvm.md` section 2); E040 to E048 fail `check` and both build targets |
-| generate | `crates/telos-rustgen` | the `telos-std` crate and the program crate |
-| substrate | `crates/telos-io` | `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError`, `run`, `spawn`, `log`, `args` |
-| driver | `crates/telos` | `telos check`, `telos emit`, `telos build` |
+| lex, parse | `crates/ignite-syntax` | `ast::Program`, diagnostics with spans |
+| check | `crates/ignite-check` | name resolution against imported modules, effect rules, protocol roles |
+| type | `crates/ignite-types` | a type for every expression (`docs/llvm.md` section 2); E040 to E048 fail `check` and both build targets |
+| generate | `crates/ignite-rustgen` | the `ignite-std` crate and the program crate |
+| substrate | `crates/ignite-io` | `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError`, `run`, `spawn`, `log`, `args` |
+| driver | `crates/ignite` | `ignite check`, `ignite emit`, `ignite build` |
 
-The frontend checks a program completely before either target generates code. `telos-check`
+The frontend checks a program completely before either target generates code. `ignite-check`
 resolves names and enforces the effect rules (section 5, including the `requires` sets,
-E016), protocol rules, record literals (E047) and type expressions (E048). `telos-types`
+E016), protocol rules, record literals (E047) and type expressions (E048). `ignite-types`
 then gives every expression a type, checks every `match` for exhaustiveness (E046) and
 resolves every call (`docs/llvm.md` section 2). A program that passes both is valid for the
 Rust and the LLVM target. Diagnostics from rustc on generated code mean a generator bug; they
@@ -169,7 +169,7 @@ be irrefutable: a binding, `_` or a tuple of those (E001 otherwise; use `match`)
 Brackets `( ) [ ] { }`, type arguments, prefix operators and `return` with a value nest at
 most 256 levels deep; the first level over the limit is E054 "nesting deeper than 256; split
 the expression". Chains of binary operators and interpolations are not nesting and have no
-such limit; the `telos` CLI compiles on a thread with a 256 MiB stack, which holds chains of
+such limit; the `ignite` CLI compiles on a thread with a 256 MiB stack, which holds chains of
 10,000 terms.
 
 AST: a function type `fn(A, B) -> R` is `Type { name: "fn", args: [A, B, R] }` (return type
@@ -204,7 +204,7 @@ call on the identifier `Action`; the checker turns an uppercase-first identifier
 ## 4 Declarations, modules and names
 
 - `package` names the module. For a program, the last segment is the Cargo package name.
-  For a standard-library file, `package` must equal its module path (`std/protocol/telnet.telos`
+  For a standard-library file, `package` must equal its module path (`std/protocol/telnet.ignite`
   declares `package std.protocol.telnet`); a mismatch is E031.
 - Record (`type`), alias, `enum`, `fn`, `const`, `protocol` and `system` names share one
   module-level namespace.
@@ -221,7 +221,7 @@ call on the identifier `Action`; the checker turns an uppercase-first identifier
   (own, imported or builtin), it is E005. A bare name that only an enum out of scope declares
   is then E003 (unknown name, or unknown variant in a pattern; also E003 for such a variant
   with a payload used without arguments). The type checker reports these E005 and E003;
-  `telos-check` passes a bare name that is a variant of an enum in any loaded module.
+  `ignite-check` passes a bare name that is a variant of an enum in any loaded module.
   A variant with a payload used bare is E003 (``variant `X` takes 1 payload value; call it``)
   however it resolves: by the expected type, by the one enum in scope that declares it, or
   when two enums in scope declare it and the expected type picks one.
@@ -237,7 +237,7 @@ call on the identifier `Action`; the checker turns an uppercase-first identifier
   import of them only checks that the name is a builtin (E031 otherwise). Builtins are usable
   without an import.
 - Every other `std.*` module is a file under the standard-library root: module `std.a.b` is
-  `<root>/a/b.telos`. The root is `std/` in this repository (`telos --std PATH` overrides it;
+  `<root>/a/b.ignite`. The root is `std/` in this repository (`ignite --std PATH` overrides it;
   the driver's default is `CARGO_MANIFEST_DIR/../../std`, canonicalized).
 - An import of a module that does not exist, or of a name the module does not define, is
   E031. Imports among standard-library modules that form a cycle are E032.
@@ -253,8 +253,8 @@ call on the identifier `Action`; the checker turns an uppercase-first identifier
 
 | role | signature | used by |
 |---|---|---|
-| `serve` | `fn serve(stream: TcpStream, application: A) -> Result<Unit, IoError> requires [...]` | `Service` components |
-| `connect` | `fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [...]` | `Client` components |
+| `serve` | `fn serve(stream: TcpStream, application: A) -> Result<Unit, IoError> requires [...]` | the accept loop of a server kind's `main` (`TelnetServer`, `HttpServer<S>`, section 14.5) |
+| `connect` | `fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [...]` | a client kind's `main` (`TelnetClient`) |
 
 - A protocol has at least one role. Each role declares `requires` and has the parameter count
   above; any other fn name inside a protocol, a role without `requires` or a wrong parameter
@@ -284,7 +284,7 @@ call on the identifier `Action`; the checker turns an uppercase-first identifier
 ### 4.4 Errors
 
 - `IoError.new(message: Text) -> IoError` is a pure builtin static that makes an error value,
-  so Telos code can fail with `return Err(IoError.new("..."))`. `error.message` is its text.
+  so Ignite code can fail with `return Err(IoError.new("..."))`. `error.message` is its text.
 
 ### 4.5 Function values
 
@@ -293,7 +293,7 @@ call on the identifier `Action`; the checker turns an uppercase-first identifier
   a value only where an effectful fn type `fn(n: A) -> R requires [..]` that covers its
   effects is expected; elsewhere E017, reported by the type checker (section 11.7).
 - A local, parameter or pattern binding can be called like a function: `respond(line)`. Such
-  a call is pure. `telos-check` does not check its arity; the type checker (`docs/llvm.md`
+  a call is pure. `ignite-check` does not check its arity; the type checker (`docs/llvm.md`
   section 2) reports E043.
 - A field of fn type is called directly: `console.respond(line)` (section 4.8). Binding it
   first, `let respond = console.respond`, also works.
@@ -329,7 +329,7 @@ this order:
 A builtin method name (`len`, `to_text`, ...) is never resolved by 2 or 3: on a receiver type
 without that builtin it is E041. A field of fn type and a fn with the same name both
 matching is E041 (ambiguous). A fn whose first parameter does not accept the receiver, or no
-candidate at all, is E041. `telos-check` checks the arity of a call by 3 (E003, receiver
+candidate at all, is E041. `ignite-check` checks the arity of a call by 3 (E003, receiver
 counted) and its effects; the type checker decides between 2 and 3.
 
 ## 5 Effects
@@ -414,9 +414,10 @@ may come from:
 Further rules:
 
 - Declaring an effect that is not needed is allowed.
-- System mains are generated and not checked. They and the protocol roles are the roots of a
-  program's effect graph, so a role declares the full set its body and its callees need, and
-  a `Service` or `Client` main grants it.
+- System mains are generated and not checked. They and the component kinds' `K.main` fns are
+  the roots of a program's effect graph; `K.main` has no `requires` (its set is inferred), a
+  protocol role declares the full set its body and its callees need, and the generated main
+  grants everything.
 - A callee's requirement is resolved by its parameter names, so the caller's own names do not
   matter: `write_text(out, ..)` in a function with parameter `out` needs `out.write`.
 - E016 is checked only in a function with `requires`. A function with an inferred set never
@@ -428,9 +429,9 @@ Further rules:
 ## 6 Rust lowering
 
 Every generated file starts with
-`#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)]`.
+`#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]`.
 
-| Telos | Rust |
+| Ignite | Rust |
 |---|---|
 | `Text` | `String` |
 | `Bytes` | `Vec<u8>` |
@@ -441,17 +442,17 @@ Every generated file starts with
 | `List<T>` | `Vec<T>` |
 | `Option<T>`, `Result<T, E>` | same |
 | `fn(A, B) -> R` | `fn(A, B) -> R` |
-| `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError` | `telos_io::` same name |
+| `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError` | `ignite_io::` same name |
 | record `type R { a: T }` | `#[derive(Clone, Debug)] pub struct R { pub a: T }` |
 | `enum E { A, B(T) }` | `#[derive(Clone, Debug)] pub enum E { A, B(T) }` |
 | `fn f(p: T) -> U` | `pub fn f(p: &T) -> U` (parameters, below) |
 | `fn f(...) requires [...]` | `pub fn f(...)` |
 | `type R<A> {..}`, `enum E<A> {..}`, `fn f<A>(..)`, a role `fn serve<A>(..)` | `pub struct R<A: Clone + Send + Sync + 'static>` and so on: every type parameter carries these bounds (11.1) |
-| `Store<T>` | `telos_io::Store<T>` |
+| `Store<T>` | `ignite_io::Store<T>` |
 | `fn(p: A) -> R requires [p.*]` | `fn(A) -> R` |
 | `protocol P { fn serve ... fn connect ... }` | `pub struct P;` and `impl P { pub fn serve ... pub fn connect ... }` |
 | `P.serve(a, b)` | `P::serve(a, b)` |
-| `import std.a.b.{X, Y}` in a program | `use telos_std::a::b::{X, Y};` |
+| `import std.a.b.{X, Y}` in a program | `use ignite_std::a::b::{X, Y};` |
 | `import std.a.b.{X, Y}` in a std module | `use crate::a::b::{X, Y};` |
 | `import std.net...`, `import std.io...` | nothing |
 | `let x = e` / `var x = e` | `let x = e;` / `let mut x = e;` |
@@ -461,11 +462,11 @@ Every generated file starts with
 | `Unit` (value) | `()` |
 | `E.V`, `V`, `E.V(x)` | `E::V`, `E::V(x)` |
 | `Some(x)`, `None`, `Ok(x)`, `Err(e)` | same |
-| `Data(b)`, `Eof` | `telos_io::Input::Data(b)`, `telos_io::Input::Eof` |
+| `Data(b)`, `Eof` | `ignite_io::Input::Data(b)`, `ignite_io::Input::Eof` |
 | `x.f` | `x.f` |
 | `e?` | `(e)?` |
 | `await e` | `(e)` |
-| `spawn f(a, b)` | `{ let __spawn_0 = a; let __spawn_1 = b; telos_io::spawn(move || { if let Err(error) = f(__spawn_0, __spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); }` |
+| `spawn f(a, b)` | `{ let __spawn_0 = a; let __spawn_1 = b; ignite_io::spawn(move || { if let Err(error) = f(__spawn_0, __spawn_1) { ignite_io::log(&format!("task ended with error: {}", error)); } }); }` |
 | `match e { p => v }` | `match e { p => v, }` |
 | `if c { a } else { b }` | same |
 | `while`, `loop`, `for x in e`, `break`, `continue`, `return` | same |
@@ -487,7 +488,7 @@ Every generated file starts with
 The `spawn` arguments are evaluated (and cloned, ownership rule) before the task starts, so
 the spawning function keeps its own copies.
 
-**Ownership rule.** Rust moves what Telos copies. A *place* (an identifier, or a place
+**Ownership rule.** Rust moves what Ignite copies. A *place* (an identifier, or a place
 followed by `.field`) used in a value position is emitted with `.clone()`. Value positions:
 call and method arguments, `let`/`var` initializers, assignment right-hand sides, `match`
 scrutinees, `return` operands, list elements, record field values, `for` iterables, and
@@ -519,7 +520,7 @@ last statement of a value-position block.
 **Builtin methods** are lowered by name; the receiver type is not known, so each name has one
 meaning. The generator emits exactly the Rust on the right.
 
-| Telos | Rust | note |
+| Ignite | Rust | note |
 |---|---|---|
 | `t.len()` | `(t.len() as i64)` | Text, Bytes, List |
 | `t.is_empty()` | `t.is_empty()` | |
@@ -534,7 +535,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `b.to_int()` | `(b as i64)` | Byte |
 | `i.to_byte()` | `u8::try_from(i).ok()` | Int |
 | `Int.parse(t)` | `Some(t).filter(\|t: &String\| !t.starts_with('+')).and_then(\|t\| t.parse::<i64>().ok())` | static |
-| `s.next_id()`, `s.get(id)`, `s.put(id, v)`, `s.remove(id)`, `s.values()`, `s.update(id, f)` | the same `telos_io::Store` method | Store |
+| `s.next_id()`, `s.get(id)`, `s.put(id, v)`, `s.remove(id)`, `s.values()`, `s.update(id, f)` | the same `ignite_io::Store` method | Store |
 | `s.set_idle_timeout(ms)` | `s.set_idle_timeout(ms)` | TcpStream |
 | `b.slice(i, j)` | `b[(i) as usize..(j) as usize].to_vec()` | |
 | `b.push(x)` | `b.push(x)` | Bytes, List |
@@ -547,16 +548,16 @@ meaning. The generator emits exactly the Rust on the right.
 | `Bytes.of([])`, `b""` | `Vec::<u8>::new()` | static; an empty list has no element type to infer |
 | `List.empty()` | `Vec::new()` | static |
 | `Int.to_text(i)` | `i.to_string()` | static |
-| `log(t)` | `telos_io::log(&t)` | free function, writes a line to stderr |
+| `log(t)` | `ignite_io::log(&t)` | free function, writes a line to stderr |
 
-`rest_after_word` and `first_word` are not builtins: `std.console` defines both in Telos, with
+`rest_after_word` and `first_word` are not builtins: `std.console` defines both in Ignite, with
 the same whitespace rule (ASCII space, tab, CR, LF, FF, VT).
 
-| Telos | Rust |
+| Ignite | Rust |
 |---|---|
 | `const N: T = e` | `#[allow(non_snake_case)] pub fn N() -> T { e }` |
 | `N` (a constant, own or imported) in any expression | `N()` |
-| `IoError.new(m)` | `telos_io::IoError::new(m)` |
+| `IoError.new(m)` | `ignite_io::IoError::new(m)` |
 | `Enum.Variant(p)` pattern | `Enum::Variant(p)` |
 | `x.to_text()` on `Int`, `Byte`, `Bool` | `x.to_string()` |
 | `t.to_text()` on `Text` | `t.clone()` |
@@ -575,135 +576,125 @@ The generator reads types (`generate_typed`, `generate_std_typed`) for UFCS, fn-
 types it falls back to the name-based rules above.
 
 Any other method name is passed through unchanged (`x.m(a)` → `x.m(a)`), so substrate
-methods need no table entry. Substrate methods are written in Telos with the same names as in
+methods need no table entry. Substrate methods are written in Ignite with the same names as in
 Rust: `bind`, `accept`, `connect`, `read`, `write_all`, `close`, `local_port`. Substrate
 statics: `TcpListener.bind`, `TcpStream.connect`, `Stdin.read`, `Stdout.write_all` lower to
-`telos_io::<Owner>::<name>(args)`.
+`ignite_io::<Owner>::<name>(args)`.
 
-`Process.exit(c)` lowers to `telos_io::exit((c) as i32)`, which returns `!`, so it has type
-Never in Rust as in Telos and needs no `?`. `e?` where `e` has type Never lowers to `e`
+`Process.exit(c)` lowers to `ignite_io::exit((c) as i32)`, which returns `!`, so it has type
+Never in Rust as in Ignite and needs no `?`. `e?` where `e` has type Never lowers to `e`
 alone (without types: where `e` is a `Process.exit` call).
 
 A bare variant whose enum the module neither declares nor imports (resolved by expected type,
-section 4) lowers to the enum's path in `telos-std`: `telos_std::console::Action::Close` in a
-program, `crate::console::Action::Close` inside `telos-std`, in expressions and patterns.
+section 4) lowers to the enum's path in `ignite-std`: `ignite_std::console::Action::Close` in a
+program, `crate::console::Action::Close` inside `ignite-std`, in expressions and patterns.
 
 ### 6.1 System lowering
 
-A `system` with resources of kind `TcpListener` and components of kind `Service` or `Client`
-produces one executable per component.
+A `system` produces one executable per executable component (section 14.5): a component
+whose kind `K` is a record type with `fn K.main(self: K) -> Result<Unit, IoError>`. The
+compiler-known kinds `Service` and `Client` of slices 1 to 9 are retired in slice 10: their
+accept loop, connect and exit codes are Ignite in `std.protocol.telnet.TelnetServer`,
+`std.protocol.telnet.TelnetClient` and `std.protocol.http.HttpServer` (section 14.6), and
+the backends know no component kind by name.
 
-| component kind | properties | `main` |
-|---|---|---|
-| `Service` | `listener` (a resource), `protocol` (a protocol with `serve`), `application` (any expression), `executable` | bind, log `listening on`, accept loop, one task per connection running `Protocol::serve(stream, application.clone())` |
-| `Client` | `target` (a resource), `protocol` (a protocol with `connect`), `executable` | connect to the target's address and port, run `Protocol::connect(stream)` |
-
-```telos
+```ignite
 system Terminal {
   resource ingress: TcpListener { address = "127.0.0.1", port = 2323 }
-  component server: Service {
-    listener = ingress
-    protocol = Telnet
-    application = Console { prompt = "terminal> ", respond = execute, maximum_line = 4096 }
-    executable = "terminald"
-  }
-  component client: Client { target = ingress, protocol = Telnet, executable = "tn" }
+  component console: CommandConsole { prompt = "terminal> ", commands = module("examples.terminal.commands") }
+  component server: TelnetServer { listener = ingress, application = console, executable = "terminald" }
+  component client: TelnetClient { target = ingress, executable = "tn" }
 }
 ```
+
+The generated `main` of an executable (the Rust shown is the Rust target's; the LLVM
+target's `main_<executable>.ll` does the same through `ignite_rt_*`, `docs/llvm.md`
+section 6):
 
 ```rust
 // src/bin/terminald.rs
 use terminal::*;
-use telos_std::protocol::telnet::Telnet;      // the program's imports are repeated here
+use ignite_std::protocol::telnet::TelnetServer;      // the program's imports are repeated here
 fn main() {
-    std::process::exit(telos_io::run(|| {
-        let application = Console { prompt: String::from("terminal> "), respond: execute, maximum_line: 4096 };
-        let port = telos_io::args::port()?.unwrap_or(2323);
-        let ingress = telos_io::TcpListener::bind(String::from("127.0.0.1"), port)?;
-        telos_io::log(&format!("listening on 127.0.0.1:{}", ingress.local_port()));
-        loop {
-            let stream = ingress.accept()?;
-            let application = application.clone();
-            telos_io::spawn(move || {
-                if let Err(error) = Telnet::serve(stream, application) {
-                    telos_io::log(&format!("session ended with error: {}", error));
-                }
-            });
-        }
-        #[allow(unreachable_code)]
-        Ok::<(), telos_io::IoError>(())
+    std::process::exit(ignite_io::run(|| {
+        let port = ignite_io::args::port()?;
+        let ingress = ignite_io::TcpListener::bind(String::from("127.0.0.1"), port.unwrap_or(2323))?;
+        ignite_io::log(&format!("listening on 127.0.0.1:{}", ingress.local_port()));
+        let console = CommandConsole { prompt: String::from("terminal> "), commands: ConsoleCommands { respond: ... }, .. };
+        let server = TelnetServer { listener: ingress, application: console.clone(), executable: String::from("terminald"), .. };
+        TelnetServer__main(&server)
     }))
 }
 
 // src/bin/tn.rs
 fn main() {
-    std::process::exit(telos_io::run(|| {
-        let port = telos_io::args::port()?.unwrap_or(2323);
-        let stream = telos_io::TcpStream::connect(String::from("127.0.0.1"), port)
-            .map_err(|error| error.with_exit_code(3))?;
-        Telnet::connect(stream).map_err(|error| error.with_exit_code(4))
+    std::process::exit(ignite_io::run(|| {
+        let port = ignite_io::args::port()?;
+        let ingress_endpoint = Endpoint { address: String::from("127.0.0.1"), port: port.unwrap_or(2323) };
+        let client = TelnetClient { target: ingress_endpoint.clone(), executable: String::from("tn") };
+        TelnetClient__main(&client)
     }))
 }
 ```
 
-Exit statuses of generated mains (design section 11.7):
+In order: `ignite_io::run`; every `Store` resource the component (or an embedded component)
+uses, created first (`let s: ignite_io::Store<T> = ignite_io::Store::new();`); every
+`TcpListener` resource it uses as a listener, bound and logged as `listening on
+<address>:<port>` (the first one takes the `--port` override; `--port 0` binds a free port
+and the line reports it); the `Endpoint` value of every `TcpListener` resource it names
+where an `Endpoint` is expected (section 14.5; `--port` applies to it too); the embedded
+components' values in dependency order; the component's own value with the kind's defaults
+for omitted fields, `executable` defaulting to the component name and a `Signal` output
+set to its reference text; then `K.main(value)`. A resource whose name is one of `main`'s
+own (`application`, `port`, `stream`, `error`) gets a trailing `_`.
 
-| status | `Service` | `Client` |
-|---|---|---|
-| 0 | never returns normally | the client role returned `Ok` |
-| 1 | bind or accept failed | not used |
-| 2 | `--port` malformed or out of range | same |
-| 3 | not used | connecting to the target failed |
-| 4 | not used | the client role returned `Err` (protocol or terminal failure) |
+Exit statuses (design section 11.7):
 
-Mains get these codes from `IoError::with_exit_code` and `telos_io::args::port()` (section 7);
-the error message goes to stderr as `error: <message>`.
+| status | source |
+|---|---|
+| 0 | `K.main` returned `Ok` |
+| 1 | bind failed, or `K.main` returned an `IoError` without an exit code of its own |
+| 2 | `--port` malformed or out of range |
+| 3 | `TelnetClient.main`: connecting to the target failed (`IoError.with_exit_code(3)`) |
+| 4 | `TelnetClient.main`: the `connect` role returned `Err` (`with_exit_code(4)`) |
 
-A `resource s: Store<T>` (no properties, one type argument) is created first in every
-`main`: `let s: telos_io::Store<T> = telos_io::Store::new();`. The `application`
-expression is lowered with the ordinary expression rules in the scope of the program's
-module, with every `Store` resource and the component's own listener as locals (a
-resource whose name is one of `main`'s own, `application`, `port`, `stream` or `error`,
-gets a trailing `_`). It is built before `bind`, or right after the `listening on` line when
-it names the listener. Naming another `TcpListener` resource there is E020.
-`executable` defaults to the component name. `--port N` on either
-binary overrides the declared port; `--port 0` on a service binds a free port and the
-`listening on` line reports it. A resource or component of any other kind, a missing or
-unknown property, or a `protocol` that is not a protocol is E020; a protocol without the
-needed role is E030. A program with no `system` produces a library crate with no executable.
-
+A `K.main` chooses its exit codes with `IoError.with_exit_code` (section 7); the generated
+`main` only maps `Err(e)` to `e.exit_code` after printing `error: <message>` to stderr. A
+resource of an unknown kind or a `system` in a std module is E020 from the type checker;
+the component rules are E020 and E104 to E109 (section 14.11). A program with no `system`
+produces a library crate with no executable.
 ### 6.2 Generated projects
 
-For `telos build terminal.telos --out DIR`:
+For `ignite build terminal.ignite --out DIR`:
 
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
-                        [dependencies] telos-io = { path = <substrate> }, telos-std = { path = "std" } when the program imports a std module
+                        [dependencies] ignite-io = { path = <substrate> }, ignite-std = { path = "std" } when the program imports a std module
                         one [[bin]] per component: name = executable, path = src/bin/<executable>.rs
 DIR/src/lib.rs          the program's imports as `use`, every type, enum, protocol and fn
 DIR/src/bin/<exe>.rs    `use <package>::*;`, the program's imports as `use`, plus the main above
-DIR/std/Cargo.toml      [package] name = "telos-std", version "0.0.0-<content hash>" so programs sharing a target dir do not share a stale artifact, edition 2024, [dependencies] telos-io
+DIR/std/Cargo.toml      [package] name = "ignite-std", version "0.0.0-<content hash>" so programs sharing a target dir do not share a stale artifact, edition 2024, [dependencies] ignite-io
 DIR/std/src/lib.rs      one nested `pub mod` per std module (`pub mod protocol { pub mod telnet { ... } }`)
 ```
 
-Every `.telos` file under the standard-library root is part of `telos-std`, checked in
-import order. `telos build` then runs `cargo build --manifest-path DIR/Cargo.toml
+Every `.ignite` file under the standard-library root is part of `ignite-std`, checked in
+import order. `ignite build` then runs `cargo build --manifest-path DIR/Cargo.toml
 --target-dir TARGET` with `TARGET` from `--target-dir` (default `DIR/target`) and prints one
 line per built executable: `built TARGET/debug/<executable>`. Exit status: 0 built, 1
 diagnostics (in any file, rendered with that file's path), 2 cargo failed (its output passed
 through), 3 a file could not be read or written.
 
-## 7 Substrate `telos-io`
+## 7 Substrate `ignite-io`
 
 The only hand-written Rust a generated program runs, and the one implementation of IO for
 every target: the Rust target's generated code calls it directly, the LLVM target through the
-C ABI adapter `telos-rt` (`docs/llvm.md` section 5).
+C ABI adapter `ignite-rt` (`docs/llvm.md` section 5).
 
 Slice 4: blocking. Sockets are `std::net`, standard input is one unbuffered `read(0)` per
 call, every task is an OS thread (`spawn`), and there is no event loop and no tokio. An
 operation that may wait is a plain `fn` with the name and signature its async version will
-have minus `async`, so slice 5 (tokio as the event loop inside `telos-io`) changes this crate,
-the generator's lowering of `await`, `spawn` and `run`, and `telos-rt`, not the operations'
+have minus `async`, so slice 5 (tokio as the event loop inside `ignite-io`) changes this crate,
+the generator's lowering of `await`, `spawn` and `run`, and `ignite-rt`, not the operations'
 callers.
 
 ```rust
@@ -755,7 +746,7 @@ send is kept with its stream and reported by that stream's next `read`, `write_a
 `close`.
 
 Substrate operations take owned `String` and `Vec<u8>` arguments because generated code
-passes every Telos value by value (a literal is `String::from(..)`, a place is cloned).
+passes every Ignite value by value (a literal is `String::from(..)`, a place is cloned).
 
 ```rust
 pub fn run<F>(main: F) -> i32 where F: FnOnce() -> Result<(), IoError>;  // main on the calling thread; Err → stderr, error.exit_code(); does not wait for tasks or blocked stdin reads; restores the terminal mode
@@ -805,7 +796,7 @@ switches standard input to non-canonical mode without echo, signals (`ISIG`), fl
 with `Ok` or `Err`, and when it panics. A process killed by a signal cannot restore them.
 On a non-terminal standard input both calls are no-ops returning `Ok`.
 
-Builtin names visible to Telos programs: types `Text Bytes Byte Int Bool Unit List Option
+Builtin names visible to Ignite programs: types `Text Bytes Byte Int Bool Unit List Option
 Result TcpListener TcpStream Stdin Stdout Input IoError`; variants `Some None Ok Err Data Eof`;
 value `Unit`; statics `Bytes.empty Bytes.of List.empty Int.to_text TcpListener.bind
 TcpStream.connect Stdin.read Stdin.is_terminal Stdin.set_raw Stdout.write_all Process.exit IoError.new
@@ -823,65 +814,82 @@ error so one run reports several errors; a declaration inside a block gives one 
 skipped. Rendering indexes the line starts of a file once, so its cost is linear in the
 number of diagnostics (20,000 in well under a second).
 
-Codes of the syntax and name stages (`telos-syntax`, `telos-check`):
+Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 
 | code | meaning |
 |---|---|
 | E001 | syntax error; also a malformed interpolation or byte literal, a refutable `let` pattern, a one-element tuple, and `await` (section 10.2) |
 | E002 | unexpected end of file |
-| E003 | unknown name; also wrong arity of a call (a UFCS call counts the receiver), `log` used as a value, a constant with payload patterns |
-| E004 | duplicate definition, including a declaration named like a builtin or `Tuple`, and a role or record field declared twice |
+| E003 | unknown name; also wrong arity of a call (a UFCS call counts the receiver), `log` used as a value, a constant with payload patterns, an associated fn whose owner is no record or enum of the module (section 13.8) |
+| E004 | duplicate definition, including a declaration named like a builtin or `Tuple`, a role or record field declared twice, an associated fn declared twice or named like a variant of its owner, and a closure parameter repeated |
 | E005 | ambiguous bare variant (section 4); reported by the type checker since slice 6 |
-| E006 | assignment to an immutable binding or a constant |
+| E006 | assignment to an immutable binding or a constant; since slice 9 also `push`, `append` or `clear` through a `let`, a `for` element or a pattern binding, on `x.to_bytes()`, or on a binding a closure captured (section 13.11) |
 | E010 | effectful call or `spawn` in a pure context: a constant's value or a field default (section 5) |
 | E011 | retired in slice 6 (was: effectful call not awaited) |
 | E012 | retired in slice 6 (was: `await` on a pure call) |
 | E013 | `spawn` of something that is not a call of an effectful user function or role, including a substrate operation |
 | E014 | retired in slice 6 (was: constant used as a pattern; constant patterns are allowed, section 4.3) |
 | E015 | constant cycle |
-| E016 | effect missing from `requires` (section 5.1) |
+| E016 | effect missing from `requires` (section 5.1); a closure's effects not on its own parameters are charged where it is created (section 13.3) |
 | E017 | effectful function used as a value where no effectful fn type covering its effects is expected (section 4.5); reported by the type checker since slice 7 |
-| E020 | unsupported or malformed resource or component (also: `Service` without `application`, two components with one executable name, a `system` in a std module) |
+| E020 | unsupported or malformed resource, component, contract, policy or assembly (also: a kind that is no record type, two components with one executable name, a `system` in a std module); reported by the type checker since slice 10. The Rust backend keeps E020 for a malformed resource and, when it runs without the typed program, for every component (a component is executable only through the type checker) |
 | E021 | reserved (unused since slice 1) |
-| E030 | protocol role missing or malformed, a role without `requires`, a call to a role the protocol lacks, a `Client` component whose protocol has no `connect` or a `Service` whose protocol has no `serve` |
-| E031 | unknown module or imported name (including a non-builtin name imported from `std.net` or `std.io`) |
+| E030 | protocol role missing or malformed, a role without `requires`, a call to a role the protocol lacks (the component rules of slices 1 to 9, `Client` without `connect` and `Service` without `serve`, retired with those kinds in slice 10: a kind's `main` calls the role, and a missing role is this E030 at the call) |
+| E031 | unknown module or imported name (including a name imported from `std.net` or `std.io` that is neither a builtin nor declared in that module's file), or an import from a module that is neither `std.*` nor a sibling of the program's package (section 14.4) |
 | E032 | import cycle |
 | E049 | a binding inside an or-pattern |
 | E050 | two tests of one module with the same name (section 12.2) |
 | E051 | a test-only item used outside tests and test-only items, or imported (section 12.2), or `Store.new()` there (section 12.3); a UFCS use is reported by the type checker |
 | E053 | a test name that is empty or interpolated; reported by the parser (section 12.1) |
-| E054 | nesting deeper than 256 levels of brackets, type arguments, prefix operators or `return` (section 3) |
-| E055 | a record or enum that contains itself other than through `List`: by a field, a payload, a tuple, `Option`, `Result` or another record or enum. Recursion through an enum payload or `Option` (finite values, needs boxing in both backends) is a later extension. |
+| E041 | (slice 9) a name two glob imports provide, used without an explicit import (section 13.1 row 6) |
+| E054 | nesting deeper than 256 levels of brackets, type arguments, prefix operators or `return` (section 3); string literals nested deeper than 32 interpolations (section 13.1 row 1) |
+| E055 | a record that contains itself through fields and tuples alone, so a value would be infinite; recursion through an enum payload, `Option`, `Result` or `List` is allowed and boxed (section 13.4) |
+| E056 | a parameter of a fn, role, fn type or closure named like an ambient capability: `stdin`, `stdout`, `process`, `net` (section 13.11) |
+| E057 | a type parameter of a generic record, enum or alias that no field, payload or aliased type uses (section 13.11) |
 
 Keywords are accepted as names in package and import paths, property names and
 record-literal field names.
 
-Codes of the type stage (`docs/llvm.md` section 7), reported by `telos check` and both build
+Codes of the type stage (`docs/llvm.md` section 7), reported by `ignite check` and both build
 targets: E003 bare variant of an enum out of scope that the expected type does not decide,
 or a payload variant used bare (section 4), E005 ambiguous variant, E040 type mismatch,
-E041 unknown method or field for the receiver type (also an ambiguous or inapplicable method call, section 4.8), E042 type cannot
-be inferred (also a type parameter a generic use leaves unbound, and an effectful operation
-whose effects `telos-check` could not check, section 11.7), E043 wrong number of arguments, E044 integer literal out of range for `Byte`,
-E045 operator not defined for the operand type (also a constant pattern of a type without
-`==`), E046 `match` not exhaustive, E047 record literal with a missing (and not defaulted),
+E041 unknown method or field for the receiver type (also an ambiguous or inapplicable method call, section 4.8; a tuple index past the tuple; a fn named like a builtin method of its first parameter's type, section 13.1 row 5), E042 type cannot
+be inferred (also a type parameter neither the expected type nor later uses in the body decide, a closure parameter without type, and an effectful operation
+whose effects `ignite-check` could not check, section 11.7), E043 wrong number of arguments (also a range pattern whose start is above its end), E044 integer literal out of range for `Byte`,
+E045 operator not defined for the operand type (also `==` on a type that is not comparable, section 13.5, a constant pattern of a type without
+`==`, and a range bound that is no literal or constant with a literal value), E046 `match` not exhaustive (ranges split `Int` and `Byte` into intervals, section 13.7), E047 record literal with a missing (and not defaulted),
 unknown or duplicate field, E048 unknown type name, wrong number of type arguments or an
 alias that refers to itself, E052 `assert` condition not `Bool` (section 12.3).
-`telos-check` reports E047 and E048 (an unknown record in a record literal is E048, not
-E003); `telos-types` reports them too for a module it is given unchecked, and alone reports
+`ignite-check` reports E047 and E048 (an unknown record in a record literal is E048, not
+E003); `ignite-types` reports them too for a module it is given unchecked, and alone reports
 alias cycles.
 
-Fixtures: E001, E002, E053 and E054 under `crates/telos-syntax/tests/fixtures`; E003, E004,
-E006, E010, E013, E015, E016, E030, E031, E047, E048, E049, E050, E051 and E055 under
-`crates/telos-check/tests/fixtures`; E003 (variant out of scope, payload variant used bare),
-E005, E017, E040 to E046, E048 (alias cycle), E051 (UFCS) and E052 under
-`crates/telos-types/tests/fixtures`.
+Codes of slice 10 (section 14.11), all from the type checker: E100 brace literal without an
+expected type, E101 quantity operands that do not fit an operator, E102 `module("p")` not
+found or a field it cannot fill, E103 named argument misuse, E104 declaration property
+(three texts, section 14.11), E105 component cycle, E106 `Map` key type, E107 quantity
+literal out of range, E108 assembly binding key, E109 `K.main` signature. Inside a `system`
+or `assembly` the type checker also reports E003 for an unknown name, E041 for `System.x`
+when `S` has no member `x`, E047 for a repeated map key or a `TcpListener` property it does
+not know, and E045 for `%` on a quantity.
+
+Fixtures: E001 (including a keyword as a variable, fn and type name, beside
+`valid_keyword_fields`), E002, E053 and E054 under `crates/ignite-syntax/tests/fixtures`;
+E003, E004, E006, E010, E013, E015, E016, E030, E031, E041 (glob conflict), E047, E048, E049,
+E050, E051, E055, E056 and E057 under `crates/ignite-check/tests/fixtures`; E003 (variant out
+of scope, payload variant used bare), E005, E017, E040 to E046, E048 (alias cycle), E051
+(UFCS), E052 and E100 to E109 (E104 three fixtures: `e104_required_field`,
+`e104_output_field`, `e104_loopback`; `valid_system` mirrors the design file with kinds
+declared locally, because the fixture standard library has no `std/protocol` and the
+fixture must type without it; the real kinds are checked by `cli::check_design_file_is_silent`)
+under `crates/ignite-types/tests/fixtures`.
 
 ## 9 Acceptance for the slice
 
-1. `telos check examples/terminal/terminal.telos` exits 0 with no output.
-2. `telos build examples/terminal/terminal.telos --out <dir>` prints `built .../terminald` and
+1. `ignite check examples/terminal/terminal.ignite` exits 0 with no output.
+2. `ignite build examples/terminal/terminal.ignite --out <dir>` prints `built .../terminald` and
    `built .../tn`.
-3. `examples/` holds `.telos` files only.
+3. `examples/` holds `.ignite` files only.
 4. `terminald --port 0` prints `listening on 127.0.0.1:<port>`; a raw TCP client sees the
    transcript of design section 11.6: prompt `terminal> `, `help`, `echo hello`, `status`,
    `quit` → `bye` and close; an unknown word answers `unknown command: <word>`; `IAC DO ECHO`
@@ -899,26 +907,27 @@ E005, E017, E040 to E046, E048 (alias cycle), E051 (UFCS) and E052 under
    server sends a subnegotiation over 1024 bytes (`std.protocol.telnet` returns
    `Err(IoError.new(..))`).
 9. `tn` on a terminal (tested through a pseudo-terminal): raw mode with local line editing in
-   Telos (printable bytes echoed, backspace 8/127 erases, Enter 13 sends the line as CR LF and echoes `\n`, which the terminal's output processing
+   Ignite (printable bytes echoed, backspace 8/127 erases, Enter 13 sends the line as CR LF and echoes `\n`, which the terminal's output processing
    shows as CR LF);
    `Ctrl+C` (3) sends `IAC IP`; `Ctrl+D` (4) on an empty line closes the write half;
    `Ctrl+]` (29) prints `\r\ntelnet> ` and reads one local command: `quit` or `close` ends
    the session at once with `Process.exit(0)`, also when the server keeps the connection open, an empty line returns to the session, `help` lists the commands,
    anything else prints `unknown command`. After `tn` exits, the terminal is back in
    canonical mode with echo.
-10. Telos sources use `const` for their limits (no zero-argument fns standing in for
+10. Ignite sources use `const` for their limits (no zero-argument fns standing in for
     constants) and qualified variant patterns where a bare name is ambiguous or unclear.
 11. Every diagnostic code in section 8 that is not retired has a fixture under
-   `crates/telos-syntax/tests/fixtures`, `crates/telos-check/tests/fixtures` or
-   `crates/telos-types/tests/fixtures` (E020 may be covered by `crates/telos-rustgen`
-   unit tests, E031, E032 by `crates/telos` driver tests).
+   `crates/ignite-syntax/tests/fixtures`, `crates/ignite-check/tests/fixtures` or
+   `crates/ignite-types/tests/fixtures` (E020 by `crates/ignite-types` fixtures and
+   `crates/ignite-rustgen` unit tests for the resource and untyped cases, E031, E032 by
+   `crates/ignite` driver tests).
 
 ## 10 Slice 6: surface syntax
 
-Slice 6 shortens Telos source without new runtime behaviour. Sections 2 to 5 and 8 are
+Slice 6 shortens Ignite source without new runtime behaviour. Sections 2 to 5 and 8 are
 rewritten to include it; this section is the contract between the frontend
-(`telos-syntax`, `telos-check`, `telos-types`) and the backends (`telos-rustgen`,
-`telos-llvm`) and states, per feature, where it is handled. "Desugar" means the parser
+(`ignite-syntax`, `ignite-check`, `ignite-types`) and the backends (`ignite-rustgen`,
+`ignite-llvm`) and states, per feature, where it is handled. "Desugar" means the parser
 produces existing AST forms, so backends see nothing new.
 
 | # | feature | source | handled by |
@@ -947,8 +956,8 @@ Rules:
 - `unimplemented!("slice 6: …")` arms left by the skeleton must all be gone at the end.
 - Generated Rust and IR goldens change only where a feature is used.
 - Std and example sources are rewritten to use these features after the frontend and
-  backends land (acceptance: `std/protocol/telnet.telos` at most 400 lines, no line over 100
-  characters; `examples/terminal/terminal.telos` without `return`, `await` or
+  backends land (acceptance: `std/protocol/telnet.ignite` at most 400 lines excluding tests, no
+  line over 100 characters; `examples/terminal/terminal.ignite` without `return`, `await` or
   `Action.Continue`).
 
 ### 10.1 Frontend contract for the backends
@@ -1023,7 +1032,7 @@ backends do not need it.
 
 **New `Builtin` variants:** `IntToTextMethod`, `ByteToText`, `BoolToText`, `TextToText`.
 **New `ModuleTypes` fields:** `aliases`, `defaults`; construct `ModuleTypes` with
-`..Default::default()` (`crates/telos-llvm/src/layout.rs` `module_types` needs it).
+`..Default::default()` (`crates/ignite-llvm/src/layout.rs` `module_types` needs it).
 **New `TypedProgram` methods:** `resolved_type(&Type)`, `field_has_default(&QualName, &str)`.
 
 **Variants.** A bare variant resolved against the expected type gets the same
@@ -1039,9 +1048,9 @@ a name in scope (Rust: section 6).
 
 ### 10.2 Deprecated `await`
 
-The flip is done: `telos_syntax::parser::AWAIT_IS_ERROR` is `true`, so `await e` is E001
+The flip is done: `ignite_syntax::parser::AWAIT_IS_ERROR` is `true`, so `await e` is E001
 ``remove `await`: effectful calls need no marker``, shown by the syntax fixture
-`e001_await.telos`. The `std/` and `examples/` sources, the goldens and the tests no longer
+`e001_await.ignite`. The `std/` and `examples/` sources, the goldens and the tests no longer
 use `await`; `grep -rln await crates std examples` lists only the lexer's keyword, the
 parser's error path and that fixture. `ParseOptions { await_is_error: false }` still parses
 `await e` as `e`; nothing in the repository uses it. `ExprKind::Await` stays in the public AST
@@ -1050,11 +1059,11 @@ and is never produced.
 ## 11 Slice 7: todo backend
 
 Slice 7 adds what an HTTP backend with shared in-memory state needs, and the example
-`examples/todo/todo.telos` (executable `todod`). This section is the contract between the
-frontend (T1: `telos-syntax`, `telos-check`, `telos-types`), the backends and substrate
-(T2: `telos-rustgen`, `telos-llvm`, `telos-rt`, `telos-io`) and the Telos sources (T3:
-`std/text.telos`, `std/json.telos`, `std/protocol/http.telos`, `examples/todo/`,
-`crates/telos/tests/todo.rs`). T1 refines it as decisions settle; T2 and T3 read it.
+`examples/todo/todo.ignite` (executable `todod`). This section is the contract between the
+frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and substrate
+(T2: `ignite-rustgen`, `ignite-llvm`, `ignite-rt`, `ignite-io`) and the Ignite sources (T3:
+`std/text.ignite`, `std/json.ignite`, `std/protocol/http.ignite`, `examples/todo/`,
+`crates/ignite/tests/todo.rs`). T1 refines it as decisions settle; T2 and T3 read it.
 
 ### 11.1 Generics
 
@@ -1100,9 +1109,9 @@ frontend (T1: `telos-syntax`, `telos-check`, `telos-types`), the backends and su
 | `s.update(id, f: fn(T) -> T)` | `Option<T>` (the new value), atomic, `f` pure | `s.write` |
 
 - Value semantics: `get`/`values` return copies; `put` stores a copy.
-- One implementation in `telos-io`: `Store<T: Clone + Send>` over
+- One implementation in `ignite-io`: `Store<T: Clone + Send>` over
   `Arc<Mutex<BTreeMap<i64, T>>>` plus an `AtomicI64` counter. The Rust target uses it
-  directly. `telos-rt` exposes `telos_rt_store_*` over a `Store<HeapValue>`, where
+  directly. `ignite-rt` exposes `ignite_rt_store_*` over a `Store<HeapValue>`, where
   `HeapValue` is a pointer to a malloc'd deep copy made and freed by generator glue
   (`copy_to_heap.<T>`, `copy_from_heap.<T>`, `free_heap.<T>`), passed to `store_new`.
 - Created as a system resource (11.4). `Store.new()` creates one in tests and test-only items
@@ -1114,7 +1123,8 @@ frontend (T1: `telos-syntax`, `telos-check`, `telos-types`), the backends and su
   before the accept loop.
 - Resource names are values inside component property expressions:
   `application = HttpApp { state = todos, handle }`.
-- A protocol may declare only `serve`; a `Client` component naming such a protocol is E030.
+- A protocol may declare only `serve`; a kind's `main` calling `connect` on it is E030 at the
+  call (the `Client` component rule of slices 7 to 9 went with that kind, section 14.5).
 
 ### 11.5 New builtins
 
@@ -1123,26 +1133,26 @@ frontend (T1: `telos-syntax`, `telos-check`, `telos-types`), the backends and su
 - `Byte.to_int()`, `Int.to_byte()` (`Option<Byte>`, `None` outside 0..255).
 - `TcpStream.set_idle_timeout(ms: Int)`; effect `stream.write`. A read that waits longer
   ends with `Eof`.
-- Text work that can be Telos (split, find, to_lower, starts/ends_with, trim) is Telos in
-  `std/text.telos`, used by UFCS. T3 lists any primitive it cannot write in Telos.
+- Text work that can be Ignite (split, find, to_lower, starts/ends_with, trim) is Ignite in
+  `std/text.ignite`, used by UFCS. T3 lists any primitive it cannot write in Ignite.
 
 ### 11.6 Std and example (T3)
 
-- `std/text.telos`, `std/json.telos` (`enum Json`, `encode`, `parse -> Result<Json,
-  JsonError>`, accessors), `std/protocol/http.telos` (HTTP/1.1 server role, keep-alive,
+- `std/text.ignite`, `std/json.ignite` (`enum Json`, `encode`, `parse -> Result<Json,
+  JsonError>`, accessors), `std/protocol/http.ignite` (HTTP/1.1 server role, keep-alive,
   `Content-Length`, limits header 8 KiB → 431 and body 1 MiB → 413, errors 400/404/405,
   idle timeout 30 s, `Response.json`).
-- `examples/todo/todo.telos` ≤ 100 lines: `GET /todos`, `POST /todos`, `GET /todos/{id}`,
+- `examples/todo/todo.ignite` ≤ 100 lines: `GET /todos`, `POST /todos`, `GET /todos/{id}`,
   `PATCH /todos/{id}`, `DELETE /todos/{id}`; JSON bodies `{"id":1,"title":"milk","done":false}`.
-- `crates/telos/tests/todo.rs`: both targets, real socket; CRUD flow, 400/404/405/413,
+- `crates/ignite/tests/todo.rs`: both targets, real socket; CRUD flow, 400/404/405/413,
   keep-alive (3 requests on one connection), 16 connections × 100 POSTs → 1600 distinct ids.
 - Since slice 8 the behaviour of `std.text`, `std.json`, `std.console`, `std.protocol.telnet`,
   `std.protocol.http` and the examples is tested inline (`test` blocks, section 12); `task
-  test-telos` runs them on both targets.
+  test-ignite` runs them on both targets.
 
 ### 11.7 Frontend contract (T1)
 
-Settled by T1; T2 builds against it, T3 writes Telos against it.
+Settled by T1; T2 builds against it, T3 writes Ignite against it.
 
 **Surface syntax.**
 
@@ -1175,7 +1185,7 @@ segment is the identifier `*`; `Path::dotted` gives `p.*`.
 | `Param(String)` | a type parameter, inside a generic declaration only | Rust: the parameter; LLVM: substitute the instance |
 | `GenericRecord(QualName, Vec<Ty>)` | a record that declares type parameters, with its arguments (`Param`s inside its own declaration) | Rust: `R<A, B>`; LLVM: one layout per instance |
 | `GenericEnum(QualName, Vec<Ty>)` | the same for an enum | same |
-| `Store(Box<Ty>)` | `Store<T>` | Rust: `telos_io::Store<T>`; LLVM: `telos_rt_store_*` |
+| `Store(Box<Ty>)` | `Store<T>` | Rust: `ignite_io::Store<T>`; LLVM: `ignite_rt_store_*` |
 | `EffectFn(Vec<Ty>, Box<Ty>, FnEffects)` | an effectful fn type; `FnEffects { names, requires }` | lower exactly like `Fn(params, ret)`; ignore the effects |
 
 A record or enum without type parameters stays `Ty::Record` / `Ty::Enum`, so a program that
@@ -1202,7 +1212,8 @@ the order of the declaration's type parameters, of:
   the scrutinee's `GenericEnum` type);
 - a record literal of a generic record;
 - the value expression of a component's `protocol` property: the instance of the role the
-  component runs (`serve` for a `Service`, `connect` for a `Client`).
+  component runs (`serve` for a `Service`, `connect` for a `Client`; since slice 10 the role
+  call is in the kind's `main` and is an ordinary call).
 
 Inside a generic declaration the arguments may contain `Param`; the LLVM target substitutes
 the enclosing instance. `TypedProgram::type_params(&QualName) -> Option<&[String]>` gives the
@@ -1236,8 +1247,8 @@ and `to_text`.
 - `Store` methods: `get`, `values` need `r.read`; `next_id`, `put`, `remove`, `update` need
   `r.write` (`r` each root of the receiver). `set_idle_timeout` needs `r.write`.
 - E017 is reported by the type checker since slice 7 (it needs the expected type); its
-  fixtures are under `crates/telos-types/tests/fixtures`.
-- `telos-check` finds Store receivers and the fn types of called values from declared types:
+  fixtures are under `crates/ignite-types/tests/fixtures`.
+- `ignite-check` finds Store receivers and the fn types of called values from declared types:
   parameter types, `let` annotations, record field types (generic arguments substituted,
   aliases expanded), `x.f`, `x.copy()`, `e?`, `l[i]`, Store results, `for` over a list. Where
   it cannot, the type checker reports E042 at the call (``cannot check the effects of `get`:
@@ -1246,30 +1257,31 @@ and `to_text`.
 **Systems.** In component property expressions every resource name is a value: a
 `TcpListener` resource of type `TcpListener`, a `Store<T>` resource of type `Store<T>`
 (`application = HttpApp { state = todos, handle }`). A `Client` naming a protocol without
-`connect`, or a `Service` naming one without `serve`, is E030 (`telos-check`).
+`connect`, or a `Service` naming one without `serve`, was E030 (`ignite-check`) until slice 10
+retired both kinds (section 14.5).
 
 **Placeholders for T2.** Every `unimplemented!("slice 7: …")` arm T1 added in
-`crates/telos-rustgen` and `crates/telos-llvm` so the workspace keeps compiling:
+`crates/ignite-rustgen` and `crates/ignite-llvm` so the workspace keeps compiling:
 
-- `crates/telos-llvm/src/layout.rs`, `TypeEnv::layout`: `Ty::Param`, `Ty::GenericRecord`,
+- `crates/ignite-llvm/src/layout.rs`, `TypeEnv::layout`: `Ty::Param`, `Ty::GenericRecord`,
   `Ty::GenericEnum`, `Ty::Store` (`Ty::EffectFn` is implemented: 8 bytes, like `Ty::Fn`).
-- `crates/telos-llvm/src/layout.rs`, `mangle`: `Ty::Param` (the other new variants are
+- `crates/ignite-llvm/src/layout.rs`, `mangle`: `Ty::Param` (the other new variants are
   implemented: `Store<T>`, `module.Name<A,B>`, `EffectFn` like `Fn`).
-- `crates/telos-llvm/src/lower.rs`, `builtin`: `ListMap`, `IntParse`, `ByteToInt`,
+- `crates/ignite-llvm/src/lower.rs`, `builtin`: `ListMap`, `IntParse`, `ByteToInt`,
   `IntToByte`, `TcpStreamSetIdleTimeout`, `StoreNextId`, `StoreGet`, `StorePut`,
   `StoreRemove`, `StoreValues`, `StoreUpdate` (one arm; applied by the substrate agent).
-- `crates/telos-llvm/src/region.rs`, `mutates`: decided, not a placeholder: `StoreNextId`,
+- `crates/ignite-llvm/src/region.rs`, `mutates`: decided, not a placeholder: `StoreNextId`,
   `StorePut`, `StoreRemove`, `StoreUpdate` mutate; the other new builtins do not.
 
-`crates/telos-rustgen` compiles unchanged: its matches have catch-all arms, so it has no
+`crates/ignite-rustgen` compiles unchanged: its matches have catch-all arms, so it has no
 placeholder, and a program using a slice-7 feature fails there at the catch-all (T2).
 
 ## 12 Slice 8: tests
 
 Tests are a primitive of the language, written inline next to the code they test, like Rust's
-`#[test]`. This section is the contract between the frontend (U1: `telos-syntax`,
-`telos-check`, `telos-types`), the substrate, backends and driver (U2: `telos-io`, `telos-rt`,
-`telos-rustgen`, `telos-llvm`, `crates/telos`) and the inline tests of std and the examples
+`#[test]`. This section is the contract between the frontend (U1: `ignite-syntax`,
+`ignite-check`, `ignite-types`), the substrate, backends and driver (U2: `ignite-io`, `ignite-rt`,
+`ignite-rustgen`, `ignite-llvm`, `crates/ignite`) and the inline tests of std and the examples
 (U3). Sections 2 to 5 and 8 include it.
 
 ### 12.1 Syntax
@@ -1330,11 +1342,11 @@ module-level names skips `Decl::Test`.
   like `List.empty()` (E042 without one, E040 for another type). It is allowed only in tests
   and test-only items (E051 elsewhere): a program's stores stay system resources. Such a store is
   never freed; the test's process ends. It has no roots (section 5.1), so its methods need no
-  effect. Rust: `telos_io::Store::new()`; LLVM: `telos_rt_store_new` with the glue of `T`.
+  effect. Rust: `ignite_io::Store::new()`; LLVM: `ignite_rt_store_new` with the glue of `T`.
 - A value is shown by its `to_text`: the builtin one of `Int`, `Byte`, `Bool`, `Text` and
   `Bytes`; the message of an `IoError`; else a pure, non-generic module-level fn
   `to_text(value: T) -> Text` in scope (own or imported; a test-only one only inside tests).
-  A value with none of these is shown as `<T>`, the type in Telos syntax (`<Option<(Text,
+  A value with none of these is shown as `<T>`, the type in Ignite syntax (`<Option<(Text,
   Text)>>`).
 
 ### 12.4 Typed API (add-only)
@@ -1390,8 +1402,8 @@ message on stderr is the target's own: `panic: index out of bounds: the len is 2
 index is 5` (Rust), `panic: index out of range` (LLVM). Only the exit status is the same.
 
 Both targets end the process through the substrate's `assert_failed` and `try_failed`
-(`telos_io`, section 7; the LLVM target through `telos_rt_assert_failed` and
-`telos_rt_try_failed`), which write the reports above and exit 101.
+(`ignite_io`, section 7; the LLVM target through `ignite_rt_assert_failed` and
+`ignite_rt_try_failed`), which write the reports above and exit 101.
 
 On the Rust target `a == b` in an assert compares `Int`, `Byte`, `Bool`, `Text` and `Unit`
 with Rust's `==` and every other `T` by its `Debug` text (`format!("{:?}", ..)` of both
@@ -1401,13 +1413,13 @@ target compares field by field.
 
 ### 12.6 Builds
 
-- `telos check` types tests and test-only items of the file and of every std module it
+- `ignite check` types tests and test-only items of the file and of every std module it
   loads; they cannot rot. The driver needs no change for this: `check_module` and
   `type_module` cover them. `check_with_std` also runs the Rust generator, which drops
-  test-only declarations (done by U1 in `crates/telos-rustgen/src/lib.rs`, `module_items`), so
-  `telos check` on a file with tests works now; it reaches the `assert` placeholder below only
+  test-only declarations (done by U1 in `crates/ignite-rustgen/src/lib.rs`, `module_items`), so
+  `ignite check` on a file with tests works now; it reaches the `assert` placeholder below only
   for an `assert` outside tests until U2 lowers it.
-- `telos build` and `telos emit` drop every declaration with `is_test_only()` after checking.
+- `ignite build` and `ignite emit` drop every declaration with `is_test_only()` after checking.
   Generated Rust, IR, goldens, `terminald` and `tn` stay byte-identical.
 - A test build includes the tests and test-only items of the files named on the command line
   only; every other module (the std modules a program loads) is built normally, with its tests
@@ -1415,20 +1427,30 @@ target compares field by field.
 
 ### 12.7 Runner ABI (U2)
 
-A test build produces test executables (Rust: a `[[bin]] telos-test`; LLVM: a main over a
-table of fn pointers), whose main is `telos_io::test_main(tests)` (LLVM:
-`telos_rt_test_main(table, count)`, forwarding to it). Each program file named gets an
-executable of its own, holding that program's tests; the std modules named share one, built
-over an empty program. An executable holds its modules' tests in module order, then
-declaration order. `telos test` runs the executables one after another, in the order of the
-first file of each; each prints its own report (so one `test result:` line per executable),
-and `telos test` exits with the largest status of them.
+A test build produces test executables (Rust: a `[[bin]] ignite-test`; LLVM: a main over a
+table of fn pointers), whose main is `ignite_io::test_main(tests)` (LLVM:
+`ignite_rt_test_main(table, count)`, forwarding to it). Since slice 9b every file named shares
+one test executable per target (`vision.md` invariant 9: one compile and one link, not
+one per file): the std modules named and every program, each program in a namespace of its
+own. Rust: one crate `ignite-tests` whose `lib.rs` holds each program as the module of its
+module path (`examples.todo` is `pub mod examples { pub mod todo { .. } }`), beside the
+`ignite-std` crate; generator API `ignite_rustgen::generate_tests`. LLVM: every program in one
+`program.ll`, separated by the module path that prefixes every symbol (`"<module>.<name>"`);
+`ignite_llvm::generate_tests`. The one exception: two programs with one module path (two files
+without a `package` line are both `main`) cannot share an executable, because the runner names
+a test `<module>/<name>`; the later one goes into a further executable (directories `tests`,
+`tests-2`, … under `--out`). An executable holds its modules' tests in the command-line order
+of their files, then declaration order. `ignite test` runs the executables one after another;
+each prints its own report (so one `test result:` line per executable), and `ignite test`
+exits with the largest status of them.
 
-The LLVM target links a runtime archive that carries `telos_rt_test_main`: `telos-rt` built
-with `--features runner` (`cargo build -p telos-rt --features runner`), passed with
-`--runtime`. `task test-telos` builds it into `target/telos-test/rt` and runs every file of
-`std/` and `examples/` on both targets, except `*.design.telos` (declarations that do not
-compile yet), which the task's file list leaves out.
+The LLVM target links a runtime archive that carries `ignite_rt_test_main`: `ignite-rt` built
+with `--features runner` (`cargo build -p ignite-rt --features runner`), passed with
+`--runtime`. `task test-ignite` builds it into `<target dir>/ignite-test/rt` (`target`, or
+`$CARGO_TARGET_DIR` when set) and runs every file of
+`std/` and `examples/` on both targets, except `*.design.ignite` (a declaration with no tests,
+checked by `cli::check_design_file_is_silent` in `crates/ignite`), which the task's file list
+leaves out.
 
 - `<exe> --run-one <full name>`: run that one test in this process under the substrate's
   `run`: exit 0 when the body returns; 101 on an assert failure, a failed `?` or a panic; the
@@ -1442,10 +1464,10 @@ compile yet), which the task's file list leaves out.
 - Per test: exit 0 passes; 101 fails; a timeout fails as `timed out after <SECS> s`; any other
   code `N` fails as `exited with code N`; death by a signal fails as `killed by signal N`.
 
-`telos test FILE.. [--target rust|llvm] [--std DIR] [--out DIR] [FILTER] [--exact] [--list]
+`ignite test FILE.. [--target rust|llvm] [--release] [--triple TRIPLE] [--std DIR] [--out DIR] [FILTER] [--exact] [--list]
 [--jobs N] [--timeout SECS]` builds the test executable for the files and runs it with the
 runner flags. Its exit code: 0 when every selected test passed or none exist (or with
-`--list`), 1 when a test failed, 2 for a compile error (diagnostics as for `telos check`).
+`--list`), 1 when a test failed, 2 for a compile error (diagnostics as for `ignite check`). `--release` builds the test executable with the release profile (Rust) or clang `-O2` (LLVM; dev builds use `-O0`); `--triple` pins the LLVM target triple, as for `ignite build --triple`, and a runtime archive for another triple is refused with exit 3 before clang runs (slice 9c).
 
 Output on stdout, modelled on `cargo test`:
 
@@ -1463,7 +1485,7 @@ failures:
 assertion failed: trim(" a ") == "a "
   left: a
   right: a 
-  at std/text.telos:120:3
+  at std/text.ignite:120:3
 
 failures:
     std.text/trim drops spaces
@@ -1488,23 +1510,679 @@ test result: FAILED. 1 passed; 2 failed; 4 filtered out; finished in 0.12s
 
 | code | stage | meaning |
 |---|---|---|
-| E050 | `telos-check` | two tests of one module have the same name |
-| E051 | `telos-check` (a UFCS call: `telos-types`) | code that is not a test or test-only item uses a test-only item or `Store.new()`, or an import names a test-only item |
-| E052 | `telos-types` | the condition of `assert` is not `Bool` |
-| E053 | `telos-syntax` | a test name is empty or interpolated |
+| E050 | `ignite-check` | two tests of one module have the same name |
+| E051 | `ignite-check` (a UFCS call: `ignite-types`) | code that is not a test or test-only item uses a test-only item or `Store.new()`, or an import names a test-only item |
+| E052 | `ignite-types` | the condition of `assert` is not `Bool` |
+| E053 | `ignite-syntax` | a test name is empty or interpolated |
 
 ### 12.9 Placeholders for U2
 
 Every `unimplemented!("slice 8: …")` arm U1 added so the workspace builds. U2 implemented all
 of them; none is left:
 
-- `crates/telos-rustgen/src/lib.rs`, `Generator::stmt`: `StmtKind::Assert` (lowering).
-- `crates/telos-rustgen/src/lib.rs`, `mutated_names`: `StmtKind::Assert`.
-- `crates/telos-llvm/src/lib.rs`, `lower_decls`: `Decl::Test`.
-- `crates/telos-llvm/src/lower.rs`, `Lower::stmt`: `StmtKind::Assert`.
-- `crates/telos-llvm/src/region.rs`, `block`: `StmtKind::Assert`.
+- `crates/ignite-rustgen/src/lib.rs`, `Generator::stmt`: `StmtKind::Assert` (lowering).
+- `crates/ignite-rustgen/src/lib.rs`, `mutated_names`: `StmtKind::Assert`.
+- `crates/ignite-llvm/src/lib.rs`, `lower_decls`: `Decl::Test`.
+- `crates/ignite-llvm/src/lower.rs`, `Lower::stmt`: `StmtKind::Assert`.
+- `crates/ignite-llvm/src/region.rs`, `block`: `StmtKind::Assert`.
 
-Not a placeholder: `crates/telos-rustgen/src/lib.rs`, `module_items` skips every declaration
+Not a placeholder: `crates/ignite-rustgen/src/lib.rs`, `module_items` skips every declaration
 with `is_test_only()` (the normal build of 12.6). The LLVM decl loop and every other
 place that iterates `Program::decls` must do the same in normal builds (U2).
-`crates/telos-rustgen/tests/units.rs` builds AST nodes with `test_only: false`.
+`crates/ignite-rustgen/tests/units.rs` builds AST nodes with `test_only: false`.
+
+## 13 Slice 9: friction fixes
+
+The coordinator's decisions of 2026-11-01 for the 17 rows of `docs/friction.md`, as built.
+N1 (frontend: `ignite-syntax`, `ignite-check`, `ignite-types`) settled this section; N2 (Rust
+target) and N3 (LLVM target and runtime) build against it. The slice-6 to slice-8 rules stay
+unless a row below changes them.
+
+### 13.1 Rows
+
+| row | syntax | typing and checking | lowering obligation |
+|---|---|---|---|
+| 1 | `"a {f("x")} b"`: an interpolation holds any expression, string literals (themselves interpolated, raw or byte) included; still no line break inside `{ }` | nesting deeper than 32 string literals is E054 | none: the parser desugars as before |
+| 2 | `r"…"`, `r#"…"#` (any number of `#`, closed by `"` and as many `#`), `br"…"` | no escapes, no interpolation, line breaks kept; a raw byte string is ASCII (E001) | none: `ExprKind::Str` and the byte-string desugaring |
+| 3 | none | `[]`, `List.empty()`, `Store.new()`, `None`, `Ok(x)` and `Err(e)` bound by a `let`/`var` without annotation take the type later uses in the same body give them: an argument, a `return`, an assignment, a pushed element, any position with an expected type. The typer walks such a body once more with inference holes and then types the `let` as if annotated; E042 only when neither the expected type nor a use decides | none: every `Ty` the backends read is resolved |
+| 4 | `break` and `continue` in expression position (`None => break`) | `ExprKind::Break`/`Continue`, type `Never`; `break` marks the innermost loop as broken | as the statements |
+| 5 | none | `x.f(..)` is the builtin `f` when it applies to `x`'s type, else a UFCS call of the user fn `f` (`Callee::Fn`). A user fn whose first parameter type has a builtin method of the fn's name is E041 at the declaration | none: `callee()` says which |
+| 6 | `import std.text.*` | every non-test public item of the module; an explicit import and an own declaration win; a name two globs provide is E041 at its use | `Import::is_glob()`, `Import::module()`; a Rust `use` of every item (or of the names `Symbols::imported` lists from that module) |
+| 7 | none | `==`/`!=` on every comparable type (13.5); E045 otherwise | general equality glue, the slice-8 assert glue generalised |
+| 8 | `b'0'..=b'9' => …`, `LIMIT..=99` | 13.7 | `range_bounds(pattern)`: `lo <= v && v <= hi` |
+| 9, 13 | `\|x, y\| expr`, `\|x\| { … }`, `\|x: Int\| …`, `\|\| e` | 13.3 | 13.3 |
+| 9 | `Todo { done = flag, ..t }` | `ExprKind::RecordUpdate`: `base` has the record's type, each field its field type; E047 for an unknown or repeated field | a copy of `base` with the fields replaced; fields evaluated in source order, then `base` |
+| 10 | `t.0`, `t.1` | `ExprKind::TupleField`; an index past the tuple is E041 | the element |
+| 11 | `x.debug()` | `Callee::Builtin(Builtin::Debug)`, `Text`, on every type without a type parameter anywhere inside (`List<T>` in a generic fn has none: E041); `Show::Debug` likewise | 13.6; a failed `assert a == b` shows both values by `AssertCompare.show`, which is `Show::Debug` where no `to_text` applies |
+| 12 | `"\u{1F600}"` | 1 to 6 hex digits, a Unicode scalar value (E001 otherwise); Text literals only | none |
+| 14 | a left-deep chain of 100,000 `+` | checker and typer walk the left spine of `Binary` iteratively | every backend pass must too, or prove its depth bound |
+| 15 | `enum Tree<T> { Leaf, Node(T, Tree<T>) }`, `type Node { next: Option<Node> }` | E055 only for a record holding itself through records and tuples alone | 13.4 |
+| 16 | none | none | generic instances emitted once per program (`linkonce_odr` or one module) |
+| 17 | `fn Response.json(status: Int, body: Json) -> Response = …` | 13.8 | 13.8 |
+
+### 13.2 AST and typed API (add-only)
+
+| item | meaning |
+|---|---|
+| `ExprKind::Closure(Closure { params: Vec<ClosureParam { name, ty: Option<Type>, span }>, body: Box<Expr> })` | a closure literal |
+| `ExprKind::RecordUpdate { name, fields, base }` | `Name { f = e, ..base }` |
+| `ExprKind::TupleField { receiver, index: usize }` | `receiver.index` |
+| `ExprKind::Break`, `ExprKind::Continue` | in expression position; statement position stays `StmtKind::Break`/`Continue` |
+| `PatternKind::Range { start, end }` | bounds are `PatternKind::Int` or a payload-less `PatternKind::Variant` naming a constant |
+| `FnDecl.owner: Option<Ident>`, `FnDecl::qualified_name()` | `Some(Response)` for `fn Response.json`; `qualified_name()` is `Response.json` |
+| `Import::is_glob()`, `Import::module()` | `import a.b.*` is `path` `a.b.*`, `names` empty |
+| `TokenKind::DotDot`, `TokenKind::DotDotEq` | `..`, `..=` |
+| `TypedProgram::closure(expr) -> Option<&ClosureInfo>` | `ClosureInfo { params: Vec<(String, Ty)>, ret, captures: Vec<Capture>, effects: Option<FnEffects> }` |
+| `Capture { name, binding: Span, ty, effects: Vec<String> }` | `binding` is the captured binding's name span (the key of `binding_type`); `effects` are the closure's effects whose head is `name` |
+| `TypedProgram::equality(&Ty) -> Option<Equality>` | `Scalar`, `Text`, `Structural`, or `None` when not comparable (13.5) |
+| `TypedProgram::boxed_payload(&QualName, variant, index) -> bool`, `boxed_field(&QualName, field) -> bool` | 13.4 |
+| `TypedProgram::range_bounds(pattern) -> Option<(i64, i64)>` | both bounds of a range pattern, inclusive, constants evaluated |
+| `TypedProgram::place_owner(&Place) -> Option<&Ty>` | the record type that owns the last field of an assignment target; the Rust target boxes the assigned value when `boxed_field` holds for that owner (13.4) |
+| `Builtin::Debug`, `Show::Debug` | 13.6 |
+| `ModuleTypes.const_values: BTreeMap<String, i64>` | values of `Int` and `Byte` constants whose value is a literal, a negated literal or such a constant |
+| `Symbols.closure_effects: BTreeMap<Span, EffectSig>`, `Symbols.glob_conflicts` | checker results the typer reads |
+| `ignite_types::{equality, boxed_payload, boxed_field}(.., &TypedModules)` | the same answers as the `TypedProgram` methods, for a layout pass that holds only the modules |
+| `ignite_check::AMBIENT_HEADS` | `stdin`, `stdout`, `process`, `net`: the heads of ambient effects (E056) |
+| `impl Drop for Expr` | drops binary and unary chains from a work list; an owned `Expr` cannot be destructured by move (match on `&e.kind`) |
+
+### 13.3 Closures
+
+**Typing.** A parameter's type is its annotation, else the expected fn type's parameter type;
+neither is E042. A closure passed where the parameter is a fn type with an open return (the
+builtin `map`'s `fn(T) -> U`, a generic `fn(T) -> U` whose `T` an earlier argument decided)
+gets that fn type's closed parameter types, and its synthesised result decides `U`:
+`names.map(|n| prefix + n)` needs no annotation. The body is checked against the expected
+return type, else synthesised (a `return e` inside a closure without an expected return
+type is checked against `Unit`).
+`return`, `?`, `break` and `continue` inside the body belong to the closure: `return` leaves
+the closure, a loop of the enclosing fn is not visible, and a `?` in a closure inside a test
+body returns from the closure. The closure's type is `Ty::Fn(params, ret)`, or
+`Ty::EffectFn(params, ret, effects)` when its body performs an effectful operation.
+
+**Captures.** A closure captures every binding of an enclosing scope its body reads (a local,
+a parameter, a pattern or loop binding; never a module-level fn or constant), in order of
+first use, including those only a nested closure reads. Captures are **by copy**: the value at
+creation; a later assignment to the outer binding does not change the closure. Assigning to a
+captured binding, or `push`/`append`/`clear` on one, inside the closure is E006.
+
+**Effects.** `ignite-check` walks the body as a fn without `requires`, parameters rooted in
+themselves. Each effect is `p.op` on a parameter `p`, `r.op` on a root `r` of a captured
+value (the enclosing fn's parameter it comes from), or ambient (`stdout.write`). Every effect
+that is not on a parameter is also needed where the closure is created: a closure carries the
+authority it captured, and its creator must hold it. `ClosureInfo.effects` lists all of them
+(`FnEffects.names` are the closure's parameter names). An effectful closure where a pure fn
+type is expected, or where an effectful fn type does not cover its effects, is E017. A
+`let f = |..| ..` binding of an effectful closure may be called; the call needs the effects on
+the arguments' roots plus the others (`Symbols::effect_sites` lists it).
+
+**Rust target (N2).** Every fn value, closure or named fn, is
+`std::sync::Arc<dyn Fn(P1, ..) -> R + Send + Sync>` (generics where cheaper and equivalent). A
+closure lowers to `Arc::new({ let c1 = c1.clone(); .. move |p1, ..| body })`, cloning each
+capture at creation. A named fn used as a value is wrapped the same way.
+
+**LLVM target (N3).** A fn value is a pair `{ ptr code, ptr env }`. `code` takes `env` first,
+then the parameters. `env` points to a struct of the captures in `ClosureInfo.captures` order,
+copied at creation; copying a fn value runs the env's copy glue (each capture's copy glue). A
+named fn used as a value has `env` null and a thunk that ignores it.
+
+### 13.4 Boxing
+
+A record field or an enum payload position is **boxed** when its declared type holds a value
+of the record or enum that owns the position inline: through records, tuples, `Option`,
+`Result` and enums (type arguments substituted), not through `List`, `Store` or a fn type.
+`boxed_field`/`boxed_payload` answer per position, for every instance of a generic
+declaration alike. Examples: `Tree.Node` payload 1 in `enum Tree<T> { Leaf, Node(T, Tree<T>) }`;
+field `next` in `type Node { value: Int, next: Option<Node> }` (the whole `Option<Node>` is
+boxed); both `A.b` and `B.X` payload 0 for `type A { b: B }`, `enum B { X(A), Y }`.
+
+Rust: the position's type is `Box<T>`; constructing boxes, matching and reading deref.
+LLVM: the position holds a pointer to a heap copy; copy glue copies the pointee, equality and
+debug glue follow the pointer. A record that holds itself through records and tuples alone is
+E055 and never reaches a backend.
+
+### 13.5 Equality
+
+`==` and `!=` take two operands of one type; the type is **comparable** when it holds no fn,
+`TcpStream`, `TcpListener`, `IoError`, `Store` or type parameter anywhere inside (fields,
+payloads, elements, type arguments; a recursive type is assumed comparable where it recurs).
+Otherwise E045. The operand type is `type_of(left)`, or `type_of(right)` when the left is
+`Never`. Both operands are evaluated, left first, each once.
+
+| `equality(ty)` | types | equal when |
+|---|---|---|
+| `Scalar` | `Int`, `Byte`, `Bool`, `Unit` | same value |
+| `Text` | `Text` | same bytes |
+| `Structural` | `List` (`Bytes` too), `Option`, `Result`, `Input`, tuples, records, enums | lists: same length and elements pairwise; tuples and records: every element or field in order; enums: same variant and payloads pairwise; boxed positions compare the pointees |
+
+`!=` is the negation. Constant patterns stay limited to `Int`, `Byte`, `Bool` and `Text`.
+
+### 13.6 Debug text
+
+`x.debug()` and a failed `assert` with `Show::Debug` produce this text, the same on both
+targets, nested values formatted by the same rules:
+
+| type | text |
+|---|---|
+| `Int`, `Byte` | decimal, `-` for a negative `Int`: `-3`, `255` |
+| `Bool` | `true`, `false` |
+| `Unit` | `()` |
+| `Text` | in `"`; `"` as `\"`, `\` as `\\`, newline `\n`, carriage return `\r`, tab `\t`, NUL `\0`, any other character below U+0020 and U+007F as `\u{hex}` (lowercase, no padding: `\u{1b}`); every other character as itself |
+| `List<T>`, `Bytes` | `[a, b]`, `[]` |
+| tuple | `(a, b)` |
+| `Option` | `Some(x)`, `None` |
+| `Result` | `Ok(x)`, `Err(e)` |
+| `Input` | `Data([104, 105])`, `Eof` |
+| record | `Todo { id: 1, title: "milk", done: false }`: the record's unqualified name, no type arguments, fields in declaration order; `Empty {}` without fields |
+| user enum | `Command.Quit`, `Command.Echo("x")`: unqualified enum name, `.`, variant, payloads in `( )` |
+| `IoError` | `IoError("connection refused")`, the message as `Text` |
+| fn value | `<fn>` |
+| `TcpStream`, `TcpListener`, `Store<T>` | `<TcpStream>`, `<TcpListener>`, `<Store>` |
+
+### 13.7 Range patterns
+
+`lo..=hi` matches a value `v` of type `Int` or `Byte` with `lo <= v <= hi`. Each bound is an
+integer literal (`-5`, `0x7F`), a byte literal (`b'a'`, an integer) or a constant of the
+scrutinee's type whose value is a literal, a negated literal or such a constant
+(`ModuleTypes.const_values`); anything else is E045. A range on another type is E040, a bound
+out of `Byte` range E044, `lo > hi` E043. Exhaustiveness splits `Int` and `Byte` columns into
+intervals: a `match` on `Byte` covering `0..=127` and `128..=255` needs no `_`; an uncovered
+interval is shown as `lo..=hi`.
+
+### 13.8 Associated fns
+
+`fn Owner.name(..)` declares a fn of the record or enum `Owner`, which the same module must
+declare (E003 otherwise); a second `Owner.name` or a variant `Owner.name` is E004. It is called
+`Owner.name(..)` (a path call) and may be used as a value `Owner.name`. Its `QualName` is
+`{ module, name: "Owner.name" }` and its key in `ModuleTypes.fns`, `Symbols.functions` and
+`Symbols.effects` is `Owner.name`; the call's callee is `Callee::Fn` of that `QualName`.
+Importing `Owner` (explicitly or by glob) brings its associated fns. Backends turn the `.` into
+a valid symbol of their own (Rust: an inherent `impl Owner { fn name }` or a mangled free fn;
+LLVM: a mangled symbol); a free fn `name` of the same module is a different fn.
+
+### 13.9 Diagnostics changed in slice 9
+
+| code | change |
+|---|---|
+| E006 | also: assignment to, or `push`/`append`/`clear` on, a captured binding inside a closure; `push`/`append`/`clear` through a `let`, a `for` element or a pattern binding, or on `x.to_bytes()` (13.11) |
+| E016 | also: a closure's effects on captures and ambient effects, charged where it is created; an effect reached through `map`, `push` or `append` on a field or index, or through a call of a local fn value (13.11) |
+| E046 | `Int` and `Byte` columns with a range pattern split into intervals (13.7) |
+| E056 | new: a parameter named like an ambient capability (13.11) |
+| E057 | new: an unused type parameter of a generic record, enum or alias (13.11) |
+| E017 | also: an effectful closure where a pure fn type, or an effectful fn type not covering its effects, is expected |
+| E041 | also: a name two glob imports provide; a fn whose first parameter type has a builtin method of the fn's name; a tuple index past the tuple |
+| E042 | also: a closure parameter without annotation or expected type; no longer for a generic value later uses decide (row 3) |
+| E043 | also: a range pattern whose start is above its end |
+| E045 | `==`/`!=` on a type that is not comparable; a range bound that is neither a literal nor a constant with a literal value |
+| E054 | also: string literals nested deeper than 32 interpolations |
+| E055 | narrowed: only a record holding itself through records and tuples alone |
+| E003, E004 | also: an associated fn whose owner is no record or enum of the module; one declared twice or named like a variant of its owner |
+
+### 13.10 Placeholders for N2 and N3
+
+Every `unimplemented!("slice 9: …")` arm N1 added so the workspace builds:
+
+- `crates/ignite-rustgen/src/lib.rs`: three `match &expr.kind` (closures, record update, tuple
+  fields, `break`/`continue` expressions), four `match &pattern.kind` (range patterns), one
+  `match show` (`Show::Debug`).
+- `crates/ignite-llvm/src/lower.rs`: `Lower::expr` (`match &e.kind`), `Lower::pattern` (range
+  patterns), the show match (`Show::Debug`), the builtin match (`Builtin::Debug`).
+- `crates/ignite-llvm/src/region.rs`: the builtin match (`Builtin::Debug`), the expression
+  walk (`match &expr.kind`).
+
+`grep -rn 'slice 9:' crates/ignite-rustgen crates/ignite-llvm` lists them. Not placeholders but
+gaps every backend has to close: `FnDecl.owner` (13.8), glob imports (row 6), boxing (13.4),
+equality on every comparable type (13.5), and `Builtin::Debug` in the Rust target's builtin
+lowering if it matches without a wildcard. `crates/ignite-rustgen/tests/units.rs` builds
+`FnDecl` with `owner: None`.
+
+### 13.11 Soundness fixes of wave A0 (frontend)
+
+From `vision.md` sections 10.1 and 10.2. The probes of `docs/audit/2026-11-01/` are copied
+to `crates/ignite-types/tests/audit/` with their expected diagnostics (the first failing stage,
+empty for a probe that must check clean); `effects_closure_variants.ignite` repeats the effect
+probes with the handle captured by a closure instead of passed as an argument.
+
+| item | rule | probes |
+|---|---|---|
+| a | `push`, `append` and `clear` (the builtins) need a receiver place rooted in a `var` or a parameter (a changed parameter is the callee's copy): through a `let`, a `for` element or a pattern binding it is E006, and so is a receiver `x.to_bytes()`, which shares `x`'s buffer on the LLVM target | `llvm/let_push`, `for_push`, `for_push2`, `match_push`, `match_push2`, `to_bytes_push` |
+| b | a parameter of a fn, a role, a fn type or a closure may not be named `stdin`, `stdout`, `process` or `net` (E056), so a `requires` head names a parameter only when the fn declares one of that name, and an ambient effect is never charged to an argument's roots | `effects/a01` to `a04`, `b08`, `c01` |
+| c | the roots of `l.map(f)` are the roots of `l` plus the roots of `f`; a closure's roots are those of its body (its captures), and a call of a local fn value `g(..)` has the roots of `g` plus its arguments' | `effects/a05`, `a06`, `b09`, `b11` |
+| d | `push` and `append` on a field, index or tuple-field receiver extend the roots of the receiver's place root (`h.items.push(s)` roots `h` in `s`) | `effects/a07`, `b10` |
+| e | a type parameter of a generic record, enum or alias that no field, payload or aliased type uses is E057 | `io/p2_unused` |
+
+Every other effects probe keeps the diagnostic `vision.md` section 10.2 names. `io/p1`
+now checks clean: row 15 allows recursion through `Option` and enum payloads.
+
+## 14 Slice 10: the system declaration (F1)
+
+Contract reviewed and accepted by the steering session on 2026-11-01. Sources: vision 4.1
+row 10, T1, T4, T5, T6, section 6 (X5, X21, X22), 10.3 (R2 to R5); design 3.2, 3.3, 4, 5,
+11.3; `examples/terminal/terminal.design.ignite`. Decisions O1 to O12 are recorded in 14.13.
+
+### 14.0 Acceptance
+
+1. `ignite check examples/terminal/terminal.design.ignite` exits 0. Edits to that file are
+   allowed only as listed in O5, mirrored in design §11.3 in the same change.
+2. `examples/terminal/terminal.ignite` and `examples/todo/todo.ignite` are in the component form
+   (14.4). `ignite build` emits `terminald`, `tn` and `todod`. The terminal suite (64 cases
+   across both targets), the todo suite and the 78 inline tests per target pass unchanged.
+3. T1: a failure ends its task. `terminald` survives a session whose handler fails an
+   `assert`, overflows or indexes out of range, on both targets. Every failure report names
+   the Ignite file, line, column and operation, identical on both targets.
+4. R2 to R5 are fixed, and `docs/audit/2026-11-01/io/iotest` `drop` and `cross` behave as the
+   audit README's "expected after the fix" column says.
+5. Invariant 9: the `task gate` wall time and the `todod` build time (both targets) are
+   measured before and after, and recorded in the `AGENTS.md` "Gate time" section. A rise of
+   more than 10 % is a deviation and has to be explained.
+6. Every new diagnostic (E100 to E109) has a fixture.
+
+### 14.1 Quantity literals and quantity types
+
+- Syntax: an Int literal or a decimal literal, then a unit name on the same line:
+  `4096 bytes`, `16 KiB`, `15 minutes`, `100 ms`, `99.9%`.
+  - A unit name is an identifier from the table below, not a keyword.
+  - The pair binds tighter than any binary operator.
+  - A decimal literal (`99.9`) exists only directly before `%` or a unit. There is no
+    `Decimal` type in slice 10.
+
+| type | units (singular and plural accepted) | representation |
+|---|---|---|
+| `Duration` | `ns`, `us`, `ms`, `second(s)`, `minute(s)`, `hour(s)`, `day(s)` | Int nanoseconds |
+| `ByteSize` | `byte(s)`, `KiB`, `MiB`, `GiB` (1024-based), `KB`, `MB`, `GB` (1000-based) | Int bytes |
+| `Ratio` | `%` | Int parts per million; at most 4 decimals, so `99.9%` is 999,000 |
+
+- The name is `ByteSize`, not design §3.3's `Bytes`, because `Bytes` is `List<Byte>` today.
+  Design §3.3 gets a one-line note.
+- Operations:
+  - same-type `+`, `-` and comparison;
+  - `* Int` and `/ Int`;
+  - `Duration.to_ms()`, `.to_ns()` and `ByteSize.to_int()`;
+  - `Ratio.ppm()`;
+  - `debug()` prints the literal form in the largest exact unit.
+- Overflow follows T6. A literal out of range is E107.
+- A unit applied to the wrong kind of value, or mixed units (`1 ms + 1 bytes`), is E101.
+- `Rate<Event>`, `CPU`, `Money` and `Decimal` are not in this slice.
+
+### 14.2 Named arguments (T5 a)
+
+- `f(a, b, name = e)`: positional arguments first, then named ones.
+- Allowed only for a direct call of a fn declared in Ignite, including associated fns and
+  UFCS. Not through fn values, closures or protocol roles.
+- Each named argument must name a parameter that no positional argument covers.
+- An unknown name, a duplicate, a positional argument after a named one, or use through a fn
+  value is E103.
+- Lowering: the arguments are reordered at the call, and evaluation order stays source order
+  (each argument goes into a temporary first when any argument has an effect).
+
+### 14.3 Brace literals and `Map<K, V>` (T5 b, c)
+
+- A brace literal `{ k = e, … }` without a type name takes its type from the expected type:
+  - a record type makes it a record literal (the slice-9 rules, defaults and `..base`);
+  - `Map<K, V>` makes it a map literal.
+    - Identifier keys give `K = Text`.
+    - Qualified component references (`Terminal.ingress`) give `K = Ref<C>` for a common
+      kind, or the kind-erased `Ref` when the kinds differ (O2).
+- There is no type named `Any`. `Ref<K>` coerces to `Ref` wherever a `Ref` is expected.
+- A brace literal with no expected type is E100.
+- `Map<K, V>`: `Map.empty()`, `get(k) -> Option<V>`, `put(k, v)`, `remove(k)`, `keys()`,
+  `len()`, `contains(k)`, and `for (k, v) in m` in key order.
+  - Value semantics, as for `List`.
+  - Structural `==` and debug text are `{k: v, …}` in key order.
+- Key types: `Int`, `Byte`, `Text`, `Bool`, enums without payloads (in declaration order), and
+  `Ref<C>`. Any other key type is E106 (O11).
+- Rust: `std::collections::BTreeMap`. LLVM: a sorted array of pairs with binary search, plus
+  copy and drop glue (O11).
+
+### 14.4 System declarations: resources, components, references
+
+The grammar is unchanged from `slice.md` section 3. What changes is what a kind is: a component
+kind is an ordinary Ignite record type (D6), declared in std or in the program.
+
+- `component name: K { props }`: `K` is a record type. `props` is a record literal of `K` with
+  the slice-9 rules, so fields with defaults may be left out. A field without a default that is
+  left out is E104.
+- `resource name: K { props }`: in slice 10 the resource kinds stay the two compiler-known
+  ones, `TcpListener` and `Store<T>`. `TcpListener` gains `exposure: Exposure`
+  (`Loopback | Private | Public`, default `Loopback`) and `backlog: Int` (default 128).
+  `exposure = Loopback` with a non-loopback address is E104.
+- A qualified enum variant `Type.Variant` (`Exposure.Loopback`) is accepted wherever an enum
+  value is expected, when `Type` names an enum. The bare form stays valid.
+- Names inside a `system` (O2):
+  - A bare resource or component name used in a property expression is a value of its
+    declared type, as resources are today. `application = console` passes the console's
+    record value.
+  - The qualified form `System.name` is a reference, `Ref<K>`, and is used as an assembly key
+    and as a probe `target`.
+  - A cycle of bare-name uses among components (`a` uses `b`, `b` uses `a`) is E105.
+- Output fields (O3): a field of a kind whose type is `Signal<T>` is an output.
+  - Setting it in a declaration is E104.
+  - `promptProbe.attempts` is a value of type `Signal<T>` that names the component and the
+    field.
+  - Signals carry no runtime behaviour in slice 10; slice 12 gives them one.
+- `module("p")` (O4): its type is `Module<I>`, where `I` is the expected record type whose
+  fields are all fn types.
+  - `p` names a module of the program's package (`examples.terminal.commands` is
+    `examples/terminal/commands.ignite`) or a std module.
+  - The literal becomes a record `I` whose fields are filled by name from the module's public
+    fns, and their types must match.
+  - A module that is not found, or a missing or mismatched fn, is E102.
+  - This adds sibling modules of the program's package to the module loader. Package
+    manifests and lockfiles stay wave H.
+
+### 14.5 Executable components (O1)
+
+- A kind `K` produces an executable when it has the associated fn
+  `fn K.main(self: K) -> Result<(), IoError>`, declared in K's module, with an inferred
+  `requires`.
+- The generated `main`, on both targets:
+  1. runs under `ignite_io::run`;
+  2. creates the `Store` resources;
+  3. binds each `TcpListener` resource the component uses, with the `--port` override and the
+     `listening on` log as today (section 6.1);
+  4. builds the component's record value, with resource handles and the values of embedded
+     components substituted;
+  5. calls `K.main(value)`;
+  6. maps an `Err` to its exit code.
+- The accept loop and the per-connection `spawn` move from generated code into Ignite:
+  - `fn TelnetServer.main` and `fn TelnetClient.main` in `std/protocol/telnet.ignite`;
+  - `fn HttpServer.main` in `std/protocol/http.ignite`.
+
+  The compiler-known kinds `Service` and `Client` are removed.
+- Exit statuses stay those of section 6.1 (1 to 4). New builtin `IoError.with_exit_code(n)`
+  (O12). Bind failure (1) and `--port` errors (2) stay in the generated part.
+- `executable` is a field of each executable kind, defaulting to the component name. The
+  examples set `executable = "terminald"`, `"tn"` and `"todod"`.
+- Components without `K.main` (`CommandConsole`, `TelnetPrompt` and `Application` in slice
+  10) produce no executable. They are values, embedded where a bare name uses them.
+
+Example, the buildable terminal (`examples/terminal/terminal.ignite`):
+
+```ignite
+system Terminal {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 2323 }
+  component console: CommandConsole {
+    implementation = module("examples.terminal.commands")
+    prompt = "terminal> "
+    maximum_line = 4096 bytes
+  }
+  component server: TelnetServer { listener = ingress, application = console, executable = "terminald" }
+  component client: TelnetClient { target = ingress, executable = "tn" }
+}
+```
+
+Whether the buildable example keeps its fns in one file (with `module("examples.terminal")`
+naming itself) or splits out `commands.ignite` is the implementing agent's choice. Both must
+work.
+
+### 14.6 Std types (Ignite, no runtime behaviour beyond 14.5)
+
+| module | types and fns |
+|---|---|
+| `std/console.ignite` | `CommandConsole { implementation: Module<ConsoleCommands>, prompt, maximum_line: ByteSize, command_schema: Option<Module<CommandSchema>> = None }`, `ConsoleCommands { respond: fn(Text) -> Reply }`; the existing `Console` stays as the runtime value built from it |
+| `std/protocol/telnet.ignite` | `TelnetServer`, `TelnetClient`, `TelnetProfile`, `SessionLimits { maximum, idle_timeout: Duration, input_buffer: ByteSize, output_buffer: ByteSize, slow_reader_deadline: Duration }`; `idle_timeout` replaces `IDLE_TIMEOUT_MS` |
+| `std/protocol/http.ignite` | `HttpServer { listener, application: HttpApp<S>, executable }` |
+| `std/contract.ignite` | `Availability`, `ThresholdCompliance`, `SLA`, `Window` (`rolling(Duration)`, `calendar_month(Text)`), `Consequence` (`event(Text)`), `MissingData` |
+| `std/policy.ignite` | `Restart { backoff: Backoff, maximum_attempts, interval: Duration }`, `Backoff` (`exponential(Duration, Duration)`, `fixed(Duration)`), `DrainRollout { deadline: Duration, on_deadline: Text }` |
+| `std/probe.ignite` | `TelnetPrompt { target: Ref<TelnetServer>, interval, timeout, expected_prompt, close_after_probe, attempts: Signal<ProbeAttempt> }`, `ProbeAttempt` |
+| `std/deploy.ignite` | `Deployment { system: SystemRef, bindings: Map<Ref, Binding> }`, `Binding` (`localSocket()`, `nativeProcess(includes: List<Ref>)`, `workstationExecutable()`, `scheduledProbeHost()`) |
+| `std/cli.ignite` | `Application { executable, commands: Map<Text, Command> }`, `Command`, `Argument { name, kind: ArgKind }`, `ArgKind` (`endpoint(Protocol)`, `text()`, …) (O6, O9) |
+
+- Every closed-set field that the design writes as a string stays `Text` in slice 10, with no
+  exceptions: `good`, `missing_data`, `on_deadline`, `terminal`, `baseline`, `negotiation`,
+  `unsupported_options` and `character_encoding`. Slice 12 turns each into an enum when it
+  gives it behaviour.
+
+### 14.7 `contract`, `policy`, `assembly` declarations
+
+- `contract name: K { … }` and `policy name: K { … }` are declarations inside a `system`, with
+  the same rules as `component` but never executable.
+- `assembly name: K { … }` is a top-level declaration whose kind is a record type
+  (`Deployment`). `system = Terminal` is a `SystemRef`.
+- Every `bindings` key must be a component or resource of that system, otherwise E108.
+- `ignite build` does not read assemblies in slice 10 (O8); slice 11 resolves them.
+- `system`, `component` and `resource` are keywords already. `contract`, `policy` and
+  `assembly` become keywords, which takes the keyword count from 29 to 32. Check `std/` and
+  `examples/` for identifiers with these names.
+
+### 14.8 T1: a failure ends its task
+
+- A panic, a failed `assert` or a failed `?` outside a test ends the task that ran it, on
+  every target. So does T6 overflow, an index out of range, a division by zero or a
+  non-exhaustive match.
+- The substrate logs `task ended with error: <report>`.
+- The process exits 101 only when the failing task is the main task or a test.
+- Report text, identical on both targets: `<operation> failed at <file>:<line>:<column>: <detail>`.
+  The main task and a test print it on stderr as `error: <report>`; a spawned task logs it as
+  `task ended with error: <report>`, without a second `error:` (coordinator, 22:40).
+  - Example: `+ failed at examples/todo/todo.ignite:41:17: 9223372036854775807 + 1`.
+  - The operations are `assert`, `?`, `+`, `-`, `*`, `/`, `%`, `index`, `match`, `unwrap` and
+    `slice`.
+  - For `assert a == b`, the detail is the slice-9 left and right debug text.
+- Rust target:
+  - Each failure site calls `ignite_io::fail(op, file, line, col, detail)`. Arithmetic uses
+    `checked_*`, so rustc's panic text is gone.
+  - `ignite_io::spawn` wraps the task in `catch_unwind`. The main task's panic exits 101.
+- LLVM target (O10):
+  - `setjmp` never sits in a Rust frame, because `returns_twice` is undefined in Rust. It
+    lives either in the emitted IR's task-entry wrapper (a `setjmp` call with the
+    `returns_twice` attribute, then the task body) or in a small C file built by `ignite-rt`.
+  - `ignite_rt_fail` prints the report, releases the task's arena regions and handles, then
+    `longjmp`s to that wrapper, which calls `task_end`.
+  - No landing pads in the emitted IR.
+  - A Rust panic inside `ignite-io` or `ignite-rt` is caught by `catch_unwind` at the task
+    thread and reported in the same format. It is never `longjmp`ed over.
+- `slice.md` §7 and §12.5 and `llvm.md` §4 change to match. X5 and X22 are resolved.
+
+### 14.9 Substrate items R2 to R5 (vision 10.3)
+
+| item | change | acceptance |
+|---|---|---|
+| R2 | a weak reference in the pending list; send plus close in the stream's `Drop` | `iotest drop`: the peer reads the bytes without waiting for a flush |
+| R3 | `close` sets a `closed` flag, and `write_all` after it returns `Err` on the writer's side | `iotest cross`: the error reaches the writer and not the other task's `read` |
+| R4 | `transient` also covers EPROTO, ENETDOWN, EHOSTUNREACH, ENETUNREACH and ENONET | a unit test of `transient` |
+| R5 | remove the flush in `exit` | a unit test: exit with a stalled writer returns |
+
+### 14.10 Typed API (add-only)
+
+- `TypedProgram::quantity(expr) -> Option<(QuantityKind, i64)>`: kind and value in base
+  units of a quantity literal.
+- `TypedProgram::named_args(call) -> Option<&[usize]>`: present only when the call has a
+  named argument; entry `i` is the index in the call's `args` of the argument for parameter
+  `i` (a UFCS receiver is not counted). Arguments are evaluated in `args` order.
+- `TypedProgram::brace_kind(expr) -> Option<&BraceKind>`, `BraceKind { Record(Ty), Map(Ty,
+  Ty) }`; `brace_key(&Path) -> Option<&Reference>` for a qualified map key.
+- `TypedProgram::reference(expr) -> Option<&Reference>`: the constant a `Ref`, `Signal`,
+  `SystemRef` or `Protocol` value denotes, `Reference { System, Member, Signal, Protocol }`,
+  lowered as the text `Reference::text()`.
+- `TypedProgram::executables() -> &[ExecutableInfo]`: system, component, kind, main fn,
+  executable name, resources used and embedded components.
+- `TypedProgram::module_record(expr) -> Option<&ModuleRecord>`: module path, record type and
+  the fn per field.
+- `TypedProgram::failure_site(expr) -> Option<FailureSite { op, offset }>` for every
+  expression that can fail; `FailureSite::position(&SourceFile)` gives file, line and column,
+  since the typed program does not know its source files.
+- New types `Ty::Map`, `Ty::Quantity(QuantityKind)`, `Ty::Ref(Option<Box<Ty>>)` (`None` is
+  the kind-erased `Ref`), `Ty::Signal`, `Ty::SystemRef`, `Ty::Protocol`. `Module<I>` is the
+  record `I` itself; `Exposure` is the builtin enum `Ty::Enum(QualName::builtin("Exposure"))`.
+- New builtins: `Map*`, `DurationToMs`, `DurationToNs`, `ByteSizeToInt`, `RatioPpm`,
+  `IoErrorWithExitCode`, `ModuleRecord`.
+- `ModuleTypes::param_names`: parameter names per fn, for named arguments across modules.
+- AST: `ExprKind::Quantity`, `NamedArg`, `Brace`; `StmtKind::ForPattern`;
+  `Decl::Assembly`; `SystemDecl::contracts` and `policies`.
+- `Symbols`: `contracts`, `policies`, `assemblies` and `systems` (members per system), kept
+  for slice 11.
+
+### 14.11 Diagnostics E100 to E109
+
+| code | rule |
+|---|---|
+| E100 | brace literal with no expected type |
+| E101 | unit on the wrong kind of value, or unit mismatch in an operation |
+| E102 | `module("…")`: module not found, or a fn missing or of the wrong type |
+| E103 | named argument: unknown name, duplicate, positional after named, or used through a fn value |
+| E104 | component or resource property; three distinct message texts and three fixtures: `required field <f> of <K> is missing`, `output field <f> of <K> cannot be set`, `exposure Loopback needs a loopback address, got <a>` |
+| E105 | cycle among components through bare-name uses |
+| E106 | `Map` key type not orderable |
+| E107 | quantity literal out of range, or more than 4 decimals |
+| E108 | assembly binding key not a member of the named system |
+| E109 | executable kind's `main` has the wrong signature |
+
+E109 is the last code of this slice. Nothing from E110 on (T4).
+
+### 14.12 Work split
+
+| agent | owns |
+|---|---|
+| P1 frontend | syntax, check and types: 14.1 to 14.4, 14.7, 14.10, 14.11, `docs/slice.md` §14 |
+| P2 Rust target and substrate | `ignite-rustgen`, `ignite-io`: Map, quantities, the 14.5 mains, the T1 Rust half, R2 to R5 |
+| P3 LLVM target | `ignite-llvm`, `ignite-rt`, `docs/llvm.md`: Map, quantities, the 14.5 mains, the T1 LLVM half (setjmp, per-task release) |
+| P4 std and examples (after P1 to P3) | 14.6 std modules, both examples in the component form, the design-file edits of O5, design §11.3 and §3.3 notes, friction rows, gate-time record |
+
+### 14.13 Decisions taken in the review
+
+| # | decision |
+|---|---|
+| O1 | A component kind is a record type; it is executable when it has `fn K.main(self: K) -> Result<(), IoError>` in Ignite. The accept loop moves to std, and `Service`/`Client` are removed (14.5). |
+| O2 | A bare name inside a `system` is a value of its type; `System.name` is `Ref<K>`. |
+| O3 | Fields of type `Signal<T>` are outputs and cannot be set (E104). Refined in 14.14 item 8: a contract's `signal = probe.attempts` sets one to another member's signal. |
+| O4 | `module("p")` resolves to a sibling module of the program's package or a std module, and gives a record of fns filled by name. |
+| O5 | The design file gets the minimal edits it needs: the package prefix in `module("…")`, the stale `std.telnet` handler path, and `type =` changed to `kind =`. Amended 2026-11-01: `workstationExecutable` and `scheduledProbeHost` join the `std.deploy` import, and `import std.protocol.telnet.Telnet` is added. They are mirrored in design §11.3. |
+| O6 | `kind = endpoint(Telnet)`; no types as values. |
+| O7 | `Duration` is Int ns, `ByteSize` Int bytes, `Ratio` Int ppm. No `Decimal`. |
+| O8 | `ignite build` does not read assemblies in slice 10. |
+| O9 | `std/cli` types are checked only; the buildable client is `TelnetClient`. |
+| O10 | LLVM T1 uses `setjmp` in the IR task-entry wrapper or in a C file of `ignite-rt`, never in a Rust frame, and `longjmp` from `ignite_rt_fail` (14.8). |
+| O11 | `Map` keys are scalars, payload-free enums and `Ref`. LLVM stores a sorted array; a B-tree is a labelled later milestone. There is no `Any` type: the kind-erased reference is `Ref`. |
+| O12 | New builtin `IoError.with_exit_code(n)`. |
+
+### 14.14 Implementation record
+
+Ownership, added by the coordinator on 2026-11-01: P1 also owns `crates/ignite/src/lib.rs`
+(module loader, front end, check path) and `crates/ignite/src/main.rs` for slice 10; P3 keeps
+`crates/ignite/src/llvm_build.rs`. `ignite check` types the program without generating Rust, so
+it does not reach a backend's placeholder arms. `Service`/`Client` kept their E020 rules until
+P4 moved the examples to the component form (items 17 to 19 below).
+
+Decisions accepted by the steering session on 2026-11-01:
+
+1. A bare member name where `Ref<K>` is expected gives the reference, as `System.name` does
+   (`target = server` in a probe).
+2. Keywords are allowed as record field names, in record and brace literal keys and after
+   `.`. The rule is contextual: a keyword is still refused as a variable, fn or type name
+   with the existing diagnostic.
+3. `Module<I>` is the record `I`; there is no module type.
+4. `Protocol` (`kind = endpoint(Telnet)`) and `SystemRef` (`system = Terminal`) are builtin
+   value types, lowered as the text of the name they denote.
+5. Client targets (P2's question, 21:12). `std/net.ignite` holds `record Endpoint { address:
+   Text, port: Int }`, written by P1 (three lines; P4 may extend the module). A bare
+   `TcpListener` resource name where `Endpoint` is expected gives `Endpoint { address, port }`
+   of that resource. `TelnetClient.target` has type `Endpoint`. `ExecutableInfo.resources`
+   keeps the field's type: an entry typed `Ty::TcpListener` is bound by the generated main
+   (14.5 step 3); an entry typed `Endpoint` is built with the `--port` override applied and
+   is not bound. No `bound` flag.
+6. Report text (14.8) is locked as P2 wrote it to P3: `error: <op> failed at
+   <file>:<line>:<col>: <detail>`; `assert` keeps the `message:`, `left:` and `right:`
+   continuation lines; `?` details `Err(<shown>)` or `None`; a Rust panic is `error: panic at
+   <file>:<line>:<col>: <message>`. P2 updates the expectations in
+   `crates/ignite/tests/ignite_test.rs` (text only) and tells P1 which lines changed.
+
+Ref, Signal, SystemRef and Protocol lower to Text in slice 10; slice 12 revisits the representation when probes and controllers resolve references at run time.
+
+Landed by P1 on 2026-11-01 (frontend, driver, `std/net.ignite`); where the implementation
+differs from 14.1 to 14.11 or refines them:
+
+7. `module("p")` where the expected type is `Option<I>` (a kind's optional module field)
+   has type `Option<I>`; the backends wrap the record in `Some`. `ModuleRecord::record` is
+   `I`. Without an expected record type the call is E042, with another expected type E040.
+8. A `Signal<T>` field of a declaration may be set to another member's signal
+   (`signal = probe.attempts`, a `Reference::Signal`); any other value is E104 `output field
+   <f> of <K> cannot be set`. A missing `Signal` field is never E104.
+9. `Int * Quantity` is allowed beside `Quantity * Int`; `Quantity / Int`; `%` on a quantity
+   is E045, every other mix E101 (comparisons still type as `Bool`). A quantity literal's
+   unit decides its kind; the literal's value is checked by E107 as 14.11 says.
+10. Failure sites: `assert` at its keyword, `?` at the `?` character, binary `+ - * / %` and
+    unary `-` at the expression start for `Int` and `Byte` operands and quantity arithmetic,
+    `x[i]` and `.at(i)` as `Index`, `.slice(a, b)` as `Slice`, every `match` as `Match`.
+    `FailureOp::Unwrap` is declared and never produced in slice 10.
+11. `Loopback`, `Private` and `Public` are builtin variants of the builtin enum `Exposure`
+    (bare or `Exposure.Loopback`). The loopback check of E104 runs only when `exposure` is
+    written as `Loopback`; `backlog: Int` is the fourth `TcpListener` property; `address`
+    and `port` are required. A `Store<T>` resource takes no properties (E047).
+12. The executable's name is the string literal of the component's `executable` property,
+    else the component's name. `ExecutableInfo.resources` lists the resources the component
+    and its embedded components use through bare names, `embedded` the components in an
+    order where each follows the components it uses. A kind without `K.main` is a plain
+    component. Unknown kinds, `Service` without `application`, two components with one
+    executable name and a `system` in a `std.*` module are E020 from the type checker, so
+    `ignite check` reports them without a backend.
+13. Sibling modules (14.4): the files `<name>.ignite` beside the program whose first
+    declaration is `package <program package>.<name>`, loaded, checked and typed in import
+    order before the program; they may import `std.*` and each other, and the program may
+    import from them (`import examples.todo.model.Todo`). `module("p")` sees them and every
+    std module. `ignite build` passes them to `generate_package` and, on the LLVM target, as
+    `ignite_llvm::Options.siblings`; `ignite test` adds them to the test crate as modules
+    (deduplicated by module path); `ignite check` generates nothing.
+14. `Ref` takes zero or one type argument; `Map<K, V>` reports E106 at `K`'s type
+    expression, also for `Map.empty()`'s expected type. Map keys written as names are `Text`
+    (E040 against another key type), keys written `System.member` are `Ref` values recorded
+    in `brace_key`. Named arguments with too many positional arguments are E003 from
+    `ignite-check` (arity) before the type checker's E043.
+15. `std.net` is both a substrate module (builtin names) and the file `std/net.ignite`
+    (`Endpoint`): `import std.net.{Endpoint}` takes the record from the file, and a name
+    that is neither is E031 as before.
+16. Compiler fix: `SourceFile` keeps its line table (`OnceLock`, computed on the first
+    `line_col`), with the `line_col` signature unchanged; `FailureSite::position` over the
+    100,000-term chain and 100,000 `line_col` calls on a 100,000-line file each finish under
+    1 s (tests `limits::failure_site_positions_of_the_long_chain_are_cheap` and
+    `robustness::line_col_computes_the_line_table_once`). Two `SourceFile`s are equal when
+    their paths and texts are.
+17. A bare fn name that is not in scope, called where a record or enum of another module
+    `M` is expected, resolves to `M`'s fn of that name, as a bare variant resolves to the
+    expected enum (`typer::expected_module_fn`); the Rust target qualifies such a call
+    through `module_fn_path` when the name is not imported. The design file's
+    `window = rolling(30 days)`, `backoff = exponential(..)`, `on_breach = event(..)` and
+    `kind = endpoint(Telnet)` rely on it with only the record types imported.
+18. The cutover (14.5): `Service` and `Client` are gone from the type checker, `ignite-check`
+    and both backends; a kind is any record type. The Rust target lowers executables only
+    from `TypedProgram::executables`; run without the typed program it reports E020 at every
+    component's kind (``unsupported component kind `K`: a component is an executable only
+    through the type checker``), and E020 for a malformed `TcpListener` resource as before.
+    Two components with one executable name are the type checker's E020. `write_project`
+    removes a `src/bin/<name>.rs` whose executable is gone, and `src/bin` when none is left.
+    The generated Rust also allows `non_snake_case` (`std.deploy`'s `localSocket`).
+19. LLVM target, `spawn`: `ignite_rt_spawn(ptr fn, ptr env)` returns `i8` (1 started, 0 no
+    thread) and `ignite_rt_spawn_copy` is removed with the generated accept loop. A
+    `TcpStream` argument moves to the task when it is a plain name that a `let` earlier in
+    the same block bound to a fresh value and no later statement of the block mentions
+    (`region::moved_to_task`): the task owns it (`tcp_own`) and releases it when its callee
+    returns, or the parent releases it at once when no thread starts. Other stream
+    arguments stay the parent's (`docs/llvm.md` section 4, `docs/friction.md` row 30).
+20. Tests moved with the examples: `cli::check_design_file_is_silent` checks the design
+    file; `syntax.rs` builds a copy of the golden with the test listener's port written
+    into `Runner.port` (the golden lowers without a standard library, so it cannot name
+    `Endpoint`); `terminal.rs`'s short-idle build rewrites `idle_timeout: Duration = 10
+    minutes` in `SessionLimits`; `llvm.rs` checks `TelnetServer.main` and `TelnetClient.main`
+    in the right executable and `examples.terminal.commands.respond` only in `terminald`;
+    `llvm_build.rs` edits the sibling `commands.ignite` and expects `program.ll` alone
+    recompiled; `failover.rs` keeps its fixture `Server` kind because the example has no
+    failing command; `slice10::crashd_survives_failing_handlers` runs the real
+    `TelnetServer` and `CommandConsole`.
+
+Placeholder arms the frontend skeleton added so that the workspace builds with
+`--all-targets`. Each is `unimplemented!("slice 10: …")` and is replaced by its owner:
+
+| owner | file | fn | covers |
+|---|---|---|---|
+| P2 | `ignite-rustgen/src/lib.rs` | `is_atomic`, `expr`, `mutated_in` | `Quantity`, `NamedArg`, `Brace` |
+| P2 | `ignite-rustgen/src/lib.rs` | `stmt`, `mutated_names` | `ForPattern` |
+| P2 | `ignite-rustgen/src/lib.rs` | `rust_ty` | new `Ty` variants |
+| P3 | `ignite-llvm/src/lower.rs` | `expr_kind` | `Quantity`, `NamedArg`, `Brace` |
+| P3 | `ignite-llvm/src/lower.rs` | `stmt` | `ForPattern` |
+| P3 | `ignite-llvm/src/lower.rs` | `builtin` | new builtins |
+| P3 | `ignite-llvm/src/region.rs` | `expr`, `block`, `mutates` | expressions, `ForPattern`, builtins |
+| P3 | `ignite-llvm/src/layout.rs` | `variants`, `memory_type` | new `Ty` variants |
+| P3 | `ignite-llvm/src/glue.rs` | `debug_function` | new `Ty` variants |
+
+That is 15 arms, 6 in `ignite-rustgen` and 9 in `ignite-llvm`. `Decl::Assembly(_) => {}` arms
+in `ignite-rustgen/src/lib.rs`, `ignite-rustgen/tests/units.rs` and `ignite-llvm/src/lib.rs` are
+final (O8), and `units.rs` sets the new `SystemDecl` fields to empty lists.

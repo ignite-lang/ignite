@@ -1,0 +1,1 @@
+e001_protocol_member.ignite:5:3: error[E001]: expected `fn` or `}` in a protocol, found `type`

@@ -1,0 +1,2 @@
+e041_param_method.ignite:3:22: error[E041]: `T` has no method `len`
+e041_param_method.ignite:4:16: error[E041]: `T` has no method `to_text`

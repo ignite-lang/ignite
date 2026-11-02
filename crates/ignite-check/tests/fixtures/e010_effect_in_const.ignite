@@ -1,0 +1,19 @@
+fn fetch() -> Int requires [net] {
+  return 1
+}
+
+fn task() -> Result<Unit, IoError> requires [net] {
+  return Ok(Unit)
+}
+
+fn inferred() -> Int = fetch()
+
+const FETCHED: Int = fetch()
+const TASK: Unit = spawn task()
+const READ: Result<Input, IoError> = Stdin.read(1)
+const INFERRED: Int = inferred()
+
+type Config {
+  port: Int = inferred()
+  name: Text = "ignite"
+}

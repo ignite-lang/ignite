@@ -1,0 +1,37 @@
+import std.shapes.{Pen, thicker}
+
+fn area(width: Int, height: Int) -> Int = width * height
+
+fn quantities(timeout: Duration, size: ByteSize, share: Ratio) -> Int {
+  let doubled = timeout * 2
+  let halved = timeout / 2
+  let longer = timeout + 5 seconds
+  let later = 2 * timeout
+  let ms = (timeout - 1 ms).to_ms() + timeout.to_ns()
+  let bytes = (size + 1 KiB).to_int()
+  let ppm = share.ppm()
+  let ok = timeout < 1 minute && size >= 1 MiB && share == 50%
+  let budget = if ok { 1.5 hours } else { 90 minutes }
+  return ms + bytes + ppm
+}
+
+fn maps(names: Map<Int, Text>) -> Int {
+  var m: Map<Text, Int> = Map.empty()
+  m.put("a", 1)
+  let got = m.get("a")
+  let removed = m.remove("a")
+  let has = m.contains("a") || names.contains(1)
+  let keys = m.keys()
+  let fixed: Map<Text, Int> = { admin = 1, guest = 2 }
+  return m.len() + fixed.len() + keys.len()
+}
+
+fn named(pen: Pen) -> Int {
+  let a = area(height = 2, width = 3)
+  let b = area(1, height = 2)
+  let thick = pen.thicker(by = 2)
+  let pen2 = thicker(by = 1, pen = pen)
+  return a + b + thick.width + pen2.width
+}
+
+fn exit(message: Text) -> Result<Unit, IoError> = Err(IoError.new(message).with_exit_code(3))

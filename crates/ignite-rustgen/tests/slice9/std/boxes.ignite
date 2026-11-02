@@ -1,0 +1,14 @@
+package std.boxes
+
+// A record with a boxed field (`docs/slice.md` section 13.4) in a module
+// other than the program that assigns to it (`tests/slice9/assign.ignite`).
+
+type Link {
+  value: Int
+  next: Option<Link>
+}
+
+fn length(link: Link) -> Int = match link.next {
+  Some(rest) => 1 + length(rest)
+  None => 1
+}

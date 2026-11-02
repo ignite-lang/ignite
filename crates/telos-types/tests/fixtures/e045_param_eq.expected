@@ -1,2 +1,0 @@
-e045_param_eq.telos:1:35: error[E045]: operator `==` is not defined for `T`
-e045_param_eq.telos:3:30: error[E045]: operator `+` is not defined for `T`

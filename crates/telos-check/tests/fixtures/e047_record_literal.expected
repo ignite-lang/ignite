@@ -1,4 +1,0 @@
-e047_record_literal.telos:7:32: error[E047]: record `Point` has no field `z`
-e047_record_literal.telos:11:25: error[E047]: field `x` is given twice in `Point` literal
-e047_record_literal.telos:15:10: error[E047]: missing field `y` in `Point` literal; it has no default
-e047_record_literal.telos:30:10: error[E047]: missing field `name` in `Config` literal; it has no default

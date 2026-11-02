@@ -1,2 +1,0 @@
-e042_store_new.telos:9:17: error[E042]: cannot infer the element type of `Store.new()`; add a type annotation
-e042_store_new.telos:10:27: error[E040]: type mismatch: expected `List<Todo>`, found a store

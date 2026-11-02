@@ -1,0 +1,4 @@
+fn f() -> Int {
+  let system = 1
+  return system
+}

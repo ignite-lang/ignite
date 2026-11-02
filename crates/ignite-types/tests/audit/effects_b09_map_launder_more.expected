@@ -1,0 +1,4 @@
+effects_b09_map_launder_more.ignite:9:10: error[E016]: missing effect `ls.read` for `read`; add it to the `requires` of `via_map_record`
+effects_b09_map_launder_more.ignite:14:5: error[E016]: missing effect `ls.write` for `write_all`; add it to the `requires` of `via_map_for`
+effects_b09_map_launder_more.ignite:21:78: error[E016]: missing effect `ls.read` for `inner_read`; add it to the `requires` of `via_inferred`
+effects_b09_map_launder_more.ignite:27:77: error[E016]: missing effect `ls.read` for `read`; add it to the `requires` of `via_generic`

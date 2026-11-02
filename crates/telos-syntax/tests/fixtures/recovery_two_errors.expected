@@ -1,2 +1,0 @@
-recovery_two_errors.telos:3:13: error[E001]: expected `:`, found identifier `Int`
-recovery_two_errors.telos:11:7: error[E001]: expected `:`, found identifier `Int`

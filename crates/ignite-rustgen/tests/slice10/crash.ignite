@@ -1,0 +1,96 @@
+package fixtures.crash
+
+import std.console.{CommandConsole, Reply, first_word, rest_after_word}
+import std.protocol.telnet.TelnetServer
+
+// The terminal example with a `crash` command whose handler fails an
+// `assert`, overflows or indexes out of range (`docs/slice.md` 14.0 item
+// 3, T1): the failure ends the session's task and `crashd` goes on
+// serving.
+
+enum Command {
+  Help,
+  Echo(Text),
+  Status,
+  Quit,
+  Crash(Text)
+}
+
+const PROMPT: Text = "terminal> "
+const MAXIMUM_LINE: Int = 4096
+
+fn int(text: Text) -> Int = match Int.parse(text) {
+  Some(n) => n
+  None => 0
+}
+
+fn asserting(kind: Text) -> Reply {
+  assert kind == "fine", "the handler asserted"
+  Reply { lines = ["unreachable"] }
+}
+
+fn overflowing() -> Reply {
+  let n = int("9223372036854775807") + int("1")
+  Reply { lines = ["{n}"] }
+}
+
+fn indexing() -> Reply {
+  let items = [1, 2]
+  let n = items[int("5")]
+  Reply { lines = ["{n}"] }
+}
+
+fn crash(kind: Text) -> Reply = match kind {
+  "assert" => asserting(kind)
+  "overflow" => overflowing()
+  "index" => indexing()
+  _ => Reply { lines = ["crash <assert|overflow|index>"] }
+}
+
+fn answer(command: Command) -> Reply = match command {
+  Help => Reply { lines = ["help", "echo <text>", "status", "quit", "crash <kind>"] }
+  Echo(text) => Reply { lines = [text] }
+  Status => Reply { lines = ["ready"] }
+  Quit => Reply { lines = ["bye"], action = Close }
+  Crash(kind) => crash(kind)
+}
+
+fn parse(line: Text) -> Option<Command> = match first_word(line) {
+  "help" => Some(Help)
+  "status" => Some(Status)
+  "quit" => Some(Quit)
+  "echo" => Some(Echo(rest_after_word(line)))
+  "crash" => Some(Crash(rest_after_word(line)))
+  _ => None
+}
+
+fn respond(line: Text) -> Reply {
+  let trimmed = line.trim()
+  if trimmed.is_empty() {
+    Reply { lines = [] }
+  } else {
+    match parse(trimmed) {
+      Some(command) => answer(command)
+      None => Reply { lines = ["unknown command: {first_word(trimmed)}"] }
+    }
+  }
+}
+
+system Crashing {
+  resource ingress: TcpListener {
+    address = "127.0.0.1"
+    port = 2399
+  }
+
+  component console: CommandConsole {
+    implementation = module("fixtures.crash")
+    prompt = PROMPT
+    maximum_line = 4096 bytes
+  }
+
+  component server: TelnetServer {
+    listener = ingress
+    application = console
+    executable = "crashd"
+  }
+}

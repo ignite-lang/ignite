@@ -1,0 +1,13 @@
+fn all(s: TcpStream) -> Result<Unit, IoError> requires [s.*] = s.close()
+
+fn specific(s: TcpStream) -> Result<Unit, IoError> requires [s.read, s.write, s.accept] = all(s)
+
+fn write_text(out: TcpStream) -> Result<Unit, IoError> requires [out.write] = out.write_all("x".to_bytes())
+
+fn caller(out: TcpStream, other: TcpStream) -> Result<Unit, IoError> requires [out.write] = write_text(other)
+
+fn ambient_like(foo: Int) -> Int requires [foo.read] = foo
+
+fn needs_foo(n: Int) -> Int requires [] = ambient_like(n)
+
+fn deep(s: TcpStream) -> Result<Unit, IoError> requires [s.a.b] = s.close()

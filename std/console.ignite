@@ -1,0 +1,162 @@
+package std.console
+
+import std.text.is_whitespace
+
+// A line-oriented console application, independent of the protocol that
+// carries it. A protocol such as std.protocol.telnet shows `prompt`, cuts
+// the input into lines of at most `maximum_line` bytes, passes each line to
+// `respond` and renders the reply.
+
+type Console {
+  prompt: Text
+  respond: fn(Text) -> Reply
+  maximum_line: Int
+}
+
+enum Action { Continue, Close }
+
+type Reply {
+  lines: List<Text>
+  action: Action = Continue
+}
+
+// What a console's command module provides (`module("p")`, design section
+// 11.3): the reply to one input line.
+type ConsoleCommands {
+  respond: fn(Text) -> Reply
+}
+
+// What an optional schema module provides: the command names, for tooling.
+type CommandSchema {
+  commands: fn() -> List<Text>
+}
+
+// A console as a system declares it: its commands come from a module of
+// the program, the line limit is a byte size. `console_of` gives the
+// `Console` a protocol runs.
+type CommandConsole {
+  implementation: Module<ConsoleCommands>
+  prompt: Text
+  maximum_line: ByteSize = 4 KiB
+  command_schema: Option<Module<CommandSchema>> = None
+}
+
+// The runtime console of a declared one.
+fn console_of(declared: CommandConsole) -> Console = Console {
+  prompt = declared.prompt
+  respond = declared.implementation.respond
+  maximum_line = declared.maximum_line.to_int()
+}
+
+// The command names of a declared console: those of its schema module,
+// none without one.
+fn command_names(declared: CommandConsole) -> List<Text> = match declared.command_schema {
+  Some(schema) => schema.commands()
+  None => []
+}
+
+// The index of the first non-whitespace byte at or after `i`.
+fn skip_space(bytes: Bytes, i: Int) -> Int {
+  var at = i
+  while at < bytes.len() && is_whitespace(bytes.at(at)) {
+    at = at + 1
+  }
+  at
+}
+
+// The index of the first whitespace byte at or after `i`.
+fn skip_word(bytes: Bytes, i: Int) -> Int {
+  var at = i
+  while at < bytes.len() && !is_whitespace(bytes.at(at)) {
+    at = at + 1
+  }
+  at
+}
+
+// The first whitespace-separated word; leading whitespace is skipped.
+// "  echo hello" -> "echo", "" -> "".
+fn first_word(line: Text) -> Text {
+  let bytes = line.to_bytes()
+  let start = skip_space(bytes, 0)
+  bytes.slice(start, skip_word(bytes, start)).to_text()
+}
+
+// The text after the first whitespace-separated word and one following
+// whitespace byte; leading whitespace is skipped.
+// "echo hello" -> "hello", "echo" -> "", "echo  x" -> " x".
+fn rest_after_word(line: Text) -> Text {
+  let bytes = line.to_bytes()
+  let end = bytes.len()
+  var i = skip_word(bytes, skip_space(bytes, 0))
+  if i < end {
+    i = i + 1
+  }
+  bytes.slice(i, end).to_text()
+}
+
+test "first_word skips leading whitespace" {
+  assert first_word("  echo hello") == "echo"
+  assert first_word("status") == "status"
+  assert first_word("\t\vquit\r\n") == "quit"
+  assert first_word("") == ""
+  assert first_word(" \t ") == ""
+  assert first_word("grüß dich") == "grüß"
+}
+
+test "rest_after_word drops the word and one whitespace byte" {
+  assert rest_after_word("echo hello") == "hello"
+  assert rest_after_word("echo") == ""
+  assert rest_after_word("echo ") == ""
+  assert rest_after_word("echo  x") == " x"
+  assert rest_after_word("  echo\tx y ") == "x y "
+  assert rest_after_word("") == ""
+  assert rest_after_word("   ") == ""
+  assert rest_after_word("echo €") == "€"
+}
+
+test "skip_space and skip_word move to the next boundary" {
+  let bytes = b" ab\tc"
+  assert skip_space(bytes, 0) == 1
+  assert skip_word(bytes, 1) == 3
+  assert skip_space(bytes, 3) == 4
+  assert skip_word(bytes, 4) == 5
+  assert skip_space(bytes, 5) == 5
+  assert skip_word(Bytes.empty(), 0) == 0
+  assert skip_space(b"\t\n\v\f\r x", 0) == 6
+  assert skip_word(b"\0x", 0) == 2
+}
+
+test "a reply continues unless it says close" {
+  let reply = Reply { lines = ["hi"] }
+  assert reply.action == Continue
+  assert Reply { lines = [], action = Close }.action == Close
+  let console = Console { prompt = "> ", respond = |line| Reply { lines = [line] }, maximum_line = 8 }
+  assert console.respond("a b").lines == ["a b"]
+}
+
+test fn shout(line: Text) -> Reply = Reply { lines = ["{line}!"] }
+
+test fn two_commands() -> List<Text> = ["shout", "quit"]
+
+test "a declared console gives the console a protocol runs" {
+  let declared = CommandConsole {
+    implementation = ConsoleCommands { respond = shout }
+    prompt = "> "
+    maximum_line = 8 bytes
+  }
+  let console = console_of(declared)
+  assert console.prompt == "> "
+  assert console.maximum_line == 8
+  assert console.respond("hi").lines == ["hi!"]
+  assert command_names(declared) == []
+  assert CommandConsole { implementation = ConsoleCommands { respond = shout }, prompt = "" }.maximum_line == 4 KiB
+}
+
+test "a declared console lists its schema's commands" {
+  let declared = CommandConsole {
+    implementation = ConsoleCommands { respond = shout }
+    prompt = "> "
+    command_schema = Some(CommandSchema { commands = two_commands })
+  }
+  assert command_names(declared) == ["shout", "quit"]
+}

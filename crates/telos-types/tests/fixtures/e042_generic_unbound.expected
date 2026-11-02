@@ -1,3 +1,0 @@
-e042_generic_unbound.telos:11:15: error[E042]: cannot infer type parameter `T` of `empty`; annotate the binding
-e042_generic_unbound.telos:12:14: error[E042]: cannot infer type parameter `T` of `Tree.Leaf`; annotate the binding
-e042_generic_unbound.telos:13:11: error[E042]: cannot infer type parameter `T` of `identity`; annotate the binding

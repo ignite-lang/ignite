@@ -1,0 +1,57 @@
+package golden.services
+
+import std.net.Endpoint
+
+protocol Greeting {
+  fn serve(stream: TcpStream, text: Text) -> Result<Unit, IoError> requires [stream.write] {
+    stream.write_all(text.to_bytes())?
+    stream.close()?
+    return Ok(Unit)
+  }
+
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read] {
+    loop {
+      let input = stream.read(1024)?
+      match input {
+        Eof => { return Ok(Unit) }
+        Data(bytes) => { log(Int.to_text(bytes.len())) }
+      }
+    }
+  }
+}
+
+type Greeter {
+  listener: TcpListener
+  text: Text
+  executable: Text
+}
+
+fn Greeter.main(self: Greeter) -> Result<Unit, IoError> {
+  loop {
+    let stream = self.listener.accept()?
+    spawn Greeting.serve(stream, self.text)
+  }
+}
+
+type Reader {
+  target: Endpoint
+  executable: Text
+}
+
+fn Reader.main(self: Reader) -> Result<Unit, IoError> {
+  let stream = match TcpStream.connect(self.target.address, self.target.port) {
+    Ok(stream) => stream
+    Err(error) => return Err(error.with_exit_code(3))
+  }
+  match Greeting.connect(stream) {
+    Ok(_) => Ok(Unit)
+    Err(error) => Err(error.with_exit_code(4))
+  }
+}
+
+system Pair {
+  resource front: TcpListener { address = "127.0.0.1", port = 7000 }
+  resource back: TcpListener { address = "0.0.0.0", port = 7001 }
+  component greeter: Greeter { listener = front, text = "hello\r\n" }
+  component reader: Reader { target = back, executable = "readerc" }
+}

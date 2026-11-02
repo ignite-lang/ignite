@@ -1,0 +1,8 @@
+import std.greeting.*
+import std.salute.*
+
+fn wave() -> Int = 2
+
+fn f() -> Greeting = greet("x")
+
+fn g() -> Int = wave()

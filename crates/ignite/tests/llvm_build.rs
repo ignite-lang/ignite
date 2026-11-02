@@ -1,0 +1,478 @@
+//! The LLVM driver's build steps (`docs/llvm.md` section 1): executables
+//! are linked with unused sections dropped, an unchanged rebuild runs no
+//! clang, an edit recompiles only the module it changed, a failed step runs
+//! again, the default runtime lookup, and the target every module is
+//! pinned to.
+//! `bench` (ignored, `task bench`) prints sizes and build times of both
+//! targets.
+
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+use std::time::Instant;
+
+use crate::common;
+
+fn tmp(name: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn workspace() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn terminal_source() -> PathBuf {
+    workspace().join("examples/terminal/terminal.ignite")
+}
+
+fn which(tool: &str) -> PathBuf {
+    std::env::var_os("PATH")
+        .and_then(|paths| {
+            std::env::split_paths(&paths)
+                .map(|dir| dir.join(tool))
+                .find(|path| path.is_file())
+        })
+        .unwrap_or_else(|| panic!("{tool} not on PATH"))
+}
+
+fn cargo() -> PathBuf {
+    std::env::var_os("CARGO")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("cargo"))
+}
+
+fn run(command: &mut Command) -> Output {
+    let output = command.output().expect("start the command");
+    assert!(
+        output.status.success(),
+        "{command:?}\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    output
+}
+
+/// `ignite build --target llvm` of `source` into `out`.
+fn llvm_build(source: &Path, out: &Path, clang: &Path, release: bool) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
+    command
+        .args(["build", "--target", "llvm"])
+        .arg(source)
+        .arg("--out")
+        .arg(out)
+        .arg("--clang")
+        .arg(clang)
+        .arg("--runtime")
+        .arg(common::runtime_archive());
+    if release {
+        command.arg("--release");
+    }
+    command
+}
+
+/// A clang wrapper that appends each call's arguments to `log`, one line.
+fn logging_clang(dir: &Path, log: &Path) -> PathBuf {
+    let wrapper = dir.join("clang");
+    let script = format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\nexec '{}' \"$@\"\n",
+        log.display(),
+        which("clang").display()
+    );
+    std::fs::write(&wrapper, script).unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
+    wrapper
+}
+
+/// The clang calls logged since the last call: (compiled `.ll` file names,
+/// number of links), without the target probe (`-emit-llvm`). Empties the
+/// log.
+fn calls(log: &Path) -> (Vec<String>, usize) {
+    let text = std::fs::read_to_string(log).unwrap_or_default();
+    let _ = std::fs::remove_file(log);
+    let mut compiled = Vec::new();
+    let mut links = 0;
+    for line in text.lines() {
+        if line.split(' ').any(|arg| arg == "-emit-llvm") {
+            continue;
+        }
+        if line.split(' ').any(|arg| arg == "-c") {
+            let ll = line
+                .split(' ')
+                .find(|arg| arg.ends_with(".ll"))
+                .expect("a .ll input");
+            compiled.push(Path::new(ll).file_name().unwrap().to_string_lossy().into());
+        } else {
+            assert!(line.contains("-Wl,--gc-sections"), "link line: {line}");
+            links += 1;
+        }
+    }
+    compiled.sort();
+    (compiled, links)
+}
+
+/// `docs/llvm.md` section 1, object cache: an unchanged rebuild calls clang
+/// zero times; an edit to the program recompiles `program.ll` only and
+/// relinks both executables.
+#[test]
+fn rebuild_compiles_only_what_changed() {
+    let dir = tmp("llvm-cache");
+    let source = dir.join("terminal.ignite");
+    std::fs::create_dir_all(&dir).unwrap();
+    for sibling in [
+        "terminal.ignite",
+        "commands.ignite",
+        "command_schema.ignite",
+    ] {
+        std::fs::copy(terminal_source().with_file_name(sibling), dir.join(sibling)).unwrap();
+    }
+    let log = dir.join("clang.log");
+    let clang = logging_clang(&dir, &log);
+    let out = dir.join("out");
+
+    run(&mut llvm_build(&source, &out, &clang, false));
+    let (compiled, links) = calls(&log);
+    assert_eq!(
+        compiled,
+        ["main_terminald.ll", "main_tn.ll", "program.ll", "std.ll"]
+    );
+    assert_eq!(links, 2);
+
+    let output = run(&mut llvm_build(&source, &out, &clang, false));
+    assert_eq!(calls(&log), (vec![], 0), "an unchanged rebuild ran clang");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        format!(
+            "built {}\nbuilt {}\n",
+            out.join("bin/terminald").display(),
+            out.join("bin/tn").display()
+        )
+    );
+
+    let commands = dir.join("commands.ignite");
+    let text = std::fs::read_to_string(&commands).unwrap();
+    let edited = text.replace("lines = [\"ready\"]", "lines = [\"ready now\"]");
+    assert_ne!(text, edited, "the edit did not apply");
+    std::fs::write(&commands, edited).unwrap();
+    run(&mut llvm_build(&source, &out, &clang, false));
+    assert_eq!(
+        calls(&log),
+        (vec!["program.ll".to_string()], 2),
+        "a sibling module is part of program.ll"
+    );
+
+    run(&mut llvm_build(&source, &out, &clang, true));
+    let (compiled, links) = calls(&log);
+    assert_eq!(compiled.len(), 4, "--release recompiles every module");
+    assert_eq!(links, 2);
+}
+
+/// A failed compile leaves no stamp: the next build compiles again.
+#[test]
+fn failed_compile_is_retried() {
+    let dir = tmp("llvm-cache-failure");
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/probe.ignite");
+    let log = dir.join("clang.log");
+    let clang = logging_clang(&dir, &log);
+    let out = dir.join("out");
+    run(&mut llvm_build(&source, &out, &clang, false));
+    calls(&log);
+    let failing_clang = dir.join("failing-clang");
+    std::fs::write(
+        &failing_clang,
+        format!(
+            "#!/bin/sh\nfor arg in \"$@\"; do [ \"$arg\" = -c ] && exit 1; done\nexec '{}' \"$@\"\n",
+            which("clang").display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&failing_clang, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let failing = llvm_build(&source, &out, &failing_clang, false)
+        .output()
+        .unwrap();
+    assert_eq!(failing.status.code(), Some(2));
+    assert!(!out.join("llvm/std.o.stamp").exists());
+    run(&mut llvm_build(&source, &out, &clang, false));
+    assert_eq!(calls(&log), (vec!["std.ll".to_string()], 0));
+}
+
+/// `docs/llvm.md` section 1, target: every emitted module starts with
+/// clang's default triple and its data layout, and clang compiles and
+/// links for that triple.
+#[test]
+fn ir_is_pinned_to_the_target() {
+    let dir = tmp("llvm-target");
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/probe.ignite");
+    let log = dir.join("clang.log");
+    let clang = logging_clang(&dir, &log);
+    let out = dir.join("out");
+    run(&mut llvm_build(&source, &out, &clang, false));
+    let printed = run(Command::new(which("clang")).arg("-print-target-triple"));
+    let triple = String::from_utf8_lossy(&printed.stdout).trim().to_string();
+    for unit in ["std", "program", "main_probe", "main_crash"] {
+        let ir = std::fs::read_to_string(out.join(format!("llvm/{unit}.ll"))).unwrap();
+        let mut lines = ir.lines();
+        assert_eq!(
+            lines.next(),
+            Some(format!("target triple = \"{triple}\"").as_str()),
+            "{unit}.ll"
+        );
+        assert!(
+            lines
+                .next()
+                .is_some_and(|line| line.starts_with("target datalayout = \"e-")),
+            "{unit}.ll"
+        );
+    }
+    let text = std::fs::read_to_string(&log).unwrap();
+    let steps: Vec<&str> = text
+        .lines()
+        .filter(|line| !line.contains("-emit-llvm"))
+        .collect();
+    assert_eq!(steps.len(), 4 + 2, "{text}");
+    for line in steps {
+        assert!(line.contains(&format!("--target={triple}")), "{line}");
+    }
+}
+
+/// `docs/llvm.md` section 1, target: a runtime archive built for another
+/// architecture than `--triple` fails with a clear error (exit 3) before
+/// clang compiles anything.
+#[test]
+fn runtime_for_another_target_is_refused() {
+    let dir = tmp("llvm-target-mismatch");
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/probe.ignite");
+    let log = dir.join("clang.log");
+    let clang = logging_clang(&dir, &log);
+    let (other, needs) = if cfg!(target_arch = "aarch64") {
+        ("x86_64-unknown-linux-gnu", 62)
+    } else {
+        ("aarch64-unknown-linux-gnu", 183)
+    };
+    let output = llvm_build(&source, &dir.join("out"), &clang, false)
+        .args(["--triple", other])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(3), "{stderr}");
+    for needle in [
+        format!("the runtime archive is not built for the target {other}: its objects are ELF64"),
+        format!("the target needs machine {needs} (build ignite-rt for {other}"),
+    ] {
+        assert!(stderr.contains(&needle), "{stderr}");
+    }
+    assert_eq!(calls(&log), (vec![], 0), "clang ran before the check");
+}
+
+/// `docs/llvm.md` section 1, runtime lookup: `libignite_rt.a` next to the
+/// driver, then in its parent directory, as for a driver in
+/// `target/<profile>/deps`.
+#[test]
+fn default_runtime_is_next_to_the_driver_or_in_its_parent() {
+    let dir = tmp("llvm-runtime-lookup");
+    let deps = dir.join("deps");
+    std::fs::create_dir_all(&deps).unwrap();
+    let driver = deps.join("ignite");
+    std::fs::copy(env!("CARGO_BIN_EXE_ignite"), &driver).unwrap();
+    assert_eq!(
+        ignite::runtime_candidates(&driver),
+        [deps.join("libignite_rt.a"), dir.join("libignite_rt.a")]
+    );
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/probe.ignite");
+    let build = || {
+        Command::new(&driver)
+            .args(["build", "--target", "llvm"])
+            .arg(&source)
+            .arg("--out")
+            .arg(dir.join("out"))
+            .output()
+            .unwrap()
+    };
+
+    let missing = build();
+    assert_eq!(missing.status.code(), Some(3));
+    assert!(
+        String::from_utf8_lossy(&missing.stderr)
+            .contains(&*deps.join("libignite_rt.a").to_string_lossy()),
+        "{}",
+        String::from_utf8_lossy(&missing.stderr)
+    );
+
+    std::fs::copy(common::runtime_archive(), dir.join("libignite_rt.a")).unwrap();
+    let parent = build();
+    assert!(
+        parent.status.success(),
+        "{}",
+        String::from_utf8_lossy(&parent.stderr)
+    );
+
+    std::fs::write(deps.join("libignite_rt.a"), "not an archive").unwrap();
+    let next_to = build();
+    assert_eq!(
+        next_to.status.code(),
+        Some(2),
+        "the archive next to the driver comes first"
+    );
+}
+
+/// Seconds `f` takes.
+fn time(f: impl FnOnce()) -> f64 {
+    let start = Instant::now();
+    f();
+    start.elapsed().as_secs_f64()
+}
+
+fn size(file: &Path) -> u64 {
+    std::fs::metadata(file).unwrap().len()
+}
+
+fn stripped_size(file: &Path, scratch: &Path) -> u64 {
+    let stripped = scratch.join("stripped");
+    run(Command::new("strip").arg("-o").arg(&stripped).arg(file));
+    size(&stripped)
+}
+
+fn megabytes(bytes: u64) -> String {
+    format!("{:.2} MB", bytes as f64 / 1e6)
+}
+
+/// A command with sccache off, so that a cold build is cold.
+fn uncached(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut command = Command::new(program);
+    command
+        .env("RUSTC_WRAPPER", "")
+        .env("CARGO_BUILD_RUSTC_WRAPPER", "")
+        .env("CARGO_INCREMENTAL", "0");
+    command
+}
+
+/// `task bench`: sizes of `terminald` for both targets and profiles, build
+/// times (runtime archive and program cold, unchanged rebuild; no sccache)
+/// and the time of 200 runs of `terminald --port nope`.
+#[test]
+#[ignore = "benchmark; run with task bench"]
+fn bench() {
+    let root = tmp("bench");
+    let ignite = env!("CARGO_BIN_EXE_ignite");
+    let source = terminal_source();
+    let clang = which("clang");
+    let profiles = ["debug", "release"];
+    let mut rows: Vec<(String, Vec<String>)> = Vec::new();
+    let mut sizes = Vec::new();
+    let mut runtime_cold = Vec::new();
+    let mut cold = Vec::new();
+    let mut rebuild = Vec::new();
+    let mut startup = Vec::new();
+    let mut binaries = Vec::new();
+
+    for profile in profiles {
+        let release = profile == "release";
+        let rt_target = root.join("runtime");
+        let mut command = uncached(cargo());
+        command
+            .args(["build", "-q", "-p", "ignite-rt", "--manifest-path"])
+            .arg(workspace().join("Cargo.toml"))
+            .arg("--target-dir")
+            .arg(&rt_target);
+        if release {
+            command.arg("--release");
+        }
+        runtime_cold.push(time(|| {
+            run(&mut command);
+        }));
+        let runtime = rt_target.join(profile).join("libignite_rt.a");
+        let out = root.join(format!("llvm-{profile}"));
+        let mut build = Command::new(ignite);
+        build
+            .args(["build", "--target", "llvm"])
+            .arg(&source)
+            .arg("--out")
+            .arg(&out)
+            .arg("--clang")
+            .arg(&clang)
+            .arg("--runtime")
+            .arg(&runtime);
+        if release {
+            build.arg("--release");
+        }
+        cold.push(time(|| {
+            run(&mut build);
+        }));
+        rebuild.push(time(|| {
+            run(&mut build);
+        }));
+        binaries.push(out.join("bin/terminald"));
+    }
+    for profile in profiles {
+        let out = root.join(format!("rust-{profile}"));
+        let target_dir = root.join(format!("rust-{profile}-target"));
+        let mut build = uncached(ignite);
+        build
+            .arg("build")
+            .arg(&source)
+            .arg("--out")
+            .arg(&out)
+            .arg("--target-dir")
+            .arg(&target_dir);
+        if profile == "release" {
+            build.arg("--release");
+        }
+        cold.push(time(|| {
+            run(&mut build);
+        }));
+        rebuild.push(time(|| {
+            run(&mut build);
+        }));
+        binaries.push(target_dir.join(profile).join("terminald"));
+    }
+    for binary in &binaries {
+        sizes.push((size(binary), stripped_size(binary, &root)));
+        startup.push(time(|| {
+            for _ in 0..200 {
+                let status = Command::new(binary)
+                    .args(["--port", "nope"])
+                    .output()
+                    .unwrap()
+                    .status;
+                assert_eq!(status.code(), Some(2));
+            }
+        }));
+    }
+
+    let seconds =
+        |values: &[f64]| -> Vec<String> { values.iter().map(|s| format!("{s:.2} s")).collect() };
+    rows.push((
+        "terminald size".into(),
+        sizes.iter().map(|(full, _)| megabytes(*full)).collect(),
+    ));
+    rows.push((
+        "terminald stripped".into(),
+        sizes
+            .iter()
+            .map(|(_, stripped)| megabytes(*stripped))
+            .collect(),
+    ));
+    rows.push((
+        "runtime archive cold".into(),
+        seconds(&runtime_cold)
+            .into_iter()
+            .chain(["-".into(), "-".into()])
+            .collect(),
+    ));
+    rows.push(("program build cold".into(), seconds(&cold)));
+    rows.push(("rebuild unchanged".into(), seconds(&rebuild)));
+    rows.push(("200 runs --port nope".into(), seconds(&startup)));
+    println!(
+        "\n{:<22}{:>14}{:>14}{:>14}{:>14}",
+        "", "llvm debug", "llvm release", "rust debug", "rust release"
+    );
+    for (label, values) in rows {
+        print!("{label:<22}");
+        for value in values {
+            print!("{value:>14}");
+        }
+        println!();
+    }
+}

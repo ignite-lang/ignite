@@ -1,0 +1,4 @@
+e006_in_place.ignite:3:3: error[E006]: cannot `push` through the immutable binding `l`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+e006_in_place.ignite:5:5: error[E006]: cannot `append` through the `for` element `w`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+e006_in_place.ignite:8:16: error[E006]: cannot `clear` through the pattern binding `b`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+e006_in_place.ignite:11:3: error[E006]: cannot `push` on the result of `to_bytes()`, which shares the text's buffer; bind it first: `var b = t.to_bytes()`

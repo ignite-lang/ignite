@@ -1,0 +1,62 @@
+package std.result
+
+// Operations on `Result<T, E>`, called by uniform function call syntax once
+// imported. `?` and `==` are builtin. The names are those of std.option;
+// a module that needs both imports them by name from one of the two.
+
+// The `Ok` value, or `fallback` for an error.
+fn unwrap_or<T, E>(value: Result<T, E>, fallback: T) -> T = match value {
+  Ok(present) => present
+  Err(_) => fallback
+}
+
+// `f` applied to the `Ok` value; an error stays as it is.
+fn map<T, U, E>(value: Result<T, E>, f: fn(T) -> U) -> Result<U, E> = match value {
+  Ok(present) => Ok(f(present))
+  Err(error) => Err(error)
+}
+
+// `f` applied to the error; an `Ok` value stays as it is.
+fn map_err<T, E, F>(value: Result<T, E>, f: fn(E) -> F) -> Result<T, F> = match value {
+  Ok(present) => Ok(present)
+  Err(error) => Err(f(error))
+}
+
+fn is_ok<T, E>(value: Result<T, E>) -> Bool = match value {
+  Ok(_) => true
+  Err(_) => false
+}
+
+fn is_err<T, E>(value: Result<T, E>) -> Bool = !is_ok(value)
+
+// The `Ok` value as an `Option`; the error is dropped.
+fn ok<T, E>(value: Result<T, E>) -> Option<T> = match value {
+  Ok(present) => Some(present)
+  Err(_) => None
+}
+
+test "unwrap_or gives the value or the fallback" {
+  let good: Result<Int, Text> = Ok(1)
+  let bad: Result<Int, Text> = Err("no")
+  assert good.unwrap_or(2) == 1
+  assert bad.unwrap_or(2) == 2
+}
+
+test "map and map_err change one side" {
+  let good: Result<Int, Text> = Ok(2)
+  let bad: Result<Int, Text> = Err("no")
+  let factor = 3
+  assert good.map(|n| n * factor) == Ok(6)
+  assert bad.map(|n| n * factor) == Err("no")
+  assert good.map_err(|e| e.len()) == Ok(2)
+  assert bad.map_err(|e| "error: {e}") == Err("error: no")
+}
+
+test "is_ok, is_err and ok" {
+  let good: Result<Int, Text> = Ok(1)
+  let bad: Result<Int, Text> = Err("no")
+  assert good.is_ok() && !good.is_err()
+  assert bad.is_err() && !bad.is_ok()
+  assert good.ok() == Some(1)
+  assert bad.ok() == None
+}

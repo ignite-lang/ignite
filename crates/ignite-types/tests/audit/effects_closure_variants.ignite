@@ -1,0 +1,46 @@
+fn helper_ambient() -> Result<Input, IoError> requires [] {
+  let read = |stdin: Int| Stdin.read(stdin)
+  return read(1)
+}
+
+fn captured_call(s: TcpStream) -> Result<Input, IoError> requires [] {
+  let read = || s.read(4096)
+  return read()
+}
+
+fn captured_param_effect(s: TcpStream) -> Result<Input, IoError> requires [] {
+  let read = |t: TcpStream| t.read(4096)
+  return read(s)
+}
+
+fn map_capture(s: TcpStream) -> Result<Input, IoError> requires [] {
+  let copies = [1].map(|i: Int| s)
+  return copies[0].read(4096)
+}
+
+fn map_identity(ls: List<TcpStream>) -> Result<Input, IoError> requires [] {
+  let copies = ls.map(|x: TcpStream| x)
+  return copies[0].read(4096)
+}
+
+type Holder {
+  items: List<TcpStream>
+}
+
+fn push_captured(s: TcpStream) -> Result<Input, IoError> requires [] {
+  var h = Holder { items = [] }
+  let get = || s
+  h.items.push(get())
+  return h.items[0].read(4096)
+}
+
+fn returned_closure(s: TcpStream) -> Result<Input, IoError> requires [] {
+  let make = || s
+  let t = make()
+  return t.read(4096)
+}
+
+fn ambient_inside() -> Result<Unit, IoError> requires [] {
+  let say = || Stdout.write_all([1])
+  return say()
+}

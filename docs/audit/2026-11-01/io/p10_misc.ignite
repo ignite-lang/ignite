@@ -1,0 +1,78 @@
+package probe.misc
+
+type Pair<A, B> {
+  first: A
+  second: B
+}
+
+type Box<T> {
+  items: List<T> = []
+  n: Int = 0
+}
+
+fn first<A, B>(p: Pair<A, B>) -> A = p.first
+
+fn firsts(ps: List<Pair<Int, Text>>) -> List<Int> = ps.map(first)
+
+fn mapi(xs: List<Int>, f: fn(Int) -> Int) -> List<Int> = xs.map(f)
+
+fn double(n: Int) -> Int = n * 2
+
+fn bump(s: Store<Int>, id: Int) -> Option<Int> requires [s.write] = s.update(id, double)
+
+fn fetch<T>(s: Store<T>, id: Int) -> Option<T> requires [s.read] = s.get(id)
+
+fn describe(a: Text, c: Bool, n: Int) -> Text = a + (if c { "x" } else { "y" }) + Int.to_text(n) + n.to_text() + a.to_text()
+
+fn newlines(bytes: Bytes) -> Int {
+  var n = 0
+  for b in bytes {
+    if b == 10 { n = n + 1 }
+  }
+  n
+}
+
+fn sum(xs: List<Int>) -> Int {
+  var i = 0
+  var total = 0
+  while i < xs.len() {
+    total = total + xs[i]
+    i = i + 1
+  }
+  total
+}
+
+fn shadow_pattern(a: Text, p: (Text, Int)) -> Bool {
+  let (a, n) = p
+  a == "x" && n == 1
+}
+
+fn mk<T>(x: T) -> Box<T> = Box { items = [x] }
+
+fn byte_at(b: Bytes, i: Int) -> Int = b[i].to_int()
+
+fn pair_text(p: Pair<Int, Text>) -> Text = p.first.to_text() + p.second
+
+fn early_exit(o: Option<Int>) -> Unit {
+  match o {
+    None => return
+    Some(v) => log(v.to_text())
+  }
+}
+
+test "misc" {
+  assert firsts([Pair { first = 1, second = "a" }]) == [1]
+  assert mapi([1, 2], double) == [2, 4]
+  let s: Store<Int> = Store.new()
+  s.put(1, 5)
+  assert bump(s, 1) == Some(10)
+  assert fetch(s, 1) == Some(10)
+  assert describe("a", true, 3) == "ax33a"
+  assert newlines(Bytes.of([10, 65, 10])) == 2
+  assert sum([1, 2, 3]) == 6
+  assert shadow_pattern("q", ("x", 1)) == true
+  assert mk(7).items == [7]
+  assert byte_at(Bytes.of([200]), 0) == 200
+  assert pair_text(Pair { first = 1, second = "b" }) == "1b"
+  early_exit(None)
+}

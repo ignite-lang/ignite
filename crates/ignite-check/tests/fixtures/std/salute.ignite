@@ -1,0 +1,5 @@
+package std.salute
+
+fn greet(name: Text) -> Text = name
+
+fn wave() -> Int = 1

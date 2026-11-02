@@ -1,0 +1,32 @@
+package fixtures.assembly_key
+
+type Leaf {
+  value: Int
+}
+
+type Deployment {
+  system: SystemRef
+  bindings: Map<Ref, Text>
+}
+
+system S {
+  component c: Leaf {
+    value = 1
+  }
+}
+
+system T {
+  component d: Leaf {
+    value = 2
+  }
+}
+
+assembly local: Deployment {
+  system = S
+  bindings = {
+    S.c = "native"
+    S.x = "nowhere"
+    T.d = "other"
+    U.y = "unknown"
+  }
+}

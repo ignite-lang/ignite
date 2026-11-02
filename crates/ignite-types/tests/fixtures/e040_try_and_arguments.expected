@@ -1,0 +1,3 @@
+e040_try_and_arguments.ignite:10:11: error[E040]: type mismatch: `?` propagates `Text`, the function returns errors of type `IoError`
+e040_try_and_arguments.ignite:11:19: error[E040]: type mismatch: expected `Int`, found `Bool`
+e040_try_and_arguments.ignite:15:11: error[E040]: type mismatch: `?` needs a function returning `Result`, this one returns `Int`

@@ -1,0 +1,23 @@
+import std.shapes.{Point, Shape}
+
+type Ops {
+  origin: fn() -> Point
+  width: fn(Shape) -> Int
+}
+
+type Bad {
+  origin: fn() -> Int
+  missing: fn() -> Int
+  count: Int
+}
+
+fn ops() -> Module<Ops> = module("std.shapes")
+
+fn bad() -> Module<Bad> = module("std.shapes")
+
+fn nowhere() -> Module<Ops> = module("std.nowhere")
+
+fn untyped() -> Int {
+  let m = module("std.shapes")
+  return 0
+}

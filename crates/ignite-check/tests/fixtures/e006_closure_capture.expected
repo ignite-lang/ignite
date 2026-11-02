@@ -1,0 +1,3 @@
+e006_closure_capture.ignite:5:5: error[E006]: cannot assign to `n` inside a closure; a closure captures `n` by copy
+e006_closure_capture.ignite:6:5: error[E006]: cannot change `items` inside a closure; a closure captures `items` by copy
+e006_closure_capture.ignite:7:5: error[E006]: cannot change `items` inside a closure; a closure captures `items` by copy

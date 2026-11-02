@@ -1,0 +1,2 @@
+effects_b08_ambient_param_variants.ignite:1:11: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it
+effects_b08_ambient_param_variants.ignite:14:31: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it

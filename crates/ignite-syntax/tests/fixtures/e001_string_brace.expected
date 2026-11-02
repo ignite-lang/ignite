@@ -1,0 +1,1 @@
+e001_string_brace.ignite:1:31: error[E001]: unmatched `}` in string; write `}}` for a literal brace

@@ -1,0 +1,2 @@
+e104_loopback.ignite:7:15: error[E104]: exposure Loopback needs a loopback address, got 0.0.0.0
+e104_loopback.ignite:13:15: error[E104]: exposure Loopback needs a loopback address, got 10.0.0.1

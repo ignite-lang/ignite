@@ -1,0 +1,1 @@
+effects_a04_fn_type_param_named_stdin.ignite:3:15: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it

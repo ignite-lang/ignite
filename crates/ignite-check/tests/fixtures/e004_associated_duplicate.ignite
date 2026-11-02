@@ -1,0 +1,9 @@
+enum Light { Red, Green }
+
+fn Light.Red() -> Light = Red
+
+fn Light.next(l: Light) -> Light = Green
+
+fn Light.next(l: Light) -> Light = Red
+
+fn next(l: Light) -> Light = l

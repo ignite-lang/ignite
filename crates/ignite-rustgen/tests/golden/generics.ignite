@@ -1,0 +1,138 @@
+package examples.counters
+
+import std.net.TcpStream
+import std.io.IoError
+
+// Slice 7 on the Rust target: generic records, enums, fns and roles, an
+// effectful fn type, a `Store` resource named in a component property, and
+// the new builtins. `countersd` answers one line per request.
+
+type IoResult<T> = Result<T, IoError>
+
+type Pair<A, B> { first: A, second: B }
+
+type Labelled<T> {
+  value: T
+  label: Text = "none"
+}
+
+enum Choice<T> { Nothing, One(T), Two(T, T) }
+
+type App<S> {
+  state: S
+  handle: fn(state: S, line: Text) -> Text requires [state.*]
+}
+
+fn swap<A, B>(p: Pair<A, B>) -> Pair<B, A> = Pair { first = p.second, second = p.first }
+
+fn or<T>(value: Option<T>, fallback: T) -> T = match value {
+  Some(present) => present
+  None => fallback
+}
+
+fn count<T>(choice: Choice<T>) -> Int = match choice {
+  Nothing => 0
+  One(_) => 1
+  Two(_, _) => 2
+}
+
+fn twice<T>(f: fn(T) -> T, value: T) -> T = f(f(value))
+
+fn identity<T>(value: T) -> T = value
+
+fn bump(n: Int) -> Int = n + 1
+
+fn show(n: Int) -> Text = "{n}"
+
+fn generic_line() -> Text {
+  let pair = swap(Pair { first = 1, second = "one" })
+  let labelled = Labelled { value = pair.second }
+  let choice: Choice<Text> = Two("a", "b")
+  let id: fn(Int) -> Int = identity
+  "{pair.first} {labelled.value} {labelled.label} {count(choice)} {twice(bump, id(5))}"
+}
+
+fn number(line: Text, command: Text) -> Option<Int> = match line.strip_prefix(command) {
+  Some(rest) => Int.parse(rest)
+  None => None
+}
+
+fn respond(counts: Store<Int>, line: Text) -> Text {
+  if line == "new" {
+    let id = counts.next_id()
+    counts.put(id, 0)
+    return "{id}"
+  }
+  if line == "all" {
+    return counts.values().map(show).join(",")
+  }
+  if line == "generic" {
+    return generic_line()
+  }
+  match number(line, "inc ") {
+    Some(id) => return show(or(counts.update(id, bump), -1))
+    None => {}
+  }
+  match number(line, "get ") {
+    Some(id) => return match counts.get(id) {
+      Some(value) => show(value)
+      None => "missing"
+    }
+    None => {}
+  }
+  match number(line, "del ") {
+    Some(id) => return match counts.remove(id) {
+      Some(value) => "removed {value}"
+      None => "missing"
+    }
+    None => {}
+  }
+  match number(line, "byte ") {
+    Some(n) => match n.to_byte() {
+      Some(b) => "byte {b.to_int()}"
+      None => "not a byte"
+    }
+    None => "unknown"
+  }
+}
+
+protocol Lines {
+  fn serve<S>(stream: TcpStream, app: App<S>) -> IoResult<Unit> requires [
+    stream.read, stream.write, app.*
+  ] {
+    stream.set_idle_timeout(5000)?
+    loop {
+      match stream.read(4096)? {
+        Eof => return Ok(())
+        Data(bytes) => {
+          let reply = app.handle(app.state, bytes.to_text().trim())
+          stream.write_all((reply + "\n").to_bytes())?
+        }
+      }
+    }
+  }
+}
+
+type Server<S> {
+  listener: TcpListener
+  application: App<S>
+  executable: Text
+}
+
+fn Server.main<S>(self: Server<S>) -> IoResult<Unit> {
+  loop {
+    let stream = self.listener.accept()?
+    spawn Lines.serve(stream, self.application)
+  }
+}
+
+system Counters {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 7400 }
+  resource counts: Store<Int>
+
+  component server: Server {
+    listener = ingress
+    application = App { state = counts, handle = respond }
+    executable = "countersd"
+  }
+}

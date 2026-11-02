@@ -2,7 +2,7 @@ use std::io::Read;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use telos_io::{Input, TcpListener, TcpStream, flush, spawn};
+use ignite_io::{Input, TcpListener, TcpStream, flush, spawn};
 
 fn pair() -> (TcpStream, std::net::TcpStream) {
     let listener = TcpListener::bind("127.0.0.1".into(), 0).unwrap();
@@ -122,7 +122,7 @@ fn reuse_has_clean_pending() {
     let got = read_with_timeout(&mut raw, 1000).map(|b| String::from_utf8_lossy(&b).into_owned());
     let t2 = tx.clone();
     spawn(move || {
-        let _ = telos_io::Stdin::is_terminal();
+        let _ = ignite_io::Stdin::is_terminal();
         t2.send(std::thread::current().id()).unwrap();
     });
     let id2 = rx.recv().unwrap();

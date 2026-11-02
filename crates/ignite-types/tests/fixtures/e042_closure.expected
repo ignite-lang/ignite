@@ -1,0 +1,3 @@
+e042_closure.ignite:4:12: error[E042]: cannot infer the type of closure parameter `x`; annotate it: `|x: T|`
+e042_closure.ignite:9:16: error[E040]: type mismatch: expected `fn(Int) -> Int`, found `fn(Text) -> Int`
+e042_closure.ignite:12:51: error[E041]: `List<T>` has no method `debug`

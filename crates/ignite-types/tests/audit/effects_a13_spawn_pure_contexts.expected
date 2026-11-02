@@ -1,0 +1,5 @@
+effects_a13_spawn_pure_contexts.ignite:4:9: error[E016]: missing effect `s.write` for `worker`; add it to the `requires` of `spawner`
+effects_a13_spawn_pure_contexts.ignite:9:9: error[E016]: missing effect `s.write` for `worker`; add it to the `requires` of `spawner_ufcs`
+effects_a13_spawn_pure_contexts.ignite:14:38: error[E010]: effectful call `TcpStream.connect` outside an effectful function: the default of field `Cfg.conn` is pure
+effects_a13_spawn_pure_contexts.ignite:17:29: error[E051]: `Store.new()` is test-only; a program's stores are `resource`s
+effects_a13_spawn_pure_contexts.ignite:19:35: error[E010]: effectful call `Stdin.read` outside an effectful function: the value of constant `R` is pure

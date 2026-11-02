@@ -1,0 +1,90 @@
+// Range patterns the checker accepts as exhaustive without `_` (no E046),
+// driven over their domain: every Byte, and Int values around every bound
+// plus both extremes. Each value must land in the arm that comparisons
+// predict; the default arm a backend adds after the ranges is never
+// reached (it would trap or panic).
+
+const SPACE: Byte = 32
+const TOP: Int = 1000
+
+fn byte_class(b: Byte) -> Int = match b {
+  0..=31 => 0
+  SPACE => 1
+  33..=126 => 2
+  127 => 3
+  0x80..=0xBF => 4
+  0xC0..=0xFF => 5
+}
+
+fn byte_expected(b: Byte) -> Int = if b < 32 {
+  0
+} else if b == 32 {
+  1
+} else if b < 127 {
+  2
+} else if b == 127 {
+  3
+} else if b < 192 {
+  4
+} else {
+  5
+}
+
+fn int_class(n: Int) -> Int = match n {
+  -9223372036854775808..=-1 => 0
+  0 => 1
+  1..=9 => 2
+  10..=TOP => 3
+  1001..=9223372036854775807 => 4
+}
+
+fn int_expected(n: Int) -> Int = if n < 0 {
+  0
+} else if n == 0 {
+  1
+} else if n <= 9 {
+  2
+} else if n <= TOP {
+  3
+} else {
+  4
+}
+
+// A pair of ranges: the column split must cover every combination.
+fn pair_class(pair: (Byte, Bool)) -> Int = match pair {
+  (0..=127, true) => 0
+  (128..=255, true) => 1
+  (_, false) => 2
+}
+
+test "every byte lands in its range" {
+  var seen = 0
+  var i = 0
+  while i < 256 {
+    let b = match i.to_byte() {
+      Some(b) => b
+      None => 0
+    }
+    assert byte_class(b) == byte_expected(b), "byte {b}"
+    assert pair_class((b, true)) == if i < 128 { 0 } else { 1 }, "byte {b}"
+    assert pair_class((b, false)) == 2, "byte {b}"
+    seen = seen + 1
+    i = i + 1
+  }
+  assert seen == 256
+  let edges: Bytes = [0, 31, 32, 33, 126, 127, 128, 191, 192, 255]
+  assert edges.map(byte_class) == [0, 0, 1, 2, 2, 3, 4, 4, 5, 5]
+}
+
+test "Int values around every bound land in their range" {
+  var n = -1100
+  while n <= 1100 {
+    assert int_class(n) == int_expected(n), "n = {n}"
+    n = n + 1
+  }
+  for edge in [-9223372036854775808, -9223372036854775807, -2, 9223372036854775806, 9223372036854775807] {
+    assert int_class(edge) == int_expected(edge), "n = {edge}"
+  }
+  assert int_class(-9223372036854775808) == 0
+  assert int_class(9223372036854775807) == 4
+}

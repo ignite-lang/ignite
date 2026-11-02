@@ -1,0 +1,2 @@
+e004_imported_clash.ignite:2:21: error[E004]: `greet` is already imported from `std.greeting`
+e004_imported_clash.ignite:4:4: error[E004]: duplicate definition of `greet`, which is imported from `std.greeting`

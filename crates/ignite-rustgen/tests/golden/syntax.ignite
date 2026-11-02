@@ -1,0 +1,192 @@
+package tests.syntax
+
+// Slice 6 surface syntax (docs/slice.md section 10). Golden for both
+// targets and built and run by crates/ignite/tests/syntax.rs: the client
+// writes one line per check to standard output and exits 0.
+
+type IoResult<T> = Result<T, IoError>
+
+type Reply {
+  lines: List<Text>
+  action: Action = Continue
+  code: Int = BASE + 1
+}
+
+enum Action { Continue, Close }
+
+enum Light { Off, On }
+
+enum Power { Off, Full }
+
+type Handler { name: Text, respond: fn(Text) -> Text }
+
+const BASE: Int = 41
+const QUIT: Text = "quit"
+const SPACE: Byte = b' '
+const lowest: Int = 3
+
+fn shout(t: Text) -> Text = t + "!"
+
+fn twice(x: Int) -> Int = x * 2
+
+fn lower_case(n: Int) -> Text {
+  match n {
+    lowest => "lowest"
+    other => "other {other}"
+  }
+}
+
+fn swap(p: (Int, Text)) -> (Text, Int) {
+  let (n, t) = p
+  (t, n)
+}
+
+fn describe(n: Int) -> Text {
+  match n {
+    0 | 1 => "small"
+    BASE => "base"
+    _ => "other"
+  }
+}
+
+fn classify(words: List<Text>) -> Text {
+  match words {
+    [] => "none"
+    [w] => "one " + w
+    [QUIT, _] => "quit with argument"
+    [a, b] => "two " + a + b
+    _ => "many"
+  }
+}
+
+fn nested(v: Option<(Bool, List<Int>)>) -> Text {
+  match v {
+    Some((true, [x, y])) => "pair {x} {y}"
+    Some((false, _)) | None => "off or none"
+    Some((true, _)) => "other"
+  }
+}
+
+fn vowel(w: Text) -> Bool {
+  match w {
+    "a" | "e" | "i" | "o" | "u" => true
+    _ => false
+  }
+}
+
+fn first_positive(values: List<Int>) -> Int {
+  for v in values {
+    if v > 0 {
+      return v
+    }
+  }
+  0
+}
+
+fn sign(n: Int) -> Text {
+  let s = match n {
+    0 => return "zero"
+    _ => if n > 0 { "+" } else { "-" }
+  }
+  s
+}
+
+fn count_spaces(bytes: Bytes) -> Int {
+  var n = 0
+  for c in bytes {
+    match c {
+      SPACE => {
+        n = n + 1
+      }
+      _ => {}
+    }
+  }
+  n
+}
+
+fn show(text: Text) -> IoResult<Unit> {
+  var bytes = text.to_bytes()
+  bytes.push(10)
+  Stdout.write_all(bytes)
+}
+
+protocol Syntax {
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stdout.write] {
+    let (word, number) = swap((7, "seven"))
+    show("{word} {number}")?
+    show(describe(0) + " " + describe(41) + " " + describe(9))?
+    show(classify([]))?
+    show(classify(["x"]))?
+    show(classify(["quit", "now"]))?
+    show(classify(["a", "b"]))?
+    show(classify(["a", "b", "c"]))?
+    show(nested(Some((true, [1, 2]))))?
+    show(nested(Some((false, [1]))))?
+    show(nested(None))?
+    show(nested(Some((true, [3]))))?
+    let e = vowel("e")
+    let x = vowel("x")
+    show("{e} {x}")?
+    show(first_positive([-1, 0, 5, 6]).to_text())?
+    show(sign(0) + sign(3) + sign(-3))?
+    show(count_spaces("a b c ".to_bytes()).to_text())?
+    let n = 21
+    show(n.twice().to_text())?
+    show("hey".shout())?
+    let h = Handler { name = "h", respond = shout }
+    show(h.respond(h.name))?
+    let r = Reply { lines = ["l"] }
+    show("code {r.code}")?
+    match r.action {
+      Continue => show("continue")?
+      Close => show("close")?
+    }
+    let flag = true
+    let space = SPACE
+    show(flag.to_text() + " " + space.to_text() + " " + "t".to_text())?
+    var pair = (0, "")
+    var i = 0
+    while i < 3000 {
+      let (count, text) = pair
+      pair = (count + 1, text + "x")
+      i = i + 1
+    }
+    let (count, text) = pair
+    let size = text.len()
+    show("{count} {size}")?
+    let spare = (1, "a")
+    var (p, q) = spare
+    p = p + 1
+    q = q + "b"
+    show("{p}{q}")?
+    let _ = twice(1)
+    _ = twice(2)
+    let light: Light = Off
+    match light {
+      Off => show("light off")?
+      On => show("light on")?
+    }
+    show(lower_case(3) + " " + lower_case(4))?
+    Ok(())
+  }
+}
+
+type Runner {
+  address: Text
+  port: Int
+}
+
+fn Runner.main(self: Runner) -> Result<Unit, IoError> {
+  let stream = match TcpStream.connect(self.address, self.port) {
+    Ok(stream) => stream
+    Err(error) => return Err(error.with_exit_code(3))
+  }
+  match Syntax.connect(stream) {
+    Ok(_) => Ok(())
+    Err(error) => Err(error.with_exit_code(4))
+  }
+}
+
+system Run {
+  component syntax: Runner { address = "127.0.0.1", port = 1 }
+}

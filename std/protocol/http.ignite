@@ -1,0 +1,687 @@
+package std.protocol.http
+
+import std.net.TcpStream
+import std.io.IoError
+import std.text.*
+import std.option.unwrap_or
+import std.json.{Json, encode}
+
+// HTTP/1.1 server (RFC 9112) over one TCP stream: requests with a
+// `Content-Length` body, keep-alive until the client asks to close, and a
+// fixed set of limits. A head over 8 KiB is answered 431, a body over
+// 1 MiB 413, a malformed request 400 and any `Transfer-Encoding` 501 (only
+// `Content-Length` framing is implemented, RFC 9112 section 6.1). Each of
+// those closes the connection after a lingering close: the reply is
+// written, the write half shut down, and up to 64 KiB of input drained for
+// at most 1 s, so the client reads the reply instead of a reset. A
+// connection idle for 30 s is closed.
+//
+// The head is parsed strictly, so a proxy in front cannot frame a request
+// differently (RFC 9112 sections 2.2, 5 and 6.3): a bare CR or LF, a
+// header name that is not a token (whitespace before the colon, a line
+// starting with whitespace), a control byte in a value, a repeated
+// `Content-Length` or one that is not 1 to 18 digits are all 400. A
+// response whose header name or value holds CR or LF is replaced by 500.
+
+type IoResult<T> = Result<T, IoError>
+
+// One request. `path` is the target without its query, `query` the text
+// after `?`; header names are in lower case, values trimmed.
+type Request {
+  method: Text
+  path: Text
+  query: Text
+  version: Text
+  headers: List<(Text, Text)>
+  body: Text
+}
+
+type Response {
+  status: Int
+  headers: List<(Text, Text)> = []
+  body: Text = ""
+}
+
+// What a server runs: shared state, and the handler called once per
+// request with that state.
+type HttpApp<S> {
+  state: S
+  handle: fn(state: S, request: Request) -> Response requires [state.*]
+}
+
+const MAXIMUM_HEAD: Int = 8192
+const MAXIMUM_BODY: Int = 1048576
+const IDLE_TIMEOUT_MS: Int = 30000
+const READ_SIZE: Int = 65536
+const MAXIMUM_DRAIN: Int = 65536
+const DRAIN_TIMEOUT_MS: Int = 1000
+const MAXIMUM_LENGTH_DIGITS: Int = 18
+
+protocol Http {
+  fn serve<S>(stream: TcpStream, application: HttpApp<S>) -> IoResult<Unit> requires [
+    stream.read, stream.write, application.*
+  ] {
+    stream.set_idle_timeout(IDLE_TIMEOUT_MS)?
+    let result = session(stream, application)
+    _ = stream.close()
+    result
+  }
+}
+
+// An HTTP server over a listener (`docs/slice.md` section 14.5): the
+// executable binds the listener, accepts connections and runs `Http.serve`
+// in one task per connection; a connection whose handler fails ends its
+// task and the server goes on accepting.
+type HttpServer<S> {
+  listener: TcpListener
+  application: HttpApp<S>
+  executable: Text
+}
+
+fn HttpServer.main<S>(self: HttpServer<S>) -> IoResult<Unit> {
+  loop {
+    let stream = self.listener.accept()?
+    spawn Http.serve(stream, self.application)
+  }
+}
+
+// ---- responses ----------------------------------------------------------
+
+fn reason(status: Int) -> Text = match status {
+  200 => "OK"
+  201 => "Created"
+  204 => "No Content"
+  400 => "Bad Request"
+  404 => "Not Found"
+  405 => "Method Not Allowed"
+  413 => "Content Too Large"
+  431 => "Request Header Fields Too Large"
+  500 => "Internal Server Error"
+  501 => "Not Implemented"
+  _ => "Unknown"
+}
+
+// A JSON response: `Response.json(201, value)`.
+fn Response.json(status: Int, value: Json) -> Response =
+  Response { status, headers = [("Content-Type", "application/json")], body = encode(value) }
+
+// A plain-text response.
+fn Response.plain(status: Int, body: Text) -> Response =
+  Response { status, headers = [("Content-Type", "text/plain; charset=utf-8")], body }
+
+// A response whose body is the reason phrase; 204 has no body.
+fn status_response(status: Int) -> Response =
+  if status == 204 { Response { status } } else { Response.plain(status, reason(status) + "\n") }
+
+// 405 with the `Allow` header listing the methods the target supports.
+fn method_not_allowed(allow: Text) -> Response {
+  var response = status_response(405)
+  response.headers.push(("Allow", allow))
+  response
+}
+
+fn has_line_break(text: Text) -> Bool = text.contains("\r") || text.contains("\n")
+
+// `response`, or 500 when a header name or value holds CR or LF and
+// would split the head.
+fn checked(response: Response) -> Response {
+  for header in response.headers {
+    if has_line_break(header.0) || has_line_break(header.1) {
+      return status_response(500)
+    }
+  }
+  response
+}
+
+// The head and body of `response`. A 204 has neither `Content-Length` nor
+// a body (RFC 9110 sections 8.6 and 15.3.5).
+fn render(response: Response, keep_alive: Bool) -> Bytes {
+  var head = "HTTP/1.1 {response.status} {reason(response.status)}\r\n"
+  for header in response.headers {
+    head = head + "{header.0}: {header.1}\r\n"
+  }
+  let body = if response.status == 204 { "" } else { response.body }
+  if response.status != 204 {
+    head = head + "Content-Length: {body.len()}\r\n"
+  }
+  let connection = if keep_alive { "keep-alive" } else { "close" }
+  head = head + "Connection: {connection}\r\n\r\n"
+  var out = head.to_bytes()
+  out.append(body.to_bytes())
+  out
+}
+
+test "responses carry their reason, type and body" {
+  assert reason(200) == "OK"
+  assert reason(431) == "Request Header Fields Too Large"
+  assert reason(299) == "Unknown"
+  assert Response.json(201, Null) == Response { status = 201, headers = [("Content-Type", "application/json")], body = "null" }
+  assert Response.plain(200, "hi") == Response { status = 200, headers = [("Content-Type", "text/plain; charset=utf-8")], body = "hi" }
+  assert status_response(404).body == "Not Found\n"
+  assert status_response(204) == Response { status = 204 }
+  let allowed = method_not_allowed("GET, POST")
+  assert allowed.status == 405
+  assert allowed.headers == [("Content-Type", "text/plain; charset=utf-8"), ("Allow", "GET, POST")]
+}
+
+test "a header holding CR or LF turns the response into 500" {
+  let fine = Response.plain(200, "line\r\nbreaks in the body are fine")
+  assert checked(fine) == fine
+  assert checked(Response { status = 200, headers = [("X", "a\r\nSet-Cookie: b")] }) == status_response(500)
+  assert checked(Response { status = 200, headers = [("X", "a\nb")] }).status == 500
+  assert checked(Response { status = 200, headers = [("X\r", "a")] }).status == 500
+  assert checked(Response { status = 200, headers = [("X", "a\tb")] }).status == 200
+}
+
+test "render writes the status line, headers, length and connection" {
+  let created = render(Response.json(201, Object([])), true).to_text()
+  assert created == "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: keep-alive\r\n\r\n" + r"{}"
+  let utf8 = render(Response { status = 200, body = "é" }, false).to_text()
+  assert utf8 == "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\né"
+}
+
+test "a 204 response has no Content-Length and no body" {
+  let empty = render(status_response(204), true).to_text()
+  assert empty == "HTTP/1.1 204 No Content\r\nConnection: keep-alive\r\n\r\n"
+  let stray = render(Response { status = 204, body = "x" }, false).to_text()
+  assert stray == "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
+}
+
+// ---- requests -----------------------------------------------------------
+
+// The value of header `name` (lower case), the first if repeated.
+fn header(request: Request, name: Text) -> Option<Text> {
+  for header in request.headers {
+    if header.0 == name {
+      return Some(header.1)
+    }
+  }
+  None
+}
+
+// The non-empty segments of the path: "/todos/3" is ["todos", "3"].
+fn segments(request: Request) -> List<Text> {
+  var out = []
+  for segment in request.path.split("/") {
+    if !segment.is_empty() {
+      out.push(segment)
+    }
+  }
+  out
+}
+
+// Whether a `Connection` header lists `option` (lower case). Its value is
+// a comma-separated list, and the header may be repeated (RFC 9110
+// section 7.6.1).
+fn has_connection_option(request: Request, option: Text) -> Bool {
+  for header in request.headers {
+    if header.0 == "connection" {
+      for item in header.1.split(",") {
+        if item.trim().to_lower() == option {
+          return true
+        }
+      }
+    }
+  }
+  false
+}
+
+// HTTP/1.1 keeps the connection unless asked to close, HTTP/1.0 closes it
+// unless asked to keep it; `close` wins over `keep-alive`.
+fn keep_alive(request: Request) -> Bool {
+  if has_connection_option(request, "close") {
+    return false
+  }
+  request.version != "HTTP/1.0" || has_connection_option(request, "keep-alive")
+}
+
+// A GET of `/` in `version` with `headers` (names in lower case).
+test fn get(version: Text, headers: List<(Text, Text)>) -> Request =
+  Request { method = "GET", path = "/", query = "", version, headers, body = "" }
+
+test "header finds the first value of a lower-case name" {
+  let request = get("HTTP/1.1", [("host", "a"), ("x", "1"), ("x", "2")])
+  assert header(request, "x") == Some("1")
+  assert header(request, "host") == Some("a")
+  assert header(request, "missing") == None
+}
+
+test "segments are the non-empty parts of the path" {
+  var request = get("HTTP/1.1", [])
+  request.path = "/todos/3"
+  assert segments(request) == ["todos", "3"]
+  request.path = "//todos//3/"
+  assert segments(request) == ["todos", "3"]
+  request.path = "/"
+  assert segments(request) == []
+}
+
+test "HTTP/1.1 keeps the connection unless asked to close" {
+  assert keep_alive(get("HTTP/1.1", []))
+  assert keep_alive(get("HTTP/1.1", [("connection", "keep-alive")]))
+  assert !keep_alive(get("HTTP/1.1", [("connection", "close")]))
+  assert !keep_alive(get("HTTP/1.1", [("connection", "Close")]))
+  assert keep_alive(get("HTTP/1.1", [("connection", "upgrade")]))
+}
+
+test "HTTP/1.0 closes the connection unless asked to keep it" {
+  assert !keep_alive(get("HTTP/1.0", []))
+  assert keep_alive(get("HTTP/1.0", [("connection", "keep-alive")]))
+  assert keep_alive(get("HTTP/1.0", [("connection", "Keep-Alive")]))
+  assert !keep_alive(get("HTTP/1.0", [("connection", "close")]))
+}
+
+test "Connection is a list of options" {
+  assert !keep_alive(get("HTTP/1.1", [("connection", "upgrade, close")]))
+  assert !keep_alive(get("HTTP/1.1", [("connection", "keep-alive"), ("connection", "close")]))
+  assert keep_alive(get("HTTP/1.0", [("connection", "TE,keep-alive")]))
+  assert !keep_alive(get("HTTP/1.0", [("connection", "keep-alive, close")]))
+  assert keep_alive(get("HTTP/1.1", [("connection", "closed")]))
+}
+
+// RFC 9110 `tchar`.
+fn is_token_byte(b: Byte) -> Bool = match b {
+  b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' | b'^' | b'_' | b'`' => true
+  b'|' | b'~' | b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' => true
+  _ => false
+}
+
+fn is_token(text: Text) -> Bool {
+  for b in text.to_bytes() {
+    if !is_token_byte(b) {
+      return false
+    }
+  }
+  !text.is_empty()
+}
+
+// A field value: no control byte except tab, so no bare CR or LF.
+fn is_field_value(text: Text) -> Bool {
+  for b in text.to_bytes() {
+    if b < b' ' && b != b'\t' || b == 127 {
+      return false
+    }
+  }
+  true
+}
+
+// A request target: visible bytes only.
+fn is_target(text: Text) -> Bool {
+  for b in text.to_bytes() {
+    if b <= b' ' || b == 127 {
+      return false
+    }
+  }
+  !text.is_empty()
+}
+
+// The request line and header lines of a head, without the blank line.
+fn parse_head(head: Text) -> Option<Request> {
+  let lines = head.split("\r\n")
+  let parts = lines.at(0).split(" ")
+  if parts.len() != 3 || !is_token(parts.at(0)) || !is_target(parts.at(1)) {
+    return None
+  }
+  if parts.at(2) != "HTTP/1.1" && parts.at(2) != "HTTP/1.0" {
+    return None
+  }
+  let (path, query) = parts.at(1).split_once("?").unwrap_or((parts.at(1), ""))
+  if !path.starts_with("/") {
+    return None
+  }
+  var headers = []
+  for line in lines.slice(1, lines.len()) {
+    match line.split_once(":") {
+      Some((name, value)) => if is_token(name) && is_field_value(value) {
+        headers.push((name.to_lower(), value.trim()))
+      } else {
+        return None
+      }
+      None => return None
+    }
+  }
+  Some(Request { method = parts.at(0), path, query, version = parts.at(2), headers, body = "" })
+}
+
+test "tokens, field values and targets" {
+  assert is_token("Content-Length")
+  assert is_token("!#$%&'*+-.^_`|~09azAZ")
+  assert !is_token("")
+  assert !is_token("Host ")
+  assert !is_token("a:b")
+  assert !is_token("é")
+  assert is_field_value("")
+  assert is_field_value("a\tb ü")
+  assert !is_field_value("a\rb")
+  assert !is_field_value("a\nb")
+  assert !is_field_value("a\0b")
+  assert !is_field_value("a\x7fb")
+  assert is_target("/todos?x=1")
+  assert !is_target("")
+  assert !is_target("/a b")
+  assert !is_target("/a\x7f")
+}
+
+test "parse_head reads the request line and headers" {
+  let head = "POST /todos?x=1&y HTTP/1.1\r\nHost: example:80\r\nX-Padded:  a\tb \t\r\nEmpty:"
+  let expected = Request {
+    method = "POST"
+    path = "/todos"
+    query = "x=1&y"
+    version = "HTTP/1.1"
+    headers = [("host", "example:80"), ("x-padded", "a\tb"), ("empty", "")]
+    body = ""
+  }
+  assert parse_head(head) == Some(expected)
+  assert parse_head("GET / HTTP/1.0") == Some(get("HTTP/1.0", []))
+  assert parse_head("GET /?a?b HTTP/1.1")?.query == "a?b"
+  assert parse_head("GET /p? HTTP/1.1")?.path == "/p"
+}
+
+test "parse_head refuses a malformed request line" {
+  assert parse_head("") == None
+  assert parse_head("NONSENSE") == None
+  assert parse_head("GET /  HTTP/1.1") == None
+  assert parse_head("GET / HTTP/2") == None
+  assert parse_head("GET / http/1.1") == None
+  assert parse_head("G@T / HTTP/1.1") == None
+  assert parse_head("GET todos HTTP/1.1") == None
+  assert parse_head("GET * HTTP/1.1") == None
+  assert parse_head("GET /\x7f HTTP/1.1") == None
+  assert parse_head("GET / HTTP/1.1\nHost: x") == None
+  assert parse_head("GET\t/ HTTP/1.1") == None
+}
+
+test "parse_head refuses a malformed header line" {
+  assert parse_head("GET / HTTP/1.1\r\nHost : x") == None
+  assert parse_head("GET / HTTP/1.1\r\nHost\t: x") == None
+  assert parse_head("GET / HTTP/1.1\r\n Host: x") == None
+  assert parse_head("GET / HTTP/1.1\r\nHost: x\r\n folded") == None
+  assert parse_head("GET / HTTP/1.1\r\nNoColon") == None
+  assert parse_head("GET / HTTP/1.1\r\n: x") == None
+  assert parse_head("GET / HTTP/1.1\r\nX: a\rb") == None
+  assert parse_head("GET / HTTP/1.1\r\nX: a\nTransfer-Encoding: chunked") == None
+  assert parse_head("GET / HTTP/1.1\r\nX: a\0") == None
+}
+
+// How reading a head ended.
+enum HeadRead { Complete(Int), Closed, TooLarge }
+
+// Reads until `buffer` holds a whole head: how it ended and the bytes
+// read. `Complete` carries the head's length including the blank line.
+fn read_head(stream: TcpStream, buffer: Bytes) -> IoResult<(HeadRead, Bytes)> {
+  var data = buffer
+  var from = 0
+  loop {
+    match bytes_find_from(data, b"\r\n\r\n", from) {
+      Some(at) => return Ok((if at + 4 > MAXIMUM_HEAD { TooLarge } else { Complete(at + 4) }, data))
+      None => {}
+    }
+    if data.len() > MAXIMUM_HEAD {
+      return Ok((TooLarge, data))
+    }
+    from = if data.len() > 3 { data.len() - 3 } else { 0 }
+    match stream.read(READ_SIZE)? {
+      Eof => return Ok((Closed, data))
+      Data(more) => data.append(more)
+    }
+  }
+}
+
+// Reads until `data` holds at least `end` bytes; `None` when the peer
+// closed first.
+fn read_body(stream: TcpStream, data: Bytes, end: Int) -> IoResult<Option<Bytes>> {
+  var out = data
+  while out.len() < end {
+    match stream.read(READ_SIZE)? {
+      Eof => return Ok(None)
+      Data(more) => out.append(more)
+    }
+  }
+  Ok(Some(out))
+}
+
+// What comes next on a connection: a request and the bytes after it, the
+// end of the connection, or a status to answer before closing.
+enum Next { Got(Request, Bytes), Close, Reject(Int) }
+
+fn next_request(stream: TcpStream, buffer: Bytes) -> IoResult<Next> {
+  let (outcome, data) = read_head(stream, buffer)?
+  let head_end = match outcome {
+    Complete(end) => end
+    Closed => return Ok(Close)
+    TooLarge => return Ok(Reject(431))
+  }
+  let request = match parse_head(data.slice(0, head_end - 4).to_text()) {
+    Some(parsed) => parsed
+    None => return Ok(Reject(400))
+  }
+  if header(request, "transfer-encoding") != None {
+    return Ok(Reject(501))
+  }
+  var lengths = []
+  for header in request.headers {
+    if header.0 == "content-length" {
+      lengths.push(header.1)
+    }
+  }
+  let length = match lengths {
+    [] => 0
+    [text] => match parse_length(text) {
+      Some(n) => n
+      None => return Ok(Reject(400))
+    }
+    _ => return Ok(Reject(400))
+  }
+  if length > MAXIMUM_BODY {
+    return Ok(Reject(413))
+  }
+  match read_body(stream, data, head_end + length)? {
+    None => Ok(Close)
+    Some(all) => {
+      var full = request
+      full.body = all.slice(head_end, head_end + length).to_text()
+      Ok(Got(full, all.slice(head_end + length, all.len())))
+    }
+  }
+}
+
+// A `Content-Length` value: 1 to 18 decimal digits, nothing else.
+fn parse_length(text: Text) -> Option<Int> {
+  if text.is_empty() || text.len() > MAXIMUM_LENGTH_DIGITS {
+    return None
+  }
+  for b in text.to_bytes() {
+    if !is_digit(b) {
+      return None
+    }
+  }
+  Int.parse(text)
+}
+
+test "a Content-Length is 1 to 18 decimal digits" {
+  assert parse_length("0") == Some(0)
+  assert parse_length("42") == Some(42)
+  assert parse_length("007") == Some(7)
+  assert parse_length("999999999999999999") == Some(999999999999999999)
+  assert parse_length("1000000000000000000") == None
+  assert parse_length("") == None
+  assert parse_length("+1") == None
+  assert parse_length("-1") == None
+  assert parse_length(" 1") == None
+  assert parse_length("1,1") == None
+  assert parse_length("0x10") == None
+  assert parse_length("١") == None
+}
+
+// Answer a rejected request and close lingering: the reply, the write half
+// shut down, then input drained (at most MAXIMUM_DRAIN bytes, each read
+// waiting at most DRAIN_TIMEOUT_MS) so unread input does not turn the
+// close into a reset that discards the reply at the client.
+fn reject(stream: TcpStream, status: Int) -> IoResult<Unit> {
+  stream.write_all(render(status_response(status), false))?
+  _ = stream.close()
+  stream.set_idle_timeout(DRAIN_TIMEOUT_MS)?
+  var drained = 0
+  while drained < MAXIMUM_DRAIN {
+    match stream.read(READ_SIZE) {
+      Ok(Data(more)) => {
+        drained = drained + more.len()
+      }
+      _ => return Ok(())
+    }
+  }
+  Ok(())
+}
+
+fn session<S>(stream: TcpStream, application: HttpApp<S>) -> IoResult<Unit> {
+  var buffer = Bytes.empty()
+  loop {
+    match next_request(stream, buffer)? {
+      Close => return Ok(())
+      Reject(status) => return reject(stream, status)
+      Got(request, rest) => {
+        let response = checked(application.handle(application.state, request))
+        let keep = keep_alive(request)
+        stream.write_all(render(response, keep))?
+        if !keep {
+          return Ok(())
+        }
+        buffer = rest
+      }
+    }
+  }
+}
+
+// A connected pair of streams: the client and the server end.
+test fn connected() -> IoResult<(TcpStream, TcpStream)> {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  client.set_idle_timeout(5000)?
+  let server = listener.accept()?
+  server.set_idle_timeout(5000)?
+  Ok((client, server))
+}
+
+// What `next_request` makes of `input`, sent with the write half closed
+// after it.
+test fn next_of(input: Bytes) -> IoResult<Next> {
+  let (client, server) = connected()?
+  client.write_all(input)?
+  _ = client.close()
+  next_request(server, Bytes.empty())
+}
+
+// `input` with `count` filler bytes in an `X` header before its blank line.
+test fn padded(input: Text, count: Int) -> Bytes {
+  var out = input.to_bytes()
+  out.append(b"X: ")
+  while out.len() < count - 4 {
+    out.push(b'x')
+  }
+  out.append(b"\r\n\r\n")
+  out
+}
+
+test "next_request reads a head, its body and keeps the rest" {
+  let request = Request {
+    method = "POST"
+    path = "/todos"
+    query = ""
+    version = "HTTP/1.1"
+    headers = [("content-length", "5")]
+    body = "hello"
+  }
+  assert next_of(b"POST /todos HTTP/1.1\r\nContent-Length: 5\r\n\r\nhelloGET /")? == Got(request, b"GET /")
+  assert next_of(b"GET / HTTP/1.0\r\n\r\n")? == Got(get("HTTP/1.0", []), Bytes.empty())
+}
+
+test "next_request takes a pipelined request from the buffer" {
+  let (client, server) = connected()?
+  _ = client.close()
+  let buffer = b"GET / HTTP/1.1\r\n\r\nGET / HTTP/1.0\r\n\r\n"
+  assert next_request(server, buffer)? == Got(get("HTTP/1.1", []), b"GET / HTTP/1.0\r\n\r\n")
+}
+
+test "next_request ends on a connection closed before a whole request" {
+  assert next_of(Bytes.empty())? == Close
+  assert next_of(b"GET / HTTP/1.1\r\n")? == Close
+  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhi")? == Close
+  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 1048576\r\n\r\n")? == Close
+}
+
+test "a head over 8 KiB is 431" {
+  match next_of(padded("GET / HTTP/1.1\r\n", 8192))? {
+    Got(request, rest) => {
+      assert request.headers.len() == 1 && rest.is_empty()
+    }
+    _ => {
+      assert false, "a head of 8192 bytes is read"
+    }
+  }
+  assert next_of(padded("GET / HTTP/1.1\r\n", 8193))? == Reject(431)
+  assert next_of(padded("GET / HTTP/1.1\r\n", 9000).slice(0, 8999))? == Reject(431)
+}
+
+test "a body over 1 MiB is 413" {
+  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 1048577\r\n\r\n")? == Reject(413)
+  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 999999999999999999\r\n\r\n")? == Reject(413)
+}
+
+test "a malformed head or Content-Length is 400" {
+  assert next_of(b"NONSENSE\r\n\r\n")? == Reject(400)
+  assert next_of(b"GET / HTTP/1.1\r\nX: a\nContent-Length: 3\r\n\r\nabc")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 3\r\nContent-Length: 3\r\n\r\nabc")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 3, 3\r\n\r\nabc")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: -1\r\n\r\n")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nContent-Length:\r\n\r\n")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 1000000000000000000\r\n\r\n")? == Reject(400)
+}
+
+test "any Transfer-Encoding is 501, also with a Content-Length" {
+  assert next_of(b"POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")? == Reject(501)
+  assert next_of(b"POST / HTTP/1.1\r\nTransfer-Encoding: identity\r\nContent-Length: 3\r\n\r\nabc")? == Reject(501)
+  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 3\r\ntransfer-encoding: chunked\r\n\r\nabc")? == Reject(501)
+  assert next_of(b"POST / HTTP/1.1\r\nTransfer-Encoding : chunked\r\n\r\n")? == Reject(400)
+}
+
+// Answers `<method> <path>?<query> <body>`; `/bad` gets a header with a
+// line break.
+test fn answer(state: Unit, request: Request) -> Response = if request.path == "/bad" {
+  Response { status = 200, headers = [("X", "a\r\nb")] }
+} else {
+  Response.plain(200, "{request.method} {request.path}?{request.query} {request.body}")
+}
+
+// Everything `Http.serve` sends for `input` until it closes the connection.
+test fn served(input: Bytes) -> IoResult<Text> {
+  let (client, server) = connected()?
+  spawn Http.serve(server, HttpApp { state = (), handle = answer })
+  client.write_all(input)?
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out.to_text())
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test fn reply(body: Text, connection: Text) -> Text {
+  let length = body.len()
+  "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {length}\r\nConnection: {connection}\r\n\r\n{body}"
+}
+
+test "the server answers pipelined requests until one asks to close" {
+  let input = b"GET /a?x HTTP/1.1\r\n\r\nPOST /b HTTP/1.1\r\nContent-Length: 2\r\n\r\nhiGET /c HTTP/1.1\r\nConnection: close\r\n\r\n"
+  let expected = reply("GET /a?x ", "keep-alive") + reply("POST /b? hi", "keep-alive") + reply("GET /c? ", "close")
+  assert served(input)? == expected
+  assert served(b"GET /e HTTP/1.0\r\n\r\n")? == reply("GET /e? ", "close")
+}
+
+test "the server answers a rejected request and closes" {
+  let rejected = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 12\r\nConnection: close\r\n\r\nBad Request\n"
+  assert served(b"GET /a HTTP/1.1\r\n\r\nBAD\r\n\r\nGET /b HTTP/1.1\r\n\r\n")? == reply("GET /a? ", "keep-alive") + rejected
+  let server_error = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 22\r\nConnection: close\r\n\r\nInternal Server Error\n"
+  assert served(b"GET /bad HTTP/1.1\r\nConnection: close\r\n\r\n")? == server_error
+}

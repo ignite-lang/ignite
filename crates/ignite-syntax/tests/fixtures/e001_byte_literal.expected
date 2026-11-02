@@ -1,0 +1,1 @@
+e001_byte_literal.ignite:1:21: error[E001]: malformed byte literal; write one ASCII character or escape, e.g. `b' '` or `b'\n'`

@@ -1,0 +1,67 @@
+package tests.small
+
+type Pair { left: Int, right: Text }
+
+enum Shape { Dot, Circle(Int) }
+
+const SCALE: Int = 2
+
+fn area(shape: Shape) -> Int {
+  return match shape {
+    Dot => 0
+    Shape.Circle(r) => SCALE * r * r
+  }
+}
+
+fn label(pair: Pair) -> Text {
+  var parts = [pair.right]
+  parts.push(Int.to_text(pair.left))
+  return parts.join("=")
+}
+
+fn repeat(text: Text, times: Int) -> Text {
+  var out = ""
+  var i = 0
+  while i < times {
+    out = out.concat(text)
+    i = i + 1
+  }
+  for b in text.to_bytes() {
+    i = i + 1
+  }
+  return out
+}
+
+fn shout(text: Text) -> Text = text.concat("!")
+
+fn greet(name: Text) -> Text = shout(name)
+
+fn checked(n: Int) -> Result<Int, IoError> {
+  if n < 0 {
+    return Err(IoError.new("negative"))
+  }
+  return Ok(area(Shape.Circle(n)))
+}
+
+protocol Echo {
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {
+    let size = checked(3)?
+    let text = label(Pair { left = size, right = "area" })
+    return stream.write_all(text.to_bytes())
+  }
+}
+
+type Dialer {
+  address: Text
+  port: Int
+  executable: Text
+}
+
+fn Dialer.main(self: Dialer) -> Result<Unit, IoError> {
+  let stream = TcpStream.connect(self.address, self.port)?
+  Echo.connect(stream)
+}
+
+system Small {
+  component client: Dialer { address = "127.0.0.1", port = 7, executable = "small" }
+}

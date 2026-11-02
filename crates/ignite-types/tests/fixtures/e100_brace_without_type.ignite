@@ -1,0 +1,4 @@
+fn f() -> Int {
+  let m = { admin = 1, guest = 2 }
+  return 0
+}

@@ -1,4 +1,0 @@
-e040_test_try.telos:6:11: error[E040]: type mismatch: `?` needs a `Result`, found `Option<Int>`
-e040_test_try.telos:11:11: error[E040]: type mismatch: `?` in a test needs a `Result` or `Option`, found `Int`
-e040_test_try.telos:12:17: error[E040]: type mismatch: expected `Text`, found `Int`
-e040_test_try.telos:13:10: error[E040]: type mismatch: expected `Unit`, found `Int`

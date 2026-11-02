@@ -1,0 +1,3 @@
+effects_a03_param_named_process_net.ignite:1:9: error[E056]: parameter `process` is named like the ambient capability `process`; rename it
+effects_a03_param_named_process_net.ignite:3:9: error[E056]: parameter `net` is named like the ambient capability `net`; rename it
+effects_a03_param_named_process_net.ignite:5:8: error[E056]: parameter `stdout` is named like the ambient capability `stdout`; rename it

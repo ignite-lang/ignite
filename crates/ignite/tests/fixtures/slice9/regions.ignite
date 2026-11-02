@@ -1,0 +1,224 @@
+// Slice 9 values that cross loop regions, arenas and the store's heap
+// (`docs/slice.md` section 13, `docs/llvm.md` sections 3 and 4): closures
+// and their environments, boxed recursive values, record updates, range
+// patterns without `_`, and debug text of every kind of value.
+
+type Chain {
+  value: Int
+  next: Option<Chain>
+}
+
+enum Tree<T> {
+  Leaf,
+  Node(Tree<T>, T, Tree<T>),
+}
+
+type Ops {
+  name: Text
+  f: fn(Text) -> Text
+}
+
+type Todo {
+  id: Int
+  title: Text
+  done: Bool = false
+}
+
+fn filler(i: Int) -> Text = "................................................................".concat(Int.to_text(i))
+
+fn adder(n: Int) -> fn(Int) -> Int = |x| x + n
+
+fn suffixer(s: Text) -> fn(Text) -> Text = |t| t + s
+
+fn twice(f: fn(Int) -> Int) -> fn(Int) -> Int = |x| f(f(x))
+
+fn insert(tree: Tree<Int>, value: Int) -> Tree<Int> = match tree {
+  Leaf => Node(Leaf, value, Leaf)
+  Node(left, v, right) => if value < v {
+    Node(insert(left, value), v, right)
+  } else {
+    Node(left, v, insert(right, value))
+  }
+}
+
+fn size(tree: Tree<Int>) -> Int = match tree {
+  Leaf => 0
+  Node(left, _, right) => size(left) + 1 + size(right)
+}
+
+fn length(chain: Chain) -> Int {
+  var n = 1
+  var cur = chain.next
+  loop {
+    match cur {
+      Some(c) => {
+        n = n + 1
+        cur = c.next
+      }
+      None => break
+    }
+  }
+  return n
+}
+
+fn half(b: Byte) -> Text = match b {
+  0..=127 => "low"
+  128..=255 => "high"
+}
+
+fn bucket(n: Int) -> Int = match n {
+  -9223372036854775807..=-1 => -1
+  0..=9 => 0
+  10..=9223372036854775807 => 1
+  _ => 2
+}
+
+test "closures carried across loop releases" {
+  var f = adder(0)
+  var g = suffixer("")
+  var i = 0
+  while i < 20000 {
+    f = adder(i)
+    g = suffixer(filler(i))
+    let junk = filler(i)
+    i = i + 1
+  }
+  assert f(1) == 20000
+  assert g("x") == "x".concat(filler(19999))
+}
+
+test "closures in a list and nested closures" {
+  var fs: List<fn(Int) -> Int> = []
+  var i = 0
+  while i < 1000 {
+    fs.push(adder(i))
+    let junk = filler(i)
+    i = i + 1
+  }
+  assert fs.len() == 1000
+  let last = fs[999]
+  assert last(1) == 1000
+  let base = [10, 20]
+  let outer = |x: Int| {
+    let inner = |y: Int| x + y + base[1]
+    inner(1)
+  }
+  assert outer(2) == 23
+  let add10 = twice(adder(5))
+  assert add10(1) == 11
+  let times16 = twice(twice(|x| x * 2))
+  assert times16(1) == 16
+}
+
+test "fn fields hold closures" {
+  let tail = "!"
+  var ops = Ops { name = "loud", f = |t| t + tail }
+  var i = 0
+  while i < 2000 {
+    ops = Ops { f = suffixer(Int.to_text(i)), ..ops }
+    let junk = filler(i)
+    i = i + 1
+  }
+  assert ops.f("x") == "x1999"
+  assert ops.name == "loud"
+  assert ops.debug() == r#"Ops { name: "loud", f: <fn> }"#
+}
+
+test "store update with a capturing closure in a loop" {
+  let store: Store<Todo> = Store.new()
+  store.put(1, Todo { id = 1, title = "" })
+  var i = 0
+  while i < 20000 {
+    let mark = filler(i)
+    let r = store.update(1, |t| Todo { title = mark, done = !t.done, ..t })
+    i = i + 1
+  }
+  match store.get(1) {
+    Some(t) => {
+      assert t.title == filler(19999)
+      assert t.done == false
+    }
+    None => { assert false }
+  }
+}
+
+test "boxed values carried across releases and through the store" {
+  var tree: Tree<Int> = Leaf
+  var i = 0
+  while i < 2000 {
+    tree = insert(tree, (i * 7919) % 10007)
+    let junk = filler(i)
+    i = i + 1
+  }
+  assert size(tree) == 2000
+  let copy = tree
+  assert copy == tree
+  var chain = Chain { value = 0, next = None }
+  var j = 1
+  while j < 5000 {
+    chain = Chain { value = j, next = Some(chain) }
+    let junk = filler(j)
+    j = j + 1
+  }
+  assert length(chain) == 5000
+  let store: Store<Chain> = Store.new()
+  store.put(1, chain)
+  let r = store.update(1, |c| Chain { value = c.value + 1, next = Some(c) })
+  match store.get(1) {
+    Some(c) => {
+      assert length(c) == 5001
+      assert c.value == 5000
+      assert c.next == Some(chain)
+    }
+    None => { assert false }
+  }
+}
+
+test "range patterns without a wildcard" {
+  assert half(0) == "low"
+  assert half(127) == "low"
+  assert half(128) == "high"
+  assert half(255) == "high"
+  assert bucket(-5) == -1
+  assert bucket(9) == 0
+  assert bucket(10) == 1
+}
+
+test "break and continue as values in carried loops" {
+  var acc: List<Text> = []
+  var i = 0
+  while true {
+    i = i + 1
+    let t = match i % 3 {
+      0 => continue
+      _ => if i > 3000 { break } else { filler(i) }
+    }
+    acc.push(t)
+  }
+  assert acc.len() == 2000
+  assert acc[1999] == filler(2999)
+}
+
+test "tuple fields and record updates of borrowed places" {
+  var pairs = [(1, "a"), (2, "b")]
+  let first = pairs[0].1
+  pairs = [(3, "c"), pairs[1]]
+  assert first == "a"
+  assert pairs[0].0 == 3
+  let todo = Todo { id = 1, title = "milk" }
+  var updated = Todo { done = true, ..todo }
+  updated.title = "eggs"
+  assert todo == Todo { id = 1, title = "milk", done = false }
+  assert updated.debug() == r#"Todo { id: 1, title: "eggs", done: true }"#
+}
+
+test "debug text of nested values" {
+  let nested: List<Option<(Int, Text)>> = [Some((1, "a\u{7f}")), None]
+  assert nested.debug() == r#"[Some((1, "a\u{7f}")), None]"#
+  let r: Result<Bytes, Text> = Ok(b"hi")
+  assert r.debug() == "Ok([104, 105])"
+  let chain = Chain { value = 1, next = Some(Chain { value = 2, next = None }) }
+  assert chain.debug() == r"Chain { value: 1, next: Some(Chain { value: 2, next: None }) }"
+  assert ().debug() == "()"
+  assert IoError.new("boom").debug() == r#"IoError("boom")"#
+}

@@ -1,0 +1,82 @@
+package std.policy
+
+// Recovery and rollout policies of a component (design section 11.3).
+// Slice 10 checks the declarations and gives `Backoff` its arithmetic;
+// a controller that restarts and drains is slice 12.
+
+// How the delay between restart attempts grows.
+enum Backoff {
+  Exponential(Duration, Duration),
+  Fixed(Duration)
+}
+
+// Delays that double from `initial` and never exceed `maximum`.
+fn exponential(initial: Duration, maximum: Duration) -> Backoff = Exponential(initial, maximum)
+
+// The same delay before every attempt.
+fn fixed(delay: Duration) -> Backoff = Fixed(delay)
+
+// The delay before retry `attempt`; the first retry is attempt 1.
+fn delay(backoff: Backoff, attempt: Int) -> Duration = match backoff {
+  Fixed(d) => d
+  Exponential(initial, maximum) => {
+    var d = initial
+    var i = 1
+    while i < attempt && d < maximum {
+      d = d * 2
+      i = i + 1
+    }
+    if d > maximum { maximum } else { d }
+  }
+}
+
+// Restart a failed component: at most `maximum_attempts` restarts within
+// `interval`, each after the backoff's delay.
+type Restart {
+  backoff: Backoff = exponential(100 ms, 10 seconds)
+  maximum_attempts: Int = 10
+  interval: Duration = 5 minutes
+}
+
+// Whether `attempt` restarts within `interval` are still allowed.
+fn allows(restart: Restart, attempt: Int) -> Bool = attempt <= restart.maximum_attempts
+
+// Replace a component by draining its sessions: new sessions go to the new
+// version, old ones end by `deadline`, then `on_deadline` happens to the
+// rest (`"disconnect_remaining"`, a closed set that slice 12 makes an enum).
+type DrainRollout {
+  deadline: Duration = 2 minutes
+  on_deadline: Text = "disconnect_remaining"
+}
+
+test "an exponential backoff doubles up to its maximum" {
+  let backoff = exponential(100 ms, 1 second)
+  assert delay(backoff, 1) == 100 ms
+  assert delay(backoff, 2) == 200 ms
+  assert delay(backoff, 4) == 800 ms
+  assert delay(backoff, 5) == 1 second
+  assert delay(backoff, 50) == 1 second
+  assert delay(exponential(3 seconds, 1 second), 1) == 1 second
+}
+
+test "a fixed backoff never changes" {
+  assert delay(fixed(250 ms), 1) == 250 ms
+  assert delay(fixed(250 ms), 9) == 250 ms
+}
+
+test "Restart counts attempts against its maximum" {
+  let restart = Restart {}
+  assert restart.backoff == exponential(100 ms, 10 seconds)
+  assert restart.interval == 5 minutes
+  assert allows(restart, 10)
+  assert !allows(restart, 11)
+  assert allows(Restart { maximum_attempts = 0 }, 0)
+  assert !allows(Restart { maximum_attempts = 0 }, 1)
+}
+
+test "DrainRollout defaults to two minutes and disconnecting" {
+  let rollout = DrainRollout {}
+  assert rollout.deadline == 2 minutes
+  assert rollout.on_deadline == "disconnect_remaining"
+  assert DrainRollout { deadline = 30 seconds }.deadline == 30 seconds
+}

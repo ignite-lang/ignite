@@ -1,0 +1,5 @@
+e010_effect_in_const.ignite:11:22: error[E010]: effectful call `fetch` outside an effectful function: the value of constant `FETCHED` is pure
+e010_effect_in_const.ignite:12:20: error[E010]: `spawn` outside an effectful function: the value of constant `TASK` is pure
+e010_effect_in_const.ignite:13:38: error[E010]: effectful call `Stdin.read` outside an effectful function: the value of constant `READ` is pure
+e010_effect_in_const.ignite:14:23: error[E010]: effectful call `inferred` outside an effectful function: the value of constant `INFERRED` is pure
+e010_effect_in_const.ignite:17:15: error[E010]: effectful call `inferred` outside an effectful function: the default of field `Config.port` is pure

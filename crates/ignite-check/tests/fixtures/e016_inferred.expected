@@ -1,0 +1,3 @@
+e016_inferred.ignite:9:3: error[E016]: missing effect `stream.read` for `echo`; add it to the `requires` of `serve`
+e016_inferred.ignite:10:3: error[E016]: missing effect `stream.read` for `echo`; add it to the `requires` of `serve`
+e016_inferred.ignite:11:10: error[E016]: missing effect `stdout.write` for `greet`; add it to the `requires` of `serve`

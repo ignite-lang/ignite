@@ -1,0 +1,5 @@
+e044_byte_range.ignite:1:19: error[E044]: integer literal 256 is out of range for `Byte` (0 to 255)
+e044_byte_range.ignite:4:24: error[E044]: integer literal -1 is out of range for `Byte` (0 to 255)
+e044_byte_range.ignite:5:29: error[E044]: integer literal 1000 is out of range for `Byte` (0 to 255)
+e044_byte_range.ignite:7:5: error[E044]: integer literal 999 is out of range for `Byte` (0 to 255)
+e044_byte_range.ignite:10:15: error[E044]: integer literal 300 is out of range for `Byte` (0 to 255)

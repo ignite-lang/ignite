@@ -1,1 +1,0 @@
-e003_const_pattern_payload.telos:5:5: error[E003]: constant `IAC` takes no payload patterns; a constant pattern is the name alone

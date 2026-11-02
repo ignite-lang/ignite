@@ -1,0 +1,66 @@
+package tests.failover
+
+// Built with `--target llvm` and run over a real socket by
+// tests/failover.rs (`docs/slice.md` section 14.0.3, 14.8): a server whose
+// session fails on the commands `index`, `overflow` and `assert`, and must
+// keep accepting afterwards. Any other line is answered `<banner><line>`.
+// `Server.main` is the accept loop of a component kind (section 14.5), as
+// `std.protocol.telnet.TelnetServer.main` is.
+
+type Settings { banner: Text }
+
+fn reply(stream: TcpStream, text: Text) -> Result<Unit, IoError> requires [stream.write] {
+  var bytes = text.to_bytes()
+  bytes.push(10)
+  return stream.write_all(bytes)
+}
+
+protocol Flaky {
+  fn serve(stream: TcpStream, application: Settings) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+    let input = stream.read(64)?
+    match input {
+      Eof => {
+        return Ok(Unit)
+      }
+      Data(bytes) => {
+        let line = bytes.to_text().trim()
+        if line == "index" {
+          let values = [1, 2]
+          reply(stream, Int.to_text(values.at(5)))?
+        }
+        if line == "overflow" {
+          var n = 9223372036854775807
+          n = n + bytes.len()
+          reply(stream, Int.to_text(n))?
+        }
+        if line == "assert" {
+          assert bytes.len() == 0
+        }
+        reply(stream, application.banner.concat(line))?
+        return stream.close()
+      }
+    }
+  }
+}
+
+type Server {
+  listener: TcpListener
+  application: Settings
+  executable: Text
+}
+
+fn Server.main(self: Server) -> Result<Unit, IoError> {
+  loop {
+    let stream = self.listener.accept()?
+    spawn Flaky.serve(stream, self.application)
+  }
+}
+
+system Failover {
+  resource listener: TcpListener { address = "127.0.0.1", port = 0 }
+  component server: Server {
+    listener = listener
+    application = Settings { banner = "ok " }
+    executable = "failoverd"
+  }
+}
