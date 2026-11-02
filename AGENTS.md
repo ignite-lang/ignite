@@ -385,6 +385,9 @@ cold comparison against each baseline meets the start-load rule and has no faile
   syscall-traced HTTP failures are diagnostic interference, not readiness evidence.
 
 - No comments in `Cargo.toml`, `Taskfile.yml` or any other config file.
+- Commit titles follow Conventional Commits: `type(scope): summary` with `type` one of `feat`,
+  `fix`, `perf`, `docs`, `test`, `refactor`, `chore`, `build`, `ci`; the scope is optional. Every
+  commit has a body: a blank line after the title, then bullets on what changed and why.
 - Reasoning lives in doc comments, `docs/slice.md` and commit messages, not in reports.
 - `docs/slice.md` is the contract between the compiler crates. Change it and the tests together;
   do not let a crate's doc comment restate it.
