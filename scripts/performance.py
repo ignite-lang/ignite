@@ -147,6 +147,13 @@ def within_budget(unit, ratio):
     return ratio <= (1.0 if unit == "file-rustgen" else 1.10)
 
 
+def gate_command(label, source, unit, command):
+    # Compare the candidate's complete workflow to the original serial owners.
+    if label == "candidate" and unit == "fmt" and (source / "scripts/check-format.py").is_file():
+        return ["python3", "scripts/check-format.py"]
+    return command
+
+
 def closure_eligible(controls, frozen_baseline_matches, comparison_present):
     """Loose controls are useful diagnostics, never performance acceptance."""
     return (frozen_baseline_matches and comparison_present
@@ -299,6 +306,7 @@ class Harness:
         before, start = os.getloadavg()[0], time.monotonic()
         failures = 0
         for name, command in GATE:
+            command = gate_command(label, self.paths[label], name, command)
             row = self.command(label, f"{mode}-{name}", pair, command, recache, phase)
             failures += bool(row["exit"])
             if label == "candidate" and name == "workspace":
@@ -510,6 +518,16 @@ def self_check():
     assert not within_budget("file-rustgen", 1.01), "Generator tests must recover matched 11b time"
     assert within_budget("warm-workspace", 1.10)
     assert not within_budget("warm-workspace", 1.11)
+    with tempfile.TemporaryDirectory(prefix="performance-format-check-") as temp:
+        source = Path(temp)
+        serial = GATE[0][1]
+        assert gate_command("candidate", source, "fmt", serial) == serial
+        (source / "scripts").mkdir()
+        (source / "scripts/check-format.py").write_text("# frozen format-check entry point\n")
+        assert gate_command("candidate", source, "fmt", serial) == ["python3", "scripts/check-format.py"]
+        assert gate_command("baseline", source, "fmt", serial) == serial
+        assert gate_command("comparison", source, "fmt", serial) == serial
+        assert gate_command("candidate", source, "clippy", GATE[1][1]) == GATE[1][1]
     controls = dict(warm_pairs=3, check_pairs=15, extra_warm_passes=2,
                     cold_retries=1, load_delta=5, absolute_max_load=9)
     assert closure_eligible(controls, True, True)

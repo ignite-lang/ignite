@@ -1,0 +1,8 @@
+    Checking ignite-check v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a/crates/ignite-check)
+    Checking ignite-types v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a/crates/ignite-types)
+    Checking ignite-rustgen v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a/crates/ignite-rustgen)
+    Checking ignite-llvm v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a/crates/ignite-llvm)
+    Checking ignite-eval v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a/crates/ignite-eval)
+    Checking ignite v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a/crates/ignite)
+      Timing report saved to /home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-d8a9cb74050a/cargo-timings/cargo-timing-20261102T131039187Z-73013ba6f3932b77.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.69s

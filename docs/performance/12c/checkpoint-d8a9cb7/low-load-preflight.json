@@ -1,0 +1,11 @@
+{
+  "target": 7,
+  "max_wait_seconds": 180,
+  "elapsed_seconds": 3.4469994716346264e-06,
+  "samples": [
+    {
+      "seconds": 3.4469994716346264e-06,
+      "load": 2.9580078125
+    }
+  ]
+}

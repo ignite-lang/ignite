@@ -38,12 +38,12 @@ tasks:
     cmds:
       - cargo build -q -p ignite
       - cargo build -q -p ignite-rt --features runner --target-dir {{.T}}/ignite-test/rt
-      - '{{.T}}/debug/ignite test {{.FILES}} {{.SELECT}} --target both --out {{.T}}/ignite-test --target-dir {{.T}}/ignite-test/cargo --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a'
+      - '{{.T}}/debug/ignite test {{.FILES}} {{.SELECT}} --target=all --out {{.T}}/ignite-test --target-dir {{.T}}/ignite-test/cargo --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a'
 
   check:
     desc: Format check and clippy with warnings denied
     cmds:
-      - cargo fmt --all -- --check
+      - python3 scripts/check-format.py
       - cargo clippy --workspace --all-targets -- -D warnings
 
   fmt:

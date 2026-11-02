@@ -1,0 +1,6 @@
+Diff in /home/timo/.cache/scratch/ignite-perf12c/format-production-verify/fixture/binary/src/nested.rs:1:
+[31m-pub fn value( )->i32{1}
+(B[m[32m+pub fn value() -> i32 {
+(B[m[32m+    1
+(B[m[32m+}
+(B[m 

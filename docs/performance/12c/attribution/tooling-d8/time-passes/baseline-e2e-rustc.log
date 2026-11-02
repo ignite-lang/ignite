@@ -1,0 +1,43 @@
+   Compiling clap v4.6.7
+   Compiling ignite v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/baseline-df7ccb9bed44/crates/ignite)
+time:   0.000; rss:   49MB ->   49MB (   +0MB)	parse_crate
+time:   0.000; rss:   55MB ->   55MB (   +0MB)	crate_injection
+time:   0.062; rss:   55MB ->   96MB (  +41MB)	expand_crate
+time:   0.062; rss:   55MB ->   96MB (  +41MB)	macro_expand_crate
+time:   0.002; rss:   96MB ->   97MB (   +1MB)	maybe_building_test_harness
+time:   0.001; rss:   97MB ->   97MB (   +0MB)	AST_validation
+time:   0.000; rss:   97MB ->   97MB (   +0MB)	finalize_imports
+time:   0.000; rss:   97MB ->   97MB (   +0MB)	finalize_macro_resolutions
+time:   0.008; rss:   97MB ->  107MB (  +10MB)	late_resolve_crate
+time:   0.000; rss:  107MB ->  107MB (   +0MB)	resolve_main
+time:   0.000; rss:  107MB ->  107MB (   +0MB)	resolve_check_unused
+time:   0.010; rss:   97MB ->  107MB (  +11MB)	resolve_crate
+time:   0.001; rss:  108MB ->  108MB (   +0MB)	write_dep_info
+time:   0.000; rss:  108MB ->  108MB (   +0MB)	complete_gated_feature_checking
+time:   0.000; rss:  113MB ->  113MB (   +0MB)	looking_for_entry_point
+time:   0.000; rss:  113MB ->  113MB (   +0MB)	check_externally_implementable_items
+time:   0.000; rss:  114MB ->  114MB (   +0MB)	unused_lib_feature_checking
+time:   0.003; rss:  113MB ->  115MB (   +2MB)	misc_checking_1
+time:   0.012; rss:  115MB ->  138MB (  +23MB)	coherence_checking
+time:   0.238; rss:  115MB ->  178MB (  +63MB)	type_check_crate
+time:   0.191; rss:  178MB ->  210MB (  +32MB)	MIR_borrow_checking
+time:   0.005; rss:  210MB ->  211MB (   +1MB)	module_lints
+time:   0.005; rss:  210MB ->  211MB (   +1MB)	lint_checking
+time:   0.004; rss:  211MB ->  211MB (   +0MB)	privacy_checking_modules
+time:   0.011; rss:  210MB ->  211MB (   +1MB)	misc_checking_3
+time:   0.000; rss:  211MB ->  211MB (   +0MB)	monomorphization_collector_root_collections
+time:   0.150; rss:  211MB ->  244MB (  +33MB)	monomorphization_collector_graph_walk
+time:   0.019; rss:  245MB ->  249MB (   +3MB)	partition_and_assert_distinct_symbols
+time:   0.000; rss:  248MB ->  250MB (   +1MB)	write_allocator_module
+time:   0.225; rss:  250MB ->  297MB (  +47MB)	codegen_to_LLVM_IR
+time:   0.397; rss:  211MB ->  297MB (  +86MB)	codegen_crate
+time:   0.000; rss:  298MB ->  298MB (   +0MB)	serialize_dep_graph
+time:   0.244; rss:  255MB ->  226MB (  -29MB)	LLVM_passes
+time:   0.000; rss:  220MB ->  219MB (   -1MB)	join_worker_thread
+time:   0.030; rss:  224MB ->  219MB (   -5MB)	finish_ongoing_codegen
+time:   0.062; rss:  220MB ->  220MB (   +0MB)	run_linker
+time:   0.063; rss:  219MB ->  220MB (   +1MB)	link_binary
+time:   0.063; rss:  219MB ->  220MB (   +1MB)	link_crate
+time:   0.063; rss:  219MB ->  220MB (   +1MB)	link
+time:   1.047; rss:   31MB ->   96MB (  +65MB)	total
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.76s

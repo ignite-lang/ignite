@@ -1,0 +1,57 @@
+task: [check] python3 scripts/check-format.py
+task: [check] cargo clippy --workspace --all-targets -- -D warnings
+    Checking ignite-check v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite-check)
+    Checking ignite-types v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite-types)
+    Checking ignite-rustgen v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite-rustgen)
+    Checking ignite-llvm v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite-llvm)
+    Checking ignite-eval v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite-eval)
+    Checking ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.59s
+task: [test] cargo test --workspace
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.46s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/ignite-7066fbb78e702281)
+
+running 21 tests
+test run::clock::tests::next_due_steps_one_instant_at_a_time ... ok
+test run::clock::tests::advance_fires_due_timers_in_order ... ok
+test run::clock::tests::the_real_clock_is_monotonic ... ok
+test run::clock::tests::durations_parse ... ok
+test run::journal::tests::fresh_renames_the_old_journal ... ok
+test run::control::tests::a_signal_becomes_an_interrupt ... okT.probe: boom
+
+test run::journal::tests::records_get_consecutive_seqs_and_persist ... ok
+test run::journal::tests::a_torn_final_line_is_dropped_and_cut ... ok
+test run::journal::tests::the_lock_admits_one_run ... ok
+test run::process::tests::lines_are_recognised ... ok
+test run::tests::rfc3339_instants ... ok
+test run::process::tests::a_missing_executable_fails_to_spawn ... ok
+T.server: noise
+test run::probe::tests::the_first_line_is_the_result ... FAILED
+test run::probe::tests::refs_become_ref_arguments ... ok
+test run::process::tests::a_child_is_started_ready_and_signalled ... ok
+test run::process::tests::an_exit_before_ready_ends_the_flight ... ok
+test run::process::tests::two_generations_are_told_apart_by_pid ... ok
+test run::probe::tests::failures_are_attempt_failed ... ok
+test run::control::tests::settle_waits_for_every_guard ... ok
+test run::process::tests::released_is_reported_once_awaited ... ok
+test run::probe::tests::a_killed_attempt_sends_nothing ... ok
+
+failures:
+
+---- run::probe::tests::the_first_line_is_the_result stdout ----
+
+thread 'run::probe::tests::the_first_line_is_the_result' (3649846) panicked at crates/ignite/src/run/probe.rs:210:9:
+assertion `left == right` failed
+  left: Ok(AttemptFailed { member: "T.probe", id: 2, reason: "cannot start /tmp/ignite-probe-tests/attempt-2-3649829.sh: Text file busy (os error 26)" })
+ right: Ok(AttemptDone { member: "T.probe", id: 2, line: "{\"received\":true}" })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    run::probe::tests::the_first_line_is_the_result
+
+test result: FAILED. 20 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+error: test failed, to rerun pass `-p ignite --lib`
+task: Failed to run task "gate": task: Failed to run task "test": exit status 101

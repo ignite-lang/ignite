@@ -6,6 +6,11 @@ publish.workspace = true
 description = "Ignite lexer, parser, AST and diagnostics."
 autotests = false
 
+[lib]
+# Cases live in tests/main.rs; re-enable before adding source unit tests.
+test = false
+bench = false
+
 [dependencies]
 
 [[test]]

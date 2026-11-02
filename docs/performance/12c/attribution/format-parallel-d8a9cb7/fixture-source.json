@@ -1,0 +1,12 @@
+{
+  "Cargo.toml": "[workspace]\nresolver = \"3\"\nmembers = [\"library\", \"binary\"]\n",
+  "binary/Cargo.toml": "[package]\nname = \"format-binary\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+  "binary/src/main.rs": "mod nested;\n\nfn main() {\n    println!(\"{}\", nested::value());\n}\n",
+  "binary/src/nested.rs": "pub fn value() -> i32 {\n    1\n}\n",
+  "library/Cargo.toml": "[package]\nname = \"format-library\"\nversion = \"0.1.0\"\nedition = \"2021\"\nautotests = false\n\n[[test]]\nname = \"main\"\npath = \"tests/main.rs\"\n",
+  "library/src/lib.rs": "mod nested;\n",
+  "library/src/nested.rs": "pub fn gen() -> i32 {\n    1\n}\n",
+  "library/tests/main.rs": "mod support;\n\n#[test]\nfn checks_nested() {\n    assert_eq!(support::value(), 1);\n}\n",
+  "library/tests/support/mod.rs": "pub fn value() -> i32 {\n    1\n}\n",
+  "rustfmt.toml": "max_width = 80\n"
+}

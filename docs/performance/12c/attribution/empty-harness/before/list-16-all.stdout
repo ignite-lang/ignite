@@ -1,0 +1,12 @@
+fuel::default_limits_are_one_million: test
+fuel::with_units_keeps_the_node_limit: test
+value::closures_and_io_errors_are_unencodable: test
+value::collections: test
+value::json_parse_is_the_inverse_of_compact: test
+value::nodes_count_items_recursively: test
+value::quantities_print_the_largest_exact_unit: test
+value::records_and_enums: test
+value::references_fns_modules_and_errors: test
+value::scalars_and_text_escapes: test
+
+10 tests, 0 benchmarks

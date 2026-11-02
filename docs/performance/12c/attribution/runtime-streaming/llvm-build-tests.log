@@ -1,0 +1,14 @@
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.29s
+     Running tests/main.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/main-b624c508ef07abba)
+
+running 6 tests
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test llvm_build::failed_compile_is_retried ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 194 filtered out; finished in 2.73s
+

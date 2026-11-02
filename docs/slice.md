@@ -3847,12 +3847,14 @@ recovered tree published as `bench/11b-recovered` (`df7ccb9`); `9273349` is the 
 10.8 s warm workspace-test limit under comparable load, unchanged diagnostic/golden
 behaviour, and all existing tests on both targets. A measured cause does not waive a miss.
 
-Additive test preparation contract: `ignite test --target both` prepares the source and
-standard-library type graph once, then builds and runs Rust followed by LLVM using that
-same immutable graph. Existing `--target rust` and `--target llvm` retain their behaviour;
+Additive test preparation contract: `ignite test --target=all` prepares the source and
+standard-library type graph once, then builds and runs every supported target using that
+same immutable graph, in native CLI target order (currently Rust then LLVM). `all` enumerates
+the native CLI's supported target variants rather than maintaining a separate pair.
+Existing `--target rust` and `--target llvm` retain their behaviour;
 `ignite build` and `ignite run` keep their two native target choices. The public driver API
 adds `test_targets(files, options, targets)` beside `test`/`build_tests`, without adding a
-`Both` variant to the native `Target` type. Each target retains its own generated directory,
+selection variant to the native `Target` type. Each target retains its own generated directory,
 Cargo/LLVM artifacts and isolated test children. The same filter, list, jobs, timeout,
 profile and tool options reach each target. Both suites run even if the first has failing
 tests, and the exit status is the maximum test status; a preparation/build diagnostic uses
@@ -3886,6 +3888,24 @@ while every site's line and column still come from the current source. LLVM prun
 borrows temporary symbol names while function text is immutable; the public symbol query keeps
 its owned result. LLVM debug-location interning uses a private integer-key hasher and preserves
 metadata IDs and emitted IR. Source-identifier maps retain their existing hashing.
+
+The format-check workflow may partition the complete workspace package set into at most
+four concurrent CargoFmt groups. CargoFmt remains responsible for every target, recursive
+module, edition, configuration and toolchain choice; no source is excluded. Every group runs
+with the same inherited environment and `-- --check`, and all groups finish before their
+statuses are combined. Successful checks are silent; failure diagnostics are retained in
+deterministic group order. A local path dependency outside the workspace uses the original
+serial `cargo fmt --all -- --check`, preserving its wider scope. The writing `task fmt` is
+unchanged. Performance comparisons run this complete candidate workflow against the original
+serial 11b and 12b workflows, recording the actual command without changing any budget.
+
+Six targets with no source-side tests or test-only code omit their empty test and benchmark
+harnesses: the syntax, types, rustgen, eval and LLVM libraries, and the CLI binary. Their
+existing integration targets exercise the normal libraries and CLI; source unit tests,
+doctests and integration targets elsewhere remain enabled. Clippy still checks the workspace
+with `--all-targets -D warnings`. The removed six executables contain zero cases: exact
+case-name and ignored-name inventories must match before and after. Re-enable these manifest
+flags before adding source unit tests or benchmarks to those targets.
 
 The CLI enables the existing `nix/poll` feature consistently with the workspace runner so
 the measured gate does not alternate dependency feature sets and rebuild the CLI. No external

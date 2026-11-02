@@ -1,0 +1,12 @@
+fixtures::every_checker_code_has_a_fixture: test
+fixtures::fixtures_match_expected: test
+limits::effect_inference_is_linear_in_either_order: test
+limits::mutual_recursion_reaches_a_fixed_point: test
+modules::check_is_check_module_without_modules: test
+modules::constants_are_exported_imported_and_listed: test
+modules::imported_definitions_enter_symbols: test
+modules::only_named_imports_enter_scope: test
+terminal::standard_library_checks_in_import_order: test
+terminal::terminal_checks_clean_against_the_standard_library: test
+
+10 tests, 0 benchmarks

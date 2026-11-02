@@ -1,0 +1,48 @@
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.81s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/ignite-7066fbb78e702281)
+
+running 22 tests
+test run::clock::tests::advance_fires_due_timers_in_order ... ok
+test run::clock::tests::durations_parse ... ok
+T.probe: warn
+test run::clock::tests::the_real_clock_is_monotonic ... ok
+test run::clock::tests::next_due_steps_one_instant_at_a_time ... ok
+test run::journal::tests::a_torn_final_line_is_dropped_and_cut ... ok
+T.probe: boom
+test run::control::tests::a_signal_becomes_an_interrupt ... ok
+test run::journal::tests::records_get_consecutive_seqs_and_persist ... ok
+test run::journal::tests::the_lock_admits_one_run ... ok
+test run::journal::tests::fresh_renames_the_old_journal ... ok
+test run::process::tests::lines_are_recognised ... ok
+test run::probe::tests::the_first_line_is_the_result ... ok
+T.server: noise
+test run::tests::rfc3339_instants ... ok
+test run::probe::tests::refs_become_ref_arguments ... ok
+test run::process::tests::a_missing_executable_fails_to_spawn ... ok
+test run::process::tests::an_exit_before_ready_ends_the_flight ... ok
+test run::process::tests::a_child_is_started_ready_and_signalled ... ok
+test run::process::tests::two_generations_are_told_apart_by_pid ... ok
+test run::probe::tests::failures_are_attempt_failed ... ok
+test run::process::tests::a_busy_executable_is_retried_after_its_writer_closes ... FAILED
+test run::control::tests::settle_waits_for_every_guard ... ok
+test run::process::tests::released_is_reported_once_awaited ... ok
+test run::probe::tests::a_killed_attempt_sends_nothing ... ok
+
+failures:
+
+---- run::process::tests::a_busy_executable_is_retried_after_its_writer_closes stdout ----
+
+thread 'run::process::tests::a_busy_executable_is_retried_after_its_writer_closes' (156525) panicked at crates/ignite/src/run/process.rs:422:9:
+assertion `left == right` failed
+  left: None
+ right: Some(7)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    run::process::tests::a_busy_executable_is_retried_after_its_writer_closes
+
+test result: FAILED. 21 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+error: test failed, to rerun pass `-p ignite --lib`

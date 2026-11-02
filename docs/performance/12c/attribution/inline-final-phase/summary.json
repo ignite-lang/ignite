@@ -1,0 +1,346 @@
+[
+  {
+    "case": "warmup",
+    "seconds": 4.38481535500614,
+    "load_before": 14.22998046875,
+    "load_after": 13.81103515625,
+    "exit": 0,
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/inline-final-phase/target/debug/ignite",
+      "test",
+      "examples/terminal/command_schema.ignite",
+      "examples/terminal/commands.ignite",
+      "examples/terminal/terminal.ignite",
+      "examples/todo/todo.ignite",
+      "std/cli.ignite",
+      "std/console.ignite",
+      "std/contract.ignite",
+      "std/control.ignite",
+      "std/deploy.ignite",
+      "std/json.ignite",
+      "std/net.ignite",
+      "std/option.ignite",
+      "std/policy.ignite",
+      "std/probe.ignite",
+      "std/protocol/http.ignite",
+      "std/protocol/telnet.ignite",
+      "std/result.ignite",
+      "std/sli.ignite",
+      "std/text.ignite",
+      "std/time.ignite",
+      "--target",
+      "both",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/inline-final-phase/programs",
+      "--target-dir",
+      "/home/timo/.cache/scratch/ignite-perf12c/inline-final-phase/generated-target",
+      "--runtime",
+      "/home/timo/.cache/scratch/ignite-perf12c/target-main/ignite-test/rt/debug/libignite_rt.a",
+      "--list"
+    ],
+    "phases": {
+      "load-std": [
+        40.036247
+      ],
+      "type-std": [
+        42.513095
+      ],
+      "type-program": [
+        3.26076,
+        3.16793,
+        3.836185,
+        6.156902
+      ],
+      "prepare-group": [
+        17.359176
+      ],
+      "prepare-tests": [
+        101.962164
+      ],
+      "rust-test-emit": [
+        5.41257
+      ],
+      "rust-std-emit": [
+        91.391544
+      ],
+      "cargo-generated": [
+        3378.240684
+      ],
+      "build-group": [
+        3478.430549,
+        790.872178
+      ],
+      "native-run": [
+        0.886752,
+        0.937611
+      ],
+      "llvm-target": [
+        14.533252,
+        0.0975
+      ],
+      "llvm-test-emit": [
+        152.600534
+      ],
+      "check-runner": [
+        12.91045
+      ],
+      "runtime-target": [
+        9.368628
+      ],
+      "llvm-write-if-changed": [
+        3.495534,
+        0.110428,
+        0.029495
+      ],
+      "llvm-ir-hash": [
+        11.705402,
+        1.241108,
+        0.107527
+      ],
+      "llvm-run-stamped": [
+        376.605614,
+        42.174542,
+        18.107373,
+        146.969444
+      ],
+      "llvm-link": [
+        610.364507
+      ],
+      "test-total": [
+        4379.338597
+      ]
+    },
+    "counts": [],
+    "listed": 296
+  },
+  {
+    "case": "list",
+    "seconds": 0.48775012302212417,
+    "load_before": 13.81103515625,
+    "load_after": 13.81103515625,
+    "exit": 0,
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/inline-final-phase/target/debug/ignite",
+      "test",
+      "examples/terminal/command_schema.ignite",
+      "examples/terminal/commands.ignite",
+      "examples/terminal/terminal.ignite",
+      "examples/todo/todo.ignite",
+      "std/cli.ignite",
+      "std/console.ignite",
+      "std/contract.ignite",
+      "std/control.ignite",
+      "std/deploy.ignite",
+      "std/json.ignite",
+      "std/net.ignite",
+      "std/option.ignite",
+      "std/policy.ignite",
+      "std/probe.ignite",
+      "std/protocol/http.ignite",
+      "std/protocol/telnet.ignite",
+      "std/result.ignite",
+      "std/sli.ignite",
+      "std/text.ignite",
+      "std/time.ignite",
+      "--target",
+      "both",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/inline-final-phase/programs",
+      "--target-dir",
+      "/home/timo/.cache/scratch/ignite-perf12c/inline-final-phase/generated-target",
+      "--runtime",
+      "/home/timo/.cache/scratch/ignite-perf12c/target-main/ignite-test/rt/debug/libignite_rt.a",
+      "--list"
+    ],
+    "phases": {
+      "load-std": [
+        41.736226
+      ],
+      "type-std": [
+        36.650875
+      ],
+      "type-program": [
+        1.7664,
+        2.057236,
+        3.317662,
+        4.167251
+      ],
+      "prepare-group": [
+        11.861834
+      ],
+      "prepare-tests": [
+        92.071093
+      ],
+      "rust-test-emit": [
+        4.369024
+      ],
+      "rust-std-emit": [
+        82.963896
+      ],
+      "cargo-generated": [
+        25.324092
+      ],
+      "build-group": [
+        155.155978,
+        222.328305
+      ],
+      "native-run": [
+        1.130687,
+        1.329614
+      ],
+      "llvm-target": [
+        0.109161,
+        0.141648
+      ],
+      "llvm-test-emit": [
+        174.007108
+      ],
+      "check-runner": [
+        16.915809
+      ],
+      "runtime-target": [
+        14.195841
+      ],
+      "llvm-write-if-changed": [
+        1.875838,
+        0.182354,
+        0.024381
+      ],
+      "llvm-ir-hash": [
+        13.017667,
+        0.852389,
+        0.114809
+      ],
+      "llvm-run-stamped": [
+        0.043552,
+        0.017425,
+        0.015006,
+        0.009878
+      ],
+      "llvm-link": [
+        30.812803
+      ],
+      "test-total": [
+        480.873783
+      ]
+    },
+    "counts": [],
+    "listed": 296
+  },
+  {
+    "case": "full",
+    "seconds": 0.6972618129802868,
+    "load_before": 13.81103515625,
+    "load_after": 13.81103515625,
+    "exit": 0,
+    "command": [
+      "/home/timo/.cache/scratch/ignite-perf12c/inline-final-phase/target/debug/ignite",
+      "test",
+      "examples/terminal/command_schema.ignite",
+      "examples/terminal/commands.ignite",
+      "examples/terminal/terminal.ignite",
+      "examples/todo/todo.ignite",
+      "std/cli.ignite",
+      "std/console.ignite",
+      "std/contract.ignite",
+      "std/control.ignite",
+      "std/deploy.ignite",
+      "std/json.ignite",
+      "std/net.ignite",
+      "std/option.ignite",
+      "std/policy.ignite",
+      "std/probe.ignite",
+      "std/protocol/http.ignite",
+      "std/protocol/telnet.ignite",
+      "std/result.ignite",
+      "std/sli.ignite",
+      "std/text.ignite",
+      "std/time.ignite",
+      "--target",
+      "both",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/inline-final-phase/programs",
+      "--target-dir",
+      "/home/timo/.cache/scratch/ignite-perf12c/inline-final-phase/generated-target",
+      "--runtime",
+      "/home/timo/.cache/scratch/ignite-perf12c/target-main/ignite-test/rt/debug/libignite_rt.a"
+    ],
+    "phases": {
+      "load-std": [
+        44.922019
+      ],
+      "type-std": [
+        41.760329
+      ],
+      "type-program": [
+        2.23189,
+        2.9533,
+        4.259644,
+        5.231363
+      ],
+      "prepare-group": [
+        15.574349
+      ],
+      "prepare-tests": [
+        104.385726
+      ],
+      "rust-test-emit": [
+        4.960219
+      ],
+      "rust-std-emit": [
+        93.457936
+      ],
+      "cargo-generated": [
+        16.998573
+      ],
+      "build-group": [
+        121.703677,
+        193.242485
+      ],
+      "native-run": [
+        130.334251,
+        134.856045
+      ],
+      "llvm-target": [
+        0.082634,
+        0.104983
+      ],
+      "llvm-test-emit": [
+        154.911334
+      ],
+      "check-runner": [
+        13.024583
+      ],
+      "runtime-target": [
+        10.759229
+      ],
+      "llvm-write-if-changed": [
+        0.930654,
+        0.066915,
+        0.021168
+      ],
+      "llvm-ir-hash": [
+        11.803234,
+        0.75679,
+        0.100915
+      ],
+      "llvm-run-stamped": [
+        0.015485,
+        0.007917,
+        0.006582,
+        0.005473
+      ],
+      "llvm-link": [
+        24.776531
+      ],
+      "test-total": [
+        691.190537
+      ]
+    },
+    "counts": [
+      "148",
+      "148"
+    ],
+    "listed": 0
+  }
+]
