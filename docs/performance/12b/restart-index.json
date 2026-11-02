@@ -1,0 +1,52 @@
+[
+  {
+    "pair": "final",
+    "workspace_exit": 0,
+    "journal": "restart-journal-final.jsonl",
+    "restart_delays_ns": [
+      106399918
+    ],
+    "within_100_to_500_ms": true,
+    "original_journal": "/home/timo/.cache/scratch/ignite12b-codex/measure/restart-journal-final.jsonl"
+  },
+  {
+    "pair": "final-1",
+    "workspace_exit": 0,
+    "journal": "restart-journal-final-1.jsonl",
+    "restart_delays_ns": [
+      106719513
+    ],
+    "within_100_to_500_ms": true,
+    "original_journal": "/home/timo/.cache/scratch/ignite12b-codex/measure/restart-journal-final-1.jsonl"
+  },
+  {
+    "pair": "final-2",
+    "workspace_exit": 0,
+    "journal": "restart-journal-final-2.jsonl",
+    "restart_delays_ns": [
+      107276931
+    ],
+    "within_100_to_500_ms": true,
+    "original_journal": "/home/timo/.cache/scratch/ignite12b-codex/measure/restart-journal-final-2.jsonl"
+  },
+  {
+    "pair": "final-3",
+    "workspace_exit": 0,
+    "journal": "restart-journal-final-3.jsonl",
+    "restart_delays_ns": [
+      104507277
+    ],
+    "within_100_to_500_ms": true,
+    "original_journal": "/home/timo/.cache/scratch/ignite12b-codex/measure/restart-journal-final-3.jsonl"
+  },
+  {
+    "pair": "cold-final",
+    "workspace_exit": 0,
+    "journal": "restart-journal-cold-final.jsonl",
+    "restart_delays_ns": [
+      104395949
+    ],
+    "within_100_to_500_ms": true,
+    "original_journal": "/home/timo/.cache/scratch/ignite12b-codex/measure/restart-journal-cold-final.jsonl"
+  }
+]

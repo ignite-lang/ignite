@@ -172,7 +172,8 @@ pub fn generate_with(
 ) -> Generated {
     let mut programs: Vec<ModuleInput<'_>> = vec![*program];
     programs.extend(options.siblings.iter().copied());
-    let env = type_env_of(std, &programs);
+    let mut env = type_env_of(std, &programs);
+    env.cache_layouts();
     let all: Vec<ModuleInput<'_>> = std.iter().chain(programs.iter()).copied().collect();
     let program_ir = lower_inputs(&env, &all, &programs, program.path, options, None);
     let mains: Vec<Main> = if options.test_modules.is_empty() {
@@ -221,7 +222,8 @@ pub fn generate_tests(
     programs: &[ModuleInput<'_>],
     options: &Options<'_>,
 ) -> Generated {
-    let env = type_env_of(std, programs);
+    let mut env = type_env_of(std, programs);
+    env.cache_layouts();
     let all: Vec<ModuleInput<'_>> = std.iter().chain(programs).copied().collect();
     let program = lower_inputs(&env, &all, programs, "program", options, None);
     let mains = vec![Main {

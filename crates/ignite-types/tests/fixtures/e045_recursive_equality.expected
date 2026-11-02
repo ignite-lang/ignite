@@ -1,0 +1,2 @@
+e045_recursive_equality.ignite:8:10: error[E045]: operator `==` is not defined for `A`, not even in an `assert`: it holds a function, handle, store or `IoError`
+e045_recursive_equality.ignite:9:10: error[E045]: operator `==` is not defined for `B`, not even in an `assert`: it holds a function, handle, store or `IoError`

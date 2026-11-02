@@ -102,6 +102,36 @@ fn group_files(
 /// 16.22): every standard-library file named, every module the programs
 /// and their siblings import, and their imports in turn.
 pub fn build_tests(files: &[PathBuf], options: &TestOptions) -> Result<Vec<PathBuf>, Error> {
+    prepare_tests(files, options)?.build(&options.build)
+}
+
+/// Owned ASTs and their address-keyed types remain together until every
+/// requested native target has built. Moving their owning Vecs preserves
+/// the AST allocations; cloning a Program here would invalidate the maps.
+struct PreparedTests {
+    library: StdLibrary,
+    types: Vec<TypedProgram>,
+    groups: Vec<PreparedGroup>,
+}
+
+impl PreparedTests {
+    fn build(&self, build: &BuildOptions) -> Result<Vec<PathBuf>, Error> {
+        self.groups
+            .iter()
+            .map(|group| build_group(&self.library, &self.types, group, build))
+            .collect()
+    }
+}
+
+/// Target-independent inputs of one executable. The existing Rust options
+/// own the selected tests and source map; LLVM borrows that same source map.
+struct PreparedGroup {
+    name: String,
+    programs: Vec<TestProgram>,
+    options: ignite_rustgen::Options,
+}
+
+fn prepare_tests(files: &[PathBuf], options: &TestOptions) -> Result<PreparedTests, Error> {
     let root = std_root(options.build.std.as_deref())?;
     let mut roots = BTreeSet::new();
     let mut parsed: BTreeMap<PathBuf, ParsedFile> = BTreeMap::new();
@@ -124,10 +154,15 @@ pub fn build_tests(files: &[PathBuf], options: &TestOptions) -> Result<Vec<PathB
         modules: &modules,
     };
     let mut used = BTreeSet::new();
-    groups
-        .iter()
-        .map(|group| build_group(&std, group, &mut parsed, &options.build, &mut used))
-        .collect()
+    let groups = groups
+        .into_iter()
+        .map(|group| prepare_group(&std, group, &mut parsed, &options.build, &mut used))
+        .collect::<Result<_, _>>()?;
+    Ok(PreparedTests {
+        library,
+        types: std_types,
+        groups,
+    })
 }
 
 /// The directory name of the next group: `tests`, then `tests-2`,
@@ -190,11 +225,37 @@ fn touch_sources(dir: &Path, now: std::time::SystemTime) -> Result<(), Error> {
 /// `options.runner`, its output inherited. Returns the exit status: 0 when
 /// every executable exited 0, else the largest status.
 pub fn test(files: &[PathBuf], options: &TestOptions) -> Result<i32, Error> {
-    let executables = build_tests(files, options)?;
+    test_targets(files, options, &[options.build.target])
+}
+
+/// Prepare the frontend once, then build and run every native target in
+/// `targets` order, applying the same runner arguments to every executable.
+/// Test failures do not stop a later target; their maximum status is returned.
+/// Preparation/build diagnostics retain the existing Error path. An empty
+/// target slice validates the inputs and returns 0 without building.
+pub fn test_targets(
+    files: &[PathBuf],
+    options: &TestOptions,
+    targets: &[Target],
+) -> Result<i32, Error> {
+    let prepared = prepare_tests(files, options)?;
+    let mut status = 0;
+    for target in targets {
+        let build = BuildOptions {
+            target: *target,
+            ..options.build.clone()
+        };
+        let executables = prepared.build(&build)?;
+        status = status.max(run_executables(executables, &options.runner)?);
+    }
+    Ok(status)
+}
+
+fn run_executables(executables: Vec<PathBuf>, runner: &[String]) -> Result<i32, Error> {
     let mut status = 0;
     for executable in executables {
         let code = Command::new(&executable)
-            .args(&options.runner)
+            .args(runner)
             .status()
             .map_err(io_error(&executable))?
             .code()
@@ -251,14 +312,14 @@ fn type_test_programs(
     Ok(())
 }
 
-/// Build one group's test executable and return its path.
-fn build_group(
+/// Type one group's programs and prepare its selection/source data once.
+fn prepare_group(
     std: &TypedStd<'_>,
-    group: &TestGroup,
+    group: TestGroup,
     parsed: &mut BTreeMap<PathBuf, ParsedFile>,
     build: &BuildOptions,
     used: &mut BTreeSet<String>,
-) -> Result<PathBuf, Error> {
+) -> Result<PreparedGroup, Error> {
     let library = std.library;
     let mut programs: Vec<TestProgram> = Vec::new();
     for file in &group.programs {
@@ -274,7 +335,7 @@ fn build_group(
         .zip(std.types)
         .chain(programs.iter().map(|p| (p.types.module.as_str(), &p.types)))
         .collect();
-    let test_modules = group.modules.clone();
+    let test_modules = group.modules;
     let tests: Vec<TestInfo> = test_modules
         .iter()
         .filter_map(|module| typed.get(module.as_str()))
@@ -288,39 +349,54 @@ fn build_group(
     for program in &programs {
         sources.insert(program.types.module.clone(), program.source.clone());
     }
+    Ok(PreparedGroup {
+        name: group_dir(used),
+        programs,
+        options: ignite_rustgen::Options {
+            substrate_path: build
+                .substrate
+                .clone()
+                .unwrap_or_else(crate::default_substrate_path),
+            test_modules,
+            tests,
+            sources,
+        },
+    })
+}
+
+/// Build one already-prepared group's test executable and return its path.
+fn build_group(
+    library: &StdLibrary,
+    std_types: &[TypedProgram],
+    group: &PreparedGroup,
+    build: &BuildOptions,
+) -> Result<PathBuf, Error> {
+    let programs = &group.programs;
     let target = match build.target {
         Target::Rust => "rust",
         Target::Llvm => "llvm",
     };
-    let name = group_dir(used);
+    let name = &group.name;
     let out = build
         .out
         .clone()
         .unwrap_or_else(|| Path::new("target").join("ignite-test"))
-        .join(&name)
+        .join(name)
         .join(target);
     match build.target {
         Target::Rust => {
-            let options = ignite_rustgen::Options {
-                substrate_path: build
-                    .substrate
-                    .clone()
-                    .unwrap_or_else(crate::default_substrate_path),
-                test_modules,
-                tests,
-                sources,
-            };
+            let options = &group.options;
             let std_modules: Vec<ignite_rustgen::TypedStdModule<'_>> = library
                 .modules
                 .iter()
-                .zip(std.types)
+                .zip(std_types)
                 .map(|(m, t)| (m.path.clone(), &m.program, &m.symbols, t))
                 .collect();
             let inputs: Vec<ignite_rustgen::TestProgram<'_>> = programs
                 .iter()
                 .map(|p| (&p.program, &p.symbols, &p.types))
                 .collect();
-            let project = ignite_rustgen::generate_tests(&inputs, &options).map_err(|errors| {
+            let project = ignite_rustgen::generate_tests(&inputs, options).map_err(|errors| {
                 let (path, found) = errors.into_iter().next().expect("an error has a module");
                 let program = programs
                     .iter()
@@ -328,7 +404,7 @@ fn build_group(
                     .expect("errors name a program");
                 diagnostics(&program.source, found)
             })?;
-            let std_project = ignite_rustgen::generate_std_for(&std_modules, &options, &project)
+            let std_project = ignite_rustgen::generate_std_for(&std_modules, options, &project)
                 .map_err(|errors| {
                     let (path, found) = errors.into_iter().next().expect("an error has a module");
                     let module = library
@@ -365,7 +441,7 @@ fn build_group(
             let std_inputs: Vec<ignite_llvm::ModuleInput<'_>> = library
                 .modules
                 .iter()
-                .zip(std.types)
+                .zip(std_types)
                 .map(|(module, types)| ignite_llvm::ModuleInput {
                     path: &module.path,
                     program: &module.program,
@@ -385,8 +461,13 @@ fn build_group(
             let ir_dir = out.join("llvm");
             std::fs::create_dir_all(&ir_dir).map_err(io_error(&ir_dir))?;
             let options = ignite_llvm::Options {
-                test_modules,
-                sources: sources.iter().map(|(p, s)| (p.clone(), s)).collect(),
+                test_modules: group.options.test_modules.clone(),
+                sources: group
+                    .options
+                    .sources
+                    .iter()
+                    .map(|(p, s)| (p.clone(), s))
+                    .collect(),
                 target: Some(crate::llvm_build::target(build, &ir_dir)?),
                 directory: std::env::current_dir()
                     .ok()
@@ -404,7 +485,7 @@ fn build_group(
                 runtime: Some(runtime),
                 ..build.clone()
             };
-            let output = crate::llvm_build::link(&name, &generated, &build)?;
+            let output = crate::llvm_build::link(name, &generated, &build)?;
             output
                 .executables
                 .into_iter()

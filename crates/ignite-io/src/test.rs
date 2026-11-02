@@ -12,11 +12,16 @@
 //! are printed in the order of `tests`, each once it and every test before
 //! it have finished, so the output does not depend on scheduling.
 
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
+use std::os::fd::AsFd;
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
+
+use nix::errno::Errno;
+use nix::fcntl::{FcntlArg, OFlag, fcntl};
+use nix::poll::{PollFd, PollFlags, poll};
 
 use crate::FAILURE_EXIT_CODE;
 
@@ -335,27 +340,20 @@ fn run_child(exe: &std::path::Path, name: &str, timeout: u64) -> Outcome {
             };
         }
     };
-    let reader = |stream: Option<Box<dyn Read + Send>>| {
-        std::thread::spawn(move || {
-            let mut bytes = Vec::new();
-            if let Some(mut stream) = stream {
-                let _ = stream.read_to_end(&mut bytes);
-            }
-            bytes
-        })
-    };
-    let stdout = reader(
-        child
-            .stdout
-            .take()
-            .map(|s| Box::new(s) as Box<dyn Read + Send>),
-    );
-    let stderr = reader(
-        child
-            .stderr
-            .take()
-            .map(|s| Box::new(s) as Box<dyn Read + Send>),
-    );
+    let mut stdout = child.stdout.take().expect("piped child stdout");
+    let mut stderr = child.stderr.take().expect("piped child stderr");
+    if let Err(error) = nonblocking(&stdout).and_then(|()| nonblocking(&stderr)) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Outcome {
+            verdict: Verdict::Exited(-1),
+            stdout: Vec::new(),
+            stderr: format!("cannot capture child output: {error}\n").into_bytes(),
+        };
+    }
+    let mut captured_out = Vec::new();
+    let mut captured_err = Vec::new();
+    let (mut out_open, mut err_open) = (true, true);
     let deadline = Instant::now() + Duration::from_secs(timeout);
     let verdict = loop {
         match child.try_wait() {
@@ -365,19 +363,67 @@ fn run_child(exe: &std::path::Path, name: &str, timeout: u64) -> Outcome {
                 let _ = child.wait();
                 break Verdict::TimedOut(timeout);
             }
-            Ok(None) => std::thread::sleep(POLL),
+            Ok(None) => {}
             Err(_) => {
                 let _ = child.kill();
                 let _ = child.wait();
                 break Verdict::Exited(-1);
             }
         }
+        // Bound each drain so a continuously writing child cannot starve the
+        // other stream or postpone its deadline. EOF removes a pipe from poll.
+        if out_open {
+            out_open = drain_output(&mut stdout, &mut captured_out);
+        }
+        if err_open {
+            err_open = drain_output(&mut stderr, &mut captured_err);
+        }
+        let mut pipes = Vec::with_capacity(2);
+        if out_open {
+            pipes.push(PollFd::new(stdout.as_fd(), PollFlags::POLLIN));
+        }
+        if err_open {
+            pipes.push(PollFd::new(stderr.as_fd(), PollFlags::POLLIN));
+        }
+        let wait = deadline.saturating_duration_since(Instant::now()).min(POLL);
+        let millis = wait.as_millis().clamp(1, POLL.as_millis()) as u16;
+        if let Err(error) = poll(&mut pipes, millis)
+            && error != Errno::EINTR
+        {
+            let _ = child.kill();
+            let _ = child.wait();
+            break Verdict::Exited(-1);
+        }
     };
+    // Once the child has exited, all of its output is already buffered. A
+    // nonblocking drain captures the remaining bytes without extra threads.
+    let _ = stdout.read_to_end(&mut captured_out);
+    let _ = stderr.read_to_end(&mut captured_err);
     Outcome {
         verdict,
-        stdout: stdout.join().unwrap_or_default(),
-        stderr: stderr.join().unwrap_or_default(),
+        stdout: captured_out,
+        stderr: captured_err,
     }
+}
+
+fn nonblocking(stream: &impl AsFd) -> nix::Result<()> {
+    let flags = OFlag::from_bits_truncate(fcntl(stream, FcntlArg::F_GETFL)?);
+    fcntl(stream, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK)).map(|_| ())
+}
+
+/// Read at most 64 KiB per turn, preserving fairness and timeout checks.
+fn drain_output(stream: &mut impl Read, captured: &mut Vec<u8>) -> bool {
+    let mut buffer = [0; 8192];
+    for _ in 0..8 {
+        match stream.read(&mut buffer) {
+            Ok(0) => return false,
+            Ok(n) => captured.extend_from_slice(&buffer[..n]),
+            Err(error) if error.kind() == ErrorKind::WouldBlock => break,
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(_) => return false,
+        }
+    }
+    true
 }
 
 #[cfg(test)]

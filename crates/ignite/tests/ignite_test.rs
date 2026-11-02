@@ -513,3 +513,108 @@ fn overflow_fails_the_same_everywhere() {
         );
     }
 }
+
+/// Both native targets use one preparation while retaining their normal
+/// runner selection, reports and failure status. A Rust failure must not
+/// prevent the LLVM suite from executing.
+#[test]
+fn combined_targets_keep_runner_arguments_and_continue_after_failure() {
+    let dir = out_dir().join("combined");
+    let source = fixture("basics.ignite");
+    let run = |args: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+            .arg("test")
+            .arg(&source)
+            .args(["--target", "both", "--out"])
+            .arg(&dir)
+            .arg("--target-dir")
+            .arg(dir.join("cargo"))
+            .arg("--runtime")
+            .arg(common::runner_archive())
+            .args(args)
+            .output()
+            .expect("run combined native tests");
+        Run {
+            status: output.status.code().unwrap(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        }
+    };
+    let selected = "fixtures.basics/arithmetic passes";
+    let listed = run(&[
+        selected,
+        "--exact",
+        "--list",
+        "--jobs",
+        "1",
+        "--timeout",
+        "1",
+    ]);
+    assert_eq!(listed.status, 0, "{}", listed.stderr);
+    assert_eq!(
+        listed.stdout,
+        format!("{selected}: test\n1 test\n").repeat(2)
+    );
+    let passed = run(&[selected, "--exact", "--jobs", "1", "--timeout", "1"]);
+    assert_eq!(passed.status, 0, "{}", passed.stderr);
+    assert_eq!(
+        passed.stdout.matches("test result: ok. 1 passed;").count(),
+        2,
+        "{}",
+        passed.stdout
+    );
+    let failed = run(&[
+        "fixtures.basics/int differs",
+        "--exact",
+        "--jobs",
+        "1",
+        "--timeout",
+        "1",
+    ]);
+    assert_eq!(failed.status, 1, "{}", failed.stderr);
+    assert_eq!(
+        failed
+            .stdout
+            .matches("test fixtures.basics/int differs ... FAILED")
+            .count(),
+        2,
+        "{}",
+        failed.stdout
+    );
+    assert!(dir.join("tests/rust").is_dir());
+    assert!(dir.join("tests/llvm").is_dir());
+}
+
+#[test]
+fn both_targets_capture_output_larger_than_pipe_buffers_without_deadlock() {
+    let dir = out_dir().join("large-streams");
+    let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("test")
+        .arg(fixture("large_output.ignite"))
+        .args(["--target", "both", "--timeout", "2", "--out"])
+        .arg(&dir)
+        .arg("--target-dir")
+        .arg(dir.join("cargo"))
+        .arg("--runtime")
+        .arg(common::runner_archive())
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(text.matches(&"0123456789abcdef".repeat(8192)).count(), 4);
+    assert_eq!(
+        text.matches("---- fixtures.large_output/large streams stdout ----")
+            .count(),
+        2
+    );
+    assert_eq!(
+        text.matches("---- fixtures.large_output/large streams stderr ----")
+            .count(),
+        2
+    );
+}

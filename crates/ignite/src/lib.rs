@@ -18,7 +18,7 @@ mod test_build;
 
 pub use llvm_build::{COMPILE_FLAGS, LINK_FLAGS, RELEASE_LINK_FLAGS};
 pub use run::Standing;
-pub use test_build::{TestGroup, TestOptions, build_tests, test, test_groups};
+pub use test_build::{TestGroup, TestOptions, build_tests, test, test_groups, test_targets};
 
 use ignite_check::{Modules, Symbols};
 use ignite_rustgen::GeneratedProject;

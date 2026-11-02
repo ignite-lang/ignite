@@ -1,0 +1,250 @@
+{
+  "before:check": {
+    "phases_ms": {
+      "check-program": 0.652999,
+      "check-std": 11.969017,
+      "eval-check-program": 3.684478,
+      "parse-program": 0.6282300000000001,
+      "parse-std": 10.119897000000002,
+      "type-program": 1.8579059999999998,
+      "type-std": 24.546523999999998
+    },
+    "largest_modules_ms": [
+      [
+        "type:std.protocol.http",
+        6.357996
+      ],
+      [
+        "type:std.json",
+        6.064367
+      ],
+      [
+        "type:std.protocol.telnet",
+        5.369747
+      ],
+      [
+        "eval-check:program",
+        3.684478
+      ],
+      [
+        "check:std.protocol.telnet",
+        3.059402
+      ],
+      [
+        "check:std.protocol.http",
+        2.890874
+      ],
+      [
+        "check:std.json",
+        2.67179
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-before/std/protocol/http.ignite",
+        2.394603
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-before/std/protocol/telnet.ignite",
+        2.293961
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-before/std/json.ignite",
+        2.289485
+      ],
+      [
+        "type:std.text",
+        1.905775
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-before/std/text.ignite",
+        0.972354
+      ]
+    ],
+    "total_ms": 62.62855796376243
+  },
+  "before:plan": {
+    "phases_ms": {
+      "check-program": 0.644675,
+      "check-std": 11.961457,
+      "eval-model-program": 3.681492,
+      "parse-program": 0.60636,
+      "parse-std": 10.087803,
+      "type-program": 1.769082,
+      "type-std": 24.344067
+    },
+    "largest_modules_ms": [
+      [
+        "type:std.protocol.http",
+        6.149283
+      ],
+      [
+        "type:std.json",
+        5.952603
+      ],
+      [
+        "type:std.protocol.telnet",
+        5.25631
+      ],
+      [
+        "eval-model:program",
+        3.681492
+      ],
+      [
+        "check:std.protocol.telnet",
+        3.028386
+      ],
+      [
+        "check:std.protocol.http",
+        2.868597
+      ],
+      [
+        "check:std.json",
+        2.684809
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-before/std/protocol/http.ignite",
+        2.354369
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-before/std/json.ignite",
+        2.291064
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-before/std/protocol/telnet.ignite",
+        2.280397
+      ],
+      [
+        "type:std.text",
+        1.97056
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-before/std/text.ignite",
+        0.967169
+      ]
+    ],
+    "total_ms": 62.11321405135095
+  },
+  "final:check": {
+    "phases_ms": {
+      "check-program": 0.720361,
+      "check-std": 16.204675,
+      "eval-check-program": 6.73327,
+      "parse-program": 0.576429,
+      "parse-std": 13.709689000000001,
+      "type-program": 1.852251,
+      "type-std": 36.652108
+    },
+    "largest_modules_ms": [
+      [
+        "type:std.control",
+        21.412559
+      ],
+      [
+        "check:std.control",
+        7.738468
+      ],
+      [
+        "eval-check:program",
+        6.73327
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-final/std/control.ignite",
+        6.647447
+      ],
+      [
+        "type:std.protocol.telnet",
+        5.809078
+      ],
+      [
+        "check:std.protocol.telnet",
+        3.549099
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-final/std/protocol/telnet.ignite",
+        2.705691
+      ],
+      [
+        "type:std.text",
+        1.890665
+      ],
+      [
+        "type:std.contract",
+        1.506242
+      ],
+      [
+        "type:std.time",
+        1.199632
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-final/std/text.ignite",
+        0.933978
+      ],
+      [
+        "check:std.contract",
+        0.926324
+      ]
+    ],
+    "total_ms": 86.7945000063628
+  },
+  "final:plan": {
+    "phases_ms": {
+      "check-program": 0.7237990000000001,
+      "check-std": 16.195052999999998,
+      "eval-model-program": 6.379648,
+      "parse-program": 0.573224,
+      "parse-std": 14.003587000000001,
+      "type-program": 1.83476,
+      "type-std": 36.569367
+    },
+    "largest_modules_ms": [
+      [
+        "type:std.control",
+        21.270723
+      ],
+      [
+        "check:std.control",
+        7.756721
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-final/std/control.ignite",
+        6.856932
+      ],
+      [
+        "eval-model:program",
+        6.379648
+      ],
+      [
+        "type:std.protocol.telnet",
+        5.815186
+      ],
+      [
+        "check:std.protocol.telnet",
+        3.548864
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-final/std/protocol/telnet.ignite",
+        2.752471
+      ],
+      [
+        "type:std.text",
+        1.885289
+      ],
+      [
+        "type:std.contract",
+        1.496899
+      ],
+      [
+        "type:std.time",
+        1.194891
+      ],
+      [
+        "check:std.contract",
+        0.935033
+      ],
+      [
+        "parse:/home/timo/.cache/scratch/ignite12b-codex/measure/profile-final/std/text.ignite",
+        0.93094
+      ]
+    ],
+    "total_ms": 87.9230079590343
+  }
+}

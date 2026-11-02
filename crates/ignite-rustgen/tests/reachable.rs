@@ -9,7 +9,7 @@ use std::path::Path;
 
 use ignite_rustgen::{
     Options, TypedStdModule, generate_std_for, generate_std_reachable, generate_std_typed,
-    generate_tests,
+    generate_tests, prepare_std_typed,
 };
 
 fn norm(text: &str) -> String {
@@ -116,14 +116,55 @@ fn a_test_build_keeps_the_selected_tests_and_what_they_reach() {
         .zip(&types)
         .map(|((m, p, s), t)| (m.clone(), p, s, t))
         .collect();
-    let std = norm(
-        &generate_std_for(&inputs, &options, &project)
-            .unwrap()
-            .lib_rs,
+    let prepared = prepare_std_typed(&inputs, &options).unwrap();
+    let generated = prepared.generate_for(&options.substrate_path, &project);
+    assert_eq!(
+        generated,
+        generate_std_for(&inputs, &options, &project).unwrap()
     );
+    let std = norm(&generated.lib_rs);
     assert!(std.contains("pub fn __ignite_test_"), "{std}");
     assert!(std.contains("pub fn encode("), "{std}");
     assert!(std.contains("pub fn parse("), "{std}");
     assert!(!std.contains("pub struct Console"), "{std}");
     assert!(!std.contains("pub struct TelnetServer"), "{std}");
+}
+
+#[test]
+fn a_prepared_template_renders_independent_roots_and_substrates() {
+    let library = common::load_std(&common::golden_std());
+    let types = common::type_std(&library).unwrap();
+    let inputs: Vec<TypedStdModule<'_>> = library
+        .iter()
+        .zip(&types)
+        .map(|((module, program, symbols), types)| (module.clone(), program, symbols, types))
+        .collect();
+    let options = Options {
+        sources: common::std_sources(&common::golden_std()),
+        ..options()
+    };
+    let prepared = prepare_std_typed(&inputs, &options).unwrap();
+    let shout = ["ignite_std::text::shout"];
+    let line = ["ignite_std::protocol::line::Line::connect"];
+    let first = prepared.generate_reachable(&options.substrate_path, &shout);
+    let second = prepared.generate_reachable(Path::new("another-substrate"), &line);
+    let again = prepared.generate_reachable(&options.substrate_path, &shout);
+    assert_eq!(
+        first, again,
+        "rendering another root must not consume template items"
+    );
+    assert!(first.lib_rs.contains("pub fn shout("));
+    assert!(!first.lib_rs.contains("pub fn pump("));
+    assert!(second.lib_rs.contains("pub fn pump("));
+    assert!(!second.lib_rs.contains("pub fn shout("));
+    assert!(second.cargo_toml.contains("another-substrate"));
+    assert!(!first.cargo_toml.contains("another-substrate"));
+    assert_eq!(
+        first,
+        generate_std_reachable(&inputs, &options, &shout).unwrap()
+    );
+    assert_eq!(
+        prepared.generate_all(&options.substrate_path),
+        generate_std_typed(&inputs, &options).unwrap()
+    );
 }

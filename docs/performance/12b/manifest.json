@@ -1,0 +1,21 @@
+{
+  "schema": "ignite-performance-evidence/1",
+  "checkpoint": "92733498f8406d8f0663a571be85351c548ea99e",
+  "baseline_ref": "refs/heads/bench/11b-recovered",
+  "baseline_commit": "df7ccb9bed4440824a2d108fa112eba3fea25f99",
+  "kind": "historical 12b observations, not 12c acceptance",
+  "files": {
+    "profile-summary.json": "98219a83ce3da2a2f1108af50e08441f15f99a934728fa11076e18c20fc2aeb1",
+    "records.jsonl": "316f39a9f150d18b6443d3935a13112dc16a2f0faf8268defd6e45272267b3ee",
+    "report.md": "0758c5dd2a10ac1096854bdcf3ec77ec616f7609372b7d6ea1a4d7ad6cdb1bae",
+    "restart-index.json": "f73887d47a3a990c598c26718cef5f1060ab0db22c9d4ef111cb14def7f117dd",
+    "restart-journal-cold-final.jsonl": "840eb34ce04073cf09e4308803c14beca4ceb6517863c1a5690ac867b97bd987",
+    "restart-journal-final-1.jsonl": "eb157317669d743b1744131850fdf0eb59a946e9fa7863cbe789800f0d5975b7",
+    "restart-journal-final-2.jsonl": "595c63e79dd3c582714c460adce40fdd9a09e3e2d32fa027b1276cc432286617",
+    "restart-journal-final-3.jsonl": "bd2f0acab045c1e3a555114c1cbe23064c3e58a0546b1de62440d7003e80ef3f",
+    "restart-journal-final.jsonl": "077216d5641f9400500f67b60af6421e014801e3bf2d87e74f04f8e80343bb6b",
+    "restart-samples.json": "4c2a8397d876725b61a51e3661bbe6aa5b422f11139f7cee4cd0292055aa35ee",
+    "summary-final.md": "28373eabd28dda80703f2defa4df8793975eb43787c31eb671b359b8b4eb3efe",
+    "summary.json": "b12430c3d544d7b079fc43c0802f7b80fb67c61d416f9ad24d8f540e33bd97e1"
+  }
+}

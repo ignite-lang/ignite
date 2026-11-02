@@ -95,9 +95,9 @@ enum Commands {
         /// `FILE.ignite…` and at most one `FILTER`.
         #[arg(required = true)]
         args: Vec<String>,
-        /// `rust` (default) or `llvm`.
+        /// `rust` (default), `llvm`, or `both` with shared preparation.
         #[arg(long, value_enum, default_value = "rust")]
-        target: TargetArg,
+        target: TestTargetArg,
         /// Root of the standard library.
         #[arg(long)]
         std: Option<PathBuf>,
@@ -116,13 +116,13 @@ enum Commands {
         /// Seconds after which a test is killed (default 60).
         #[arg(long)]
         timeout: Option<u64>,
-        /// clang for `--target llvm`.
+        /// clang for the LLVM tests (`--target llvm` or `both`).
         #[arg(long)]
         clang: Option<PathBuf>,
-        /// Runtime archive for `--target llvm`.
+        /// LLVM runtime archive for `--target llvm` or `both`.
         #[arg(long)]
         runtime: Option<PathBuf>,
-        /// Cargo target directory for `--target rust` (default `<out>/<name>/rust/target`).
+        /// Cargo target directory for Rust tests (default `<out>/<name>/rust/target`).
         #[arg(long)]
         target_dir: Option<PathBuf>,
         /// Build the tests with the release profile (`-O2` on `--target llvm`).
@@ -287,6 +287,23 @@ fn main() {
     }
 }
 
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+enum TestTargetArg {
+    Rust,
+    Llvm,
+    Both,
+}
+
+impl TestTargetArg {
+    fn targets(self) -> &'static [ignite::Target] {
+        match self {
+            Self::Rust => &[ignite::Target::Rust],
+            Self::Llvm => &[ignite::Target::Llvm],
+            Self::Both => &[ignite::Target::Rust, ignite::Target::Llvm],
+        }
+    }
+}
+
 fn run() {
     let cli = Cli::parse();
     if let Commands::Test {
@@ -326,10 +343,7 @@ fn run() {
         }
         let options = ignite::TestOptions {
             build: ignite::BuildOptions {
-                target: match target {
-                    TargetArg::Rust => ignite::Target::Rust,
-                    TargetArg::Llvm => ignite::Target::Llvm,
-                },
+                target: target.targets()[0],
                 clang,
                 runtime,
                 out,
@@ -342,7 +356,7 @@ fn run() {
             runner,
         };
         let files: Vec<PathBuf> = files.into_iter().map(PathBuf::from).collect();
-        match ignite::test(&files, &options) {
+        match ignite::test_targets(&files, &options, target.targets()) {
             Ok(status) => std::process::exit(status),
             Err(error) => {
                 match &error {

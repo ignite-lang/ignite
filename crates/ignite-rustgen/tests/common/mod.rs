@@ -5,13 +5,17 @@
 //! panics with the rendered text.
 #![allow(dead_code)]
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use ignite_check::{Modules, Symbols, check_module};
 use ignite_rustgen::{
-    GeneratedProject, Options, SiblingModule, StdModule, TypedStdModule, generate,
-    generate_package, generate_std, generate_std_for, generate_tests, generate_typed,
+    GeneratedProject, Options, PreparedStd as LoweredStd, SiblingModule, StdModule, TypedStdModule,
+    generate, generate_package, generate_std, generate_std_for, generate_tests, generate_typed,
+    prepare_std_typed,
 };
 use ignite_syntax::SourceFile;
 use ignite_syntax::ast::Program;
@@ -166,6 +170,123 @@ pub fn type_std(library: &[(String, Program, Symbols)]) -> Option<Vec<TypedProgr
     Some(std_types)
 }
 
+/// One immutable fixture's semantic input. Typed expression maps use AST
+/// addresses, so the library and types are always borrowed together, never
+/// cloned. Generated projects remain specific to each program and its options.
+struct PreparedStd {
+    library: Vec<(String, Program, Symbols)>,
+    modules: Modules,
+    types: Option<Vec<TypedProgram>>,
+    typed_modules: TypedModules,
+    sources: BTreeMap<String, SourceFile>,
+    plain_std: OnceLock<LoweredStd>,
+    test_std: OnceLock<LoweredStd>,
+}
+
+impl PreparedStd {
+    fn load(root: &Path) -> Self {
+        let library = load_std(root);
+        let modules = library
+            .iter()
+            .map(|(module, _, symbols)| (module.clone(), symbols.clone()))
+            .collect();
+        let types = type_std(&library);
+        let typed_modules = types
+            .as_ref()
+            .map(|types| {
+                library
+                    .iter()
+                    .zip(types)
+                    .map(|((module, _, _), types)| (module.clone(), types.exports()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Self {
+            library,
+            modules,
+            types,
+            typed_modules,
+            sources: std_sources(root),
+            plain_std: OnceLock::new(),
+            test_std: OnceLock::new(),
+        }
+    }
+
+    fn inputs(&self) -> Vec<TypedStdModule<'_>> {
+        self.library
+            .iter()
+            .zip(self.types.as_deref().expect("the standard library types"))
+            .map(|((module, program, symbols), types)| (module.clone(), program, symbols, types))
+            .collect()
+    }
+}
+
+/// Only the repository and checked-in golden roots are immutable fixtures.
+/// Custom roots may be rewritten by a test, so they are prepared on every call.
+enum StdFixture {
+    Shared(&'static PreparedStd),
+    Fresh(Box<PreparedStd>),
+}
+
+impl Deref for StdFixture {
+    type Target = PreparedStd;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Shared(fixture) => fixture,
+            Self::Fresh(fixture) => fixture,
+        }
+    }
+}
+
+impl StdFixture {
+    fn generate_std_for(&self, options: &Options, program: &GeneratedProject) -> GeneratedProject {
+        // The immutable templates freeze only std-specific lowering inputs.
+        // Program roots and the substrate path are supplied afresh below.
+        let fixed_context = matches!(self, Self::Shared(_))
+            && self.library.iter().all(|(module, _, _)| {
+                !options.test_modules.contains(module)
+                    && options.sources.get(module) == self.sources.get(module)
+            });
+        if !fixed_context {
+            return generate_std_for(&self.inputs(), options, program)
+                .unwrap_or_else(|errors| panic!("{errors:?}"));
+        }
+        let cell = if options.test_modules.is_empty() {
+            &self.plain_std
+        } else {
+            &self.test_std
+        };
+        let template = cell.get_or_init(|| {
+            prepare_std_typed(&self.inputs(), options).unwrap_or_else(|errors| panic!("{errors:?}"))
+        });
+        template.generate_for(&options.substrate_path, program)
+    }
+}
+
+fn std_fixture(root: &Path) -> StdFixture {
+    static REPOSITORY: OnceLock<PreparedStd> = OnceLock::new();
+    static GOLDEN: OnceLock<PreparedStd> = OnceLock::new();
+    static ROOTS: OnceLock<(PathBuf, PathBuf)> = OnceLock::new();
+    let (repository, golden) = ROOTS.get_or_init(|| {
+        (
+            repository_std()
+                .canonicalize()
+                .expect("repository std root"),
+            golden_std().canonicalize().expect("golden std root"),
+        )
+    });
+    if let Ok(canonical) = root.canonicalize() {
+        if canonical == *repository {
+            return StdFixture::Shared(REPOSITORY.get_or_init(|| PreparedStd::load(root)));
+        }
+        if canonical == *golden {
+            return StdFixture::Shared(GOLDEN.get_or_init(|| PreparedStd::load(root)));
+        }
+    }
+    StdFixture::Fresh(Box::new(PreparedStd::load(root)))
+}
+
 /// The program project and the `ignite-std` project for `file` with the
 /// standard library at `std_root`. Like the driver, the typed generator
 /// runs when the library and the program type; otherwise the untyped one
@@ -196,24 +317,16 @@ pub fn generate_source(
     text: &str,
     std_root: &Path,
 ) -> Result<GeneratedProject, Vec<ignite_syntax::diagnostic::Diagnostic>> {
-    let library = load_std(std_root);
-    let modules: Modules = library
-        .iter()
-        .map(|(m, _, s)| (m.clone(), s.clone()))
-        .collect();
+    let fixture = std_fixture(std_root);
     let source = SourceFile::new("test.ignite", text);
     let program = ignite_syntax::parse(&source)
         .unwrap_or_else(|d| panic!("parse failed:\n{}", source.render_all(&d)));
-    let symbols = check_module(&program, &modules)
+    let symbols = check_module(&program, &fixture.modules)
         .unwrap_or_else(|d| panic!("check failed:\n{}", source.render_all(&d)));
-    let std_types = type_std(&library).expect("the standard library types");
-    let mut typed_modules = TypedModules::new();
-    for ((module, _, _), types) in library.iter().zip(&std_types) {
-        typed_modules.insert(module.clone(), types.exports());
-    }
-    let types = type_module(&program, &symbols, &typed_modules)
+    fixture.types.as_ref().expect("the standard library types");
+    let types = type_module(&program, &symbols, &fixture.typed_modules)
         .unwrap_or_else(|d| panic!("typing failed:\n{}", source.render_all(&d)));
-    let mut sources = std_sources(std_root);
+    let mut sources = fixture.sources.clone();
     sources.insert(types.module.clone(), source);
     let options = Options {
         substrate_path: Path::new("../ignite-io").to_path_buf(),
@@ -250,22 +363,14 @@ fn lower_tests_with(
     substrate: &Path,
     grouped: bool,
 ) -> (GeneratedProject, GeneratedProject) {
-    let library = load_std(std_root);
-    let modules: Modules = library
-        .iter()
-        .map(|(m, _, s)| (m.clone(), s.clone()))
-        .collect();
+    let fixture = std_fixture(std_root);
     let (source, program) = parse(file);
-    let symbols = check_module(&program, &modules)
+    let symbols = check_module(&program, &fixture.modules)
         .unwrap_or_else(|d| panic!("check failed:\n{}", source.render_all(&d)));
-    let std_types = type_std(&library).expect("the standard library types");
-    let mut typed_modules = TypedModules::new();
-    for ((module, _, _), types) in library.iter().zip(&std_types) {
-        typed_modules.insert(module.clone(), types.exports());
-    }
-    let types = type_module(&program, &symbols, &typed_modules)
+    fixture.types.as_ref().expect("the standard library types");
+    let types = type_module(&program, &symbols, &fixture.typed_modules)
         .unwrap_or_else(|d| panic!("typing failed:\n{}", source.render_all(&d)));
-    let mut sources = std_sources(std_root);
+    let mut sources = fixture.sources.clone();
     sources.insert(types.module.clone(), source.clone());
     let options = Options {
         substrate_path: substrate.to_path_buf(),
@@ -282,12 +387,7 @@ fn lower_tests_with(
         generate_typed(&program, &symbols, &types, &options)
             .unwrap_or_else(|d| panic!("generate failed:\n{}", source.render_all(&d)))
     };
-    let inputs: Vec<TypedStdModule<'_>> = library
-        .iter()
-        .zip(&std_types)
-        .map(|((m, p, s), t)| (m.clone(), p, s, t))
-        .collect();
-    let std = generate_std_for(&inputs, &options, &project).unwrap_or_else(|e| panic!("{e:?}"));
+    let std = fixture.generate_std_for(&options, &project);
     (project, std)
 }
 
@@ -349,45 +449,36 @@ fn lower_with(
     substrate: &Path,
     require_types: bool,
 ) -> (GeneratedProject, GeneratedProject) {
-    let library = load_std(std_root);
-    let mut modules: Modules = library
-        .iter()
-        .map(|(m, _, s)| (m.clone(), s.clone()))
-        .collect();
+    let fixture = std_fixture(std_root);
+    let library = &fixture.library;
+    let mut modules = Cow::Borrowed(&fixture.modules);
     let (source, program) = parse(file);
     let mut options = Options {
         substrate_path: substrate.to_path_buf(),
         ..Options::default()
     };
-    let std_types = type_std(&library);
-    let mut typed_modules = TypedModules::new();
-    if let Some(std_types) = &std_types {
-        for ((module, _, _), types) in library.iter().zip(std_types) {
-            typed_modules.insert(module.clone(), types.exports());
-        }
-    }
+    let std_types = fixture.types.as_deref();
+    let mut typed_modules = Cow::Borrowed(&fixture.typed_modules);
     let mut typed_siblings: Vec<(String, Program, Symbols, TypedProgram)> = Vec::new();
     let mut sibling_sources: Vec<(String, SourceFile)> = Vec::new();
     for (path, sibling_source, sibling) in sibling_programs(file, &program) {
-        let symbols = check_module(&sibling, &modules)
+        let symbols = check_module(&sibling, modules.as_ref())
             .unwrap_or_else(|d| panic!("check failed:\n{}", sibling_source.render_all(&d)));
         if std_types.is_some() {
-            let types = type_module(&sibling, &symbols, &typed_modules)
+            let types = type_module(&sibling, &symbols, typed_modules.as_ref())
                 .unwrap_or_else(|d| panic!("typing failed:\n{}", sibling_source.render_all(&d)));
-            typed_modules.insert(path.clone(), types.exports());
+            typed_modules.to_mut().insert(path.clone(), types.exports());
             typed_siblings.push((path.clone(), sibling, symbols.clone(), types));
         }
-        modules.insert(path.clone(), symbols);
+        modules.to_mut().insert(path.clone(), symbols);
         sibling_sources.push((path, sibling_source));
     }
-    let symbols = check_module(&program, &modules)
+    let symbols = check_module(&program, modules.as_ref())
         .unwrap_or_else(|d| panic!("check failed:\n{}", source.render_all(&d)));
-    let types = std_types
-        .as_ref()
-        .map(|_| type_module(&program, &symbols, &typed_modules));
-    match (&std_types, types) {
-        (Some(std_types), Some(Ok(types))) => {
-            options.sources = std_sources(std_root);
+    let types = std_types.map(|_| type_module(&program, &symbols, typed_modules.as_ref()));
+    match (std_types, types) {
+        (Some(_), Some(Ok(types))) => {
+            options.sources = fixture.sources.clone();
             options.sources.insert(types.module.clone(), source.clone());
             for (path, sibling_source) in sibling_sources {
                 options.sources.insert(path, sibling_source);
@@ -401,13 +492,7 @@ fn lower_with(
                     let diagnostics: Vec<_> = errors.into_iter().flat_map(|(_, d)| d).collect();
                     panic!("generate failed:\n{}", source.render_all(&diagnostics))
                 });
-            let inputs: Vec<TypedStdModule<'_>> = library
-                .iter()
-                .zip(std_types)
-                .map(|((m, p, s), t)| (m.clone(), p, s, t))
-                .collect();
-            let std =
-                generate_std_for(&inputs, &options, &project).unwrap_or_else(|e| panic!("{e:?}"));
+            let std = fixture.generate_std_for(&options, &project);
             (project, std)
         }
         (_, types) => {
@@ -425,4 +510,62 @@ fn lower_with(
             (project, std)
         }
     }
+}
+
+#[test]
+fn mutable_custom_std_is_reloaded_between_lowerings() {
+    let root =
+        Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("mutable-std-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let file = root.join("custom.ignite");
+    std::fs::write(&file, "package std.custom\nfn value() -> Int = 7\n").unwrap();
+    let first = generate_source(
+        "import std.custom.value\nfn answer() -> Int = value()\n",
+        &root,
+    )
+    .unwrap();
+    assert!(first.lib_rs.contains("pub fn answer() -> i64"));
+    let program_file = root.with_extension("ignite");
+    std::fs::write(
+        &program_file,
+        "import std.custom.value\nfn answer() -> Int = value()\n",
+    )
+    .unwrap();
+    let (_, first_std) = lower_typed(&program_file, &root, Path::new("../ignite-io"));
+    assert!(first_std.lib_rs.contains("pub fn value() -> i64"));
+
+    std::fs::write(
+        &file,
+        "package std.custom\nfn value() -> Text = \"updated\"\n",
+    )
+    .unwrap();
+    let second = generate_source(
+        "import std.custom.value\nfn answer() -> Text = value()\n",
+        &root,
+    )
+    .unwrap();
+    assert!(second.lib_rs.contains("pub fn answer() -> String"));
+    std::fs::write(
+        &program_file,
+        "import std.custom.value\nfn answer() -> Text = value()\n",
+    )
+    .unwrap();
+    let (_, second_std) = lower_typed(&program_file, &root, Path::new("../ignite-io"));
+    assert!(second_std.lib_rs.contains("pub fn value() -> String"));
+
+    std::fs::write(&file, "package std.custom\nfn value() -> Int = missing\n").unwrap();
+    let failure = std::panic::catch_unwind(|| {
+        generate_source(
+            "import std.custom.value\nfn answer() -> Int = value()\n",
+            &root,
+        )
+    })
+    .expect_err("an edited std diagnostic must not be hidden by a fixture cache");
+    let message = failure
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| failure.downcast_ref::<&str>().copied())
+        .expect("the checker panic carries its rendered diagnostic");
+    assert!(message.contains("E003"), "{message}");
+    assert!(message.contains("custom.ignite"), "{message}");
 }
