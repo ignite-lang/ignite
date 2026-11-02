@@ -4,13 +4,17 @@ import std.net.{TcpStream, Endpoint}
 import std.io.IoError
 import std.console.{Console, Reply, Action, CommandConsole, ConsoleCommands, console_of}
 import std.policy.{Restart, DrainRollout}
+import std.control.{Machine, Supervisor}
 
 // Telnet over one TCP stream (RFC 854): a Network Virtual Terminal with
 // every option refused. Both roles decode the incoming byte stream with
 // `decode`, one byte at a time, so commands split across reads are handled.
 // `TelnetServer` and `TelnetClient` are the component kinds a system
 // declares (`docs/slice.md` section 14.5): their `main` fns hold the
-// accept loop and the client's exit codes.
+// accept loop and the client's exit codes. `await_prompt` is the probe's
+// side of a session (16.8): a protocol has the two roles `serve` and
+// `connect` only (4.2), so it is a module fn beside the protocol, as
+// `serve_with` is.
 
 type IoResult<T> = Result<T, IoError>
 
@@ -139,6 +143,92 @@ fn TelnetServer.main(self: TelnetServer) -> IoResult<Unit> {
     let stream = self.listener.accept()?
     spawn serve_with(stream, console, self.sessions)
   }
+}
+
+// The supervisor of a server under `ignite run` (`docs/slice.md` 16.7):
+// restarts under `recovery`; the `rollout` policy gives the member its
+// rollout machine through `std.control.companions` (16.12).
+fn TelnetServer.machine(self: TelnetServer, id: Text) -> Machine = Machine.Supervise(Supervisor {
+  id = "{id}.supervisor"
+  member = id
+  restart = self.recovery
+  rollout = Some(self.rollout)
+})
+
+// The declaration rules of a server (E120): session limits that admit a
+// session. The policies are validated as declarations of their own.
+fn TelnetServer.validate(self: TelnetServer) -> List<Text> = session_reasons(self.sessions)
+
+fn session_reasons(sessions: SessionLimits) -> List<Text> {
+  var reasons = []
+  if sessions.maximum < 1 {
+    reasons.push("sessions.maximum must be at least 1, found {sessions.maximum}")
+  }
+  if sessions.idle_timeout <= 0 ms {
+    reasons.push("sessions.idle_timeout must be positive, found {sessions.idle_timeout.debug()}")
+  }
+  reasons
+}
+
+test "a server refuses session limits that admit no session" {
+  assert session_reasons(SessionLimits {}) == []
+  assert session_reasons(SessionLimits { maximum = 0 }) == ["sessions.maximum must be at least 1, found 0"]
+  assert session_reasons(SessionLimits { idle_timeout = 0 ms }) == ["sessions.idle_timeout must be positive, found 0 ns"]
+}
+
+// The probe's side of a session (`docs/slice.md` 16.8): read the server's
+// bytes, answer option negotiation as `connect` does, and return the text
+// before `expected_prompt` once the text ends with it; line ends arrive as
+// LF. `Err` when the server closes the stream first, on an overlong
+// subnegotiation, or when a read fails (the stream's idle timeout).
+fn await_prompt(stream: TcpStream, expected_prompt: Text) -> IoResult<Text> {
+  let prompt = expected_prompt.to_bytes()
+  var state = Ground
+  var text = Bytes.empty()
+  loop {
+    match stream.read(4096)? {
+      Eof => return Err(IoError.new("connection closed before the prompt"))
+      Data(bytes) => {
+        for b in bytes {
+          let (next, event) = decode(state, b)
+          state = next
+          match event {
+            Literal(c) => text.push(c)
+            EndOfLine => text.push(b'\n')
+            Answer(answer) => stream.write_all(answer)?
+            SubnegotiationTooLong => return Err(IoError.new("subnegotiation longer than {MAXIMUM_SUBNEGOTIATION} bytes"))
+            _ => {}
+          }
+        }
+        if ends_with_bytes(text, prompt) {
+          return Ok(text.slice(0, text.len() - prompt.len()).to_text())
+        }
+      }
+    }
+  }
+}
+
+fn ends_with_bytes(bytes: Bytes, suffix: Bytes) -> Bool {
+  if suffix.len() > bytes.len() {
+    return false
+  }
+  let start = bytes.len() - suffix.len()
+  var i = 0
+  while i < suffix.len() {
+    if bytes.at(start + i) != suffix.at(i) {
+      return false
+    }
+    i = i + 1
+  }
+  true
+}
+
+test "ends_with_bytes compares the suffix" {
+  assert ends_with_bytes(b"terminal> ", b"> ")
+  assert ends_with_bytes(b"> ", b"> ")
+  assert !ends_with_bytes(b">", b"> ")
+  assert !ends_with_bytes(b"terminal>", b"> ")
+  assert ends_with_bytes(b"x", Bytes.empty())
 }
 
 // A Telnet client of `target`: standard input and output become the
@@ -709,6 +799,25 @@ test fn exchange_with(input: Bytes, limits: SessionLimits) -> IoResult<Bytes> {
 
 test "a client silent for the idle timeout ends the session" {
   assert exchange_with(b"hi\r\n", SessionLimits { idle_timeout = 100 ms })? == b"> hi\r\n> "
+}
+
+test "await_prompt returns the text before each prompt and fails when the server closes" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  client.set_idle_timeout(5000)?
+  let server = listener.accept()?
+  spawn Telnet.serve(server, Console { prompt = "> ", respond = echo, maximum_line = 8 })
+  assert await_prompt(client, "> ")? == ""
+  var input = [IAC, DO, 1]
+  input.append(b"hi\r\n")
+  client.write_all(input)?
+  assert await_prompt(client, "> ")? == "hi\n"
+  client.write_all(b"bye\r\n")?
+  let closed = match await_prompt(client, "> ") {
+    Ok(_) => false
+    Err(error) => error.message == "connection closed before the prompt"
+  }
+  assert closed
 }
 
 test "a telnet server runs a declared console, a client its session" {

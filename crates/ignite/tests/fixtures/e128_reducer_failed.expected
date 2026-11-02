@@ -1,0 +1,1 @@
+{"at":{"ns":0,"type":"Duration"},"kind":"error","machine":"S.daemon.supervisor","seq":3,"value":{"code":"E128","report":"reducer of S.daemon.supervisor failed: the fuel limit of 1 units exceeded in std.control.step"}}

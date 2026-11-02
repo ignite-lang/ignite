@@ -3,14 +3,22 @@
 //! invariant 9). Each file is a module; harness names are
 //! `<file>::<test>`.
 
+mod build_cache;
 mod cli;
 mod common;
+mod control_trace;
+mod decode;
+mod drain;
+mod eval;
 mod failover;
 mod generics;
 mod ignite_test;
 mod llvm;
 mod llvm_build;
 mod llvm_memory;
+mod plan;
+mod reachability;
+mod run;
 mod siblings;
 mod slice10_llvm;
 mod slice9;

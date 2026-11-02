@@ -1,0 +1,1 @@
+e111_bound_twice.ignite:32:5: error[E111]: `S.h` is both a bindings key and included by `S.w`

@@ -1,0 +1,36 @@
+package fixture_e112
+
+import std.deploy.{Deployment, nativeProcess, workstationExecutable}
+import std.policy.Restart
+
+type Helper {
+  name: Text
+}
+
+type Worker {
+  listener: TcpListener
+  helper: Helper
+  executable: Text
+}
+
+fn Worker.main(self: Worker) -> Result<Unit, IoError> {
+  let stream = self.listener.accept()?
+  stream.close()?
+  Ok(Unit)
+}
+
+system S {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  component h: Helper { name = "h" }
+  component w: Worker { listener = ingress, helper = h }
+  policy restart: Restart { maximum_attempts = 3 }
+}
+
+assembly a: Deployment {
+  system = S
+  bindings = {
+    S.ingress = nativeProcess(includes = [])
+    S.w = nativeProcess(includes = [S.h])
+    S.restart = workstationExecutable()
+  }
+}

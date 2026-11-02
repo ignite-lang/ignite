@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use ignite_check::{Modules, Symbols, check_module};
 use ignite_rustgen::{
     GeneratedProject, Options, SiblingModule, StdModule, TypedStdModule, generate,
-    generate_package, generate_std, generate_std_typed, generate_tests, generate_typed,
+    generate_package, generate_std, generate_std_for, generate_tests, generate_typed,
 };
 use ignite_syntax::SourceFile;
 use ignite_syntax::ast::Program;
@@ -155,7 +155,7 @@ pub fn load_std(root: &Path) -> Vec<(String, Program, Symbols)> {
 
 /// The standard library typed in import order, or `None` when a module
 /// does not type.
-fn type_std(library: &[(String, Program, Symbols)]) -> Option<Vec<TypedProgram>> {
+pub fn type_std(library: &[(String, Program, Symbols)]) -> Option<Vec<TypedProgram>> {
     let mut typed_modules = TypedModules::new();
     let mut std_types = Vec::new();
     for (module, program, symbols) in library {
@@ -287,7 +287,7 @@ fn lower_tests_with(
         .zip(&std_types)
         .map(|((m, p, s), t)| (m.clone(), p, s, t))
         .collect();
-    let std = generate_std_typed(&inputs, &options).unwrap_or_else(|e| panic!("{e:?}"));
+    let std = generate_std_for(&inputs, &options, &project).unwrap_or_else(|e| panic!("{e:?}"));
     (project, std)
 }
 
@@ -406,7 +406,8 @@ fn lower_with(
                 .zip(std_types)
                 .map(|((m, p, s), t)| (m.clone(), p, s, t))
                 .collect();
-            let std = generate_std_typed(&inputs, &options).unwrap_or_else(|e| panic!("{e:?}"));
+            let std =
+                generate_std_for(&inputs, &options, &project).unwrap_or_else(|e| panic!("{e:?}"));
             (project, std)
         }
         (_, types) => {

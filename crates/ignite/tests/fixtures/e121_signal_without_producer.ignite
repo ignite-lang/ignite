@@ -1,0 +1,52 @@
+package fixture_e121
+
+import std.deploy.Member
+
+type Pinger {
+  interval: Duration = 10 seconds
+  attempts: Signal<Int>
+}
+
+fn Pinger.describe(self: Pinger) -> Text = "pinger"
+
+type Uptime {
+  signal: Signal<Int>
+}
+
+enum Host {
+  Shelf,
+  Runner
+}
+
+fn shelf() -> Host = Shelf
+
+fn runner() -> Host = Runner
+
+fn admits(binding: Host, member: Member) -> Option<Text> = None
+
+fn includes(binding: Host) -> List<Ref> = []
+
+fn entries(binding: Host) -> List<Text> = match binding {
+  Shelf => []
+  Runner => ["describe"]
+}
+
+type Plan {
+  system: SystemRef
+  bindings: Map<Ref, Host>
+}
+
+system S {
+  component ping: Pinger {}
+  component spare: Pinger {}
+  contract up: Uptime { signal = ping.attempts }
+  contract fine: Uptime { signal = spare.attempts }
+}
+
+assembly a: Plan {
+  system = S
+  bindings = {
+    S.ping = shelf()
+    S.spare = runner()
+  }
+}

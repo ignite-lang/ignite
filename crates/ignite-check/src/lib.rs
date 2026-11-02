@@ -134,7 +134,15 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Int", "parse"),
     ("Store", "new"),
     ("Map", "empty"),
+    ("Clock", "monotonic"),
+    ("Endpoint", "of"),
 ];
+
+/// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
+/// not builtin types: `std.net.Endpoint` declares the record and the
+/// substrate supplies `Endpoint.of` (`docs/slice.md` 16.13), so its
+/// declaration is no duplicate of a builtin (E004).
+pub const STD_RECORD_STATIC_OWNERS: &[&str] = &["Endpoint"];
 
 /// Substrate operations that are effectful, by method name.
 pub const EFFECTFUL_METHODS: &[&str] = &[
@@ -230,6 +238,8 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Int", "parse", 1),
     ("Store", "new", 0),
     ("Map", "empty", 0),
+    ("Clock", "monotonic", 0),
+    ("Endpoint", "of", 1),
 ];
 
 /// Builtin statics that are effectful substrate operations.
@@ -241,6 +251,8 @@ const EFFECTFUL_STATICS: &[(&str, &str)] = &[
     ("Stdin", "set_raw"),
     ("Stdout", "write_all"),
     ("Process", "exit"),
+    ("Clock", "monotonic"),
+    ("Endpoint", "of"),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -309,6 +321,8 @@ pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
         ("Process", "exit") => Some("process.exit"),
         ("TcpListener", "bind") => Some("net.listen"),
         ("TcpStream", "connect") => Some("net.connect"),
+        ("Clock", "monotonic") => Some("clock.read"),
+        ("Endpoint", "of") => Some("process.args"),
         _ => None,
     }
 }
@@ -915,7 +929,8 @@ impl Checker {
             let name = decl.name();
             if BUILTIN_TYPES.contains(&name.name.as_str())
                 || BUILTIN_FUNCTIONS.contains(&name.name.as_str())
-                || is_static_owner(&name.name)
+                || (is_static_owner(&name.name)
+                    && !STD_RECORD_STATIC_OWNERS.contains(&name.name.as_str()))
                 || name.name == "Tuple"
             {
                 self.error(

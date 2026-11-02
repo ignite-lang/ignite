@@ -58,7 +58,7 @@ absolute path; build it with its own `--target-dir`): subcommands `drop`, `cross
 | `a05`, `a06`, `b09`, `b11` | E016: `map` carries the roots of its fn argument | E016 |
 | `a07`, `b10` | E016: `push` and `append` on a field extend the place root's roots | E016 |
 | `c03` | E042, consistent with `slice.md` §11.7 | E042 |
-| `a21` | accepted; the vision leaves component property expressions as effect roots | accepted |
+| `a21` | E116 since slice 11 (`docs/slice.md` 15.2, O16): a property expression is pure, so the effectful call inside `application = ..` is refused; slice 10 accepted it as an effect root | E116 |
 | every other probe | the correctly rejected attack keeps the diagnostic `vision.md` section 10.2 names | unchanged; the `.expected` files hold them |
 
 `crates/ignite-types/tests/audit/effects_closure_variants.ignite` repeats the effect probes with

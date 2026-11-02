@@ -97,10 +97,18 @@ fn terminal_checks_clean_against_the_standard_library() {
         !symbols.imported.contains_key("Telnet"),
         "the program names the kinds, not the protocol (docs/slice.md section 14.5)"
     );
+    // `TelnetServer.machine` and `TelnetServer.validate` are the hooks of
+    // `docs/slice.md` 16.16 that `ignite run` and E120 call (slice 12); the
+    // associated fns of an imported kind come with its record (E003).
     assert_eq!(
         symbols.functions.keys().collect::<Vec<_>>(),
-        ["TelnetClient.main", "TelnetServer.main"],
-        "the kinds' mains come with the imported records; the commands live in the sibling module `commands.ignite`"
+        [
+            "TelnetClient.main",
+            "TelnetServer.machine",
+            "TelnetServer.main",
+            "TelnetServer.validate"
+        ],
+        "the kinds' mains and hooks come with the imported records; the commands live in the sibling module `commands.ignite`"
     );
     assert_eq!(symbols.enum_of_variant("Some"), Some("Option"));
 }

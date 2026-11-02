@@ -1,0 +1,1 @@
+e121_signal_without_producer.ignite:42:34: error[E121]: `S.up.signal` has no producer that assembly `a` runs: `S.ping` is not bound to a host that runs it

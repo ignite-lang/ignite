@@ -78,6 +78,137 @@ fn fixtures_match_expected() {
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
 
+/// `valid_system.ignite` through the slice-11 API (`docs/slice.md` 15.9):
+/// the system's members with kind, property sources and outputs, the
+/// assembly, and the effect sets of property expressions.
+#[test]
+fn valid_system_describes_its_system_and_assembly() {
+    use ignite_types::{MemberDeclaration, PropertySource, QualName, Ty, field_default};
+
+    let std = common::load_std(&fixture_dir().join("std"))
+        .unwrap_or_else(|e| panic!("fixture standard library:\n{e}"));
+    let path = fixture_dir().join("valid_system.ignite");
+    let source = SourceFile::new(
+        "valid_system.ignite",
+        std::fs::read_to_string(&path).unwrap(),
+    );
+    let program = ignite_syntax::parse(&source).unwrap();
+    let symbols = ignite_check::check_module(&program, &std.modules).unwrap();
+    let typed = ignite_types::type_module(&program, &symbols, &std.typed)
+        .unwrap_or_else(|d| panic!("type failed:\n{}", source.render_all(&d)));
+    let local = |name: &str| QualName::new("fixtures.system", name);
+
+    let [system] = typed.systems() else {
+        panic!("one system, got {:?}", typed.systems());
+    };
+    assert_eq!(system.name, "Terminal");
+    let decl = system.decl(&program).expect("system decl");
+    assert_eq!(decl.name.name, "Terminal");
+    let members: Vec<(&str, MemberDeclaration, usize)> = system
+        .members
+        .iter()
+        .map(|m| (m.name.as_str(), m.declaration, m.index))
+        .collect();
+    assert_eq!(
+        members,
+        [
+            ("ingress", MemberDeclaration::Resource, 0),
+            ("sessions", MemberDeclaration::Resource, 1),
+            ("server", MemberDeclaration::Component, 0),
+            ("probe", MemberDeclaration::Component, 1),
+            ("uptime", MemberDeclaration::Contract, 0),
+            ("recovery", MemberDeclaration::Policy, 0),
+        ]
+    );
+    for m in &system.members {
+        assert_eq!(m.id, format!("Terminal.{}", m.name));
+    }
+
+    let ingress = system.member("ingress").unwrap();
+    assert_eq!(ingress.kind, Ty::TcpListener);
+    assert_eq!(
+        ingress.properties,
+        [
+            ("address".to_string(), PropertySource::Set(0)),
+            ("port".to_string(), PropertySource::Set(1)),
+            ("exposure".to_string(), PropertySource::Set(2)),
+            (
+                "backlog".to_string(),
+                PropertySource::Default(QualName::builtin("TcpListener.backlog"))
+            ),
+        ]
+    );
+    assert!(ingress.outputs.is_empty());
+    let port = ingress.property(decl, "port").expect("port expression");
+    assert_eq!(typed.type_of(port), &Ty::Int);
+    assert_eq!(ingress.property(decl, "backlog"), None);
+
+    let sessions = system.member("sessions").unwrap();
+    assert_eq!(
+        sessions.kind,
+        Ty::Store(Box::new(Ty::Record(local("Window"))))
+    );
+    assert!(sessions.properties.is_empty() && sessions.outputs.is_empty());
+
+    let server = system.member("server").unwrap();
+    assert_eq!(server.kind, Ty::Record(local("TelnetServer")));
+    assert_eq!(
+        server.properties,
+        [
+            ("listener".to_string(), PropertySource::Set(0)),
+            ("commands".to_string(), PropertySource::Set(1)),
+            ("sessions".to_string(), PropertySource::Set(2)),
+            (
+                "executable".to_string(),
+                PropertySource::Default(local("TelnetServer.executable"))
+            ),
+        ]
+    );
+    assert!(field_default(&program, "TelnetServer", "executable").is_some());
+
+    let probe = system.member("probe").unwrap();
+    assert_eq!(probe.outputs, [("attempts".to_string(), Ty::Int)]);
+    assert_eq!(probe.properties.len(), 3);
+
+    let uptime = system.member("uptime").unwrap();
+    assert!(uptime.outputs.is_empty(), "a set signal is a property");
+    let signal = uptime.property(decl, "signal").unwrap();
+    assert_eq!(typed.type_of(signal), &Ty::Signal(Box::new(Ty::Int)));
+    let window = uptime.property(decl, "window").unwrap();
+    assert!(typed.effects(window).is_some_and(|e| e.is_empty()));
+    assert!(typed.effects(signal).is_some_and(|e| e.is_empty()));
+    assert!(typed.effects(port).is_some_and(|e| e.is_empty()));
+
+    let recovery = system.member("recovery").unwrap();
+    assert_eq!(
+        recovery.properties[2],
+        (
+            "budget".to_string(),
+            PropertySource::Default(local("Restart.budget"))
+        )
+    );
+
+    let [assembly] = typed.assemblies() else {
+        panic!("one assembly, got {:?}", typed.assemblies());
+    };
+    assert_eq!(assembly.name, "local");
+    assert_eq!(assembly.kind, Ty::Record(local("Deployment")));
+    assert_eq!(assembly.system.as_deref(), Some("Terminal"));
+    assert_eq!(
+        assembly.properties,
+        [
+            ("system".to_string(), PropertySource::Set(0)),
+            ("bindings".to_string(), PropertySource::Set(1)),
+        ]
+    );
+    let bindings = assembly.property(&program, "bindings").unwrap();
+    assert!(typed.effects(bindings).is_some_and(|e| e.is_empty()));
+    assert_eq!(
+        assembly.decl(&program).map(|a| a.name.name.as_str()),
+        Some("local")
+    );
+}
+
 #[test]
 fn every_type_code_has_a_fixture() {
     let names: Vec<String> = fixtures()
@@ -87,7 +218,7 @@ fn every_type_code_has_a_fixture() {
     for code in [
         "e005", "e040", "e041", "e042", "e043", "e044", "e045", "e046", "e048", "e017", "e051",
         "e052", "e100", "e101", "e102", "e103", "e104", "e105", "e106", "e107", "e108", "e109",
-        "valid",
+        "e116", "valid",
     ] {
         assert!(
             names.iter().any(|n| n.starts_with(code)),

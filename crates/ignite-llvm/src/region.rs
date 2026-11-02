@@ -37,6 +37,8 @@ fn mutates(builtin: Builtin) -> bool {
         | RatioPpm
         | IoErrorWithExitCode
         | ModuleRecord
+        | ClockMonotonic
+        | EndpointOf
         | TextLen
         | TextIsEmpty
         | TextTrim

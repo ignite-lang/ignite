@@ -1,5 +1,16 @@
 package std.net
 
+// The client-side target a `TcpListener` resource name gives where an
+// `Endpoint` is expected (`docs/slice.md` 14.14 item 5), and the result
+// of the substrate builtin `Endpoint.of`.
+//
+// `Endpoint.of(reference: Ref<K>) -> Result<Endpoint, IoError>` is a
+// builtin static of this module, implemented in the substrate and not
+// declared here (16.9, 16.13): it resolves a reference's path text through
+// the process arguments `--ref <path>=<address>:<port>` that `ignite run`
+// passes to a probe, and fails with "no binding for <path>" outside a
+// run. The module is also the substrate's `TcpListener`, `TcpStream` and
+// `Exposure`.
 type Endpoint {
   address: Text
   port: Int

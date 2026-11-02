@@ -1,0 +1,170 @@
+package std.time
+
+// Civil time for calendar windows (design section 4.1: "Window: rolling or
+// calendar interval, timezone, and boundary rules"; `docs/slice.md` 16.4,
+// 16.10, O36). An instant is a Duration since 1970-01-01T00:00:00Z: the
+// journal's epoch plus an event's `at`. Zones are a closed set, `UTC` and
+// `Europe/Berlin`; the latter follows the EU rule, summer time from the
+// last Sunday of March 01:00 UTC to the last Sunday of October 01:00 UTC.
+// Any other zone is unknown and refused by the kinds' `validate` (E120).
+// A leaf module: `std.control` reads it for the period boundaries of a
+// `CalendarMonth` window.
+
+const DAY_SECONDS: Int = 86400
+const HOUR_SECONDS: Int = 3600
+const NS_PER_SECOND: Int = 1000000000
+
+fn zone_known(zone: Text) -> Bool = zone == "UTC" || zone == "Europe/Berlin"
+
+// Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's
+// `days_from_civil`).
+fn days_from_civil(year: Int, month: Int, day: Int) -> Int {
+  let y = if month <= 2 { year - 1 } else { year }
+  let era = (if y >= 0 { y } else { y - 399 }) / 400
+  let yoe = y - era * 400
+  let mp = if month > 2 { month - 3 } else { month + 9 }
+  let doy = (153 * mp + 2) / 5 + day - 1
+  let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+  era * 146097 + doe - 719468
+}
+
+// The date of a day count since 1970-01-01: (year, month, day).
+fn civil_from_days(days: Int) -> (Int, Int, Int) {
+  let z = days + 719468
+  let era = (if z >= 0 { z } else { z - 146096 }) / 146097
+  let doe = z - era * 146097
+  let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+  let y = yoe + era * 400
+  let doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+  let mp = (5 * doy + 2) / 153
+  let d = doy - (153 * mp + 2) / 5 + 1
+  let m = if mp < 10 { mp + 3 } else { mp - 9 }
+  (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+// Days since the epoch of the last Sunday of `month` in `year`.
+fn last_sunday(year: Int, month: Int) -> Int {
+  let last = days_from_civil(year, month + 1, 1) - 1
+  let weekday = (last + 4) % 7
+  last - weekday
+}
+
+// Whether Central European Summer Time holds at the UTC second `utc`.
+fn berlin_summer(utc: Int) -> Bool {
+  let (year, _, _) = civil_from_days(utc / DAY_SECONDS)
+  let start = last_sunday(year, 3) * DAY_SECONDS + HOUR_SECONDS
+  let end = last_sunday(year, 10) * DAY_SECONDS + HOUR_SECONDS
+  utc >= start && utc < end
+}
+
+// The offset of `zone` from UTC at the UTC second `utc`, in seconds.
+fn offset(zone: Text, utc: Int) -> Option<Int> = match zone {
+  "UTC" => Some(0)
+  "Europe/Berlin" => Some(if berlin_summer(utc) { 2 * HOUR_SECONDS } else { HOUR_SECONDS })
+  _ => None
+}
+
+// The UTC second of 00:00 on the first of `month` in `zone`. The offset in
+// force one hour before that instant decides, since no transition falls on
+// the first of a month.
+fn local_midnight_utc(zone: Text, year: Int, month: Int) -> Int {
+  let local = days_from_civil(year, month, 1) * DAY_SECONDS
+  match offset(zone, local - HOUR_SECONDS) {
+    Some(off) => local - off
+    None => local
+  }
+}
+
+fn month_start_seconds(zone: Text, utc: Int) -> Option<Int> = match offset(zone, utc) {
+  Some(off) => {
+    let (year, month, _) = civil_from_days((utc + off) / DAY_SECONDS)
+    Some(local_midnight_utc(zone, year, month))
+  }
+  None => None
+}
+
+fn next_month_start_seconds(zone: Text, utc: Int) -> Option<Int> = match offset(zone, utc) {
+  Some(off) => {
+    let (year, month, _) = civil_from_days((utc + off) / DAY_SECONDS)
+    if month == 12 {
+      Some(local_midnight_utc(zone, year + 1, 1))
+    } else {
+      Some(local_midnight_utc(zone, year, month + 1))
+    }
+  }
+  None => None
+}
+
+fn seconds(instant: Duration) -> Int = instant.to_ns() / NS_PER_SECOND
+
+// The instant at which the calendar month containing `instant` starts in
+// `zone`; `None` for an unknown zone.
+fn month_start(zone: Text, instant: Duration) -> Option<Duration> = match month_start_seconds(zone, seconds(instant)) {
+  Some(s) => Some(s * 1 second)
+  None => None
+}
+
+// The first month start in `zone` strictly after `instant`; `None` for an
+// unknown zone.
+fn next_month_start(zone: Text, instant: Duration) -> Option<Duration> = match next_month_start_seconds(zone, seconds(instant)) {
+  Some(s) => Some(s * 1 second)
+  None => None
+}
+
+test "civil dates round-trip through days since the epoch" {
+  assert days_from_civil(1970, 1, 1) == 0
+  assert civil_from_days(0) == (1970, 1, 1)
+  assert days_from_civil(2026, 10, 31) == 20757
+  assert civil_from_days(20757) == (2026, 10, 31)
+  assert days_from_civil(2000, 3, 1) == 11017
+  assert days_from_civil(2024, 2, 29) == 19782
+  assert civil_from_days(19782) == (2024, 2, 29)
+  assert civil_from_days(19783) == (2024, 3, 1)
+}
+
+test "Europe/Berlin follows the EU summer time rule" {
+  assert last_sunday(2026, 3) == days_from_civil(2026, 3, 29)
+  assert last_sunday(2026, 10) == days_from_civil(2026, 10, 25)
+  assert !berlin_summer(1774746000 - 1)
+  assert berlin_summer(1774746000)
+  assert berlin_summer(1792890000 - 1)
+  assert !berlin_summer(1792890000)
+  assert offset("Europe/Berlin", 1793487000) == Some(3600)
+  assert offset("Europe/Berlin", 1774746000) == Some(7200)
+  assert offset("UTC", 1793487000) == Some(0)
+  assert offset("Mars/Olympus", 0) == None
+  assert zone_known("UTC") && zone_known("Europe/Berlin") && !zone_known("Europe/Paris")
+}
+
+test "month boundaries in UTC" {
+  let at = 1793487000 seconds
+  assert month_start("UTC", at) == Some(1790812800 seconds)
+  assert next_month_start("UTC", at) == Some(1793491200 seconds)
+  assert next_month_start("UTC", 1798761600 seconds - 1 ns) == Some(1798761600 seconds)
+  assert month_start("UTC", 1798761600 seconds) == Some(1798761600 seconds)
+  assert next_month_start("UTC", 1798761600 seconds) == Some(1798761600 seconds + 31 days)
+  assert month_start("Mars/Olympus", at) == None
+  assert next_month_start("Mars/Olympus", at) == None
+}
+
+test "month boundaries in Europe/Berlin across both summer time changes" {
+  let at = 1793487000 seconds
+  assert month_start("Europe/Berlin", at) == Some(1790805600 seconds)
+  assert next_month_start("Europe/Berlin", at) == Some(1793487600 seconds)
+  assert next_month_start("Europe/Berlin", 1793487600 seconds) == Some(1796079600 seconds)
+  assert month_start("Europe/Berlin", 1774746000 seconds) == Some(1772319600 seconds)
+  assert next_month_start("Europe/Berlin", 1774746000 seconds) == Some(1774994400 seconds)
+  assert next_month_start("Europe/Berlin", 1798758000 seconds - 1 second) == Some(1798758000 seconds)
+  assert month_start("Europe/Berlin", 1798758000 seconds) == Some(1798758000 seconds)
+  assert month_start("Europe/Berlin", 1706745600 seconds) == Some(1706742000 seconds)
+  assert next_month_start("Europe/Berlin", 1706745600 seconds) == Some(1709247600 seconds)
+}
+
+test "a month with a summer time change is an hour longer or shorter" {
+  let october = 1793487600 seconds - 1790805600 seconds
+  assert october == 31 days + 1 hour
+  let march = 1774994400 seconds - 1772319600 seconds
+  assert march == 31 days - 1 hour
+  let november = 1796079600 seconds - 1793487600 seconds
+  assert november == 30 days
+}

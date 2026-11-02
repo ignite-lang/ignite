@@ -1,0 +1,15 @@
+// ignite run
+package fixture_e125
+
+// E125 (`docs/slice.md` 16.17): `ignite run` on a program without an
+// assembly. `ignite check` and `ignite plan` accept it.
+
+type Service {
+  name: Text
+}
+
+fn Service.main(self: Service) -> Result<Unit, IoError> = Ok(Unit)
+
+system S {
+  component svc: Service { name = "svc" }
+}

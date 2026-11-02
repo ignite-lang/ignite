@@ -78,7 +78,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 
 use ignite_check::Symbols;
-use ignite_syntax::ast::{Expr, Pattern, Place, Program, Span, Type};
+use ignite_syntax::ast::{
+    AssemblyDecl, Decl, Expr, FieldInit, Pattern, Place, Program, Span, SystemDecl, Type,
+};
 use ignite_syntax::diagnostic::Diagnostic;
 
 /// The variants of the builtin enum `Exposure` of a `TcpListener` resource
@@ -572,6 +574,14 @@ pub enum Builtin {
     IoErrorWithExitCode,
     /// `module("p")`: the record of [`TypedProgram::module_record`].
     ModuleRecord,
+    /// `Clock.monotonic() -> Duration`: the time since an arbitrary start
+    /// of the process, never decreasing (`docs/slice.md` 16.13); effect
+    /// `clock.read`.
+    ClockMonotonic,
+    /// `Endpoint.of(ref: Ref<K>) -> Result<std.net.Endpoint, IoError>`:
+    /// the `--ref path=address:port` argument for the reference's text
+    /// (`docs/slice.md` 16.9, 16.13); effect `process.args`.
+    EndpointOf,
 }
 
 /// What a `Call` or `Method` expression calls.
@@ -897,6 +907,233 @@ impl FailureSite {
     }
 }
 
+/// The default values of the builtin resource kind `TcpListener` that a
+/// declaration may leave out (`docs/slice.md` section 14.4): the variant
+/// of `exposure` and the value of `backlog`. [`PropertySource::Default`]
+/// names them `TcpListener.exposure` and `TcpListener.backlog` in the
+/// builtin module `""`.
+pub const TCP_LISTENER_DEFAULT_EXPOSURE: &str = "Loopback";
+pub const TCP_LISTENER_DEFAULT_BACKLOG: i64 = 128;
+
+/// Where a property of a member or assembly declaration takes its value
+/// (`docs/slice.md` section 15.9).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PropertySource {
+    /// Set in the declaration: the index into its `properties`
+    /// (`FieldInit`s, source order). [`MemberInfo::property`] and
+    /// [`AssemblyInfo::property`] give the expression.
+    Set(usize),
+    /// Left out; the kind's field default `<Record>.<field>` in the
+    /// kind's module ([`field_default`] finds its expression), or
+    /// `TcpListener.exposure` and `TcpListener.backlog` in the builtin
+    /// module `""` ([`TCP_LISTENER_DEFAULT_EXPOSURE`],
+    /// [`TCP_LISTENER_DEFAULT_BACKLOG`]).
+    Default(QualName),
+    /// The `executable` field left out: its value is the component's
+    /// name (`docs/slice.md` section 14.5).
+    ComponentName,
+}
+
+/// Which declaration a member of a `system` is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum MemberDeclaration {
+    Resource,
+    Component,
+    Contract,
+    Policy,
+}
+
+impl MemberDeclaration {
+    /// The keyword: `resource`, `component`, `contract`, `policy`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MemberDeclaration::Resource => "resource",
+            MemberDeclaration::Component => "component",
+            MemberDeclaration::Contract => "contract",
+            MemberDeclaration::Policy => "policy",
+        }
+    }
+}
+
+impl fmt::Display for MemberDeclaration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// One member of a `system` (`docs/slice.md` section 15.9): a resource,
+/// component, contract or policy with its kind and where each property of
+/// the kind takes its value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemberInfo {
+    /// `<System>.<name>`, the member's stable identity.
+    pub id: String,
+    /// The member's name inside the system.
+    pub name: String,
+    pub declaration: MemberDeclaration,
+    /// Index of the declaration in the system's list for its
+    /// [`MemberDeclaration`]: `SystemDecl::resources`, `components`,
+    /// `contracts` or `policies`.
+    pub index: usize,
+    /// `TcpListener`, `Store<T>` or the kind's record type, type
+    /// arguments inferred for a generic kind.
+    pub kind: Ty,
+    /// Every field of the kind that is not an unset `Signal<T>` output,
+    /// in the kind's field order (`address`, `port`, `exposure`,
+    /// `backlog` for a `TcpListener`; none for a `Store<T>`), with the
+    /// source of its value.
+    pub properties: Vec<(String, PropertySource)>,
+    /// The `Signal<T>` fields the declaration does not set, in field
+    /// order, each with its element type `T`.
+    pub outputs: Vec<(String, Ty)>,
+    /// Byte offset of the declaration's start in the module's source.
+    pub offset: usize,
+}
+
+impl MemberInfo {
+    /// The declaration's `properties` in `system`, the `SystemDecl` of
+    /// [`SystemInfo::decl`].
+    pub fn properties_of<'p>(&self, system: &'p SystemDecl) -> &'p [FieldInit] {
+        let list: Option<&'p [FieldInit]> = match self.declaration {
+            MemberDeclaration::Resource => system
+                .resources
+                .get(self.index)
+                .map(|r| r.properties.as_slice()),
+            MemberDeclaration::Component => system
+                .components
+                .get(self.index)
+                .map(|c| c.properties.as_slice()),
+            MemberDeclaration::Contract => system
+                .contracts
+                .get(self.index)
+                .map(|c| c.properties.as_slice()),
+            MemberDeclaration::Policy => system
+                .policies
+                .get(self.index)
+                .map(|c| c.properties.as_slice()),
+        };
+        list.unwrap_or(&[])
+    }
+
+    /// The expression property `field` is set to in the declaration;
+    /// `None` for a defaulted, implicit or unknown property.
+    pub fn property<'p>(&self, system: &'p SystemDecl, field: &str) -> Option<&'p Expr> {
+        let (_, source) = self.properties.iter().find(|(f, _)| f == field)?;
+        match source {
+            PropertySource::Set(i) => self.properties_of(system).get(*i).map(|p| &p.value),
+            PropertySource::Default(_) | PropertySource::ComponentName => None,
+        }
+    }
+}
+
+/// One `system` of a module (`docs/slice.md` section 15.9) with its
+/// members in declaration order: resources, components, contracts,
+/// policies.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SystemInfo {
+    pub name: String,
+    /// Index of the `Decl::System` in `Program::decls`.
+    pub decl: usize,
+    pub members: Vec<MemberInfo>,
+    /// Byte offset of the declaration's start.
+    pub offset: usize,
+}
+
+impl SystemInfo {
+    /// The declaration in `program`, the `Program` this module was typed
+    /// from.
+    pub fn decl<'p>(&self, program: &'p Program) -> Option<&'p SystemDecl> {
+        match program.decls.get(self.decl)? {
+            Decl::System(system) => Some(system),
+            _ => None,
+        }
+    }
+
+    pub fn member(&self, name: &str) -> Option<&MemberInfo> {
+        self.members.iter().find(|m| m.name == name)
+    }
+}
+
+/// One `assembly` of a module (`docs/slice.md` section 15.9).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AssemblyInfo {
+    pub name: String,
+    /// Index of the `Decl::Assembly` in `Program::decls`.
+    pub decl: usize,
+    /// The kind's record type.
+    pub kind: Ty,
+    /// The system its `system` property names; `None` when the property
+    /// is not a bare system name.
+    pub system: Option<String>,
+    /// Every field of the kind in field order with the source of its
+    /// value, as [`MemberInfo::properties`].
+    pub properties: Vec<(String, PropertySource)>,
+    /// Byte offset of the declaration's start.
+    pub offset: usize,
+}
+
+impl AssemblyInfo {
+    pub fn decl<'p>(&self, program: &'p Program) -> Option<&'p AssemblyDecl> {
+        match program.decls.get(self.decl)? {
+            Decl::Assembly(assembly) => Some(assembly),
+            _ => None,
+        }
+    }
+
+    /// The expression property `field` is set to; `None` for a defaulted
+    /// or unknown property.
+    pub fn property<'p>(&self, program: &'p Program, field: &str) -> Option<&'p Expr> {
+        let (_, source) = self.properties.iter().find(|(f, _)| f == field)?;
+        match source {
+            PropertySource::Set(i) => self.decl(program)?.properties.get(*i).map(|p| &p.value),
+            PropertySource::Default(_) | PropertySource::ComponentName => None,
+        }
+    }
+}
+
+/// The default expression of field `field` of the record `record`
+/// declared in `program` (`docs/slice.md` section 4.7), for a
+/// [`PropertySource::Default`] whose module's AST is `program`.
+pub fn field_default<'p>(program: &'p Program, record: &str, field: &str) -> Option<&'p Expr> {
+    program.decls.iter().find_map(|decl| match decl {
+        Decl::Record(r) if r.name.name == record => r
+            .fields
+            .iter()
+            .find(|f| f.name.name == field)
+            .and_then(|f| f.default.as_ref()),
+        _ => None,
+    })
+}
+
+/// The effects an expression performs (`docs/slice.md` section 15.2),
+/// sorted and deduplicated, in the form `requires` writes them: `r.op` on
+/// a system member `r` the expression names (`ingress.accept`), an
+/// ambient effect (`stdin.read`, `net.listen`), a requirement of a callee
+/// kept as written when the argument for its parameter names no member,
+/// the bare operation (`accept`, `read`) on a handle that is neither, and
+/// `spawn`. Empty for a pure expression: a bare member or resource name
+/// is a value, not an operation.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct EffectSet {
+    entries: Vec<String>,
+}
+
+impl EffectSet {
+    pub fn new(mut entries: Vec<String>) -> EffectSet {
+        entries.sort();
+        entries.dedup();
+        EffectSet { entries }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn entries(&self) -> &[String] {
+        &self.entries
+    }
+}
+
 /// The result of typing one module. Expression keys are addresses: the
 /// `Program` passed to [`type_module`] must be the same object (not a clone)
 /// that later stages look expressions up in.
@@ -941,6 +1178,13 @@ pub struct TypedProgram {
     executables: Vec<ExecutableInfo>,
     /// Failure sites, keyed by expression address.
     failures: HashMap<usize, FailureSite>,
+    /// The module's systems in declaration order (slice 11).
+    systems: Vec<SystemInfo>,
+    /// The module's assemblies in declaration order (slice 11).
+    assemblies: Vec<AssemblyInfo>,
+    /// Effect sets of property expressions, constant values and field
+    /// defaults and their sub-expressions, keyed by expression address.
+    effects: HashMap<usize, EffectSet>,
 }
 
 fn key(expr: &Expr) -> usize {
@@ -1160,6 +1404,30 @@ impl TypedProgram {
     /// character) and `assert`.
     pub fn failure_site(&self, expr: &Expr) -> Option<FailureSite> {
         self.failures.get(&key(expr)).copied()
+    }
+
+    /// The systems this module declares with their members
+    /// (`docs/slice.md` section 15.9), in declaration order.
+    pub fn systems(&self) -> &[SystemInfo] {
+        &self.systems
+    }
+
+    /// The assemblies this module declares (`docs/slice.md` section
+    /// 15.9), in declaration order.
+    pub fn assemblies(&self) -> &[AssemblyInfo] {
+        &self.assemblies
+    }
+
+    /// The effects `expr` performs (`docs/slice.md` section 15.2), for a
+    /// property expression of a resource, component, contract, policy or
+    /// assembly, a constant's value, a field default, and every
+    /// sub-expression of those (closure bodies excluded: creating a
+    /// closure performs nothing). `None` for an expression inside a fn,
+    /// role or test body, whose effects `ignite-check` accounts to the
+    /// fn. E116 reports a non-empty set on a property expression, so a
+    /// typed program's property expressions all have empty sets.
+    pub fn effects(&self, expr: &Expr) -> Option<&EffectSet> {
+        self.effects.get(&key(expr))
     }
 
     /// Index and payload types of variant `name` of a value of type `ty`
@@ -1414,5 +1682,8 @@ pub fn type_module(
         module_records: typed.system.module_records,
         executables: typed.system.executables,
         failures: typed.system.failures,
+        systems: typed.system.systems,
+        assemblies: typed.system.assemblies,
+        effects: typed.system.effects,
     })
 }

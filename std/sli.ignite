@@ -1,0 +1,115 @@
+package std.sli
+
+// Service-level indicator vocabulary (design section 4.1): the sample a
+// probe emits, the outcome a contract names, the window a contract is
+// judged over, the rule for attempts the probe never made, and the target
+// comparison. A leaf module (`docs/slice.md` 16.6, O45): the kinds of
+// `std.contract` and `std.probe`, whose `machine` hooks return
+// `std.control.Machine`, and the reducers of `std.control` all read it, and
+// it imports none of them, so that no import cycle (E032) can arise.
+
+// One attempt of a prompt probe: whether the prompt arrived before the
+// probe's timeout, and how long it took.
+type ProbeAttempt {
+  received: Bool
+  latency: Duration
+}
+
+// The outcome a contract names in `good` for `attempt`:
+// `prompt_received_before_timeout` holds when the prompt arrived,
+// `prompt_received_within_threshold` when it arrived in at most
+// `threshold`. An unknown outcome name holds for no attempt.
+fn satisfies(attempt: ProbeAttempt, good: Text, threshold: Duration) -> Bool = match good {
+  "prompt_received_before_timeout" => attempt.received
+  "prompt_received_within_threshold" => attempt.received && attempt.latency <= threshold
+  _ => false
+}
+
+// Whether `good` names an outcome `satisfies` knows; the kinds' `validate`
+// refuses any other (E120).
+fn known_outcome(good: Text) -> Bool =
+  good == "prompt_received_before_timeout" || good == "prompt_received_within_threshold"
+
+// The span a contract is judged over.
+enum Window {
+  Rolling(Duration),
+  CalendarMonth(Text)
+}
+
+// The last `span` of time, ending now.
+fn rolling(span: Duration) -> Window = Rolling(span)
+
+// Whole calendar months in the IANA time zone `time_zone`.
+fn calendar_month(time_zone: Text) -> Window = CalendarMonth(time_zone)
+
+// How attempts the probe never made count. The declarations write it as
+// text (`missing_data = "insufficient_evidence"`); `missing_data` reads it.
+enum MissingData {
+  InsufficientEvidence,
+  CountsAsGood,
+  CountsAsBad
+}
+
+fn missing_data(text: Text) -> Option<MissingData> = match text {
+  "insufficient_evidence" => Some(InsufficientEvidence)
+  "counts_as_good" => Some(CountsAsGood)
+  "counts_as_bad" => Some(CountsAsBad)
+  _ => None
+}
+
+// Whether `good` of `total` attempts reach `target`. No attempts reach no
+// target: design section 4.1, "Zero traffic does not automatically prove
+// compliance" (`docs/slice.md` 16.10, O32); the evaluator reports zero
+// executed attempts as `InsufficientEvidence`.
+fn meets(target: Ratio, good: Int, total: Int) -> Bool =
+  total > 0 && good * 1000000 >= target.ppm() * total
+
+test "an attempt satisfies the outcomes it earned" {
+  let fast = ProbeAttempt { received = true, latency = 50 ms }
+  let slow = ProbeAttempt { received = true, latency = 900 ms }
+  let missed = ProbeAttempt { received = false, latency = 2 seconds }
+  assert satisfies(fast, "prompt_received_before_timeout", 200 ms)
+  assert satisfies(fast, "prompt_received_within_threshold", 200 ms)
+  assert satisfies(slow, "prompt_received_before_timeout", 200 ms)
+  assert !satisfies(slow, "prompt_received_within_threshold", 200 ms)
+  assert satisfies(slow, "prompt_received_within_threshold", 900 ms)
+  assert !satisfies(missed, "prompt_received_before_timeout", 200 ms)
+  assert !satisfies(missed, "prompt_received_within_threshold", 5 seconds)
+  assert !satisfies(fast, "unknown", 5 seconds)
+  assert known_outcome("prompt_received_before_timeout")
+  assert known_outcome("prompt_received_within_threshold")
+  assert !known_outcome("unknown")
+  assert !known_outcome("")
+}
+
+test "windows are built by name" {
+  assert rolling(30 days) == Rolling(30 days)
+  assert calendar_month("Europe/Berlin") == CalendarMonth("Europe/Berlin")
+}
+
+test "missing_data reads the closed set" {
+  assert missing_data("insufficient_evidence") == Some(InsufficientEvidence)
+  assert missing_data("counts_as_good") == Some(CountsAsGood)
+  assert missing_data("counts_as_bad") == Some(CountsAsBad)
+  assert missing_data("") == None
+  assert missing_data("Insufficient_Evidence") == None
+}
+
+test "meets compares good attempts against the target in ppm" {
+  assert (99.9%).ppm() == 999000
+  assert meets(99.9%, 999, 1000)
+  assert !meets(99.9%, 998, 1000)
+  assert meets(99%, 99, 100)
+  assert !meets(99%, 98, 100)
+  assert !meets(100%, 999, 1000)
+  assert meets(0%, 0, 1000)
+}
+
+// Design section 4.1: "Zero traffic does not automatically prove
+// compliance." Before slice 12 this read `meets(100%, 0, 0)`.
+test "no attempts meet no target" {
+  assert !meets(100%, 0, 0)
+  assert !meets(0%, 0, 0)
+  assert !meets(99.9%, 0, 0)
+  assert meets(99.9%, 1, 1)
+}

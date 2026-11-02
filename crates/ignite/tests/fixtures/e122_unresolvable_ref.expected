@@ -1,0 +1,3 @@
+e122_unresolvable_ref.ignite:76:40: error[E122]: `S.several.target` names `S.twin`, which binds 2 `TcpListener` resources (S.back, S.front): `Endpoint.of` resolves to several endpoints
+e122_unresolvable_ref.ignite:77:37: error[E122]: `S.none.target` names `S.quiet`, which binds no `TcpListener` resource: `Endpoint.of` resolves to no endpoint
+e122_unresolvable_ref.ignite:78:40: error[E122]: `S.stopped.target` names `S.shelved`, which assembly `a` does not run as a process
