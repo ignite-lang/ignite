@@ -27,7 +27,7 @@ system Terminal {
   component server: TelnetServer {
     listener = ingress
     application = console
-
+    executable = "terminald"
     protocol = TelnetProfile {
       baseline = "nvt"
       negotiation = "q_method"

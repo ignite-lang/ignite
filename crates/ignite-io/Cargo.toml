@@ -7,7 +7,7 @@ description = "Ignite IO substrate: TCP listener and stream, standard input and 
 autotests = false
 
 [dependencies]
-nix.workspace = true
+nix = { workspace = true, features = ["signal"] }
 
 [features]
 runner = []

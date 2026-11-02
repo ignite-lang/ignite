@@ -1,0 +1,27 @@
+package fixture_e115
+
+type Worker {
+  steps: Int
+}
+
+fn forever(n: Int) -> Int {
+  var i = n
+  while i >= 0 {
+    i = i + 1
+  }
+  i
+}
+
+fn deep(n: Int) -> Int = deep(n + 1)
+
+fn grow(n: Int) -> List<Int> {
+  var xs = [n]
+  while xs.len() < 2000000 {
+    xs.append(xs)
+  }
+  xs
+}
+
+system S {
+  component w: Worker { steps = forever(0) }
+}

@@ -5,14 +5,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ignite_syntax::ast::{
-    AssemblyDecl, BinaryOp, BraceEntry, ComponentDecl, Expr, ExprKind, Ident, Path, ResourceDecl,
-    Span, SystemDecl,
+    AssemblyDecl, BinaryOp, BraceEntry, ComponentDecl, Expr, ExprKind, FieldInit, FnDecl, Ident,
+    Path, ResourceDecl, Span, SystemDecl,
 };
 
 use super::{Typer, compatible, exposure, fn_ty};
 use crate::{
-    BraceKind, Builtin, Callee, ExecutableInfo, FailureOp, FailureSite, ModuleRecord, QualName,
-    QuantityKind, Reference, Ty, key,
+    AssemblyInfo, BraceKind, Builtin, Callee, ExecutableInfo, FailureOp, FailureSite,
+    MemberDeclaration, MemberInfo, ModuleRecord, PropertySource, QualName, QuantityKind, Reference,
+    SystemInfo, Ty, key,
 };
 
 /// One member of a `system` (`docs/slice.md` section 14.4).
@@ -40,14 +41,34 @@ pub(super) enum MemberKind {
 
 impl MemberKind {
     fn word(self) -> &'static str {
+        self.declaration().as_str()
+    }
+
+    fn declaration(self) -> MemberDeclaration {
         match self {
-            MemberKind::Resource => "resource",
-            MemberKind::Component => "component",
-            MemberKind::Contract => "contract",
-            MemberKind::Policy => "policy",
+            MemberKind::Resource => MemberDeclaration::Resource,
+            MemberKind::Component => MemberDeclaration::Component,
+            MemberKind::Contract => MemberDeclaration::Contract,
+            MemberKind::Policy => MemberDeclaration::Policy,
         }
     }
 }
+
+/// The properties of a declaration with the source of each value, and its
+/// unset `Signal<T>` outputs with their element types (`docs/slice.md`
+/// section 15.9).
+type Properties = Vec<(String, PropertySource)>;
+type Outputs = Vec<(String, Ty)>;
+
+/// The compiler-known properties of a `TcpListener` resource
+/// (`docs/slice.md` section 14.4) in field order, with whether each has a
+/// default.
+const TCP_LISTENER_FIELDS: [(&str, bool); 4] = [
+    ("address", false),
+    ("port", false),
+    ("exposure", true),
+    ("backlog", true),
+];
 
 /// What a list of `field = value` entries builds, for the diagnostics of
 /// [`Typer::fields_literal`].
@@ -1009,12 +1030,92 @@ impl Typer<'_> {
             .insert(system.name.name.clone(), members);
     }
 
+    /// Where each property of a declaration of the record kind `ty` with
+    /// the properties `given` takes its value, and the `Signal<T>` outputs
+    /// it leaves unset (`docs/slice.md` section 15.9), in the kind's field
+    /// order. A required field that is missing (E104) appears in neither.
+    fn property_sources(&self, ty: &Ty, given: &[FieldInit]) -> (Properties, Outputs) {
+        let (q, args) = match ty {
+            Ty::Record(q) => (q, Vec::new()),
+            Ty::GenericRecord(q, args) => (q, args.clone()),
+            _ => return (Vec::new(), Vec::new()),
+        };
+        let params = self.generics_of(q);
+        let defaults = self
+            .module_types(&q.module)
+            .and_then(|m| m.defaults.get(&q.name).cloned())
+            .unwrap_or_default();
+        let mut properties = Vec::new();
+        let mut outputs = Vec::new();
+        for (field, field_ty) in self.record_fields(q).unwrap_or_default() {
+            let field_ty = field_ty.substitute(&params, &args);
+            if let Some(i) = given.iter().position(|p| p.name.name == field) {
+                properties.push((field, PropertySource::Set(i)));
+            } else if let Ty::Signal(element) = &field_ty {
+                outputs.push((field, (**element).clone()));
+            } else if defaults.contains(&field) {
+                let default = QualName::new(q.module.clone(), format!("{}.{field}", q.name));
+                properties.push((field, PropertySource::Default(default)));
+            } else if field == "executable" && field_ty == Ty::Text {
+                properties.push((field, PropertySource::ComponentName));
+            }
+        }
+        (properties, outputs)
+    }
+
+    /// The [`MemberInfo`] of member `index` of `kind` in `system`, whose
+    /// typed kind is `ty`; `None` for a kind that did not type (E020).
+    #[allow(clippy::too_many_arguments)]
+    fn member_info(
+        &self,
+        system: &str,
+        name: &str,
+        kind: MemberKind,
+        index: usize,
+        ty: Option<Ty>,
+        properties: &[FieldInit],
+        offset: usize,
+    ) -> Option<MemberInfo> {
+        let ty = ty?;
+        let (properties, outputs) = match &ty {
+            Ty::TcpListener => {
+                let sources = TCP_LISTENER_FIELDS
+                    .iter()
+                    .filter_map(|(field, defaulted)| {
+                        let source = match properties.iter().position(|p| p.name.name == *field) {
+                            Some(i) => PropertySource::Set(i),
+                            None if *defaulted => PropertySource::Default(QualName::builtin(
+                                format!("TcpListener.{field}"),
+                            )),
+                            None => return None,
+                        };
+                        Some((field.to_string(), source))
+                    })
+                    .collect();
+                (sources, Vec::new())
+            }
+            Ty::Store(_) => (Vec::new(), Vec::new()),
+            other => self.property_sources(other, properties),
+        };
+        Some(MemberInfo {
+            id: format!("{system}.{name}"),
+            name: name.to_string(),
+            declaration: kind.declaration(),
+            index,
+            kind: ty,
+            properties,
+            outputs,
+            offset,
+        })
+    }
+
     /// A `system` declaration (`docs/slice.md` sections 14.4, 14.5 and
     /// 14.7): its resources, then its components, contracts and policies
     /// as declarations of their kinds; the components whose kinds have a
     /// `main` become executables; a cycle of bare-name uses among
-    /// components is E105.
-    pub(super) fn system(&mut self, system: &SystemDecl) {
+    /// components is E105. `decl` is the declaration's index in the
+    /// module, for [`SystemInfo`].
+    pub(super) fn system(&mut self, decl: usize, system: &SystemDecl) {
         let name = system.name.name.clone();
         if self.module == "std" || self.module.starts_with("std.") {
             self.error(
@@ -1102,6 +1203,45 @@ impl Typer<'_> {
                 executables.push((executable, decl.name.span));
             }
         }
+        let mut infos = Vec::new();
+        for (index, resource) in system.resources.iter().enumerate() {
+            let ty = members
+                .iter()
+                .find(|m| m.name == resource.name.name)
+                .and_then(|m| m.ty.clone());
+            infos.extend(self.member_info(
+                &name,
+                &resource.name.name,
+                MemberKind::Resource,
+                index,
+                ty,
+                &resource.properties,
+                resource.span.start,
+            ));
+        }
+        for (list, kind) in lists {
+            for (index, decl) in list.iter().enumerate() {
+                let ty = members
+                    .iter()
+                    .find(|m| m.name == decl.name.name)
+                    .and_then(|m| m.ty.clone());
+                infos.extend(self.member_info(
+                    &name,
+                    &decl.name.name,
+                    kind,
+                    index,
+                    ty,
+                    &decl.properties,
+                    decl.span.start,
+                ));
+            }
+        }
+        self.system.systems.push(SystemInfo {
+            name,
+            decl,
+            members: infos,
+            offset: system.span.start,
+        });
         self.current_system = None;
         self.scopes.clear();
     }
@@ -1137,6 +1277,11 @@ impl Typer<'_> {
                     match known.iter().find(|(n, _)| *n == name) {
                         Some((_, ty)) => {
                             self.check(&property.value, ty);
+                            self.property_effects(
+                                &property.value,
+                                name,
+                                &format!("resource `{}`", resource.name.name),
+                            );
                             if name == "address" {
                                 address = Some(&property.value);
                             }
@@ -1252,6 +1397,10 @@ impl Typer<'_> {
             Literal::Declaration,
         );
         let uses = self.member_uses.take().unwrap_or_default();
+        let owner = format!("{} `{}`", kind.word(), decl.name.name);
+        for property in &decl.properties {
+            self.property_effects(&property.value, &property.name.name, &owner);
+        }
         if let Some(ty) = &ty {
             if let Some(member) = self
                 .system_members
@@ -1263,6 +1412,61 @@ impl Typer<'_> {
             self.bind(&decl.name, Some(ty.clone()));
         }
         (ty, uses)
+    }
+
+    /// E109 at a `fn K.machine` or `fn K.validate` declaration whose
+    /// signature is not the hook's (`docs/slice.md` 16.6, 16.17): `fn
+    /// K.machine(self: K, id: Text) -> std.control.Machine` and `fn
+    /// K.validate(self: K) -> List<Text>`, both pure, like `K.main` (14.5).
+    /// The driver finds both by name on every record, the kinds of
+    /// members and of their property values alike, so the shape is checked
+    /// where the fn is declared, on records and enums of this module. A
+    /// kind without a hook passes here; whether its host needs one is
+    /// E129, decided per assembly.
+    pub(super) fn hook_signature(&mut self, f: &FnDecl) {
+        let Some(owner) = &f.owner else {
+            return;
+        };
+        let (extra, arity, ret) = match f.name.name.as_str() {
+            "machine" => (
+                "id: Text",
+                2,
+                Ty::Enum(QualName::new("std.control", "Machine")),
+            ),
+            "validate" => ("", 1, Ty::List(Box::new(Ty::Text))),
+            _ => return,
+        };
+        let hook_name = f.qualified_name();
+        let Some(sig) = self.own.fns.get(&hook_name).cloned() else {
+            return;
+        };
+        let self_ok = matches!(
+            sig.params.first(),
+            Some(Ty::Record(q) | Ty::GenericRecord(q, _) | Ty::Enum(q) | Ty::GenericEnum(q, _))
+                if q.module == self.module && q.name == owner.name
+        );
+        let shape_ok = self_ok
+            && sig.params.len() == arity
+            && (arity == 1 || sig.params[1] == Ty::Text)
+            && sig.ret == ret;
+        if shape_ok && !sig.effectful {
+            return;
+        }
+        let found = fn_ty(sig.params.clone(), sig.ret.clone());
+        let comma = if extra.is_empty() { "" } else { ", " };
+        let purity = if sig.effectful {
+            " and it must be pure"
+        } else {
+            ""
+        };
+        self.error(
+            "E109",
+            f.name.span,
+            format!(
+                "`{hook_name}` is a hook of `ignite run` and must have the signature `fn {hook_name}(self: {}{comma}{extra}) -> {ret}`, found `{found}`{purity}",
+                owner.name
+            ),
+        );
     }
 
     /// The [`ExecutableInfo`] of a component whose kind has `K.main`
@@ -1364,8 +1568,9 @@ impl Typer<'_> {
 
     /// An `assembly` declaration (`docs/slice.md` section 14.7): a
     /// declaration literal of its kind; the system its `system` property
-    /// names is the one every `bindings` key must belong to (E108).
-    pub(super) fn assembly(&mut self, assembly: &AssemblyDecl) {
+    /// names is the one every `bindings` key must belong to (E108). `decl`
+    /// is the declaration's index in the module, for [`AssemblyInfo`].
+    pub(super) fn assembly(&mut self, decl: usize, assembly: &AssemblyDecl) {
         self.scopes = vec![BTreeMap::new()];
         self.ret = None;
         let system = assembly
@@ -1378,7 +1583,7 @@ impl Typer<'_> {
                 }
                 _ => None,
             });
-        self.assembly_system = Some(system.unwrap_or_default());
+        self.assembly_system = Some(system.clone().unwrap_or_default());
         let kind_name = assembly.kind.name.as_str();
         match self.records.get(kind_name).cloned() {
             Some(q) => {
@@ -1387,7 +1592,7 @@ impl Typer<'_> {
                     .iter()
                     .map(|p| (&p.name, &p.value))
                     .collect();
-                self.fields_literal(
+                let ty = self.fields_literal(
                     assembly.span,
                     None,
                     &q,
@@ -1396,6 +1601,21 @@ impl Typer<'_> {
                     None,
                     Literal::Declaration,
                 );
+                let owner = format!("assembly `{}`", assembly.name.name);
+                for property in &assembly.properties {
+                    self.property_effects(&property.value, &property.name.name, &owner);
+                }
+                if let Some(ty) = ty {
+                    let (properties, _) = self.property_sources(&ty, &assembly.properties);
+                    self.system.assemblies.push(AssemblyInfo {
+                        name: assembly.name.name.clone(),
+                        decl,
+                        kind: ty,
+                        system,
+                        properties,
+                        offset: assembly.span.start,
+                    });
+                }
             }
             None => {
                 for property in &assembly.properties {

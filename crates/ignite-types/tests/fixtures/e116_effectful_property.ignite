@@ -1,0 +1,39 @@
+package fixtures.effectful_property
+
+type Probe {
+  attempts: Signal<Int>
+  input: Result<Input, IoError>
+  accepted: Result<TcpStream, IoError>
+  stored: Int
+  count: Int
+  started: Unit
+  listener: TcpListener
+}
+
+fn noisy() -> Result<Input, IoError> requires [stdin.read] = Stdin.read(1)
+
+fn inferred() -> Result<Input, IoError> = noisy()
+
+fn quiet() -> Int requires [] = 1
+
+fn next(n: Int) -> Int = n + 1
+
+fn tick() -> Result<Unit, IoError> requires [stdout.write] = Stdout.write_all("tick".to_bytes())
+
+system S {
+  resource ingress: TcpListener {
+    address = "127.0.0.1"
+    port = 0
+  }
+
+  resource todos: Store<Int>
+
+  component probe: Probe {
+    input = inferred()
+    accepted = ingress.accept()
+    stored = todos.values().len()
+    count = quiet() + next(1)
+    started = spawn tick()
+    listener = ingress
+  }
+}

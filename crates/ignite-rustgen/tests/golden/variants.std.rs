@@ -3,11 +3,6 @@
 pub mod apply {
     use crate::modes::{level, pick};
 
-    pub fn louder(n: &i64) -> i64 {
-        let mut n = n.clone();
-        ignite_io::checked::add(level(&crate::modes::Mode::Loud), level(&crate::modes::Mode::Quiet(n.clone())), "crates/ignite-rustgen/tests/golden/variants/std/apply.ignite", 5, 28)
-    }
-
     pub fn describe(loud: &bool) -> String {
         let mut loud = loud.clone();
         match pick(&loud) {

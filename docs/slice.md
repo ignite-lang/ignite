@@ -1,4 +1,4 @@
-# Ignite slices 1 to 10: language subset, standard library, substrate and lowering
+# Ignite slices 1 to 12: language subset, standard library, substrate and lowering
 
 Status: implementation contract for the compiler slice, 2026-11-01. It narrows
 `design.md` to what `examples/terminal/terminal.ignite` and `std/` need. Where the two
@@ -868,10 +868,32 @@ Codes of slice 10 (section 14.11), all from the type checker: E100 brace literal
 expected type, E101 quantity operands that do not fit an operator, E102 `module("p")` not
 found or a field it cannot fill, E103 named argument misuse, E104 declaration property
 (three texts, section 14.11), E105 component cycle, E106 `Map` key type, E107 quantity
-literal out of range, E108 assembly binding key, E109 `K.main` signature. Inside a `system`
+literal out of range, E108 assembly binding key, E109 `K.main` signature (since slice 12
+also the `K.machine` and `K.validate` hook signatures, fixture `e109_hook_signature` under
+`crates/ignite-types/tests/fixtures`). Inside a `system`
 or `assembly` the type checker also reports E003 for an unknown name, E041 for `System.x`
 when `S` has no member `x`, E047 for a repeated map key or a `TcpListener` property it does
 not know, and E045 for `%` on a quantity.
+
+Codes of slice 11 (section 15.10): E116 effectful property expression, from the type
+checker; from `ignite-eval`, through `ignite check`, `ignite plan` and `ignite explain`:
+E110 member neither bound nor included by the assembly, E111 member bound twice, E112
+binding not admitted (the reason `admits` returns), E113 `includes` differs from the
+embedded components, E114 no assembly or system selectable, E115 evaluation limit (fuel or
+value size), E117 failure during evaluation (14.8 report text), E118 value the model cannot
+encode, E119 `ignite explain` path that names nothing. Fixtures: E116 under
+`crates/ignite-types/tests/fixtures`, E110 to E115 and E117 to E119 under
+`crates/ignite/tests/fixtures`, named as in section 15.10.
+
+Codes of slice 12 (section 16.17): from `ignite-eval`, through `ignite check`, `ignite plan`
+and `ignite run`: E120 declaration its kind's `validate` refuses (the reason `validate`
+returns), E121 contract signal without a producer the assembly runs, E122 run-time `Ref`
+that resolves to no running member or endpoint, E123 probe timing (`timeout >= interval`
+or not positive), E124 contract window shorter than its signal's interval, E129 hosted
+member whose kind lacks the entry its host needs; from `ignite run` and `ignite replay`:
+E125 nothing to run, E126 journal of another model or format, or a held lock, E127 journal
+that does not replay (first diverging `seq`), E128 reducer failure at run time (14.8 report
+text). Fixtures: all under `crates/ignite/tests/fixtures`, named as in section 16.17.
 
 Fixtures: E001 (including a keyword as a variable, fn and type name, beside
 `valid_keyword_fields`), E002, E053 and E054 under `crates/ignite-syntax/tests/fixtures`;
@@ -1747,7 +1769,7 @@ probes with the handle captured by a closure instead of passed as an argument.
 | a | `push`, `append` and `clear` (the builtins) need a receiver place rooted in a `var` or a parameter (a changed parameter is the callee's copy): through a `let`, a `for` element or a pattern binding it is E006, and so is a receiver `x.to_bytes()`, which shares `x`'s buffer on the LLVM target | `llvm/let_push`, `for_push`, `for_push2`, `match_push`, `match_push2`, `to_bytes_push` |
 | b | a parameter of a fn, a role, a fn type or a closure may not be named `stdin`, `stdout`, `process` or `net` (E056), so a `requires` head names a parameter only when the fn declares one of that name, and an ambient effect is never charged to an argument's roots | `effects/a01` to `a04`, `b08`, `c01` |
 | c | the roots of `l.map(f)` are the roots of `l` plus the roots of `f`; a closure's roots are those of its body (its captures), and a call of a local fn value `g(..)` has the roots of `g` plus its arguments' | `effects/a05`, `a06`, `b09`, `b11` |
-| d | `push` and `append` on a field, index or tuple-field receiver extend the roots of the receiver's place root (`h.items.push(s)` roots `h` in `s`) | `effects/a07`, `b10` |
+| d | `push` and `append` on a field, index or tuple-field receiver extend the roots of the receiver's place root (`h.items.push(s)` roots `h` in `s`), and the call changes that element in place on every target and in the evaluator: `lists[0].push(9)` on `var lists = [[1], [2]]` gives `[[1, 9], [2]]`, also through a field of an indexed element, a nested index and for `clear`, `put` and `remove` (slice 11b; the Rust target goes through `ignite_io::checked::at_mut`) | `effects/a07`, `b10`; `fixtures/tests/targets.ignite` row 32 |
 | e | a type parameter of a generic record, enum or alias that no field, payload or aliased type uses is E057 | `io/p2_unused` |
 
 Every other effects probe keeps the diagnostic `vision.md` section 10.2 names. `io/p1`
@@ -2025,7 +2047,7 @@ work.
 | E106 | `Map` key type not orderable |
 | E107 | quantity literal out of range, or more than 4 decimals |
 | E108 | assembly binding key not a member of the named system |
-| E109 | executable kind's `main` has the wrong signature |
+| E109 | executable kind's `main` has the wrong signature; since slice 12 also a `machine` or `validate` hook with the wrong signature or an effect (16.17) |
 
 E109 is the last code of this slice. Nothing from E110 on (T4).
 
@@ -2186,3 +2208,1633 @@ Placeholder arms the frontend skeleton added so that the workspace builds with
 That is 15 arms, 6 in `ignite-rustgen` and 9 in `ignite-llvm`. `Decl::Assembly(_) => {}` arms
 in `ignite-rustgen/src/lib.rs`, `ignite-rustgen/tests/units.rs` and `ignite-llvm/src/lib.rs` are
 final (O8), and `units.rs` sets the new `SystemDecl` fields to empty lists.
+
+## 15 Slice 11: plan and explain (F2)
+
+Contract reviewed and accepted by the steering session on 2026-11-02, with seven amendments
+(telos-steer, 01:58) applied. Sources: vision 4.1 row 11, invariant 9, T4, D5, D7, section 6
+(X2, X3), 10.2 (a21); design 3.1, 3.4, 3.5, 5, 6.1 to 6.3, 10.1, 11.3; `docs/slice.md` 14.4 to
+14.7 and 14.14; `examples/terminal/terminal.design.ignite`; `std/contract.ignite`,
+`std/policy.ignite`, `std/deploy.ignite`, `std/probe.ignite`. Decisions O13 to O26 (numbering
+continues slice 10's O1 to O12) are recorded in 15.12.
+
+### 15.0 Acceptance
+
+Carry-overs from slice 10 first. The measuring agent P0 measures and attributes them on the
+committed tree `60aef38`, in its own copy of that tree with its own target dir, before any
+slice 11 edit lands and in parallel with P1's skeleton; P0 fixes nothing. The coordinator
+assigns the fixes by P0's numbers when P2 and P3 are dispatched (15.1, 15.11). Each item ends
+in a fix or in a new baseline the steering session accepts in writing.
+
+1. Gate warm time: `task gate` after `touch crates/ignite-check/src/lib.rs`, re-measured at
+   load average under 5, attributed per test file of `crates/ignite/tests/`. Slice 10 recorded
+   45.5 s against 25.9 s after slice 9b (+76 %; 39.0 s of e2e test execution at load 21).
+2. Program build time: `todod` re-measured at load average under 5 on both targets, attributed
+   per compile step. Slice 10 recorded LLVM release 0.9 s to 1.2 s and Rust dev 3.0 s to 3.3 to
+   4.0 s.
+3. The flake `failover::a_failing_session_does_not_end_the_service` is reproduced and fixed, or
+   bounded: 0 failures in 30 runs alone and 30 runs beside a full `cargo test --workspace`.
+
+Slice 11 proper:
+
+4. `ignite plan examples/terminal/terminal.design.ignite` exits 0 and prints the system model
+   (15.5). Two runs in separate processes, started from two different working directories,
+   give byte-identical output, equal to the golden `crates/ignite/tests/golden/terminal.design.model.json`.
+5. Every property value in that model is evaluated: the golden contains no Ignite expression
+   text (none of `exponential(`, `rolling(`, `calendar_month(`, `event(`, `module(`,
+   `localSocket(`, `nativeProcess(`, `endpoint(`, and no quantity written with a unit), and a
+   test walks the JSON and checks every value against the encoding of 15.4.
+6. The assembly `local` is resolved: each of the five resources and components of `Terminal`
+   appears exactly once in `assembly.resolution` (15.6). `ignite check` on the design file
+   still exits 0, now with the evaluation and resolution rules of this slice applied.
+7. `ignite explain` on the design file prints the golden texts for `Terminal.reachable`,
+   `Terminal.server.recovery` and `local` (15.8).
+8. The evaluator agrees with both targets: every fn of the fixture
+   `crates/ignite/tests/fixtures/eval_equivalence.ignite` gives the same debug text in the
+   evaluator, in a Rust-target build and in an LLVM-target build (15.3).
+9. Builds are unchanged: every Rust golden and every LLVM golden is byte-identical, except
+   LLVM goldens changed by the reachable-only std emission if carry-over 2 adopts it; each
+   such golden is re-blessed with the diff explained in P3's report. The only behaviour change
+   of an existing program is E116 for effectful property expressions (O16).
+10. Invariant 9: `task gate` wall time (cold and warm), the `todod` build time on both targets,
+    and `ignite check` and `ignite plan` of the design file are measured before and after and
+    recorded in `AGENTS.md`. A rise of more than 10 % is a deviation and has to be explained.
+11. Every diagnostic E110 to E119 has a fixture.
+
+### 15.1 Carry-overs: how they are measured
+
+- Who and when: P0 measures on its own copy of commit `60aef38` (`git archive 60aef38 | tar
+  -x`), with its own target dir, while P1 builds the skeleton; it reports numbers and
+  attributions to the coordinator and changes no file of the repository. The fixes below are
+  candidates; the coordinator assigns them by P0's numbers: the LLVM reachable-only std
+  emission to P3 only if `clang` on `std.ll` is confirmed as the cause; the e2e shared-build
+  or parallel-test fix and the flake test rewrite to P3, the owner of `crates/ignite/tests/`.
+  P2 keeps the evaluator only.
+- Load: other sessions share the machine, so before and after are measured interleaved on
+  the same machine state. For each timed unit, one run on a `git archive 60aef38` copy, then
+  one run on the slice-11 tree, alternating, at least 3 pairs. The 1-minute load is recorded
+  per run; a pair whose two loads differ by more than 5 is discarded; the median of the pair
+  ratios is reported with the absolute times. P0 reports slice 10's carry-overs as shares (%
+  per test file, % per compile step) with load per run. P4 runs the interleaved pairs at the
+  close of the slice.
+- Item 1: each file of `crates/ignite/tests/` runs alone as `cargo test -p ignite --test main
+  <file>::` after the warm touch, timed; the sum is compared with the whole step. The fix
+  candidates are named in the order to try: one shared build of each example program per test
+  binary run instead of one per test, then parallel e2e tests where they now serialise on a
+  lock, then removal of a test that repeats another's coverage (named and agreed). If the warm
+  gate stays above 28.5 s (25.9 s + 10 %) after the fix, the measured number becomes the new
+  baseline only with the steering session's written yes.
+- Item 2: LLVM release split into emit, `clang -O2` of `std.ll`, `clang -O2` of `program.ll`
+  and link; Rust dev into the `ignite-std` crate and the program crate. If `clang` on `std.ll`
+  is the cause (inferred in slice 10: 18,120 lines, 0.84 s), the LLVM target emits only the std
+  fns reachable from the program's executables and tests (a call-graph walk over the typed
+  modules before emission; glue for types no reachable fn uses is dropped too). The Rust-target
+  part is measured and attributed; a fix there is a labelled later milestone unless the
+  low-load number is more than 10 % over 3.0 s.
+- Item 3: P0 runs the test 30 times alone and 30 times beside a full workspace test run.
+  Slice 10's failure lacked the third `task ended with error` line in a log read after `kill`.
+  The rewrite (P3, whether or not P0 reproduces the failure): the test waits for the line with
+  a deadline instead of reading the log once after `kill`.
+
+P0's result (2026-11-02): warm gate 25.98 s at load under 5, equal to slice 9b's 25.9 s, so no
+fix; `clang -O2 std.ll` is 70.5 % of the todod LLVM release build, so reachable-only std
+emission is assigned to P3; the flake did not reproduce in 30 + 30 runs, so the deadline
+rewrite is preventive.
+
+### 15.2 Property expressions are pure (E116)
+
+- A property expression is the right-hand side of a property in a `resource`, `component`,
+  `contract`, `policy` or `assembly` declaration, and the default expression of every kind
+  field a declaration leaves out.
+- Its effect set must be empty. A call of a fn with a non-empty `requires`, `spawn`, an
+  operation on a handle (`TcpListener`, `TcpStream`, `Store<T>`), or an ambient name (`stdin`,
+  `stdout`, `process`) inside it is E116, reported by the type checker at the expression.
+- A bare member name stays a value of its type (14.4), and a resource name stays legal: naming
+  a handle is not an operation on it.
+- Audit probe `docs/audit/2026-11-01/effects/a21_system_property_effect.ignite` changes from
+  "accepted" to E116; the audit README row and the `.expected` file change with it (O16).
+  Vision 10.2 names a21 a hole (property expressions not walked by the checker), and E116
+  closes it.
+- The generated `main` of 14.5 still evaluates property expressions at run time on both
+  targets; this slice does not fold them into the binaries (O19).
+
+### 15.3 The evaluator (D5)
+
+- New crate `crates/ignite-eval`: an interpreter over the typed program, used by `ignite
+  check`, `ignite plan` and `ignite explain`. Compile time only: no backend and no compiled
+  program depends on it. Both targets share it because neither links it.
+- It evaluates every property expression of every declaration of a program, with the fns,
+  constants and default field values it reaches in any module (program, siblings, std): `let`,
+  `var`, assignment, `if`, `match`, `while`, `loop`, `for`, `break`, `return`, closures applied
+  inside the evaluation, records, enums, tuples, lists, maps, quantities, text, string
+  interpolation, `debug()`, named arguments (in source order, 14.2), and every builtin whose
+  effect set is empty.
+- Semantics are those of the targets: T6 overflow, 14.8 failures, 14.3 map order, 14.1
+  quantity arithmetic and debug text, slice-9 structural `==`.
+- Fuel (O14): one unit per expression evaluated, per loop iteration and per call. The limit is
+  1,000,000 units per property expression, and `--fuel N` on `check`, `plan` and `explain`
+  changes it. A value larger than 1,000,000 nodes (list items, map entries, record fields,
+  counted recursively) also stops the evaluation. Either is E115 at the property expression,
+  naming the limit and the fn that was running.
+- A failure during evaluation (`assert`, overflow, index, `match`, `?` on `Err`, `slice`) is
+  E117 at the property expression, with the 14.8 report text as its detail:
+  `E117 evaluating Terminal.server.sessions: + failed at <file>:<line>:<column>: <detail>`.
+- A result that the model cannot encode is E118 (15.4): a closure value, a fn value that is not
+  a named top-level fn, a handle produced by anything other than a member name.
+- Equivalence (acceptance 8): the fixture holds at least 40 pure fns, at least one per builtin
+  family (Int, Byte, Text, List, Map, Option, Result, quantities, records, enums, closures,
+  interpolation, `debug`). The test evaluates each with `ignite-eval` and runs one compiled
+  program per target that prints `debug(f())` for each; the three texts must be equal.
+- Pure `test` blocks at `ignite check` and constant folding in the backends are not in this
+  slice (labelled later milestone, D5 option A's remaining parts).
+
+### 15.4 Value encoding in the model
+
+Every value is a JSON value; where JSON alone is ambiguous it is an object tagged by `"type"`.
+
+| Ignite value | JSON |
+|---|---|
+| `Unit` | `null` |
+| `Bool` | `true`, `false` |
+| `Int` | a JSON integer, the exact i64 (O17) |
+| `Byte` | `{"type": "Byte", "value": 7}` |
+| `Text` | a JSON string |
+| `List<T>` | an array, in list order |
+| tuple | `{"items": [...], "type": "Tuple"}` |
+| record | `{"fields": {...}, "type": "<qualified type name>"}`, every field present |
+| enum variant | `{"type": "<qualified enum name>", "variant": "<name>"}`, plus `"fields": [...]` when it has a payload; `Option` and `Result` are enums named `Option` and `Result` |
+| `Map<K, V>` | `{"entries": [[k, v], ...], "type": "Map"}`, in the map's key order (14.3) |
+| `Duration` | `{"ns": 100000000, "type": "Duration"}` |
+| `ByteSize` | `{"bytes": 16384, "type": "ByteSize"}` |
+| `Ratio` | `{"ppm": 999000, "type": "Ratio"}` |
+| `Ref<K>`, `Ref` | `{"ref": "Terminal.server", "type": "Ref"}` |
+| `Signal<T>` | `{"ref": "Terminal.promptProbe.attempts", "type": "Signal"}` |
+| `SystemRef` | `{"ref": "Terminal", "type": "SystemRef"}` |
+| `Protocol` | `{"ref": "std.protocol.telnet.Telnet", "type": "Protocol"}` |
+| `module("p")` record (14.4) | `{"fns": {"respond": "examples.terminal.commands.respond"}, "module": "examples.terminal.commands", "type": "Module"}` |
+| named top-level fn | `{"fn": "std.text.trim", "type": "Fn"}` |
+| a member name used as a value (`listener = ingress`, `application = console`) | `{"ref": "Terminal.ingress", "type": "Ref"}`, plus a `uses` edge (15.5); the embedded value is the member's own entry |
+| a `TcpListener` name where `Endpoint` is expected (14.14 item 5) | the evaluated `std.net.Endpoint` record |
+
+Qualified names are `module.Name` as the typer prints them; builtin types use their bare name.
+
+### 15.5 The system model (D7)
+
+`ignite plan` prints one JSON document, the system model of one system and at most one
+assembly. Canonical form, so that equal inputs give equal bytes:
+
+- UTF-8, object keys in byte order at every level, two-space indentation, one key or array item
+  per line, `[]` and `{}` for empty containers, `\n` line ends and a final newline.
+- Strings escape only `"`, `\` and control characters (`\n`, `\t`, `\r`, `\b`, `\f`, others as
+  `\u00XX`); other characters are written as UTF-8.
+- Arrays of members, edges and resolution entries are sorted by `id` (or by `from`, `kind`,
+  `to`); declaration order in the source does not show (O15).
+- Paths are relative: a program file and its siblings relative to the program file's
+  directory, std files as `std/<path>`. No absolute path, timestamp, host name or compiler
+  version appears (design 6.3).
+
+Top-level keys. Where design 6.2's envelope has a key, the model keeps its name; `assembly` and
+`edges` are additions (O13):
+
+| key | content |
+|---|---|
+| `assembly` | the selected assembly (15.6), or `null` when the program declares none; design 6.2's `bindings` is `assembly.resolution` |
+| `components` | every `component` of the system |
+| `contracts` | every `contract` |
+| `edges` | `{"from", "kind", "to"}`: `uses` (a bare member name in a property), `references` (a `Ref` value), `observes` (a `Signal` value), `hosts` (from the resolution) |
+| `formatVersion` | `"ignite-model/0.1"`; a change that removes or reinterprets a key bumps it, an added key does not |
+| `policies` | every `policy` |
+| `resources` | every `resource` |
+| `sourceMap` | object from every member id and property path (`Terminal.server.recovery`) to `file:line:column` of its declaration or expression; a defaulted property maps to the default's position in the kind's module. Slice 13's plan diff compares the model without `sourceMap`; a reformat of the source changes only that key |
+| `systemId` | the system's name |
+
+Each member entry:
+
+| key | content |
+|---|---|
+| `declaration` | `"resource"`, `"component"`, `"contract"` or `"policy"` |
+| `defaults` | names of the properties that took the kind's default, sorted |
+| `executable` | the executable name when the kind has `K.main` (14.5), else `null` |
+| `id` | `<System>.<name>`, the stable logical identity (design 3.4) |
+| `kind` | qualified name of the kind |
+| `outputs` | object from each `Signal<T>` field the declaration does not set to its element type's name |
+| `properties` | object from every other field of the kind to its evaluated value (15.4), set or defaulted |
+
+Excerpt for `Terminal.promptProbe` (the emitted form puts every key on its own line):
+
+```json
+{
+  "declaration": "component", "defaults": [], "executable": null,
+  "id": "Terminal.promptProbe", "kind": "std.probe.TelnetPrompt",
+  "outputs": {"attempts": "std.probe.ProbeAttempt"},
+  "properties": {
+    "close_after_probe": true,
+    "expected_prompt": "terminal> ",
+    "interval": {"ns": 10000000000, "type": "Duration"},
+    "target": {"ref": "Terminal.server", "type": "Ref"},
+    "timeout": {"ns": 2000000000, "type": "Duration"}
+  }
+}
+```
+
+The design 6.2 envelope's `machines`, `observations`, `artifacts`, `stateSchema` and
+`admissionChecks` are not emitted; slices 12 and 13 add them as new keys under the same
+`formatVersion` rule. P4 adds a note to design 6.2 (15.11) saying:
+
+- the executable specification is the system model of `docs/slice.md` §15 (D7's rename, X3);
+- its `bindings` is the model's `assembly.resolution`;
+- `machines`, `observations`, `artifacts`, `stateSchema` and `admissionChecks` arrive in slices
+  12 and 13;
+- until wave H the public schema is the 15.4 table plus the golden
+  `crates/ignite/tests/golden/terminal.design.model.json`; there is no JSON Schema file in this
+  slice.
+
+### 15.6 Assembly resolution
+
+- `ignite plan` selects one assembly: the one named by `--assembly NAME`, else the only one in
+  the program. Several assemblies and no `--assembly`, or a name that is not an assembly, is
+  E114. Without assemblies, the model's system is the program's only `system`; several systems
+  and no assembly is E114 as well.
+- An assembly kind is resolvable when it has a field `bindings: Map<Ref, B>` and `B`'s module
+  declares `fn admits(binding: B, member: std.deploy.Member) -> Option<Text>` and `fn
+  includes(binding: B) -> List<Ref>` (O18). The compiler knows these two fn names and the
+  record `std.deploy.Member`, not the variants of `std.deploy.Binding`. An assembly of another
+  kind is evaluated and emitted with `"resolution": null`.
+- `std/deploy.ignite` gains `type Member { declaration: Text, kind: Text, executable: Bool,
+  outputs: List<Text> }` and `admits`: `LocalSocket` admits a `TcpListener` resource;
+  `NativeProcess` a component that is executable; `WorkstationExecutable` any component;
+  `ScheduledProbeHost` a component with at least one output. Each refusal returns the reason
+  text that E112 prints. Inline tests cover each variant.
+- Rules, checked by `ignite check` for every assembly and by `ignite plan` for the selected
+  one, after evaluation:
+
+| rule | diagnostic |
+|---|---|
+| every resource and component of the system is a `bindings` key or in exactly one binding's `includes` | E110 when neither |
+| no member is both a key and included, or included by two bindings | E111 |
+| `admits(binding, member)` returns `Some(reason)` for a key | E112 with that reason |
+| a binding's `includes` equals the components its member embeds (`ExecutableInfo.embedded`, 14.14 item 12) | E113, naming the missing or extra member |
+| contracts and policies are never keys | E112 (`admits` is not consulted) |
+
+- `assembly.resolution` lists one entry per resource and component, sorted by member id:
+  `{"binding": <value>, "member": "Terminal.console", "via": "Terminal.server"}`, where `via`
+  is the key whose binding hosts the member (the member itself when it is a key).
+- The assembly entry otherwise follows the member form: `id` (the assembly's name), `kind`,
+  `properties` (evaluated, so `system` and `bindings` appear as values), `defaults`.
+- `ignite build` still ignores assemblies (O8 stays); slice 12's `ignite run` reads the
+  resolution.
+
+### 15.7 `ignite plan`
+
+```text
+ignite plan <file.ignite> [--assembly NAME] [--out FILE] [--fuel N] [--std PATH]
+```
+
+- Prints the model on stdout, or writes it to `FILE` (overwriting it).
+- Exit statuses as `ignite check`: 0 model written, 1 diagnostics, 2 invalid arguments, 3 a
+  file could not be read or written.
+- Nothing is planned against a live system in this slice: no admission, no diff, no effects
+  (slice 13).
+
+### 15.8 `ignite explain`
+
+```text
+ignite explain <file.ignite> <path> [--assembly NAME] [--fuel N] [--std PATH]
+```
+
+- `path` is a system (`Terminal`), a member (`Terminal.reachable`), a property path
+  (`Terminal.server.recovery`, `Terminal.server.sessions.idle_timeout`) or an assembly
+  (`local`). A path that names none of these is E119.
+- Output on stdout, plain text, deterministic like the model:
+  - line 1: `<path>: <declaration> <kind> (<file:line:column>)`;
+  - then one line per property in the kind's field order: `  <name> = <value>`, with
+    ` (default)` after a defaulted one. Values print as slice-9 debug text with quantities in
+    their literal form (14.1); `Ref`, `Signal`, `SystemRef` and `Protocol` print their name
+    unquoted;
+  - then the member's edges, one per line (`uses Terminal.ingress`, `observed by
+    Terminal.reachable`), and its resolution line when an assembly is selected;
+  - a contract ends with `standing: not evaluated before slice 12`.
+- Exit statuses as `ignite plan`.
+
+Golden for `Terminal.reachable`:
+
+```text
+Terminal.reachable: contract std.contract.Availability (terminal.design.ignite:81:3)
+  signal = Terminal.promptProbe.attempts
+  good = "prompt_received_before_timeout"
+  target = 99.9%
+  window = Rolling(30 days)
+  missing_data = "insufficient_evidence"
+observes Terminal.promptProbe.attempts
+standing: not evaluated before slice 12
+```
+
+Golden for `local`:
+
+```text
+local: assembly std.deploy.Deployment of Terminal (terminal.design.ignite:108:1)
+  Terminal.client = WorkstationExecutable
+  Terminal.console via Terminal.server = NativeProcess([Terminal.console])
+  Terminal.ingress = LocalSocket
+  Terminal.promptProbe = ScheduledProbeHost
+  Terminal.server = NativeProcess([Terminal.console]), executable terminald
+```
+
+### 15.9 Typed API (add-only)
+
+As landed by P1's skeleton on 2026-11-02; what differs from the reviewed draft is in 15.14.
+
+- `TypedProgram::systems() -> &[SystemInfo]`: per system `SystemInfo { name, decl, members,
+  offset }` (`decl` is the index of the `Decl::System` in `Program::decls`), each member a
+  `MemberInfo { id, name, declaration: MemberDeclaration, index, kind: Ty, properties:
+  Vec<(field, PropertySource)>, outputs: Vec<(field, Ty)>, offset }`. `properties` is in the
+  kind's field order and holds every field that is not an unset `Signal<T>` output;
+  `outputs` the unset `Signal<T>` fields with their element type. `PropertySource::Set(i)`
+  is the index into the declaration's `properties` (`MemberInfo::property(&SystemDecl,
+  field)` gives the expression); `Default(QualName)` names the default's constant
+  (`<Record>.<field>`, slice 9 item 6; `ignite_types::field_default(&Program, record, field)`
+  finds its expression; the builtin `TcpListener`'s two defaults are `TcpListener.exposure`
+  and `TcpListener.backlog` in the builtin module `""`, values
+  `TCP_LISTENER_DEFAULT_EXPOSURE` and `TCP_LISTENER_DEFAULT_BACKLOG`); `ComponentName` is
+  an `executable` field left out, whose value is the component's name (14.5).
+- `TypedProgram::assemblies() -> &[AssemblyInfo]`: `AssemblyInfo { name, decl, kind: Ty,
+  system: Option<String>, properties, offset }`; `AssemblyInfo::property(&Program, field)`
+  gives a property expression.
+- `TypedProgram::effects(expr) -> Option<&EffectSet>`: the effect set of a property
+  expression of a resource, component, contract, policy or assembly, of a constant's value,
+  of a field default, and of every sub-expression of those (closure bodies excluded);
+  `None` inside fn, role and test bodies, whose effects `ignite-check` accounts to the fn.
+  `EffectSet::entries()` are sorted `requires` entries: `r.op` on a member `r` the
+  expression names (`ingress.accept`), an ambient effect (`stdin.read`), a callee's
+  requirement as written when the argument for its parameter names no member, the bare
+  operation (`accept`) on a handle that is neither, and `spawn`. Used by E116 and asserted
+  empty by the evaluator.
+- `TypedModules` stays the exports map every crate uses. The evaluator's view of every
+  module (path, `SourceFile`, AST, `TypedProgram`) is `ignite_eval::Module<'p>`, collected in
+  `ignite_eval::Modules<'p>`; the driver builds it from the standard library, the siblings
+  and the program, as it builds `ignite_llvm::ModuleInput`.
+- `ignite-eval`: `Evaluator::new(&Modules, Fuel)`, `Evaluator::evaluate(&mut self,
+  &TypedProgram, &Expr) -> Result<Value, EvalError>` with `EvalError::{Limit { limit, running
+  }, Failed { report }, Unencodable { what }}` for E115, E117 and E118; `Fuel { units, nodes
+  }`, both 1,000,000 by default, `Fuel::with_units(n)` for `--fuel`; `Value` (15.4);
+  `model(&mut Evaluator, &TypedProgram, assembly: Option<&str>) -> Result<Model,
+  Vec<Diagnostic>>`; `Model::to_json() -> String`; `resolve(&mut Evaluator, &TypedProgram,
+  &SystemInfo, &AssemblyInfo, bindings: &Value) -> Result<Vec<ResolutionEntry>,
+  Vec<Diagnostic>>`; `explain(&Model, path) -> Result<String, Diagnostic>`.
+- `ignite` library: `PlanOptions { assembly, fuel, std }`, `plan(file, &PlanOptions) ->
+  Result<String, Error>` and `explain(file, path, &PlanOptions) -> Result<String, Error>`;
+  `--out FILE` is written by `main.rs`.
+
+### 15.10 Diagnostics E110 to E119
+
+| code | rule | fixture |
+|---|---|---|
+| E110 | a resource or component the assembly neither binds nor includes | `e110_unbound_member` |
+| E111 | a member bound twice: key and included, or included by two bindings | `e111_bound_twice` |
+| E112 | binding not admitted for the member (reason from `admits`), or a contract or policy as a key | `e112_binding_not_admitted` |
+| E113 | a binding's `includes` differs from the components its member embeds | `e113_includes_mismatch` |
+| E114 | no assembly or system selectable: several and no `--assembly`, or an unknown name | `e114_assembly_selection` |
+| E115 | evaluation limit exceeded: fuel or value size | `e115_fuel_exhausted` |
+| E116 | effectful property expression | `e116_effectful_property` |
+| E117 | failure during evaluation, with the 14.8 report text | `e117_evaluation_failed` |
+| E118 | value the model cannot encode | `e118_unencodable_value` |
+| E119 | `ignite explain` path names no system, member, property or assembly | `e119_unknown_path` |
+
+Fixtures live in `crates/ignite-types/tests/fixtures/` (E116) and
+`crates/ignite/tests/fixtures/` (the rest, run through `ignite check`, `plan` or `explain`).
+E119 is the last code of this slice; nothing from E120 on (T4).
+
+### 15.11 Work split
+
+| agent | owns |
+|---|---|
+| P0 measuring | its own copy of commit `60aef38` and its own target dir; measures and attributes 15.0 items 1 to 3 per 15.1 and reports the numbers to the coordinator; edits no file of the repository and fixes nothing |
+| P1 frontend | `ignite-syntax`, `ignite-check`, `ignite-types`: 15.2 (E116), 15.9 typed API, the `crates/ignite-eval` skeleton with its placeholders and the `plan` and `explain` subcommand stubs; `docs/slice.md` for the whole slice |
+| P2 evaluator | `crates/ignite-eval` `eval.rs` and `value.rs`: 15.3, E115, E117, E118, the equivalence fixture and test (acceptance 8); nothing else |
+| P3 model, resolution, CLI, tests | `crates/ignite-eval` `model.rs`, `resolve.rs`, `explain.rs`; `crates/ignite` `plan`, `explain` and their CLI; `crates/ignite/tests/`, including `main.rs` and `common/mod.rs`; 15.4 to 15.8, E110 to E114, E119; goldens for the design file; the carry-over fixes the coordinator assigns by P0's numbers (15.1), including the flake rewrite |
+| P4 std, examples, acceptance | `std/deploy.ignite` `Member`, `admits` and `includes` with inline tests (15.6, first, so that P3 can resolve); model goldens for `examples/terminal/terminal.ignite` and `examples/todo/todo.ignite`; the design 6.2 note of 15.5 and a 10.1 note on `plan` and `explain`; audit README row a21; 15.0 items 4 to 11 verified with commands; `AGENTS.md` layout row for `ignite-eval` and the slice-11 gate-time row; `docs/friction.md`. P4 does not edit `docs/vision.md` |
+
+- Order: P0 and P1 in parallel; then P2, P3 and P4 (P4 starting with `std/deploy.ignite`);
+  P4's acceptance last.
+- Shared files: `crates/ignite/tests/main.rs` and `tests/common/mod.rs` are P3's. P2's
+  equivalence test gets its `mod` line by message to P3, as in slice 10.
+
+### 15.12 Decisions taken in the review
+
+| # | decision |
+|---|---|
+| O13 | Design 6.2 key names are kept where they exist (`formatVersion` with the value `"ignite-model/0.1"`, `systemId`, `resources`, `components`, `contracts`, `policies`, `sourceMap`); `assembly` and `edges` are additions; additive keys keep the version (steering amendment 3) |
+| O14 | Fuel: 1,000,000 units per property expression (expression, iteration, call), value size 1,000,000 nodes; `--fuel` overrides |
+| O15 | Member arrays sorted by id, not in declaration order, so that reordering declarations changes nothing (slice 13's plan diff) |
+| O16 | Property expressions must be pure (E116); audit probe a21 flips from accepted to E116 |
+| O17 | `Int` is a JSON integer even beyond 2^53; consumers parse it as i64. No string fallback |
+| O18 | Resolution is defined by `admits` and `includes` in the binding type's module, not by compiler-known variants of `std.deploy.Binding` (invariant 6: domain nouns are library symbols) |
+| O19 | Builds do not use the evaluator: constants and property values stay run-time code; goldens unchanged |
+| O20 | `ignite check` evaluates every property expression and resolves every assembly, so E110 to E118 appear at check time |
+| O21 | Paths in the model and in `explain` are relative to the program file's directory; std files are `std/<path>` |
+| O22 | No source hashes and no compiler version in the model, so the golden changes only when the model does; provenance beyond `sourceMap` waits for packages (wave H) |
+| O23 | `ScheduledProbeHost` admits a component with at least one `Signal` output; `WorkstationExecutable` any component (`Application` has no `main`, O9) |
+| O24 | Explain prints properties in the kind's field order; the model uses byte order |
+| O25 | Edge kinds are the syntactic `uses`, `references`, `observes`, `hosts`; design 3.4's provisioning, readiness and recovery classes are slice 12's |
+| O26 | Carry-over fixes that leave a number more than 10 % over its baseline need the steering session's written yes before the baseline moves |
+
+### 15.13 Placeholder arms
+
+P1's skeleton adds `crates/ignite-eval` and the `plan` and `explain` subcommands so that the
+workspace builds with `--all-targets`. Each placeholder is `unimplemented!("slice 11: …")`,
+replaced by its owner:
+
+| owner | file | fn | covers |
+|---|---|---|---|
+| P2 | `ignite-eval/src/eval.rs` | `Evaluator::evaluate` | 15.3 |
+| P2 | `ignite-eval/src/value.rs` | `Value::debug_text` | equivalence, explain values |
+| P3 | `ignite-eval/src/model.rs` | `model`, `Model::to_json` | 15.4, 15.5 |
+| P3 | `ignite-eval/src/resolve.rs` | `resolve` | 15.6 |
+| P3 | `ignite-eval/src/explain.rs` | `explain` | 15.8 |
+| P3 | `ignite/src/lib.rs` | `plan`, `explain` | 15.7, 15.8 |
+
+That is 8 placeholders. `TypedProgram::systems`, `assemblies` and `effects` and the `plan`
+and `explain` subcommands of `main.rs` (which writes `--out FILE`) are not placeholders; the
+skeleton implements them. `crates/ignite-eval/tests/main.rs` holds `fuel.rs` (the O14
+defaults); P2 and P3 add their modules there.
+
+### 15.14 Implementation record
+
+Landed by P1 on 2026-11-02 (the skeleton of 15.13 and 15.9); where the implementation differs
+from the reviewed contract or refines it:
+
+1. `PropertySource::Set` holds the property's index in the declaration, not `&Expr`:
+   `TypedProgram` has no lifetime (its expression keys are addresses), so the expression is
+   reached through `MemberInfo::property(&SystemDecl, field)` and
+   `AssemblyInfo::property(&Program, field)`. A third source, `ComponentName`, covers an
+   `executable` field left out (14.5), which no module's default supplies. The builtin
+   `TcpListener`'s defaults are `Default(QualName::builtin("TcpListener.exposure"))` and
+   `..backlog`, since no module declares them; their values are the two constants of 15.9.
+2. `TypedProgram::effects` returns `Option<&EffectSet>`: sets are recorded for the pure
+   contexts the type checker owns (property expressions, constants, field defaults, each
+   with its sub-expressions), not for fn bodies, so a 100,000-term chain inside a fn costs
+   nothing more. A requirement on a callee parameter whose argument names no member (a
+   local bound from a member, an owned handle) stays as written, and an operation on such a
+   handle is the bare operation, so every effectful operation leaves at least one entry.
+3. `TypedModules` is unchanged (the exports alias of every crate). `ignite_eval::Module` and
+   `Modules` carry path, `SourceFile`, AST and `TypedProgram` per module; the driver builds
+   them (P3), as it builds `ignite_llvm::ModuleInput`.
+4. `model` and `resolve` take the `Evaluator`, which carries the modules and the fuel: the
+   draft's `model(&TypedProgram, assembly)` had no way to reach the other modules' ASTs or
+   the `--fuel` value. `Model`, `ModelMember`, `ModelAssembly`, `Edge`, `EdgeKind`,
+   `ResolutionEntry` and `Value` are starting shapes in P3's and P2's files, theirs to reshape.
+5. E116 is reported at the first effectful operation of the property expression, as E010 is
+   at the call, with the text ``effectful call `noisy` in the property `application` of
+   component `svc`: a property expression is pure`` (``effectful operation `accept` `` for a
+   handle operation, `` `spawn` `` for a spawn). A field default is pure by E010 where it is
+   declared, so E116 never arises for a defaulted property; its effect set is recorded all
+   the same, for the evaluator's assertion.
+6. New workspace crate `crates/ignite-eval` (dependencies `ignite-syntax`, `ignite-types`) and
+   the dependency `ignite -> ignite-eval`; no external crate was added.
+7. E042 "cannot check the effects of `..`" (11.7) is not reported inside a `system` or
+   `assembly`: there every effectful operation is E116, which names the property, so the two
+   never stack on one expression (`todos.values()` in a property was both before this
+   refinement). Outside systems E042 is unchanged.
+8. Tests: fixture `e116_effectful_property` (four E116: an inferred-effectful fn call, a
+   handle operation, a `Store` method, `spawn`); the audit probe `effects/a21` flips to E116
+   (`.expected` and the README row); `valid_system_describes_its_system_and_assembly` in
+   `crates/ignite-types/tests/fixtures.rs` reads `systems()`, `assemblies()`, every
+   `PropertySource` variant, `outputs`, `property(..)` and empty `effects(..)` of the
+   `valid_system` fixture. `ignite check` of every std file, both examples and the design file
+   stays clean; frontend time of `check examples/todo/todo.ignite` and of the design file was
+   0.056 to 0.059 s and 0.055 to 0.057 s after (5 runs each, load 6.5), 0.081 to 0.136 s and
+   0.053 to 0.061 s before (load 10 to 11): no regression measurable above load noise.
+9. P3's refinements of 15.4 to 15.8 (model, resolution, `plan`, `explain`, check), landed
+   2026-11-02 with 11 `plan::` tests and the fixtures E110 to E114 and E119 under
+   `crates/ignite/tests/fixtures/`:
+   - `explain` of a system prints `<System>: system (pos)`, then one line per member sorted by
+     id, `  <declaration> <id>: <kind>[, executable X]`, then `assembly <name>: <kind>` per
+     assembly; of an assembly, the 15.8 form when it resolves, else its properties; of a
+     property path, `<path>: property <type>[ (default)] (pos)` and then the record's fields
+     as `  f = v` (`  value = v` for a non-record), nested paths allowed
+     (`Terminal.server.sessions.idle_timeout` gives `value = 15 minutes`); a member's explain
+     adds `  <name>: output of <T>` per output after the properties and
+     `resolution: <binding>[ via <key>]` when an assembly is selected. Enum variants print
+     without the enum name (`Rolling(30 days)`), as the 15.8 golden.
+   - `sourceMap` also holds the system id, the assembly id and the assembly's property paths
+     (`local.bindings`). Edges come from the system members' values (`uses`, `references`,
+     `observes`) plus `hosts` from the resolution, not from assembly properties.
+     `ModelAssembly` has `system: Option<String>`, the `SystemRef`'s name.
+   - E114 texts: ``no assembly named `x`: the program declares a, b``; several assemblies and
+     no `--assembly`: ``several assemblies (a, b) and no `--assembly`: select one`` at the
+     second assembly; several systems and no assembly likewise. E110 is at the `bindings`
+     expression, E111 to E113 at the bindings key. The E119 fixture `e119_unknown_path` runs
+     `ignite explain <file> S.w.nowhere` through a `// ignite explain S.w.nowhere` first line.
+   - `ignite check` of a program without systems evaluates nothing, so every std file stays
+     clean. The 15.8 `local` golden keeps `executable terminald`: the design file's
+     `component server` now sets `executable = "terminald"` (P4), as 14.5 would otherwise
+     name it `server`.
+10. Slice 11b (2026-11-02): fixed the four target bugs of friction rows 32 to 35; tests:
+    `fixtures/tests/targets.ignite` (one inline test per row, run on both targets by
+    `ignite_test::target_bugs_of_slice_11b_are_fixed`), the rustgen golden `targets` with
+    `golden::target_bugs_of_slice_11b`, and the restored equivalence fns `list_index_push`,
+    `map_enum_key`, `record_named_box`, `enum_exposure` (`eval::` tests, both targets against
+    the evaluator). Fixes, all in the targets and the substrate, none in the language: row 32,
+    a mutating method (`push`, `append`, `clear`, map `put`, `remove`) on an indexed receiver
+    is lowered through `ignite_io::checked::at_mut` on the place instead of a clone
+    (`rustgen::indexed_mutation`, `mutable_place`; 13.11 row d); row 33, a generated enum
+    without payloads derives `PartialEq, Eq, PartialOrd, Ord` (`rustgen::enumeration`), which
+    re-blessed five derive lines in the goldens `consts.std.rs`, `modules.std.rs`, `syntax.rs`
+    and nothing else; row 34, `Exposure` is `ignite_io::Exposure` on the Rust target
+    (`rust_type`, `enum_name`, `variant_path`, `variants_of`) and a builtin enum of layout
+    `Loopback` 0, `Private` 1, `Public` 2 on the LLVM target (`layout::variants`, `mangle`),
+    `TcpListener` and `TcpStream` as parameter and return types were already lowered; row 35,
+    a user type or variant named after the Rust prelude (`Box`, `Vec`, `String`, `Some`, `Ok`,
+    …) is emitted with a trailing underscore (`rustgen::ident`, `RUST_PRELUDE_NAMES`);
+    `Option` and `Result` are not covered because they are builtins (E004). LLVM goldens are
+    unchanged. `ignite_test.rs` runs its two targets on two threads with one output directory
+    and one lock per target, which took the file from 8.6 s to 4.6 s warm (a variant with one
+    output directory per invocation and no LLVM lock measured no better at load 24 to 31 and
+    was not kept).
+    Design §11.2 now says `ignite check`, `plan` and `explain` accept the design file and
+    `ignite build` does not. Measurements (15.1 method, 3 interleaved pairs against the
+    60aef38 copy and the slice-11 copy, load 6 to 9, other sessions building): warm `cargo
+    test --workspace` 10.8 s median (10.3 to 17.8; 60aef38 24.0 s, slice 11 16.1 s in the
+    same passes; the steering target of 8 s at load under 5 could not be checked at that load,
+    the remaining time is the end-to-end binary 5.6 s, the rebuild 1.8 s, rustgen's tests
+    1.7 s); todod Rust dev 3.35 s (pair ratio 1.00), Rust release 4.74 s (1.03), LLVM dev
+    0.35 s (0.95), LLVM release 0.88 s (0.70). Against slice 11's absolute numbers in
+    `AGENTS.md` (load under 5) Rust release reads +13 % and LLVM release +10 %: load, since
+    the 60aef38 copy rose the same way in the same passes (4.46 and 1.16 s against its 4.12
+    and 1.10 s) and the pair ratios hold. Gate at the close (load 24 to 32): fmt, clippy,
+    `cargo test --workspace --no-fail-fast` (582 passed, 0 failed, 4 ignored; slice 11's 784
+    counted the 204 inline tests in, its cargo count was 580), `task test-ignite` (102 inline
+    tests per target), `task gate`, `task compile`, `compile-llvm`, `compile-todo`,
+    `compile-todo-llvm`: all exit 0.
+
+## 16 Slice 12: run and control (F3)
+
+Contract reviewed and accepted by the steering session on 2026-11-02, with fifteen
+amendments (review of 04:10, A1 to A15) applied. Sources: vision 4.1 row 12, invariants 5, 6
+and 9, T1, T4, D1, D5, D7; actors.md R8; design 2, 3.4, 4.1 to 4.3, 6.2, 7, 7.1, 7.4, 10.1,
+11.7, 11.8, 11.10 (Rollout, Recovery, Contracts); `docs/slice.md` 6.1, 14.5, 14.8, 15.4 to
+15.8 and 15.12 (O18, O19, O25); `std/contract.ignite`, `std/policy.ignite`,
+`std/probe.ignite`, `std/deploy.ignite`, `std/protocol/telnet.ignite`;
+`examples/terminal/terminal.design.ignite`. Decisions O27 to O44 are recorded in 16.19.
+
+The slice adds two commands:
+
+- `ignite run` starts the processes an assembly hosts, supervises them, runs the probes,
+  evaluates the contracts and writes every decision to a journal.
+- `ignite replay` re-derives every decision from that journal.
+
+Vision 4.1 (amended by steering, A1): the reducers are stepped by the evaluator inside
+`ignite run`, and are compiled on both targets in the trace fixture of item 10. The
+controller is written as reducers in the shape of actors.md R8, so that wave C replaces the
+runtime under them, not the reducers.
+
+### 16.0 Acceptance
+
+Baseline first (16.1). Then the row-12 items.
+
+1. The terminal system runs under `ignite run`.
+   - The command: `ignite run examples/terminal/terminal.design.ignite --assembly local
+     --port Terminal.ingress=0 --clock manual`.
+   - It builds `terminald` and `promptProbe`, starts `terminald`, and journals `started`,
+     then `ready` (16.7).
+   - A TCP client on the reported port reads `terminal> `, and `echo hello` answers `hello`.
+   - The `client` member is listed as declared, not buildable (16.3, A10).
+   - The control line `stop` ends the run with exit 0. No process the run started is left,
+     checked through `/proc`.
+   - One test runs the same with `--target llvm`.
+2. Killing `terminald` restarts it within the policy's backoff.
+   - Manual clock: after `ready`, the test sends SIGKILL to the journaled pid.
+   - The journal shows `exited`, then a `restart` effect with `attempt 1` and `delay 100 ms`.
+   - `advance 99 ms` starts nothing. `advance 1 ms` journals `started` at exactly
+     `exited.at + 100 ms`, the instant of the `Spawn` dispatch.
+   - A second kill gives `delay 200 ms`.
+   - Real clock (one test): `started.at - exited.at` lies in `[100 ms, 500 ms]`.
+   - A fixture with `maximum_attempts = 2` journals `gave_up` on the third failure inside
+     `interval`. The run goes on, and `stop` then exits 1.
+3. A probe timeout is visible in the journal and in the contract's standing.
+   - Manual clock: one good attempt is journaled.
+   - The test sends SIGSTOP to `terminald`, so connects queue in the backlog and no prompt
+     arrives.
+   - The next scheduled attempt is dispatched. `advance 2 seconds` journals `probe timeout`,
+     a bad attempt (as landed, P3: the test accepts the bad attempt at 10 s or at 12 s,
+     depending on whether the slot or its deadline falls on the advance).
+   - The next `standing` record of `Terminal.reachable` reads `violated` with `good 1` and
+     `executed 2`.
+   - The control line `status` prints the same standing.
+   - After SIGCONT, attempts are good again. The 30-day window keeps `violated`.
+   - This is the only test that pays a settle wait (16.4, A2).
+
+Contract semantics (design 4.1, 11.7):
+
+4. Zero executed attempts give `insufficient_evidence`, never `compliant`.
+   - `std.contract.meets(_, 0, 0)` is `false` (16.10, O32).
+   - A probe that cannot run (its executable is missing, or its output does not parse) is
+     missing evidence, not a bad attempt.
+   - Completeness below `minimum_completeness` gives `insufficient_evidence`.
+   - Each case has an inline test over synthetic events. The zero-attempt case also has an
+     end-to-end test: a run stopped before the first slot.
+5. `ThresholdCompliance` and `SLA` evaluate from the same signal.
+   - The test of item 3 starts with `--epoch 2026-10-31T22:50:00Z`. After the timeout it
+     advances across the Europe/Berlin month boundary (2026-10-31T23:00Z).
+   - It journals the `standing` of the closed period and one `consequence`,
+     `access_commitment_breached`.
+   - A second run with only good attempts crosses the same boundary and journals no
+     consequence.
+   - Inline tests over synthetic events cover the rest:
+     - no consequence for `compliant` or `insufficient_evidence`;
+     - none twice for one period;
+     - period boundaries in months with a DST change (16.11).
+6. `DrainRollout` works (A12: the last unit of P2 and P4).
+   - The control line `rollout Terminal.server` rebuilds `terminald` and drains the old
+     process: its listener closes and prints `released`, and its sessions keep working.
+   - The run then starts the new process.
+   - At `deadline` (manual clock), the old process gets SIGKILL if sessions remain
+     (`disconnect_remaining`).
+   - The journal records the declared disruption with its measured interval (16.12).
+   - An open session on the old process answers `echo` until the deadline.
+
+Determinism and time:
+
+7. Every journal written by the end-to-end tests replays.
+   - `ignite replay` re-derives every effect and standing record byte for byte and exits 0
+     (16.15).
+   - A journal with one effect record altered exits with E127, naming its `seq`.
+8. Two manual-clock runs of one scenario give equal journals after masking the `pid` and
+   probe `latency` values, the only values a real process contributes.
+9. No test sleeps for a policy or probe duration.
+   - Probe timeouts, backoff, windows and calendar periods are driven by the manual clock
+     (16.4).
+   - Tests assert the `at` of `Ready`, `AttemptDone` and `Started` only as "the instant of
+     the dispatch" (A2).
+   - All `ignite run` end-to-end tests together add at most 6 s of wall time to
+     `crates/ignite/tests` (O41).
+10. The reducers agree across the evaluator and both targets.
+    - A trace fixture steps each reducer of 16.6 over one event list in the evaluator, in a
+      Rust-target build and in an LLVM-target build.
+    - The debug texts are equal (this extends 15.0 item 8).
+
+Records:
+
+11. `ignite plan` of the design file adds `machines`, `observations` and the edge classes of
+    16.14.
+    - The version stays `ignite-model/0.1` (O13, additive).
+    - The golden is re-blessed, with the diff explained.
+    - The terminal and todo model goldens change only by empty `machines` and
+      `observations` keys.
+    - Every Rust and LLVM build golden is byte-identical, except programs that use the new
+      builtins (16.13).
+12. Invariant 9 (16.1).
+    - Measured with the interleaved pairs of 15.1 against the slice-12 start tree:
+      - gate cold and warm;
+      - the warm `cargo test --workspace` step;
+      - `todod` on both targets, dev and release;
+      - `ignite check` and `ignite plan` of the design file.
+    - A rise over 10 % is a deviation to explain; O26 applies.
+    - The warm test step stays under slice 11b's recorded number: 10.8 s median at load 6
+      to 9 (`AGENTS.md`).
+    - New absolute numbers:
+      - `ignite run` from start to the first `ready` (warm build);
+      - `ignite replay` of a 10,000-record journal;
+      - the evaluator test of A7 (16.10): 10,000 emissions into a 30-day window.
+13. Every diagnostic E120 to E129 has a fixture (16.17).
+
+### 16.1 Baseline and measurement
+
+- The baseline tree is `/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-before`.
+  - It is an rsync copy of `git ls-files -co --exclude-standard` of the working tree at
+    slice-12 start (741 files), made by the coordinator.
+  - It is not a `git archive`, because the slice-11 and 11b state is uncommitted. The copy
+    replaces the slice-11 close commit.
+  - It has its own target dir.
+- No P0: the slice-11 and 11b rows in `AGENTS.md` are the reference.
+- P4 re-measures both trees in pairs, as 15.1 prescribes:
+  - one run per tree, alternating, at least 3 pairs;
+  - the 1-minute load recorded for every run;
+  - a pair dropped when its two loads differ by more than 5;
+  - the median of the pair ratios reported next to the absolute times.
+- New end-to-end test files of this slice are timed per file in the same pairs. The before
+  tree has none, so their absolute time is reported.
+
+### 16.2 Run-time architecture
+
+| part | where | language | role |
+|---|---|---|---|
+| reducers | `std/control.ignite` (as landed, P4: the reducers share the module of `Event`, `Effect` and `Step`, because a module below `std.control` could not import them and one above would be an E032 cycle, O45; the contract's `std/control/*.ignite` is void) | Ignite | supervisor, probe scheduler, contract evaluator, rollout: pure fns `step(machine, event) -> Step` (16.6) |
+| shared vocabulary | `std/sli.ignite`, `std/time.ignite` | Ignite | `ProbeAttempt`, `satisfies`, `Window`, `MissingData`, `meets`; calendar arithmetic and the two time zones (O36): the leaves both the reducers and the kinds import (O45) |
+| domain kinds and hooks | `std/contract.ignite`, `std/policy.ignite`, `std/probe.ignite`, `std/protocol/telnet.ignite`, `std/time.ignite` | Ignite | `K.machine`, `K.validate`, the probe's `K.main`, calendar arithmetic |
+| driver (the supervisor process) | `crates/ignite/src/run/` | Rust | event loop, adapters (process, probe, timer, build, journal, clock, control input), routing; it knows only the `std.control` types |
+| evaluator at run time | `crates/ignite-eval` | Rust | steps the reducers (O27); decodes adapter results into values |
+| substrate | `crates/ignite-io` (and the `ignite-rt` adapter) | Rust | monotonic clock, reference endpoints, drain on SIGTERM (16.13); nothing about supervision |
+
+The supervisor process:
+
+- The supervisor process is the `ignite run` process itself, in the foreground (design
+  10.1). It is not a compiled Ignite program.
+- Its children are the built executables: one per `NativeProcess` member, and one
+  short-lived probe process per probe attempt.
+- Each child is started in the run's process group with `PR_SET_PDEATHSIG(SIGKILL)`, so that
+  a crash of `ignite run` leaves no orphan.
+- prctl(2) ties that signal to the thread that forked, not to the process (A3). So the
+  process adapter spawns every child, probes included, from one spawner thread that lives
+  for the whole run. Other threads send it spawn requests.
+- The run stops on SIGINT, on SIGTERM and on the control line `stop`:
+  1. It journals `stopping`.
+  2. It drains every process with SIGTERM.
+  3. It waits up to each member's `DrainRollout.deadline` (10 s when the member has none).
+  4. It sends SIGKILL to what is left.
+  5. It journals `stopped` and exits.
+
+The decision engine (design 2):
+
+- The driver keeps one ordered queue of events.
+- Each event is journaled, then stepped through the reducers it is routed to (16.9).
+- Each effect a reducer returns is journaled, then dispatched (design 7.1).
+- Adapters run on their own threads and return observations to the queue.
+- Reducers never do IO, and adapters never decide.
+
+Library boundaries:
+
+- Invariant 6: the driver knows the `std.control` types (`Machine`, `Event`, `Effect`,
+  `Step`) and the hook names `machine` and `validate`. It knows no domain noun.
+- `Restart`, `Availability` and `TelnetPrompt` are library symbols, read only by Ignite code
+  (O18 carried over).
+- Nothing named after telnet lives under `crates/`. The probe's protocol work is Ignite
+  code: `TelnetPrompt.main` over a new telnet client-role fn (16.8).
+- Layering of std (O45): `K.machine` returns `std.control.Machine` and must be declared in
+  `K`'s module (E003, 13.8), so `std.probe`, `std.contract` and `std.protocol.telnet` import
+  `std.control`. `std.control` and every reducer module therefore import no kind's module
+  (E032 otherwise): only the leaves `std.sli`, `std.policy` and `std.time`. The vocabulary
+  the reducers consume (`ProbeAttempt`, `satisfies`, `Window`, `MissingData`, `meets`) moved
+  from `std.probe` and `std.contract` to `std.sli`; `std.contract` and `std.probe` import it
+  from there, and the model prints `std.sli.ProbeAttempt` and `std.sli.Window`.
+
+### 16.3 `ignite run` and `ignite replay`
+
+```
+ignite run <file> [--assembly NAME] [--state DIR] [--build DIR] [--target rust|llvm]
+                  [--release] [--clock real|manual] [--epoch RFC3339] [--settle DURATION]
+                  [--port RESOURCE=PORT]... [--json] [--fresh] [--std PATH] [--fuel N]
+ignite replay <file> [--assembly NAME] [--state DIR] [--std PATH] [--fuel N]
+```
+
+Steps of `ignite run`:
+
+1. Plan as `ignite plan` does: evaluate, then resolve (E110 to E119). Then check E120 to
+   E125 and E129 (16.17).
+2. Build every buildable member:
+   - the build project lives in `<build>`, default `<state>/build/`;
+   - the executables are copied into `<state>/bin/<generation>/`;
+   - generation 1 is the start, and a rollout increments it.
+3. Open the journal (16.5; E126, E127).
+4. Construct the machines and start them.
+
+As landed (P3): steps 2 and 3 run in the other order, the journal open and the E126 check
+before the build, so a held lock or a foreign journal is reported before any cargo or clang
+run. `ignite run` also takes `--runtime PATH` and `--target-dir DIR` (as `ignite build`),
+fields `runtime` and `target_dir` of `RunOptions`. `--fuel` of `run` and `replay` bounds the
+reducer steps only; property expressions keep the default fuel (15.3).
+
+Paths and builds:
+
+- `<state>` defaults to `target/ignite-run/<assembly>/` under the working directory.
+- Builds with unchanged sources are a no-op in `<build>`. Tests pass one shared `--build`
+  per target and never rebuild; each test has its own `--state`, because the journal lock
+  (E126) admits one run per state directory (A2).
+
+Ports:
+
+- `--port Terminal.ingress=0` binds a free port.
+- The driver reads the port from the child's `listening on <address>:<port>` line (6.1) and
+  pins it for every restart of that member.
+
+`WorkstationExecutable` members (A10):
+
+- A member whose kind has `main` is built, not started, and the run prints its path.
+- A member whose kind has no `main` is listed as "declared, not buildable in slice 12" in
+  the `status` output and in the journal's first `segment`. This is not E129. The design
+  file's `client: Application` is such a member.
+
+Control input, one command per line on stdin:
+
+| line | effect |
+|---|---|
+| `status` | prints the current standing of every contract and the state of every machine (one JSON line with `--json`); as landed (P3) also the `ports` in use and, per contract, the standing of the open window through `std.control.standing_at` |
+| `rollout <member>` | starts the rollout machine of the member (16.12) |
+| `stop` | the same as SIGINT |
+| `advance <quantity>` | manual clock only: moves time (16.4); `<quantity>` is a Duration literal such as `100 ms` or `2 seconds` |
+
+Output and exit status:
+
+- One human line per journal record goes to stderr.
+- With `--json`, the journal records themselves go to stdout; the tests synchronize on them.
+- Exit 0: a requested stop with no failed machine.
+- Exit 1: a machine gave up (`gave_up`) or failed (E128).
+- Exit 2: a diagnostic before the start.
+
+`ignite replay`:
+
+- It reads the journal of `<state>` and checks the header against the current plan (E126).
+- It re-steps the reducers with the journaled events and compares every effect and standing
+  record (E127).
+- It then prints the final standings.
+
+### 16.4 Clock and time control
+
+The driver owns the only clock the reducers see. Every event carries `at`, a `Duration` since
+the journal's epoch. Reducers read no clock (actors R8).
+
+`--clock real` (the default):
+
+- `at` comes from the monotonic clock, offset by the segment's start.
+- The epoch is the wall time at which the journal was created.
+- A resumed segment continues from the wall time at which it starts (16.5).
+
+`--clock manual`:
+
+- Time moves only on `advance`.
+- The epoch is `--epoch`, default `2026-01-01T00:00:00Z`.
+- `advance d` fires every due timer in `(at, seq)` order, setting `now` to each timer's
+  instant. Then it sets `now` to the target.
+- The settle rule: at each instant, before moving on, the driver waits in real time until
+  every in-flight adapter operation has completed, at most `--settle` (2 s by default;
+  tests pass `--settle 1 s`, A2).
+- An operation still running after the settle wait stays in flight. It completes at a later
+  instant or at its deadline.
+- A healthy probe completes at its dispatch instant, so its latency in manual time is 0.
+- A hung probe (its target is SIGSTOPped) costs one settle wait, then times out when time
+  reaches its deadline.
+
+Other time rules:
+
+- Calendar periods read the epoch plus `at` as UTC. `std/time.ignite` converts that to civil
+  time in the zone (O36).
+- Inline Ignite tests of the reducers use no clock: they step synthetic event lists with
+  chosen `at` values.
+
+### 16.5 The journal
+
+- Location: `<state>/journal.jsonl`.
+- `<state>/lock` is held for the run's lifetime; E126 when another run holds it.
+- One JSON object per line, keys in byte order, values in the model encoding of 15.4, and
+  `\n` after every record.
+
+Line 1 is the header:
+
+```
+{"epoch":{"ns":…,"type":"Duration"},"formatVersion":"ignite-journal/0.1","kind":"header","model":{…the full model…},"seq":0}
+```
+
+Every other record has this shape:
+
+```
+{"at":{"ns":…,"type":"Duration"},"kind":"<kind>","machine":"<machine id or null>","seq":<n>,"value":<encoded std.control value>}
+```
+
+| kind | value | written when |
+|---|---|---|
+| `segment` | `std.control.Segment` (start, stop, clock mode, generation, declared members that are not buildable) | at run start, resume and stop |
+| `event` | `std.control.Event` | before the reducers step it |
+| `effect` | `std.control.Effect` | after the step and before dispatch, with `sync_data` before dispatch (O30) |
+| `signal` | `{"ref": …, "value": …}`, an emission routed to subscribers (16.9) | when a reducer emits |
+| `standing` | `std.control.Standing` (16.10) | at every evaluation |
+| `consequence` | `std.control.Fired` (16.11) | at a period close with `violated` |
+| `error` | the 14.8 report text plus the code (E128) | at a reducer failure |
+
+Rules:
+
+- `seq` is gap-free from 0.
+- A run on an existing journal with the same header model and version appends a `segment`
+  record (O31).
+- `--fresh` first renames the old file to `journal.<n>.jsonl`.
+- A final line without `\n`, from a crash while writing, is dropped on open and reported once
+  on stderr. Any other unparsable line is E127.
+- There are no snapshots. Resume and replay re-step from `seq` 1 (O30).
+
+### 16.6 Machines: the reducer interface (`std/control.ignite`)
+
+```
+enum Machine { Supervise(Supervisor), Schedule(ProbeScheduler), Evaluate(Evaluator), Roll(Rollout) }
+type Step { machine: Machine, effects: List<Effect> }
+type Event { at: Duration, kind: EventKind }
+fn step(machine: Machine, event: Event) -> Step
+```
+
+`Event` is a record (as landed, O46): `at` is the Duration since the journal's epoch (16.4)
+and `kind` an `EventKind`. Members and signals are named by their path text
+(`Terminal.server`, `Terminal.promptProbe.attempts`), POSIX signals and pids are `Int`, and
+a signal's element is `std.sli.ProbeAttempt`, the one element type of slice 12.
+
+`EventKind` (final shapes, P4; the skeleton's lifecycle variants gained the pid, and
+`Start` is new):
+
+- `Start(Duration)`: the epoch, sent to every machine at segment start; it triggers the
+  first `Spawn` and the first period timer;
+- process lifecycle: `Started(Int, Int)` (pid, generation), `Ready(Int)` (pid),
+  `Exited(Int, Int)` (pid, code), `Signalled(Int, Int)` (pid, signal), `SpawnFailed(Text)`;
+- probe: `AttemptDone(Int, ProbeAttempt)`, `AttemptFailed(Int, Text)`;
+- `Timer(Int)`;
+- `Emitted(Text, ProbeAttempt)` (signal, value);
+- build: `Built(Int)` (generation), `BuildFailed(Text)`;
+- `Released`;
+- control: `Control(Text)`.
+
+`Effect` (final shapes, P4; `Kill` gained the pid, `Abort` is new):
+
+- process: `Spawn(Text, Int)` (member, generation), `Kill(Text, Int, Int)` (member, pid,
+  signal);
+- probe: `Attempt(Text, Int)` (member, id), `Abort(Text, Int)` (member, id: kill the probe
+  process of an attempt at its deadline);
+- timers: `SetTimer(Int, Duration)` (id, the absolute instant), `CancelTimer(Int)`;
+- outputs: `Emit(Text, ProbeAttempt)`, `Publish(Standing)`, `Fire(Fired)`;
+- `Build(Text)`;
+- `AwaitRelease(Text)`;
+- `Note(Text)`, a journal line with no adapter.
+
+The `Evaluator` machine carries `interval: Duration = 0 ms` (the driver fills it from the
+observed probe), `epoch`, `current: Option<Bucket>`, `sum_good` and `sum_executed`;
+`Standing.version` and `Fired.standing_seq` are 0 from the reducer and filled by the driver
+with the record's `seq`. All four reducers live in `std/control.ignite` (16.2, O45).
+
+The machine records (`Supervisor`, `ProbeScheduler`, `Evaluator`, `Rollout`), `Standing`,
+`Fired`, `Segment` and their state enums are declared in `std/control.ignite` with defaults
+for every field a reducer owns, so `K.machine` constructs them from the kind's fields only.
+Hook signatures are checked by the typer: `K.machine(self, id: Text) -> std.control.Machine`
+and `K.validate(self) -> List<Text>`, both pure; any other shape is E109 at the component's
+kind (fixture `crates/ignite-types/tests/fixtures/e109_hook_signature.ignite`).
+
+Construction:
+
+- The evaluator calls `K.machine(self, id: Text) -> Machine` for every member and contract
+  the assembly hosts whose kind defines `machine`.
+- This happens at plan time, so the initial machines are part of the model (16.14).
+- Machine ids are `<member path>.<role>`: `Terminal.server.supervisor`,
+  `Terminal.promptProbe.scheduler`, `Terminal.reachable.evaluator`,
+  `Terminal.server.rollout`.
+- `Machine` is a closed std enum in slice 12. A user kind cannot define a new machine (O39).
+- As landed (P3, P4): `K.machine` returns one `Machine`, and `Terminal.server` needs two
+  (supervisor and rollout). The driver passes the member path as `id` (`Terminal.server`);
+  the hook forms `<path>.<role>` in its payload's `id` field (`"{path}.supervisor"`), and the
+  driver reads the machine id from there. The second machine comes from
+  `std.control.companions(machine: Machine) -> List<Machine>`, which `machines()` calls after
+  each hook (a supervisor whose `Restart` member carries a rollout policy yields the `Roll`
+  machine); a nested `DrainRollout.machine` was not possible, because `std.policy` cannot
+  import `std.control` (O45, E032). The hook check (E109) still covers every `fn K.machine`
+  and `fn K.validate` of a module, records and enums alike, not only the kinds of components.
+
+Failures:
+
+- A reducer failure (assert, overflow, fuel per step O14) ends that machine only (T1).
+- The run journals `error` with E128 and continues. The exit status becomes 1.
+
+### 16.7 Supervisor and `Restart`
+
+`TelnetServer.machine` returns `Supervise` with the member's `recovery: Restart`. The states
+follow design 11.8: `Starting`, `Running`, `Backoff`, `Failed`, `Draining`, `Stopped`. The
+supervisor also does the work of design 11.8's listener lifecycle (O44).
+
+Readiness:
+
+- `Ready` is the adapter's event for the child's `listening on` line. Generated `main` binds
+  the listener before `K.main` (6.1).
+- A member with no listener is ready at `Started`.
+- With no `Ready` before `readiness_timeout`, the supervisor sends `Kill` and counts a
+  failure.
+- The new field is `Restart.readiness_timeout: Duration = 10 seconds` (O37).
+
+Failures:
+
+- An exit or signal that no `Kill` of this machine requested is a failure, exit 0 included,
+  because a server does not end by itself.
+- The attempt number `n` is the number of failures within the trailing `interval`, plus 1.
+- If `allows(restart, n)`: the state becomes `Backoff`, with
+  `SetTimer(at + delay(backoff, n))`. This is journaled as the effect `restart` with
+  `attempt` and `delay`. At the timer comes `Spawn`.
+- Otherwise: the state becomes `Failed`, with `Note("gave_up")`. Other machines go on (O38).
+- `delay` and `allows` are the existing std fns, and their tests stay.
+
+### 16.8 Probe scheduler and the probe process
+
+The probe executable:
+
+- `TelnetPrompt` gains `executable: Text` (defaulting to the component name, the 6.1 rule)
+  and `fn TelnetPrompt.main(self) -> IoResult<Unit>`.
+- `ignite build` emits it as an executable like any kind with `main`. This changes builds of
+  the design file only.
+
+`main` runs one attempt:
+
+1. Resolve `self.target` with `Endpoint.of` (16.9).
+2. Connect.
+3. Read through `Telnet.await_prompt(stream, expected_prompt)`. This is a new client-role fn
+   in `std/protocol/telnet.ignite`: it answers option negotiation as `connect` does and
+   returns the text before the prompt.
+4. Measure `latency` with `Clock.monotonic()`.
+5. Close if `close_after_probe`.
+6. Print one line, the 15.4 encoding of `std.sli.ProbeAttempt` (O45).
+7. Exit 0.
+
+A refused or reset connection gives `received = false`, a bad attempt.
+
+The scheduler: `TelnetPrompt.machine` returns `Schedule`.
+
+- Routing of lifecycle events (A4): the driver sends a member's lifecycle events
+  (`Started`, `Ready`, `Exited`, `Signalled`, `SpawnFailed`) to its supervisor. It also sends
+  them to every scheduler that has an `edges.readiness` edge to that member (16.14). As
+  landed (P3), the order is the supervisor, then the member's rollout machine, then the
+  schedulers.
+  Readiness is no signal and does not appear in `observations`.
+- Slots: one every `interval`, from the target's first `Ready` on. Earlier slots are outside
+  the evidence horizon, not missing (O40).
+- At each slot the scheduler returns `Attempt(member, id)` and
+  `SetTimer(deadline = at + timeout)`.
+- The adapter spawns the probe process (through the spawner thread, 16.2) and decodes its
+  stdout line by the signal's element type.
+- `AttemptDone` before the deadline gives `Emit(attempts, value)`.
+- The deadline first gives `Kill` of the probe process and
+  `Emit(attempts, ProbeAttempt{received: false, latency: timeout})`. This is journaled as the
+  effect `probe timeout`, a bad event (11.7).
+- `AttemptFailed` gives no emission and a `Note("missing")`. Its causes: no executable, an
+  exit status other than 0, a line that does not decode. The slot counts as expected and not
+  executed.
+- There is one probe process per attempt (O28). Probes of one member never overlap, because
+  E123 guarantees `timeout < interval`.
+
+### 16.9 Signals and references at run time
+
+Signals:
+
+- A `Signal<T>` value is a stream name, its 15.4 `ref` text.
+- Only reducers emit, through `Effect.Emit`.
+- The driver journals the emission as a `signal` record. It routes it as `Event.Emitted` to
+  every machine whose model entry lists that ref in `subscribes`, in machine-id byte order.
+- Lifecycle events are routed by 16.8's rule. Every other event goes to the machine it names.
+- Compiled programs do not emit signals in slice 12. A probe's stdout line is an adapter
+  result, not an emission.
+- Pub/sub between processes is wave C (actors.md).
+
+References:
+
+- A `Ref<K>` value in a compiled program is its reference text (6.1).
+- The new builtin `Endpoint.of(ref) -> IoResult<Endpoint>` resolves it through the process
+  arguments `--ref <path>=<address>:<port>` that the driver passes.
+- Outside `ignite run` it fails with "no binding for <path>". This mechanism is new for
+  references, and works like the existing `--port`.
+- The driver resolves a component ref to the endpoint of the single `TcpListener` resource
+  with a `provisioning` edge to that component (16.14). It applies `--port` overrides and
+  pinned ports first.
+- No such resource, or several, is E122.
+
+### 16.10 Contract evaluation
+
+- `Availability.machine`, `ThresholdCompliance.machine` and `SLA.machine` return `Evaluate`.
+  Each subscribes to its `signal`.
+- A good event satisfies `satisfies(attempt, good, threshold)` (std/probe). `threshold` is 0
+  for `Availability` and `SLA`.
+- Population: the executed attempts in the window (11.7).
+- Missing: the expected slots in the window that are not executed.
+
+The `Standing` record:
+
+- `contract`;
+- `status`: `Compliant`, `Violated` or `InsufficientEvidence`;
+- `good`, `executed`, `expected`;
+- `completeness` (a Ratio);
+- `from`, `to`;
+- `coverage`: the Ratio of the window inside the evidence horizon;
+- `calculation = "ignite-sli/0.1"`;
+- `version`: the record's `seq`.
+
+The status, decided in this order:
+
+1. Apply `missing_data`: `counts_as_good` and `counts_as_bad` fill the missing slots.
+2. `executed == 0` gives `InsufficientEvidence`.
+3. `completeness < minimum_completeness`, when `missing_data` is `insufficient_evidence`,
+   gives `InsufficientEvidence`.
+4. `meets(target, good, executed)` gives `Compliant`; otherwise `Violated`.
+
+Std changes:
+
+- The three kinds gain the field `minimum_completeness: Ratio = 90%` (O32).
+- `meets` changes: `total == 0` now gives `false`.
+- Its inline test `meets(100%, 0, 0)` flips. The flipped test cites design 4.1: "Zero traffic
+  does not automatically prove compliance" (A15).
+- The new fn `standing(...)` is the evaluation entry.
+
+Windows:
+
+- `Rolling(d)` keeps counts in buckets of `max(signal interval, d / 10,000)` (O33). A 30-day
+  window has 10,000 buckets.
+- `CalendarMonth(zone)` keeps the current period's counts. The evaluator sets a timer at the
+  next month boundary in `zone`.
+- Evaluation runs on every emission and at every period boundary.
+- Fuel (A7): an inline test steps an `Evaluate` machine with a 30-day `Rolling` window and
+  `interval = 5 seconds` through 10,000 emissions in the evaluator, under the default fuel
+  per step (O14). Item 12 records its time.
+- If the fuel does not hold, O33 becomes `window / 1,000`, and that test is the evidence.
+- As landed (P3): the fuel held, so O33 stays `window / 10,000`. The 10,000-step evaluator
+  test takes 12.5 s and is `#[ignore]`; the gate runs the same test with 1,000 steps.
+
+### 16.11 Consequences: `event("…")`
+
+At an `SLA` period boundary, the evaluator publishes the closed period's standing.
+
+- If the standing is `Violated`, the evaluator returns `Fire(Fired{contract, consequence,
+  period_from, period_to, standing_seq})`.
+- The journal record is the consequence's dispatch. Slice 12 has no external sink. Design 7.1
+  requires the intent to be persisted; an adapter for delivery comes later.
+- There is one `Fired` per contract and period, and replay and resume never fire it twice.
+  The key is `(contract, period_from)`, checked against the journal.
+- `InsufficientEvidence` fires nothing. It journals `Note("consequence withheld: insufficient
+  evidence")` (invariant 5: no silent loss).
+- `exclusions` must be empty in slice 12; anything else is E120. They are not evaluated, so
+  accepting them would ignore them without a word.
+
+### 16.12 `DrainRollout`
+
+Design 11.8: "Until it does, planning rejects that rollout binding or requires an explicit
+stop-and-start strategy with declared disruption. It must not simulate zero-downtime
+behavior in its plan." Slice 12 declares the disruption (O34).
+
+The declaration:
+
+- The model's rollout machine entry carries `"disruption": "connections refused between
+  listener close and rebind"`.
+- `ignite explain Terminal.server.rollout` prints it.
+
+The sequence, triggered by `rollout <member>`:
+
+1. `Build` writes generation n+1 (a no-op build when the sources are unchanged, 16.3).
+2. `Kill(old, SIGTERM)`: the old process drains (16.13).
+3. `AwaitRelease`: the adapter reads the old process's stderr line `released
+   <address>:<port>` (as landed, P2: printed on and read from stderr, not stdout). The drain
+   prints it after the listener is closed, the `listening on` rule in reverse (A5). The
+   adapter then sends `Released`. It does not connect-poll.
+4. `Spawn(new)`, then await `Ready`.
+5. The old process exits when its sessions end, and the journal records `retired`. If it
+   still runs at `deadline`, `on_deadline` applies (`DisconnectRemaining` sends SIGKILL),
+   and the journal records `retired forced`.
+
+Rules:
+
+- The journal records `disruption` with the measured interval from `Released.at` to
+  `Ready.at`.
+- The old process's exit during `Draining` is not a failure. A failure of the new process
+  follows 16.7.
+- `on_deadline` stays `Text`, with the closed set `{"disconnect_remaining"}` (O35).
+  `fn on_deadline(text) -> Option<OnDeadline>` parses it, as `missing_data` does; any other
+  value is E120.
+- `BuildFailed` aborts the rollout before step 2, and the old process keeps serving.
+
+### 16.13 Substrate additions (`crates/ignite-io`, both targets)
+
+| builtin | behaviour | test |
+|---|---|---|
+| `Clock.monotonic() -> Duration` | the time since an arbitrary start of the process; it never decreases | inline: two reads are ordered |
+| `Endpoint.of(ref: Ref<K>) -> IoResult<Endpoint>` | the `--ref path=address:port` argument for `ref`'s text; otherwise the IoError "no binding for <path>" | end to end (`prober`), as landed (P2): a `Ref<K>` exists only inside a system, so no inline test can call it |
+| drain on SIGTERM | see the rules below | e2e: an open session survives SIGTERM; a new connect is refused after `released` |
+
+The drain on SIGTERM:
+
+- A signal thread (`sigwait`, with SIGTERM blocked in all other threads) sets drain mode.
+- It shuts down the read side of every listener and prints `released <address>:<port>` on
+  stderr for each one once it is closed (A5; as landed, P2: stderr, not stdout).
+- A pending `accept` fails with "draining".
+- After `K.main` returns, `run` waits for the live tasks to end, then exits 0.
+- A second SIGTERM exits at once.
+- As landed (P2): a SIGTERM's in-flight guard ends at `released`; a SIGTERM to a program
+  without a listener (`tn`) drains too: it waits for `main`, and a second SIGTERM ends it.
+- Outside `ignite run`, the wait for live tasks has no bound. Only the driver's deadline
+  bounds it (A6).
+- Existing tests end servers with `Child::kill` (SIGKILL), so the SIGTERM change touches none
+  of them.
+
+Other rules:
+
+- The substrate has no process spawning and no journal API. Both are driver code; a compiled
+  program does neither.
+- Lowering: rustgen calls the builtins directly; ignite-llvm calls them through C ABI entries
+  in `ignite-rt`. The type checker knows their signatures.
+- Builds of programs that use none of them stay byte-identical (16.0 item 11).
+- As landed in the skeleton: `Clock.monotonic` carries the ambient effect `clock.read` and
+  `Endpoint.of` the effect `process.args` (its source is the process arguments), both in
+  `ignite-check`'s `EFFECTFUL_STATICS` and the typer's `builtin_effect`. `Endpoint` is both
+  a builtin static owner and the record `std.net.Endpoint`; `ignite-check`'s
+  `STD_RECORD_STATIC_OWNERS` exempts it from E004, so `std/net.ignite` keeps `type Endpoint`
+  and must not declare `fn Endpoint.of` (it would shadow the builtin; its declaration there
+  is a doc comment). `Clock` is a static owner with no record: std declares no `type Clock`.
+
+### 16.14 Model additions (additive, `ignite-model/0.1`)
+
+| key | content |
+|---|---|
+| `machines` | array sorted by id: `{"id", "machine": <encoded initial Machine value>, "member", "subscribes": [refs], "disruption"?}` |
+| `observations` | array sorted by ref: `{"ref", "producer", "element": "<qualified type>", "interval"}` |
+| `edges.provisioning` | resource → the component that binds it (`Terminal.ingress` → `Terminal.server`) |
+| `edges.readiness` | probe → its target; evaluator → its signal's producer; the routing of 16.8 reads it |
+| `edges.recovery` | member → its supervisor machine |
+
+- O25's deferred edge classes land here.
+- `ignite explain` accepts machine ids as paths. It prints the machine's state fields and its
+  `disruption`.
+
+### 16.15 Replay
+
+- `ignite replay` and the end-to-end tests share one fn. It takes the model and the journal's
+  `event` records and re-steps the machines. It produces the `effect`, `signal`, `standing`
+  and `consequence` records.
+- They must equal the journaled ones byte for byte. The first difference is E127, with its
+  `seq`.
+- The values a real process contributes (`pid`, `latency`, `code`) enter only through `event`
+  records, so replay is exact.
+- Design 7 is the source: "Interpreter and native execution share semantic tests and replay
+  traces" (A13).
+
+### 16.16 Typed API (add-only)
+
+- `ignite_eval`:
+  - `Value::decode(json: &str, ty: &Type) -> Result<Value, DecodeError>`, the inverse of
+    15.4;
+  - `Evaluator::call(&mut self, fn path, args) -> Result<Value, EvalError>`;
+  - `Model.machines` and `Model.observations`.
+- `ignite`:
+  - `RunOptions{assembly, state, build, target, release, clock, epoch, settle, ports, json,
+    fresh, std, fuel}`;
+  - `run(&Path, &RunOptions) -> Result<i32, Diagnostics>`;
+  - `replay(&Path, &ReplayOptions) -> Result<Vec<Standing>, Diagnostics>`.
+- `ignite-types`: the signatures of the three builtins of 16.13.
+
+As landed in the skeleton (P1, 2026-11-02), where it differs from the list above:
+
+- `ignite_eval`: `Value::decode(json: &str, ty: &Ty)` (the typer's type is `Ty`);
+  `DecodeError { message }`; `machines(&mut Evaluator, &TypedProgram, &SystemInfo,
+  &[ModelMember], &[ResolutionEntry]) -> Result<Vec<ModelMachine>, Vec<Diagnostic>>` and
+  `observations(&TypedProgram, &SystemInfo, &[ModelMember], &[ResolutionEntry]) ->
+  Result<Vec<ModelObservation>, Vec<Diagnostic>>` are free fns beside `model`, which
+  `Builder` calls to fill `Model.machines` and `Model.observations`; `ModelMachine { id,
+  machine: Value, member, subscribes, disruption }`, `ModelObservation { reference, producer,
+  element, interval }` (16.14); `validate(&mut Evaluator, &TypedProgram, &SystemInfo,
+  &[ModelMember], &AssemblyInfo, &[ResolutionEntry]) -> Result<(), Vec<Diagnostic>>` (16.17).
+- `ignite`: `RunOptions { assembly, state, build, target: Target, release, clock: ClockMode,
+  epoch: Option<String>, settle: Option<String>, ports: Vec<(String, u16)>, json, fresh, std,
+  fuel }`, `ClockMode { Real, Manual }`, `ReplayOptions { assembly, state, std, fuel }`,
+  `Standing { contract: String, value: Value }`; `run(&Path, &RunOptions) -> Result<i32,
+  Error>` and `replay(&Path, &ReplayOptions) -> Result<Vec<Standing>, Error>`: `Error` is the
+  crate's existing error (`Diagnostics`, `Cargo`, `Clang`, `Io`); no `Diagnostics` type
+  exists. `main.rs` maps `Error::Diagnostics` of `run` to exit 2 (16.3) and of `replay` to
+  exit 1 like `plan`; a malformed `--port` is exit 2.
+- `ignite-types`: `Builtin::ClockMonotonic` and `Builtin::EndpointOf` with the signatures
+  `Clock.monotonic() -> Duration` and `Endpoint.of(Ref<K>) -> IoResult<Endpoint>`
+  (`builtins::static_fn`), their effects in `typer/effects.rs`, and the hook signature
+  checks of 16.6 in `typer/system.rs` (E109, `hook_signature`, one pass per module over
+  every `fn K.machine` and `fn K.validate`).
+- `ignite-types`, for the hooks (P4's request): `Ref<K>.to_text()` and `Signal<T>.to_text()`
+  are `Builtin::TextToText -> Text`, and a `Ref` or `Signal` interpolates as its path text
+  (`"{self.target}"`). Both types lower to `Text` on both targets (14.14), so rustgen needs
+  no change; ignite-llvm's interpolation arm admits the two types (P2); the evaluator's
+  `TextToText` arm accepts a member or signal reference and gives its path (P3).
+- `ignite_eval` (step 2): `validate_system(&mut Evaluator, &TypedProgram, &SystemInfo,
+  &[ModelMember]) -> Result<(), Vec<Diagnostic>>` beside `validate`, split so that E120,
+  E123 and E124 are reported once per system and E121, E122 and E129 once per assembly
+  (16.17); `resolve::entries_fn` beside `binding_fns`.
+- As landed by P2 and P3: `Value::decode(json: &str, ty: &Ty, program: &TypedProgram)` takes
+  the typed program (record field order and enum payloads come from it), so its tests live in
+  `crates/ignite/tests/decode.rs`, not in `ignite-eval`; `RunOptions` gains `runtime:
+  Option<PathBuf>` and `target_dir: Option<PathBuf>` (`--runtime`, `--target-dir`, 16.3);
+  the adapters of `crates/ignite/src/run/` are `await_release(..) -> Bool` (whether the
+  `released` line arrived before the deadline), `pids(member) -> Vec<i32>`, `kill(pid,
+  signal)` and `kill_attempt(..)` for a probe's deadline, in place of the skeleton's
+  `spawn`/`kill` pair.
+
+### 16.17 Diagnostics E120 to E129
+
+| code | rule | phase | fixture |
+|---|---|---|---|
+| E120 | a declaration its kind's `validate` refuses, with the reason text from std: an unknown `good` outcome, `missing_data`, `on_deadline` or time zone; `maximum_attempts` < 1; `target` not in (0 %, 100 %]; non-empty `exclusions`; a backoff initial greater than its maximum | check | `e120_validate_refused` |
+| E121 | a contract's `signal` has no producer the assembly runs: its member is not bound to a host that runs it, or the ref is no output | check | `e121_signal_without_producer` |
+| E122 | a run-time `Ref` (a probe's `target`) names a member the assembly does not run as a process, or resolves to no endpoint or to several | check | `e122_unresolvable_ref` |
+| E123 | probe timing: `interval` or `timeout` not positive, or `timeout >= interval` | check | `e123_probe_timing` |
+| E124 | a contract window shorter than its signal's `interval`, so it can hold no expected attempt | check | `e124_window_too_short` |
+| E125 | `ignite run` on a file without an assembly, or on an assembly that runs nothing (no member with a machine) | run | `e125_nothing_to_run` |
+| E126 | the state directory's journal has another model or `formatVersion`, or another `ignite run` holds its lock | run, replay | `e126_journal_mismatch` |
+| E127 | a journal that does not replay: an unparsable line before the last, or a re-derived record that differs (first `seq`) | run (resume), replay | `e127_replay_diverged` |
+| E128 | a reducer failed at run time (14.8 report text; fuel per step); the machine stops, and the run continues and exits 1 | run | `e128_reducer_failed` (a run with `--fuel 1`) |
+| E129 | a member the assembly hosts whose kind lacks the entry its host needs: `ScheduledProbeHost` without `K.main` or `K.machine`, `NativeProcess` without `K.machine` | check | `e129_missing_entry` |
+
+- Phase "check": `ignite check` and `ignite plan` report these codes for every assembly (O20
+  carried over).
+- `ignite check` of the design file still exits 0 with no output, which
+  `cli::check_design_file_is_silent` asserts (A14).
+- `validate` is a hook like `machine`: `fn K.validate(self) -> List<Text>`, evaluated purely.
+  The compiler knows no outcome names and no zone names (invariant 6).
+- Fixtures live in `crates/ignite/tests/fixtures/`.
+- E129 is the last code of this slice (T4).
+- A `machine` or `validate` fn with another signature, or an effectful one, is E109 (the
+  slice-10 code for the `K.main` signature, 14.11, extended to the two hooks), reported by
+  the typer at the fn's name, for every `fn K.machine` and `fn K.validate` of a module
+  (records and enums alike, so the kinds of property values such as `DrainRollout` are
+  covered): fixture `crates/ignite-types/tests/fixtures/e109_hook_signature.ignite` (O47).
+
+As landed (P1, `crates/ignite-eval/src/validate.rs`), the check-phase codes read the
+program as follows; the compiler knows no kind, binding variant, outcome or zone name:
+
+- `validate_system` runs per system (E120, E123, E124), so a program without an assembly
+  gets them too; `validate` runs per resolved assembly (E121, E122, E129), after `resolve`
+  succeeded. `Builder` calls both (P3's `model.rs`).
+- E120: every member whose kind's module declares `fn K.validate` is validated as the record
+  value of its declaration (an unset `Signal<T>` output filled with its own ref), and so is
+  every record value set in a property whose type's module declares `validate`, recursively
+  (`recovery = Restart { .. }` is a declaration of a `Restart`); each text the hook returns is
+  one line, ``declaration `S.m[.property]` of kind `K` is refused: <text>``, at the member or
+  the property. A hook that fails is E115 or E117 as any evaluation.
+- E121, E122 and E129 rest on a third fn of the binding type's module, found by name like
+  `admits` and `includes` (O18): `fn entries(binding: B) -> List<Text>`, the fns the hosted
+  kind must declare for the binding to run it (`std.deploy`: `["main", "machine"]` for
+  `NativeProcess` and `ScheduledProbeHost`, `[]` for `LocalSocket` and
+  `WorkstationExecutable`, the A10 rule). A binding with a non-empty list runs its member;
+  an included member runs with its host. Without `entries` the three codes are not checked.
+- E121: a property whose value is a signal ref `S.p.f`: `f` must be an unset output of `S.p`
+  (else "is no output"), and `S.p` must run.
+- E122: for every member that runs, every property whose field type is `Ref<_>` and whose
+  value names a member `T`: `T` must run, and exactly one `TcpListener` resource must appear
+  among `T`'s property values (the `provisioning` edge of 16.14); zero or several is E122.
+- E123: a member with an output (a producer) whose `Duration` properties `interval` or
+  `timeout` are not positive, or `timeout >= interval`; the names are the convention of
+  `observations.interval` (16.14).
+- E124: a member with a signal-ref property reading producer `S.p` with a `Duration`
+  `interval`, and a property of type `std.sli.Window` with variant `Rolling(d)`: `d <
+  interval` is E124 (`CalendarMonth` is never too short).
+- E129: for every bindings key whose binding has entries: `main` is declared when the kind is
+  an executable (14.5), any other entry when the kind's module declares `fn K.<entry>`.
+- The fixtures carry their own binding type with `admits`, `includes` and `entries` and their
+  own kinds with `validate`, so they hold whatever `std/deploy.ignite` and the std kinds
+  declare; `e124` imports `std.sli.Window`.
+
+### 16.18 Work split
+
+| agent | owns |
+|---|---|
+| P0 | none (16.1) |
+| P1 frontend and skeleton | `ignite-syntax`, `ignite-check`, `ignite-types` (the builtin signatures of 16.13, the hook signature checks); `crates/ignite-eval/src/resolve.rs` and the new `validate.rs` (E120 to E124, E129); `std/control.ignite` type declarations only (`Machine`, `Event`, `Effect`, `Step`, `Standing`, `Fired`, `Segment`), written first, then handed to P4; the `run` and `replay` CLI stubs and the `crates/ignite/src/run/` module stubs with their placeholders (16.20); `docs/slice.md` for the whole slice |
+| P2 substrate and adapters | `crates/ignite-io` (16.13), the `crates/ignite-rt` entries, and the lowering of the three builtins in `ignite-rustgen` and `ignite-llvm`; `crates/ignite/src/run/{process,probe,clock,journal,control}.rs` (the adapters with the spawner thread, the manual clock with the settle rule, the journal file and lock); substrate tests in `crates/ignite-io/tests/` |
+| P3 driver loop, model, replay, tests | `crates/ignite-eval/src/{model,value,eval,explain}.rs` (16.14, `decode`, `call`); `crates/ignite/src/run/{mod,engine,replay}.rs`, `crates/ignite/src/lib.rs` and `main.rs`; `crates/ignite/tests/**`, including `main.rs` and `common/mod.rs`; E125 to E128; the model and explain goldens; the acceptance tests of items 1 to 3 and 5 to 9 |
+| P4 std, examples, records, acceptance | the `std/control/*.ignite` reducers with inline tests (the A7 fuel test among them), `std/time.ignite`, `std/contract.ignite`, `std/policy.ignite`, `std/probe.ignite` (`main`, `machine`, `validate`), `std/protocol/telnet.ignite` (`await_prompt`), `std/net.ignite` (the `Endpoint.of` declaration); the reducer trace fixture of item 10 (the file goes in `crates/ignite/tests/fixtures/`; its test comes by message to P3); `examples/**`; `AGENTS.md` (layout rows, the slice-12 gate-time row); `docs/friction.md`; design notes in 10.1 (`run` and `replay` exist) and 11.8; acceptance items 4 and 11 to 13, verified with commands |
+
+Order:
+
+- P1 comes first: the skeleton and the `std/control.ignite` types.
+- Then P2, P3 and P4 run in parallel. P4 starts with `std/control` and `std/probe`, because
+  P3's engine steps them.
+- 16.12 (`DrainRollout`) and the drain row of 16.13 are the last units of P2 and P4. They
+  start after acceptance items 1 to 5 and 7 to 10 pass (A12).
+- If the slice runs long, the close reports the rollout as the carried item, and the rest
+  closes. This is no cut: vision row 12 keeps `DrainRollout` in the slice.
+- P4's acceptance comes last.
+
+Shared files:
+
+- `crates/ignite/tests/main.rs` and `tests/common/mod.rs` are P3's. P2 and P4 ask P3 for
+  their `mod` lines.
+- After the skeleton, `std/control.ignite` changes only by message between P3 and P4.
+
+Rules for tests and dependencies:
+
+- One integration-test binary per crate: new files are modules of the existing `main.rs` of
+  `crates/ignite`, `crates/ignite-io` and `crates/ignite-eval`. No `[[test]]` entry is added.
+- `nix` moves from a dev-dependency to a dependency of `crates/ignite`, for pdeathsig,
+  process groups and signals (O43). It is already a workspace dependency of `ignite-io`, so
+  no new crate is added.
+
+### 16.19 Decisions taken in the review
+
+| # | decision |
+|---|---|
+| O27 | Reducers run in the evaluator inside `ignite run`. The trace fixture of item 10 also compiles them on both targets. Steering amended vision 4.1 to say so (A1). Wave C revisits a compiled controller with actors |
+| O28 | One probe process per attempt. `latency` is the probe's own connect-to-prompt time. A resident probe host is a later milestone |
+| O29 | Tests control time with the manual clock, driven by `advance` on stdin, and the settle rule of 16.4. The default is `--settle 2 s`; tests pass `--settle 1 s` (A2) |
+| O30 | `sync_data` after every `effect` record, before dispatch. No snapshots; resume re-steps from `seq` 1 |
+| O31 | A run appends to a journal with the same model. The gap between segments is missing evidence. `--fresh` renames the old journal |
+| O32 | A new field `minimum_completeness: Ratio = 90%` on `Availability`, `ThresholdCompliance` and `SLA`. Zero executed attempts give `insufficient_evidence`, and `meets(_, 0, 0)` becomes `false`. Source: design 4.1, "Zero traffic does not automatically prove compliance" (A15) |
+| O33 | Buckets of `max(interval, window / 10,000)`, calculation version `ignite-sli/0.1`. They become `window / 1,000` if the fuel test of 16.10 fails (A7). Outcome: the fuel held, `window / 10,000` stays; the 10,000-step test is `#[ignore]` at 12.5 s and the gate runs 1,000 steps |
+| O34 | `DrainRollout` without a handoff is declared by the plan (`machines[].disruption`). No user field is added, and the rollout is not rejected. Design 11.8: "Until it does, planning rejects that rollout binding or requires an explicit stop-and-start strategy with declared disruption." (A9) |
+| O35 | `on_deadline` stays `Text`, with a closed set checked by `validate`. This reverses the std comment that announced an enum, and the design file stays unchanged |
+| O36 | Time zones are a closed set in `std/time.ignite`: `UTC` and `Europe/Berlin` (the EU DST rule, in Ignite). Any other zone is E120 |
+| O37 | Readiness is the child's `listening on` line. `Restart.readiness_timeout = 10 seconds`; a timeout counts as a failure |
+| O38 | A member with exhausted restarts stays `Failed`. The run continues and exits 1 at stop |
+| O39 | No user-defined machines in slice 12: `Machine` is a closed std enum |
+| O40 | Expected slots start at the target's first `Ready`. Partial windows are evaluated and report `coverage` |
+| O41 | All `ignite run` end-to-end tests together add at most 6 s of wall time to `crates/ignite/tests`. Only the hung-probe scenario (one test, one target) pays a settle wait. Tests build the design file once per target into one shared `--build` and never rebuild. They never use port 2323 (A2) |
+| O42 | `TelnetPrompt` gains `executable` (defaulting to the component name) and `main`, so the design file builds a `promptProbe` binary |
+| O43 | `nix` becomes a normal dependency of `crates/ignite`; no new crate |
+| O44 | Design 11.8 lists five machines, and slice 12 has four (A8). It folds the listener lifecycle into the supervisor: `listening on` gives `Ready`, and the `released` line gives `Released`. The design row is "Listener lifecycle: Observe, bind or adopt, report ready, release according to ownership". Adopt and bind ownership are slice 13's |
+| O45 | std layering (P1, skeleton; steering confirmed): `K.machine` returns `std.control.Machine` and must live in `K`'s module (E003), so the kinds `std.probe`, `std.contract` and `std.protocol.telnet` import `std.control`, and `std.control` cannot import them back (E032). The shared vocabulary (`ProbeAttempt`, `satisfies`, `Window`, `MissingData`, `meets`) therefore moved to the new leaf `std/sli.ignite`, which `std.contract`, `std.probe` and `std.control` import. Slice 13 must not move these types back. Consequence for P4: reducers that `step` dispatches to live in `std.control` itself or in modules `std.control` imports, never in a module that imports `std.control` |
+| O46 | `Event` is a record `{ at: Duration, kind: EventKind }`, not an enum with `at` in some payloads: every event has a time, and the engine fills it once. The one signal element type of slice 12 is `std.sli.ProbeAttempt`, so `AttemptDone`, `Emitted` and `Emit` carry it directly; a generic `Value` payload needs generics on `Machine`, which is closed (O39) |
+| O47 | Hook signature errors reuse E109 (the `K.main` code of 14.11) instead of a code from E120 to E129: one code for "a hook of the driver has the wrong signature", and the slice's range stays for the semantic rules of 16.17 |
+
+### 16.20 Placeholder arms
+
+P1's skeleton makes the workspace build with `--all-targets`. Each placeholder is
+`unimplemented!("slice 12: …")`, and its owner replaces it:
+
+| owner | file | fn | covers |
+|---|---|---|---|
+| P2 | `ignite-io/src/clock.rs` | `monotonic` | 16.13 |
+| P2 | `ignite-io/src/net.rs` | `endpoint_of` | 16.9, 16.13 |
+| P2 | `ignite-io/src/lib.rs` | `drain` (signal thread) | 16.13 |
+| P2 | `ignite/src/run/process.rs` | `spawn`, `kill` | 16.2, 16.7 |
+| P2 | `ignite/src/run/probe.rs` | `attempt` | 16.8 |
+| P2 | `ignite/src/run/clock.rs` | `Manual::advance` | 16.4 |
+| P2 | `ignite/src/run/journal.rs` | `Journal::open`, `Journal::append` | 16.5 |
+| P3 | `ignite/src/run/engine.rs` | `Engine::step` | 16.2, 16.6 |
+| P3 | `ignite/src/run/replay.rs` | `replay` | 16.15 |
+| P3 | `ignite/src/lib.rs` | `run`, `replay` | 16.3 |
+| P3 | `ignite-eval/src/value.rs` | `Value::decode` | 16.16 |
+| P3 | `ignite-eval/src/model.rs` | `machines`, `observations` | 16.14 |
+| P1 | `ignite-eval/src/validate.rs` | `validate` | 16.17 |
+| P2 | `ignite-rustgen/src/lib.rs` | the `("Clock", "monotonic")` and `("Endpoint", "of")` arm of `static_call` | 16.13 |
+| P2 | `ignite-llvm/src/lower.rs` | the `ClockMonotonic | EndpointOf` arm of `builtin` | 16.13 |
+
+- That is 19 placeholders in 15 rows, as landed: the contract's 17 plus the two compiler
+  arms, which the contract's "lowering" row of 16.18 covers but its table did not list.
+  `grep -rn 'slice 12: ' crates/ | wc -l` counts them (every placeholder text starts so;
+  no doc comment does).
+- The std fns have no placeholders: P4 writes them on top of P1's type declarations.
+  `std/control.ignite` has one body, `step`, which returns the machine unchanged with no
+  effects; P4 replaces it.
+- The placeholder signatures of `crates/ignite/src/run/*.rs` are provisional; the owner
+  replaces the fn, not only its body. `crates/ignite/src/run/mod.rs` carries
+  `#![allow(dead_code)]` until the engine calls the adapters; P3 removes it.
+- `Builtin::ClockMonotonic` and `Builtin::EndpointOf` are also in `ignite-llvm/src/region.rs`
+  (`mutates`: neither mutates an argument) and in `ignite-eval/src/eval.rs` (`is_static`), with
+  no placeholder: the typer keeps them out of what the evaluator runs (E116 in a property
+  expression, E109 in a hook), and `builtin_static`'s fallback arm reports an internal error
+  for any effectful static that reaches it.
+
+### 16.21 Implementation record
+
+Landed by P1 on 2026-11-02 (the skeleton of 16.18 and 16.20); where the implementation
+differs from the reviewed contract or refines it:
+
+1. `std/sli.ignite` is a new leaf module (O45, 16.2): `ProbeAttempt`, `satisfies`,
+   `Window`, `rolling`, `calendar_month`, `MissingData`, `missing_data`, `meets` and their
+   inline tests moved there from `std/probe.ignite` and `std/contract.ignite`, which import
+   them. The model golden `crates/ignite/tests/golden/terminal.design.model.json` changed in
+   four lines (`std.probe.ProbeAttempt` to `std.sli.ProbeAttempt`, three
+   `std.contract.Window` to `std.sli.Window`), re-blessed with `IGNITE_BLESS=1`. Inline tests:
+   103 per target (102 before; the `Window` asserts became their own test).
+2. `std/control.ignite` holds every type of 16.6 with field defaults, `Event` as a record
+   (O46), `EventKind`, `SupervisorState`, `Bucket`, `Status`, `RolloutState`, and a `step`
+   that returns the machine unchanged. It imports `std.sli` and `std.policy` only.
+3. Hook signatures are E109 (O47), checked in `ignite-types` (`typer/system.rs`, `hooks`)
+   for every component whose kind declares `machine` or `validate`; fixture
+   `e109_hook_signature` (three diagnostics: wrong return, extra parameter, effectful).
+4. The builtins `Clock.monotonic` and `Endpoint.of` are statics in `ignite-check` (tables and
+   `static_effect`: `clock.read`, `process.args`) and `ignite-types` (`Builtin::ClockMonotonic`,
+   `Builtin::EndpointOf`); `STD_RECORD_STATIC_OWNERS` keeps `type Endpoint` in `std/net.ignite`
+   free of E004 (16.13). Their lowering arms in `ignite-rustgen` and `ignite-llvm` are
+   placeholders, so 16.20 has 19 placeholders in 15 rows, not 17 in 13.
+5. `ignite` API as 16.16 "as landed": `run` and `replay` return `Error`, not a `Diagnostics`
+   type; `ClockMode`, `Standing { contract, value }`; `main.rs` parses `--port RESOURCE=PORT`
+   and maps a diagnostic of `run` to exit 2. `nix` is a dependency of `crates/ignite` (O43).
+6. `ignite_eval`: `machines`, `observations` and `validate` are free fns taking the
+   `Evaluator`, the `TypedProgram`, the `SystemInfo`, the evaluated `ModelMember`s and the
+   `ResolutionEntry`s (and `validate` the `AssemblyInfo`), the shape `model` and `resolve`
+   have; `ModelMachine`, `ModelObservation`, `DecodeError` are starting shapes in P3's files.
+7. Tests at the skeleton: `cargo test -p ignite-syntax -p ignite-check -p ignite-types -p
+   ignite-eval` green (216 tests); `cargo test -p ignite` 163 passed,
+   3 ignored after the re-bless; clippy `-D warnings` and `cargo fmt --check` clean on the
+   workspace; `ignite check` of every std file, both examples and the design file exits 0
+   with no output.
+
+Step 2 of P1 (the validators), landed 2026-11-02 while P2 to P4 worked:
+
+8. `validate` split in two (16.16): `validate_system` for E120, E123 and E124 once per
+   system, `validate` for E121, E122 and E129 once per resolved assembly, so a system with
+   two assemblies reports a refused declaration once and a program without an assembly is
+   still validated. P3 calls both from `Builder` (`system`, `assembly`).
+9. The notion "the assembly runs this member" is the binding type's `fn entries(binding) ->
+   List<Text>`, found by name as `admits` and `includes` are (O18; `resolve::entries_fn`),
+   not a variant name: the compiler keeps knowing no binding variant (invariant 6). P4 adds
+   it to `std/deploy.ignite` with the hooks; until then E121, E122 and E129 are not checked,
+   and the design file stays silent (A14).
+10. E120 also validates record values set in properties (`recovery = Restart { .. }`), since
+    the design file declares `Restart` and `DrainRollout` only that way; one line per text
+    the hook returns. E123 and E124 read the properties `interval` and `timeout` and the
+    `std.sli.Window` value by name and type, with no hook: the rules are arithmetic the
+    contract fixes, and a hook would let std weaken them.
+11. E109 moved from the component's kind to the hook's declaration and covers every
+    `fn K.machine` and `fn K.validate` of a module (records and enums), because the hooks are
+    found by name wherever they are declared (`validate` on property kinds such as `Restart`,
+    16.6); the fixture's three lines moved to lines 7, 9 and 15. The second machine of a
+    member comes from `std.control.companions` (16.6, P3 and P4), not from a nested hook.
+12. `Ref<K>.to_text()`, `Signal<T>.to_text()` and their interpolation are `TextToText`
+    (16.16), for the hooks that fill `ProbeScheduler.target` and `.signal` with path text.
+13. Fixtures `crates/ignite/tests/fixtures/e120_validate_refused`,
+    `e121_signal_without_producer`, `e122_unresolvable_ref`, `e123_probe_timing`,
+    `e124_window_too_short`, `e129_missing_entry` (`.ignite` and `.expected`; 3, 1, 3, 3, 1,
+    3 lines), each with its own binding type and kinds, verified through a scratch harness
+    that calls the two fns as `Builder` does; P3's `plan.rs::fixtures_match_expected` runs
+    them with the `e11` fixtures.
+14. Invariant 9, with P3's wiring in place (15.1 method, 4 pairs, load 1.66 on every run,
+    none dropped; `target/debug/ignite` of each tree on its own
+    `examples/terminal/terminal.design.ignite`): `ignite check` 0.059 to 0.063 s before,
+    0.061 to 0.063 s after, median pair ratio 1.03; `ignite plan` 0.059 to 0.061 s before,
+    0.062 to 0.063 s after, median 1.04. `cli::check_design_file_is_silent` and
+    `plan::fixtures_match_expected` pass; `ignite check` of every std file, both examples and
+    the design file exits 0 with no output; `cargo test -p ignite-syntax -p ignite-check -p
+    ignite-types` 207 passed; clippy and fmt clean on P1's files (the workspace gate waits
+    for P2 to P4's in-progress files).
+15. Parser finding (P4, not fixed in this slice; a `docs/friction.md` row by P4): an integer
+    percent literal followed by `||`, `{`, `(`, `[`, `-` or an identifier is read as a
+    remainder, because `unit_after` (`ignite-syntax/src/parser.rs`, around line 1885) asks
+    `starts_operand` without regard to `no_record` or to `||`: `t > 100% || x` becomes
+    `t > 100 % (|| x)` (E101 and E040), `if t <= 0% {` becomes `0 % { .. }` (E001 at the
+    block's first statement). `100.0%` and `(t > 100%)` parse. A fix is a grammar decision
+    (`%` after an integer literal when the next token is `||` or, under `no_record`, `{`)
+    for the slice that owns the parser next; the std reducers use the parenthesised form.
+
+Landed by P2 (substrate and adapters), verified at run time:
+
+16. Thread count. The drain of 16.13 adds one OS thread to every compiled program on both
+    targets: `ignite_io::drain()` (called by `ignite_io::run` and by the LLVM runtime's
+    `ignite_rt_init`) blocks SIGTERM in the main thread and starts the signal thread `drain`,
+    which takes SIGTERM with `sigwait`. An idle program with a listener therefore runs two
+    threads (`/proc/<pid>/task/*/comm`: `terminald`, `drain`; verified on both targets), a
+    session adds one; the one-thread-per-task invariant of section 7 holds for tasks.
+    `crates/ignite/tests/terminal.rs`: `idle_terminald_runs_one_thread` now expects 2 idle
+    and 3 with a session, and `a_task_that_cannot_start_closes_only_its_connection` runs
+    under systemd `TasksMax=3` (main, drain, one session) instead of 2.
+17. The `released` line. 16.12 step 3 said the drained process prints `released
+    <address>:<port>` on stdout. As landed it is written with `ignite_io::log`, on stderr,
+    the channel of the `listening on` line it mirrors (A5), and the process adapter reads it
+    from the child's stderr; 16.12 step 3 and the 16.13 drain rules say so.
+
+### 16.22 Slice 12b: reachable std, the build-time carry-over
+
+Approved by the steering session on 2026-11-02 after item 12 of 16.0 measured rises over
+10 % against `s12-before` (O26: the baseline does not move). Slice 12 is done; item 12 is
+carried here, as slice 11's was into 11b.
+
+Measured causes (item 12, 15.1 pairs on `s12-p4-after2`):
+
+- every compiler run loads and checks all of `std/`, used or not: 3,033 to 5,135 lines;
+- the generated `ignite-std` crate holds every std module: 2,191 to 3,792 lines;
+- `crates/ignite/tests/ignite_test.rs` 6.6 to 9.8 s.
+
+Work:
+
+1. Frontend: a program's build, `check`, `plan`, `explain`, `run` and `test` load, check and
+   type only the std modules it reaches. The reached set is:
+   - the modules its files import, transitively;
+   - the modules the compiler itself calls into for that command: `std.deploy` for
+     assembly resolution (15.6), the kinds' modules for `K.main`, the reducers' modules for
+     `ignite run`.
+   `load_std` keeps its signature (public APIs: add, do not rename); the reachable variant is
+   a new fn beside it. `ignite test` of a std file reaches that file's imports.
+2. Rust target: `ignite-std` holds only the items the program and its mains reach, as the
+   LLVM target's std module does since slice 11 (`docs/llvm.md` section 1).
+3. `ignite_test.rs` back to 4.6 s or under (11b), with one test per behaviour kept.
+
+Rules:
+
+- No diagnostic, golden or program behaviour changes. If reachable-only loading changes
+  which diagnostics a program sees (a diagnostic in an unreached std module), the change is
+  reported as a finding, not silenced: `ignite check` of every std file and of both examples
+  stays silent, and the test of the whole std (`task test-ignite`) still checks every module.
+- Generated Rust of a program that reaches every std module is unchanged in content; the
+  rustgen goldens of programs that reach a subset change only by dropped items, and each
+  diff is listed.
+
+Acceptance, measured with the 15.1 pairs against two trees:
+
+- `s12-before` (the 11b baseline): every unit of item 12's table within 1.10, the warm
+  `cargo test --workspace` step included. A unit still over 1.10 gets a measured cause in
+  the `AGENTS.md` row, not an inferred one.
+- `s12-p4-after2` (the slice-12 close): the gain per unit.
+- The gate of 16.0 green: fmt, clippy, `cargo test --workspace --no-fail-fast`,
+  `task test-ignite`, `task gate`, the four compile tasks.
+
+Implementation record (12b, 2026-11-02): the frontend resolves the import closure plus
+literal `module("p")` dependencies of the program and its sibling modules. `check`, `plan`
+and `explain` additionally root `std.deploy` when the main program declares an assembly
+(assembly admission, inclusion and entries);
+`run` and `replay` root `std.control` and `std.sli`, with `std.time` reached transitively.
+Checking a std file roots that module, and the whole-std inline test roots every input.
+Diagnostics in an unrelated std module are intentionally absent from a program's check;
+checking that module directly and the whole-std test still reports them.
+
+The Rust generator retains lowered items referenced by generated program/test text and
+all executable mains, transitively; same-name items in different modules are conservatively
+retained together. Types retain their defaults, associated functions and derived glue. The
+unpruned public API is preserved. Generated std package versions carry a content hash, and
+both `build` and `test` claim a shared Cargo target directory before compiling: alternating
+projects must rebuild their own program even when their std content is identical. The
+`build_cache` integration regression builds A, B and A again in the same target directory,
+with identical std content but different program output; it checks that the last A runs A.
+
+12b runtime finding: redundant syncs of `signal`, `standing` and `consequence` records
+serialized probe fanout ahead of real-clock restart timers. These records are deterministic
+projections of their preceding durable effects. They are still appended in the same order,
+but no longer add a separate sync; O30's sync after every effect, before its dispatch, is
+unchanged. The real-clock restart assertion remains 100 to 500 ms, and every test journal
+still replays. The syscall diagnostic is retained separately from readiness checks because
+tracing interfered with unrelated HTTP concurrency tests.

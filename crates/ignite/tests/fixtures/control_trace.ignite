@@ -1,0 +1,205 @@
+package control_trace
+
+import std.control.*
+import std.sli.{ProbeAttempt, Window, MissingData}
+import std.policy.Restart
+
+// Slice 12 (docs/slice.md 16.4, 16.10): the reducers of std.control stepped
+// over synthetic events. Every fn without parameters below is evaluated by
+// ignite-eval and printed by the compiled program on both targets; the
+// three debug texts must agree (tests/control.rs). `a7_machine` and
+// `a7_event` feed the A7 fuel measurement: ten thousand emissions into a
+// thirty-day rolling window at five-second slots, stepped in the evaluator.
+
+fn at(ms: Int, kind: EventKind) -> Event = Event { at = ms * 1 ms, kind }
+
+fn good(latency: Duration) -> ProbeAttempt = ProbeAttempt { received = true, latency }
+
+fn bad() -> ProbeAttempt = ProbeAttempt { received = false, latency = 2 seconds }
+
+fn server() -> Supervisor = Supervisor {
+  id = "T.server.supervisor"
+  member = "T.server"
+  restart = Restart { maximum_attempts = 3, interval = 1 minute }
+}
+
+fn probe() -> ProbeScheduler = ProbeScheduler {
+  id = "T.probe.scheduler"
+  member = "T.probe"
+  target = "T.server"
+  signal = "T.probe.attempts"
+  interval = 10 seconds
+  timeout = 2 seconds
+}
+
+fn reachable() -> Evaluator = Evaluator {
+  id = "T.reachable.evaluator"
+  contract = "T.reachable"
+  signal = "T.probe.attempts"
+  interval = 10 seconds
+  good = "prompt_received_before_timeout"
+  target = 99.9%
+  window = Rolling(30 days)
+  missing_data = MissingData.InsufficientEvidence
+  minimum_completeness = 90%
+}
+
+fn access() -> Evaluator = Evaluator {
+  id = "T.customerAccess.evaluator"
+  contract = "T.customerAccess"
+  signal = "T.probe.attempts"
+  interval = 10 seconds
+  good = "prompt_received_before_timeout"
+  target = 99.5%
+  window = CalendarMonth("Europe/Berlin")
+  missing_data = MissingData.InsufficientEvidence
+  minimum_completeness = 90%
+  consequence = Some("access_commitment_breached")
+}
+
+// Step `machine` through `events`, collecting every effect.
+fn run(machine: Machine, events: List<Event>) -> (Machine, List<Effect>) {
+  var current = machine
+  var effects = []
+  for event in events {
+    let result = step(current, event)
+    current = result.machine
+    effects.append(result.effects)
+  }
+  (current, effects)
+}
+
+fn supervisor_events() -> List<Event> = [
+  at(0, Start(1767225600 seconds)),
+  at(0, Started(42, 1)),
+  at(20, Ready(42)),
+  at(1000, Signalled(42, 9)),
+  at(1100, Timer(BACKOFF_TIMER)),
+  at(1100, Started(43, 1)),
+  at(1105, Ready(43)),
+  at(2000, Exited(43, 1)),
+  at(2200, Timer(BACKOFF_TIMER)),
+  at(2200, Started(44, 1)),
+  at(12200, Timer(READINESS_TIMER)),
+  at(12201, Signalled(44, 9)),
+  at(12600, Timer(BACKOFF_TIMER)),
+  at(12600, Started(45, 1)),
+  at(12605, Ready(45)),
+  at(20000, Exited(45, 1)),
+  at(30000, Control("stop"))
+]
+
+fn supervisor_effects() -> List<Effect> = run(Supervise(server()), supervisor_events()).1
+
+fn supervisor_machine() -> Machine = run(Supervise(server()), supervisor_events()).0
+
+fn stop_effects() -> List<Effect> = run(Supervise(server()), [
+  at(0, Start(0 ms)),
+  at(0, Started(42, 1)),
+  at(20, Ready(42)),
+  at(500, Control("stop")),
+  at(600, Exited(42, 0))
+]).1
+
+fn scheduler_events() -> List<Event> = [
+  at(0, Start(0 ms)),
+  at(0, Started(42, 1)),
+  at(1000, Ready(42)),
+  at(1003, AttemptDone(1, good(3 ms))),
+  at(11000, Timer(SLOT_TIMER)),
+  at(13000, Timer(2)),
+  at(13500, AttemptDone(2, good(2500 ms))),
+  at(21000, Timer(SLOT_TIMER)),
+  at(21001, AttemptFailed(3, "exit status 1")),
+  at(31000, Timer(SLOT_TIMER))
+]
+
+fn scheduler_effects() -> List<Effect> = run(Schedule(probe()), scheduler_events()).1
+
+fn scheduler_machine() -> Machine = run(Schedule(probe()), scheduler_events()).0
+
+fn rolling_events() -> List<Event> = [
+  at(0, Start(0 ms)),
+  at(0, Emitted("T.probe.attempts", good(3 ms))),
+  at(12000, Emitted("T.probe.attempts", bad())),
+  at(20000, Emitted("T.probe.attempts", good(1 ms))),
+  at(20500, Emitted("T.other", good(1 ms)))
+]
+
+fn rolling_effects() -> List<Effect> = run(Evaluate(reachable()), rolling_events()).1
+
+fn rolling_machine() -> Machine = run(Evaluate(reachable()), rolling_events()).0
+
+fn calendar_events() -> List<Event> {
+  var events = [at(0, Start(1793487000 seconds)), at(0, Emitted("T.probe.attempts", good(2 ms))), at(12000, Emitted("T.probe.attempts", bad()))]
+  var k = 2
+  while k < 60 {
+    events.push(at(k * 10000, Emitted("T.probe.attempts", good(1 ms))))
+    k = k + 1
+  }
+  events.push(at(600000, Timer(PERIOD_TIMER)))
+  events
+}
+
+fn calendar_effects() -> List<Effect> {
+  let (_, effects) = run(Evaluate(access()), calendar_events())
+  var closing = []
+  var i = 61
+  while i < effects.len() {
+    closing.push(effects.at(i))
+    i = i + 1
+  }
+  closing
+}
+
+fn calendar_machine() -> Machine = run(Evaluate(access()), calendar_events()).0
+
+fn companions_of_server() -> List<Machine> = companions(Supervise(server()))
+
+fn a7_machine() -> Machine {
+  var e = reachable()
+  e.interval = 5 seconds
+  Evaluate(e)
+}
+
+fn a7_event(i: Int) -> Event = at(i * 5000, Emitted("T.probe.attempts", good(1 ms)))
+
+// The printer of tests/control_trace.rs: every fn above without parameters,
+// in declaration order, one debug text per line, on both targets.
+fn show(text: Text) -> Result<Unit, IoError> requires [stdout.write] {
+  var bytes = text.to_bytes()
+  bytes.push(10)
+  return Stdout.write_all(bytes)
+}
+
+type Printer {
+  executable: Text
+}
+
+fn Printer.main(self: Printer) -> Result<Unit, IoError> {
+  show(bad().debug())?
+  show(server().debug())?
+  show(probe().debug())?
+  show(reachable().debug())?
+  show(access().debug())?
+  show(supervisor_events().debug())?
+  show(supervisor_effects().debug())?
+  show(supervisor_machine().debug())?
+  show(stop_effects().debug())?
+  show(scheduler_events().debug())?
+  show(scheduler_effects().debug())?
+  show(scheduler_machine().debug())?
+  show(rolling_events().debug())?
+  show(rolling_effects().debug())?
+  show(rolling_machine().debug())?
+  show(calendar_events().debug())?
+  show(calendar_effects().debug())?
+  show(calendar_machine().debug())?
+  show(companions_of_server().debug())?
+  show(a7_machine().debug())?
+  Ok(Unit)
+}
+
+system Trace {
+  component traceprint: Printer { executable = "traceprint" }
+}

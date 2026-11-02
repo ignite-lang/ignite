@@ -1,0 +1,1 @@
+e125_nothing_to_run.ignite:1:1: error[E125]: `ignite run` needs an assembly, and the program declares none

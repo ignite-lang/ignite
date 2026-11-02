@@ -2,7 +2,10 @@ package std.policy
 
 // Recovery and rollout policies of a component (design section 11.3).
 // Slice 10 checks the declarations and gives `Backoff` its arithmetic;
-// a controller that restarts and drains is slice 12.
+// slice 12 applies them: the supervisor of `std.control` restarts under
+// `Restart` and the rollout machine drains under `DrainRollout`
+// (`docs/slice.md` 16.7, 16.12). The `validate` hooks are the declaration
+// rules `ignite check` reports as E120 (16.17).
 
 // How the delay between restart attempts grows.
 enum Backoff {
@@ -31,22 +34,65 @@ fn delay(backoff: Backoff, attempt: Int) -> Duration = match backoff {
 }
 
 // Restart a failed component: at most `maximum_attempts` restarts within
-// `interval`, each after the backoff's delay.
+// `interval`, each after the backoff's delay. A process that reports no
+// readiness within `readiness_timeout` of its start is killed and counts
+// as a failure (O37).
 type Restart {
   backoff: Backoff = exponential(100 ms, 10 seconds)
   maximum_attempts: Int = 10
   interval: Duration = 5 minutes
+  readiness_timeout: Duration = 10 seconds
 }
 
 // Whether `attempt` restarts within `interval` are still allowed.
 fn allows(restart: Restart, attempt: Int) -> Bool = attempt <= restart.maximum_attempts
 
+// The declaration rules of a restart policy (E120): at least one attempt,
+// and an exponential backoff that does not start above its maximum.
+fn Restart.validate(self: Restart) -> List<Text> {
+  var reasons = []
+  if self.maximum_attempts < 1 {
+    reasons.push("maximum_attempts must be at least 1, found {self.maximum_attempts}")
+  }
+  match self.backoff {
+    Exponential(initial, maximum) => if initial > maximum {
+      reasons.push("backoff initial {initial.debug()} is greater than its maximum {maximum.debug()}")
+    }
+    Fixed(_) => {}
+  }
+  reasons
+}
+
 // Replace a component by draining its sessions: new sessions go to the new
 // version, old ones end by `deadline`, then `on_deadline` happens to the
-// rest (`"disconnect_remaining"`, a closed set that slice 12 makes an enum).
+// rest. `on_deadline` is written as text and read by `on_deadline` (O35);
+// the closed set is `"disconnect_remaining"`.
 type DrainRollout {
   deadline: Duration = 2 minutes
   on_deadline: Text = "disconnect_remaining"
+}
+
+// What happens to the sessions still open at a rollout's deadline.
+enum OnDeadline {
+  DisconnectRemaining
+}
+
+fn on_deadline(text: Text) -> Option<OnDeadline> = match text {
+  "disconnect_remaining" => Some(DisconnectRemaining)
+  _ => None
+}
+
+// The declaration rules of a rollout policy (E120): a known `on_deadline`
+// and a positive deadline.
+fn DrainRollout.validate(self: DrainRollout) -> List<Text> {
+  var reasons = []
+  if on_deadline(self.on_deadline) == None {
+    reasons.push("unknown on_deadline \"{self.on_deadline}\": the closed set is disconnect_remaining")
+  }
+  if self.deadline <= 0 ms {
+    reasons.push("deadline must be positive, found {self.deadline.debug()}")
+  }
+  reasons
 }
 
 test "an exponential backoff doubles up to its maximum" {
@@ -68,10 +114,19 @@ test "Restart counts attempts against its maximum" {
   let restart = Restart {}
   assert restart.backoff == exponential(100 ms, 10 seconds)
   assert restart.interval == 5 minutes
+  assert restart.readiness_timeout == 10 seconds
   assert allows(restart, 10)
   assert !allows(restart, 11)
   assert allows(Restart { maximum_attempts = 0 }, 0)
   assert !allows(Restart { maximum_attempts = 0 }, 1)
+}
+
+test "Restart refuses no attempts and a backoff above its maximum" {
+  assert Restart.validate(Restart {}) == []
+  assert Restart.validate(Restart { maximum_attempts = 0 }) == ["maximum_attempts must be at least 1, found 0"]
+  assert Restart.validate(Restart { backoff = exponential(3 seconds, 1 second) }) == ["backoff initial 3 seconds is greater than its maximum 1 second"]
+  assert Restart.validate(Restart { backoff = fixed(1 hour) }) == []
+  assert Restart.validate(Restart { maximum_attempts = -1, backoff = exponential(2 ms, 1 ms) }).len() == 2
 }
 
 test "DrainRollout defaults to two minutes and disconnecting" {
@@ -79,4 +134,12 @@ test "DrainRollout defaults to two minutes and disconnecting" {
   assert rollout.deadline == 2 minutes
   assert rollout.on_deadline == "disconnect_remaining"
   assert DrainRollout { deadline = 30 seconds }.deadline == 30 seconds
+  assert on_deadline("disconnect_remaining") == Some(DisconnectRemaining)
+  assert on_deadline("keep") == None
+}
+
+test "DrainRollout refuses an unknown on_deadline and a deadline of zero" {
+  assert DrainRollout.validate(DrainRollout {}) == []
+  assert DrainRollout.validate(DrainRollout { on_deadline = "keep" }) == ["unknown on_deadline \"keep\": the closed set is disconnect_remaining"]
+  assert DrainRollout.validate(DrainRollout { deadline = 0 ms }) == ["deadline must be positive, found 0 ns"]
 }

@@ -1,0 +1,42 @@
+package golden.targets
+
+enum Color { Red, Green, Blue }
+
+type Box {
+  label: Text
+  inner: Option<Box>
+}
+
+type Holder {
+  items: List<Int>
+}
+
+fn describe(e: Exposure) -> Text = match e {
+  Loopback => "loopback"
+  Private => "private"
+  Public => "public"
+}
+
+fn pick(open: Bool) -> Exposure = if open { Public } else { Loopback }
+
+fn pushed() -> List<List<Int>> {
+  var lists = [[1], [2]]
+  lists[0].push(9)
+  lists[1].append([3])
+  lists
+}
+
+fn held() -> List<Holder> {
+  var holders = [Holder { items = [] }]
+  holders[0].items.push(7)
+  holders
+}
+
+fn counted() -> Map<Color, Int> {
+  var m: Map<Color, Int> = Map.empty()
+  m.put(Blue, 3)
+  m.put(Red, 1)
+  m
+}
+
+fn boxed() -> Box = Box { label = "outer", inner = Some(Box { label = "inner", inner = None }) }

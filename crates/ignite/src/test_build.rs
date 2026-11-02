@@ -21,8 +21,9 @@ use ignite_syntax::ast::Program;
 use ignite_types::{TestInfo, TypedModules, TypedProgram};
 
 use crate::{
-    BuildOptions, Error, StdLibrary, Target, diagnostics, io_error, parse, program_module,
-    read_source, std_library, type_program_with, type_std,
+    BuildOptions, Error, ParsedFile, StdLibrary, Target, diagnostics, io_error, load_std_reachable,
+    module_path, parse, parse_program, program_module, read_source, std_root, type_parsed_with,
+    type_std,
 };
 
 /// Options of `ignite test`.
@@ -54,15 +55,24 @@ pub struct TestGroup {
 /// a program and goes into the first group without a program of its module
 /// path. Programs are read and parsed for their `package` line.
 pub fn test_groups(files: &[PathBuf], library: &StdLibrary) -> Result<Vec<TestGroup>, Error> {
+    group_files(files, &library.root, |file| {
+        Ok(program_module(&parse(&read_source(file)?)?))
+    })
+}
+
+/// [`test_groups`] over the canonical standard-library `root`, the module
+/// path of a program file given by `module_of`.
+fn group_files(
+    files: &[PathBuf],
+    root: &Path,
+    mut module_of: impl FnMut(&Path) -> Result<String, Error>,
+) -> Result<Vec<TestGroup>, Error> {
     let mut groups: Vec<TestGroup> = Vec::new();
     for file in files {
         let canonical = file.canonicalize().map_err(io_error(file))?;
-        let (module, program) = match canonical.strip_prefix(&library.root) {
-            Ok(_) => (crate::module_path(&library.root, &canonical), None),
-            Err(_) => {
-                let program = parse(&read_source(file)?)?;
-                (program_module(&program), Some(file.clone()))
-            }
+        let (module, program) = match canonical.strip_prefix(root) {
+            Ok(_) => (module_path(root, &canonical), None),
+            Err(_) => (module_of(file)?, Some(file.clone())),
         };
         let index = match &program {
             None => 0,
@@ -87,10 +97,26 @@ pub fn test_groups(files: &[PathBuf], library: &StdLibrary) -> Result<Vec<TestGr
     Ok(groups)
 }
 
-/// Build the test executable of every group of `files`.
+/// Build the test executable of every group of `files`. The standard
+/// library is loaded to the modules the files reach (`docs/slice.md`
+/// 16.22): every standard-library file named, every module the programs
+/// and their siblings import, and their imports in turn.
 pub fn build_tests(files: &[PathBuf], options: &TestOptions) -> Result<Vec<PathBuf>, Error> {
-    let library = std_library(options.build.std.as_deref())?;
-    let groups = test_groups(files, &library)?;
+    let root = std_root(options.build.std.as_deref())?;
+    let mut roots = BTreeSet::new();
+    let mut parsed: BTreeMap<PathBuf, ParsedFile> = BTreeMap::new();
+    for file in files {
+        let canonical = file.canonicalize().map_err(io_error(file))?;
+        if canonical.starts_with(&root) {
+            roots.insert(module_path(&root, &canonical));
+        } else if !parsed.contains_key(file) {
+            let program = parse_program(file)?;
+            roots.extend(program.std_modules());
+            parsed.insert(file.clone(), program);
+        }
+    }
+    let library = load_std_reachable(&root, &roots)?;
+    let groups = group_files(files, &root, |file| Ok(parsed[file].module()))?;
     let (std_types, modules) = type_std(&library)?;
     let std = TypedStd {
         library: &library,
@@ -100,7 +126,7 @@ pub fn build_tests(files: &[PathBuf], options: &TestOptions) -> Result<Vec<PathB
     let mut used = BTreeSet::new();
     groups
         .iter()
-        .map(|group| build_group(&std, group, &options.build, &mut used))
+        .map(|group| build_group(&std, group, &mut parsed, &options.build, &mut used))
         .collect()
 }
 
@@ -123,13 +149,13 @@ const LAST_PROJECT: &str = "ignite-test-project";
 
 /// Make cargo rebuild the generated project at `out` in `target_dir` when
 /// another project was built there last. Cargo hashes a path package by its
-/// name and its path relative to its workspace, so every test project (all
-/// are `ignite-tests`, and every `ignite-std` beside them) is one unit in a
-/// shared `--target-dir`; `write_project` leaves unchanged files alone, and
+/// name, version and workspace-relative path, so generated projects with the
+/// same package identity can share one unit in a shared `--target-dir`.
+/// `write_project` leaves unchanged files alone, and
 /// sources older than that unit's output count as fresh, so the build would
 /// keep the other project's executable. Touching the sources marks the unit
 /// dirty. A repeated build of the same project stays incremental.
-fn claim_target_dir(out: &Path, target_dir: &Path) -> Result<(), Error> {
+pub(crate) fn claim_target_dir(out: &Path, target_dir: &Path) -> Result<(), Error> {
     let marker = target_dir.join(LAST_PROJECT);
     let project = out.to_string_lossy();
     if std::fs::read_to_string(&marker).is_ok_and(|last| last == project) {
@@ -193,16 +219,16 @@ struct TestProgram {
     types: TypedProgram,
 }
 
-/// Add the program at `file` and its sibling modules (`docs/slice.md`
+/// Add the parsed program and its sibling modules (`docs/slice.md`
 /// section 14.4), checked and typed, to `programs`; a module whose path
 /// `programs` already holds (a sibling also named on the command line, or
 /// named by two programs) is added once.
 fn type_test_programs(
-    file: &Path,
+    parsed: ParsedFile,
     std: &TypedStd<'_>,
     programs: &mut Vec<TestProgram>,
 ) -> Result<(), Error> {
-    let typed = type_program_with(file, std.library, std.modules)?;
+    let typed = type_parsed_with(parsed, std.library, std.modules)?;
     let mut add = |source, program, symbols, types: TypedProgram| {
         if !programs.iter().any(|p| p.types.module == types.module) {
             programs.push(TestProgram {
@@ -229,13 +255,17 @@ fn type_test_programs(
 fn build_group(
     std: &TypedStd<'_>,
     group: &TestGroup,
+    parsed: &mut BTreeMap<PathBuf, ParsedFile>,
     build: &BuildOptions,
     used: &mut BTreeSet<String>,
 ) -> Result<PathBuf, Error> {
     let library = std.library;
     let mut programs: Vec<TestProgram> = Vec::new();
     for file in &group.programs {
-        type_test_programs(file, std, &mut programs)?;
+        let program = parsed
+            .remove(file)
+            .expect("every program of a group was parsed");
+        type_test_programs(program, std, &mut programs)?;
     }
     let typed: BTreeMap<&str, &TypedProgram> = library
         .modules
@@ -286,16 +316,6 @@ fn build_group(
                 .zip(std.types)
                 .map(|(m, t)| (m.path.clone(), &m.program, &m.symbols, t))
                 .collect();
-            let std_project =
-                ignite_rustgen::generate_std_typed(&std_modules, &options).map_err(|errors| {
-                    let (path, found) = errors.into_iter().next().expect("an error has a module");
-                    let module = library
-                        .modules
-                        .iter()
-                        .find(|m| m.path == path)
-                        .expect("errors name loaded modules");
-                    diagnostics(&module.source, found)
-                })?;
             let inputs: Vec<ignite_rustgen::TestProgram<'_>> = programs
                 .iter()
                 .map(|p| (&p.program, &p.symbols, &p.types))
@@ -308,6 +328,16 @@ fn build_group(
                     .expect("errors name a program");
                 diagnostics(&program.source, found)
             })?;
+            let std_project = ignite_rustgen::generate_std_for(&std_modules, &options, &project)
+                .map_err(|errors| {
+                    let (path, found) = errors.into_iter().next().expect("an error has a module");
+                    let module = library
+                        .modules
+                        .iter()
+                        .find(|m| m.path == path)
+                        .expect("errors name loaded modules");
+                    diagnostics(&module.source, found)
+                })?;
             ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
             let std_out = out.join("std");
             ignite_rustgen::write_project(&std_project, &std_out).map_err(io_error(&std_out))?;

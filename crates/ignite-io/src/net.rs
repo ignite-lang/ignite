@@ -21,8 +21,9 @@
 use std::cell::RefCell;
 use std::io::{ErrorKind, Read, Write};
 use std::net::Shutdown;
+use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, Weak};
 use std::time::Duration;
 
 use crate::{Input, IoError, input, read_buffer, socket_address};
@@ -70,7 +71,43 @@ fn transient(error: &std::io::Error) -> bool {
 
 #[derive(Clone, Debug)]
 pub struct TcpListener {
-    inner: Arc<std::net::TcpListener>,
+    slot: Arc<Slot>,
+}
+
+/// The socket of a listener, `None` once the drain closed it
+/// (`crate::drain`), with the address and port it was bound to.
+#[derive(Debug)]
+pub(crate) struct Slot {
+    listener: RwLock<Option<std::net::TcpListener>>,
+    address: String,
+    port: i64,
+}
+
+impl Slot {
+    fn read(&self) -> RwLockReadGuard<'_, Option<std::net::TcpListener>> {
+        self.listener.read().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Release the listener for the drain: shut its read side down, which
+    /// wakes a pending `accept` with an error, then close it once that
+    /// `accept` has let go of it. The `released <address>:<port>` line, or
+    /// `None` when the listener was already closed.
+    pub(crate) fn release(&self) -> Option<String> {
+        {
+            let guard = self.read();
+            let listener = guard.as_ref()?;
+            // SAFETY: the descriptor belongs to `listener`, which the read
+            // lock keeps open for the call.
+            unsafe { nix::libc::shutdown(listener.as_raw_fd(), nix::libc::SHUT_RD) };
+        }
+        let closed = self
+            .listener
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()?;
+        drop(closed);
+        Some(format!("released {}:{}", self.address, self.port))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -200,9 +237,17 @@ impl TcpListener {
         let target = socket_address("bind", &address, port)?;
         let listener = std::net::TcpListener::bind(&target)
             .map_err(|e| IoError::new(format!("bind {target}: {e}")))?;
-        Ok(TcpListener {
-            inner: Arc::new(listener),
-        })
+        let port = listener
+            .local_addr()
+            .map(|bound| i64::from(bound.port()))
+            .unwrap_or(0);
+        let slot = Arc::new(Slot {
+            listener: RwLock::new(Some(listener)),
+            address,
+            port,
+        });
+        crate::drain::register(&slot);
+        Ok(TcpListener { slot })
     }
 
     /// The next connection. Flushes the current task's writes first. An
@@ -211,13 +256,18 @@ impl TcpListener {
     /// connection aborted before it was accepted) is retried after a pause
     /// of [`ACCEPT_BACKOFF_FIRST`], doubling up to [`ACCEPT_BACKOFF_LAST`];
     /// the first failure of a run is logged once. Any other failure is
-    /// returned.
+    /// returned. While the process drains (`crate::drain`), and after the
+    /// drain closed the listener, the error is "draining".
     pub fn accept(&self) -> Result<TcpStream, IoError> {
         flush();
+        let guard = self.slot.read();
+        let Some(listener) = guard.as_ref() else {
+            return Err(IoError::new(crate::drain::DRAINING));
+        };
         let mut pause = ACCEPT_BACKOFF_FIRST;
         let mut failing = false;
         loop {
-            match self.inner.accept() {
+            match listener.accept() {
                 Ok((socket, _peer)) => return Ok(TcpStream::from_socket(socket)),
                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(e) if transient(&e) => {
@@ -228,17 +278,17 @@ impl TcpListener {
                     std::thread::sleep(pause);
                     pause = (pause * 2).min(ACCEPT_BACKOFF_LAST);
                 }
+                Err(_) if crate::drain::draining() => {
+                    return Err(IoError::new(crate::drain::DRAINING));
+                }
                 Err(e) => return Err(e.into()),
             }
         }
     }
 
-    /// The bound port; 0 only if the operating system cannot report it.
+    /// The port bound; 0 only if the operating system could not report it.
     pub fn local_port(&self) -> i64 {
-        self.inner
-            .local_addr()
-            .map(|address| i64::from(address.port()))
-            .unwrap_or(0)
+        self.slot.port
     }
 }
 
@@ -365,6 +415,16 @@ impl TcpStream {
     }
 }
 
+/// `Endpoint.of(ref)` (`docs/slice.md` 16.9, 16.13): the address and port
+/// of the `--ref <path>=<address>:<port>` process argument whose path is
+/// `reference`'s text; otherwise the IoError "no binding for <path>". The
+/// driver `ignite run` passes one `--ref` per reference the program
+/// resolves; outside it every reference is unbound
+/// ([`crate::args::endpoint_from_args`]).
+pub fn endpoint_of(reference: &str) -> Result<(String, i64), IoError> {
+    crate::args::endpoint_from_args(std::env::args(), reference)
+}
+
 #[cfg(test)]
 mod tests {
     use super::transient;
@@ -406,5 +466,38 @@ mod tests {
                 "{errno}"
             );
         }
+    }
+
+    /// `Slot::release` (the drain, 16.13): a pending `accept` is woken
+    /// and fails, the port is free again at once (the next generation
+    /// binds it), the line names the bound address and port, and a second
+    /// release has nothing to say. The drain mode itself is not set here:
+    /// it is process-wide, and this test binary accepts elsewhere.
+    #[test]
+    fn a_released_listener_wakes_its_accept_and_frees_the_port() {
+        let listener = super::TcpListener::bind("127.0.0.1".to_string(), 0).unwrap();
+        let port = listener.local_port();
+        assert!(port > 0);
+        let accepting = listener.clone();
+        let (started, go) = std::sync::mpsc::channel();
+        let pending = std::thread::spawn(move || {
+            started.send(()).unwrap();
+            accepting.accept().map(|_| ())
+        });
+        go.recv().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let line = listener.slot.release();
+        assert_eq!(line, Some(format!("released 127.0.0.1:{port}")));
+        assert!(
+            pending.join().unwrap().is_err(),
+            "the pending accept failed"
+        );
+        assert!(listener.accept().is_err(), "a later accept fails too");
+        assert_eq!(listener.local_port(), port, "the port stays known");
+        let again = super::TcpListener::bind("127.0.0.1".to_string(), port)
+            .unwrap_or_else(|e| panic!("the port is free again: {e}"));
+        assert_eq!(again.local_port(), port);
+        assert_eq!(listener.slot.release(), None);
+        assert!(again.slot.release().is_some());
     }
 }

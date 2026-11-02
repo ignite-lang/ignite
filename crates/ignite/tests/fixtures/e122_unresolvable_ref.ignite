@@ -1,0 +1,97 @@
+package fixture_e122
+
+import std.deploy.Member
+
+type Server {
+  listener: TcpListener
+  executable: Text
+}
+
+fn Server.main(self: Server) -> Result<Unit, IoError> {
+  let stream = self.listener.accept()?
+  stream.close()?
+  Ok(Unit)
+}
+
+type Twin {
+  front: TcpListener
+  back: TcpListener
+  executable: Text
+}
+
+fn Twin.main(self: Twin) -> Result<Unit, IoError> {
+  let stream = self.front.accept()?
+  stream.close()?
+  Ok(Unit)
+}
+
+type Quiet {
+  name: Text
+  executable: Text
+}
+
+fn Quiet.main(self: Quiet) -> Result<Unit, IoError> = Ok(Unit)
+
+type Pinger {
+  target: Ref
+  executable: Text
+  attempts: Signal<Int>
+}
+
+fn Pinger.main(self: Pinger) -> Result<Unit, IoError> = Ok(Unit)
+
+enum Host {
+  Shelf,
+  Runner
+}
+
+fn shelf() -> Host = Shelf
+
+fn runner() -> Host = Runner
+
+fn admits(binding: Host, member: Member) -> Option<Text> = None
+
+fn includes(binding: Host) -> List<Ref> = []
+
+fn entries(binding: Host) -> List<Text> = match binding {
+  Shelf => []
+  Runner => ["main"]
+}
+
+type Plan {
+  system: SystemRef
+  bindings: Map<Ref, Host>
+}
+
+system S {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  resource front: TcpListener { address = "127.0.0.1", port = 0 }
+  resource back: TcpListener { address = "127.0.0.1", port = 0 }
+  resource spare: TcpListener { address = "127.0.0.1", port = 0 }
+  component server: Server { listener = ingress }
+  component twin: Twin { front = front, back = back }
+  component quiet: Quiet { name = "q" }
+  component shelved: Server { listener = spare }
+  component fine: Pinger { target = server }
+  component several: Pinger { target = twin }
+  component none: Pinger { target = quiet }
+  component stopped: Pinger { target = shelved }
+}
+
+assembly a: Plan {
+  system = S
+  bindings = {
+    S.ingress = shelf()
+    S.front = shelf()
+    S.back = shelf()
+    S.spare = shelf()
+    S.server = runner()
+    S.twin = runner()
+    S.quiet = runner()
+    S.shelved = shelf()
+    S.fine = runner()
+    S.several = runner()
+    S.none = runner()
+    S.stopped = runner()
+  }
+}

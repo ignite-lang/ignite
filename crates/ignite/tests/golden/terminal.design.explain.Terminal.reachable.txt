@@ -1,0 +1,11 @@
+Terminal.reachable: contract std.contract.Availability (terminal.design.ignite:81:3)
+  signal = Terminal.promptProbe.attempts
+  good = "prompt_received_before_timeout"
+  target = 99.9%
+  window = Rolling(30 days)
+  missing_data = "insufficient_evidence"
+  minimum_completeness = 90% (default)
+observes Terminal.promptProbe.attempts
+readiness Terminal.promptProbe
+machine Terminal.reachable.evaluator: Evaluate
+standing: evaluated at run time (ignite run, ignite replay)

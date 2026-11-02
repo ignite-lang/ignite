@@ -1,0 +1,71 @@
+// ignite plan
+package fixture_e114
+
+import std.deploy.{Deployment, localSocket, nativeProcess, scheduledProbeHost, workstationExecutable}
+import std.control.{Machine, Supervisor, ProbeScheduler}
+import std.policy.Restart
+
+type Helper {
+  name: Text
+}
+
+type Worker {
+  listener: TcpListener
+  helper: Helper
+  executable: Text
+}
+
+type Watch {
+  every: Duration
+  ticks: Signal<Int>
+}
+
+fn Worker.main(self: Worker) -> Result<Unit, IoError> {
+  let stream = self.listener.accept()?
+  stream.close()?
+  Ok(Unit)
+}
+
+system S {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  component h: Helper { name = "h" }
+  component w: Worker { listener = ingress, helper = h }
+  component watch: Watch { every = 1 seconds }
+}
+
+assembly hosted: Deployment {
+  system = S
+  bindings = {
+    S.ingress = localSocket()
+    S.w = nativeProcess(includes = [S.h])
+    S.watch = scheduledProbeHost()
+  }
+}
+
+assembly workstation: Deployment {
+  system = S
+  bindings = {
+    S.ingress = localSocket()
+    S.w = nativeProcess(includes = [S.h])
+    S.watch = workstationExecutable()
+  }
+}
+
+// The entries `nativeProcess` and `scheduledProbeHost` run (E129): the
+// hosted kinds carry `machine` and `main`.
+fn Worker.machine(self: Worker, id: Text) -> Machine = Machine.Supervise(Supervisor {
+  id = "{id}.supervisor"
+  member = id
+  restart = Restart { maximum_attempts = 1 }
+})
+
+fn Watch.main(self: Watch) -> Result<Unit, IoError> = Ok(Unit)
+
+fn Watch.machine(self: Watch, id: Text) -> Machine = Machine.Schedule(ProbeScheduler {
+  id = "{id}.scheduler"
+  member = id
+  target = "S.w"
+  signal = self.ticks.to_text()
+  interval = self.every
+  timeout = 500 ms
+})

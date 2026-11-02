@@ -29,6 +29,7 @@ const TYPED: &[&str] = &[
     "components",
     "services",
     "modules",
+    "targets",
 ];
 
 fn lower(stem: &str, std_root: &Path) -> (GeneratedProject, GeneratedProject) {
@@ -367,6 +368,33 @@ fn listeners_are_bound_before_the_component_value() {
         .find("let c = Server { listener: port_.clone(), port: bound(&(Holder { listener: port_.clone() })) };")
         .expect(&main);
     assert!(bind < value, "{main}");
+}
+
+/// Slice 11b (`docs/friction.md` rows 32 to 35): a mutating call on an
+/// indexed receiver writes through `ignite_io::checked::at_mut`; an enum
+/// without payloads derives the `BTreeMap` key traits; `Exposure` is
+/// `ignite_io::Exposure`; a record named `Box` is `Box_`, so the boxed
+/// field stays `Box<Option<Box_>>`.
+#[test]
+fn target_bugs_of_slice_11b() {
+    let project = check_program("targets", &common::golden_std(), false);
+    let lib = norm(&project.lib_rs);
+    for text in [
+        "(*ignite_io::checked::at_mut(&mut lists, __p1, ",
+        ")).push(__p2) }",
+        ")).extend_from_slice(&__p4) }",
+        ")).items.push(__p6) }",
+        "#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)] pub enum Color {",
+        "pub fn describe(e: &ignite_io::Exposure) -> String {",
+        "ignite_io::Exposure::Loopback =>",
+        "pub fn pick(open: &bool) -> ignite_io::Exposure {",
+        "pub struct Box_ {",
+        "pub inner: Box<Option<Box_>>,",
+        "pub fn boxed() -> Box_ {",
+        "Box_ { label: String::from(\"outer\"), inner: Box::new(Some(Box_ {",
+    ] {
+        assert!(lib.contains(text), "no `{text}` in\n{lib}");
+    }
 }
 
 #[test]

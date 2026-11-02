@@ -1,0 +1,1 @@
+effects_a21_system_property_effect.ignite:27:29: error[E116]: effectful call `noisy` in the property `application` of component `svc`: a property expression is pure
