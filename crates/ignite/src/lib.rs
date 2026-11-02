@@ -90,6 +90,20 @@ impl Default for BuildOptions {
     }
 }
 
+/// Options of `ignite plan` and `ignite explain` (`docs/slice.md` sections
+/// 15.7 and 15.8).
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct PlanOptions {
+    /// `--assembly NAME`: the assembly to select; default the program's
+    /// only one (15.6).
+    pub assembly: Option<String>,
+    /// `--fuel N`: the fuel limit per property expression (15.3, O14);
+    /// default `ignite_eval::Fuel::DEFAULT_LIMIT`.
+    pub fuel: Option<u64>,
+    /// Root of the standard library. Default: [`default_std_path`].
+    pub std: Option<PathBuf>,
+}
+
 /// Why a driver command failed. Maps to the exit statuses in `main.rs`.
 #[derive(Debug)]
 pub enum Error {
@@ -657,7 +671,9 @@ fn generate(file: &Path, library: &StdLibrary, substrate: PathBuf) -> Result<Emi
 }
 
 /// `ignite check`: load the standard library, then parse, check and type
-/// the program and its sibling modules against it; `Ok` means no
+/// the program and its sibling modules against it, then evaluate every
+/// property expression of every system and assembly and resolve every
+/// assembly (`docs/slice.md` O20, E110 to E118); `Ok` means no
 /// diagnostics. The type checker owns the system rules (`E020`, `E104` to
 /// `E109`), so nothing is generated.
 pub fn check(file: &Path) -> Result<(), Error> {
@@ -667,9 +683,115 @@ pub fn check(file: &Path) -> Result<(), Error> {
 /// [`check`] with the standard library at `std` (default
 /// [`default_std_path`]).
 pub fn check_with_std(file: &Path, std: Option<&Path>) -> Result<(), Error> {
+    load(file, std)?.check()
+}
+
+/// A program read, parsed, checked and typed with the standard library and
+/// its sibling modules: the input of the evaluator (`docs/slice.md`
+/// section 15.9), as [`load`] returns it.
+pub struct Loaded {
+    library: StdLibrary,
+    typed: Typed,
+}
+
+impl Loaded {
+    /// Every module the evaluator may reach: the standard library, the
+    /// siblings and the program, by module path.
+    pub fn modules(&self) -> ignite_eval::Modules<'_> {
+        let std = self
+            .library
+            .modules
+            .iter()
+            .zip(&self.typed.std_types)
+            .map(|(module, types)| ignite_eval::Module {
+                path: &module.path,
+                source: &module.source,
+                program: &module.program,
+                types,
+            });
+        let file = &self.typed.file;
+        let siblings = file.siblings.iter().map(|sibling| ignite_eval::Module {
+            path: &sibling.path,
+            source: &sibling.source,
+            program: &sibling.program,
+            types: &sibling.types,
+        });
+        let program = ignite_eval::Module {
+            path: &file.types.module,
+            source: &file.source,
+            program: &file.program,
+            types: &file.types,
+        };
+        std.chain(siblings)
+            .chain(std::iter::once(program))
+            .collect()
+    }
+
+    /// The program's types.
+    pub fn types(&self) -> &TypedProgram {
+        &self.typed.file.types
+    }
+
+    /// The program's AST, the object its types were computed from.
+    pub fn program(&self) -> &Program {
+        &self.typed.file.program
+    }
+
+    /// The program's source.
+    pub fn source(&self) -> &SourceFile {
+        &self.typed.file.source
+    }
+
+    /// The evaluation and resolution rules of `ignite check` (`docs/slice.md`
+    /// O20) over every system and assembly, with the default fuel.
+    pub fn check(&self) -> Result<(), Error> {
+        let modules = self.modules();
+        let mut evaluator = ignite_eval::Evaluator::new(&modules, ignite_eval::Fuel::default());
+        ignite_eval::Model::check(&mut evaluator, self.types())
+            .map_err(|found| diagnostics(self.source(), found))
+    }
+
+    /// The model of `options.assembly` (`docs/slice.md` section 15.5),
+    /// diagnostics rendered with the program's file.
+    pub fn model(&self, options: &PlanOptions) -> Result<ignite_eval::Model, Error> {
+        let modules = self.modules();
+        let mut evaluator = ignite_eval::Evaluator::new(&modules, fuel(options));
+        ignite_eval::model(&mut evaluator, self.types(), options.assembly.as_deref())
+            .map_err(|found| diagnostics(self.source(), found))
+    }
+}
+
+fn fuel(options: &PlanOptions) -> ignite_eval::Fuel {
+    options
+        .fuel
+        .map_or_else(ignite_eval::Fuel::default, ignite_eval::Fuel::with_units)
+}
+
+/// Read, parse, check and type the program at `file` and its siblings
+/// against the standard library at `std` (default [`default_std_path`]),
+/// for evaluation (`docs/slice.md` section 15.3).
+pub fn load(file: &Path, std: Option<&Path>) -> Result<Loaded, Error> {
     let library = std_library(std)?;
-    type_program(file, &library)?;
-    Ok(())
+    let typed = type_program(file, &library)?;
+    Ok(Loaded { library, typed })
+}
+
+/// `ignite plan`: the system model of the program at `file` as canonical
+/// JSON (`docs/slice.md` sections 15.5 to 15.7), after the same pipeline
+/// as [`check`]. Diagnostics of the evaluation and resolution (E110 to
+/// E118) are rendered with the program's file.
+pub fn plan(file: &Path, options: &PlanOptions) -> Result<String, Error> {
+    let loaded = load(file, options.std.as_deref())?;
+    Ok(loaded.model(options)?.to_json())
+}
+
+/// `ignite explain`: the explanation of `path` (a system, member, property
+/// path or assembly) in the model of the program at `file`
+/// (`docs/slice.md` section 15.8); E119 for a path that names nothing.
+pub fn explain(file: &Path, path: &str, options: &PlanOptions) -> Result<String, Error> {
+    let loaded = load(file, options.std.as_deref())?;
+    let model = loaded.model(options)?;
+    ignite_eval::explain(&model, path).map_err(|found| diagnostics(loaded.source(), vec![found]))
 }
 
 /// `ignite emit`: the generated program project without writing or

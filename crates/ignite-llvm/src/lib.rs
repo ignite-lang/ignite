@@ -22,7 +22,7 @@ pub mod layout;
 mod lower;
 mod region;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ignite_check::Symbols;
 use ignite_syntax::SourceFile;
@@ -174,9 +174,8 @@ pub fn generate_with(
     programs.extend(options.siblings.iter().copied());
     let env = type_env_of(std, &programs);
     let all: Vec<ModuleInput<'_>> = std.iter().chain(programs.iter()).copied().collect();
-    let std_ir = lower_inputs(&env, &all, std, "std", options);
-    let program_ir = lower_inputs(&env, &all, &programs, program.path, options);
-    let mains = if options.test_modules.is_empty() {
+    let program_ir = lower_inputs(&env, &all, &programs, program.path, options, None);
+    let mains: Vec<Main> = if options.test_modules.is_empty() {
         program
             .types
             .executables()
@@ -192,11 +191,22 @@ pub fn generate_with(
             ir: test_main_module(&env, &all, options),
         }]
     };
+    let roots = std_roots(&program_ir, &mains);
     Generated {
-        std: std_ir,
+        std: lower_inputs(&env, &all, std, "std", options, Some(roots)),
         program: program_ir,
         mains,
     }
+}
+
+/// The symbols the standard-library module is emitted for: everything the
+/// program module and the mains name (`docs/llvm.md` section 1).
+fn std_roots(program: &str, mains: &[Main]) -> BTreeSet<String> {
+    let mut roots = ir::referenced_symbols(program);
+    for main in mains {
+        roots.extend(ir::referenced_symbols(&main.ir));
+    }
+    roots
 }
 
 /// A test build of several programs in one executable (`docs/slice.md`
@@ -213,13 +223,16 @@ pub fn generate_tests(
 ) -> Generated {
     let env = type_env_of(std, programs);
     let all: Vec<ModuleInput<'_>> = std.iter().chain(programs).copied().collect();
+    let program = lower_inputs(&env, &all, programs, "program", options, None);
+    let mains = vec![Main {
+        executable: TEST_EXECUTABLE.to_string(),
+        ir: test_main_module(&env, &all, options),
+    }];
+    let roots = std_roots(&program, &mains);
     Generated {
-        std: lower_inputs(&env, &all, std, "std", options),
-        program: lower_inputs(&env, &all, programs, "program", options),
-        mains: vec![Main {
-            executable: TEST_EXECUTABLE.to_string(),
-            ir: test_main_module(&env, &all, options),
-        }],
+        std: lower_inputs(&env, &all, std, "std", options, Some(roots)),
+        program,
+        mains,
     }
 }
 
@@ -237,19 +250,25 @@ pub fn lower_modules_with(
     inputs: &[ModuleInput<'_>],
     name: &str,
 ) -> String {
-    lower_inputs(env, sources, inputs, name, &Options::default())
+    lower_inputs(env, sources, inputs, name, &Options::default(), None)
 }
 
+/// One IR module of `inputs`; with `roots`, only the functions reachable
+/// from those symbols (`Module::set_roots`).
 fn lower_inputs<'e>(
     env: &'e TypeEnv,
     sources: &[ModuleInput<'e>],
     inputs: &[ModuleInput<'_>],
     name: &str,
     options: &Options<'e>,
+    roots: Option<BTreeSet<String>>,
 ) -> String {
     let mut m = Module::new(env, name);
     configure(&mut m, options);
     add_sources(&mut m, sources);
+    if let Some(roots) = roots {
+        m.set_roots(roots);
+    }
     for input in inputs {
         let cx = Ctx::new(input.path, input.program, input.symbols, input.types);
         let tests = options.test_modules.iter().any(|path| path == input.path);

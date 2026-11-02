@@ -1,18 +1,31 @@
 //! `ignite test` end to end on both targets (`docs/slice.md` section 12):
 //! the fixtures in `tests/fixtures/tests` are built into test executables
 //! and run; the report on stdout and the exit status are checked.
+//!
+//! Every test runs its two targets on two threads ([`on_both_targets`]),
+//! and the targets have separate output directories and locks, so a Rust
+//! build (cargo) and an LLVM build (clang) overlap; the report of
+//! `basics.ignite` is produced once per target and shared.
 
 use crate::common;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
-/// One `ignite test` at a time: invocations share the output directory of
-/// their target and cargo's target directory.
-static BUILDS: Mutex<()> = Mutex::new(());
+/// One `ignite test` per target at a time: the invocations of a target
+/// share its output directory and, on the Rust target, cargo's target
+/// directory.
+static BUILDS: [Mutex<()>; 2] = [Mutex::new(()), Mutex::new(())];
 
 const TARGETS: [&str; 2] = ["rust", "llvm"];
+
+fn target_index(target: &str) -> usize {
+    TARGETS
+        .iter()
+        .position(|t| *t == target)
+        .unwrap_or_else(|| panic!("unknown target {target}"))
+}
 
 fn fixture(name: &str) -> String {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -34,23 +47,44 @@ struct Run {
 
 /// `ignite test <args> --target <target>`.
 fn ignite_test(target: &str, args: &[&str]) -> Run {
-    let _guard = BUILDS.lock().unwrap_or_else(|e| e.into_inner());
-    let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+    let _guard = BUILDS[target_index(target)]
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let out = out_dir().join(target);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
+    command
         .arg("test")
         .args(args)
         .args(["--target", target, "--out"])
-        .arg(out_dir())
+        .arg(&out)
         .arg("--runtime")
-        .arg(runner_runtime())
-        .arg("--target-dir")
-        .arg(out_dir().join("cargo"))
-        .output()
-        .expect("run ignite test");
+        .arg(runner_runtime());
+    if target == "rust" {
+        command.arg("--target-dir").arg(out_dir().join("cargo"));
+    }
+    let output = command.output().expect("run ignite test");
     Run {
         status: output.status.code().expect("ignite test exits"),
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
     }
+}
+
+/// `f` once per target, the two on their own threads; a failing target
+/// fails the test with its own panic message.
+fn on_both_targets(f: impl Fn(&str) + Sync) {
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = TARGETS
+            .iter()
+            .map(|target| scope.spawn(|| f(target)))
+            .collect();
+        let failed = handles
+            .into_iter()
+            .map(|handle| handle.join())
+            .filter(Result::is_err)
+            .count();
+        assert_eq!(failed, 0, "{failed} target(s) failed");
+    });
 }
 
 /// The report without the time of the summary line.
@@ -65,13 +99,16 @@ fn without_time(report: &str) -> String {
         .join("\n")
 }
 
-fn basics(target: &str) -> Run {
-    ignite_test(target, &[&fixture("basics.ignite")])
+/// The run of `basics.ignite` on `target`, once per test binary: four
+/// tests read it.
+fn basics(target: &str) -> &'static Run {
+    static RUNS: [OnceLock<Run>; 2] = [OnceLock::new(), OnceLock::new()];
+    RUNS[target_index(target)].get_or_init(|| ignite_test(target, &[&fixture("basics.ignite")]))
 }
 
 #[test]
 fn counts_results_and_failures() {
-    for target in TARGETS {
+    on_both_targets(|target| {
         let run = basics(target);
         let out = &run.stdout;
         assert_eq!(run.status, 1, "{target}: {out}\n{}", run.stderr);
@@ -91,14 +128,14 @@ fn counts_results_and_failures() {
             out.contains("failures:\n    fixtures.basics/int differs\n"),
             "{target}: {out}"
         );
-    }
+    });
 }
 
 #[test]
 fn assert_and_try_reports() {
     let path = fixture("basics.ignite");
-    for target in TARGETS {
-        let out = basics(target).stdout;
+    on_both_targets(|target| {
+        let out = &basics(target).stdout;
         for report in [
             format!(
                 "---- fixtures.basics/int differs stderr ----\nerror: assert failed at {path}:33:3: 1 + 1 == 3\n  left: 2\n  right: 3\n"
@@ -118,13 +155,13 @@ fn assert_and_try_reports() {
         ] {
             assert!(out.contains(&report), "{target}: no\n{report}\nin\n{out}");
         }
-    }
+    });
 }
 
 #[test]
 fn captured_output_only_for_failures() {
-    for target in TARGETS {
-        let out = basics(target).stdout;
+    on_both_targets(|target| {
+        let out = &basics(target).stdout;
         assert!(
             out.contains(
                 "---- fixtures.basics/output shown on failure stdout ----\ncaptured out\n"
@@ -136,7 +173,7 @@ fn captured_output_only_for_failures() {
             !out.contains("---- fixtures.basics/exit code 3 stdout"),
             "{target}: {out}"
         );
-    }
+    });
 }
 
 #[test]
@@ -157,7 +194,7 @@ fn both_targets_print_the_same_report() {
 #[test]
 fn filter_exact_and_list() {
     let file = fixture("basics.ignite");
-    for target in TARGETS {
+    on_both_targets(|target| {
         let list = ignite_test(target, &[&file, "differs", "--list"]);
         assert_eq!(list.status, 0, "{target}: {}", list.stderr);
         assert_eq!(
@@ -189,7 +226,7 @@ fn filter_exact_and_list() {
             "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 12 filtered out",
             "{target}"
         );
-    }
+    });
 }
 
 /// Programs with different packages share one test executable: one list,
@@ -197,7 +234,7 @@ fn filter_exact_and_list() {
 #[test]
 fn files_share_one_executable() {
     let (basics, slow) = (fixture("basics.ignite"), fixture("slow.ignite"));
-    for target in TARGETS {
+    on_both_targets(|target| {
         let list = ignite_test(target, &[&slow, &basics, "fa", "--list"]);
         assert_eq!(list.status, 0, "{target}: {}", list.stderr);
         assert_eq!(
@@ -205,7 +242,7 @@ fn files_share_one_executable() {
             "fixtures.slow/fast: test\nfixtures.basics/try on err fails: test\nfixtures.basics/try on none fails: test\nfixtures.basics/output shown on failure: test\n4 tests\n",
             "{target}"
         );
-    }
+    });
 }
 
 /// Two programs with one module path (`main`, no `package` line) in one
@@ -216,20 +253,22 @@ fn files_share_one_executable() {
 #[test]
 fn each_unnamed_file_runs_its_own_tests() {
     let (a, b) = (fixture("unnamed_a.ignite"), fixture("unnamed_b.ignite"));
-    for target in TARGETS.iter().chain(&TARGETS) {
-        let run = ignite_test(target, &[&a, &b]);
-        assert_eq!(run.status, 0, "{target}: {}\n{}", run.stdout, run.stderr);
-        assert_eq!(
-            without_time(&run.stdout),
-            "running 1 test\ntest main/first file ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 filtered out\nrunning 2 tests\ntest main/second file ... ok\ntest main/second file again ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 filtered out",
-            "{target}"
-        );
-    }
+    on_both_targets(|target| {
+        for _round in 0..2 {
+            let run = ignite_test(target, &[&a, &b]);
+            assert_eq!(run.status, 0, "{target}: {}\n{}", run.stdout, run.stderr);
+            assert_eq!(
+                without_time(&run.stdout),
+                "running 1 test\ntest main/first file ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 filtered out\nrunning 2 tests\ntest main/second file ... ok\ntest main/second file again ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 filtered out",
+                "{target}"
+            );
+        }
+    });
 }
 
 #[test]
 fn timeout_kills_a_test() {
-    for target in TARGETS {
+    on_both_targets(|target| {
         let run = ignite_test(target, &[&fixture("slow.ignite"), "--timeout", "1"]);
         assert_eq!(run.status, 1, "{target}: {}\n{}", run.stdout, run.stderr);
         assert!(
@@ -244,12 +283,12 @@ fn timeout_kills_a_test() {
             "{target}: {}",
             run.stdout
         );
-    }
+    });
 }
 
 #[test]
 fn compile_error_exits_2() {
-    for target in TARGETS {
+    on_both_targets(|target| {
         let run = ignite_test(target, &[&fixture("broken.ignite")]);
         assert_eq!(run.status, 2, "{target}: {}", run.stderr);
         assert!(
@@ -258,13 +297,13 @@ fn compile_error_exits_2() {
             run.stderr
         );
         assert!(run.stdout.is_empty(), "{target}: {}", run.stdout);
-    }
+    });
 }
 
 #[test]
 fn std_module_as_the_file() {
     let std = fixture("std");
-    for target in TARGETS {
+    on_both_targets(|target| {
         let run = ignite_test(target, &[&fixture("std/greet.ignite"), "--std", &std]);
         assert_eq!(run.status, 0, "{target}: {}\n{}", run.stdout, run.stderr);
         assert_eq!(
@@ -272,7 +311,40 @@ fn std_module_as_the_file() {
             "running 1 test\ntest std.greet/greets by name ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 filtered out",
             "{target}"
         );
-    }
+    });
+}
+
+/// Slice 11b: the four target bugs of `docs/friction.md` rows 32 to 35
+/// (`fixtures/tests/targets.ignite`, one test per row) pass on both
+/// targets: a mutating call through an indexed receiver writes the
+/// element, a user enum is a `Map` key, `Exposure` is a value type, and
+/// user types named `Box`, `Vec`, `String` or with variants `Some`,
+/// `None`, `Ok`, `Err` build.
+#[test]
+fn target_bugs_of_slice_11b_are_fixed() {
+    on_both_targets(|target| {
+        let run = ignite_test(target, &[&fixture("targets.ignite")]);
+        assert_eq!(run.status, 0, "{target}: {}\n{}", run.stdout, run.stderr);
+        assert!(
+            run.stdout.starts_with("running 4 tests\n"),
+            "{target}: {}",
+            run.stdout
+        );
+        for row in ["32", "33", "34", "35"] {
+            assert!(
+                run.stdout
+                    .contains(&format!("test fixtures.targets/row {row}: ")),
+                "{target}: no row {row} in\n{}",
+                run.stdout
+            );
+        }
+        assert!(
+            run.stdout
+                .contains("test result: ok. 4 passed; 0 failed; 0 filtered out;"),
+            "{target}: {}",
+            run.stdout
+        );
+    });
 }
 
 /// The newest `libignite_rt-*.a` beside the test executable that has the
@@ -311,8 +383,8 @@ fn runner_runtime() -> PathBuf {
 #[test]
 fn overflow_fails_the_same_everywhere() {
     let file = fixture("overflow.ignite");
-    let mut reports = Vec::new();
-    for target in TARGETS {
+    let reports: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+    on_both_targets(|target| {
         for profile in [&[][..], &["--release"][..]] {
             let mut args = vec![file.as_str()];
             args.extend(profile.iter().copied());
@@ -349,9 +421,14 @@ fn overflow_fails_the_same_everywhere() {
                     run.stdout
                 );
             }
-            reports.push((label, without_time(&run.stdout)));
+            reports
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push((label, without_time(&run.stdout)));
         }
-    }
+    });
+    let reports = reports.into_inner().unwrap_or_else(|e| e.into_inner());
+    assert_eq!(reports.len(), 4);
     for (label, report) in &reports[1..] {
         assert_eq!(
             report, &reports[0].1,

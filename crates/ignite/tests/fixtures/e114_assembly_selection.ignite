@@ -1,0 +1,50 @@
+// ignite plan
+package fixture_e114
+
+import std.deploy.{Deployment, localSocket, nativeProcess, scheduledProbeHost, workstationExecutable}
+
+type Helper {
+  name: Text
+}
+
+type Worker {
+  listener: TcpListener
+  helper: Helper
+  executable: Text
+}
+
+type Watch {
+  every: Duration
+  ticks: Signal<Int>
+}
+
+fn Worker.main(self: Worker) -> Result<Unit, IoError> {
+  let stream = self.listener.accept()?
+  stream.close()?
+  Ok(Unit)
+}
+
+system S {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  component h: Helper { name = "h" }
+  component w: Worker { listener = ingress, helper = h }
+  component watch: Watch { every = 1 seconds }
+}
+
+assembly hosted: Deployment {
+  system = S
+  bindings = {
+    S.ingress = localSocket()
+    S.w = nativeProcess(includes = [S.h])
+    S.watch = scheduledProbeHost()
+  }
+}
+
+assembly workstation: Deployment {
+  system = S
+  bindings = {
+    S.ingress = localSocket()
+    S.w = nativeProcess(includes = [S.h])
+    S.watch = workstationExecutable()
+  }
+}

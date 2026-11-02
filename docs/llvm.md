@@ -37,6 +37,18 @@ Size. Every function and datum is in its own section (rustc emits the runtime's 
 way by default), so `--gc-sections` drops what no executable reaches. The workspace builds `ignite-rt` with `codegen-units = 1` in the release
 profile.
 
+Reachable std only (slice 11, `docs/slice.md` 15.1 item 2). `std.ll` holds only the std
+fns, constants, field defaults and glue reachable from the program: the program module and
+the mains are lowered first, every symbol they name is a root, and the std module keeps a
+function when a root, a global or a kept function names it (a walk over the `@symbol`
+references of the lowered IR, `ir::Module::set_roots`). Glue for types no kept function uses
+goes with them; debug metadata of dropped functions stays unreferenced. A test build's
+roots come from the test program module and `main_ignite-test.ll`, so std tests are kept
+when their module is selected. For `todod` this cuts `std.ll` from 222 to 107 functions
+(18,120 to 12,361 lines), `clang -c -O2` of it from 0.80 s to 0.48 to 0.55 s, and the
+release build from 1.10 to 1.11 s to 0.80 to 0.81 s (four interleaved pairs against commit
+`60aef38`, load 1.6, 2026-11-02). The program goldens hold no `std.ll`, so none changed.
+
 Target. Every IR module starts with `target triple = "<triple>"` and
 `target datalayout = "<layout>"`, and every clang call gets `--target=<triple>`, so the
 IR, the objects and the link agree; `-Werror=override-module` makes a module whose triple
@@ -167,7 +179,7 @@ pub enum Callee { Fn(QualName), Role { protocol: QualName, role: String }, Varia
 | `TcpListener`, `TcpStream` | `i64` runtime handle | 8, 8 |
 | record | `{ fields in declaration order }` with C layout | C rules |
 | tuple `(A, B, ..)` | `{ elements in order }` with C layout, an aggregate like a record; copy function `"copy.(A,B)"` | C rules |
-| enum, `Option`, `Result`, `Input` | `{ i32 tag, payload }`: tag = variant index in declaration order (`Some` 0, `None` 1; `Ok` 0, `Err` 1; `Data` 0, `Eof` 1); payload at offset 8 (or 4 when every payload's alignment is ≤ 4), laid out as a C struct of the variant's fields; size = max over variants, rounded to 8 | |
+| enum, `Option`, `Result`, `Input`, `Exposure` | `{ i32 tag, payload }`: tag = variant index in declaration order (`Some` 0, `None` 1; `Ok` 0, `Err` 1; `Data` 0, `Eof` 1; `Loopback` 0, `Private` 1, `Public` 2); payload at offset 8 (or 4 when every payload's alignment is ≤ 4), laid out as a C struct of the variant's fields; size = max over variants, rounded to 8 | |
 | `IoError` | `{ Text message, i32 exit_code }` | 32, 8 |
 | `fn(..) -> R` | `{ ptr code, ptr env }`, an aggregate (section 3.1) | 16, 8 |
 | `fn(..) -> R requires [..]` (effectful) | as `fn(..) -> R` | 16, 8 |

@@ -10,6 +10,7 @@ members = [
     "crates/ignite-rt",
     "crates/ignite-llvm",
     "crates/ignite-load",
+    "crates/ignite-eval",
 ]
 
 [workspace.package]
@@ -26,7 +27,8 @@ ignite = { path = "crates/ignite" }
 ignite-types = { path = "crates/ignite-types" }
 ignite-rt = { path = "crates/ignite-rt" }
 ignite-llvm = { path = "crates/ignite-llvm" }
-clap = { version = "4.6", features = ["derive"] }
+ignite-eval = { path = "crates/ignite-eval" }
+clap ={ version = "4.6", features = ["derive"] }
 nix = { version = "0.31", features = ["term", "fs"] }
 
 [profile.release.package.ignite-rt]

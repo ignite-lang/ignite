@@ -74,7 +74,7 @@ pub mod text {
         pub apply: std::sync::Arc<dyn Fn(String) -> String + Send + Sync>,
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
     pub enum Mode {
         Loud,
         Quiet,

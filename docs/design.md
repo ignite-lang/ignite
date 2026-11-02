@@ -301,6 +301,8 @@ The initial executable specification is canonical JSON with a public, versioned 
 
 This envelope intentionally omits populated records. Controller records must include state, input event types, transition guards, outputs, effect intent types, deadlines, and recovery behavior. Unsupported required features fail loading. Optional metadata may be ignored according to schema rules.
 
+Note (slice 11, 2026-11-02). The executable specification is the system model of `docs/slice.md` section 15, printed by `ignite plan` (D7's rename, vision X3). Its `formatVersion` is `"ignite-model/0.1"`. This envelope's `bindings` is the model's `assembly.resolution` (slice.md 15.6). `machines`, `observations`, `artifacts`, `stateSchema` and `admissionChecks` are not emitted yet; slices 12 and 13 add them as new keys under the same `formatVersion`. Until wave H the public schema is the table of slice.md 15.4 together with the golden `crates/ignite/tests/golden/terminal.design.model.json`; there is no JSON Schema file in this slice.
+
 ### 6.3 Determinism
 
 Specify numeric representation, overflow, rounding, map order, stable identities, scheduling tie-breaks, and event ordering. Time, random values, filesystem content, and external responses enter through declared inputs or recorded effects. Reproducible builds require pinned packages and toolchains plus normalization of incidental paths and timestamps.
@@ -531,6 +533,8 @@ ignite test terminal.ignite
 
 These are proposed command contracts. `run` is foreground development execution; `apply` submits a saved plan to the configured execution host. `build` does not deploy. Apply validates the plan's source, configuration, ownership, and relevant observed revisions before mutation. Inspect and explain are observational.
 
+Note (slice 11, 2026-11-02). `check`, `build` and `test` exist as `docs/slice.md` sections 1, 12 and 14 define them; `plan` and `explain` exist as `docs/slice.md` 15.7 and 15.8 define them: `ignite plan <file.ignite> [--assembly NAME] [--out FILE] [--fuel N] [--std PATH]` prints the system model of section 6.2, and `ignite explain <file.ignite> <path> [--assembly NAME] [--fuel N] [--std PATH]` takes the file as its first argument, unlike the line above, because no live system is inspected before slice 12. `fmt`, `run`, `apply` and `inspect` are still proposals.
+
 ### 10.2 Application CLI declarations
 
 An application CLI is a component with an executable name, typed command tree, arguments, flags, handler bindings, terminal requirements, and exit-status mapping. The compiler generates parsing, help, and validation. It does not generate arbitrary handler behavior from a command name.
@@ -549,7 +553,7 @@ The first assembly listens on loopback and provides application commands rather 
 
 ### 11.2 Source layout and module bindings
 
-The project consists logically of `terminal.ignite`, a package manifest and lockfile, protocol and CLI modules, command behavior, and conformance fixtures. An implementation exists in this repository: `examples/terminal/terminal.ignite` declares the system and the console, `std/protocol/telnet.ignite` holds `protocol Telnet` with the server role `serve` and the client role `connect`, `std/console.ignite` the console types, and `ignite build` emits the executables `terminald` and `tn`. The full declaration of section 11.3 is kept as `examples/terminal/terminal.design.ignite` and does not compile yet. Package manifests, lockfiles and `module("...")` bindings are not implemented.
+The project consists logically of `terminal.ignite`, a package manifest and lockfile, protocol and CLI modules, command behavior, and conformance fixtures. An implementation exists in this repository: `examples/terminal/terminal.ignite` declares the system and the console, `std/protocol/telnet.ignite` holds `protocol Telnet` with the server role `serve` and the client role `connect`, `std/console.ignite` the console types, and `ignite build` emits the executables `terminald` and `tn`. The full declaration of section 11.3 is kept as `examples/terminal/terminal.design.ignite`; `ignite check` accepts it since slice 10 and `ignite plan` and `ignite explain` evaluate it since slice 11, while `ignite build` does not build it yet. Package manifests, lockfiles and `module("...")` bindings are not implemented.
 
 During the first slice, protocol and interactive terminal behavior are supplied by seed implementation modules; in the implementation they are Ignite code in `std/`. The pure `respond` function in section 3 illustrates the later Ignite implementation of console behavior. The module resolver maps each `module("...")` reference to a locked implementation and a declared interface.
 

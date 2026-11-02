@@ -1,0 +1,4 @@
+e116_effectful_property.ignite:32:13: error[E116]: effectful call `inferred` in the property `input` of component `probe`: a property expression is pure
+e116_effectful_property.ignite:33:16: error[E116]: effectful operation `accept` in the property `accepted` of component `probe`: a property expression is pure
+e116_effectful_property.ignite:34:14: error[E116]: effectful operation `values` in the property `stored` of component `probe`: a property expression is pure
+e116_effectful_property.ignite:36:15: error[E116]: `spawn` in the property `started` of component `probe`: a property expression is pure

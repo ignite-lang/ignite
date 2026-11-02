@@ -16,7 +16,8 @@ the IO substrate (Rust) that compiled programs link.
 | `crates/ignite-llvm/` | LLVM target: IR text for std, program and one main per executable |
 | `crates/ignite-rt/` | runtime of the LLVM target, `libignite_rt.a`: C ABI adapter over `ignite-io` (value conversion, handle table), arenas and regions, the spawn handshake; no IO of its own |
 | `crates/ignite-io/` | IO substrate of both targets, blocking: TCP listener and stream, stdin, stdout, terminal mode, tasks (one thread each), `run`, process arguments and exit, the reports of `assert` and `?`, the test runner (feature `runner`) |
-| `crates/ignite/` | `ignite` CLI: `check`, `emit`, `build`, `test`; end-to-end tests of the example in `tests/terminal.rs` |
+| `crates/ignite-eval/` | compile-time evaluator (`docs/slice.md` section 15): interprets property expressions over the typed modules with fuel (E115, E117, E118), builds the system model `ignite plan` prints, resolves assemblies through `std.deploy`'s `admits` and `includes` (E110 to E114), renders `ignite explain`; used by `check`, `plan` and `explain` only, linked by no backend and no compiled program |
+| `crates/ignite/` | `ignite` CLI: `check`, `emit`, `build`, `test`, `plan`, `explain`; end-to-end tests of the example in `tests/terminal.rs`, model and explain goldens in `tests/golden/` |
 | `crates/ignite-load/` | `ignite-load`: load generator for `terminald` (workloads `rr`, `pipe`, `connect`; `ignite-load matrix` for `task bench-throughput`); not linked into compiled programs |
 | `std/` | standard library in Ignite; module `std.a.b` is `std/a/b.ignite` |
 | `std/console.ignite` | `Console`, `Reply`, `Action`: a line-oriented console application, independent of the protocol that carries it; `CommandConsole` (the declared form: `implementation: Module<ConsoleCommands>`, `command_schema`), `console_of`, `command_names` |
@@ -26,7 +27,7 @@ the IO substrate (Rust) that compiled programs link.
 | `std/net.ignite` | `Endpoint { address, port }`: the client-side target a bare `TcpListener` resource name gives where `Endpoint` is expected (slice 10); the module is also the substrate builtins `TcpListener`, `TcpStream`, `Exposure` |
 | `std/protocol/telnet.ignite` | `protocol Telnet`: server role `serve`, client role `connect`; the executable kinds `TelnetServer` (accept loop, `SessionLimits`, `TelnetProfile`) and `TelnetClient` (exit 3 and 4) with their `main` fns |
 | `std/protocol/http.ignite` | `protocol Http`: server role `serve` over `HttpApp<S>`; `Request`, `Response`; the executable kind `HttpServer<S>` |
-| `std/contract.ignite`, `std/policy.ignite`, `std/probe.ignite`, `std/deploy.ignite`, `std/cli.ignite` | the declaration vocabulary of design section 11.3 (`SLA`, `Availability`, `Restart`, `DrainRollout`, `TelnetPrompt`, `Deployment`, `Application`, …), checked and tested, not yet run by anything |
+| `std/contract.ignite`, `std/policy.ignite`, `std/probe.ignite`, `std/deploy.ignite`, `std/cli.ignite` | the declaration vocabulary of design section 11.3 (`SLA`, `Availability`, `Restart`, `DrainRollout`, `TelnetPrompt`, `Deployment`, `Application`, …), checked and tested; `std.deploy`'s `Member`, `admits` and `includes` are what the compiler calls to resolve an assembly (`docs/slice.md` 15.6), nothing else is run before slice 12 |
 | `examples/terminal/terminal.ignite` | the terminal system in component form (`CommandConsole`, `TelnetServer`, `TelnetClient`); `ignite build` emits `terminald` and `tn` |
 | `examples/terminal/commands.ignite`, `command_schema.ignite` | sibling modules of the terminal: the console's commands (`respond`) and their names (`commands`), filled into the declaration by `module(..)` |
 | `examples/terminal/terminal.design.ignite` | the full declaration from design section 11.3; `ignite check` passes it (`cli::check_design_file_is_silent`), `ignite build` does not build it |
@@ -66,6 +67,8 @@ Rules of the layout:
 | compile the example with the LLVM target | `task compile-llvm` (writes `target/ignite-llvm/terminal/bin/`) |
 | run the LLVM-built binaries | `task server TARGET=llvm`, `task client TARGET=llvm` |
 | run the inline Ignite tests | `task test-ignite` (std/ and examples/, both targets; `FILTER=text` selects tests); one file: `target/debug/ignite test FILE [FILTER]` |
+| print the system model of a program | `target/debug/ignite plan FILE [--assembly NAME] [--out FILE] [--fuel N]` (canonical JSON, `docs/slice.md` 15.5; the design file's model is the golden `crates/ignite/tests/golden/terminal.design.model.json`) |
+| explain one system, member, property or assembly | `target/debug/ignite explain FILE PATH [--assembly NAME]` (`Terminal.reachable`, `Terminal.server.recovery`, `local`; `docs/slice.md` 15.8) |
 
 `task` is go-task. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
 invocation in automation sets `CARGO_INCREMENTAL=0`. `task test-ignite` honours
@@ -142,6 +145,81 @@ sessions (load average 11 to 23), sccache on, own `CARGO_TARGET_DIR`; "before" i
   runs of the suite, in the warm gate: rebinding the released listener's port gave `Address
   already in use`. Inferred, not verified: another process on the host took the ephemeral port
   between release and rebind.
+
+Slice 11 (plan and explain, 2026-11-02 03:00 to 03:10, P4), 20 cores, load average 0.8 to 4.7
+throughout, sccache on. Method (`docs/slice.md` 15.1): "before" is a `git archive 60aef38` copy,
+"after" a copy of the finished slice-11 tree, each with its own `CARGO_TARGET_DIR`; the cold gate
+once per tree in a fresh target dir with `SCCACHE_RECACHE=1`, then three interleaved passes, each
+running every warm unit once on the before copy and once on the after copy; the 1-minute load is
+recorded per run, a pair whose two loads differ by more than 5 is discarded (none was), and the
+ratio is the median of the pair ratios. Warm = after `touch crates/ignite-check/src/lib.rs`.
+Scripts and raw logs: the slice's scratch directory, `p4-scripts/` and `p4-logs/`.
+
+| measurement | command | before (60aef38) | slice 11 | ratio |
+|---|---|---|---|---|
+| gate, cold | fresh target dir, `SCCACHE_RECACHE=1`, the gate (1 pair) | 64.8 s (fmt 0.4, clippy 4.2, test 51.9, test-ignite 8.2) | 54.5 s (0.5, 4.3, 41.6, 8.2) | 0.84 |
+| gate, warm | the gate after the touch (3 pairs) | 25.9 s (25.9 to 26.2) | 16.8 s (16.8 to 17.1) | 0.65 |
+| warm `cargo test --workspace` step | same (3 pairs) | 22.9 to 23.1 s | 13.5 to 13.8 s | 0.59 |
+| warm fmt, clippy, test-ignite steps | same | 0.38, 1.98, 0.65 s | 0.45, 2.19, 0.68 s | 1.16, 1.11, 1.03 |
+| test executables | `cargo test --workspace --no-run`, `Executable` lines | 19, 220 MB | 21, 246 MB | |
+| `--no-run`, warm / after the touch | same, repeated / after the touch (3 pairs) | 1.01 / 1.45 s | 1.03 / 1.61 s | 1.02 / 1.21 |
+| `crates/ignite/tests`, per file | `cargo test -p ignite --test main <file>::` warm (3 pairs) | slice9 17.5, ignite_test 9.1, terminal 2.1, llvm_build 2.1, slice10_llvm 0.7, cli 0.6, failover 0.6 s; the other 7 files 0.6 s together | slice9 3.7, ignite_test 8.6, terminal 2.1, llvm_build 1.5, slice10_llvm 1.0, cli 0.6, failover 0.6; eval 0.4, plan 0.7 (new) | 0.21, 0.95, 1.00, 0.70, 1.22, 0.95, 1.03 |
+| todod, Rust dev | `ignite build examples/todo/todo.ignite`, fresh `--out` and `--target-dir`, `SCCACHE_RECACHE=1` (3 pairs); split = separate builds of `ignite-io`, `ignite-std`, the program crate in one fresh target dir | 3.19 s (io 2.37, std 0.37, program 0.26) | 3.19 s (2.36, 0.36, 0.26) | 1.00 |
+| todod, Rust release | same with `--release` | 4.12 s (io 2.79, std 0.65, program 0.51) | 4.19 s (2.83, 0.66, 0.51) | 1.02 |
+| todod, LLVM dev | same with `--target llvm`; split = the build's clang and link commands rerun by hand | 0.35 s (clang std 0.08, program 0.02, main 0.02, link 0.11) | 0.33 s (0.06, 0.02, 0.02, 0.11) | 0.94 |
+| todod, LLVM release | same with `--release` | 1.10 s (clang -O2 std 0.78, program 0.08, main 0.06, link 0.06) | 0.80 s (0.48, 0.08, 0.06, 0.05) | 0.73 |
+| `ignite check` of the design file | `ignite check examples/terminal/terminal.design.ignite` (15 pairs) | 0.05 s | 0.06 s | 1.2 |
+| `ignite plan`, `ignite explain local` of the design file | `ignite plan …` with `--out`, `ignite explain … local` (15 runs each, load 2.2 to 4.0) | | 0.06 s (0.06 to 0.07), 0.06 s | |
+
+- Test counts, cargo tests plus the inline tests of both targets: 746 passed (552 cargo + 2 × 97
+  inline), 3 ignored before; 784 passed (580 cargo + 2 × 102 inline), 4 ignored after
+  (`#[ignore]`: the two 100,000-term chain tests, the LLVM `bench`, the new 100,000-term
+  lowering); 97 inline tests per target before, 102 after (std/deploy +5). `cargo test
+  --workspace` on the working tree at the close: 580 passed, 0 failed, 4 ignored, 13.98 s at load
+  3.3; `task gate` 13.4 s warm.
+- Slice 10's carry-overs (P0 on 60aef38, raw logs in the scratch directory `p0-logs/`): the warm
+  gate is 25.98 s at load under 5 (fmt 0.40, clippy 2.05, test 22.88, test-ignite 0.65) and 75.4 s
+  at load 18 to 44, so slice 10's 45.5 s was load, not a regression. Of the warm test step the
+  `crates/ignite` end-to-end binary was 18.69 s (82 %): `slice9.rs` 17.4 s serial behind its
+  `BUILDS` mutex, of which the inline test `boxed values carried across releases and through the
+  store` (`fixtures/slice9/regions.ignite`) was 9.1 s (6.8 s Rust dev, 2.3 s LLVM -O0). todod LLVM
+  release 1.16 s: `clang -O2` on `std.ll` 0.834 s (70.5 %), emit 0.113, `program.ll` 0.084, main
+  0.064, link 0.063. todod Rust dev 3.04 s (the 3.0 s baseline); release 4.56 s against 3.9 s: libc
+  and nix 52 % (recompiled every run under `SCCACHE_RECACHE=1`), `ignite-std` 16 %, the program
+  crate 12 %, accepted as the new baseline. The flake
+  `failover::a_failing_session_does_not_end_the_service`: 0 failures in 30 runs alone and 30
+  beside a full workspace run (P0 on 60aef38); after P3's rewrite (a deadline instead of one read
+  after `kill`) again 30/30 alone (P3) and 30/30 beside a workspace run (P4, load 2.5).
+- Fixes in slice 11: `slice9.rs` 17.5 s to 3.7 s (the boxed test's sizes 2,000 inserts and 5,000
+  links to 500 and 1,000, 6.8 s to 0.31 s Rust and 2.3 s to 0.09 s LLVM with the same assertions;
+  `long_chains_lower_quickly` 100,000 to 10,000 terms, 3.5 s to 0.4 s, the 100,000-term lowering
+  now `#[ignore]` as `long_chains_100k_lower_quickly`; the 14 audit probes built as two `ignite
+  test` groups per target instead of 28 subprocesses, 7.2 s to 1.9 s). `llvm_build.rs` 2.1 to 1.5 s
+  and todod LLVM release 1.10 to 0.80 s from P3's reachable-only std emission (`std.ll` 222 to 107
+  defines; `clang -O2` on it 0.78 to 0.48 s). The steering target of a warm test step under 8 s is
+  not met: 13.5 s at load 3, of which `ignite_test.rs` is 8.6 s (the end-to-end files run in
+  parallel, so the binary's wall is its longest file; `timeout_kills_a_test` 2.6 s,
+  `overflow_fails_the_same_everywhere` 1.7 s, each spawning `ignite test` per target and profile),
+  the rebuild after the touch 1.6 s, the other crates' binaries about 3 s.
+- Slice 11b (2026-11-02, the four target bugs and the warm test step; 3 interleaved passes over
+  the 60aef38 copy, the slice-11 close tree and the 11b tree, load 6 to 9): warm `cargo test
+  --workspace` step 10.8 s median (10.3 to 17.8 s) against 16.1 s for the slice-11 tree in the
+  same passes (ratio 0.70); `ignite_test.rs` 8.6 s to 4.6 s (the two targets on two threads, one
+  shared basics run). The target "under 8 s at load under 5" was not checked: the load never fell
+  under 5. Remainder: the end-to-end binary 5.6 s, the rebuild after the touch 1.8 s, the
+  rustgen tests 1.7 s. todod against the 60aef38 copy in the same passes: Rust dev 3.35 s
+  (ratio 1.00), release 4.74 s (1.03); LLVM dev 0.35 s (0.95), release 0.88 s (0.70). Cargo
+  tests 582 passed, 0 failed, 4 ignored; inline tests 102 per target.
+- Rises over 10 %: fmt +16 % (70 ms) and clippy +11 % (0.2 s) from the new crate `ignite-eval`;
+  `--no-run` after the touch +21 % (0.16 s) because `ignite-eval` depends on `ignite-types` and
+  recompiles with it; `ignite check` of the design file +20 % (10 ms, at 10 ms resolution): O20
+  evaluates every property and resolves the assembly at check time; `slice10_llvm.rs` +22 %
+  (0.69 to 0.98 s, after-tree range 0.69 to 1.00 s: one slow run, load noise, inferred); test
+  executables 19 to 21 (+12 % size): `ignite-eval`'s unit and integration test binaries.
+- Flake seen in the measurement: `llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent`
+  failed once per tree in 8 gate runs with `Text file busy` at the exec of the copied driver (the
+  copy's write descriptor inherited by another test thread's fork for an instant); the test now
+  retries the exec on ETXTBSY. Pre-existing on 60aef38, not a slice-11 regression.
 
 ## Conventions
 
