@@ -1,0 +1,10 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/main-b624c508ef07abba)
+
+running 3 tests
+test drain::an_open_session_survives_sigterm_and_new_connects_are_refused ... ok
+test drain::rollout_drains_the_old_process_and_starts_the_new_rust ... ok
+test drain::rollout_drains_the_old_process_and_starts_the_new_llvm ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 198 filtered out; finished in 1.18s
+

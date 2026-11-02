@@ -1,6 +1,44 @@
 //! Helpers shared by the driver's integration tests.
 
 use std::path::PathBuf;
+use std::sync::mpsc::Receiver;
+use std::time::Duration;
+
+use ignite_eval::Json;
+
+/// Setup includes compilation and build-lock waits. The first stdout segment
+/// follows build/copy completion; the on-disk journal header can precede it.
+/// Return the original line for the caller's normal record consumption, after
+/// which its live protocol deadlines apply unchanged.
+pub fn wait_run_initial_segment(
+    lines: &Receiver<String>,
+    stderr: impl FnOnce() -> String,
+) -> String {
+    const SETUP_TIMEOUT: Duration = Duration::from_secs(60);
+    let line = lines.recv_timeout(SETUP_TIMEOUT).unwrap_or_else(|error| {
+        panic!("ignite run setup did not produce a segment within {SETUP_TIMEOUT:?}: {error}\nstderr:\n{}", stderr())
+    });
+    let record = Json::parse(&line).unwrap_or_else(|error| panic!("{line}: {error}"));
+    assert_eq!(
+        record.get("kind").and_then(Json::as_str),
+        Some("segment"),
+        "ignite run setup expected the first stdout record to be a segment: {line}"
+    );
+    line
+}
+
+#[test]
+fn run_setup_preserves_the_raw_segment_and_later_records() {
+    let (send, receive) = std::sync::mpsc::channel();
+    let segment = " { \"kind\" : \"segment\", \"generation\" : 1 } ";
+    send.send(segment.to_string()).unwrap();
+    send.send("later record".to_string()).unwrap();
+    assert_eq!(
+        wait_run_initial_segment(&receive, || panic!("unexpected setup failure")),
+        segment
+    );
+    assert_eq!(receive.try_recv().unwrap(), "later record");
+}
 
 /// The runtime archive `libignite_rt.a`. `ignite-rt` is a dev-dependency, so
 /// cargo builds its `staticlib` next to this test binary as

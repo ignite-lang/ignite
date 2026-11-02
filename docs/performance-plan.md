@@ -232,3 +232,7 @@ Final closure requires:
 6. Record the exact source refs, commands, paired results, counts and retained evidence in
    `AGENTS.md`; update `PLAN.md` to performance complete only after these criteria pass.
    Publish the fixes and finish/archive managed trees. Explanations cannot move the baseline.
+7. After all required acceptance evidence is retained and the fixes are merged
+   to the default branch, validate that merged version and publish a new tagged
+   GitHub release, as requested on 2026-11-02. Follow the repository's package
+   version and release history; release notes must report verified results.

@@ -1,0 +1,5 @@
+{"label": "helper", "command": ["cargo", "test", "-p", "ignite", "--test", "main", "common::run_setup_"], "exit": 0, "seconds": 2.481751213024836, "load_before": 6.55908203125, "load_after": 6.55908203125}
+{"label": "run", "command": ["cargo", "test", "-p", "ignite", "--test", "main", "run::"], "exit": 0, "seconds": 4.314470090961549, "load_before": 6.55908203125, "load_after": 6.9951171875}
+{"label": "drain", "command": ["cargo", "test", "-p", "ignite", "--test", "main", "drain::"], "exit": 0, "seconds": 1.2008568869787268, "load_before": 6.9951171875, "load_after": 6.9951171875}
+{"label": "clippy", "command": ["cargo", "clippy", "-p", "ignite", "--all-targets", "--", "-D", "warnings"], "exit": 0, "seconds": 3.098274412972387, "load_before": 6.9951171875, "load_after": 7.31591796875}
+{"label": "fmt", "command": ["cargo", "fmt", "-p", "ignite", "--check"], "exit": 0, "seconds": 0.15496767801232636, "load_before": 7.31591796875, "load_after": 7.31591796875}
