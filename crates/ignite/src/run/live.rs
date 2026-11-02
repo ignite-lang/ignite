@@ -158,6 +158,9 @@ pub struct Live<'a, 'p> {
     pinned: BTreeMap<String, u16>,
     generation: i64,
     stopping: bool,
+    /// Synchronous acknowledgements of this driver's own Spawn effects.
+    /// Complete the current reducer/effect turn before delivering them.
+    completions: VecDeque<Observation>,
     deferred: VecDeque<Observation>,
 }
 
@@ -208,6 +211,7 @@ impl<'a, 'p> Live<'a, 'p> {
             manual,
             pinned: BTreeMap::new(),
             stopping: false,
+            completions: VecDeque::new(),
             deferred: VecDeque::new(),
         }
     }
@@ -253,6 +257,12 @@ impl<'a, 'p> Live<'a, 'p> {
             self.process(records)?;
         }
         while !self.stopping {
+            if !self.completions.is_empty() {
+                if !self.config.manual {
+                    self.fire_due()?;
+                }
+                self.complete_spawns()?;
+            }
             let received = if self.config.manual {
                 match self.rx.recv() {
                     Ok(observation) => observation,
@@ -263,6 +273,7 @@ impl<'a, 'p> Live<'a, 'p> {
                 match self.core.next_timer_at() {
                     Some(due) if due <= now => {
                         self.fire_due()?;
+                        self.complete_spawns()?;
                         continue;
                     }
                     Some(due) => match self
@@ -272,6 +283,7 @@ impl<'a, 'p> Live<'a, 'p> {
                         Ok(observation) => observation,
                         Err(RecvTimeoutError::Timeout) => {
                             self.fire_due()?;
+                            self.complete_spawns()?;
                             continue;
                         }
                         Err(RecvTimeoutError::Disconnected) => break,
@@ -285,9 +297,23 @@ impl<'a, 'p> Live<'a, 'p> {
             if !self.config.manual {
                 self.fire_due()?;
             }
-            self.observe(received, false)?;
+            self.observe_next(received, false)?;
         }
         self.stop()
+    }
+
+    /// At a turn boundary, publish the acknowledgements already known from
+    /// synchronous dispatch before starting an unrelated observation's work.
+    fn complete_spawns(&mut self) -> io::Result<()> {
+        while let Some(observation) = self.completions.pop_front() {
+            self.observe(observation, false)?;
+        }
+        Ok(())
+    }
+
+    fn observe_next(&mut self, observation: Observation, advancing: bool) -> io::Result<()> {
+        self.complete_spawns()?;
+        self.observe(observation, advancing)
     }
 
     /// Write and dispatch records in order: the journal first (synced for
@@ -355,14 +381,14 @@ impl<'a, 'p> Live<'a, 'p> {
         match dispatch {
             Dispatch::Spawn { member, generation } => {
                 let Some(executable) = self.executable(&member, generation) else {
-                    let _ = self.tx.send(Observation::SpawnFailed {
+                    self.completions.push_back(Observation::SpawnFailed {
                         reason: format!("{member} has no executable"),
                         member,
                     });
                     return;
                 };
                 if !executable.is_file() {
-                    let _ = self.tx.send(Observation::SpawnFailed {
+                    self.completions.push_back(Observation::SpawnFailed {
                         reason: format!("{} is not built", executable.display()),
                         member,
                     });
@@ -378,8 +404,15 @@ impl<'a, 'p> Live<'a, 'p> {
                     args.push("--ref".to_string());
                     args.push(format!("{path}={endpoint}"));
                 }
-                self.adapters
-                    .spawn(&member, generation, &executable, &args, listener.is_some());
+                let completions = &mut self.completions;
+                self.adapters.spawn_with_completion(
+                    &member,
+                    generation,
+                    &executable,
+                    &args,
+                    listener.is_some(),
+                    &mut |observation| completions.push_back(observation),
+                );
             }
             Dispatch::Kill {
                 member,
@@ -687,7 +720,7 @@ impl<'a, 'p> Live<'a, 'p> {
         }
         self.manual.advance_to(target);
         while let Some(observation) = self.deferred.pop_front() {
-            self.observe(observation, false)?;
+            self.observe_next(observation, false)?;
             if self.stopping {
                 break;
             }
@@ -701,17 +734,18 @@ impl<'a, 'p> Live<'a, 'p> {
     /// released is caught by one short wait.
     fn settle_and_drain(&mut self) -> io::Result<()> {
         loop {
+            self.complete_spawns()?;
             self.adapters.settle(self.config.settle);
             let mut any = false;
             while let Ok(observation) = self.rx.try_recv() {
                 any = true;
-                self.observe(observation, true)?;
+                self.observe_next(observation, true)?;
             }
             if any {
                 continue;
             }
             match self.rx.recv_timeout(Duration::from_millis(20)) {
-                Ok(observation) => self.observe(observation, true)?,
+                Ok(observation) => self.observe_next(observation, true)?,
                 Err(_) => return Ok(()),
             }
         }
@@ -819,6 +853,7 @@ impl<'a, 'p> Live<'a, 'p> {
 
     /// The stop sequence (module doc).
     fn stop(&mut self) -> io::Result<i32> {
+        self.complete_spawns()?;
         let targets: Vec<usize> = self
             .core
             .machines()
@@ -909,4 +944,161 @@ pub fn copy_into(bin: &Path, built: &BTreeMap<String, PathBuf>) -> io::Result<()
         std::fs::rename(&temporary, &target)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ignite_eval::{Evaluator, Fuel};
+    use std::sync::mpsc::channel;
+
+    /// Seed recorded history through the real reducers, as replay does. Its
+    /// historical effects have already happened and are not dispatched again.
+    fn history(core: &mut Core<'_, '_>, journal: &mut Journal, machine: usize, event: Value) {
+        for record in core.feed(machine, 0, event) {
+            journal.append(&record.line(), record.durable).unwrap();
+        }
+    }
+
+    #[test]
+    fn timer_spawn_completion_precedes_a_held_probe_result() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/terminal/terminal.design.ignite");
+        let loaded = crate::load(&source, None).unwrap();
+        let model = loaded.model(&crate::PlanOptions::default()).unwrap();
+        let modules = loaded.modules();
+        let types = modules.get(CONTROL_MODULE).unwrap().types;
+        let mut evaluator = Evaluator::new(&modules, Fuel::default());
+        let mut core = Core::new(&mut evaluator, &model);
+        let state =
+            std::env::temp_dir().join(format!("ignite-live-completion-{}", std::process::id()));
+        let bin = state.join("bin/1");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::os::unix::fs::symlink("/bin/true", bin.join("server")).unwrap();
+        let mut journal = Journal::open(&state, true).unwrap();
+        let model_json = Json::parse(&model.to_json()).unwrap();
+        journal
+            .append(&crate::journal_header(&model_json, 0), true)
+            .unwrap();
+        for machine in 0..core.machines().len() {
+            history(
+                &mut core,
+                &mut journal,
+                machine,
+                kind("Start", vec![Value::Quantity(QuantityKind::Duration, 0)]),
+            );
+        }
+        let supervisor = core.machine("Terminal.server.supervisor").unwrap();
+        let rollout = core.machine("Terminal.server.rollout").unwrap();
+        let scheduler = core.machine("Terminal.promptProbe.scheduler").unwrap();
+        for event in [
+            kind("Started", vec![Value::Int(1234), Value::Int(1)]),
+            kind("Ready", vec![Value::Int(1234)]),
+            kind("Signalled", vec![Value::Int(1234), Value::Int(9)]),
+        ] {
+            for machine in [supervisor, rollout, scheduler] {
+                history(&mut core, &mut journal, machine, event.clone());
+            }
+        }
+        let config = Config {
+            state: state.clone(),
+            manual: true,
+            epoch: 0,
+            settle: Duration::from_secs(1),
+            json: false,
+            ports: BTreeMap::new(),
+            declared: Vec::new(),
+            executables: BTreeMap::from([("Terminal.server".to_string(), "server".to_string())]),
+            generation: 1,
+            start_at: 0,
+            builder: Arc::new(|| Ok(BTreeMap::new())),
+        };
+        let (tx, rx) = channel();
+        let adapters = Adapters::start(tx.clone()).unwrap();
+        let mut live = Live::new(core, &model, types, config, journal, adapters, tx, rx);
+        // This models the real-clock branch that already received an external
+        // observation, then fires a due timer before delivering that message.
+        let held = Observation::AttemptDone {
+            member: "Terminal.promptProbe".to_string(),
+            id: 1,
+            line: "{\"fields\":{\"latency\":{\"ns\":0,\"type\":\"Duration\"},\"received\":false},\"type\":\"std.sli.ProbeAttempt\"}".to_string(),
+        };
+        live.manual.advance_to(100_000_000);
+        live.fire_due().unwrap();
+        live.observe_next(held, false).unwrap();
+        while let Ok(observation) = live.rx.try_recv() {
+            live.observe_next(observation, false).unwrap();
+        }
+        assert_eq!(live.stop().unwrap(), 0);
+        drop(live);
+        let lines: Vec<String> = std::fs::read_to_string(state.join("journal.jsonl"))
+            .unwrap()
+            .lines()
+            .map(str::to_string)
+            .collect();
+        let records: Vec<Json> = lines
+            .iter()
+            .map(|line| Json::parse(line).unwrap())
+            .collect();
+        let event = |record: &Json| {
+            record
+                .get("value")
+                .and_then(|v| v.get("fields"))
+                .and_then(|f| f.get("kind"))
+                .and_then(|k| k.get("variant"))
+                .and_then(Json::as_str)
+                .map(str::to_string)
+        };
+        let at = |record: &Json| {
+            record
+                .get("at")
+                .and_then(|v| v.get("ns"))
+                .and_then(Json::as_i64)
+        };
+        let started: Vec<_> = records
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| event(r).as_deref() == Some("Started") && at(r) == Some(100_000_000))
+            .collect();
+        assert_eq!(
+            started
+                .iter()
+                .map(|(_, r)| r.get("machine").unwrap().as_str().unwrap())
+                .collect::<Vec<_>>(),
+            [
+                "Terminal.server.supervisor",
+                "Terminal.server.rollout",
+                "Terminal.promptProbe.scheduler"
+            ]
+        );
+        let probe = records
+            .iter()
+            .position(|r| event(r).as_deref() == Some("AttemptDone"))
+            .unwrap();
+        assert!(
+            started.last().unwrap().0 < probe,
+            "complete lifecycle acknowledgement before probe fanout"
+        );
+        let published: Vec<_> = records
+            .iter()
+            .enumerate()
+            .filter(|(_, record)| {
+                record.get("kind").and_then(Json::as_str) == Some("effect")
+                    && record
+                        .get("value")
+                        .and_then(|v| v.get("variant"))
+                        .and_then(Json::as_str)
+                        == Some("Publish")
+            })
+            .collect();
+        assert_eq!(
+            published.len(),
+            3,
+            "the held probe still publishes all standings"
+        );
+        assert!(published.iter().all(|(index, _)| *index > probe));
+        let mut replay_core = Core::new(&mut evaluator, &model);
+        super::super::replay::replay(&mut replay_core, types, &lines[1..]).unwrap();
+        std::fs::remove_dir_all(state).unwrap();
+    }
 }

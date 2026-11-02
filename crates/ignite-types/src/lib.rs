@@ -645,6 +645,22 @@ pub struct ModuleTypes {
 }
 
 impl ModuleTypes {
+    /// Owned metadata for the public queries on `TypedProgram`, after typing.
+    /// Keep every record/enum shape, default and generic parameter list.
+    /// Function/constant signatures, protocols, aliases, constant values and
+    /// parameter names are needed while typing, but no retained query reads
+    /// them. A new query that needs one must extend this snapshot and the
+    /// ownership regression; these snapshots must never be typing inputs.
+    fn query_snapshot(&self) -> ModuleTypes {
+        ModuleTypes {
+            records: self.records.clone(),
+            enums: self.enums.clone(),
+            defaults: self.defaults.clone(),
+            generics: self.generics.clone(),
+            ..ModuleTypes::default()
+        }
+    }
+
     /// Whether the module declares a record, enum, fn, const, protocol or
     /// alias named `name`.
     pub fn exports_name(&self, name: &str) -> bool {
@@ -1151,7 +1167,9 @@ pub struct TypedProgram {
     /// Resolved type expressions, keyed by `Type` address.
     type_exprs: AddressMap<Ty>,
     exports: ModuleTypes,
-    /// The modules this one was typed against, plus itself.
+    /// Owned query metadata of the imported modules and this one: only
+    /// records, enums, defaults and generics. See `ModuleTypes::query_snapshot`;
+    /// full signatures remain in `exports` and in the caller's typing inputs.
     modules: TypedModules,
     /// Type arguments of generic uses, keyed by expression address.
     instances: AddressMap<Vec<Ty>>,
@@ -1660,8 +1678,11 @@ pub fn type_module(
     modules: &TypedModules,
 ) -> Result<TypedProgram, Vec<Diagnostic>> {
     let typed = typer::Typer::new(program, symbols, modules).run(program)?;
-    let mut all = modules.clone();
-    all.insert(typed.module.clone(), typed.exports.clone());
+    let mut all: TypedModules = modules
+        .iter()
+        .map(|(path, types)| (path.clone(), types.query_snapshot()))
+        .collect();
+    all.insert(typed.module.clone(), typed.exports.query_snapshot());
     Ok(TypedProgram {
         module: typed.module,
         types: typed.types,

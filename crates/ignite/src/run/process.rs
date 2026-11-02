@@ -159,6 +159,7 @@ pub(super) fn spawn(
     executable: &Path,
     args: &[String],
     expect_ready: bool,
+    complete: &mut dyn FnMut(Observation),
 ) {
     let mut command = Command::new(executable);
     command
@@ -169,7 +170,7 @@ pub(super) fn spawn(
     let mut child = match adapters.spawner.spawn(command) {
         Ok(child) => child,
         Err(error) => {
-            let _ = adapters.observations.send(Observation::SpawnFailed {
+            complete(Observation::SpawnFailed {
                 member: member.to_string(),
                 reason: format!("cannot start {}: {error}", executable.display()),
             });
@@ -187,7 +188,7 @@ pub(super) fn spawn(
             release: Release::Unseen,
         },
     );
-    let _ = adapters.observations.send(Observation::Started {
+    complete(Observation::Started {
         member: member.to_string(),
         generation,
         pid,

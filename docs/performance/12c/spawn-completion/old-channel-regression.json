@@ -1,0 +1,5 @@
+{
+  "exit": 101,
+  "mutation": "old channel spawn + forwarding-only observe_next",
+  "fixed_source_sha256": "0313c1856d4a63afd003c9000115cfba80067d01672d76792439b6d37b31a6b7"
+}

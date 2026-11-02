@@ -1,0 +1,22 @@
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.92s
+     Running tests/main.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/main-b624c508ef07abba)
+
+running 14 tests
+test run::e126_journal_mismatch ... ok
+test run::e125_nothing_to_run ... ok
+test run::exhausted_restarts_give_up_and_stop_exits_1 ... ok
+test run::terminal_runs_under_ignite_run_on_the_llvm_target ... ok
+test run::e127_replay_diverged ... ok
+test run::e128_reducer_failed ... ok
+test run::zero_attempts_give_insufficient_evidence ... ok
+test run::terminal_runs_under_ignite_run ... ok
+test run::pinned_port_survives_a_restart ... ok
+test run::killing_terminald_restarts_it_in_real_time ... ok
+test run::killing_terminald_restarts_it_within_backoff ... ok
+test run::good_attempts_across_the_period_fire_no_consequence ... ok
+test run::two_manual_runs_give_equal_journals_after_masking ... ok
+test run::probe_timeout_is_visible_in_journal_and_standing ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 186 filtered out; finished in 3.22s
+

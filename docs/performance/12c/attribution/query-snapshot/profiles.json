@@ -1,0 +1,240 @@
+{
+  "before": {
+    "command": [
+      "valgrind",
+      "--tool=callgrind",
+      "--error-exitcode=97",
+      "--callgrind-out-file=/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/before.callgrind",
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-before",
+      "check",
+      "examples/terminal/terminal.design.ignite"
+    ],
+    "exit": 0,
+    "seconds_diagnostic_only": 6.145767177978996,
+    "cli_sha256": "343b087eb58aa8d3dd3844c493c694f3a53a51dd841f9a2d8f0b093e89ce4534",
+    "total_instructions": 359567786,
+    "selected_functions": [
+      {
+        "name": "<ignite_types::ModuleTypes as core::clone::Clone>::clone",
+        "self": 20875,
+        "inclusive": 10552938,
+        "calls": 167
+      },
+      {
+        "name": "<ignite_types::FnSig as core::clone::Clone>::clone",
+        "self": 110976,
+        "inclusive": 5151047,
+        "calls": 3264
+      },
+      {
+        "name": "ignite_types::type_module",
+        "self": 7008,
+        "inclusive": 134054514,
+        "calls": 16
+      }
+    ]
+  },
+  "after": {
+    "command": [
+      "valgrind",
+      "--tool=callgrind",
+      "--error-exitcode=97",
+      "--callgrind-out-file=/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/after.callgrind",
+      "/home/timo/.cache/scratch/ignite-perf12c/query-snapshot/ignite-after",
+      "check",
+      "examples/terminal/terminal.design.ignite"
+    ],
+    "exit": 0,
+    "seconds_diagnostic_only": 6.120143742999062,
+    "cli_sha256": "a1d9e0afd75189fc6045999b8c4995d1e0ab80aafe1e1c443ef0c7880072d501",
+    "total_instructions": 349961814,
+    "selected_functions": [
+      {
+        "name": "<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}> as core::iter::traits::collect::IntoIterator>::into_iter",
+        "self": 288,
+        "inclusive": 992,
+        "calls": 32
+      },
+      {
+        "name": "core::slice::sort::shared::smallsort::insertion_sort_shift_left::<(alloc::string::String, ignite_types::ModuleTypes), <[(alloc::string::String, ignite_types::ModuleTypes)]>::sort_by<<alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_types::ModuleTypes> as core::iter::traits::collect::FromIterator<(alloc::string::String, ignite_types::ModuleTypes)>>::from_iter<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>::{closure#0}>",
+        "self": 1519,
+        "inclusive": 11883,
+        "calls": 14
+      },
+      {
+        "name": "core::slice::sort::shared::smallsort::insert_tail::<(alloc::string::String, ignite_types::ModuleTypes), <[(alloc::string::String, ignite_types::ModuleTypes)]>::sort_by<<alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_types::ModuleTypes> as core::iter::traits::collect::FromIterator<(alloc::string::String, ignite_types::ModuleTypes)>>::from_iter<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>::{closure#0}>",
+        "self": 1680,
+        "inclusive": 10364,
+        "calls": 105
+      },
+      {
+        "name": "<[(alloc::string::String, ignite_types::ModuleTypes)]>::sort_by::<<alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_types::ModuleTypes> as core::iter::traits::collect::FromIterator<(alloc::string::String, ignite_types::ModuleTypes)>>::from_iter<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>::{closure#0}",
+        "self": 840,
+        "inclusive": 8684,
+        "calls": 105
+      },
+      {
+        "name": "<alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)> as alloc::vec::spec_extend::SpecExtend<(alloc::string::String, ignite_types::ModuleTypes), core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>>::spec_extend",
+        "self": 64,
+        "inclusive": 2370173,
+        "calls": 16
+      },
+      {
+        "name": "<alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)>>::extend_trusted::<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>",
+        "self": 656,
+        "inclusive": 2370109,
+        "calls": 16
+      },
+      {
+        "name": "<ignite_types::ModuleTypes as core::clone::Clone>::clone",
+        "self": 3875,
+        "inclusive": 2271079,
+        "calls": 31
+      },
+      {
+        "name": "<ignite_types::FnSig as core::clone::Clone>::clone",
+        "self": 61404,
+        "inclusive": 2793265,
+        "calls": 1806
+      },
+      {
+        "name": "<ignite_types::ModuleTypes>::query_snapshot",
+        "self": 14144,
+        "inclusive": 2594352,
+        "calls": 136
+      },
+      {
+        "name": "ignite_types::type_module::{closure#0}",
+        "self": 3240,
+        "inclusive": 2306474,
+        "calls": 120
+      },
+      {
+        "name": "ignite_types::type_module",
+        "self": 7168,
+        "inclusive": 128475365,
+        "calls": 16
+      },
+      {
+        "name": "<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes> as core::iter::traits::iterator::Iterator>::map::<(alloc::string::String, ignite_types::ModuleTypes), ignite_types::type_module::{closure#0}>",
+        "self": 144,
+        "inclusive": 496,
+        "calls": 16
+      },
+      {
+        "name": "<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}> as core::iter::traits::iterator::Iterator>::collect::<alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_types::ModuleTypes>>",
+        "self": 112,
+        "inclusive": 2571496,
+        "calls": 16
+      },
+      {
+        "name": "<[(alloc::string::String, ignite_types::ModuleTypes)]>::sort_by::<<alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_types::ModuleTypes> as core::iter::traits::collect::FromIterator<(alloc::string::String, ignite_types::ModuleTypes)>>::from_iter<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>",
+        "self": 75,
+        "inclusive": 12249,
+        "calls": 15
+      },
+      {
+        "name": "alloc::slice::stable_sort::<(alloc::string::String, ignite_types::ModuleTypes), <[(alloc::string::String, ignite_types::ModuleTypes)]>::sort_by<<alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_types::ModuleTypes> as core::iter::traits::collect::FromIterator<(alloc::string::String, ignite_types::ModuleTypes)>>::from_iter<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>::{closure#0}>",
+        "self": 291,
+        "inclusive": 12174,
+        "calls": 15
+      },
+      {
+        "name": "<alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_types::ModuleTypes> as core::iter::traits::collect::FromIterator<(alloc::string::String, ignite_types::ModuleTypes)>>::from_iter::<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}",
+        "self": 1050,
+        "inclusive": 7844,
+        "calls": 105
+      },
+      {
+        "name": "<alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_types::ModuleTypes> as core::iter::traits::collect::FromIterator<(alloc::string::String, ignite_types::ModuleTypes)>>::from_iter::<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>",
+        "self": 489,
+        "inclusive": 2571384,
+        "calls": 16
+      },
+      {
+        "name": "<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}> as core::iter::traits::iterator::Iterator>::collect::<alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)>>",
+        "self": 112,
+        "inclusive": 2378693,
+        "calls": 16
+      },
+      {
+        "name": "<alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<(alloc::string::String, ignite_types::ModuleTypes), core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>>::from_iter",
+        "self": 768,
+        "inclusive": 2377797,
+        "calls": 16
+      },
+      {
+        "name": "<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}> as core::iter::traits::iterator::Iterator>::size_hint",
+        "self": 224,
+        "inclusive": 448,
+        "calls": 32
+      },
+      {
+        "name": "<alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)> as core::iter::traits::collect::FromIterator<(alloc::string::String, ignite_types::ModuleTypes)>>::from_iter::<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>",
+        "self": 176,
+        "inclusive": 2378581,
+        "calls": 16
+      },
+      {
+        "name": "<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}> as core::iter::traits::iterator::Iterator>::for_each::<<alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)>>::extend_trusted<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>",
+        "self": 176,
+        "inclusive": 2368621,
+        "calls": 16
+      },
+      {
+        "name": "<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::traits::iterator::Iterator::for_each::call<(alloc::string::String, ignite_types::ModuleTypes), <alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)>>::extend_trusted<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>::{closure#0}>",
+        "self": 320,
+        "inclusive": 2368445,
+        "calls": 16
+      },
+      {
+        "name": "<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::adapters::map::map_fold<(&alloc::string::String, &ignite_types::ModuleTypes), (alloc::string::String, ignite_types::ModuleTypes), (), ignite_types::type_module::{closure#0}, core::iter::traits::iterator::Iterator::for_each::call<(alloc::string::String, ignite_types::ModuleTypes), <alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)>>::extend_trusted<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>::{closure#0}>::{closure#0}>",
+        "self": 3536,
+        "inclusive": 2367773,
+        "calls": 16
+      },
+      {
+        "name": "core::iter::adapters::map::map_fold::<(&alloc::string::String, &ignite_types::ModuleTypes), (alloc::string::String, ignite_types::ModuleTypes), (), ignite_types::type_module::{closure#0}, core::iter::traits::iterator::Iterator::for_each::call<(alloc::string::String, ignite_types::ModuleTypes), <alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)>>::extend_trusted<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>::{closure#0}>::{closure#0}",
+        "self": 2400,
+        "inclusive": 2331056,
+        "calls": 120
+      },
+      {
+        "name": "core::ptr::drop_glue::<core::iter::adapters::map::map_fold<(&alloc::string::String, &ignite_types::ModuleTypes), (alloc::string::String, ignite_types::ModuleTypes), (), ignite_types::type_module::{closure#0}, core::iter::traits::iterator::Iterator::for_each::call<(alloc::string::String, ignite_types::ModuleTypes), <alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)>>::extend_trusted<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>::{closure#0}>::{closure#0}>",
+        "self": 64,
+        "inclusive": 320,
+        "calls": 16
+      },
+      {
+        "name": "core::iter::traits::iterator::Iterator::for_each::call::<(alloc::string::String, ignite_types::ModuleTypes), <alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)>>::extend_trusted<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>::{closure#0}",
+        "self": 1320,
+        "inclusive": 15822,
+        "calls": 120
+      },
+      {
+        "name": "<alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)>>::extend_trusted::<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}",
+        "self": 1800,
+        "inclusive": 8142,
+        "calls": 120
+      },
+      {
+        "name": "<alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)> as alloc::vec::spec_from_iter::SpecFromIter<(alloc::string::String, ignite_types::ModuleTypes), core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>>::from_iter",
+        "self": 112,
+        "inclusive": 2377909,
+        "calls": 16
+      },
+      {
+        "name": "core::ptr::drop_glue::<core::iter::traits::iterator::Iterator::for_each::call<(alloc::string::String, ignite_types::ModuleTypes), <alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)>>::extend_trusted<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>::{closure#0}>",
+        "self": 64,
+        "inclusive": 256,
+        "calls": 16
+      },
+      {
+        "name": "core::ptr::drop_glue::<<alloc::vec::Vec<(alloc::string::String, ignite_types::ModuleTypes)>>::extend_trusted<core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<alloc::string::String, ignite_types::ModuleTypes>, ignite_types::type_module::{closure#0}>>::{closure#0}>",
+        "self": 64,
+        "inclusive": 192,
+        "calls": 16
+      }
+    ]
+  }
+}
