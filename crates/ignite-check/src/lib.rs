@@ -31,7 +31,7 @@
 //!   is checked for the last three (`E003`, "wrong number of arguments").
 //! * An identifier that is not a local binding or a constant and is
 //!   uppercase or names a protocol, followed by `.name`, is a path: `Enum.Variant`, a protocol
-//!   role `Telnet.serve` or a builtin static such as `Bytes.empty`. The
+//!   role `Echo.serve` or a builtin static such as `Bytes.empty`. The
 //!   parser may produce `Enum.Variant(x)` either as a call on a field or as
 //!   a method call; both are treated as a path call.
 //! * A protocol role that is not `serve` or `connect`, a pure role, a role
@@ -343,7 +343,7 @@ pub struct Symbols {
     /// here is a constant wherever it is not shadowed by a local binding.
     pub constants: BTreeSet<String>,
     /// Every imported name (record, enum, fn, const, protocol) to the module path it
-    /// came from, e.g. `"Telnet" -> "std.protocol.telnet"`. Own definitions
+    /// came from, e.g. `"Json" -> "std.json"`. Own definitions
     /// are not listed. The maps above contain imported entries too.
     pub imported: BTreeMap<String, String>,
     /// Record name to its field names in declaration order, own and
@@ -2873,7 +2873,7 @@ impl Checker {
     }
 
     /// The type, enum or protocol name heading a path such as
-    /// `Action.Continue`, `Bytes.empty` or `Telnet.serve`: an identifier that
+    /// `Action.Continue`, `Bytes.empty` or `Echo.serve`: an identifier that
     /// is not a local binding or a constant and is uppercase or names a
     /// protocol. `LIMIT.to_text()` on a constant is an ordinary method call.
     fn path_head<'e>(&self, receiver: &'e Expr) -> Option<&'e Ident> {

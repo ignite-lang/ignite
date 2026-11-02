@@ -13,10 +13,10 @@ import std.time.{month_start, next_month_start}
 // Duration since the journal's epoch.
 //
 // Layering (16.6, O45): this module is below every kind whose `machine`
-// hook returns `Machine` (`std.probe`, `std.contract`,
-// `std.protocol.telnet`). It imports only leaf modules: `std.sli` for the
-// vocabulary the reducers consume, `std.policy` for the policies they
-// apply, `std.time` for calendar boundaries. Importing a kind's module
+// hook returns `Machine` (`std.contract`, `std.protocol.telnet`). It
+// imports only leaf modules: `std.sli` for the vocabulary the reducers
+// consume, `std.policy` for the policies they apply, `std.time` for
+// calendar boundaries (`docs/layering.md`). Importing a kind's module
 // here is an import cycle (E032), which is also why the four reducers
 // live in this file: a module that declared one would have to import
 // `Event` and `Effect` from here while being imported by `step`.

@@ -1509,7 +1509,7 @@ fn program_projection(program: &Program) -> Json {
         .filter(|decl| !decl.is_test_only() && !matches!(decl, Decl::System(_) | Decl::Assembly(_)))
         .map(|decl| {
             // Associated fns are keyed `Owner.name`, so `A.run` and `B.run`
-            // (or `TelnetServer.main` and `TelnetClient.main`) are both kept.
+            // (or `Server.main` and `Client.main`) are both kept.
             let name = match decl {
                 Decl::Fn(function) => function.qualified_name(),
                 _ => decl.name().name.clone(),

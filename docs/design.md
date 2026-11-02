@@ -577,7 +577,7 @@ import std.console.CommandConsole
 import std.cli.{Application, Command, Argument}
 import std.contract.{Availability, ThresholdCompliance, SLA}
 import std.policy.{Restart, DrainRollout}
-import std.probe.TelnetPrompt
+import std.protocol.telnet.TelnetPrompt
 import std.deploy.{Deployment, localSocket, nativeProcess, workstationExecutable, scheduledProbeHost}
 
 system Terminal {

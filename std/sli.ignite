@@ -4,7 +4,7 @@ package std.sli
 // probe emits, the outcome a contract names, the window a contract is
 // judged over, the rule for attempts the probe never made, and the target
 // comparison. A leaf module (`docs/slice.md` 16.6, O45): the kinds of
-// `std.contract` and `std.probe`, whose `machine` hooks return
+// `std.contract` and `std.protocol.telnet`, whose `machine` hooks return
 // `std.control.Machine`, and the reducers of `std.control` all read it, and
 // it imports none of them, so that no import cycle (E032) can arise.
 

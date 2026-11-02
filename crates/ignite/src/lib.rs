@@ -231,7 +231,7 @@ pub struct BuildOutput {
 /// One checked standard-library module.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StdModule {
-    /// Module path, e.g. `std.protocol.telnet`.
+    /// Module path, e.g. `std.control`.
     pub path: String,
     pub source: SourceFile,
     pub program: Program,

@@ -1300,7 +1300,7 @@ impl<'a> Typer<'a> {
     }
 
     /// The type, enum or protocol heading a path such as `Action.Continue`,
-    /// `Bytes.empty` or `Telnet.serve`, by the rule of `ignite-check`.
+    /// `Bytes.empty` or `Echo.serve`, by the rule of `ignite-check`.
     fn path_head<'e>(&self, receiver: &'e Expr) -> Option<&'e Ident> {
         match &receiver.kind {
             ExprKind::Name(id)
