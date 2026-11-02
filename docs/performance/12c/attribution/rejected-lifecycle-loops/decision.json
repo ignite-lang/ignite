@@ -1,0 +1,6 @@
+{
+  "decision": "revert inconclusive lifecycle compile experiment",
+  "reason": "Clippy median paired ratio1.00146 does not improve the intended library-analysis owner; no-run median paired ratio0.98749 is small and first pair includes unexpected prewarm/invalidation overhead.",
+  "source_restored_sha256": "25bab1445c83a1153850272725884292d4778edb9f8e7b7bb44c15e465fb2af9",
+  "retained": "All phase rows, paired rows, logs and source variants retained; no sample removed."
+}

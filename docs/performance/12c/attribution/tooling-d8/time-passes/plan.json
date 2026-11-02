@@ -1,0 +1,104 @@
+[
+  {
+    "label": "baseline",
+    "phase": "library-clippy",
+    "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/baseline-df7ccb9bed44",
+    "command": [
+      "cargo",
+      "clippy",
+      "-p",
+      "ignite",
+      "--lib",
+      "--",
+      "-Ztime-passes",
+      "-D",
+      "warnings"
+    ],
+    "environment": {
+      "CARGO_TARGET_DIR": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/baseline-df7ccb9bed44",
+      "RUSTC_BOOTSTRAP": "1",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_RELEASE_DEBUG": "0",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TERM_COLOR": "never"
+    },
+    "diagnostic_only": true
+  },
+  {
+    "label": "baseline",
+    "phase": "e2e-rustc",
+    "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/baseline-df7ccb9bed44",
+    "command": [
+      "cargo",
+      "rustc",
+      "-p",
+      "ignite",
+      "--test",
+      "main",
+      "--",
+      "-Ztime-passes"
+    ],
+    "environment": {
+      "CARGO_TARGET_DIR": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/baseline-df7ccb9bed44",
+      "RUSTC_BOOTSTRAP": "1",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_RELEASE_DEBUG": "0",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TERM_COLOR": "never"
+    },
+    "diagnostic_only": true
+  },
+  {
+    "label": "candidate",
+    "phase": "library-clippy",
+    "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a",
+    "command": [
+      "cargo",
+      "clippy",
+      "-p",
+      "ignite",
+      "--lib",
+      "--",
+      "-Ztime-passes",
+      "-D",
+      "warnings"
+    ],
+    "environment": {
+      "CARGO_TARGET_DIR": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-d8a9cb74050a",
+      "RUSTC_BOOTSTRAP": "1",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_RELEASE_DEBUG": "0",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TERM_COLOR": "never"
+    },
+    "diagnostic_only": true
+  },
+  {
+    "label": "candidate",
+    "phase": "e2e-rustc",
+    "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a",
+    "command": [
+      "cargo",
+      "rustc",
+      "-p",
+      "ignite",
+      "--test",
+      "main",
+      "--",
+      "-Ztime-passes"
+    ],
+    "environment": {
+      "CARGO_TARGET_DIR": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-d8a9cb74050a",
+      "RUSTC_BOOTSTRAP": "1",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_RELEASE_DEBUG": "0",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TERM_COLOR": "never"
+    },
+    "diagnostic_only": true
+  }
+]

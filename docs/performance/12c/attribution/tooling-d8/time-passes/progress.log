@@ -1,0 +1,4 @@
+{"label": "baseline", "phase": "library-clippy", "exit": 0, "seconds": 3.3059649909846485}
+{"label": "baseline", "phase": "e2e-rustc", "exit": 0, "seconds": 1.768792257993482}
+{"label": "candidate", "phase": "library-clippy", "exit": 0, "seconds": 3.2581445690011606}
+{"label": "candidate", "phase": "e2e-rustc", "exit": 0, "seconds": 3.259786445007194}

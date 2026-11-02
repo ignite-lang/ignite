@@ -1,0 +1,73 @@
+    Checking ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+error: items after a test module
+   --> crates/ignite/src/llvm_build.rs:225:1
+    |
+225 |   mod archive_tests {
+    |   ^^^^^^^^^^^^^^^^^
+...
+291 |   fn check_runtime_target(runtime: &Path, triple: &str) -> Result<(), Error> {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+324 |   pub const LINK_FLAGS: &[&str] = &["-Wl,--gc-sections"];
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+328 |   pub const RELEASE_LINK_FLAGS: &[&str] = &["-Wl,--strip-debug"];
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+331 |   fn clang(clang: &Path, args: &[OsString]) -> Result<(), Error> {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+350 |   fn stamp(program: &Path, args: &[OsString], extra: &str) -> String {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+362 |   fn up_to_date(output: &Path, stamp_path: &Path, expected: &str) -> bool {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+368 | / fn run_stamped(
+369 | |     clang_path: &Path,
+370 | |     args: &[OsString],
+371 | |     output: &Path,
+372 | |     stamp_path: &Path,
+373 | |     expected: &str,
+374 | | ) -> Result<bool, Error> {
+    | |________________________^
+...
+388 |   fn ir_hash(ir: &str) -> u64 {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+395 |   fn runtime_identity(runtime: &Path) -> Result<String, Error> {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+412 |   fn write_if_changed(path: &Path, contents: &str) -> Result<(), Error> {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+419 |   pub(crate) fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+427 |   fn out_dir(package: &str, options: &BuildOptions) -> PathBuf {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+437 | / pub(crate) fn link(
+438 | |     package: &str,
+439 | |     generated: &ignite_llvm::Generated,
+440 | |     options: &BuildOptions,
+441 | | ) -> Result<BuildOutput, Error> {
+    | |_______________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#items_after_test_module
+    = note: `-D clippy::items-after-test-module` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::items_after_test_module)]`
+    = help: move the items to before the test module was defined
+
+error: manual implementation of `.is_multiple_of()`
+   --> crates/ignite/src/llvm_build.rs:242:12
+    |
+242 |         if data.len() % 2 != 0 {
+    |            ^^^^^^^^^^^^^^^^^^^ help: replace with: `!data.len().is_multiple_of(2)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_is_multiple_of
+    = note: `-D clippy::manual-is-multiple-of` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::manual_is_multiple_of)]`
+
+error: could not compile `ignite` (lib test) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...

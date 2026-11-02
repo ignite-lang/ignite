@@ -63,6 +63,20 @@ index/cache-admission delays while preserving fresh target builds and `SCCACHE_R
 Missing dependencies still fail the command. Fetching dependencies is setup, never a timed
 compiler gain. Preserve earlier failed online batches; do not mix online and offline samples.
 
+The candidate's format unit runs `python3 scripts/check-format.py` when that committed entry
+point exists. It checks the complete workspace in at most four whole-package CargoFmt groups;
+CargoFmt still discovers every target and recursive module with the same edition, config,
+toolchain, inherited environment and `-- --check` flags. All groups finish, failure output is
+reported in deterministic group order, and success is silent. Local path dependencies outside
+the workspace fall back to the original serial `cargo fmt --all -- --check`. `task check` uses
+the same full-scope entry point; the writing `task fmt` remains unchanged. Baseline and published
+comparison format units always run their original serial command, and each harness row records
+the actual command used. This changes workflow scheduling, never the checked sources, compiler
+profile, required units or acceptance budgets. The prototype's exact root coverage, isolated
+nested-module failure parity and three timing pairs (including metadata/Python startup) are
+retained in `12c/attribution/format-parallel-d8a9cb7/`; those diagnostics do not establish final
+candidate acceptance.
+
 Defaults implement the performance plan:
 
 - Same toolchain and environment for both sides: incremental off, dev debug line tables,

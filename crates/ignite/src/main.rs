@@ -4,7 +4,7 @@
 //! ignite check <file.ignite> [--std PATH]
 //! ignite emit <file.ignite> [--substrate PATH] [--std PATH]
 //! ignite build <file.ignite> [--target rust|llvm] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE]
-//! ignite test <file.ignite>… [FILTER] [--target rust|llvm] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE]
+//! ignite test <file.ignite>… [FILTER] [--target rust|llvm|all] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE]
 //! ignite plan <file.ignite> [--assembly NAME] [--out FILE] [--fuel N] [--std PATH]
 //! ignite explain <file.ignite> <path> [--assembly NAME] [--fuel N] [--std PATH]
 //! ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target rust|llvm] [--release] [--clock real|manual] [--epoch RFC3339] [--settle DURATION] [--port RESOURCE=PORT]... [--json] [--fresh] [--std PATH] [--fuel N] [--runtime PATH] [--target-dir DIR]
@@ -95,7 +95,7 @@ enum Commands {
         /// `FILE.ignite…` and at most one `FILTER`.
         #[arg(required = true)]
         args: Vec<String>,
-        /// `rust` (default), `llvm`, or `both` with shared preparation.
+        /// `rust` (default), `llvm`, or `all` supported targets with shared preparation.
         #[arg(long, value_enum, default_value = "rust")]
         target: TestTargetArg,
         /// Root of the standard library.
@@ -116,10 +116,10 @@ enum Commands {
         /// Seconds after which a test is killed (default 60).
         #[arg(long)]
         timeout: Option<u64>,
-        /// clang for the LLVM tests (`--target llvm` or `both`).
+        /// clang for the LLVM tests (`--target llvm` or `all`).
         #[arg(long)]
         clang: Option<PathBuf>,
-        /// LLVM runtime archive for `--target llvm` or `both`.
+        /// LLVM runtime archive for `--target llvm` or `all`.
         #[arg(long)]
         runtime: Option<PathBuf>,
         /// Cargo target directory for Rust tests (default `<out>/<name>/rust/target`).
@@ -291,15 +291,19 @@ fn main() {
 enum TestTargetArg {
     Rust,
     Llvm,
-    Both,
+    All,
 }
 
 impl TestTargetArg {
-    fn targets(self) -> &'static [ignite::Target] {
+    fn targets(self) -> Vec<ignite::Target> {
         match self {
-            Self::Rust => &[ignite::Target::Rust],
-            Self::Llvm => &[ignite::Target::Llvm],
-            Self::Both => &[ignite::Target::Rust, ignite::Target::Llvm],
+            Self::Rust => vec![ignite::Target::Rust],
+            Self::Llvm => vec![ignite::Target::Llvm],
+            Self::All => <TargetArg as clap::ValueEnum>::value_variants()
+                .iter()
+                .copied()
+                .map(Into::into)
+                .collect(),
         }
     }
 }
@@ -341,9 +345,10 @@ fn run() {
         if let Some(timeout) = timeout {
             runner.extend(["--timeout".into(), timeout.to_string()]);
         }
+        let targets = target.targets();
         let options = ignite::TestOptions {
             build: ignite::BuildOptions {
-                target: target.targets()[0],
+                target: targets[0],
                 clang,
                 runtime,
                 out,
@@ -356,7 +361,7 @@ fn run() {
             runner,
         };
         let files: Vec<PathBuf> = files.into_iter().map(PathBuf::from).collect();
-        match ignite::test_targets(&files, &options, target.targets()) {
+        match ignite::test_targets(&files, &options, &targets) {
             Ok(status) => std::process::exit(status),
             Err(error) => {
                 match &error {

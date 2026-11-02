@@ -1,0 +1,233 @@
+{
+  "diagnostic_only": true,
+  "records": [
+    {
+      "label": "baseline",
+      "unit": "clippy",
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/baseline-df7ccb9bed44",
+      "target": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/baseline-df7ccb9bed44",
+      "touch": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/baseline-df7ccb9bed44/crates/ignite-check/src/lib.rs",
+      "command": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--timings",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 3.2128789220005274,
+      "load_before": [
+        2.822265625,
+        4.90283203125,
+        6.58251953125
+      ],
+      "load_after": [
+        3.7177734375,
+        5.05419921875,
+        6.62255859375
+      ],
+      "checker_hash_before": "b0f848b6e10dcadc10e64f5511f8a3c1ea35a0acc5f3005406e8ccd9574d2d22",
+      "checker_hash_after": "b0f848b6e10dcadc10e64f5511f8a3c1ea35a0acc5f3005406e8ccd9574d2d22",
+      "checker_mtime_before": 1793624573857210483,
+      "checker_mtime_after": 1793625033533172377,
+      "unit_count": 20,
+      "diagnostic_only": true
+    },
+    {
+      "label": "baseline",
+      "unit": "no-run",
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/baseline-df7ccb9bed44",
+      "target": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/baseline-df7ccb9bed44",
+      "touch": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/baseline-df7ccb9bed44/crates/ignite-check/src/lib.rs",
+      "command": [
+        "cargo",
+        "test",
+        "--workspace",
+        "--no-run",
+        "--timings"
+      ],
+      "exit": 0,
+      "seconds": 2.4134436230524443,
+      "load_before": [
+        3.7177734375,
+        5.05419921875,
+        6.62255859375
+      ],
+      "load_after": [
+        3.7177734375,
+        5.05419921875,
+        6.62255859375
+      ],
+      "checker_hash_before": "b0f848b6e10dcadc10e64f5511f8a3c1ea35a0acc5f3005406e8ccd9574d2d22",
+      "checker_hash_after": "b0f848b6e10dcadc10e64f5511f8a3c1ea35a0acc5f3005406e8ccd9574d2d22",
+      "checker_mtime_before": 1793625033533172377,
+      "checker_mtime_after": 1793625036748210588,
+      "unit_count": 20,
+      "diagnostic_only": true
+    },
+    {
+      "label": "candidate",
+      "unit": "clippy",
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a",
+      "target": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-d8a9cb74050a",
+      "touch": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a/crates/ignite-check/src/lib.rs",
+      "command": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--timings",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 3.7235499640228227,
+      "load_before": [
+        3.7177734375,
+        5.05419921875,
+        6.62255859375
+      ],
+      "load_after": [
+        4.54150390625,
+        5.203125,
+        6.66259765625
+      ],
+      "checker_hash_before": "a1fa58d424ecd5bc0ad9803125c7f88c2994ea501e9ecd392efee571c90f699a",
+      "checker_hash_after": "a1fa58d424ecd5bc0ad9803125c7f88c2994ea501e9ecd392efee571c90f699a",
+      "checker_mtime_before": 1793624596754615433,
+      "checker_mtime_after": 1793625039163245356,
+      "unit_count": 20,
+      "diagnostic_only": true
+    },
+    {
+      "label": "candidate",
+      "unit": "no-run",
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a",
+      "target": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-d8a9cb74050a",
+      "touch": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a/crates/ignite-check/src/lib.rs",
+      "command": [
+        "cargo",
+        "test",
+        "--workspace",
+        "--no-run",
+        "--timings"
+      ],
+      "exit": 0,
+      "seconds": 3.1063653909950517,
+      "load_before": [
+        4.54150390625,
+        5.203125,
+        6.66259765625
+      ],
+      "load_after": [
+        5.61962890625,
+        5.416015625,
+        6.7236328125
+      ],
+      "checker_hash_before": "a1fa58d424ecd5bc0ad9803125c7f88c2994ea501e9ecd392efee571c90f699a",
+      "checker_hash_after": "a1fa58d424ecd5bc0ad9803125c7f88c2994ea501e9ecd392efee571c90f699a",
+      "checker_mtime_before": 1793625039163245356,
+      "checker_mtime_after": 1793625042888414119,
+      "unit_count": 20,
+      "diagnostic_only": true
+    }
+  ],
+  "critical_paths": {
+    "clippy": {
+      "baseline_last": {
+        "i": 17,
+        "name": "ignite",
+        "version": "0.1.0",
+        "mode": "todo",
+        "target": " main \"test\" (check-test)",
+        "features": [],
+        "start": 2.4,
+        "duration": 0.78,
+        "unblocked_units": [],
+        "unblocked_rmeta_units": [],
+        "sections": [
+          [
+            "frontend",
+            {
+              "start": 0.0,
+              "end": 0.76
+            }
+          ],
+          [
+            "codegen",
+            {
+              "start": 0.76,
+              "end": 0.78
+            }
+          ]
+        ]
+      },
+      "candidate_last": {
+        "i": 17,
+        "name": "ignite",
+        "version": "0.1.0",
+        "mode": "todo",
+        "target": " main \"test\" (check-test)",
+        "features": [],
+        "start": 2.81,
+        "duration": 0.88,
+        "unblocked_units": [],
+        "unblocked_rmeta_units": [],
+        "sections": [
+          [
+            "frontend",
+            {
+              "start": 0.0,
+              "end": 0.86
+            }
+          ],
+          [
+            "codegen",
+            {
+              "start": 0.86,
+              "end": 0.88
+            }
+          ]
+        ]
+      }
+    },
+    "no-run": {
+      "baseline_last": {
+        "i": 18,
+        "name": "ignite",
+        "version": "0.1.0",
+        "mode": "todo",
+        "target": " main \"test\" (test)",
+        "features": [],
+        "start": 0.6,
+        "duration": 1.8,
+        "unblocked_units": [],
+        "unblocked_rmeta_units": [],
+        "sections": null
+      },
+      "candidate_last": {
+        "i": 18,
+        "name": "ignite",
+        "version": "0.1.0",
+        "mode": "todo",
+        "target": " main \"test\" (test)",
+        "features": [],
+        "start": 0.72,
+        "duration": 2.38,
+        "unblocked_units": [],
+        "unblocked_rmeta_units": [],
+        "sections": null
+      }
+    }
+  },
+  "findings": [
+    "Clippy critical upstream LLVM ends2.17->2.20; driver non-test library frontend0.22->0.60; E2E frontend0.76->0.86. This is analysis work, not monomorph code generation.",
+    "No-run critical E2E starts0.60->0.72 and takes1.80->2.38; completion2.40->3.10. Test targets have no Cargo phase sections; monomorphization versus linking is not separated.",
+    "Driver lib-test no-run grows0.45->1.52 but finishes2.03, before E2E3.10; do not add overlapping unit durations.",
+    "Callback type erasure in E2E wait_for loops is an owner-local experiment for codegen cost, not a proved fix for clippy."
+  ]
+}

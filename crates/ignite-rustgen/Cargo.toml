@@ -6,6 +6,11 @@ publish.workspace = true
 description = "Ignite Rust target: lowers a checked AST to a Cargo project that links ignite-io."
 autotests = false
 
+[lib]
+# Cases live in tests/main.rs; re-enable before adding source unit tests.
+test = false
+bench = false
+
 [dependencies]
 ignite-syntax.workspace = true
 ignite-check.workspace = true

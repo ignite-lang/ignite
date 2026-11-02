@@ -17,7 +17,9 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
+use nix::errno::Errno;
 use nix::sys::signal::Signal;
 use nix::unistd::Pid;
 
@@ -43,7 +45,22 @@ impl Spawner {
             .name("spawner".to_string())
             .spawn(move || {
                 for Request { mut command, reply } in incoming {
-                    let _ = reply.send(command.spawn());
+                    let mut result = command.spawn();
+                    // A concurrent fork can briefly retain a writable file
+                    // descriptor after its owner closed it. Retry only that
+                    // exec conflict, on this same parent thread (A3), with
+                    // 31 ms total backoff before the final spawn error.
+                    for delay in [1, 2, 4, 8, 16] {
+                        if !matches!(
+                            &result,
+                            Err(error) if error.raw_os_error() == Some(Errno::ETXTBSY as i32)
+                        ) {
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(delay));
+                        result = command.spawn();
+                    }
+                    let _ = reply.send(result);
                 }
             })?;
         Ok(Spawner { requests })
@@ -324,6 +341,10 @@ pub(super) fn pids(adapters: &Adapters, member: &str) -> Vec<(i64, i32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::os::fd::OwnedFd;
+    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::net::UnixStream;
     use std::sync::mpsc::Receiver;
     use std::time::Duration;
 
@@ -336,6 +357,72 @@ mod tests {
 
     fn sh(script: &str) -> Vec<String> {
         vec!["-c".to_string(), script.to_string()]
+    }
+
+    #[test]
+    fn a_busy_executable_is_retried_after_its_writer_closes() {
+        let path =
+            std::env::temp_dir().join(format!("ignite-spawn-busy-{}.sh", std::process::id()));
+        let mut writer = std::fs::File::create(&path).unwrap();
+        writer.write_all(b"#!/bin/sh\nexit 7\n").unwrap();
+        writer
+            .set_permissions(std::fs::Permissions::from_mode(0o700))
+            .unwrap();
+        // The parent drops its writable handle after spawn. The holder's
+        // stdout keeps the executable busy until its stdin reaches EOF.
+        let (holder_reader, holder_input) = UnixStream::pair().unwrap();
+        let mut holder = Command::new("/bin/cat")
+            .stdin(Stdio::from(OwnedFd::from(holder_reader)))
+            .stdout(Stdio::from(writer))
+            .spawn()
+            .unwrap();
+        assert_eq!(
+            Command::new(&path).spawn().unwrap_err().raw_os_error(),
+            Some(Errno::ETXTBSY as i32)
+        );
+        let (notify_child, mut notify_parent) = UnixStream::pair().unwrap();
+        let (mut acknowledge_parent, acknowledge_child) = UnixStream::pair().unwrap();
+        notify_parent.set_read_timeout(Some(LIMIT)).unwrap();
+        acknowledge_child.set_read_timeout(Some(LIMIT)).unwrap();
+        let controller = std::thread::spawn(move || -> io::Result<()> {
+            let mut byte = [0];
+            let attempts = (|| {
+                notify_parent.read_exact(&mut byte)?;
+                // First exec happens while the holder still owns the writer.
+                acknowledge_parent.write_all(&[1])?;
+                notify_parent.read_exact(&mut byte)
+            })();
+            // Shutdown reaches every inherited duplicate of this socket;
+            // no child needs to close a borrowed numeric file descriptor.
+            let stopped = holder_input.shutdown(std::net::Shutdown::Write);
+            let released = holder.wait();
+            attempts?;
+            stopped?;
+            assert!(released?.success());
+            // Second exec starts only after the holder released its writer.
+            acknowledge_parent.write_all(&[1])
+        });
+        let mut command = Command::new(&path);
+        // SAFETY: the child performs only async-signal-safe socket read/write
+        // syscalls; the streams are owned and initialized before the fork.
+        unsafe {
+            command.pre_exec(move || {
+                nix::unistd::write(&notify_child, &[1]).map_err(io::Error::from)?;
+                let mut byte = [0];
+                match nix::unistd::read(&acknowledge_child, &mut byte).map_err(io::Error::from)? {
+                    1 => Ok(()),
+                    _ => Err(io::ErrorKind::UnexpectedEof.into()),
+                }
+            });
+        }
+        let spawner = Spawner::start().unwrap();
+        let result = spawner.spawn(command);
+        let controlled = controller.join().unwrap();
+        let status = result.and_then(|mut child| child.wait());
+        std::fs::remove_file(path).unwrap();
+        let status = status.expect("retry the transient executable write conflict");
+        controlled.unwrap();
+        assert_eq!(status.code(), Some(7));
     }
 
     #[test]

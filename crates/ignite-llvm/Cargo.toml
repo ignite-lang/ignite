@@ -6,6 +6,11 @@ publish.workspace = true
 description = "Ignite LLVM target: typed AST to LLVM IR text."
 autotests = false
 
+[lib]
+# Cases live in tests/main.rs; re-enable before adding source unit tests.
+test = false
+bench = false
+
 [dependencies]
 ignite-syntax.workspace = true
 ignite-check.workspace = true

@@ -1,0 +1,6 @@
+{
+  "source": "/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite/src/run/live.rs",
+  "before_sha256": "25bab1445c83a1153850272725884292d4778edb9f8e7b7bb44c15e465fb2af9",
+  "purpose": "Replace iterator/closure layers with explicit grouped loops. Preserve readiness membership collection to avoid rescanning unrelated edges for each scheduler.",
+  "state": "Prepared outside tree; not applied; no Cargo run."
+}

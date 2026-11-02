@@ -1,0 +1,12 @@
+tests::ambiguous_variants_are_left_to_the_type_checker: test
+tests::arm_bindings_are_scoped_to_their_arm: test
+tests::assignment_needs_a_var: test
+tests::duplicate_top_level_names: test
+tests::effect_rules: test
+tests::for_variable_is_scoped_to_its_body: test
+tests::inner_let_shadows_outer_var_for_assignment: test
+tests::let_shadows_and_inner_block_does_not_leak: test
+tests::let_value_is_checked_before_binding: test
+tests::path_calls_resolve_variants_and_statics: test
+
+10 tests, 0 benchmarks

@@ -1,0 +1,8 @@
+{
+  "parent_writer_closed": true,
+  "inherited_child": 3852070,
+  "inherited_fd": "/home/timo/.cache/scratch/ignite-perf12c/etxtbsy-repro/probe.sh",
+  "busy_errno": 26,
+  "busy_error": "[Errno 26] Text file busy: '/home/timo/.cache/scratch/ignite-perf12c/etxtbsy-repro/probe.sh'",
+  "after_child_release_exit": 7
+}

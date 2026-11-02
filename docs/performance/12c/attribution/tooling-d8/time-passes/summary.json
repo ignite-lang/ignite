@@ -1,0 +1,429 @@
+{
+  "diagnostic_only": true,
+  "comparison": {
+    "library-clippy": [
+      {
+        "phase": "AST_validation",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "MIR_borrow_checking",
+        "baseline": 0.054,
+        "candidate": 0.155,
+        "delta": 0.101
+      },
+      {
+        "phase": "check_externally_implementable_items",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "coherence_checking",
+        "baseline": 0.007,
+        "candidate": 0.017,
+        "delta": 0.01
+      },
+      {
+        "phase": "complete_gated_feature_checking",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "crate_injection",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "crate_lints",
+        "baseline": 0.016,
+        "candidate": 0.042,
+        "delta": 0.026
+      },
+      {
+        "phase": "drop_ast",
+        "baseline": 0.0,
+        "candidate": 0,
+        "delta": 0.0
+      },
+      {
+        "phase": "expand_crate",
+        "baseline": 0.005,
+        "candidate": 0.013,
+        "delta": 0.008
+      },
+      {
+        "phase": "finalize_macro_resolutions",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "generate_crate_metadata",
+        "baseline": 0.001,
+        "candidate": 0.002,
+        "delta": 0.001
+      },
+      {
+        "phase": "late_resolve_crate",
+        "baseline": 0.003,
+        "candidate": 0.008,
+        "delta": 0.005
+      },
+      {
+        "phase": "link",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "link_crate",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "lint_checking",
+        "baseline": 0.017,
+        "candidate": 0.046,
+        "delta": 0.029
+      },
+      {
+        "phase": "macro_expand_crate",
+        "baseline": 0.005,
+        "candidate": 0.013,
+        "delta": 0.008
+      },
+      {
+        "phase": "misc_checking_1",
+        "baseline": 0.001,
+        "candidate": 0.003,
+        "delta": 0.002
+      },
+      {
+        "phase": "misc_checking_3",
+        "baseline": 0.019,
+        "candidate": 0.052,
+        "delta": 0.033
+      },
+      {
+        "phase": "module_lints",
+        "baseline": 0.001,
+        "candidate": 0.004,
+        "delta": 0.003
+      },
+      {
+        "phase": "parse_crate",
+        "baseline": 0.001,
+        "candidate": 0.002,
+        "delta": 0.001
+      },
+      {
+        "phase": "privacy_checking_modules",
+        "baseline": 0.001,
+        "candidate": 0.003,
+        "delta": 0.002
+      },
+      {
+        "phase": "resolve_check_unused",
+        "baseline": 0.0,
+        "candidate": 0,
+        "delta": 0.0
+      },
+      {
+        "phase": "resolve_crate",
+        "baseline": 0.003,
+        "candidate": 0.009,
+        "delta": 0.006
+      },
+      {
+        "phase": "type_check_crate",
+        "baseline": 0.056,
+        "candidate": 0.143,
+        "delta": 0.087
+      },
+      {
+        "phase": "unused_lib_feature_checking",
+        "baseline": 0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "write_dep_info",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      }
+    ],
+    "e2e-rustc": [
+      {
+        "phase": "AST_validation",
+        "baseline": 0.001,
+        "candidate": 0.001,
+        "delta": 0.0
+      },
+      {
+        "phase": "LLVM_passes",
+        "baseline": 0.244,
+        "candidate": 0.285,
+        "delta": 0.041
+      },
+      {
+        "phase": "MIR_borrow_checking",
+        "baseline": 0.191,
+        "candidate": 0.644,
+        "delta": 0.453
+      },
+      {
+        "phase": "check_externally_implementable_items",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "check_lint_expectations",
+        "baseline": 0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "codegen_crate",
+        "baseline": 0.397,
+        "candidate": 0.585,
+        "delta": 0.188
+      },
+      {
+        "phase": "codegen_to_LLVM_IR",
+        "baseline": 0.225,
+        "candidate": 0.274,
+        "delta": 0.049
+      },
+      {
+        "phase": "coherence_checking",
+        "baseline": 0.012,
+        "candidate": 0.017,
+        "delta": 0.005
+      },
+      {
+        "phase": "complete_gated_feature_checking",
+        "baseline": 0.0,
+        "candidate": 0.001,
+        "delta": 0.001
+      },
+      {
+        "phase": "crate_injection",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "emit_ast_lowering_delayed_lints",
+        "baseline": 0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "expand_crate",
+        "baseline": 0.062,
+        "candidate": 0.043,
+        "delta": -0.019
+      },
+      {
+        "phase": "finalize_imports",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "finalize_macro_resolutions",
+        "baseline": 0.0,
+        "candidate": 0.001,
+        "delta": 0.001
+      },
+      {
+        "phase": "finish_ongoing_codegen",
+        "baseline": 0.03,
+        "candidate": 0.025,
+        "delta": -0.005
+      },
+      {
+        "phase": "join_worker_thread",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "late_resolve_crate",
+        "baseline": 0.008,
+        "candidate": 0.01,
+        "delta": 0.002
+      },
+      {
+        "phase": "link",
+        "baseline": 0.063,
+        "candidate": 0.071,
+        "delta": 0.008
+      },
+      {
+        "phase": "link_binary",
+        "baseline": 0.063,
+        "candidate": 0.071,
+        "delta": 0.008
+      },
+      {
+        "phase": "link_crate",
+        "baseline": 0.063,
+        "candidate": 0.071,
+        "delta": 0.008
+      },
+      {
+        "phase": "lint_checking",
+        "baseline": 0.005,
+        "candidate": 0.007,
+        "delta": 0.002
+      },
+      {
+        "phase": "looking_for_entry_point",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "macro_expand_crate",
+        "baseline": 0.062,
+        "candidate": 0.043,
+        "delta": -0.019
+      },
+      {
+        "phase": "maybe_building_test_harness",
+        "baseline": 0.002,
+        "candidate": 0.002,
+        "delta": 0.0
+      },
+      {
+        "phase": "misc_checking_1",
+        "baseline": 0.003,
+        "candidate": 0.005,
+        "delta": 0.002
+      },
+      {
+        "phase": "misc_checking_3",
+        "baseline": 0.011,
+        "candidate": 0.016,
+        "delta": 0.005
+      },
+      {
+        "phase": "module_lints",
+        "baseline": 0.005,
+        "candidate": 0.007,
+        "delta": 0.002
+      },
+      {
+        "phase": "monomorphization_collector_graph_walk",
+        "baseline": 0.15,
+        "candidate": 0.279,
+        "delta": 0.129
+      },
+      {
+        "phase": "monomorphization_collector_root_collections",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "parse_crate",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "partition_and_assert_distinct_symbols",
+        "baseline": 0.019,
+        "candidate": 0.024,
+        "delta": 0.005
+      },
+      {
+        "phase": "privacy_checking_modules",
+        "baseline": 0.004,
+        "candidate": 0.006,
+        "delta": 0.002
+      },
+      {
+        "phase": "resolve_check_unused",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "resolve_crate",
+        "baseline": 0.01,
+        "candidate": 0.014,
+        "delta": 0.004
+      },
+      {
+        "phase": "resolve_main",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "resolve_postprocess",
+        "baseline": 0,
+        "candidate": 0.002,
+        "delta": 0.002
+      },
+      {
+        "phase": "run_linker",
+        "baseline": 0.062,
+        "candidate": 0.07,
+        "delta": 0.008
+      },
+      {
+        "phase": "serialize_dep_graph",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "total",
+        "baseline": 1.047,
+        "candidate": 1.786,
+        "delta": 0.739
+      },
+      {
+        "phase": "type_check_crate",
+        "baseline": 0.238,
+        "candidate": 0.332,
+        "delta": 0.094
+      },
+      {
+        "phase": "unused_lib_feature_checking",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "write_allocator_module",
+        "baseline": 0.0,
+        "candidate": 0.0,
+        "delta": 0.0
+      },
+      {
+        "phase": "write_dep_info",
+        "baseline": 0.001,
+        "candidate": 0.001,
+        "delta": 0.0
+      }
+    ]
+  },
+  "notes": [
+    "Library clippy phase rows select only the block after final Checking ignite; preceding dependency timings are interleaved.",
+    "Nested phases overlap; do not sum LLVM_passes/codegen_crate/codegen_to_LLVM_IR or lint_checking/misc_checking_3.",
+    "MIR borrow checking is the dominant E2E growth; linking is only+8ms. Callback erasure targets secondary monomorphization cost, not most borrow-checking growth.",
+    "RUSTC_BOOTSTRAP and -Ztime-passes were process-scoped. Regular profile manifests were unchanged."
+  ]
+}

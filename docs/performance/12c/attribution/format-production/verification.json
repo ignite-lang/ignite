@@ -1,0 +1,230 @@
+{
+  "verification": "complete production format check and isolated nested-module parity",
+  "accepted": true,
+  "diagnostic_timing_only": true,
+  "production_wrapper_sha256": "02be1dc31e22517fdc29289a66b7a704c8c0620c94d88459bdfd7647e2915d0e",
+  "workspace": [
+    {
+      "name": "workspace-production",
+      "command": [
+        "python3",
+        "scripts/check-format.py"
+      ],
+      "cwd": "/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c",
+      "exit": 0,
+      "seconds": 0.2440641929861158,
+      "stdout": "workspace-production.stdout",
+      "stderr": "workspace-production.stderr"
+    },
+    {
+      "name": "workspace-original",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "cwd": "/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c",
+      "exit": 0,
+      "seconds": 0.5270643499679863,
+      "stdout": "workspace-original.stdout",
+      "stderr": "workspace-original.stderr"
+    }
+  ],
+  "workspace_source_count": 928,
+  "workspace_source_unchanged": true,
+  "workspace_source_manifest": "workspace-source-sha256.json",
+  "cases": [
+    {
+      "name": "valid-serial",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/format-production-verify/fixture",
+      "exit": 0,
+      "seconds": 0.031672966957557946,
+      "stdout": "valid-serial.stdout",
+      "stderr": "valid-serial.stderr",
+      "source_unchanged": true,
+      "rust_source_sha256": {
+        "binary/src/nested.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123",
+        "binary/src/main.rs": "a8f26dd4739085c301b978c6757f21b7d7c1fefea2bece0fbbeb3dab504cd189",
+        "library/src/nested.rs": "2482073f15729ebca7c258b27885a0f5802e95fd745e01e3134b26527c878b86",
+        "library/src/lib.rs": "703f3448e7b28a66896c65f038a12400f14adab6552be64ed23037214075e7c5",
+        "library/tests/main.rs": "03e2d855644b539f13e9a1c83f4a6513025cbe725c11b65203dd0abc5de9760e",
+        "library/tests/support/mod.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123"
+      }
+    },
+    {
+      "name": "valid-production",
+      "command": [
+        "python3",
+        "scripts/check-format.py"
+      ],
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/format-production-verify/fixture",
+      "exit": 0,
+      "seconds": 0.08705654699588194,
+      "stdout": "valid-production.stdout",
+      "stderr": "valid-production.stderr",
+      "source_unchanged": true,
+      "rust_source_sha256": {
+        "binary/src/nested.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123",
+        "binary/src/main.rs": "a8f26dd4739085c301b978c6757f21b7d7c1fefea2bece0fbbeb3dab504cd189",
+        "library/src/nested.rs": "2482073f15729ebca7c258b27885a0f5802e95fd745e01e3134b26527c878b86",
+        "library/src/lib.rs": "703f3448e7b28a66896c65f038a12400f14adab6552be64ed23037214075e7c5",
+        "library/tests/main.rs": "03e2d855644b539f13e9a1c83f4a6513025cbe725c11b65203dd0abc5de9760e",
+        "library/tests/support/mod.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123"
+      }
+    },
+    {
+      "name": "lib-serial",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/format-production-verify/fixture",
+      "exit": 1,
+      "seconds": 0.031300480011850595,
+      "stdout": "lib-serial.stdout",
+      "stderr": "lib-serial.stderr",
+      "source_unchanged": true,
+      "rust_source_sha256": {
+        "binary/src/nested.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123",
+        "binary/src/main.rs": "a8f26dd4739085c301b978c6757f21b7d7c1fefea2bece0fbbeb3dab504cd189",
+        "library/src/nested.rs": "1720e5e49489202d76660f7c8efd09490f125f40e48e0b10874537637c6aef27",
+        "library/src/lib.rs": "703f3448e7b28a66896c65f038a12400f14adab6552be64ed23037214075e7c5",
+        "library/tests/main.rs": "03e2d855644b539f13e9a1c83f4a6513025cbe725c11b65203dd0abc5de9760e",
+        "library/tests/support/mod.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123"
+      }
+    },
+    {
+      "name": "lib-production",
+      "command": [
+        "python3",
+        "scripts/check-format.py"
+      ],
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/format-production-verify/fixture",
+      "exit": 1,
+      "seconds": 0.0878955369698815,
+      "stdout": "lib-production.stdout",
+      "stderr": "lib-production.stderr",
+      "source_unchanged": true,
+      "rust_source_sha256": {
+        "binary/src/nested.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123",
+        "binary/src/main.rs": "a8f26dd4739085c301b978c6757f21b7d7c1fefea2bece0fbbeb3dab504cd189",
+        "library/src/nested.rs": "1720e5e49489202d76660f7c8efd09490f125f40e48e0b10874537637c6aef27",
+        "library/src/lib.rs": "703f3448e7b28a66896c65f038a12400f14adab6552be64ed23037214075e7c5",
+        "library/tests/main.rs": "03e2d855644b539f13e9a1c83f4a6513025cbe725c11b65203dd0abc5de9760e",
+        "library/tests/support/mod.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123"
+      }
+    },
+    {
+      "name": "test-serial",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/format-production-verify/fixture",
+      "exit": 1,
+      "seconds": 0.03219984599854797,
+      "stdout": "test-serial.stdout",
+      "stderr": "test-serial.stderr",
+      "source_unchanged": true,
+      "rust_source_sha256": {
+        "binary/src/nested.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123",
+        "binary/src/main.rs": "a8f26dd4739085c301b978c6757f21b7d7c1fefea2bece0fbbeb3dab504cd189",
+        "library/src/nested.rs": "2482073f15729ebca7c258b27885a0f5802e95fd745e01e3134b26527c878b86",
+        "library/src/lib.rs": "703f3448e7b28a66896c65f038a12400f14adab6552be64ed23037214075e7c5",
+        "library/tests/main.rs": "03e2d855644b539f13e9a1c83f4a6513025cbe725c11b65203dd0abc5de9760e",
+        "library/tests/support/mod.rs": "42cc9f931da45dcbd4592d66bce557983f74bbac3dbf890e7beecb6f5a73c431"
+      }
+    },
+    {
+      "name": "test-production",
+      "command": [
+        "python3",
+        "scripts/check-format.py"
+      ],
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/format-production-verify/fixture",
+      "exit": 1,
+      "seconds": 0.08947218203684315,
+      "stdout": "test-production.stdout",
+      "stderr": "test-production.stderr",
+      "source_unchanged": true,
+      "rust_source_sha256": {
+        "binary/src/nested.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123",
+        "binary/src/main.rs": "a8f26dd4739085c301b978c6757f21b7d7c1fefea2bece0fbbeb3dab504cd189",
+        "library/src/nested.rs": "2482073f15729ebca7c258b27885a0f5802e95fd745e01e3134b26527c878b86",
+        "library/src/lib.rs": "703f3448e7b28a66896c65f038a12400f14adab6552be64ed23037214075e7c5",
+        "library/tests/main.rs": "03e2d855644b539f13e9a1c83f4a6513025cbe725c11b65203dd0abc5de9760e",
+        "library/tests/support/mod.rs": "42cc9f931da45dcbd4592d66bce557983f74bbac3dbf890e7beecb6f5a73c431"
+      }
+    },
+    {
+      "name": "bin-serial",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/format-production-verify/fixture",
+      "exit": 1,
+      "seconds": 0.030411201994866133,
+      "stdout": "bin-serial.stdout",
+      "stderr": "bin-serial.stderr",
+      "source_unchanged": true,
+      "rust_source_sha256": {
+        "binary/src/nested.rs": "42cc9f931da45dcbd4592d66bce557983f74bbac3dbf890e7beecb6f5a73c431",
+        "binary/src/main.rs": "a8f26dd4739085c301b978c6757f21b7d7c1fefea2bece0fbbeb3dab504cd189",
+        "library/src/nested.rs": "2482073f15729ebca7c258b27885a0f5802e95fd745e01e3134b26527c878b86",
+        "library/src/lib.rs": "703f3448e7b28a66896c65f038a12400f14adab6552be64ed23037214075e7c5",
+        "library/tests/main.rs": "03e2d855644b539f13e9a1c83f4a6513025cbe725c11b65203dd0abc5de9760e",
+        "library/tests/support/mod.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123"
+      }
+    },
+    {
+      "name": "bin-production",
+      "command": [
+        "python3",
+        "scripts/check-format.py"
+      ],
+      "cwd": "/home/timo/.cache/scratch/ignite-perf12c/format-production-verify/fixture",
+      "exit": 1,
+      "seconds": 0.08616892999270931,
+      "stdout": "bin-production.stdout",
+      "stderr": "bin-production.stderr",
+      "source_unchanged": true,
+      "rust_source_sha256": {
+        "binary/src/nested.rs": "42cc9f931da45dcbd4592d66bce557983f74bbac3dbf890e7beecb6f5a73c431",
+        "binary/src/main.rs": "a8f26dd4739085c301b978c6757f21b7d7c1fefea2bece0fbbeb3dab504cd189",
+        "library/src/nested.rs": "2482073f15729ebca7c258b27885a0f5802e95fd745e01e3134b26527c878b86",
+        "library/src/lib.rs": "703f3448e7b28a66896c65f038a12400f14adab6552be64ed23037214075e7c5",
+        "library/tests/main.rs": "03e2d855644b539f13e9a1c83f4a6513025cbe725c11b65203dd0abc5de9760e",
+        "library/tests/support/mod.rs": "f979f22a4f9c9c37e5408ad3f560340c4f4fc0fbb3c3c1b483b1ad4ec717c123"
+      }
+    }
+  ],
+  "fixture_editions": [
+    "2021",
+    "2024"
+  ],
+  "fixture_root_config": "max_width=80",
+  "nested_contexts": [
+    "lib",
+    "integration-test",
+    "bin"
+  ]
+}

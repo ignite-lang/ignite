@@ -12,6 +12,7 @@
 //! executables run one after another, each printing its own report.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -502,15 +503,38 @@ fn build_group(
 /// with the feature `runner` defines.
 const RUNNER_SYMBOL: &[u8] = b"ignite_rt_test_main";
 
+const RUNNER_READ_SIZE: usize = 8192;
+
+/// The runner symbol may occur anywhere in an archive, including across a
+/// read boundary. Keep just the possible prefix from the previous chunk.
+fn contains_runner(input: &mut impl Read) -> std::io::Result<bool> {
+    let mut buffer = [0; RUNNER_READ_SIZE + RUNNER_SYMBOL.len() - 1];
+    let mut kept = 0;
+    loop {
+        let count = match input.read(&mut buffer[kept..kept + RUNNER_READ_SIZE]) {
+            Ok(0) => return Ok(false),
+            Ok(count) => count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
+        let end = kept + count;
+        if buffer[..end]
+            .windows(RUNNER_SYMBOL.len())
+            .any(|window| window == RUNNER_SYMBOL)
+        {
+            return Ok(true);
+        }
+        kept = (RUNNER_SYMBOL.len() - 1).min(end);
+        buffer.copy_within(end - kept..end, 0);
+    }
+}
+
 /// An error naming the fix when `runtime` has no test runner: the default
 /// `libignite_rt.a` leaves it out so that programs link as they did before
 /// tests existed (`docs/llvm.md` section 5).
 fn check_runner(runtime: &Path) -> Result<(), Error> {
-    let archive = std::fs::read(runtime).map_err(io_error(runtime))?;
-    if archive
-        .windows(RUNNER_SYMBOL.len())
-        .any(|window| window == RUNNER_SYMBOL)
-    {
+    let mut archive = std::fs::File::open(runtime).map_err(io_error(runtime))?;
+    if contains_runner(&mut archive).map_err(io_error(runtime))? {
         return Ok(());
     }
     Err(Error::Io {
@@ -519,4 +543,28 @@ fn check_runner(runtime: &Path) -> Result<(), Error> {
             "runtime archive without the test runner: build it with `cargo build -p ignite-rt --features runner` and pass it with --runtime",
         ),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runner_symbol_is_found_across_chunks_and_after_other_members() {
+        for start in [
+            0,
+            RUNNER_READ_SIZE - 7,
+            RUNNER_READ_SIZE,
+            3 * RUNNER_READ_SIZE + 1,
+        ] {
+            let mut archive = vec![b'x'; start];
+            archive.extend_from_slice(RUNNER_SYMBOL);
+            archive.extend_from_slice(b"unrelated trailing archive data");
+            assert!(contains_runner(&mut archive.as_slice()).unwrap());
+        }
+        let mut missing = vec![b'x'; 3 * RUNNER_READ_SIZE];
+        missing.extend_from_slice(&RUNNER_SYMBOL[..RUNNER_SYMBOL.len() - 1]);
+        assert!(!contains_runner(&mut missing.as_slice()).unwrap());
+        assert!(!contains_runner(&mut &[][..]).unwrap());
+    }
 }

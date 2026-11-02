@@ -6,6 +6,15 @@ but cold validation then exposed a shutdown-journal race and registry contention
 failed measurements are retained in `docs/performance/12c/failed-checkpoint/`.
 Batch 12c remains open until every performance criterion below passes; do not start slice 13.
 
+Checkpoint `d8a9cb7` recovered the strict generator-test and file-level CLI-test
+budgets. Its remaining warm misses and all raw evidence are in
+[`performance/12c/checkpoint-d8a9cb7/`](performance/12c/checkpoint-d8a9cb7/).
+The next implementation uses complete-workspace parallel formatting, identical
+JSON output with fewer tiny writes, and removal of six proven-empty Cargo
+harnesses. The integrated gate passes 654 Rust tests, five ignored, 148 inline
+cases per backend and four example builds. These are correctness results;
+final frozen performance and LLVM readiness validation remain outstanding.
+
 ## Result required
 
 Restore the original 11b budget with the current behaviour and coverage. A measured reason

@@ -1,0 +1,137 @@
+{
+  "accepted": true,
+  "fixture": "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-fixture",
+  "cases": [
+    {
+      "case": "valid",
+      "kind": "serial",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "-v",
+        "--",
+        "--check"
+      ],
+      "exit": 0,
+      "source_unchanged": true
+    },
+    {
+      "case": "valid",
+      "kind": "parallel",
+      "command": [
+        "python3",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-parallel-prototype.py",
+        "--repo",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-fixture",
+        "--report",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-valid-parallel.json",
+        "--jobs",
+        "4"
+      ],
+      "exit": 0,
+      "source_unchanged": true
+    },
+    {
+      "case": "lib",
+      "kind": "serial",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "-v",
+        "--",
+        "--check"
+      ],
+      "exit": 1,
+      "source_unchanged": true
+    },
+    {
+      "case": "lib",
+      "kind": "parallel",
+      "command": [
+        "python3",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-parallel-prototype.py",
+        "--repo",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-fixture",
+        "--report",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-lib-parallel.json",
+        "--jobs",
+        "4"
+      ],
+      "exit": 1,
+      "source_unchanged": true
+    },
+    {
+      "case": "test",
+      "kind": "serial",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "-v",
+        "--",
+        "--check"
+      ],
+      "exit": 1,
+      "source_unchanged": true
+    },
+    {
+      "case": "test",
+      "kind": "parallel",
+      "command": [
+        "python3",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-parallel-prototype.py",
+        "--repo",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-fixture",
+        "--report",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-test-parallel.json",
+        "--jobs",
+        "4"
+      ],
+      "exit": 1,
+      "source_unchanged": true
+    },
+    {
+      "case": "bin",
+      "kind": "serial",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "-v",
+        "--",
+        "--check"
+      ],
+      "exit": 1,
+      "source_unchanged": true
+    },
+    {
+      "case": "bin",
+      "kind": "parallel",
+      "command": [
+        "python3",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-parallel-prototype.py",
+        "--repo",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-fixture",
+        "--report",
+        "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-bin-parallel.json",
+        "--jobs",
+        "4"
+      ],
+      "exit": 1,
+      "source_unchanged": true
+    }
+  ],
+  "editions": [
+    "2021",
+    "2024"
+  ],
+  "root_config": "max_width=80",
+  "nested_contexts": [
+    "lib",
+    "integration-test",
+    "bin"
+  ],
+  "checks_do_not_write": true
+}

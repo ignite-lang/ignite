@@ -12,6 +12,7 @@
 
 use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -171,29 +172,53 @@ fn elf_machine(arch: &str) -> Option<(u8, u8, u16)> {
 
 /// Class, byte order and machine of the first ELF member of an `ar`
 /// archive.
-fn archive_machine(archive: &[u8]) -> Option<(u8, u8, u16)> {
-    let mut at = archive.strip_prefix(b"!<arch>\n").map(|_| 8)?;
-    while at + 60 <= archive.len() {
-        let header = &archive[at..at + 60];
-        let size: usize = std::str::from_utf8(&header[48..58])
-            .ok()?
-            .trim()
-            .parse()
-            .ok()?;
-        let data = archive.get(at + 60..at + 60 + size)?;
-        if data.len() >= 20 && data.starts_with(b"\x7fELF") {
-            let (class, order) = (data[4], data[5]);
-            let bytes = [data[18], data[19]];
-            let machine = if order == 2 {
-                u16::from_be_bytes(bytes)
-            } else {
-                u16::from_le_bytes(bytes)
-            };
-            return Some((class, order, machine));
-        }
-        at += 60 + size + size % 2;
+fn archive_machine(archive: &mut (impl Read + Seek)) -> std::io::Result<Option<(u8, u8, u16)>> {
+    let length = archive.seek(SeekFrom::End(0))?;
+    if length < 8 {
+        return Ok(None);
     }
-    None
+    archive.seek(SeekFrom::Start(0))?;
+    let mut magic = [0; 8];
+    archive.read_exact(&mut magic)?;
+    if &magic != b"!<arch>\n" {
+        return Ok(None);
+    }
+    let mut at = 8_u64;
+    while let Some(start) = at.checked_add(60).filter(|&start| start <= length) {
+        archive.seek(SeekFrom::Start(at))?;
+        let mut header = [0; 60];
+        archive.read_exact(&mut header)?;
+        let Some(size) = std::str::from_utf8(&header[48..58])
+            .ok()
+            .and_then(|size| size.trim().parse::<usize>().ok())
+        else {
+            return Ok(None);
+        };
+        // A prefix is classified only when the entire declared member is
+        // present, as in the former whole-archive slice walk.
+        let Some(end) = start.checked_add(size as u64).filter(|&end| end <= length) else {
+            return Ok(None);
+        };
+        if size >= 20 {
+            let mut data = [0; 20];
+            archive.read_exact(&mut data)?;
+            if data.starts_with(b"\x7fELF") {
+                let (class, order) = (data[4], data[5]);
+                let bytes = [data[18], data[19]];
+                let machine = if order == 2 {
+                    u16::from_be_bytes(bytes)
+                } else {
+                    u16::from_le_bytes(bytes)
+                };
+                return Ok(Some((class, order, machine)));
+            }
+        }
+        let Some(next) = end.checked_add((size % 2) as u64) else {
+            return Ok(None);
+        };
+        at = next;
+    }
+    Ok(None)
 }
 
 /// Fail unless the objects of the runtime archive are for `triple`'s
@@ -204,8 +229,8 @@ fn check_runtime_target(runtime: &Path, triple: &str) -> Result<(), Error> {
     let Some(expected) = elf_machine(arch) else {
         return Ok(());
     };
-    let archive = std::fs::read(runtime).map_err(io_error(runtime))?;
-    let Some(found) = archive_machine(&archive) else {
+    let mut archive = std::fs::File::open(runtime).map_err(io_error(runtime))?;
+    let Some(found) = archive_machine(&mut archive).map_err(io_error(runtime))? else {
         return Ok(());
     };
     if found == expected {
@@ -432,4 +457,68 @@ pub(crate) fn link(
         project_dir: out,
         executables,
     })
+}
+
+#[cfg(test)]
+mod archive_tests {
+    use super::*;
+    use std::io::Cursor;
+
+    fn member(archive: &mut Vec<u8>, data: &[u8]) {
+        let header = format!(
+            "{:<16}{:<12}{:<6}{:<6}{:<8}{:<10}`\n",
+            "member/",
+            0,
+            0,
+            0,
+            "644",
+            data.len()
+        );
+        assert_eq!(header.len(), 60);
+        archive.extend_from_slice(header.as_bytes());
+        archive.extend_from_slice(data);
+        if !data.len().is_multiple_of(2) {
+            archive.push(b'\n');
+        }
+    }
+
+    #[test]
+    fn first_elf_after_odd_and_large_members_preserves_byte_order() {
+        for (order, encoded) in [(1, 183_u16.to_le_bytes()), (2, 183_u16.to_be_bytes())] {
+            let mut archive = b"!<arch>\n".to_vec();
+            member(&mut archive, b"odd");
+            member(&mut archive, &[0; 32_768]);
+            let mut elf = [0; 32];
+            elf[..4].copy_from_slice(b"\x7fELF");
+            elf[4] = 2;
+            elf[5] = order;
+            elf[18..20].copy_from_slice(&encoded);
+            member(&mut archive, &elf);
+            elf[18..20].copy_from_slice(&62_u16.to_le_bytes());
+            member(&mut archive, &elf);
+            assert_eq!(
+                archive_machine(&mut Cursor::new(archive)).unwrap(),
+                Some((2, order, 183))
+            );
+        }
+    }
+
+    #[test]
+    fn truncated_member_with_complete_elf_prefix_remains_unknown() {
+        let mut archive = b"!<arch>\n".to_vec();
+        let mut elf = [0; 100];
+        elf[..4].copy_from_slice(b"\x7fELF");
+        elf[4] = 2;
+        elf[5] = 1;
+        elf[18..20].copy_from_slice(&183_u16.to_le_bytes());
+        member(&mut archive, &elf);
+        for length in [0, 7, 8, 67, 88, archive.len() - 1] {
+            assert_eq!(
+                archive_machine(&mut Cursor::new(&archive[..length])).unwrap(),
+                None
+            );
+        }
+        archive[8 + 48..8 + 58].fill(b'?');
+        assert_eq!(archive_machine(&mut Cursor::new(archive)).unwrap(), None);
+    }
 }

@@ -1,0 +1,22 @@
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.90s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/ignite-7066fbb78e702281)
+
+running 1 test
+test run::process::tests::a_busy_executable_is_retried_after_its_writer_closes ... FAILED
+
+failures:
+
+---- run::process::tests::a_busy_executable_is_retried_after_its_writer_closes stdout ----
+
+thread 'run::process::tests::a_busy_executable_is_retried_after_its_writer_closes' (149093) panicked at crates/ignite/src/run/process.rs:399:32:
+retry the transient executable write conflict: Os { code: 26, kind: ExecutableFileBusy, message: "Text file busy" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    run::process::tests::a_busy_executable_is_retried_after_its_writer_closes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 21 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p ignite --lib`

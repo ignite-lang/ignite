@@ -9,6 +9,9 @@ autotests = false
 [[bin]]
 name = "ignite"
 path = "src/main.rs"
+# CLI cases use CARGO_BIN_EXE_ignite; re-enable before adding binary unit tests.
+test = false
+bench = false
 
 [dependencies]
 ignite-syntax.workspace = true
