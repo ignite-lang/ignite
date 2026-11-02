@@ -386,6 +386,7 @@ cold comparison against each baseline meets the start-load rule and has no faile
   syscall-traced HTTP failures are diagnostic interference, not readiness evidence.
 
 - No comments in `Cargo.toml`, `Taskfile.yml` or any other config file.
+- Tooling, checks and scripts are Rust (Timo, 2026-11-02): a `#[test]` in the crate that owns the rule, or a Rust binary. No new Python; Bash only for one-line invocations in `Taskfile.yml`. `scripts/*.py` are being ported (`story:rust-tooling`); scripts under `docs/performance/` are recorded evidence and stay as they are.
 - Commit titles follow Conventional Commits: `type(scope): summary` with `type` one of `feat`,
   `fix`, `perf`, `docs`, `test`, `refactor`, `chore`, `build`, `ci`; the scope is optional. Every
   commit has a body: a blank line after the title, then bullets on what changed and why.
