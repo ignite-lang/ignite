@@ -818,6 +818,7 @@
                 "type": "Option",
                 "variant": "None"
               },
+              "start_first": false,
               "state": {
                 "type": "std.control.RolloutState",
                 "variant": "Idle"
