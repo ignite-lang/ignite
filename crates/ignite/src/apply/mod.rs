@@ -573,8 +573,8 @@ fn action_progress(snapshot: &Json, state: &Path, id: &str, operation: Option<&s
     let rows: Vec<Json> = members
         .iter()
         .map(|action| {
-            let member = action.get("member").and_then(Json::as_str).unwrap_or("");
-            let kind = action.get("action").and_then(Json::as_str).unwrap_or("");
+            let member = action.get("id").and_then(Json::as_str).unwrap_or("");
+            let kind = action.get("kind").and_then(Json::as_str).unwrap_or("");
             let effect = match kind {
                 "unchanged" | "detach" => true,
                 "add" | "replace" => owner(member).is_some_and(|owned| {
