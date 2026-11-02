@@ -4,6 +4,7 @@
 //! `<file>::<test>`.
 
 mod apply;
+mod apply_admission;
 mod apply_host;
 mod build_cache;
 mod cli;
