@@ -1,0 +1,2489 @@
+[
+  {
+    "label": "baseline",
+    "phase": "library-clippy",
+    "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/baseline-df7ccb9bed44",
+    "command": [
+      "cargo",
+      "clippy",
+      "-p",
+      "ignite",
+      "--lib",
+      "--",
+      "-Ztime-passes",
+      "-D",
+      "warnings"
+    ],
+    "environment": {
+      "CARGO_TARGET_DIR": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/baseline-df7ccb9bed44",
+      "RUSTC_BOOTSTRAP": "1",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_RELEASE_DEBUG": "0",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TERM_COLOR": "never"
+    },
+    "diagnostic_only": true,
+    "exit": 0,
+    "seconds": 3.3059649909846485,
+    "load_before": [
+      2.56591796875,
+      3.3837890625,
+      5.375
+    ],
+    "load_after": [
+      2.56591796875,
+      3.3837890625,
+      5.375
+    ],
+    "source_hashes": {
+      "crates/ignite/Cargo.toml": "768987d46ab7c28dfe72178af8ece256ca78aa965a7f1f9750189d4a4b4812ce",
+      "crates/ignite/src/lib.rs": "85f6ba29689dbfca5857ede713fb14cdb17c553cdf64d272196a18b1ad8b2af7",
+      "crates/ignite/tests/main.rs": "fa7852201db1f4039bdad28aa14a4edf58788538d6da63f0e32ac9f5f27590ab"
+    },
+    "phase_timings": [
+      {
+        "seconds": 0.0,
+        "phase": "parse_crate",
+        "raw": "time:   0.000; rss:   41MB ->   43MB (   +2MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   48MB ->   48MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.012,
+        "phase": "expand_crate",
+        "raw": "time:   0.012; rss:   48MB ->   73MB (  +25MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.012,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.012; rss:   48MB ->   73MB (  +25MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "AST_validation",
+        "raw": "time:   0.000; rss:   73MB ->   73MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   73MB ->   73MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "compute_effective_visibilities",
+        "raw": "time:   0.000; rss:   73MB ->   73MB (   +0MB)\tcompute_effective_visibilities"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   73MB ->   74MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.006,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.006; rss:   74MB ->   82MB (   +8MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:   82MB ->   82MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "resolve_postprocess",
+        "raw": "time:   0.001; rss:   82MB ->   82MB (   +0MB)\tresolve_postprocess"
+      },
+      {
+        "seconds": 0.008,
+        "phase": "resolve_crate",
+        "raw": "time:   0.008; rss:   73MB ->   82MB (   +9MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "write_dep_info",
+        "raw": "time:   0.001; rss:   82MB ->   82MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:   82MB ->   83MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:   87MB ->   87MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:   88MB ->   88MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:   91MB ->   91MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:   92MB ->   92MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.005; rss:   91MB ->   93MB (   +2MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.015,
+        "phase": "coherence_checking",
+        "raw": "time:   0.015; rss:   93MB ->  109MB (  +16MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.094,
+        "phase": "type_check_crate",
+        "raw": "time:   0.094; rss:   93MB ->  139MB (  +46MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.098,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.098; rss:  139MB ->  158MB (  +19MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.033,
+        "phase": "crate_lints",
+        "raw": "time:   0.033; rss:  158MB ->  169MB (  +11MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "module_lints",
+        "raw": "time:   0.003; rss:  169MB ->  169MB (   +0MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.036,
+        "phase": "lint_checking",
+        "raw": "time:   0.036; rss:  158MB ->  169MB (  +11MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.002; rss:  169MB ->  170MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.04,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.040; rss:  158MB ->  170MB (  +11MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.002; rss:  170MB ->  170MB (   +1MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  121MB ->  121MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  121MB ->  121MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "parse_crate",
+        "raw": "time:   0.004; rss:   41MB ->   46MB (   +5MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   52MB ->   52MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "expand_crate",
+        "raw": "time:   0.004; rss:   52MB ->   67MB (  +15MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.004; rss:   52MB ->   67MB (  +15MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "AST_validation",
+        "raw": "time:   0.000; rss:   67MB ->   67MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   67MB ->   67MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   67MB ->   68MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.004; rss:   68MB ->   78MB (  +10MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "resolve_crate",
+        "raw": "time:   0.004; rss:   67MB ->   78MB (  +11MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "write_dep_info",
+        "raw": "time:   0.000; rss:   78MB ->   78MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:   79MB ->   79MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:   84MB ->   84MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:   86MB ->   86MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:   87MB ->   87MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.001; rss:   86MB ->   87MB (   +2MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.006,
+        "phase": "coherence_checking",
+        "raw": "time:   0.006; rss:   87MB ->  101MB (  +13MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.082,
+        "phase": "type_check_crate",
+        "raw": "time:   0.082; rss:   87MB ->  127MB (  +40MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.095,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.095; rss:  127MB ->  143MB (  +15MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.027,
+        "phase": "crate_lints",
+        "raw": "time:   0.027; rss:  143MB ->  155MB (  +12MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "module_lints",
+        "raw": "time:   0.002; rss:  155MB ->  155MB (   +0MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.029,
+        "phase": "lint_checking",
+        "raw": "time:   0.029; rss:  143MB ->  155MB (  +12MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.002; rss:  155MB ->  155MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.032,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.032; rss:  143MB ->  155MB (  +12MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.001; rss:  155MB ->  156MB (   +1MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  113MB ->  113MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  113MB ->  113MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "parse_crate",
+        "raw": "time:   0.002; rss:   43MB ->   46MB (   +3MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   52MB ->   52MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.021,
+        "phase": "expand_crate",
+        "raw": "time:   0.021; rss:   52MB ->   79MB (  +27MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.021,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.021; rss:   52MB ->   79MB (  +27MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "AST_validation",
+        "raw": "time:   0.001; rss:   79MB ->   79MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   79MB ->   79MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "compute_effective_visibilities",
+        "raw": "time:   0.000; rss:   79MB ->   79MB (   +0MB)\tcompute_effective_visibilities"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   79MB ->   80MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.009,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.009; rss:   80MB ->   91MB (  +11MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:   91MB ->   91MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.011,
+        "phase": "resolve_crate",
+        "raw": "time:   0.011; rss:   79MB ->   91MB (  +12MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "write_dep_info",
+        "raw": "time:   0.001; rss:   91MB ->   91MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:   91MB ->   91MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:  101MB ->  101MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:  102MB ->  102MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.005; rss:  101MB ->  102MB (   +2MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.016,
+        "phase": "coherence_checking",
+        "raw": "time:   0.016; rss:  102MB ->  123MB (  +21MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.189,
+        "phase": "type_check_crate",
+        "raw": "time:   0.189; rss:  102MB ->  159MB (  +57MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.216,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.216; rss:  159MB ->  187MB (  +28MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.057,
+        "phase": "crate_lints",
+        "raw": "time:   0.057; rss:  187MB ->  200MB (  +13MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "module_lints",
+        "raw": "time:   0.005; rss:  200MB ->  201MB (   +1MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.062,
+        "phase": "lint_checking",
+        "raw": "time:   0.062; rss:  187MB ->  201MB (  +13MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.004; rss:  201MB ->  201MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.069,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.069; rss:  187MB ->  201MB (  +14MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.003; rss:  201MB ->  203MB (   +2MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  154MB ->  154MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  154MB ->  154MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "parse_crate",
+        "raw": "time:   0.000; rss:   40MB ->   42MB (   +2MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "parse_crate",
+        "raw": "time:   0.001; rss:   40MB ->   43MB (   +3MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   47MB ->   47MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   48MB ->   49MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.009,
+        "phase": "parse_crate",
+        "raw": "time:   0.009; rss:   42MB ->   49MB (   +7MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   54MB ->   54MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.019,
+        "phase": "expand_crate",
+        "raw": "time:   0.019; rss:   47MB ->   73MB (  +26MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.019,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.019; rss:   47MB ->   73MB (  +26MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "AST_validation",
+        "raw": "time:   0.001; rss:   73MB ->   73MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   73MB ->   73MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   73MB ->   74MB (   +0MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.021,
+        "phase": "expand_crate",
+        "raw": "time:   0.021; rss:   49MB ->   79MB (  +30MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.021,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.021; rss:   49MB ->   79MB (  +30MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.011,
+        "phase": "expand_crate",
+        "raw": "time:   0.011; rss:   54MB ->   75MB (  +21MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.011,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.011; rss:   54MB ->   75MB (  +21MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "AST_validation",
+        "raw": "time:   0.001; rss:   79MB ->   79MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "AST_validation",
+        "raw": "time:   0.001; rss:   75MB ->   75MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   79MB ->   79MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   75MB ->   75MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   79MB ->   80MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   75MB ->   76MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.009,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.009; rss:   74MB ->   82MB (   +8MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:   82MB ->   82MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "resolve_postprocess",
+        "raw": "time:   0.001; rss:   82MB ->   82MB (   +0MB)\tresolve_postprocess"
+      },
+      {
+        "seconds": 0.01,
+        "phase": "resolve_crate",
+        "raw": "time:   0.010; rss:   73MB ->   82MB (   +8MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "write_dep_info",
+        "raw": "time:   0.000; rss:   82MB ->   82MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:   82MB ->   82MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.009,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.009; rss:   80MB ->   89MB (  +10MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:   89MB ->   89MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.008,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.008; rss:   76MB ->   85MB (   +9MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:   85MB ->   85MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.01,
+        "phase": "resolve_crate",
+        "raw": "time:   0.010; rss:   79MB ->   89MB (  +10MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.01,
+        "phase": "resolve_crate",
+        "raw": "time:   0.010; rss:   75MB ->   85MB (  +10MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "write_dep_info",
+        "raw": "time:   0.000; rss:   89MB ->   90MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "write_dep_info",
+        "raw": "time:   0.001; rss:   85MB ->   85MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:   90MB ->   90MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:   85MB ->   85MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:   87MB ->   87MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:   90MB ->   91MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:   96MB ->   96MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:   90MB ->   90MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:   91MB ->   91MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:   94MB ->   94MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.003; rss:   90MB ->   92MB (   +2MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:   95MB ->   95MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.003; rss:   94MB ->   95MB (   +2MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:  101MB ->  101MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:  102MB ->  102MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.004; rss:  101MB ->  102MB (   +1MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.008,
+        "phase": "coherence_checking",
+        "raw": "time:   0.008; rss:   96MB ->  111MB (  +15MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.012,
+        "phase": "coherence_checking",
+        "raw": "time:   0.012; rss:   92MB ->  118MB (  +26MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.013,
+        "phase": "coherence_checking",
+        "raw": "time:   0.013; rss:  102MB ->  118MB (  +15MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.12,
+        "phase": "type_check_crate",
+        "raw": "time:   0.120; rss:   92MB ->  143MB (  +51MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.138,
+        "phase": "type_check_crate",
+        "raw": "time:   0.138; rss:   95MB ->  146MB (  +50MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.132,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.132; rss:  143MB ->  164MB (  +21MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.243,
+        "phase": "type_check_crate",
+        "raw": "time:   0.243; rss:  102MB ->  159MB (  +57MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.035,
+        "phase": "crate_lints",
+        "raw": "time:   0.035; rss:  165MB ->  175MB (  +10MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "module_lints",
+        "raw": "time:   0.003; rss:  175MB ->  176MB (   +1MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.039,
+        "phase": "lint_checking",
+        "raw": "time:   0.039; rss:  165MB ->  176MB (  +11MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.003; rss:  176MB ->  176MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.044,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.044; rss:  164MB ->  176MB (  +11MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.158,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.158; rss:  146MB ->  171MB (  +25MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.002; rss:  176MB ->  177MB (   +1MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "codegen_crate",
+        "raw": "time:   0.000; rss:  177MB ->  177MB (   +0MB)\tcodegen_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  127MB ->  127MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  127MB ->  127MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.044,
+        "phase": "crate_lints",
+        "raw": "time:   0.044; rss:  171MB ->  183MB (  +12MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "module_lints",
+        "raw": "time:   0.004; rss:  183MB ->  183MB (   +0MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.048,
+        "phase": "lint_checking",
+        "raw": "time:   0.048; rss:  171MB ->  183MB (  +12MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.003; rss:  183MB ->  183MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.053,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.053; rss:  171MB ->  183MB (  +12MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.002; rss:  183MB ->  185MB (   +2MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  136MB ->  136MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  136MB ->  136MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.236,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.236; rss:  159MB ->  195MB (  +36MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.085,
+        "phase": "crate_lints",
+        "raw": "time:   0.085; rss:  195MB ->  206MB (  +11MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.007,
+        "phase": "module_lints",
+        "raw": "time:   0.007; rss:  206MB ->  207MB (   +0MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.093,
+        "phase": "lint_checking",
+        "raw": "time:   0.093; rss:  195MB ->  207MB (  +12MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.007,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.007; rss:  207MB ->  207MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.102,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.102; rss:  195MB ->  207MB (  +12MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.005; rss:  207MB ->  207MB (   +0MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  159MB ->  159MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  159MB ->  159MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "parse_crate",
+        "raw": "time:   0.001; rss:   50MB ->   54MB (   +5MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   59MB ->   59MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "expand_crate",
+        "raw": "time:   0.005; rss:   59MB ->   79MB (  +19MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.005; rss:   59MB ->   79MB (  +19MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "AST_validation",
+        "raw": "time:   0.000; rss:   79MB ->   79MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   79MB ->   80MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.003; rss:   80MB ->   87MB (   +8MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:   87MB ->   87MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "resolve_crate",
+        "raw": "time:   0.003; rss:   79MB ->   87MB (   +9MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "write_dep_info",
+        "raw": "time:   0.000; rss:   88MB ->   88MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:   88MB ->   88MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:   92MB ->   93MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:   96MB ->   96MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.001; rss:   96MB ->   99MB (   +4MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.007,
+        "phase": "coherence_checking",
+        "raw": "time:   0.007; rss:   99MB ->  126MB (  +27MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.056,
+        "phase": "type_check_crate",
+        "raw": "time:   0.056; rss:   99MB ->  148MB (  +49MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.054,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.054; rss:  148MB ->  159MB (  +11MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.016,
+        "phase": "crate_lints",
+        "raw": "time:   0.016; rss:  159MB ->  172MB (  +12MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "module_lints",
+        "raw": "time:   0.001; rss:  172MB ->  172MB (   +1MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.017,
+        "phase": "lint_checking",
+        "raw": "time:   0.017; rss:  159MB ->  172MB (  +13MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.001; rss:  172MB ->  172MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.019,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.019; rss:  159MB ->  172MB (  +13MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.001; rss:  172MB ->  173MB (   +1MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  121MB ->  121MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  121MB ->  121MB (   +0MB)\tlink"
+      }
+    ],
+    "regular_profiles_changed": false
+  },
+  {
+    "label": "baseline",
+    "phase": "e2e-rustc",
+    "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/baseline-df7ccb9bed44",
+    "command": [
+      "cargo",
+      "rustc",
+      "-p",
+      "ignite",
+      "--test",
+      "main",
+      "--",
+      "-Ztime-passes"
+    ],
+    "environment": {
+      "CARGO_TARGET_DIR": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/baseline-df7ccb9bed44",
+      "RUSTC_BOOTSTRAP": "1",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_RELEASE_DEBUG": "0",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TERM_COLOR": "never"
+    },
+    "diagnostic_only": true,
+    "exit": 0,
+    "seconds": 1.768792257993482,
+    "load_before": [
+      2.56591796875,
+      3.3837890625,
+      5.375
+    ],
+    "load_after": [
+      2.76123046875,
+      3.41064453125,
+      5.37255859375
+    ],
+    "source_hashes": {
+      "crates/ignite/Cargo.toml": "768987d46ab7c28dfe72178af8ece256ca78aa965a7f1f9750189d4a4b4812ce",
+      "crates/ignite/src/lib.rs": "85f6ba29689dbfca5857ede713fb14cdb17c553cdf64d272196a18b1ad8b2af7",
+      "crates/ignite/tests/main.rs": "fa7852201db1f4039bdad28aa14a4edf58788538d6da63f0e32ac9f5f27590ab"
+    },
+    "phase_timings": [
+      {
+        "seconds": 0.0,
+        "phase": "parse_crate",
+        "raw": "time:   0.000; rss:   49MB ->   49MB (   +0MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   55MB ->   55MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.062,
+        "phase": "expand_crate",
+        "raw": "time:   0.062; rss:   55MB ->   96MB (  +41MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.062,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.062; rss:   55MB ->   96MB (  +41MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "maybe_building_test_harness",
+        "raw": "time:   0.002; rss:   96MB ->   97MB (   +1MB)\tmaybe_building_test_harness"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "AST_validation",
+        "raw": "time:   0.001; rss:   97MB ->   97MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   97MB ->   97MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   97MB ->   97MB (   +0MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.008,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.008; rss:   97MB ->  107MB (  +10MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_main",
+        "raw": "time:   0.000; rss:  107MB ->  107MB (   +0MB)\tresolve_main"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:  107MB ->  107MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.01,
+        "phase": "resolve_crate",
+        "raw": "time:   0.010; rss:   97MB ->  107MB (  +11MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "write_dep_info",
+        "raw": "time:   0.001; rss:  108MB ->  108MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:  108MB ->  108MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "looking_for_entry_point",
+        "raw": "time:   0.000; rss:  113MB ->  113MB (   +0MB)\tlooking_for_entry_point"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:  113MB ->  113MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:  114MB ->  114MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.003; rss:  113MB ->  115MB (   +2MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.012,
+        "phase": "coherence_checking",
+        "raw": "time:   0.012; rss:  115MB ->  138MB (  +23MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.238,
+        "phase": "type_check_crate",
+        "raw": "time:   0.238; rss:  115MB ->  178MB (  +63MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.191,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.191; rss:  178MB ->  210MB (  +32MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "module_lints",
+        "raw": "time:   0.005; rss:  210MB ->  211MB (   +1MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "lint_checking",
+        "raw": "time:   0.005; rss:  210MB ->  211MB (   +1MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.004; rss:  211MB ->  211MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.011,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.011; rss:  210MB ->  211MB (   +1MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "monomorphization_collector_root_collections",
+        "raw": "time:   0.000; rss:  211MB ->  211MB (   +0MB)\tmonomorphization_collector_root_collections"
+      },
+      {
+        "seconds": 0.15,
+        "phase": "monomorphization_collector_graph_walk",
+        "raw": "time:   0.150; rss:  211MB ->  244MB (  +33MB)\tmonomorphization_collector_graph_walk"
+      },
+      {
+        "seconds": 0.019,
+        "phase": "partition_and_assert_distinct_symbols",
+        "raw": "time:   0.019; rss:  245MB ->  249MB (   +3MB)\tpartition_and_assert_distinct_symbols"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "write_allocator_module",
+        "raw": "time:   0.000; rss:  248MB ->  250MB (   +1MB)\twrite_allocator_module"
+      },
+      {
+        "seconds": 0.225,
+        "phase": "codegen_to_LLVM_IR",
+        "raw": "time:   0.225; rss:  250MB ->  297MB (  +47MB)\tcodegen_to_LLVM_IR"
+      },
+      {
+        "seconds": 0.397,
+        "phase": "codegen_crate",
+        "raw": "time:   0.397; rss:  211MB ->  297MB (  +86MB)\tcodegen_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "serialize_dep_graph",
+        "raw": "time:   0.000; rss:  298MB ->  298MB (   +0MB)\tserialize_dep_graph"
+      },
+      {
+        "seconds": 0.244,
+        "phase": "LLVM_passes",
+        "raw": "time:   0.244; rss:  255MB ->  226MB (  -29MB)\tLLVM_passes"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "join_worker_thread",
+        "raw": "time:   0.000; rss:  220MB ->  219MB (   -1MB)\tjoin_worker_thread"
+      },
+      {
+        "seconds": 0.03,
+        "phase": "finish_ongoing_codegen",
+        "raw": "time:   0.030; rss:  224MB ->  219MB (   -5MB)\tfinish_ongoing_codegen"
+      },
+      {
+        "seconds": 0.062,
+        "phase": "run_linker",
+        "raw": "time:   0.062; rss:  220MB ->  220MB (   +0MB)\trun_linker"
+      },
+      {
+        "seconds": 0.063,
+        "phase": "link_binary",
+        "raw": "time:   0.063; rss:  219MB ->  220MB (   +1MB)\tlink_binary"
+      },
+      {
+        "seconds": 0.063,
+        "phase": "link_crate",
+        "raw": "time:   0.063; rss:  219MB ->  220MB (   +1MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.063,
+        "phase": "link",
+        "raw": "time:   0.063; rss:  219MB ->  220MB (   +1MB)\tlink"
+      },
+      {
+        "seconds": 1.047,
+        "phase": "total",
+        "raw": "time:   1.047; rss:   31MB ->   96MB (  +65MB)\ttotal"
+      }
+    ],
+    "regular_profiles_changed": false
+  },
+  {
+    "label": "candidate",
+    "phase": "library-clippy",
+    "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a",
+    "command": [
+      "cargo",
+      "clippy",
+      "-p",
+      "ignite",
+      "--lib",
+      "--",
+      "-Ztime-passes",
+      "-D",
+      "warnings"
+    ],
+    "environment": {
+      "CARGO_TARGET_DIR": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-d8a9cb74050a",
+      "RUSTC_BOOTSTRAP": "1",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_RELEASE_DEBUG": "0",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TERM_COLOR": "never"
+    },
+    "diagnostic_only": true,
+    "exit": 0,
+    "seconds": 3.2581445690011606,
+    "load_before": [
+      2.76123046875,
+      3.41064453125,
+      5.37255859375
+    ],
+    "load_after": [
+      2.76123046875,
+      3.41064453125,
+      5.37255859375
+    ],
+    "source_hashes": {
+      "crates/ignite/Cargo.toml": "c5f8764ef29916ae654a3c060e2a34947d592f70088c91245b97cc40a925179f",
+      "crates/ignite/src/lib.rs": "787a21a685ca0996df21eda04a6785e70033cb0606d6e125337e5ce6e337fd32",
+      "crates/ignite/tests/main.rs": "316aa23e30e8d923eff19c7b6bb9fd6a3c6878ca358de10aa334e40d4d75d52c"
+    },
+    "phase_timings": [
+      {
+        "seconds": 0.0,
+        "phase": "parse_crate",
+        "raw": "time:   0.000; rss:   54MB ->   55MB (   +1MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   62MB ->   62MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.01,
+        "phase": "expand_crate",
+        "raw": "time:   0.010; rss:   62MB ->   87MB (  +25MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.01,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.010; rss:   62MB ->   87MB (  +25MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "AST_validation",
+        "raw": "time:   0.000; rss:   87MB ->   87MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   87MB ->   87MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   87MB ->   88MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.005; rss:   88MB ->   98MB (  +10MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:   98MB ->   98MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "resolve_postprocess",
+        "raw": "time:   0.001; rss:   98MB ->   98MB (   +0MB)\tresolve_postprocess"
+      },
+      {
+        "seconds": 0.006,
+        "phase": "resolve_crate",
+        "raw": "time:   0.006; rss:   87MB ->   98MB (  +11MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "write_dep_info",
+        "raw": "time:   0.000; rss:   98MB ->   98MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:   98MB ->   98MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:  103MB ->  103MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:  103MB ->  103MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:  108MB ->  108MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:  109MB ->  109MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.004; rss:  108MB ->  110MB (   +1MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.011,
+        "phase": "coherence_checking",
+        "raw": "time:   0.011; rss:  110MB ->  129MB (  +19MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.079,
+        "phase": "type_check_crate",
+        "raw": "time:   0.079; rss:  110MB ->  161MB (  +51MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.087,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.087; rss:  161MB ->  176MB (  +15MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.027,
+        "phase": "crate_lints",
+        "raw": "time:   0.027; rss:  176MB ->  187MB (  +11MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "module_lints",
+        "raw": "time:   0.003; rss:  187MB ->  187MB (   +1MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.031,
+        "phase": "lint_checking",
+        "raw": "time:   0.031; rss:  176MB ->  187MB (  +12MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.002; rss:  187MB ->  188MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.034,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.034; rss:  176MB ->  188MB (  +12MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.003; rss:  188MB ->  190MB (   +2MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  141MB ->  141MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  141MB ->  141MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "parse_crate",
+        "raw": "time:   0.004; rss:   50MB ->   55MB (   +5MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   60MB ->   60MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "expand_crate",
+        "raw": "time:   0.004; rss:   60MB ->   75MB (  +15MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.004; rss:   60MB ->   75MB (  +15MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "AST_validation",
+        "raw": "time:   0.000; rss:   75MB ->   75MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   75MB ->   75MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   75MB ->   76MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.003; rss:   76MB ->   87MB (  +11MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "resolve_crate",
+        "raw": "time:   0.004; rss:   75MB ->   87MB (  +12MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "write_dep_info",
+        "raw": "time:   0.000; rss:   87MB ->   87MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:   87MB ->   87MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:   93MB ->   93MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:   94MB ->   94MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.001; rss:   94MB ->   97MB (   +3MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "coherence_checking",
+        "raw": "time:   0.005; rss:   97MB ->  114MB (  +16MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.079,
+        "phase": "type_check_crate",
+        "raw": "time:   0.079; rss:   97MB ->  141MB (  +44MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.086,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.086; rss:  141MB ->  160MB (  +20MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.025,
+        "phase": "crate_lints",
+        "raw": "time:   0.025; rss:  160MB ->  172MB (  +12MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "module_lints",
+        "raw": "time:   0.002; rss:  172MB ->  173MB (   +0MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.028,
+        "phase": "lint_checking",
+        "raw": "time:   0.028; rss:  160MB ->  173MB (  +12MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.002; rss:  173MB ->  173MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.03,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.030; rss:  160MB ->  173MB (  +13MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.001; rss:  173MB ->  173MB (   +0MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  130MB ->  130MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  130MB ->  130MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "parse_crate",
+        "raw": "time:   0.002; rss:   50MB ->   55MB (   +5MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   59MB ->   59MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.02,
+        "phase": "expand_crate",
+        "raw": "time:   0.020; rss:   59MB ->   88MB (  +29MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.02,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.020; rss:   59MB ->   88MB (  +29MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "AST_validation",
+        "raw": "time:   0.001; rss:   88MB ->   89MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   89MB ->   89MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   89MB ->   89MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.009,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.009; rss:   89MB ->  104MB (  +15MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:  104MB ->  104MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.011,
+        "phase": "resolve_crate",
+        "raw": "time:   0.011; rss:   89MB ->  104MB (  +16MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "write_dep_info",
+        "raw": "time:   0.001; rss:  104MB ->  104MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:  105MB ->  105MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:  114MB ->  114MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.005; rss:  114MB ->  115MB (   +1MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.016,
+        "phase": "coherence_checking",
+        "raw": "time:   0.016; rss:  115MB ->  136MB (  +21MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.191,
+        "phase": "type_check_crate",
+        "raw": "time:   0.191; rss:  115MB ->  175MB (  +60MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.206,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.206; rss:  175MB ->  204MB (  +29MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.057,
+        "phase": "crate_lints",
+        "raw": "time:   0.057; rss:  204MB ->  216MB (  +12MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "module_lints",
+        "raw": "time:   0.005; rss:  216MB ->  217MB (   +0MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.063,
+        "phase": "lint_checking",
+        "raw": "time:   0.063; rss:  204MB ->  217MB (  +13MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.005; rss:  217MB ->  217MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.07,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.070; rss:  204MB ->  217MB (  +13MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.003; rss:  217MB ->  218MB (   +1MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  168MB ->  168MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  168MB ->  168MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "parse_crate",
+        "raw": "time:   0.000; rss:   49MB ->   50MB (   +1MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   57MB ->   57MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "parse_crate",
+        "raw": "time:   0.001; rss:   49MB ->   51MB (   +2MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   58MB ->   58MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "parse_crate",
+        "raw": "time:   0.005; rss:   49MB ->   55MB (   +6MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   60MB ->   61MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.007,
+        "phase": "expand_crate",
+        "raw": "time:   0.007; rss:   61MB ->   82MB (  +21MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.007,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.007; rss:   61MB ->   82MB (  +21MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "AST_validation",
+        "raw": "time:   0.000; rss:   82MB ->   82MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   82MB ->   82MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   82MB ->   83MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.016,
+        "phase": "expand_crate",
+        "raw": "time:   0.016; rss:   57MB ->   84MB (  +27MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.016,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.016; rss:   57MB ->   84MB (  +27MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "AST_validation",
+        "raw": "time:   0.001; rss:   84MB ->   85MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   85MB ->   85MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "compute_effective_visibilities",
+        "raw": "time:   0.000; rss:   85MB ->   85MB (   +0MB)\tcompute_effective_visibilities"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   85MB ->   85MB (   +0MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.005; rss:   83MB ->   91MB (   +9MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:   91MB ->   91MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.007,
+        "phase": "resolve_crate",
+        "raw": "time:   0.007; rss:   82MB ->   91MB (  +10MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "write_dep_info",
+        "raw": "time:   0.000; rss:   91MB ->   91MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:   92MB ->   92MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.021,
+        "phase": "expand_crate",
+        "raw": "time:   0.021; rss:   58MB ->   88MB (  +30MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.021,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.021; rss:   58MB ->   88MB (  +30MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "AST_validation",
+        "raw": "time:   0.001; rss:   88MB ->   89MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:   89MB ->   89MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   89MB ->   89MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.007,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.007; rss:   85MB ->   94MB (   +9MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:   94MB ->   94MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.009,
+        "phase": "resolve_crate",
+        "raw": "time:   0.009; rss:   85MB ->   94MB (   +9MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "write_dep_info",
+        "raw": "time:   0.001; rss:   94MB ->   94MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:   94MB ->   94MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.009,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.009; rss:   89MB ->   99MB (  +10MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:   99MB ->   99MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:   97MB ->   97MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "resolve_postprocess",
+        "raw": "time:   0.001; rss:   99MB ->   99MB (   +0MB)\tresolve_postprocess"
+      },
+      {
+        "seconds": 0.011,
+        "phase": "resolve_crate",
+        "raw": "time:   0.011; rss:   89MB ->   99MB (  +11MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "write_dep_info",
+        "raw": "time:   0.000; rss:   99MB ->   99MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:  100MB ->  100MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:  100MB ->  100MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:  100MB ->  100MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:  102MB ->  102MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.003; rss:  100MB ->  102MB (   +2MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "drop_ast",
+        "raw": "time:   0.000; rss:  105MB ->  106MB (   +0MB)\tdrop_ast"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:  104MB ->  104MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:  105MB ->  105MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.009,
+        "phase": "coherence_checking",
+        "raw": "time:   0.009; rss:  102MB ->  117MB (  +15MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.004; rss:  104MB ->  106MB (   +2MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "looking_for_entry_point",
+        "raw": "time:   0.000; rss:  110MB ->  110MB (   +0MB)\tlooking_for_entry_point"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:  110MB ->  110MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:  112MB ->  112MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.015,
+        "phase": "coherence_checking",
+        "raw": "time:   0.015; rss:  106MB ->  131MB (  +25MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.004; rss:  110MB ->  112MB (   +1MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.012,
+        "phase": "coherence_checking",
+        "raw": "time:   0.012; rss:  112MB ->  127MB (  +16MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.145,
+        "phase": "type_check_crate",
+        "raw": "time:   0.145; rss:  102MB ->  154MB (  +52MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.177,
+        "phase": "type_check_crate",
+        "raw": "time:   0.177; rss:  106MB ->  162MB (  +56MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.215,
+        "phase": "type_check_crate",
+        "raw": "time:   0.215; rss:  112MB ->  170MB (  +59MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.165,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.165; rss:  154MB ->  181MB (  +27MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.046,
+        "phase": "crate_lints",
+        "raw": "time:   0.046; rss:  181MB ->  192MB (  +10MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "module_lints",
+        "raw": "time:   0.004; rss:  192MB ->  192MB (   +0MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.05,
+        "phase": "lint_checking",
+        "raw": "time:   0.050; rss:  181MB ->  192MB (  +11MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.003; rss:  192MB ->  192MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.055,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.055; rss:  181MB ->  192MB (  +11MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.002; rss:  192MB ->  192MB (   +0MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  142MB ->  142MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  142MB ->  142MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.194,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.194; rss:  162MB ->  193MB (  +31MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.051,
+        "phase": "crate_lints",
+        "raw": "time:   0.051; rss:  193MB ->  203MB (  +11MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "module_lints",
+        "raw": "time:   0.004; rss:  203MB ->  204MB (   +0MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.055,
+        "phase": "lint_checking",
+        "raw": "time:   0.055; rss:  193MB ->  204MB (  +11MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.004; rss:  204MB ->  204MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.062,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.062; rss:  193MB ->  204MB (  +11MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.003; rss:  204MB ->  203MB (   -1MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  153MB ->  153MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  153MB ->  153MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.236,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.236; rss:  170MB ->  207MB (  +37MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.07,
+        "phase": "crate_lints",
+        "raw": "time:   0.070; rss:  207MB ->  218MB (  +11MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.006,
+        "phase": "module_lints",
+        "raw": "time:   0.006; rss:  218MB ->  218MB (   +0MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.076,
+        "phase": "lint_checking",
+        "raw": "time:   0.076; rss:  207MB ->  218MB (  +11MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.005; rss:  218MB ->  218MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.083,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.083; rss:  207MB ->  218MB (  +11MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.002; rss:  218MB ->  218MB (   +0MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  169MB ->  169MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  169MB ->  169MB (   +0MB)\tlink"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "parse_crate",
+        "raw": "time:   0.002; rss:   50MB ->   55MB (   +5MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   60MB ->   60MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.013,
+        "phase": "expand_crate",
+        "raw": "time:   0.013; rss:   60MB ->   92MB (  +33MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.013,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.013; rss:   60MB ->   92MB (  +33MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "AST_validation",
+        "raw": "time:   0.000; rss:   92MB ->   93MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.000; rss:   93MB ->   93MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.008,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.008; rss:   93MB ->  108MB (  +15MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.009,
+        "phase": "resolve_crate",
+        "raw": "time:   0.009; rss:   93MB ->  108MB (  +16MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "write_dep_info",
+        "raw": "time:   0.000; rss:  108MB ->  109MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.000; rss:  109MB ->  109MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:  118MB ->  118MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:  119MB ->  118MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.003; rss:  118MB ->  119MB (   +1MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.017,
+        "phase": "coherence_checking",
+        "raw": "time:   0.017; rss:  119MB ->  155MB (  +37MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.143,
+        "phase": "type_check_crate",
+        "raw": "time:   0.143; rss:  119MB ->  186MB (  +67MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.155,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.155; rss:  186MB ->  212MB (  +27MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.042,
+        "phase": "crate_lints",
+        "raw": "time:   0.042; rss:  212MB ->  222MB (   +9MB)\tcrate_lints"
+      },
+      {
+        "seconds": 0.004,
+        "phase": "module_lints",
+        "raw": "time:   0.004; rss:  222MB ->  223MB (   +1MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.046,
+        "phase": "lint_checking",
+        "raw": "time:   0.046; rss:  212MB ->  223MB (  +10MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.003,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.003; rss:  223MB ->  223MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.052,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.052; rss:  212MB ->  223MB (  +10MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "generate_crate_metadata",
+        "raw": "time:   0.002; rss:  223MB ->  223MB (   +0MB)\tgenerate_crate_metadata"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link_crate",
+        "raw": "time:   0.000; rss:  161MB ->  161MB (   +0MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "link",
+        "raw": "time:   0.000; rss:  161MB ->  161MB (   +0MB)\tlink"
+      }
+    ],
+    "regular_profiles_changed": false
+  },
+  {
+    "label": "candidate",
+    "phase": "e2e-rustc",
+    "cwd": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-d8a9cb74050a",
+    "command": [
+      "cargo",
+      "rustc",
+      "-p",
+      "ignite",
+      "--test",
+      "main",
+      "--",
+      "-Ztime-passes"
+    ],
+    "environment": {
+      "CARGO_TARGET_DIR": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-d8a9cb74050a",
+      "RUSTC_BOOTSTRAP": "1",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+      "CARGO_PROFILE_RELEASE_DEBUG": "0",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TERM_COLOR": "never"
+    },
+    "diagnostic_only": true,
+    "exit": 0,
+    "seconds": 3.259786445007194,
+    "load_before": [
+      2.76123046875,
+      3.41064453125,
+      5.37255859375
+    ],
+    "load_after": [
+      2.78076171875,
+      3.40380859375,
+      5.359375
+    ],
+    "source_hashes": {
+      "crates/ignite/Cargo.toml": "c5f8764ef29916ae654a3c060e2a34947d592f70088c91245b97cc40a925179f",
+      "crates/ignite/src/lib.rs": "787a21a685ca0996df21eda04a6785e70033cb0606d6e125337e5ce6e337fd32",
+      "crates/ignite/tests/main.rs": "316aa23e30e8d923eff19c7b6bb9fd6a3c6878ca358de10aa334e40d4d75d52c"
+    },
+    "phase_timings": [
+      {
+        "seconds": 0.0,
+        "phase": "parse_crate",
+        "raw": "time:   0.000; rss:   48MB ->   48MB (   +0MB)\tparse_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "crate_injection",
+        "raw": "time:   0.000; rss:   54MB ->   54MB (   +0MB)\tcrate_injection"
+      },
+      {
+        "seconds": 0.043,
+        "phase": "expand_crate",
+        "raw": "time:   0.043; rss:   54MB ->  101MB (  +47MB)\texpand_crate"
+      },
+      {
+        "seconds": 0.043,
+        "phase": "macro_expand_crate",
+        "raw": "time:   0.043; rss:   54MB ->  101MB (  +47MB)\tmacro_expand_crate"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "maybe_building_test_harness",
+        "raw": "time:   0.002; rss:  101MB ->  101MB (   +1MB)\tmaybe_building_test_harness"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "AST_validation",
+        "raw": "time:   0.001; rss:  101MB ->  102MB (   +0MB)\tAST_validation"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "finalize_imports",
+        "raw": "time:   0.000; rss:  102MB ->  102MB (   +0MB)\tfinalize_imports"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "finalize_macro_resolutions",
+        "raw": "time:   0.001; rss:  102MB ->  102MB (   +1MB)\tfinalize_macro_resolutions"
+      },
+      {
+        "seconds": 0.01,
+        "phase": "late_resolve_crate",
+        "raw": "time:   0.010; rss:  102MB ->  113MB (  +11MB)\tlate_resolve_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_main",
+        "raw": "time:   0.000; rss:  113MB ->  113MB (   +0MB)\tresolve_main"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "resolve_check_unused",
+        "raw": "time:   0.000; rss:  113MB ->  113MB (   +0MB)\tresolve_check_unused"
+      },
+      {
+        "seconds": 0.002,
+        "phase": "resolve_postprocess",
+        "raw": "time:   0.002; rss:  113MB ->  113MB (   +0MB)\tresolve_postprocess"
+      },
+      {
+        "seconds": 0.014,
+        "phase": "resolve_crate",
+        "raw": "time:   0.014; rss:  102MB ->  113MB (  +11MB)\tresolve_crate"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "write_dep_info",
+        "raw": "time:   0.001; rss:  113MB ->  113MB (   +0MB)\twrite_dep_info"
+      },
+      {
+        "seconds": 0.001,
+        "phase": "complete_gated_feature_checking",
+        "raw": "time:   0.001; rss:  113MB ->  113MB (   +0MB)\tcomplete_gated_feature_checking"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "looking_for_entry_point",
+        "raw": "time:   0.000; rss:  121MB ->  121MB (   +0MB)\tlooking_for_entry_point"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_externally_implementable_items",
+        "raw": "time:   0.000; rss:  121MB ->  121MB (   +0MB)\tcheck_externally_implementable_items"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "unused_lib_feature_checking",
+        "raw": "time:   0.000; rss:  121MB ->  121MB (   +0MB)\tunused_lib_feature_checking"
+      },
+      {
+        "seconds": 0.005,
+        "phase": "misc_checking_1",
+        "raw": "time:   0.005; rss:  121MB ->  122MB (   +2MB)\tmisc_checking_1"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "emit_ast_lowering_delayed_lints",
+        "raw": "time:   0.000; rss:  122MB ->  123MB (   +0MB)\temit_ast_lowering_delayed_lints"
+      },
+      {
+        "seconds": 0.017,
+        "phase": "coherence_checking",
+        "raw": "time:   0.017; rss:  123MB ->  147MB (  +25MB)\tcoherence_checking"
+      },
+      {
+        "seconds": 0.332,
+        "phase": "type_check_crate",
+        "raw": "time:   0.332; rss:  123MB ->  194MB (  +71MB)\ttype_check_crate"
+      },
+      {
+        "seconds": 0.644,
+        "phase": "MIR_borrow_checking",
+        "raw": "time:   0.644; rss:  194MB ->  236MB (  +42MB)\tMIR_borrow_checking"
+      },
+      {
+        "seconds": 0.007,
+        "phase": "module_lints",
+        "raw": "time:   0.007; rss:  236MB ->  237MB (   +0MB)\tmodule_lints"
+      },
+      {
+        "seconds": 0.007,
+        "phase": "lint_checking",
+        "raw": "time:   0.007; rss:  236MB ->  237MB (   +1MB)\tlint_checking"
+      },
+      {
+        "seconds": 0.006,
+        "phase": "privacy_checking_modules",
+        "raw": "time:   0.006; rss:  237MB ->  237MB (   +0MB)\tprivacy_checking_modules"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "check_lint_expectations",
+        "raw": "time:   0.000; rss:  237MB ->  237MB (   +0MB)\tcheck_lint_expectations"
+      },
+      {
+        "seconds": 0.016,
+        "phase": "misc_checking_3",
+        "raw": "time:   0.016; rss:  236MB ->  237MB (   +1MB)\tmisc_checking_3"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "monomorphization_collector_root_collections",
+        "raw": "time:   0.000; rss:  237MB ->  237MB (   +0MB)\tmonomorphization_collector_root_collections"
+      },
+      {
+        "seconds": 0.279,
+        "phase": "monomorphization_collector_graph_walk",
+        "raw": "time:   0.279; rss:  237MB ->  276MB (  +40MB)\tmonomorphization_collector_graph_walk"
+      },
+      {
+        "seconds": 0.024,
+        "phase": "partition_and_assert_distinct_symbols",
+        "raw": "time:   0.024; rss:  277MB ->  283MB (   +6MB)\tpartition_and_assert_distinct_symbols"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "write_allocator_module",
+        "raw": "time:   0.000; rss:  283MB ->  284MB (   +1MB)\twrite_allocator_module"
+      },
+      {
+        "seconds": 0.274,
+        "phase": "codegen_to_LLVM_IR",
+        "raw": "time:   0.274; rss:  285MB ->  344MB (  +60MB)\tcodegen_to_LLVM_IR"
+      },
+      {
+        "seconds": 0.585,
+        "phase": "codegen_crate",
+        "raw": "time:   0.585; rss:  237MB ->  344MB ( +107MB)\tcodegen_crate"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "serialize_dep_graph",
+        "raw": "time:   0.000; rss:  345MB ->  345MB (   +0MB)\tserialize_dep_graph"
+      },
+      {
+        "seconds": 0.285,
+        "phase": "LLVM_passes",
+        "raw": "time:   0.285; rss:  298MB ->  269MB (  -29MB)\tLLVM_passes"
+      },
+      {
+        "seconds": 0.0,
+        "phase": "join_worker_thread",
+        "raw": "time:   0.000; rss:  259MB ->  257MB (   -2MB)\tjoin_worker_thread"
+      },
+      {
+        "seconds": 0.025,
+        "phase": "finish_ongoing_codegen",
+        "raw": "time:   0.025; rss:  269MB ->  258MB (  -12MB)\tfinish_ongoing_codegen"
+      },
+      {
+        "seconds": 0.07,
+        "phase": "run_linker",
+        "raw": "time:   0.070; rss:  258MB ->  258MB (   +0MB)\trun_linker"
+      },
+      {
+        "seconds": 0.071,
+        "phase": "link_binary",
+        "raw": "time:   0.071; rss:  258MB ->  258MB (   +1MB)\tlink_binary"
+      },
+      {
+        "seconds": 0.071,
+        "phase": "link_crate",
+        "raw": "time:   0.071; rss:  258MB ->  258MB (   +1MB)\tlink_crate"
+      },
+      {
+        "seconds": 0.071,
+        "phase": "link",
+        "raw": "time:   0.071; rss:  258MB ->  258MB (   +1MB)\tlink"
+      },
+      {
+        "seconds": 1.786,
+        "phase": "total",
+        "raw": "time:   1.786; rss:   31MB ->  105MB (  +74MB)\ttotal"
+      }
+    ],
+    "regular_profiles_changed": false
+  }
+]

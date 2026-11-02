@@ -1,0 +1,22 @@
+{
+  "compile": [
+    "rustc",
+    "--edition=2024",
+    "-C",
+    "opt-level=0",
+    "-C",
+    "debuginfo=line-tables-only",
+    "/home/timo/.cache/scratch/ignite-perf12c/json-escape-micro/main.rs",
+    "-L",
+    "dependency=/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps",
+    "--extern",
+    "ignite_eval=/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/libignite_eval-32bab89117ec33f8.rlib",
+    "-o",
+    "/home/timo/.cache/scratch/ignite-perf12c/json-escape-micro/micro"
+  ],
+  "run": [
+    "/home/timo/.cache/scratch/ignite-perf12c/json-escape-micro/micro",
+    "/home/timo/.cache/scratch/ignite-perf12c/final-bench/evidence-v4/plan-1-candidate.json"
+  ],
+  "profile": "opt0 line-tables-only, diagnostic only"
+}

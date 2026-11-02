@@ -1,0 +1,17 @@
+golden::loops_release_their_region: test
+golden::modules_name_target_and_source: test
+golden::read_only_parameters_are_borrowed: test
+golden::small_program: test
+golden::symbols_are_module_qualified: test
+golden::syntax_program: test
+layout::copy_glue_only_where_buffers_are: test
+layout::enums_are_tag_and_payload: test
+layout::public_environments_observe_module_edits_after_layout_queries: test
+layout::records_have_c_layout: test
+layout::runtime_types_match_the_layouts: test
+layout::scalars_and_builtins: test
+layout::type_names_in_symbols: test
+tests_build::normal_build_drops_test_only_declarations: test
+tests_build::test_build_lowers_tests_and_a_runner_main: test
+
+15 tests, 0 benchmarks

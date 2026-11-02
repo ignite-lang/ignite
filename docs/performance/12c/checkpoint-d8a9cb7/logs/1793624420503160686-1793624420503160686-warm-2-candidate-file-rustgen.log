@@ -1,0 +1,140 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-d8a9cb74050a/debug/deps/main-5e4ab9ed9c9b052f)
+
+running 85 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test common::mutable_custom_std_is_reloaded_between_lowerings ... ok
+test reachable::a_prepared_template_renders_independent_roots_and_substrates ... ok
+test golden::target_bugs_of_slice_11b ... ok
+test golden::pure_functions ... ok
+test golden::record_and_enum_with_match ... ok
+test golden::process_exit_diverges ... ok
+test golden::constants_qualified_patterns_and_io_error ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test reachable::keeps_what_the_roots_name_and_what_that_names ... ok
+test reachable::follows_roles_into_their_module_and_its_imports ... ok
+test reachable::naming_everything_gives_the_whole_library ... ok
+test reachable::methods_fields_and_ranges_do_not_name_items ... ok
+test golden::system_with_server_and_client ... ok
+test golden::generics_stores_and_builtins ... ok
+test golden::surface_syntax ... ok
+test slice9::long_chains_build_and_run_100k ... ignored
+test golden::variants_of_enums_not_imported ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test compiles::variants_of_enums_not_imported_build ... ok
+    Blocking waiting for file lock on package cache
+test units::aliases_and_field_defaults ... ok
+test units::bindings_are_scoped ... ok
+    Blocking waiting for file lock on package cache
+test units::block_values ... ok
+test units::bool_or_and_tuple_patterns_are_native ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test units::builtin_methods ... ok
+test units::constants_are_zero_argument_functions ... ok
+test units::e020_bad_properties ... ok
+test units::e020_components_without_types ... ok
+test units::e020_resource_kind ... ok
+test units::effectful_function_is_a_plain_fn ... ok
+test units::else_if_chain_keeps_statement_position ... ok
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test units::function_body_value_depends_on_return_type ... ok
+    Blocking waiting for file lock on package cache
+test units::function_types_and_values ... ok
+    Blocking waiting for file lock on package cache
+test units::functions_and_variants_are_not_places ... ok
+test units::generate_std_nests_modules ... ok
+test units::generate_std_rejects_a_system ... ok
+test units::header_and_declarations ... ok
+test units::imported_constant_and_local_shadowing ... ok
+    Blocking waiting for file lock on package cache
+test units::imports_become_use_lines ... ok
+test units::int_literals_are_plain_digits ... ok
+test compiles::std_crate_and_program_build ... ok
+test units::list_and_text_patterns_are_guarded_arms ... ok
+test units::no_system_is_a_library_without_executables ... ok
+test units::own_protocol_is_known_without_symbols ... ok
+test units::ownership_non_value_positions_do_not_clone ... ok
+test units::package_name_defaults_to_program ... ok
+test units::protocol_lowering ... ok
+test units::qualified_variant_patterns ... ok
+test units::receiver_that_is_not_atomic_is_parenthesized ... ok
+test units::return_expressions ... ok
+test units::rust_keywords_are_escaped ... ok
+test units::spawn_lowering ... ok
+test units::std_version_follows_the_library_text ... ok
+test units::ownership_value_positions_clone_places ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test units::string_escaping ... ok
+test units::substrate_imports_need_no_std_crate ... ok
+    Blocking waiting for file lock on package cache
+test units::tuple_type ... ok
+test units::tuples_and_pattern_lets ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test units::type_table ... ok
+test units::typed_let ... ok
+test units::unit_value_and_type ... ok
+test units::variant_patterns ... ok
+test units::write_project_creates_layout ... ok
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+test units::variant_expressions ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+test compiles::constants_across_modules_build ... ok
+test compiles::generics_and_store_serve ... ok
+test slice9::assignments_box_by_the_fields_owner ... ok
+test compiles::store_ids_and_updates_are_atomic_across_connections ... ok
+test compiles::process_exit_without_try_builds_and_exits ... ok
+test slice10::generate_tests_lays_a_program_out_by_its_module_path ... ok
+test golden::executable_components ... ok
+test golden::terminal ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test slice9::failed_asserts_show_debug_text ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test slice10::slice10_features_pass ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test slice10::failures_report_the_operation_and_position ... ok
+test compiles::terminal_project_builds ... ok
+test slice9::slice9_features_pass ... ok
+test reachable::a_test_build_keeps_the_selected_tests_and_what_they_reach ... ok
+test slice10::executable_component_main_runs_and_maps_the_exit_code ... ok
+test slice10::crashd_survives_failing_handlers ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test slice9::long_chains_build_and_run ... ok
+test slice9::long_chains_lower_without_overflow ... ok
+
+test result: ok. 84 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.63s
+

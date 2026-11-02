@@ -1,0 +1,10 @@
+{
+  "diagnostic_only": true,
+  "decision": "revert: no overall or monomorphization improvement",
+  "frozen_total": 1.525,
+  "active_total": 1.537,
+  "frozen_mono": 0.224,
+  "active_mono": 0.235,
+  "frozen_borrowck": 0.308,
+  "active_borrowck": 0.311
+}

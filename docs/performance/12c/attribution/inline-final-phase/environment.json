@@ -1,0 +1,9 @@
+{
+  "CARGO_TARGET_DIR": "/home/timo/.cache/scratch/ignite-perf12c/inline-final-phase/target",
+  "CARGO_INCREMENTAL": "0",
+  "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+  "CARGO_PROFILE_RELEASE_DEBUG": "0",
+  "CARGO_NET_OFFLINE": "true",
+  "RUSTC_WRAPPER": null,
+  "RUSTFLAGS": null
+}

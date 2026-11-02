@@ -1,0 +1,153 @@
+{
+  "candidate": "d8a9cb74050a3547eabbf99817f802b9d3e5503f",
+  "diagnostic": true,
+  "toolchain": "rustfmt 1.10.0-stable (58cf8f9c35 2026-10-13)",
+  "prototype_sha256": "fcf3c6526fc1df4579017b5353fea8d5c012259145d908e9e115e9f9d0d21b05",
+  "source_integrity": true,
+  "metadata_sha256": "0c59ac2fe2c53fdbcb06e2d510ccbc383d4ce945a8fbd5ed1d8f61844894209b",
+  "original_command": [
+    "cargo",
+    "fmt",
+    "--all",
+    "-v",
+    "--",
+    "--check"
+  ],
+  "parallel_commands": [
+    [
+      "cargo",
+      "fmt",
+      "-v",
+      "-p",
+      "ignite",
+      "-p",
+      "ignite-io",
+      "--",
+      "--check"
+    ],
+    [
+      "cargo",
+      "fmt",
+      "-v",
+      "-p",
+      "ignite-check",
+      "-p",
+      "ignite-rt",
+      "-p",
+      "ignite-types",
+      "--",
+      "--check"
+    ],
+    [
+      "cargo",
+      "fmt",
+      "-v",
+      "-p",
+      "ignite-rustgen",
+      "-p",
+      "ignite-syntax",
+      "--",
+      "--check"
+    ],
+    [
+      "cargo",
+      "fmt",
+      "-v",
+      "-p",
+      "ignite-eval",
+      "-p",
+      "ignite-llvm",
+      "-p",
+      "ignite-load",
+      "--",
+      "--check"
+    ]
+  ],
+  "target_count": 20,
+  "workspace_package_count": 10,
+  "root_coverage_exact": true,
+  "no_duplicate_roots": true,
+  "targets": [
+    {
+      "kind_edition": "lib (2024)",
+      "root": "crates/ignite/src/lib.rs"
+    },
+    {
+      "kind_edition": "bin (2024)",
+      "root": "crates/ignite/src/main.rs"
+    },
+    {
+      "kind_edition": "test (2024)",
+      "root": "crates/ignite/tests/main.rs"
+    },
+    {
+      "kind_edition": "lib (2024)",
+      "root": "crates/ignite-check/src/lib.rs"
+    },
+    {
+      "kind_edition": "test (2024)",
+      "root": "crates/ignite-check/tests/main.rs"
+    },
+    {
+      "kind_edition": "lib (2024)",
+      "root": "crates/ignite-eval/src/lib.rs"
+    },
+    {
+      "kind_edition": "test (2024)",
+      "root": "crates/ignite-eval/tests/main.rs"
+    },
+    {
+      "kind_edition": "lib (2024)",
+      "root": "crates/ignite-io/src/lib.rs"
+    },
+    {
+      "kind_edition": "test (2024)",
+      "root": "crates/ignite-io/tests/main.rs"
+    },
+    {
+      "kind_edition": "lib (2024)",
+      "root": "crates/ignite-llvm/src/lib.rs"
+    },
+    {
+      "kind_edition": "test (2024)",
+      "root": "crates/ignite-llvm/tests/main.rs"
+    },
+    {
+      "kind_edition": "bin (2024)",
+      "root": "crates/ignite-load/src/main.rs"
+    },
+    {
+      "kind_edition": "staticlib (2024)",
+      "root": "crates/ignite-rt/src/lib.rs"
+    },
+    {
+      "kind_edition": "test (2024)",
+      "root": "crates/ignite-rt/tests/main.rs"
+    },
+    {
+      "kind_edition": "lib (2024)",
+      "root": "crates/ignite-rustgen/src/lib.rs"
+    },
+    {
+      "kind_edition": "test (2024)",
+      "root": "crates/ignite-rustgen/tests/main.rs"
+    },
+    {
+      "kind_edition": "lib (2024)",
+      "root": "crates/ignite-syntax/src/lib.rs"
+    },
+    {
+      "kind_edition": "test (2024)",
+      "root": "crates/ignite-syntax/tests/main.rs"
+    },
+    {
+      "kind_edition": "lib (2024)",
+      "root": "crates/ignite-types/src/lib.rs"
+    },
+    {
+      "kind_edition": "test (2024)",
+      "root": "crates/ignite-types/tests/main.rs"
+    }
+  ],
+  "external_dependency_fallback": []
+}

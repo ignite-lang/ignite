@@ -1,0 +1,24 @@
+run::clock::tests::advance_fires_due_timers_in_order: test
+run::clock::tests::durations_parse: test
+run::clock::tests::next_due_steps_one_instant_at_a_time: test
+run::clock::tests::the_real_clock_is_monotonic: test
+run::control::tests::a_signal_becomes_an_interrupt: test
+run::control::tests::settle_waits_for_every_guard: test
+run::journal::tests::a_torn_final_line_is_dropped_and_cut: test
+run::journal::tests::fresh_renames_the_old_journal: test
+run::journal::tests::records_get_consecutive_seqs_and_persist: test
+run::journal::tests::the_lock_admits_one_run: test
+run::probe::tests::a_killed_attempt_sends_nothing: test
+run::probe::tests::failures_are_attempt_failed: test
+run::probe::tests::refs_become_ref_arguments: test
+run::probe::tests::the_first_line_is_the_result: test
+run::process::tests::a_busy_executable_is_retried_after_its_writer_closes: test
+run::process::tests::a_child_is_started_ready_and_signalled: test
+run::process::tests::a_missing_executable_fails_to_spawn: test
+run::process::tests::an_exit_before_ready_ends_the_flight: test
+run::process::tests::lines_are_recognised: test
+run::process::tests::released_is_reported_once_awaited: test
+run::process::tests::two_generations_are_told_apart_by_pid: test
+run::tests::rfc3339_instants: test
+
+22 tests, 0 benchmarks

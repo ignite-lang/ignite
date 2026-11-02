@@ -1,0 +1,24 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling syn v3.0.9
+   Compiling clap_derive v4.6.7
+   Compiling clap v4.6.7
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.60s
+     Running tests/main.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/main-b624c508ef07abba)
+
+running 11 tests
+test plan::todo_example_model_matches_golden ... ok
+test plan::exit_statuses ... ok
+test plan::terminal_example_model_matches_golden ... ok
+test plan::design_model_is_canonical_and_every_value_is_encoded_as_15_4_says ... ok
+test plan::design_model_has_no_expression_text ... ok
+test plan::design_model_resolves_each_of_the_five_members_once ... ok
+test plan::e114_covers_an_unknown_assembly_name_and_check_passes ... ok
+test plan::fixtures_match_expected ... ok
+test plan::design_model_is_byte_identical_across_processes_and_directories ... ok
+test plan::explain_unknown_path_is_e119 ... ok
+test plan::explain_matches_the_goldens_of_15_8 ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 189 filtered out; finished in 0.37s
+

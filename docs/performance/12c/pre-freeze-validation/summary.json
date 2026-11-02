@@ -1,0 +1,27 @@
+[
+  {
+    "step": "gate",
+    "seconds": 11.443972439970821,
+    "exit": 0
+  },
+  {
+    "step": "compile",
+    "seconds": 0.3712824819958769,
+    "exit": 0
+  },
+  {
+    "step": "compile-llvm",
+    "seconds": 0.26838972500991076,
+    "exit": 0
+  },
+  {
+    "step": "compile-todo",
+    "seconds": 0.38308828498702496,
+    "exit": 0
+  },
+  {
+    "step": "compile-todo-llvm",
+    "seconds": 0.20209511904977262,
+    "exit": 0
+  }
+]

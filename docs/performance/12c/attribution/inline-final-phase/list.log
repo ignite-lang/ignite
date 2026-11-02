@@ -1,0 +1,330 @@
+PERF12C load-std 41.736226
+PERF12C type-std 36.650875
+PERF12C type-program 1.766400
+PERF12C type-program 2.057236
+PERF12C type-program 3.317662
+PERF12C type-program 4.167251
+PERF12C prepare-group 11.861834
+PERF12C prepare-tests 92.071093
+PERF12C rust-test-emit 4.369024
+PERF12C rust-std-emit 82.963896
+PERF12C cargo-generated 25.324092
+PERF12C build-group 155.155978
+examples.terminal.command_schema/the schema names the four commands: test
+examples.terminal.commands/parse reads the four commands by their first word: test
+examples.terminal.commands/answer replies to each command: test
+examples.terminal.commands/respond trims the line and names unknown commands: test
+examples.todo/to_json: test
+examples.todo/handle creates, lists, reads, updates and deletes: test
+examples.todo/handle answers 400, 404 and 405: test
+std.cli/arguments describe themselves: test
+std.cli/usage joins the command and its arguments: test
+std.console/first_word skips leading whitespace: test
+std.console/rest_after_word drops the word and one whitespace byte: test
+std.console/skip_space and skip_word move to the next boundary: test
+std.console/a reply continues unless it says close: test
+std.console/a declared console gives the console a protocol runs: test
+std.console/a declared console lists its schema's commands: test
+std.contract/consequences are built by name: test
+std.contract/a sound contract declaration gives no reason: test
+std.contract/validate refuses the texts the compiler does not know: test
+std.contract/validate refuses a target outside (0 %, 100 %] and an empty window: test
+std.contract/missing_rule reads the declaration's text: test
+std.control/a supervisor spawns at start, arms readiness at started and runs at ready: test
+std.control/an unrequested exit restarts with the policy's backoff: test
+std.control/restarts exhausted inside the interval give up and the machine stays failed: test
+std.control/failures outside the restart interval are forgotten: test
+std.control/no ready before the readiness timeout kills the process and counts a failure: test
+std.control/stop drains the process and its exit is no failure: test
+std.control/a failed spawn is a failure: test
+std.control/a new generation started by a rollout is adopted and the old exit is ignored: test
+std.control/a member without a listener is ready at started: test
+std.control/a supervisor with a rollout policy brings the member's rollout machine: test
+std.control/slots open at the target's first ready and every interval after: test
+std.control/the deadline aborts the attempt and emits a bad attempt with the timeout as latency: test
+std.control/a failed attempt is missing evidence, not a bad attempt: test
+std.control/start forgets the schedule until the target is ready again: test
+std.control/zero executed attempts are insufficient evidence, never compliant: test
+std.control/a missing attempt is missing evidence: completeness under the minimum is insufficient: test
+std.control/a violated share is violated whatever its coverage: test
+std.control/expected slots are counted from the horizon within the span: test
+std.control/a probe timeout violates reachability over the rolling window: test
+std.control/the rolling window forgets buckets that left it: test
+std.control/a calendar period closes at the zone's month boundary and fires its consequence once: test
+std.control/a compliant period fires nothing and a contract without a consequence notes nothing: test
+std.control/period boundaries follow the zone through months with a summer time change: test
+std.control/ten thousand emissions into a thirty-day window at five-second slots: test
+std.control/a rollout builds, drains the old generation, starts the new one and retires the old: test
+std.control/an old process still running at the deadline is disconnected and retired forced: test
+std.control/a failed build aborts the rollout and the old process keeps serving: test
+std.control/stop cancels a rollout's deadline and a rollout without a known process only starts: test
+std.deploy/bindings are built by name: test
+std.deploy/a native process and a probe host run their member and need main and machine: test
+std.deploy/only a native process includes other members: test
+std.deploy/a local socket admits a TcpListener resource only: test
+std.deploy/a native process admits an executable component only: test
+std.deploy/a workstation executable admits any component: test
+std.deploy/a scheduled probe host admits a component with an output: test
+std.deploy/no binding admits a contract or a policy: test
+std.json/encode writes every kind compactly: test
+std.json/encode escapes quote, backslash and control characters: test
+std.json/parse reads every kind of value: test
+std.json/parse decodes escapes: test
+std.json/a lone or broken surrogate is an invalid escape: test
+std.json/numbers are integers of at most 18 digits: test
+std.json/nesting is limited to 64 levels: test
+std.json/malformed input is an error at its offset: test
+std.json/the accessors read members of the right kind: test
+std.json/encode and parse round trip: test
+std.option/unwrap_or gives the value or the fallback: test
+std.option/map and and_then apply a fn to the value: test
+std.option/is_some, is_none and ok_or: test
+std.policy/an exponential backoff doubles up to its maximum: test
+std.policy/a fixed backoff never changes: test
+std.policy/Restart counts attempts against its maximum: test
+std.policy/Restart refuses no attempts and a backoff above its maximum: test
+std.policy/DrainRollout defaults to two minutes and disconnecting: test
+std.policy/DrainRollout refuses an unknown on_deadline and a deadline of zero: test
+std.probe/the prompt is seen at the start of the server's text: test
+std.probe/an attempt is printed in the model encoding: test
+std.protocol.http/responses carry their reason, type and body: test
+std.protocol.http/a header holding CR or LF turns the response into 500: test
+std.protocol.http/render writes the status line, headers, length and connection: test
+std.protocol.http/a 204 response has no Content-Length and no body: test
+std.protocol.http/header finds the first value of a lower-case name: test
+std.protocol.http/segments are the non-empty parts of the path: test
+std.protocol.http/HTTP/1.1 keeps the connection unless asked to close: test
+std.protocol.http/HTTP/1.0 closes the connection unless asked to keep it: test
+std.protocol.http/Connection is a list of options: test
+std.protocol.http/tokens, field values and targets: test
+std.protocol.http/parse_head reads the request line and headers: test
+std.protocol.http/parse_head refuses a malformed request line: test
+std.protocol.http/parse_head refuses a malformed header line: test
+std.protocol.http/a Content-Length is 1 to 18 decimal digits: test
+std.protocol.http/next_request reads a head, its body and keeps the rest: test
+std.protocol.http/next_request takes a pipelined request from the buffer: test
+std.protocol.http/next_request ends on a connection closed before a whole request: test
+std.protocol.http/a head over 8 KiB is 431: test
+std.protocol.http/a body over 1 MiB is 413: test
+std.protocol.http/a malformed head or Content-Length is 400: test
+std.protocol.http/any Transfer-Encoding is 501, also with a Content-Length: test
+std.protocol.http/the server answers pipelined requests until one asks to close: test
+std.protocol.http/the server answers a rejected request and closes: test
+std.protocol.telnet/a server refuses session limits that admit no session: test
+std.protocol.telnet/ends_with_bytes compares the suffix: test
+std.protocol.telnet/the profile and the limits default to what Telnet implements: test
+std.protocol.telnet/data bytes are literals: test
+std.protocol.telnet/CR LF, CR NUL, a lone CR and a lone LF end one line: test
+std.protocol.telnet/a CR LF split across reads ends one line: test
+std.protocol.telnet/IAC IAC is the data byte 255: test
+std.protocol.telnet/DO is answered WONT and WILL is answered DONT: test
+std.protocol.telnet/a negotiation split across reads is answered once complete: test
+std.protocol.telnet/AYT and IP are reported and other commands ignored: test
+std.protocol.telnet/a subnegotiation is skipped up to IAC SE: test
+std.protocol.telnet/a subnegotiation is limited to 1024 bytes including the IAC of IAC SE: test
+std.protocol.telnet/render ends each reply line with CR LF: test
+std.protocol.telnet/encode_input writes NVT line ends and doubles IAC: test
+std.protocol.telnet/encoded input decodes to the same lines: test
+std.protocol.telnet/erase_last removes one UTF-8 character: test
+std.protocol.telnet/apply_key edits the line: test
+std.protocol.telnet/the server answers each line and ends on the console's close: test
+std.protocol.telnet/the server answers options and AYT between lines: test
+std.protocol.telnet/the server closes on an overlong line, IAC IP and an overlong subnegotiation: test
+std.protocol.telnet/a client silent for the idle timeout ends the session: test
+std.protocol.telnet/await_prompt returns the text before each prompt and fails when the server closes: test
+std.protocol.telnet/a telnet server runs a declared console, a client its session: test
+std.result/unwrap_or gives the value or the fallback: test
+std.result/map and map_err change one side: test
+std.result/is_ok, is_err and ok: test
+std.sli/an attempt satisfies the outcomes it earned: test
+std.sli/windows are built by name: test
+std.sli/missing_data reads the closed set: test
+std.sli/meets compares good attempts against the target in ppm: test
+std.sli/no attempts meet no target: test
+std.text/digit_value reads decimal digits only: test
+std.text/is_whitespace is ASCII whitespace: test
+std.text/slice takes byte offsets: test
+std.text/find returns the first byte offset: test
+std.text/contains, ends_with and strip_suffix: test
+std.text/split keeps empty pieces: test
+std.text/split_once splits at the first separator: test
+std.text/replace replaces every occurrence: test
+std.text/trim_start and trim_end drop ASCII whitespace: test
+std.text/case mapping is ASCII only: test
+std.text/lines splits at LF and drops CR before it: test
+std.text/repeat concatenates copies: test
+std.time/civil dates round-trip through days since the epoch: test
+std.time/Europe/Berlin follows the EU summer time rule: test
+std.time/month boundaries in UTC: test
+std.time/month boundaries in Europe/Berlin across both summer time changes: test
+std.time/a month with a summer time change is an hour longer or shorter: test
+148 tests
+PERF12C native-run 1.130687
+PERF12C llvm-target 0.109161
+PERF12C llvm-test-emit 174.007108
+PERF12C check-runner 16.915809
+PERF12C llvm-target 0.141648
+PERF12C runtime-target 14.195841
+PERF12C llvm-write-if-changed 1.875838
+PERF12C llvm-ir-hash 13.017667
+PERF12C llvm-run-stamped 0.043552
+PERF12C llvm-write-if-changed 0.182354
+PERF12C llvm-ir-hash 0.852389
+PERF12C llvm-run-stamped 0.017425
+PERF12C llvm-write-if-changed 0.024381
+PERF12C llvm-ir-hash 0.114809
+PERF12C llvm-run-stamped 0.015006
+PERF12C llvm-run-stamped 0.009878
+PERF12C llvm-link 30.812803
+PERF12C build-group 222.328305
+examples.terminal.command_schema/the schema names the four commands: test
+examples.terminal.commands/parse reads the four commands by their first word: test
+examples.terminal.commands/answer replies to each command: test
+examples.terminal.commands/respond trims the line and names unknown commands: test
+examples.todo/to_json: test
+examples.todo/handle creates, lists, reads, updates and deletes: test
+examples.todo/handle answers 400, 404 and 405: test
+std.cli/arguments describe themselves: test
+std.cli/usage joins the command and its arguments: test
+std.console/first_word skips leading whitespace: test
+std.console/rest_after_word drops the word and one whitespace byte: test
+std.console/skip_space and skip_word move to the next boundary: test
+std.console/a reply continues unless it says close: test
+std.console/a declared console gives the console a protocol runs: test
+std.console/a declared console lists its schema's commands: test
+std.contract/consequences are built by name: test
+std.contract/a sound contract declaration gives no reason: test
+std.contract/validate refuses the texts the compiler does not know: test
+std.contract/validate refuses a target outside (0 %, 100 %] and an empty window: test
+std.contract/missing_rule reads the declaration's text: test
+std.control/a supervisor spawns at start, arms readiness at started and runs at ready: test
+std.control/an unrequested exit restarts with the policy's backoff: test
+std.control/restarts exhausted inside the interval give up and the machine stays failed: test
+std.control/failures outside the restart interval are forgotten: test
+std.control/no ready before the readiness timeout kills the process and counts a failure: test
+std.control/stop drains the process and its exit is no failure: test
+std.control/a failed spawn is a failure: test
+std.control/a new generation started by a rollout is adopted and the old exit is ignored: test
+std.control/a member without a listener is ready at started: test
+std.control/a supervisor with a rollout policy brings the member's rollout machine: test
+std.control/slots open at the target's first ready and every interval after: test
+std.control/the deadline aborts the attempt and emits a bad attempt with the timeout as latency: test
+std.control/a failed attempt is missing evidence, not a bad attempt: test
+std.control/start forgets the schedule until the target is ready again: test
+std.control/zero executed attempts are insufficient evidence, never compliant: test
+std.control/a missing attempt is missing evidence: completeness under the minimum is insufficient: test
+std.control/a violated share is violated whatever its coverage: test
+std.control/expected slots are counted from the horizon within the span: test
+std.control/a probe timeout violates reachability over the rolling window: test
+std.control/the rolling window forgets buckets that left it: test
+std.control/a calendar period closes at the zone's month boundary and fires its consequence once: test
+std.control/a compliant period fires nothing and a contract without a consequence notes nothing: test
+std.control/period boundaries follow the zone through months with a summer time change: test
+std.control/ten thousand emissions into a thirty-day window at five-second slots: test
+std.control/a rollout builds, drains the old generation, starts the new one and retires the old: test
+std.control/an old process still running at the deadline is disconnected and retired forced: test
+std.control/a failed build aborts the rollout and the old process keeps serving: test
+std.control/stop cancels a rollout's deadline and a rollout without a known process only starts: test
+std.deploy/bindings are built by name: test
+std.deploy/a native process and a probe host run their member and need main and machine: test
+std.deploy/only a native process includes other members: test
+std.deploy/a local socket admits a TcpListener resource only: test
+std.deploy/a native process admits an executable component only: test
+std.deploy/a workstation executable admits any component: test
+std.deploy/a scheduled probe host admits a component with an output: test
+std.deploy/no binding admits a contract or a policy: test
+std.json/encode writes every kind compactly: test
+std.json/encode escapes quote, backslash and control characters: test
+std.json/parse reads every kind of value: test
+std.json/parse decodes escapes: test
+std.json/a lone or broken surrogate is an invalid escape: test
+std.json/numbers are integers of at most 18 digits: test
+std.json/nesting is limited to 64 levels: test
+std.json/malformed input is an error at its offset: test
+std.json/the accessors read members of the right kind: test
+std.json/encode and parse round trip: test
+std.option/unwrap_or gives the value or the fallback: test
+std.option/map and and_then apply a fn to the value: test
+std.option/is_some, is_none and ok_or: test
+std.policy/an exponential backoff doubles up to its maximum: test
+std.policy/a fixed backoff never changes: test
+std.policy/Restart counts attempts against its maximum: test
+std.policy/Restart refuses no attempts and a backoff above its maximum: test
+std.policy/DrainRollout defaults to two minutes and disconnecting: test
+std.policy/DrainRollout refuses an unknown on_deadline and a deadline of zero: test
+std.probe/the prompt is seen at the start of the server's text: test
+std.probe/an attempt is printed in the model encoding: test
+std.protocol.http/responses carry their reason, type and body: test
+std.protocol.http/a header holding CR or LF turns the response into 500: test
+std.protocol.http/render writes the status line, headers, length and connection: test
+std.protocol.http/a 204 response has no Content-Length and no body: test
+std.protocol.http/header finds the first value of a lower-case name: test
+std.protocol.http/segments are the non-empty parts of the path: test
+std.protocol.http/HTTP/1.1 keeps the connection unless asked to close: test
+std.protocol.http/HTTP/1.0 closes the connection unless asked to keep it: test
+std.protocol.http/Connection is a list of options: test
+std.protocol.http/tokens, field values and targets: test
+std.protocol.http/parse_head reads the request line and headers: test
+std.protocol.http/parse_head refuses a malformed request line: test
+std.protocol.http/parse_head refuses a malformed header line: test
+std.protocol.http/a Content-Length is 1 to 18 decimal digits: test
+std.protocol.http/next_request reads a head, its body and keeps the rest: test
+std.protocol.http/next_request takes a pipelined request from the buffer: test
+std.protocol.http/next_request ends on a connection closed before a whole request: test
+std.protocol.http/a head over 8 KiB is 431: test
+std.protocol.http/a body over 1 MiB is 413: test
+std.protocol.http/a malformed head or Content-Length is 400: test
+std.protocol.http/any Transfer-Encoding is 501, also with a Content-Length: test
+std.protocol.http/the server answers pipelined requests until one asks to close: test
+std.protocol.http/the server answers a rejected request and closes: test
+std.protocol.telnet/a server refuses session limits that admit no session: test
+std.protocol.telnet/ends_with_bytes compares the suffix: test
+std.protocol.telnet/the profile and the limits default to what Telnet implements: test
+std.protocol.telnet/data bytes are literals: test
+std.protocol.telnet/CR LF, CR NUL, a lone CR and a lone LF end one line: test
+std.protocol.telnet/a CR LF split across reads ends one line: test
+std.protocol.telnet/IAC IAC is the data byte 255: test
+std.protocol.telnet/DO is answered WONT and WILL is answered DONT: test
+std.protocol.telnet/a negotiation split across reads is answered once complete: test
+std.protocol.telnet/AYT and IP are reported and other commands ignored: test
+std.protocol.telnet/a subnegotiation is skipped up to IAC SE: test
+std.protocol.telnet/a subnegotiation is limited to 1024 bytes including the IAC of IAC SE: test
+std.protocol.telnet/render ends each reply line with CR LF: test
+std.protocol.telnet/encode_input writes NVT line ends and doubles IAC: test
+std.protocol.telnet/encoded input decodes to the same lines: test
+std.protocol.telnet/erase_last removes one UTF-8 character: test
+std.protocol.telnet/apply_key edits the line: test
+std.protocol.telnet/the server answers each line and ends on the console's close: test
+std.protocol.telnet/the server answers options and AYT between lines: test
+std.protocol.telnet/the server closes on an overlong line, IAC IP and an overlong subnegotiation: test
+std.protocol.telnet/a client silent for the idle timeout ends the session: test
+std.protocol.telnet/await_prompt returns the text before each prompt and fails when the server closes: test
+std.protocol.telnet/a telnet server runs a declared console, a client its session: test
+std.result/unwrap_or gives the value or the fallback: test
+std.result/map and map_err change one side: test
+std.result/is_ok, is_err and ok: test
+std.sli/an attempt satisfies the outcomes it earned: test
+std.sli/windows are built by name: test
+std.sli/missing_data reads the closed set: test
+std.sli/meets compares good attempts against the target in ppm: test
+std.sli/no attempts meet no target: test
+std.text/digit_value reads decimal digits only: test
+std.text/is_whitespace is ASCII whitespace: test
+std.text/slice takes byte offsets: test
+std.text/find returns the first byte offset: test
+std.text/contains, ends_with and strip_suffix: test
+std.text/split keeps empty pieces: test
+std.text/split_once splits at the first separator: test
+std.text/replace replaces every occurrence: test
+std.text/trim_start and trim_end drop ASCII whitespace: test
+std.text/case mapping is ASCII only: test
+std.text/lines splits at LF and drops CR before it: test
+std.text/repeat concatenates copies: test
+std.time/civil dates round-trip through days since the epoch: test
+std.time/Europe/Berlin follows the EU summer time rule: test
+std.time/month boundaries in UTC: test
+std.time/month boundaries in Europe/Berlin across both summer time changes: test
+std.time/a month with a summer time change is an hour longer or shorter: test
+148 tests
+PERF12C native-run 1.329614
+PERF12C test-total 480.873783

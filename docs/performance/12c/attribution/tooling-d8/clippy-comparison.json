@@ -1,0 +1,942 @@
+[
+  {
+    "name": "ignite",
+    "target": " (check)",
+    "baseline": {
+      "start": 2.18,
+      "duration": 0.22,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.22
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.22,
+            "end": 0.22
+          }
+        ]
+      ],
+      "finish": 2.4
+    },
+    "candidate": {
+      "start": 2.2,
+      "duration": 0.61,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.6
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.6,
+            "end": 0.61
+          }
+        ]
+      ],
+      "finish": 2.81
+    },
+    "duration_delta": 0.39
+  },
+  {
+    "name": "ignite",
+    "target": " (check-test)",
+    "baseline": {
+      "start": 2.18,
+      "duration": 0.24,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.23
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.23,
+            "end": 0.24
+          }
+        ]
+      ],
+      "finish": 2.42
+    },
+    "candidate": {
+      "start": 2.2,
+      "duration": 0.78,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.77
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.77,
+            "end": 0.78
+          }
+        ]
+      ],
+      "finish": 2.98
+    },
+    "duration_delta": 0.54
+  },
+  {
+    "name": "ignite",
+    "target": " ignite \"bin\" (check)",
+    "baseline": {
+      "start": 2.4,
+      "duration": 0.18,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.17
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.17,
+            "end": 0.18
+          }
+        ]
+      ],
+      "finish": 2.58
+    },
+    "candidate": {
+      "start": 2.81,
+      "duration": 0.19,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.18
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.18,
+            "end": 0.19
+          }
+        ]
+      ],
+      "finish": 3.0
+    },
+    "duration_delta": 0.01
+  },
+  {
+    "name": "ignite",
+    "target": " ignite \"bin\" (check-test)",
+    "baseline": {
+      "start": 2.4,
+      "duration": 0.2,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.19
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.19,
+            "end": 0.2
+          }
+        ]
+      ],
+      "finish": 2.6
+    },
+    "candidate": {
+      "start": 2.81,
+      "duration": 0.19,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.18
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.18,
+            "end": 0.19
+          }
+        ]
+      ],
+      "finish": 3.0
+    },
+    "duration_delta": -0.01
+  },
+  {
+    "name": "ignite",
+    "target": " main \"test\" (check-test)",
+    "baseline": {
+      "start": 2.4,
+      "duration": 0.78,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.76
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.76,
+            "end": 0.78
+          }
+        ]
+      ],
+      "finish": 3.18
+    },
+    "candidate": {
+      "start": 2.81,
+      "duration": 0.88,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.86
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.86,
+            "end": 0.88
+          }
+        ]
+      ],
+      "finish": 3.69
+    },
+    "duration_delta": 0.1
+  },
+  {
+    "name": "ignite-check",
+    "target": " (check)",
+    "baseline": {
+      "start": 0.09,
+      "duration": 0.32,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.31
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.31,
+            "end": 0.32
+          }
+        ]
+      ],
+      "finish": 0.41
+    },
+    "candidate": {
+      "start": 0.08,
+      "duration": 0.34,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.33
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.33,
+            "end": 0.34
+          }
+        ]
+      ],
+      "finish": 0.42
+    },
+    "duration_delta": 0.02
+  },
+  {
+    "name": "ignite-check",
+    "target": " (check-test)",
+    "baseline": {
+      "start": 0.09,
+      "duration": 0.39,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.37
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.37,
+            "end": 0.39
+          }
+        ]
+      ],
+      "finish": 0.48
+    },
+    "candidate": {
+      "start": 0.08,
+      "duration": 0.37,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.36
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.36,
+            "end": 0.37
+          }
+        ]
+      ],
+      "finish": 0.45
+    },
+    "duration_delta": -0.02
+  },
+  {
+    "name": "ignite-check",
+    "target": " main \"test\" (check-test)",
+    "baseline": {
+      "start": 0.41,
+      "duration": 0.12,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.11
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.11,
+            "end": 0.12
+          }
+        ]
+      ],
+      "finish": 0.53
+    },
+    "candidate": {
+      "start": 0.41,
+      "duration": 0.13,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.12
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.12,
+            "end": 0.13
+          }
+        ]
+      ],
+      "finish": 0.54
+    },
+    "duration_delta": 0.01
+  },
+  {
+    "name": "ignite-eval",
+    "target": " (check)",
+    "baseline": {
+      "start": 1.18,
+      "duration": 0.55,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.53
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.53,
+            "end": 0.55
+          }
+        ]
+      ],
+      "finish": 1.73
+    },
+    "candidate": {
+      "start": 1.22,
+      "duration": 0.79,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.78
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.78,
+            "end": 0.79
+          }
+        ]
+      ],
+      "finish": 2.01
+    },
+    "duration_delta": 0.24
+  },
+  {
+    "name": "ignite-eval",
+    "target": " (check-test)",
+    "baseline": {
+      "start": 1.18,
+      "duration": 0.54,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.52
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.52,
+            "end": 0.54
+          }
+        ]
+      ],
+      "finish": 1.72
+    },
+    "candidate": {
+      "start": 1.22,
+      "duration": 0.8,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.78
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.78,
+            "end": 0.8
+          }
+        ]
+      ],
+      "finish": 2.02
+    },
+    "duration_delta": 0.26
+  },
+  {
+    "name": "ignite-eval",
+    "target": " main \"test\" (check-test)",
+    "baseline": {
+      "start": 1.73,
+      "duration": 0.08,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.07
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.07,
+            "end": 0.08
+          }
+        ]
+      ],
+      "finish": 1.81
+    },
+    "candidate": {
+      "start": 2.01,
+      "duration": 0.07,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.06
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.06,
+            "end": 0.07
+          }
+        ]
+      ],
+      "finish": 2.08
+    },
+    "duration_delta": -0.01
+  },
+  {
+    "name": "ignite-llvm",
+    "target": " (check)",
+    "baseline": {
+      "start": 1.18,
+      "duration": 0.99,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.98
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.98,
+            "end": 0.99
+          }
+        ]
+      ],
+      "finish": 2.17
+    },
+    "candidate": {
+      "start": 1.22,
+      "duration": 0.98,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.96
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.96,
+            "end": 0.98
+          }
+        ]
+      ],
+      "finish": 2.2
+    },
+    "duration_delta": -0.01
+  },
+  {
+    "name": "ignite-llvm",
+    "target": " (check-test)",
+    "baseline": {
+      "start": 1.18,
+      "duration": 1.0,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.99
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.99,
+            "end": 1.0
+          }
+        ]
+      ],
+      "finish": 2.18
+    },
+    "candidate": {
+      "start": 1.22,
+      "duration": 0.98,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.96
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.96,
+            "end": 0.98
+          }
+        ]
+      ],
+      "finish": 2.2
+    },
+    "duration_delta": -0.02
+  },
+  {
+    "name": "ignite-llvm",
+    "target": " main \"test\" (check-test)",
+    "baseline": {
+      "start": 2.18,
+      "duration": 0.13,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.11
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.11,
+            "end": 0.13
+          }
+        ]
+      ],
+      "finish": 2.31
+    },
+    "candidate": {
+      "start": 2.2,
+      "duration": 0.12,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.11
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.11,
+            "end": 0.12
+          }
+        ]
+      ],
+      "finish": 2.32
+    },
+    "duration_delta": -0.01
+  },
+  {
+    "name": "ignite-rustgen",
+    "target": " (check)",
+    "baseline": {
+      "start": 1.18,
+      "duration": 0.61,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.6
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.6,
+            "end": 0.61
+          }
+        ]
+      ],
+      "finish": 1.79
+    },
+    "candidate": {
+      "start": 1.22,
+      "duration": 0.66,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.64
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.64,
+            "end": 0.66
+          }
+        ]
+      ],
+      "finish": 1.88
+    },
+    "duration_delta": 0.05
+  },
+  {
+    "name": "ignite-rustgen",
+    "target": " (check-test)",
+    "baseline": {
+      "start": 1.18,
+      "duration": 0.64,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.63
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.63,
+            "end": 0.64
+          }
+        ]
+      ],
+      "finish": 1.82
+    },
+    "candidate": {
+      "start": 1.22,
+      "duration": 0.67,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.66
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.66,
+            "end": 0.67
+          }
+        ]
+      ],
+      "finish": 1.89
+    },
+    "duration_delta": 0.03
+  },
+  {
+    "name": "ignite-rustgen",
+    "target": " main \"test\" (check-test)",
+    "baseline": {
+      "start": 1.8,
+      "duration": 0.39,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.38
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.38,
+            "end": 0.39
+          }
+        ]
+      ],
+      "finish": 2.19
+    },
+    "candidate": {
+      "start": 1.88,
+      "duration": 0.48,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.47
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.47,
+            "end": 0.48
+          }
+        ]
+      ],
+      "finish": 2.36
+    },
+    "duration_delta": 0.09
+  },
+  {
+    "name": "ignite-types",
+    "target": " (check)",
+    "baseline": {
+      "start": 0.41,
+      "duration": 0.78,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.76
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.76,
+            "end": 0.78
+          }
+        ]
+      ],
+      "finish": 1.19
+    },
+    "candidate": {
+      "start": 0.41,
+      "duration": 0.81,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.79
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.79,
+            "end": 0.81
+          }
+        ]
+      ],
+      "finish": 1.22
+    },
+    "duration_delta": 0.03
+  },
+  {
+    "name": "ignite-types",
+    "target": " (check-test)",
+    "baseline": {
+      "start": 0.41,
+      "duration": 0.81,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.78
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.78,
+            "end": 0.81
+          }
+        ]
+      ],
+      "finish": 1.22
+    },
+    "candidate": {
+      "start": 0.41,
+      "duration": 0.76,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.75
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.75,
+            "end": 0.76
+          }
+        ]
+      ],
+      "finish": 1.17
+    },
+    "duration_delta": -0.05
+  },
+  {
+    "name": "ignite-types",
+    "target": " main \"test\" (check-test)",
+    "baseline": {
+      "start": 1.18,
+      "duration": 0.43,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.42
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.42,
+            "end": 0.43
+          }
+        ]
+      ],
+      "finish": 1.61
+    },
+    "candidate": {
+      "start": 1.22,
+      "duration": 0.4,
+      "sections": [
+        [
+          "frontend",
+          {
+            "start": 0.0,
+            "end": 0.39
+          }
+        ],
+        [
+          "codegen",
+          {
+            "start": 0.39,
+            "end": 0.4
+          }
+        ]
+      ],
+      "finish": 1.62
+    },
+    "duration_delta": -0.03
+  }
+]

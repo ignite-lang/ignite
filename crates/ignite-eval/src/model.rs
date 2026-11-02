@@ -9,6 +9,7 @@
 //! (O21). Nothing else about the machine enters the model (O22).
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::path::Path;
 
 use ignite_syntax::ast::{Decl, Expr, ExprKind, Span, SystemDecl};
@@ -1865,28 +1866,40 @@ impl Parser<'_> {
 }
 
 fn pad(out: &mut String, indent: usize) {
-    for _ in 0..indent {
-        out.push_str("  ");
+    const SPACES: &str = "                                ";
+    let levels = SPACES.len() / 2;
+    for _ in 0..indent / levels {
+        out.push_str(SPACES);
     }
+    out.push_str(&SPACES[..(indent % levels) * 2]);
 }
 
 /// A JSON string: `"`, `\` and control characters escaped, everything
 /// else as UTF-8 (15.5).
 fn write_string(out: &mut String, text: &str) {
     out.push('"');
-    for c in text.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\t' => out.push_str("\\t"),
-            '\r' => out.push_str("\\r"),
-            '\u{8}' => out.push_str("\\b"),
-            '\u{c}' => out.push_str("\\f"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
+    let mut start = 0;
+    for (i, byte) in text.bytes().enumerate() {
+        if byte < 0x20 || byte == b'"' || byte == b'\\' {
+            // ASCII escape bytes cannot be UTF-8 continuation bytes, so
+            // both ends of each unchanged slice are character boundaries.
+            out.push_str(&text[start..i]);
+            match byte {
+                b'"' => out.push_str("\\\""),
+                b'\\' => out.push_str("\\\\"),
+                b'\n' => out.push_str("\\n"),
+                b'\t' => out.push_str("\\t"),
+                b'\r' => out.push_str("\\r"),
+                8 => out.push_str("\\b"),
+                12 => out.push_str("\\f"),
+                _ => {
+                    let _ = write!(out, "\\u{byte:04x}");
+                }
+            }
+            start = i + 1;
         }
     }
+    out.push_str(&text[start..]);
     out.push('"');
 }
 

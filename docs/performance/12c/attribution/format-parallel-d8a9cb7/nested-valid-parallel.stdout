@@ -1,0 +1,5 @@
+[lib (2021)] "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-fixture/library/src/lib.rs"
+[test (2021)] "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-fixture/library/tests/main.rs"
+rustfmt --edition 2021 --check /home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-fixture/library/src/lib.rs /home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-fixture/library/tests/main.rs
+[bin (2024)] "/home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-fixture/binary/src/main.rs"
+rustfmt --edition 2024 --check /home/timo/.cache/scratch/ignite-perf12c/format-prototype/nested-fixture/binary/src/main.rs

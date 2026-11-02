@@ -216,6 +216,31 @@ fn json_parse_is_the_inverse_of_compact() {
         Json::parse(" { \"k\" : [ 1 , 2 ] } ").unwrap().compact(),
         r#"{"k":[1,2]}"#
     );
+    let quoted = concat!(
+        r#""\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r"#,
+        r#"\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017"#,
+        r#"\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\"\\é😀"#,
+        "\u{7f}\u{2028}\u{2029}\""
+    );
+    let text = Json::parse(quoted).unwrap().as_str().unwrap().to_string();
+    let object = Json::Object(std::collections::BTreeMap::from([(
+        text.clone(),
+        Json::Str(text),
+    )]));
+    assert_eq!(object.compact(), format!("{{{quoted}:{quoted}}}"));
+    for indent in [0, 3, 20, 100] {
+        let mut pretty = "existing\n".to_string();
+        object.write(&mut pretty, indent);
+        assert_eq!(
+            pretty,
+            format!(
+                "existing\n{{\n{}{quoted}: {quoted}\n{}}}",
+                "  ".repeat(indent + 1),
+                "  ".repeat(indent)
+            )
+        );
+        assert_eq!(Json::parse(&pretty["existing\n".len()..]).unwrap(), object);
+    }
     for bad in [
         "",
         "{",

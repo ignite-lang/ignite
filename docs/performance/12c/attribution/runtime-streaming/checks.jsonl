@@ -1,0 +1,4 @@
+{"label": "llvm-build-tests", "command": ["cargo", "test", "-p", "ignite", "--test", "main", "llvm_build::"], "seconds": 6.028535147022922, "load_before": 8.24951171875, "load_after": 8.36572265625, "exit": 0, "inline_counts": ["5"]}
+{"label": "clippy", "command": ["cargo", "clippy", "-p", "ignite", "--all-targets", "--", "-D", "warnings"], "seconds": 1.376720917003695, "load_before": 8.36572265625, "load_after": 8.36572265625, "exit": 101, "inline_counts": []}
+{"label": "clippy-final", "command": ["cargo", "clippy", "-p", "ignite", "--all-targets", "--", "-D", "warnings"], "seconds": 1.2978506859508343, "load_before": 7.9140625, "load_after": 7.9140625, "exit": 0, "inline_counts": []}
+{"label": "inline", "command": ["task", "test-ignite"], "seconds": 2.3858097590273246, "load_before": 7.9140625, "load_after": 7.9140625, "exit": 0, "inline_counts": ["148", "148"]}
