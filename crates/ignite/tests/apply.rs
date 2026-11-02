@@ -120,6 +120,11 @@ struct Flow {
 }
 
 impl Flow {
+    /// A fresh copy of the terminal design on `port` and a fresh state whose
+    /// `build` is one directory shared by every test of this binary (O41), so
+    /// the host's per-target cargo target directory keeps the substrate
+    /// compiled across tests; plans pin artifacts by digest under their own
+    /// `preparations`, never under `build`.
     fn new(target: &str, port: u16) -> Flow {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -149,8 +154,13 @@ impl Flow {
             original.replace("port = 2323", &format!("port = {port}")),
         )
         .unwrap();
+        let state = root.join("state");
+        fs::create_dir_all(&state).unwrap();
+        let shared = Path::new(env!("CARGO_TARGET_TMPDIR")).join("apply-build");
+        fs::create_dir_all(&shared).unwrap();
+        std::os::unix::fs::symlink(&shared, state.join("build")).unwrap();
         Flow {
-            state: root.join("state"),
+            state,
             root,
             source,
             counter: Cell::new(0),
