@@ -1,0 +1,37 @@
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.24s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/ignite-7066fbb78e702281)
+
+running 26 tests
+test llvm_build::archive_tests::truncated_member_with_complete_elf_prefix_remains_unknown ... ok
+test llvm_build::archive_tests::first_elf_after_odd_and_large_members_preserves_byte_order ... ok
+test run::clock::tests::advance_fires_due_timers_in_order ... ok
+test run::clock::tests::durations_parse ... ok
+test run::clock::tests::the_real_clock_is_monotonic ... ok
+T.probe: boom
+test run::clock::tests::next_due_steps_one_instant_at_a_time ... ok
+test run::journal::tests::a_torn_final_line_is_dropped_and_cut ... ok
+test run::journal::tests::the_lock_admits_one_run ... ok
+test run::journal::tests::records_get_consecutive_seqs_and_persist ... ok
+test run::journal::tests::fresh_renames_the_old_journal ... ok
+test run::control::tests::a_signal_becomes_an_interrupt ... ok
+test run::tests::rfc3339_instants ... ok
+test run::process::tests::a_missing_executable_fails_to_spawn ... ok
+test run::process::tests::lines_are_recognised ... ok
+T.probe: warn
+test run::probe::tests::refs_become_ref_arguments ... ok
+test run::process::tests::an_exit_before_ready_ends_the_flight ... ok
+test run::probe::tests::the_first_line_is_the_result ... ok
+T.server: noise
+test run::process::tests::a_child_is_started_ready_and_signalled ... ok
+test test_build::tests::runner_symbol_is_found_across_chunks_and_after_other_members ... ok
+test run::process::tests::two_generations_are_told_apart_by_pid ... ok
+test run::process::tests::a_busy_executable_is_retried_after_its_writer_closes ... ok
+test run::probe::tests::failures_are_attempt_failed ... ok
+test run::control::tests::settle_waits_for_every_guard ... ok
+test run::live::tests::timer_spawn_completion_precedes_a_held_probe_result ... ok
+test run::process::tests::released_is_reported_once_awaited ... ok
+test run::probe::tests::a_killed_attempt_sends_nothing ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+

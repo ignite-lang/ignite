@@ -2952,6 +2952,20 @@ The decision engine (design 2):
 - Adapters run on their own threads and return observations to the queue.
 - Reducers never do IO, and adapters never decide.
 
+Synchronous spawn acknowledgements use the driver's existing turn boundary:
+after completing every record, effect dispatch and lifecycle recipient of the
+current turn, deliver its already-known `Started` or `SpawnFailed` acknowledgement
+before taking an unrelated queued observation. Keep the existing due-timer
+precedence, acknowledgement order, and `Started` before that child's asynchronous
+`Ready`/exit. Timestamp delivery with the current foreground clock; do not backdate
+it to spawn time. Acknowledgements must drain at the current manual-clock instant
+before settling/moving time, and before entering stop. Complete the initial `Start`
+fanout to every machine before draining startup acknowledgements. The adapter's ordinary
+channel API retains its existing behaviour. Every effect still synchronizes the
+journal before dispatch (O30); processing a probe result cannot postpone publication
+of an already completed spawn behind that probe's effect fanout. The existing driver
+owns this scheduling; reducers retain policy ownership.
+
 Library boundaries:
 
 - Invariant 6: the driver knows the `std.control` types (`Machine`, `Event`, `Effect`,

@@ -1,0 +1,949 @@
+1733186 1793630752.137747 execve("/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/debug/deps/main-b624c508ef07abba", ["/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/debug/deps/main-b624c508ef07abba", "run::killing_terminald_restarts_it_in_real_time", "--exact", "--nocapture"], 0x7ffeae7bf078 /* 144 vars */) = 0 <0.000827>
+1733186 1793630752.142669 write(1</home/timo/.cache/scratch/ignite-perf12c/restart-c6-syscall/stdout.log>, "\nrunning 1 test\n", 16) = 16 <0.000024>
+1733186 1793630752.143312 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7febc15ffce8, parent_tid=0x7febc15ff990, exit_signal=0, stack=0x7febc13ff000, stack_size=0x1fff00, tls=0x7febc15ff6c0} => {parent_tid=[1733200]}, 88) = 1733200 <0.000035>
+1733186 1793630752.143401 futex(0x55bb89fb3858, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298586, tv_nsec=224614650}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733200 1793630752.148625 clone3({flags=CLONE_VM|CLONE_VFORK|CLONE_CLEAR_SIGHAND, exit_signal=SIGCHLD, stack=0x7febc19cb000, stack_size=0x9000}, 88 <unfinished ...>
+1733206 1793630752.148898 execve("/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/debug/ignite", ["/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/debug/ignite", "run", "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-c6b22cf148f1/crates/ignite/../../examples/terminal/terminal.design.ignite", "--assembly", "local", "--state", "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real", "--build", "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-build-design-rust", "--target", "rust", "--json", "--settle", "1 s", "--target-dir", "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-cargo", "--port", "Terminal.ingress=0", "--clock", "real"], 0x7fff3bdfefb0 /* 144 vars */ <unfinished ...>
+1733200 1793630752.149071 <... clone3 resumed>) = 1733206 <0.000411>
+1733206 1793630752.149168 <... execve resumed>) = 0 <0.000222>
+1733200 1793630752.149249 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7febc13fece8, parent_tid=0x7febc13fe990, exit_signal=0, stack=0x7febc11fe000, stack_size=0x1fff00, tls=0x7febc13fe6c0} => {parent_tid=[1733207]}, 88) = 1733207 <0.000032>
+1733200 1793630752.149415 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7febc11fdce8, parent_tid=0x7febc11fd990, exit_signal=0, stack=0x7febc0ffd000, stack_size=0x1fff00, tls=0x7febc11fd6c0} => {parent_tid=[1733209]}, 88) = 1733209 <0.000040>
+1733200 1793630752.149549 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=230936346}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733206 1793630752.151958 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f80019ffce8, parent_tid=0x7f80019ff990, exit_signal=0, stack=0x7f7ff19ff000, stack_size=0xfffff00, tls=0x7f80019ff6c0} => {parent_tid=[1733213]}, 88) = 1733213 <0.000040>
+1733206 1793630752.152060 futex(0x7f80019ffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.310773 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7febfffce8, parent_tid=0x7f7febfff990, exit_signal=0, stack=0x7f7fcbfff000, stack_size=0x1fffff00, tls=0x7f7febfff6c0} => {parent_tid=[1733441]}, 88) = 1733441 <0.000046>
+1733213 1793630752.310893 futex(0x7f7febfffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733441 1793630752.314387 +++ exited with 0 +++
+1733213 1793630752.314423 <... futex resumed>) = 0 <0.003516>
+1733213 1793630752.317932 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"epoch\":{\"ns\":1793630752317198897,\"type\":\"Duration\"},\"formatVersion\":\"ignite-journal/0.1\",\"kind\":\"header\",\"model\":{\"assembly\":{\"defaults\":[],\"id\":\"local\",\"kind\":\"std.deploy.Deployment\",\"properties\":{\"bindings\":{\"entries\":[[{\"ref\":\"Terminal.client\",\"type\":"..., 16231) = 16231 <0.000663>
+1733213 1793630752.318675 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.019238>
+1733213 1793630752.352763 write(2<pipe:[627441490]>, "ignite run: ", 12) = 12 <0.000017>
+1733213 1793630752.352848 write(2<pipe:[627441490]>, "Terminal.client", 15) = 15 <0.000006>
+1733213 1793630752.352882 write(2<pipe:[627441490]>, ": declared, not buildable in slice 12\n", 38) = 38 <0.000006>
+1733213 1793630752.352992 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7ff19fece8, parent_tid=0x7f7ff19fe990, exit_signal=0, stack=0x7f7ff17fe000, stack_size=0x1fff00, tls=0x7f7ff19fe6c0} => {parent_tid=[1733499]}, 88) = 1733499 <0.000055>
+1733213 1793630752.353168 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7ff17fdce8, parent_tid=0x7f7ff17fd990, exit_signal=0, stack=0x7f7ff15fd000, stack_size=0x1fff00, tls=0x7f7ff17fd6c0} => {parent_tid=[1733500]}, 88) = 1733500 <0.000040>
+1733213 1793630752.353488 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7ff15fcce8, parent_tid=0x7f7ff15fc990, exit_signal=0, stack=0x7f7ff13fc000, stack_size=0x1fff00, tls=0x7f7ff15fc6c0} <unfinished ...>
+1733499 1793630752.353553 futex(0x7f7fec925ba8, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.353568 <... clone3 resumed> => {parent_tid=[1733502]}, 88) = 1733502 <0.000059>
+1733213 1793630752.353759 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":652,\"type\":\"Duration\"},\"kind\":\"segment\",\"machine\":null,\"seq\":1,\"value\":{\"fields\":{\"clock\":\"real\",\"declared\":[\"Terminal.client\"],\"generation\":1,\"start\":{\"ns\":652,\"type\":\"Duration\"},\"stop\":{\"type\":\"Option\",\"variant\":\"None\"}},\"type\":\"std.control.S"..., 266) = 266 <0.000023>
+1733213 1793630752.353832 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.010033>
+1733213 1793630752.363934 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":652,\"type\":\"Duration\"},\"kind\":\"segment\",\"machine\":null,\"seq\":1,\"value\":{\"fields\":{\"clock\":\"real\",\"declared\":[\"Terminal.client\"],\"generation\":1,\"start\":{\"ns\":652,\"type\":\"Duration\"},\"stop\":{\"type\":\"Option\",\"variant\":\"None\"}},\"type\":\"std.control.S"..., 266 <unfinished ...>
+1733207 1793630752.364035 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000011>
+1733200 1793630752.364061 <... futex resumed>) = 0 <0.214498>
+1733213 1793630752.364095 <... write resumed>) = 266 <0.000116>
+1733213 1793630752.364162 write(2<pipe:[627441490]>, "1 652 ns segment: { clock: \"real\", declared: [\"Terminal.client\"], generation: 1, start: 652 ns, stop: None }", 108 <unfinished ...>
+1733200 1793630752.364183 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=445566812}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.364205 <... write resumed>) = 108 <0.000024>
+1733213 1793630752.364222 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000014>
+1733213 1793630752.364417 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733517]}, 88) = 1733517 <0.000053>
+1733213 1793630752.364532 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733517 1793630752.365859 +++ exited with 0 +++
+1733213 1793630752.365884 <... futex resumed>) = 0 <0.001342>
+1733213 1793630752.366035 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":10604693,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":2,\"value\":{\"fields\":{\"at\":{\"ns\":10604693,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.Event"..., 311) = 311 <0.000016>
+1733213 1793630752.366106 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":10604693,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":2,\"value\":{\"fields\":{\"at\":{\"ns\":10604693,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.Event"..., 311 <unfinished ...>
+1733207 1793630752.366170 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000013>
+1733200 1793630752.366199 <... futex resumed>) = 0 <0.002006>
+1733213 1793630752.366232 <... write resumed>) = 311 <0.000104>
+1733213 1793630752.366275 write(2<pipe:[627441490]>, "2 10604693 ns event Terminal.customerAccess.evaluator: Start(1793630752317198897 ns)", 84 <unfinished ...>
+1733200 1793630752.366296 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=447677126}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.366322 <... write resumed>) = 84 <0.000029>
+1733213 1793630752.366342 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000015>
+1733213 1793630752.366415 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":10604693,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":3,\"value\":{\"fields\":[1,{\"ns\":2448847682801103,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 225) = 225 <0.000015>
+1733213 1793630752.366477 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.008422>
+1733213 1793630752.374963 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":10604693,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":3,\"value\":{\"fields\":[1,{\"ns\":2448847682801103,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 225) = 225 <0.000020>
+1733207 1793630752.375049 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000014>
+1733200 1793630752.375083 <... futex resumed>) = 0 <0.008773>
+1733213 1793630752.375094 write(2<pipe:[627441490]>, "3 10604693 ns effect Terminal.customerAccess.evaluator: SetTimer(1, 2448847682801103 ns)", 88) = 88 <0.000015>
+1733213 1793630752.375151 write(2<pipe:[627441490]>, "\n", 1 <unfinished ...>
+1733200 1793630752.375181 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=456551905}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.375201 <... write resumed>) = 1 <0.000027>
+1733213 1793630752.375374 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733525]}, 88) = 1733525 <0.000110>
+1733213 1793630752.375545 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733525 1793630752.378091 +++ exited with 0 +++
+1733213 1793630752.378116 <... futex resumed>) = 0 <0.002553>
+1733213 1793630752.378236 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":21557035,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptFast.evaluator\",\"seq\":4,\"value\":{\"fields\":{\"at\":{\"ns\":21557035,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind"..., 307) = 307 <0.000017>
+1733213 1793630752.378303 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":21557035,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptFast.evaluator\",\"seq\":4,\"value\":{\"fields\":{\"at\":{\"ns\":21557035,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind"..., 307) = 307 <0.002292>
+1733207 1793630752.380677 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.380699 write(2<pipe:[627441490]>, "4 21557035 ns event Terminal.promptFast.evaluator: Start(1793630752317198897 ns)", 80 <unfinished ...>
+1733207 1793630752.380739 <... futex resumed>) = 1 <0.000042>
+1733213 1793630752.380750 <... write resumed>) = 80 <0.000025>
+1733213 1793630752.380763 write(2<pipe:[627441490]>, "\n", 1 <unfinished ...>
+1733200 1793630752.381225 <... futex resumed>) = 0 <0.006029>
+1733200 1793630752.381318 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=462708420}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.383637 <... write resumed>) = 1 <0.002854>
+1733213 1793630752.383851 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733537]}, 88) = 1733537 <0.000045>
+1733213 1793630752.383955 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733537 1793630752.386516 +++ exited with 0 +++
+1733213 1793630752.386542 <... futex resumed>) = 0 <0.002570>
+1733213 1793630752.386667 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":30028389,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":5,\"value\":{\"fields\":{\"at\":{\"ns\":30028389,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.EventKin"..., 308) = 308 <0.000012>
+1733213 1793630752.386733 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":30028389,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":5,\"value\":{\"fields\":{\"at\":{\"ns\":30028389,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.EventKin"..., 308) = 308 <0.000012>
+1733207 1793630752.386802 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.386827 write(2<pipe:[627441490]>, "5 30028389 ns event Terminal.promptProbe.scheduler: Start(1793630752317198897 ns)", 81 <unfinished ...>
+1733207 1793630752.386846 <... futex resumed>) = 1 <0.000032>
+1733213 1793630752.386864 <... write resumed>) = 81 <0.000019>
+1733213 1793630752.386887 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000010>
+1733200 1793630752.386994 <... futex resumed>) = 0 <0.005659>
+1733213 1793630752.387059 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} <unfinished ...>
+1733200 1793630752.387079 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=468473306}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.387140 <... clone3 resumed> => {parent_tid=[1733543]}, 88) = 1733543 <0.000064>
+1733213 1793630752.387176 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733543 1793630752.389048 +++ exited with 0 +++
+1733213 1793630752.389068 <... futex resumed>) = 0 <0.001882>
+1733213 1793630752.389170 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":33258721,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.reachable.evaluator\",\"seq\":6,\"value\":{\"fields\":{\"at\":{\"ns\":33258721,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind\""..., 306) = 306 <0.000011>
+1733213 1793630752.389225 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":33258721,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.reachable.evaluator\",\"seq\":6,\"value\":{\"fields\":{\"at\":{\"ns\":33258721,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind\""..., 306) = 306 <0.000012>
+1733207 1793630752.389288 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.389309 write(2<pipe:[627441490]>, "6 33258721 ns event Terminal.reachable.evaluator: Start(1793630752317198897 ns)", 79) = 79 <0.000014>
+1733207 1793630752.389352 <... futex resumed>) = 1 <0.000046>
+1733213 1793630752.389364 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000005>
+1733200 1793630752.389902 <... futex resumed>) = 0 <0.002803>
+1733200 1793630752.389999 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=471391525}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.390643 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733550]}, 88) = 1733550 <0.000055>
+1733213 1793630752.390757 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733550 1793630752.391314 +++ exited with 0 +++
+1733213 1793630752.391326 <... futex resumed>) = 0 <0.000558>
+1733213 1793630752.391427 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":35730902,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":7,\"value\":{\"fields\":{\"at\":{\"ns\":35730902,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind\",\"var"..., 301) = 301 <0.000015>
+1733213 1793630752.391484 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":35730902,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":7,\"value\":{\"fields\":{\"at\":{\"ns\":35730902,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind\",\"var"..., 301) = 301 <0.000013>
+1733207 1793630752.391547 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.391559 write(2<pipe:[627441490]>, "7 35730902 ns event Terminal.server.rollout: Start(1793630752317198897 ns)", 74) = 74 <0.000013>
+1733207 1793630752.391595 <... futex resumed>) = 1 <0.000038>
+1733200 1793630752.391619 <... futex resumed>) = 0 <0.001605>
+1733213 1793630752.391638 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000009>
+1733213 1793630752.391784 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733553]}, 88) = 1733553 <0.000037>
+1733213 1793630752.391872 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733200 1793630752.392029 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=473423600}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733553 1793630752.396471 +++ exited with 0 +++
+1733213 1793630752.396498 <... futex resumed>) = 0 <0.004618>
+1733213 1793630752.396822 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":38009704,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":8,\"value\":{\"fields\":{\"at\":{\"ns\":38009704,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind\",\""..., 304) = 304 <0.000017>
+1733213 1793630752.396891 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":38009704,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":8,\"value\":{\"fields\":{\"at\":{\"ns\":38009704,\"type\":\"Duration\"},\"kind\":{\"fields\":[{\"ns\":1793630752317198897,\"type\":\"Duration\"}],\"type\":\"std.control.EventKind\",\""..., 304) = 304 <0.000011>
+1733213 1793630752.396952 write(2<pipe:[627441490]>, "8 38009704 ns event Terminal.server.supervisor: Start(1793630752317198897 ns)", 77 <unfinished ...>
+1733207 1793630752.396966 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.396976 <... write resumed>) = 77 <0.000013>
+1733213 1793630752.397000 write(2<pipe:[627441490]>, "\n", 1 <unfinished ...>
+1733207 1793630752.397018 <... futex resumed>) = 1 <0.000045>
+1733200 1793630752.397026 <... futex resumed>) = 0 <0.004988>
+1733213 1793630752.397034 <... write resumed>) = 1 <0.000023>
+1733213 1793630752.397069 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":38009704,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":9,\"value\":{\"fields\":[\"Terminal.server\",1],\"type\":\"std.control.Effect\",\"variant\":\"Spawn\"}}\n", 191) = 191 <0.000012>
+1733213 1793630752.397106 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>
+1733200 1793630752.397118 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=478499579}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.404714 <... fdatasync resumed>) = 0 <0.007593>
+1733213 1793630752.404765 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":38009704,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":9,\"value\":{\"fields\":[\"Terminal.server\",1],\"type\":\"std.control.Effect\",\"variant\":\"Spawn\"}}\n", 191) = 191 <0.000013>
+1733207 1793630752.404842 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.404855 write(2<pipe:[627441490]>, "9 38009704 ns effect Terminal.server.supervisor: Spawn(\"Terminal.server\", 1)", 76 <unfinished ...>
+1733207 1793630752.404874 <... futex resumed>) = 1 <0.000023>
+1733213 1793630752.404886 <... write resumed>) = 76 <0.000015>
+1733213 1793630752.404900 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000006>
+1733213 1793630752.405384 futex(0x7f7fec925ba8, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733499 1793630752.405412 <... futex resumed>) = 0 <0.051845>
+1733213 1793630752.405421 <... futex resumed>) = 1 <0.000027>
+1733213 1793630752.405451 futex(0x5621073d2d98, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733499 1793630752.405551 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f7ff19fe990) = 1733573 <0.000555>
+1733200 1793630752.406465 <... futex resumed>) = 0 <0.009337>
+1733200 1793630752.406545 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=487938223}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733573 1793630752.407017 execve("/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/bin/1/terminald", ["/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/bin/1/terminald", "--port", "0"], 0x7ffdddb4ef00 /* 144 vars */) = 0 <0.000705>
+1733573 1793630752.409102 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f86771ffce8, parent_tid=0x7f86771ff990, exit_signal=0, stack=0x7f8676fff000, stack_size=0x1ffec0, tls=0x7f86771ff6c0} => {parent_tid=[1733575]}, 88) = 1733575 <0.000033>
+1733499 1793630752.409343 futex(0x5621073d2d98, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000019>
+1733213 1793630752.409381 <... futex resumed>) = 0 <0.003916>
+1733499 1793630752.409427 futex(0x7f7fec925ba8, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733573 1793630752.409455 write(2<pipe:[627456242]>, "listening on 127.0.0.1:36851\n", 29) = 29 <0.000012>
+1733213 1793630752.409555 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7ff13f8ce8, parent_tid=0x7f7ff13f8990, exit_signal=0, stack=0x7f7ff11f8000, stack_size=0x1fff00, tls=0x7f7ff13f86c0} => {parent_tid=[1733578]}, 88) = 1733578 <0.000033>
+1733213 1793630752.409698 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7ff11f7ce8, parent_tid=0x7f7ff11f7990, exit_signal=0, stack=0x7f7ff0ff7000, stack_size=0x1fff00, tls=0x7f7ff11f76c0} => {parent_tid=[1733579]}, 88) = 1733579 <0.000028>
+1733213 1793630752.409817 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7ff0ff6ce8, parent_tid=0x7f7ff0ff6990, exit_signal=0, stack=0x7f7ff0df6000, stack_size=0x1fff00, tls=0x7f7ff0ff66c0} => {parent_tid=[1733580]}, 88) = 1733580 <0.000037>
+1733213 1793630752.410093 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733581]}, 88) = 1733581 <0.000031>
+1733213 1793630752.410169 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733580 1793630752.411098 wait4(1733573 <unfinished ...>
+1733579 1793630752.412824 futex(0x7f7fec99f660, FUTEX_WAKE_PRIVATE, 2147483647) = 0 <0.000006>
+1733581 1793630752.414154 +++ exited with 0 +++
+1733213 1793630752.414649 <... futex resumed>) = 0 <0.004469>
+1733213 1793630752.415266 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":10,\"value\":{\"fields\":{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":\"std.c"..., 272) = 272 <0.000017>
+1733213 1793630752.415334 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":10,\"value\":{\"fields\":{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":\"std.c"..., 272) = 272 <0.000017>
+1733207 1793630752.415388 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.415417 write(2<pipe:[627441490]>, "10 56268295 ns event Terminal.server.supervisor: Started(1733573, 1)", 68 <unfinished ...>
+1733207 1793630752.415436 <... futex resumed>) = 1 <0.000040>
+1733200 1793630752.415445 <... futex resumed>) = 0 <0.008883>
+1733213 1793630752.415452 <... write resumed>) = 68 <0.000019>
+1733200 1793630752.415515 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=496908761}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.418631 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000020>
+1733213 1793630752.418766 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":11,\"value\":{\"fields\":[2,{\"ns\":10056268295,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 214) = 214 <0.000452>
+1733213 1793630752.419254 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.008292>
+1733213 1793630752.427604 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":11,\"value\":{\"fields\":[2,{\"ns\":10056268295,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 214) = 214 <0.000016>
+1733207 1793630752.427684 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.427705 write(2<pipe:[627441490]>, "11 56268295 ns effect Terminal.server.supervisor: SetTimer(2, 10056268295 ns)", 77 <unfinished ...>
+1733207 1793630752.427720 <... futex resumed>) = 1 <0.000027>
+1733213 1793630752.427728 <... write resumed>) = 77 <0.000010>
+1733213 1793630752.427747 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000014>
+1733213 1793630752.427936 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733602]}, 88) = 1733602 <0.000040>
+1733213 1793630752.428019 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733200 1793630752.428141 <... futex resumed>) = 0 <0.012615>
+1733200 1793630752.428213 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=509606098}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733602 1793630752.429326 +++ exited with 0 +++
+1733213 1793630752.429340 <... futex resumed>) = 0 <0.001314>
+1733213 1793630752.429445 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":12,\"value\":{\"fields\":{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":\"std.cont"..., 269) = 269 <0.000016>
+1733213 1793630752.429501 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":12,\"value\":{\"fields\":{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":\"std.cont"..., 269) = 269 <0.000010>
+1733213 1793630752.429555 write(2<pipe:[627441490]>, "12 56268295 ns event Terminal.server.rollout: Started(1733573, 1)", 65 <unfinished ...>
+1733207 1793630752.429569 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.429583 <... write resumed>) = 65 <0.000016>
+1733213 1793630752.429606 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000017>
+1733200 1793630752.429653 <... futex resumed>) = 0 <0.001429>
+1733207 1793630752.429663 <... futex resumed>) = 1 <0.000082>
+1733200 1793630752.429716 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=511110392}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.429795 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733605]}, 88) = 1733605 <0.000041>
+1733213 1793630752.429875 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733605 1793630752.434932 +++ exited with 0 +++
+1733213 1793630752.434955 <... futex resumed>) = 0 <0.005073>
+1733213 1793630752.435067 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":13,\"value\":{\"fields\":{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":\"s"..., 276) = 276 <0.000015>
+1733213 1793630752.435128 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":13,\"value\":{\"fields\":{\"at\":{\"ns\":56268295,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":\"s"..., 276) = 276 <0.000010>
+1733213 1793630752.435185 write(2<pipe:[627441490]>, "13 56268295 ns event Terminal.promptProbe.scheduler: Started(1733573, 1)", 72 <unfinished ...>
+1733207 1793630752.435200 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.435215 <... write resumed>) = 72 <0.000016>
+1733213 1793630752.435236 write(2<pipe:[627441490]>, "\n", 1 <unfinished ...>
+1733207 1793630752.435268 <... futex resumed>) = 1 <0.000054>
+1733200 1793630752.435278 <... futex resumed>) = 0 <0.005545>
+1733213 1793630752.435295 <... write resumed>) = 1 <0.000035>
+1733200 1793630752.435361 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=516750272}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.435473 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733613]}, 88) = 1733613 <0.000070>
+1733213 1793630752.435592 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733613 1793630752.440061 +++ exited with 0 +++
+1733213 1793630752.440087 <... futex resumed>) = 0 <0.004476>
+1733213 1793630752.440347 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":14,\"value\":{\"fields\":{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std.contr"..., 268) = 268 <0.000016>
+1733213 1793630752.440407 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":14,\"value\":{\"fields\":{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std.contr"..., 268) = 268 <0.000013>
+1733213 1793630752.440467 write(2<pipe:[627441490]>, "14 81688253 ns event Terminal.server.supervisor: Ready(1733573)", 63 <unfinished ...>
+1733207 1793630752.440483 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.440493 <... write resumed>) = 63 <0.000011>
+1733213 1793630752.440512 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000014>
+1733207 1793630752.440563 <... futex resumed>) = 1 <0.000073>
+1733213 1793630752.440572 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":15,\"value\":{\"fields\":[2],\"type\":\"std.control.Effect\",\"variant\":\"CancelTimer\"}}\n", 180 <unfinished ...>
+1733200 1793630752.440586 <... futex resumed>) = 0 <0.005205>
+1733213 1793630752.440596 <... write resumed>) = 180 <0.000012>
+1733213 1793630752.440618 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>
+1733200 1793630752.440885 clone3({flags=CLONE_VM|CLONE_VFORK|CLONE_CLEAR_SIGHAND, exit_signal=SIGCHLD, stack=0x7febc19c5000, stack_size=0x9000}, 88 <unfinished ...>
+1733625 1793630752.441025 execve("/home/timo/.codex/packages/standalone/releases/0.166.0-x86_64-unknown-linux-musl/codex-path/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000020>
+1733625 1793630752.441115 execve("/home/timo/.local/bin/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000015>
+1733625 1793630752.441156 execve("/home/timo/.deno/bin/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000013>
+1733625 1793630752.441192 execve("/home/timo/.codex/tmp/arg0-linux/codex-arg0gzPZyd/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000014>
+1733625 1793630752.441229 execve("/home/timo/.codex/packages/standalone/releases/0.166.0-x86_64-unknown-linux-musl/codex-path/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000010>
+1733625 1793630752.441261 execve("/home/timo/.codex/tmp/arg0/codex-arg0aHmGwy/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000009>
+1733625 1793630752.441292 execve("/home/linuxbrew/.linuxbrew/Caskroom/codex/0.160.0/codex-path/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000015>
+1733625 1793630752.441329 execve("/home/timo/.bun/bin/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000013>
+1733625 1793630752.441364 execve("/home/linuxbrew/.linuxbrew/bin/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000012>
+1733625 1793630752.441399 execve("/home/linuxbrew/.linuxbrew/sbin/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000012>
+1733625 1793630752.441433 execve("/home/timo/.opencode/bin/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000013>
+1733625 1793630752.441468 execve("/home/timo/.fly/bin/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000013>
+1733625 1793630752.441503 execve("/home/timo/.cargo/bin/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000013>
+1733625 1793630752.441538 execve("/home/timo/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000014>
+1733625 1793630752.441576 execve("/home/timo/anaconda/bin/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */) = -1 ENOENT (No such file or directory) <0.000008>
+1733625 1793630752.441618 execve("/usr/bin/kill", ["kill", "-9", "1733573"], 0x7fff3bdfefb0 /* 144 vars */ <unfinished ...>
+1733200 1793630752.443869 <... clone3 resumed>) = 1733625 <0.002969>
+1733625 1793630752.445622 <... execve resumed>) = 0 <0.003988>
+1733200 1793630752.445973 wait4(1733625 <unfinished ...>
+1733575 1793630752.446448 +++ killed by SIGKILL +++
+1733573 1793630752.446569 +++ killed by SIGKILL +++
+1733580 1793630752.446590 <... wait4 resumed>, [{WIFSIGNALED(s) && WTERMSIG(s) == SIGKILL}], 0, NULL) = 1733573 <0.035475>
+1733499 1793630752.446615 <... futex resumed>) = ? ERESTARTSYS (To be restarted if SA_RESTART is set) <0.037179>
+1733580 1793630752.446633 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_KILLED, si_pid=1733573, si_uid=1000, si_status=SIGKILL, si_utime=0, si_stime=0} ---
+1733499 1793630752.446649 futex(0x7f7fec925ba8, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733579 1793630752.446818 +++ exited with 0 +++
+1733580 1793630752.446830 +++ exited with 0 +++
+1733625 1793630752.446841 +++ exited with 0 +++
+1733578 1793630752.446873 +++ exited with 0 +++
+1733200 1793630752.447857 <... wait4 resumed>, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 1733625 <0.001868>
+1733200 1793630752.447886 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=1733625, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+1733200 1793630752.447925 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=529314183}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.448417 <... fdatasync resumed>) = 0 <0.007787>
+1733213 1793630752.448894 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":15,\"value\":{\"fields\":[2],\"type\":\"std.control.Effect\",\"variant\":\"CancelTimer\"}}\n", 180) = 180 <0.000014>
+1733207 1793630752.448965 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.448976 write(2<pipe:[627441490]>, "15 81688253 ns effect Terminal.server.supervisor: CancelTimer(2)", 64 <unfinished ...>
+1733207 1793630752.448996 <... futex resumed>) = 1 <0.000022>
+1733213 1793630752.449006 <... write resumed>) = 64 <0.000013>
+1733213 1793630752.449017 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000005>
+1733213 1793630752.449181 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733635]}, 88) = 1733635 <0.000049>
+1733213 1793630752.449278 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733635 1793630752.450034 +++ exited with 0 +++
+1733213 1793630752.450048 <... futex resumed>) = 0 <0.000762>
+1733200 1793630752.450088 <... futex resumed>) = 0 <0.002150>
+1733200 1793630752.450158 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=531551110}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.450236 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":16,\"value\":{\"fields\":{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std.control."..., 265) = 265 <0.000023>
+1733213 1793630752.450298 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":16,\"value\":{\"fields\":{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std.control."..., 265) = 265 <0.000012>
+1733213 1793630752.450354 write(2<pipe:[627441490]>, "16 81688253 ns event Terminal.server.rollout: Ready(1733573)", 60) = 60 <0.000010>
+1733213 1793630752.450390 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000008>
+1733213 1793630752.450516 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733637]}, 88) = 1733637 <0.000040>
+1733213 1793630752.450612 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.451082 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000010>
+1733200 1793630752.451109 <... futex resumed>) = 0 <0.000940>
+1733200 1793630752.451176 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=532568633}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733637 1793630752.452184 +++ exited with 0 +++
+1733213 1793630752.452196 <... futex resumed>) = 0 <0.001573>
+1733213 1793630752.452334 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":17,\"value\":{\"fields\":{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std.c"..., 272) = 272 <0.000013>
+1733213 1793630752.452387 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":17,\"value\":{\"fields\":{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std.c"..., 272) = 272 <0.000012>
+1733213 1793630752.452442 write(2<pipe:[627441490]>, "17 81688253 ns event Terminal.promptProbe.scheduler: Ready(1733573)", 67) = 67 <0.000010>
+1733213 1793630752.452472 write(2<pipe:[627441490]>, "\n", 1 <unfinished ...>
+1733207 1793630752.452491 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.452501 <... write resumed>) = 1 <0.000015>
+1733213 1793630752.452536 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":18,\"value\":{\"fields\":[\"Terminal.promptProbe\",1],\"type\":\"std.control.Effect\",\"variant\":\"Attempt\"}}\n", 203) = 203 <0.000010>
+1733213 1793630752.452575 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>
+1733207 1793630752.455640 <... futex resumed>) = 1 <0.003139>
+1733200 1793630752.455667 <... futex resumed>) = 0 <0.004480>
+1733200 1793630752.455740 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=537132933}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.461632 <... fdatasync resumed>) = 0 <0.009038>
+1733213 1793630752.461680 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":18,\"value\":{\"fields\":[\"Terminal.promptProbe\",1],\"type\":\"std.control.Effect\",\"variant\":\"Attempt\"}}\n", 203) = 203 <0.000013>
+1733207 1793630752.461748 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000009>
+1733213 1793630752.461770 write(2<pipe:[627441490]>, "18 81688253 ns effect Terminal.promptProbe.scheduler: Attempt(\"Terminal.promptProbe\", 1)", 88 <unfinished ...>
+1733200 1793630752.461787 <... futex resumed>) = 0 <0.006031>
+1733213 1793630752.461800 <... write resumed>) = 88 <0.000015>
+1733213 1793630752.461815 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000007>
+1733200 1793630752.461856 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=543246492}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.461907 futex(0x7f7fec925ba8, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733499 1793630752.461925 <... futex resumed>) = 0 <0.015266>
+1733213 1793630752.461932 <... futex resumed>) = 1 <0.000020>
+1733213 1793630752.461961 futex(0x5621073d2d98, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733499 1793630752.462047 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f7ff19fe990) = 1733654 <0.000536>
+1733654 1793630752.462916 execve("/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/bin/1/promptProbe", ["/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/bin/1/promptProbe", "--ref", "Terminal.server=127.0.0.1:36851"], 0x7ffdddb4ef00 /* 144 vars */) = 0 <0.000686>
+1733499 1793630752.464129 futex(0x5621073d2d98, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000012>
+1733213 1793630752.464165 <... futex resumed>) = 0 <0.002198>
+1733499 1793630752.464206 futex(0x7f7fec925ba8, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.464311 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7ff13f8ce8, parent_tid=0x7f7ff13f8990, exit_signal=0, stack=0x7f7ff11f8000, stack_size=0x1fff00, tls=0x7f7ff13f86c0} => {parent_tid=[1733664]}, 88) = 1733664 <0.000034>
+1733213 1793630752.464459 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":19,\"value\":{\"fields\":[1,{\"ns\":2081688253,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 217) = 217 <0.000016>
+1733213 1793630752.464516 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>
+1733654 1793630752.465696 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f4c65dffce8, parent_tid=0x7f4c65dff990, exit_signal=0, stack=0x7f4c65bff000, stack_size=0x1ffec0, tls=0x7f4c65dff6c0} => {parent_tid=[1733665]}, 88) = 1733665 <0.000034>
+1733654 1793630752.465943 write(1<pipe:[627456250]>, "{\"fields\":{\"latency\":{\"ns\":137446,\"type\":\"Duration\"},\"received\":false},\"type\":\"std.sli.ProbeAttempt\"}\n", 102) = 102 <0.000021>
+1733665 1793630752.466150 +++ exited with 0 +++
+1733654 1793630752.466164 +++ exited with 0 +++
+1733499 1793630752.466171 <... futex resumed>) = ? ERESTARTSYS (To be restarted if SA_RESTART is set) <0.001956>
+1733499 1793630752.466191 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=1733654, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+1733499 1793630752.466218 futex(0x7f7fec925ba8, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733664 1793630752.466291 wait4(1733654, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 1733654 <0.000016>
+1733664 1793630752.466349 futex(0x7f7fec99f660, FUTEX_WAKE_PRIVATE, 2147483647) = 0 <0.000007>
+1733664 1793630752.466483 +++ exited with 0 +++
+1733213 1793630752.471051 <... fdatasync resumed>) = 0 <0.006516>
+1733213 1793630752.471640 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":19,\"value\":{\"fields\":[1,{\"ns\":2081688253,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 217) = 217 <0.000017>
+1733207 1793630752.471726 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000010>
+1733213 1793630752.471763 write(2<pipe:[627441490]>, "19 81688253 ns effect Terminal.promptProbe.scheduler: SetTimer(1, 2081688253 ns)", 80 <unfinished ...>
+1733200 1793630752.471791 <... futex resumed>) = 0 <0.009924>
+1733213 1793630752.471803 <... write resumed>) = 80 <0.000021>
+1733213 1793630752.471827 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000011>
+1733200 1793630752.471876 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=553267842}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.471920 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":20,\"value\":{\"fields\":[0,{\"ns\":10081688253,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 218) = 218 <0.000076>
+1733213 1793630752.472037 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006709>
+1733213 1793630752.478815 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":81688253,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":20,\"value\":{\"fields\":[0,{\"ns\":10081688253,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 218) = 218 <0.000116>
+1733207 1793630752.479011 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000013>
+1733200 1793630752.479052 <... futex resumed>) = 0 <0.007162>
+1733213 1793630752.479064 write(2<pipe:[627441490]>, "20 81688253 ns effect Terminal.promptProbe.scheduler: SetTimer(0, 10081688253 ns)", 81) = 81 <0.000018>
+1733213 1793630752.479118 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000010>
+1733200 1793630752.479161 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=560554934}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.479353 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733684]}, 88) = 1733684 <0.000034>
+1733213 1793630752.479437 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733684 1793630752.480020 +++ exited with 0 +++
+1733213 1793630752.480038 <... futex resumed>) = 0 <0.000591>
+1733213 1793630752.480200 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":21,\"value\":{\"fields\":{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,9],\"type\":\"std.control.EventKind\",\"variant\":\"Signalled\"}},\"type\":\"s"..., 276) = 276 <0.000017>
+1733213 1793630752.480263 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":21,\"value\":{\"fields\":{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,9],\"type\":\"std.control.EventKind\",\"variant\":\"Signalled\"}},\"type\":\"s"..., 276) = 276 <0.000012>
+1733207 1793630752.480321 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.480336 write(2<pipe:[627441490]>, "21 125537430 ns event Terminal.server.supervisor: Signalled(1733573, 9)", 71) = 71 <0.000016>
+1733207 1793630752.480377 <... futex resumed>) = 1 <0.000044>
+1733200 1793630752.480387 <... futex resumed>) = 0 <0.001213>
+1733213 1793630752.480396 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000013>
+1733200 1793630752.480453 futex(0x7febbc009980, FUTEX_WAIT_BITSET_PRIVATE, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.480468 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":22,\"value\":{\"fields\":[\"restart attempt 1 delay 100 ms\"],\"type\":\"std.control.Effect\",\"variant\":\"Note\"}}\n", 205 <unfinished ...>
+1733207 1793630752.480490 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.480507 <... write resumed>) = 205 <0.000019>
+1733207 1793630752.480515 <... futex resumed>) = 0 <0.000011>
+1733213 1793630752.480522 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>
+1733200 1793630752.480542 <... futex resumed>) = -1 EAGAIN (Resource temporarily unavailable) <0.000076>
+1733200 1793630752.480557 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000005>
+1733200 1793630752.480574 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=561836661}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.487400 <... fdatasync resumed>) = 0 <0.006863>
+1733213 1793630752.487489 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":22,\"value\":{\"fields\":[\"restart attempt 1 delay 100 ms\"],\"type\":\"std.control.Effect\",\"variant\":\"Note\"}}\n", 205) = 205 <0.000016>
+1733207 1793630752.487568 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.487593 write(2<pipe:[627441490]>, "22 125537430 ns effect Terminal.server.supervisor: Note(\"restart attempt 1 delay 100 ms\")", 89 <unfinished ...>
+1733207 1793630752.487630 <... futex resumed>) = 1 <0.000052>
+1733200 1793630752.487641 <... futex resumed>) = 0 <0.007058>
+1733213 1793630752.487651 <... write resumed>) = 89 <0.000025>
+1733213 1793630752.487677 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000020>
+1733200 1793630752.487722 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=569107373}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.487777 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":23,\"value\":{\"fields\":[1,{\"ns\":225537430,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 213) = 213 <0.000016>
+1733213 1793630752.487826 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006244>
+1733213 1793630752.494135 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":23,\"value\":{\"fields\":[1,{\"ns\":225537430,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 213) = 213 <0.000017>
+1733213 1793630752.494257 write(2<pipe:[627441490]>, "23 125537430 ns effect Terminal.server.supervisor: SetTimer(1, 225537430 ns)", 76 <unfinished ...>
+1733207 1793630752.494286 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.494307 <... write resumed>) = 76 <0.000023>
+1733207 1793630752.494316 <... futex resumed>) = 1 <0.000021>
+1733200 1793630752.494327 <... futex resumed>) = 0 <0.006592>
+1733213 1793630752.494343 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000015>
+1733200 1793630752.494469 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=575793742}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.494541 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733705]}, 88) = 1733705 <0.000031>
+1733213 1793630752.494618 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733705 1793630752.495128 +++ exited with 0 +++
+1733213 1793630752.495138 <... futex resumed>) = 0 <0.000507>
+1733213 1793630752.495223 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":24,\"value\":{\"fields\":{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,9],\"type\":\"std.control.EventKind\",\"variant\":\"Signalled\"}},\"type\":\"std."..., 273) = 273 <0.000013>
+1733213 1793630752.495282 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":24,\"value\":{\"fields\":{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,9],\"type\":\"std.control.EventKind\",\"variant\":\"Signalled\"}},\"type\":\"std."..., 273) = 273 <0.000010>
+1733207 1793630752.495330 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.495345 write(2<pipe:[627441490]>, "24 125537430 ns event Terminal.server.rollout: Signalled(1733573, 9)", 68) = 68 <0.000013>
+1733200 1793630752.495381 <... futex resumed>) = 0 <0.000897>
+1733213 1793630752.495390 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000012>
+1733200 1793630752.495431 futex(0x7febbc009980, FUTEX_WAIT_BITSET_PRIVATE, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.495457 <... futex resumed>) = 1 <0.000115>
+1733207 1793630752.495479 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000016>
+1733200 1793630752.495505 <... futex resumed>) = 0 <0.000066>
+1733200 1793630752.495518 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000005>
+1733213 1793630752.495535 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} <unfinished ...>
+1733200 1793630752.495550 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=576826229}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.495583 <... clone3 resumed> => {parent_tid=[1733710]}, 88) = 1733710 <0.000034>
+1733213 1793630752.495623 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733710 1793630752.496005 +++ exited with 0 +++
+1733213 1793630752.496017 <... futex resumed>) = 0 <0.000383>
+1733213 1793630752.496100 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":25,\"value\":{\"fields\":{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,9],\"type\":\"std.control.EventKind\",\"variant\":\"Signalled\"}},\"type"..., 280) = 280 <0.000012>
+1733213 1793630752.496147 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":25,\"value\":{\"fields\":{\"at\":{\"ns\":125537430,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733573,9],\"type\":\"std.control.EventKind\",\"variant\":\"Signalled\"}},\"type"..., 280) = 280 <0.000010>
+1733213 1793630752.496204 write(2<pipe:[627441490]>, "25 125537430 ns event Terminal.promptProbe.scheduler: Signalled(1733573, 9)", 75 <unfinished ...>
+1733207 1793630752.496228 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.496245 <... write resumed>) = 75 <0.000026>
+1733207 1793630752.496263 <... futex resumed>) = 1 <0.000027>
+1733200 1793630752.496276 <... futex resumed>) = 0 <0.000715>
+1733213 1793630752.496286 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000016>
+1733200 1793630752.496434 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=577724735}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.496491 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733711]}, 88) = 1733711 <0.000031>
+1733213 1793630752.496574 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733711 1793630752.499117 +++ exited with 0 +++
+1733213 1793630752.499320 <... futex resumed>) = 0 <0.002736>
+1733213 1793630752.499580 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733714]}, 88) = 1733714 <0.000032>
+1733213 1793630752.499674 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733714 1793630752.501652 +++ exited with 0 +++
+1733213 1793630752.501808 <... futex resumed>) = 0 <0.002123>
+1733213 1793630752.502030 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733719]}, 88) = 1733719 <0.000036>
+1733213 1793630752.502114 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733719 1793630752.502949 +++ exited with 0 +++
+1733213 1793630752.503367 <... futex resumed>) = 0 <0.001244>
+1733213 1793630752.503554 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733721]}, 88) = 1733721 <0.000035>
+1733213 1793630752.503635 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733721 1793630752.504660 +++ exited with 0 +++
+1733213 1793630752.504674 <... futex resumed>) = 0 <0.001029>
+1733213 1793630752.504855 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":26,\"value\":{\"fields\":{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":{\"fields\":[1,{\"fields\":{\"latency\":{\"ns\":137446,\"type\":\"Duration\"},\"received\":false"..., 376) = 376 <0.000016>
+1733213 1793630752.504917 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":26,\"value\":{\"fields\":{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":{\"fields\":[1,{\"fields\":{\"latency\":{\"ns\":137446,\"type\":\"Duration\"},\"received\":false"..., 376) = 376 <0.000016>
+1733207 1793630752.504980 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.505015 write(2<pipe:[627441490]>, "26 142717287 ns event Terminal.promptProbe.scheduler: AttemptDone(1, { latency: 137446 ns, received: false })", 109 <unfinished ...>
+1733207 1793630752.505033 <... futex resumed>) = 1 <0.000044>
+1733200 1793630752.505043 <... futex resumed>) = 0 <0.008594>
+1733200 1793630752.505144 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=586537706}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.505159 <... write resumed>) = 109 <0.000130>
+1733213 1793630752.505173 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000015>
+1733213 1793630752.505250 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":27,\"value\":{\"fields\":[1],\"type\":\"std.control.Effect\",\"variant\":\"CancelTimer\"}}\n", 185) = 185 <0.000012>
+1733213 1793630752.505304 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006531>
+1733213 1793630752.511890 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":27,\"value\":{\"fields\":[1],\"type\":\"std.control.Effect\",\"variant\":\"CancelTimer\"}}\n", 185 <unfinished ...>
+1733207 1793630752.511967 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000012>
+1733200 1793630752.511994 <... futex resumed>) = 0 <0.006838>
+1733200 1793630752.512061 futex(0x7febbc009980, FUTEX_WAIT_BITSET_PRIVATE, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.512083 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733200 1793630752.512097 <... futex resumed>) = 0 <0.000027>
+1733200 1793630752.512110 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000006>
+1733200 1793630752.512132 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=593452908}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.512154 <... futex resumed>) = 1 <0.000065>
+1733213 1793630752.512178 <... write resumed>) = 185 <0.000252>
+1733213 1793630752.512224 write(2<pipe:[627441490]>, "27 142717287 ns effect Terminal.promptProbe.scheduler: CancelTimer(1)", 69) = 69 <0.000011>
+1733213 1793630752.512265 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000010>
+1733213 1793630752.512353 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":28,\"value\":{\"fields\":[\"Terminal.promptProbe.attempts\",{\"fields\":{\"latency\":{\"ns\":137446,\"type\":\"Duration\"},\"received\":false},\"type\":\"std.sli.ProbeAtte"..., 310) = 310 <0.000013>
+1733213 1793630752.512397 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.005360>
+1733213 1793630752.517808 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":28,\"value\":{\"fields\":[\"Terminal.promptProbe.attempts\",{\"fields\":{\"latency\":{\"ns\":137446,\"type\":\"Duration\"},\"received\":false},\"type\":\"std.sli.ProbeAtte"..., 310 <unfinished ...>
+1733207 1793630752.517879 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733200 1793630752.517896 <... futex resumed>) = 0 <0.005753>
+1733200 1793630752.517983 futex(0x7febbc009980, FUTEX_WAIT_BITSET_PRIVATE, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.517998 <... futex resumed>) = 1 <0.000111>
+1733207 1793630752.518012 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733200 1793630752.518026 <... futex resumed>) = 0 <0.000035>
+1733200 1793630752.518039 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000006>
+1733200 1793630752.518060 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=599377113}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.518080 <... futex resumed>) = 1 <0.000062>
+1733213 1793630752.518103 <... write resumed>) = 310 <0.000262>
+1733213 1793630752.518170 write(2<pipe:[627441490]>, "28 142717287 ns effect Terminal.promptProbe.scheduler: Emit(\"Terminal.promptProbe.attempts\", { latency: 137446 ns, received: false })", 133) = 133 <0.000012>
+1733213 1793630752.518211 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000014>
+1733213 1793630752.518295 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"signal\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":29,\"value\":{\"ref\":\"Terminal.promptProbe.attempts\",\"value\":{\"fields\":{\"latency\":{\"ns\":137446,\"type\":\"Duration\"},\"received\":false},\"type\":\"std.sli.Probe"..., 268) = 268 <0.000013>
+1733213 1793630752.518349 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"signal\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":29,\"value\":{\"ref\":\"Terminal.promptProbe.attempts\",\"value\":{\"fields\":{\"latency\":{\"ns\":137446,\"type\":\"Duration\"},\"received\":false},\"type\":\"std.sli.Probe"..., 268 <unfinished ...>
+1733207 1793630752.518384 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733200 1793630752.518400 <... futex resumed>) = 0 <0.000328>
+1733200 1793630752.518468 futex(0x7febbc009980, FUTEX_WAIT_BITSET_PRIVATE, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.518484 <... futex resumed>) = 1 <0.000093>
+1733207 1793630752.518499 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733200 1793630752.518513 <... futex resumed>) = 0 <0.000036>
+1733200 1793630752.518526 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000006>
+1733200 1793630752.518546 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=599861976}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.518565 <... futex resumed>) = 1 <0.000060>
+1733213 1793630752.518591 <... write resumed>) = 268 <0.000227>
+1733213 1793630752.518630 write(2<pipe:[627441490]>, "29 142717287 ns signal Terminal.promptProbe.scheduler: { ref: \"Terminal.promptProbe.attempts\", value: { latency: 137446 ns, received: false } }", 143) = 143 <0.000010>
+1733213 1793630752.518669 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000012>
+1733213 1793630752.518752 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":30,\"value\":{\"fields\":{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":{\"fields\":[\"Terminal.promptProbe.attempts\",{\"fields\":{\"latency\":{\"ns\":137446,\"t"..., 405) = 405 <0.000010>
+1733213 1793630752.518793 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":30,\"value\":{\"fields\":{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":{\"fields\":[\"Terminal.promptProbe.attempts\",{\"fields\":{\"latency\":{\"ns\":137446,\"t"..., 405 <unfinished ...>
+1733207 1793630752.518828 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733200 1793630752.518844 <... futex resumed>) = 0 <0.000288>
+1733200 1793630752.518935 futex(0x7febbc009980, FUTEX_WAIT_BITSET_PRIVATE, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.518952 <... futex resumed>) = 1 <0.000116>
+1733207 1793630752.518966 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733200 1793630752.518980 <... futex resumed>) = 0 <0.000036>
+1733200 1793630752.518993 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000006>
+1733200 1793630752.519013 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=600328956}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.519032 <... futex resumed>) = 1 <0.000059>
+1733213 1793630752.519054 <... write resumed>) = 405 <0.000247>
+1733213 1793630752.519086 write(2<pipe:[627441490]>, "30 142717287 ns event Terminal.customerAccess.evaluator: Emitted(\"Terminal.promptProbe.attempts\", { latency: 137446 ns, received: false })", 138) = 138 <0.000009>
+1733213 1793630752.519122 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000009>
+1733213 1793630752.519198 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":31,\"value\":{\"fields\":[{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.customerAccess\","..., 565) = 565 <0.000013>
+1733213 1793630752.519244 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006659>
+1733213 1793630752.525950 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":31,\"value\":{\"fields\":[{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.customerAccess\","..., 565 <unfinished ...>
+1733207 1793630752.526023 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733200 1793630752.526043 <... futex resumed>) = 0 <0.007020>
+1733200 1793630752.526170 futex(0x7febbc009980, FUTEX_WAIT_BITSET_PRIVATE, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.526184 <... futex resumed>) = 1 <0.000150>
+1733207 1793630752.526198 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733200 1793630752.526209 <... futex resumed>) = 0 <0.000031>
+1733200 1793630752.526219 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000004>
+1733200 1793630752.526236 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=607564400}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.526252 <... futex resumed>) = 1 <0.000049>
+1733213 1793630752.526271 <... write resumed>) = 565 <0.000288>
+1733213 1793630752.526343 write(2<pipe:[627441490]>, "31 142717287 ns effect Terminal.customerAccess.evaluator: Publish({ calculation: \"ignite-sli/0.1\", completeness: 100%, contract: \"Terminal.customerAccess\", coverage: 0%, executed: 1, expected: 1, from: 142579841 ns, good: 0, status: Violated, to: 142717287"..., 275) = 275 <0.000009>
+1733213 1793630752.526377 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000008>
+1733213 1793630752.526464 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"standing\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":32,\"value\":{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.customerAccess\",\"coverage"..., 506) = 506 <0.000276>
+1733213 1793630752.526794 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"standing\",\"machine\":\"Terminal.customerAccess.evaluator\",\"seq\":32,\"value\":{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.customerAccess\",\"coverage"..., 506) = 506 <0.000010>
+1733207 1793630752.526843 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000008>
+1733200 1793630752.527181 <... futex resumed>) = 0 <0.000934>
+1733213 1793630752.527238 write(2<pipe:[627441490]>, "32 142717287 ns standing Terminal.customerAccess.evaluator: { calculation: \"ignite-sli/0.1\", completeness: 100%, contract: \"Terminal.customerAccess\", coverage: 0%, executed: 1, expected: 1, from: 142579841 ns, good: 0, status: Violated, to: 142717287 ns, v"..., 268 <unfinished ...>
+1733200 1793630752.527703 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=609094231}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.528145 <... write resumed>) = 268 <0.000888>
+1733213 1793630752.528162 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000008>
+1733213 1793630752.528236 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptFast.evaluator\",\"seq\":33,\"value\":{\"fields\":{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":{\"fields\":[\"Terminal.promptProbe.attempts\",{\"fields\":{\"latency\":{\"ns\":137446,\"type\""..., 401) = 401 <0.000009>
+1733213 1793630752.528277 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptFast.evaluator\",\"seq\":33,\"value\":{\"fields\":{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":{\"fields\":[\"Terminal.promptProbe.attempts\",{\"fields\":{\"latency\":{\"ns\":137446,\"type\""..., 401) = 401 <0.000007>
+1733207 1793630752.528313 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000012>
+1733200 1793630752.528339 <... futex resumed>) = 0 <0.000619>
+1733213 1793630752.528352 write(2<pipe:[627441490]>, "33 142717287 ns event Terminal.promptFast.evaluator: Emitted(\"Terminal.promptProbe.attempts\", { latency: 137446 ns, received: false })", 134) = 134 <0.000019>
+1733213 1793630752.528835 write(2<pipe:[627441490]>, "\n", 1 <unfinished ...>
+1733200 1793630752.529300 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=610693035}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.529760 <... write resumed>) = 1 <0.000905>
+1733213 1793630752.529843 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptFast.evaluator\",\"seq\":34,\"value\":{\"fields\":[{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.promptFast\",\"coverag"..., 557) = 557 <0.000013>
+1733213 1793630752.529890 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006410>
+1733213 1793630752.536362 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.promptFast.evaluator\",\"seq\":34,\"value\":{\"fields\":[{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.promptFast\",\"coverag"..., 557) = 557 <0.000019>
+1733207 1793630752.536453 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000013>
+1733200 1793630752.536483 <... futex resumed>) = 0 <0.007170>
+1733213 1793630752.536506 write(2<pipe:[627441490]>, "34 142717287 ns effect Terminal.promptFast.evaluator: Publish({ calculation: \"ignite-sli/0.1\", completeness: 100%, contract: \"Terminal.promptFast\", coverage: 0%, executed: 1, expected: 1, from: 142579841 ns, good: 0, status: Violated, to: 142717287 ns, ver"..., 267) = 267 <0.000037>
+1733213 1793630752.536581 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000017>
+1733200 1793630752.536686 futex(0x7febbc009980, FUTEX_WAIT_BITSET_PRIVATE, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.536709 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"standing\",\"machine\":\"Terminal.promptFast.evaluator\",\"seq\":35,\"value\":{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.promptFast\",\"coverage\":{\"ppm\""..., 498 <unfinished ...>
+1733207 1793630752.536734 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.536751 <... write resumed>) = 498 <0.000019>
+1733200 1793630752.536759 <... futex resumed>) = 0 <0.000064>
+1733213 1793630752.536767 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"standing\",\"machine\":\"Terminal.promptFast.evaluator\",\"seq\":35,\"value\":{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.promptFast\",\"coverage\":{\"ppm\""..., 498) = 498 <0.000010>
+1733207 1793630752.536796 <... futex resumed>) = 1 <0.000055>
+1733200 1793630752.536807 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000007>
+1733200 1793630752.536830 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=618079041}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.536851 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733200 1793630752.536861 <... futex resumed>) = -1 EAGAIN (Resource temporarily unavailable) <0.000013>
+1733207 1793630752.536873 <... futex resumed>) = 0 <0.000016>
+1733213 1793630752.536927 write(2<pipe:[627441490]>, "35 142717287 ns standing Terminal.promptFast.evaluator: { calculation: \"ignite-sli/0.1\", completeness: 100%, contract: \"Terminal.promptFast\", coverage: 0%, executed: 1, expected: 1, from: 142579841 ns, good: 0, status: Violated, to: 142717287 ns, version: "..., 260) = 260 <0.000012>
+1733213 1793630752.536975 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000017>
+1733200 1793630752.537044 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=618440993}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.537058 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.reachable.evaluator\",\"seq\":36,\"value\":{\"fields\":{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":{\"fields\":[\"Terminal.promptProbe.attempts\",{\"fields\":{\"latency\":{\"ns\":137446,\"type\":"..., 400) = 400 <0.000554>
+1733213 1793630752.537647 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.reachable.evaluator\",\"seq\":36,\"value\":{\"fields\":{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":{\"fields\":[\"Terminal.promptProbe.attempts\",{\"fields\":{\"latency\":{\"ns\":137446,\"type\":"..., 400) = 400 <0.000012>
+1733207 1793630752.537696 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.537707 write(2<pipe:[627441490]>, "36 142717287 ns event Terminal.reachable.evaluator: Emitted(\"Terminal.promptProbe.attempts\", { latency: 137446 ns, received: false })", 133) = 133 <0.000010>
+1733207 1793630752.537735 <... futex resumed>) = 1 <0.000030>
+1733200 1793630752.537748 <... futex resumed>) = 0 <0.000691>
+1733213 1793630752.537762 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000005>
+1733213 1793630752.537826 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.reachable.evaluator\",\"seq\":37,\"value\":{\"fields\":[{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.reachable\",\"coverage\""..., 555) = 555 <0.000019>
+1733213 1793630752.537870 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>
+1733200 1793630752.537891 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=619284506}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.544132 <... fdatasync resumed>) = 0 <0.006245>
+1733213 1793630752.544183 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.reachable.evaluator\",\"seq\":37,\"value\":{\"fields\":[{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.reachable\",\"coverage\""..., 555) = 555 <0.000014>
+1733207 1793630752.544257 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000012>
+1733200 1793630752.544281 <... futex resumed>) = 0 <0.006378>
+1733213 1793630752.544290 write(2<pipe:[627441490]>, "37 142717287 ns effect Terminal.reachable.evaluator: Publish({ calculation: \"ignite-sli/0.1\", completeness: 100%, contract: \"Terminal.reachable\", coverage: 0%, executed: 1, expected: 1, from: 142579841 ns, good: 0, status: Violated, to: 142717287 ns, versi"..., 265) = 265 <0.000060>
+1733213 1793630752.544375 write(2<pipe:[627441490]>, "\n", 1 <unfinished ...>
+1733200 1793630752.544489 futex(0x7febbc009980, FUTEX_WAIT_BITSET_PRIVATE, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.544511 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000009>
+1733200 1793630752.544531 <... futex resumed>) = 0 <0.000032>
+1733200 1793630752.544546 futex(0x7febbc009980, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000006>
+1733200 1793630752.544567 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=625882005}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.544796 <... write resumed>) = 1 <0.000398>
+1733213 1793630752.544878 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"standing\",\"machine\":\"Terminal.reachable.evaluator\",\"seq\":38,\"value\":{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.reachable\",\"coverage\":{\"ppm\":0"..., 496) = 496 <0.000015>
+1733213 1793630752.544929 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":142717287,\"type\":\"Duration\"},\"kind\":\"standing\",\"machine\":\"Terminal.reachable.evaluator\",\"seq\":38,\"value\":{\"fields\":{\"calculation\":\"ignite-sli/0.1\",\"completeness\":{\"ppm\":1000000,\"type\":\"Ratio\"},\"contract\":\"Terminal.reachable\",\"coverage\":{\"ppm\":0"..., 496) = 496 <0.000012>
+1733213 1793630752.544997 write(2<pipe:[627441490]>, "38 142717287 ns standing Terminal.reachable.evaluator: { calculation: \"ignite-sli/0.1\", completeness: 100%, contract: \"Terminal.reachable\", coverage: 0%, executed: 1, expected: 1, from: 142579841 ns, good: 0, status: Violated, to: 142717287 ns, version: 38"..., 258 <unfinished ...>
+1733207 1793630752.545020 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.545044 <... write resumed>) = 258 <0.000024>
+1733200 1793630752.545055 <... futex resumed>) = 0 <0.000476>
+1733213 1793630752.545063 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000007>
+1733213 1793630752.545134 futex(0x5621073d2d98, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298526, tv_nsec=660612004}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733207 1793630752.545148 <... futex resumed>) = 1 <0.000120>
+1733200 1793630752.545194 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=626589349}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.579288 <... futex resumed>) = -1 ETIMEDOUT (Connection timed out) <0.034134>
+1733213 1793630752.579497 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733849]}, 88) = 1733849 <0.000031>
+1733213 1793630752.579579 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY) = 0 <0.000481>
+1733213 1793630752.580164 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":225537430,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":39,\"value\":{\"fields\":{\"at\":{\"ns\":225537430,\"type\":\"Duration\"},\"kind\":{\"fields\":[1],\"type\":\"std.control.EventKind\",\"variant\":\"Timer\"}},\"type\":\"std.control.E"..., 264) = 264 <0.000011>
+1733213 1793630752.580217 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":225537430,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":39,\"value\":{\"fields\":{\"at\":{\"ns\":225537430,\"type\":\"Duration\"},\"kind\":{\"fields\":[1],\"type\":\"std.control.EventKind\",\"variant\":\"Timer\"}},\"type\":\"std.control.E"..., 264) = 264 <0.000010>
+1733213 1793630752.580280 write(2<pipe:[627441490]>, "39 225537430 ns event Terminal.server.supervisor: Timer(1)", 58 <unfinished ...>
+1733207 1793630752.580299 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000019>
+1733200 1793630752.580338 <... futex resumed>) = 0 <0.035133>
+1733213 1793630752.580374 <... write resumed>) = 58 <0.000077>
+1733213 1793630752.580386 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000025>
+1733213 1793630752.580450 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":225537430,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":40,\"value\":{\"fields\":[\"Terminal.server\",1],\"type\":\"std.control.Effect\",\"variant\":\"Spawn\"}}\n", 193 <unfinished ...>
+1733200 1793630752.580470 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=661835308}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.580488 <... write resumed>) = 193 <0.000019>
+1733213 1793630752.580500 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>
+1733849 1793630752.580554 +++ exited with 0 +++
+1733213 1793630752.586020 <... fdatasync resumed>) = 0 <0.005501>
+1733213 1793630752.586069 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":225537430,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":40,\"value\":{\"fields\":[\"Terminal.server\",1],\"type\":\"std.control.Effect\",\"variant\":\"Spawn\"}}\n", 193 <unfinished ...>
+1733207 1793630752.586130 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000010>
+1733200 1793630752.586152 <... futex resumed>) = 0 <0.005673>
+1733213 1793630752.586177 <... write resumed>) = 193 <0.000083>
+1733213 1793630752.586231 write(2<pipe:[627441490]>, "40 225537430 ns effect Terminal.server.supervisor: Spawn(\"Terminal.server\", 1)", 78 <unfinished ...>
+1733200 1793630752.586248 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=667614428}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.586284 <... write resumed>) = 78 <0.000037>
+1733213 1793630752.586295 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000019>
+1733213 1793630752.586391 futex(0x7f7fec925ba8, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000011>
+1733213 1793630752.586428 futex(0x5621073d2d98, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733499 1793630752.586504 <... futex resumed>) = 0 <0.120276>
+1733499 1793630752.588738 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f7ff19fe990) = 1733863 <0.000612>
+1733863 1793630752.593267 execve("/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/bin/1/terminald", ["/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/bin/1/terminald", "--port", "36851"], 0x7ffdddb4ef00 /* 144 vars */) = 0 <0.000981>
+1733499 1793630752.594410 futex(0x5621073d2d98, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000012>
+1733213 1793630752.594444 <... futex resumed>) = 0 <0.008007>
+1733499 1793630752.594475 futex(0x7f7fec925ba8, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.594561 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7ff13f8ce8, parent_tid=0x7f7ff13f8990, exit_signal=0, stack=0x7f7ff11f8000, stack_size=0x1fff00, tls=0x7f7ff13f86c0} => {parent_tid=[1733874]}, 88) = 1733874 <0.000044>
+1733213 1793630752.594730 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7ff11f7ce8, parent_tid=0x7f7ff11f7990, exit_signal=0, stack=0x7f7ff0ff7000, stack_size=0x1fff00, tls=0x7f7ff11f76c0} => {parent_tid=[1733875]}, 88) = 1733875 <0.000048>
+1733213 1793630752.594913 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7ff0ff6ce8, parent_tid=0x7f7ff0ff6990, exit_signal=0, stack=0x7f7ff0df6000, stack_size=0x1fff00, tls=0x7f7ff0ff66c0} => {parent_tid=[1733877]}, 88) = 1733877 <0.000029>
+1733213 1793630752.595200 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} <unfinished ...>
+1733877 1793630752.595238 wait4(1733863 <unfinished ...>
+1733213 1793630752.595260 <... clone3 resumed> => {parent_tid=[1733878]}, 88) = 1733878 <0.000044>
+1733213 1793630752.595336 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733863 1793630752.595877 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fb9041ffce8, parent_tid=0x7fb9041ff990, exit_signal=0, stack=0x7fb903fff000, stack_size=0x1ffec0, tls=0x7fb9041ff6c0} => {parent_tid=[1733879]}, 88) = 1733879 <0.000029>
+1733863 1793630752.596033 write(2<pipe:[627456285]>, "listening on 127.0.0.1:36851\n", 29) = 29 <0.000022>
+1733875 1793630752.596113 futex(0x7f7fec99f660, FUTEX_WAKE_PRIVATE, 2147483647) = 0 <0.000005>
+1733878 1793630752.596211 +++ exited with 0 +++
+1733213 1793630752.596221 <... futex resumed>) = 0 <0.000876>
+1733213 1793630752.596335 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":41,\"value\":{\"fields\":{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":\"std"..., 274) = 274 <0.000017>
+1733213 1793630752.596389 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":41,\"value\":{\"fields\":{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":\"std"..., 274) = 274 <0.000008>
+1733207 1793630752.596443 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000009>
+1733200 1793630752.596463 <... futex resumed>) = 0 <0.010203>
+1733213 1793630752.596507 write(2<pipe:[627441490]>, "41 241386629 ns event Terminal.server.supervisor: Started(1733863, 1)", 69) = 69 <0.000032>
+1733213 1793630752.596559 write(2<pipe:[627441490]>, "\n", 1 <unfinished ...>
+1733200 1793630752.596572 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=677961140}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.596608 <... write resumed>) = 1 <0.000037>
+1733213 1793630752.596651 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":42,\"value\":{\"fields\":[2,{\"ns\":10241386629,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 215) = 215 <0.000010>
+1733213 1793630752.596691 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.008278>
+1733213 1793630752.605031 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":42,\"value\":{\"fields\":[2,{\"ns\":10241386629,\"type\":\"Duration\"}],\"type\":\"std.control.Effect\",\"variant\":\"SetTimer\"}}\n", 215 <unfinished ...>
+1733207 1793630752.605117 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000011>
+1733200 1793630752.605143 <... futex resumed>) = 0 <0.008561>
+1733213 1793630752.605171 <... write resumed>) = 215 <0.000100>
+1733213 1793630752.605254 write(2<pipe:[627441490]>, "42 241386629 ns effect Terminal.server.supervisor: SetTimer(2, 10241386629 ns)", 78 <unfinished ...>
+1733200 1793630752.605278 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=686665671}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.605327 <... write resumed>) = 78 <0.000052>
+1733213 1793630752.605345 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000028>
+1733213 1793630752.605539 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733893]}, 88) = 1733893 <0.000052>
+1733213 1793630752.605644 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733893 1793630752.606159 +++ exited with 0 +++
+1733213 1793630752.606169 <... futex resumed>) = 0 <0.000514>
+1733213 1793630752.606264 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":43,\"value\":{\"fields\":{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":\"std.co"..., 271) = 271 <0.000013>
+1733213 1793630752.606319 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":43,\"value\":{\"fields\":{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":\"std.co"..., 271 <unfinished ...>
+1733207 1793630752.606358 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000011>
+1733200 1793630752.606380 <... futex resumed>) = 0 <0.001090>
+1733213 1793630752.606407 <... write resumed>) = 271 <0.000072>
+1733213 1793630752.606459 write(2<pipe:[627441490]>, "43 241386629 ns event Terminal.server.rollout: Started(1733863, 1)", 66 <unfinished ...>
+1733200 1793630752.606478 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=687864995}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.606516 <... write resumed>) = 66 <0.000040>
+1733213 1793630752.606531 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000024>
+1733213 1793630752.606669 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733899]}, 88) = 1733899 <0.000034>
+1733213 1793630752.606748 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733899 1793630752.607453 +++ exited with 0 +++
+1733213 1793630752.607463 <... futex resumed>) = 0 <0.000707>
+1733213 1793630752.607544 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":44,\"value\":{\"fields\":{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":"..., 278) = 278 <0.000012>
+1733213 1793630752.607594 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":44,\"value\":{\"fields\":{\"at\":{\"ns\":241386629,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,1],\"type\":\"std.control.EventKind\",\"variant\":\"Started\"}},\"type\":"..., 278 <unfinished ...>
+1733207 1793630752.607641 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000010>
+1733200 1793630752.607668 <... futex resumed>) = 0 <0.001180>
+1733213 1793630752.607696 <... write resumed>) = 278 <0.000079>
+1733213 1793630752.607737 write(2<pipe:[627441490]>, "44 241386629 ns event Terminal.promptProbe.scheduler: Started(1733863, 1)", 73 <unfinished ...>
+1733200 1793630752.607755 futex(0x55bb89fb4088, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298541, tv_nsec=689134069}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733213 1793630752.607792 <... write resumed>) = 73 <0.000038>
+1733213 1793630752.607807 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000024>
+1733213 1793630752.607974 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733900]}, 88) = 1733900 <0.000037>
+1733213 1793630752.608054 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733900 1793630752.608821 +++ exited with 0 +++
+1733213 1793630752.608840 <... futex resumed>) = 0 <0.000775>
+1733213 1793630752.608939 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":45,\"value\":{\"fields\":{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std.con"..., 270) = 270 <0.000012>
+1733213 1793630752.608990 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":45,\"value\":{\"fields\":{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std.con"..., 270 <unfinished ...>
+1733207 1793630752.609030 futex(0x55bb89fb4088, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000010>
+1733200 1793630752.609052 <... futex resumed>) = 0 <0.001286>
+1733213 1793630752.609078 <... write resumed>) = 270 <0.000073>
+1733213 1793630752.609122 write(2<pipe:[627441490]>, "45 254217101 ns event Terminal.server.supervisor: Ready(1733863)", 64) = 64 <0.000025>
+1733213 1793630752.609172 write(2<pipe:[627441490]>, "\n", 1 <unfinished ...>
+1733200 1793630752.609189 write(4<pipe:[627441488]>, "stop", 4) = 4 <0.000012>
+1733200 1793630752.609232 write(4<pipe:[627441488]>, "\n", 1) = 1 <0.000005>
+1733200 1793630752.609265 wait4(1733206, 0x7febc15fe108, WNOHANG, NULL) = 0 <0.000005>
+1733213 1793630752.609290 <... write resumed>) = 1 <0.000103>
+1733200 1793630752.609298 clock_nanosleep(CLOCK_MONOTONIC, 0, {tv_sec=0, tv_nsec=10000000} <unfinished ...>
+1733213 1793630752.609341 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":46,\"value\":{\"fields\":[2],\"type\":\"std.control.Effect\",\"variant\":\"CancelTimer\"}}\n", 181) = 181 <0.000011>
+1733213 1793630752.609382 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>) = 0 <0.006053>
+1733213 1793630752.615492 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":46,\"value\":{\"fields\":[2],\"type\":\"std.control.Effect\",\"variant\":\"CancelTimer\"}}\n", 181) = 181 <0.000049>
+1733213 1793630752.615630 write(2<pipe:[627441490]>, "46 254217101 ns effect Terminal.server.supervisor: CancelTimer(2)", 65) = 65 <0.000036>
+1733213 1793630752.615701 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000027>
+1733213 1793630752.615881 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733908]}, 88) = 1733908 <0.000043>
+1733213 1793630752.615978 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733908 1793630752.616635 +++ exited with 0 +++
+1733213 1793630752.616648 <... futex resumed>) = 0 <0.000659>
+1733213 1793630752.616738 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":47,\"value\":{\"fields\":{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std.contro"..., 267) = 267 <0.000013>
+1733213 1793630752.616791 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":47,\"value\":{\"fields\":{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std.contro"..., 267) = 267 <0.000035>
+1733213 1793630752.616862 write(2<pipe:[627441490]>, "47 254217101 ns event Terminal.server.rollout: Ready(1733863)", 61) = 61 <0.000028>
+1733213 1793630752.616913 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000025>
+1733213 1793630752.617048 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733910]}, 88) = 1733910 <0.000040>
+1733213 1793630752.617130 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733200 1793630752.619383 <... clock_nanosleep resumed>, 0x7febc15fe0f8) = 0 <0.010072>
+1733200 1793630752.619434 wait4(1733206, 0x7febc15fe108, WNOHANG, NULL) = 0 <0.000014>
+1733200 1793630752.619472 clock_nanosleep(CLOCK_MONOTONIC, 0, {tv_sec=0, tv_nsec=10000000} <unfinished ...>
+1733910 1793630752.620013 +++ exited with 0 +++
+1733213 1793630752.620026 <... futex resumed>) = 0 <0.002887>
+1733213 1793630752.620129 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":48,\"value\":{\"fields\":{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std"..., 274) = 274 <0.000012>
+1733213 1793630752.620187 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":48,\"value\":{\"fields\":{\"at\":{\"ns\":254217101,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863],\"type\":\"std.control.EventKind\",\"variant\":\"Ready\"}},\"type\":\"std"..., 274) = 274 <0.000046>
+1733213 1793630752.620283 write(2<pipe:[627441490]>, "48 254217101 ns event Terminal.promptProbe.scheduler: Ready(1733863)", 68) = 68 <0.000037>
+1733213 1793630752.620344 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000024>
+1733213 1793630752.620511 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733915]}, 88) = 1733915 <0.000044>
+1733213 1793630752.620605 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733915 1793630752.621306 +++ exited with 0 +++
+1733213 1793630752.621323 <... futex resumed>) = 0 <0.000705>
+1733213 1793630752.621402 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":266747948,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":49,\"value\":{\"fields\":{\"at\":{\"ns\":266747948,\"type\":\"Duration\"},\"kind\":{\"fields\":[\"stop\"],\"type\":\"std.control.EventKind\",\"variant\":\"Control\"}},\"type\":\"std.contr"..., 268) = 268 <0.000013>
+1733213 1793630752.621452 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":266747948,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":49,\"value\":{\"fields\":{\"at\":{\"ns\":266747948,\"type\":\"Duration\"},\"kind\":{\"fields\":[\"stop\"],\"type\":\"std.control.EventKind\",\"variant\":\"Control\"}},\"type\":\"std.contr"..., 268) = 268 <0.000036>
+1733213 1793630752.621524 write(2<pipe:[627441490]>, "49 266747948 ns event Terminal.server.rollout: Control(\"stop\")", 62) = 62 <0.000027>
+1733213 1793630752.621575 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000030>
+1733213 1793630752.621714 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733917]}, 88) = 1733917 <0.000034>
+1733213 1793630752.621791 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733917 1793630752.622169 +++ exited with 0 +++
+1733213 1793630752.622178 <... futex resumed>) = 0 <0.000378>
+1733213 1793630752.622264 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":266747948,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":50,\"value\":{\"fields\":{\"at\":{\"ns\":266747948,\"type\":\"Duration\"},\"kind\":{\"fields\":[\"stop\"],\"type\":\"std.control.EventKind\",\"variant\":\"Control\"}},\"type\":\"std.co"..., 271) = 271 <0.000012>
+1733213 1793630752.622311 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":266747948,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":50,\"value\":{\"fields\":{\"at\":{\"ns\":266747948,\"type\":\"Duration\"},\"kind\":{\"fields\":[\"stop\"],\"type\":\"std.control.EventKind\",\"variant\":\"Control\"}},\"type\":\"std.co"..., 271) = 271 <0.000030>
+1733213 1793630752.622375 write(2<pipe:[627441490]>, "50 266747948 ns event Terminal.server.supervisor: Control(\"stop\")", 65) = 65 <0.000027>
+1733213 1793630752.622426 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000026>
+1733213 1793630752.622494 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":266747948,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":51,\"value\":{\"fields\":[\"Terminal.server\",1733863,15],\"type\":\"std.control.Effect\",\"variant\":\"Kill\"}}\n", 201) = 201 <0.000010>
+1733213 1793630752.622533 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>
+1733200 1793630752.629565 <... clock_nanosleep resumed>, 0x7febc15fe0f8) = 0 <0.010074>
+1733200 1793630752.629614 wait4(1733206, 0x7febc15fe108, WNOHANG, NULL) = 0 <0.000009>
+1733200 1793630752.629647 clock_nanosleep(CLOCK_MONOTONIC, 0, {tv_sec=0, tv_nsec=10000000} <unfinished ...>
+1733213 1793630752.631818 <... fdatasync resumed>) = 0 <0.009269>
+1733213 1793630752.631850 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":266747948,\"type\":\"Duration\"},\"kind\":\"effect\",\"machine\":\"Terminal.server.supervisor\",\"seq\":51,\"value\":{\"fields\":[\"Terminal.server\",1733863,15],\"type\":\"std.control.Effect\",\"variant\":\"Kill\"}}\n", 201) = 201 <0.000011>
+1733213 1793630752.631973 write(2<pipe:[627441490]>, "51 266747948 ns effect Terminal.server.supervisor: Kill(\"Terminal.server\", 1733863, 15)", 87) = 87 <0.000011>
+1733213 1793630752.632035 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000008>
+1733213 1793630752.632162 futex(0x5621073d2d98, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, {tv_sec=298646, tv_nsec=713547304}, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733879 1793630752.632247 futex(0x55788af1104c, FUTEX_WAIT_BITSET_PRIVATE, 0, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733863 1793630752.632274 futex(0x55788af1104c, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733879 1793630752.632289 <... futex resumed>) = 0 <0.000029>
+1733863 1793630752.632296 <... futex resumed>) = 1 <0.000017>
+1733879 1793630752.632307 futex(0x55788af1104c, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000005>
+1733879 1793630752.632459 +++ exited with 0 +++
+1733863 1793630752.632472 +++ exited with 0 +++
+1733877 1793630752.632479 <... wait4 resumed>, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 1733863 <0.037230>
+1733874 1793630752.632490 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=1733863, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+1733499 1793630752.632503 <... futex resumed>) = ? ERESTARTSYS (To be restarted if SA_RESTART is set) <0.038019>
+1733877 1793630752.632512 futex(0x5621073d2d98, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733499 1793630752.632521 futex(0x7f7fec925ba8, FUTEX_WAIT_BITSET_PRIVATE, 4294967295, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733877 1793630752.632529 <... futex resumed>) = 1 <0.000012>
+1733877 1793630752.632550 futex(0x7f7fec99f660, FUTEX_WAKE_PRIVATE, 2147483647) = 0 <0.000006>
+1733877 1793630752.632719 +++ exited with 0 +++
+1733875 1793630752.632768 +++ exited with 0 +++
+1733874 1793630752.632776 +++ exited with 0 +++
+1733213 1793630752.634619 <... futex resumed>) = 0 <0.002440>
+1733213 1793630752.634796 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733939]}, 88) = 1733939 <0.000042>
+1733213 1793630752.634883 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733939 1793630752.635583 +++ exited with 0 +++
+1733213 1793630752.635590 <... futex resumed>) = 0 <0.000698>
+1733213 1793630752.635744 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":52,\"value\":{\"fields\":{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,0],\"type\":\"std.control.EventKind\",\"variant\":\"Exited\"}},\"type\":\"std."..., 273) = 273 <0.000015>
+1733213 1793630752.635799 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.supervisor\",\"seq\":52,\"value\":{\"fields\":{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,0],\"type\":\"std.control.EventKind\",\"variant\":\"Exited\"}},\"type\":\"std."..., 273) = 273 <0.000009>
+1733213 1793630752.635850 write(2<pipe:[627441490]>, "52 280997439 ns event Terminal.server.supervisor: Exited(1733863, 0)", 68) = 68 <0.000014>
+1733213 1793630752.635892 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000011>
+1733213 1793630752.636016 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733945]}, 88) = 1733945 <0.000032>
+1733213 1793630752.636084 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733945 1793630752.636528 +++ exited with 0 +++
+1733213 1793630752.636546 <... futex resumed>) = 0 <0.000455>
+1733213 1793630752.636628 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":53,\"value\":{\"fields\":{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,0],\"type\":\"std.control.EventKind\",\"variant\":\"Exited\"}},\"type\":\"std.con"..., 270) = 270 <0.000010>
+1733213 1793630752.636679 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.server.rollout\",\"seq\":53,\"value\":{\"fields\":{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,0],\"type\":\"std.control.EventKind\",\"variant\":\"Exited\"}},\"type\":\"std.con"..., 270) = 270 <0.000011>
+1733213 1793630752.636737 write(2<pipe:[627441490]>, "53 280997439 ns event Terminal.server.rollout: Exited(1733863, 0)", 65) = 65 <0.000012>
+1733213 1793630752.636776 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000004>
+1733213 1793630752.636887 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f7fc3fffce8, parent_tid=0x7f7fc3fff990, exit_signal=0, stack=0x7f7fa3fff000, stack_size=0x1fffff00, tls=0x7f7fc3fff6c0} => {parent_tid=[1733952]}, 88) = 1733952 <0.000035>
+1733213 1793630752.636967 futex(0x7f7fc3fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733952 1793630752.637491 +++ exited with 0 +++
+1733213 1793630752.637501 <... futex resumed>) = 0 <0.000526>
+1733213 1793630752.637573 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":54,\"value\":{\"fields\":{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,0],\"type\":\"std.control.EventKind\",\"variant\":\"Exited\"}},\"type\":\""..., 277) = 277 <0.000016>
+1733213 1793630752.637625 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":\"event\",\"machine\":\"Terminal.promptProbe.scheduler\",\"seq\":54,\"value\":{\"fields\":{\"at\":{\"ns\":280997439,\"type\":\"Duration\"},\"kind\":{\"fields\":[1733863,0],\"type\":\"std.control.EventKind\",\"variant\":\"Exited\"}},\"type\":\""..., 277) = 277 <0.000010>
+1733213 1793630752.637752 write(2<pipe:[627441490]>, "54 280997439 ns event Terminal.promptProbe.scheduler: Exited(1733863, 0)", 72) = 72 <0.000011>
+1733213 1793630752.637901 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000059>
+1733213 1793630752.638069 write(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl>, "{\"at\":{\"ns\":284339283,\"type\":\"Duration\"},\"kind\":\"segment\",\"machine\":null,\"seq\":55,\"value\":{\"fields\":{\"clock\":\"real\",\"declared\":[\"Terminal.client\"],\"generation\":1,\"start\":{\"ns\":0,\"type\":\"Duration\"},\"stop\":{\"fields\":[{\"ns\":284339283,\"type\":\"Duration\"}],\"type"..., 317) = 317 <0.000014>
+1733213 1793630752.638119 fdatasync(5</home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real/journal.jsonl> <unfinished ...>
+1733200 1793630752.639732 <... clock_nanosleep resumed>, 0x7febc15fe0f8) = 0 <0.010068>
+1733200 1793630752.639761 wait4(1733206, 0x7febc15fe108, WNOHANG, NULL) = 0 <0.000009>
+1733200 1793630752.639792 clock_nanosleep(CLOCK_MONOTONIC, 0, {tv_sec=0, tv_nsec=10000000} <unfinished ...>
+1733213 1793630752.645469 <... fdatasync resumed>) = 0 <0.007331>
+1733213 1793630752.645516 write(1<pipe:[627441489]>, "{\"at\":{\"ns\":284339283,\"type\":\"Duration\"},\"kind\":\"segment\",\"machine\":null,\"seq\":55,\"value\":{\"fields\":{\"clock\":\"real\",\"declared\":[\"Terminal.client\"],\"generation\":1,\"start\":{\"ns\":0,\"type\":\"Duration\"},\"stop\":{\"fields\":[{\"ns\":284339283,\"type\":\"Duration\"}],\"type"..., 317) = 317 <0.000013>
+1733213 1793630752.646361 write(2<pipe:[627441490]>, "55 284339283 ns segment: { clock: \"real\", declared: [\"Terminal.client\"], generation: 1, start: 0 ns, stop: Some(284339283 ns) }", 127) = 127 <0.000013>
+1733213 1793630752.646428 write(2<pipe:[627441490]>, "\n", 1) = 1 <0.000007>
+1733213 1793630752.646664 futex(0x7f7fec925ba8, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000009>
+1733499 1793630752.650650 <... futex resumed>) = 0 <0.018117>
+1733200 1793630752.650681 <... clock_nanosleep resumed>, 0x7febc15fe0f8) = 0 <0.010857>
+1733200 1793630752.650712 wait4(1733206, 0x7febc15fe108, WNOHANG, NULL) = 0 <0.000071>
+1733200 1793630752.650809 clock_nanosleep(CLOCK_MONOTONIC, 0, {tv_sec=0, tv_nsec=10000000} <unfinished ...>
+1733499 1793630752.650865 futex(0x7f7fec000030, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000007>
+1733499 1793630752.650892 futex(0x7f7fec000030, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+1733213 1793630752.650902 futex(0x7f7fec000030, FUTEX_WAIT_PRIVATE, 2, NULL <unfinished ...>
+1733499 1793630752.650910 <... futex resumed>) = 0 <0.000010>
+1733213 1793630752.650943 <... futex resumed>) = -1 EAGAIN (Resource temporarily unavailable) <0.000028>
+1733499 1793630752.651008 +++ exited with 0 +++
+1733213 1793630752.651035 futex(0x7f7fec000030, FUTEX_WAKE_PRIVATE, 1) = 0 <0.000009>
+1733206 1793630752.656031 <... futex resumed>) = ?
+1733500 1793630752.656075 +++ exited with 0 +++
+1733213 1793630752.656110 +++ exited with 0 +++
+1733502 1793630752.658295 +++ exited with 0 +++
+1733206 1793630752.658325 +++ exited with 0 +++
+1733209 1793630752.658331 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=1733206, si_uid=1000, si_status=0, si_utime=11 /* 0.11 s */, si_stime=4 /* 0.04 s */} ---
+1733200 1793630752.658349 <... clock_nanosleep resumed>, {tv_sec=0, tv_nsec=2555821}) = ? ERESTART_RESTARTBLOCK (Interrupted by signal) <0.007523>
+1733207 1793630752.658452 +++ exited with 0 +++
+1733209 1793630752.658495 +++ exited with 0 +++
+1733200 1793630752.660917 wait4(1733206, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], WNOHANG, NULL) = 1733206 <0.000022>
+1733200 1793630752.661605 clone3({flags=CLONE_VM|CLONE_VFORK|CLONE_CLEAR_SIGHAND, exit_signal=SIGCHLD, stack=0x7febc19cb000, stack_size=0x9000}, 88 <unfinished ...>
+1733996 1793630752.662764 execve("/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/debug/ignite", ["/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/debug/ignite", "replay", "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-c6b22cf148f1/crates/ignite/../../examples/terminal/terminal.design.ignite", "--assembly", "local", "--state", "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/tmp/run-state-item2-real"], 0x7fff3bdfefb0 /* 144 vars */ <unfinished ...>
+1733200 1793630752.662955 <... clone3 resumed>) = 1733996 <0.001329>
+1733996 1793630752.663152 <... execve resumed>) = 0 <0.000349>
+1733996 1793630752.664912 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc01b7ffce8, parent_tid=0x7fc01b7ff990, exit_signal=0, stack=0x7fc00b7ff000, stack_size=0xfffff00, tls=0x7fc01b7ff6c0} => {parent_tid=[1733999]}, 88) = 1733999 <0.000042>
+1733996 1793630752.665013 futex(0x7fc01b7ffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1733999 1793630752.788437 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734174]}, 88) = 1734174 <0.000031>
+1733999 1793630752.788528 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734174 1793630752.794081 +++ exited with 0 +++
+1733999 1793630752.795618 <... futex resumed>) = 0 <0.007070>
+1733999 1793630752.799425 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734190]}, 88) = 1734190 <0.000038>
+1733999 1793630752.799525 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734190 1793630752.800897 +++ exited with 0 +++
+1733999 1793630752.800912 <... futex resumed>) = 0 <0.001376>
+1733999 1793630752.801177 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734191]}, 88) = 1734191 <0.000039>
+1733999 1793630752.801262 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734191 1793630752.802201 +++ exited with 0 +++
+1733999 1793630752.802215 <... futex resumed>) = 0 <0.000943>
+1733999 1793630752.802431 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734195]}, 88) = 1734195 <0.000035>
+1733999 1793630752.802508 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734195 1793630752.803675 +++ exited with 0 +++
+1733999 1793630752.803687 <... futex resumed>) = 0 <0.001169>
+1733999 1793630752.803902 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734196]}, 88) = 1734196 <0.000034>
+1733999 1793630752.803980 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734196 1793630752.804595 +++ exited with 0 +++
+1733999 1793630752.804611 <... futex resumed>) = 0 <0.000621>
+1733999 1793630752.804839 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734198]}, 88) = 1734198 <0.000031>
+1733999 1793630752.804911 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734198 1793630752.805433 +++ exited with 0 +++
+1733999 1793630752.805442 <... futex resumed>) = 0 <0.000523>
+1733999 1793630752.805654 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734200]}, 88) = 1734200 <0.000030>
+1733999 1793630752.805728 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734200 1793630752.807777 +++ exited with 0 +++
+1733999 1793630752.807792 <... futex resumed>) = 0 <0.002055>
+1733999 1793630752.808073 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734203]}, 88) = 1734203 <0.000032>
+1733999 1793630752.808151 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734203 1793630752.809073 +++ exited with 0 +++
+1733999 1793630752.809087 <... futex resumed>) = 0 <0.000921>
+1733999 1793630752.809344 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734209]}, 88) = 1734209 <0.000030>
+1733999 1793630752.809417 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734209 1793630752.810189 +++ exited with 0 +++
+1733999 1793630752.810203 <... futex resumed>) = 0 <0.000776>
+1733999 1793630752.810411 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734210]}, 88) = 1734210 <0.000034>
+1733999 1793630752.810490 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734210 1793630752.812345 +++ exited with 0 +++
+1733999 1793630752.812364 <... futex resumed>) = 0 <0.001864>
+1733999 1793630752.812644 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734211]}, 88) = 1734211 <0.000046>
+1733999 1793630752.812743 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734211 1793630752.813365 +++ exited with 0 +++
+1733999 1793630752.813374 <... futex resumed>) = 0 <0.000620>
+1733999 1793630752.813619 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734213]}, 88) = 1734213 <0.000037>
+1733999 1793630752.813710 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY) = 0 <0.000524>
+1733999 1793630752.814444 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734214]}, 88) = 1734214 <0.000034>
+1733999 1793630752.814521 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734213 1793630752.815109 +++ exited with 0 +++
+1734214 1793630752.815407 +++ exited with 0 +++
+1733999 1793630752.815416 <... futex resumed>) = 0 <0.000886>
+1733999 1793630752.815696 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734217]}, 88) = 1734217 <0.000032>
+1733999 1793630752.815836 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734217 1793630752.818015 +++ exited with 0 +++
+1733999 1793630752.818034 <... futex resumed>) = 0 <0.002187>
+1733999 1793630752.818425 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734221]}, 88) = 1734221 <0.000036>
+1733999 1793630752.818515 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734221 1793630752.819883 +++ exited with 0 +++
+1733999 1793630752.819895 <... futex resumed>) = 0 <0.001369>
+1733999 1793630752.820123 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734222]}, 88) = 1734222 <0.000035>
+1733999 1793630752.820202 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734222 1793630752.820603 +++ exited with 0 +++
+1733999 1793630752.820614 <... futex resumed>) = 0 <0.000403>
+1733999 1793630752.820834 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734223]}, 88) = 1734223 <0.000032>
+1733999 1793630752.820909 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734223 1793630752.821739 +++ exited with 0 +++
+1733999 1793630752.821753 <... futex resumed>) = 0 <0.000835>
+1733999 1793630752.821926 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734227]}, 88) = 1734227 <0.000032>
+1733999 1793630752.822000 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734227 1793630752.825176 +++ exited with 0 +++
+1733999 1793630752.825197 <... futex resumed>) = 0 <0.003187>
+1733999 1793630752.825421 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734229]}, 88) = 1734229 <0.000043>
+1733999 1793630752.825516 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734229 1793630752.826747 +++ exited with 0 +++
+1733999 1793630752.826763 <... futex resumed>) = 0 <0.001236>
+1733999 1793630752.826966 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734231]}, 88) = 1734231 <0.000038>
+1733999 1793630752.827048 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734231 1793630752.829136 +++ exited with 0 +++
+1733999 1793630752.829157 <... futex resumed>) = 0 <0.002099>
+1733999 1793630752.829846 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734235]}, 88) = 1734235 <0.000036>
+1733999 1793630752.829936 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734235 1793630752.832169 +++ exited with 0 +++
+1733999 1793630752.832195 <... futex resumed>) = 0 <0.002249>
+1733999 1793630752.832486 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734239]}, 88) = 1734239 <0.000041>
+1733999 1793630752.832584 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734239 1793630752.833632 +++ exited with 0 +++
+1733999 1793630752.833646 <... futex resumed>) = 0 <0.001050>
+1733999 1793630752.833909 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734241]}, 88) = 1734241 <0.000035>
+1733999 1793630752.833988 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734241 1793630752.835056 +++ exited with 0 +++
+1733999 1793630752.835071 <... futex resumed>) = 0 <0.001075>
+1733999 1793630752.835299 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734243]}, 88) = 1734243 <0.000032>
+1733999 1793630752.835374 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734243 1793630752.836947 +++ exited with 0 +++
+1733999 1793630752.836964 <... futex resumed>) = 0 <0.001579>
+1733999 1793630752.837203 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734244]}, 88) = 1734244 <0.000047>
+1733999 1793630752.837295 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734244 1793630752.837841 +++ exited with 0 +++
+1733999 1793630752.837859 <... futex resumed>) = 0 <0.000553>
+1733999 1793630752.838112 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734248]}, 88) = 1734248 <0.000031>
+1733999 1793630752.838185 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734248 1793630752.840704 +++ exited with 0 +++
+1733999 1793630752.840726 <... futex resumed>) = 0 <0.002532>
+1733999 1793630752.840993 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734256]}, 88) = 1734256 <0.000031>
+1733999 1793630752.841073 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734256 1793630752.841757 +++ exited with 0 +++
+1733999 1793630752.841769 <... futex resumed>) = 0 <0.000686>
+1733999 1793630752.841972 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734258]}, 88) = 1734258 <0.000028>
+1733999 1793630752.842041 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734258 1793630752.843610 +++ exited with 0 +++
+1733999 1793630752.843624 <... futex resumed>) = 0 <0.001574>
+1733999 1793630752.843842 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734262]}, 88) = 1734262 <0.000030>
+1733999 1793630752.843920 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734262 1793630752.845302 +++ exited with 0 +++
+1733999 1793630752.845321 <... futex resumed>) = 0 <0.001391>
+1733999 1793630752.845589 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734263]}, 88) = 1734263 <0.000042>
+1733999 1793630752.845684 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734263 1793630752.846893 +++ exited with 0 +++
+1733999 1793630752.846910 <... futex resumed>) = 0 <0.001216>
+1733999 1793630752.847152 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734264]}, 88) = 1734264 <0.000040>
+1733999 1793630752.847238 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734264 1793630752.848015 +++ exited with 0 +++
+1733999 1793630752.848027 <... futex resumed>) = 0 <0.000779>
+1733999 1793630752.848238 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fc003fffce8, parent_tid=0x7fc003fff990, exit_signal=0, stack=0x7fbfe3fff000, stack_size=0x1fffff00, tls=0x7fc003fff6c0} => {parent_tid=[1734272]}, 88) = 1734272 <0.000033>
+1733999 1793630752.848331 futex(0x7fc003fffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+1734272 1793630752.848758 +++ exited with 0 +++
+1733999 1793630752.848770 <... futex resumed>) = 0 <0.000423>
+1733999 1793630752.856290 write(1<pipe:[627462600]>, "Terminal.customerAccess Standing { contract: \"Terminal.customerAccess\", status: Status.Violated, good: 0, executed: 1, expected: 1, completeness: 100%, from: 142579841 ns, to: 142717287 ns, coverage: 0%, calculation: \"ignite-sli/0.1\", version: 32 }\n", 249) = 249 <0.000122>
+1733999 1793630752.856484 write(1<pipe:[627462600]>, "Terminal.promptFast Standing { contract: \"Terminal.promptFast\", status: Status.Violated, good: 0, executed: 1, expected: 1, completeness: 100%, from: 142579841 ns, to: 142717287 ns, coverage: 0%, calculation: \"ignite-sli/0.1\", version: 35 }\n", 241) = 241 <0.000047>
+1733999 1793630752.856565 write(1<pipe:[627462600]>, "Terminal.reachable Standing { contract: \"Terminal.reachable\", status: Status.Violated, good: 0, executed: 1, expected: 1, completeness: 100%, from: 142579841 ns, to: 142717287 ns, coverage: 0%, calculation: \"ignite-sli/0.1\", version: 38 }\n", 239) = 239 <0.000065>
+1733999 1793630752.857863 +++ exited with 0 +++
+1733996 1793630752.857880 <... futex resumed>) = 0 <0.192855>
+1733996 1793630752.859372 +++ exited with 0 +++
+1733186 1793630752.859388 <... futex resumed>) = ? ERESTART_RESTARTBLOCK (Interrupted by signal) <0.712367>
+1733186 1793630752.859404 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=1733996, si_uid=1000, si_status=0, si_utime=10 /* 0.10 s */, si_stime=2 /* 0.02 s */} ---
+1733200 1793630752.859483 wait4(1733996, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 1733996 <0.000013>
+1733200 1793630752.859813 futex(0x55bb89fb3858, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000012>
+1733186 1793630752.859849 futex(0x7febc15ffce8, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 2, NULL, FUTEX_BITSET_MATCH_ANY) = 0 <0.000109>
+1733200 1793630752.859971 +++ exited with 0 +++
+1733186 1793630752.859985 write(1</home/timo/.cache/scratch/ignite-perf12c/restart-c6-syscall/stdout.log>, "test run::killing_terminald_restarts_it_in_real_time ... ", 57) = 57 <0.000012>
+1733186 1793630752.860037 write(1</home/timo/.cache/scratch/ignite-perf12c/restart-c6-syscall/stdout.log>, "ok", 2) = 2 <0.000007>
+1733186 1793630752.860069 write(1</home/timo/.cache/scratch/ignite-perf12c/restart-c6-syscall/stdout.log>, "\n", 1) = 1 <0.000007>
+1733186 1793630752.860182 write(1</home/timo/.cache/scratch/ignite-perf12c/restart-c6-syscall/stdout.log>, "\n", 1) = 1 <0.000008>
+1733186 1793630752.860215 write(1</home/timo/.cache/scratch/ignite-perf12c/restart-c6-syscall/stdout.log>, "test result: ", 13) = 13 <0.000007>
+1733186 1793630752.860245 write(1</home/timo/.cache/scratch/ignite-perf12c/restart-c6-syscall/stdout.log>, "ok", 2) = 2 <0.000007>
+1733186 1793630752.860276 write(1</home/timo/.cache/scratch/ignite-perf12c/restart-c6-syscall/stdout.log>, ". 1 passed; 0 failed; 0 ignored; 0 measured; 199 filtered out", 61) = 61 <0.000007>
+1733186 1793630752.860308 write(1</home/timo/.cache/scratch/ignite-perf12c/restart-c6-syscall/stdout.log>, "; finished in 0.72s", 19) = 19 <0.000007>
+1733186 1793630752.860340 write(1</home/timo/.cache/scratch/ignite-perf12c/restart-c6-syscall/stdout.log>, "\n\n", 2) = 2 <0.000007>
+1733186 1793630752.860711 +++ exited with 0 +++

@@ -197,7 +197,38 @@ impl Adapters {
         args: &[String],
         expect_ready: bool,
     ) {
-        process::spawn(self, member, generation, executable, args, expect_ready);
+        self.spawn_with_completion(
+            member,
+            generation,
+            executable,
+            args,
+            expect_ready,
+            &mut |observation| {
+                let _ = self.observations.send(observation);
+            },
+        );
+    }
+
+    /// The driver's synchronous acknowledgement, before asynchronous child
+    /// watchers start. The caller delivers it after its current turn finishes.
+    pub(super) fn spawn_with_completion(
+        &self,
+        member: &str,
+        generation: i64,
+        executable: &Path,
+        args: &[String],
+        expect_ready: bool,
+        complete: &mut dyn FnMut(Observation),
+    ) {
+        process::spawn(
+            self,
+            member,
+            generation,
+            executable,
+            args,
+            expect_ready,
+            complete,
+        );
     }
 
     /// `signal` to the live child `pid` (`Kill(member, pid, signal)`, 16.6).

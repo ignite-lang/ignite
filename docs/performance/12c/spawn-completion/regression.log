@@ -1,0 +1,15 @@
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+error[E0599]: no variant, associated function, or constant named `as_int` found for enum `ignite_eval::Json` in the current scope
+    --> crates/ignite/src/run/live.rs:1057:33
+     |
+1057 |                 .and_then(Json::as_int)
+     |                                 ^^^^^^ variant, associated function, or constant not found in `ignite_eval::Json`
+     |
+help: there is a method `as_i64` with a similar name
+    --> crates/ignite-eval/src/model.rs:1634:5
+     |
+1634 |     pub fn as_i64(&self) -> Option<i64> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `ignite` (lib test) due to 1 previous error

@@ -1,0 +1,10 @@
+{
+  "before": {
+    "cli_sha256": "343b087eb58aa8d3dd3844c493c694f3a53a51dd841f9a2d8f0b093e89ce4534",
+    "source_sha256": "472a710cfb8c237ce991a89da907be29accdaae334fad052cdb6e5535254df79"
+  },
+  "after": {
+    "cli_sha256": "a1d9e0afd75189fc6045999b8c4995d1e0ab80aafe1e1c443ef0c7880072d501",
+    "source_sha256": "652d74c51b6ba8c716fe31e62c450748b9095dbc106a237e522a3eee0d875820"
+  }
+}

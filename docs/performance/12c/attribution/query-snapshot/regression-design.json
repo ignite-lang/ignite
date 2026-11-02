@@ -1,0 +1,18 @@
+{
+  "location": "crates/ignite-types/tests/surface.rs",
+  "explicit_target": "crates/ignite-types/tests/main.rs mod surface",
+  "covers": [
+    "Imported record shape and field defaults after replacing and dropping caller imports",
+    "Imported enum declaration order, instantiated payloads, recursive equality and boxing",
+    "Every generic record/enum/fn/protocol-role parameter list",
+    "Full own exports retain function/protocol/alias/constant/parameter-name tables",
+    "Recorded consumer callee generic instance/type remains unchanged"
+  ],
+  "required_existing_parity": [
+    "All ignite-types integration tests including recursive boxing/generics/diagnostics",
+    "CLI plan canonical terminal.design.model.json",
+    "CLI eval integration tests with fuel reset",
+    "LLVM goldens/query consumers and all148 inline tests on Rust+LLVM"
+  ],
+  "not_executed": true
+}

@@ -1,0 +1,43 @@
+{
+  "command": [
+    "timeout",
+    "--signal=TERM",
+    "--kill-after=2s",
+    "30s",
+    "strace",
+    "-f",
+    "-ttt",
+    "-T",
+    "-yy",
+    "-s",
+    "256",
+    "-e",
+    "trace=fdatasync,write,clone,clone3,execve,wait4,waitid,futex,clock_nanosleep",
+    "-o",
+    "/home/timo/.cache/scratch/ignite-perf12c/restart-c6-syscall/syscalls.strace",
+    "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/debug/deps/main-b624c508ef07abba",
+    "run::killing_terminald_restarts_it_in_real_time",
+    "--exact",
+    "--nocapture"
+  ],
+  "commit": "c6b22cf148f1402499a4279975b52494106bd68a",
+  "source": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-c6b22cf148f1",
+  "source_manifest_sha256": "8462c05d6e85b4aff7c809d9b2dc2bb864e9568cb1d24cc7b3d777474b598f0a",
+  "binaries": {
+    "test": {
+      "path": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/debug/deps/main-b624c508ef07abba",
+      "sha256": "cc042383c46184b25d1bbf8a3dd96ad1d1917aedc0fe8908e8ad1628e0130fe1"
+    },
+    "cli": {
+      "path": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-c6b22cf148f1/debug/ignite",
+      "sha256": "78da42d0bfb391924fcbf34b85fbce3c78ed8985d3d6ad79229ff294222dd56e"
+    }
+  },
+  "load_before": [
+    56.28857421875,
+    38.08203125,
+    23.90234375
+  ],
+  "started_utc": "2026-11-02T14:45:52.115375+00:00",
+  "purpose": "single bounded diagnostic trace, not readiness acceptance"
+}

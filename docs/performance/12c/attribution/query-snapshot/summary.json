@@ -1,0 +1,18 @@
+{
+  "check": {
+    "before": 0.07654967397684231,
+    "after": 0.0704996109707281,
+    "median_saved_seconds": 0.005823791027069092,
+    "raw_pairs": 3,
+    "before_cpu_seconds": 0.07571700000000003,
+    "after_cpu_seconds": 0.06936000000000009
+  },
+  "plan": {
+    "before": 0.07396944100037217,
+    "after": 0.07318797899642959,
+    "median_saved_seconds": 0.0005961210117675364,
+    "raw_pairs": 3,
+    "before_cpu_seconds": 0.07320500000000019,
+    "after_cpu_seconds": 0.07238600000000028
+  }
+}
