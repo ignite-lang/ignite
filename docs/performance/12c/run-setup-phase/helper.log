@@ -1,0 +1,9 @@
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.46s
+     Running tests/main.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/main-b624c508ef07abba)
+
+running 1 test
+test common::run_setup_preserves_the_raw_segment_and_later_records ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 200 filtered out; finished in 0.00s
+

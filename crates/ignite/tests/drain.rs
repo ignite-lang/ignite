@@ -334,6 +334,7 @@ struct Run {
     child: Child,
     stdin: ChildStdin,
     lines: Receiver<String>,
+    pending_initial: Option<String>,
     stderr: Receiver<String>,
     seen: Vec<Json>,
     state: PathBuf,
@@ -371,14 +372,19 @@ impl Run {
         let stdin = child.stdin.take().expect("stdin");
         let lines = lines_of(child.stdout.take().expect("stdout"));
         let stderr = lines_of(child.stderr.take().expect("stderr"));
-        Run {
+        let mut run = Run {
             child,
             stdin,
             lines,
+            pending_initial: None,
             stderr,
             seen: Vec::new(),
             state,
-        }
+        };
+        run.pending_initial = Some(common::wait_run_initial_segment(&run.lines, || {
+            run.stderr()
+        }));
+        run
     }
 
     fn stderr(&self) -> String {
@@ -399,7 +405,12 @@ impl Run {
         let started = Instant::now();
         loop {
             let left = TIMEOUT.saturating_sub(started.elapsed());
-            let line = match self.lines.recv_timeout(left) {
+            let line = match self
+                .pending_initial
+                .take()
+                .map(Ok)
+                .unwrap_or_else(|| self.lines.recv_timeout(left))
+            {
                 Ok(line) => line,
                 Err(RecvTimeoutError::Timeout) => panic!(
                     "no {what} within {TIMEOUT:?}; seen {} records, the last {:?}\nstderr:\n{}",

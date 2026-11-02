@@ -1,0 +1,8 @@
+{
+  "head": "0a423387d75c1a4ba46a6a68d83d855dac0480eb",
+  "sha256": {
+    "crates/ignite/tests/common/mod.rs": "c676131cb5b199335b63525bd2cf8397255fdaebe5c8bd5b5bc53fc5d0f48755",
+    "crates/ignite/tests/run.rs": "9480b7a651d27158140570d754c61cbde0161a191fc2b701d97c691d4c091f9f",
+    "crates/ignite/tests/drain.rs": "f6bc3713c52d6f3507ae5f52cd463969452876f5a501673530fda58256873e29"
+  }
+}
