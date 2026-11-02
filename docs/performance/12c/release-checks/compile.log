@@ -1,0 +1,7 @@
+task: [compile] cargo run -q -p ignite -- build examples/terminal/terminal.ignite --out target/ignite/terminal --target-dir target
+note: building the generated Rust project in target/ignite/terminal; compiler messages refer to generated code
+   Compiling ignite-std v0.0.0-a1f1801447d978f1 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/target/ignite/terminal/std)
+   Compiling terminal v0.0.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/target/ignite/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s
+built target/debug/terminald
+built target/debug/tn

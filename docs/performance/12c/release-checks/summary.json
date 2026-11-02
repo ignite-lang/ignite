@@ -1,0 +1,34 @@
+[
+  {
+    "command": [
+      "task",
+      "compile"
+    ],
+    "exit": 0,
+    "seconds": 0.40770108497235924
+  },
+  {
+    "command": [
+      "task",
+      "compile-llvm"
+    ],
+    "exit": 0,
+    "seconds": 0.21685479098232463
+  },
+  {
+    "command": [
+      "task",
+      "compile-todo"
+    ],
+    "exit": 0,
+    "seconds": 0.31508115102769807
+  },
+  {
+    "command": [
+      "task",
+      "compile-todo-llvm"
+    ],
+    "exit": 0,
+    "seconds": 0.16714213194791228
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "limit_seconds": 180,
+  "target_load": 7,
+  "passed": true,
+  "samples": [
+    {
+      "seconds": 3.420282155275345e-07,
+      "load": 6.25439453125
+    }
+  ]
+}
