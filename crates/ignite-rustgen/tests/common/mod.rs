@@ -287,6 +287,21 @@ fn std_fixture(root: &Path) -> StdFixture {
     StdFixture::Fresh(Box::new(PreparedStd::load(root)))
 }
 
+/// Borrow an AST and its address-keyed types together for a generator test.
+/// Fixed fixture roots share semantic preparation; custom roots stay fresh.
+/// The callback cannot retain a reference beyond the fixture's lifetime.
+pub fn with_typed_std<T>(
+    root: &Path,
+    run: impl FnOnce(&[(String, Program, Symbols)], &[TypedProgram]) -> T,
+) -> T {
+    let fixture = std_fixture(root);
+    let types = fixture
+        .types
+        .as_deref()
+        .expect("the standard library types");
+    run(&fixture.library, types)
+}
+
 /// The program project and the `ignite-std` project for `file` with the
 /// standard library at `std_root`. Like the driver, the typed generator
 /// runs when the library and the program type; otherwise the untyped one

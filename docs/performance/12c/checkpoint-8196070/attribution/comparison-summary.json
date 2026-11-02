@@ -1,0 +1,693 @@
+{
+  "binary": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/deps/main-5e4ab9ed9c9b052f",
+  "binary_sha256": "b43f95f3990213a294ebefa4a2d41930f83738190c7fa449b2c20cc683257cde",
+  "build": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840",
+  "cargo_lock_wait_lines": 0,
+  "command": [
+    "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/deps/main-5e4ab9ed9c9b052f",
+    "--test-threads",
+    "1",
+    "--format",
+    "pretty",
+    "--color",
+    "never"
+  ],
+  "commit": "92733498f8406d8f0663a571be85351c548ea99e",
+  "exit": 0,
+  "label": "comparison",
+  "load_after": 10.50341796875,
+  "load_before": 11.15673828125,
+  "outstanding_tests": [],
+  "purpose": "diagnostic, not acceptance",
+  "seconds": 6.496327642002143,
+  "source": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/comparison-92733498f840",
+  "started_utc": "2026-11-02T12:04:31.539649+00:00",
+  "test_threads": 1,
+  "tests": [
+    {
+      "duration_seconds": 0.03960554103832692,
+      "event": "test_completed",
+      "seconds": 0.042413307004608214,
+      "start_observed": true,
+      "status": "ok",
+      "test": "compiles::constants_across_modules_build"
+    },
+    {
+      "duration_seconds": 0.040521892020478845,
+      "event": "test_completed",
+      "seconds": 0.0833811039919965,
+      "start_observed": true,
+      "status": "ok",
+      "test": "compiles::generics_and_store_serve"
+    },
+    {
+      "duration_seconds": 0.05555743700824678,
+      "event": "test_completed",
+      "seconds": 0.13934563100337982,
+      "start_observed": true,
+      "status": "ok",
+      "test": "compiles::process_exit_without_try_builds_and_exits"
+    },
+    {
+      "duration_seconds": 0.027996060031000525,
+      "event": "test_completed",
+      "seconds": 0.16746855300152674,
+      "start_observed": true,
+      "status": "ok",
+      "test": "compiles::std_crate_and_program_build"
+    },
+    {
+      "duration_seconds": 0.04955327295465395,
+      "event": "test_completed",
+      "seconds": 0.21708130202023312,
+      "start_observed": true,
+      "status": "ok",
+      "test": "compiles::store_ids_and_updates_are_atomic_across_connections"
+    },
+    {
+      "duration_seconds": 0.22608222998678684,
+      "event": "test_completed",
+      "seconds": 0.4432248169905506,
+      "start_observed": true,
+      "status": "ok",
+      "test": "compiles::terminal_project_builds"
+    },
+    {
+      "duration_seconds": 0.02108260802924633,
+      "event": "test_completed",
+      "seconds": 0.46438320400193334,
+      "start_observed": true,
+      "status": "ok",
+      "test": "compiles::variants_of_enums_not_imported_build"
+    },
+    {
+      "duration_seconds": 4.5877008233219385e-05,
+      "event": "test_completed",
+      "seconds": 0.46450698701664805,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::acceptance_copy_is_current"
+    },
+    {
+      "duration_seconds": 0.006191241031046957,
+      "event": "test_completed",
+      "seconds": 0.47073364502284676,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::constants_qualified_patterns_and_io_error"
+    },
+    {
+      "duration_seconds": 0.001765546971000731,
+      "event": "test_completed",
+      "seconds": 0.4725567569839768,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::element_reads_copy_only_non_copy_elements"
+    },
+    {
+      "duration_seconds": 0.2163229649886489,
+      "event": "test_completed",
+      "seconds": 0.6889271520194598,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::executable_components"
+    },
+    {
+      "duration_seconds": 0.020082465023733675,
+      "event": "test_completed",
+      "seconds": 0.7091114440117963,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::generics_stores_and_builtins"
+    },
+    {
+      "duration_seconds": 0.00439606502186507,
+      "event": "test_completed",
+      "seconds": 0.713986142014619,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::listeners_are_bound_before_the_component_value"
+    },
+    {
+      "duration_seconds": 0.002687513013370335,
+      "event": "test_completed",
+      "seconds": 0.7171769790002145,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::parameters_are_borrowed_unless_changed"
+    },
+    {
+      "duration_seconds": 0.008285382005851716,
+      "event": "test_completed",
+      "seconds": 0.7258805829915218,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::process_exit_diverges"
+    },
+    {
+      "duration_seconds": 0.011676424008328468,
+      "event": "test_completed",
+      "seconds": 0.7376200510188937,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::protocol_import_spawn_and_function_values"
+    },
+    {
+      "duration_seconds": 0.006860444031190127,
+      "event": "test_completed",
+      "seconds": 0.7445415969705209,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::pure_functions"
+    },
+    {
+      "duration_seconds": 0.006173824018333107,
+      "event": "test_completed",
+      "seconds": 0.7507994929910637,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::record_and_enum_with_match"
+    },
+    {
+      "duration_seconds": 0.012057990010362118,
+      "event": "test_completed",
+      "seconds": 0.7629169140127487,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::surface_syntax"
+    },
+    {
+      "duration_seconds": 3.510701935738325e-05,
+      "event": "test_completed",
+      "seconds": 0.763017218967434,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::syntax_copy_is_current"
+    },
+    {
+      "duration_seconds": 0.006269484001677483,
+      "event": "test_completed",
+      "seconds": 0.7693099780008197,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::system_with_server_and_client"
+    },
+    {
+      "duration_seconds": 0.005651904037222266,
+      "event": "test_completed",
+      "seconds": 0.7750257209991105,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::target_bugs_of_slice_11b"
+    },
+    {
+      "duration_seconds": 0.1719092819839716,
+      "event": "test_completed",
+      "seconds": 0.9469875789945945,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::terminal"
+    },
+    {
+      "duration_seconds": 0.009111844003200531,
+      "event": "test_completed",
+      "seconds": 0.9561567810014822,
+      "start_observed": true,
+      "status": "ok",
+      "test": "golden::variants_of_enums_not_imported"
+    },
+    {
+      "duration_seconds": 0.16498094098642468,
+      "event": "test_completed",
+      "seconds": 1.1211926019750535,
+      "start_observed": true,
+      "status": "ok",
+      "test": "reachable::a_test_build_keeps_the_selected_tests_and_what_they_reach"
+    },
+    {
+      "duration_seconds": 0.0015868920017965138,
+      "event": "test_completed",
+      "seconds": 1.1228600320173427,
+      "start_observed": true,
+      "status": "ok",
+      "test": "reachable::follows_roles_into_their_module_and_its_imports"
+    },
+    {
+      "duration_seconds": 0.00129836198175326,
+      "event": "test_completed",
+      "seconds": 1.1241955810110085,
+      "start_observed": true,
+      "status": "ok",
+      "test": "reachable::keeps_what_the_roots_name_and_what_that_names"
+    },
+    {
+      "duration_seconds": 0.0023945519933477044,
+      "event": "test_completed",
+      "seconds": 1.126626844983548,
+      "start_observed": true,
+      "status": "ok",
+      "test": "reachable::methods_fields_and_ranges_do_not_name_items"
+    },
+    {
+      "duration_seconds": 0.0016434940043836832,
+      "event": "test_completed",
+      "seconds": 1.128310446976684,
+      "start_observed": true,
+      "status": "ok",
+      "test": "reachable::naming_everything_gives_the_whole_library"
+    },
+    {
+      "duration_seconds": 0.22864807001315057,
+      "event": "test_completed",
+      "seconds": 1.3569986160146073,
+      "start_observed": true,
+      "status": "ok",
+      "test": "slice10::crashd_survives_failing_handlers"
+    },
+    {
+      "duration_seconds": 0.16023881401633844,
+      "event": "test_completed",
+      "seconds": 1.5172897910233587,
+      "start_observed": true,
+      "status": "ok",
+      "test": "slice10::executable_component_main_runs_and_maps_the_exit_code"
+    },
+    {
+      "duration_seconds": 0.13681002496741712,
+      "event": "test_completed",
+      "seconds": 1.6541519010206684,
+      "start_observed": true,
+      "status": "ok",
+      "test": "slice10::failures_report_the_operation_and_position"
+    },
+    {
+      "duration_seconds": 0.11900398804573342,
+      "event": "test_completed",
+      "seconds": 1.7732059929985553,
+      "start_observed": true,
+      "status": "ok",
+      "test": "slice10::generate_tests_lays_a_program_out_by_its_module_path"
+    },
+    {
+      "duration_seconds": 0.1407197840162553,
+      "event": "test_completed",
+      "seconds": 1.9139771920163184,
+      "start_observed": true,
+      "status": "ok",
+      "test": "slice10::slice10_features_pass"
+    },
+    {
+      "duration_seconds": 0.02125199296278879,
+      "event": "test_completed",
+      "seconds": 1.935279879020527,
+      "start_observed": true,
+      "status": "ok",
+      "test": "slice9::assignments_box_by_the_fields_owner"
+    },
+    {
+      "duration_seconds": 0.1295101700234227,
+      "event": "test_completed",
+      "seconds": 2.0648411249858327,
+      "start_observed": true,
+      "status": "ok",
+      "test": "slice9::failed_asserts_show_debug_text"
+    },
+    {
+      "duration_seconds": 0.42376086802687496,
+      "event": "test_completed",
+      "seconds": 2.488650178012904,
+      "start_observed": true,
+      "status": "ok",
+      "test": "slice9::long_chains_build_and_run"
+    },
+    {
+      "duration_seconds": 1.3567972928285599e-05,
+      "event": "test_completed",
+      "seconds": 2.4887107519898564,
+      "start_observed": true,
+      "status": "ignored",
+      "test": "slice9::long_chains_build_and_run_100k"
+    },
+    {
+      "duration_seconds": 3.8161365740234032,
+      "event": "test_completed",
+      "seconds": 6.30486557999393,
+      "start_observed": true,
+      "status": "ok",
+      "test": "slice9::long_chains_lower_without_overflow"
+    },
+    {
+      "duration_seconds": 0.17172226100228727,
+      "event": "test_completed",
+      "seconds": 6.476638562977314,
+      "start_observed": true,
+      "status": "ok",
+      "test": "slice9::slice9_features_pass"
+    },
+    {
+      "duration_seconds": 0.00016613199841231108,
+      "event": "test_completed",
+      "seconds": 6.476859754009638,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::aliases_and_field_defaults"
+    },
+    {
+      "duration_seconds": 0.00016101199435070157,
+      "event": "test_completed",
+      "seconds": 6.4770402910071425,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::bindings_are_scoped"
+    },
+    {
+      "duration_seconds": 0.0002440169919282198,
+      "event": "test_completed",
+      "seconds": 6.477303989988286,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::block_values"
+    },
+    {
+      "duration_seconds": 0.00017754099098965526,
+      "event": "test_completed",
+      "seconds": 6.477497029991355,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::bool_or_and_tuple_patterns_are_native"
+    },
+    {
+      "duration_seconds": 0.003687874006573111,
+      "event": "test_completed",
+      "seconds": 6.481200970010832,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::builtin_methods"
+    },
+    {
+      "duration_seconds": 0.00019443302880972624,
+      "event": "test_completed",
+      "seconds": 6.48141539801145,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::constants_are_zero_argument_functions"
+    },
+    {
+      "duration_seconds": 0.00010567298159003258,
+      "event": "test_completed",
+      "seconds": 6.481536022969522,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::e020_bad_properties"
+    },
+    {
+      "duration_seconds": 6.072403630241752e-05,
+      "event": "test_completed",
+      "seconds": 6.481611278024502,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::e020_components_without_types"
+    },
+    {
+      "duration_seconds": 6.27670087851584e-05,
+      "event": "test_completed",
+      "seconds": 6.481689739972353,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::e020_resource_kind"
+    },
+    {
+      "duration_seconds": 0.0001478400081396103,
+      "event": "test_completed",
+      "seconds": 6.481853669974953,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::effectful_function_is_a_plain_fn"
+    },
+    {
+      "duration_seconds": 0.00013040995690971613,
+      "event": "test_completed",
+      "seconds": 6.482023380987812,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::else_if_chain_keeps_statement_position"
+    },
+    {
+      "duration_seconds": 0.00024162500631064177,
+      "event": "test_completed",
+      "seconds": 6.482297377020586,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::function_body_value_depends_on_return_type"
+    },
+    {
+      "duration_seconds": 0.00023605703609064221,
+      "event": "test_completed",
+      "seconds": 6.482564033009112,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::function_types_and_values"
+    },
+    {
+      "duration_seconds": 0.00013196398504078388,
+      "event": "test_completed",
+      "seconds": 6.4827263340121135,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::functions_and_variants_are_not_places"
+    },
+    {
+      "duration_seconds": 0.00022274599177762866,
+      "event": "test_completed",
+      "seconds": 6.482976418978069,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::generate_std_nests_modules"
+    },
+    {
+      "duration_seconds": 7.122103124856949e-05,
+      "event": "test_completed",
+      "seconds": 6.483071918017231,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::generate_std_rejects_a_system"
+    },
+    {
+      "duration_seconds": 0.0001170799951069057,
+      "event": "test_completed",
+      "seconds": 6.483204881020356,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::header_and_declarations"
+    },
+    {
+      "duration_seconds": 0.00018503796309232712,
+      "event": "test_completed",
+      "seconds": 6.483404996979516,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::imported_constant_and_local_shadowing"
+    },
+    {
+      "duration_seconds": 0.00012050301302224398,
+      "event": "test_completed",
+      "seconds": 6.483557952975389,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::imports_become_use_lines"
+    },
+    {
+      "duration_seconds": 0.00017015403136610985,
+      "event": "test_completed",
+      "seconds": 6.483757595997304,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::int_literals_are_plain_digits"
+    },
+    {
+      "duration_seconds": 0.00018777797231450677,
+      "event": "test_completed",
+      "seconds": 6.483974776987452,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::list_and_text_patterns_are_guarded_arms"
+    },
+    {
+      "duration_seconds": 0.0030101709999144077,
+      "event": "test_completed",
+      "seconds": 6.487016954983119,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::no_system_is_a_library_without_executables"
+    },
+    {
+      "duration_seconds": 0.00015971099492162466,
+      "event": "test_completed",
+      "seconds": 6.487218367983587,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::own_protocol_is_known_without_symbols"
+    },
+    {
+      "duration_seconds": 0.00017818500055000186,
+      "event": "test_completed",
+      "seconds": 6.487425328989048,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::ownership_non_value_positions_do_not_clone"
+    },
+    {
+      "duration_seconds": 0.0014944489812478423,
+      "event": "test_completed",
+      "seconds": 6.488950007013045,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::ownership_value_positions_clone_places"
+    },
+    {
+      "duration_seconds": 5.164899630472064e-05,
+      "event": "test_completed",
+      "seconds": 6.489044289977755,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::package_name_defaults_to_program"
+    },
+    {
+      "duration_seconds": 0.00019043503561988473,
+      "event": "test_completed",
+      "seconds": 6.489265480020549,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::protocol_lowering"
+    },
+    {
+      "duration_seconds": 0.00017348997062072158,
+      "event": "test_completed",
+      "seconds": 6.489468957006466,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::qualified_variant_patterns"
+    },
+    {
+      "duration_seconds": 0.00012649199925363064,
+      "event": "test_completed",
+      "seconds": 6.489626622991636,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::receiver_that_is_not_atomic_is_parenthesized"
+    },
+    {
+      "duration_seconds": 0.00011385901598259807,
+      "event": "test_completed",
+      "seconds": 6.489767664985266,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::return_expressions"
+    },
+    {
+      "duration_seconds": 0.00012866902397945523,
+      "event": "test_completed",
+      "seconds": 6.4899222570238635,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::rust_keywords_are_escaped"
+    },
+    {
+      "duration_seconds": 0.0002452099579386413,
+      "event": "test_completed",
+      "seconds": 6.4901949419872835,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::spawn_lowering"
+    },
+    {
+      "duration_seconds": 0.0001608500024303794,
+      "event": "test_completed",
+      "seconds": 6.490386202989612,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::std_version_follows_the_library_text"
+    },
+    {
+      "duration_seconds": 0.00012728094588965178,
+      "event": "test_completed",
+      "seconds": 6.490541129023768,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::string_escaping"
+    },
+    {
+      "duration_seconds": 7.710902718827128e-05,
+      "event": "test_completed",
+      "seconds": 6.490643565019127,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::substrate_imports_need_no_std_crate"
+    },
+    {
+      "duration_seconds": 0.00012943800538778305,
+      "event": "test_completed",
+      "seconds": 6.490798805025406,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::tuple_type"
+    },
+    {
+      "duration_seconds": 0.00016360299196094275,
+      "event": "test_completed",
+      "seconds": 6.490989408979658,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::tuples_and_pattern_lets"
+    },
+    {
+      "duration_seconds": 0.0001646919990889728,
+      "event": "test_completed",
+      "seconds": 6.491183229023591,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::type_table"
+    },
+    {
+      "duration_seconds": 0.00012599799083545804,
+      "event": "test_completed",
+      "seconds": 6.49133771500783,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::typed_let"
+    },
+    {
+      "duration_seconds": 0.00013955601025372744,
+      "event": "test_completed",
+      "seconds": 6.491503982979339,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::unit_value_and_type"
+    },
+    {
+      "duration_seconds": 0.0015065799816511571,
+      "event": "test_completed",
+      "seconds": 6.493037678999826,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::variant_expressions"
+    },
+    {
+      "duration_seconds": 0.00021717901108786464,
+      "event": "test_completed",
+      "seconds": 6.493291213992052,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::variant_patterns"
+    },
+    {
+      "duration_seconds": 0.000145876023452729,
+      "event": "test_completed",
+      "seconds": 6.493467063992284,
+      "start_observed": true,
+      "status": "ok",
+      "test": "units::write_project_creates_layout"
+    }
+  ],
+  "timed_out": false
+}

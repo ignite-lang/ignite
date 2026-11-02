@@ -1,0 +1,11 @@
+bytes=20305420 lines=5290 plus_bytes=0 amp_bytes=204100 all actual-line/exhaustive edge counts equal
+pass=1 variant=original seconds=0.060883761
+pass=1 variant=prefiltered seconds=0.016478624
+pass=2 variant=prefiltered seconds=0.015272315
+pass=2 variant=original seconds=0.062482145
+pass=3 variant=original seconds=0.059010314
+pass=3 variant=prefiltered seconds=0.016373674
+pass=4 variant=prefiltered seconds=0.016019121
+pass=4 variant=original seconds=0.061107370
+pass=5 variant=original seconds=0.059662865
+pass=5 variant=prefiltered seconds=0.014910694

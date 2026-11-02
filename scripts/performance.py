@@ -310,6 +310,41 @@ class Harness:
                                 pair=str(pair), phase=phase, seconds=time.monotonic() - start, exit=failures,
                                 load_before=before, load_after=os.getloadavg()[0]))
 
+    def is_prepared(self):
+        # __init__ has already verified the configuration, tools, source bytes
+        # and target ownership. Reuse only a complete, successful preparation.
+        units = {"prepare-" + name for name, _ in GATE} | {"gate-prepare", "runtime-release"}
+        artifacts = ("debug/ignite", "ignite-test/rt/debug/libignite_rt.a",
+                     "ignite-test/rt/release/libignite_rt.a")
+        for label in self.refs:
+            latest, last_clean = {}, -1
+            for index, row in enumerate(self.rows):
+                if row["label"] == label:
+                    if row["unit"] in units:
+                        latest[row["unit"]] = (index, row)
+                    if row["unit"] == "clean":
+                        last_clean = index
+            if set(latest) != units:
+                return False
+            rows = [row for _, row in latest.values()]
+            if (any(row["exit"] or row["commit"] != self.commits[label] or row["phase"] != "prepare" for row in rows)
+                    or len({row["pair"] for row in rows}) != 1
+                    or len({row.get("capture") for row in rows}) != 1
+                    or rows[0].get("capture") is None
+                    or last_clean > min(index for index, _ in latest.values())):
+                return False
+            for name in artifacts:
+                path = self.targets[label] / name
+                if not path.is_file() or path.stat().st_size == 0 or not path.resolve().is_relative_to(self.targets[label].resolve()):
+                    return False
+        return True
+
+    def ensure_prepared(self):
+        if self.failed_candidate():
+            raise RuntimeError("Candidate failure in this batch; fix and freeze a new candidate")
+        if not self.is_prepared():
+            self.prepare()
+
     def prepare(self):
         for label in self.refs:
             self.gate(label, "prepare-" + self.capture_id, "prepare", phase="prepare")
@@ -349,7 +384,7 @@ class Harness:
                 return
 
     def warm(self):
-        self.prepare()
+        self.ensure_prepared()
         for number in range(1, self.args.warm_pairs + self.args.extra_warm_passes + 1):
             pair = self.capture_id + "-warm-" + str(number)
             for label in self.refs:
@@ -483,7 +518,42 @@ def self_check():
     for key, value in [("load_delta", 6), ("absolute_max_load", 10), ("cold_retries", 2),
                        ("extra_warm_passes", 3), ("warm_pairs", 2), ("check_pairs", 14)]:
         assert not closure_eligible(dict(controls, **{key: value}), True, True), key
-    print("Self-check passed: paired ratios, exclusions, candidate failures, and strict closure provenance/controls")
+    with tempfile.TemporaryDirectory(prefix="performance-prepare-check-") as temp:
+        holder.refs = {"candidate": "frozen"}
+        holder.commits = {"candidate": "frozen-commit"}
+        holder.targets = {"candidate": Path(temp)}
+        units = ["prepare-" + name for name, _ in GATE] + ["gate-prepare", "runtime-release"]
+        prepared = [dict(label="candidate", unit=unit, exit=0, commit="frozen-commit",
+                         phase="prepare", pair="prepare-1", capture="1") for unit in units]
+        holder.rows = prepared.copy()
+        artifacts = [Path(temp) / name for name in ("debug/ignite", "ignite-test/rt/debug/libignite_rt.a",
+                                                    "ignite-test/rt/release/libignite_rt.a")]
+        for path in artifacts:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"prepared")
+        assert holder.is_prepared()
+        calls = []
+        holder.prepare = lambda: calls.append("prepare")
+        holder.ensure_prepared()
+        assert not calls, "Matching complete preparation must be reusable"
+        holder.refs["baseline"] = "frozen-baseline"
+        assert not holder.is_prepared(), "Every configured source needs preparation"
+        del holder.refs["baseline"]
+        for change in ({"exit": 1}, {"commit": "other-commit"}, {"pair": "prepare-2"},
+                       {"capture": "2"}, {"phase": "measured"}):
+            holder.rows = prepared + [dict(prepared[0], **change)]
+            assert not holder.is_prepared(), change
+        holder.rows = prepared[:-1]
+        assert not holder.is_prepared(), "A runtime build record is required"
+        holder.rows = prepared + [dict(prepared[0], unit="clean")]
+        assert not holder.is_prepared(), "Cleaning invalidates prior preparation"
+        holder.rows = prepared.copy()
+        artifacts[-1].write_bytes(b"")
+        assert not holder.is_prepared(), "Empty artifacts cannot prove preparation"
+        artifacts[-1].unlink()
+        holder.ensure_prepared()
+        assert calls == ["prepare"], "Missing outputs must execute full preparation"
+    print("Self-check passed: paired ratios, exclusions, candidate failures, strict closure controls, and preparation reuse")
 
 
 def parser():

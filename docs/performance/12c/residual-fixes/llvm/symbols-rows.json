@@ -1,0 +1,222 @@
+[
+  {
+    "pair": 0,
+    "side": "reference",
+    "seconds": 0.36262112302938476,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "load_after": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 0,
+    "side": "candidate",
+    "seconds": 0.3650668819900602,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "load_after": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 1,
+    "side": "candidate",
+    "seconds": 0.33580523903947324,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "load_after": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 1,
+    "side": "reference",
+    "seconds": 0.3147581259836443,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "load_after": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 2,
+    "side": "reference",
+    "seconds": 0.35435408796183765,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "load_after": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 2,
+    "side": "candidate",
+    "seconds": 0.335661168966908,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "load_after": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 3,
+    "side": "candidate",
+    "seconds": 0.36180381500162184,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "load_after": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 3,
+    "side": "reference",
+    "seconds": 0.33085716696223244,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "load_after": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 4,
+    "side": "reference",
+    "seconds": 0.3128710730234161,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "load_after": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 4,
+    "side": "candidate",
+    "seconds": 0.3243128920439631,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "load_after": [
+      16.3837890625,
+      12.3330078125,
+      11.0146484375
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  }
+]

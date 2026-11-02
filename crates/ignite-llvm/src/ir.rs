@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write as _;
+use std::hash::{BuildHasherDefault, Hasher};
 
 use ignite_check::Symbols;
 use ignite_syntax::SourceFile;
@@ -212,7 +213,31 @@ struct Debug {
     /// line is ASCII (its column is then a byte difference).
     lines: BTreeMap<String, Vec<(usize, bool)>>,
     /// `!N` of each `DILocation` made, by line, column and scope.
-    locations: HashMap<(usize, usize, usize), usize>,
+    locations: HashMap<(usize, usize, usize), usize, BuildHasherDefault<LocationHasher>>,
+}
+
+/// Only compiler-generated line, column and scope integers use this map.
+/// Mix every component and both ends of the hash for bucket indices and tags.
+#[derive(Default)]
+struct LocationHasher(u64);
+
+impl Hasher for LocationHasher {
+    fn finish(&self) -> u64 {
+        let mut value = self.0;
+        value = (value ^ (value >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+        value = (value ^ (value >> 27)).wrapping_mul(0x94d049bb133111eb);
+        value ^ (value >> 31)
+    }
+
+    fn write_usize(&mut self, value: usize) {
+        self.0 = self.0.wrapping_mul(0x9e3779b185ebca87) ^ value as u64;
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 = self.0.wrapping_mul(0x9e3779b185ebca87) ^ u64::from(*byte);
+        }
+    }
 }
 
 /// The largest column a `DILocation` holds; a later column is clamped.
@@ -264,33 +289,38 @@ impl<'e> Module<'e> {
         let Some(roots) = &self.roots else {
             return;
         };
-        let functions: Vec<(String, BTreeSet<String>)> = self
-            .functions
-            .iter()
-            .map(|text| (defined_symbol(text), referenced_symbols(text)))
-            .collect();
-        let index: BTreeMap<&str, usize> = functions
-            .iter()
-            .enumerate()
-            .map(|(i, (symbol, _))| (symbol.as_str(), i))
-            .collect();
-        let mut pending: Vec<&str> = roots.iter().map(String::as_str).collect();
-        let mut global_refs = BTreeSet::new();
-        for global in &self.globals {
-            global_refs.extend(referenced_symbols(global));
-        }
-        pending.extend(global_refs.iter().map(String::as_str));
-        let mut kept = vec![false; functions.len()];
-        while let Some(symbol) = pending.pop() {
-            let Some(&i) = index.get(symbol) else {
-                continue;
-            };
-            if kept[i] {
-                continue;
+        // The graph lives only while function text is immutable. Borrow the
+        // symbol slices instead of allocating a name for every IR reference.
+        let kept = {
+            let functions: Vec<(&str, BTreeSet<&str>)> = self
+                .functions
+                .iter()
+                .map(|text| (defined_symbol(text), symbol_slices(text)))
+                .collect();
+            let index: BTreeMap<&str, usize> = functions
+                .iter()
+                .enumerate()
+                .map(|(i, (symbol, _))| (*symbol, i))
+                .collect();
+            let mut pending: Vec<&str> = roots.iter().map(String::as_str).collect();
+            let mut global_refs = BTreeSet::new();
+            for global in &self.globals {
+                global_refs.extend(symbol_slices(global));
             }
-            kept[i] = true;
-            pending.extend(functions[i].1.iter().map(String::as_str));
-        }
+            pending.extend(global_refs.iter().copied());
+            let mut kept = vec![false; functions.len()];
+            while let Some(symbol) = pending.pop() {
+                let Some(&i) = index.get(symbol) else {
+                    continue;
+                };
+                if kept[i] {
+                    continue;
+                }
+                kept[i] = true;
+                pending.extend(functions[i].1.iter().copied());
+            }
+            kept
+        };
         let mut i = 0;
         self.functions.retain(|_| {
             let keep = kept[i];
@@ -592,12 +622,9 @@ impl<'e> Module<'e> {
 
 /// The symbol a function definition text defines: the first `@name` of its
 /// `define` line, unquoted.
-fn defined_symbol(text: &str) -> String {
+fn defined_symbol(text: &str) -> &str {
     let header = text.lines().next().unwrap_or("");
-    referenced_symbols(header)
-        .into_iter()
-        .next()
-        .unwrap_or_default()
+    symbol_slices(header).into_iter().next().unwrap_or_default()
 }
 
 /// Every symbol `text` names as `@name` or `@"name"`, unquoted. A symbol
@@ -605,6 +632,22 @@ fn defined_symbol(text: &str) -> String {
 /// any character but `"`.
 pub fn referenced_symbols(text: &str) -> BTreeSet<String> {
     let mut symbols = BTreeSet::new();
+    scan_symbols(text, |symbol| {
+        symbols.insert(symbol.to_owned());
+    });
+    symbols
+}
+
+/// References borrowed from immutable IR text, for the temporary pruning graph.
+fn symbol_slices(text: &str) -> BTreeSet<&str> {
+    let mut symbols = BTreeSet::new();
+    scan_symbols(text, |symbol| {
+        symbols.insert(symbol);
+    });
+    symbols
+}
+
+fn scan_symbols<'a>(text: &'a str, mut emit: impl FnMut(&'a str)) {
     let bytes = text.as_bytes();
     let mut i = 0;
     while let Some(at) = text[i..].find('@') {
@@ -612,7 +655,7 @@ pub fn referenced_symbols(text: &str) -> BTreeSet<String> {
         if bytes.get(start) == Some(&b'"') {
             match text[start + 1..].find('"') {
                 Some(len) => {
-                    symbols.insert(text[start + 1..start + 1 + len].to_string());
+                    emit(&text[start + 1..start + 1 + len]);
                     i = start + 1 + len + 1;
                 }
                 None => break,
@@ -623,12 +666,11 @@ pub fn referenced_symbols(text: &str) -> BTreeSet<String> {
                 .take_while(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'$' | b'.' | b'_'))
                 .count();
             if len > 0 {
-                symbols.insert(text[start..start + len].to_string());
+                emit(&text[start..start + len]);
             }
             i = start + len;
         }
     }
-    symbols
 }
 
 /// One function body: registers, labels, entry-block allocas.

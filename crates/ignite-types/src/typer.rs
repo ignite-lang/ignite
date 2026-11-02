@@ -3997,10 +3997,9 @@ impl<'a> Typer<'a> {
             }
         };
         let from_scrutinee = ty
-            .and_then(|t| self.variants(t))
-            .filter(|(q, _)| owner.is_none_or(|o| o == q.name))
-            .and_then(|(_, variants)| variants.into_iter().find(|(v, _)| *v == variant.name))
-            .map(|(_, payload)| payload);
+            .and_then(|t| self.selected_variant(t, &variant.name))
+            .filter(|(q, _, _)| owner.is_none_or(|o| o == q.name))
+            .map(|(_, _, payload)| payload);
         let payload = match from_scrutinee {
             Some(payload) => Some(payload),
             None if owner.is_none()

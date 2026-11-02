@@ -1,0 +1,16 @@
+bytes=20305420 unique=216 all occurrence sequences and256classifications equal
+pass=1 variant=direct-partial seconds=0.472344767
+pass=1 variant=direct-all seconds=0.475384971
+pass=1 variant=class-table seconds=0.536974309
+pass=2 variant=class-table seconds=0.538364319
+pass=2 variant=direct-all seconds=0.464162365
+pass=2 variant=direct-partial seconds=0.474882930
+pass=3 variant=direct-partial seconds=0.469686239
+pass=3 variant=direct-all seconds=0.485739758
+pass=3 variant=class-table seconds=0.542831881
+pass=4 variant=class-table seconds=0.545928837
+pass=4 variant=direct-all seconds=0.469725741
+pass=4 variant=direct-partial seconds=0.470245400
+pass=5 variant=direct-partial seconds=0.484818703
+pass=5 variant=direct-all seconds=0.482769027
+pass=5 variant=class-table seconds=0.549349741

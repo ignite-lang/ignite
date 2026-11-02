@@ -41,7 +41,15 @@ language revisions because the model schema itself evolved between 11b and 12b.
 
 Once the smoke records are inspected, use the same arguments with `all`. Individual modes
 `prepare`, `cold`, `warm`, `programs`, `cli`, and `summarize` support focused work. `prepare`
-warms the complete gate and builds the runner runtime. `warm` does that automatically;
+warms the complete gate and builds the runner runtime. `warm` reuses it only when the latest
+gate/component and release-runtime preparation records all succeeded for every exact source
+commit in one preparation capture per source, no later clean invalidated them, and the owned
+compiler plus debug/release runner archives remain present and nonempty. Configuration,
+tool versions and source bytes are rechecked before reuse. A failed, incomplete, stale or
+missing preparation/output runs the full `prepare` path instead. This permits an explicit
+`prepare`, a bounded low-load preflight, then `warm` without repeating unmeasured setup;
+every measured gate, touch, command, count and budget is unchanged. Explicit `prepare` always
+executes the complete preparation.
 `programs` and `cli` require already-built compilers (`prepare` or `cold`). Cold mode cleans
 only owned per-ref Cargo targets via `cargo clean`, including artifacts left by smoke.
 The source revision and roots must match existing evidence; use new evidence for a new

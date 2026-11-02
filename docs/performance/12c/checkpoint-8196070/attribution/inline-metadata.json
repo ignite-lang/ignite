@@ -1,0 +1,691 @@
+{
+  "diagnostic_only": true,
+  "script_sha256": "5d0c44e9c04399b40c80a46d5f84ff69c99c7ac745d39edd09b419b3d9e984a4",
+  "pairs": 1,
+  "plan": {
+    "native-rust-list": {
+      "comparison": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/tests/rust/ignite-test",
+          "--list"
+        ]
+      ],
+      "candidate": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/tests/rust/ignite-test",
+          "--list"
+        ]
+      ]
+    },
+    "native-rust-full": {
+      "comparison": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/tests/rust/ignite-test"
+        ]
+      ],
+      "candidate": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/tests/rust/ignite-test"
+        ]
+      ]
+    },
+    "native-llvm-list": {
+      "comparison": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/tests/llvm/bin/ignite-test",
+          "--list"
+        ]
+      ],
+      "candidate": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/tests/llvm/bin/ignite-test",
+          "--list"
+        ]
+      ]
+    },
+    "native-llvm-full": {
+      "comparison": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/tests/llvm/bin/ignite-test"
+        ]
+      ],
+      "candidate": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/tests/llvm/bin/ignite-test"
+        ]
+      ]
+    },
+    "cli-rust-list": {
+      "comparison": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "rust",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test",
+          "--target-dir",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/cargo",
+          "--list"
+        ]
+      ],
+      "candidate": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "rust",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test",
+          "--target-dir",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/cargo",
+          "--list"
+        ]
+      ]
+    },
+    "cli-rust-full": {
+      "comparison": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "rust",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test",
+          "--target-dir",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/cargo"
+        ]
+      ],
+      "candidate": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "rust",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test",
+          "--target-dir",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/cargo"
+        ]
+      ]
+    },
+    "cli-llvm-list": {
+      "comparison": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "llvm",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test",
+          "--runtime",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/rt/debug/libignite_rt.a",
+          "--list"
+        ]
+      ],
+      "candidate": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "llvm",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test",
+          "--runtime",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/rt/debug/libignite_rt.a",
+          "--list"
+        ]
+      ]
+    },
+    "cli-llvm-full": {
+      "comparison": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "llvm",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test",
+          "--runtime",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/rt/debug/libignite_rt.a"
+        ]
+      ],
+      "candidate": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "llvm",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test",
+          "--runtime",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/rt/debug/libignite_rt.a"
+        ]
+      ]
+    },
+    "cli-both-list": {
+      "comparison": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "rust",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test",
+          "--target-dir",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/cargo",
+          "--list"
+        ],
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "llvm",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test",
+          "--runtime",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/rt/debug/libignite_rt.a",
+          "--list"
+        ]
+      ],
+      "candidate": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "both",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test",
+          "--target-dir",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/cargo",
+          "--runtime",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/rt/debug/libignite_rt.a",
+          "--list"
+        ]
+      ]
+    },
+    "cli-both-full": {
+      "comparison": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "rust",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test",
+          "--target-dir",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/cargo"
+        ],
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "llvm",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test",
+          "--runtime",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/rt/debug/libignite_rt.a"
+        ]
+      ],
+      "candidate": [
+        [
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/debug/ignite",
+          "test",
+          "examples/terminal/command_schema.ignite",
+          "examples/terminal/commands.ignite",
+          "examples/terminal/terminal.ignite",
+          "examples/todo/todo.ignite",
+          "std/cli.ignite",
+          "std/console.ignite",
+          "std/contract.ignite",
+          "std/control.ignite",
+          "std/deploy.ignite",
+          "std/json.ignite",
+          "std/net.ignite",
+          "std/option.ignite",
+          "std/policy.ignite",
+          "std/probe.ignite",
+          "std/protocol/http.ignite",
+          "std/protocol/telnet.ignite",
+          "std/result.ignite",
+          "std/sli.ignite",
+          "std/text.ignite",
+          "std/time.ignite",
+          "--target",
+          "both",
+          "--out",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test",
+          "--target-dir",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/cargo",
+          "--runtime",
+          "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/rt/debug/libignite_rt.a"
+        ]
+      ]
+    }
+  },
+  "versions": {
+    "comparison": {
+      "source": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/comparison-92733498f840",
+      "build": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840",
+      "files": [
+        "examples/terminal/command_schema.ignite",
+        "examples/terminal/commands.ignite",
+        "examples/terminal/terminal.ignite",
+        "examples/todo/todo.ignite",
+        "std/cli.ignite",
+        "std/console.ignite",
+        "std/contract.ignite",
+        "std/control.ignite",
+        "std/deploy.ignite",
+        "std/json.ignite",
+        "std/net.ignite",
+        "std/option.ignite",
+        "std/policy.ignite",
+        "std/probe.ignite",
+        "std/protocol/http.ignite",
+        "std/protocol/telnet.ignite",
+        "std/result.ignite",
+        "std/sli.ignite",
+        "std/text.ignite",
+        "std/time.ignite"
+      ],
+      "selected_source_sha256": {
+        "examples/terminal/command_schema.ignite": "43c2f9b1eac5848791a75884f8bbd7304c7ddd8bc028d8b4758743785ff802c0",
+        "examples/terminal/commands.ignite": "fe4b717341a7805d67a7b7f376e2e08351479b014aa864070ba5ccff7631124c",
+        "examples/terminal/terminal.ignite": "633057460dd46491e354fcd49de5c92e22a849641373bb5acdd15b52eeae5d3c",
+        "examples/todo/todo.ignite": "dab573fa81ba29da3a4e5ba525437aefa42f285a9e6d78194b7ffa3bc448270e",
+        "std/cli.ignite": "3ceb89f0cbfe1e6efabfd2976120da919cd866aed68647822487516a8c0d6f49",
+        "std/console.ignite": "8a776437b422b9f00bc27e59acdc20864e944cb261f2a93ca374e340496807d1",
+        "std/contract.ignite": "9492ae0c87503a15f2b9e50e13e6ba69277313d41a1f07226b71058748e586b5",
+        "std/control.ignite": "b62d5e7acc0b9b443ec0c9cc72487e7f077e297f492b2adaaa2b74d710c866cd",
+        "std/deploy.ignite": "2d3e660ba159a81afdd48a4d0e5d0e355ad44bb7000693eb280130b397e59c0d",
+        "std/json.ignite": "cef1773665dbdfa28ffbcf69917395c42817266534409d1c35dfbf068b457b6e",
+        "std/net.ignite": "fdbc816b34adf442ea74c337bf45db77efcf0c4cda4a89fece6ba1d6b48c590b",
+        "std/option.ignite": "616aaa065115ad53a60d44d29d535bc7261728bba7787eec13cba5ced2cca4a0",
+        "std/policy.ignite": "125579965238ada9303997947863bd4edf372c52c237b9d5b050b57b2edc7970",
+        "std/probe.ignite": "8bf7dd09f33b9e1203bfe96df29d10cae476a25695a9876e91ebbaf8faebf06f",
+        "std/protocol/http.ignite": "5b206bfb94fd8f7a5a87696ad516f036d655bbbeb160e2939f5666bbde0bcda0",
+        "std/protocol/telnet.ignite": "6d51d1c5e1c7efc53a8b0c883cf310cdee5abdf2bc3513dfc20f2d1af1456426",
+        "std/result.ignite": "5637625de4b013c23f1924ef8b3d07f3c5070c47a46cda86f5438b4d174ca9f3",
+        "std/sli.ignite": "fd07eb39bcda6dadd1da9c4fc1fd1ad985849bab5191e2d0018cfa05f0cf0ab7",
+        "std/text.ignite": "7014247f16a1995326ce61203b31dd5d21ffd06a3297a3acbc882abcae3913a1",
+        "std/time.ignite": "e1d47cb3f8649af0bd509585639126e5c8248a400186a87f1af5941ce05bd424"
+      },
+      "binaries_before": {
+        "cli": {
+          "path": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/ignite",
+          "sha256": "e04c7d31deafc9a8b697cfb7c73b3d90503941c1f666371fd5a0ce8a60e8f46a",
+          "bytes": 37742072
+        },
+        "rust": {
+          "path": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/tests/rust/ignite-test",
+          "sha256": "e786cd2a9bee433dfdcf774f6887dee31ca52cce529e62179cd813a3a7a06eeb",
+          "bytes": 11318632
+        },
+        "llvm": {
+          "path": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/tests/llvm/bin/ignite-test",
+          "sha256": "65e6260c3c19ff6541570d14322481d046251cf54578a91492da2d8ce4359b2f",
+          "bytes": 7977928
+        },
+        "runtime": {
+          "path": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/ignite-test/rt/debug/libignite_rt.a",
+          "sha256": "48f88c95a2a3eb81d156cb87dc897812421cd9a78b3b405d584fe4dd61e96b03",
+          "bytes": 30105924
+        }
+      }
+    },
+    "candidate": {
+      "source": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-819607066ef5",
+      "build": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5",
+      "files": [
+        "examples/terminal/command_schema.ignite",
+        "examples/terminal/commands.ignite",
+        "examples/terminal/terminal.ignite",
+        "examples/todo/todo.ignite",
+        "std/cli.ignite",
+        "std/console.ignite",
+        "std/contract.ignite",
+        "std/control.ignite",
+        "std/deploy.ignite",
+        "std/json.ignite",
+        "std/net.ignite",
+        "std/option.ignite",
+        "std/policy.ignite",
+        "std/probe.ignite",
+        "std/protocol/http.ignite",
+        "std/protocol/telnet.ignite",
+        "std/result.ignite",
+        "std/sli.ignite",
+        "std/text.ignite",
+        "std/time.ignite"
+      ],
+      "selected_source_sha256": {
+        "examples/terminal/command_schema.ignite": "43c2f9b1eac5848791a75884f8bbd7304c7ddd8bc028d8b4758743785ff802c0",
+        "examples/terminal/commands.ignite": "fe4b717341a7805d67a7b7f376e2e08351479b014aa864070ba5ccff7631124c",
+        "examples/terminal/terminal.ignite": "633057460dd46491e354fcd49de5c92e22a849641373bb5acdd15b52eeae5d3c",
+        "examples/todo/todo.ignite": "dab573fa81ba29da3a4e5ba525437aefa42f285a9e6d78194b7ffa3bc448270e",
+        "std/cli.ignite": "3ceb89f0cbfe1e6efabfd2976120da919cd866aed68647822487516a8c0d6f49",
+        "std/console.ignite": "8a776437b422b9f00bc27e59acdc20864e944cb261f2a93ca374e340496807d1",
+        "std/contract.ignite": "9492ae0c87503a15f2b9e50e13e6ba69277313d41a1f07226b71058748e586b5",
+        "std/control.ignite": "b62d5e7acc0b9b443ec0c9cc72487e7f077e297f492b2adaaa2b74d710c866cd",
+        "std/deploy.ignite": "2d3e660ba159a81afdd48a4d0e5d0e355ad44bb7000693eb280130b397e59c0d",
+        "std/json.ignite": "cef1773665dbdfa28ffbcf69917395c42817266534409d1c35dfbf068b457b6e",
+        "std/net.ignite": "fdbc816b34adf442ea74c337bf45db77efcf0c4cda4a89fece6ba1d6b48c590b",
+        "std/option.ignite": "616aaa065115ad53a60d44d29d535bc7261728bba7787eec13cba5ced2cca4a0",
+        "std/policy.ignite": "125579965238ada9303997947863bd4edf372c52c237b9d5b050b57b2edc7970",
+        "std/probe.ignite": "8bf7dd09f33b9e1203bfe96df29d10cae476a25695a9876e91ebbaf8faebf06f",
+        "std/protocol/http.ignite": "5b206bfb94fd8f7a5a87696ad516f036d655bbbeb160e2939f5666bbde0bcda0",
+        "std/protocol/telnet.ignite": "6d51d1c5e1c7efc53a8b0c883cf310cdee5abdf2bc3513dfc20f2d1af1456426",
+        "std/result.ignite": "5637625de4b013c23f1924ef8b3d07f3c5070c47a46cda86f5438b4d174ca9f3",
+        "std/sli.ignite": "fd07eb39bcda6dadd1da9c4fc1fd1ad985849bab5191e2d0018cfa05f0cf0ab7",
+        "std/text.ignite": "7014247f16a1995326ce61203b31dd5d21ffd06a3297a3acbc882abcae3913a1",
+        "std/time.ignite": "e1d47cb3f8649af0bd509585639126e5c8248a400186a87f1af5941ce05bd424"
+      },
+      "binaries_before": {
+        "cli": {
+          "path": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/debug/ignite",
+          "sha256": "eb5411db508f237230e26ae41bb86a789d6e550a1b37ff79f84cf1e9284b55ca",
+          "bytes": 38271560
+        },
+        "rust": {
+          "path": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/tests/rust/ignite-test",
+          "sha256": "0cca8507f0879b7cfa2abc8579d00e34628463f272552e47ffbd1f971d0e81fd",
+          "bytes": 11294432
+        },
+        "llvm": {
+          "path": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/tests/llvm/bin/ignite-test",
+          "sha256": "6dd727cf7d013d849c8648329b97a21eddb1e62fdae0bb067a5ff7721a153a54",
+          "bytes": 7955640
+        },
+        "runtime": {
+          "path": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/ignite-test/rt/debug/libignite_rt.a",
+          "sha256": "759c23fff563911631b1b3fac45c859d6ec66237495cf8b6b21ea45dd50f07f3",
+          "bytes": 30163236
+        }
+      }
+    }
+  },
+  "environment": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_RELEASE_DEBUG": "0",
+    "CARGO_NET_OFFLINE": "true",
+    "RUSTC_WRAPPER": null,
+    "RUSTUP_TOOLCHAIN": null,
+    "RUSTFLAGS": null
+  },
+  "binaries_after": {
+    "comparison": {
+      "cli": "e04c7d31deafc9a8b697cfb7c73b3d90503941c1f666371fd5a0ce8a60e8f46a",
+      "rust": "e786cd2a9bee433dfdcf774f6887dee31ca52cce529e62179cd813a3a7a06eeb",
+      "llvm": "65e6260c3c19ff6541570d14322481d046251cf54578a91492da2d8ce4359b2f",
+      "runtime": "48f88c95a2a3eb81d156cb87dc897812421cd9a78b3b405d584fe4dd61e96b03"
+    },
+    "candidate": {
+      "cli": "eb5411db508f237230e26ae41bb86a789d6e550a1b37ff79f84cf1e9284b55ca",
+      "rust": "0cca8507f0879b7cfa2abc8579d00e34628463f272552e47ffbd1f971d0e81fd",
+      "llvm": "6dd727cf7d013d849c8648329b97a21eddb1e62fdae0bb067a5ff7721a153a54",
+      "runtime": "759c23fff563911631b1b3fac45c859d6ec66237495cf8b6b21ea45dd50f07f3"
+    }
+  }
+}

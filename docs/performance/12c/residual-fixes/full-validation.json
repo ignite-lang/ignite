@@ -1,0 +1,51 @@
+{
+  "purpose": "Correctness close before final frozen benchmark; timings are not paired acceptance",
+  "path": "/home/timo/.cache/scratch/ignite-perf12c/validation/1793623406864573847",
+  "steps": [
+    {
+      "step": "fmt",
+      "seconds": 0.7714662859798409,
+      "exit": 0
+    },
+    {
+      "step": "clippy",
+      "seconds": 2.881022071989719,
+      "exit": 0
+    },
+    {
+      "step": "workspace",
+      "seconds": 16.51532516896259,
+      "exit": 0
+    },
+    {
+      "step": "inline",
+      "seconds": 1.110091224021744,
+      "exit": 0
+    },
+    {
+      "step": "gate",
+      "seconds": 13.894722577009816,
+      "exit": 0
+    },
+    {
+      "step": "compile",
+      "seconds": 1.051723311014939,
+      "exit": 0
+    },
+    {
+      "step": "compile-llvm",
+      "seconds": 0.345631098956801,
+      "exit": 0
+    },
+    {
+      "step": "compile-todo",
+      "seconds": 0.9338470719521865,
+      "exit": 0
+    },
+    {
+      "step": "compile-todo-llvm",
+      "seconds": 0.26806644396856427,
+      "exit": 0
+    }
+  ]
+}

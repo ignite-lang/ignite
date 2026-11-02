@@ -1,0 +1,491 @@
+{
+  "accepted": false,
+  "any_command_failed": false,
+  "candidate_failed": false,
+  "closure_controls_pass": true,
+  "commits": {
+    "baseline": "df7ccb9bed4440824a2d108fa112eba3fea25f99",
+    "candidate": "819607066ef5032b0af52ab02a4f42034897722c",
+    "comparison": "92733498f8406d8f0663a571be85351c548ea99e"
+  },
+  "comparable_low_load": false,
+  "comparison_missing": [
+    "cold-clippy",
+    "cold-fmt",
+    "cold-inline",
+    "cold-workspace",
+    "gate-cold",
+    "todod-llvm-dev",
+    "todod-llvm-release",
+    "todod-rust-dev",
+    "todod-rust-release"
+  ],
+  "coverage_pass": true,
+  "frozen_baseline_matches": true,
+  "ignite_test_absolute_pass": true,
+  "missing": [
+    "cold-clippy",
+    "cold-fmt",
+    "cold-inline",
+    "cold-workspace",
+    "gate-cold",
+    "todod-llvm-dev",
+    "todod-llvm-release",
+    "todod-rust-dev",
+    "todod-rust-release"
+  ],
+  "over_budget": [
+    "file-rustgen",
+    "gate-warm",
+    "plan",
+    "warm-clippy",
+    "warm-inline"
+  ],
+  "results": [
+    {
+      "baseline": "baseline",
+      "before": 0.4870397829799913,
+      "candidate": 0.537441493012011,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            31.2236328125,
+            23.61572265625
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        9.30517578125,
+        17.2666015625
+      ],
+      "ratio": 1.0704273207031418,
+      "unit": "warm-fmt",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 2.4359243409708142,
+      "candidate": 3.1413462980417535,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            31.2236328125,
+            23.61572265625
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        9.30517578125,
+        17.2666015625
+      ],
+      "ratio": 1.1674975216386723,
+      "unit": "warm-clippy",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 11.554198651982006,
+      "candidate": 12.37464719399577,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            28.96337890625,
+            22.125
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        9.30517578125,
+        16.5244140625
+      ],
+      "ratio": 1.0586019436835055,
+      "unit": "warm-workspace",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.6825904700090177,
+      "candidate": 1.2034425850142725,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            25.19677734375,
+            19.40576171875
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        9.201171875,
+        16.92529296875
+      ],
+      "ratio": 1.7497547900359711,
+      "unit": "warm-inline",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 15.130240973026957,
+      "candidate": 16.960510678007267,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            31.2236328125,
+            23.61572265625
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        9.30517578125,
+        17.2666015625
+      ],
+      "ratio": 1.1209676506965867,
+      "unit": "gate-warm",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.025292642996646464,
+      "candidate": 0.02494298102101311,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            25.19677734375,
+            19.40576171875
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        8.86474609375,
+        16.92529296875
+      ],
+      "ratio": 0.9861753484726877,
+      "unit": "no-run-warm",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 2.1736031400505453,
+      "candidate": 2.3147604809491895,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            25.19677734375,
+            19.40576171875
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        8.86474609375,
+        16.92529296875
+      ],
+      "ratio": 1.0154711917520967,
+      "unit": "no-run-touch",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 4.779298969020601,
+      "candidate": 2.2263469839817844,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            24.5400390625,
+            18.412109375
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        8.86474609375,
+        17.8125
+      ],
+      "ratio": 0.4368589679284613,
+      "unit": "file-ignite_test",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 1.8370301569812,
+      "candidate": 2.7215560380136594,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            23.61572265625,
+            18.412109375
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        8.86474609375,
+        17.2666015625
+      ],
+      "ratio": 1.3993301013419517,
+      "unit": "file-rustgen",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.06376324401935562,
+      "candidate": 0.07183166698087007,
+      "excluded": [],
+      "loads": [
+        12.80078125,
+        13.56689453125
+      ],
+      "ratio": 1.0740662047983314,
+      "unit": "check",
+      "valid_pairs": 15
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.06488633301341906,
+      "candidate": 0.06966579699655995,
+      "excluded": [],
+      "loads": [
+        12.80078125,
+        13.56689453125
+      ],
+      "ratio": 1.1066810417327817,
+      "unit": "plan",
+      "valid_pairs": 15
+    },
+    {
+      "baseline": "comparison",
+      "before": 0.5812101169722155,
+      "candidate": 0.537441493012011,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            17.2578125,
+            23.61572265625
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        8.39501953125,
+        17.2666015625
+      ],
+      "ratio": 0.992555890156771,
+      "unit": "warm-fmt",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "comparison",
+      "before": 2.754475990019273,
+      "candidate": 3.1413462980417535,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            17.2578125,
+            23.61572265625
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        8.39501953125,
+        17.2666015625
+      ],
+      "ratio": 1.1271726874043941,
+      "unit": "warm-clippy",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "comparison",
+      "before": 13.297787704505026,
+      "candidate": 13.320320979488315,
+      "excluded": [],
+      "loads": [
+        7.802734375,
+        22.125
+      ],
+      "ratio": 0.9329995086843607,
+      "unit": "warm-workspace",
+      "valid_pairs": 4
+    },
+    {
+      "baseline": "comparison",
+      "before": 1.181009914522292,
+      "candidate": 1.197606669011293,
+      "excluded": [],
+      "loads": [
+        7.97412109375,
+        19.40576171875
+      ],
+      "ratio": 1.0087774302366173,
+      "unit": "warm-inline",
+      "valid_pairs": 4
+    },
+    {
+      "baseline": "comparison",
+      "before": 17.5093373869895,
+      "candidate": 16.960510678007267,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            17.2578125,
+            23.61572265625
+          ],
+          "pair": "1793620541877908746-warm-1",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        8.39501953125,
+        17.2666015625
+      ],
+      "ratio": 0.9686551982606695,
+      "unit": "gate-warm",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "comparison",
+      "before": 0.02578598851687275,
+      "candidate": 0.02492829249240458,
+      "excluded": [],
+      "loads": [
+        7.97412109375,
+        19.40576171875
+      ],
+      "ratio": 0.9667665901292622,
+      "unit": "no-run-warm",
+      "valid_pairs": 4
+    },
+    {
+      "baseline": "comparison",
+      "before": 2.4525987939850893,
+      "candidate": 2.343901134474436,
+      "excluded": [],
+      "loads": [
+        7.97412109375,
+        19.40576171875
+      ],
+      "ratio": 0.9511396622775254,
+      "unit": "no-run-touch",
+      "valid_pairs": 4
+    },
+    {
+      "baseline": "comparison",
+      "before": 2.4615310124645475,
+      "candidate": 2.1516302974778228,
+      "excluded": [],
+      "loads": [
+        8.6171875,
+        18.412109375
+      ],
+      "ratio": 0.8766299702286667,
+      "unit": "file-ignite_test",
+      "valid_pairs": 4
+    },
+    {
+      "baseline": "comparison",
+      "before": 3.6694659814820625,
+      "candidate": 2.633836887020152,
+      "excluded": [],
+      "loads": [
+        8.6171875,
+        18.412109375
+      ],
+      "ratio": 0.7129669957852727,
+      "unit": "file-rustgen",
+      "valid_pairs": 4
+    },
+    {
+      "baseline": "comparison",
+      "before": 0.09218184999190271,
+      "candidate": 0.07183166698087007,
+      "excluded": [],
+      "loads": [
+        12.80078125,
+        13.56689453125
+      ],
+      "ratio": 0.7578532301838711,
+      "unit": "check",
+      "valid_pairs": 15
+    },
+    {
+      "baseline": "comparison",
+      "before": 0.09397357900161296,
+      "candidate": 0.06966579699655995,
+      "excluded": [],
+      "loads": [
+        12.095703125,
+        13.56689453125
+      ],
+      "ratio": 0.787520174298994,
+      "unit": "plan",
+      "valid_pairs": 15
+    }
+  ],
+  "rustgen_11b_pass": false,
+  "schema": "ignite-performance/1",
+  "warm_workspace_absolute_pass": false
+}
