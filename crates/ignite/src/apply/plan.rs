@@ -142,6 +142,11 @@ pub struct Artifact {
 ///     machine), `included` (runs inside another member's process),
 ///     `external` (bound outside the host: observed, never started, stopped,
 ///     replaced or deleted) or `declared` (no instance of its own);
+///     A `remove` carries the base's ownership and authority: a member that
+///     was `owned` and is rebound to an external binding is one `remove`
+///     entry of the host-created instance (ownership `owned`, its instance
+///     and stop authority); its new external binding is only observed and
+///     gets no second entry;
 ///   - `reason`: why the member has this kind;
 ///   - `authority`: `process` (`host-created-instance-only`,
 ///     `with-host-process` or `none`), `instance` (the observed instance or
@@ -151,10 +156,14 @@ pub struct Artifact {
 ///   - `dependsOn`: the members it requires (readiness, references, uses);
 ///   - `dependents`: the exact affected dependent closure, the members this
 ///     member's change replaces transitively (empty when `unchanged`).
-/// - `startOrder`: the `owned` members to start (`add`, `replace`),
-///   providers before readiness-dependent consumers.
+/// - `startOrder`: the `owned` members to start (`add`, `replace`), every
+///   provider before the members that depend on it, over the same edges as
+///   `dependsOn`.
 /// - `stopOrder`: the `owned` members of the base to stop (`remove`,
-///   `replace`), dependents before their providers.
+///   `replace`), dependents before their providers, over the same edges.
+/// - A change of operational identity that affects no member (a codegen
+///   revision change of a system without executables) plans every member
+///   `unchanged` with fresh pins; admission treats it as a no-op.
 /// - `affectedDependents`: members replaced only through a provider.
 /// - `replacementPolicy`: `prepare-drain-release-start-ready`.
 #[derive(Clone, Debug)]
@@ -558,13 +567,6 @@ impl Plan {
                 reasons.insert(id.clone(), why.to_string());
             }
         }
-        if previous.is_some_and(|plan| plan.operational_identity != self.operational_identity)
-            && reasons.is_empty()
-        {
-            return Err(
-                "unsupported operational change outside the member action projection".into(),
-            );
-        }
         let mut dependencies = configuration_dependencies(&self.model)?;
         if let Some(model) = old_model {
             for (consumer, providers) in configuration_dependencies(model)? {
@@ -634,7 +636,10 @@ impl Plan {
             .iter()
             .map(|id| {
                 let kind = kinds[id];
-                let class = if new.contains_key(id) {
+                // A `remove` acts on the base's instance, so it carries the
+                // base's ownership and authority, also when the member stays
+                // in the desired model rebound to an external binding.
+                let class = if new.contains_key(id) && kind != "remove" {
                     new_class(id)
                 } else {
                     old_class(id).expect("removed member has a base")
@@ -749,12 +754,12 @@ impl Plan {
             })
             .cloned()
             .collect();
-        let start: Vec<String> = readiness_order(&self.model, &start_nodes)?
+        let start: Vec<String> = dependency_order(&self.model, &start_nodes)?
             .into_iter()
             .filter(|id| new_class(id) == Class::Owned)
             .collect();
         let mut stop: Vec<String> = old_model
-            .map(|model| readiness_order(model, &stop_nodes))
+            .map(|model| dependency_order(model, &stop_nodes))
             .transpose()?
             .unwrap_or_default()
             .into_iter()
@@ -1023,29 +1028,23 @@ fn configuration_dependencies(model: &Json) -> Result<BTreeMap<String, BTreeSet<
     Ok(dependencies)
 }
 
-/// Only readiness edges impose startup ordering. Signal/dataflow edges stay
-/// out of this graph, and arbitrary user lists retain their declared order.
-/// A cycle is rejected naming its members.
-fn readiness_order(model: &Json, nodes: &BTreeSet<String>) -> Result<Vec<String>, String> {
+/// `nodes` with every provider before its consumers, over the edges that
+/// give `dependsOn` and `dependents` ([`configuration_dependencies`]:
+/// readiness, references, uses). Signal/dataflow (`observes`), hosting and
+/// provisioning edges stay out of this graph, and arbitrary user lists retain
+/// their declared order. A cycle is rejected naming its members.
+fn dependency_order(model: &Json, nodes: &BTreeSet<String>) -> Result<Vec<String>, String> {
     let mut dependencies: BTreeMap<String, BTreeSet<String>> = nodes
         .iter()
         .map(|id| (id.clone(), BTreeSet::new()))
         .collect();
-    for edge in model
-        .get("edges")
-        .and_then(Json::as_array)
-        .into_iter()
-        .flatten()
-    {
-        if edge.get("kind").and_then(Json::as_str) != Some("readiness") {
-            continue;
-        }
-        let consumer = required_text(edge, "from")?;
-        let provider = required_text(edge, "to")?;
-        if nodes.contains(provider)
-            && let Some(required) = dependencies.get_mut(consumer)
-        {
-            required.insert(provider.into());
+    for (consumer, providers) in configuration_dependencies(model)? {
+        if let Some(required) = dependencies.get_mut(&consumer) {
+            required.extend(
+                providers
+                    .into_iter()
+                    .filter(|provider| nodes.contains(provider)),
+            );
         }
     }
     let mut result = Vec::new();
@@ -1056,7 +1055,7 @@ fn readiness_order(model: &Json, nodes: &BTreeSet<String>) -> Result<Vec<String>
             .map(|(id, _)| id.clone())
         else {
             return Err(format!(
-                "required action ordering contains a cycle: {} (each requires the next to be ready)",
+                "required action ordering contains a cycle: {} (each requires the next)",
                 cycle(&dependencies).join(" -> ")
             ));
         };
@@ -1509,10 +1508,13 @@ fn program_projection(program: &Program) -> Json {
         .iter()
         .filter(|decl| !decl.is_test_only() && !matches!(decl, Decl::System(_) | Decl::Assembly(_)))
         .map(|decl| {
-            (
-                decl.name().name.clone(),
-                text(without_spans(&format!("{decl:?}"))),
-            )
+            // Associated fns are keyed `Owner.name`, so `A.run` and `B.run`
+            // (or `TelnetServer.main` and `TelnetClient.main`) are both kept.
+            let name = match decl {
+                Decl::Fn(function) => function.qualified_name(),
+                _ => decl.name().name.clone(),
+            };
+            (name, text(without_spans(&format!("{decl:?}"))))
         })
         .collect();
     object([
@@ -2079,5 +2081,168 @@ mod tests {
         );
         plan.model=Json::parse(r#"{"components":[{"id":"a"},{"id":"b"}],"edges":[{"from":"a","kind":"observes","to":"b"},{"from":"b","kind":"observes","to":"a"}]}"#).unwrap();
         plan.annotate(None, &Json::Object(BTreeMap::new())).unwrap();
+    }
+
+    #[test]
+    fn adversary_projection_keys_associated_fns_by_qualified_name() {
+        let first = parsed("fn A.run() -> Int = 1\nfn B.run() -> Int = 2\n");
+        let changed = parsed("fn A.run() -> Int = 3\nfn B.run() -> Int = 2\n");
+        assert_ne!(
+            program_projection(&first),
+            program_projection(&changed),
+            "a changed body of A.run is invisible to the implementation projection"
+        );
+    }
+
+    #[test]
+    fn adversary_owned_member_rebound_external_keeps_stop_authority() {
+        let old = action_plan(
+            Json::parse(
+                r#"{
+            "components":[{"id":"server","port":1}],
+            "assembly":{"resolution":[
+                {"member":"server","via":"server","binding":{"variant":"NativeProcess"}}
+            ]}
+        }"#,
+            )
+            .unwrap(),
+        );
+        let mut new = action_plan(
+            Json::parse(
+                r#"{
+            "components":[{"id":"server","port":1}],
+            "assembly":{"resolution":[
+                {"member":"server","via":"server","binding":{"variant":"WorkstationExecutable"}}
+            ]}
+        }"#,
+            )
+            .unwrap(),
+        );
+        let ownership = Json::parse(r#"{"server":{"pid":7,"instance":"9"}}"#).unwrap();
+        new.annotate(Some(&old), &ownership).unwrap();
+        let stop = new
+            .actions
+            .get("stopOrder")
+            .and_then(Json::as_array)
+            .unwrap();
+        assert!(
+            stop.contains(&text("server")),
+            "the host-created process must be stopped"
+        );
+        let server = entry(&new, "server");
+        let authority = server.get("authority").unwrap();
+        assert_eq!(
+            (
+                server.get("ownership").and_then(Json::as_str),
+                authority.get("process").and_then(Json::as_str),
+                authority.get("instance").cloned(),
+            ),
+            (
+                Some("owned"),
+                Some("host-created-instance-only"),
+                Some(Json::parse(r#"{"pid":7,"instance":"9"}"#).unwrap())
+            ),
+            "stopOrder holds a member whose entry grants no authority over the instance to stop: {server:?}"
+        );
+    }
+
+    const USES: &str = r#"{
+        "components":[{"id":"api","listener":"listener"}],
+        "resources":[{"id":"listener","port":PORT}],
+        "edges":[{"from":"api","kind":"uses","to":"listener"}],
+        "assembly":{"resolution":[
+            {"member":"api","via":"api","binding":{"variant":"NativeProcess"}},
+            {"member":"listener","via":"listener","binding":{"variant":"LocalSocket"}}
+        ]}
+    }"#;
+
+    fn position(order: &[Json], id: &str) -> Option<usize> {
+        order.iter().position(|value| value.as_str() == Some(id))
+    }
+
+    #[test]
+    fn adversary_start_order_respects_depends_on() {
+        let mut plan = action_plan(Json::parse(&USES.replace("PORT", "1")).unwrap());
+        plan.annotate(None, &Json::Object(BTreeMap::new())).unwrap();
+        assert_eq!(
+            entry(&plan, "api").get("dependsOn"),
+            Some(&Json::Array(vec![text("listener")]))
+        );
+        let start = plan
+            .actions
+            .get("startOrder")
+            .and_then(Json::as_array)
+            .unwrap();
+        assert!(
+            position(start, "listener") < position(start, "api"),
+            "api dependsOn listener but starts first: {start:?}"
+        );
+    }
+
+    #[test]
+    fn adversary_stop_order_stops_dependents_before_providers() {
+        let old = action_plan(Json::parse(&USES.replace("PORT", "1")).unwrap());
+        let mut new = action_plan(Json::parse(&USES.replace("PORT", "2")).unwrap());
+        new.annotate(Some(&old), &Json::Object(BTreeMap::new()))
+            .unwrap();
+        assert_eq!(kind(&new, "listener"), "replace");
+        assert_eq!(kind(&new, "api"), "replace");
+        assert_eq!(
+            entry(&new, "listener").get("dependents"),
+            Some(&Json::Array(vec![text("api")]))
+        );
+        let stop = new
+            .actions
+            .get("stopOrder")
+            .and_then(Json::as_array)
+            .unwrap();
+        assert!(
+            position(stop, "api") < position(stop, "listener"),
+            "listener's dependent api is stopped after its provider: {stop:?}"
+        );
+    }
+
+    #[test]
+    fn adversary_codegen_change_without_affected_members_plans_unchanged() {
+        let model = Json::parse(
+            r#"{
+            "resources":[{"id":"first","port":1},{"id":"second","port":2}],
+            "assembly":{"resolution":[
+                {"member":"first","via":"first","binding":{"variant":"LocalSocket"}},
+                {"member":"second","via":"second","binding":{"variant":"LocalSocket"}}
+            ]}
+        }"#,
+        )
+        .unwrap();
+        let old = action_plan(model);
+        let mut new = old.clone();
+        new.codegen_revision = "ignite-codegen/next".into();
+        new.implementation_identity = "implementation-under-next".into();
+        new.operational_identity = "operational-under-next".into();
+        new.annotate(Some(&old), &Json::Object(BTreeMap::new()))
+            .expect(
+                "a compiler upgrade must not make an unchanged listener-only state unplannable",
+            );
+        assert_eq!(kind(&new, "first"), "unchanged");
+        assert_eq!(kind(&new, "second"), "unchanged");
+    }
+
+    #[test]
+    fn adversary_self_and_indirect_readiness_cycles_are_rejected() {
+        let mut plan = action_plan(
+            Json::parse(
+                r#"{"components":[{"id":"a"}],"edges":[{"from":"a","kind":"readiness","to":"a"}]}"#,
+            )
+            .unwrap(),
+        );
+        let error = plan
+            .annotate(None, &Json::Object(BTreeMap::new()))
+            .unwrap_err();
+        assert!(error.contains("cycle: a -> a"), "{error}");
+        plan.model = Json::parse(r#"{"components":[{"id":"a"},{"id":"b"},{"id":"c"}],"edges":[{"from":"a","kind":"readiness","to":"b"},{"from":"b","kind":"readiness","to":"c"},{"from":"c","kind":"readiness","to":"a"}]}"#).unwrap();
+        let error = plan
+            .annotate(None, &Json::Object(BTreeMap::new()))
+            .unwrap_err();
+        assert!(error.contains("cycle: a -> b -> c -> a"), "{error}");
     }
 }

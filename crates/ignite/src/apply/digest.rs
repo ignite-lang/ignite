@@ -1,11 +1,13 @@
 //! Cryptographic pins for admitted local inputs and retained artifacts.
 //!
-//! Every digest is SHA-256 over `domain || 0x00 || content` and printed as
-//! `sha256:<hex>`, so a pin of one kind can never be replayed as another:
-//! file contents use [`FILE`], plan ids, identities and revisions their own
-//! domain (`docs/slice.md` 17.3). [`bytes`] is the undomained primitive for
-//! callers that prefix their own format tag (the host journal's hash chain)
-//! or hash random state bytes.
+//! Every digest is SHA-256 over `len(domain) || domain || content`, the
+//! length as 8 big-endian bytes, printed as `sha256:<hex>`. The length prefix
+//! makes the split between domain and content unambiguous whatever bytes
+//! either holds, so a pin of one kind can never be replayed as another: file
+//! contents use [`FILE`], plan ids, identities and revisions their own domain
+//! (`docs/slice.md` 17.3). [`bytes`] is the undomained primitive for callers
+//! that prefix their own format tag (the host journal's hash chain) or hash
+//! random state bytes.
 
 use std::fs::File;
 use std::io::{self, Read};
@@ -22,11 +24,17 @@ pub fn bytes(input: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(input))
 }
 
+/// A hasher that has absorbed the length-prefixed `domain`.
+fn domain_hasher(domain: &str) -> Sha256 {
+    let mut hash = Sha256::new();
+    hash.update((domain.len() as u64).to_be_bytes());
+    hash.update(domain.as_bytes());
+    hash
+}
+
 /// SHA-256 of `input` under `domain`.
 pub fn tagged(domain: &str, input: &[u8]) -> String {
-    let mut hash = Sha256::new();
-    hash.update(domain.as_bytes());
-    hash.update([0]);
+    let mut hash = domain_hasher(domain);
     hash.update(input);
     format!("sha256:{:x}", hash.finalize())
 }
@@ -40,9 +48,7 @@ pub fn content(input: &[u8]) -> String {
 /// The [`FILE`] digest of the file at `path`, streamed.
 pub fn file(path: &Path) -> io::Result<String> {
     let mut input = File::open(path)?;
-    let mut hash = Sha256::new();
-    hash.update(FILE.as_bytes());
-    hash.update([0]);
+    let mut hash = domain_hasher(FILE);
     let mut buffer = [0; 64 * 1024];
     loop {
         let count = input.read(&mut buffer)?;
@@ -71,7 +77,7 @@ mod tests {
     fn file_digests_are_domain_separated_and_stream_like_content() {
         assert_eq!(
             super::content(b"abc"),
-            super::bytes(b"ignite-file/0.1\0abc")
+            super::bytes(b"\0\0\0\0\0\0\0\x0fignite-file/0.1abc")
         );
         assert_ne!(super::content(b"abc"), super::bytes(b"abc"));
         assert_ne!(super::content(b"abc"), super::tagged("other/0.1", b"abc"));
@@ -79,6 +85,15 @@ mod tests {
         assert_eq!(
             super::file(&executable).unwrap(),
             super::content(&std::fs::read(&executable).unwrap())
+        );
+    }
+
+    #[test]
+    fn adversary_a_domain_with_a_zero_byte_cannot_alias_another() {
+        assert_ne!(
+            super::tagged("ignite-a\0b", b"c"),
+            super::tagged("ignite-a", b"b\0c"),
+            "domain || 0x00 || content is ambiguous when the domain holds a zero byte"
         );
     }
 }

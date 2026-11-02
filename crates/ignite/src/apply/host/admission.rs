@@ -280,9 +280,20 @@ impl Host {
                     .and_then(|value| Plan::parse(&value).map_err(|reason| fail(3, reason)))
             })
             .transpose()?;
-        let unchanged = previous_plan
-            .as_ref()
-            .is_some_and(|old| old.operational_identity == plan.operational_identity);
+        // An operational identity change that affects no member (a codegen
+        // revision change of a system without executables) is a no-op too.
+        let every_member_unchanged = plan
+            .actions
+            .get("members")
+            .and_then(Json::as_array)
+            .is_some_and(|members| {
+                members
+                    .iter()
+                    .all(|member| member.get("kind").and_then(Json::as_str) == Some("unchanged"))
+            });
+        let unchanged = previous_plan.as_ref().is_some_and(|old| {
+            old.operational_identity == plan.operational_identity || every_member_unchanged
+        });
         let mut rollout_member = None;
         if !unchanged {
             let actions = plan
