@@ -30,11 +30,17 @@ const SOCKET: &str = "control.sock";
 const SOCKET_STAGING: &str = "control.d";
 /// The state identity's file name in the state directory.
 const IDENTITY: &str = "identity";
+/// The files whose presence means the state has host history, which is
+/// bound to its identity.
+const JOURNAL: &str = "host-journal.jsonl";
+const STATUS: &str = "status.json";
 
 /// Hold the state directory against a second host or run, then restrict
 /// the directory to its owner. A state owned by another user, a state a
 /// plain `ignite run` journals into, and a held lock are refused (exit 2)
-/// before anything in the directory changes.
+/// before anything in the directory changes. A flock proves nothing once
+/// the lock file was deleted or replaced, so the lock taken must be the
+/// file at the path, and no host may still answer on `control.sock`.
 pub(super) fn lock(root: &Path) -> Result<Flock<File>, Failure> {
     let metadata = std::fs::metadata(root)?;
     let user = std::fs::metadata("/proc/self")?.uid();
@@ -54,20 +60,38 @@ pub(super) fn lock(root: &Path) -> Result<Flock<File>, Failure> {
         .truncate(false)
         .write(true)
         .open(&lock_path)?;
+    let in_use = || {
+        fail(
+            2,
+            format!(
+                "state {} is in use by a running `ignite host` or `ignite run`; stop that \
+                 process (stdin `stop` or SIGTERM) and retry. Its lock is held, not stale: \
+                 deleting it does not release the state",
+                root.display()
+            ),
+        )
+    };
     let lock = match Flock::lock(lock_file, FlockArg::LockExclusiveNonblock) {
         Ok(lock) => lock,
-        Err((_, nix::errno::Errno::EWOULDBLOCK)) => {
-            return Err(fail(
-                2,
-                format!(
-                    "state {} is held by another `ignite host` or `ignite run` ({})",
-                    root.display(),
-                    lock_path.display()
-                ),
-            ));
-        }
+        Err((_, nix::errno::Errno::EWOULDBLOCK)) => return Err(in_use()),
         Err((_, errno)) => return Err(fail(3, format!("{}: {errno}", lock_path.display()))),
     };
+    let held = lock.metadata()?;
+    let same_file = std::fs::symlink_metadata(&lock_path)
+        .is_ok_and(|at_path| at_path.dev() == held.dev() && at_path.ino() == held.ino());
+    if !same_file {
+        return Err(fail(
+            2,
+            format!(
+                "the lock file {} was replaced while this host took it; another process is \
+                 using the state",
+                lock_path.display()
+            ),
+        ));
+    }
+    if crate::apply::connect(root).is_ok() {
+        return Err(in_use());
+    }
     if root.join(crate::run::journal::FILE).exists() {
         return Err(fail(
             2,
@@ -111,6 +135,19 @@ pub(super) fn identity(root: &Path) -> Result<String, Failure> {
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(fail(3, format!("{}: {error}", path.display()))),
+    }
+    for history in [JOURNAL, STATUS] {
+        if root.join(history).exists() {
+            return Err(fail(
+                3,
+                format!(
+                    "{} is missing but {} records host history bound to it; restore the \
+                     identity file, a new identity would orphan that history",
+                    path.display(),
+                    root.join(history).display()
+                ),
+            ));
+        }
     }
     let mut random = [0; 32];
     File::open("/dev/urandom")?.read_exact(&mut random)?;

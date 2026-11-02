@@ -79,11 +79,14 @@ fn required<'a>(value: &'a Json, key: &str) -> Result<&'a str, Failure> {
 const MAX_REQUEST_ID: usize = 128;
 
 /// Why a control frame could not be read (17.2). `Closed` is a peer that
-/// ended or stalled before a whole frame arrived, which has nobody to
-/// answer; the other two are answered with status 2 before admission.
+/// sent nothing before its end of file, or stalled or failed mid-frame,
+/// which has nobody to answer; `Truncated` is a frame cut short by the
+/// peer's end of file, whose sender may still read; it and the other two
+/// are answered with status 2 before admission.
 #[derive(Debug)]
 enum FrameError {
     Closed(io::Error),
+    Truncated { expected: usize, received: usize },
     Oversized(usize),
     Malformed(String),
 }
@@ -92,6 +95,9 @@ impl FrameError {
     fn reason(&self) -> String {
         match self {
             FrameError::Closed(error) => format!("control connection ended mid-frame: {error}"),
+            FrameError::Truncated { expected, received } => {
+                format!("malformed control frame: cut short at {received} of {expected} bytes")
+            }
             FrameError::Oversized(size) => {
                 format!("control frame of {size} bytes exceeds the 16 MiB limit")
             }
@@ -119,15 +125,48 @@ fn write_frame(stream: &mut UnixStream, value: &Json) -> io::Result<()> {
     stream.write_all(&bytes)
 }
 
+/// Read until `buffer` is full or the peer's end of file; the count read.
+fn fill(stream: &mut UnixStream, buffer: &mut [u8]) -> io::Result<usize> {
+    let mut filled = 0;
+    while filled < buffer.len() {
+        match stream.read(&mut buffer[filled..]) {
+            Ok(0) => break,
+            Ok(count) => filled += count,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(filled)
+}
+
 fn read_frame(stream: &mut UnixStream) -> Result<Json, FrameError> {
     let mut size = [0; 4];
-    stream.read_exact(&mut size).map_err(FrameError::Closed)?;
+    match fill(stream, &mut size).map_err(FrameError::Closed)? {
+        0 => {
+            return Err(FrameError::Closed(io::Error::from(
+                io::ErrorKind::UnexpectedEof,
+            )));
+        }
+        4 => {}
+        received => {
+            return Err(FrameError::Truncated {
+                expected: 4,
+                received,
+            });
+        }
+    }
     let size = u32::from_be_bytes(size) as usize;
     if size > MAX_FRAME {
         return Err(FrameError::Oversized(size));
     }
     let mut bytes = vec![0; size];
-    stream.read_exact(&mut bytes).map_err(FrameError::Closed)?;
+    let received = fill(stream, &mut bytes).map_err(FrameError::Closed)?;
+    if received < size {
+        return Err(FrameError::Truncated {
+            expected: 4 + size,
+            received: 4 + received,
+        });
+    }
     let source = std::str::from_utf8(&bytes)
         .map_err(|error| FrameError::Malformed(format!("not UTF-8: {error}")))?;
     Json::parse(source).map_err(|why| FrameError::Malformed(format!("not JSON: {why}")))
@@ -481,18 +520,28 @@ fn describe(snapshot: &Json, state: &Path, live: Option<Liveness>) -> Json {
             fields.insert("host".into(), Json::Null);
             fields.insert("health".into(), text("unknown: host offline"));
             fields.insert("readiness".into(), text("unknown: host offline"));
-            if let Some(Json::Object(owners)) = fields.get_mut("ownership") {
-                for owner in owners.values_mut() {
-                    if let Json::Object(owner) = owner
-                        && let Some(ready) = owner.remove("ready")
-                    {
-                        owner.insert("lastRecordedReady".into(), ready);
-                    }
-                }
-            }
+            let mut view = Json::Object(fields);
+            rename_ready(&mut view);
+            return view;
         }
     }
     Json::Object(fields)
+}
+
+/// Rename every `ready` key in a durable snapshot, at any depth (owners,
+/// retiring instances, receipts), to `lastRecordedReady`: a snapshot read
+/// while no host answers records readiness, it does not observe it.
+fn rename_ready(value: &mut Json) {
+    match value {
+        Json::Object(fields) => {
+            if let Some(ready) = fields.remove("ready") {
+                fields.insert("lastRecordedReady".into(), ready);
+            }
+            fields.values_mut().for_each(rename_ready);
+        }
+        Json::Array(items) => items.iter_mut().for_each(rename_ready),
+        _ => {}
+    }
 }
 
 /// Each member action of operation `id`'s plan with its progress: `done`

@@ -431,7 +431,10 @@ fn second_host_and_run_on_a_host_state_are_refused_before_any_change() {
     let journal = read(&case.state.join("host-journal.jsonl"));
 
     let (_, stderr) = case.cli("second-host", &["host", "--state", case.state_arg()], 2);
-    assert!(stderr.contains("held by another"), "{stderr}");
+    assert!(
+        stderr.contains("in use by a running") && !stderr.contains("/lock"),
+        "{stderr}"
+    );
 
     let fixture = repo().join("crates/ignite/tests/fixtures/run_gave_up.ignite");
     let (_, stderr) = case.cli(
@@ -727,11 +730,246 @@ fn inspect_reports_identity_revisions_operation_progress_readiness_and_next_acti
             .is_some_and(|next| next.contains("ignite host")),
         "{offline:?}"
     );
-    for owner in field(&offline, &["ownership"])
-        .as_object()
-        .unwrap()
-        .values()
-    {
-        assert!(owner.get("ready").is_none(), "{owner:?}");
+}
+
+/// Start `ignite host` on `case`'s state with a held stdin, so it runs
+/// until killed or told to stop.
+fn spawn_host(case: &Case, label: &str) -> (Child, PathBuf) {
+    let stderr = case.root.join(format!("{label}.stderr"));
+    let child = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .args(["host", "--state", case.state_arg()])
+        .current_dir(repo())
+        .stdin(Stdio::piped())
+        .stdout(File::create(case.root.join(format!("{label}.stdout"))).unwrap())
+        .stderr(File::create(&stderr).unwrap())
+        .spawn()
+        .expect("start host");
+    (child, stderr)
+}
+
+/// Adversary (U2): a user told "state … is held by another `ignite host`
+/// (<state>/lock)" may delete the lock file as a stale lock. The first host
+/// still runs; a second host must still be refused (17.2: "The host alone
+/// holds `<state>/lock` for its lifetime").
+#[test]
+fn adversary_a_second_host_is_refused_after_the_lock_file_is_deleted() {
+    let case = Case::new("lock-deleted");
+    let _first = Host::start(&case, "first");
+    let socket = fs::metadata(case.state.join("control.sock")).unwrap().ino();
+    fs::remove_file(case.state.join("lock")).unwrap();
+    let (mut second, stderr) = spawn_host(&case, "second");
+    let status = wait(&mut second, Duration::from_secs(5));
+    let socket_now = fs::metadata(case.state.join("control.sock"))
+        .map(|metadata| metadata.ino())
+        .ok();
+    if status.is_none() {
+        let _ = second.kill();
+        let _ = second.wait();
+    }
+    assert_eq!(
+        status.and_then(|status| status.code()),
+        Some(2),
+        "second host on a live host's state after `rm lock`: exit {status:?} \
+         (None = still running after 5 s), control.sock replaced: {}\nstderr: {}",
+        socket_now != Some(socket),
+        read(&stderr)
+    );
+}
+
+/// Adversary (U2): a state with host history whose identity file is lost
+/// must not be given a new identity (17.2: "a durable unique identity";
+/// the history is bound to the old one).
+#[test]
+fn adversary_a_lost_identity_of_a_state_with_history_is_not_replaced() {
+    let case = Case::new("identity-lost");
+    let mut host = Host::start(&case, "host");
+    let identity = read(&case.state.join("identity"));
+    host.stop();
+    assert!(
+        read(&case.state.join("host-journal.jsonl")).contains(&identity),
+        "the journal does not record the identity"
+    );
+    fs::remove_file(case.state.join("identity")).unwrap();
+    let (_, stderr) = case.cli("restart", &["host", "--state", case.state_arg()], 3);
+    let after = fs::read_to_string(case.state.join("identity")).ok();
+    assert!(
+        after.is_none() || after.as_deref() == Some(identity.as_str()),
+        "a state whose journal is bound to {identity} was given the new identity {after:?} \
+         by a host that then failed\nstderr: {stderr}"
+    );
+}
+
+/// Every path in `value` that ends in an object key `key`.
+fn keys_named(value: &Json, key: &str, path: &str, found: &mut Vec<String>) {
+    match value {
+        Json::Object(fields) => {
+            for (name, inner) in fields {
+                let here = format!("{path}.{name}");
+                if name == key {
+                    found.push(here.clone());
+                }
+                keys_named(inner, key, &here, found);
+            }
+        }
+        Json::Array(items) => {
+            for (index, inner) in items.iter().enumerate() {
+                keys_named(inner, key, &format!("{path}[{index}]"), found);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Adversary (U2): offline inspect must not claim live readiness (17.1
+/// "it must not infer live health"; 17.2 "keeps each owner's last flag as
+/// `lastRecordedReady`"). The durable status of a host killed during a
+/// replacement holds an owner and a retiring instance, each with the
+/// `ready` flag the controller recorded (controller.rs: `retiring.insert`
+/// of the previous owner entry).
+#[test]
+fn adversary_offline_inspect_carries_no_ready_flag_anywhere() {
+    let case = Case::new("offline-ready");
+    let mut host = Host::start(&case, "host");
+    host.stop();
+    let path = case.state.join("status.json");
+    let owner = r#"{"pid":4242,"ready":true,"operationId":"op","instance":"x","generation":1}"#;
+    let status = read(&path);
+    assert!(status.contains(r#""ownership":{}"#) && status.contains(r#""retiringInstances":{}"#));
+    let status = status
+        .replace(
+            r#""ownership":{}"#,
+            &format!(r#""ownership":{{"S.m":{owner}}}"#),
+        )
+        .replace(
+            r#""retiringInstances":{}"#,
+            &format!(r#""retiringInstances":{{"4241":{owner}}}"#),
+        );
+    fs::write(&path, status).unwrap();
+    let offline = case.inspect("offline");
+    assert_eq!(field(&offline, &["online"]), &Json::Bool(false));
+    assert_eq!(
+        field(&offline, &["ownership", "S.m", "lastRecordedReady"]),
+        &Json::Bool(true)
+    );
+    let mut found = Vec::new();
+    keys_named(&offline, "ready", "", &mut found);
+    assert!(
+        found.is_empty(),
+        "offline inspect still carries live `ready` flags at {found:?}\n{}",
+        offline.compact()
+    );
+}
+
+/// Adversary (U2): 17.2 as landed says an "incomplete envelope … is
+/// answered with status 2 before the host queue". A client that sends half
+/// a frame and half-closes its side is still there to read the answer.
+#[test]
+fn adversary_a_frame_cut_short_by_a_half_close_is_answered_with_status_2() {
+    let case = Case::new("half-close");
+    let _host = Host::start(&case, "host");
+    let (_directory, address) = socket_address(&case.state);
+    let mut stream = UnixStream::connect(address).unwrap();
+    stream.set_read_timeout(Some(LIVE_TIMEOUT)).unwrap();
+    let body = envelope(PROTOCOL, "r-cut");
+    let mut bytes = frame(body.as_bytes());
+    bytes.truncate(4 + body.len() / 2);
+    stream.write_all(&bytes).unwrap();
+    stream.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut reply = Vec::new();
+    stream.read_to_end(&mut reply).unwrap();
+    assert!(
+        reply.len() > 4,
+        "a frame cut short at {} of {} body bytes got no reply ({} bytes)",
+        body.len() / 2,
+        body.len(),
+        reply.len()
+    );
+    let reply = Json::parse(std::str::from_utf8(&reply[4..]).unwrap()).unwrap();
+    assert_eq!(status_of(&reply).0, 2, "{reply:?}");
+}
+
+/// Adversary (U2) probes expected green: a zero-length frame, a frame of
+/// exactly 16 MiB, request ids of 128 and 129 bytes, and a peer that sent
+/// a length and stalls beside a client that is served.
+#[test]
+fn adversary_frame_boundaries_and_a_stalled_peer() {
+    let case = Case::new("frame-bounds");
+    let _host = Host::start(&case, "host");
+
+    let empty = raw(&case.state, &0u32.to_be_bytes());
+    assert_eq!(status_of(&empty), (2, "", PROTOCOL), "{empty:?}");
+
+    let (_directory, address) = socket_address(&case.state);
+    let mut stalled = UnixStream::connect(&address).unwrap();
+    stalled.write_all(&100u32.to_be_bytes()).unwrap();
+    stalled.write_all(br#"{"vers"#).unwrap();
+    let started = Instant::now();
+    let beside = raw(
+        &case.state,
+        &frame(envelope(PROTOCOL, "r-beside").as_bytes()),
+    );
+    assert_eq!(status_of(&beside), (0, "r-beside", PROTOCOL), "{beside:?}");
+    assert!(started.elapsed() < Duration::from_secs(5));
+
+    let id_128 = "a".repeat(128);
+    let at = raw(&case.state, &frame(envelope(PROTOCOL, &id_128).as_bytes()));
+    assert_eq!(status_of(&at), (0, id_128.as_str(), PROTOCOL));
+    let over = raw(
+        &case.state,
+        &frame(envelope(PROTOCOL, &"a".repeat(129)).as_bytes()),
+    );
+    assert_eq!(status_of(&over), (2, "", PROTOCOL), "{over:?}");
+
+    let mut padded = envelope(PROTOCOL, "r-limit").into_bytes();
+    padded.resize(MAX_FRAME as usize, b' ');
+    let limit = raw(&case.state, &frame(&padded));
+    assert_eq!(status_of(&limit), (0, "r-limit", PROTOCOL), "{limit:?}");
+    drop(stalled);
+}
+
+/// Adversary (U2) probe expected green: two hosts started at once on a new
+/// state leave exactly one host, the other exits 2, and one identity.
+#[test]
+fn adversary_two_hosts_started_at_once_leave_exactly_one() {
+    for round in 0..3 {
+        let case = Case::new(&format!("race-{round}"));
+        let (mut a, a_err) = spawn_host(&case, "a");
+        let (mut b, b_err) = spawn_host(&case, "b");
+        let deadline = Instant::now() + LIVE_TIMEOUT;
+        let (status, a_lost) = loop {
+            if let Some(status) = a.try_wait().unwrap() {
+                break (status, true);
+            }
+            if let Some(status) = b.try_wait().unwrap() {
+                break (status, false);
+            }
+            assert!(
+                Instant::now() < deadline,
+                "round {round}: neither host exited"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        std::thread::sleep(Duration::from_millis(500));
+        let winner_alive = if a_lost { &mut b } else { &mut a }
+            .try_wait()
+            .unwrap()
+            .is_none();
+        let _ = a.kill();
+        let _ = b.kill();
+        let _ = a.wait();
+        let _ = b.wait();
+        let (loser_err, winner_err) = if a_lost {
+            (&a_err, &b_err)
+        } else {
+            (&b_err, &a_err)
+        };
+        assert_eq!(
+            status.code(),
+            Some(2),
+            "round {round}: loser {}",
+            read(loser_err)
+        );
+        assert!(winner_alive, "round {round}: winner {}", read(winner_err));
+        assert_eq!(identity_files(&case.state), ["identity"]);
     }
 }

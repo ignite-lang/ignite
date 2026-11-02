@@ -4005,17 +4005,22 @@ most 16 MiB. A request is an object with `version` (`ignite-host-control/0.1`), 
 the `requestId`, `status` (the 17.1 categories), `reason` and `payload`. An oversized,
 non-UTF-8, non-JSON or incomplete envelope, or another version, is answered with status 2
 before the host queue; the reply carries the request id when it could be read and the empty
-id otherwise, and the client reports such a reply as the host's rejection (exit 2). The host
+id otherwise, and the client reports such a reply as the host's rejection (exit 2); a frame
+cut short by the client's end of file is answered the same way, with the empty id. The host
 takes the lock before it changes anything, then restricts the state directory to mode 0700;
-a held lock or a state with a `run` journal is exit 2. The socket is bound in a fresh 0700
+a held lock or a state with a `run` journal is exit 2. After locking, the host checks that
+the locked file is still the one at `<state>/lock` and that no host answers on
+`control.sock`, so deleting the lock file of a live host does not admit a second one (exit 2).
+The socket is bound in a fresh 0700
 directory, set to 0600 and renamed over `control.sock`. The identity is 32 random bytes in
 hex, written to a temporary file, synced, renamed and the directory synced; an identity file
-that is not one is exit 3 and is never replaced. An apply of a plan with neither a receipt
+that is not one is exit 3 and is never replaced, and a missing identity on a state that holds
+`host-journal.jsonl` or `status.json` is exit 3 with nothing written. An apply of a plan with neither a receipt
 nor `plans/<id>.json` is exit 2. `inspect` adds `host` (PID and start time), `currentOperation`,
 `actionProgress` (per member action of the desired plan: `done`, `pending` or `blocked`),
 `readiness` (expected and ready machines, `converged`) and `nextAction`; offline it sets
-`online` false, `host` null, `health` and `readiness` to `unknown: host offline`, and keeps
-each owner's last flag as `lastRecordedReady`.
+`online` false, `host` null, `health` and `readiness` to `unknown: host offline`, and renames
+every `ready` flag at any depth, `retiringInstances` included, to `lastRecordedReady`.
 
 ### 17.3 Saved plan and identity
 
