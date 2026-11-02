@@ -10,15 +10,16 @@ use ignite_syntax::ast::{
 };
 use ignite_syntax::diagnostic::Diagnostic;
 
+mod effects;
 mod system;
 
 use crate::builtins::{self, bytes, io};
 use crate::exhaustive;
 use crate::{
-    Alias, AssertCompare, BraceKind, Builtin, Callee, Capture, ClosureInfo, EXPOSURE_VARIANTS,
-    ExecutableInfo, FailureOp, FailureSite, FnEffects, FnSig, ModuleRecord, ModuleTypes, QualName,
-    QuantityKind, Reference, Show, TestInfo, TestTry, Ty, TypedModules, Variants, instantiate, key,
-    variants_of,
+    Alias, AssemblyInfo, AssertCompare, BraceKind, Builtin, Callee, Capture, ClosureInfo,
+    EXPOSURE_VARIANTS, EffectSet, ExecutableInfo, FailureOp, FailureSite, FnEffects, FnSig,
+    ModuleRecord, ModuleTypes, QualName, QuantityKind, Reference, Show, SystemInfo, TestInfo,
+    TestTry, Ty, TypedModules, Variants, instantiate, key, variants_of,
 };
 
 /// What [`Typer::run`] produces for a module without diagnostics.
@@ -51,6 +52,9 @@ pub(crate) struct SystemTables {
     pub module_records: HashMap<usize, ModuleRecord>,
     pub executables: Vec<ExecutableInfo>,
     pub failures: HashMap<usize, FailureSite>,
+    pub systems: Vec<SystemInfo>,
+    pub assemblies: Vec<AssemblyInfo>,
+    pub effects: HashMap<usize, EffectSet>,
 }
 
 /// How an expression is used. `Value(Some(t))` checks it against `t`,
@@ -648,7 +652,13 @@ impl<'a> Typer<'a> {
 
     /// E042 for an effectful operation (a `Store` method, a call of a value
     /// of effectful fn type) whose effects `ignite-check` could not check.
+    /// Not inside a `system` or `assembly`, which `ignite-check` does not
+    /// walk: there the type checker owns the rule (E116, `docs/slice.md`
+    /// section 15.2).
     fn effect_site(&mut self, expr: &Expr, what: &str) {
+        if self.current_system.is_some() || self.assembly_system.is_some() {
+            return;
+        }
         if !self.symbols.effect_sites.contains(&expr.span) {
             self.error(
                 "E042",
@@ -1290,9 +1300,9 @@ impl<'a> Typer<'a> {
                 self.collect_members(system);
             }
         }
-        for decl in &program.decls {
+        for (index, decl) in program.decls.iter().enumerate() {
             if let Decl::System(system) = decl {
-                self.system(system);
+                self.system(index, system);
             }
         }
         for (index, decl) in program.decls.iter().enumerate() {
@@ -1323,6 +1333,7 @@ impl<'a> Typer<'a> {
                         self.ret = None;
                         self.check(&c.value, &ty);
                         self.scopes.clear();
+                        self.record_effects(&c.value);
                     }
                 }
 
@@ -1335,11 +1346,12 @@ impl<'a> Typer<'a> {
                             self.ret = None;
                             self.check(default, ty);
                             self.scopes.clear();
+                            self.record_effects(default);
                         }
                     }
                     self.type_params.clear();
                 }
-                Decl::Assembly(assembly) => self.assembly(assembly),
+                Decl::Assembly(assembly) => self.assembly(index, assembly),
                 Decl::System(_) | Decl::Alias(_) | Decl::Enum(_) => {}
             }
         }

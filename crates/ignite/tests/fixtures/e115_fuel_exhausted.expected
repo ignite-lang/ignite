@@ -1,0 +1,1 @@
+e115_fuel_exhausted.ignite:26:33: error[E115]: evaluating S.w.steps: the fuel limit of 1000000 units exceeded in fixture_e115.forever

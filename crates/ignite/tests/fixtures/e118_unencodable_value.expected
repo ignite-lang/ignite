@@ -1,0 +1,1 @@
+e118_unencodable_value.ignite:12:33: error[E118]: evaluating S.w.scale: a closure cannot be encoded in the model

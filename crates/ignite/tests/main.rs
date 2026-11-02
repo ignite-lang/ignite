@@ -5,12 +5,14 @@
 
 mod cli;
 mod common;
+mod eval;
 mod failover;
 mod generics;
 mod ignite_test;
 mod llvm;
 mod llvm_build;
 mod llvm_memory;
+mod plan;
 mod siblings;
 mod slice10_llvm;
 mod slice9;

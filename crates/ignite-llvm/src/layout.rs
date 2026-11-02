@@ -221,6 +221,12 @@ impl TypeEnv {
             Ty::Option(t) => vec![v("Some", vec![(**t).clone()]), v("None", vec![])],
             Ty::Result(t, e) => vec![v("Ok", vec![(**t).clone()]), v("Err", vec![(**e).clone()])],
             Ty::Input => vec![v("Data", vec![bytes()]), v("Eof", vec![])],
+            Ty::Enum(name) if name.is_builtin() && name.name == "Exposure" => {
+                ignite_types::EXPOSURE_VARIANTS
+                    .iter()
+                    .map(|variant| v(variant, vec![]))
+                    .collect()
+            }
             Ty::Enum(name) => self
                 .module(&name.module)
                 .and_then(|m| m.enums.get(&name.name))
@@ -500,6 +506,7 @@ pub fn mangle(ty: &Ty) -> String {
         Ty::List(t) => format!("List<{}>", mangle(t)),
         Ty::Option(t) => format!("Option<{}>", mangle(t)),
         Ty::Result(t, e) => format!("Result<{},{}>", mangle(t), mangle(e)),
+        Ty::Enum(name) if name.is_builtin() => name.name.clone(),
         Ty::Record(name) | Ty::Enum(name) => format!("{}.{}", name.module, name.name),
         Ty::Fn(params, ret) | Ty::EffectFn(params, ret, _) => {
             format!("fn({})->{}", list(params), mangle(ret))

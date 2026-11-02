@@ -1,0 +1,208 @@
+{
+  "assembly": null,
+  "components": [
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": "tn",
+      "id": "Terminal.client",
+      "kind": "std.protocol.telnet.TelnetClient",
+      "outputs": {},
+      "properties": {
+        "executable": "tn",
+        "target": {
+          "fields": {
+            "address": "127.0.0.1",
+            "port": 2323
+          },
+          "type": "std.net.Endpoint"
+        }
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "Terminal.console",
+      "kind": "std.console.CommandConsole",
+      "outputs": {},
+      "properties": {
+        "command_schema": {
+          "fns": {
+            "commands": "examples.terminal.command_schema.commands"
+          },
+          "module": "examples.terminal.command_schema",
+          "type": "Module"
+        },
+        "implementation": {
+          "fns": {
+            "respond": "examples.terminal.commands.respond"
+          },
+          "module": "examples.terminal.commands",
+          "type": "Module"
+        },
+        "maximum_line": {
+          "bytes": 4096,
+          "type": "ByteSize"
+        },
+        "prompt": "terminal> "
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [
+        "protocol",
+        "recovery",
+        "rollout",
+        "sessions"
+      ],
+      "executable": "terminald",
+      "id": "Terminal.server",
+      "kind": "std.protocol.telnet.TelnetServer",
+      "outputs": {},
+      "properties": {
+        "application": {
+          "ref": "Terminal.console",
+          "type": "Ref"
+        },
+        "executable": "terminald",
+        "listener": {
+          "ref": "Terminal.ingress",
+          "type": "Ref"
+        },
+        "protocol": {
+          "fields": {
+            "baseline": "nvt",
+            "character_encoding": "nvt_ascii",
+            "negotiation": "q_method",
+            "unsupported_options": "refuse"
+          },
+          "type": "std.protocol.telnet.TelnetProfile"
+        },
+        "recovery": {
+          "fields": {
+            "backoff": {
+              "fields": [
+                {
+                  "ns": 100000000,
+                  "type": "Duration"
+                },
+                {
+                  "ns": 10000000000,
+                  "type": "Duration"
+                }
+              ],
+              "type": "std.policy.Backoff",
+              "variant": "Exponential"
+            },
+            "interval": {
+              "ns": 300000000000,
+              "type": "Duration"
+            },
+            "maximum_attempts": 10
+          },
+          "type": "std.policy.Restart"
+        },
+        "rollout": {
+          "fields": {
+            "deadline": {
+              "ns": 120000000000,
+              "type": "Duration"
+            },
+            "on_deadline": "disconnect_remaining"
+          },
+          "type": "std.policy.DrainRollout"
+        },
+        "sessions": {
+          "fields": {
+            "idle_timeout": {
+              "ns": 600000000000,
+              "type": "Duration"
+            },
+            "input_buffer": {
+              "bytes": 16384,
+              "type": "ByteSize"
+            },
+            "maximum": 1000,
+            "output_buffer": {
+              "bytes": 65536,
+              "type": "ByteSize"
+            },
+            "slow_reader_deadline": {
+              "ns": 30000000000,
+              "type": "Duration"
+            }
+          },
+          "type": "std.protocol.telnet.SessionLimits"
+        }
+      }
+    }
+  ],
+  "contracts": [],
+  "edges": [
+    {
+      "from": "Terminal.client",
+      "kind": "uses",
+      "to": "Terminal.ingress"
+    },
+    {
+      "from": "Terminal.server",
+      "kind": "uses",
+      "to": "Terminal.console"
+    },
+    {
+      "from": "Terminal.server",
+      "kind": "uses",
+      "to": "Terminal.ingress"
+    }
+  ],
+  "formatVersion": "ignite-model/0.1",
+  "policies": [],
+  "resources": [
+    {
+      "declaration": "resource",
+      "defaults": [
+        "backlog",
+        "exposure"
+      ],
+      "executable": null,
+      "id": "Terminal.ingress",
+      "kind": "TcpListener",
+      "outputs": {},
+      "properties": {
+        "address": "127.0.0.1",
+        "backlog": 128,
+        "exposure": {
+          "type": "Exposure",
+          "variant": "Loopback"
+        },
+        "port": 2323
+      }
+    }
+  ],
+  "sourceMap": {
+    "Terminal": "terminal.ignite:13:1",
+    "Terminal.client": "terminal.ignite:32:3",
+    "Terminal.client.executable": "terminal.ignite:34:18",
+    "Terminal.client.target": "terminal.ignite:33:14",
+    "Terminal.console": "terminal.ignite:19:3",
+    "Terminal.console.command_schema": "terminal.ignite:23:22",
+    "Terminal.console.implementation": "terminal.ignite:20:22",
+    "Terminal.console.maximum_line": "terminal.ignite:22:20",
+    "Terminal.console.prompt": "terminal.ignite:21:14",
+    "Terminal.ingress": "terminal.ignite:14:3",
+    "Terminal.ingress.address": "terminal.ignite:15:15",
+    "Terminal.ingress.backlog": "terminal.ignite:14:3",
+    "Terminal.ingress.exposure": "terminal.ignite:14:3",
+    "Terminal.ingress.port": "terminal.ignite:16:12",
+    "Terminal.server": "terminal.ignite:26:3",
+    "Terminal.server.application": "terminal.ignite:28:19",
+    "Terminal.server.executable": "terminal.ignite:29:18",
+    "Terminal.server.listener": "terminal.ignite:27:16",
+    "Terminal.server.protocol": "std/protocol/telnet.ignite:130:29",
+    "Terminal.server.recovery": "std/protocol/telnet.ignite:132:23",
+    "Terminal.server.rollout": "std/protocol/telnet.ignite:133:27",
+    "Terminal.server.sessions": "std/protocol/telnet.ignite:131:29"
+  },
+  "systemId": "Terminal"
+}

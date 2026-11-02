@@ -974,9 +974,57 @@ const RUST_ONLY_KEYWORDS: &[&str] = &[
     "macro", "override", "priv", "typeof", "unsized", "virtual", "yield", "try", "gen",
 ];
 
+/// Names of the Rust prelude the generated code uses bare (`Box::new`,
+/// `Vec<_>`, `String::from`, `Some(..)`, the bounds `Clone + Send + Sync`,
+/// `dyn Fn`): a user declaration of one of these names (`type Box`) is
+/// emitted as `Box_`, as `self` is `self_`, so it does not shadow the
+/// prelude item (`docs/friction.md` row 35). `Option` and `Result` are not
+/// listed: they are Ignite's own builtins (E004 for a user declaration) and
+/// lower to the Rust types of the same names.
+const RUST_PRELUDE_NAMES: &[&str] = &[
+    "Box",
+    "Vec",
+    "String",
+    "Some",
+    "None",
+    "Ok",
+    "Err",
+    "Clone",
+    "Copy",
+    "Send",
+    "Sync",
+    "Sized",
+    "Unpin",
+    "Drop",
+    "Fn",
+    "FnMut",
+    "FnOnce",
+    "Default",
+    "Iterator",
+    "IntoIterator",
+    "DoubleEndedIterator",
+    "ExactSizeIterator",
+    "Extend",
+    "FromIterator",
+    "From",
+    "Into",
+    "TryFrom",
+    "TryInto",
+    "AsRef",
+    "AsMut",
+    "ToOwned",
+    "ToString",
+    "PartialEq",
+    "Eq",
+    "PartialOrd",
+    "Ord",
+    "Future",
+    "IntoFuture",
+];
+
 /// A Ignite identifier as a Rust identifier.
 fn ident(name: &str) -> String {
-    if matches!(name, "self" | "Self" | "crate" | "super") {
+    if matches!(name, "self" | "Self" | "crate" | "super") || RUST_PRELUDE_NAMES.contains(&name) {
         format!("{name}_")
     } else if RUST_ONLY_KEYWORDS.contains(&name) {
         format!("r#{name}")
@@ -1020,6 +1068,7 @@ fn variant_path(owner: &str, variant: &str) -> String {
     match owner {
         "Option" | "Result" => variant.to_string(),
         "Input" => format!("ignite_io::Input::{variant}"),
+        "Exposure" => format!("ignite_io::Exposure::{variant}"),
         _ => format!("{}::{}", ident(owner), ident(variant)),
     }
 }
@@ -1048,7 +1097,7 @@ pub fn rust_type(ty: &Type) -> String {
         "Unit" => "()".to_string(),
         "Tuple" => format!("({})", args.join(", ")),
         "List" => generic("Vec"),
-        "TcpListener" | "TcpStream" | "Stdin" | "Stdout" | "Input" | "IoError" => {
+        "TcpListener" | "TcpStream" | "Stdin" | "Stdout" | "Input" | "IoError" | "Exposure" => {
             format!("ignite_io::{}", ty.name.name)
         }
         "Store" => generic("ignite_io::Store"),
@@ -1525,14 +1574,21 @@ impl<'a> Generator<'a> {
 
     /// The Rust name of record or enum `q` in this module: its name when
     /// it is builtin, own or imported, else its path in `ignite-std`
-    /// (`ignite_std::console::Action`).
+    /// (`ignite_std::console::Action`). The builtin `Exposure` is the
+    /// substrate's `ignite_io::Exposure`.
     fn enum_name(&self, q: &QualName) -> String {
-        if q.is_builtin() || self.symbols.imported.get(&q.name) == Some(&q.module) {
-            return q.name.clone();
+        if q.is_builtin() {
+            return match q.name.as_str() {
+                "Exposure" => "ignite_io::Exposure".to_string(),
+                _ => q.name.clone(),
+            };
+        }
+        if self.symbols.imported.get(&q.name) == Some(&q.module) {
+            return ident(&q.name);
         }
         match self.module_path(&q.module) {
             Some(path) => format!("{path}::{}", ident(&q.name)),
-            None => q.name.clone(),
+            None => ident(&q.name),
         }
     }
 
@@ -1670,10 +1726,18 @@ impl<'a> Generator<'a> {
         self.defaults(w, record);
     }
 
+    /// An enum without payloads also derives the traits of a `BTreeMap`
+    /// key (`docs/slice.md` 14.3: enums without payloads are `Map` keys);
+    /// the derived order is the declaration order of the variants, as in
+    /// the LLVM target and the evaluator.
     fn enumeration(&mut self, w: &mut Writer, decl: &EnumDecl) {
         let q = self.own(&decl.name);
         w.line("");
-        w.line("#[derive(Clone)]");
+        if decl.variants.iter().all(|v| v.payload.is_empty()) {
+            w.line("#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]");
+        } else {
+            w.line("#[derive(Clone)]");
+        }
         w.open(&format!(
             "pub enum {}{} {{",
             ident(&decl.name.name),
@@ -2097,6 +2161,64 @@ impl<'a> Generator<'a> {
     fn receiver(&mut self, expr: &Expr) -> String {
         let text = self.bare(expr);
         wrap(expr, text)
+    }
+
+    /// Whether `expr` is a place (`x[i]`, `x.f[i].g`, `x[i][j]`) rooted in
+    /// a local and reached through at least one index.
+    fn indexed_place(&self, expr: &Expr) -> bool {
+        match &expr.kind {
+            ExprKind::Index { receiver, .. } => {
+                self.is_place(receiver) || self.indexed_place(receiver)
+            }
+            ExprKind::Field { receiver, .. } | ExprKind::TupleField { receiver, .. } => {
+                self.assoc_callee(expr).is_none() && self.indexed_place(receiver)
+            }
+            _ => false,
+        }
+    }
+
+    /// An [`indexed_place`](Self::indexed_place) as the receiver of a
+    /// method that changes it (`push`, `append`, `clear`, `put`, `remove`;
+    /// `docs/slice.md` 13.11 row d): the element behind every index through
+    /// `ignite_io::checked::at_mut` on a `&mut` borrow of its list, so the
+    /// call writes the element and not a copy of it. Each index is bound
+    /// by a `let` pushed to `lets`, in source order, before the borrow it
+    /// feeds: an index that reads the list could not run while the list is
+    /// borrowed.
+    fn mutable_place(&mut self, expr: &Expr, lets: &mut Vec<String>) -> String {
+        match &expr.kind {
+            ExprKind::Index { receiver, index } => {
+                let list = self.mutable_place(receiver, lets);
+                let index_text = self.bare(index);
+                let index_text = self.deref_if_borrowed(index, index_text);
+                let temp = self.fresh();
+                lets.push(format!("let {temp} = {index_text};"));
+                match self.types.and_then(|t| t.failure_site(expr)) {
+                    Some(site) => format!(
+                        "(*ignite_io::checked::at_mut(&mut {list}, {temp}, {}))",
+                        self.site_args(site)
+                    ),
+                    None => format!("{list}[({temp}) as usize]"),
+                }
+            }
+            ExprKind::Field { receiver, name } => {
+                let receiver_ty = self.type_of(receiver);
+                let text = format!(
+                    "{}.{}",
+                    self.mutable_place(receiver, lets),
+                    ident(&name.name)
+                );
+                if self.is_boxed_field(receiver_ty, &name.name) {
+                    format!("(*{text})")
+                } else {
+                    text
+                }
+            }
+            ExprKind::TupleField { receiver, index } => {
+                format!("{}.{index}", self.mutable_place(receiver, lets))
+            }
+            _ => self.receiver(expr),
+        }
     }
 
     fn args(&mut self, args: &[Expr]) -> Vec<String> {
@@ -2768,6 +2890,48 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// A call that changes an indexed receiver in place
+    /// (`lists[i].push(v)`, `holders[i].items.append(vs)`,
+    /// `maps[i].put(k, v)`): a block binding the indexes and the arguments
+    /// first, then the call on the [`mutable_place`](Self::mutable_place).
+    fn indexed_mutation(
+        &mut self,
+        expr: &Expr,
+        receiver: &Expr,
+        name: &Ident,
+        args: &[Expr],
+    ) -> String {
+        let mut lets = Vec::new();
+        let place = self.mutable_place(receiver, &mut lets);
+        let values = self.args(args);
+        let temps: Vec<String> = values
+            .iter()
+            .map(|value| {
+                let temp = self.fresh();
+                lets.push(format!("let {temp} = {value};"));
+                temp
+            })
+            .collect();
+        let call = match self.callee(expr) {
+            Some(Callee::Builtin(Builtin::MapPut)) => {
+                format!("{place}.insert({}, {});", temps[0], temps[1])
+            }
+            Some(Callee::Builtin(Builtin::MapRemove)) => {
+                let call = format!("{place}.remove(&{})", temps[0]);
+                match self.type_of(expr) {
+                    Some(Ty::Unit) => format!("{call};"),
+                    _ => call,
+                }
+            }
+            _ => match name.name.as_str() {
+                "push" => format!("{place}.push({})", temps[0]),
+                "append" => format!("{place}.extend_from_slice(&{})", temps[0]),
+                _ => format!("{place}.clear()"),
+            },
+        };
+        format!("{{ {} {call} }}", lets.join(" "))
+    }
+
     fn method(&mut self, expr: &Expr, receiver: &Expr, name: &Ident, args: &[Expr]) -> String {
         match self.callee(expr) {
             Some(Callee::Fn(q)) if q.name.contains('.') => {
@@ -2776,6 +2940,9 @@ impl<'a> Generator<'a> {
             Some(Callee::Fn(q)) => {
                 let target = self.fn_path(q);
                 return self.fn_call(expr, target, Some(receiver), args);
+            }
+            _ if mutates_receiver(expr, &name.name, self.types) && self.indexed_place(receiver) => {
+                return self.indexed_mutation(expr, receiver, name, args);
             }
             Some(Callee::Builtin(builtin @ (Builtin::ListAt | Builtin::ListSlice)))
                 if self.types.and_then(|t| t.failure_site(expr)).is_some() =>
@@ -3408,6 +3575,15 @@ impl<'a> Generator<'a> {
     fn variants_of(&self, ty: &Ty) -> Option<Vec<Variant>> {
         let types = self.types?;
         let (q, args) = Self::nominal(ty)?;
+        if q.is_builtin() {
+            let (_, variants) = BUILTIN_ENUMS.iter().find(|(name, _)| *name == q.name)?;
+            return Some(
+                variants
+                    .iter()
+                    .map(|name| (name.to_string(), Vec::new()))
+                    .collect(),
+            );
+        }
         let variants = types.enum_variants(q)?;
         let params = types.type_params(q).unwrap_or(&[]);
         Some(

@@ -1,0 +1,1 @@
+e110_unbound_member.ignite:30:14: error[E110]: `S.spare` is neither a bindings key nor included by a binding of assembly `a`

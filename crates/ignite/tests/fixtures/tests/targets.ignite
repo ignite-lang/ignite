@@ -1,0 +1,123 @@
+package fixtures.targets
+
+// The four target bugs of slice 11b (`docs/friction.md` rows 32 to 35),
+// one test each, run by `ignite test` on both targets
+// (crates/ignite/tests/ignite_test.rs `target_bugs_of_slice_11b_are_fixed`).
+
+type Holder {
+  items: List<Int>
+  pair: (Int, List<Text>)
+}
+
+enum Color { Red, Green, Blue }
+
+type Box {
+  label: Text
+  inner: Option<Box>
+}
+
+type Vec { n: Int }
+
+type String { s: Text }
+
+enum Maybe { Some(Int), None }
+
+enum Outcome { Ok(Int), Err(Text) }
+
+fn describe(e: Exposure) -> Text = match e {
+  Loopback => "loopback"
+  Private => "private"
+  Public => "public"
+}
+
+fn pick(open: Bool) -> Exposure = if open { Public } else { Loopback }
+
+fn same_stream(stream: TcpStream) -> TcpStream = stream
+
+fn same_listener(listener: TcpListener) -> TcpListener = listener
+
+fn last(xs: List<List<Int>>) -> Int = xs.len() - 1
+
+fn grow(lists: List<List<Int>>) -> List<List<Int>> {
+  var out = lists
+  out[0].push(2)
+  out
+}
+
+fn unwrap_maybe(m: Maybe) -> Int = match m {
+  Maybe.Some(n) => n
+  Maybe.None => 0
+}
+
+test "row 32: push through an indexed receiver" {
+  var lists = [[1], [2]]
+  lists[0].push(9)
+  assert lists == [[1, 9], [2]]
+  lists[lists.len() - 1].push(lists[0].len())
+  lists[last(lists)].append([7])
+  lists[0].clear()
+  assert lists == [[], [2, 2, 7]]
+  var deep = [[[1]], [[2], [3]]]
+  deep[1][0].push(5)
+  assert deep == [[[1]], [[2, 5], [3]]]
+  var holders = [Holder { items = [1], pair = (1, ["x"]) }]
+  holders[0].items.push(7)
+  holders[0].pair.1.push("y")
+  assert holders[0].items == [1, 7]
+  assert holders[0].pair.1 == ["x", "y"]
+  var maps: List<Map<Text, Int>> = [Map.empty(), Map.empty()]
+  maps[1].put("a", 1)
+  maps[1].put("b", 2)
+  maps[1].remove("a")
+  assert maps[0].len() == 0
+  assert maps[1].keys() == ["b"]
+  let shared = [[1]]
+  assert grow(shared) == [[1, 2]]
+  assert shared == [[1]]
+}
+
+test "row 33: a user enum as a map key" {
+  var m: Map<Color, Int> = Map.empty()
+  m.put(Blue, 3)
+  m.put(Red, 1)
+  m.put(Green, 2)
+  assert m.keys() == [Red, Green, Blue]
+  assert m.get(Blue) == Some(3)
+  assert m.remove(Green) == Some(2)
+  assert m.contains(Green) == false
+  var out = ""
+  for (k, v) in m {
+    out = out + "{v}"
+  }
+  assert out == "13"
+}
+
+test "row 34: Exposure as a value type" {
+  let f: fn(Exposure) -> Text = describe
+  assert f(Public) == "public"
+  let e = Loopback
+  assert describe(e) == "loopback"
+  assert pick(true) == Public
+  assert pick(false) != Public
+  assert [Loopback, Private, Public].len() == 3
+  assert Exposure.Private.debug() == "Exposure.Private"
+  var reach: Map<Exposure, Int> = Map.empty()
+  reach.put(Public, 2)
+  reach.put(Loopback, 0)
+  assert reach.keys() == [Loopback, Public]
+}
+
+test "row 35: user types named after the Rust prelude" {
+  let b = Box { label = "outer", inner = Some(Box { label = "inner", inner = None }) }
+  assert b.label == "outer"
+  assert b.inner != None
+  assert b.debug() == "Box {{ label: \"outer\", inner: Some(Box {{ label: \"inner\", inner: None }}) }}"
+  let v = Vec { n = 1 }
+  let s = String { s = "x" }
+  assert v.n == 1 && s.s == "x"
+  assert unwrap_maybe(Maybe.Some(5)) == 5
+  assert unwrap_maybe(Maybe.None) == 0
+  assert Outcome.Ok(1) == Outcome.Ok(1)
+  assert Outcome.Err("e") != Outcome.Ok(1)
+  assert [Option.Some(1), Option.None].len() == 2
+}

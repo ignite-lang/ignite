@@ -81,6 +81,17 @@ pub enum Input {
     Eof,
 }
 
+/// The reach of a `TcpListener` (`docs/slice.md` 14.14 item 11): the
+/// builtin enum `Exposure`, a value in a compiled program as any other
+/// enum; the order of the variants is their declaration order, as in the
+/// LLVM target and the evaluator, so it can be a `Map` key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Exposure {
+    Loopback,
+    Private,
+    Public,
+}
+
 /// The running process.
 #[derive(Clone, Copy, Debug)]
 pub struct Process;
