@@ -67,24 +67,31 @@ fn listener() -> &'static TcpListener {
 }
 
 fn source() -> PathBuf {
-    let golden =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../ignite-llvm/tests/golden/syntax.ignite");
-    let text = std::fs::read_to_string(&golden).unwrap();
-    let placeholder = "port = 1 }";
-    assert!(
-        text.contains(placeholder),
-        "syntax.ignite has no `{placeholder}`"
-    );
-    let port = listener().local_addr().unwrap().port();
-    let dir = tmp("syntax-source");
-    std::fs::create_dir_all(&dir).unwrap();
-    let copy = dir.join("syntax.ignite");
-    std::fs::write(
-        &copy,
-        text.replace(placeholder, &format!("port = {port} }}")),
-    )
-    .unwrap();
-    copy
+    // Both targets build concurrently. Publish the immutable copy once so
+    // neither parser can read it between the other writer's truncate/write.
+    static SOURCE: OnceLock<PathBuf> = OnceLock::new();
+    SOURCE
+        .get_or_init(|| {
+            let golden = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../ignite-llvm/tests/golden/syntax.ignite");
+            let text = std::fs::read_to_string(&golden).unwrap();
+            let placeholder = "port = 1 }";
+            assert!(
+                text.contains(placeholder),
+                "syntax.ignite has no `{placeholder}`"
+            );
+            let port = listener().local_addr().unwrap().port();
+            let dir = tmp("syntax-source");
+            std::fs::create_dir_all(&dir).unwrap();
+            let copy = dir.join("syntax.ignite");
+            std::fs::write(
+                &copy,
+                text.replace(placeholder, &format!("port = {port} }}")),
+            )
+            .unwrap();
+            copy
+        })
+        .clone()
 }
 
 fn build(target: Target) -> PathBuf {
