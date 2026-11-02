@@ -409,3 +409,27 @@ cold comparison against each baseline meets the start-load rule and has no faile
 - `ignite build` owns the generated project directory it was given; it overwrites it.
 - `ignite-io::run` owns the process entry and `ignite-io::spawn` the task threads; generated `main`
   never starts a thread itself.
+
+## Slice 12c release decision (2026-11-02)
+
+The user chose to release the tested improvements with documented performance gaps
+and stop further optimization for this release. Performance recovery is **not complete**.
+Frozen implementation: `815cf741b359af1bb6df16fe7f48b7a5b1e304ba`; full evidence,
+raw samples and exclusions: `docs/performance/12c/release-815cf74/README.md`.
+
+- Correctness: 660 Rust tests, five ignored, 148 inline cases per backend; full
+  format/Clippy/workspace/inline gate passes; four example builds pass.
+- LLVM readiness: manual restart exactly 100 ms, real restart 104.162 ms, probe
+  failure/recovery and standings, stop and journal replay pass. Rust lifecycle
+  and both-backend draining rollouts are covered by the full suite.
+- Fifteen matched check/plan pairs pass at 1.0647/1.0589 of frozen 11b.
+- Formatting, inline, generator-file and CLI-file paired budgets pass.
+- Clippy remains 1.1135; checker-touch no-run remains 1.2814 (limit 1.10).
+- Warm workspace median 14.333 s misses 10.8 s; comparable low-load evidence
+  was not established. Cold and final program timing guards are uncollected;
+  published-comparison workspace evidence is insufficient. No baseline moved.
+- `ignite test --target=all` enumerates all supported native CLI targets.
+
+Next roadmap step: review/finalize the slice-13 contract for `ignite apply` before
+implementation. The remaining 12c gaps are deferred, not a reason to silently
+change its acceptance limits or claim recovery.

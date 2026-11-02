@@ -1,19 +1,10 @@
 # Performance budget recovery
 
-Status: implementation in progress, 2026-11-02. The first implementation checkpoint is
-`631be24`, based on published slices 11–12b (`9273349`). Its full correctness close passed,
-but cold validation then exposed a shutdown-journal race and registry contention; the
-failed measurements are retained in `docs/performance/12c/failed-checkpoint/`.
-Batch 12c remains open until every performance criterion below passes; do not start slice 13.
-
-Checkpoint `d8a9cb7` recovered the strict generator-test and file-level CLI-test
-budgets. Its remaining warm misses and all raw evidence are in
-[`performance/12c/checkpoint-d8a9cb7/`](performance/12c/checkpoint-d8a9cb7/).
-The next implementation uses complete-workspace parallel formatting, identical
-JSON output with fewer tiny writes, and removal of six proven-empty Cargo
-harnesses. The integrated gate passes 654 Rust tests, five ignored, 148 inline
-cases per backend and four example builds. These are correctness results;
-final frozen performance and LLVM readiness validation remain outstanding.
+Status: performance recovery paused by user decision, 2026-11-02. Release the tested
+fixes with the remaining gaps documented; do not claim the original budget restored.
+The final release evidence is [`performance/12c/release-815cf74/README.md`](performance/12c/release-815cf74/README.md).
+The baseline and acceptance criteria below remain unchanged for any future recovery work.
+The user chose to proceed to release and then review the next roadmap goal.
 
 ## Result required
 
