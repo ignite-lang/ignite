@@ -1,0 +1,122 @@
+[
+  {
+    "label": "comparison",
+    "case": "native-rust-list",
+    "median_seconds": 0.0010584499686956406,
+    "all_passed": true
+  },
+  {
+    "label": "candidate",
+    "case": "native-rust-list",
+    "median_seconds": 0.0008176240371540189,
+    "all_passed": true
+  },
+  {
+    "label": "comparison",
+    "case": "native-rust-full",
+    "median_seconds": 0.13939865597058088,
+    "all_passed": true
+  },
+  {
+    "label": "candidate",
+    "case": "native-rust-full",
+    "median_seconds": 0.1322773449937813,
+    "all_passed": true
+  },
+  {
+    "label": "comparison",
+    "case": "native-llvm-list",
+    "median_seconds": 0.0011649639927782118,
+    "all_passed": true
+  },
+  {
+    "label": "candidate",
+    "case": "native-llvm-list",
+    "median_seconds": 0.0011221369495615363,
+    "all_passed": true
+  },
+  {
+    "label": "comparison",
+    "case": "native-llvm-full",
+    "median_seconds": 0.14465399202890694,
+    "all_passed": true
+  },
+  {
+    "label": "candidate",
+    "case": "native-llvm-full",
+    "median_seconds": 0.1302406499744393,
+    "all_passed": true
+  },
+  {
+    "label": "comparison",
+    "case": "cli-rust-list",
+    "median_seconds": 0.26748211903031915,
+    "all_passed": true
+  },
+  {
+    "label": "candidate",
+    "case": "cli-rust-list",
+    "median_seconds": 0.22588580602314323,
+    "all_passed": true
+  },
+  {
+    "label": "comparison",
+    "case": "cli-rust-full",
+    "median_seconds": 0.41419672401389107,
+    "all_passed": true
+  },
+  {
+    "label": "candidate",
+    "case": "cli-rust-full",
+    "median_seconds": 0.35311516001820564,
+    "all_passed": true
+  },
+  {
+    "label": "comparison",
+    "case": "cli-llvm-list",
+    "median_seconds": 0.5688883449765854,
+    "all_passed": true
+  },
+  {
+    "label": "candidate",
+    "case": "cli-llvm-list",
+    "median_seconds": 0.3085829400224611,
+    "all_passed": true
+  },
+  {
+    "label": "comparison",
+    "case": "cli-llvm-full",
+    "median_seconds": 0.7095358269871213,
+    "all_passed": true
+  },
+  {
+    "label": "candidate",
+    "case": "cli-llvm-full",
+    "median_seconds": 0.43950929801212624,
+    "all_passed": true
+  },
+  {
+    "label": "comparison",
+    "case": "cli-both-list",
+    "median_seconds": 0.8222337890183553,
+    "all_passed": true
+  },
+  {
+    "label": "candidate",
+    "case": "cli-both-list",
+    "median_seconds": 0.44112209702143446,
+    "all_passed": true
+  },
+  {
+    "label": "comparison",
+    "case": "cli-both-full",
+    "median_seconds": 1.0868332799873315,
+    "all_passed": true
+  },
+  {
+    "label": "candidate",
+    "case": "cli-both-full",
+    "median_seconds": 0.6944152089999989,
+    "all_passed": true
+  }
+]

@@ -1,0 +1,24 @@
+{
+  "median_ratio": 1.0338742070375306,
+  "median_test_ratio": 1.04,
+  "pairs": [
+    {
+      "load_delta": 0.5146484375,
+      "pair": 1,
+      "ratio": 1.038820742963183,
+      "test_ratio": 1.0402298850574714
+    },
+    {
+      "load_delta": 0.0,
+      "pair": 2,
+      "ratio": 0.798148732799339,
+      "test_ratio": 0.7974137931034484
+    },
+    {
+      "load_delta": 0.0,
+      "pair": 3,
+      "ratio": 1.0338742070375306,
+      "test_ratio": 1.04
+    }
+  ]
+}

@@ -40,7 +40,7 @@
 //! `const` declarations. A constant is a zero-argument fn, so a non-local
 //! name that is a constant is emitted as `N()` and is never a place.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::io;
@@ -614,15 +614,17 @@ fn std_segments(path: &str) -> Vec<&str> {
 /// a range and ends no such position), with the `r#` of a raw identifier
 /// dropped. Strings and comments are not skipped: a name in them keeps an
 /// item and never drops one.
-fn rust_identifiers(text: &str, out: &mut Vec<String>) {
+fn rust_identifiers<'a>(text: &'a str, mut visit: impl FnMut(&'a str)) {
     let bytes = text.as_bytes();
     let mut i = 0;
     let mut after_dot = false;
     while i < bytes.len() {
         let b = bytes[i];
-        if b.is_ascii_alphabetic() || b == b'_' {
+        if matches!(b, b'a'..=b'z' | b'A'..=b'Z' | b'_') {
             let start = i;
-            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+            while i < bytes.len()
+                && matches!(bytes[i], b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_')
+            {
                 i += 1;
             }
             if i - start == 1 && b == b'r' && bytes.get(i) == Some(&b'#') {
@@ -630,11 +632,13 @@ fn rust_identifiers(text: &str, out: &mut Vec<String>) {
                 continue;
             }
             if !after_dot {
-                out.push(text[start..i].to_string());
+                visit(&text[start..i]);
             }
             after_dot = false;
         } else if b.is_ascii_digit() {
-            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+            while i < bytes.len()
+                && matches!(bytes[i], b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_')
+            {
                 i += 1;
             }
             after_dot = false;
@@ -685,10 +689,10 @@ impl StdDependencies {
                     .or_default()
                     .push((module_index, item_index));
                 let mut names = Vec::new();
-                rust_identifiers(&item.text, &mut names);
+                rust_identifiers(&item.text, |name| names.push(name));
                 names.sort_unstable();
                 names.dedup();
-                items.push(names);
+                items.push(names.into_iter().map(str::to_string).collect());
             }
             references.push(items);
         }
@@ -699,30 +703,41 @@ impl StdDependencies {
     }
 
     fn reachable(&self, modules: &[LoweredModule], roots: &[&str]) -> RetainedStd {
-        let mut root_names = Vec::new();
+        // Generated operator chains can repeat a few names millions of times.
+        // Borrow every token and queue each distinct name once; only the final
+        // use-filter set needs owned strings. Roots and item bodies stay alive
+        // throughout this walk, and rendering order comes from the modules.
+        let mut names = HashSet::new();
+        let mut pending = Vec::new();
         for root in roots {
-            rust_identifiers(root, &mut root_names);
+            rust_identifiers(root, |name| {
+                if names.insert(name) {
+                    pending.push(name);
+                }
+            });
         }
-        let mut pending: Vec<&str> = root_names.iter().map(String::as_str).collect();
-        let mut names = BTreeSet::new();
         let mut items: Vec<Vec<bool>> = modules
             .iter()
             .map(|module| vec![false; module.items.len()])
             .collect();
         while let Some(name) = pending.pop() {
-            if !names.insert(name.to_string()) {
-                continue;
-            }
             if let Some(defined) = self.definitions.get(name) {
                 for &(module, item) in defined {
                     if !items[module][item] {
                         items[module][item] = true;
-                        pending.extend(self.references[module][item].iter().map(String::as_str));
+                        for reference in &self.references[module][item] {
+                            if names.insert(reference.as_str()) {
+                                pending.push(reference.as_str());
+                            }
+                        }
                     }
                 }
             }
         }
-        RetainedStd { items, names }
+        RetainedStd {
+            items,
+            names: names.into_iter().map(str::to_string).collect(),
+        }
     }
 }
 
@@ -970,10 +985,8 @@ fn module_item_list(
     root: &'static str,
     module: &ModuleOptions<'_>,
 ) -> Vec<Item> {
-    let mut generator = Generator::new(symbols, program, types);
+    let mut generator = Generator::new(symbols, program, types, module.path, module.source);
     generator.root = root;
-    generator.source = module.source;
-    generator.module = module.path.to_string();
     generator.package = module.package.clone();
     let mut items = Vec::new();
     for (index, decl) in program.decls.iter().enumerate() {
@@ -1560,6 +1573,8 @@ struct Generator<'a> {
     borrowed: BTreeSet<String>,
     /// The source the module was read from, for `assert` and `?` reports.
     source: Option<&'a SourceFile>,
+    /// Fixed filename escaped once for every failure site in this module.
+    escaped_site_file: String,
     /// The module path, the position of a report without a source.
     module: String,
     /// Equality and debug glue fns the generated text calls, in order of
@@ -1622,6 +1637,8 @@ impl<'a> Generator<'a> {
         symbols: &'a Symbols,
         program: &Program,
         types: Option<&'a TypedProgram>,
+        module: &str,
+        source: Option<&'a SourceFile>,
     ) -> Generator<'a> {
         let mut protocols: BTreeSet<String> = symbols.protocols.keys().cloned().collect();
         let mut constants = symbols.constants.clone();
@@ -1648,8 +1665,9 @@ impl<'a> Generator<'a> {
             renames: BTreeMap::new(),
             renamed_uses: BTreeSet::new(),
             borrowed: BTreeSet::new(),
-            source: None,
-            module: String::new(),
+            source,
+            escaped_site_file: escape_str(source.map_or(module, |source| source.path.as_str())),
+            module: module.to_string(),
             glue: Vec::new(),
             closure_base: None,
             package: Package::new("", "crate"),
@@ -1686,10 +1704,10 @@ impl<'a> Generator<'a> {
     fn site_args(&self, site: FailureSite) -> String {
         match self.source {
             Some(source) => {
-                let (file, line, col) = site.position(source);
-                format!("\"{}\", {line}, {col}", escape_str(&file))
+                let (line, col) = source.line_col(site.offset);
+                format!("\"{}\", {line}, {col}", self.escaped_site_file)
             }
-            None => format!("\"{}\", 0, 0", escape_str(&self.module)),
+            None => format!("\"{}\", 0, 0", self.escaped_site_file),
         }
     }
 
@@ -5014,11 +5032,9 @@ fn executable_main(
     w.open("fn main() {");
     w.open("std::process::exit(ignite_io::run(|| {");
 
-    let mut generator = Generator::new(symbols, program, Some(types));
+    let mut generator = Generator::new(symbols, program, Some(types), &package.module, source);
     generator.indent = w.indent;
-    generator.module = package.module.clone();
     generator.package = package.clone();
-    generator.source = source;
     let mut scope = Vec::new();
     for name in system
         .resources

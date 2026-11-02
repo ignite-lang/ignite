@@ -1,0 +1,50 @@
+{
+  "label": "visitor",
+  "pairs": 5,
+  "reference_median_s": 0.29554396896855906,
+  "candidate_median_s": 0.2903690540115349,
+  "median_paired_ratio": 0.9824902028111605,
+  "same_ir": true,
+  "executables": {
+    "reference": {
+      "path": "/home/timo/.cache/scratch/ignite-perf12c/llvm-ir-fixes/hasher-ignite",
+      "sha256": "92e3e19af148bae83b92c1fa9e0a2f502da49747cebe577051fada34527a6eba"
+    },
+    "candidate": {
+      "path": "/home/timo/.cache/scratch/ignite-perf12c/llvm-ir-fixes/visitor-ignite",
+      "sha256": "ce58ebb30aacaba926fc7af46e0a98e22de8309f67b1bf918488b65686f7168e"
+    }
+  },
+  "ir_source_sha256": "982b4008e87c49c3a05ab69552843e660c7b828df458e0896716817898c1cee6",
+  "command_arguments": [
+    "test",
+    "examples/terminal/command_schema.ignite",
+    "examples/terminal/commands.ignite",
+    "examples/terminal/terminal.ignite",
+    "examples/todo/todo.ignite",
+    "std/cli.ignite",
+    "std/console.ignite",
+    "std/contract.ignite",
+    "std/control.ignite",
+    "std/deploy.ignite",
+    "std/json.ignite",
+    "std/net.ignite",
+    "std/option.ignite",
+    "std/policy.ignite",
+    "std/probe.ignite",
+    "std/protocol/http.ignite",
+    "std/protocol/telnet.ignite",
+    "std/result.ignite",
+    "std/sli.ignite",
+    "std/text.ignite",
+    "std/time.ignite",
+    "--target",
+    "llvm",
+    "--out",
+    "/home/timo/.cache/scratch/ignite-perf12c/target-main/ignite-test",
+    "--runtime",
+    "/home/timo/.cache/scratch/ignite-perf12c/target-main/ignite-test/rt/debug/libignite_rt.a",
+    "--list"
+  ],
+  "diagnostic_only": true
+}

@@ -1,0 +1,14 @@
+{
+  "command": [
+    "cargo",
+    "build",
+    "-vv",
+    "-p",
+    "ignite"
+  ],
+  "exit": 0,
+  "seconds": 0.030255288002081215,
+  "compiled": false,
+  "dirty": false,
+  "fresh_ignite": true
+}

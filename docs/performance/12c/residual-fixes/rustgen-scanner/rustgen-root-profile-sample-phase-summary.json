@@ -1,0 +1,14 @@
+{
+  "samples": 448,
+  "cycles": 9295397831,
+  "root_scan_first_sample_seconds": 1.700343000004068,
+  "root_scan_last_sample_seconds": 2.087714999972377,
+  "root_scan_observed_span": 0.38737199996830896,
+  "root_scan_region_samples": 78,
+  "root_scan_region_cycle_share": 0.18489295049517068,
+  "region_categories": {
+    "lexer": 660395167,
+    "hash": 573472102,
+    "other": 484786262
+  }
+}

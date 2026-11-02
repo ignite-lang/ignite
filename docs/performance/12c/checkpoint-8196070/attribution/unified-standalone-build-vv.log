@@ -1,0 +1,30 @@
+       Fresh ignite-syntax v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite-syntax)
+       Fresh unicode-ident v1.0.27
+       Fresh proc-macro2 v1.0.107
+       Fresh ignite-check v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite-check)
+       Fresh utf8parse v0.2.2
+       Fresh ignite-types v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite-types)
+       Fresh quote v1.0.47
+       Fresh is_terminal_polyfill v1.70.2
+       Fresh colorchoice v1.0.5
+       Fresh anstyle-query v1.1.5
+       Fresh anstyle-parse v1.0.0
+       Fresh anstyle v1.0.14
+       Fresh cfg_aliases v0.2.2
+       Fresh syn v3.0.9
+       Fresh strsim v0.11.1
+       Fresh clap_lex v1.1.1
+       Fresh heck v0.5.0
+       Fresh cfg-if v1.0.5
+       Fresh bitflags v2.13.2
+       Fresh ignite-eval v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite-eval)
+       Fresh ignite-rustgen v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite-rustgen)
+       Fresh ignite-llvm v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite-llvm)
+       Fresh anstream v1.0.0
+       Fresh clap_derive v4.6.7
+       Fresh libc v0.2.191
+       Fresh clap_builder v4.6.7
+       Fresh clap v4.6.7
+       Fresh nix v0.31.3
+       Fresh ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s

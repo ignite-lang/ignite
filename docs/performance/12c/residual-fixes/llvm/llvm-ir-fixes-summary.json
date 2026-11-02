@@ -1,0 +1,162 @@
+{
+  "owner": "crates/ignite-llvm/src/ir.rs",
+  "source_sha256": "982b4008e87c49c3a05ab69552843e660c7b828df458e0896716817898c1cee6",
+  "hasher": {
+    "label": "hasher",
+    "pairs": 5,
+    "reference_median_s": 0.3710150620318018,
+    "candidate_median_s": 0.35669326601782814,
+    "median_paired_ratio": 0.9613983434107964,
+    "same_ir": true,
+    "executables": {
+      "reference": {
+        "path": "/home/timo/.cache/scratch/ignite-perf12c/llvm-ir-fixes/baseline-ignite",
+        "sha256": "fd3a0a5c93fe6523668124252f8a121041c785f2ab37d5d01b3ea83476ab02e5"
+      },
+      "candidate": {
+        "path": "/home/timo/.cache/scratch/ignite-perf12c/llvm-ir-fixes/hasher-ignite",
+        "sha256": "92e3e19af148bae83b92c1fa9e0a2f502da49747cebe577051fada34527a6eba"
+      }
+    },
+    "ir_source_sha256": "ec27575998d566c5b903d5197f1e2d3b6999708b67415af459cff3283cd2292a",
+    "command_arguments": [
+      "test",
+      "examples/terminal/command_schema.ignite",
+      "examples/terminal/commands.ignite",
+      "examples/terminal/terminal.ignite",
+      "examples/todo/todo.ignite",
+      "std/cli.ignite",
+      "std/console.ignite",
+      "std/contract.ignite",
+      "std/control.ignite",
+      "std/deploy.ignite",
+      "std/json.ignite",
+      "std/net.ignite",
+      "std/option.ignite",
+      "std/policy.ignite",
+      "std/probe.ignite",
+      "std/protocol/http.ignite",
+      "std/protocol/telnet.ignite",
+      "std/result.ignite",
+      "std/sli.ignite",
+      "std/text.ignite",
+      "std/time.ignite",
+      "--target",
+      "llvm",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/target-main/ignite-test",
+      "--runtime",
+      "/home/timo/.cache/scratch/ignite-perf12c/target-main/ignite-test/rt/debug/libignite_rt.a",
+      "--list"
+    ],
+    "diagnostic_only": true
+  },
+  "borrowed_double_set_rejected": {
+    "label": "symbols",
+    "pairs": 5,
+    "reference_median_s": 0.33085716696223244,
+    "candidate_median_s": 0.33580523903947324,
+    "median_paired_ratio": 1.0365703959460983,
+    "same_ir": true,
+    "executables": {
+      "reference": {
+        "path": "/home/timo/.cache/scratch/ignite-perf12c/llvm-ir-fixes/hasher-ignite",
+        "sha256": "92e3e19af148bae83b92c1fa9e0a2f502da49747cebe577051fada34527a6eba"
+      },
+      "candidate": {
+        "path": "/home/timo/.cache/scratch/ignite-perf12c/llvm-ir-fixes/symbols-ignite",
+        "sha256": "39ebfd3bc1e9f4b848f2f99a2028d9c03019d17c3696da4fadb3c7762bb869c7"
+      }
+    },
+    "ir_source_sha256": "f9fc5dc2d51895763b7978fa5a051b474dfb833497d6915d5e772569749647d0",
+    "command_arguments": [
+      "test",
+      "examples/terminal/command_schema.ignite",
+      "examples/terminal/commands.ignite",
+      "examples/terminal/terminal.ignite",
+      "examples/todo/todo.ignite",
+      "std/cli.ignite",
+      "std/console.ignite",
+      "std/contract.ignite",
+      "std/control.ignite",
+      "std/deploy.ignite",
+      "std/json.ignite",
+      "std/net.ignite",
+      "std/option.ignite",
+      "std/policy.ignite",
+      "std/probe.ignite",
+      "std/protocol/http.ignite",
+      "std/protocol/telnet.ignite",
+      "std/result.ignite",
+      "std/sli.ignite",
+      "std/text.ignite",
+      "std/time.ignite",
+      "--target",
+      "llvm",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/target-main/ignite-test",
+      "--runtime",
+      "/home/timo/.cache/scratch/ignite-perf12c/target-main/ignite-test/rt/debug/libignite_rt.a",
+      "--list"
+    ],
+    "diagnostic_only": true
+  },
+  "borrowed_visitor": {
+    "label": "visitor",
+    "pairs": 5,
+    "reference_median_s": 0.29554396896855906,
+    "candidate_median_s": 0.2903690540115349,
+    "median_paired_ratio": 0.9824902028111605,
+    "same_ir": true,
+    "executables": {
+      "reference": {
+        "path": "/home/timo/.cache/scratch/ignite-perf12c/llvm-ir-fixes/hasher-ignite",
+        "sha256": "92e3e19af148bae83b92c1fa9e0a2f502da49747cebe577051fada34527a6eba"
+      },
+      "candidate": {
+        "path": "/home/timo/.cache/scratch/ignite-perf12c/llvm-ir-fixes/visitor-ignite",
+        "sha256": "ce58ebb30aacaba926fc7af46e0a98e22de8309f67b1bf918488b65686f7168e"
+      }
+    },
+    "ir_source_sha256": "982b4008e87c49c3a05ab69552843e660c7b828df458e0896716817898c1cee6",
+    "command_arguments": [
+      "test",
+      "examples/terminal/command_schema.ignite",
+      "examples/terminal/commands.ignite",
+      "examples/terminal/terminal.ignite",
+      "examples/todo/todo.ignite",
+      "std/cli.ignite",
+      "std/console.ignite",
+      "std/contract.ignite",
+      "std/control.ignite",
+      "std/deploy.ignite",
+      "std/json.ignite",
+      "std/net.ignite",
+      "std/option.ignite",
+      "std/policy.ignite",
+      "std/probe.ignite",
+      "std/protocol/http.ignite",
+      "std/protocol/telnet.ignite",
+      "std/result.ignite",
+      "std/sli.ignite",
+      "std/text.ignite",
+      "std/time.ignite",
+      "--target",
+      "llvm",
+      "--out",
+      "/home/timo/.cache/scratch/ignite-perf12c/target-main/ignite-test",
+      "--runtime",
+      "/home/timo/.cache/scratch/ignite-perf12c/target-main/ignite-test/rt/debug/libignite_rt.a",
+      "--list"
+    ],
+    "diagnostic_only": true
+  },
+  "validation": {
+    "llvm_tests": "15 integration tests passed including goldens",
+    "inline": "148/148 native Rust and LLVM passed",
+    "clippy": "cargo clippy -p ignite-llvm --all-targets -- -D warnings passed",
+    "fmt": "cargo fmt --all -- --check passed",
+    "ir": "Each separate paired measurement retained identical .ll hashes for every output"
+  },
+  "performance_limit": "Attribution diagnostics use different wall-time batches; do not add isolated median differences as a combined acceptance result."
+}

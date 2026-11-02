@@ -156,7 +156,19 @@ fn chains_file(terms: usize, name: &str) -> PathBuf {
 /// No generated line holds a Rust operator chain of 64 or more terms.
 fn assert_chunked(generated: &str) {
     for line in generated.lines() {
-        let operators = line.matches(" + ").count() + line.matches(" && ").count();
+        // A counted operator must contain its marker. Skip the full pattern
+        // search only when that marker is absent; otherwise count exactly.
+        let plus = if line.contains('+') {
+            line.matches(" + ").count()
+        } else {
+            0
+        };
+        let and = if line.contains('&') {
+            line.matches(" && ").count()
+        } else {
+            0
+        };
+        let operators = plus + and;
         assert!(
             operators < 64,
             "a chain of {operators} operators on one line"

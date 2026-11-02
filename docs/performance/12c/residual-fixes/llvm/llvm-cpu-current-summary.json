@@ -1,0 +1,30 @@
+{
+  "diagnostic_only": true,
+  "cli_sha256": "fd3a0a5c93fe6523668124252f8a121041c785f2ab37d5d01b3ea83476ab02e5",
+  "cli_unchanged_after_profile": true,
+  "source_manifest_sha256": "a5bae60e28bb3d00b05c76ff3afa1c6c31792faa4769775bfc62c4732fb9f971",
+  "callgrind_total_instructions": 1761712288,
+  "included_listed_tests": 148,
+  "inclusive_instructions": {
+    "generate_tests": 1021678542,
+    "locate": 194218667,
+    "debug_location": 112288756,
+    "line_col": 73362850,
+    "di_file": 39355895,
+    "debug_location_tuple_siphash": 72299568,
+    "prune": 117636170,
+    "referenced_symbols": 102152780
+  },
+  "counts": {
+    "locate_calls": 16650,
+    "location_queries": 16650,
+    "location_created": 12240,
+    "line_col_queries": 17190
+  },
+  "perf_limitation": "320 hardware samples captured; most deep worker frames did not unwind, so use Callgrind caller attribution rather than summed perf flat samples",
+  "proposals": [
+    "Use a mixed integer hasher only for private compiler-generated (line,column,scope) debug-location keys.",
+    "Borrow symbol substrings for the temporary pruning graph; preserve public owned-symbol API and drop graph before retaining functions."
+  ],
+  "not_recommended": "Additional offset cache: only4410/16650 repeated debug locations; most positions unique."
+}

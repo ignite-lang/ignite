@@ -1,0 +1,45 @@
+{
+  "helper_sha256": "e0c0b937dabf288336725a6eab6729cea7b5677f10d489741784c23ebd7e8c01",
+  "recorded_environment": {
+    "CARGO_BUILD_JOBS": null,
+    "CARGO_BUILD_TARGET": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_RELEASE_DEBUG": "0",
+    "RUSTC_WORKSPACE_WRAPPER": null,
+    "RUSTC_WRAPPER": null,
+    "RUSTFLAGS": null,
+    "RUSTUP_TOOLCHAIN": null,
+    "SCCACHE_DISABLE": null
+  },
+  "refs": [
+    {
+      "binary": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/baseline-df7ccb9bed44/debug/deps/main-5e4ab9ed9c9b052f",
+      "binary_sha256": "126646519f4b53b084d6832bd0d89da448b83569800d06aa0981925a9ff3ac46",
+      "build": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/baseline-df7ccb9bed44",
+      "commit": "df7ccb9bed4440824a2d108fa112eba3fea25f99",
+      "label": "baseline",
+      "source": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/baseline-df7ccb9bed44"
+    },
+    {
+      "binary": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5/debug/deps/main-5e4ab9ed9c9b052f",
+      "binary_sha256": "daa8eea51c19140b505176bdf07d928cae231d5fd392a40667faa1a8518caca1",
+      "build": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5",
+      "commit": "819607066ef5032b0af52ab02a4f42034897722c",
+      "label": "candidate",
+      "source": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-819607066ef5"
+    },
+    {
+      "binary": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/deps/main-5e4ab9ed9c9b052f",
+      "binary_sha256": "b43f95f3990213a294ebefa4a2d41930f83738190c7fa449b2c20cc683257cde",
+      "build": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840",
+      "commit": "92733498f8406d8f0663a571be85351c548ea99e",
+      "label": "comparison",
+      "source": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/comparison-92733498f840"
+    }
+  ],
+  "scope": "diagnostic serial scheduling, preserves one-process fixture caches",
+  "timing": "monotonic stdout receipt; no unstable libtest options"
+}

@@ -1,0 +1,222 @@
+[
+  {
+    "pair": 0,
+    "side": "reference",
+    "seconds": 0.38046198297524825,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      18.34375,
+      11.18994140625,
+      10.556640625
+    ],
+    "load_after": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 0,
+    "side": "candidate",
+    "seconds": 0.3524977079941891,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "load_after": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 1,
+    "side": "candidate",
+    "seconds": 0.34918103099334985,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "load_after": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 1,
+    "side": "reference",
+    "seconds": 0.35608863399829715,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "load_after": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 2,
+    "side": "reference",
+    "seconds": 0.36559796100482345,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "load_after": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 2,
+    "side": "candidate",
+    "seconds": 0.40039236698066816,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "load_after": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 3,
+    "side": "candidate",
+    "seconds": 0.36405109299812466,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "load_after": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 3,
+    "side": "reference",
+    "seconds": 0.3804435869678855,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "load_after": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 4,
+    "side": "reference",
+    "seconds": 0.3710150620318018,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "load_after": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  },
+  {
+    "pair": 4,
+    "side": "candidate",
+    "seconds": 0.35669326601782814,
+    "exit": 0,
+    "listed": 148,
+    "load_before": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "load_after": [
+      18.396484375,
+      11.31982421875,
+      10.60205078125
+    ],
+    "ir_sha256": {
+      "main_ignite-test.ll": "75f15c2143ee3298fb4b733d4826da88ddad5fc24dbeed23932725b5c27959a0",
+      "program.ll": "e791bc2d5acb6bf16bf2887134de198ce30f90c27e72bcb8fa8282759dd89276",
+      "std.ll": "7fc416c81986ea5a5b3486bc6bb75a2e1859c8d57d5805ea53f088bf28577442"
+    }
+  }
+]
