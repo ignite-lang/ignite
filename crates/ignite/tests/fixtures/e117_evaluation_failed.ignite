@@ -1,0 +1,29 @@
+package fixture_e117
+
+import std.option.ok_or
+
+type Worker {
+  steps: Int
+}
+
+fn ratio(a: Int, b: Int) -> Int = a / b
+
+fn big() -> Int = 9223372036854775807
+
+fn overflow() -> Int = big() + 1
+
+fn checked() -> Int {
+  assert 1 + 1 == 3, "math"
+  1
+}
+
+fn third(xs: List<Int>) -> Int = xs[3]
+
+fn parsed(text: Text) -> Result<Int, Text> {
+  let n = Int.parse(text).ok_or("not a number: " + text)?
+  Ok(n)
+}
+
+system S {
+  component w: Worker { steps = ratio(1, 0) }
+}

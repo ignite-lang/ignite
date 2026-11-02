@@ -833,22 +833,25 @@ fn threads(pid: u32) -> u64 {
         .expect("Threads in proc status")
 }
 
-/// One OS thread per task and nothing else: an idle `terminald` is its
-/// main thread alone, a session adds one thread, and the thread ends with
-/// the session.
+/// One OS thread per task and nothing else but the drain's signal thread
+/// (`docs/slice.md` 16.13, `ignite-io/src/drain.rs`, named `drain`, which
+/// takes SIGTERM with `sigwait` since slice 12): an idle `terminald` is
+/// its main thread and that one, a session adds one thread, and the
+/// thread ends with the session.
 #[test]
 fn idle_terminald_runs_one_thread() {
+    const IDLE: u64 = 2;
     for target in [Target::Rust, Target::Llvm] {
         let mut server = Server::start(target);
         let pid = server.process.0.id();
-        assert_eq!(threads(pid), 1, "{target:?} idle");
+        assert_eq!(threads(pid), IDLE, "{target:?} idle");
         let mut stream = server.raw();
-        assert_eq!(threads(pid), 2, "{target:?} with one session");
+        assert_eq!(threads(pid), IDLE + 1, "{target:?} with one session");
         send_line(&mut stream, "quit");
         assert_eq!(shown(&read_until_closed(&mut stream)), shown(b"bye\r\n"));
         drop(stream);
         let deadline = Instant::now() + TIMEOUT;
-        while threads(pid) != 1 {
+        while threads(pid) != IDLE {
             assert!(
                 Instant::now() < deadline,
                 "{target:?}: {} threads after the session ended",
@@ -910,10 +913,11 @@ fn session_when_a_thread_is_free(server: &Server) -> TcpStream {
     }
 }
 
-/// With at most two threads (systemd `TasksMax=2`: the main thread and one
-/// session), the second connection finds no thread to start: `terminald`
-/// logs it, closes that connection only and keeps serving. Skipped without
-/// systemd user scopes.
+/// With at most three threads (systemd `TasksMax=3`: the main thread, the
+/// drain's signal thread of `docs/slice.md` 16.13 and one session), the
+/// second connection finds no thread to start: `terminald` logs it, closes
+/// that connection only and keeps serving. Skipped without systemd user
+/// scopes.
 fn a_task_that_cannot_start_closes_only_its_connection(target: Target) {
     if !scopes_available() {
         eprintln!("skipped: systemd-run --user --scope is not available");
@@ -927,7 +931,7 @@ fn a_task_that_cannot_start_closes_only_its_connection(target: Target) {
             "--scope",
             "--quiet",
             "-p",
-            "TasksMax=2",
+            "TasksMax=3",
         ],
     );
     let mut first = server.raw();

@@ -1,24 +1,17 @@
 package std.contract
 
-import std.probe.ProbeAttempt
+import std.sli.{ProbeAttempt, Window, MissingData, missing_data, known_outcome}
+import std.control.{Machine, Evaluator}
+import std.time.zone_known
 
 // Contracts over a probe's attempts (design section 11.3): what fraction
 // of attempts must be good, over which window, and what happens to
-// attempts the probe never made. Slice 10 checks the declarations and
-// gives the compliance arithmetic; evaluation over live signals is slice
-// 12.
-
-// The span a contract is judged over.
-enum Window {
-  Rolling(Duration),
-  CalendarMonth(Text)
-}
-
-// The last `span` of time, ending now.
-fn rolling(span: Duration) -> Window = Rolling(span)
-
-// Whole calendar months in the IANA time zone `time_zone`.
-fn calendar_month(time_zone: Text) -> Window = CalendarMonth(time_zone)
+// attempts the probe never made. The window, the missing-data rule and
+// the compliance arithmetic are the `std.sli` vocabulary (`docs/slice.md`
+// 16.6); evaluation over live signals is the `Evaluate` machine of
+// `std.control`, which each kind's `machine` hook returns (16.10). The
+// `validate` hooks are the declaration rules `ignite check` reports as
+// E120 (16.17).
 
 // What a breached SLA causes.
 enum Consequence {
@@ -28,29 +21,35 @@ enum Consequence {
 // The named event is raised.
 fn event(name: Text) -> Consequence = Event(name)
 
-// How attempts the probe never made count. The declarations write it as
-// text (`missing_data = "insufficient_evidence"`); `missing_data` reads it.
-enum MissingData {
-  InsufficientEvidence,
-  CountsAsGood,
-  CountsAsBad
+fn consequence_name(consequence: Consequence) -> Text = match consequence {
+  Event(name) => name
 }
 
-fn missing_data(text: Text) -> Option<MissingData> = match text {
-  "insufficient_evidence" => Some(InsufficientEvidence)
-  "counts_as_good" => Some(CountsAsGood)
-  "counts_as_bad" => Some(CountsAsBad)
-  _ => None
-}
-
-// At least `target` of the attempts in `window` are `good`.
+// At least `target` of the attempts in `window` are `good`. Evidence
+// covering less than `minimum_completeness` of the expected attempts is
+// insufficient (O32).
 type Availability {
   signal: Signal<ProbeAttempt>
   good: Text
   target: Ratio
   window: Window
   missing_data: Text = "insufficient_evidence"
+  minimum_completeness: Ratio = 90%
 }
+
+fn Availability.machine(self: Availability, id: Text) -> Machine = Machine.Evaluate(Evaluator {
+  id = "{id}.evaluator"
+  contract = id
+  signal = self.signal.to_text()
+  good = self.good
+  target = self.target
+  window = self.window
+  missing_data = missing_rule(self.missing_data)
+  minimum_completeness = self.minimum_completeness
+})
+
+fn Availability.validate(self: Availability) -> List<Text> =
+  reasons(self.good, self.target, self.window, Some(self.missing_data), self.minimum_completeness)
 
 // At least `target` of the attempts in `window` are `good` within
 // `threshold`.
@@ -61,11 +60,33 @@ type ThresholdCompliance {
   target: Ratio
   window: Window
   missing_data: Text = "insufficient_evidence"
+  minimum_completeness: Ratio = 90%
+}
+
+fn ThresholdCompliance.machine(self: ThresholdCompliance, id: Text) -> Machine = Machine.Evaluate(Evaluator {
+  id = "{id}.evaluator"
+  contract = id
+  signal = self.signal.to_text()
+  good = self.good
+  threshold = self.threshold
+  target = self.target
+  window = self.window
+  missing_data = missing_rule(self.missing_data)
+  minimum_completeness = self.minimum_completeness
+})
+
+fn ThresholdCompliance.validate(self: ThresholdCompliance) -> List<Text> {
+  var found = reasons(self.good, self.target, self.window, Some(self.missing_data), self.minimum_completeness)
+  if self.threshold <= 0 ms {
+    found.push("threshold must be positive, found {self.threshold.debug()}")
+  }
+  found
 }
 
 // A commitment to a customer: `target` of the attempts in each `period`
 // are `good`, with `exclusions` (named maintenance windows) left out, else
-// `consequence`.
+// `consequence`. Missing attempts are insufficient evidence; exclusions
+// are not evaluated in slice 12, so none may be declared (16.11).
 type SLA {
   signal: Signal<ProbeAttempt>
   good: Text
@@ -73,34 +94,95 @@ type SLA {
   period: Window
   exclusions: List<Text> = []
   consequence: Consequence
+  minimum_completeness: Ratio = 90%
 }
 
-// Whether `good` of `total` attempts reach `target`; no attempts reach
-// every target.
-fn meets(target: Ratio, good: Int, total: Int) -> Bool =
-  total == 0 || good * 1000000 >= target.ppm() * total
+fn SLA.machine(self: SLA, id: Text) -> Machine = Machine.Evaluate(Evaluator {
+  id = "{id}.evaluator"
+  contract = id
+  signal = self.signal.to_text()
+  good = self.good
+  target = self.target
+  window = self.period
+  missing_data = MissingData.InsufficientEvidence
+  minimum_completeness = self.minimum_completeness
+  consequence = Some(consequence_name(self.consequence))
+})
 
-test "windows and consequences are built by name" {
-  assert rolling(30 days) == Rolling(30 days)
-  assert calendar_month("Europe/Berlin") == CalendarMonth("Europe/Berlin")
+fn SLA.validate(self: SLA) -> List<Text> {
+  var found = reasons(self.good, self.target, self.period, None, self.minimum_completeness)
+  if self.exclusions.len() > 0 {
+    found.push("exclusions are not evaluated in slice 12: declare none, found {self.exclusions.len()}")
+  }
+  found
+}
+
+// The missing-data rule of a declaration's text; `validate` has refused
+// unknown texts, so none reaches a machine.
+fn missing_rule(text: Text) -> MissingData = match missing_data(text) {
+  Some(rule) => rule
+  None => MissingData.InsufficientEvidence
+}
+
+// The declaration rules shared by the three kinds (E120): a known `good`
+// outcome, a target in (0 %, 100 %], a known time zone, a known
+// missing-data rule, a minimum completeness of at most 100 %.
+fn reasons(good: Text, target: Ratio, window: Window, missing: Option<Text>, minimum_completeness: Ratio) -> List<Text> {
+  var found = []
+  if !known_outcome(good) {
+    found.push("unknown good outcome \"{good}\": the closed set is prompt_received_before_timeout, prompt_received_within_threshold")
+  }
+  if (target > 100%) || (target <= 0%) {
+    found.push("target {target.debug()} is not in (0 %, 100 %]")
+  }
+  match window {
+    CalendarMonth(zone) => if !zone_known(zone) {
+      found.push("unknown time zone \"{zone}\": the closed set is UTC, Europe/Berlin")
+    }
+    Rolling(span) => if span <= 0 ms {
+      found.push("window must be positive, found {span.debug()}")
+    }
+  }
+  match missing {
+    Some(text) => if missing_data(text) == None {
+      found.push("unknown missing_data \"{text}\": the closed set is insufficient_evidence, counts_as_good, counts_as_bad")
+    }
+    None => {}
+  }
+  if (minimum_completeness > 100%) {
+    found.push("minimum_completeness {minimum_completeness.debug()} is above 100 %")
+  }
+  found
+}
+
+test "consequences are built by name" {
   assert event("access_commitment_breached") == Event("access_commitment_breached")
+  assert consequence_name(event("access_commitment_breached")) == "access_commitment_breached"
 }
 
-test "missing_data reads the closed set" {
-  assert missing_data("insufficient_evidence") == Some(InsufficientEvidence)
-  assert missing_data("counts_as_good") == Some(CountsAsGood)
-  assert missing_data("counts_as_bad") == Some(CountsAsBad)
-  assert missing_data("") == None
-  assert missing_data("Insufficient_Evidence") == None
+test "a sound contract declaration gives no reason" {
+  assert reasons("prompt_received_before_timeout", 99.9%, Rolling(30 days), Some("insufficient_evidence"), 90%) == []
+  assert reasons("prompt_received_within_threshold", 100%, CalendarMonth("Europe/Berlin"), None, 100%) == []
+  assert reasons("prompt_received_before_timeout", 0.0001%, CalendarMonth("UTC"), Some("counts_as_bad"), 0%) == []
 }
 
-test "meets compares good attempts against the target in ppm" {
-  assert (99.9%).ppm() == 999000
-  assert meets(99.9%, 999, 1000)
-  assert !meets(99.9%, 998, 1000)
-  assert meets(99%, 99, 100)
-  assert !meets(99%, 98, 100)
-  assert meets(100%, 0, 0)
-  assert !meets(100%, 999, 1000)
-  assert meets(0%, 0, 1000)
+test "validate refuses the texts the compiler does not know" {
+  assert reasons("prompt_received", 99%, Rolling(1 hour), None, 90%) == ["unknown good outcome \"prompt_received\": the closed set is prompt_received_before_timeout, prompt_received_within_threshold"]
+  assert reasons("prompt_received_before_timeout", 99%, CalendarMonth("Europe/Paris"), None, 90%) == ["unknown time zone \"Europe/Paris\": the closed set is UTC, Europe/Berlin"]
+  assert reasons("prompt_received_before_timeout", 99%, Rolling(1 hour), Some("ignore"), 90%) == ["unknown missing_data \"ignore\": the closed set is insufficient_evidence, counts_as_good, counts_as_bad"]
+}
+
+test "validate refuses a target outside (0 %, 100 %] and an empty window" {
+  assert reasons("prompt_received_before_timeout", 0%, Rolling(1 hour), None, 90%) == ["target 0% is not in (0 %, 100 %]"]
+  assert reasons("prompt_received_before_timeout", 100.5%, Rolling(1 hour), None, 90%) == ["target 100.5% is not in (0 %, 100 %]"]
+  assert reasons("prompt_received_before_timeout", 99%, Rolling(0 ms), None, 90%) == ["window must be positive, found 0 ns"]
+  assert reasons("prompt_received_before_timeout", 99%, Rolling(1 hour), None, 101%) == ["minimum_completeness 101% is above 100 %"]
+  assert reasons("x", 0%, CalendarMonth("y"), Some("z"), 101%).len() == 5
+}
+
+test "missing_rule reads the declaration's text" {
+  assert missing_rule("insufficient_evidence") == MissingData.InsufficientEvidence
+  assert missing_rule("counts_as_good") == CountsAsGood
+  assert missing_rule("counts_as_bad") == CountsAsBad
+  assert missing_rule("nonsense") == MissingData.InsufficientEvidence
 }

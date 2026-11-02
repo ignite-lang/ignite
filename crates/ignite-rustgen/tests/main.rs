@@ -6,6 +6,7 @@
 mod common;
 mod compiles;
 mod golden;
+mod reachable;
 mod slice10;
 mod slice9;
 mod units;

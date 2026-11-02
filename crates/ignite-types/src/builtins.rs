@@ -48,6 +48,7 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
         (Ty::Text, "concat") => sig(TextConcat, vec![Ty::Text], Ty::Text),
         (Ty::Text, "to_bytes") => sig(TextToBytes, vec![], bytes()),
         (Ty::Text, "to_text") => sig(TextToText, vec![], Ty::Text),
+        (Ty::Ref(_) | Ty::Signal(_), "to_text") => sig(TextToText, vec![], Ty::Text),
         (Ty::Int, "to_text") => sig(IntToTextMethod, vec![], Ty::Text),
         (Ty::Byte, "to_text") => sig(ByteToText, vec![], Ty::Text),
         (Ty::Bool, "to_text") => sig(BoolToText, vec![], Ty::Text),
@@ -146,8 +147,16 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
         ("Stdout", "write_all") => sig(StdoutWriteAll, vec![bytes()], io(Ty::Unit)),
         ("Process", "exit") => sig(ProcessExit, vec![Ty::Int], Ty::Never),
         ("IoError", "new") => sig(IoErrorNew, vec![Ty::Text], Ty::IoError),
+        ("Clock", "monotonic") => sig(ClockMonotonic, vec![], Ty::Quantity(QuantityKind::Duration)),
+        ("Endpoint", "of") => sig(EndpointOf, vec![Ty::Ref(None)], io(endpoint())),
         _ => None,
     }
+}
+
+/// The record `std.net.Endpoint` (`docs/slice.md` 14.14 item 5, 16.13):
+/// the result of `Endpoint.of`.
+pub(crate) fn endpoint() -> Ty {
+    Ty::Record(crate::QualName::new("std.net", "Endpoint"))
 }
 
 /// The builtin free function `log(line: Text)`.

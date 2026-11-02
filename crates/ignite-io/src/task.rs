@@ -18,7 +18,7 @@
 //! the LLVM runtime ends every task with `task_end`, which resets the arena.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::Thread;
 use std::time::{Duration, Instant};
 
@@ -28,6 +28,37 @@ use crate::IoError;
 pub const LINGER: Duration = Duration::from_secs(1);
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
+
+/// Tasks handed to [`spawn`] that have not ended: counted from the call
+/// until the task returned or failed. The drain (`docs/slice.md` 16.13)
+/// waits for zero.
+static LIVE: Mutex<usize> = Mutex::new(0);
+static ENDED: Condvar = Condvar::new();
+
+fn task_started() {
+    *lock(&LIVE) += 1;
+}
+
+fn task_ended() {
+    let mut live = lock(&LIVE);
+    *live = live.saturating_sub(1);
+    ENDED.notify_all();
+}
+
+/// The number of tasks started and not yet ended.
+pub fn live_tasks() -> usize {
+    *lock(&LIVE)
+}
+
+/// Wait until every task started with [`spawn`] has ended. No bound: a
+/// task that never ends keeps the caller waiting (`docs/slice.md` 16.13,
+/// A6: outside `ignite run` only the driver's deadline ends a drain).
+pub fn wait_for_tasks() {
+    let mut live = lock(&LIVE);
+    while *live > 0 {
+        live = ENDED.wait(live).unwrap_or_else(PoisonError::into_inner);
+    }
+}
 
 /// An idle worker: its thread and the slot `spawn` puts its next task in.
 struct Worker {
@@ -62,6 +93,7 @@ where
     F: FnOnce() + Send + 'static,
 {
     let job: Job = Box::new(task);
+    task_started();
     let worker = lock(&IDLE).pop();
     if let Some(worker) = worker {
         *lock(&worker.next) = Some(job);
@@ -74,6 +106,7 @@ where
             Ok(())
         }
         Err(error) => {
+            task_ended();
             let error = IoError::new(format!("cannot start a task: {error}"));
             if !FAILING.swap(true, Ordering::Relaxed) {
                 crate::log(&error.to_string());
@@ -97,6 +130,7 @@ fn work(mut job: Job) {
             crate::report::task_failed(&report);
         }
         crate::flush();
+        task_ended();
         lock(&IDLE).push(Arc::clone(&me));
         let deadline = Instant::now() + LINGER;
         job = loop {
@@ -137,6 +171,42 @@ mod tests {
         a_finished_worker_runs_the_next_task();
         a_failed_task_leaves_its_worker_to_the_next();
         every_task_runs_once_under_contention();
+        the_drain_waits_for_every_live_task();
+    }
+
+    /// `wait_for_tasks` (the drain, 16.13) returns once the last task
+    /// ended, a failed one included, and not before.
+    fn the_drain_waits_for_every_live_task() {
+        wait_for_tasks();
+        assert_eq!(live_tasks(), 0);
+        let (release, held) = channel::<()>();
+        let held = Arc::new(Mutex::new(held));
+        for i in 0..3 {
+            let held = Arc::clone(&held);
+            spawn(move || {
+                lock(&held).recv().unwrap();
+                if i == 2 {
+                    crate::fail("assert", "t.ignite", 2, 1, "a failed task also ends");
+                }
+            });
+        }
+        assert_eq!(live_tasks(), 3);
+        let (done, waited) = channel();
+        std::thread::spawn(move || {
+            wait_for_tasks();
+            done.send(()).unwrap();
+        });
+        assert!(
+            waited.recv_timeout(Duration::from_millis(100)).is_err(),
+            "the wait ended with tasks live"
+        );
+        for _ in 0..3 {
+            release.send(()).unwrap();
+        }
+        waited
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the wait ends when the tasks end");
+        assert_eq!(live_tasks(), 0);
     }
 
     fn a_failed_task_leaves_its_worker_to_the_next() {

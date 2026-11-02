@@ -81,6 +81,17 @@ pub enum Input {
     Eof,
 }
 
+/// The reach of a `TcpListener` (`docs/slice.md` 14.14 item 11): the
+/// builtin enum `Exposure`, a value in a compiled program as any other
+/// enum; the order of the variants is their declaration order, as in the
+/// LLVM target and the evaluator, so it can be a `Map` key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Exposure {
+    Loopback,
+    Private,
+    Public,
+}
+
 /// The running process.
 #[derive(Clone, Copy, Debug)]
 pub struct Process;
@@ -221,14 +232,32 @@ pub mod terminal {
 /// that has no input yet; a generated `main` passes the status to
 /// `std::process::exit`, which ends them. Terminal attributes saved by
 /// [`Stdin::set_raw`] are restored when `main` returns and when it fails.
+///
+/// `run` arms the drain on SIGTERM first ([`drain`]). When `main` returns
+/// while the process drains, the result is not the exit status: an error
+/// other than [`DRAINING`] (the refused `accept` that ends a server's
+/// loop) is logged, then `run` waits for the live tasks to end
+/// ([`wait_for_tasks`], no bound) and returns 0.
 pub fn run<F>(main: F) -> i32
 where
     F: FnOnce() -> Result<(), IoError>,
 {
+    drain();
     let restore = terminal::Restore;
     let result = report::catch(main);
     flush();
     drop(restore);
+    if draining() {
+        match &result {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) if e.to_string() == DRAINING => {}
+            Ok(Err(e)) => log(&format!("error: {e}")),
+            Err(report) => log(&format!("error: {report}")),
+        }
+        wait_for_tasks();
+        flush();
+        return 0;
+    }
     match result {
         Ok(Ok(())) => 0,
         Ok(Err(e)) => {
@@ -306,6 +335,60 @@ pub mod args {
             })
     }
 
+    /// The `--ref <path>=<address>:<port>` (or `--ref=<path>=…`) binding
+    /// for `reference` in `args` (`docs/slice.md` 16.9): its address and
+    /// port. No binding with that path is the error `no binding for
+    /// <path>` (exit code 1); a `--ref` without a value or a binding that
+    /// is not `path=address:port` with a port in `0..=65535` is an error
+    /// with exit code 2, like a malformed `--port`. Bindings are read in
+    /// order and the first with the path wins.
+    pub fn endpoint_from_args(
+        args: impl Iterator<Item = String>,
+        reference: &str,
+    ) -> Result<(String, i64), IoError> {
+        let mut args = args;
+        while let Some(arg) = args.next() {
+            let binding = if arg == "--ref" {
+                match args.next() {
+                    Some(value) => value,
+                    None => {
+                        return Err(
+                            IoError::new("--ref needs a value").with_exit_code(PORT_EXIT_CODE)
+                        );
+                    }
+                }
+            } else if let Some(value) = arg.strip_prefix("--ref=") {
+                value.to_string()
+            } else {
+                continue;
+            };
+            let (path, endpoint) = parse_binding(&binding)?;
+            if path == reference {
+                return Ok(endpoint);
+            }
+        }
+        Err(IoError::new(format!("no binding for {reference}")))
+    }
+
+    /// `path=address:port` split into the path and the endpoint.
+    fn parse_binding(binding: &str) -> Result<(&str, (String, i64)), IoError> {
+        let malformed = || {
+            IoError::new(format!("--ref {binding}: expected path=address:port"))
+                .with_exit_code(PORT_EXIT_CODE)
+        };
+        let (path, target) = binding.split_once('=').ok_or_else(malformed)?;
+        let (address, port) = target.rsplit_once(':').ok_or_else(malformed)?;
+        let port = port
+            .parse::<i64>()
+            .ok()
+            .filter(|port| (0..=65535).contains(port))
+            .ok_or_else(malformed)?;
+        if path.is_empty() || address.is_empty() {
+            return Err(malformed());
+        }
+        Ok((path, (address.to_string(), port)))
+    }
+
     #[cfg(test)]
     mod tests {
         use super::{from_args, port_from_args};
@@ -365,6 +448,69 @@ pub mod args {
         fn absent_is_none() {
             assert_eq!(parse(&[]), None);
             assert_eq!(parse(&["--verbose"]), None);
+        }
+
+        fn endpoint(args: &[&str], reference: &str) -> Result<(String, i64), (String, i32)> {
+            super::endpoint_from_args(
+                std::iter::once("prog")
+                    .chain(args.iter().copied())
+                    .map(String::from),
+                reference,
+            )
+            .map_err(|e| (e.message.clone(), e.exit_code()))
+        }
+
+        #[test]
+        fn ref_binding_is_found_by_path() {
+            assert_eq!(
+                endpoint(
+                    &["--ref", "Terminal.server=127.0.0.1:2323"],
+                    "Terminal.server"
+                ),
+                Ok(("127.0.0.1".to_string(), 2323))
+            );
+            assert_eq!(
+                endpoint(
+                    &[
+                        "--port",
+                        "0",
+                        "--ref",
+                        "Other.member=10.0.0.1:1",
+                        "--ref=Terminal.server=::1:65535",
+                    ],
+                    "Terminal.server"
+                ),
+                Ok(("::1".to_string(), 65535))
+            );
+        }
+
+        #[test]
+        fn missing_ref_binding_is_an_error() {
+            assert_eq!(
+                endpoint(&[], "Terminal.server"),
+                Err(("no binding for Terminal.server".to_string(), 1))
+            );
+            assert_eq!(
+                endpoint(&["--ref", "Other.member=10.0.0.1:1"], "Terminal.server"),
+                Err(("no binding for Terminal.server".to_string(), 1))
+            );
+        }
+
+        #[test]
+        fn malformed_ref_binding_has_exit_code_two() {
+            for bad in [
+                &["--ref"][..],
+                &["--ref", "Terminal.server"],
+                &["--ref", "Terminal.server=127.0.0.1"],
+                &["--ref", "Terminal.server=127.0.0.1:x"],
+                &["--ref", "Terminal.server=127.0.0.1:65536"],
+                &["--ref", "=127.0.0.1:1"],
+                &["--ref", "Terminal.server=:1"],
+            ] {
+                let (message, code) = endpoint(bad, "Terminal.server").unwrap_err();
+                assert_eq!(code, 2, "{bad:?}");
+                assert!(message.starts_with("--ref"), "{message}");
+            }
         }
     }
 }
@@ -447,3 +593,25 @@ pub use quantity::{Quantity, quantity_debug};
 pub use test::{
     Arguments, DEFAULT_TIMEOUT, Test, USAGE_EXIT_CODE, Verdict, test_main, test_main_with,
 };
+
+// Slice 12 (`docs/slice.md` section 16.13): the monotonic clock, `Endpoint.of`
+// and the drain on SIGTERM, after the tests for the same reason. Owner: P2.
+pub mod clock;
+mod drain;
+pub use drain::{DRAINING, draining};
+pub use net::endpoint_of;
+pub use task::{live_tasks, wait_for_tasks};
+
+/// Arm the drain on SIGTERM (`docs/slice.md` 16.13, module `drain`): block
+/// SIGTERM in the calling thread, so every thread started afterwards
+/// inherits the block, and start the signal thread that takes it. The
+/// first SIGTERM shuts the read side of every listener, closes it and
+/// prints `released <address>:<port>` per listener; pending and later
+/// `accept`s fail with [`DRAINING`]; once `main` returns, [`run`] waits
+/// for the live tasks and returns 0. A second SIGTERM ends the process at
+/// once. Idempotent; [`run`] and the LLVM runtime's `init` call it before
+/// any task thread exists. Outside `ignite run` the wait for live tasks
+/// has no bound (A6).
+pub fn drain() {
+    drain::install();
+}

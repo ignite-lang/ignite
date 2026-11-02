@@ -1,0 +1,564 @@
+package eval_equivalence
+
+import std.text.*
+import std.option.*
+import std.result.{ok, is_err, map_err}
+
+// Acceptance 8 of slice 11 (docs/slice.md section 15.3): every fn without
+// parameters below is evaluated by ignite-eval and printed by the compiled
+// program on both targets; the three debug texts must agree. The printer's
+// main lists the fns in declaration order.
+
+const LIMIT: Int = 7
+const GREETING: Text = "hi"
+
+type Todo {
+  id: Int
+  title: Text
+  done: Bool = false
+}
+
+type Wrapper<T> {
+  value: T
+}
+
+type Pair {
+  left: Todo
+  right: Wrapper<Int>
+  tags: List<Text> = ["new"]
+}
+
+type Ops {
+  name: Text
+  f: fn(Text) -> Text
+}
+
+type Box {
+  label: Text
+  inner: Option<Box>
+}
+
+enum Color { Red, Green, Blue }
+
+enum Shape {
+  Dot,
+  Circle(Int),
+  Rect(Int, Int)
+}
+
+enum Tree<T> {
+  Leaf,
+  Node(Tree<T>, T, Tree<T>)
+}
+
+// Int
+
+fn int_arith() -> List<Int> = [(7 + 3) * 4 - 10 / 3 % 2, -7 / 2, -7 % 2, 7 / -2, 7 % -2, 2 * 3 + 4 * 5]
+
+fn int_neg() -> Int = -(5 - 12)
+
+fn int_extremes() -> List<Int> = [9223372036854775807, -9223372036854775807 - 1, 0 - 0]
+
+fn int_compare() -> List<Bool> = [1 < 2, 2 <= 2, 3 > 4, 4 >= 4, 1 == 1, 1 != 1]
+
+fn int_parse() -> List<Option<Int>> = [Int.parse("42"), Int.parse("+1"), Int.parse("x"), Int.parse("-7"), Int.parse("")]
+
+fn int_to_text() -> Text = 12.to_text() + "/" + Int.to_text(-3) + "/" + LIMIT.to_text()
+
+fn int_while() -> Int {
+  var i = 1
+  var total = 0
+  while i <= 10 {
+    total = total + i
+    i = i + 1
+  }
+  total
+}
+
+fn int_loop() -> Int {
+  var i = 0
+  var acc = 0
+  loop {
+    i = i + 1
+    if i > 10 {
+      break
+    }
+    if i % 2 == 0 {
+      continue
+    }
+    acc = acc + i
+  }
+  acc
+}
+
+fn divmod(a: Int, b: Int) -> (Int, Int) = (a / b, a % b)
+
+fn int_let_pattern() -> Text {
+  let (q, r) = divmod(17, 5)
+  assert q * 5 + r == 17
+  "{q} rem {r}"
+}
+
+// Byte
+
+fn byte_arith() -> List<Byte> {
+  let a: Byte = 200
+  let b: Byte = 9
+  [b'A' + 1, a - 100, b * 3, b / 2, b % 4]
+}
+
+fn byte_convert() -> (Int, Option<Byte>, Option<Byte>, Option<Byte>, Text) {
+  let z: Byte = b'z'
+  let a: Byte = b'A'
+  (z.to_int(), 255.to_byte(), 256.to_byte(), (0 - 1).to_byte(), a.to_text())
+}
+
+fn byte_compare() -> List<Bool> = [b'a' < b'b', b'a' == b'a', b'z' >= b'z']
+
+fn bytes_text() -> List<Text> {
+  var bs = b"h"
+  bs.push(255)
+  bs.push(105)
+  ["héllo".to_bytes().len().to_text(), b"hi".to_text(), bs.to_text(), Bytes.empty().len().to_text()]
+}
+
+fn bytes_literal() -> Bytes = "ok".to_bytes()
+
+// Text
+
+fn text_ops() -> List<Text> = ["  pad ".trim(), "pre-fix".strip_prefix("pre-").unwrap_or("?"), "abc".concat("def"), "Hello".to_lower(), "x".repeat(3), "a-b".replace("-", "+")]
+
+fn text_split() -> List<Text> = "a,b,,c".split(",")
+
+fn text_find() -> (Option<Int>, Option<Int>, Bool, Bool, Bool) = ("hello".find("ll"), "hello".find("q"), "hello".contains("lo"), "hello".starts_with("he"), "hello".ends_with("x"))
+
+fn text_escapes() -> Text = "q\" bs\\ nl\n cr\r tab\t nul\0 del\u{7f} bell\u{7} é"
+
+fn text_join_lines() -> (Text, List<Text>) = (["a", "b", "c"].join("-"), "l1\nl2\n\nl3".lines())
+
+fn text_len_empty() -> (Int, Bool, Bool, Bool) = ("héllo".len(), "".is_empty(), " ".is_empty(), "a" == "a" && "a" != "b")
+
+fn text_slice() -> (Text, Option<(Text, Text)>) = ("abcdef".slice(1, 4), "k=v=w".split_once("="))
+
+// List
+
+fn list_ops() -> List<Int> {
+  var xs = [3, 1]
+  xs.push(2)
+  xs.append([5, 4])
+  var ys = xs
+  ys.clear()
+  xs.push(ys.len())
+  xs
+}
+
+fn list_index_slice() -> (Int, List<Int>, Int, Bool, Int) {
+  let xs = [10, 20, 30]
+  (xs[1], xs.slice(1, 3), xs.at(0), xs.slice(0, 0).is_empty(), xs.len())
+}
+
+fn list_map_closure() -> List<Int> = [1, 2, 3].map(|x| x * x)
+
+fn list_for() -> Int {
+  var total = 0
+  for v in [1, 2, 3, 4] {
+    if v == 3 {
+      continue
+    }
+    total = total + v
+  }
+  total
+}
+
+fn list_nested() -> List<List<Text>> = [["a"], [], ["b", "c"]]
+
+fn list_eq() -> List<Bool> = [[1, 2] == [1, 2], [1] == [2], [[1], [2]] == [[1], [2]], [(1, "a")] != [(1, "b")]]
+
+fn list_mutate_place() -> List<Todo> {
+  var first = Todo { id = 1, title = "a" }
+  var second = Todo { id = 2, title = "b" }
+  first.title = "aa"
+  second.done = true
+  var todos = [first]
+  todos.push(second)
+  todos
+}
+
+fn list_index_push() -> List<List<Int>> {
+  var lists = [[1], [2]]
+  lists[0].push(9)
+  lists[lists.len() - 1].append([3, 4])
+  var deep = [[[1]], [[2], [3]]]
+  deep[1][0].push(5)
+  deep[0][0].clear()
+  lists.append(deep[1])
+  lists.push(deep[0][0])
+  lists
+}
+
+// Map
+
+fn map_literal() -> Map<Text, Int> = { b = 2, a = 1, c = 3 }
+
+fn map_ops() -> Map<Int, Text> {
+  var m: Map<Int, Text> = Map.empty()
+  m.put(3, "three")
+  m.put(1, "one")
+  m.put(2, "two")
+  m.put(1, "uno")
+  m.remove(2)
+  m
+}
+
+fn map_queries() -> (Option<Text>, Option<Text>, Bool, Bool, List<Int>, Int) {
+  let m = map_ops()
+  (m.get(1), m.get(9), m.contains(3), m.contains(2), m.keys(), m.len())
+}
+
+fn map_for() -> Text {
+  var out = ""
+  for (k, v) in map_ops() {
+    out = out + "{k}={v};"
+  }
+  out
+}
+
+
+fn map_eq() -> List<Bool> {
+  var a: Map<Text, Int> = Map.empty()
+  a.put("x", 1)
+  a.put("y", 2)
+  var b: Map<Text, Int> = Map.empty()
+  b.put("y", 2)
+  b.put("x", 1)
+  [a == b, a == map_literal()]
+}
+
+fn map_nested() -> Map<Text, List<Option<Int>>> = { odd = [Some(1), None], even = [Some(2)] }
+
+fn map_enum_key() -> (Map<Color, Int>, List<Color>, Option<Int>, Map<Exposure, Text>) {
+  var m: Map<Color, Int> = Map.empty()
+  m.put(Blue, 3)
+  m.put(Red, 1)
+  m.put(Green, 2)
+  m.remove(Green)
+  var reach: Map<Exposure, Text> = Map.empty()
+  reach.put(Public, "all")
+  reach.put(Loopback, "host")
+  (m, m.keys(), m.get(Blue), reach)
+}
+
+// Option and Result
+
+fn option_ops() -> List<Text> {
+  let nothing: Option<Int> = None
+  [Some(2).map(|n| "n={n}").unwrap_or("none"), nothing.map(|n| "n={n}").unwrap_or("none"), Some(1).is_some().to_text(), nothing.is_none().to_text()]
+}
+
+fn option_debug() -> (Option<Int>, Option<Text>, Option<Option<Int>>, Option<Todo>) = (Some(1), None, Some(None), Some(Todo { id = 3, title = "x" }))
+
+fn add_opts(a: Option<Int>, b: Option<Int>) -> Option<Int> = match a {
+  Some(x) => match b {
+    Some(y) => Some(x + y)
+    None => None
+  }
+  None => None
+}
+
+fn option_try() -> List<Option<Int>> = [add_opts(Some(1), Some(2)), add_opts(Some(1), None), add_opts(None, Some(2))]
+
+fn parse_two(a: Text, b: Text) -> Result<Int, Text> {
+  let x = Int.parse(a).ok_or("bad a")?
+  let y = Int.parse(b).ok_or("bad b")?
+  Ok(x + y)
+}
+
+fn result_try() -> List<Result<Int, Text>> = [parse_two("1", "2"), parse_two("1", "x"), parse_two("q", "2")]
+
+fn result_ops() -> (Option<Int>, Option<Int>, Bool, Result<Int, Text>) = (parse_two("1", "1").ok(), parse_two("", "").ok(), parse_two("", "").is_err(), parse_two("", "").map_err(|e| e + "!"))
+
+fn result_debug() -> List<Result<Todo, Text>> = [Ok(Todo { id = 1, title = "ok" }), Err("no")]
+
+// match
+
+fn classify(n: Int) -> Text = match n {
+  0 => "zero"
+  1 | 2 => "small"
+  3..=6 => "medium"
+  LIMIT => "limit"
+  _ => "large"
+}
+
+fn shape_text(pair: (Int, Text)) -> Text = match pair {
+  (0, s) => "zero:" + s
+  (n, "x") => "x:" + n.to_text()
+  (n, s) => s + n.to_text()
+}
+
+fn list_shape(xs: List<Int>) -> Text = match xs {
+  [] => "empty"
+  [a] => "one:{a}"
+  [a, b] => "two:{a},{b}"
+  _ => "many"
+}
+
+fn match_patterns() -> List<Text> = [classify(0), classify(2), classify(5), classify(7), classify(100), shape_text((0, "a")), shape_text((5, "x")), shape_text((9, "z")), list_shape([]), list_shape([4]), list_shape([4, 5]), list_shape([4, 5, 6])]
+
+fn match_bool_text() -> List<Text> = [match true { true => "t", false => "f" }, match "b" { "a" => "A", "b" => "B", _ => "?" }, match b'A' { b'A' => "letter A", _ => "other" }]
+
+// Quantities
+
+fn quantity_durations() -> List<Duration> = [100 ms + 2 seconds, 1 minute - 30 seconds, 3 ms * 4, 2 * 500 us, 10 seconds / 4, 1500 ms, 2 hours, 90 minutes]
+
+fn quantity_sizes() -> (ByteSize, ByteSize, ByteSize, Int, Int, Int) {
+  let g = 1 GiB
+  let d = 1500 ms
+  let u = 2 us
+  (16 KiB + 512 bytes, 2 MiB, 1 KB, g.to_int(), d.to_ms(), u.to_ns())
+}
+
+fn quantity_ratios() -> (Ratio, Ratio, Ratio, Int, Bool, Bool) {
+  let r = 12.5%
+  (99.9%, 50% + 25%, 3 * 10%, r.ppm(), 1 ms < 1 second, 1 KiB == 1024 bytes)
+}
+
+// Records
+
+fn record_literal() -> Todo = Todo { id = 1, title = "milk" }
+
+fn record_update() -> Todo = Todo { done = true, ..record_literal() }
+
+fn record_nested() -> Pair = Pair { left = record_update(), right = Wrapper { value = 7 } }
+
+fn record_field_fn() -> Text {
+  let ops = Ops { name = "loud", f = |s| s.to_upper() + "!" }
+  ops.f(ops.name) + " " + ops.name
+}
+
+fn record_eq() -> List<Bool> = [record_literal() == record_literal(), record_literal() == record_update(), record_nested() == Pair { left = record_update(), right = Wrapper { value = 7 }, tags = ["new"] }]
+
+fn record_var_field() -> Pair {
+  var pair = record_nested()
+  pair.left.title = "eggs"
+  pair.right.value = pair.right.value + 1
+  pair.tags.push("old")
+  pair
+}
+
+fn label(name: Text, count: Int, sep: Text) -> Text = name + sep + count.to_text()
+
+fn named_args() -> List<Text> = [label("a", 1, "="), label("b", sep = ":", count = 2), label(name = "c", count = 3, sep = "-")]
+
+fn record_named_box() -> (Box, Bool, Text) {
+  let b = Box { label = "outer", inner = Some(Box { label = "inner", inner = None }) }
+  (b, b.inner != None, b.label)
+}
+
+// Enums
+
+fn enum_values() -> List<Shape> = [Dot, Circle(3), Rect(2, 4)]
+
+fn area(shape: Shape) -> Int = match shape {
+  Dot => 0
+  Circle(r) => 3 * r * r
+  Rect(w, h) => w * h
+}
+
+fn enum_match() -> List<Int> = [area(Dot), area(Circle(3)), area(Rect(2, 4))]
+
+fn enum_generic() -> Tree<Int> = Node(Leaf, 1, Node(Leaf, 2, Leaf))
+
+fn depth(tree: Tree<Int>) -> Int = match tree {
+  Leaf => 0
+  Node(l, _, r) => {
+    let dl = depth(l)
+    let dr = depth(r)
+    1 + if dl > dr { dl } else { dr }
+  }
+}
+
+fn enum_recursion() -> Int = depth(enum_generic())
+
+fn enum_eq() -> List<Bool> = [Circle(3) == Circle(3), Circle(3) == Circle(4), Dot == Dot, Red != Blue, Some(Red) == Some(Red)]
+
+fn describe_exposure(e: Exposure) -> Text = match e {
+  Loopback => "loopback"
+  Private => "private"
+  Public => "public"
+}
+
+fn pick_exposure(open: Bool) -> Exposure = if open { Public } else { Loopback }
+
+fn enum_exposure() -> (Exposure, List<Text>, Bool, List<Exposure>) {
+  let f: fn(Exposure) -> Text = describe_exposure
+  let e = Private
+  (pick_exposure(true), [f(Loopback), describe_exposure(e)], pick_exposure(false) == Loopback, [Public, Loopback])
+}
+
+// Closures
+
+fn adder(n: Int) -> fn(Int) -> Int = |x| x + n
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int = f(x)
+
+fn double(x: Int) -> Int = x * 2
+
+fn closure_capture() -> List<Int> {
+  let n = 10
+  let add5 = adder(5)
+  [1, 2].map(|x| x + n).append_one(add5(1))
+}
+
+fn append_one(xs: List<Int>, x: Int) -> List<Int> {
+  var out = xs
+  out.push(x)
+  out
+}
+
+fn closure_fn_value() -> List<Text> {
+  let shout: fn(Text) -> Text = to_upper
+  [apply(double, 4).to_text(), ["a", "b"].map(shout).join(""), ["c"].map(to_upper).join("")]
+}
+
+fn closure_compose() -> Int {
+  let inc: fn(Int) -> Int = |x| x + 1
+  let twice: fn(Int) -> Int = |x| inc(inc(x))
+  twice(twice(1))
+}
+
+fn closure_copy_capture() -> List<Int> {
+  var n = 1
+  let f: fn(Int) -> Int = |x| x * n
+  n = 2
+  [f(100), n]
+}
+
+fn closure_in_record_applied() -> Text {
+  let ops = Ops { name = "quiet", f = |s| s.to_lower() }
+  ops.f("LOUD")
+}
+
+// Interpolation
+
+fn interpolation() -> Text {
+  let a = 2
+  let b = 3
+  "{a} + {b} = {a + b}; {{literal}} {GREETING}"
+}
+
+fn interpolation_types() -> Text {
+  let flag = true
+  let b: Byte = 7
+  let t = "txt"
+  let bs = b"hi"
+  "{flag} {b} {t} {bs.to_text()} {1 == 1}"
+}
+
+// debug
+
+fn debug_nested() -> Text {
+  let nested: List<Option<(Int, Text)>> = [Some((1, "a\u{7f}")), None]
+  nested.debug()
+}
+
+fn debug_unit_tuple() -> (Unit, (Int, Bool), List<Unit>) = (Unit, (1, true), [Unit, Unit])
+
+fn debug_text_of_debug() -> Text = record_update().debug().debug()
+
+fn debug_bytes() -> (Bytes, Result<Bytes, Text>) {
+  let r: Result<Bytes, Text> = Ok(b"hi")
+  (b"\x00\xff", r)
+}
+
+fn bool_ops() -> List<Bool> = [true && false, true || false, !true, !(1 > 2) && (2 > 1 || false)]
+
+fn show(text: Text) -> Result<Unit, IoError> requires [stdout.write] {
+  var bytes = text.to_bytes()
+  bytes.push(10)
+  return Stdout.write_all(bytes)
+}
+
+type Printer {
+  executable: Text
+}
+
+fn Printer.main(self: Printer) -> Result<Unit, IoError> {
+  show(int_arith().debug())?
+  show(int_neg().debug())?
+  show(int_extremes().debug())?
+  show(int_compare().debug())?
+  show(int_parse().debug())?
+  show(int_to_text().debug())?
+  show(int_while().debug())?
+  show(int_loop().debug())?
+  show(int_let_pattern().debug())?
+  show(byte_arith().debug())?
+  show(byte_convert().debug())?
+  show(byte_compare().debug())?
+  show(bytes_text().debug())?
+  show(bytes_literal().debug())?
+  show(text_ops().debug())?
+  show(text_split().debug())?
+  show(text_find().debug())?
+  show(text_escapes().debug())?
+  show(text_join_lines().debug())?
+  show(text_len_empty().debug())?
+  show(text_slice().debug())?
+  show(list_ops().debug())?
+  show(list_index_slice().debug())?
+  show(list_map_closure().debug())?
+  show(list_for().debug())?
+  show(list_nested().debug())?
+  show(list_eq().debug())?
+  show(list_mutate_place().debug())?
+  show(list_index_push().debug())?
+  show(map_literal().debug())?
+  show(map_ops().debug())?
+  show(map_queries().debug())?
+  show(map_for().debug())?
+  show(map_eq().debug())?
+  show(map_nested().debug())?
+  show(map_enum_key().debug())?
+  show(option_ops().debug())?
+  show(option_debug().debug())?
+  show(option_try().debug())?
+  show(result_try().debug())?
+  show(result_ops().debug())?
+  show(result_debug().debug())?
+  show(match_patterns().debug())?
+  show(match_bool_text().debug())?
+  show(quantity_durations().debug())?
+  show(quantity_sizes().debug())?
+  show(quantity_ratios().debug())?
+  show(record_literal().debug())?
+  show(record_update().debug())?
+  show(record_nested().debug())?
+  show(record_field_fn().debug())?
+  show(record_eq().debug())?
+  show(record_var_field().debug())?
+  show(named_args().debug())?
+  show(record_named_box().debug())?
+  show(enum_values().debug())?
+  show(enum_match().debug())?
+  show(enum_generic().debug())?
+  show(enum_recursion().debug())?
+  show(enum_eq().debug())?
+  show(enum_exposure().debug())?
+  show(closure_capture().debug())?
+  show(closure_fn_value().debug())?
+  show(closure_compose().debug())?
+  show(closure_copy_capture().debug())?
+  show(closure_in_record_applied().debug())?
+  show(interpolation().debug())?
+  show(interpolation_types().debug())?
+  show(debug_nested().debug())?
+  show(debug_unit_tuple().debug())?
+  show(debug_text_of_debug().debug())?
+  show(debug_bytes().debug())?
+  show(bool_ops().debug())?
+  Ok(Unit)
+}
+
+system Eq {
+  component eqprint: Printer { executable = "eqprint" }
+}

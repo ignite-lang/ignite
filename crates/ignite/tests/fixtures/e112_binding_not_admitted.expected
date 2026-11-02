@@ -1,0 +1,2 @@
+e112_binding_not_admitted.ignite:32:5: error[E112]: binding of `S.ingress` is not admitted: a native process hosts an executable component, not a resource
+e112_binding_not_admitted.ignite:34:5: error[E112]: `S.restart` is a policy: contracts and policies are never bindings keys

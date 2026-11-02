@@ -1,0 +1,6 @@
+local: assembly std.deploy.Deployment of Terminal (terminal.design.ignite:108:1)
+  Terminal.client = WorkstationExecutable
+  Terminal.console via Terminal.server = NativeProcess([Terminal.console])
+  Terminal.ingress = LocalSocket
+  Terminal.promptProbe = ScheduledProbeHost, executable promptProbe
+  Terminal.server = NativeProcess([Terminal.console]), executable terminald

@@ -1,0 +1,34 @@
+package fixture_e113
+
+import std.deploy.{Deployment, localSocket, nativeProcess, workstationExecutable}
+
+type Helper {
+  name: Text
+}
+
+type Worker {
+  listener: TcpListener
+  helper: Helper
+  executable: Text
+}
+
+fn Worker.main(self: Worker) -> Result<Unit, IoError> {
+  let stream = self.listener.accept()?
+  stream.close()?
+  Ok(Unit)
+}
+
+system S {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  component h: Helper { name = "h" }
+  component w: Worker { listener = ingress, helper = h }
+}
+
+assembly a: Deployment {
+  system = S
+  bindings = {
+    S.ingress = localSocket()
+    S.w = nativeProcess(includes = [])
+    S.h = workstationExecutable()
+  }
+}

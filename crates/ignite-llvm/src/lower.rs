@@ -2566,7 +2566,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     let no = self.literal_ref(b"false");
                     self.f.val(format!("select i1 {b}, ptr {yes}, ptr {no}"))
                 }
-                (Builtin::TextToText, Ty::Text) => self.ptr(v),
+                (Builtin::TextToText, Ty::Text | Ty::Ref(_) | Ty::Signal(_)) => self.ptr(v),
                 (Builtin::BytesToText, Ty::List(_)) => {
                     let p = self.ptr(v);
                     let t = self.rt_out("text_from_bytes_lossy", &Ty::Text, &[format!("ptr {p}")]);
@@ -3551,6 +3551,20 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             BytesEmpty | ListEmpty => self.empty_list(),
             StoreNew => unreachable!("`Store.new()` is lowered by `store_new`"),
+            ClockMonotonic => {
+                self.m.declare("ignite_rt_clock_monotonic", "i64", &[]);
+                Val::Scalar(self.f.val("call i64 @ignite_rt_clock_monotonic()"))
+            }
+            EndpointOf => {
+                self.m.declare(
+                    "ignite_rt_endpoint_of",
+                    "i32",
+                    &["ptr".to_string(), "ptr".to_string(), "ptr".to_string()],
+                );
+                let reference = self.read_arg(&args[0]);
+                let endpoint = Ty::Record(QualName::new("std.net", "Endpoint"));
+                self.rt_result("endpoint_of", &[format!("ptr {reference}")], endpoint)
+            }
             BytesOf => {
                 let aty = self.ty(&args[0]);
                 if aty == bytes() {

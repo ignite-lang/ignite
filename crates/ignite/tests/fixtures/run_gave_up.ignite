@@ -1,0 +1,34 @@
+// ignite run
+package fixture_run_gave_up
+
+import std.deploy.{Deployment, nativeProcess}
+import std.control.{Machine, Supervisor}
+import std.policy.{Restart, fixed}
+
+// `docs/slice.md` 16.0 item 2: a member whose process exits at once under
+// `Restart { maximum_attempts = 2 }` journals `gave_up` on the third
+// failure inside `interval`; the run goes on and `stop` exits 1.
+
+type Daemon {
+  name: Text
+}
+
+fn Daemon.main(self: Daemon) -> Result<Unit, IoError> = Ok(Unit)
+
+fn Daemon.machine(self: Daemon, id: Text) -> Machine = Machine.Supervise(Supervisor {
+  id = "{id}.supervisor"
+  member = id
+  restart = Restart { backoff = fixed(100 ms), maximum_attempts = 2, interval = 1 minutes }
+  has_listener = false
+})
+
+system S {
+  component daemon: Daemon { name = "d" }
+}
+
+assembly local: Deployment {
+  system = S
+  bindings = {
+    S.daemon = nativeProcess(includes = [])
+  }
+}

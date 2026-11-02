@@ -16,20 +16,25 @@ the IO substrate (Rust) that compiled programs link.
 | `crates/ignite-llvm/` | LLVM target: IR text for std, program and one main per executable |
 | `crates/ignite-rt/` | runtime of the LLVM target, `libignite_rt.a`: C ABI adapter over `ignite-io` (value conversion, handle table), arenas and regions, the spawn handshake; no IO of its own |
 | `crates/ignite-io/` | IO substrate of both targets, blocking: TCP listener and stream, stdin, stdout, terminal mode, tasks (one thread each), `run`, process arguments and exit, the reports of `assert` and `?`, the test runner (feature `runner`) |
-| `crates/ignite/` | `ignite` CLI: `check`, `emit`, `build`, `test`; end-to-end tests of the example in `tests/terminal.rs` |
+| `crates/ignite-eval/` | compile-time evaluator (`docs/slice.md` section 15): interprets property expressions over the typed modules with fuel (E115, E117, E118), builds the system model `ignite plan` prints, resolves assemblies through `std.deploy`'s `admits` and `includes` (E110 to E114), renders `ignite explain`; steps the reducers of `std.control` for `ignite run` and `ignite replay` (`docs/slice.md` 16.2, O27); used by `check`, `plan`, `explain`, `run` and `replay` only, linked by no backend and no compiled program |
+| `crates/ignite/` | `ignite` CLI: `check`, `emit`, `build`, `test`, `plan`, `explain`, `run`, `replay`; end-to-end tests of the example in `tests/terminal.rs`, model and explain goldens in `tests/golden/` |
+| `crates/ignite/src/run/` | the driver of `ignite run` and `ignite replay` (`docs/slice.md` 16.3): `engine` steps the `std.control` reducers in `ignite-eval`, `live` runs the adapters `process`, `probe`, `clock` and `control` that turn effects into processes, attempts, timers and stdin commands and feed events back, `journal` records every event, effect, signal, standing and consequence (16.5), `replay` re-steps a journal and compares (E127) |
 | `crates/ignite-load/` | `ignite-load`: load generator for `terminald` (workloads `rr`, `pipe`, `connect`; `ignite-load matrix` for `task bench-throughput`); not linked into compiled programs |
 | `std/` | standard library in Ignite; module `std.a.b` is `std/a/b.ignite` |
 | `std/console.ignite` | `Console`, `Reply`, `Action`: a line-oriented console application, independent of the protocol that carries it; `CommandConsole` (the declared form: `implementation: Module<ConsoleCommands>`, `command_schema`), `console_of`, `command_names` |
 | `std/text.ignite` | text operations called by UFCS (`split`, `contains`, `to_lower`, `is_digit`, …) |
 | `std/option.ignite`, `std/result.ignite` | UFCS helpers on `Option` and `Result` (`unwrap_or`, `map`, `and_then`, `ok_or`, `map_err`, `ok`, …); the shared names make a glob import of both E041 at use |
 | `std/json.ignite` | `Json` with integer numbers (RFC 8259): `encode`, `parse` |
-| `std/net.ignite` | `Endpoint { address, port }`: the client-side target a bare `TcpListener` resource name gives where `Endpoint` is expected (slice 10); the module is also the substrate builtins `TcpListener`, `TcpStream`, `Exposure` |
+| `std/net.ignite` | `Endpoint { address, port }`: the client-side target a bare `TcpListener` resource name gives where `Endpoint` is expected (slice 10); the module is also the substrate builtins `TcpListener`, `TcpStream`, `Exposure`; `Endpoint.of(ref)` is the substrate builtin that resolves a `Ref` through `ignite run`'s `--ref` arguments (16.9) |
+| `std/sli.ignite` | probe attempts, windows, missing data and the meets check; the leaf module that `std.control`, `std.probe` and `std.contract` import |
+| `std/time.ignite` | civil time for calendar windows, a leaf: `month_start` and `next_month_start` of an instant in `UTC` or `Europe/Berlin` (EU summer-time rule), `zone_known` |
+| `std/control.ignite` | the pure reducers `ignite run` steps (`docs/slice.md` 16.5 to 16.12): `Machine` (`Supervise`, `Schedule`, `Evaluate`, `Roll`), `Event`, `Effect`, `Standing`, `Fired`, `step(machine, event) -> Step`, `companions(machine)`; imports only the leaves `std.sli`, `std.policy`, `std.time` (O45), tested inline with synthetic event lists; `crates/ignite/tests/fixtures/control_trace.ignite` steps the same reducers in the evaluator and on both targets (`control_trace::reducers_agree_across_the_evaluator_and_both_targets`) and times A7 (`control_trace::a7_evaluator_steps_10000_emissions_into_a_30_day_window`) |
 | `std/protocol/telnet.ignite` | `protocol Telnet`: server role `serve`, client role `connect`; the executable kinds `TelnetServer` (accept loop, `SessionLimits`, `TelnetProfile`) and `TelnetClient` (exit 3 and 4) with their `main` fns |
 | `std/protocol/http.ignite` | `protocol Http`: server role `serve` over `HttpApp<S>`; `Request`, `Response`; the executable kind `HttpServer<S>` |
-| `std/contract.ignite`, `std/policy.ignite`, `std/probe.ignite`, `std/deploy.ignite`, `std/cli.ignite` | the declaration vocabulary of design section 11.3 (`SLA`, `Availability`, `Restart`, `DrainRollout`, `TelnetPrompt`, `Deployment`, `Application`, …), checked and tested, not yet run by anything |
+| `std/contract.ignite`, `std/policy.ignite`, `std/probe.ignite`, `std/deploy.ignite`, `std/cli.ignite` | the declaration vocabulary of design section 11.3 (`SLA`, `Availability`, `Restart`, `DrainRollout`, `TelnetPrompt`, `Deployment`, `Application`, …), checked and tested; `std.deploy`'s `Member`, `admits` and `includes` are what the compiler calls to resolve an assembly (`docs/slice.md` 15.6); since slice 12 each runnable kind has the hooks `machine` and `validate` of 16.16 (`ignite run` steps the machines, `ignite check` reports `validate`'s reasons as E120), `TelnetPrompt.main` is the probe process (16.8) and `std.deploy.entries` names the entries a binding needs (E129) |
 | `examples/terminal/terminal.ignite` | the terminal system in component form (`CommandConsole`, `TelnetServer`, `TelnetClient`); `ignite build` emits `terminald` and `tn` |
 | `examples/terminal/commands.ignite`, `command_schema.ignite` | sibling modules of the terminal: the console's commands (`respond`) and their names (`commands`), filled into the declaration by `module(..)` |
-| `examples/terminal/terminal.design.ignite` | the full declaration from design section 11.3; `ignite check` passes it (`cli::check_design_file_is_silent`), `ignite build` does not build it |
+| `examples/terminal/terminal.design.ignite` | the full declaration from design section 11.3; `ignite check` passes it (`cli::check_design_file_is_silent`); `ignite run` builds it; `task compile` builds `terminal.ignite` |
 | `examples/todo/` | the todo system: an HTTP JSON backend over `Store<Todo>`; `ignite build` emits `todod` |
 | `docs/vision.md` | direction: target architecture, sequencing of waves and slices, contradictions between documents, open and taken decisions |
 | `PLAN.md` | the roadmap in outline: slices, waves, state; reasoning stays in `docs/vision.md` |
@@ -66,6 +71,10 @@ Rules of the layout:
 | compile the example with the LLVM target | `task compile-llvm` (writes `target/ignite-llvm/terminal/bin/`) |
 | run the LLVM-built binaries | `task server TARGET=llvm`, `task client TARGET=llvm` |
 | run the inline Ignite tests | `task test-ignite` (std/ and examples/, both targets; `FILTER=text` selects tests); one file: `target/debug/ignite test FILE [FILTER]` |
+| print the system model of a program | `target/debug/ignite plan FILE [--assembly NAME] [--out FILE] [--fuel N]` (canonical JSON, `docs/slice.md` 15.5; the design file's model is the golden `crates/ignite/tests/golden/terminal.design.model.json`) |
+| explain one system, member, property or assembly | `target/debug/ignite explain FILE PATH [--assembly NAME]` (`Terminal.reachable`, `Terminal.server.recovery`, `local`; `docs/slice.md` 15.8) |
+| run a system in the foreground | `target/debug/ignite run FILE [--assembly NAME] [--state DIR] [--build DIR] [--target rust\|llvm] [--release] [--clock real\|manual] [--epoch RFC3339] [--port RESOURCE=PORT] [--json] [--fresh]` (`docs/slice.md` 16.3; stdin takes `status`, `rollout <member>`, `stop`, `advance <quantity>`; state defaults to `target/ignite-run/<assembly>/`; exit 0 on a requested stop, 1 when a machine gave up, 2 on a diagnostic; `--fuel N` bounds each reducer step only, the plan inside `run` and `replay` keeps the default fuel) |
+| replay a run's journal | `target/debug/ignite replay FILE [--assembly NAME] [--state DIR]` (re-steps the reducers over the journaled events, compares every effect and standing record, E127, prints the final standings) |
 
 `task` is go-task. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
 invocation in automation sets `CARGO_INCREMENTAL=0`. `task test-ignite` honours
@@ -84,7 +93,7 @@ warnings`, `cargo test --workspace --no-fail-fast`, `task test-ignite`, run one 
 
 | measurement | command | before 9b | after 9b |
 |---|---|---|---|
-| gate, cold | the gate with `SCCACHE_RECACHE=1` after `cargo clean` | 129.9 s | 86.5 s |
+| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
 | gate, warm | the gate after `touch crates/ignite-check/src/lib.rs` | 35.4 s | 25.9 s |
 | test executables | `cargo test --workspace --no-run` | 49, 666 MB | 18, 202 MB |
 | integration-test binaries | same | 39 | 8, one per crate |
@@ -112,7 +121,7 @@ sessions (load average 11 to 23), sccache on, own `CARGO_TARGET_DIR`; "before" i
 
 | measurement | command | before (9b) | slice 10 |
 |---|---|---|---|
-| gate, cold | `cargo clean`, `SCCACHE_RECACHE=1`, the gate | 86.5 s | 72.3 s (fmt 0.9, clippy 7.4, test 55.5, test-ignite 8.5) |
+| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
 | gate, warm | after `touch crates/ignite-check/src/lib.rs` | 25.9 s | 45.5 s (fmt 0.4, clippy 2.1, test 41.7, test-ignite 1.3) |
 | test executables | `cargo test --workspace --no-run` | 18, 202 MB | 18, 210 MB |
 | `--no-run`, warm | same, repeated | 0.0 s | 0.1 s |
@@ -143,7 +152,237 @@ sessions (load average 11 to 23), sccache on, own `CARGO_TARGET_DIR`; "before" i
   already in use`. Inferred, not verified: another process on the host took the ephemeral port
   between release and rebind.
 
-## Conventions
+Slice 11 (plan and explain, 2026-11-02 03:00 to 03:10, P4), 20 cores, load average 0.8 to 4.7
+throughout, sccache on. Method (`docs/slice.md` 15.1): "before" is a `git archive 60aef38` copy,
+"after" a copy of the finished slice-11 tree, each with its own `CARGO_TARGET_DIR`; the cold gate
+once per tree in a fresh target dir with `SCCACHE_RECACHE=1`, then three interleaved passes, each
+running every warm unit once on the before copy and once on the after copy; the 1-minute load is
+recorded per run, a pair whose two loads differ by more than 5 is discarded (none was), and the
+ratio is the median of the pair ratios. Warm = after `touch crates/ignite-check/src/lib.rs`.
+Scripts and raw logs: the slice's scratch directory, `p4-scripts/` and `p4-logs/`.
+
+| measurement | command | before (60aef38) | slice 11 | ratio |
+|---|---|---|---|---|
+| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
+| gate, warm | the gate after the touch (3 pairs) | 25.9 s (25.9 to 26.2) | 16.8 s (16.8 to 17.1) | 0.65 |
+| warm `cargo test --workspace` step | same (3 pairs) | 22.9 to 23.1 s | 13.5 to 13.8 s | 0.59 |
+| warm fmt, clippy, test-ignite steps | same | 0.38, 1.98, 0.65 s | 0.45, 2.19, 0.68 s | 1.16, 1.11, 1.03 |
+| test executables | `cargo test --workspace --no-run`, `Executable` lines | 19, 220 MB | 21, 246 MB | |
+| `--no-run`, warm / after the touch | same, repeated / after the touch (3 pairs) | 1.01 / 1.45 s | 1.03 / 1.61 s | 1.02 / 1.21 |
+| `crates/ignite/tests`, per file | `cargo test -p ignite --test main <file>::` warm (3 pairs) | slice9 17.5, ignite_test 9.1, terminal 2.1, llvm_build 2.1, slice10_llvm 0.7, cli 0.6, failover 0.6 s; the other 7 files 0.6 s together | slice9 3.7, ignite_test 8.6, terminal 2.1, llvm_build 1.5, slice10_llvm 1.0, cli 0.6, failover 0.6; eval 0.4, plan 0.7 (new) | 0.21, 0.95, 1.00, 0.70, 1.22, 0.95, 1.03 |
+| todod, Rust dev | `ignite build examples/todo/todo.ignite`, fresh `--out` and `--target-dir`, `SCCACHE_RECACHE=1` (3 pairs); split = separate builds of `ignite-io`, `ignite-std`, the program crate in one fresh target dir | 3.19 s (io 2.37, std 0.37, program 0.26) | 3.19 s (2.36, 0.36, 0.26) | 1.00 |
+| todod, Rust release | same with `--release` | 4.12 s (io 2.79, std 0.65, program 0.51) | 4.19 s (2.83, 0.66, 0.51) | 1.02 |
+| todod, LLVM dev | same with `--target llvm`; split = the build's clang and link commands rerun by hand | 0.35 s (clang std 0.08, program 0.02, main 0.02, link 0.11) | 0.33 s (0.06, 0.02, 0.02, 0.11) | 0.94 |
+| todod, LLVM release | same with `--release` | 1.10 s (clang -O2 std 0.78, program 0.08, main 0.06, link 0.06) | 0.80 s (0.48, 0.08, 0.06, 0.05) | 0.73 |
+| `ignite check` of the design file | `ignite check examples/terminal/terminal.design.ignite` (15 pairs) | 0.05 s | 0.06 s | 1.2 |
+| `ignite plan`, `ignite explain local` of the design file | `ignite plan …` with `--out`, `ignite explain … local` (15 runs each, load 2.2 to 4.0) | | 0.06 s (0.06 to 0.07), 0.06 s | |
+
+- Test counts, cargo tests plus the inline tests of both targets: 746 passed (552 cargo + 2 × 97
+  inline), 3 ignored before; 784 passed (580 cargo + 2 × 102 inline), 4 ignored after
+  (`#[ignore]`: the two 100,000-term chain tests, the LLVM `bench`, the new 100,000-term
+  lowering); 97 inline tests per target before, 102 after (std/deploy +5). `cargo test
+  --workspace` on the working tree at the close: 580 passed, 0 failed, 4 ignored, 13.98 s at load
+  3.3; `task gate` 13.4 s warm.
+- Slice 10's carry-overs (P0 on 60aef38, raw logs in the scratch directory `p0-logs/`): the warm
+  gate is 25.98 s at load under 5 (fmt 0.40, clippy 2.05, test 22.88, test-ignite 0.65) and 75.4 s
+  at load 18 to 44, so slice 10's 45.5 s was load, not a regression. Of the warm test step the
+  `crates/ignite` end-to-end binary was 18.69 s (82 %): `slice9.rs` 17.4 s serial behind its
+  `BUILDS` mutex, of which the inline test `boxed values carried across releases and through the
+  store` (`fixtures/slice9/regions.ignite`) was 9.1 s (6.8 s Rust dev, 2.3 s LLVM -O0). todod LLVM
+  release 1.16 s: `clang -O2` on `std.ll` 0.834 s (70.5 %), emit 0.113, `program.ll` 0.084, main
+  0.064, link 0.063. todod Rust dev 3.04 s (the 3.0 s baseline); release 4.56 s against 3.9 s: libc
+  and nix 52 % (recompiled every run under `SCCACHE_RECACHE=1`), `ignite-std` 16 %, the program
+  crate 12 %, accepted as the new baseline. The flake
+  `failover::a_failing_session_does_not_end_the_service`: 0 failures in 30 runs alone and 30
+  beside a full workspace run (P0 on 60aef38); after P3's rewrite (a deadline instead of one read
+  after `kill`) again 30/30 alone (P3) and 30/30 beside a workspace run (P4, load 2.5).
+- Fixes in slice 11: `slice9.rs` 17.5 s to 3.7 s (the boxed test's sizes 2,000 inserts and 5,000
+  links to 500 and 1,000, 6.8 s to 0.31 s Rust and 2.3 s to 0.09 s LLVM with the same assertions;
+  `long_chains_lower_quickly` 100,000 to 10,000 terms, 3.5 s to 0.4 s, the 100,000-term lowering
+  now `#[ignore]` as `long_chains_100k_lower_quickly`; the 14 audit probes built as two `ignite
+  test` groups per target instead of 28 subprocesses, 7.2 s to 1.9 s). `llvm_build.rs` 2.1 to 1.5 s
+  and todod LLVM release 1.10 to 0.80 s from P3's reachable-only std emission (`std.ll` 222 to 107
+  defines; `clang -O2` on it 0.78 to 0.48 s). The steering target of a warm test step under 8 s is
+  not met: 13.5 s at load 3, of which `ignite_test.rs` is 8.6 s (the end-to-end files run in
+  parallel, so the binary's wall is its longest file; `timeout_kills_a_test` 2.6 s,
+  `overflow_fails_the_same_everywhere` 1.7 s, each spawning `ignite test` per target and profile),
+  the rebuild after the touch 1.6 s, the other crates' binaries about 3 s.
+- Slice 11b (2026-11-02, the four target bugs and the warm test step; 3 interleaved passes over
+  the 60aef38 copy, the slice-11 close tree and the 11b tree, load 6 to 9): warm `cargo test
+  --workspace` step 10.8 s median (10.3 to 17.8 s) against 16.1 s for the slice-11 tree in the
+  same passes (ratio 0.70); `ignite_test.rs` 8.6 s to 4.6 s (the two targets on two threads, one
+  shared basics run). The target "under 8 s at load under 5" was not checked: the load never fell
+  under 5. Remainder: the end-to-end binary 5.6 s, the rebuild after the touch 1.8 s, the
+  rustgen tests 1.7 s. todod against the 60aef38 copy in the same passes: Rust dev 3.35 s
+  (ratio 1.00), release 4.74 s (1.03); LLVM dev 0.35 s (0.95), release 0.88 s (0.70). Cargo
+  tests 582 passed, 0 failed, 4 ignored; inline tests 102 per target.
+- Rises over 10 %: fmt +16 % (70 ms) and clippy +11 % (0.2 s) from the new crate `ignite-eval`;
+  `--no-run` after the touch +21 % (0.16 s) because `ignite-eval` depends on `ignite-types` and
+  recompiles with it; `ignite check` of the design file +20 % (10 ms, at 10 ms resolution): O20
+  evaluates every property and resolves the assembly at check time; `slice10_llvm.rs` +22 %
+  (0.69 to 0.98 s, after-tree range 0.69 to 1.00 s: one slow run, load noise, inferred); test
+  executables 19 to 21 (+12 % size): `ignite-eval`'s unit and integration test binaries.
+- Flake seen in the measurement: `llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent`
+  failed once per tree in 8 gate runs with `Text file busy` at the exec of the copied driver (the
+  copy's write descriptor inherited by another test thread's fork for an instant); the test now
+  retries the exec on ETXTBSY. Pre-existing on 60aef38, not a slice-11 regression.
+
+Slice 12 (`ignite run`, 2026-11-02 06:51 to 06:58, P4), 20 cores shared with other sessions'
+test runs (load average 10 to 40 throughout; 3 to 6 for the before tree's cold gate at 05:43),
+sccache on. Method as slice 11 (`docs/slice.md` 16.1): "before" is the coordinator's
+`s12-before` copy of the slice-12 start tree, "after" the snapshot `s12-p4-after2` of the closed
+tree (every test green), each with its own `CARGO_TARGET_DIR`; one cold gate per tree, then three
+interleaved passes; a pair whose two 1-minute loads differ by more than 5 is discarded. No run
+of either tree happened under load 5. Scripts and raw logs: the slice's scratch directory,
+`s12-p4-scripts/` and `s12-p4-logs/measure/` (`pairs2.txt` is the summary; `pairs.txt` the
+earlier set over the snapshot that still held 4 failing tests, see the note below).
+
+| measurement | command | before (s12-before) | slice 12 | ratio |
+|---|---|---|---|---|
+| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
+| gate, warm | the gate after the touch (pairs 2 and 3 kept, loads 27 to 35; pair 1 discarded, loads 11 and 34) | 23.5 s (19.8, 27.3) | 33.1 s (29.5, 36.7) | 1.42 (1.35, 1.49) |
+| warm `cargo test --workspace` step | same (pairs 2 and 3) | 17.5 s (14.4, 20.6) at load 28 to 31 | 26.3 s (23.1, 29.5) at load 27 to 31 | 1.52 (1.43, 1.61) |
+| warm fmt, clippy steps | same (pairs 2 and 3) | 0.86, 4.25 s | 0.81, 4.37 s | 0.95, 1.04 |
+| warm `task test-ignite` step | same; every warm pair discarded by the load rule (loads 28 to 41), the cold pair (loads 6.0 and 10.6) shown | 8.45 s cold | 10.57 s cold | 1.25 (1 pair) |
+| test executables | `cargo test --workspace --no-run`, `Executable` lines | 21, 247 MB | 21, 265 MB | |
+| `--no-run`, warm / after the touch | same (3 pairs) | 1.13 / 1.89 s | 1.29 / 2.30 s | 1.03 / 1.26 |
+| `crates/ignite/tests`, per file | `cargo test -p ignite --test main <file>::` warm (3 pairs, loads 15 to 27, from the earlier set over the snapshot whose `terminal` tests failed; the other files were not affected, `pairs.txt`) | ignite_test 6.6, slice9 3.9, llvm_build 2.5, terminal 2.1, slice10_llvm 1.4, plan 1.0, failover 0.9, cli 0.7, llvm_memory 0.6, eval 0.5 s | ignite_test 9.8, slice9 6.0, llvm_build 3.6, terminal failed, slice10_llvm 1.5, plan 2.3, failover 1.7, cli 0.7, llvm_memory 0.9, eval 0.8; new: run 3.0 (2.9 to 3.1), drain 1.9 (1.7 to 2.2), control_trace 0.7, decode 0.2 | 1.47, 1.50, 1.45, , 1.52, 2.46, 1.39, 0.90, 1.53, 1.54 |
+| todod, Rust dev / release | `ignite build examples/todo/todo.ignite`, fresh `--out` and `--target-dir`, `SCCACHE_RECACHE=1` (3 pairs, loads 29 to 38) | 5.55 s (5.0 to 6.6) / 6.84 s (5.4 to 7.5) | 6.02 s (5.2 to 7.0) / 7.57 s (5.3 to 8.9) | 1.06 (0.93 to 1.21) / 1.20 (0.77 to 1.40) |
+| todod, LLVM dev / release | same with `--target llvm` | 0.42 s (0.42 to 0.64) / 1.11 s (0.91 to 1.46) | 0.87 s (0.56 to 0.90) / 1.40 s (1.24 to 1.83) | 1.41 (1.33 to 2.07) / 1.26 (1.25 to 1.36) |
+| same, P2 after unit 1 at load 1 to 4 | `s12-p2-bench-unit1cold/todod.log`, 3 pairs | Rust 3.32 / 4.25 s, LLVM 0.33 / 0.81 s | Rust 3.50 / 4.76 s, LLVM 0.50 / 0.98 s | 1.07 / 1.12, 1.52 / 1.23 |
+| `ignite check`, `ignite plan` of the design file | 15 pairs each, loads 27 to 32 | 0.10 s (0.07 to 0.13), 0.10 s | 0.20 s (0.13 to 0.37), 0.19 s (0.13 to 0.23) | 1.86, 1.75 |
+| `ignite run` to the first `ready` | P3, `p3-measure/run-ready-*`, warm build, manual clock, 5 runs | | 127 ms | |
+| `ignite replay` of a 10,071-record journal | P3, `p3-measure/replay-*`, 5 runs | | 2.54 to 2.63 s | |
+| A7: 10,000 emissions into a 30-day rolling window, evaluator | `control_trace::a7_evaluator_steps_10000_emissions_into_a_30_day_window` (`#[ignore]`; the gate runs the 1,000-step variant) | | 12.5 s, 1.25 ms per step | |
+
+- Test counts: before 786 passed (582 cargo + 2 × 102 inline), 0 failed, 4 ignored; after 932
+  passed (636 cargo + 2 × 148 inline), 0 failed, 5 ignored (A7 10,000 added), in the after2 cold
+  gate and in the close gate below. Inline tests per target 102 to 148 (std/control 28, time 5,
+  sli +1, contract +2, telnet +4, probe, deploy +1, policy +2). Test executables 21 before and
+  after, 247 to 265 MB (+7 %).
+- The measured snapshot's 4 failures were deterministic (3 of 3 reruns alone at load 13.6), no
+  load flake, and are fixed at the close. `terminal::idle_terminald_runs_one_thread` and
+  `terminal::{rust,llvm}::a_task_that_cannot_start_closes_only_its_connection`: the drain's
+  `sigwait` thread (comm `drain`, `crates/ignite-io/src/drain.rs`, 16.13) is a second idle
+  thread and counts against systemd's `TasksMax=2`, so the first session's thread got EAGAIN
+  (P2, verified); the tests now expect 2 threads idle and 3 with a session and start the server
+  under `TasksMax=3` (`crates/ignite/tests/terminal.rs` only, no timed path).
+  `terminal::terminal_checks_clean_against_the_standard_library`
+  (`crates/ignite-check/tests/terminal.rs:100`) listed the terminal program's functions before
+  the 16.16 hooks existed; it now expects `TelnetServer.machine` and `TelnetServer.validate`
+  beside the two mains. The working tree's gate at the close (06:47, load 10 to 24): fmt 0.51 s
+  exit 0, clippy 0.84 s exit 0, `cargo test --workspace --no-fail-fast` 34.5 s exit 0 (636 passed,
+  0 failed, 5 ignored), `task test-ignite` 2.30 s exit 0 (148 per target), `task gate` 28.1 s
+  exit 0, `task compile` 0.47 s, `compile-llvm` 1.00 s, `compile-todo` 0.43 s, `compile-todo-llvm`
+  0.47 s, all exit 0 (`s12-p4-logs/measure/finalgate.log.summary`).
+- The warm test step's target (under 10.8 s, slice 11b at load 6 to 9) is not met: 23.1 and
+  29.5 s at load 27 to 31, where the before tree took 14.4 and 20.6 s in the same pairs; the pair
+  ratio 1.52 (1.43 to 1.61) is the slice's own growth, the rest of the absolute rise is load. The
+  growth, measured per file in the earlier set at matched loads: `ignite_test.rs` 6.6 to 9.8 s
+  sets the end-to-end binary's wall (its files run in parallel), `slice9.rs` 3.9 to 6.0,
+  `llvm_build.rs` 2.5 to 3.6, `plan.rs` 1.0 to 2.3, the new `run.rs` 3.0 s and `drain.rs` 1.9 s
+  (under O41's 6 s together), the rebuild after the touch 1.9 to 2.3 s. Their causes are in the
+  next bullet.
+- Rises over 10 %, measured causes: `ignite check` and `ignite plan` of the design file 1.86 and
+  1.75 (0.10 to 0.20 s and 0.19 s at load 27 to 32; 0.06 to 0.12 s in the earlier set; P3: the std
+  the CLI loads grew from 3,033 to 5,135 lines and model construction stays about 1 ms in both
+  trees, `p3-measure/plan-*.log`). Every test that spawns the CLI pays that per spawn, which is
+  the growth of the short per-file rows (plan, siblings, syntax, todo, llvm, eval: 0.2 to 1.3 s
+  more each) and of `task test-ignite` (cold pair 8.45 to 10.57 s, 1.25, also 102 to 148 inline
+  tests); the split between the two is inferred. Program builds pay the larger generated std:
+  `ignite-std` 2,191 to 3,792 lines (P2, measured) for the Rust rows (todod Rust dev 1.06 and
+  release 1.20 here, 1.07 and 1.12 at P2's load 1 to 4; ignite_test, slice9, llvm_build 1.45 to
+  1.50, which build programs inside the tests, inferred); for LLVM (todod dev 1.41, release 1.26
+  here, 1.52 and 1.23 at P2's load) the frontend on the larger std (P2: check 0.058 to 0.102 s
+  measured, `clang -O2` on `std.ll` unchanged at 0.50 s and 107 defines measured, IR emission not
+  measured, so the LLVM dev remainder is inferred). fmt 0.95 and clippy 1.04 in the valid pairs
+  (the earlier set's 1.13 and 1.25 were load, inferred); `--no-run` after the touch 1.26 (0.4 s,
+  earlier set): the new `crates/ignite/src/run/` (9 modules), `ignite-io` `drain` and `clock`,
+  and the new test files (inferred from the source growth, not split).
+- Cold gate, the one pair invalid by the load rule (3.1 against 14.6): 60.4 s against 43.5 s in
+  the test step holds 146 more tests, among them the end-to-end `run` and `drain` suites that
+  build the design file once per target with cargo inside the test (P3: builds shared per
+  target, O41), at load 14.0 to 10.6 against 3.8 to 6.0 (inferred split); cold `task test-ignite`
+  8.5 to 10.6 s (148 tests, the compiler build inside the step; inferred).
+- Earlier set (06:30 to 06:43, `pairs.txt`, over the snapshot in which 4 tests still failed, loads
+  6 to 28): gate cold 80.6 s (1.41), gate warm 30.8 s (2.22, 2 pairs), warm test step 14.9, 15.7,
+  35.3 s after against 10.2, 10.7, 20.9 s before (all pairs void by the failure), fmt, clippy,
+  test-ignite 1.13, 1.25, 1.67, todod 1.02 / 1.15 Rust and 1.64 / 1.20 LLVM, check and plan 0.06
+  to 0.12 s (1.83, 1.85). Replaced by the rows above, kept for the record.
+
+Slice 12b (2026-11-02, completed after recovering the interrupted batch). The 11b baseline
+stays unchanged; the remaining timing exceptions are recorded rather than accepted as a new
+baseline. Full evidence, named-test timings and attribution:
+`/home/timo/.cache/scratch/ignite12b-codex/measure/report.md`, `summary-final.md`,
+`records.jsonl`, source hashes, Cargo timing HTML/JSON, and retained restart journals.
+
+One exact-final cold before/final/slice-12 pass uses fresh owned targets and
+`SCCACHE_RECACHE=1` (start loads 3.71/4.66/0.98); three interleaved warm passes compare `s12-before`, final and
+`s12-p4-after2` (loads 5.1–7.0). A unit with start-load delta over 5 or a failed exit is
+excluded. Absolute medians and medians of pair ratios are shown below. Final gate/cache
+samples include the minimal ownership test and journal fix; unchanged program/CLI paths use
+three program-build pairs and 15 check/plan pairs measured before those two changes. Earlier
+sources, invalid cold comparisons and failed samples remain separately versioned; the final
+cold comparison against each baseline meets the start-load rule and has no failed step.
+
+| measurement | 11b → 12b; ratio | slice 12 → 12b; ratio |
+|---|---|---|
+| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
+| gate, warm after touch | 13.374 → 16.786 s; ×1.255 (3 kept/0 discarded) | 18.705 → 16.627 s; ×0.889 (2 kept/1 discarded) |
+| warm cargo test --workspace | 10.142 → 12.413 s; ×1.233 (3 kept/0 discarded) | 14.594 → 12.313 s; ×0.844 (2 kept/1 discarded) |
+| warm fmt | 0.447 → 0.523 s; ×1.169 (3 kept/0 discarded) | 0.523 → 0.523 s; ×1.009 (3 kept/0 discarded) |
+| warm clippy | 2.166 → 2.713 s; ×1.271 (3 kept/0 discarded) | 2.508 → 2.713 s; ×1.042 (3 kept/0 discarded) |
+| warm task test-ignite | 0.663 → 1.140 s; ×1.709 (3 kept/0 discarded) | 1.099 → 1.140 s; ×1.047 (3 kept/0 discarded) |
+| todod Rust dev | 4.952 → 3.998 s; ×0.990 (3 kept/0 discarded) | 4.836 → 3.998 s; ×0.892 (3 kept/0 discarded) |
+| todod Rust release | 5.611 → 4.740 s; ×0.843 (3 kept/0 discarded) | 5.371 → 4.740 s; ×0.934 (3 kept/0 discarded) |
+| todod LLVM dev | 0.379 → 0.309 s; ×0.892 (3 kept/0 discarded) | 0.528 → 0.309 s; ×0.585 (3 kept/0 discarded) |
+| todod LLVM release | 0.862 → 0.820 s; ×0.946 (3 kept/0 discarded) | 1.052 → 0.820 s; ×0.791 (3 kept/0 discarded) |
+| check design file | 0.062 → 0.090 s; ×1.447 (15 kept/0 discarded) | 0.115 → 0.090 s; ×0.769 (15 kept/0 discarded) |
+| plan design file | 0.063 → 0.091 s; ×1.437 (15 kept/0 discarded) | 0.117 → 0.091 s; ×0.778 (15 kept/0 discarded) |
+| --no-run warm | 0.029 → 0.030 s; ×0.961 (3 kept/0 discarded) | 0.032 → 0.030 s; ×0.931 (3 kept/0 discarded) |
+| --no-run after touch | 2.233 → 2.594 s; ×1.162 (3 kept/0 discarded) | 2.751 → 2.594 s; ×0.901 (3 kept/0 discarded) |
+| ignite_test.rs file | 7.735 → 2.185 s; ×0.399 (3 kept/0 discarded) | 8.233 → 2.185 s; ×0.259 (3 kept/0 discarded) |
+
+- Validation: 647 cargo tests pass, 0 fail, 5 ignored; 148 inline tests per target. All nine
+  parent close steps pass, followed by three normal final warm gates and the exact-final
+  cold gate. Slice 12's first final warm pass hit its existing shared-ARGS race and is
+  discarded (2 valid gate/test pairs); that baseline was not patched. Actual executable
+  lines count 20 per tree, about 247 MB before and 266 MB after; the earlier count 21 also
+  matched Cargo's `target(s)` summary text.
+- Generated todo `ignite-std`: 2,191 lines (11b), 3,792 (slice 12), 993 (12b). All four
+  program-build ratios meet 1.10 against 11b. `ignite_test.rs` is 2.185 s median (range
+  2.131–3.875), under 4.6 s; `report.md` names every isolated test timing and the filter-test
+  rename. Isolated cases reset shared fixture setup, so their times are not additive.
+- Frontend exception, separate disposable profiling (15 pairs): std parse/check/type is
+  10.12/11.97/24.55 → 13.71/16.20/36.65 ms. Required `std.control` alone costs
+  6.65/7.74/21.41 ms; unused HTTP/JSON disappear, but the design's kind hooks/imports retain
+  reducers. Program parse/check/type stays about 0.58/0.72/1.85 ms; evaluation check is
+  3.68 → 6.73 ms. Normal CLI output contains no profiling instrumentation.
+- Warm workspace attribution (second final pair): Ignite E2E execution 4.93 → 4.91 s,
+  rustgen integration 1.60 → 3.13 s (its helper still loads/types the full std per program),
+  new driver unit tests 0 → 0.25 s. Inline tests grow 102 → 148 per target. Cold test/inline
+  steps are 44.37 → 51.26 s and 8.05 → 9.68 s. These remain explicit exceptions; a finer
+  causal split beyond the measured crate/phase figures is not claimed.
+- Attribution before removal of redundant cache-test cases: package fmt `ignite`
+  0.087 → 0.146 s, evaluator 0.070 → 0.087 s; runtime/rustgen unchanged. Warm clippy
+  2.26 → 2.95 s; timed driver library 0.17 → 0.48 s, test library 0.19 → 0.50 s, E2E check
+  0.52 → 0.72 s, evaluator 0.40 → 0.57 s, LLVM 0.67 → 0.80 s. Parallel unit durations
+  are not additive; see retained Cargo timing artifacts.
+- Five frontend tests and the cache regression cover transitive/module-literal roots,
+  unused broken std and project ownership. Four E031/E032/E003 CLI fixtures explicitly
+  import their broken modules; the emit fixture expects unused nested std absent. All 21
+  std/example files check silently. Recovered `consts.std.rs`/`variants.std.rs` goldens only
+  drop unreachable items; this completion changes no goldens. Removing the build claim
+  mutation-checked the cache regression (wrong third program); restored minimal A/B/A
+  coverage is 0.538 s median over three normal runs.
+- Pre-fix integrated restart failures (1,341.69/869.97 ms) and the shared-ARGS test race are
+  retained in the evidence. Three isolated restart passes alone had not established
+  readiness. The runtime now avoids separate syncs for deterministic follow records;
+  every originating effect is still synced before dispatch (O30), with unchanged journal
+  order/bytes and replay. Final normal suite delays are 106.72, 107.28 and 104.51 ms;
+  final cold delay 104.40 ms, all inside the unchanged 100–500 ms bound with replay passing.
+  `restart-samples.json` links the copied journals. A test-only mutex fixes the ARGS race;
+  syscall-traced HTTP failures are diagnostic interference, not readiness evidence.
 
 - No comments in `Cargo.toml`, `Taskfile.yml` or any other config file.
 - Reasoning lives in doc comments, `docs/slice.md` and commit messages, not in reports.

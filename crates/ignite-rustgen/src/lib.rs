@@ -6,6 +6,9 @@
 //!
 //! * [`generate`] and [`generate_std`] are pure: they return source text and
 //!   write nothing. [`write_project`] writes one project.
+//! * [`generate_std_reachable`] (the driver's path, through
+//!   [`generate_std_for`]) holds only the standard-library items the
+//!   program crate's text reaches; [`generate_std_typed`] holds every item.
 //! * The lowering table, the ownership rule (`.clone()` on places in value
 //!   positions), the builtin method table and the project layout (6.2) in
 //!   section 6 are the specification; the generated text for each row is
@@ -94,6 +97,7 @@ const SUBSTRATE_NAMES: &[&str] = &[
     "Input",
     "Data",
     "Eof",
+    "Exposure",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -401,7 +405,7 @@ pub fn generate_std(
         .iter()
         .map(|(path, program, symbols)| (path.clone(), *program, *symbols, None))
         .collect();
-    std_project(&modules, options)
+    std_project(&modules, options, None)
 }
 
 /// A [`StdModule`] with its types.
@@ -416,17 +420,214 @@ pub fn generate_std_typed(
         .iter()
         .map(|(path, program, symbols, types)| (path.clone(), *program, *symbols, Some(*types)))
         .collect();
-    std_project(&modules, options)
+    std_project(&modules, options, None)
+}
+
+/// [`generate_std_typed`] holding only the items `roots` reach
+/// (`docs/slice.md` 16.22 item 2; the LLVM target's `std.ll` is emitted
+/// the same way, `docs/llvm.md` section 1). `roots` are Rust source texts:
+/// the program crate's `lib.rs` and its executables, or the test crate's.
+/// An item (a fn, type, protocol, constant, test or glue fn) is kept when
+/// a root or a kept item names it; a `use` line keeps the names that are
+/// kept (a glob stays); a module whose items are all dropped stays as an
+/// empty `pub mod`. A name is any identifier of the text that is not a
+/// method or field (`.name`), so the walk is over names, not resolved
+/// paths: two modules' items of one name are kept together, and nothing
+/// the text can reach is dropped.
+pub fn generate_std_reachable(
+    modules: &[TypedStdModule<'_>],
+    options: &Options,
+    roots: &[&str],
+) -> Result<GeneratedProject, Vec<(String, Vec<Diagnostic>)>> {
+    let modules: Vec<_> = modules
+        .iter()
+        .map(|(path, program, symbols, types)| (path.clone(), *program, *symbols, Some(*types)))
+        .collect();
+    std_project(&modules, options, Some(roots))
+}
+
+/// [`generate_std_reachable`] with the roots of `program`: its `lib.rs`
+/// and the source of every executable.
+pub fn generate_std_for(
+    modules: &[TypedStdModule<'_>],
+    options: &Options,
+    program: &GeneratedProject,
+) -> Result<GeneratedProject, Vec<(String, Vec<Diagnostic>)>> {
+    let mut roots = vec![program.lib_rs.as_str()];
+    roots.extend(program.executables.iter().map(|e| e.source.as_str()));
+    generate_std_reachable(modules, options, &roots)
 }
 
 type StdInput<'a> = (String, &'a Program, &'a Symbols, Option<&'a TypedProgram>);
 
+/// One lowered standard-library module before rendering: its `use`
+/// targets and its items, each with the name it defines, so
+/// [`prune_std`] can drop what no root reaches.
+struct LoweredModule {
+    path: String,
+    uses: Vec<UseTarget>,
+    items: Vec<Item>,
+}
+
+impl LoweredModule {
+    /// The module's text as [`module_items`] renders it.
+    fn render(&self) -> String {
+        let mut out = String::new();
+        for target in &self.uses {
+            out.push_str(&target.render());
+            out.push('\n');
+        }
+        for item in &self.items {
+            out.push_str(&item.text);
+        }
+        out
+    }
+}
+
+/// One item of a module: the Rust name it defines, without a raw
+/// identifier's `r#`, and its text as [`Writer`] lines at indentation 0.
+struct Item {
+    name: String,
+    text: String,
+}
+
+/// The target of one `use` line: the Rust path of the module and the
+/// names taken from it, as emitted (`*` for a glob).
+struct UseTarget {
+    path: String,
+    names: Vec<String>,
+}
+
+impl UseTarget {
+    fn render(&self) -> String {
+        match self.names.as_slice() {
+            [single] => format!("use {}::{single};", self.path),
+            _ => format!("use {}::{{{}}};", self.path, self.names.join(", ")),
+        }
+    }
+}
+
+/// The path segments of the std module `path` under the crate root:
+/// `std.protocol.telnet` is `protocol`, `telnet`.
+fn std_segments(path: &str) -> Vec<&str> {
+    match path.strip_prefix("std.") {
+        Some(rest) => rest.split('.').collect(),
+        None if path == "std" => Vec::new(),
+        None => path.split('.').collect(),
+    }
+}
+
+/// The identifiers of the Rust source `text` that can name an item: every
+/// identifier token except one after a `.` (a method or a field; `..` is
+/// a range and ends no such position), with the `r#` of a raw identifier
+/// dropped. Strings and comments are not skipped: a name in them keeps an
+/// item and never drops one.
+fn rust_identifiers(text: &str, out: &mut Vec<String>) {
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    let mut after_dot = false;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b.is_ascii_alphabetic() || b == b'_' {
+            let start = i;
+            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
+            if i - start == 1 && b == b'r' && bytes.get(i) == Some(&b'#') {
+                i += 1;
+                continue;
+            }
+            if !after_dot {
+                out.push(text[start..i].to_string());
+            }
+            after_dot = false;
+        } else if b.is_ascii_digit() {
+            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
+            after_dot = false;
+        } else if b == b'.' {
+            if bytes.get(i + 1) == Some(&b'.') {
+                i += 2;
+                after_dot = false;
+            } else {
+                i += 1;
+                after_dot = true;
+            }
+        } else if b.is_ascii_whitespace() {
+            i += 1;
+        } else {
+            i += 1;
+            after_dot = false;
+        }
+    }
+}
+
+/// A Rust identifier as [`rust_identifiers`] reports it.
+fn plain_ident(rust: &str) -> &str {
+    rust.strip_prefix("r#").unwrap_or(rust)
+}
+
+/// Drop every item of `modules` no root reaches, and every imported name
+/// that is dropped ([`generate_std_reachable`]).
+fn prune_std(modules: &mut [LoweredModule], roots: &[&str]) {
+    let (kept, referenced) = {
+        let mut index: BTreeMap<&str, Vec<(usize, usize)>> = BTreeMap::new();
+        for (m, module) in modules.iter().enumerate() {
+            for (i, item) in module.items.iter().enumerate() {
+                index.entry(item.name.as_str()).or_default().push((m, i));
+            }
+        }
+        let mut pending = Vec::new();
+        for root in roots {
+            rust_identifiers(root, &mut pending);
+        }
+        let mut referenced = BTreeSet::new();
+        let mut kept: Vec<Vec<bool>> = modules
+            .iter()
+            .map(|module| vec![false; module.items.len()])
+            .collect();
+        while let Some(name) = pending.pop() {
+            let Some(defined) = index.get(name.as_str()) else {
+                referenced.insert(name);
+                continue;
+            };
+            if !referenced.insert(name) {
+                continue;
+            }
+            for &(m, i) in defined {
+                if kept[m][i] {
+                    continue;
+                }
+                kept[m][i] = true;
+                rust_identifiers(&modules[m].items[i].text, &mut pending);
+            }
+        }
+        (kept, referenced)
+    };
+    for (m, module) in modules.iter_mut().enumerate() {
+        let mut i = 0;
+        module.items.retain(|_| {
+            let keep = kept[m][i];
+            i += 1;
+            keep
+        });
+        for target in &mut module.uses {
+            target
+                .names
+                .retain(|name| name == "*" || referenced.contains(plain_ident(name)));
+        }
+        module.uses.retain(|target| !target.names.is_empty());
+    }
+}
+
 fn std_project(
     modules: &[StdInput<'_>],
     options: &Options,
+    roots: Option<&[&str]>,
 ) -> Result<GeneratedProject, Vec<(String, Vec<Diagnostic>)>> {
     let mut errors = Vec::new();
-    let mut tree = ModuleTree::default();
+    let mut lowered = Vec::new();
     for (path, program, symbols, types) in modules {
         let systems: Vec<Diagnostic> = program
             .decls
@@ -444,26 +645,27 @@ fn std_project(
             continue;
         }
         let package = Package::new(path, "crate");
-        let uses = use_lines(&program.imports, "crate", &package);
-        let segments: Vec<&str> = match path.strip_prefix("std.") {
-            Some(rest) => rest.split('.').collect(),
-            None if path == "std" => Vec::new(),
-            None => path.split('.').collect(),
-        };
-        tree.insert(
-            &segments,
-            module_items(
+        lowered.push(LoweredModule {
+            path: path.clone(),
+            uses: use_targets(&program.imports, "crate", &package),
+            items: module_item_list(
                 program,
                 symbols,
                 *types,
-                &uses,
                 "crate",
                 &ModuleOptions::of(options, path, &package),
             ),
-        );
+        });
     }
     if !errors.is_empty() {
         return Err(errors);
+    }
+    if let Some(roots) = roots {
+        prune_std(&mut lowered, roots);
+    }
+    let mut tree = ModuleTree::default();
+    for module in &lowered {
+        tree.insert(&std_segments(&module.path), module.render());
     }
     let mut lib = String::new();
     if !options.test_modules.is_empty() {
@@ -615,6 +817,14 @@ impl Package {
 /// program's package; nothing for the substrate's own names or for imports
 /// of a module that is neither.
 fn use_lines(imports: &[Import], root: &str, package: &Package) -> Vec<String> {
+    use_targets(imports, root, package)
+        .iter()
+        .map(UseTarget::render)
+        .collect()
+}
+
+/// The targets of [`use_lines`], before rendering.
+fn use_targets(imports: &[Import], root: &str, package: &Package) -> Vec<UseTarget> {
     imports
         .iter()
         .filter_map(import_target)
@@ -631,10 +841,9 @@ fn use_lines(imports: &[Import], root: &str, package: &Package) -> Vec<String> {
             } else {
                 return None;
             };
-            let names: Vec<String> = names.iter().map(|n| ident(n)).collect();
-            Some(match names.as_slice() {
-                [single] => format!("use {path}::{single};"),
-                _ => format!("use {path}::{{{}}};", names.join(", ")),
+            Some(UseTarget {
+                path,
+                names: names.iter().map(|n| ident(n)).collect(),
             })
         })
         .collect()
@@ -651,33 +860,77 @@ fn module_items(
     root: &'static str,
     module: &ModuleOptions<'_>,
 ) -> String {
+    let mut w = Writer::new();
+    for line in uses {
+        w.line(line);
+    }
+    for item in module_item_list(program, symbols, types, root, module) {
+        w.raw(&item.text);
+    }
+    w.finish()
+}
+
+/// The items of [`module_items`], each with the name it defines: every
+/// record, enum, alias, protocol, fn, constant and test of the module in
+/// declaration order, then the glue fns they use.
+fn module_item_list(
+    program: &Program,
+    symbols: &Symbols,
+    types: Option<&TypedProgram>,
+    root: &'static str,
+    module: &ModuleOptions<'_>,
+) -> Vec<Item> {
     let mut generator = Generator::new(symbols, program, types);
     generator.root = root;
     generator.source = module.source;
     generator.module = module.path.to_string();
     generator.package = module.package.clone();
-    let mut w = Writer::new();
-    for line in uses {
-        w.line(line);
-    }
+    let mut items = Vec::new();
     for (index, decl) in program.decls.iter().enumerate() {
         if decl.is_test_only() && !module.tests {
             continue;
         }
-        match decl {
-            Decl::Assembly(_) => {}
-            Decl::Alias(alias) => generator.alias(&mut w, alias),
-            Decl::Record(record) => generator.record(&mut w, record),
-            Decl::Enum(decl) => generator.enumeration(&mut w, decl),
-            Decl::Fn(decl) => generator.function(&mut w, decl),
-            Decl::Protocol(decl) => generator.protocol(&mut w, decl),
-            Decl::Const(decl) => generator.constant(&mut w, decl),
-            Decl::Test(test) => generator.test_decl(&mut w, test, index),
-            Decl::System(_) => {}
-        }
+        let mut w = Writer::new();
+        let name = match decl {
+            Decl::Assembly(_) | Decl::System(_) => continue,
+            Decl::Alias(alias) => {
+                generator.alias(&mut w, alias);
+                ident(&alias.name.name)
+            }
+            Decl::Record(record) => {
+                generator.record(&mut w, record);
+                ident(&record.name.name)
+            }
+            Decl::Enum(decl) => {
+                generator.enumeration(&mut w, decl);
+                ident(&decl.name.name)
+            }
+            Decl::Fn(decl) => {
+                generator.function(&mut w, decl);
+                fn_symbol(decl)
+            }
+            Decl::Protocol(decl) => {
+                generator.protocol(&mut w, decl);
+                ident(&decl.name.name)
+            }
+            Decl::Const(decl) => {
+                generator.constant(&mut w, decl);
+                ident(&decl.name.name)
+            }
+            Decl::Test(test) => {
+                generator.test_decl(&mut w, test, index);
+                test_fn_name(index)
+            }
+        };
+        items.push(Item {
+            name: plain_ident(&name).to_string(),
+            text: w.finish(),
+        });
     }
-    w.raw(&generator.glue_items());
-    w.finish()
+    for (name, text) in generator.glue_item_list() {
+        items.push(Item { name, text });
+    }
+    items
 }
 
 /// What [`module_items`] needs to know about one module beyond its AST.
@@ -974,9 +1227,57 @@ const RUST_ONLY_KEYWORDS: &[&str] = &[
     "macro", "override", "priv", "typeof", "unsized", "virtual", "yield", "try", "gen",
 ];
 
+/// Names of the Rust prelude the generated code uses bare (`Box::new`,
+/// `Vec<_>`, `String::from`, `Some(..)`, the bounds `Clone + Send + Sync`,
+/// `dyn Fn`): a user declaration of one of these names (`type Box`) is
+/// emitted as `Box_`, as `self` is `self_`, so it does not shadow the
+/// prelude item (`docs/friction.md` row 35). `Option` and `Result` are not
+/// listed: they are Ignite's own builtins (E004 for a user declaration) and
+/// lower to the Rust types of the same names.
+const RUST_PRELUDE_NAMES: &[&str] = &[
+    "Box",
+    "Vec",
+    "String",
+    "Some",
+    "None",
+    "Ok",
+    "Err",
+    "Clone",
+    "Copy",
+    "Send",
+    "Sync",
+    "Sized",
+    "Unpin",
+    "Drop",
+    "Fn",
+    "FnMut",
+    "FnOnce",
+    "Default",
+    "Iterator",
+    "IntoIterator",
+    "DoubleEndedIterator",
+    "ExactSizeIterator",
+    "Extend",
+    "FromIterator",
+    "From",
+    "Into",
+    "TryFrom",
+    "TryInto",
+    "AsRef",
+    "AsMut",
+    "ToOwned",
+    "ToString",
+    "PartialEq",
+    "Eq",
+    "PartialOrd",
+    "Ord",
+    "Future",
+    "IntoFuture",
+];
+
 /// A Ignite identifier as a Rust identifier.
 fn ident(name: &str) -> String {
-    if matches!(name, "self" | "Self" | "crate" | "super") {
+    if matches!(name, "self" | "Self" | "crate" | "super") || RUST_PRELUDE_NAMES.contains(&name) {
         format!("{name}_")
     } else if RUST_ONLY_KEYWORDS.contains(&name) {
         format!("r#{name}")
@@ -1020,6 +1321,7 @@ fn variant_path(owner: &str, variant: &str) -> String {
     match owner {
         "Option" | "Result" => variant.to_string(),
         "Input" => format!("ignite_io::Input::{variant}"),
+        "Exposure" => format!("ignite_io::Exposure::{variant}"),
         _ => format!("{}::{}", ident(owner), ident(variant)),
     }
 }
@@ -1048,7 +1350,7 @@ pub fn rust_type(ty: &Type) -> String {
         "Unit" => "()".to_string(),
         "Tuple" => format!("({})", args.join(", ")),
         "List" => generic("Vec"),
-        "TcpListener" | "TcpStream" | "Stdin" | "Stdout" | "Input" | "IoError" => {
+        "TcpListener" | "TcpStream" | "Stdin" | "Stdout" | "Input" | "IoError" | "Exposure" => {
             format!("ignite_io::{}", ty.name.name)
         }
         "Store" => generic("ignite_io::Store"),
@@ -1214,6 +1516,15 @@ fn fold_class(op: BinaryOp) -> u8 {
 /// section 13.8).
 fn assoc_symbol(owner: &str, name: &str) -> String {
     format!("{owner}__{name}")
+}
+
+/// The Rust name of a fn: [`assoc_symbol`] for `fn Owner.name(..)`, else
+/// its name as a Rust identifier.
+fn fn_symbol(decl: &FnDecl) -> String {
+    match &decl.owner {
+        Some(owner) => assoc_symbol(&owner.name, &decl.name.name),
+        None => ident(&decl.name.name),
+    }
 }
 
 impl<'a> Generator<'a> {
@@ -1525,14 +1836,21 @@ impl<'a> Generator<'a> {
 
     /// The Rust name of record or enum `q` in this module: its name when
     /// it is builtin, own or imported, else its path in `ignite-std`
-    /// (`ignite_std::console::Action`).
+    /// (`ignite_std::console::Action`). The builtin `Exposure` is the
+    /// substrate's `ignite_io::Exposure`.
     fn enum_name(&self, q: &QualName) -> String {
-        if q.is_builtin() || self.symbols.imported.get(&q.name) == Some(&q.module) {
-            return q.name.clone();
+        if q.is_builtin() {
+            return match q.name.as_str() {
+                "Exposure" => "ignite_io::Exposure".to_string(),
+                _ => q.name.clone(),
+            };
+        }
+        if self.symbols.imported.get(&q.name) == Some(&q.module) {
+            return ident(&q.name);
         }
         match self.module_path(&q.module) {
             Some(path) => format!("{path}::{}", ident(&q.name)),
-            None => q.name.clone(),
+            None => ident(&q.name),
         }
     }
 
@@ -1670,10 +1988,18 @@ impl<'a> Generator<'a> {
         self.defaults(w, record);
     }
 
+    /// An enum without payloads also derives the traits of a `BTreeMap`
+    /// key (`docs/slice.md` 14.3: enums without payloads are `Map` keys);
+    /// the derived order is the declaration order of the variants, as in
+    /// the LLVM target and the evaluator.
     fn enumeration(&mut self, w: &mut Writer, decl: &EnumDecl) {
         let q = self.own(&decl.name);
         w.line("");
-        w.line("#[derive(Clone)]");
+        if decl.variants.iter().all(|v| v.payload.is_empty()) {
+            w.line("#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]");
+        } else {
+            w.line("#[derive(Clone)]");
+        }
         w.open(&format!(
             "pub enum {}{} {{",
             ident(&decl.name.name),
@@ -1882,13 +2208,10 @@ impl<'a> Generator<'a> {
         if spaced {
             w.line("");
         }
-        let name = match &decl.owner {
-            Some(owner) => {
-                w.line("#[allow(non_snake_case)]");
-                assoc_symbol(&owner.name, &decl.name.name)
-            }
-            None => ident(&decl.name.name),
-        };
+        if decl.owner.is_some() {
+            w.line("#[allow(non_snake_case)]");
+        }
+        let name = fn_symbol(decl);
         w.line(&format!(
             "pub fn {name}{}({}){ret} {body}",
             bounded_params(&decl.type_params),
@@ -2099,6 +2422,64 @@ impl<'a> Generator<'a> {
         wrap(expr, text)
     }
 
+    /// Whether `expr` is a place (`x[i]`, `x.f[i].g`, `x[i][j]`) rooted in
+    /// a local and reached through at least one index.
+    fn indexed_place(&self, expr: &Expr) -> bool {
+        match &expr.kind {
+            ExprKind::Index { receiver, .. } => {
+                self.is_place(receiver) || self.indexed_place(receiver)
+            }
+            ExprKind::Field { receiver, .. } | ExprKind::TupleField { receiver, .. } => {
+                self.assoc_callee(expr).is_none() && self.indexed_place(receiver)
+            }
+            _ => false,
+        }
+    }
+
+    /// An [`indexed_place`](Self::indexed_place) as the receiver of a
+    /// method that changes it (`push`, `append`, `clear`, `put`, `remove`;
+    /// `docs/slice.md` 13.11 row d): the element behind every index through
+    /// `ignite_io::checked::at_mut` on a `&mut` borrow of its list, so the
+    /// call writes the element and not a copy of it. Each index is bound
+    /// by a `let` pushed to `lets`, in source order, before the borrow it
+    /// feeds: an index that reads the list could not run while the list is
+    /// borrowed.
+    fn mutable_place(&mut self, expr: &Expr, lets: &mut Vec<String>) -> String {
+        match &expr.kind {
+            ExprKind::Index { receiver, index } => {
+                let list = self.mutable_place(receiver, lets);
+                let index_text = self.bare(index);
+                let index_text = self.deref_if_borrowed(index, index_text);
+                let temp = self.fresh();
+                lets.push(format!("let {temp} = {index_text};"));
+                match self.types.and_then(|t| t.failure_site(expr)) {
+                    Some(site) => format!(
+                        "(*ignite_io::checked::at_mut(&mut {list}, {temp}, {}))",
+                        self.site_args(site)
+                    ),
+                    None => format!("{list}[({temp}) as usize]"),
+                }
+            }
+            ExprKind::Field { receiver, name } => {
+                let receiver_ty = self.type_of(receiver);
+                let text = format!(
+                    "{}.{}",
+                    self.mutable_place(receiver, lets),
+                    ident(&name.name)
+                );
+                if self.is_boxed_field(receiver_ty, &name.name) {
+                    format!("(*{text})")
+                } else {
+                    text
+                }
+            }
+            ExprKind::TupleField { receiver, index } => {
+                format!("{}.{index}", self.mutable_place(receiver, lets))
+            }
+            _ => self.receiver(expr),
+        }
+    }
+
     fn args(&mut self, args: &[Expr]) -> Vec<String> {
         args.iter().map(|a| self.value(a)).collect()
     }
@@ -2162,7 +2543,10 @@ impl<'a> Generator<'a> {
                             format!("{path}({})", self.variant_args(expr, args).join(", "))
                         }
                         None if self.calls_fn(expr, id) => {
-                            let target = self.name(id);
+                            let target = match self.callee(expr) {
+                                Some(Callee::Fn(q)) if !q.name.contains('.') => self.fn_path(q),
+                                _ => self.name(id),
+                            };
                             self.fn_call(expr, target, None, args)
                         }
                         None => self.call(expr, callee, args),
@@ -2758,6 +3142,14 @@ impl<'a> Generator<'a> {
                 format!("{}.to_string()", wrap(&args[0], value.clone()))
             }
             ("Process", "exit", [code]) => format!("ignite_io::exit(({code}) as i32)"),
+            ("Clock", "monotonic", []) => "ignite_io::clock::monotonic()".to_string(),
+            ("Endpoint", "of", [reference]) => {
+                let endpoint = self.enum_name(&QualName::new("std.net", "Endpoint"));
+                format!(
+                    "ignite_io::endpoint_of({}).map(|(address, port)| {endpoint} {{ address, port }})",
+                    borrow(&args[0], reference.clone())
+                )
+            }
             ("Int", "parse", [text]) => format!(
                 "Some({text}).filter(|t: &String| !t.starts_with('+')).and_then(|t| t.parse::<i64>().ok())"
             ),
@@ -2768,6 +3160,48 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// A call that changes an indexed receiver in place
+    /// (`lists[i].push(v)`, `holders[i].items.append(vs)`,
+    /// `maps[i].put(k, v)`): a block binding the indexes and the arguments
+    /// first, then the call on the [`mutable_place`](Self::mutable_place).
+    fn indexed_mutation(
+        &mut self,
+        expr: &Expr,
+        receiver: &Expr,
+        name: &Ident,
+        args: &[Expr],
+    ) -> String {
+        let mut lets = Vec::new();
+        let place = self.mutable_place(receiver, &mut lets);
+        let values = self.args(args);
+        let temps: Vec<String> = values
+            .iter()
+            .map(|value| {
+                let temp = self.fresh();
+                lets.push(format!("let {temp} = {value};"));
+                temp
+            })
+            .collect();
+        let call = match self.callee(expr) {
+            Some(Callee::Builtin(Builtin::MapPut)) => {
+                format!("{place}.insert({}, {});", temps[0], temps[1])
+            }
+            Some(Callee::Builtin(Builtin::MapRemove)) => {
+                let call = format!("{place}.remove(&{})", temps[0]);
+                match self.type_of(expr) {
+                    Some(Ty::Unit) => format!("{call};"),
+                    _ => call,
+                }
+            }
+            _ => match name.name.as_str() {
+                "push" => format!("{place}.push({})", temps[0]),
+                "append" => format!("{place}.extend_from_slice(&{})", temps[0]),
+                _ => format!("{place}.clear()"),
+            },
+        };
+        format!("{{ {} {call} }}", lets.join(" "))
+    }
+
     fn method(&mut self, expr: &Expr, receiver: &Expr, name: &Ident, args: &[Expr]) -> String {
         match self.callee(expr) {
             Some(Callee::Fn(q)) if q.name.contains('.') => {
@@ -2776,6 +3210,9 @@ impl<'a> Generator<'a> {
             Some(Callee::Fn(q)) => {
                 let target = self.fn_path(q);
                 return self.fn_call(expr, target, Some(receiver), args);
+            }
+            _ if mutates_receiver(expr, &name.name, self.types) && self.indexed_place(receiver) => {
+                return self.indexed_mutation(expr, receiver, name, args);
             }
             Some(Callee::Builtin(builtin @ (Builtin::ListAt | Builtin::ListSlice)))
                 if self.types.and_then(|t| t.failure_site(expr)).is_some() =>
@@ -3408,6 +3845,15 @@ impl<'a> Generator<'a> {
     fn variants_of(&self, ty: &Ty) -> Option<Vec<Variant>> {
         let types = self.types?;
         let (q, args) = Self::nominal(ty)?;
+        if q.is_builtin() {
+            let (_, variants) = BUILTIN_ENUMS.iter().find(|(name, _)| *name == q.name)?;
+            return Some(
+                variants
+                    .iter()
+                    .map(|name| (name.to_string(), Vec::new()))
+                    .collect(),
+            );
+        }
         let variants = types.enum_variants(q)?;
         let params = types.type_params(q).unwrap_or(&[]);
         Some(
@@ -3518,7 +3964,15 @@ impl<'a> Generator<'a> {
 
     /// The glue fns registered so far, and those they need, as items.
     fn glue_items(&mut self) -> String {
-        let mut out = String::new();
+        self.glue_item_list()
+            .into_iter()
+            .map(|(_, text)| text)
+            .collect()
+    }
+
+    /// [`Generator::glue_items`] one item at a time, each with its name.
+    fn glue_item_list(&mut self) -> Vec<(String, String)> {
+        let mut out = Vec::new();
         let mut index = 0;
         while index < self.glue.len() {
             let (kind, ty) = self.glue[index].clone();
@@ -3526,18 +3980,24 @@ impl<'a> Generator<'a> {
             let item = match kind {
                 Glue::Eq => {
                     let body = self.eq_body(&ty);
-                    format!(
-                        "\nfn __ignite_eq_{index}(a: &{rust}, b: &{rust}) -> bool {{\n    {body}\n}}\n"
+                    (
+                        format!("__ignite_eq_{index}"),
+                        format!(
+                            "\nfn __ignite_eq_{index}(a: &{rust}, b: &{rust}) -> bool {{\n    {body}\n}}\n"
+                        ),
                     )
                 }
                 Glue::Debug => {
                     let body = self.debug_body(&ty);
-                    format!(
-                        "\nfn __ignite_debug_{index}(v: &{rust}, out: &mut String) {{\n    {body}\n}}\n"
+                    (
+                        format!("__ignite_debug_{index}"),
+                        format!(
+                            "\nfn __ignite_debug_{index}(v: &{rust}, out: &mut String) {{\n    {body}\n}}\n"
+                        ),
                     )
                 }
             };
-            out.push_str(&item);
+            out.push(item);
             index += 1;
         }
         out

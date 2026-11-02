@@ -1,0 +1,29 @@
+package fixture_e109_hooks
+
+type Worker {
+  name: Text
+}
+
+fn Worker.machine(self: Worker) -> Int = 1
+
+fn Worker.validate(self: Worker, strict: Bool) -> List<Text> = []
+
+type Quiet {
+  name: Text
+}
+
+fn Quiet.validate(self: Quiet) -> List<Text> requires [process.exit] {
+  Process.exit(0)
+}
+
+type Fine {
+  name: Text
+}
+
+fn Fine.validate(self: Fine) -> List<Text> = if self.name.is_empty() { ["name is empty"] } else { [] }
+
+system S {
+  component w: Worker { name = "w" }
+  component q: Quiet { name = "q" }
+  component f: Fine { name = "f" }
+}

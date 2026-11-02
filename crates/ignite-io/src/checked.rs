@@ -134,6 +134,31 @@ pub fn at<'a, T>(list: &'a [T], index: i64, file: &str, line: usize, col: usize)
     }
 }
 
+/// `list[index]` as the receiver of `push`, `append`, `clear`, `put` or
+/// `remove`: the element itself, to change in place, or the `index`
+/// failure of [`at`]. The Rust target writes through an indexed receiver
+/// as the LLVM target and the evaluator do (`docs/slice.md` 13.11 row d).
+#[inline]
+pub fn at_mut<'a, T>(
+    list: &'a mut [T],
+    index: i64,
+    file: &str,
+    line: usize,
+    col: usize,
+) -> &'a mut T {
+    let len = list.len();
+    match usize::try_from(index).ok().and_then(|i| list.get_mut(i)) {
+        Some(item) => item,
+        None => out_of_range(
+            "index",
+            format!("index {index} out of range for length {len}"),
+            file,
+            line,
+            col,
+        ),
+    }
+}
+
 /// `list.slice(from, to)`: a copy of the elements `from..to`, or the
 /// `slice` failure `slice <from>..<to> out of range for length <n>`
 /// (also when `from > to`).

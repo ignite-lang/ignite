@@ -22,6 +22,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 mod arena;
+mod clock;
 mod fail;
 mod net;
 mod process;
@@ -35,6 +36,7 @@ pub use arena::{
     ignite_rt_arena_release, ignite_rt_arena_scratch, ignite_rt_arena_scratch_clear,
     ignite_rt_arena_state, ignite_rt_task_end,
 };
+pub use clock::ignite_rt_clock_monotonic;
 pub use fail::{
     ignite_rt_assert_failed, ignite_rt_fail_arith, ignite_rt_fail_index, ignite_rt_fail_match,
     ignite_rt_fail_neg, ignite_rt_fail_slice, ignite_rt_guard_pop, ignite_rt_guard_push,
@@ -46,8 +48,8 @@ pub use net::{
     ignite_rt_tcp_set_idle_timeout, ignite_rt_tcp_write_all,
 };
 pub use process::{
-    ignite_rt_args_port, ignite_rt_exit, ignite_rt_fail, ignite_rt_init, ignite_rt_io_error_new,
-    ignite_rt_log, ignite_rt_panic,
+    ignite_rt_args_port, ignite_rt_endpoint_of, ignite_rt_exit, ignite_rt_fail, ignite_rt_init,
+    ignite_rt_io_error_new, ignite_rt_log, ignite_rt_panic,
 };
 pub use stdio::{
     ignite_rt_stdin_is_terminal, ignite_rt_stdin_read, ignite_rt_stdin_set_raw,
@@ -91,6 +93,16 @@ pub struct IgniteIoError {
 pub struct IgniteInput {
     pub tag: i32,
     pub data: IgniteList,
+}
+
+/// `std.net.Endpoint`: `{ Text address, i64 port }`, the record's fields in
+/// declaration order (`docs/llvm.md` section 3); the `out` of
+/// [`ignite_rt_endpoint_of`].
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct IgniteEndpoint {
+    pub address: IgniteList,
+    pub port: i64,
 }
 
 impl IgniteList {

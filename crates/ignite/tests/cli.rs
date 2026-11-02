@@ -252,8 +252,8 @@ fn emit_with_std_fixture() {
         "{stdout}"
     );
     assert!(stdout.contains("pub mod greet {"), "{stdout}");
-    assert!(stdout.contains("pub mod nested {"), "{stdout}");
-    assert!(stdout.contains("pub mod deeper {"), "{stdout}");
+    assert!(!stdout.contains("pub mod nested {"), "{stdout}");
+    assert!(!stdout.contains("pub mod deeper {"), "{stdout}");
     assert!(
         stdout.contains("match Greeting::connect(stream.clone()) {"),
         "{stdout}"
@@ -269,7 +269,7 @@ fn std_package_mismatch_is_e031_in_the_std_file() {
                 "std/text.ignite",
                 "package std.txt\n\nfn f() -> Int {\n  return 1\n}\n",
             ),
-            ("program.ignite", PROGRAM),
+            ("program.ignite", &format!("import std.text.f\n{PROGRAM}")),
         ],
     );
     let output = ignite(&[
@@ -295,7 +295,7 @@ fn std_file_without_package_is_e031() {
         "e031-missing",
         &[
             ("std/text.ignite", "fn f() -> Int {\n  return 1\n}\n"),
-            ("program.ignite", PROGRAM),
+            ("program.ignite", &format!("import std.text.f\n{PROGRAM}")),
         ],
     );
     let output = ignite(&[
@@ -337,7 +337,7 @@ fn std_import_cycle_is_e032() {
                 "std/z.ignite",
                 "package std.z\n\nfn z() -> Int {\n  return 0\n}\n",
             ),
-            ("program.ignite", PROGRAM),
+            ("program.ignite", &format!("import std.a.f\n{PROGRAM}")),
         ],
     );
     let output = ignite(&[
@@ -398,7 +398,7 @@ fn std_diagnostic_is_rendered_with_its_file() {
                 "std/bad.ignite",
                 "package std.bad\n\nfn f() -> Int {\n  return nothing\n}\n",
             ),
-            ("program.ignite", PROGRAM),
+            ("program.ignite", &format!("import std.bad.f\n{PROGRAM}")),
         ],
     );
     let output = ignite(&[

@@ -1,0 +1,1 @@
+e124_window_too_short.ignite:17:58: error[E124]: `S.up.window` (5 seconds) is shorter than the interval (10 seconds) of its signal `S.ping.attempts` (`S.up.signal`), so it can hold no expected attempt

@@ -8,10 +8,15 @@ The roadmap in outline. The reasoning and the dependency analysis are in `docs/v
 
 | step | state |
 |---|---|
-| slice 10, F1 system declaration | in progress: frontend, Rust target and LLVM target accepted; std modules, examples in component form, design-file edits and the 14.0 acceptance running |
-| rename the project to Ignite: strings, paths, crate names, file extensions, then a full gate | after slice 10's gate |
-| `README.md` for humans with a logo | after the rename |
-| one commit of everything, push to the GitHub organisation `ignite-lang` | after the README |
+| slice 10, F1 system declaration | done 2026-11-02: 14.0 items 1 to 6 pass; 552 cargo tests, 97 inline tests per target |
+| rename to Ignite, `README.md`, commit, push to `https://github.com/ignite-lang/ignite` | done 2026-11-02, commit `60aef38` |
+| slice 11, F2 plan and explain (`docs/slice.md` section 15) | done 2026-11-02, uncommitted: 580 cargo tests, 102 inline tests per target; gate cold 64.8 to 54.5 s, warm 25.9 to 16.8 s; `todod` LLVM release 1.10 to 0.80 s |
+| slice 11b: four pre-existing backend bugs found by the evaluator (indexed `push` lost on the Rust target, enum map keys, handle types as fn values, std name collisions in generated Rust), warm test step | done 2026-11-02, uncommitted: 582 cargo tests; warm test step 16.1 to 10.8 s at load 6 to 9 (target under 8 s at load under 5 not measurable that night) |
+| slice 12 contract (`docs/slice.md` section 16) | reviewed 2026-11-02 with 15 amendments |
+| slice 12, F3 run and control | done 2026-11-02, uncommitted: 16.0 items 1 to 11 and 13 pass; 636 cargo tests, 148 inline tests per target; item 12 (gate time) carried into 12b |
+| slice 12b: gate time back within 10 % of 11b (the frontend loads only the std modules a program reaches, rustgen emits a reachable-only `ignite-std`, `ignite_test.rs` cut back) | implementation and measurement complete 2026-11-02, uncommitted: 647 cargo tests, 148 inline tests per target; cold gate 57.14 → 66.11 s (1.157), warm 13.37 → 16.79 s (1.255) against 11b; timing exceptions and measured causes in `AGENTS.md`, baseline unchanged |
+| commit and push slices 11 to 12b | needs Timo's word |
+| slice 13 contract (`docs/slice.md` section 17), reviewed before agents are dispatched | after 12b |
 
 ## Slices
 
@@ -21,9 +26,9 @@ The roadmap in outline. The reasoning and the dependency analysis are in `docs/v
 | 9 | A0 soundness, A friction rows 1 to 17 | mutability through bindings (E006), ambient names (E056), unused type parameters (E057), LLVM arena fixes M1 to M5, audit probes as tests | gate green on both targets | done 2026-11-01 |
 | 9b | invariant 9 | one test executable per target, one integration-test binary per crate | gate cold 129.9 s to 86.5 s, warm 35.4 s to 25.9 s | done 2026-11-01 |
 | 9c | LLVM parity, T6 | overflow is a failure on both targets, debug metadata, pinned triple, `-O0` dev | identical overflow failure on both targets, `gdb` shows source lines | done 2026-11-01 |
-| 10 | F1 system declaration | quantity literals, `resource`, `component name: Type { … }`, `contract`, `policy`, `assembly`, `module("…")`, `Map<K, V>`, named arguments, std types for contracts, policies, probes, deployment and CLI; T1 a failure ends its task, with file, line, column and operation on both targets; substrate items R2 to R5 | `ignite check examples/terminal/terminal.design.ignite` exit 0; both examples in component form with unchanged behaviour; `terminald` survives a failing handler | in progress |
-| 11 | F2 plan and explain | `ignite plan` emits the versioned system model (D7, deterministic JSON), `ignite explain`, assembly bindings resolved, pure evaluator with fuel (D5) | model byte-identical across runs and golden-tested; every property value evaluated | next |
-| 12 | F3 run and control | `ignite run <assembly>`: probes as protocol clients, SLI windows and contract evaluation, `Restart` with backoff, `DrainRollout`, event journal, `event("…")` consequences; signals and references get runtime behaviour | the terminal system runs under `ignite run`; a killed `terminald` restarts within the policy's backoff; a probe timeout is in the journal and the contract's standing | |
+| 10 | F1 system declaration | quantity literals, `resource`, `component name: Type { … }`, `contract`, `policy`, `assembly`, `module("…")`, `Map<K, V>`, named arguments, std types for contracts, policies, probes, deployment and CLI; T1 a failure ends its task, with file, line, column and operation on both targets; substrate items R2 to R5 | `ignite check examples/terminal/terminal.design.ignite` exit 0; both examples in component form with unchanged behaviour; `terminald` survives a failing handler | done 2026-11-02 |
+| 11 | F2 plan and explain | `ignite plan` emits the versioned system model (D7, deterministic JSON), `ignite explain`, assembly bindings resolved, pure evaluator with fuel (D5) | model byte-identical across runs and golden-tested; every property value evaluated | done 2026-11-02 |
+| 12 | F3 run and control | `ignite run <assembly>` and `ignite replay`: probes as protocol clients (one probe process per attempt), SLI windows and contract evaluation, `Restart` with backoff, `DrainRollout`, event journal with manual clock for tests, `event("…")` consequences; reducers in `std/control` stepped by the evaluator; signals and references get runtime behaviour | the terminal system runs under `ignite run`; a killed `terminald` restarts within the policy's backoff; a probe timeout is in the journal and the contract's standing; every test journal replays byte for byte | done 2026-11-02; gate time in 12b |
 | 13 | F4 apply | `ignite apply` with plan diff, changes, deletion, recovery of a half-applied plan from the journal | a second `apply` is a no-op; an interrupted `apply` resumes | |
 | 14+ | B protocols P1 | `Pipe.pair()`, `ByteStream` bound, roles generic over the stream, in-process protocol tests | | |
 | | C actors P1 to P3 | `Address`, `ReplyTo`, `Outbox`, `Actor` kind, mailboxes, `std/actor`, `std/table`, `Topic`, `Sink`, `Supervisor`, todo example on an actor (D4) | | |

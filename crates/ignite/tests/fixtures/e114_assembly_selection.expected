@@ -1,0 +1,1 @@
+e114_assembly_selection.ignite:45:1: error[E114]: several assemblies (hosted, workstation) and no `--assembly`: select one
