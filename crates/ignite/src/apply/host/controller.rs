@@ -1,30 +1,109 @@
 //! Driving admitted revisions: the bridge to the run driver, the records it
-//! sends back, ownership and readiness of the owned instances, and the
+//! sends back, ownership and readiness of the owned instances, the
+//! transition from the running revision to the desired one, and the
 //! completion or rejection of an operation.
+//!
+//! Transitions (`docs/slice.md` 17.4, decision D1): the diff of the base and
+//! desired revisions is the plan's `actions` (`ignite-apply-actions/0.1`);
+//! what happens in which order is the pure `std.control.transit` reducer,
+//! stepped here in the evaluator over the desired revision's retained
+//! standard library. Every step is a host journal record of kind
+//! `transition` (`operationId`, `event`, `effects`, `transition`), written
+//! before its effects are executed. The effects reach the running revision
+//! as control lines (`run::live`): `StopMember` retires the member's machines
+//! and drains its processes, `SwitchRevision` hands the instances that stay
+//! to the desired revision (the same run when the semantic model and the
+//! reducer revision are equal, else a handover to a new run, or a first run),
+//! `StartMember` starts a deferred member's machines, `CutOver` rolls a member
+//! through its `DrainRollout`, `Commit` completes the operation and `Abandon`
+//! fails it with its reason (`gave_up`, `ordering_cycle`).
+//!
+//! The driver reports back: `MemberStopped` once the member has no live owned
+//! process, `MemberReady` once every desired machine of the member reports
+//! ready (a supervisor's accepted `Ready`, a scheduler's first `signal`, an
+//! evaluator's first `standing`), `MemberGaveUp` at a supervisor's
+//! `Note("gave_up")`, `Converged` once every desired machine reports ready and
+//! no retiring instance is left.
+//!
+//! The transition is differential when the running revision realizes the
+//! committed one, the plan's base. Otherwise (no running revision, or one
+//! that realizes an operation that did not commit) every owned desired member
+//! starts afresh and the running revision's instances are stopped at the
+//! switch.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, atomic::Ordering, mpsc};
 
-use ignite_eval::Json;
+use ignite_eval::{CONTROL_MODULE, Evaluator, Fuel, Json, Value, value_json};
+use ignite_types::QualName;
 
 use super::admission::retained_plan;
 use super::journal::{FORMAT, save_json};
 use super::{Host, Message, read_json};
+use crate::apply::revision::Launch;
 use crate::apply::{Failure, fail, object, plan::Plan, text};
 use crate::run::control::Observation;
+use crate::run::engine::{enum_parts, field};
+use crate::run::live::Carried;
 
 /// The revision controller running on the run driver's thread.
 pub(super) struct Runtime {
     pub(super) operation: String,
     pub(super) controller_plan: String,
+    /// The plan whose desired state this run realizes: the controller plan,
+    /// or the plan a transition switched it to.
+    pub(super) desired: String,
+    /// The semantic model and reducer revision of the controller plan.
+    pub(super) model: Json,
+    pub(super) reducer: String,
     pub(super) operation_sink: Arc<Mutex<String>>,
     pub(super) artifacts: Arc<Mutex<BTreeMap<String, PathBuf>>>,
-    pub(super) minimum_generation: Option<i64>,
+    /// Member to the lowest generation whose `Ready` counts during a cutover.
+    pub(super) minimum_generation: BTreeMap<String, i64>,
     pub(super) control: mpsc::Sender<Observation>,
     pub(super) ready: BTreeSet<String>,
     pub(super) expected: BTreeSet<String>,
+    /// Pids a previous revision's run handed over: their artifact was proven
+    /// when they became ready.
+    pub(super) adopted: BTreeSet<i64>,
+    /// The supervisor machines: their lifecycle events carry ownership.
+    pub(super) supervised: BTreeSet<String>,
+}
+
+/// The transition of one operation in flight.
+pub(super) struct Driving {
+    operation: String,
+    plan: Plan,
+    loaded: crate::Loaded,
+    value: Value,
+    phase: String,
+    queue: VecDeque<Value>,
+    stopping: Option<String>,
+    starting: Option<String>,
+    /// Waiting for the desired revision's run to initialize.
+    switching: bool,
+    /// The members the desired revision's run starts on `start <member>`.
+    deferred: BTreeSet<String>,
+    /// The members whose instances stay at the switch.
+    keep: BTreeSet<String>,
+}
+
+/// One member action as the reducer receives it.
+struct Action {
+    member: String,
+    kind: String,
+    ownership: String,
+    cutover: bool,
+    depends_on: Vec<String>,
+}
+
+impl Action {
+    fn starts(&self) -> bool {
+        self.ownership == "owned"
+            && (self.kind == "add" || (self.kind == "replace" && !self.cutover))
+    }
 }
 
 /// The start time of a live process, `None` when it is gone or a zombie.
@@ -37,6 +116,69 @@ pub(super) fn process_identity(pid: i64) -> Option<String> {
     Some(fields.split_whitespace().nth(19)?.to_string())
 }
 
+fn texts(value: Option<&Json>) -> Vec<String> {
+    value
+        .and_then(Json::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Json::as_str)
+        .map(str::to_string)
+        .collect()
+}
+
+fn text_list(items: &[String]) -> Value {
+    Value::List(items.iter().cloned().map(Value::Text).collect())
+}
+
+fn transition_event(variant: &str, member: Option<&str>) -> Value {
+    Value::Enum {
+        name: QualName::new(CONTROL_MODULE, "TransitionEvent"),
+        variant: variant.to_string(),
+        fields: member
+            .map(|m| vec![Value::Text(m.to_string())])
+            .unwrap_or_default(),
+    }
+}
+
+/// The member of a machine id `<member>.<role>`.
+fn member_of(machine: &str) -> &str {
+    machine
+        .rsplit_once('.')
+        .map_or(machine, |(member, _)| member)
+}
+
+/// The machines of `model` whose readiness the host awaits.
+fn awaited(model: &ignite_eval::Model) -> BTreeSet<String> {
+    model
+        .machines
+        .iter()
+        .filter(|machine| matches!(machine.variant(), "Supervise" | "Schedule" | "Evaluate"))
+        .map(|machine| machine.id.clone())
+        .collect()
+}
+
+/// `members` with every provider before its dependents, keeping the order
+/// of `priority` otherwise; a member left in a cycle keeps its place last.
+fn provider_first(members: Vec<String>, depends: &BTreeMap<String, Vec<String>>) -> Vec<String> {
+    let set: BTreeSet<&String> = members.iter().collect();
+    let mut placed: Vec<String> = Vec::new();
+    let mut left = members.clone();
+    while !left.is_empty() {
+        let next = left.iter().position(|member| {
+            depends.get(member).into_iter().flatten().all(|provider| {
+                !set.contains(provider) || placed.contains(provider) || provider == member
+            })
+        });
+        match next {
+            Some(index) => placed.push(left.remove(index)),
+            None => {
+                placed.append(&mut left);
+            }
+        }
+    }
+    placed
+}
+
 impl Host {
     pub(super) fn complete(&mut self, id: &str) -> Result<(), Failure> {
         self.revision += 1;
@@ -44,6 +186,9 @@ impl Host {
         self.contexts.remove(id);
         self.active = None;
         self.recovery_reason = None;
+        if let Some(runtime) = &mut self.runtime {
+            runtime.desired = id.to_string();
+        }
         let receipt = self
             .receipts
             .get_mut(id)
@@ -63,6 +208,13 @@ impl Host {
     }
 
     pub(super) fn reject_operation(&mut self, id: &str, reason: &str) -> Result<(), Failure> {
+        if self
+            .transition
+            .as_ref()
+            .is_some_and(|driving| driving.operation == id)
+        {
+            self.transition = None;
+        }
         if let Some(Json::Object(receipt)) = self.receipts.get_mut(id)
             && receipt.get("state").and_then(Json::as_str) != Some("completed")
         {
@@ -70,7 +222,11 @@ impl Host {
             receipt.insert("reason".into(), text(reason));
             receipt.insert(
                 "nextAction".into(),
-                text("inspect retained ownership and journal before recovery"),
+                text(if reason == "gave_up" {
+                    "apply a corrective plan prepared against the committed revision"
+                } else {
+                    "inspect retained ownership and journal before recovery"
+                }),
             );
         }
         self.active = Some(id.to_string());
@@ -82,81 +238,484 @@ impl Host {
         Ok(())
     }
 
-    /// Hand an admitted, journaled operation to the controller: roll
-    /// `rollout_member` in the running controller, stop the old controller
-    /// (its end starts the new one), or start the first one.
-    pub(super) fn dispatch(
-        &mut self,
-        plan: Plan,
-        rollout_member: Option<String>,
-    ) -> Result<(), Failure> {
-        if let Some(member) = rollout_member {
-            let frozen = &self.contexts.get(&plan.id).expect("admitted context").plan;
-            let artifacts: BTreeMap<_, _> = frozen
-                .artifacts
+    /// Hand an admitted, journaled operation to the transition driver: build
+    /// the reducer's `Transition` from the plan's member actions and step it
+    /// from `Begin` (module doc).
+    pub(super) fn dispatch(&mut self, plan: Plan) -> Result<(), Failure> {
+        let frozen = match self.contexts.get(&plan.id) {
+            Some(context) => context.plan.clone(),
+            None => retained_plan(&self.root, &plan)?,
+        };
+        let loaded = crate::load_for(&frozen.source, frozen.std.as_deref(), crate::RUN_ROOTS)?;
+        let differential = self.committed.is_some()
+            && self
+                .runtime
+                .as_ref()
+                .is_some_and(|runtime| Some(&runtime.desired) == self.committed.as_ref());
+        let base_rollouts: BTreeSet<String> = self
+            .runtime
+            .as_ref()
+            .and_then(|runtime| runtime.model.get("machines"))
+            .and_then(Json::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|machine| {
+                machine
+                    .get("machine")
+                    .and_then(|m| m.get("variant"))
+                    .and_then(Json::as_str)
+                    == Some("Roll")
+            })
+            .filter_map(|machine| machine.get("member").and_then(Json::as_str))
+            .map(str::to_string)
+            .collect();
+        let desired_rollouts: BTreeSet<String> = crate::apply::plan::semantic_model(&frozen.model)
+            .get("machines")
+            .and_then(Json::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|machine| {
+                machine
+                    .get("machine")
+                    .and_then(|m| m.get("variant"))
+                    .and_then(Json::as_str)
+                    == Some("Roll")
+            })
+            .filter_map(|machine| machine.get("member").and_then(Json::as_str))
+            .map(str::to_string)
+            .collect();
+        let mut actions = Vec::new();
+        for entry in plan
+            .actions
+            .get("members")
+            .and_then(Json::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let member = entry.get("id").and_then(Json::as_str).unwrap_or_default();
+            let kind = entry.get("kind").and_then(Json::as_str).unwrap_or_default();
+            let ownership = entry
+                .get("ownership")
+                .and_then(Json::as_str)
+                .unwrap_or_default();
+            let depends_on = texts(entry.get("dependsOn"));
+            let (kind, cutover) = if differential {
+                let live = self.owned.get(member).is_some_and(|owner| {
+                    owner.get("ready").and_then(Json::as_bool) == Some(true)
+                        && owner
+                            .get("pid")
+                            .and_then(Json::as_i64)
+                            .zip(owner.get("instance").and_then(Json::as_str))
+                            .is_some_and(|(pid, instance)| {
+                                process_identity(pid).as_deref() == Some(instance)
+                            })
+                });
+                let cutover = kind == "replace"
+                    && live
+                    && base_rollouts.contains(member)
+                    && desired_rollouts.contains(member);
+                (kind.to_string(), cutover)
+            } else if kind == "remove" {
+                continue;
+            } else {
+                ("add".to_string(), false)
+            };
+            actions.push(Action {
+                member: member.to_string(),
+                kind,
+                ownership: ownership.to_string(),
+                cutover,
+                depends_on,
+            });
+        }
+        let depends: BTreeMap<String, Vec<String>> = actions
+            .iter()
+            .map(|a| (a.member.clone(), a.depends_on.clone()))
+            .collect();
+        let (start_order, stop_order) = if differential {
+            (
+                texts(plan.actions.get("startOrder")),
+                texts(plan.actions.get("stopOrder")),
+            )
+        } else {
+            let mut order = texts(plan.actions.get("startOrder"));
+            order.retain(|member| actions.iter().any(|a| &a.member == member && a.starts()));
+            for action in &actions {
+                if action.starts() && !order.contains(&action.member) {
+                    order.push(action.member.clone());
+                }
+            }
+            (provider_first(order, &depends), Vec::new())
+        };
+        let deferred: BTreeSet<String> = actions
+            .iter()
+            .filter(|a| a.starts())
+            .map(|a| a.member.clone())
+            .collect();
+        let keep: BTreeSet<String> = if differential {
+            actions
                 .iter()
-                .map(|(member, artifact)| (member.clone(), artifact.path.clone()))
-                .collect();
-            let controller_plan = self.runtime.as_ref().unwrap().controller_plan.clone();
-            self.append(
-                "revisionTransition",
-                object([
-                    ("operationId", text(&plan.id)),
-                    ("controllerPlanId", text(controller_plan)),
-                    ("member", text(&member)),
-                    ("artifacts", plan.json().get("artifacts").cloned().unwrap()),
-                ]),
-            )?;
-            let runtime = self.runtime.as_mut().unwrap();
-            *runtime
-                .artifacts
-                .lock()
-                .map_err(|_| fail(3, "artifact manifest lock failed"))? = artifacts;
+                .filter(|a| a.kind != "remove" && !deferred.contains(&a.member))
+                .filter(|a| !(a.kind == "replace" && !a.cutover))
+                .map(|a| a.member.clone())
+                .collect()
+        } else {
+            BTreeSet::new()
+        };
+        let value = {
+            let modules = loaded.modules();
+            let mut evaluator = Evaluator::new(&modules, Fuel::default());
+            let mut values = Vec::new();
+            for action in &actions {
+                values.push(
+                    evaluator
+                        .call(
+                            &QualName::new(CONTROL_MODULE, "member_action"),
+                            vec![
+                                Value::Text(action.member.clone()),
+                                Value::Text(action.kind.clone()),
+                                Value::Text(action.ownership.clone()),
+                                Value::Bool(action.cutover),
+                                text_list(&action.depends_on),
+                            ],
+                        )
+                        .map_err(|error| fail(2, format!("transition: {error:?}")))?,
+                );
+            }
+            evaluator
+                .call(
+                    &QualName::new(CONTROL_MODULE, "transition"),
+                    vec![
+                        Value::Text(plan.id.clone()),
+                        Value::List(values),
+                        text_list(&start_order),
+                        text_list(&stop_order),
+                    ],
+                )
+                .map_err(|error| fail(2, format!("transition: {error:?}")))?
+        };
+        if let Some(runtime) = &mut self.runtime {
+            runtime.operation = plan.id.clone();
             *runtime
                 .operation_sink
                 .lock()
                 .map_err(|_| fail(3, "operation identity lock failed"))? = plan.id.clone();
-            runtime.operation = plan.id.clone();
-            runtime.minimum_generation = Some(
-                self.owned
-                    .get(&member)
-                    .and_then(|owner| owner.get("generation"))
-                    .and_then(Json::as_i64)
-                    .unwrap_or(1)
-                    + 1,
-            );
-            runtime.ready.clear();
+        }
+        self.transition = Some(Driving {
+            operation: plan.id.clone(),
+            plan: frozen,
+            loaded,
+            value,
+            phase: "Planned".into(),
+            queue: VecDeque::from([transition_event("Begin", None)]),
+            stopping: None,
+            starting: None,
+            switching: false,
+            deferred,
+            keep,
+        });
+        self.drive()
+    }
+
+    /// Whether `member` has no live owned process.
+    fn member_stopped(&self, member: &str) -> bool {
+        self.owned.get(member).is_none_or(|owner| {
+            !owner
+                .get("pid")
+                .and_then(Json::as_i64)
+                .zip(owner.get("instance").and_then(Json::as_str))
+                .is_some_and(|(pid, instance)| process_identity(pid).as_deref() == Some(instance))
+        })
+    }
+
+    /// Whether every awaited machine of `member` in the running revision
+    /// reports ready.
+    fn member_ready(&self, member: &str) -> bool {
+        self.runtime.as_ref().is_some_and(|runtime| {
             runtime
-                .control
-                .send(Observation::Control(format!("rollout {member}")))
-                .map_err(|_| fail(1, "revision controller is unavailable"))?;
-        } else if let Some(runtime) = &self.runtime {
-            runtime
-                .control
-                .send(Observation::Control("stop".into()))
-                .map_err(|_| fail(1, "old revision controller is unavailable"))?;
-        } else {
-            self.start(plan)?;
+                .expected
+                .iter()
+                .filter(|machine| member_of(machine) == member)
+                .all(|machine| runtime.ready.contains(machine))
+        })
+    }
+
+    fn converged(&self) -> bool {
+        self.retiring.is_empty()
+            && self
+                .runtime
+                .as_ref()
+                .is_some_and(|runtime| runtime.expected.is_subset(&runtime.ready))
+    }
+
+    /// Step the transition over every event that is due until none is.
+    pub(super) fn drive(&mut self) -> Result<(), Failure> {
+        loop {
+            let Some(driving) = &self.transition else {
+                return Ok(());
+            };
+            let stopped = driving
+                .stopping
+                .as_deref()
+                .filter(|member| self.member_stopped(member))
+                .map(str::to_string);
+            let ready = driving
+                .starting
+                .as_deref()
+                .filter(|member| !driving.switching && self.member_ready(member))
+                .map(str::to_string);
+            let converged = driving.phase == "Converging" && !driving.switching && self.converged();
+            let driving = self.transition.as_mut().unwrap();
+            let event = if let Some(event) = driving.queue.pop_front() {
+                event
+            } else if let Some(member) = stopped {
+                driving.stopping = None;
+                transition_event("MemberStopped", Some(&member))
+            } else if let Some(member) = ready {
+                driving.starting = None;
+                transition_event("MemberReady", Some(&member))
+            } else if converged {
+                transition_event("Converged", None)
+            } else {
+                return Ok(());
+            };
+            self.transit(event)?;
+        }
+    }
+
+    /// One reducer step: journal it, then execute its effects in order.
+    fn transit(&mut self, event: Value) -> Result<(), Failure> {
+        let driving = self.transition.as_mut().unwrap();
+        let operation = driving.operation.clone();
+        let stepped = {
+            let modules = driving.loaded.modules();
+            let mut evaluator = Evaluator::new(&modules, Fuel::default());
+            evaluator.call(
+                &QualName::new(CONTROL_MODULE, "transit"),
+                vec![driving.value.clone(), event.clone()],
+            )
+        };
+        let step = match stepped {
+            Ok(step) => step,
+            Err(error) => {
+                self.append(
+                    "transition",
+                    object([
+                        ("operationId", text(&operation)),
+                        ("event", value_json(&event)),
+                        ("error", text(format!("{error:?}"))),
+                    ]),
+                )?;
+                return self.reject_operation(&operation, "transition reducer failed");
+            }
+        };
+        let next = field(&step, "transition").cloned().unwrap_or(Value::Unit);
+        let effects = match field(&step, "effects") {
+            Some(Value::List(effects)) => effects.clone(),
+            _ => Vec::new(),
+        };
+        self.append(
+            "transition",
+            object([
+                ("operationId", text(&operation)),
+                ("event", value_json(&event)),
+                (
+                    "effects",
+                    Json::Array(effects.iter().map(value_json).collect()),
+                ),
+                ("transition", value_json(&next)),
+            ]),
+        )?;
+        let driving = self.transition.as_mut().unwrap();
+        driving.phase = field(&next, "phase")
+            .and_then(enum_parts)
+            .map(|(variant, _)| variant.to_string())
+            .unwrap_or_default();
+        driving.value = next;
+        for effect in effects {
+            let Some((variant, fields)) = enum_parts(&effect) else {
+                continue;
+            };
+            let first = fields.first().and_then(crate::run::engine::text);
+            match (variant, first) {
+                ("StopMember", Some(member)) => self.stop_member(&member)?,
+                ("SwitchRevision", _) => self.switch()?,
+                ("StartMember", Some(member)) => self.start_member(&member, false)?,
+                ("CutOver", Some(member)) => self.start_member(&member, true)?,
+                ("Commit", _) => {
+                    self.transition = None;
+                    if self.active.as_deref() == Some(operation.as_str()) {
+                        self.complete(&operation)?;
+                    }
+                }
+                ("Abandon", Some(reason)) => {
+                    return self.reject_operation(&operation, &reason);
+                }
+                _ => {}
+            }
+            if self.transition.is_none() {
+                break;
+            }
         }
         Ok(())
     }
 
+    fn send(&self, line: String) -> Result<(), Failure> {
+        if let Some(runtime) = &self.runtime {
+            runtime
+                .control
+                .send(Observation::Control(line))
+                .map_err(|_| fail(1, "revision controller is unavailable"))?;
+        }
+        Ok(())
+    }
+
+    fn forget_ready(&mut self, member: &str) {
+        if let Some(runtime) = &mut self.runtime {
+            runtime.ready.retain(|machine| member_of(machine) != member);
+        }
+    }
+
+    fn stop_member(&mut self, member: &str) -> Result<(), Failure> {
+        self.forget_ready(member);
+        if let Some(driving) = &mut self.transition {
+            driving.stopping = Some(member.to_string());
+        }
+        self.send(format!("retire {member}"))
+    }
+
+    fn start_member(&mut self, member: &str, cutover: bool) -> Result<(), Failure> {
+        if let Some(driving) = &mut self.transition {
+            driving.starting = Some(member.to_string());
+        }
+        if cutover {
+            let minimum = self
+                .owned
+                .get(member)
+                .and_then(|owner| owner.get("generation"))
+                .and_then(Json::as_i64)
+                .unwrap_or(1)
+                + 1;
+            if let Some(runtime) = &mut self.runtime {
+                runtime
+                    .minimum_generation
+                    .insert(member.to_string(), minimum);
+            }
+            self.forget_ready(member);
+            self.send(format!("rollout {member}"))
+        } else {
+            self.send(format!("start {member}"))
+        }
+    }
+
+    /// `SwitchRevision`: rebind the running revision to the desired plan's
+    /// artifacts when both have the same semantic model and reducer, hand its
+    /// staying instances to a new run otherwise, or start the first run.
+    fn switch(&mut self) -> Result<(), Failure> {
+        let driving = self.transition.as_mut().unwrap();
+        let plan = driving.plan.clone();
+        let Some(runtime) = &mut self.runtime else {
+            driving.switching = true;
+            let deferred = driving.deferred.clone();
+            return self.start_runtime(
+                plan,
+                Some(Launch {
+                    carried: None,
+                    deferred,
+                }),
+            );
+        };
+        let same = self.committed.as_ref() == Some(&runtime.desired)
+            && runtime.model == crate::apply::plan::semantic_model(&plan.model)
+            && runtime.reducer == plan.reducer_revision;
+        if same {
+            let artifacts: BTreeMap<_, _> = plan
+                .artifacts
+                .iter()
+                .map(|(member, artifact)| (member.clone(), artifact.path.clone()))
+                .collect();
+            *runtime
+                .artifacts
+                .lock()
+                .map_err(|_| fail(3, "artifact manifest lock failed"))? = artifacts;
+            runtime.desired = plan.id.clone();
+            driving.queue.push_back(transition_event("Switched", None));
+            self.send("rebind".into())
+        } else {
+            driving.switching = true;
+            let keep: Vec<String> = driving.keep.iter().cloned().collect();
+            self.send(format!("handover {}", keep.join(" ")))
+        }
+    }
+
+    /// The running revision handed its staying instances over: start the
+    /// desired revision's run with them.
+    pub(super) fn handed_over(&mut self, id: &str, carried: Carried) -> Result<(), Failure> {
+        if !self
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.controller_plan == id)
+        {
+            return Ok(());
+        }
+        let Some(driving) = &self.transition else {
+            self.runtime = None;
+            drop(carried);
+            return Ok(());
+        };
+        let plan = driving.plan.clone();
+        let deferred = driving.deferred.clone();
+        self.runtime = None;
+        self.start_runtime(
+            plan,
+            Some(Launch {
+                carried: Some(carried),
+                deferred,
+            }),
+        )
+    }
+
+    /// Start the run of `plan` with every machine, as a resumed revision.
     pub(super) fn start(&mut self, plan: Plan) -> Result<(), Failure> {
+        self.start_runtime(plan, None)
+    }
+
+    fn start_runtime(&mut self, plan: Plan, launch: Option<Launch>) -> Result<(), Failure> {
         let id = plan.id.clone();
         let context = match self.contexts.remove(&id) {
             Some(context) => context,
             None => crate::apply::revision::Context::load(retained_plan(&self.root, &plan)?)?,
         };
-        let expected = context
+        let expected = awaited(&context.model);
+        let supervised = context
             .model
             .machines
             .iter()
             .filter(|machine| machine.variant() == "Supervise")
             .map(|machine| machine.id.clone())
             .collect();
-        let (control, rx) = mpsc::channel();
+        let adopted: BTreeSet<i64> = launch
+            .as_ref()
+            .and_then(|launch| launch.carried.as_ref())
+            .map(|carried| {
+                carried
+                    .instances
+                    .values()
+                    .filter(|instance| instance.ready)
+                    .map(|instance| i64::from(instance.pid))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let (control, rx) = match launch.as_ref().and_then(|launch| launch.carried.as_ref()) {
+            Some(carried) => (carried.tx.clone(), mpsc::channel().1),
+            None => mpsc::channel(),
+        };
         let tx = self.tx.clone();
-        let operation_sink = Arc::new(Mutex::new(id.clone()));
+        let operation_id = self
+            .transition
+            .as_ref()
+            .map_or_else(|| id.clone(), |driving| driving.operation.clone());
+        let operation_sink = Arc::new(Mutex::new(operation_id.clone()));
         let operation = Arc::clone(&operation_sink);
         let controller_plan = id.clone();
         let sink: crate::run::live::RecordSink = Box::new(move |record| {
@@ -172,7 +731,7 @@ impl Host {
                 value,
                 ack,
             ))
-            .map_err(io::Error::other)?;
+            .map_err(|_| io::Error::other("host queue closed"))?;
             wait.recv().map_err(io::Error::other)?
         });
         let tx = self.tx.clone();
@@ -208,14 +767,19 @@ impl Host {
                 .map_err(|_| "artifact manifest lock failed".to_string())
         });
         self.runtime = Some(Runtime {
-            operation: id.clone(),
+            operation: operation_id,
             controller_plan: id.clone(),
+            desired: id.clone(),
+            model: crate::apply::plan::semantic_model(&context.plan.model),
+            reducer: context.plan.reducer_revision.clone(),
             operation_sink,
             artifacts,
-            minimum_generation: None,
+            minimum_generation: BTreeMap::new(),
             control,
             ready: BTreeSet::new(),
             expected,
+            adopted,
+            supervised,
         });
         std::thread::spawn(move || {
             let initialized_tx = tx.clone();
@@ -223,7 +787,7 @@ impl Host {
             let started = Box::new(move || {
                 initialized_tx
                     .send(Message::Initialized(initialized_id))
-                    .map_err(io::Error::other)
+                    .map_err(|_| io::Error::other("host queue closed"))
             });
             let result = crate::apply::revision::run(
                 context,
@@ -233,16 +797,39 @@ impl Host {
                 sink,
                 started,
                 builder,
-            )
-            .map_err(|error| error.to_string());
-            let _ = tx.send(Message::Finished(id, result));
+                launch,
+            );
+            let _ = match result {
+                Ok(crate::run::live::Ended::Handover(carried)) => {
+                    tx.send(Message::Handover(id, Box::new(carried)))
+                }
+                Ok(crate::run::live::Ended::Stopped(code)) => {
+                    tx.send(Message::Finished(id, Ok(code)))
+                }
+                Err(error) => tx.send(Message::Finished(id, Err(error.to_string()))),
+            };
         });
         Ok(())
     }
 
-    /// The controller of `id` initialized; a revision without supervised
-    /// processes is complete now.
+    /// The controller of `id` initialized: a transition waiting for the
+    /// desired revision's run is switched now; without a transition, a
+    /// revision without awaited machines is complete now.
     pub(super) fn initialized(&mut self, id: &str) -> Result<(), Failure> {
+        if !self
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.controller_plan == id)
+        {
+            return Ok(());
+        }
+        if let Some(driving) = &mut self.transition {
+            if driving.switching {
+                driving.switching = false;
+                driving.queue.push_back(transition_event("Switched", None));
+            }
+            return self.drive();
+        }
         if self.active.as_deref() == Some(id)
             && self
                 .runtime
@@ -263,10 +850,26 @@ impl Host {
         result: Result<i32, String>,
         shutdown: bool,
     ) -> Result<(), Failure> {
+        if !self
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.controller_plan == id)
+        {
+            return Ok(());
+        }
         self.runtime = None;
         self.owned.clear();
         self.retiring.clear();
         if shutdown {
+            return Ok(());
+        }
+        if let Some(driving) = self.transition.take() {
+            return self.reject_operation(
+                &driving.operation,
+                &format!("revision controller ended before convergence: {result:?}"),
+            );
+        }
+        if self.recovery_reason.is_some() {
             return Ok(());
         }
         if let Some(active) = self.active.clone() {
@@ -316,7 +919,14 @@ impl Host {
         {
             self.standings.insert(machine.to_string(), record.clone());
         }
-        if kind == Some("effect") && self.recovery_reason.is_some() {
+        // A machine that gave up blocks nothing: the operation it failed
+        // waits for a corrective apply, and the other machines go on.
+        if kind == Some("effect")
+            && self
+                .recovery_reason
+                .as_deref()
+                .is_some_and(|reason| reason != "gave_up")
+        {
             return Err(fail(1, "effect dispatch blocked by unresolved recovery"));
         }
         if kind == Some("error") {
@@ -325,6 +935,34 @@ impl Host {
                 "revision reducer failed; inspect retained journal",
             )?;
         }
+        let machine = record.get("machine").and_then(Json::as_str).unwrap_or("");
+        let owns_machine = self
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.expected.contains(machine));
+        if matches!(kind, Some("signal" | "standing"))
+            && owns_machine
+            && let Some(runtime) = &mut self.runtime
+        {
+            runtime.ready.insert(machine.to_string());
+        }
+        if kind == Some("effect")
+            && machine.ends_with(".supervisor")
+            && record
+                .get("value")
+                .and_then(|v| v.get("variant"))
+                .and_then(Json::as_str)
+                == Some("Note")
+            && texts(record.get("value").and_then(|v| v.get("fields")))
+                .first()
+                .map(String::as_str)
+                == Some("gave_up")
+            && let Some(driving) = &mut self.transition
+        {
+            driving
+                .queue
+                .push_back(transition_event("MemberGaveUp", Some(member_of(machine))));
+        }
         let event = record
             .get("value")
             .and_then(|value| value.get("fields"))
@@ -332,89 +970,116 @@ impl Host {
         let variant = event
             .and_then(|value| value.get("variant"))
             .and_then(Json::as_str);
-        let machine = record.get("machine").and_then(Json::as_str).unwrap_or("");
-        let owns_machine = self
+        let supervised = self
             .runtime
             .as_ref()
-            .is_some_and(|runtime| runtime.expected.contains(machine));
-        if kind == Some("event") && owns_machine {
-            let member = machine
-                .rsplit_once('.')
-                .map_or(machine, |(member, _)| member);
-            let pid = event
-                .and_then(|value| value.get("fields"))
-                .and_then(Json::as_array)
-                .and_then(|fields| fields.first())
-                .and_then(Json::as_i64);
-            if let Some("Started") = variant {
-                if let Some(runtime) = &mut self.runtime {
-                    runtime.ready.remove(machine);
-                }
-                if let Some(pid) = event
-                    .and_then(|value| value.get("fields"))
-                    .and_then(Json::as_array)
-                    .and_then(|fields| fields.first())
-                    .and_then(Json::as_i64)
-                {
-                    if let Some(previous) = self.owned.get(member)
-                        && let Some(old_pid) = previous.get("pid").and_then(Json::as_i64)
-                        && old_pid != pid
-                        && previous
-                            .get("instance")
-                            .and_then(Json::as_str)
-                            .is_some_and(|instance| {
-                                process_identity(old_pid).as_deref() == Some(instance)
-                            })
-                    {
-                        self.retiring.insert(old_pid.to_string(), previous.clone());
-                    }
-                    let generation = event
-                        .and_then(|value| value.get("fields"))
-                        .and_then(Json::as_array)
-                        .and_then(|fields| fields.get(1))
-                        .and_then(Json::as_i64)
-                        .unwrap_or(1);
-                    self.owned.insert(
-                        member.to_string(),
-                        object([
-                            ("pid", Json::Int(pid)),
-                            ("ready", Json::Bool(false)),
-                            ("operationId", text(operation)),
-                            ("instance", process_identity(pid).map_or(Json::Null, text)),
-                            ("generation", Json::Int(generation)),
-                        ]),
-                    );
-                }
+            .is_some_and(|runtime| runtime.supervised.contains(machine));
+        if kind == Some("event") && supervised {
+            self.lifecycle(operation, machine, event, variant)?;
+        }
+        if self.transition.is_some() {
+            return self.drive();
+        }
+        if self.recovery_reason.is_none()
+            && self.retiring.is_empty()
+            && self.active.as_deref() == Some(operation)
+            && self.runtime.as_ref().is_some_and(|runtime| {
+                !runtime.expected.is_empty() && runtime.expected.is_subset(&runtime.ready)
+            })
+        {
+            self.complete(operation)?;
+        }
+        Ok(())
+    }
+
+    /// Ownership and readiness from one lifecycle event of an awaited
+    /// machine.
+    fn lifecycle(
+        &mut self,
+        operation: &str,
+        machine: &str,
+        event: Option<&Json>,
+        variant: Option<&str>,
+    ) -> Result<(), Failure> {
+        let member = member_of(machine);
+        let fields = event
+            .and_then(|value| value.get("fields"))
+            .and_then(Json::as_array);
+        let pid = fields
+            .and_then(|fields| fields.first())
+            .and_then(Json::as_i64);
+        if let Some("Started") = variant {
+            if let Some(runtime) = &mut self.runtime {
+                runtime.ready.remove(machine);
             }
-            let matches_instance = self
-                .owned
-                .get(member)
-                .and_then(|owned| owned.get("pid"))
-                .and_then(Json::as_i64)
-                == pid;
-            let desired_generation = self
-                .owned
-                .get(member)
-                .and_then(|owner| owner.get("generation"))
-                .and_then(Json::as_i64)
-                .is_some_and(|generation| {
-                    self.runtime
-                        .as_ref()
-                        .and_then(|runtime| runtime.minimum_generation)
-                        .is_none_or(|minimum| generation >= minimum)
-                });
-            if variant == Some("Ready") && matches_instance && desired_generation {
-                if let Some(id) = self.active.as_ref().or(self.committed.as_ref()) {
-                    let manifest = read_json(&self.root.join("plans").join(format!("{id}.json")))?;
-                    let expected = manifest
-                        .get("artifacts")
-                        .and_then(|artifacts| artifacts.get(member))
-                        .and_then(|artifact| artifact.get("digest"))
-                        .and_then(Json::as_str);
-                    if let Some(pid) = pid {
-                        let actual = match crate::apply::digest::file(Path::new(&format!(
-                            "/proc/{pid}/exe"
-                        ))) {
+            if let Some(pid) = pid {
+                if let Some(previous) = self.owned.get(member)
+                    && let Some(old_pid) = previous.get("pid").and_then(Json::as_i64)
+                    && old_pid != pid
+                    && previous
+                        .get("instance")
+                        .and_then(Json::as_str)
+                        .is_some_and(|instance| {
+                            process_identity(old_pid).as_deref() == Some(instance)
+                        })
+                {
+                    self.retiring.insert(old_pid.to_string(), previous.clone());
+                }
+                let generation = fields
+                    .and_then(|fields| fields.get(1))
+                    .and_then(Json::as_i64)
+                    .unwrap_or(1);
+                self.owned.insert(
+                    member.to_string(),
+                    object([
+                        ("pid", Json::Int(pid)),
+                        ("ready", Json::Bool(false)),
+                        ("operationId", text(operation)),
+                        ("instance", process_identity(pid).map_or(Json::Null, text)),
+                        ("generation", Json::Int(generation)),
+                    ]),
+                );
+            }
+        }
+        let matches_instance = self
+            .owned
+            .get(member)
+            .and_then(|owned| owned.get("pid"))
+            .and_then(Json::as_i64)
+            == pid;
+        let desired_generation = self
+            .owned
+            .get(member)
+            .and_then(|owner| owner.get("generation"))
+            .and_then(Json::as_i64)
+            .is_some_and(|generation| {
+                self.runtime
+                    .as_ref()
+                    .and_then(|runtime| runtime.minimum_generation.get(member))
+                    .is_none_or(|minimum| generation >= *minimum)
+            });
+        if variant == Some("Ready") && matches_instance && desired_generation {
+            let adopted = self
+                .runtime
+                .as_ref()
+                .zip(pid)
+                .is_some_and(|(runtime, pid)| runtime.adopted.contains(&pid));
+            let desired = self
+                .runtime
+                .as_ref()
+                .map(|runtime| runtime.desired.clone())
+                .or_else(|| self.active.clone())
+                .or_else(|| self.committed.clone());
+            if !adopted && let Some(id) = desired {
+                let manifest = read_json(&self.root.join("plans").join(format!("{id}.json")))?;
+                let expected = manifest
+                    .get("artifacts")
+                    .and_then(|artifacts| artifacts.get(member))
+                    .and_then(|artifact| artifact.get("digest"))
+                    .and_then(Json::as_str);
+                if let Some(pid) = pid {
+                    let actual =
+                        match crate::apply::digest::file(Path::new(&format!("/proc/{pid}/exe"))) {
                             Ok(digest) => digest,
                             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                                 return Ok(());
@@ -426,49 +1091,39 @@ impl Host {
                                 ));
                             }
                         };
-                        if expected != Some(actual.as_str()) {
-                            let id = id.clone();
-                            self.reject_operation(
-                                &id,
-                                "ready process artifact differs from the admitted desired artifact",
-                            )?;
-                            return Err(fail(1, "ready artifact identity mismatch"));
-                        }
+                    if expected != Some(actual.as_str()) {
+                        let id = self.active.clone().unwrap_or(id);
+                        self.reject_operation(
+                            &id,
+                            "ready process artifact differs from the admitted desired artifact",
+                        )?;
+                        return Err(fail(1, "ready artifact identity mismatch"));
                     }
                 }
-                if let Some(Json::Object(owned)) = self.owned.get_mut(member) {
-                    owned.insert("ready".into(), Json::Bool(true));
-                }
-                if let Some(runtime) = &mut self.runtime {
-                    runtime.ready.insert(machine.to_string());
-                }
             }
-            if matches!(variant, Some("Exited" | "Signalled")) && matches_instance {
-                self.owned.remove(member);
-                if let Some(runtime) = &mut self.runtime {
-                    runtime.ready.remove(machine);
-                }
+            if let Some(Json::Object(owned)) = self.owned.get_mut(member) {
+                owned.insert("ready".into(), Json::Bool(true));
             }
-            if matches!(variant, Some("Exited" | "Signalled"))
-                && let Some(pid) = pid
-            {
-                self.retiring.remove(&pid.to_string());
-            }
-            if variant == Some("SpawnFailed") && self.active.as_deref() == Some(operation) {
-                if let Some(runtime) = &mut self.runtime {
-                    runtime.ready.remove(machine);
-                }
-                self.reject_operation(operation, "a required owned process failed to start")?;
+            if let Some(runtime) = &mut self.runtime {
+                runtime.ready.insert(machine.to_string());
             }
         }
-        if self.recovery_reason.is_none()
-            && self.retiring.is_empty()
-            && self.active.as_deref() == Some(operation)
-            && self.runtime.as_ref().is_some_and(|runtime| {
-                !runtime.expected.is_empty() && runtime.expected.is_subset(&runtime.ready)
-            })
+        if matches!(variant, Some("Exited" | "Signalled")) && matches_instance {
+            self.owned.remove(member);
+            if let Some(runtime) = &mut self.runtime {
+                runtime.ready.remove(machine);
+            }
+        }
+        if matches!(variant, Some("Exited" | "Signalled"))
+            && let Some(pid) = pid
         {
-            self.complete(operation)?;
+            self.retiring.remove(&pid.to_string());
+        }
+        if variant == Some("SpawnFailed") && self.active.as_deref() == Some(operation) {
+            if let Some(runtime) = &mut self.runtime {
+                runtime.ready.remove(machine);
+            }
+            self.reject_operation(operation, "a required owned process failed to start")?;
         }
         Ok(())
     }

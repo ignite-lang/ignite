@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -7,7 +7,7 @@ use crate::run::{
     control::{Adapters, Observation},
     engine::Core,
     journal::Journal,
-    live::{Config, Live, RecordSink},
+    live::{Carried, Config, Ended, Live, RecordSink},
 };
 
 use super::plan::Plan;
@@ -78,9 +78,21 @@ pub(super) fn verify(context: Context, state: &Path) -> Result<(), crate::Error>
     Ok(())
 }
 
+/// How a revision's run starts under a transition driver: the instances a
+/// previous revision's run handed over, and the members that start only on
+/// the driver's `start <member>`. `None` for a resumed revision, which
+/// starts every machine; its run accepts the driver's control lines too.
+pub(super) struct Launch {
+    pub carried: Option<Carried>,
+    pub deferred: BTreeSet<String>,
+}
+
 /// The revision context owns every parsed/type table. The live driver borrows
 /// it only inside this worker's stack; a new revision cannot replace borrowed
 /// ASTs or silently change the reducer behind an existing journal.
+/// With carried instances the run keeps the carried channel and `tx` and
+/// `rx` are unused.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn run(
     context: Context,
     state: &Path,
@@ -89,7 +101,8 @@ pub(super) fn run(
     sink: RecordSink,
     started: Box<dyn FnOnce() -> std::io::Result<()> + Send>,
     builder: crate::run::live::Builder,
-) -> Result<i32, crate::Error> {
+    launch: Option<Launch>,
+) -> Result<Ended, crate::Error> {
     let Context {
         plan,
         loaded,
@@ -123,10 +136,39 @@ pub(super) fn run(
         .iter()
         .map(|(member, artifact)| (member.clone(), artifact.path.clone()))
         .collect();
-    let bin = state.join("bin/1");
+    let (carried, deferred) = match launch {
+        Some(Launch { carried, deferred }) => (carried, deferred),
+        None => (None, BTreeSet::new()),
+    };
+    let generation = carried
+        .as_ref()
+        .and_then(|carried| carried.instances.values().map(|i| i.generation).max())
+        .unwrap_or(1)
+        .max(1);
+    let bin = state.join("bin").join(generation.to_string());
     crate::run::live::copy_into(&bin, &built).map_err(crate::io_error(&bin))?;
     let (executables, declared) = crate::run_members(&model);
-    let adapters = Adapters::start(tx.clone()).map_err(crate::io_error(state))?;
+    let (adapters, tx, rx, adopted, pinned) = match carried {
+        Some(carried) => {
+            for observation in carried.pending {
+                let _ = carried.tx.send(observation);
+            }
+            (
+                carried.adapters,
+                carried.tx,
+                carried.rx,
+                carried.instances,
+                carried.pinned,
+            )
+        }
+        None => (
+            Adapters::start(tx.clone()).map_err(crate::io_error(state))?,
+            tx,
+            rx,
+            BTreeMap::new(),
+            BTreeMap::new(),
+        ),
+    };
     let config = Config {
         state: state.to_path_buf(),
         manual: false,
@@ -136,13 +178,14 @@ pub(super) fn run(
         ports: BTreeMap::new(),
         declared,
         executables,
-        generation: 1,
+        generation,
         start_at: 0,
         builder,
     };
     Live::new(core, &model, types, config, journal, adapters, tx, rx)
         .with_record_sink(sink)
         .with_started_hook(started)
-        .run()
+        .with_transitions(deferred, adopted, pinned)
+        .run_host()
         .map_err(crate::io_error(state))
 }

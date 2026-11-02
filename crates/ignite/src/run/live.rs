@@ -28,8 +28,25 @@
 //! is left or the deadline passes (each member's `DrainRollout.deadline`,
 //! 10 s without one), what is left gets SIGKILL, and the stop `segment`
 //! closes the journal. Exit 1 when a machine failed or gave up.
+//!
+//! Transitions (`docs/slice.md` 17.4, a local host only, never `ignite
+//! run`): [`Live::with_transitions`] lets a host's transition driver change
+//! the running revision member by member. Members in `deferred` get no
+//! `Start` at segment start and no event until the control line `start
+//! <member>`, which starts their machines and replays the target's
+//! readiness to a scheduler whose target is already ready. `retire
+//! <member>` drains the member's process with `Control("stop")` (SIGKILL
+//! after its drain deadline) and stops feeding its other machines.
+//! `rebind` copies the builder's artifacts into the next generation, so
+//! later spawns and probe attempts use the desired revision's executables.
+//! `handover <member>...` stops every process of a member not named, then
+//! ends this segment without stopping the named ones and returns the
+//! adapters, the channel and the pinned ports ([`Ended::Handover`]): the
+//! next revision's run adopts those instances, and a `Spawn` of an adopted
+//! member is answered with the surviving instance's `Started` (and `Ready`
+//! when it was ready) instead of a second process.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -144,6 +161,54 @@ impl Members {
     }
 }
 
+/// The live process of one member: its pid, the generation it was spawned
+/// with, whether it printed `listening on` and the port it reported.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Instance {
+    pub pid: i32,
+    pub generation: i64,
+    pub ready: bool,
+    pub port: u16,
+}
+
+/// What a run hands to the next revision's run of the same host: the
+/// adapters whose spawner thread is the parent of the surviving children,
+/// the observation channel they report to, the pinned ports of the
+/// surviving listeners and the live instance of each surviving member.
+#[derive(Debug)]
+pub struct Carried {
+    pub adapters: Adapters,
+    pub tx: Sender<Observation>,
+    pub rx: Receiver<Observation>,
+    pub pinned: BTreeMap<String, u16>,
+    pub instances: BTreeMap<String, Instance>,
+    /// Control lines that arrived during the handover; the next run
+    /// receives them first.
+    pub pending: Vec<Observation>,
+}
+
+/// How a run ended.
+#[derive(Debug)]
+pub enum Ended {
+    /// The stop sequence ran; the exit status of 16.3.
+    Stopped(i32),
+    /// A host's `handover` (module doc).
+    Handover(Carried),
+}
+
+/// The transition state of a host's run (module doc).
+#[derive(Default)]
+struct Transitions {
+    enabled: bool,
+    deferred: BTreeSet<String>,
+    retired: BTreeSet<usize>,
+    adopted: BTreeMap<String, Instance>,
+    handover: Option<BTreeSet<String>>,
+    /// The lowest generation a `Spawn` uses: the generation whose
+    /// executables are the desired revision's.
+    floor: i64,
+}
+
 /// One live run.
 pub struct Live<'a, 'p> {
     core: Core<'a, 'p>,
@@ -168,6 +233,9 @@ pub struct Live<'a, 'p> {
     deferred: VecDeque<Observation>,
     record_sink: Option<RecordSink>,
     started_hook: Option<Box<dyn FnOnce() -> io::Result<()> + Send>>,
+    transitions: Transitions,
+    /// Member to its newest live process.
+    instances: BTreeMap<String, Instance>,
 }
 
 const SIGKILL: i32 = 9;
@@ -221,7 +289,41 @@ impl<'a, 'p> Live<'a, 'p> {
             deferred: VecDeque::new(),
             record_sink: None,
             started_hook: None,
+            transitions: Transitions::default(),
+            instances: BTreeMap::new(),
         }
+    }
+
+    /// Accept a host transition driver's control lines (module doc):
+    /// `deferred` members start only on `start <member>`, `adopted` are the
+    /// live instances a previous revision's run handed over, `pinned` its
+    /// pinned ports of their listeners.
+    pub fn with_transitions(
+        mut self,
+        deferred: BTreeSet<String>,
+        adopted: BTreeMap<String, Instance>,
+        pinned: BTreeMap<String, u16>,
+    ) -> Self {
+        self.transitions = Transitions {
+            enabled: true,
+            deferred,
+            floor: self.generation,
+            adopted,
+            ..Transitions::default()
+        };
+        self.pinned = pinned;
+        self
+    }
+
+    /// Whether `machine` gets no event: its member is deferred or the
+    /// machine retired.
+    fn blocked(&self, machine: usize) -> bool {
+        self.transitions.retired.contains(&machine)
+            || self
+                .core
+                .machines()
+                .get(machine)
+                .is_some_and(|m| self.transitions.deferred.contains(&m.member))
     }
 
     /// Attach an owning host's durable revision journal without changing the
@@ -257,6 +359,23 @@ impl<'a, 'p> Live<'a, 'p> {
     /// The whole run: the segment, `Start` to every machine, the loop,
     /// the stop sequence; the exit status of 16.3.
     pub fn run(mut self) -> io::Result<i32> {
+        self.run_loop()?;
+        self.stop()
+    }
+
+    /// A host's run: like [`Live::run`], or the handover of the instances
+    /// that stay to the next revision's run (module doc).
+    pub fn run_host(mut self) -> io::Result<Ended> {
+        self.run_loop()?;
+        match self.transitions.handover.take() {
+            Some(keep) => self.handover(keep).map(Ended::Handover),
+            None => self.stop().map(Ended::Stopped),
+        }
+    }
+
+    /// The segment, `Start` to every machine, the loop until a stop or a
+    /// handover is requested.
+    fn run_loop(&mut self) -> io::Result<()> {
         let at = self.now();
         let value = segment(
             at,
@@ -270,6 +389,9 @@ impl<'a, 'p> Live<'a, 'p> {
             .record("segment", at, None, value_json(&value), true, None);
         self.process(vec![record])?;
         for index in 0..self.core.machines().len() {
+            if self.blocked(index) {
+                continue;
+            }
             let at = self.now();
             let start = kind(
                 "Start",
@@ -323,8 +445,11 @@ impl<'a, 'p> Live<'a, 'p> {
                 self.fire_due()?;
             }
             self.observe_next(received, false)?;
+            if self.transitions.handover.is_some() {
+                break;
+            }
         }
-        self.stop()
+        Ok(())
     }
 
     /// At a turn boundary, publish the acknowledgements already known from
@@ -408,6 +533,35 @@ impl<'a, 'p> Live<'a, 'p> {
     fn dispatch(&mut self, dispatch: Dispatch) {
         match dispatch {
             Dispatch::Spawn { member, generation } => {
+                if let Some(instance) = self.transitions.adopted.remove(&member)
+                    && self
+                        .adapters
+                        .pids(&member)
+                        .iter()
+                        .any(|(_, pid)| *pid == instance.pid)
+                {
+                    self.completions.push_back(Observation::Started {
+                        member: member.clone(),
+                        generation: instance.generation,
+                        pid: instance.pid,
+                    });
+                    if instance.ready && self.members.listeners.contains_key(&member) {
+                        let address = self
+                            .members
+                            .listeners
+                            .get(&member)
+                            .map(|l| l.address.clone())
+                            .unwrap_or_default();
+                        self.completions.push_back(Observation::Ready {
+                            member,
+                            pid: instance.pid,
+                            address,
+                            port: instance.port,
+                        });
+                    }
+                    return;
+                }
+                let generation = generation.max(self.transitions.floor);
                 let Some(executable) = self.executable(&member, generation) else {
                     self.completions.push_back(Observation::SpawnFailed {
                         reason: format!("{member} has no executable"),
@@ -496,6 +650,9 @@ impl<'a, 'p> Live<'a, 'p> {
     fn fire_due(&mut self) -> io::Result<()> {
         let now = self.now();
         while let Some((at, machine, id)) = self.core.next_due(now) {
+            if self.blocked(machine) {
+                continue;
+            }
             let records = self
                 .core
                 .feed(machine, at, kind("Timer", vec![Value::Int(id)]));
@@ -536,6 +693,9 @@ impl<'a, 'p> Live<'a, 'p> {
     fn feed_all(&mut self, machines: &[usize], kind: Value) -> io::Result<()> {
         let at = self.now();
         for machine in machines {
+            if self.blocked(*machine) {
+                continue;
+            }
             let records = self.core.feed(*machine, at, kind.clone());
             self.process(records)?;
         }
@@ -573,6 +733,15 @@ impl<'a, 'p> Live<'a, 'p> {
                 generation,
                 pid,
             } => {
+                self.instances.insert(
+                    member.clone(),
+                    Instance {
+                        pid,
+                        generation,
+                        ready: false,
+                        port: 0,
+                    },
+                );
                 let targets = self.lifecycle(&member);
                 self.feed_all(
                     &targets,
@@ -597,10 +766,17 @@ impl<'a, 'p> Live<'a, 'p> {
                 if let Some(listener) = self.members.listeners.get(&member) {
                     self.pinned.insert(listener.resource.clone(), port);
                 }
+                if let Some(instance) = self.instances.get_mut(&member)
+                    && instance.pid == pid
+                {
+                    instance.ready = true;
+                    instance.port = port;
+                }
                 let targets = self.lifecycle(&member);
                 self.feed_all(&targets, kind("Ready", vec![Value::Int(i64::from(pid))]))
             }
             Observation::Exited { member, pid, code } => {
+                self.ended(&member, pid);
                 let targets = self.lifecycle(&member);
                 self.feed_all(
                     &targets,
@@ -615,6 +791,7 @@ impl<'a, 'p> Live<'a, 'p> {
                 pid,
                 signal,
             } => {
+                self.ended(&member, pid);
                 let targets = self.lifecycle(&member);
                 self.feed_all(
                     &targets,
@@ -726,11 +903,352 @@ impl<'a, 'p> Live<'a, 'p> {
                     }
                 }
             }
+            Some(word @ ("start" | "retire" | "retire-deadline" | "rebind" | "handover"))
+                if self.transitions.enabled =>
+            {
+                let rest: Vec<String> = words.map(str::to_string).collect();
+                self.transition_control(word, rest)
+            }
             Some(other) => {
                 self.note(&format!("unknown control line `{other}`"));
                 Ok(())
             }
             None => Ok(()),
+        }
+    }
+
+    /// The control lines of a host's transition driver (module doc).
+    fn transition_control(&mut self, word: &str, rest: Vec<String>) -> io::Result<()> {
+        match (word, rest.as_slice()) {
+            ("start", [member]) => self.start_member(member),
+            ("retire", [member]) => self.retire(member),
+            ("retire-deadline", [member, pids @ ..]) => {
+                let live: Vec<i32> = self
+                    .adapters
+                    .pids(member)
+                    .into_iter()
+                    .map(|(_, pid)| pid)
+                    .collect();
+                for pid in pids.iter().filter_map(|pid| pid.parse::<i32>().ok()) {
+                    if live.contains(&pid) {
+                        self.note(&format!(
+                            "{member} pid {pid} still running at its drain deadline"
+                        ));
+                        let _ = self.adapters.kill(pid, SIGKILL);
+                    }
+                }
+                Ok(())
+            }
+            ("rebind", []) => {
+                self.generation += 1;
+                let bin = self
+                    .config
+                    .state
+                    .join("bin")
+                    .join(self.generation.to_string());
+                let built = (self.config.builder)().map_err(io::Error::other)?;
+                copy_into(&bin, &built)?;
+                self.transitions.floor = self.generation;
+                Ok(())
+            }
+            ("handover", keep) => {
+                self.transitions.handover = Some(keep.iter().cloned().collect());
+                Ok(())
+            }
+            _ => {
+                self.note(&format!("malformed control line `{word}`"));
+                Ok(())
+            }
+        }
+    }
+
+    /// `start <member>`: the member's machines get `Start`, and a
+    /// scheduler whose target is already ready gets that `Ready`.
+    fn start_member(&mut self, member: &str) -> io::Result<()> {
+        self.transitions.deferred.remove(member);
+        let machines: Vec<usize> = self
+            .core
+            .machines()
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.member == member)
+            .map(|(i, _)| i)
+            .collect();
+        for index in &machines {
+            self.transitions.retired.remove(index);
+        }
+        self.feed_all(
+            &machines,
+            kind(
+                "Start",
+                vec![Value::Quantity(QuantityKind::Duration, self.config.epoch)],
+            ),
+        )?;
+        let targets: Vec<String> = self
+            .model
+            .edges
+            .iter()
+            .filter(|e| e.kind == EdgeKind::Readiness && e.from == member)
+            .map(|e| e.to.clone())
+            .collect();
+        let schedulers: Vec<usize> = machines
+            .iter()
+            .copied()
+            .filter(|i| self.core.machines()[*i].variant() == "Schedule")
+            .collect();
+        for target in targets {
+            if let Some(instance) = self.instances.get(&target).filter(|i| i.ready) {
+                let pid = instance.pid;
+                self.feed_all(&schedulers, kind("Ready", vec![Value::Int(i64::from(pid))]))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// `retire <member>`: its processes drain under `Control("stop")` and
+    /// get SIGKILL at the member's drain deadline; its other machines get
+    /// no further event.
+    fn retire(&mut self, member: &str) -> io::Result<()> {
+        let mut drain = Vec::new();
+        for (index, machine) in self.core.machines().iter().enumerate() {
+            if machine.member != member {
+                continue;
+            }
+            match machine.variant() {
+                "Supervise" | "Roll" => drain.push(index),
+                _ => {
+                    self.transitions.retired.insert(index);
+                }
+            }
+        }
+        self.feed_all(
+            &drain,
+            kind("Control", vec![Value::Text("stop".to_string())]),
+        )?;
+        let pids: Vec<String> = self
+            .adapters
+            .pids(member)
+            .into_iter()
+            .map(|(_, pid)| pid.to_string())
+            .collect();
+        if !pids.is_empty() {
+            let deadline = self.member_deadline(member);
+            let tx = self.tx.clone();
+            let line = format!("retire-deadline {member} {}", pids.join(" "));
+            std::thread::spawn(move || {
+                std::thread::sleep(deadline);
+                let _ = tx.send(Observation::Control(line));
+            });
+        }
+        Ok(())
+    }
+
+    fn ended(&mut self, member: &str, pid: i32) {
+        if self.instances.get(member).is_some_and(|i| i.pid == pid) {
+            self.instances.remove(member);
+        }
+    }
+
+    /// End this segment for the next revision's run: stop every process of
+    /// a member not in `keep`, wait for them as the stop sequence does, and
+    /// hand the rest over (module doc).
+    fn handover(mut self, keep: BTreeSet<String>) -> io::Result<Carried> {
+        self.complete_spawns()?;
+        let targets: Vec<usize> = self
+            .core
+            .machines()
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| {
+                matches!(m.variant(), "Supervise" | "Roll") && !keep.contains(&m.member)
+            })
+            .map(|(i, _)| i)
+            .collect();
+        self.feed_all(
+            &targets,
+            kind("Control", vec![Value::Text("stop".to_string())]),
+        )?;
+        let leaving: Vec<String> = self
+            .config
+            .executables
+            .keys()
+            .filter(|member| !keep.contains(*member))
+            .cloned()
+            .collect();
+        let mut pending = Vec::new();
+        self.await_exits(&leaving, &mut pending)?;
+        let at = self.now();
+        let value = segment(
+            self.config.start_at,
+            Some(at),
+            self.clock_name(),
+            self.generation,
+            &self.config.declared,
+        );
+        let record = self
+            .core
+            .record("segment", at, None, value_json(&value), true, None);
+        self.process(vec![record])?;
+        while let Some(observation) = self.deferred.pop_front() {
+            pending.push(observation);
+        }
+        let resources: BTreeSet<String> = keep
+            .iter()
+            .filter_map(|member| self.members.listeners.get(member))
+            .map(|listener| listener.resource.clone())
+            .collect();
+        let pinned = self
+            .pinned
+            .iter()
+            .filter(|(resource, _)| resources.contains(*resource))
+            .map(|(resource, port)| (resource.clone(), *port))
+            .collect();
+        let live: BTreeSet<(String, i32)> = keep
+            .iter()
+            .flat_map(|member| {
+                self.adapters
+                    .pids(member)
+                    .into_iter()
+                    .map(move |(_, pid)| (member.clone(), pid))
+            })
+            .collect();
+        let instances = self
+            .instances
+            .iter()
+            .filter(|(member, instance)| live.contains(&((*member).clone(), instance.pid)))
+            .map(|(member, instance)| (member.clone(), *instance))
+            .collect();
+        Ok(Carried {
+            adapters: self.adapters,
+            tx: self.tx,
+            rx: self.rx,
+            pinned,
+            instances,
+            pending,
+        })
+    }
+
+    /// The deadline a drain of `member` waits: its `DrainRollout.deadline`,
+    /// 10 s without one.
+    fn member_deadline(&self, member: &str) -> Duration {
+        self.core
+            .machines_of(member, "Roll")
+            .into_iter()
+            .find_map(|index| {
+                let machine = &self.core.machines()[index];
+                let policy = machine.field("policy")?;
+                let ns = field(policy, "deadline").and_then(int)?;
+                u64::try_from(ns).ok().map(Duration::from_nanos)
+            })
+            .unwrap_or(STOP_DEADLINE)
+    }
+
+    /// Feed only `Exited` and `Signalled` until no child of `members` is
+    /// left or the longest of their deadlines passes, SIGKILL what is left
+    /// and wait once more. Control lines that arrive meanwhile go to
+    /// `pending`; lifecycle observations of other members update their
+    /// instances only.
+    fn await_exits(
+        &mut self,
+        members: &[String],
+        pending: &mut Vec<Observation>,
+    ) -> io::Result<()> {
+        let deadline = members
+            .iter()
+            .filter(|member| !self.adapters.pids(member).is_empty())
+            .map(|member| self.member_deadline(member))
+            .max()
+            .unwrap_or(Duration::ZERO);
+        let started = Instant::now();
+        let mut killed = false;
+        loop {
+            let live: Vec<i32> = members
+                .iter()
+                .flat_map(|member| self.adapters.pids(member))
+                .map(|(_, pid)| pid)
+                .collect();
+            if live.is_empty() {
+                let _ = self.tx.send(Observation::StopBoundary);
+                while let Ok(observation) = self.rx.try_recv() {
+                    if matches!(observation, Observation::StopBoundary) {
+                        break;
+                    }
+                    self.during_handover(observation, members, pending)?;
+                }
+                return Ok(());
+            }
+            let budget = if killed { AFTER_KILL } else { deadline };
+            let elapsed = started.elapsed();
+            if elapsed >= budget {
+                if killed {
+                    return Ok(());
+                }
+                for pid in live {
+                    let _ = self.adapters.kill(pid, SIGKILL);
+                }
+                killed = true;
+                continue;
+            }
+            match self.rx.recv_timeout(budget - elapsed) {
+                Ok(observation) => self.during_handover(observation, members, pending)?,
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Disconnected) => return Ok(()),
+            }
+        }
+    }
+
+    fn during_handover(
+        &mut self,
+        observation: Observation,
+        leaving: &[String],
+        pending: &mut Vec<Observation>,
+    ) -> io::Result<()> {
+        match observation {
+            Observation::Exited { ref member, .. } | Observation::Signalled { ref member, .. }
+                if leaving.contains(member) =>
+            {
+                self.observe(observation, false)
+            }
+            Observation::Exited { member, pid, .. }
+            | Observation::Signalled { member, pid, .. } => {
+                self.ended(&member, pid);
+                Ok(())
+            }
+            Observation::Started {
+                member,
+                generation,
+                pid,
+            } => {
+                self.instances.insert(
+                    member,
+                    Instance {
+                        pid,
+                        generation,
+                        ready: false,
+                        port: 0,
+                    },
+                );
+                Ok(())
+            }
+            Observation::Ready {
+                member, pid, port, ..
+            } => {
+                if let Some(instance) = self.instances.get_mut(&member)
+                    && instance.pid == pid
+                {
+                    instance.ready = true;
+                    instance.port = port;
+                }
+                if let Some(listener) = self.members.listeners.get(&member) {
+                    self.pinned.insert(listener.resource.clone(), port);
+                }
+                Ok(())
+            }
+            observation @ (Observation::Control(_) | Observation::Interrupt) => {
+                pending.push(observation);
+                Ok(())
+            }
+            _ => Ok(()),
         }
     }
 

@@ -4178,7 +4178,7 @@ The following are implementation tasks authorized by the approved plan:
 | Owner | Deliverable | Dependencies | Acceptance |
 |---|---|---|---|
 | Evaluator/frontend and existing build driver | Canonical operational projection, saved-plan admission and pinned artifact manifest | Reviewed contract | Source-only no-op; changed code/codegen replacement; exact input validation |
-| Ignite control/kind modules | Pure diff, ordering, replacement and reconciliation transitions | Plan/action contracts | Reducer traces agree in evaluator and both backends; preserve std layering (O45) |
+| Ignite control/kind modules | Pure ordering, replacement and reconciliation transitions (`std.control` `Transition`, stepped by the host); the diff is computed by the driver as the plan's `actions` (decision D1) | Plan/action contracts | Reducer traces agree in evaluator and both backends; preserve std layering (O45) |
 | Driver host/control/journal | Socket client/host, owned revision context, durable receipts and revision replay | Projection and reducer interfaces | Single owner; retry precedence; multi-revision crash recovery |
 | Existing process/probe/build adapters | Instance identity, immutable generations and existing drain/release dispatch | Durable action interface | No foreign mutation/duplicate spawn; occupied-port cutover |
 | Existing integration/inline test owners | Walkthrough and fault-injection matrix above | Host and adapter implementation | Both targets; unchanged run/replay/ordinary-plan coverage |

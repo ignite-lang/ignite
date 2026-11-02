@@ -2,7 +2,8 @@
 //! targets (`docs/slice.md` 16.0 item 10, extending 15.0 item 8): every fn
 //! of `fixtures/control_trace.ignite` without parameters gives the same
 //! debug text in the evaluator, in a Rust-target build and in an
-//! LLVM-target build. The A7 measurement of 16.10 steps ten thousand
+//! LLVM-target build; since slice 13 that includes the transition reducer
+//! of 17.4 (decision D1). The A7 measurement of 16.10 steps ten thousand
 //! emissions into a thirty-day rolling window in the evaluator under the
 //! default fuel per step and prints its wall time.
 
@@ -102,8 +103,25 @@ fn printed(target: Target) -> Vec<String> {
 fn reducers_agree_across_the_evaluator_and_both_targets() {
     let loaded = ignite::load(&fixture(), None).unwrap_or_else(|e| panic!("{e}"));
     let names = printed_fns(loaded.program());
-    assert!(names.len() >= 14, "{names:?}");
+    assert!(names.len() >= 19, "{names:?}");
     let ours = evaluated(&loaded);
+    let shown = |name: &str| {
+        let index = names
+            .iter()
+            .position(|n| n == name)
+            .unwrap_or_else(|| panic!("{name} not in {names:?}"));
+        ours[index].clone()
+    };
+    // 17.4, D1: the transition stops first, switches, starts providers
+    // first, cuts the rollout member over and commits at convergence.
+    assert_eq!(
+        shown("transition_effects"),
+        r#"[TransitionEffect.StopMember("T.probe"), TransitionEffect.StopMember("T.old"), TransitionEffect.SwitchRevision, TransitionEffect.StartMember("T.ingress"), TransitionEffect.CutOver("T.server"), TransitionEffect.StartMember("T.probe"), TransitionEffect.Commit]"#
+    );
+    assert_eq!(
+        shown("transition_gave_up"),
+        r#"[TransitionEffect.StopMember("T.probe"), TransitionEffect.StopMember("T.old"), TransitionEffect.SwitchRevision, TransitionEffect.StartMember("T.ingress"), TransitionEffect.Abandon("gave_up", "T.ingress")]"#
+    );
     std::thread::scope(|scope| {
         let handles: Vec<_> = [Target::Rust, Target::Llvm]
             .into_iter()

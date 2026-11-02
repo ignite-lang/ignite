@@ -21,7 +21,7 @@ use ignite_eval::Json;
 
 use super::{Failure, fail, plan::Plan};
 use crate::run::control::Observation;
-use controller::Runtime;
+use controller::{Driving, Runtime};
 
 type Reply = mpsc::Sender<Result<Json, Failure>>;
 
@@ -31,6 +31,7 @@ enum Message {
     Record(String, String, Json, mpsc::Sender<io::Result<()>>),
     Finished(String, Result<i32, String>),
     Initialized(String),
+    Handover(String, Box<crate::run::live::Carried>),
     Status,
     Stop,
 }
@@ -49,6 +50,7 @@ struct Host {
     journal: File,
     last_digest: String,
     runtime: Option<Runtime>,
+    transition: Option<Driving>,
     contexts: BTreeMap<String, super::revision::Context>,
     preparing: bool,
     waiters: BTreeMap<String, Vec<Reply>>,
@@ -86,6 +88,7 @@ pub fn run(state: &Path) -> Result<i32, Failure> {
         journal,
         last_digest: history.last_digest,
         runtime: None,
+        transition: None,
         contexts: BTreeMap::new(),
         preparing: false,
         waiters: BTreeMap::new(),
@@ -127,6 +130,7 @@ pub fn run(state: &Path) -> Result<i32, Failure> {
                 }
             }
             Message::Initialized(id) => host.initialized(&id)?,
+            Message::Handover(id, carried) => host.handed_over(&id, *carried)?,
             Message::Status => println!("{}", host.snapshot(true).compact()),
             Message::Stop => {
                 shutdown = true;

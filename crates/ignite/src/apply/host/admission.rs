@@ -3,7 +3,6 @@
 //! input pins, ownership), the operation receipts, and the retained context of
 //! an admitted plan.
 
-use std::collections::BTreeSet;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -258,7 +257,11 @@ impl Host {
             }
             return Ok(());
         }
-        if self.active.is_some() {
+        // Decision D3: an operation a machine gave up on is resolved by a
+        // corrective plan whose base is the committed revision.
+        let corrective = self.recovery_reason.as_deref() == Some("gave_up")
+            && plan.base_revision == self.revision;
+        if self.active.is_some() && !corrective {
             return Err(fail(2, "host has an active or unresolved operation"));
         }
         if plan.base_revision != self.revision {
@@ -294,83 +297,9 @@ impl Host {
         let unchanged = previous_plan.as_ref().is_some_and(|old| {
             old.operational_identity == plan.operational_identity || every_member_unchanged
         });
-        let mut rollout_member = None;
-        if !unchanged {
-            let actions = plan
-                .actions
-                .get("members")
-                .and_then(Json::as_array)
-                .ok_or_else(|| fail(2, "plan has no reviewed member actions"))?;
-            if self.owned.len() > 1
-                || self.owned.keys().any(|member| {
-                    actions.iter().any(|action| {
-                        action.get("id").and_then(Json::as_str) == Some(member)
-                            && action.get("kind").and_then(Json::as_str) == Some("unchanged")
-                    })
-                })
-            {
-                return Err(fail(
-                    2,
-                    "unsupported partial revision: preserving unaffected owned members requires the differential transition driver",
-                ));
-            }
-        }
         if !unchanged {
             retain_context(&self.root, &plan)?;
             let context = crate::apply::revision::Context::load(retained_plan(&self.root, &plan)?)?;
-            let supervised: BTreeSet<_> = context
-                .model
-                .machines
-                .iter()
-                .filter(|machine| machine.variant() == "Supervise")
-                .map(|machine| machine.member.as_str())
-                .collect();
-            if context.model.edges.iter().any(|edge| {
-                supervised.contains(edge.from.as_str())
-                    && supervised.contains(edge.to.as_str())
-                    && matches!(
-                        edge.kind,
-                        ignite_eval::EdgeKind::Readiness
-                            | ignite_eval::EdgeKind::References
-                            | ignite_eval::EdgeKind::Uses
-                    )
-            }) {
-                return Err(fail(
-                    2,
-                    "unsupported required startup order between native processes",
-                ));
-            }
-            if self.owned.len() == 1 && self.runtime.is_some() {
-                let (member, owner) = self.owned.first_key_value().unwrap();
-                let same_controller = previous_plan.as_ref().is_some_and(|old| {
-                    crate::apply::plan::semantic_model(&old.model)
-                        == crate::apply::plan::semantic_model(&plan.model)
-                        && old.reducer_revision == plan.reducer_revision
-                });
-                let ready_instance = owner.get("ready").and_then(Json::as_bool) == Some(true)
-                    && owner
-                        .get("pid")
-                        .and_then(Json::as_i64)
-                        .zip(owner.get("instance").and_then(Json::as_str))
-                        .is_some_and(|(pid, instance)| {
-                            super::controller::process_identity(pid).as_deref() == Some(instance)
-                        });
-                if same_controller
-                    && ready_instance
-                    && context
-                        .model
-                        .machines
-                        .iter()
-                        .any(|machine| machine.member == *member && machine.variant() == "Roll")
-                {
-                    rollout_member = Some(member.clone());
-                } else if !supervised.is_empty() {
-                    return Err(fail(
-                        2,
-                        "unsupported model/controller replacement; this host currently rolls implementation-only changes through the declared drain policy",
-                    ));
-                }
-            }
             self.contexts.insert(plan.id.clone(), context);
         }
         self.receipts.insert(
@@ -395,6 +324,6 @@ impl Host {
         self.active = Some(plan.id.clone());
         self.persist()?;
         self.waiters.entry(plan.id.clone()).or_default().push(reply);
-        self.dispatch(plan, rollout_member)
+        self.dispatch(plan)
     }
 }
