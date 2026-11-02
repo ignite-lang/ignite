@@ -93,7 +93,7 @@ warnings`, `cargo test --workspace --no-fail-fast`, `task test-ignite`, run one 
 
 | measurement | command | before 9b | after 9b |
 |---|---|---|---|
-| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
+| gate, cold | the gate with `SCCACHE_RECACHE=1` after `cargo clean` | 129.9 s | 86.5 s |
 | gate, warm | the gate after `touch crates/ignite-check/src/lib.rs` | 35.4 s | 25.9 s |
 | test executables | `cargo test --workspace --no-run` | 49, 666 MB | 18, 202 MB |
 | integration-test binaries | same | 39 | 8, one per crate |
@@ -121,7 +121,7 @@ sessions (load average 11 to 23), sccache on, own `CARGO_TARGET_DIR`; "before" i
 
 | measurement | command | before (9b) | slice 10 |
 |---|---|---|---|
-| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
+| gate, cold | `cargo clean`, `SCCACHE_RECACHE=1`, the gate | 86.5 s | 72.3 s (fmt 0.9, clippy 7.4, test 55.5, test-ignite 8.5) |
 | gate, warm | after `touch crates/ignite-check/src/lib.rs` | 25.9 s | 45.5 s (fmt 0.4, clippy 2.1, test 41.7, test-ignite 1.3) |
 | test executables | `cargo test --workspace --no-run` | 18, 202 MB | 18, 210 MB |
 | `--no-run`, warm | same, repeated | 0.0 s | 0.1 s |
@@ -163,7 +163,7 @@ Scripts and raw logs: `docs/performance/evidence/telos/telos-f769e68e/p4-scripts
 
 | measurement | command | before (60aef38) | slice 11 | ratio |
 |---|---|---|---|---|
-| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
+| gate, cold | fresh target dir, `SCCACHE_RECACHE=1`, the gate (1 pair) | 64.8 s (fmt 0.4, clippy 4.2, test 51.9, test-ignite 8.2) | 54.5 s (0.5, 4.3, 41.6, 8.2) | 0.84 |
 | gate, warm | the gate after the touch (3 pairs) | 25.9 s (25.9 to 26.2) | 16.8 s (16.8 to 17.1) | 0.65 |
 | warm `cargo test --workspace` step | same (3 pairs) | 22.9 to 23.1 s | 13.5 to 13.8 s | 0.59 |
 | warm fmt, clippy, test-ignite steps | same | 0.38, 1.98, 0.65 s | 0.45, 2.19, 0.68 s | 1.16, 1.11, 1.03 |
@@ -239,7 +239,7 @@ earlier set over the snapshot that still held 4 failing tests, see the note belo
 
 | measurement | command | before (s12-before) | slice 12 | ratio |
 |---|---|---|---|---|
-| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
+| gate, cold | fresh target dir, SCCACHE_RECACHE=1, the gate (1 pair, discarded by the load rule: loads 3.1 and 14.6) | 57.1 s (fmt 0.47, clippy 4.61, test 43.54, test-ignite 8.45) | 78.1 s (0.52, 6.54, 60.43, 10.57) | 1.37, not valid |
 | gate, warm | the gate after the touch (pairs 2 and 3 kept, loads 27 to 35; pair 1 discarded, loads 11 and 34) | 23.5 s (19.8, 27.3) | 33.1 s (29.5, 36.7) | 1.42 (1.35, 1.49) |
 | warm `cargo test --workspace` step | same (pairs 2 and 3) | 17.5 s (14.4, 20.6) at load 28 to 31 | 26.3 s (23.1, 29.5) at load 27 to 31 | 1.52 (1.43, 1.61) |
 | warm fmt, clippy steps | same (pairs 2 and 3) | 0.86, 4.25 s | 0.81, 4.37 s | 0.95, 1.04 |
