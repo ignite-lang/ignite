@@ -99,35 +99,35 @@ fn naming_everything_gives_the_whole_library() {
 /// do not reach lose their items.
 #[test]
 fn a_test_build_keeps_the_selected_tests_and_what_they_reach() {
-    let library = common::load_std(&common::repository_std());
-    let types = common::type_std(&library).expect("the standard library types");
-    let json = library
-        .iter()
-        .position(|(m, _, _)| m == "std.json")
-        .expect("std.json");
-    let options = Options {
-        test_modules: vec!["std.json".to_string()],
-        tests: types[json].tests().to_vec(),
-        ..options()
-    };
-    let project = generate_tests(&[], &options).unwrap();
-    let inputs: Vec<TypedStdModule<'_>> = library
-        .iter()
-        .zip(&types)
-        .map(|((m, p, s), t)| (m.clone(), p, s, t))
-        .collect();
-    let prepared = prepare_std_typed(&inputs, &options).unwrap();
-    let generated = prepared.generate_for(&options.substrate_path, &project);
-    assert_eq!(
-        generated,
-        generate_std_for(&inputs, &options, &project).unwrap()
-    );
-    let std = norm(&generated.lib_rs);
-    assert!(std.contains("pub fn __ignite_test_"), "{std}");
-    assert!(std.contains("pub fn encode("), "{std}");
-    assert!(std.contains("pub fn parse("), "{std}");
-    assert!(!std.contains("pub struct Console"), "{std}");
-    assert!(!std.contains("pub struct TelnetServer"), "{std}");
+    common::with_typed_std(&common::repository_std(), |library, types| {
+        let json = library
+            .iter()
+            .position(|(m, _, _)| m == "std.json")
+            .expect("std.json");
+        let options = Options {
+            test_modules: vec!["std.json".to_string()],
+            tests: types[json].tests().to_vec(),
+            ..options()
+        };
+        let project = generate_tests(&[], &options).unwrap();
+        let inputs: Vec<TypedStdModule<'_>> = library
+            .iter()
+            .zip(types)
+            .map(|((m, p, s), t)| (m.clone(), p, s, t))
+            .collect();
+        let prepared = prepare_std_typed(&inputs, &options).unwrap();
+        let generated = prepared.generate_for(&options.substrate_path, &project);
+        assert_eq!(
+            generated,
+            generate_std_for(&inputs, &options, &project).unwrap()
+        );
+        let std = norm(&generated.lib_rs);
+        assert!(std.contains("pub fn __ignite_test_"), "{std}");
+        assert!(std.contains("pub fn encode("), "{std}");
+        assert!(std.contains("pub fn parse("), "{std}");
+        assert!(!std.contains("pub struct Console"), "{std}");
+        assert!(!std.contains("pub struct TelnetServer"), "{std}");
+    });
 }
 
 #[test]

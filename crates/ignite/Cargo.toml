@@ -18,7 +18,7 @@ ignite-types.workspace = true
 ignite-llvm.workspace = true
 ignite-eval.workspace = true
 clap.workspace = true
-nix = { workspace = true, features = ["process", "signal"] }
+nix = { workspace = true, features = ["poll", "process", "signal"] }
 
 [dev-dependencies]
 ignite-rt = { workspace = true, features = ["runner"] }

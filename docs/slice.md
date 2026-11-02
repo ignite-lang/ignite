@@ -3878,3 +3878,17 @@ allowed the closing segment to omit exit events. The process adapter now publish
 before exposing quiescence. Stop processes the finite queued prefix through an internal fence
 before closing the segment, using the ordinary reducer/journal path. This preserves every
 completion without letting later control input extend shutdown; effect syncs remain unchanged.
+
+The remaining 12c hot paths keep the same ownership. Rust reachability borrows identifiers
+from immutable generated text and deduplicates before walking; its lexical rules and rendered
+order are unchanged. A Rust generator prepares its fixed escaped failure-site filename once,
+while every site's line and column still come from the current source. LLVM pruning likewise
+borrows temporary symbol names while function text is immutable; the public symbol query keeps
+its owned result. LLVM debug-location interning uses a private integer-key hasher and preserves
+metadata IDs and emitted IR. Source-identifier maps retain their existing hashing.
+
+The CLI enables the existing `nix/poll` feature consistently with the workspace runner so
+the measured gate does not alternate dependency feature sets and rebuild the CLI. No external
+dependency is added. Test-only work also shares the checked AST/type pair for immutable std
+fixtures, and the giant-chain assertion avoids a pattern search only when its required marker
+is absent; every assertion, case, ignore and failure condition is preserved.

@@ -1,0 +1,19 @@
+{
+  "command": [
+    "cargo",
+    "build",
+    "-vv",
+    "-p",
+    "ignite"
+  ],
+  "exit": 0,
+  "seconds": 1.757516176032368,
+  "environment": {
+    "CARGO_TARGET_DIR": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-819607066ef5",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_RELEASE_DEBUG": "0",
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO_LOG": "cargo::core::compiler::fingerprint=info"
+  }
+}
