@@ -1,0 +1,52 @@
+{
+  "candidate": "631be24",
+  "purpose": "Correctness validation, not paired timing acceptance",
+  "path": "/home/timo/.cache/scratch/ignite-perf12c/validation/1793619576793146330",
+  "steps": [
+    {
+      "step": "fmt",
+      "seconds": 0.5278281169594266,
+      "exit": 0
+    },
+    {
+      "step": "clippy",
+      "seconds": 1.1672958160052076,
+      "exit": 0
+    },
+    {
+      "step": "workspace",
+      "seconds": 23.415647496003658,
+      "exit": 0
+    },
+    {
+      "step": "inline",
+      "seconds": 6.22506034001708,
+      "exit": 0
+    },
+    {
+      "step": "gate",
+      "seconds": 12.83561531099258,
+      "exit": 0
+    },
+    {
+      "step": "compile",
+      "seconds": 0.4464895830024034,
+      "exit": 0
+    },
+    {
+      "step": "compile-llvm",
+      "seconds": 0.5737324230140075,
+      "exit": 0
+    },
+    {
+      "step": "compile-todo",
+      "seconds": 0.4857933960156515,
+      "exit": 0
+    },
+    {
+      "step": "compile-todo-llvm",
+      "seconds": 0.44575386703945696,
+      "exit": 0
+    }
+  ]
+}

@@ -142,6 +142,11 @@ def compare_rows(rows, baseline="baseline", candidate="candidate", load_delta=5)
     return result
 
 
+def within_budget(unit, ratio):
+    # Step 1 requires the generator tests to recover their full matched 11b time.
+    return ratio <= (1.0 if unit == "file-rustgen" else 1.10)
+
+
 def closure_eligible(controls, frozen_baseline_matches, comparison_present):
     """Loose controls are useful diagnostics, never performance acceptance."""
     return (frozen_baseline_matches and comparison_present
@@ -198,7 +203,7 @@ class Harness:
         self.controls = {key: getattr(args, key) for key in ("warm_pairs", "check_pairs", "extra_warm_passes", "cold_retries", "load_delta", "absolute_max_load")}
         config = dict(schema=SCHEMA, commits=self.commits, refs=self.refs, controls=self.controls,
                       sources=str(self.sources), builds=str(self.builds), load_delta=args.load_delta,
-                      environment={key: self.env_base.get(key) for key in ("CARGO_INCREMENTAL", "CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_RELEASE_DEBUG", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTUP_TOOLCHAIN", "CARGO_BUILD_JOBS", "CARGO_BUILD_TARGET", "SCCACHE_DISABLE")})
+                      environment={key: self.env_base.get(key) for key in ("CARGO_INCREMENTAL", "CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_RELEASE_DEBUG", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTUP_TOOLCHAIN", "CARGO_BUILD_JOBS", "CARGO_BUILD_TARGET", "CARGO_NET_OFFLINE", "SCCACHE_DISABLE")})
         metadata = self.evidence / "run.json"
         if metadata.exists() and json.loads(metadata.read_text()) != config:
             raise ValueError("Evidence belongs to another configuration; use a new evidence directory")
@@ -232,6 +237,11 @@ class Harness:
             raise ValueError("Tool versions changed; do not mix toolchains in one comparison")
         dump(tool_path, tools)
         self.capture_id = str(time.time_ns())
+        self.harness_sha256 = digest(Path(__file__))
+        harness_source = self.evidence / "harness" / (self.harness_sha256 + ".py")
+        harness_source.parent.mkdir(exist_ok=True)
+        if not harness_source.exists():
+            shutil.copy2(Path(__file__), harness_source)
 
     def env(self, label, recache=False):
         value = dict(self.env_base, CARGO_TARGET_DIR=str(self.targets[label]))
@@ -245,6 +255,8 @@ class Harness:
             raise RuntimeError(f"Disk guard: {free:.1f} GiB available, requires {self.args.min_free_gib}")
 
     def append(self, row):
+        row["capture"] = self.capture_id
+        row["harness_sha256"] = self.harness_sha256
         self.rows.append(row)
         with self.records_path.open("a") as stream:
             stream.write(json.dumps(row, sort_keys=True) + "\n")
@@ -349,8 +361,9 @@ class Harness:
                 (self.paths[label] / "crates/ignite-check/src/lib.rs").touch()
                 self.command(label, "no-run-touch", pair, ["cargo", "test", "--workspace", "--no-run"])
                 self.command(label, "file-ignite_test", pair, ["cargo", "test", "-p", "ignite", "--test", "main", "ignite_test::"])
+                self.command(label, "file-rustgen", pair, ["cargo", "test", "-p", "ignite-rustgen", "--test", "main"])
             values = self.comparisons()
-            needed = [r for r in values if r["unit"].startswith("warm-") or r["unit"] in ("gate-warm", "no-run-warm", "no-run-touch", "file-ignite_test")]
+            needed = [r for r in values if r["unit"].startswith("warm-") or r["unit"] in ("gate-warm", "no-run-warm", "no-run-touch", "file-ignite_test", "file-rustgen")]
             if number >= self.args.warm_pairs and all(r["valid_pairs"] >= self.args.warm_pairs for r in needed):
                 return
 
@@ -395,20 +408,22 @@ class Harness:
         results = compare_rows(measured, load_delta=self.args.load_delta)
         if "comparison" in self.refs:
             results += compare_rows(measured, baseline="comparison", load_delta=self.args.load_delta)
-        required = {"cold-" + name for name, _ in GATE} | {"gate-cold", "gate-warm", "no-run-warm", "no-run-touch", "file-ignite_test", "check", "plan"} | {"warm-" + name for name, _ in GATE} | {f"todod-{target}-{profile}" for target in ("rust", "llvm") for profile in ("dev", "release")}
+        required = {"cold-" + name for name, _ in GATE} | {"gate-cold", "gate-warm", "no-run-warm", "no-run-touch", "file-ignite_test", "file-rustgen", "check", "plan"} | {"warm-" + name for name, _ in GATE} | {f"todod-{target}-{profile}" for target in ("rust", "llvm") for profile in ("dev", "release")}
         missing, over = [], []
         for unit in sorted(required):
             row = next((r for r in results if r["baseline"] == "baseline" and r["unit"] == unit), None)
             count = 1 if unit.startswith("cold-") or unit == "gate-cold" else max(15, self.args.check_pairs) if unit in ("check", "plan") else max(3, self.args.warm_pairs)
             if row is None or row["valid_pairs"] < count:
                 missing.append(unit)
-            elif row["ratio"] > 1.10:
+            elif not within_budget(unit, row["ratio"]):
                 over.append(unit)
         workspace = next((r for r in results if r["baseline"] == "baseline" and r["unit"] == "warm-workspace"), None)
         absolute = bool(workspace and workspace.get("candidate", float("inf")) <= 10.8)
         low_load = bool(workspace and workspace.get("loads", [float("inf"), float("inf")])[1] <= self.args.absolute_max_load)
         file = next((r for r in results if r["baseline"] == "baseline" and r["unit"] == "file-ignite_test"), None)
         file_ok = bool(file and file.get("candidate", float("inf")) <= 4.6)
+        rustgen = next((r for r in results if r["baseline"] == "baseline" and r["unit"] == "file-rustgen"), None)
+        rustgen_ok = bool(rustgen and rustgen["valid_pairs"] >= max(3, self.args.warm_pairs) and within_budget("file-rustgen", rustgen.get("ratio", float("inf"))))
         comparison_missing = [] if "comparison" in self.refs else ["published comparison not configured"]
         if "comparison" in self.refs:
             for unit in sorted(required):
@@ -421,10 +436,10 @@ class Harness:
         coverage = bool(workspaces and inlines) and all(r["tests"]["passed"] >= 647 and r["tests"]["ignored"] == 5 for r in workspaces) and all(len(r.get("inline_counts", [])) == 2 and min(r["inline_counts"]) >= 148 for r in inlines)
         failed = any(r["exit"] for r in self.rows)
         controls_pass = closure_eligible(self.controls, self.frozen_baseline_matches, "comparison" in self.refs)
-        accepted = controls_pass and not missing and not comparison_missing and not over and absolute and low_load and file_ok and coverage and not self.failed_candidate()
+        accepted = controls_pass and rustgen_ok and not missing and not comparison_missing and not over and absolute and low_load and file_ok and coverage and not self.failed_candidate()
         summary = dict(schema=SCHEMA, commits=self.commits, results=results, missing=missing, over_budget=over,
                        warm_workspace_absolute_pass=absolute, comparable_low_load=low_load,
-                       ignite_test_absolute_pass=file_ok, candidate_failed=self.failed_candidate(),
+                       ignite_test_absolute_pass=file_ok, rustgen_11b_pass=rustgen_ok, candidate_failed=self.failed_candidate(),
                        any_command_failed=failed, frozen_baseline_matches=self.frozen_baseline_matches, closure_controls_pass=controls_pass, coverage_pass=coverage, comparison_missing=comparison_missing, accepted=accepted)
         dump(self.evidence / "summary.json", summary)
         lines = ["# Performance comparison", "", "unit | baseline | before s | candidate s | ratio | valid/excluded", "---|---|---:|---:|---:|---:"]
@@ -456,6 +471,10 @@ def self_check():
     assert holder.failed_candidate(), "Later green samples cannot hide a candidate failure"
     holder.rows = [row("baseline", "1", 10, exit=1), row("candidate", "2", 1)]
     assert not holder.failed_candidate(), "Unchanged-baseline failure is tracked separately"
+    assert within_budget("file-rustgen", 1.0)
+    assert not within_budget("file-rustgen", 1.01), "Generator tests must recover matched 11b time"
+    assert within_budget("warm-workspace", 1.10)
+    assert not within_budget("warm-workspace", 1.11)
     controls = dict(warm_pairs=3, check_pairs=15, extra_warm_passes=2,
                     cold_retries=1, load_delta=5, absolute_max_load=9)
     assert closure_eligible(controls, True, True)

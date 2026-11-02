@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/main-b624c508ef07abba",
+    "run::killing_terminald_restarts_it_in_real_time",
+    "--exact",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "seconds": 0.5045539910206571,
+  "restart_ms": 107.221753,
+  "load_after": [
+    12.63671875,
+    16.61083984375,
+    12.39599609375
+  ]
+}

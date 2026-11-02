@@ -1,0 +1,18 @@
+{
+  "base": "631be24",
+  "failure": "two_manual_runs_give_equal_journals_after_masking: journals 58 vs55; completion events omitted before closing segment",
+  "cause": "pid retired and InFlight guards dropped before terminal observation publication; stop checked only live pids and did not drain queued exits",
+  "fix": "publish completion and retire under process-table lock; after quiescence, enqueue StopBoundary fence and process queued terminal observations through normal observe/process up to fence",
+  "final_journal_lengths": [
+    58,
+    58
+  ],
+  "source_sha256": {
+    "crates/ignite/src/run/process.rs": "085ee3c81b834b8aa6de8f6322cf88de0b4baabbe410bd9889257fa547a17ebb",
+    "crates/ignite/src/run/live.rs": "25bab1445c83a1153850272725884292d4778edb9f8e7b7bb44c15e465fb2af9",
+    "crates/ignite/src/run/control.rs": "d30d90eb47138cb46c8a73002cab440d6fdb8686ba434f2b419bb3ec6aabf172",
+    "crates/ignite/tests/run.rs": "34a992128c209555f15058c3f4b9b0d77f44908798e607219aafdedeb41130ff"
+  },
+  "repeats": "initial+5 exact test executions before finite-fence addition; one final exact execution after fence; each test runs and replays two manual scenarios",
+  "preserved": "full masked journal comparison, all exit deliveries, O30 sync-before-dispatch, existing shutdown deadline/kill path and restart timing"
+}
