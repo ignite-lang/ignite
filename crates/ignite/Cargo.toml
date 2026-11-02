@@ -16,6 +16,7 @@ ignite-check.workspace = true
 ignite-rustgen.workspace = true
 ignite-types.workspace = true
 ignite-llvm.workspace = true
+ignite-eval.workspace = true
 clap.workspace = true
 
 [dev-dependencies]

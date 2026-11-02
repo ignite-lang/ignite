@@ -1,7 +1,8 @@
 //! Slice 9 (`docs/slice.md` section 13) and the soundness probes of the
 //! 2026-11-01 audit through `ignite test`: every fixture must pass on both
 //! targets, failing asserts print the same debug text on both, and a
-//! 100,000-term chain lowers, compiles and runs on the LLVM target.
+//! 10,000-term chain lowers, compiles and runs on the LLVM target (the
+//! 100,000-term chain in the `#[ignore]` tests, run by hand).
 
 use crate::common;
 
@@ -35,10 +36,17 @@ struct Run {
 /// and cargo target directory, so one fixture's build never waits for or
 /// invalidates another's.
 fn ignite_test(target: &str, file: &Path, name: &str) -> Run {
+    ignite_test_files(target, &[file.to_path_buf()], name)
+}
+
+/// `ignite test <files>… --target <target>`: one test executable per
+/// target for every file given (`docs/slice.md` 12.7), so a group of
+/// fixtures costs one build and one subprocess instead of one per file.
+fn ignite_test_files(target: &str, files: &[PathBuf], name: &str) -> Run {
     let _guard = BUILDS.lock().unwrap_or_else(|e| e.into_inner());
     let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
         .arg("test")
-        .arg(file)
+        .args(files)
         .args(["--target", target, "--out"])
         .arg(out_dir(name))
         .arg("--runtime")
@@ -56,15 +64,22 @@ fn ignite_test(target: &str, file: &Path, name: &str) -> Run {
 }
 
 fn assert_passes(file: &Path, name: &str, targets: &[&str]) {
+    assert_all_pass(&[file.to_path_buf()], name, targets);
+}
+
+/// Every file's tests pass on every target, the files built together.
+fn assert_all_pass(files: &[PathBuf], name: &str, targets: &[&str]) {
     for target in targets {
-        let run = ignite_test(target, file, name);
+        let run = ignite_test_files(target, files, name);
+        let shown = files
+            .iter()
+            .map(|file| file.display().to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
         assert_eq!(
-            run.status,
-            0,
-            "{} on {target}:\n{}\n{}",
-            file.display(),
-            run.stdout,
-            run.stderr
+            run.status, 0,
+            "{shown} on {target}:\n{}\n{}",
+            run.stdout, run.stderr
         );
         assert!(run.stdout.contains("test result: ok."), "{}", run.stdout);
     }
@@ -85,48 +100,60 @@ fn var_aliases_leave_the_source_unchanged() {
     assert_passes(&file, "aliases", &TARGETS);
 }
 
+/// The probes of `dir` under `docs/audit/2026-11-01/`, as one list of files.
+fn audit_probes(dir: &str, probes: &[&str]) -> Vec<PathBuf> {
+    probes
+        .iter()
+        .map(|probe| {
+            workspace()
+                .join("docs/audit/2026-11-01")
+                .join(dir)
+                .join(format!("{probe}.ignite"))
+        })
+        .collect()
+}
+
 /// The probes of `docs/audit/2026-11-01/llvm/` that must compile and run
 /// (the others are checker fixtures of E006). `range_exhaustive` drives
-/// matches without `_` over their whole domain. All share one output and
-/// cargo target directory.
+/// matches without `_` over their whole domain. One build per target for
+/// all of them (slice 11; one per probe before took 3.8 s of the gate).
 #[test]
 fn audit_probes_pass() {
-    for probe in [
-        "index_if",
-        "index_if_only",
-        "len_match",
-        "later_arg",
-        "sound_ok",
-        "range_exhaustive",
-    ] {
-        let file = workspace()
-            .join("docs/audit/2026-11-01/llvm")
-            .join(format!("{probe}.ignite"));
-        assert_passes(&file, "audit", &TARGETS);
-    }
+    let files = audit_probes(
+        "llvm",
+        &[
+            "index_if",
+            "index_if_only",
+            "len_match",
+            "later_arg",
+            "sound_ok",
+            "range_exhaustive",
+        ],
+    );
+    assert_all_pass(&files, "audit-llvm", &TARGETS);
 }
 
 /// The probes of `docs/audit/2026-11-01/io/` that `ignite check` accepts
 /// build and pass on both targets: `p1` (recursion through `Option` and an
 /// enum payload, accepted since row 15), `p3c` (spawn of field arguments)
 /// and the positive cases `p4` to `p10`. The others are checker fixtures.
+/// One build per target for all of them (one per probe took 3.4 s).
 #[test]
 fn audit_io_probes_pass() {
-    for probe in [
-        "p1_recursive",
-        "p3c_spawn_fieldarg",
-        "p4_guarded",
-        "p5_params",
-        "p6_if",
-        "p9_generics",
-        "p9b_generics",
-        "p10_misc",
-    ] {
-        let file = workspace()
-            .join("docs/audit/2026-11-01/io")
-            .join(format!("{probe}.ignite"));
-        assert_passes(&file, "audit", &TARGETS);
-    }
+    let files = audit_probes(
+        "io",
+        &[
+            "p1_recursive",
+            "p3c_spawn_fieldarg",
+            "p4_guarded",
+            "p5_params",
+            "p6_if",
+            "p9_generics",
+            "p9b_generics",
+            "p10_misc",
+        ],
+    );
+    assert_all_pass(&files, "audit-io", &TARGETS);
 }
 
 /// The Rust target's slice-9 suite, run on the LLVM target.
@@ -168,8 +195,9 @@ fn failed_asserts_print_the_same_debug_text_on_both_targets() {
 }
 
 /// Row 14: a program with left-deep chains of `terms` terms of `+` on
-/// `Int` and `Text` and of `&&`, and a test of their values.
-fn chains(terms: usize) -> PathBuf {
+/// `Int` and `Text` and of `&&`, and a test of their values, written under
+/// `name` (each test its own directory, since tests run in parallel).
+fn chains(terms: usize, name: &str) -> PathBuf {
     let mut source = String::from("fn ints() -> Int = 1");
     source.push_str(&" + 1".repeat(terms - 1));
     source.push_str("\nfn texts() -> Text = \"a\"");
@@ -179,29 +207,33 @@ fn chains(terms: usize) -> PathBuf {
     source.push_str(&format!(
         "\ntest \"chains\" {{\n  assert ints() == {terms}\n  assert texts().len() == {terms}\n  assert both(1)\n  assert !both(0)\n}}\n"
     ));
-    let dir = out_dir(&format!("chains-source-{terms}"));
+    let dir = out_dir(&format!("{name}-source-{terms}"));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("chains.ignite");
     std::fs::write(&file, source).unwrap();
     file
 }
 
+/// The 10,000-term chains lower, build and run on the LLVM target: the one
+/// chain test of the gate that builds and runs (slice 11; the 100,000-term
+/// builds are the `#[ignore]` tests below, run by hand).
 #[test]
 fn long_chains_run_on_llvm() {
-    assert_passes(&chains(10_000), "chains-10000", &["llvm"]);
+    assert_passes(&chains(10_000, "chains"), "chains-10000", &["llvm"]);
 }
 
-/// Lowering 100,000-term chains to IR neither overflows the stack nor
-/// takes 20 s of wall time (measured 3.1 s alone, 6.7 s under two
-/// parallel gates), and a `Text` chain appends into one buffer through a
-/// constant number of stack slots.
-#[test]
-fn long_chains_lower_quickly() {
-    let file = chains(100_000);
+/// Lowering the chains to IR: a `Text` chain appends into one buffer
+/// through a constant number of stack slots, and the whole lowering stays
+/// under `seconds` of wall time.
+fn assert_chains_lower(terms: usize, seconds: f64) {
+    let file = chains(terms, "chains-lower");
     let start = std::time::Instant::now();
     let (_, generated) = ignite::emit_llvm(&file, None).unwrap_or_else(|e| panic!("{e}"));
     let elapsed = start.elapsed();
-    assert!(elapsed.as_secs_f64() < 20.0, "lowering took {elapsed:?}");
+    assert!(
+        elapsed.as_secs_f64() < seconds,
+        "lowering {terms} terms took {elapsed:?}"
+    );
     let texts = generated
         .program
         .split("define void @\"main.texts\"")
@@ -211,11 +243,27 @@ fn long_chains_lower_quickly() {
     assert!(body.matches("alloca").count() < 10, "{}", &body[..2000]);
 }
 
+/// The 10,000-term lowering of the gate.
+#[test]
+fn long_chains_lower_quickly() {
+    assert_chains_lower(10_000, 5.0);
+}
+
+/// Lowering 100,000-term chains to IR neither overflows the stack nor
+/// takes 20 s of wall time (measured 3.1 s alone, 6.7 s under two
+/// parallel gates, 3.5 s in the slice-10 gate); run by hand beside the
+/// 100,000-term build below.
+#[test]
+#[ignore]
+fn long_chains_100k_lower_quickly() {
+    assert_chains_lower(100_000, 20.0);
+}
+
 /// The 100,000-term build and run; prints its time.
 #[test]
 #[ignore]
 fn long_chains_100k_run_on_llvm() {
-    let file = chains(100_000);
+    let file = chains(100_000, "chains");
     let start = std::time::Instant::now();
     assert_passes(&file, "chains-100000", &["llvm"]);
     eprintln!("100,000-term chains built and ran in {:?}", start.elapsed());

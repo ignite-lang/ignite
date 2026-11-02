@@ -1,0 +1,13 @@
+package fixture_e118
+
+type Worker {
+  scale: fn(Int) -> Int
+}
+
+fn adder(n: Int) -> fn(Int) -> Int = |x| x + n
+
+fn double(x: Int) -> Int = x * 2
+
+system S {
+  component w: Worker { scale = adder(1) }
+}

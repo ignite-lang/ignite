@@ -142,32 +142,36 @@ test "store update with a capturing closure in a loop" {
   }
 }
 
+// Sizes chosen so that the test runs under 1 s on both targets (slice 11):
+// an insert copies the path and a link copies the chain, so the cost grows
+// with the square of the size (2,000 inserts and 5,000 links took 6.8 s on
+// the Rust target and 2.3 s on the LLVM target).
 test "boxed values carried across releases and through the store" {
   var tree: Tree<Int> = Leaf
   var i = 0
-  while i < 2000 {
+  while i < 500 {
     tree = insert(tree, (i * 7919) % 10007)
     let junk = filler(i)
     i = i + 1
   }
-  assert size(tree) == 2000
+  assert size(tree) == 500
   let copy = tree
   assert copy == tree
   var chain = Chain { value = 0, next = None }
   var j = 1
-  while j < 5000 {
+  while j < 1000 {
     chain = Chain { value = j, next = Some(chain) }
     let junk = filler(j)
     j = j + 1
   }
-  assert length(chain) == 5000
+  assert length(chain) == 1000
   let store: Store<Chain> = Store.new()
   store.put(1, chain)
   let r = store.update(1, |c| Chain { value = c.value + 1, next = Some(c) })
   match store.get(1) {
     Some(c) => {
-      assert length(c) == 5001
-      assert c.value == 5000
+      assert length(c) == 1001
+      assert c.value == 1000
       assert c.next == Some(chain)
     }
     None => { assert false }

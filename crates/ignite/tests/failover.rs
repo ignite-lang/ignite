@@ -42,7 +42,7 @@ fn failoverd() -> &'static PathBuf {
 }
 
 /// A running `failoverd`: its process, its port, and what it logged after
-/// the `listening on` line.
+/// the `listening on` line, line by line as it arrives.
 struct Server {
     child: Child,
     port: u16,
@@ -71,15 +71,40 @@ impl Server {
         let log = Arc::new(Mutex::new(String::new()));
         let sink = Arc::clone(&log);
         let reader = std::thread::spawn(move || {
-            let mut rest = String::new();
-            let _ = stderr.read_to_string(&mut rest);
-            sink.lock().unwrap().push_str(&rest);
+            let mut line = String::new();
+            while stderr.read_line(&mut line).is_ok_and(|n| n > 0) {
+                sink.lock().unwrap().push_str(&line);
+                line.clear();
+            }
         });
         Server {
             child,
             port,
             log,
             reader: Some(reader),
+        }
+    }
+
+    /// The log so far.
+    fn log(&self) -> String {
+        self.log.lock().unwrap().clone()
+    }
+
+    /// Wait until the log holds `count` occurrences of `needle`; the
+    /// server writes a session's report after the client has seen the
+    /// connection close, so a read right after the session can miss it.
+    fn wait_for(&self, needle: &str, count: usize) {
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            let log = self.log();
+            if log.matches(needle).count() >= count {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "no {count} x {needle:?} within {TIMEOUT:?} in\n{log}"
+            );
+            std::thread::sleep(Duration::from_millis(5));
         }
     }
 
@@ -135,26 +160,41 @@ impl Drop for Server {
     }
 }
 
+/// `docs/slice.md` section 15.1 item 3: each report is awaited with a
+/// deadline, not read once after `kill`.
 #[test]
 fn a_failing_session_does_not_end_the_service() {
     let mut server = Server::start();
     assert_eq!(server.session("hello\n"), b"ok hello\n");
-    for command in ["index\n", "overflow\n", "assert\n"] {
+    let file = source().display().to_string();
+    let reports = [
+        (
+            "index\n",
+            format!("task ended with error: index failed at {file}:29:"),
+            ": index 5 out of range for length 2\n",
+        ),
+        (
+            "overflow\n",
+            format!("task ended with error: + failed at {file}:33:"),
+            ": 9223372036854775807 + 9\n",
+        ),
+        (
+            "assert\n",
+            format!("task ended with error: assert failed at {file}:37:"),
+            ": bytes.len() == 0\n  left: 7\n  right: 0\n",
+        ),
+    ];
+    for (i, (command, report, _)) in reports.iter().enumerate() {
         assert_eq!(server.session(command), b"", "{command:?} answered");
         assert!(server.alive(), "{command:?} ended the service");
         assert_eq!(server.session("after\n"), b"ok after\n", "{command:?}");
+        server.wait_for(report, 1);
+        server.wait_for("task ended with error:", i + 1);
     }
     let log = server.stop();
-    let file = source().display().to_string();
-    for report in [
-        format!("task ended with error: index failed at {file}:29:"),
-        ": index 5 out of range for length 2\n".to_string(),
-        format!("task ended with error: + failed at {file}:33:"),
-        ": 9223372036854775807 + 9\n".to_string(),
-        format!("task ended with error: assert failed at {file}:37:"),
-        ": bytes.len() == 0\n  left: 7\n  right: 0\n".to_string(),
-    ] {
-        assert!(log.contains(&report), "no {report:?} in\n{log}");
+    for (_, report, detail) in &reports {
+        assert!(log.contains(report), "no {report:?} in\n{log}");
+        assert!(log.contains(detail), "no {detail:?} in\n{log}");
     }
     assert_eq!(log.matches("task ended with error:").count(), 3, "{log}");
     assert!(!log.contains("error: error"), "{log}");
@@ -189,6 +229,7 @@ fn ten_thousand_failing_sessions_leak_nothing() {
         grown < 32 * 1024,
         "RSS grew by {grown} KiB over 10,000 failing sessions"
     );
+    server.wait_for("task ended with error: index failed", 10_001);
     let log = server.stop();
     assert_eq!(
         log.matches("task ended with error: index failed").count(),

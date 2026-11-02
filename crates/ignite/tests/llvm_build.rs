@@ -281,14 +281,26 @@ fn default_runtime_is_next_to_the_driver_or_in_its_parent() {
         [deps.join("libignite_rt.a"), dir.join("libignite_rt.a")]
     );
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/probe.ignite");
+    // Another test thread's fork can hold the copy's write descriptor open
+    // for an instant, and the exec then fails with ETXTBSY (seen twice in
+    // eight gate runs of slice 11); the exec is retried until it starts.
     let build = || {
-        Command::new(&driver)
-            .args(["build", "--target", "llvm"])
-            .arg(&source)
-            .arg("--out")
-            .arg(dir.join("out"))
-            .output()
-            .unwrap()
+        let mut attempts = 0;
+        loop {
+            let output = Command::new(&driver)
+                .args(["build", "--target", "llvm"])
+                .arg(&source)
+                .arg("--out")
+                .arg(dir.join("out"))
+                .output();
+            match output {
+                Err(error) if error.raw_os_error() == Some(26) && attempts < 100 => {
+                    attempts += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                other => return other.unwrap(),
+            }
+        }
     };
 
     let missing = build();

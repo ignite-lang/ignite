@@ -5,6 +5,8 @@
 //! ignite emit <file.ignite> [--substrate PATH] [--std PATH]
 //! ignite build <file.ignite> [--target rust|llvm] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE]
 //! ignite test <file.ignite>… [FILTER] [--target rust|llvm] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE]
+//! ignite plan <file.ignite> [--assembly NAME] [--out FILE] [--fuel N] [--std PATH]
+//! ignite explain <file.ignite> <path> [--assembly NAME] [--fuel N] [--std PATH]
 //! ```
 //!
 //! `--std` is the standard-library root (default: the repository's `std/`
@@ -13,7 +15,9 @@
 //! of the file they are in), 2 cargo or clang failed (its output passed through) or
 //! invalid arguments, 3 a file could not be read or the project could not be
 //! written. `ignite test` exits with the test executable's status (0 every test passed,
-//! 1 a test failed), 2 for diagnostics.
+//! 1 a test failed), 2 for diagnostics. `ignite plan` prints the system model
+//! (`docs/slice.md` section 15.5) on stdout or writes it to `--out FILE`;
+//! `ignite explain` prints the explanation of one path (section 15.8).
 
 use std::path::PathBuf;
 
@@ -23,7 +27,7 @@ use clap::{Parser, Subcommand};
 #[command(
     name = "ignite",
     version,
-    about = "Check, emit and build Ignite programs"
+    about = "Check, emit, build, plan and explain Ignite programs"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -122,6 +126,38 @@ enum Commands {
         /// Target triple for `--target llvm`, passed to clang (default: clang's own target).
         #[arg(long)]
         triple: Option<String>,
+    },
+    /// Print the system model of a program as canonical JSON (`docs/slice.md` section 15.5).
+    Plan {
+        file: PathBuf,
+        /// The assembly to select (default: the program's only one).
+        #[arg(long)]
+        assembly: Option<String>,
+        /// Write the model to this file instead of stdout (overwriting it).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Fuel limit per property expression (default 1,000,000 units).
+        #[arg(long)]
+        fuel: Option<u64>,
+        /// Root of the standard library.
+        #[arg(long)]
+        std: Option<PathBuf>,
+    },
+    /// Explain one system, member, property path or assembly of a program (`docs/slice.md`
+    /// section 15.8).
+    Explain {
+        file: PathBuf,
+        /// `Terminal`, `Terminal.reachable`, `Terminal.server.recovery` or `local`.
+        path: String,
+        /// The assembly to select (default: the program's only one).
+        #[arg(long)]
+        assembly: Option<String>,
+        /// Fuel limit per property expression (default 1,000,000 units).
+        #[arg(long)]
+        fuel: Option<u64>,
+        /// Root of the standard library.
+        #[arg(long)]
+        std: Option<PathBuf>,
     },
 }
 
@@ -259,6 +295,41 @@ fn run() {
                     println!("built {}", executable.display());
                 }
             })
+        }
+        Commands::Plan {
+            file,
+            assembly,
+            out,
+            fuel,
+            std,
+        } => {
+            let options = ignite::PlanOptions {
+                assembly,
+                fuel,
+                std,
+            };
+            ignite::plan(&file, &options).and_then(|model| match out {
+                Some(out) => std::fs::write(&out, &model)
+                    .map_err(|error| ignite::Error::Io { path: out, error }),
+                None => {
+                    print!("{model}");
+                    Ok(())
+                }
+            })
+        }
+        Commands::Explain {
+            file,
+            path,
+            assembly,
+            fuel,
+            std,
+        } => {
+            let options = ignite::PlanOptions {
+                assembly,
+                fuel,
+                std,
+            };
+            ignite::explain(&file, &path, &options).map(|text| print!("{text}"))
         }
     };
     if let Err(error) = result {
