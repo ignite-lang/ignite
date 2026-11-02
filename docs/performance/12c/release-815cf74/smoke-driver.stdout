@@ -1,0 +1,12 @@
+{"label": "baseline", "unit": "smoke-compiler", "pair": "smoke", "seconds": 0.02897282800404355, "exit": 0, "load_before": 7.19482421875}
+{"label": "baseline", "unit": "smoke-plan", "pair": "smoke-0", "seconds": 0.08615025400649756, "exit": 0, "load_before": 7.19482421875}
+{"label": "baseline", "unit": "smoke-plan", "pair": "smoke-1", "seconds": 0.05669677100377157, "exit": 0, "load_before": 7.19482421875}
+{"label": "baseline", "unit": "smoke-build", "pair": "smoke", "seconds": 1.3332447620341554, "exit": 0, "load_before": 7.19482421875}
+{"label": "candidate", "unit": "smoke-compiler", "pair": "smoke", "seconds": 6.385653858014848, "exit": 0, "load_before": 7.19482421875}
+{"label": "candidate", "unit": "smoke-plan", "pair": "smoke-0", "seconds": 0.03157026699045673, "exit": 0, "load_before": 7.23876953125}
+{"label": "candidate", "unit": "smoke-plan", "pair": "smoke-1", "seconds": 0.03173527796752751, "exit": 0, "load_before": 7.23876953125}
+{"label": "candidate", "unit": "smoke-build", "pair": "smoke", "seconds": 2.9371236769948155, "exit": 0, "load_before": 7.23876953125}
+{"label": "comparison", "unit": "smoke-compiler", "pair": "smoke", "seconds": 0.034959512995556, "exit": 0, "load_before": 7.23876953125}
+{"label": "comparison", "unit": "smoke-plan", "pair": "smoke-0", "seconds": 0.04425883898511529, "exit": 0, "load_before": 7.23876953125}
+{"label": "comparison", "unit": "smoke-plan", "pair": "smoke-1", "seconds": 0.03701482497854158, "exit": 0, "load_before": 7.23876953125}
+{"label": "comparison", "unit": "smoke-build", "pair": "smoke", "seconds": 1.2295381560106762, "exit": 0, "load_before": 7.23876953125}

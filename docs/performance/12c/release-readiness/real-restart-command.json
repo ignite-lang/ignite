@@ -1,0 +1,22 @@
+[
+  "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-815cf741b359/debug/ignite",
+  "run",
+  "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-815cf741b359/examples/terminal/terminal.design.ignite",
+  "--assembly",
+  "local",
+  "--state",
+  "/home/timo/.cache/scratch/ignite-perf12c/readiness-815cf74/states/real-restart",
+  "--build",
+  "/home/timo/.cache/scratch/ignite-perf12c/readiness-815cf74/build",
+  "--target",
+  "llvm",
+  "--runtime",
+  "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/candidate-815cf741b359/ignite-test/rt/debug/libignite_rt.a",
+  "--json",
+  "--settle",
+  "1 s",
+  "--port",
+  "Terminal.ingress=0",
+  "--clock",
+  "real"
+]

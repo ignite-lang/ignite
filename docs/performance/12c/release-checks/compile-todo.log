@@ -1,0 +1,6 @@
+task: [compile-todo] cargo run -q -p ignite -- build examples/todo/todo.ignite --out target/ignite/todo --target-dir target
+note: building the generated Rust project in target/ignite/todo; compiler messages refer to generated code
+   Compiling ignite-std v0.0.0-5394ad1c9c74f32a (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/target/ignite/todo/std)
+   Compiling todo v0.0.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/target/ignite/todo)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+built target/debug/todod

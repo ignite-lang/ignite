@@ -1,0 +1,7 @@
+    Checking ignite-check v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/comparison-92733498f840/crates/ignite-check)
+    Checking ignite-types v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/comparison-92733498f840/crates/ignite-types)
+    Checking ignite-eval v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/comparison-92733498f840/crates/ignite-eval)
+    Checking ignite-rustgen v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/comparison-92733498f840/crates/ignite-rustgen)
+    Checking ignite-llvm v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/comparison-92733498f840/crates/ignite-llvm)
+    Checking ignite v0.1.0 (/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/comparison-92733498f840/crates/ignite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.64s

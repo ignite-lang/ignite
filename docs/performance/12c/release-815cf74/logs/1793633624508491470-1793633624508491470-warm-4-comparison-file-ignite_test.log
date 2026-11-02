@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds/comparison-92733498f840/debug/deps/main-90b129b53e45974f)
+
+running 14 tests
+test ignite_test::compile_error_exits_2 ... ok
+test ignite_test::endpoint_of_reads_the_ref_binding_on_both_targets ... ok
+test ignite_test::std_module_as_the_file ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+test ignite_test::substrate_builtins_run_on_both_targets ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::files_share_one_executable ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+test ignite_test::filter_exact_passing_and_none ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 183 filtered out; finished in 2.70s
+
