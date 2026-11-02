@@ -210,7 +210,7 @@
       ],
       "executable": "promptProbe",
       "id": "Terminal.promptProbe",
-      "kind": "std.probe.TelnetPrompt",
+      "kind": "std.protocol.telnet.TelnetPrompt",
       "outputs": {
         "attempts": "std.sli.ProbeAttempt"
       },

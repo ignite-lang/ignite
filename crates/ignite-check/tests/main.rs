@@ -5,6 +5,7 @@
 
 mod common;
 mod fixtures;
+mod layering;
 mod limits;
 mod modules;
 mod terminal;

@@ -16,8 +16,8 @@
 //!   not calls: a unit variant (`Help`, `Action.Close`) is
 //!   [`Callee::Variant`], a constant is [`Callee::Const`] and a pure function
 //!   used as a value is [`Callee::Fn`]. A local binding has no callee.
-//! * The head of a path (`Command` in `Command.Echo(x)`, `Telnet` in
-//!   `Telnet.serve(..)`, `TcpListener` in `TcpListener.bind(..)`) is not a
+//! * The head of a path (`Command` in `Command.Echo(x)`, `Echo` in
+//!   `Echo.serve(..)`, `TcpListener` in `TcpListener.bind(..)`) is not a
 //!   value and has type `Unit`. The `Field` callee of a path call has the
 //!   function type of what it calls, e.g. `fn(Text) -> Command`.
 //! * In a `system`, the resource properties `address` (`Text`) and `port`
@@ -192,7 +192,7 @@ pub enum Ty {
     Signal(Box<Ty>),
     /// `SystemRef`: the value of a system name (`system = Terminal`).
     SystemRef,
-    /// `Protocol`: the value of a protocol name (`endpoint(Telnet)`).
+    /// `Protocol`: the value of a protocol name (`endpoint(Echo)`).
     Protocol,
 }
 
@@ -806,13 +806,13 @@ pub enum Reference {
         member: String,
         field: String,
     },
-    /// `Telnet` where a `Protocol` is expected.
+    /// `Echo` where a `Protocol` is expected.
     Protocol(QualName),
 }
 
 impl Reference {
     /// `Terminal`, `Terminal.ingress`, `Terminal.promptProbe.attempts`,
-    /// `std.protocol.telnet.Telnet`.
+    /// `std.protocol.echo.Echo`.
     pub fn text(&self) -> String {
         match self {
             Reference::System(system) => system.clone(),

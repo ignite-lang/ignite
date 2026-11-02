@@ -21,7 +21,7 @@ use crate::{
 pub(super) struct Member {
     pub name: String,
     pub kind: MemberKind,
-    /// The kind as written: `TcpListener`, `Store`, `TelnetServer`.
+    /// The kind as written: `TcpListener`, `Store`, `CommandConsole`.
     pub kind_name: String,
     /// `TcpListener`, `Store<T>` or the kind's record type. `None` for an
     /// unknown kind, and for a generic kind until its declaration has been

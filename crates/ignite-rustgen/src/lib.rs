@@ -395,8 +395,8 @@ fn generate_program(
 pub type StdModule<'a> = (String, &'a Program, &'a Symbols);
 
 /// Lower the standard library to the `ignite-std` crate: one nested
-/// `pub mod` per module (`std.protocol.telnet` is
-/// `pub mod protocol { pub mod telnet { .. } }`); imports become
+/// `pub mod` per module (`std.a.b` is
+/// `pub mod a { pub mod b { .. } }`); imports become
 /// `use crate::..`. Errors are grouped by module path.
 pub fn generate_std(
     modules: &[StdModule<'_>],
@@ -600,7 +600,7 @@ impl UseTarget {
 }
 
 /// The path segments of the std module `path` under the crate root:
-/// `std.protocol.telnet` is `protocol`, `telnet`.
+/// `std.a.b` is `a`, `b`.
 fn std_segments(path: &str) -> Vec<&str> {
     match path.strip_prefix("std.") {
         Some(rest) => rest.split('.').collect(),

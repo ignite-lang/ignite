@@ -1945,7 +1945,7 @@ work.
 | `std/protocol/http.ignite` | `HttpServer { listener, application: HttpApp<S>, executable }` |
 | `std/contract.ignite` | `Availability`, `ThresholdCompliance`, `SLA`, `Window` (`rolling(Duration)`, `calendar_month(Text)`), `Consequence` (`event(Text)`), `MissingData` |
 | `std/policy.ignite` | `Restart { backoff: Backoff, maximum_attempts, interval: Duration }`, `Backoff` (`exponential(Duration, Duration)`, `fixed(Duration)`), `DrainRollout { deadline: Duration, on_deadline: Text }` |
-| `std/probe.ignite` | `TelnetPrompt { target: Ref<TelnetServer>, interval, timeout, expected_prompt, close_after_probe, attempts: Signal<ProbeAttempt> }`, `ProbeAttempt` |
+| `std/probe.ignite` (since moved: `TelnetPrompt` is in `std/protocol/telnet.ignite`, `ProbeAttempt` in `std/sli.ignite`; `docs/layering.md`) | `TelnetPrompt { target: Ref<TelnetServer>, interval, timeout, expected_prompt, close_after_probe, attempts: Signal<ProbeAttempt> }`, `ProbeAttempt` |
 | `std/deploy.ignite` | `Deployment { system: SystemRef, bindings: Map<Ref, Binding> }`, `Binding` (`localSocket()`, `nativeProcess(includes: List<Ref>)`, `workstationExecutable()`, `scheduledProbeHost()`) |
 | `std/cli.ignite` | `Application { executable, commands: Map<Text, Command> }`, `Command`, `Argument { name, kind: ArgKind }`, `ArgKind` (`endpoint(Protocol)`, `text()`, …) (O6, O9) |
 
@@ -2425,8 +2425,8 @@ Excerpt for `Terminal.promptProbe` (the emitted form puts every key on its own l
 ```json
 {
   "declaration": "component", "defaults": [], "executable": null,
-  "id": "Terminal.promptProbe", "kind": "std.probe.TelnetPrompt",
-  "outputs": {"attempts": "std.probe.ProbeAttempt"},
+  "id": "Terminal.promptProbe", "kind": "std.protocol.telnet.TelnetPrompt",
+  "outputs": {"attempts": "std.sli.ProbeAttempt"},
   "properties": {
     "close_after_probe": true,
     "expected_prompt": "terminal> ",
@@ -2921,7 +2921,7 @@ Records:
 |---|---|---|---|
 | reducers | `std/control.ignite` (as landed, P4: the reducers share the module of `Event`, `Effect` and `Step`, because a module below `std.control` could not import them and one above would be an E032 cycle, O45; the contract's `std/control/*.ignite` is void) | Ignite | supervisor, probe scheduler, contract evaluator, rollout: pure fns `step(machine, event) -> Step` (16.6) |
 | shared vocabulary | `std/sli.ignite`, `std/time.ignite` | Ignite | `ProbeAttempt`, `satisfies`, `Window`, `MissingData`, `meets`; calendar arithmetic and the two time zones (O36): the leaves both the reducers and the kinds import (O45) |
-| domain kinds and hooks | `std/contract.ignite`, `std/policy.ignite`, `std/probe.ignite`, `std/protocol/telnet.ignite`, `std/time.ignite` | Ignite | `K.machine`, `K.validate`, the probe's `K.main`, calendar arithmetic |
+| domain kinds and hooks | `std/contract.ignite`, `std/policy.ignite`, `std/protocol/telnet.ignite` (the probe since the layering fix, `docs/layering.md`), `std/time.ignite` | Ignite | `K.machine`, `K.validate`, the probe's `K.main`, calendar arithmetic |
 | driver (the supervisor process) | `crates/ignite/src/run/` | Rust | event loop, adapters (process, probe, timer, build, journal, clock, control input), routing; it knows only the `std.control` types |
 | evaluator at run time | `crates/ignite-eval` | Rust | steps the reducers (O27); decodes adapter results into values |
 | substrate | `crates/ignite-io` (and the `ignite-rt` adapter) | Rust | monotonic clock, reference endpoints, drain on SIGTERM (16.13); nothing about supervision |
@@ -2975,11 +2975,12 @@ Library boundaries:
 - Nothing named after telnet lives under `crates/`. The probe's protocol work is Ignite
   code: `TelnetPrompt.main` over a new telnet client-role fn (16.8).
 - Layering of std (O45): `K.machine` returns `std.control.Machine` and must be declared in
-  `K`'s module (E003, 13.8), so `std.probe`, `std.contract` and `std.protocol.telnet` import
+  `K`'s module (E003, 13.8), so `std.contract` and `std.protocol.telnet` import
   `std.control`. `std.control` and every reducer module therefore import no kind's module
   (E032 otherwise): only the leaves `std.sli`, `std.policy` and `std.time`. The vocabulary
   the reducers consume (`ProbeAttempt`, `satisfies`, `Window`, `MissingData`, `meets`) moved
-  from `std.probe` and `std.contract` to `std.sli`; `std.contract` and `std.probe` import it
+  from `std.probe` and `std.contract` to `std.sli`; `std.contract` and `std.protocol.telnet`
+  (which holds the probe since `std/probe.ignite` was removed, `docs/layering.md`) import it
   from there, and the model prints `std.sli.ProbeAttempt` and `std.sli.Window`.
 
 ### 16.3 `ignite run` and `ignite replay`
@@ -3302,7 +3303,7 @@ References:
 
 - `Availability.machine`, `ThresholdCompliance.machine` and `SLA.machine` return `Evaluate`.
   Each subscribes to its `signal`.
-- A good event satisfies `satisfies(attempt, good, threshold)` (std/probe). `threshold` is 0
+- A good event satisfies `satisfies(attempt, good, threshold)` (std/sli). `threshold` is 0
   for `Availability` and `SLA`.
 - Population: the executed attempts in the window (11.7).
 - Missing: the expected slots in the window that are not executed.

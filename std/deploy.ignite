@@ -35,7 +35,7 @@ type Deployment {
 
 // What the compiler tells `admits` about the member a binding is proposed
 // for: its declaration (`resource`, `component`, `contract` or `policy`),
-// the qualified name of its kind (`TcpListener`, `std.probe.TelnetPrompt`),
+// the qualified name of its kind (`TcpListener`, `std.contract.Availability`),
 // whether it is an executable (its kind has `main`), and the names of the
 // `Signal` outputs it leaves unset.
 type Member {
@@ -128,7 +128,7 @@ fn server() -> Member = Member { declaration = "component", kind = "std.protocol
 
 fn console() -> Member = Member { declaration = "component", kind = "std.console.CommandConsole", executable = false, outputs = [] }
 
-fn probe() -> Member = Member { declaration = "component", kind = "std.probe.TelnetPrompt", executable = false, outputs = ["attempts"] }
+fn probe() -> Member = Member { declaration = "component", kind = "std.protocol.telnet.TelnetPrompt", executable = false, outputs = ["attempts"] }
 
 fn availability() -> Member = Member { declaration = "contract", kind = "std.contract.Availability", executable = false, outputs = [] }
 
@@ -144,7 +144,7 @@ test "a local socket admits a TcpListener resource only" {
 test "a native process admits an executable component only" {
   assert admits(nativeProcess(includes = []), server()) == None
   assert admits(nativeProcess(includes = []), console()) == Some("a native process hosts an executable component; std.console.CommandConsole has no main")
-  assert admits(nativeProcess(includes = []), probe()) == Some("a native process hosts an executable component; std.probe.TelnetPrompt has no main")
+  assert admits(nativeProcess(includes = []), probe()) == Some("a native process hosts an executable component; std.protocol.telnet.TelnetPrompt has no main")
   assert admits(nativeProcess(includes = []), listener()) == Some("a native process hosts an executable component, not a resource")
 }
 
