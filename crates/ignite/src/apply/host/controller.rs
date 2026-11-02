@@ -41,6 +41,23 @@
 //! when it cannot; like `gave_up`, that leaves the committed revision's
 //! instances as they were, and a corrective plan resolves it.
 //!
+//! A start-first replacement that fails after it was spawned leaves the old
+//! instance serving, but in the desired revision's run, whose supervisor
+//! gave the member up. When such a transition is abandoned, the old instance
+//! is the member's again (`restore <member>`), and every live owned instance
+//! another operation started is handed to a new run of the committed plan
+//! (journal record `restoreCommitted`): its supervisors adopt them with the
+//! committed policy, generation, artifact and port and their readiness, and
+//! what the failed operation started stops at that handover. An instance
+//! keeps the operation that started it across handovers.
+//!
+//! A corrective plan back to the committed revision, applied while the
+//! running revision is still the failed operation's, is a transition too:
+//! its member actions are the diff from the failed plan to the corrective
+//! one, so it stops what the failed operation started and starts what it
+//! stopped, each step journaled; a member whose live instance another
+//! operation started is kept.
+//!
 //! The transition is differential when the running revision realizes the
 //! committed one, the plan's base. Otherwise (no running revision, or one
 //! that realizes an operation that did not commit) every owned desired member
@@ -86,6 +103,9 @@ pub(super) struct Runtime {
     pub(super) adopted: BTreeSet<i64>,
     /// The supervisor machines: their lifecycle events carry ownership.
     pub(super) supervised: BTreeSet<String>,
+    /// The committed plan whose run takes this run's handover: set when a
+    /// failed start-first cutover gives the old instances back (module doc).
+    pub(super) restore_to: Option<String>,
 }
 
 /// The transition of one operation in flight.
@@ -169,6 +189,24 @@ impl Action {
         self.ownership == "owned"
             && (self.kind == "add" || (self.kind == "replace" && !self.cutover))
     }
+}
+
+/// Whether the process an ownership record names is still that process.
+fn instance_alive(owner: &Json) -> bool {
+    owner
+        .get("pid")
+        .and_then(Json::as_i64)
+        .zip(owner.get("instance").and_then(Json::as_str))
+        .is_some_and(|(pid, instance)| process_identity(pid).as_deref() == Some(instance))
+}
+
+/// Whether a pinned `port` of `resource` stays for a run of `model`: the
+/// resource declares no other fixed port.
+fn keeps_pin(model: &Json, resource: &str, port: u16) -> bool {
+    declared(model, resource)
+        .and_then(|properties| properties.get("port"))
+        .and_then(Json::as_i64)
+        .is_none_or(|declared| declared == 0 || declared == i64::from(port))
 }
 
 /// The start time of a live process, `None` when it is gone or a zombie.
@@ -318,16 +356,42 @@ impl Host {
     /// the reducer's `Transition` from the plan's member actions and step it
     /// from `Begin` (module doc).
     pub(super) fn dispatch(&mut self, plan: Plan) -> Result<(), Failure> {
+        self.dispatch_from(plan, None)
+    }
+
+    /// `dispatch` of a corrective plan back to the committed revision while
+    /// the running revision still realizes `failed`, the operation it
+    /// resolves: the member actions are the diff from `failed` to the plan,
+    /// so the transition stops what `failed` started and starts what it
+    /// stopped. A member whose live instance another operation started keeps
+    /// it (module doc).
+    pub(super) fn revert(&mut self, plan: Plan, failed: &str) -> Result<(), Failure> {
+        self.dispatch_from(plan, Some(failed))
+    }
+
+    fn dispatch_from(&mut self, plan: Plan, failed: Option<&str>) -> Result<(), Failure> {
         let frozen = match self.contexts.get(&plan.id) {
             Some(context) => context.plan.clone(),
             None => retained_plan(&self.root, &plan)?,
         };
         let loaded = crate::load_for(&frozen.source, frozen.std.as_deref(), crate::RUN_ROOTS)?;
-        let differential = self.committed.is_some()
-            && self
-                .runtime
-                .as_ref()
-                .is_some_and(|runtime| Some(&runtime.desired) == self.committed.as_ref());
+        let plan_actions = match failed {
+            Some(failed) => {
+                let value = read_json(&self.root.join("plans").join(format!("{failed}.json")))?;
+                let base = Plan::parse(&value).map_err(|reason| fail(3, reason))?;
+                let mut back = plan.clone();
+                back.annotate(Some(&base), &Json::Object(self.owned.clone()))
+                    .map_err(|reason| fail(2, format!("corrective plan: {reason}")))?;
+                back.actions
+            }
+            None => plan.actions.clone(),
+        };
+        let differential = failed.is_some()
+            || self.committed.is_some()
+                && self
+                    .runtime
+                    .as_ref()
+                    .is_some_and(|runtime| Some(&runtime.desired) == self.committed.as_ref());
         let base_rollouts: BTreeSet<String> = self
             .runtime
             .as_ref()
@@ -362,15 +426,23 @@ impl Host {
             .collect();
         let mut actions = Vec::new();
         let mut kinds = BTreeMap::new();
-        for entry in plan
-            .actions
+        for entry in plan_actions
             .get("members")
             .and_then(Json::as_array)
             .into_iter()
             .flatten()
         {
             let member = entry.get("id").and_then(Json::as_str).unwrap_or_default();
-            let kind = entry.get("kind").and_then(Json::as_str).unwrap_or_default();
+            let mut kind = entry.get("kind").and_then(Json::as_str).unwrap_or_default();
+            if kind == "replace"
+                && let Some(failed) = failed
+                && self.owned.get(member).is_some_and(|owner| {
+                    owner.get("operationId").and_then(Json::as_str) != Some(failed)
+                        && instance_alive(owner)
+                })
+            {
+                kind = "unchanged";
+            }
             kinds.insert(member.to_string(), kind.to_string());
             let ownership = entry
                 .get("ownership")
@@ -412,11 +484,11 @@ impl Host {
             .collect();
         let (start_order, stop_order) = if differential {
             (
-                texts(plan.actions.get("startOrder")),
-                texts(plan.actions.get("stopOrder")),
+                texts(plan_actions.get("startOrder")),
+                texts(plan_actions.get("stopOrder")),
             )
         } else {
-            let mut order = texts(plan.actions.get("startOrder"));
+            let mut order = texts(plan_actions.get("startOrder"));
             order.retain(|member| actions.iter().any(|a| &a.member == member && a.starts()));
             for action in &actions {
                 if action.starts() && !order.contains(&action.member) {
@@ -655,6 +727,7 @@ impl Host {
                     }
                 }
                 ("Abandon", Some(reason)) => {
+                    self.restore_displaced(&operation)?;
                     return self.reject_operation(&operation, &reason);
                 }
                 _ => {}
@@ -662,6 +735,70 @@ impl Host {
             if self.transition.is_none() {
                 break;
             }
+        }
+        Ok(())
+    }
+
+    /// The transition of `operation` is abandoned: every start-first cutover
+    /// whose replacement never became ready gives its displaced instance
+    /// back, and the instances of the committed revision (every live owned
+    /// one another operation started) are handed to a run of the committed
+    /// plan, whose supervisors adopt them as they were before the attempt
+    /// (module doc). Nothing happens without such a cutover.
+    fn restore_displaced(&mut self, operation: &str) -> Result<(), Failure> {
+        let (Some(driving), Some(committed)) = (&self.transition, self.committed.clone()) else {
+            return Ok(());
+        };
+        if self.runtime.is_none() {
+            return Ok(());
+        }
+        let mut restored = Vec::new();
+        for (member, old) in driving.displaced.clone() {
+            let record = self.retiring.get(&old.to_string()).cloned().or_else(|| {
+                self.owned
+                    .get(&member)
+                    .filter(|owner| owner.get("pid").and_then(Json::as_i64) == Some(old))
+                    .cloned()
+            });
+            let Some(record) = record.filter(instance_alive) else {
+                continue;
+            };
+            let replaced = self.owned.get(&member).is_some_and(|owner| {
+                owner.get("pid").and_then(Json::as_i64) != Some(old)
+                    && owner.get("ready").and_then(Json::as_bool) == Some(true)
+            });
+            if replaced {
+                continue;
+            }
+            self.retiring.remove(&old.to_string());
+            self.owned.insert(member.clone(), record);
+            restored.push(member);
+        }
+        if restored.is_empty() {
+            return Ok(());
+        }
+        let keep: Vec<String> = self
+            .owned
+            .iter()
+            .filter(|(_, owner)| {
+                owner.get("operationId").and_then(Json::as_str) != Some(operation)
+                    && instance_alive(owner)
+            })
+            .map(|(member, _)| member.clone())
+            .collect();
+        self.append(
+            "restoreCommitted",
+            object([
+                ("operationId", text(operation)),
+                ("committedPlanId", text(&committed)),
+                ("restored", Json::Array(restored.iter().map(text).collect())),
+                ("keep", Json::Array(keep.iter().map(text).collect())),
+            ]),
+        )?;
+        self.send(format!("restore {}", restored.join(" ")))?;
+        self.send(format!("handover {}", keep.join(" ")))?;
+        if let Some(runtime) = &mut self.runtime {
+            runtime.restore_to = Some(committed);
         }
         Ok(())
     }
@@ -772,22 +909,37 @@ impl Host {
         {
             return Ok(());
         }
+        let restore_to = self
+            .runtime
+            .as_ref()
+            .and_then(|runtime| runtime.restore_to.clone());
+        let mut carried = carried;
         let Some(driving) = &self.transition else {
             self.runtime = None;
-            drop(carried);
-            return Ok(());
+            let Some(committed) = restore_to else {
+                drop(carried);
+                return Ok(());
+            };
+            let value = read_json(&self.root.join("plans").join(format!("{committed}.json")))?;
+            let plan = Plan::parse(&value).map_err(|reason| fail(3, reason))?;
+            carried
+                .pinned
+                .retain(|resource, port| keeps_pin(&plan.model, resource, *port));
+            return self.start_runtime(
+                plan,
+                Some(Launch {
+                    carried: Some(carried),
+                    deferred: BTreeSet::new(),
+                }),
+            );
         };
         let plan = driving.plan.clone();
         let deferred = driving.deferred.clone();
         // A pinned port stays only for a listener the plan keeps as it was
         // declared: a replaced listener gets its desired port.
-        let mut carried = carried;
         carried.pinned.retain(|resource, port| {
             driving.kinds.get(resource).map(String::as_str) != Some("replace")
-                && declared(&plan.model, resource)
-                    .and_then(|properties| properties.get("port"))
-                    .and_then(Json::as_i64)
-                    .is_none_or(|declared| declared == 0 || declared == i64::from(*port))
+                && keeps_pin(&plan.model, resource, *port)
         });
         self.runtime = None;
         self.start_runtime(
@@ -904,6 +1056,7 @@ impl Host {
             expected,
             adopted,
             supervised,
+            restore_to: None,
         });
         std::thread::spawn(move || {
             let initialized_tx = tx.clone();
@@ -1171,12 +1324,22 @@ impl Host {
                     .and_then(|fields| fields.get(1))
                     .and_then(Json::as_i64)
                     .unwrap_or(1);
+                // An adopted instance reports `Started` again in the next
+                // revision's run; it stays the instance of the operation
+                // that started it.
+                let origin = self
+                    .owned
+                    .get(member)
+                    .filter(|previous| previous.get("pid").and_then(Json::as_i64) == Some(pid))
+                    .and_then(|previous| previous.get("operationId"))
+                    .cloned()
+                    .unwrap_or_else(|| text(operation));
                 self.owned.insert(
                     member.to_string(),
                     object([
                         ("pid", Json::Int(pid)),
                         ("ready", Json::Bool(false)),
-                        ("operationId", text(operation)),
+                        ("operationId", origin),
                         ("instance", process_identity(pid).map_or(Json::Null, text)),
                         ("generation", Json::Int(generation)),
                     ]),

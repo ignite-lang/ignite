@@ -264,6 +264,10 @@ impl Host {
         // `recovery_required`.
         let corrective = self.transition.is_none()
             && self
+                .runtime
+                .as_ref()
+                .is_none_or(|runtime| runtime.restore_to.is_none())
+            && self
                 .recovery_reason
                 .as_deref()
                 .is_some_and(super::controller::resolvable)
@@ -311,6 +315,16 @@ impl Host {
         let unchanged = previous_plan.as_ref().is_some_and(|old| {
             old.operational_identity == plan.operational_identity || every_member_unchanged
         });
+        // A corrective plan back to the committed revision while the running
+        // revision is still the failed operation's: a transition from that
+        // revision back, which stops what the failed operation started.
+        let reverting = unchanged
+            && corrective
+            && self
+                .runtime
+                .as_ref()
+                .is_some_and(|runtime| Some(&runtime.desired) != self.committed.as_ref());
+        let unchanged = unchanged && !reverting;
         if !unchanged {
             retain_context(&self.root, &plan)?;
             let context = crate::apply::revision::Context::load(retained_plan(&self.root, &plan)?)?;
@@ -347,9 +361,22 @@ impl Host {
             let _ = reply.send(Ok(self.receipt(&plan.id)));
             return Ok(());
         }
+        let resolved = if reverting { self.active.take() } else { None };
+        if let Some(failed) = &resolved {
+            self.append(
+                "recoveryResolved",
+                object([
+                    ("operationId", text(&plan.id)),
+                    ("resolvedOperationId", text(failed)),
+                ]),
+            )?;
+        }
         self.active = Some(plan.id.clone());
         self.persist()?;
         self.waiters.entry(plan.id.clone()).or_default().push(reply);
-        self.dispatch(plan)
+        match resolved {
+            Some(failed) => self.revert(plan, &failed),
+            None => self.dispatch(plan),
+        }
     }
 }

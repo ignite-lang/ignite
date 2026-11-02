@@ -4086,6 +4086,28 @@ deleted; a reference, matching address or historical PID does not grant authorit
 is unsupported. Listener adoption requires matching durable ownership and OS process identity;
 port availability alone is insufficient. Resource adoption that cannot be proved is blocked.
 
+As landed (U4): the order is the pure reducer `Transition` in `std.control`, stepped by the
+host over the plan's member actions (`ignite-apply-actions/0.1`); each step is journaled as a
+`transition` record before the host acts on it. Owned members to remove, and owned members
+replaced stop-first, stop one at a time in `stopOrder`; a provider still serving a dependent
+that cuts over is stopped only after that dependent has cut over or stopped. `SwitchRevision`
+hands the staying instances to the desired revision; members to add or replace then start in
+`startOrder`, each once the providers it depends on are ready. A replacement on the port its
+old instance holds (an occupied listener) drains and releases the old listener first, then
+starts the new one and requires `Ready`; a failure after that step reports actual state with
+`recovery_required`. A replacement with no listener conflict starts first: the old instance
+keeps serving until the new one is `Ready`, and a replacement that never becomes ready fails
+the operation: everything the failed operation started stops, and the old instance and the
+other committed instances are handed to a new run of the committed plan (`restoreCommitted`),
+whose supervisor takes them back with their policy, generation, port and readiness. Before any destructive step
+the host checks that each new listener's port can be bound, and refuses with
+`listener_unavailable` otherwise. An effect the host cannot carry out (spawn failure, artifact
+mismatch, an ended controller) is reported to the reducer as `EffectFailed` and journaled as an
+`Abandon` step before the operation fails; a desired member that gives up gives
+`Abandon("gave_up", member)`. A corrective apply (D3) is admitted only while no operation other
+than the gave-up one is active; a no-op corrective back to the committed revision clears
+`gave_up`, journals `recoveryResolved` and retires the failed revision's instances.
+
 ### 17.5 Durability, revision and recovery
 
 This needs a distinct versioned host journal, not an altered interpretation of

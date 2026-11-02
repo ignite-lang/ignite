@@ -255,7 +255,12 @@ impl Flow {
     /// Write `revision` and prepare it against the host; the plan's path
     /// and the plan.
     fn prepare(&self, label: &str, revision: Revision) -> (PathBuf, Json) {
-        fs::write(&self.source, revision.source()).unwrap();
+        self.prepare_source(label, revision.source())
+    }
+
+    /// Write `source` and prepare it against the host.
+    fn prepare_source(&self, label: &str, source: String) -> (PathBuf, Json) {
+        fs::write(&self.source, source).unwrap();
         let output = self.root.join(format!("{label}.json"));
         self.cli(
             label,
@@ -1095,4 +1100,310 @@ fn a_replacement_that_never_becomes_ready_keeps_the_old_serving_and_fails() {
         status.compact()
     );
     drop(occupied);
+}
+
+/// `source` with a second server on `port`, its own listener and console;
+/// their ids sort before `ingress` and `server`, so an operation that adds
+/// it starts it first.
+fn with_auxiliary(source: String, port: u16) -> String {
+    let members = format!(
+        r#"  resource altIngress: TcpListener {{
+    address = "127.0.0.1"
+    port = {port}
+    exposure = Exposure.Loopback
+    backlog = 128
+  }}
+
+  component auxConsole: CommandConsole {{
+    implementation = module("examples.terminal.commands")
+    prompt = "terminal> "
+    maximum_line = 4096 bytes
+    command_schema = module("examples.terminal.command_schema")
+  }}
+
+  component auxiliary: TelnetServer {{
+    listener = altIngress
+    application = auxConsole
+    executable = "terminald2"
+    recovery = Restart {{
+      backoff = exponential(100 ms, 1 seconds)
+      maximum_attempts = 1
+      interval = 5 minutes
+    }}
+    rollout = DrainRollout {{
+      deadline = 10 seconds
+      on_deadline = "disconnect_remaining"
+    }}
+  }}
+
+"#
+    );
+    let client = "  component client: Application";
+    let binding = "    Terminal.client = workstationExecutable()\n";
+    assert!(source.contains(client) && source.contains(binding));
+    source.replace(client, &format!("{members}{client}")).replace(
+        binding,
+        &format!(
+            "{binding}    Terminal.altIngress = localSocket()\n    Terminal.auxiliary = nativeProcess(\n      includes = [Terminal.auxConsole]\n    )\n"
+        ),
+    )
+}
+
+fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
+    let deadline = Instant::now() + LIVE_TIMEOUT;
+    while !done() {
+        assert!(Instant::now() < deadline, "{what} within {LIVE_TIMEOUT:?}");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn owned_generation(status: &Json, member: &str) -> Option<i64> {
+    status
+        .get("ownership")
+        .and_then(|owned| owned.get(member))
+        .and_then(|owner| owner.get("generation"))
+        .and_then(Json::as_i64)
+}
+
+/// The text of a run journal's `Note` effect of `machine`.
+fn note_of(record: &Json, machine: &str) -> Option<String> {
+    if record.get("kind").and_then(Json::as_str) != Some("effect")
+        || record.get("machine").and_then(Json::as_str) != Some(machine)
+    {
+        return None;
+    }
+    let value = record.get("value")?;
+    if value.get("variant")?.as_str()? != "Note" {
+        return None;
+    }
+    Some(
+        value
+            .get("fields")?
+            .as_array()?
+            .first()?
+            .as_str()?
+            .to_string(),
+    )
+}
+
+/// The records of each run journal of the host, one list per run.
+fn run_journals(flow: &Flow) -> Vec<Vec<Json>> {
+    let Ok(entries) = fs::read_dir(flow.state.join("revisions")) else {
+        return Vec::new();
+    };
+    entries
+        .map(|entry| {
+            read(&entry.unwrap().path().join("journal.jsonl"))
+                .lines()
+                .filter_map(|line| Json::parse(line).ok())
+                .collect()
+        })
+        .collect()
+}
+
+/// Replacement-first, the failure half: a start-first replacement that fails
+/// after it was spawned (its new port is free at admission, and the
+/// auxiliary server the same operation starts first takes it) gives the old
+/// instance back to the committed revision's supervisor. Killed afterwards,
+/// the old server is restarted under the committed `Restart` policy, with
+/// its generation, on its port.
+#[test]
+fn a_failed_start_first_replacement_leaves_the_old_instance_supervised() {
+    let _builds = BUILDS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let flow = Flow::new("restored");
+    let (old_port, new_port) = {
+        let a = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let b = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        (
+            a.local_addr().unwrap().port(),
+            b.local_addr().unwrap().port(),
+        )
+    };
+    let good = Revision {
+        port: old_port,
+        server: true,
+        probe: false,
+        escape: "Ctrl+]",
+        attempts: 1,
+    };
+    let mut host = Host::start(&flow, "host");
+    let (first, first_plan) = flow.prepare("good", good);
+    flow.applied("apply-good", &first);
+    let status = flow.inspect();
+    let old = owned_pid(&status, "Terminal.server").expect("owned server");
+    let generation = owned_generation(&status, "Terminal.server");
+    let moved = with_auxiliary(
+        Revision {
+            port: new_port,
+            ..good
+        }
+        .source(),
+        new_port,
+    );
+    let (second, second_plan) = flow.prepare_source("moved", moved);
+    assert_eq!(kind(&second_plan, "Terminal.server"), "replace");
+    let (code, stdout, stderr) = try_apply(&flow, "apply-moved", &second, LIVE_TIMEOUT);
+    let effects = flow.effects(&plan_id(&second_plan));
+    assert_eq!(
+        code,
+        Some(1),
+        "effects: {effects:?}\nstdout: {stdout}\nstderr: {stderr}"
+    );
+    assert!(
+        position(&effects, "StartMember Terminal.auxiliary")
+            < position(&effects, "CutOver Terminal.server"),
+        "{effects:?}"
+    );
+    assert_eq!(
+        effects.last().map(String::as_str),
+        Some("Abandon gave_up Terminal.server"),
+        "{effects:?}"
+    );
+    let spawned = flow
+        .run_records()
+        .iter()
+        .filter(|record| {
+            record.get("machine").and_then(Json::as_str) == Some("Terminal.server.supervisor")
+        })
+        .filter_map(event_of)
+        .any(|(variant, pid)| variant == "Started" && pid != old);
+    assert!(spawned, "the replacement was never spawned");
+
+    // The old server is supervised again once a run started after the
+    // restoration reports it ready.
+    let committed = plan_id(&first_plan);
+    wait_until("the committed revision runs the old server again", || {
+        let status = flow.inspect();
+        let journal: Vec<Json> = read(&flow.state.join("host-journal.jsonl"))
+            .lines()
+            .filter_map(|line| Json::parse(line).ok())
+            .collect();
+        let adopted = journal
+            .iter()
+            .position(|record| {
+                record.get("kind").and_then(Json::as_str) == Some("restoreCommitted")
+            })
+            .is_some_and(|restored| {
+                journal[restored..].iter().any(|record| {
+                    let value = record.get("value");
+                    record.get("kind").and_then(Json::as_str) == Some("revisionRecord")
+                        && value
+                            .and_then(|value| value.get("controllerPlanId"))
+                            .and_then(Json::as_str)
+                            == Some(committed.as_str())
+                        && value
+                            .and_then(|value| value.get("record"))
+                            .and_then(event_of)
+                            == Some(("Ready".to_string(), old))
+                })
+            });
+        adopted
+            && status.get("runtimeOperation").and_then(Json::as_str) == Some(committed.as_str())
+            && owned_pid(&status, "Terminal.server") == Some(old)
+    });
+    assert!(alive(old));
+    let killed = Command::new("kill")
+        .args(["-KILL", &old.to_string()])
+        .status()
+        .unwrap();
+    assert!(killed.success());
+    wait_until("the old server restarted on its port", || {
+        owned_pid(&flow.inspect(), "Terminal.server").is_some_and(|pid| pid != old && alive(pid))
+            && std::net::TcpStream::connect(("127.0.0.1", old_port)).is_ok()
+    });
+    assert_eq!(
+        owned_generation(&flow.inspect(), "Terminal.server"),
+        generation
+    );
+    let restarted = run_journals(&flow).iter().any(|records| {
+        records
+            .iter()
+            .position(|record| event_of(record) == Some(("Signalled".to_string(), old)))
+            .is_some_and(|end| {
+                records[end..].iter().any(|record| {
+                    note_of(record, "Terminal.server.supervisor")
+                        .is_some_and(|note| note.starts_with("restart attempt 1"))
+                })
+            })
+    });
+    assert!(
+        restarted,
+        "no supervisor restarted the old server after its end"
+    );
+    host.stop();
+}
+
+/// D3: the corrective apply back to the committed revision also ends what
+/// the failed operation started. The auxiliary server it added and started
+/// before the server gave up is stopped as a step of a transition, and only
+/// the committed revision's instances remain.
+#[test]
+fn a_revert_after_gave_up_stops_what_the_failed_operation_started() {
+    let _builds = BUILDS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let flow = Flow::new("revert-stops");
+    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let idle = Revision {
+        port: occupied.local_addr().unwrap().port(),
+        server: false,
+        probe: false,
+        escape: "Ctrl+]",
+        attempts: 1,
+    };
+    let mut host = Host::start(&flow, "host");
+    let (committed, _) = flow.prepare("idle", idle);
+    flow.applied("apply-idle", &committed);
+    let broken = with_auxiliary(
+        Revision {
+            server: true,
+            ..idle
+        }
+        .source(),
+        free_port(),
+    );
+    let (failing, failing_plan) = flow.prepare_source("occupied", broken);
+    flow.apply("apply-occupied", &failing, 1);
+    let status = flow.inspect();
+    assert_eq!(
+        status.get("recoveryReason").and_then(Json::as_str),
+        Some("gave_up"),
+        "{:?}",
+        flow.effects(&plan_id(&failing_plan))
+    );
+    let auxiliary = owned_pid(&status, "Terminal.auxiliary")
+        .expect("the auxiliary server the failed operation started");
+    assert!(alive(auxiliary));
+
+    let (revert, revert_plan) = flow.prepare("revert", idle);
+    flow.applied("apply-revert", &revert);
+    let status = flow.inspect();
+    let effects = flow.effects(&plan_id(&revert_plan));
+    assert_eq!(status.get("recoveryReason"), Some(&Json::Null));
+    assert!(
+        !alive(auxiliary),
+        "the failed operation's server still runs: {effects:?}"
+    );
+    assert!(
+        status
+            .get("ownership")
+            .and_then(Json::as_object)
+            .is_some_and(|owned| owned.is_empty()),
+        "{}",
+        status.compact()
+    );
+    assert_eq!(
+        status.get("runtimeOperation").and_then(Json::as_str),
+        Some(plan_id(&revert_plan).as_str()),
+        "{}",
+        status.compact()
+    );
+    assert!(
+        position(&effects, "StopMember Terminal.auxiliary") < position(&effects, "Commit"),
+        "{effects:?}"
+    );
+    drop(occupied);
+    host.stop();
 }

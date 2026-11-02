@@ -40,7 +40,9 @@
 //! after its drain deadline) and stops feeding its other machines.
 //! `rebind` copies the builder's artifacts into the next generation, so
 //! later spawns and probe attempts use the desired revision's executables.
-//! `handover <member>...` stops every process of a member not named, then
+//! `restore <member>...` gives each member back the live instance its newest
+//! process displaced (a start-first replacement that failed) and kills the
+//! member's other processes. `handover <member>...` stops every process of a member not named, then
 //! ends this segment without stopping the named ones and returns the
 //! adapters, the channel and the pinned ports ([`Ended::Handover`]): the
 //! next revision's run adopts those instances, and a `Spawn` of an adopted
@@ -237,6 +239,9 @@ pub struct Live<'a, 'p> {
     transitions: Transitions,
     /// Member to its newest live process.
     instances: BTreeMap<String, Instance>,
+    /// Member to the live instance its newest process displaced, until that
+    /// instance ends: what `restore <member>` gives back.
+    displaced: BTreeMap<String, Instance>,
 }
 
 const SIGKILL: i32 = 9;
@@ -292,6 +297,7 @@ impl<'a, 'p> Live<'a, 'p> {
             started_hook: None,
             transitions: Transitions::default(),
             instances: BTreeMap::new(),
+            displaced: BTreeMap::new(),
         }
     }
 
@@ -753,6 +759,16 @@ impl<'a, 'p> Live<'a, 'p> {
                 generation,
                 pid,
             } => {
+                if let Some(previous) = self.instances.get(&member).copied()
+                    && previous.pid != pid
+                    && self
+                        .adapters
+                        .pids(&member)
+                        .iter()
+                        .any(|(_, live)| *live == previous.pid)
+                {
+                    self.displaced.insert(member.clone(), previous);
+                }
                 self.instances.insert(
                     member.clone(),
                     Instance {
@@ -925,9 +941,9 @@ impl<'a, 'p> Live<'a, 'p> {
                     }
                 }
             }
-            Some(word @ ("start" | "retire" | "retire-deadline" | "rebind" | "handover"))
-                if self.transitions.enabled =>
-            {
+            Some(
+                word @ ("start" | "retire" | "retire-deadline" | "rebind" | "restore" | "handover"),
+            ) if self.transitions.enabled => {
                 let rest: Vec<String> = words.map(str::to_string).collect();
                 self.transition_control(word, rest)
             }
@@ -971,6 +987,12 @@ impl<'a, 'p> Live<'a, 'p> {
                 let built = (self.config.builder)().map_err(io::Error::other)?;
                 copy_into(&bin, &built)?;
                 self.transitions.floor = self.generation;
+                Ok(())
+            }
+            ("restore", members) => {
+                for member in members {
+                    self.restore(member);
+                }
                 Ok(())
             }
             ("handover", keep) => {
@@ -1069,6 +1091,29 @@ impl<'a, 'p> Live<'a, 'p> {
         if self.instances.get(member).is_some_and(|i| i.pid == pid) {
             self.instances.remove(member);
         }
+        if self.displaced.get(member).is_some_and(|i| i.pid == pid) {
+            self.displaced.remove(member);
+        }
+    }
+
+    /// `restore <member>`: the instance the member's newest process
+    /// displaced is the member's live instance again, and every other
+    /// process of the member gets SIGKILL, so that a `handover` carries the
+    /// displaced instance (module doc).
+    fn restore(&mut self, member: &str) {
+        let Some(instance) = self.displaced.remove(member) else {
+            return;
+        };
+        let live = self.adapters.pids(member);
+        if !live.iter().any(|(_, pid)| *pid == instance.pid) {
+            return;
+        }
+        for (_, pid) in live {
+            if pid != instance.pid {
+                let _ = self.adapters.kill(pid, SIGKILL);
+            }
+        }
+        self.instances.insert(member.to_string(), instance);
     }
 
     /// End this segment for the next revision's run: stop every process of
