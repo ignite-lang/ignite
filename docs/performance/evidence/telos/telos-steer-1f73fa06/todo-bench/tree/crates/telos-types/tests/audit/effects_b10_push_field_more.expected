@@ -1,0 +1,3 @@
+effects_b10_push_field_more.telos:12:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_nested`
+effects_b10_push_field_more.telos:18:10: error[E016]: missing effect `ls.read` for `read`; add it to the `requires` of `via_append_field`
+effects_b10_push_field_more.telos:24:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_param_holder`

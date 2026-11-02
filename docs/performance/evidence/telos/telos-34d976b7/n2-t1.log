@@ -1,0 +1,181 @@
+   Compiling telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+   Compiling telos-types v0.1.0 (/home/timo/projects/telos/crates/telos-types)
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.81s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_rustgen-5d2638f7ab6de329)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/compiles.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/compiles-d64630510774239f)
+
+running 7 tests
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+    Blocking waiting for file lock on package cache
+   Compiling counters v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/generics)
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+test process_exit_without_try_builds_and_exits ... ok
+    Blocking waiting for file lock on build directory
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
+   Compiling telos-std v0.0.0-1767cffa4faf7a00 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/modules/std)
+test generics_and_store_serve ... ok
+   Compiling modules v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/modules)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.62s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.62s
+test std_crate_and_program_build ... ok
+   Compiling telos-std v0.0.0-74b4ec16dc40af08 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/variants/std)
+test store_ids_and_updates_are_atomic_across_connections ... ok
+   Compiling variants v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/variants)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.80s
+   Compiling consts v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/consts)
+test variants_of_enums_not_imported_build ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.89s
+   Compiling telos-std v0.0.0-0f096105a0538384 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/terminal/std)
+test constants_across_modules_build ... ok
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.33s
+test terminal_project_builds ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.39s
+
+     Running tests/golden.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/golden-6ee125d81c6cfa55)
+
+running 17 tests
+test acceptance_copy_is_current ... ok
+test syntax_copy_is_current ... ok
+test element_reads_copy_only_non_copy_elements ... ok
+test a_listener_the_component_does_not_bind_is_not_a_value ... ok
+test store_resources_take_one_type_argument_and_no_properties ... ok
+test parameters_are_borrowed_unless_changed ... ok
+test process_exit_diverges ... ok
+test the_own_listener_as_a_value_is_bound_first ... ok
+test pure_functions ... ok
+test system_with_service_and_client ... ok
+test record_and_enum_with_match ... ok
+test constants_qualified_patterns_and_io_error ... ok
+test protocol_import_spawn_and_function_values ... ok
+test variants_of_enums_not_imported ... ok
+test generics_stores_and_builtins ... ok
+test surface_syntax ... ok
+test terminal ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/units.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/units-b19561da1420093c)
+
+running 52 tests
+test bindings_are_scoped ... ok
+test aliases_and_field_defaults ... ok
+test bool_or_and_tuple_patterns_are_native ... ok
+test e020_bad_properties ... ok
+test e020_client_rejects_application_and_listener ... ok
+test e020_duplicate_executable ... ok
+test e020_component_kind ... ok
+test e020_missing_properties ... ok
+test e020_resource_kind ... ok
+test e020_protocol_that_is_not_a_protocol ... ok
+test block_values ... ok
+test constants_are_zero_argument_functions ... ok
+test e030_protocol_without_the_role ... ok
+test effectful_function_is_a_plain_fn ... ok
+test else_if_chain_keeps_statement_position ... ok
+test executable_defaults_to_component_name ... ok
+test generate_std_rejects_a_system ... ok
+test function_body_value_depends_on_return_type ... ok
+test functions_and_variants_are_not_places ... ok
+test header_and_declarations ... FAILED
+test imported_constant_and_local_shadowing ... ok
+test imports_become_use_lines ... ok
+test function_types_and_values ... FAILED
+test generate_std_nests_modules ... FAILED
+test int_literals_are_plain_digits ... ok
+test no_system_is_a_library_without_executables ... ok
+test list_and_text_patterns_are_guarded_arms ... ok
+test imported_protocol_is_known_from_symbols ... ok
+test package_name_defaults_to_program ... ok
+test own_protocol_is_known_without_symbols ... ok
+test ownership_non_value_positions_do_not_clone ... ok
+test receiver_that_is_not_atomic_is_parenthesized ... ok
+test return_expressions ... ok
+test qualified_variant_patterns ... ok
+test rust_keywords_are_escaped ... ok
+test protocol_lowering ... ok
+test resource_named_like_a_main_binding_is_renamed ... ok
+test substrate_imports_need_no_std_crate ... ok
+test std_version_follows_the_library_text ... ok
+test string_escaping ... ok
+test tuple_type ... ok
+test unit_value_and_type ... ok
+test spawn_lowering ... ok
+test typed_let ... ok
+test type_table ... ok
+test tuples_and_pattern_lets ... ok
+test variant_patterns ... ok
+test system_lowering ... ok
+test write_project_creates_layout ... ok
+test ownership_value_positions_clone_places ... ok
+test variant_expressions ... ok
+test builtin_methods ... ok
+
+failures:
+
+---- header_and_declarations stdout ----
+
+thread 'header_and_declarations' (1002979) panicked at crates/telos-rustgen/tests/units.rs:453:5:
+expected
+  #[derive(Clone, Debug)] pub enum Command { Help, Echo(String), }
+in
+  #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)] #[derive(Clone)] pub enum Command { Help, Echo(String), } #[derive(Clone)] pub enum Action { Continue, Close, } #[derive(Clone)] pub struct Reply { pub lines: Vec<String>, pub action: Action, }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- function_types_and_values stdout ----
+
+thread 'function_types_and_values' (1002975) panicked at crates/telos-rustgen/tests/units.rs:1749:5:
+expected
+  pub struct Console { pub respond: fn(String) -> Reply, }
+in
+  #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)] #[derive(Clone)] pub enum Command { Help, Echo(String), } #[derive(Clone)] pub enum Action { Continue, Close, } #[derive(Clone)] pub struct Reply { pub lines: Vec<String>, pub action: Action, } #[derive(Clone)] pub struct Console { pub respond: std::sync::Arc<dyn Fn(String) -> Reply + Send + Sync>, } pub fn answer(line: &String) -> Reply { return Reply { lines: vec![], action: Action::Close }; } pub fn apply(f: &std::sync::Arc<dyn Fn(String) -> Reply + Send + Sync>, g: &std::sync::Arc<dyn Fn() -> () + Send + Sync>, console: &Console) -> Reply { let mut f = f.clone(); let mut g = g.clone(); let made = Console { respond: std::sync::Arc::new(|__a0| answer(&__a0)) }; let h = std::sync::Arc::new(|__a0| answer(&__a0)); let respond = console.respond.clone(); respond(String::from("x")); h(String::from("y")); return f(String::from("z")); }
+
+---- generate_std_nests_modules stdout ----
+
+thread 'generate_std_nests_modules' (1002977) panicked at crates/telos-rustgen/tests/units.rs:1863:5:
+expected
+  pub mod console { #[derive(Clone, Debug)] pub enum Command {
+in
+  #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)] pub mod console { #[derive(Clone)] pub enum Command { Help, Echo(String), } #[derive(Clone)] pub enum Action { Continue, Close, } #[derive(Clone)] pub struct Reply { pub lines: Vec<String>, pub action: Action, } } pub mod protocol { pub mod http { pub fn version() -> i64 { 1 } } pub mod telnet { use crate::console::{Reply, Action}; pub struct Telnet; impl Telnet { pub fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> { return Ok(()); } } } }
+
+
+failures:
+    function_types_and_values
+    generate_std_nests_modules
+    header_and_declarations
+
+test result: FAILED. 49 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p telos-rustgen --test units`
+EXIT=101

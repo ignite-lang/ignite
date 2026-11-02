@@ -1,0 +1,10 @@
+    Checking telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+    Checking telos-types v0.1.0 (/home/timo/projects/telos/crates/telos-types)
+    Checking telos-syntax v0.1.0 (/home/timo/projects/telos/crates/telos-syntax)
+    Checking telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+    Checking telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+    Checking telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+    Checking telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+    Checking telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.02s
+EXIT=0

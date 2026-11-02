@@ -1,0 +1,5 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/out/p4_guarded; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling guarded v0.0.0 (/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/out/p4_guarded)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s

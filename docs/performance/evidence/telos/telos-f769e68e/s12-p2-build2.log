@@ -1,0 +1,59 @@
+/dev/nvme0n1p2  848G  762G   78G  91% /
+error: environment variable `CARGO_TARGET_TMPDIR` not defined at compile time
+   --> crates/ignite/src/run/journal.rs:150:29
+    |
+150 |         let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: `CARGO_TARGET_TMPDIR` may not be available for the current Cargo target
+    = help: Cargo sets build script variables at run time. Use `std::env::var("CARGO_TARGET_TMPDIR")` instead
+
+error[E0369]: binary operation `==` cannot be applied to type `std::result::Result<u64, std::io::Error>`
+   --> crates/ignite/src/run/journal.rs:165:13
+    |
+165 |             assert_eq!(journal.append(r#"{"kind":"header","seq":0}"#, false), Ok(0));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |             |
+    |             std::result::Result<u64, std::io::Error>
+    |             std::result::Result<u64, std::io::Error>
+    |
+note: `std::io::Error` does not implement `PartialEq`
+   --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/io/error.rs:87:1
+    |
+ 87 | pub struct Error {
+    | ^^^^^^^^^^^^^^^^ `std::io::Error` is defined in another crate
+
+error[E0369]: binary operation `==` cannot be applied to type `std::result::Result<u64, std::io::Error>`
+   --> crates/ignite/src/run/journal.rs:166:13
+    |
+166 |             assert_eq!(journal.append(r#"{"kind":"effect","seq":1}"#, true), Ok(1));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |             |
+    |             std::result::Result<u64, std::io::Error>
+    |             std::result::Result<u64, std::io::Error>
+    |
+note: `std::io::Error` does not implement `PartialEq`
+   --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/io/error.rs:87:1
+    |
+ 87 | pub struct Error {
+    | ^^^^^^^^^^^^^^^^ `std::io::Error` is defined in another crate
+
+error[E0369]: binary operation `==` cannot be applied to type `std::result::Result<u64, std::io::Error>`
+   --> crates/ignite/src/run/journal.rs:197:9
+    |
+197 |         assert_eq!(journal.append(r#"{"seq":2}"#, true), Ok(2));
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |         |
+    |         std::result::Result<u64, std::io::Error>
+    |         std::result::Result<u64, std::io::Error>
+    |
+note: `std::io::Error` does not implement `PartialEq`
+   --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/io/error.rs:87:1
+    |
+ 87 | pub struct Error {
+    | ^^^^^^^^^^^^^^^^ `std::io::Error` is defined in another crate
+
+For more information about this error, try `rustc --explain E0369`.
+error: could not compile `ignite` (lib test) due to 4 previous errors
+warning: build failed, waiting for other jobs to finish...
+EXIT=101

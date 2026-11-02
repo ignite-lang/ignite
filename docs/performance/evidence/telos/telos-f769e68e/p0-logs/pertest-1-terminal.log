@@ -1,0 +1,77 @@
+START 2026-11-02T02:10:29+01:00 file=terminal load=5.19 15.52 16.77 4/2941 2688211
+   0.013 +  0.013     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.013 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.014 +  0.001 
+   0.014 +  0.000 running 64 tests
+   0.086 +  0.071 test terminal::idle_terminald_runs_one_thread ...     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+   2.199 +  2.113 ok
+   2.601 +  0.402 test terminal::llvm::a_silent_session_is_closed_after_the_idle_timeout ... ok
+   2.668 +  0.067 test terminal::llvm::a_task_that_cannot_start_closes_only_its_connection ... ok
+   2.681 +  0.013 test terminal::llvm::accept_survives_running_out_of_descriptors ... ok
+   2.682 +  0.001 test terminal::llvm::are_you_there_is_answered ... ok
+   2.723 +  0.042 test terminal::llvm::cr_nul_ends_a_line ... ok
+   2.725 +  0.001 test terminal::llvm::do_echo_is_refused_with_wont ... ok
+   2.846 +  0.122 test terminal::llvm::fragmented_input_is_reassembled ... ok
+   2.847 +  0.001 test terminal::llvm::iac_iac_is_a_literal_byte ... ok
+   2.848 +  0.001 test terminal::llvm::interrupt_process_closes ... ok
+   2.849 +  0.001 test terminal::llvm::line_of_4096_bytes_is_accepted ... ok
+   2.850 +  0.001 test terminal::llvm::overlong_line_is_refused_and_closed ... ok
+   2.851 +  0.001 test terminal::llvm::subnegotiation_is_skipped ... ok
+   2.851 +  0.001 test terminal::llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+   2.852 +  0.001 test terminal::llvm::subnegotiation_over_1024_bytes_closes ... ok
+   2.893 +  0.041 test terminal::llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+   2.913 +  0.020 test terminal::llvm::tn_exits_2_for_a_malformed_port ... ok
+   2.934 +  0.020 test terminal::llvm::tn_exits_3_when_nothing_listens ... ok
+   2.954 +  0.021 test terminal::llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... error: subnegotiation longer than 1024 bytes
+   2.974 +  0.020 ok
+   2.996 +  0.021 test terminal::llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+   3.037 +  0.042 test terminal::llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+   3.078 +  0.041 test terminal::llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+   3.100 +  0.022 test terminal::llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+   3.141 +  0.041 test terminal::llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+   3.163 +  0.022 test terminal::llvm::tn_on_a_terminal_erases_with_backspace ... ok
+   3.204 +  0.041 test terminal::llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+   3.246 +  0.042 test terminal::llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+   3.267 +  0.021 test terminal::llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+   3.308 +  0.041 test terminal::llvm::tn_refuses_options_and_strips_commands ... ok
+   3.329 +  0.022 test terminal::llvm::tn_with_piped_input_prints_the_transcript ... ok
+   3.577 +  0.248 test terminal::llvm::transcript_on_raw_socket ... ok
+   3.579 +  0.001 test terminal::llvm::will_naws_is_refused_with_dont ... ok
+   3.655 +  0.076 test terminal::no_target_links_tokio ... ok
+   3.730 +  0.075 test terminal::rust::a_silent_session_is_closed_after_the_idle_timeout ...     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+   4.041 +  0.311 ok
+   4.116 +  0.075 test terminal::rust::a_task_that_cannot_start_closes_only_its_connection ... ok
+   4.139 +  0.023 test terminal::rust::accept_survives_running_out_of_descriptors ... ok
+   4.140 +  0.001 test terminal::rust::are_you_there_is_answered ... ok
+   4.182 +  0.042 test terminal::rust::cr_nul_ends_a_line ... ok
+   4.183 +  0.001 test terminal::rust::do_echo_is_refused_with_wont ... ok
+   4.304 +  0.122 test terminal::rust::fragmented_input_is_reassembled ... ok
+   4.305 +  0.001 test terminal::rust::iac_iac_is_a_literal_byte ... ok
+   4.306 +  0.001 test terminal::rust::interrupt_process_closes ... ok
+   4.307 +  0.001 test terminal::rust::line_of_4096_bytes_is_accepted ... ok
+   4.308 +  0.001 test terminal::rust::overlong_line_is_refused_and_closed ... ok
+   4.309 +  0.001 test terminal::rust::subnegotiation_is_skipped ... ok
+   4.310 +  0.001 test terminal::rust::subnegotiation_of_1024_bytes_is_skipped ... ok
+   4.310 +  0.001 test terminal::rust::subnegotiation_over_1024_bytes_closes ... ok
+   4.351 +  0.040 test terminal::rust::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+   4.371 +  0.020 test terminal::rust::tn_exits_2_for_a_malformed_port ... ok
+   4.392 +  0.020 test terminal::rust::tn_exits_3_when_nothing_listens ... ok
+   4.412 +  0.021 test terminal::rust::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... error: subnegotiation longer than 1024 bytes
+   4.432 +  0.020 ok
+   4.454 +  0.021 test terminal::rust::tn_exits_when_input_ends_and_terminald_closes ... ok
+   4.495 +  0.042 test terminal::rust::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+   4.536 +  0.041 test terminal::rust::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+   4.558 +  0.022 test terminal::rust::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+   4.599 +  0.041 test terminal::rust::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+   4.621 +  0.022 test terminal::rust::tn_on_a_terminal_erases_with_backspace ... ok
+   4.662 +  0.041 test terminal::rust::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+   4.703 +  0.042 test terminal::rust::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+   4.724 +  0.021 test terminal::rust::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+   4.765 +  0.041 test terminal::rust::tn_refuses_options_and_strips_commands ... ok
+   4.786 +  0.021 test terminal::rust::tn_with_piped_input_prints_the_transcript ... ok
+   5.036 +  0.250 test terminal::rust::transcript_on_raw_socket ... ok
+   5.037 +  0.001 test terminal::rust::will_naws_is_refused_with_dont ... ok
+   5.037 +  0.000 
+   5.037 +  0.000 test result: ok. 64 passed; 0 failed; 0 ignored; 0 measured; 82 filtered out; finished in 5.02s
+   5.037 +  0.000 
+END load=6.46 15.61 16.79 3/2969 2689357

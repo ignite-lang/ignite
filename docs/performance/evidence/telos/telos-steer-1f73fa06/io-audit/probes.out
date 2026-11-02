@@ -1,0 +1,58 @@
+=== p1_recursive build
+EXIT=1
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p1_recursive.telos:3:6: error[E055]: recursive type `Node` contains itself without `List` indirection; hold the nested `Node` values in a `List`
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p1_recursive.telos:8:6: error[E055]: recursive type `Tree` contains itself without `List` indirection; hold the nested `Tree` values in a `List`
+=== p2_unused build
+EXIT=2
+error[E0392]: type parameter `T` is never used
+error[E0392]: type parameter `T` is never used
+error[E0091]: type parameter `T` is never used
+error[E0283]: type annotations needed
+error[E0283]: type annotations needed
+error[E0283]: type annotations needed
+error[E0283]: type annotations needed
+Some errors have detailed explanations: E0091, E0283, E0392.
+For more information about an error, try `rustc --explain E0091`.
+error: could not compile `unused` (lib) due to 7 previous errors
+error: cargo build failed with status 101
+=== p3a_spawn_field build
+EXIT=1
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p3a_spawn_field.telos:8:3: error[E013]: `spawn` needs a call to an effectful function or protocol role
+=== p3b_spawn_value build
+EXIT=1
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p3b_spawn_value.telos:4:3: error[E013]: `spawn` needs a call to an effectful function or protocol role
+=== p3c_spawn_fieldarg build
+EXIT=1
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p3c_spawn_fieldarg.telos:15:9: error[E016]: missing effect `h.read` for `worker`; add it to the `requires` of `run_field_arg`
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p3c_spawn_fieldarg.telos:15:9: error[E016]: missing effect `h.write` for `worker`; add it to the `requires` of `run_field_arg`
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p3c_spawn_fieldarg.telos:16:9: error[E016]: missing effect `h.read` for `worker`; add it to the `requires` of `run_field_arg`
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p3c_spawn_fieldarg.telos:16:9: error[E016]: missing effect `h.write` for `worker`; add it to the `requires` of `run_field_arg`
+=== p4_guarded build
+EXIT=0
+=== p4_guarded test
+EXIT=0
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+=== p5_params build
+EXIT=1
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p5_params.telos:56:44: error[E040]: type mismatch: expected `Bytes`, found `List<Int>`
+=== p5_params test
+EXIT=2
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p5_params.telos:56:44: error[E040]: type mismatch: expected `Bytes`, found `List<Int>`
+=== p6_if build
+EXIT=0
+=== p6_if test
+EXIT=0
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+=== p7_store build
+EXIT=1
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p7_store.telos:21:23: error[E017]: effectful function `bump` is not a value here; only an effectful fn type (`fn(..) -> R requires [..]`) accepts it
+=== p7_store test
+EXIT=2
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p7_store.telos:21:23: error[E017]: effectful function `bump` is not a value here; only an effectful fn type (`fn(..) -> R requires [..]`) accepts it
+=== p8_assign_param build
+EXIT=1
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p8_assign_param.telos:4:3: error[E006]: cannot assign to parameter `n`; parameters are immutable
+=== p8_assign_param test
+EXIT=2
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p8_assign_param.telos:4:3: error[E006]: cannot assign to parameter `n`; parameters are immutable
+EXIT=ALLDONE

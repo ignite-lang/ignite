@@ -1,0 +1,94 @@
+/dev/nvme0n1p2  848G  767G   73G  92% /
+== fmt (drain.rs only)
+STEP fmt exit=0
+== skip io-rt (green in chain 11)
+STEP io-rt-tests exit=0
+== build ignite + runtimes
+STEP build exit=0
+== clippy (errors by file)
+STEP clippy exit=0
+== drain e2e tests
+97 30 seconds effect Terminal.promptFast.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 0.8333%, executed: 4, expected: 4, from: 0 ns, good: 4, status: Compliant, to: 30 seconds, version: 98 })
+98 30 seconds standing Terminal.promptFast.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 0.8333%, executed: 4, expected: 4, from: 0 ns, good: 4, status: Compliant, to: 30 seconds, version: 98 }
+99 30 seconds event Terminal.reachable.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 1999974 ns, received: true })
+100 30 seconds effect Terminal.reachable.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0.0011%, executed: 4, expected: 4, from: 0 ns, good: 4, status: Compliant, to: 30 seconds, version: 101 })
+101 30 seconds standing Terminal.reachable.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0.0011%, executed: 4, expected: 4, from: 0 ns, good: 4, status: Compliant, to: 30 seconds, version: 101 }
+102 40 seconds event Terminal.promptProbe.scheduler: Timer(0)
+103 40 seconds effect Terminal.promptProbe.scheduler: Attempt("Terminal.promptProbe", 5)
+104 40 seconds effect Terminal.promptProbe.scheduler: SetTimer(5, 42 seconds)
+105 40 seconds effect Terminal.promptProbe.scheduler: SetTimer(0, 50 seconds)
+106 40 seconds event Terminal.promptProbe.scheduler: AttemptDone(5, { latency: 178229 ns, received: true })
+107 40 seconds effect Terminal.promptProbe.scheduler: CancelTimer(5)
+108 40 seconds effect Terminal.promptProbe.scheduler: Emit("Terminal.promptProbe.attempts", { latency: 178229 ns, received: true })
+109 40 seconds signal Terminal.promptProbe.scheduler: { ref: "Terminal.promptProbe.attempts", value: { latency: 178229 ns, received: true } }
+110 40 seconds event Terminal.customerAccess.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 178229 ns, received: true })
+111 40 seconds effect Terminal.customerAccess.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.customerAccess", coverage: 0.0014%, executed: 5, expected: 5, from: 0 ns, good: 5, status: Compliant, to: 40 seconds, version: 112 })
+112 40 seconds standing Terminal.customerAccess.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.customerAccess", coverage: 0.0014%, executed: 5, expected: 5, from: 0 ns, good: 5, status: Compliant, to: 40 seconds, version: 112 }
+113 40 seconds event Terminal.promptFast.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 178229 ns, received: true })
+114 40 seconds effect Terminal.promptFast.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 1.1111%, executed: 5, expected: 5, from: 0 ns, good: 5, status: Compliant, to: 40 seconds, version: 115 })
+115 40 seconds standing Terminal.promptFast.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 1.1111%, executed: 5, expected: 5, from: 0 ns, good: 5, status: Compliant, to: 40 seconds, version: 115 }
+116 40 seconds event Terminal.reachable.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 178229 ns, received: true })
+117 40 seconds effect Terminal.reachable.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0.0015%, executed: 5, expected: 5, from: 0 ns, good: 5, status: Compliant, to: 40 seconds, version: 118 })
+118 40 seconds standing Terminal.reachable.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0.0015%, executed: 5, expected: 5, from: 0 ns, good: 5, status: Compliant, to: 40 seconds, version: 118 }
+119 50 seconds event Terminal.promptProbe.scheduler: Timer(0)
+120 50 seconds effect Terminal.promptProbe.scheduler: Attempt("Terminal.promptProbe", 6)
+121 50 seconds effect Terminal.promptProbe.scheduler: SetTimer(6, 52 seconds)
+122 50 seconds effect Terminal.promptProbe.scheduler: SetTimer(0, 1 minute)
+123 50 seconds event Terminal.promptProbe.scheduler: AttemptDone(6, { latency: 214398 ns, received: true })
+124 50 seconds effect Terminal.promptProbe.scheduler: CancelTimer(6)
+125 50 seconds effect Terminal.promptProbe.scheduler: Emit("Terminal.promptProbe.attempts", { latency: 214398 ns, received: true })
+126 50 seconds signal Terminal.promptProbe.scheduler: { ref: "Terminal.promptProbe.attempts", value: { latency: 214398 ns, received: true } }
+127 50 seconds event Terminal.customerAccess.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 214398 ns, received: true })
+128 50 seconds effect Terminal.customerAccess.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.customerAccess", coverage: 0.0018%, executed: 6, expected: 6, from: 0 ns, good: 6, status: Compliant, to: 50 seconds, version: 129 })
+129 50 seconds standing Terminal.customerAccess.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.customerAccess", coverage: 0.0018%, executed: 6, expected: 6, from: 0 ns, good: 6, status: Compliant, to: 50 seconds, version: 129 }
+130 50 seconds event Terminal.promptFast.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 214398 ns, received: true })
+131 50 seconds effect Terminal.promptFast.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 1.3888%, executed: 6, expected: 6, from: 0 ns, good: 6, status: Compliant, to: 50 seconds, version: 132 })
+132 50 seconds standing Terminal.promptFast.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 1.3888%, executed: 6, expected: 6, from: 0 ns, good: 6, status: Compliant, to: 50 seconds, version: 132 }
+133 50 seconds event Terminal.reachable.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 214398 ns, received: true })
+134 50 seconds effect Terminal.reachable.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0.0019%, executed: 6, expected: 6, from: 0 ns, good: 6, status: Compliant, to: 50 seconds, version: 135 })
+135 50 seconds standing Terminal.reachable.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0.0019%, executed: 6, expected: 6, from: 0 ns, good: 6, status: Compliant, to: 50 seconds, version: 135 }
+136 1 minute event Terminal.promptProbe.scheduler: Timer(0)
+137 1 minute effect Terminal.promptProbe.scheduler: Attempt("Terminal.promptProbe", 7)
+138 1 minute effect Terminal.promptProbe.scheduler: SetTimer(7, 62 seconds)
+139 1 minute effect Terminal.promptProbe.scheduler: SetTimer(0, 70 seconds)
+140 1 minute event Terminal.promptProbe.scheduler: AttemptDone(7, { latency: 190749 ns, received: true })
+141 1 minute effect Terminal.promptProbe.scheduler: CancelTimer(7)
+142 1 minute effect Terminal.promptProbe.scheduler: Emit("Terminal.promptProbe.attempts", { latency: 190749 ns, received: true })
+143 1 minute signal Terminal.promptProbe.scheduler: { ref: "Terminal.promptProbe.attempts", value: { latency: 190749 ns, received: true } }
+144 1 minute event Terminal.customerAccess.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 190749 ns, received: true })
+145 1 minute effect Terminal.customerAccess.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.customerAccess", coverage: 0.0022%, executed: 7, expected: 7, from: 0 ns, good: 7, status: Compliant, to: 1 minute, version: 146 })
+146 1 minute standing Terminal.customerAccess.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.customerAccess", coverage: 0.0022%, executed: 7, expected: 7, from: 0 ns, good: 7, status: Compliant, to: 1 minute, version: 146 }
+147 1 minute event Terminal.promptFast.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 190749 ns, received: true })
+148 1 minute effect Terminal.promptFast.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 1.6666%, executed: 7, expected: 7, from: 0 ns, good: 7, status: Compliant, to: 1 minute, version: 149 })
+149 1 minute standing Terminal.promptFast.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 1.6666%, executed: 7, expected: 7, from: 0 ns, good: 7, status: Compliant, to: 1 minute, version: 149 }
+150 1 minute event Terminal.reachable.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 190749 ns, received: true })
+151 1 minute effect Terminal.reachable.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0.0023%, executed: 7, expected: 7, from: 0 ns, good: 7, status: Compliant, to: 1 minute, version: 152 })
+152 1 minute standing Terminal.reachable.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0.0023%, executed: 7, expected: 7, from: 0 ns, good: 7, status: Compliant, to: 1 minute, version: 152 }
+153 70 seconds event Terminal.promptProbe.scheduler: Timer(0)
+154 70 seconds effect Terminal.promptProbe.scheduler: Attempt("Terminal.promptProbe", 8)
+155 70 seconds effect Terminal.promptProbe.scheduler: SetTimer(8, 72 seconds)
+156 70 seconds effect Terminal.promptProbe.scheduler: SetTimer(0, 80 seconds)
+157 70 seconds event Terminal.promptProbe.scheduler: AttemptDone(8, { latency: 267715 ns, received: true })
+158 70 seconds effect Terminal.promptProbe.scheduler: CancelTimer(8)
+159 70 seconds effect Terminal.promptProbe.scheduler: Emit("Terminal.promptProbe.attempts", { latency: 267715 ns, received: true })
+160 70 seconds signal Terminal.promptProbe.scheduler: { ref: "Terminal.promptProbe.attempts", value: { latency: 267715 ns, received: true } }
+161 70 seconds event Terminal.customerAccess.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 267715 ns, received: true })
+162 70 seconds effect Terminal.customerAccess.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.customerAccess", coverage: 0.0026%, executed: 8, expected: 8, from: 0 ns, good: 8, status: Compliant, to: 70 seconds, version: 163 })
+163 70 seconds standing Terminal.customerAccess.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.customerAccess", coverage: 0.0026%, executed: 8, expected: 8, from: 0 ns, good: 8, status: Compliant, to: 70 seconds, version: 163 }
+164 70 seconds event Terminal.promptFast.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 267715 ns, received: true })
+165 70 seconds effect Terminal.promptFast.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 1.9444%, executed: 8, expected: 8, from: 0 ns, good: 8, status: Compliant, to: 70 seconds, version: 166 })
+166 70 seconds standing Terminal.promptFast.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.promptFast", coverage: 1.9444%, executed: 8, expected: 8, from: 0 ns, good: 8, status: Compliant, to: 70 seconds, version: 166 }
+167 70 seconds event Terminal.reachable.evaluator: Emitted("Terminal.promptProbe.attempts", { latency: 267715 ns, received: true })
+168 70 seconds effect Terminal.reachable.evaluator: Publish({ calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0.0027%, executed: 8, expected: 8, from: 0 ns, good: 8, status: Compliant, to: 70 seconds, version: 169 })
+169 70 seconds standing Terminal.reachable.evaluator: { calculation: "ignite-sli/0.1", completeness: 100%, contract: "Terminal.reachable", coverage: 0.0027%, executed: 8, expected: 8, from: 0 ns, good: 8, status: Compliant, to: 70 seconds, version: 169 }
+test drain::rollout_drains_the_old_process_and_starts_the_new_rust ... FAILED
+failures:
+failures:
+    drain::rollout_drains_the_old_process_and_starts_the_new_llvm
+    drain::rollout_drains_the_old_process_and_starts_the_new_rust
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 188 filtered out; finished in 19.37s
+error: test failed, to rerun pass `-p ignite --test main`
+STEP drain-tests exit=101
+drain tests secs=20.8 load=13.53
+EXIT=0
+EXIT=0

@@ -1,0 +1,41 @@
+   Compiling telos-io v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/snap-v3/crates/telos-io)
+   Compiling telos-rt v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/snap-v3/crates/telos-rt)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.68s
+-rw-r--r-- 2 timo timo 27571860 Nov  1 12:04 /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-v3/debug/libtelos_rt.a
+== rust
+note: building the generated Rust project in verify-v3/out-rust; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling telos-io v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/snap-v3/crates/telos-io)
+   Compiling demo v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/snap-v3/verify-v3/out-rust)
+error[E0308]: mismatched types
+  --> src/lib.rs:16:12
+   |
+ 5 |     X(i64),
+   |     - `X` defines an enum variant constructor here, which should be called
+...
+15 | pub fn f() -> A {
+   |               - expected `A` because of return type
+16 |     return A::X;
+   |            ^^^^ expected `A`, found enum constructor
+   |
+   = note:          expected enum `A`
+           found enum constructor `fn(i64) -> A {A::X}`
+help: use parentheses to construct this tuple variant
+   |
+16 |     return A::X(/* i64 */);
+   |                +++++++++++
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `demo` (lib) due to 1 previous error
+error: cargo build failed with status 101
+rust exit=2
+== llvm
+built verify-v3/out-llvm/bin/c
+llvm exit=0
+EXIT=0

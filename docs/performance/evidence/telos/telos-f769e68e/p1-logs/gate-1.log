@@ -1,0 +1,65 @@
+/dev/nvme0n1p2  848G  762G   78G  91% /
+== fmt
+Diff in /home/timo/projects/telos/crates/ignite-types/tests/fixtures.rs:88:
+     let std = common::load_std(&fixture_dir().join("std"))
+         .unwrap_or_else(|e| panic!("fixture standard library:\n{e}"));
+     let path = fixture_dir().join("valid_system.ignite");
+[31m-    let source = SourceFile::new("valid_system.ignite", std::fs::read_to_string(&path).unwrap());
+(B[m[32m+    let source = SourceFile::new(
+(B[m[32m+        "valid_system.ignite",
+(B[m[32m+        std::fs::read_to_string(&path).unwrap(),
+(B[m[32m+    );
+(B[m     let program = ignite_syntax::parse(&source).unwrap();
+     let symbols = ignite_check::check_module(&program, &std.modules).unwrap();
+     let typed = ignite_types::type_module(&program, &symbols, &std.typed)
+fmt rc=1
+== clippy
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.71s
+clippy rc=0
+== build
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.92s
+build rc=0
+== test frontend
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p1/debug/deps/ignite_check-8e7359fd2edf000b)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p1/debug/deps/main-625bf336fa859c75)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p1/debug/deps/ignite_eval-2bc076bdfd01a6cd)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p1/debug/deps/main-17eca3f1c638dc2a)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p1/debug/deps/ignite_syntax-d8cc51728136adfa)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p1/debug/deps/main-807151e0292813cb)
+test result: ok. 148 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p1/debug/deps/ignite_types-75ebb7e5fa68d1f9)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p1/debug/deps/main-1ec713e6db068368)
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test rc=0
+== check files
+ok   std/cli.ignite
+ok   std/console.ignite
+ok   std/contract.ignite
+ok   std/deploy.ignite
+ok   std/json.ignite
+ok   std/net.ignite
+ok   std/option.ignite
+ok   std/policy.ignite
+ok   std/probe.ignite
+ok   std/protocol/http.ignite
+ok   std/protocol/telnet.ignite
+ok   std/result.ignite
+ok   std/text.ignite
+ok   examples/terminal/command_schema.ignite
+ok   examples/terminal/commands.ignite
+ok   examples/terminal/terminal.design.ignite
+ok   examples/terminal/terminal.ignite
+ok   examples/todo/todo.ignite
+check rc=0
+EXIT=0
+EXIT=0

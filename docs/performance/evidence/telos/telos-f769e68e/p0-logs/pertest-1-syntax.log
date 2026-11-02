@@ -1,0 +1,13 @@
+START 2026-11-02T02:11:02+01:00 file=syntax load=6.54 14.76 16.47 6/2928 2701680
+   0.011 +  0.011     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.012 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.013 +  0.001 
+   0.013 +  0.000 running 2 tests
+   0.248 +  0.235 test syntax::llvm_target_runs_every_feature ... ok
+   0.322 +  0.074 test syntax::rust_target_runs_every_feature ...    Compiling syntax v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/tmp/syntax-rust)
+   0.379 +  0.057     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.06s
+   0.403 +  0.024 ok
+   0.403 +  0.000 
+   0.403 +  0.000 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 144 filtered out; finished in 0.39s
+   0.403 +  0.000 
+END load=6.54 14.76 16.47 5/2939 2701884

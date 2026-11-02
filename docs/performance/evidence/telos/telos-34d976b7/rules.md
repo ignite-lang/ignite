@@ -1,0 +1,12 @@
+Rules (Timo's, non-negotiable):
+- No git commits, and no git operations that discard changes (no checkout, restore, reset or stash). Uncommitted changes in the tree belong to earlier slices and other agents.
+- Every cargo command runs with `CARGO_TARGET_DIR=<your target dir> CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=line-tables-only`. Run `df -h /` before large builds, and stop and report if under 20G is free.
+- No work files in /tmp or /dev/shm. Use `/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/` with unique file names.
+- No heredocs into stdin readers, and no `python3 -c` with backticks. Write scripts with the Write tool and run them by path.
+- Commands likely to run longer than 2 minutes: run them in the background and wait on their output file.
+- Never call the GitLab API, with `curl` or anything else, using `$GITLAB_PERSONAL_TOKEN` or any other personal token of Timo's.
+- No comments in Cargo.toml, Taskfile.yml or other config files. Do not add a dependency without a line in your report saying what it replaces.
+- Generated Rust and IR are artifacts: never edit them by hand.
+- Use test ports outside 2323. Kill every process you started, by PID, before you finish.
+- Do not edit files owned by another agent. If you need a change there, say so in your report or in a message.
+- If clippy or fmt fails only in another agent's in-progress files, report it; do not fix it.

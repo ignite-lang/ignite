@@ -1,0 +1,28 @@
+START 2026-11-02T02:11:02+01:00 file=cli load=6.54 14.76 16.47 4/2939 2701886
+   0.011 +  0.011     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.012 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.013 +  0.001 
+   0.013 +  0.000 running 19 tests
+   0.314 +  0.301 test cli::build_std_and_program_then_run_both_executables ... ok
+   0.367 +  0.053 test cli::check_acceptance_program_is_silent ... ok
+   0.420 +  0.053 test cli::check_design_file_is_silent ... ok
+   0.471 +  0.050 test cli::check_reports_unsupported_component_kind ... ok
+   0.522 +  0.051 test cli::check_unknown_name_is_e003 ... ok
+   0.818 +  0.296 test cli::client_exit_statuses ... ok
+   0.818 +  0.000 test cli::default_std_is_the_repository_std ... ok
+   0.818 +  0.000 test cli::default_substrate_is_the_sibling_crate ... ok
+   0.882 +  0.063 test cli::emit_prints_the_program_and_the_std_crate ... ok
+   0.946 +  0.065 test cli::emit_uses_given_substrate ... ok
+   0.950 +  0.003 test cli::emit_with_std_fixture ... ok
+   0.998 +  0.049 test cli::missing_file_is_exit_3 ... ok
+   1.000 +  0.001 test cli::missing_std_root_is_exit_3 ... ok
+   1.001 +  0.001 test cli::no_arguments_is_exit_2 ... ok
+   1.003 +  0.001 test cli::std_diagnostic_is_rendered_with_its_file ... ok
+   1.004 +  0.001 test cli::std_file_without_package_is_e031 ... ok
+   1.005 +  0.001 test cli::std_import_cycle_is_e032 ... ok
+   1.007 +  0.002 test cli::std_modules_are_checked_in_import_order ... ok
+   1.008 +  0.001 test cli::std_package_mismatch_is_e031_in_the_std_file ... ok
+   1.008 +  0.000 
+   1.008 +  0.000 test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 127 filtered out; finished in 1.00s
+   1.008 +  0.000 
+END load=6.54 14.76 16.47 4/2963 2702329

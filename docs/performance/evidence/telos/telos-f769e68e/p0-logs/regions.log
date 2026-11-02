@@ -1,0 +1,90 @@
+=== rust main/closures carried across loop releases
+running 1 test
+test main/closures carried across loop releases ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== rust main/closures in a list and nested closures
+running 1 test
+test main/closures in a list and nested closures ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== rust main/fn fields hold closures
+running 1 test
+test main/fn fields hold closures ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== rust main/store update with a capturing closure in a loop
+running 1 test
+test main/store update with a capturing closure in a loop ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== rust main/boxed values carried across releases and through the store
+running 1 test
+test main/boxed values carried across releases and through the store ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 6.77s
+=== rust main/range patterns without a wildcard
+running 1 test
+test main/range patterns without a wildcard ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== rust main/break and continue as values in carried loops
+running 1 test
+test main/break and continue as values in carried loops ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== rust main/tuple fields and record updates of borrowed places
+running 1 test
+test main/tuple fields and record updates of borrowed places ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== rust main/debug text of nested values
+running 1 test
+test main/debug text of nested values ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== llvm main/closures carried across loop releases
+running 1 test
+test main/closures carried across loop releases ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.02s
+=== llvm main/closures in a list and nested closures
+running 1 test
+test main/closures in a list and nested closures ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== llvm main/fn fields hold closures
+running 1 test
+test main/fn fields hold closures ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== llvm main/store update with a capturing closure in a loop
+running 1 test
+test main/store update with a capturing closure in a loop ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.02s
+=== llvm main/boxed values carried across releases and through the store
+running 1 test
+test main/boxed values carried across releases and through the store ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 2.25s
+=== llvm main/range patterns without a wildcard
+running 1 test
+test main/range patterns without a wildcard ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== llvm main/break and continue as values in carried loops
+running 1 test
+test main/break and continue as values in carried loops ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== llvm main/tuple fields and record updates of borrowed places
+running 1 test
+test main/tuple fields and record updates of borrowed places ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+=== llvm main/debug text of nested values
+running 1 test
+test main/debug text of nested values ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s

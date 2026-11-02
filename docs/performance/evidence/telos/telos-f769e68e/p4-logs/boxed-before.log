@@ -1,0 +1,21 @@
+running 1 test
+test main/boxed values carried across releases and through the store ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 6.85s
+RUN target=rust rep=1 wall=9.075304620 load=6.16
+running 1 test
+test main/boxed values carried across releases and through the store ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 6.81s
+RUN target=rust rep=2 wall=6.897164343 load=5.52
+running 1 test
+test main/boxed values carried across releases and through the store ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 2.26s
+RUN target=llvm rep=1 wall=2.639069520 load=5.52
+running 1 test
+test main/boxed values carried across releases and through the store ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 2.27s
+RUN target=llvm rep=2 wall=2.386149424 load=5.72
+EXIT=0

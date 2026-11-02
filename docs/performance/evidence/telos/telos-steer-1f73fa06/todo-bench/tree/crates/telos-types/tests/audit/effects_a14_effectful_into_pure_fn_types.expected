@@ -1,0 +1,6 @@
+effects_a14_effectful_into_pure_fn_types.telos:6:4: error[E041]: fn `update` takes a `Store<Int>` first, and `Store<Int>` has the builtin method `update`, so `x.update(..)` could never call it; rename it
+effects_a14_effectful_into_pure_fn_types.telos:6:74: error[E017]: effectful function `shout` is not a value here; only an effectful fn type (`fn(..) -> R requires [..]`) accepts it
+effects_a14_effectful_into_pure_fn_types.telos:8:58: error[E017]: effectful function `shout` is not a value here; only an effectful fn type (`fn(..) -> R requires [..]`) accepts it
+effects_a14_effectful_into_pure_fn_types.telos:12:38: error[E017]: effectful function `shout` is not a value here; only an effectful fn type (`fn(..) -> R requires [..]`) accepts it
+effects_a14_effectful_into_pure_fn_types.telos:14:88: error[E040]: type mismatch: expected `fn(Int) -> Int`, found `fn(n: Int) -> Int requires [stdout.write]`
+effects_a14_effectful_into_pure_fn_types.telos:17:42: error[E040]: type mismatch: expected `fn(n: Int) -> Int requires []`, found `fn(n: Int) -> Int requires [stdout.write]`

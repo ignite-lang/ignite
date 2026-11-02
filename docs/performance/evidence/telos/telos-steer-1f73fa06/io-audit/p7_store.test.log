@@ -1,0 +1,1 @@
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p7_store.telos:21:23: error[E017]: effectful function `bump` is not a value here; only an effectful fn type (`fn(..) -> R requires [..]`) accepts it

@@ -1,0 +1,1 @@
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p3b_spawn_value.telos:4:3: error[E013]: `spawn` needs a call to an effectful function or protocol role

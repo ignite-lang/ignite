@@ -1,0 +1,57 @@
+## gate-fmt
+  ratio after/before: median 0.946 (range 0.711-1.181), pairs kept 2, discarded 2
+  before: median 0.86 s, range 0.83-0.90 s, load 27.4-32.2, n=2
+  after:  median 0.81 s, range 0.64-0.98 s, load 28.0-29.2, n=2
+  discarded pair 0 (load): before 0.47s@3.14 exit=0, after 0.52s@14.59 exit=0
+  discarded pair 1 (load): before 0.64s@11.1 exit=0, after 1.50s@33.81 exit=0
+## gate-clippy
+  ratio after/before: median 1.042 (range 0.939-1.146), pairs kept 2, discarded 2
+  before: median 4.25 s, range 3.71-4.78 s, load 27.4-31.1, n=2
+  after:  median 4.37 s, range 4.25-4.49 s, load 28.0-31.0, n=2
+  discarded pair 0 (load): before 4.61s@3.14 exit=0, after 6.54s@14.59 exit=0
+  discarded pair 1 (load): before 4.36s@11.1 exit=0, after 8.75s@37.51 exit=0
+## gate-test
+  ratio after/before: median 1.520 (range 1.434-1.607), pairs kept 2, discarded 2
+  before: median 17.46 s, range 14.38-20.55 s, load 27.5-31.1, n=2
+  after:  median 26.29 s, range 23.11-29.46 s, load 27.1-31.0, n=2
+  discarded pair 0 (load): before 43.54s@3.77 exit=0, after 60.43s@13.98 exit=0
+  discarded pair 1 (load): before 31.75s@13.42 exit=0, after 29.59s@39.71 exit=0
+## gate-test-ignite
+  ratio after/before: median 1.251 (range 1.251-1.251), pairs kept 1, discarded 3
+  before: median 8.45 s, range 8.45-8.45 s, load 6.0-6.0, n=1
+  after:  median 10.57 s, range 10.57-10.57 s, load 10.6-10.6, n=1
+  discarded pair 1 (load): before 2.08s@33.81 exit=0, after 1.21s@40.54 exit=0
+  discarded pair 2 (load): before 0.76s@29.22 exit=0, after 1.45s@34.5 exit=0
+  discarded pair 3 (load): before 1.11s@28.01 exit=0, after 1.77s@33.83 exit=0
+## gate-cold-total
+  before only: median 57.10 s, range 57.10-57.10 s, load 3.1-3.1, n=1
+## prep-rt-release
+  ratio after/before: median 1.196 (range 1.196-1.196), pairs kept 1, discarded 0
+  before: median 4.64 s, range 4.64-4.64 s, load 5.8-5.8, n=1
+  after:  median 5.55 s, range 5.55-5.55 s, load 9.6-9.6, n=1
+## gate-warm-total
+  before only: median 27.33 s, range 19.79-38.94 s, load 11.1-32.2, n=3
+## todod-rust-dev
+  ratio after/before: median 1.056 (range 0.930-1.206), pairs kept 3, discarded 0
+  before: median 5.55 s, range 4.99-6.60 s, load 33.8-38.1, n=3
+  after:  median 6.02 s, range 5.16-6.97 s, load 32.9-35.9, n=3
+## todod-llvm-dev
+  ratio after/before: median 1.406 (range 1.333-2.071), pairs kept 3, discarded 0
+  before: median 0.42 s, range 0.42-0.64 s, load 32.9-35.9, n=3
+  after:  median 0.87 s, range 0.56-0.90 s, load 29.8-33.9, n=3
+## todod-rust-release
+  ratio after/before: median 1.197 (range 0.768-1.402), pairs kept 3, discarded 0
+  before: median 6.84 s, range 5.40-7.47 s, load 29.8-33.9, n=3
+  after:  median 7.57 s, range 5.25-8.94 s, load 30.3-32.0, n=3
+## todod-llvm-release
+  ratio after/before: median 1.261 (range 1.253-1.363), pairs kept 3, discarded 0
+  before: median 1.11 s, range 0.91-1.46 s, load 30.3-32.0, n=3
+  after:  median 1.40 s, range 1.24-1.83 s, load 28.8-32.2, n=3
+## check-design
+  ratio after/before: median 1.857 (range 1.615-3.364), pairs kept 15, discarded 0
+  before: median 0.10 s, range 0.07-0.13 s, load 27.4-32.2, n=15
+  after:  median 0.20 s, range 0.13-0.37 s, load 27.4-32.2, n=15
+## plan-design
+  ratio after/before: median 1.750 (range 1.444-2.143), pairs kept 15, discarded 0
+  before: median 0.10 s, range 0.07-0.13 s, load 27.4-32.2, n=15
+  after:  median 0.19 s, range 0.13-0.23 s, load 27.4-32.2, n=15

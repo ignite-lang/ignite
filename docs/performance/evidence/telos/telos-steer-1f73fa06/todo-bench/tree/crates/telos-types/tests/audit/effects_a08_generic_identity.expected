@@ -1,0 +1,3 @@
+effects_a08_generic_identity.telos:17:65: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_id`
+effects_a08_generic_identity.telos:21:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_box`
+effects_a08_generic_identity.telos:27:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_enum`

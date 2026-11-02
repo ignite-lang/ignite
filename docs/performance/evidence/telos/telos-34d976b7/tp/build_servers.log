@@ -1,0 +1,57 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-release; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 21 packages to highest Rust 1.99.1 compatible versions
+   Compiling libc v0.2.191
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+   Compiling cfg_aliases v0.2.2
+   Compiling pin-project-lite v0.2.17
+   Compiling bytes v1.12.1
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling errno v0.3.14
+   Compiling mio v1.2.4
+   Compiling socket2 v0.6.5
+   Compiling syn v3.0.9
+   Compiling signal-hook-registry v1.4.8
+   Compiling tokio-macros v2.7.2
+   Compiling tokio v1.54.1
+   Compiling telos-io v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/snap3/crates/telos-io)
+   Compiling telos-std v0.0.0-988166c48030668e (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-release/std)
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-release)
+    Finished `release` profile [optimized] target(s) in 5.98s
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/tn
+note: building the generated Rust project in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-debug; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 21 packages to highest Rust 1.99.1 compatible versions
+   Compiling libc v0.2.191
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+   Compiling cfg_aliases v0.2.2
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+   Compiling pin-project-lite v0.2.17
+   Compiling bytes v1.12.1
+   Compiling nix v0.31.3
+   Compiling errno v0.3.14
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.4
+   Compiling syn v3.0.9
+   Compiling signal-hook-registry v1.4.8
+   Compiling tokio-macros v2.7.2
+   Compiling tokio v1.54.1
+   Compiling telos-io v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/snap3/crates/telos-io)
+   Compiling telos-std v0.0.0-988166c48030668e (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-debug/std)
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-debug)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.49s
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/debug/terminald
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/debug/tn
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/llvm-release/bin/terminald
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/llvm-release/bin/tn
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/llvm-debug/bin/terminald
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/llvm-debug/bin/tn
+EXIT=0

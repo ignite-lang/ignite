@@ -1,0 +1,10 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/debug/deps/main-90b129b53e45974f)
+
+running 2 tests
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test control_trace::reducers_agree_across_the_evaluator_and_both_targets ... ok
+test control_trace::a7_evaluator_steps_10000_emissions_into_a_30_day_window ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 186 filtered out; finished in 11.87s
+

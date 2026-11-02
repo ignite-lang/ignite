@@ -1,0 +1,13 @@
+(eval):1: no such file or directory: ./profile.sh
+(eval):1: no such file or directory: ./profile.sh
+strace: attach: ptrace(PTRACE_SEIZE, 3973849): Operation not permitted
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/tp/profile.sh: line 56: kill: (3973872) - No such process
+strace: attach: ptrace(PTRACE_SEIZE, 3975244): Operation not permitted
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/tp/profile.sh: line 56: kill: (3975267) - No such process
+EXIT=0
+strace: attach: ptrace(PTRACE_SEIZE, 3975875): Operation not permitted
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/tp/profile.sh: line 56: kill: (3975878) - No such process
+strace: attach: ptrace(PTRACE_SEIZE, 3976758): Operation not permitted
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/tp/profile.sh: line 56: kill: (3976761) - No such process
+EXIT=0
+ALLDONE

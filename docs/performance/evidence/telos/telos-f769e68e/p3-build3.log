@@ -1,0 +1,38 @@
+   Compiling ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+warning: ignoring -C extra-filename flag due to -o flag
+
+error[E0425]: cannot find function `path_target` in this scope
+    --> crates/ignite-eval/src/eval.rs:1346:36
+     |
+1346 |                 let target = match path_target(self, cx, receiver, &mut temporary_slot(), &map) {
+     |                                    ^^^^^^^^^^^-------------------------------------------------
+     |                                    |
+     |                                    help: try calling `path_target` as a method: `self.path_target(cx, receiver, &mut temporary_slot(), &map)`
+
+error[E0425]: cannot find function `temporary_slot` in this scope
+    --> crates/ignite-eval/src/eval.rs:1346:73
+     |
+1346 |                 let target = match path_target(self, cx, receiver, &mut temporary_slot(), &map) {
+     |                                                                         ^^^^^^^^^^^^^^ not found in this scope
+
+For more information about this error, try `rustc --explain E0425`.
+warning: `ignite-eval` (lib) generated 1 warning
+error: could not compile `ignite-eval` (lib) due to 2 previous errors; 1 warning emitted
+warning: build failed, waiting for other jobs to finish...
+warning: unreachable statement
+    --> crates/ignite-eval/src/eval.rs:1349:17
+     |
+1346 |                   let target = match path_target(self, cx, receiver, &mut temporary_slot(), &map) {
+     |  ______________________________-
+1347 | |                     _ => unreachable!(),
+1348 | |                 };
+     | |_________________- any code following this `match` expression is unreachable, as all arms diverge
+1349 |                   let _ = target;
+     |                   ^^^^^^^^^^^^^^^ unreachable statement
+     |
+     = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ignite-eval` (lib test) generated 1 warning
+error: could not compile `ignite-eval` (lib test) due to 2 previous errors; 1 warning emitted
+EXIT=101

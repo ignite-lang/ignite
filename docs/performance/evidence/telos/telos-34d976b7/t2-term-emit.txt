@@ -1,0 +1,1232 @@
+// ==== Cargo.toml ====
+[package]
+name = "terminal"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "terminald"
+path = "src/bin/terminald.rs"
+
+[[bin]]
+name = "tn"
+path = "src/bin/tn.rs"
+
+[dependencies]
+telos-io = { path = "/home/timo/projects/telos/crates/telos-io" }
+telos-std = { path = "std" }
+// ==== src/lib.rs ====
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)]
+use telos_std::console::{Console, Reply, first_word, rest_after_word};
+use telos_std::protocol::telnet::Telnet;
+
+#[derive(Clone, Debug)]
+pub enum Command {
+    Help,
+    Echo(String),
+    Status,
+    Quit,
+}
+
+#[allow(non_snake_case)]
+pub fn PROMPT() -> String {
+    String::from("terminal> ")
+}
+
+#[allow(non_snake_case)]
+pub fn MAXIMUM_LINE() -> i64 {
+    4096
+}
+
+pub fn respond(mut command: Command) -> Reply {
+    match command.clone() {
+        Command::Help => Reply { lines: vec![String::from("help"), String::from("echo <text>"), String::from("status"), String::from("quit")], action: Reply::default_action() },
+        Command::Echo(text) => Reply { lines: vec![text.clone()], action: Reply::default_action() },
+        Command::Status => Reply { lines: vec![String::from("ready")], action: Reply::default_action() },
+        Command::Quit => Reply { lines: vec![String::from("bye")], action: telos_std::console::Action::Close },
+    }
+}
+
+pub fn parse(mut line: String) -> Option<Command> {
+    match first_word(line.clone()) {
+        __m if (*(&__m) == "help") => Some(Command::Help),
+        __m if (*(&__m) == "status") => Some(Command::Status),
+        __m if (*(&__m) == "quit") => Some(Command::Quit),
+        __m if (*(&__m) == "echo") => Some(Command::Echo(rest_after_word(line.clone()))),
+        _ => None,
+    }
+}
+
+pub fn execute(mut line: String) -> Reply {
+    let trimmed = line.trim().to_string();
+    if trimmed.is_empty() {
+        Reply { lines: vec![], action: Reply::default_action() }
+    } else {
+        match parse(trimmed.clone()) {
+            Some(command) => respond(command.clone()),
+            None => Reply { lines: vec![format!("{}{}", String::from("unknown command: "), first_word(trimmed.clone()).clone())], action: Reply::default_action() },
+        }
+    }
+}
+// ==== src/bin/terminald.rs ====
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)]
+use terminal::*;
+use telos_std::console::{Console, Reply, first_word, rest_after_word};
+use telos_std::protocol::telnet::Telnet;
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let application = Console { prompt: PROMPT(), respond: execute, maximum_line: MAXIMUM_LINE() };
+        let port = telos_io::args::port()?.unwrap_or(2323);
+        let ingress = telos_io::TcpListener::bind(String::from("127.0.0.1"), port)?;
+        telos_io::log(&format!("listening on 127.0.0.1:{}", ingress.local_port()));
+        loop {
+            let stream = ingress.accept()?;
+            let application = application.clone();
+            telos_io::spawn(move || {
+                if let Err(error) = Telnet::serve(stream, application) {
+                    telos_io::log(&format!("session ended with error: {}", error));
+                }
+            });
+        }
+        #[allow(unreachable_code)]
+        Ok::<(), telos_io::IoError>(())
+    }))
+}
+// ==== src/bin/tn.rs ====
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)]
+use terminal::*;
+use telos_std::console::{Console, Reply, first_word, rest_after_word};
+use telos_std::protocol::telnet::Telnet;
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let port = telos_io::args::port()?.unwrap_or(2323);
+        let stream = telos_io::TcpStream::connect(String::from("127.0.0.1"), port).map_err(|error| error.with_exit_code(3))?;
+        Telnet::connect(stream).map_err(|error| error.with_exit_code(4))
+    }))
+}
+// ==== std/Cargo.toml ====
+[package]
+name = "telos-std"
+version = "0.0.0-568e1b2232bf7ec0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+telos-io = { path = "/home/timo/projects/telos/crates/telos-io" }
+// ==== std/src/lib.rs ====
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)]
+
+pub mod console {
+
+    #[derive(Clone, Debug)]
+    pub struct Console {
+        pub prompt: String,
+        pub respond: fn(String) -> Reply,
+        pub maximum_line: i64,
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum Action {
+        Continue,
+        Close,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Reply {
+        pub lines: Vec<String>,
+        pub action: Action,
+    }
+
+    impl Reply {
+        #[allow(non_snake_case)]
+        pub fn default_action() -> Action {
+            Action::Continue
+        }
+    }
+
+    pub fn is_space(mut b: u8) -> bool {
+        match b.clone() {
+            32 | 9 | 10 | 11 | 12 | 13 => true,
+            _ => false,
+        }
+    }
+
+    pub fn skip_space(mut bytes: Vec<u8>, mut i: i64) -> i64 {
+        let mut at = i.clone();
+        while (at < (bytes.len() as i64)) && is_space(bytes[(at.clone()) as usize]) {
+            at = at + 1;
+        }
+        at
+    }
+
+    pub fn skip_word(mut bytes: Vec<u8>, mut i: i64) -> i64 {
+        let mut at = i.clone();
+        while (at < (bytes.len() as i64)) && !is_space(bytes[(at.clone()) as usize]) {
+            at = at + 1;
+        }
+        at
+    }
+
+    pub fn first_word(mut line: String) -> String {
+        let bytes = line.clone().into_bytes();
+        let start = skip_space(bytes.clone(), 0);
+        String::from_utf8_lossy(&bytes[(start.clone()) as usize..(skip_word(bytes.clone(), start.clone())) as usize].to_vec()).into_owned()
+    }
+
+    pub fn rest_after_word(mut line: String) -> String {
+        let bytes = line.clone().into_bytes();
+        let end = (bytes.len() as i64);
+        let mut i = skip_word(bytes.clone(), skip_space(bytes.clone(), 0));
+        if i < end {
+            i = i + 1;
+        };
+        String::from_utf8_lossy(&bytes[(i.clone()) as usize..(end.clone()) as usize].to_vec()).into_owned()
+    }
+}
+
+pub mod json {
+    use crate::text::{digit_value, is_digit};
+
+    #[derive(Clone, Debug)]
+    pub enum Json {
+        Null,
+        Bool(bool),
+        Number(i64),
+        Str(String),
+        Array(Vec<Json>),
+        Object(Vec<(String, Json)>),
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct JsonError {
+        pub message: String,
+        pub offset: i64,
+    }
+
+    pub type Parsed = Result<(Json, i64), JsonError>;
+
+    #[allow(non_snake_case)]
+    pub fn MAXIMUM_DIGITS() -> i64 {
+        18
+    }
+
+    #[allow(non_snake_case)]
+    pub fn MAXIMUM_DEPTH() -> i64 {
+        64
+    }
+
+    pub fn hex_digit(mut n: u8) -> u8 {
+        if n < 10 {
+            48 + n
+        } else {
+            (97 + n) - 10
+        }
+    }
+
+    pub fn quote(mut text: String) -> String {
+        let mut out = Vec::<u8>::new();
+        out.push(34);
+        for b in (text.clone().into_bytes()) {
+            match b.clone() {
+                34 => out.extend_from_slice(&(vec![92, 34]).iter().map(|x| *x as u8).collect::<Vec<u8>>()),
+                92 => out.extend_from_slice(&(vec![92, 92]).iter().map(|x| *x as u8).collect::<Vec<u8>>()),
+                10 => out.extend_from_slice(&(vec![92, 110]).iter().map(|x| *x as u8).collect::<Vec<u8>>()),
+                13 => out.extend_from_slice(&(vec![92, 114]).iter().map(|x| *x as u8).collect::<Vec<u8>>()),
+                9 => out.extend_from_slice(&(vec![92, 116]).iter().map(|x| *x as u8).collect::<Vec<u8>>()),
+                8 => out.extend_from_slice(&(vec![92, 98]).iter().map(|x| *x as u8).collect::<Vec<u8>>()),
+                12 => out.extend_from_slice(&(vec![92, 102]).iter().map(|x| *x as u8).collect::<Vec<u8>>()),
+                _ => if b < 32 {
+                    out.extend_from_slice(&(vec![92, 117, 48, 48]).iter().map(|x| *x as u8).collect::<Vec<u8>>());
+                    out.push(hex_digit(b / 16));
+                    out.push(hex_digit(b % 16))
+                } else {
+                    out.push(b.clone())
+                },
+            };
+        }
+        out.push(34);
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
+    pub fn encode(mut value: Json) -> String {
+        match value.clone() {
+            Json::Null => String::from("null"),
+            Json::Bool(b) => b.to_string(),
+            Json::Number(n) => n.to_string(),
+            Json::Str(text) => quote(text.clone()),
+            Json::Array(items) => {
+                let mut parts: Vec<String> = Vec::new();
+                for item in (items.clone()) {
+                    parts.push(encode(item.clone()));
+                }
+                format!("{}{}{}", String::from("["), parts.join(&String::from(",")), String::from("]"))
+            },
+            Json::Object(members) => {
+                let mut parts: Vec<String> = Vec::new();
+                for member in (members.clone()) {
+                    let (name, item) = member.clone();
+                    parts.push(format!("{}{}{}", quote(name.clone()), String::from(":"), encode(item.clone())));
+                }
+                format!("{}{}{}", String::from("{"), parts.join(&String::from(",")), String::from("}"))
+            },
+        }
+    }
+
+    pub fn error(mut message: String, mut offset: i64) -> JsonError {
+        JsonError { message: message.clone(), offset: offset.clone() }
+    }
+
+    pub fn smaller(mut a: i64, mut b: i64) -> i64 {
+        if a < b {
+            a
+        } else {
+            b
+        }
+    }
+
+    pub fn is_space(mut b: u8) -> bool {
+        match b.clone() {
+            32 | 9 | 10 | 13 => true,
+            _ => false,
+        }
+    }
+
+    pub fn skip_space(mut bytes: Vec<u8>, mut at: i64) -> i64 {
+        let mut i = at.clone();
+        while (i < (bytes.len() as i64)) && is_space(bytes[(i.clone()) as usize]) {
+            i = i + 1;
+        }
+        i
+    }
+
+    pub fn parse(mut text: String) -> Result<Json, JsonError> {
+        let bytes = text.clone().into_bytes();
+        let (value, end) = (parse_value(bytes.clone(), skip_space(bytes.clone(), 0), 0))?;
+        let rest = skip_space(bytes.clone(), end.clone());
+        if rest < (bytes.len() as i64) {
+            return Err(error(String::from("unexpected character after the value"), rest.clone()));
+        };
+        Ok(value.clone())
+    }
+
+    pub fn parse_value(mut bytes: Vec<u8>, mut at: i64, mut depth: i64) -> Parsed {
+        if at >= (bytes.len() as i64) {
+            return Err(error(String::from("unexpected end of input"), at.clone()));
+        };
+        let b = bytes[(at.clone()) as usize];
+        match b.clone() {
+            110 => parse_word(bytes.clone(), at.clone(), String::from("null"), Json::Null),
+            116 => parse_word(bytes.clone(), at.clone(), String::from("true"), Json::Bool(true)),
+            102 => parse_word(bytes.clone(), at.clone(), String::from("false"), Json::Bool(false)),
+            34 => {
+                let (text, end) = (parse_string(bytes.clone(), at.clone()))?;
+                Ok((Json::Str(text.clone()), end.clone()))
+            },
+            91 => parse_array(bytes.clone(), at.clone(), depth + 1),
+            123 => parse_object(bytes.clone(), at.clone(), depth + 1),
+            _ => if (b == 45) || is_digit(b.clone()) {
+                parse_number(bytes.clone(), at.clone())
+            } else {
+                Err(error(String::from("unexpected character"), at.clone()))
+            },
+        }
+    }
+
+    pub fn parse_word(mut bytes: Vec<u8>, mut at: i64, mut word: String, mut value: Json) -> Parsed {
+        let end = at + (word.len() as i64);
+        if (end > (bytes.len() as i64)) || (String::from_utf8_lossy(&bytes[(at.clone()) as usize..(end.clone()) as usize].to_vec()).into_owned() != word) {
+            return Err(error(String::from("unexpected character"), at.clone()));
+        };
+        Ok((value.clone(), end.clone()))
+    }
+
+    pub fn parse_number(mut bytes: Vec<u8>, mut at: i64) -> Parsed {
+        let negative = bytes[(at.clone()) as usize] == 45;
+        let start = if negative {
+            at + 1
+        } else {
+            at
+        };
+        let mut i = start.clone();
+        let mut value = 0;
+        while i < (bytes.len() as i64) {
+            match digit_value(bytes[(i.clone()) as usize]) {
+                Some(digit) => {
+                    if (i - start) == MAXIMUM_DIGITS() {
+                        return Err(error(format!("{}{}{}", String::from("number longer than "), MAXIMUM_DIGITS().to_string(), String::from(" digits")), start.clone()));
+                    };
+                    value = (value * 10) + digit;
+                    i = i + 1;
+                },
+                None => {
+                    break;
+                },
+            };
+        }
+        if i == start {
+            return Err(error(String::from("expected a digit"), i.clone()));
+        };
+        if ((i - start) > 1) && (bytes[(start.clone()) as usize] == 48) {
+            return Err(error(String::from("leading zero in a number"), start.clone()));
+        };
+        if i < (bytes.len() as i64) {
+            match bytes[(i.clone()) as usize] {
+                46 | 101 | 69 => return Err(error(String::from("only integer numbers are supported"), i.clone())),
+                _ => {
+                },
+            };
+        };
+        Ok((Json::Number(if negative {
+            -value.clone()
+        } else {
+            value
+        }), i.clone()))
+    }
+
+    pub fn parse_string(mut bytes: Vec<u8>, mut at: i64) -> Result<(String, i64), JsonError> {
+        let mut out = Vec::<u8>::new();
+        let mut i = at + 1;
+        loop {
+            if i >= (bytes.len() as i64) {
+                return Err(error(String::from("unterminated string"), at.clone()));
+            };
+            let b = bytes[(i.clone()) as usize];
+            if b == 34 {
+                return Ok((String::from_utf8_lossy(&out).into_owned(), i + 1));
+            } else if b == 92 {
+                match escape(bytes[(i.clone()) as usize..(smaller(i + 12, (bytes.len() as i64))) as usize].to_vec()) {
+                    Some((decoded, length)) => {
+                        out.extend_from_slice(&decoded.clone());
+                        i = i + length;
+                    },
+                    None => return Err(error(String::from("invalid escape"), i.clone())),
+                };
+            } else if b < 32 {
+                return Err(error(String::from("control character in a string"), i.clone()));
+            } else {
+                out.push(b.clone());
+                i = i + 1;
+            };
+        }
+    }
+
+    pub fn escape(mut w: Vec<u8>) -> Option<(Vec<u8>, i64)> {
+        if (w.len() as i64) < 2 {
+            return None;
+        };
+        match w[(1) as usize] {
+            34 => Some(((vec![34]).iter().map(|x| *x as u8).collect::<Vec<u8>>(), 2)),
+            92 => Some(((vec![92]).iter().map(|x| *x as u8).collect::<Vec<u8>>(), 2)),
+            47 => Some(((vec![47]).iter().map(|x| *x as u8).collect::<Vec<u8>>(), 2)),
+            98 => Some(((vec![8]).iter().map(|x| *x as u8).collect::<Vec<u8>>(), 2)),
+            102 => Some(((vec![12]).iter().map(|x| *x as u8).collect::<Vec<u8>>(), 2)),
+            110 => Some(((vec![10]).iter().map(|x| *x as u8).collect::<Vec<u8>>(), 2)),
+            114 => Some(((vec![13]).iter().map(|x| *x as u8).collect::<Vec<u8>>(), 2)),
+            116 => Some(((vec![9]).iter().map(|x| *x as u8).collect::<Vec<u8>>(), 2)),
+            117 => unicode_escape(w.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn hex_value(mut b: u8) -> Option<u8> {
+        if (b >= 48) && (b <= 57) {
+            Some(b - 48)
+        } else if (b >= 97) && (b <= 102) {
+            Some((b - 97) + 10)
+        } else if (b >= 65) && (b <= 70) {
+            Some((b - 65) + 10)
+        } else {
+            None
+        }
+    }
+
+    pub fn hex4(mut w: Vec<u8>, mut at: i64) -> Option<(u8, u8, u8, u8)> {
+        if (at + 4) > (w.len() as i64) {
+            return None;
+        };
+        match (hex_value(w[(at.clone()) as usize]), hex_value(w[(at + 1) as usize]), hex_value(w[(at + 2) as usize]), hex_value(w[(at + 3) as usize])) {
+            (Some(a), Some(b), Some(c), Some(d)) => Some((a.clone(), b.clone(), c.clone(), d.clone())),
+            _ => None,
+        }
+    }
+
+    pub fn unicode_escape(mut w: Vec<u8>) -> Option<(Vec<u8>, i64)> {
+        match hex4(w.clone(), 2) {
+            None => None,
+            Some((n1, n2, n3, n4)) => if (n1 == 13) && (n2 >= 12) {
+                None
+            } else if (n1 == 13) && (n2 >= 8) {
+                if (((w.len() as i64) < 12) || (w[(6) as usize] != 92)) || (w[(7) as usize] != 117) {
+                    return None;
+                };
+                match hex4(w.clone(), 8) {
+                    Some((13, m2, m3, m4)) => if m2 >= 12 {
+                        Some((surrogate_pair(n2 - 8, n3.clone(), n4.clone(), m2 - 12, m3.clone(), m4.clone()), 12))
+                    } else {
+                        None
+                    },
+                    _ => None,
+                }
+            } else {
+                Some((basic_plane(n1.clone(), n2.clone(), n3.clone(), n4.clone()), 6))
+            },
+        }
+    }
+
+    pub fn basic_plane(mut n1: u8, mut n2: u8, mut n3: u8, mut n4: u8) -> Vec<u8> {
+        if ((n1 == 0) && (n2 == 0)) && (n3 < 8) {
+            vec![(n3 * 16) + n4]
+        } else if (n1 == 0) && (n2 < 8) {
+            vec![(192 + (n2 * 4)) + (n3 / 4), (128 + ((n3 % 4) * 16)) + n4]
+        } else {
+            vec![224 + n1, (128 + (n2 * 4)) + (n3 / 4), (128 + ((n3 % 4) * 16)) + n4]
+        }
+    }
+
+    pub fn surrogate_pair(mut a: u8, mut b: u8, mut c: u8, mut d: u8, mut e: u8, mut f: u8) -> Vec<u8> {
+        let plane = (1 + (a * 4)) + (b / 4);
+        vec![240 + (plane / 4), ((128 + ((plane % 4) * 16)) + ((b % 4) * 4)) + (c / 4), ((128 + ((c % 4) * 16)) + (d * 4)) + (e / 4), (128 + ((e % 4) * 16)) + f]
+    }
+
+    pub fn parse_array(mut bytes: Vec<u8>, mut at: i64, mut depth: i64) -> Parsed {
+        if depth > MAXIMUM_DEPTH() {
+            return Err(error(format!("{}{}", String::from("nested deeper than "), MAXIMUM_DEPTH().to_string()), at.clone()));
+        };
+        let mut items: Vec<Json> = Vec::new();
+        let mut i = skip_space(bytes.clone(), at + 1);
+        if (i < (bytes.len() as i64)) && (bytes[(i.clone()) as usize] == 93) {
+            return Ok((Json::Array(items.clone()), i + 1));
+        };
+        loop {
+            let (item, end) = (parse_value(bytes.clone(), i.clone(), depth.clone()))?;
+            items.push(item.clone());
+            i = skip_space(bytes.clone(), end.clone());
+            if i >= (bytes.len() as i64) {
+                return Err(error(String::from("unexpected end of input"), i.clone()));
+            };
+            match bytes[(i.clone()) as usize] {
+                44 => {
+                    i = skip_space(bytes.clone(), i + 1);
+                },
+                93 => return Ok((Json::Array(items.clone()), i + 1)),
+                _ => return Err(error(String::from("expected `,` or `]`"), i.clone())),
+            };
+        }
+    }
+
+    pub fn parse_object(mut bytes: Vec<u8>, mut at: i64, mut depth: i64) -> Parsed {
+        if depth > MAXIMUM_DEPTH() {
+            return Err(error(format!("{}{}", String::from("nested deeper than "), MAXIMUM_DEPTH().to_string()), at.clone()));
+        };
+        let mut members: Vec<(String, Json)> = Vec::new();
+        let mut i = skip_space(bytes.clone(), at + 1);
+        if (i < (bytes.len() as i64)) && (bytes[(i.clone()) as usize] == 125) {
+            return Ok((Json::Object(members.clone()), i + 1));
+        };
+        loop {
+            if (i >= (bytes.len() as i64)) || (bytes[(i.clone()) as usize] != 34) {
+                return Err(error(String::from("expected a member name"), i.clone()));
+            };
+            let (name, after_name) = (parse_string(bytes.clone(), i.clone()))?;
+            i = skip_space(bytes.clone(), after_name.clone());
+            if (i >= (bytes.len() as i64)) || (bytes[(i.clone()) as usize] != 58) {
+                return Err(error(String::from("expected `:`"), i.clone()));
+            };
+            let (item, end) = (parse_value(bytes.clone(), skip_space(bytes.clone(), i + 1), depth.clone()))?;
+            members.push((name.clone(), item.clone()));
+            i = skip_space(bytes.clone(), end.clone());
+            if i >= (bytes.len() as i64) {
+                return Err(error(String::from("unexpected end of input"), i.clone()));
+            };
+            match bytes[(i.clone()) as usize] {
+                44 => {
+                    i = skip_space(bytes.clone(), i + 1);
+                },
+                125 => return Ok((Json::Object(members.clone()), i + 1)),
+                _ => return Err(error(String::from("expected `,` or `}`"), i.clone())),
+            };
+        }
+    }
+
+    pub fn member(mut value: Json, mut name: String) -> Option<Json> {
+        match value.clone() {
+            Json::Object(members) => {
+                for pair in (members.clone()) {
+                    let (key, item) = pair.clone();
+                    if key == name {
+                        return Some(item.clone());
+                    };
+                }
+                None
+            },
+            _ => None,
+        }
+    }
+
+    pub fn as_text(mut value: Json) -> Option<String> {
+        match value.clone() {
+            Json::Str(text) => Some(text.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn as_int(mut value: Json) -> Option<i64> {
+        match value.clone() {
+            Json::Number(n) => Some(n.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn as_bool(mut value: Json) -> Option<bool> {
+        match value.clone() {
+            Json::Bool(b) => Some(b.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn as_list(mut value: Json) -> Option<Vec<Json>> {
+        match value.clone() {
+            Json::Array(items) => Some(items.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn text(mut value: Json, mut name: String) -> Option<String> {
+        match member(value.clone(), name.clone()) {
+            Some(Json::Str(t)) => Some(t.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn int(mut value: Json, mut name: String) -> Option<i64> {
+        match member(value.clone(), name.clone()) {
+            Some(Json::Number(n)) => Some(n.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn bool(mut value: Json, mut name: String) -> Option<bool> {
+        match member(value.clone(), name.clone()) {
+            Some(Json::Bool(b)) => Some(b.clone()),
+            _ => None,
+        }
+    }
+}
+
+pub mod protocol {
+
+    pub mod telnet {
+        use crate::console::{Console, Reply, Action};
+
+        pub type IoResult<T> = Result<T, telos_io::IoError>;
+
+        pub struct Telnet;
+
+        impl Telnet {
+            pub fn serve(mut stream: telos_io::TcpStream, mut application: Console) -> IoResult<()> {
+                let result = session(stream.clone(), application.clone());
+                let _ = stream.close();
+                result
+            }
+
+            pub fn connect(mut stream: telos_io::TcpStream) -> IoResult<()> {
+                if (telos_io::Stdin::is_terminal())? {
+                    (telos_io::Stdin::set_raw(true))?;
+                    { let __spawn_0 = stream.clone(); telos_io::spawn(move || { if let Err(error) = edit_input(__spawn_0) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+                } else {
+                    { let __spawn_0 = stream.clone(); telos_io::spawn(move || { if let Err(error) = forward_input(__spawn_0) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+                };
+                let mut state = Decoder::Ground;
+                loop {
+                    match (stream.read(4096))? {
+                        telos_io::Input::Eof => {
+                            (telos_io::Stdin::set_raw(false))?;
+                            return Ok(());
+                        },
+                        telos_io::Input::Data(bytes) => {
+                            let mut out = Vec::<u8>::new();
+                            for b in (bytes.clone()) {
+                                let (next, event) = decode(state.clone(), b.clone());
+                                state = next.clone();
+                                match event.clone() {
+                                    Event::Literal(c) => out.push(c.clone()),
+                                    Event::EndOfLine => out.push(10),
+                                    Event::Answer(answer) => (stream.write_all(answer.clone()))?,
+                                    Event::SubnegotiationTooLong => {
+                                        (telos_io::Stdout::write_all(out.clone()))?;
+                                        (telos_io::Stdin::set_raw(false))?;
+                                        let limit = MAXIMUM_SUBNEGOTIATION();
+                                        return Err(telos_io::IoError::new(format!("{}{}{}", String::from("subnegotiation longer than "), limit.to_string(), String::from(" bytes"))));
+                                    },
+                                    _ => {
+                                    },
+                                };
+                            }
+                            if !out.is_empty() {
+                                (telos_io::Stdout::write_all(out.clone()))?;
+                            }
+                        },
+                    };
+                }
+            }
+        }
+
+        #[allow(non_snake_case)]
+        pub fn IAC() -> u8 {
+            255
+        }
+
+        #[allow(non_snake_case)]
+        pub fn DONT() -> u8 {
+            254
+        }
+
+        #[allow(non_snake_case)]
+        pub fn DO() -> u8 {
+            253
+        }
+
+        #[allow(non_snake_case)]
+        pub fn WONT() -> u8 {
+            252
+        }
+
+        #[allow(non_snake_case)]
+        pub fn WILL() -> u8 {
+            251
+        }
+
+        #[allow(non_snake_case)]
+        pub fn SB() -> u8 {
+            250
+        }
+
+        #[allow(non_snake_case)]
+        pub fn AYT() -> u8 {
+            246
+        }
+
+        #[allow(non_snake_case)]
+        pub fn IP() -> u8 {
+            244
+        }
+
+        #[allow(non_snake_case)]
+        pub fn SE() -> u8 {
+            240
+        }
+
+        #[allow(non_snake_case)]
+        pub fn MAXIMUM_SUBNEGOTIATION() -> i64 {
+            1024
+        }
+
+        #[derive(Clone, Debug)]
+        pub enum Decoder {
+            Ground,
+            CarriageReturn,
+            Interpret,
+            Negotiation(u8),
+            Subnegotiation(i64),
+            SubnegotiationInterpret(i64),
+        }
+
+        #[derive(Clone, Debug)]
+        pub enum Event {
+            Nothing,
+            Literal(u8),
+            EndOfLine,
+            Answer(Vec<u8>),
+            AreYouThere,
+            Interrupt,
+            SubnegotiationTooLong,
+        }
+
+        pub fn decode(mut state: Decoder, mut b: u8) -> (Decoder, Event) {
+            match (state.clone(), b.clone()) {
+                __m if { let (__p1, __p2) = (&__m); matches!(__p1, Decoder::Ground) && (*__p2 == IAC()) } => (Decoder::Interpret, Event::Nothing),
+                (Decoder::Ground, 13) => (Decoder::CarriageReturn, Event::EndOfLine),
+                (Decoder::Ground, 10) => (Decoder::Ground, Event::EndOfLine),
+                (Decoder::Ground, _) => (Decoder::Ground, Event::Literal(b.clone())),
+                (Decoder::CarriageReturn, 10 | 0) => (Decoder::Ground, Event::Nothing),
+                (Decoder::CarriageReturn, _) => decode(Decoder::Ground, b.clone()),
+                __m if { let (__p3, __p4) = (&__m); matches!(__p3, Decoder::Interpret) && (*__p4 == IAC()) } => (Decoder::Ground, Event::Literal(IAC())),
+                __m if { let (__p5, __p6) = (&__m); matches!(__p5, Decoder::Interpret) && ((*__p6 == WILL()) || (*__p6 == WONT()) || (*__p6 == DO()) || (*__p6 == DONT())) } => (Decoder::Negotiation(b.clone()), Event::Nothing),
+                __m if { let (__p7, __p8) = (&__m); matches!(__p7, Decoder::Interpret) && (*__p8 == SB()) } => (Decoder::Subnegotiation(0), Event::Nothing),
+                __m if { let (__p9, __p10) = (&__m); matches!(__p9, Decoder::Interpret) && (*__p10 == AYT()) } => (Decoder::Ground, Event::AreYouThere),
+                __m if { let (__p11, __p12) = (&__m); matches!(__p11, Decoder::Interpret) && (*__p12 == IP()) } => (Decoder::Ground, Event::Interrupt),
+                (Decoder::Interpret, _) => (Decoder::Ground, Event::Nothing),
+                __m if { let (__p13, _) = (&__m); (match __p13 { Decoder::Negotiation(__p14) => (*__p14 == DO()), _ => false }) } => (Decoder::Ground, Event::Answer(vec![IAC(), WONT(), b.clone()])),
+                __m if { let (__p16, _) = (&__m); (match __p16 { Decoder::Negotiation(__p17) => (*__p17 == WILL()), _ => false }) } => (Decoder::Ground, Event::Answer(vec![IAC(), DONT(), b.clone()])),
+                (Decoder::Negotiation(_), _) => (Decoder::Ground, Event::Nothing),
+                (Decoder::Subnegotiation(count), _) => if (count + 1) > MAXIMUM_SUBNEGOTIATION() {
+                    (Decoder::Ground, Event::SubnegotiationTooLong)
+                } else if b == IAC() {
+                    (Decoder::SubnegotiationInterpret(count + 1), Event::Nothing)
+                } else {
+                    (Decoder::Subnegotiation(count + 1), Event::Nothing)
+                },
+                __m if { let (__p19, __p21) = (&__m); matches!(__p19, Decoder::SubnegotiationInterpret(..)) && (*__p21 == SE()) } => (Decoder::Ground, Event::Nothing),
+                (Decoder::SubnegotiationInterpret(count), _) => (Decoder::Subnegotiation(count.clone()), Event::Nothing),
+            }
+        }
+
+        pub fn write_text(mut stream: telos_io::TcpStream, mut text: String) -> IoResult<()> {
+            stream.write_all(text.clone().into_bytes())
+        }
+
+        pub fn render(mut reply: Reply) -> Vec<u8> {
+            let mut out = Vec::<u8>::new();
+            for line in (reply.lines.clone()) {
+                out.extend_from_slice(&line.clone().into_bytes());
+                out.extend_from_slice(&(vec![13, 10]).iter().map(|x| *x as u8).collect::<Vec<u8>>());
+            }
+            out
+        }
+
+        pub fn encode_input(mut bytes: Vec<u8>) -> Vec<u8> {
+            let mut out = Vec::<u8>::new();
+            let mut i = 0;
+            while i < (bytes.len() as i64) {
+                let b = bytes[(i.clone()) as usize];
+                i = i + 1;
+                match b.clone() {
+                    10 => out.extend_from_slice(&(vec![13, 10]).iter().map(|x| *x as u8).collect::<Vec<u8>>()),
+                    13 => if (i >= (bytes.len() as i64)) || (bytes[(i.clone()) as usize] != 10) {
+                        out.extend_from_slice(&(vec![13, 0]).iter().map(|x| *x as u8).collect::<Vec<u8>>());
+                    },
+                    __m if (*(&__m) == IAC()) => out.extend_from_slice(&vec![IAC(), IAC()]),
+                    _ => out.push(b.clone()),
+                };
+            }
+            out
+        }
+
+        pub fn forward_input(mut stream: telos_io::TcpStream) -> IoResult<()> {
+            loop {
+                match (telos_io::Stdin::read(4096))? {
+                    telos_io::Input::Eof => return stream.close(),
+                    telos_io::Input::Data(bytes) => (stream.write_all(encode_input(bytes.clone())))?,
+                };
+            }
+        }
+
+        #[allow(non_snake_case)]
+        pub fn BACKSPACE() -> u8 {
+            8
+        }
+
+        #[allow(non_snake_case)]
+        pub fn DELETE() -> u8 {
+            127
+        }
+
+        #[allow(non_snake_case)]
+        pub fn CONTROL_C() -> u8 {
+            3
+        }
+
+        #[allow(non_snake_case)]
+        pub fn CONTROL_D() -> u8 {
+            4
+        }
+
+        #[allow(non_snake_case)]
+        pub fn ESCAPE() -> u8 {
+            29
+        }
+
+        #[allow(non_snake_case)]
+        pub fn COMMAND_PROMPT() -> String {
+            String::from("\r\ntelnet> ")
+        }
+
+        #[allow(non_snake_case)]
+        pub fn COMMAND_HELP() -> String {
+            format!("{}{}{}{}", String::from("close    end the session\n"), String::from("quit     end the session\n"), String::from("help     list these commands\n"), String::from("(empty)  return to the session\n"))
+        }
+
+        #[derive(Clone, Debug)]
+        pub enum Edit {
+            Unchanged,
+            Show(Vec<u8>),
+            Enter(Vec<u8>),
+            Interrupt,
+            EndOfInput,
+            Escape,
+        }
+
+        pub fn erase_last(mut line: Vec<u8>) -> Vec<u8> {
+            let mut end = (line.len() as i64) - 1;
+            while ((end > 0) && (line[(end.clone()) as usize] >= 128)) && (line[(end.clone()) as usize] < 192) {
+                end = end - 1;
+            }
+            line[(0) as usize..(end.clone()) as usize].to_vec()
+        }
+
+        pub fn apply_key(mut line: Vec<u8>, mut b: u8) -> (Vec<u8>, Edit) {
+            match b.clone() {
+                13 | 10 => (Vec::<u8>::new(), Edit::Enter(line.clone())),
+                __m if ((*(&__m) == BACKSPACE()) || (*(&__m) == DELETE())) => if line.is_empty() {
+                    (line.clone(), Edit::Unchanged)
+                } else {
+                    (erase_last(line.clone()), Edit::Show((vec![8, 32, 8]).iter().map(|x| *x as u8).collect::<Vec<u8>>()))
+                },
+                __m if (*(&__m) == CONTROL_C()) => (Vec::<u8>::new(), Edit::Interrupt),
+                __m if (*(&__m) == CONTROL_D()) => if line.is_empty() {
+                    (line.clone(), Edit::EndOfInput)
+                } else {
+                    (line.clone(), Edit::Unchanged)
+                },
+                __m if (*(&__m) == ESCAPE()) => (line.clone(), Edit::Escape),
+                _ => if b < 32 {
+                    (line.clone(), Edit::Unchanged)
+                } else {
+                    let mut longer = line.clone();
+                    longer.push(b.clone());
+                    (longer.clone(), Edit::Show(vec![b.clone()]))
+                },
+            }
+        }
+
+        pub fn finish_input(mut stream: telos_io::TcpStream) -> IoResult<()> {
+            (telos_io::Stdin::set_raw(false))?;
+            stream.close()
+        }
+
+        pub fn run_command(mut stream: telos_io::TcpStream, mut command: Vec<u8>) -> IoResult<()> {
+            match String::from_utf8_lossy(&command).into_owned().trim().to_string() {
+                __m if ((*(&__m) == "quit") || (*(&__m) == "close")) => {
+                    let _ = stream.close();
+                    telos_io::exit((0) as i32)
+                },
+                __m if (*(&__m) == "help") => (telos_io::Stdout::write_all(COMMAND_HELP().clone().into_bytes()))?,
+                __m if (*(&__m) == "") => {
+                },
+                _ => (telos_io::Stdout::write_all((vec![117, 110, 107, 110, 111, 119, 110, 32, 99, 111, 109, 109, 97, 110, 100, 10]).iter().map(|x| *x as u8).collect::<Vec<u8>>()))?,
+            };
+            Ok(())
+        }
+
+        pub fn edit_input(mut stream: telos_io::TcpStream) -> IoResult<()> {
+            let mut line = Vec::<u8>::new();
+            let mut command = Vec::<u8>::new();
+            let mut commanding = false;
+            loop {
+                match (telos_io::Stdin::read(4096))? {
+                    telos_io::Input::Eof => return finish_input(stream.clone()),
+                    telos_io::Input::Data(bytes) => {
+                        for b in (bytes.clone()) {
+                            if commanding {
+                                let (next, edit) = apply_key(command.clone(), b.clone());
+                                command = next.clone();
+                                match edit.clone() {
+                                    Edit::Unchanged => {
+                                    },
+                                    Edit::Show(shown) => (telos_io::Stdout::write_all(shown.clone()))?,
+                                    Edit::Enter(entered) => {
+                                        (telos_io::Stdout::write_all((vec![10]).iter().map(|x| *x as u8).collect::<Vec<u8>>()))?;
+                                        (run_command(stream.clone(), entered.clone()))?;
+                                        commanding = false;
+                                        (telos_io::Stdout::write_all(line.clone()))?
+                                    },
+                                    _ => {
+                                        (telos_io::Stdout::write_all((vec![10]).iter().map(|x| *x as u8).collect::<Vec<u8>>()))?;
+                                        command.clear();
+                                        commanding = false;
+                                        (telos_io::Stdout::write_all(line.clone()))?
+                                    },
+                                };
+                            } else {
+                                let (next, edit) = apply_key(line.clone(), b.clone());
+                                line = next.clone();
+                                match edit.clone() {
+                                    Edit::Unchanged => {
+                                    },
+                                    Edit::Show(shown) => (telos_io::Stdout::write_all(shown.clone()))?,
+                                    Edit::Enter(entered) => {
+                                        (telos_io::Stdout::write_all((vec![10]).iter().map(|x| *x as u8).collect::<Vec<u8>>()))?;
+                                        let mut sent = encode_input(entered.clone());
+                                        sent.extend_from_slice(&(vec![13, 10]).iter().map(|x| *x as u8).collect::<Vec<u8>>());
+                                        (stream.write_all(sent.clone()))?
+                                    },
+                                    Edit::Interrupt => (stream.write_all(vec![IAC(), IP()]))?,
+                                    Edit::EndOfInput => return finish_input(stream.clone()),
+                                    Edit::Escape => {
+                                        (telos_io::Stdout::write_all(COMMAND_PROMPT().clone().into_bytes()))?;
+                                        commanding = true;
+                                    },
+                                };
+                            };
+                        }
+                    },
+                };
+            }
+        }
+
+        pub fn answer_line(mut stream: telos_io::TcpStream, mut application: Console, mut line: Vec<u8>) -> IoResult<bool> {
+            let reply = (application.respond)(String::from_utf8_lossy(&line).into_owned());
+            let mut out = render(reply.clone());
+            match reply.action.clone() {
+                Action::Continue => {
+                    out.extend_from_slice(&application.prompt.clone().into_bytes());
+                    (stream.write_all(out.clone()))?;
+                    Ok(true)
+                },
+                Action::Close => {
+                    (stream.write_all(out.clone()))?;
+                    Ok(false)
+                },
+            }
+        }
+
+        pub fn session(mut stream: telos_io::TcpStream, mut application: Console) -> IoResult<()> {
+            (write_text(stream.clone(), application.prompt.clone()))?;
+            let mut state = Decoder::Ground;
+            let mut line = Vec::<u8>::new();
+            loop {
+                match (stream.read(4096))? {
+                    telos_io::Input::Eof => return Ok(()),
+                    telos_io::Input::Data(bytes) => {
+                        for b in (bytes.clone()) {
+                            let (next, event) = decode(state.clone(), b.clone());
+                            state = next.clone();
+                            match event.clone() {
+                                Event::Nothing => {
+                                },
+                                Event::Literal(c) => {
+                                    line.push(c.clone());
+                                    if (line.len() as i64) > application.maximum_line {
+                                        (write_text(stream.clone(), String::from("line too long\r\n")))?;
+                                        return Ok(());
+                                    }
+                                },
+                                Event::EndOfLine => {
+                                    if !(answer_line(stream.clone(), application.clone(), line.clone()))? {
+                                        return Ok(());
+                                    };
+                                    line.clear()
+                                },
+                                Event::Answer(answer) => (stream.write_all(answer.clone()))?,
+                                Event::AreYouThere => (write_text(stream.clone(), String::from("[yes]\r\n")))?,
+                                Event::Interrupt | Event::SubnegotiationTooLong => return Ok(()),
+                            };
+                        }
+                    },
+                };
+            }
+        }
+    }
+}
+
+pub mod text {
+
+    pub fn is_whitespace(mut b: u8) -> bool {
+        match b.clone() {
+            32 | 9 | 10 | 11 | 12 | 13 => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_digit(mut b: u8) -> bool {
+        (b >= 48) && (b <= 57)
+    }
+
+    pub fn digit_value(mut b: u8) -> Option<i64> {
+        match b.clone() {
+            48 => Some(0),
+            49 => Some(1),
+            50 => Some(2),
+            51 => Some(3),
+            52 => Some(4),
+            53 => Some(5),
+            54 => Some(6),
+            55 => Some(7),
+            56 => Some(8),
+            57 => Some(9),
+            _ => None,
+        }
+    }
+
+    pub fn substring(mut text: String, mut start: i64, mut end: i64) -> String {
+        String::from_utf8_lossy(&text.clone().into_bytes()[(start.clone()) as usize..(end.clone()) as usize].to_vec()).into_owned()
+    }
+
+    pub fn bytes_match_at(mut bytes: Vec<u8>, mut needle: Vec<u8>, mut at: i64) -> bool {
+        if (at < 0) || ((at + (needle.len() as i64)) > (bytes.len() as i64)) {
+            return false;
+        };
+        let mut i = 0;
+        while i < (needle.len() as i64) {
+            if bytes[(at + i) as usize] != needle[(i.clone()) as usize] {
+                return false;
+            };
+            i = i + 1;
+        }
+        true
+    }
+
+    pub fn bytes_find_from(mut bytes: Vec<u8>, mut needle: Vec<u8>, mut start: i64) -> Option<i64> {
+        let mut at = start.clone();
+        while (at + (needle.len() as i64)) <= (bytes.len() as i64) {
+            if bytes_match_at(bytes.clone(), needle.clone(), at.clone()) {
+                return Some(at.clone());
+            };
+            at = at + 1;
+        }
+        None
+    }
+
+    pub fn find_from(mut text: String, mut needle: String, mut start: i64) -> Option<i64> {
+        bytes_find_from(text.clone().into_bytes(), needle.clone().into_bytes(), start.clone())
+    }
+
+    pub fn find(mut text: String, mut needle: String) -> Option<i64> {
+        find_from(text.clone(), needle.clone(), 0)
+    }
+
+    pub fn contains(mut text: String, mut needle: String) -> bool {
+        match find(text.clone(), needle.clone()) {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
+    pub fn ends_with(mut text: String, mut suffix: String) -> bool {
+        let bytes = text.clone().into_bytes();
+        bytes_match_at(bytes.clone(), suffix.clone().into_bytes(), (bytes.len() as i64) - (suffix.len() as i64))
+    }
+
+    pub fn strip_suffix(mut text: String, mut suffix: String) -> Option<String> {
+        if ends_with(text.clone(), suffix.clone()) {
+            Some(substring(text.clone(), 0, (text.len() as i64) - (suffix.len() as i64)))
+        } else {
+            None
+        }
+    }
+
+    pub fn split(mut text: String, mut separator: String) -> Vec<String> {
+        let bytes = text.clone().into_bytes();
+        let needle = separator.clone().into_bytes();
+        let mut pieces: Vec<String> = Vec::new();
+        if needle.is_empty() {
+            pieces.push(text.clone());
+            return pieces.clone();
+        };
+        let mut start = 0;
+        loop {
+            match bytes_find_from(bytes.clone(), needle.clone(), start.clone()) {
+                Some(at) => {
+                    pieces.push(String::from_utf8_lossy(&bytes[(start.clone()) as usize..(at.clone()) as usize].to_vec()).into_owned());
+                    start = at + (needle.len() as i64);
+                },
+                None => {
+                    pieces.push(String::from_utf8_lossy(&bytes[(start.clone()) as usize..((bytes.len() as i64)) as usize].to_vec()).into_owned());
+                    return pieces.clone();
+                },
+            };
+        }
+    }
+
+    pub fn split_once(mut text: String, mut separator: String) -> Option<(String, String)> {
+        match find(text.clone(), separator.clone()) {
+            Some(at) => Some((substring(text.clone(), 0, at.clone()), substring(text.clone(), at + (separator.len() as i64), (text.len() as i64)))),
+            None => None,
+        }
+    }
+
+    pub fn replace(mut text: String, mut from: String, mut to: String) -> String {
+        if from.is_empty() {
+            text
+        } else {
+            split(text.clone(), from.clone()).join(&to.clone())
+        }
+    }
+
+    pub fn trim_start(mut text: String) -> String {
+        let bytes = text.clone().into_bytes();
+        let mut start = 0;
+        while (start < (bytes.len() as i64)) && is_whitespace(bytes[(start.clone()) as usize]) {
+            start = start + 1;
+        }
+        String::from_utf8_lossy(&bytes[(start.clone()) as usize..((bytes.len() as i64)) as usize].to_vec()).into_owned()
+    }
+
+    pub fn trim_end(mut text: String) -> String {
+        let bytes = text.clone().into_bytes();
+        let mut end = (bytes.len() as i64);
+        while (end > 0) && is_whitespace(bytes[(end - 1) as usize]) {
+            end = end - 1;
+        }
+        String::from_utf8_lossy(&bytes[(0) as usize..(end.clone()) as usize].to_vec()).into_owned()
+    }
+
+    pub fn lower_byte(mut b: u8) -> u8 {
+        if (b >= 65) && (b <= 90) {
+            b + 32
+        } else {
+            b
+        }
+    }
+
+    pub fn upper_byte(mut b: u8) -> u8 {
+        if (b >= 97) && (b <= 122) {
+            b - 32
+        } else {
+            b
+        }
+    }
+
+    pub fn to_lower(mut text: String) -> String {
+        let mut out = Vec::<u8>::new();
+        for b in (text.clone().into_bytes()) {
+            out.push(lower_byte(b.clone()));
+        }
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
+    pub fn to_upper(mut text: String) -> String {
+        let mut out = Vec::<u8>::new();
+        for b in (text.clone().into_bytes()) {
+            out.push(upper_byte(b.clone()));
+        }
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
+    pub fn equals_ignore_case(mut a: String, mut b: String) -> bool {
+        to_lower(a.clone()) == to_lower(b.clone())
+    }
+
+    pub fn lines(mut text: String) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for line in (split(text.clone(), String::from("\n"))) {
+            out.push(match strip_suffix(line.clone(), String::from("\r")) {
+                Some(stripped) => stripped,
+                None => line,
+            });
+        }
+        if !out.is_empty() && out[((out.len() as i64) - 1) as usize].is_empty() {
+            return out[(0) as usize..((out.len() as i64) - 1) as usize].to_vec();
+        };
+        out
+    }
+
+    pub fn repeat(mut text: String, mut count: i64) -> String {
+        let mut out = String::from("");
+        let mut i = 0;
+        while i < count {
+            out = format!("{}{}", out, text);
+            i = i + 1;
+        }
+        out
+    }
+}

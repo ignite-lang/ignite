@@ -1,0 +1,1 @@
+io_p3a_spawn_field.telos:8:3: error[E013]: `spawn` needs a call to an effectful function or protocol role

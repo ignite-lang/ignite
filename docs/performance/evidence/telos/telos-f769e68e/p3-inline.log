@@ -1,0 +1,6 @@
+FILES 17
+build ignite EXIT=0
+build rt EXIT=0
+rust EXIT=0 secs=3.4
+llvm EXIT=0 secs=0.8
+EXIT=0

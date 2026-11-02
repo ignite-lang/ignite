@@ -1,0 +1,307 @@
+# callgrind format
+version: 1
+creator: callgrind-3.25.1
+pid: 4163702
+cmd:  /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald --port 2642
+part: 2
+
+
+desc: I1 cache: 
+desc: D1 cache: 
+desc: LL cache: 
+
+desc: Timerange: Basic block 129584598 - 129584790
+desc: Trigger: Program termination
+
+positions: line
+events: Ir
+summary: 871
+
+
+ob=(7) /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald
+fl=(117) ???
+fn=(5052) <tokio::runtime::signal::Driver>::process
+0 15
+
+fn=(5056) <tokio::runtime::time::handle::Handle>::process_at_time
+0 30
+cfn=(5058) <tokio::runtime::time::wheel::Wheel>::poll
+calls=1 0 
+0 78
+0 6
+cfn=(5030) <tokio::runtime::time::wheel::Wheel>::next_expiration
+calls=1 0 
+0 38
+0 30
+
+fn=(5060) <tokio::runtime::scheduler::multi_thread::idle::Idle>::is_parked
+0 104
+
+fn=(4546) core::io::error::os_functions::get_os_functions
+0 3
+
+fn=(4796) <std::sys::thread::unix::Thread>::new::thread_start
+cfn=(4826) <std::thread::lifecycle::spawn_unchecked<<tokio::runtime::blocking::pool::Spawner>::spawn_thread::{closure#0}, ()>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
+calls=0 0 
+0 871
+
+fn=(4836) std::sys::backtrace::__rust_begin_short_backtrace::<<tokio::runtime::blocking::pool::Spawner>::spawn_thread::{closure#0}, ()>
+cfn=(4840) <tokio::runtime::blocking::pool::Inner>::run
+calls=0 0 
+0 871
+
+fn=(5024) <tokio::runtime::scheduler::multi_thread::worker::Context>::park_internal
+0 47
+cfn=(5026) <tokio::runtime::driver::Driver>::park
+calls=1 0 
+0 582
+0 50
+
+fn=(5034) <tokio::runtime::io::driver::Driver>::turn
+0 23
+cfn=(5036) <mio::poll::Poll>::poll
+calls=1 0 
+0 92
+0 11
+cfn=(4546)
+calls=1 0 
+0 3
+0 3
+cfn=(5210) std::sys::io::error::unix::decode_error_kind
+calls=1 0 
+0 8
+0 16
+
+fn=(5010) <tokio::runtime::scheduler::multi_thread::worker::Context>::run
+0 26
+cfn=(5024)
+calls=1 0 
+0 679
+0 60
+cfn=(5060)
+calls=1 0 
+0 104
+0 2
+
+fn=(4610) <std::time::Instant>::now
+0 2
+cfn=(4612) <std::sys::pal::unix::time::Timespec>::now
+calls=1 0 
+0 27
+
+fn=(4998) <tokio::runtime::task::core::Core<tokio::runtime::blocking::task::BlockingTask<<tokio::runtime::scheduler::multi_thread::worker::Launch>::launch::{closure#0}>, tokio::runtime::blocking::schedule::BlockingSchedule>>::poll
+cfn=(5000) tokio::runtime::scheduler::multi_thread::worker::run
+calls=0 0 
+0 871
+
+fn=(5014) <std::sys::pal::unix::time::Timespec>::sub_timespec
+0 36
+
+fn=(5028) <tokio::runtime::time::Driver>::park_internal
+0 32
+cfn=(5030)
+calls=1 0 
+0 38
+0 33
+cfn=(5034)
+calls=1 0 
+0 156
+0 2
+cfn=(5052)
+calls=1 0 
+0 15
+0 2
+cfn=(4610)
+calls=1 0 
+0 29
+0 7
+cfn=(5054) <std::time::Instant>::duration_since
+calls=1 0 
+0 54
+0 15
+cfn=(5056)
+calls=1 0 
+0 182
+0 8
+
+fn=(5210)
+0 8
+
+fn=(4544) core::io::error::os_functions::set_functions::set_functions_inner
+0 3
+
+fn=(4612)
+0 6
+cob=(2) /usr/lib/libc.so.6
+cfi=(195) /usr/src/debug/glibc/glibc/time/../sysdeps/unix/sysv/linux/clock_gettime.c
+cfn=(4614) clock_gettime@@GLIBC_2.17
+calls=1 30 
+0 11
+0 10
+
+fn=(5008) <tokio::runtime::context::scoped::Scoped<tokio::runtime::scheduler::Context>>::set::<tokio::runtime::scheduler::multi_thread::worker::run::{closure#0}::{closure#0}, ()>
+cfn=(5010)
+calls=0 0 
+0 871
+
+fn=(4996) <tokio::runtime::task::harness::Harness<tokio::runtime::blocking::task::BlockingTask<<tokio::runtime::scheduler::multi_thread::worker::Launch>::launch::{closure#0}>, tokio::runtime::blocking::schedule::BlockingSchedule>>::poll
+cfn=(4998)
+calls=0 0 
+0 871
+
+fn=(5000)
+cfn=(5006) tokio::runtime::context::runtime::enter_runtime::<tokio::runtime::scheduler::multi_thread::worker::run::{closure#0}, ()>
+calls=0 0 
+0 871
+
+fn=(5006)
+cfn=(5008)
+calls=0 0 
+0 871
+
+fn=(5030)
+0 78
+cfn=(5032) <tokio::runtime::time::wheel::level::Level>::next_expiration
+calls=3 0 
+0 21
+0 15
+
+fn=(5036)
+0 11
+cob=(2)
+cfi=(236) /usr/src/debug/glibc/glibc/misc/../sysdeps/unix/sysv/linux/epoll_wait.c
+cfn=(5038) epoll_wait
+calls=1 28 
+0 57
+0 3
+cob=(2)
+cfi=(181) /usr/src/debug/glibc/glibc/csu/errno-loc.c
+cfn=(4440) __errno_location
+calls=1 25 
+0 4
+0 9
+cfn=(4544)
+calls=1 0 
+0 3
+0 5
+
+fn=(4826)
+cfn=(4836)
+calls=0 0 
+0 871
+
+fn=(4840)
+cfn=(4994) tokio::runtime::task::raw::poll::<tokio::runtime::blocking::task::BlockingTask<<tokio::runtime::scheduler::multi_thread::worker::Launch>::launch::{closure#0}>, tokio::runtime::blocking::schedule::BlockingSchedule>
+calls=0 0 
+0 871
+
+fn=(4994)
+cfn=(4996)
+calls=0 0 
+0 871
+
+fn=(5026)
+0 9
+cfn=(5028)
+calls=1 0 
+0 573
+
+fn=(5032)
+0 21
+
+fn=(5054)
+0 10
+cfn=(5014)
+calls=1 0 
+0 36
+0 8
+
+fn=(5058)
+0 36
+cfn=(5030)
+calls=1 0 
+0 38
+0 4
+
+ob=(2)
+fl=(206) /usr/src/debug/glibc/glibc/nptl/pthread_create.c
+fn=(4766) start_thread
+cob=(7)
+cfi=(117)
+cfn=(4796)
+calls=0 0 
+454 871
+
+fl=(181)
+fn=(4440)
+25 1
++1 2
++1 1
+
+fl=(212) /usr/src/debug/glibc/glibc/misc/../sysdeps/unix/sysv/linux/x86_64/clone.S
+fn=(4756) clone
+cfi=(206)
+cfn=(4766)
+calls=0 339 
+100 871
+
+fl=(236)
+fn=(5038)
+28 1
+fi=(237) /usr/src/debug/glibc/glibc/misc/../sysdeps/unix/sysv/linux/sysdep-cancel.h
++13 1
+fe=(236)
+-11 3
+fi=(237)
++11 1
++1 6
+fe=(236)
+-14 2
+fi=(237)
++25 5
+fe=(236)
+-25 2
+fi=(237)
++25 4
+cfi=(235) /usr/src/debug/glibc/glibc/nptl/../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S
+cfn=(4980) __syscall_cancel_arch
+calls=1 -22 
+* 15
++5 1
+-5 1
++5 1
++6 1
++17 1
+-17 7
++18 3
+fe=(236)
+-48 2
+
+fl=(195)
+fn=(4614)
+30 1
++8 2
++2 2
++28 3
++1 2
++17 1
+
+fl=(235)
+fn=(4980)
+31 1
++6 1
++1 1
++1 1
++4 1
++1 1
++1 1
++1 1
++1 1
++1 1
++1 1
++1 1
++1 1
++1 1
++4 1
+
+totals: 871

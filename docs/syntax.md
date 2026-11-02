@@ -42,7 +42,7 @@ verbose".
 
 ### 2.1 Corpus
 
-`measure.py` (session scratch directory, run as `python3 -I measure.py <repo>`) strips
+`measure.py` (`docs/performance/evidence/telos/telos-34d976b7/syntax-scratch/measure.py`, run as `python3 -I measure.py <repo>`) strips
 comments, tokenizes with one regular expression (a literal is one token) and runs 29 pattern
 detectors.
 

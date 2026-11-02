@@ -1,0 +1,27 @@
+START 00:57:34
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-7833c6a20e9dcc9e)
+
+running 16 tests
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test golden::acceptance_copy_is_current ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::record_and_enum_with_match ... ok
+test golden::pure_functions ... ok
+test golden::generics_stores_and_builtins ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test golden::constants_qualified_patterns_and_io_error ... ok
+test golden::surface_syntax ... ok
+test golden::system_with_server_and_client ... ok
+test golden::process_exit_diverges ... ok
+test golden::variants_of_enums_not_imported ... ok
+test golden::terminal ... ok
+test golden::executable_components ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.20s
+
+cargo EXIT=0
+END 00:57:34
+EXIT=0

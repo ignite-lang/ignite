@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/todo.list.TodoId",
+  "x-ess-provenance": {
+    "system": "todo",
+    "specification_version": "v1",
+    "source_digest": "4fab963621d47043d38543f5141de315c8b798f376db1be3379011617c426950",
+    "contract_digest": "slice-sha256/2:0d92b2fff6392d87bac64cf31e448b435dbaa8d17afa65bb74a07a33815bcf5c",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "todo.list.TodoId": {
+      "title": "TodoId",
+      "x-ess-name": "todo.list.TodoId",
+      "x-ess-kind": "newtype",
+      "type": "integer"
+    }
+  }
+}

@@ -1,0 +1,779 @@
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:861:
+ /// The `--state` of 16.3: the option, else
+ /// `target/ignite-run/<assembly>/` under the working directory.
+ fn state_dir(state: Option<&Path>, assembly: &str) -> PathBuf {
+[31m-    state.map(Path::to_path_buf).unwrap_or_else(|| {
+(B[m[31m-        Path::new("target")
+(B[m[31m-            .join("ignite-run")
+(B[m[31m-            .join(assembly)
+(B[m[31m-    })
+(B[m[32m+    state
+(B[m[32m+        .map(Path::to_path_buf)
+(B[m[32m+        .unwrap_or_else(|| Path::new("target").join("ignite-run").join(assembly))
+(B[m }
+ 
+ /// A diagnostic of the run phase (E125 to E127) at the program's file.
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:963:
+     ignite_files(&std_root, &mut files)?;
+     for path in &files {
+         path.hash(&mut hasher);
+[31m-        std::fs::read(path).map_err(io_error(path))?.hash(&mut hasher);
+(B[m[32m+        std::fs::read(path)
+(B[m[32m+            .map_err(io_error(path))?
+(B[m[32m+            .hash(&mut hasher);
+(B[m     }
+     let mut stat = |path: &Path| {
+         if let Ok(metadata) = std::fs::metadata(path) {
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:1003:
+         .write(true)
+         .open(&lock_path)
+         .map_err(io_error(&lock_path))?;
+[31m-    let _lock = nix::fcntl::Flock::lock(lock_file, nix::fcntl::FlockArg::LockExclusive)
+(B[m[31m-        .map_err(|(_, errno)| Error::Io {
+(B[m[32m+    let _lock = nix::fcntl::Flock::lock(lock_file, nix::fcntl::FlockArg::LockExclusive).map_err(
+(B[m[32m+        |(_, errno)| Error::Io {
+(B[m             path: lock_path.clone(),
+             error: errno.into(),
+[31m-        })?;
+(B[m[32m+        },
+(B[m[32m+    )?;
+(B[m     let stamp = build_stamp(file, options)?;
+     let stamp_path = build_dir.join("stamp");
+     let by_name = |paths: &[PathBuf]| -> BTreeMap<String, PathBuf> {
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:1089:
+ 
+ /// Check a journal's header against the current model (E126) and return
+ /// its epoch.
+[31m-fn check_header(loaded: &Loaded, header: &str, model_json: &ignite_eval::Json) -> Result<i64, Error> {
+(B[m[32m+fn check_header(
+(B[m[32m+    loaded: &Loaded,
+(B[m[32m+    header: &str,
+(B[m[32m+    model_json: &ignite_eval::Json,
+(B[m[32m+) -> Result<i64, Error> {
+(B[m     let mismatch = |what: String| run_diagnostic(loaded, "E126", what);
+     let parsed = ignite_eval::Json::parse(header)
+         .map_err(|reason| mismatch(format!("the journal's header does not parse: {reason}")))?;
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:1098:
+             "the journal's first record is no header".to_string(),
+         ));
+     }
+[31m-    match parsed.get("formatVersion").and_then(ignite_eval::Json::as_str) {
+(B[m[32m+    match parsed
+(B[m[32m+        .get("formatVersion")
+(B[m[32m+        .and_then(ignite_eval::Json::as_str)
+(B[m[32m+    {
+(B[m         Some(version) if version == run::engine::JOURNAL_VERSION => {}
+         Some(version) => {
+             return Err(mismatch(format!(
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:1106:
+                 run::engine::JOURNAL_VERSION
+             )));
+         }
+[31m-        None => return Err(mismatch("the journal's header has no formatVersion".to_string())),
+(B[m[32m+        None => {
+(B[m[32m+            return Err(mismatch(
+(B[m[32m+                "the journal's header has no formatVersion".to_string(),
+(B[m[32m+            ));
+(B[m[32m+        }
+(B[m     }
+     if parsed.get("model") != Some(model_json) {
+         return Err(mismatch(
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:1143:
+         None,
+         options.std.as_deref(),
+     )?;
+[31m-    let assembly_id = model.assembly.as_ref().map(|a| a.id.clone()).unwrap_or_default();
+(B[m[32m+    let assembly_id = model
+(B[m[32m+        .assembly
+(B[m[32m+        .as_ref()
+(B[m[32m+        .map(|a| a.id.clone())
+(B[m[32m+        .unwrap_or_default();
+(B[m     let state = state_dir(options.state.as_deref(), &assembly_id);
+     let build_dir = options.build.clone().unwrap_or_else(|| state.join("build"));
+     let manual = options.clock == ClockMode::Manual;
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:1171:
+         None => DEFAULT_SETTLE,
+     };
+     let (executables, declared) = run_members(&model);
+[31m-    let mut journal = run::journal::Journal::open(&state, options.fresh).map_err(|error| match error {
+(B[m[31m-        run::journal::JournalError::Locked(path) => run_diagnostic(
+(B[m[31m-            &loaded,
+(B[m[31m-            "E126",
+(B[m[31m-            format!("another `ignite run` holds {}", path.display()),
+(B[m[31m-        ),
+(B[m[31m-        run::journal::JournalError::Io(error) => Error::Io {
+(B[m[31m-            path: state.clone(),
+(B[m[31m-            error,
+(B[m[31m-        },
+(B[m[31m-    })?;
+(B[m[32m+    let mut journal =
+(B[m[32m+        run::journal::Journal::open(&state, options.fresh).map_err(|error| match error {
+(B[m[32m+            run::journal::JournalError::Locked(path) => run_diagnostic(
+(B[m[32m+                &loaded,
+(B[m[32m+                "E126",
+(B[m[32m+                format!("another `ignite run` holds {}", path.display()),
+(B[m[32m+            ),
+(B[m[32m+            run::journal::JournalError::Io(error) => Error::Io {
+(B[m[32m+                path: state.clone(),
+(B[m[32m+                error,
+(B[m[32m+            },
+(B[m[32m+        })?;
+(B[m     if journal.dropped_torn_line {
+         eprintln!(
+             "ignite run: dropped a torn last line of {}",
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:1215:
+     let mut core = run::engine::Core::new(&mut evaluator, &model);
+     let (epoch, generation, start_at) = if journal.records.is_empty() {
+         let epoch = if manual {
+[31m-            epoch_option.unwrap_or_else(|| {
+(B[m[31m-                run::parse_rfc3339(run::DEFAULT_EPOCH).unwrap_or_default()
+(B[m[31m-            })
+(B[m[32m+            epoch_option
+(B[m[32m+                .unwrap_or_else(|| run::parse_rfc3339(run::DEFAULT_EPOCH).unwrap_or_default())
+(B[m         } else {
+             wall_now()
+         };
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:1272:
+         start_at,
+         builder,
+     };
+[31m-    let live = run::live::Live::new(core, &model, control_types, config, journal, adapters, tx, rx);
+(B[m[32m+    let live = run::live::Live::new(
+(B[m[32m+        core,
+(B[m[32m+        &model,
+(B[m[32m+        control_types,
+(B[m[32m+        config,
+(B[m[32m+        journal,
+(B[m[32m+        adapters,
+(B[m[32m+        tx,
+(B[m[32m+        rx,
+(B[m[32m+    );
+(B[m     live.run().map_err(io_error(&state))
+ }
+ 
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:1288:
+         None,
+         options.std.as_deref(),
+     )?;
+[31m-    let assembly_id = model.assembly.as_ref().map(|a| a.id.clone()).unwrap_or_default();
+(B[m[32m+    let assembly_id = model
+(B[m[32m+        .assembly
+(B[m[32m+        .as_ref()
+(B[m[32m+        .map(|a| a.id.clone())
+(B[m[32m+        .unwrap_or_default();
+(B[m     let state = state_dir(options.state.as_deref(), &assembly_id);
+     let path = state.join(run::journal::FILE);
+     let content = std::fs::read_to_string(&path).map_err(io_error(&path))?;
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:1295:
+     let mut lines: Vec<String> = content.lines().map(str::to_string).collect();
+     if !content.is_empty() && !content.ends_with('\n') {
+         lines.pop();
+[31m-        eprintln!("ignite replay: dropped a torn last line of {}", path.display());
+(B[m[32m+        eprintln!(
+(B[m[32m+            "ignite replay: dropped a torn last line of {}",
+(B[m[32m+            path.display()
+(B[m[32m+        );
+(B[m     }
+     if lines.is_empty() {
+         return Err(run_diagnostic(
+Diff in /home/timo/projects/telos/crates/ignite/src/run/engine.rs:82:
+         let fields = value
+             .get("fields")
+             .and_then(Json::as_array)
+[31m-            .map(|items| {
+(B[m[31m-                items
+(B[m[31m-                    .iter()
+(B[m[31m-                    .map(brief)
+(B[m[31m-                    .collect::<Vec<_>>()
+(B[m[31m-                    .join(", ")
+(B[m[31m-            })
+(B[m[32m+            .map(|items| items.iter().map(brief).collect::<Vec<_>>().join(", "))
+(B[m             .unwrap_or_default();
+         Some(if fields.is_empty() {
+             variant.to_string()
+Diff in /home/timo/projects/telos/crates/ignite/src/run/engine.rs:102:
+             Json::Int(n) => n.to_string(),
+             Json::Bool(b) => b.to_string(),
+             Json::Null => "()".to_string(),
+[31m-            Json::Array(items) => format!("[{}]", items.iter().map(brief).collect::<Vec<_>>().join(", ")),
+(B[m[32m+            Json::Array(items) => format!(
+(B[m[32m+                "[{}]",
+(B[m[32m+                items.iter().map(brief).collect::<Vec<_>>().join(", ")
+(B[m[32m+            ),
+(B[m             Json::Object(object) => {
+[31m-                if let (Some(Json::Str(ty)), Some(Json::Int(n))) =
+(B[m[31m-                    (object.get("type"), object.get("ns").or(object.get("ppm")).or(object.get("bytes")))
+(B[m[31m-                {
+(B[m[32m+                if let (Some(Json::Str(ty)), Some(Json::Int(n))) = (
+(B[m[32m+                    object.get("type"),
+(B[m[32m+                    object
+(B[m[32m+                        .get("ns")
+(B[m[32m+                        .or(object.get("ppm"))
+(B[m[32m+                        .or(object.get("bytes")),
+(B[m[32m+                ) {
+(B[m                     return match ty.as_str() {
+                         "Duration" => QuantityKind::Duration.debug_text(*n),
+                         "Ratio" => QuantityKind::Ratio.debug_text(*n),
+Diff in /home/timo/projects/telos/crates/ignite/src/run/engine.rs:148:
+ /// and notes have no dispatch beyond their records.
+ #[derive(Clone, Debug, PartialEq, Eq)]
+ pub enum Dispatch {
+[31m-    Spawn { member: String, generation: i64 },
+(B[m[31m-    Kill { member: String, pid: i32, signal: i32 },
+(B[m[31m-    Abort { member: String, id: i64 },
+(B[m[31m-    Attempt { member: String, id: i64 },
+(B[m[31m-    Build { member: String },
+(B[m[31m-    AwaitRelease { member: String },
+(B[m[32m+    Spawn {
+(B[m[32m+        member: String,
+(B[m[32m+        generation: i64,
+(B[m[32m+    },
+(B[m[32m+    Kill {
+(B[m[32m+        member: String,
+(B[m[32m+        pid: i32,
+(B[m[32m+        signal: i32,
+(B[m[32m+    },
+(B[m[32m+    Abort {
+(B[m[32m+        member: String,
+(B[m[32m+        id: i64,
+(B[m[32m+    },
+(B[m[32m+    Attempt {
+(B[m[32m+        member: String,
+(B[m[32m+        id: i64,
+(B[m[32m+    },
+(B[m[32m+    Build {
+(B[m[32m+        member: String,
+(B[m[32m+    },
+(B[m[32m+    AwaitRelease {
+(B[m[32m+        member: String,
+(B[m[32m+    },
+(B[m }
+ 
+ /// One machine of the run.
+Diff in /home/timo/projects/telos/crates/ignite/src/run/engine.rs:412:
+             let id = state.id.clone();
+             let current = state.value.clone();
+             let event = event(at, kind);
+[31m-            let record = self.record("event", at, Some(id.clone()), value_json(&event), false, None);
+(B[m[32m+            let record = self.record(
+(B[m[32m+                "event",
+(B[m[32m+                at,
+(B[m[32m+                Some(id.clone()),
+(B[m[32m+                value_json(&event),
+(B[m[32m+                false,
+(B[m[32m+                None,
+(B[m[32m+            );
+(B[m             out.push(record);
+             let args = vec![current, event];
+             match self.evaluator.call(&self.step, args) {
+Diff in /home/timo/projects/telos/crates/ignite/src/run/engine.rs:564:
+                     let contract = field(&standing, "contract")
+                         .and_then(text)
+                         .unwrap_or_default();
+[31m-                    self.standings
+(B[m[31m-                        .insert(contract, (seq, standing.clone()));
+(B[m[32m+                    self.standings.insert(contract, (seq, standing.clone()));
+(B[m                     follow.push(("standing", value_json(&standing)));
+                     effect = Value::Enum {
+                         name: QualName::new(CONTROL_MODULE, "Effect"),
+Diff in /home/timo/projects/telos/crates/ignite/src/run/engine.rs:577:
+             "Fire" => {
+                 if let Some(fired) = fields.first() {
+                     let mut fired = fired.clone();
+[31m-                    let contract = field(&fired, "contract")
+(B[m[31m-                        .and_then(text)
+(B[m[31m-                        .unwrap_or_default();
+(B[m[32m+                    let contract = field(&fired, "contract").and_then(text).unwrap_or_default();
+(B[m                     let standing_seq = self
+                         .standings
+                         .get(&contract)
+Diff in /home/timo/projects/telos/crates/ignite/src/run/engine.rs:598:
+             }
+             "Build" => {
+                 self.builds.insert(arg_text(0), machine);
+[31m-                dispatch = Some(Dispatch::Build { member: arg_text(0) });
+(B[m[32m+                dispatch = Some(Dispatch::Build {
+(B[m[32m+                    member: arg_text(0),
+(B[m[32m+                });
+(B[m             }
+             "AwaitRelease" => {
+                 self.releases.insert(arg_text(0), machine);
+Diff in /home/timo/projects/telos/crates/ignite/src/run/engine.rs:605:
+[31m-                dispatch = Some(Dispatch::AwaitRelease { member: arg_text(0) });
+(B[m[32m+                dispatch = Some(Dispatch::AwaitRelease {
+(B[m[32m+                    member: arg_text(0),
+(B[m[32m+                });
+(B[m             }
+             "Note" => {}
+             other => {
+Diff in /home/timo/projects/telos/crates/ignite/src/run/engine.rs:639:
+     Value::Record {
+         name: QualName::new(CONTROL_MODULE, "Event"),
+         fields: vec![
+[31m-            ("at".to_string(), Value::Quantity(QuantityKind::Duration, at)),
+(B[m[32m+            (
+(B[m[32m+                "at".to_string(),
+(B[m[32m+                Value::Quantity(QuantityKind::Duration, at),
+(B[m[32m+            ),
+(B[m             ("kind".to_string(), kind),
+         ],
+     }
+Diff in /home/timo/projects/telos/crates/ignite/src/run/engine.rs:646:
+ }
+ 
+ /// A `std.control.Segment` value (16.5).
+[31m-pub fn segment(start: i64, stop: Option<i64>, clock: &str, generation: i64, declared: &[String]) -> Value {
+(B[m[32m+pub fn segment(
+(B[m[32m+    start: i64,
+(B[m[32m+    stop: Option<i64>,
+(B[m[32m+    clock: &str,
+(B[m[32m+    generation: i64,
+(B[m[32m+    declared: &[String],
+(B[m[32m+) -> Value {
+(B[m     Value::Record {
+         name: QualName::new(CONTROL_MODULE, "Segment"),
+         fields: vec![
+Diff in /home/timo/projects/telos/crates/ignite/src/run/live.rs:412:
+                 let guard = self.adapters.in_flight();
+                 let builder = self.config.builder.clone();
+                 let tx = self.tx.clone();
+[31m-                let bin = self
+(B[m[31m-                    .config
+(B[m[31m-                    .state
+(B[m[31m-                    .join("bin")
+(B[m[31m-                    .join(generation.to_string());
+(B[m[32m+                let bin = self.config.state.join("bin").join(generation.to_string());
+(B[m                 std::thread::spawn(move || {
+                     let _guard = guard;
+                     let result = builder()
+Diff in /home/timo/projects/telos/crates/ignite/src/run/live.rs:439:
+     fn fire_due(&mut self) -> io::Result<()> {
+         let now = self.now();
+         while let Some((at, machine, id)) = self.core.next_due(now) {
+[31m-            let records = self.core.feed(machine, at, kind("Timer", vec![Value::Int(id)]));
+(B[m[32m+            let records = self
+(B[m[32m+                .core
+(B[m[32m+                .feed(machine, at, kind("Timer", vec![Value::Int(id)]));
+(B[m             self.process(records)?;
+         }
+         Ok(())
+Diff in /home/timo/projects/telos/crates/ignite/src/run/live.rs:483:
+         Ok(())
+     }
+ 
+[31m-    fn feed_one(&mut self, machine: Option<usize>, fallback: Vec<usize>, kind: Value) -> io::Result<()> {
+(B[m[32m+    fn feed_one(
+(B[m[32m+        &mut self,
+(B[m[32m+        machine: Option<usize>,
+(B[m[32m+        fallback: Vec<usize>,
+(B[m[32m+        kind: Value,
+(B[m[32m+    ) -> io::Result<()> {
+(B[m         match machine {
+             Some(machine) => self.feed_all(&[machine], kind),
+             None => self.feed_all(&fallback, kind),
+Diff in /home/timo/projects/telos/crates/ignite/src/run/live.rs:602:
+             Observation::Built { member, generation } => {
+                 let machine = self.core.take_build(&member);
+                 let fallback = self.core.machines_of(&member, "Roll");
+[31m-                self.feed_one(machine, fallback, kind("Built", vec![Value::Int(generation)]))
+(B[m[32m+                self.feed_one(
+(B[m[32m+                    machine,
+(B[m[32m+                    fallback,
+(B[m[32m+                    kind("Built", vec![Value::Int(generation)]),
+(B[m[32m+                )
+(B[m             }
+             Observation::BuildFailed { member, reason } => {
+                 let machine = self.core.take_build(&member);
+Diff in /home/timo/projects/telos/crates/ignite/src/run/live.rs:609:
+                 let fallback = self.core.machines_of(&member, "Roll");
+[31m-                self.feed_one(machine, fallback, kind("BuildFailed", vec![Value::Text(reason)]))
+(B[m[32m+                self.feed_one(
+(B[m[32m+                    machine,
+(B[m[32m+                    fallback,
+(B[m[32m+                    kind("BuildFailed", vec![Value::Text(reason)]),
+(B[m[32m+                )
+(B[m             }
+         }
+     }
+Diff in /home/timo/projects/telos/crates/ignite/src/run/live.rs:667:
+         self.settle_and_drain()?;
+         while let Some((at, machine, id)) = self.core.next_due(target) {
+             self.manual.advance_to(at);
+[31m-            let records = self.core.feed(machine, at, kind("Timer", vec![Value::Int(id)]));
+(B[m[32m+            let records = self
+(B[m[32m+                .core
+(B[m[32m+                .feed(machine, at, kind("Timer", vec![Value::Int(id)]));
+(B[m             self.process(records)?;
+             self.settle_and_drain()?;
+         }
+Diff in /home/timo/projects/telos/crates/ignite/src/run/live.rs:762:
+                 )?;
+             }
+             for machine in self.core.machines() {
+[31m-                writeln!(out, "machine {}: {}", machine.id, machine.value.debug_text())?;
+(B[m[32m+                writeln!(
+(B[m[32m+                    out,
+(B[m[32m+                    "machine {}: {}",
+(B[m[32m+                    machine.id,
+(B[m[32m+                    machine.value.debug_text()
+(B[m[32m+                )?;
+(B[m             }
+             for (resource, port) in &self.pinned {
+                 writeln!(out, "port {resource}: {port}")?;
+Diff in /home/timo/projects/telos/crates/ignite/src/run/live.rs:808:
+             .filter(|(_, m)| matches!(m.variant(), "Supervise" | "Roll"))
+             .map(|(i, _)| i)
+             .collect();
+[31m-        self.feed_all(&targets, kind("Control", vec![Value::Text("stop".to_string())]))?;
+(B[m[32m+        self.feed_all(
+(B[m[32m+            &targets,
+(B[m[32m+            kind("Control", vec![Value::Text("stop".to_string())]),
+(B[m[32m+        )?;
+(B[m         let deadline = self.stop_deadline();
+         let started = Instant::now();
+         let mut killed = false;
+Diff in /home/timo/projects/telos/crates/ignite/src/run/mod.rs:92:
+     }
+     let days = days_from_civil(year, month, day);
+     let seconds = days * 86_400 + hour * 3600 + minute * 60 + second - offset_s;
+[31m-    seconds
+(B[m[31m-        .checked_mul(1_000_000_000)?
+(B[m[31m-        .checked_add(fraction_ns)
+(B[m[32m+    seconds.checked_mul(1_000_000_000)?.checked_add(fraction_ns)
+(B[m }
+ 
+ /// Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's
+Diff in /home/timo/projects/telos/crates/ignite/src/run/replay.rs:182:
+                         reason: error.message,
+                     }
+                 })?;
+[31m-                let kind = field(&event, "kind")
+(B[m[31m-                    .cloned()
+(B[m[31m-                    .ok_or_else(|| ReplayError::Unparsable {
+(B[m[31m-                        seq: line.seq,
+(B[m[31m-                        reason: "an event without `kind`".to_string(),
+(B[m[31m-                    })?;
+(B[m[32m+                let kind =
+(B[m[32m+                    field(&event, "kind")
+(B[m[32m+                        .cloned()
+(B[m[32m+                        .ok_or_else(|| ReplayError::Unparsable {
+(B[m[32m+                            seq: line.seq,
+(B[m[32m+                            reason: "an event without `kind`".to_string(),
+(B[m[32m+                        })?;
+(B[m                 let at = field(&event, "at").and_then(int).unwrap_or(line.at);
+                 if enum_parts(&kind).map(|(variant, _)| variant) == Some("Emitted") {
+                     return Err(ReplayError::Diverged {
+Diff in /home/timo/projects/telos/crates/ignite/src/run/replay.rs:194:
+                         seq: line.seq,
+                         journaled: lines[i].clone(),
+[31m-                        derived: "nothing: an `Emitted` event follows a `signal` record".to_string(),
+(B[m[32m+                        derived: "nothing: an `Emitted` event follows a `signal` record"
+(B[m[32m+                            .to_string(),
+(B[m                     });
+                 }
+                 let machine = line
+Diff in /home/timo/projects/telos/crates/ignite/tests/ignite_test.rs:373:
+ /// binding and prints the endpoint of one.
+ #[test]
+ fn endpoint_of_reads_the_ref_binding_on_both_targets() {
+[31m-    let source =
+(B[m[31m-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tests/builtins.ignite");
+(B[m[32m+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tests/builtins.ignite");
+(B[m     std::thread::scope(|scope| {
+         let handles: Vec<_> = ["rust", "llvm"]
+             .into_iter()
+Diff in /home/timo/projects/telos/crates/ignite/tests/run.rs:160:
+     }
+ 
+     fn stderr(&self) -> String {
+[31m-        self.stderr.lock().unwrap_or_else(|e| e.into_inner()).clone()
+(B[m[32m+        self.stderr
+(B[m[32m+            .lock()
+(B[m[32m+            .unwrap_or_else(|e| e.into_inner())
+(B[m[32m+            .clone()
+(B[m     }
+ 
+     fn send(&mut self, line: &str) {
+Diff in /home/timo/projects/telos/crates/ignite/tests/run.rs:208:
+     }
+ 
+     fn wait_event(&mut self, variant: &str) -> Json {
+[31m-        self.wait_for(&format!("event {variant}"), |r| event_variant(r) == Some(variant))
+(B[m[32m+        self.wait_for(&format!("event {variant}"), |r| {
+(B[m[32m+            event_variant(r) == Some(variant)
+(B[m[32m+        })
+(B[m     }
+ 
+     fn wait_effect(&mut self, variant: &str) -> Json {
+Diff in /home/timo/projects/telos/crates/ignite/tests/run.rs:323:
+         let started = Instant::now();
+         while proc_dir.exists() && started.elapsed() < Duration::from_secs(2) {
+             let status = std::fs::read_to_string(proc_dir.join("status")).unwrap_or_default();
+[31m-            if status.lines().any(|l| l.starts_with("State:") && l.contains('Z')) {
+(B[m[32m+            if status
+(B[m[32m+                .lines()
+(B[m[32m+                .any(|l| l.starts_with("State:") && l.contains('Z'))
+(B[m[32m+            {
+(B[m                 break;
+             }
+             std::thread::sleep(Duration::from_millis(20));
+Diff in /home/timo/projects/telos/crates/ignite/tests/run.rs:529:
+     let exited = run.wait_for("Exited of Terminal.server", |r| {
+         event_variant(r) == Some("Exited") && machine(r) == "Terminal.server.supervisor"
+     });
+[31m-    assert_ne!(event_fields(&exited)[1].as_i64(), Some(0), "{}", exited.compact());
+(B[m[32m+    assert_ne!(
+(B[m[32m+        event_fields(&exited)[1].as_i64(),
+(B[m[32m+        Some(0),
+(B[m[32m+        "{}",
+(B[m[32m+        exited.compact()
+(B[m[32m+    );
+(B[m     run.wait_note("restart attempt 1 delay 100 ms");
+     let status = run.status();
+     let standings = status
+Diff in /home/timo/projects/telos/crates/ignite/tests/run.rs:555:
+         let status_of = field(standing, "status")
+             .and_then(|s| s.get("variant"))
+             .and_then(Json::as_str);
+[31m-        assert_eq!(status_of, Some("InsufficientEvidence"), "{}", standing.compact());
+(B[m[32m+        assert_eq!(
+(B[m[32m+            status_of,
+(B[m[32m+            Some("InsufficientEvidence"),
+(B[m[32m+            "{}",
+(B[m[32m+            standing.compact()
+(B[m[32m+        );
+(B[m         assert_eq!(field(standing, "executed").and_then(Json::as_i64), Some(0));
+         assert_eq!(field(standing, "good").and_then(Json::as_i64), Some(0));
+     }
+Diff in /home/timo/projects/telos/crates/ignite/tests/run.rs:727:
+     let violated = run.wait_for("standing of Terminal.reachable", |r| {
+         kind(r) == "standing" && standing_contract(r) == "Terminal.reachable"
+     });
+[31m-    assert_eq!(standing_status(&violated), "Violated", "{}", violated.compact());
+(B[m[32m+    assert_eq!(
+(B[m[32m+        standing_status(&violated),
+(B[m[32m+        "Violated",
+(B[m[32m+        "{}",
+(B[m[32m+        violated.compact()
+(B[m[32m+    );
+(B[m     assert_eq!(standing_int(&violated, "good"), 1);
+     assert_eq!(standing_int(&violated, "executed"), 2);
+     let timed_out = run.seen.iter().any(|r| {
+Diff in /home/timo/projects/telos/crates/ignite/tests/run.rs:816:
+             && standing_contract(r) == "Terminal.customerAccess"
+             && at_ns(r) == 30_000 * NS_PER_MS
+     });
+[31m-    assert_eq!(standing_status(&closed), "Compliant", "{}", closed.compact());
+(B[m[32m+    assert_eq!(
+(B[m[32m+        standing_status(&closed),
+(B[m[32m+        "Compliant",
+(B[m[32m+        "{}",
+(B[m[32m+        closed.compact()
+(B[m[32m+    );
+(B[m     assert_eq!(standing_int(&closed, "good"), 3);
+     assert_eq!(standing_int(&closed, "executed"), 3);
+     let pids = run.pids();
+Diff in /home/timo/projects/telos/crates/ignite/tests/run.rs:936:
+     );
+     assert_eq!(output.status.code(), Some(2), "{}", text(&output.stderr));
+     assert!(output.stdout.is_empty());
+[31m-    compare(&fixture("e125_nothing_to_run.expected"), &text(&output.stderr));
+(B[m[32m+    compare(
+(B[m[32m+        &fixture("e125_nothing_to_run.expected"),
+(B[m[32m+        &text(&output.stderr),
+(B[m[32m+    );
+(B[m }
+ 
+ /// E126 (16.17): a state directory whose journal was written for another
+Diff in /home/timo/projects/telos/crates/ignite/tests/run.rs:1021:
+     assert_eq!(kind(&status), "status");
+     let code = run.stop();
+     assert_eq!(code, 1, "stderr:\n{}", run.stderr());
+[31m-    compare(&fixture("e128_reducer_failed.expected"), &(error.compact() + "\n"));
+(B[m[32m+    compare(
+(B[m[32m+        &fixture("e128_reducer_failed.expected"),
+(B[m[32m+        &(error.compact() + "\n"),
+(B[m[32m+    );
+(B[m     run.replay();
+ }
+ 
+Diff in /home/timo/projects/telos/crates/ignite/tests/run.rs:1040:
+     send_signal(run.pids()[0], SIGKILL);
+     run.wait_note("restart attempt 1");
+     run.send("advance 100 ms");
+[31m-    run.wait_for("second Ready", |r| event_variant(r) == Some("Ready") && at_ns(r) > 0);
+(B[m[32m+    run.wait_for("second Ready", |r| {
+(B[m[32m+        event_variant(r) == Some("Ready") && at_ns(r) > 0
+(B[m[32m+    });
+(B[m     let after = run.status();
+     assert_eq!(
+[31m-        after.get("ports").and_then(|p| p.get("Terminal.ingress")).and_then(Json::as_i64),
+(B[m[32m+        after
+(B[m[32m+            .get("ports")
+(B[m[32m+            .and_then(|p| p.get("Terminal.ingress"))
+(B[m[32m+            .and_then(Json::as_i64),
+(B[m         Some(port)
+     );
+     echo_hello(port);
+Diff in /home/timo/projects/telos/crates/ignite/tests/run.rs:1053:
+     assert_no_process_left(&pids);
+     run.replay();
+ }
+[31m-
+(B[m 
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:462:
+                 .iter()
+                 .find(|(f, _)| f == "interval")
+                 .map_or(Value::Unit, |(_, v)| v.clone());
+[31m-            member.outputs.iter().map(move |(field, element)| ModelObservation {
+(B[m[31m-                reference: format!("{}.{field}", member.id),
+(B[m[31m-                producer: member.id.clone(),
+(B[m[31m-                element: element.clone(),
+(B[m[31m-                interval: interval.clone(),
+(B[m[31m-            })
+(B[m[32m+            member
+(B[m[32m+                .outputs
+(B[m[32m+                .iter()
+(B[m[32m+                .map(move |(field, element)| ModelObservation {
+(B[m[32m+                    reference: format!("{}.{field}", member.id),
+(B[m[32m+                    producer: member.id.clone(),
+(B[m[32m+                    element: element.clone(),
+(B[m[32m+                    interval: interval.clone(),
+(B[m[32m+                })
+(B[m         })
+         .collect();
+     observations.sort_by(|a, b| a.reference.cmp(&b.reference));
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:526:
+     }
+     for machine in machines {
+         if machine.variant() == "Supervise" {
+[31m-            edge(EdgeKind::Recovery, machine.member.clone(), machine.id.clone());
+(B[m[32m+            edge(
+(B[m[32m+                EdgeKind::Recovery,
+(B[m[32m+                machine.member.clone(),
+(B[m[32m+                machine.id.clone(),
+(B[m[32m+            );
+(B[m         }
+     }
+ }
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:542:
+         Value::List(items) | Value::Tuple(items) | Value::Enum { fields: items, .. } => {
+             items.iter().for_each(|item| readiness_targets(item, out));
+         }
+[31m-        Value::Record { fields, .. } => fields
+(B[m[31m-            .iter()
+(B[m[31m-            .for_each(|(_, v)| readiness_targets(v, out)),
+(B[m[32m+        Value::Record { fields, .. } => fields.iter().for_each(|(_, v)| readiness_targets(v, out)),
+(B[m         Value::Map(entries) => entries.iter().for_each(|(k, v)| {
+             readiness_targets(k, out);
+             readiness_targets(v, out);
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:1045:
+                 return false;
+             }
+         };
+[31m-        control_edges(program, system, members, entries, &machines, &mut self.edges);
+(B[m[32m+        control_edges(
+(B[m[32m+            program,
+(B[m[32m+            system,
+(B[m[32m+            members,
+(B[m[32m+            entries,
+(B[m[32m+            &machines,
+(B[m[32m+            &mut self.edges,
+(B[m[32m+        );
+(B[m         self.machines = machines;
+         self.observations = observations;
+         true
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:1325:
+         entry.insert("member".to_string(), Json::Str(self.member.clone()));
+         entry.insert(
+             "subscribes".to_string(),
+[31m-            Json::Array(self.subscribes.iter().map(|s| Json::Str(s.clone())).collect()),
+(B[m[32m+            Json::Array(
+(B[m[32m+                self.subscribes
+(B[m[32m+                    .iter()
+(B[m[32m+                    .map(|s| Json::Str(s.clone()))
+(B[m[32m+                    .collect(),
+(B[m[32m+            ),
+(B[m         );
+         Json::Object(entry)
+     }
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/value.rs:304:
+     };
+     let expected = |what: &str| fail(format!("expected {what}, found {}", json.kind()));
+     let tagged = |tag: &str| -> Result<&BTreeMap<String, Json>, DecodeError> {
+[31m-        let object = json.as_object().ok_or_else(|| expected(&format!("a `{tag}` object")))?;
+(B[m[32m+        let object = json
+(B[m[32m+            .as_object()
+(B[m[32m+            .ok_or_else(|| expected(&format!("a `{tag}` object")))?;
+(B[m         match object.get("type").and_then(Json::as_str) {
+             Some(found) if found == tag => Ok(object),
+             Some(found) => Err(fail(format!("expected type `{tag}`, found `{found}`"))),
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/value.rs:321:
+     let items = |object: &BTreeMap<String, Json>, key: &str| -> Result<Vec<Json>, DecodeError> {
+         match object.get(key) {
+             Some(Json::Array(items)) => Ok(items.clone()),
+[31m-            Some(other) => Err(fail(format!("expected `{key}` to be an array, found {}", other.kind()))),
+(B[m[32m+            Some(other) => Err(fail(format!(
+(B[m[32m+                "expected `{key}` to be an array, found {}",
+(B[m[32m+                other.kind()
+(B[m[32m+            ))),
+(B[m             None => Ok(Vec::new()),
+         }
+     };
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/value.rs:351:
+             Json::Null => Ok(Value::Unit),
+             _ => Err(expected("null")),
+         },
+[31m-        Ty::Bool => json.as_bool().map(Value::Bool).ok_or_else(|| expected("a boolean")),
+(B[m[31m-        Ty::Int => json.as_i64().map(Value::Int).ok_or_else(|| expected("an integer")),
+(B[m[32m+        Ty::Bool => json
+(B[m[32m+            .as_bool()
+(B[m[32m+            .map(Value::Bool)
+(B[m[32m+            .ok_or_else(|| expected("a boolean")),
+(B[m[32m+        Ty::Int => json
+(B[m[32m+            .as_i64()
+(B[m[32m+            .map(Value::Int)
+(B[m[32m+            .ok_or_else(|| expected("an integer")),
+(B[m         Ty::Text => json
+             .as_str()
+             .map(|t| Value::Text(t.to_string()))
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/value.rs:378:
+             let object = tagged("Option")?;
+             match text_of(object, "variant")?.as_str() {
+                 "Some" => Ok(Value::some(
+[31m-                    payload(&items(object, "fields")?, std::slice::from_ref(inner), "`Some`")?.remove(0),
+(B[m[32m+                    payload(
+(B[m[32m+                        &items(object, "fields")?,
+(B[m[32m+                        std::slice::from_ref(inner),
+(B[m[32m+                        "`Some`",
+(B[m[32m+                    )?
+(B[m[32m+                    .remove(0),
+(B[m                 )),
+                 "None" => Ok(Value::none()),
+                 other => Err(fail(format!("`Option` has no variant `{other}`"))),
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/value.rs:391:
+                     payload(&items(object, "fields")?, std::slice::from_ref(ok), "`Ok`")?.remove(0),
+                 )),
+                 "Err" => Ok(Value::err(
+[31m-                    payload(&items(object, "fields")?, std::slice::from_ref(err), "`Err`")?.remove(0),
+(B[m[32m+                    payload(
+(B[m[32m+                        &items(object, "fields")?,
+(B[m[32m+                        std::slice::from_ref(err),
+(B[m[32m+                        "`Err`",
+(B[m[32m+                    )?
+(B[m[32m+                    .remove(0),
+(B[m                 )),
+                 other => Err(fail(format!("`Result` has no variant `{other}`"))),
+             }
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/value.rs:429:
+                     decode(item, &field_ty, types, &format!("{path}.{field}"))?,
+                 ));
+             }
+[31m-            if let Some(extra) = given.keys().find(|k| !declared.iter().any(|(f, _)| f == *k)) {
+(B[m[32m+            if let Some(extra) = given
+(B[m[32m+                .keys()
+(B[m[32m+                .find(|k| !declared.iter().any(|(f, _)| f == *k))
+(B[m[32m+            {
+(B[m                 return Err(fail(format!("record `{q}` has no field `{extra}`")));
+             }
+             Ok(Value::Record {

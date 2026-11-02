@@ -1,0 +1,72 @@
+
+test fn rollout() -> Machine = Roll(Rollout { id = "T.server.rollout", member = "T.server", policy = DrainRollout { deadline = 30 seconds } })
+
+test fn rollout_of(machine: Machine) -> Rollout = match machine {
+  Roll(r) => r
+  _ => Rollout { id = "", member = "", policy = DrainRollout {} }
+}
+
+test "a rollout builds, drains the old generation, starts the new one and retires the old" {
+  let (idle, e0) = run(rollout(), [at(0, Start(0 ms)), at(0, Started(42, 1)), at(5, Ready(42))])
+  assert e0 == []
+  assert rollout_of(idle).old_pid == Some(42) && rollout_of(idle).state == Idle
+  let (building, e1) = run(idle, [at(1000, Control("rollout"))])
+  assert e1 == [Build("T.server")]
+  assert rollout_of(building).state == Building
+  assert run(building, [at(1001, Control("rollout"))]).1 == [Note("rollout already in progress")]
+  let (draining, e2) = run(building, [at(1500, Built(2))])
+  assert e2 == [Kill("T.server", 42, SIGTERM), AwaitRelease("T.server"), SetTimer(DEADLINE_TIMER, 31500 ms)]
+  assert rollout_of(draining).state == Draining && rollout_of(draining).generation == 2
+  let (starting, e3) = run(draining, [at(1600, Released)])
+  assert e3 == [Spawn("T.server", 2)]
+  assert rollout_of(starting).state == Starting && rollout_of(starting).released_at == Some(1600 ms)
+  let (retiring, e4) = run(starting, [at(1650, Started(50, 2)), at(1700, Ready(50))])
+  assert e4 == [Note("disruption 100 ms")]
+  assert rollout_of(retiring).state == Retiring && rollout_of(retiring).new_pid == Some(50) && rollout_of(retiring).old_pid == Some(42)
+  let (done, e5) = run(retiring, [at(5000, Exited(42, 0))])
+  assert e5 == [Note("retired"), CancelTimer(DEADLINE_TIMER)]
+  assert rollout_of(done).state == Done && rollout_of(done).old_pid == Some(50) && rollout_of(done).new_pid == None
+  assert rollout_of(done).deadline_timer == None
+  assert run(done, [at(6000, Timer(DEADLINE_TIMER)), at(6001, Exited(42, 0))]) == (done, [])
+  let (again, e6) = run(done, [at(7000, Control("rollout")), at(7100, Built(3))])
+  assert e6 == [Build("T.server"), Kill("T.server", 50, SIGTERM), AwaitRelease("T.server"), SetTimer(DEADLINE_TIMER, 37100 ms)]
+  assert rollout_of(again).generation == 3
+}
+
+test "an old process still running at the deadline is disconnected and retired forced" {
+  let (retiring, _) = run(rollout(), [at(0, Started(42, 1)), at(1000, Control("rollout")), at(1500, Built(2)), at(1600, Released), at(1650, Started(50, 2)), at(1700, Ready(50))])
+  let (done, e1) = run(retiring, [at(31500, Timer(DEADLINE_TIMER))])
+  assert e1 == [Kill("T.server", 42, SIGKILL), Note("retired forced")]
+  assert rollout_of(done).state == Done && rollout_of(done).old_pid == Some(50) && rollout_of(done).new_pid == None
+  assert run(done, [at(31501, Signalled(42, 9))]) == (done, [])
+  let (draining, _) = run(rollout(), [at(0, Started(42, 1)), at(1000, Control("rollout")), at(1500, Built(2))])
+  let (still_draining, e2) = run(draining, [at(31500, Timer(DEADLINE_TIMER))])
+  assert e2 == [Kill("T.server", 42, SIGKILL), Note("retired forced")]
+  assert rollout_of(still_draining).state == Draining && rollout_of(still_draining).old_pid == None
+  assert run(still_draining, [at(31600, Released)]).1 == [Spawn("T.server", 2)]
+}
+
+test "a failed build aborts the rollout and the old process keeps serving" {
+  let (building, _) = run(rollout(), [at(0, Started(42, 1)), at(1000, Control("rollout"))])
+  let (aborted, e1) = run(building, [at(1500, BuildFailed("rustc exited 1"))])
+  assert e1 == [Note("rollout aborted: rustc exited 1")]
+  assert rollout_of(aborted).state == Aborted && rollout_of(aborted).old_pid == Some(42)
+  assert run(aborted, [at(1600, Released), at(1700, Timer(DEADLINE_TIMER))]) == (aborted, [])
+  let (gone, e2) = run(aborted, [at(2000, Exited(42, 1))])
+  assert e2 == [] && rollout_of(gone).old_pid == None
+  assert run(aborted, [at(3000, Control("rollout"))]).1 == [Build("T.server")]
+}
+
+test "stop cancels a rollout's deadline and a rollout without a known process only starts" {
+  let (draining, _) = run(rollout(), [at(0, Started(42, 1)), at(1000, Control("rollout")), at(1500, Built(2))])
+  let (stopped, e1) = run(draining, [at(2000, Control("stop"))])
+  assert e1 == [CancelTimer(DEADLINE_TIMER)]
+  assert rollout_of(stopped).deadline_timer == None
+  assert run(stopped, [at(2001, Control("stop"))]) == (stopped, [])
+  let (fresh, e2) = run(rollout(), [at(0, Control("rollout")), at(100, Built(1))])
+  assert e2 == [Build("T.server"), Spawn("T.server", 1)]
+  assert rollout_of(fresh).state == Starting
+  let (done, e3) = run(fresh, [at(150, Started(7, 1)), at(200, Ready(7))])
+  assert e3 == []
+  assert rollout_of(done).state == Done && rollout_of(done).old_pid == Some(7)
+}

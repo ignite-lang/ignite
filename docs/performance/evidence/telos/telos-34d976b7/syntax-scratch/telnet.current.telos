@@ -1,0 +1,124 @@
+// One byte of the incoming stream: the decoder's next state and the byte's
+// event. CR LF, CR NUL, a lone CR and a lone LF end a line; IAC IAC is the
+// data byte 255; DO is answered WONT and WILL is answered DONT;
+// subnegotiation is skipped.
+fn decode(state: Decoder, b: Byte) -> (Decoder, Event) = match (state, b) {
+  (Ground, IAC) => (Interpret, Nothing)
+  (Ground, b'\r') => (CarriageReturn, EndOfLine)
+  (Ground, b'\n') => (Ground, EndOfLine)
+  (Ground, _) => (Ground, Literal(b))
+  (CarriageReturn, b'\n' | b'\0') => (Ground, Nothing)
+  (CarriageReturn, _) => decode(Ground, b)
+  (Interpret, IAC) => (Ground, Literal(IAC))
+  (Interpret, WILL | WONT | DO | DONT) => (Negotiation(b), Nothing)
+  (Interpret, SB) => (Subnegotiation(0), Nothing)
+  (Interpret, AYT) => (Ground, AreYouThere)
+  (Interpret, IP) => (Ground, Interrupt)
+  (Interpret, _) => (Ground, Nothing)
+  (Negotiation(DO), _) => (Ground, Answer([IAC, WONT, b]))
+  (Negotiation(WILL), _) => (Ground, Answer([IAC, DONT, b]))
+  (Negotiation(_), _) => (Ground, Nothing)
+  (Subnegotiation(count), _) => if count + 1 > MAXIMUM_SUBNEGOTIATION {
+    (Ground, SubnegotiationTooLong)
+  } else if b == IAC {
+    (SubnegotiationInterpret(count + 1), Nothing)
+  } else {
+    (Subnegotiation(count + 1), Nothing)
+  }
+  (SubnegotiationInterpret(_), SE) => (Ground, Nothing)
+  (SubnegotiationInterpret(count), _) => (Subnegotiation(count), Nothing)
+}
+
+// `bytes` decoded from `state`: the state after them and their events,
+// `Nothing` left out.
+test fn feed(state: Decoder, bytes: Bytes) -> (Decoder, List<Event>) {
+  var at = state
+  var events: List<Event> = List.empty()
+  for b in bytes {
+    let (next, event) = decode(at, b)
+    at = next
+    match event {
+      Nothing => {}
+      _ => events.push(event)
+    }
+  }
+  (at, events)
+}
+
+// The events of `bytes` decoded from `Ground`.
+test fn events(bytes: Bytes) -> List<Event> {
+  let (_, out) = feed(Ground, bytes)
+  out
+}
+
+// `count` copies of `b`.
+test fn filled(count: Int, b: Byte) -> Bytes {
+  var out = Bytes.empty()
+  while out.len() < count {
+    out.push(b)
+  }
+  out
+}
+
+// Each reply line followed by CR LF.
+fn render(reply: Reply) -> Bytes {
+  var out = Bytes.empty()
+  for line in reply.lines {
+    out.append(line.to_bytes())
+    out.append(b"\r\n")
+  }
+  out
+}
+
+// Standard input as NVT data: LF becomes CR LF, a CR before LF is dropped,
+// any other CR becomes CR NUL, and the data byte 255 is doubled.
+fn encode_input(bytes: Bytes) -> Bytes {
+  var out = Bytes.empty()
+  var i = 0
+  while i < bytes.len() {
+    let b = bytes.at(i)
+    i = i + 1
+    match b {
+      b'\n' => out.append(b"\r\n")
+      b'\r' => if i >= bytes.len() || bytes.at(i) != b'\n' {
+        out.append(b"\r\0")
+      }
+      IAC => out.append([IAC, IAC])
+      _ => out.push(b)
+    }
+  }
+  out
+}
+
+// The line without its last UTF-8 character.
+fn erase_last(line: Bytes) -> Bytes {
+  var end = line.len() - 1
+  while end > 0 && line.at(end) >= 128 && line.at(end) < 192 {
+    end = end - 1
+  }
+  line.slice(0, end)
+}
+
+// One key pressed while `line` is being edited: the line after the key and
+// what the key does. Printable bytes are added and echoed; backspace (8 or
+// 127) erases the last character on screen; Enter (CR or LF) completes the
+// line; Ctrl+C, Ctrl+D on an empty line and Ctrl+] are reported; other
+// control bytes are ignored.
+fn apply_key(line: Bytes, b: Byte) -> (Bytes, Edit) = match b {
+  b'\r' | b'\n' => (Bytes.empty(), Enter(line))
+  BACKSPACE | DELETE => if line.is_empty() {
+    (line, Unchanged)
+  } else {
+    (erase_last(line), Show(b"\x08 \x08"))
+  }
+  CONTROL_C => (Bytes.empty(), Interrupt)
+  CONTROL_D => if line.is_empty() { (line, EndOfInput) } else { (line, Unchanged) }
+  ESCAPE => (line, Escape)
+  _ => if b < b' ' {
+    (line, Unchanged)
+  } else {
+    var longer = line
+    longer.push(b)
+    (longer, Show([b]))
+  }
+}

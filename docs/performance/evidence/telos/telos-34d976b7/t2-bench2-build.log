@@ -1,0 +1,9 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/bench2; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling bench2 v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/bench2)
+    Finished `release` profile [optimized] target(s) in 0.51s
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/release/benchd
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/release/bints
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/release/btexts
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/release/bscan

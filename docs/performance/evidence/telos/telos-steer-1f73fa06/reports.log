@@ -1,0 +1,12 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/main-9d267f49cdec8647)
+
+running 4 tests
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test telos_test::both_targets_print_the_same_report ... ok
+test telos_test::assert_and_try_reports ... ok
+test telos_test::overflow_fails_the_same_everywhere ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 135 filtered out; finished in 4.60s
+
+EXIT=0

@@ -1,0 +1,66 @@
+== std/control.ignite
+/home/timo/projects/telos/std/contract.ignite:43:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:69:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:103:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:135:6: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/projects/telos/std/contract.ignite:135:15: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+== std/probe.ignite
+/home/timo/projects/telos/std/contract.ignite:43:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:69:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:103:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:135:6: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/projects/telos/std/contract.ignite:135:15: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+== std/protocol/telnet.ignite
+/home/timo/projects/telos/std/contract.ignite:43:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:69:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:103:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:135:6: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/projects/telos/std/contract.ignite:135:15: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+== std/contract.ignite
+/home/timo/projects/telos/std/contract.ignite:43:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:69:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:103:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:135:6: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/projects/telos/std/contract.ignite:135:15: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+== std/time.ignite
+/home/timo/projects/telos/std/contract.ignite:43:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:69:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:103:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:135:6: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/projects/telos/std/contract.ignite:135:15: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+== std/sli.ignite
+/home/timo/projects/telos/std/contract.ignite:43:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:69:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:103:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:135:6: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/projects/telos/std/contract.ignite:135:15: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+== std/policy.ignite
+/home/timo/projects/telos/std/contract.ignite:43:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:69:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:103:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:135:6: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/projects/telos/std/contract.ignite:135:15: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+== std/deploy.ignite
+/home/timo/projects/telos/std/contract.ignite:43:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:69:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:103:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:135:6: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/projects/telos/std/contract.ignite:135:15: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+== examples/terminal/terminal.design.ignite
+/home/timo/projects/telos/std/contract.ignite:43:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:69:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:103:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:135:6: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/projects/telos/std/contract.ignite:135:15: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+== examples/terminal/terminal.ignite
+/home/timo/projects/telos/std/contract.ignite:43:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:69:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:103:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:135:6: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/projects/telos/std/contract.ignite:135:15: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+== examples/todo/todo.ignite
+/home/timo/projects/telos/std/contract.ignite:43:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:69:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:103:24: error[E041]: `Signal<ProbeAttempt>` has no method `to_text`
+/home/timo/projects/telos/std/contract.ignite:135:6: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/projects/telos/std/contract.ignite:135:15: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`

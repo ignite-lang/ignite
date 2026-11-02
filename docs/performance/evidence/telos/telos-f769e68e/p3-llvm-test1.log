@@ -1,0 +1,34 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p3/debug/deps/ignite_llvm-7881cc793d259bda)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p3/debug/deps/main-1516246f4e04c1f5)
+
+running 14 tests
+test layout::copy_glue_only_where_buffers_are ... ok
+test layout::runtime_types_match_the_layouts ... ok
+test layout::records_have_c_layout ... ok
+test layout::enums_are_tag_and_payload ... ok
+test layout::type_names_in_symbols ... ok
+test layout::scalars_and_builtins ... ok
+test golden::read_only_parameters_are_borrowed ... ok
+test golden::loops_release_their_region ... ok
+test golden::symbols_are_module_qualified ... ok
+test golden::modules_name_target_and_source ... ok
+test tests_build::normal_build_drops_test_only_declarations ... ok
+test golden::small_program ... ok
+test tests_build::test_build_lowers_tests_and_a_runner_main ... ok
+test golden::syntax_program ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+   Doc-tests ignite_llvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT=0

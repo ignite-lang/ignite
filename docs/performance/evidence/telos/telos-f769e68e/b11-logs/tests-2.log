@@ -1,0 +1,167 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-11b/debug/deps/main-5e4ab9ed9c9b052f)
+
+running 1 test
+test golden::target_bugs_of_slice_11b ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 77 filtered out; finished in 0.01s
+
+BLESS_EXIT=0
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-11b/debug/deps/main-5e4ab9ed9c9b052f)
+
+running 17 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test golden::pure_functions ... ok
+test golden::process_exit_diverges ... ok
+test golden::record_and_enum_with_match ... ok
+test golden::constants_qualified_patterns_and_io_error ... ok
+test golden::target_bugs_of_slice_11b ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test golden::generics_stores_and_builtins ... ok
+test golden::variants_of_enums_not_imported ... ok
+test golden::surface_syntax ... ok
+test golden::system_with_server_and_client ... ok
+test golden::executable_components ... ok
+test golden::terminal ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.09s
+
+GOLDEN_EXIT=0
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.61s
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-11b/debug/deps/main-6eaf5699a056c807)
+NORUN_EXIT=0
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-11b/debug/deps/main-6eaf5699a056c807)
+
+running 12 tests
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test ignite_test::files_share_one_executable ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test ignite_test::compile_error_exits_2 ... ok
+test ignite_test::std_module_as_the_file ... ok
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... FAILED
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+
+failures:
+
+---- ignite_test::target_bugs_of_slice_11b_are_fixed stdout ----
+
+thread '<unnamed>' (534241) panicked at crates/ignite/tests/ignite_test.rs:327:9:
+assertion `left == right` failed: llvm: 
+/home/timo/projects/telos/crates/ignite/tests/fixtures/tests/targets.ignite:122:11: error[E005]: ambiguous variant `Some`: declared by `Option`, `Maybe`; qualify it, e.g. `Option.Some`
+/home/timo/projects/telos/crates/ignite/tests/fixtures/tests/targets.ignite:122:20: error[E005]: ambiguous variant `None`: declared by `Option`, `Maybe`; qualify it, e.g. `Option.None`
+
+  left: 2
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread '<unnamed>' (534236) panicked at crates/ignite/tests/ignite_test.rs:327:9:
+assertion `left == right` failed: rust: 
+/home/timo/projects/telos/crates/ignite/tests/fixtures/tests/targets.ignite:122:11: error[E005]: ambiguous variant `Some`: declared by `Option`, `Maybe`; qualify it, e.g. `Option.Some`
+/home/timo/projects/telos/crates/ignite/tests/fixtures/tests/targets.ignite:122:20: error[E005]: ambiguous variant `None`: declared by `Option`, `Maybe`; qualify it, e.g. `Option.None`
+
+  left: 2
+ right: 0
+
+thread 'ignite_test::target_bugs_of_slice_11b_are_fixed' (534229) panicked at crates/ignite/tests/ignite_test.rs:86:9:
+assertion `left == right` failed: 2 target(s) failed
+  left: 2
+ right: 0
+
+
+failures:
+    ignite_test::target_bugs_of_slice_11b_are_fixed
+
+test result: FAILED. 11 passed; 1 failed; 0 ignored; 0 measured; 154 filtered out; finished in 13.86s
+
+error: test failed, to rerun pass `-p ignite --test main`
+IGNITE_TEST run=1 secs=13.904633448 exit=101 load=6.44
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-11b/debug/deps/main-6eaf5699a056c807)
+
+running 12 tests
+test ignite_test::compile_error_exits_2 ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::std_module_as_the_file ... ok
+test ignite_test::files_share_one_executable ... ok
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... FAILED
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+
+failures:
+
+---- ignite_test::target_bugs_of_slice_11b_are_fixed stdout ----
+
+thread '<unnamed>' (537450) panicked at crates/ignite/tests/ignite_test.rs:327:9:
+assertion `left == right` failed: rust: 
+/home/timo/projects/telos/crates/ignite/tests/fixtures/tests/targets.ignite:122:11: error[E005]: ambiguous variant `Some`: declared by `Option`, `Maybe`; qualify it, e.g. `Option.Some`
+/home/timo/projects/telos/crates/ignite/tests/fixtures/tests/targets.ignite:122:20: error[E005]: ambiguous variant `None`: declared by `Option`, `Maybe`; qualify it, e.g. `Option.None`
+
+  left: 2
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread '<unnamed>' (537452) panicked at crates/ignite/tests/ignite_test.rs:327:9:
+assertion `left == right` failed: llvm: 
+/home/timo/projects/telos/crates/ignite/tests/fixtures/tests/targets.ignite:122:11: error[E005]: ambiguous variant `Some`: declared by `Option`, `Maybe`; qualify it, e.g. `Option.Some`
+/home/timo/projects/telos/crates/ignite/tests/fixtures/tests/targets.ignite:122:20: error[E005]: ambiguous variant `None`: declared by `Option`, `Maybe`; qualify it, e.g. `Option.None`
+
+  left: 2
+ right: 0
+
+thread 'ignite_test::target_bugs_of_slice_11b_are_fixed' (537440) panicked at crates/ignite/tests/ignite_test.rs:86:9:
+assertion `left == right` failed: 2 target(s) failed
+  left: 2
+ right: 0
+
+
+failures:
+    ignite_test::target_bugs_of_slice_11b_are_fixed
+
+test result: FAILED. 11 passed; 1 failed; 0 ignored; 0 measured; 154 filtered out; finished in 4.31s
+
+error: test failed, to rerun pass `-p ignite --test main`
+IGNITE_TEST run=2 secs=4.350808169 exit=101 load=6.24
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-11b/debug/deps/main-6eaf5699a056c807)
+
+running 7 tests
+test eval::e118_closures_are_unencodable ... ok
+test eval::e117_failures_carry_the_target_report ... ok
+test eval::design_file_properties_evaluate_within_default_fuel ... ok
+test eval::fixture_covers_every_family ... ok
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+test eval::e115_limits ... ok
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+   Compiling nix v0.31.3
+test eval::evaluator_agrees_with_the_llvm_target ... ok
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-std v0.0.0-9d17b9d41be0ca6c (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-11b/tmp/eval-equivalence/std)
+   Compiling eval_equivalence v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-11b/tmp/eval-equivalence)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.89s
+test eval::evaluator_agrees_with_the_rust_target ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 159 filtered out; finished in 2.11s
+
+EVAL run=1 secs=2.142585706 exit=0
+EXIT=0

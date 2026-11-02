@@ -1,0 +1,2 @@
+e045_assert_eq.telos:11:10: error[E045]: operator `==` is not defined for `Handler`, not even in an `assert`: it holds a function, handle, store or `IoError`
+e045_assert_eq.telos:12:10: error[E045]: operator `!=` is not defined for `Option<IoError>`, not even in an `assert`: it holds a function, handle, store or `IoError`

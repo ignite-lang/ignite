@@ -1,0 +1,2 @@
+e017_closure.telos:6:20: error[E017]: effectful closure (requires [conn.write]) where the pure fn type `fn(Int) -> Int` is expected
+e017_closure.telos:10:26: error[E017]: effectful closure does not fit `fn(n: Int) -> Int requires [n.read]`: its effects `stdout.write` are not covered by the type's `requires`

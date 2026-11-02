@@ -1,0 +1,11 @@
+START 23:49:03
+   Compiling telos-types v0.1.0 (/home/timo/projects/telos/crates/telos-types)
+   Compiling telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.10s
+telos EXIT=0
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+rt EXIT=0
+END 23:49:08
+EXIT=0

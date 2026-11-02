@@ -1,0 +1,29 @@
+START 2026-11-02T07:13:01+01:00 load=17.81 20.39 21.14 17/3188 2761500 free=72G
+   Compiling ignite-syntax v0.1.0 (/home/timo/projects/telos/crates/ignite-syntax)
+   Compiling ignite-check v0.1.0 (/home/timo/projects/telos/crates/ignite-check)
+   Compiling ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+error[E0061]: this function takes 3 arguments but 2 arguments were supplied
+   --> crates/ignite-rustgen/src/lib.rs:408:5
+    |
+408 |     std_project(&modules, options)
+    |     ^^^^^^^^^^^------------------- argument #3 of type `std::option::Option<&[&str]>` is missing
+    |
+note: function defined here
+   --> crates/ignite-rustgen/src/lib.rs:626:4
+    |
+626 | fn std_project(
+    |    ^^^^^^^^^^^
+...
+629 |     roots: Option<&[&str]>,
+    |     ----------------------
+help: provide the argument
+    |
+408 |     std_project(&modules, options, /* Option<&[&str]> */)
+    |                                  +++++++++++++++++++++++
+
+For more information about this error, try `rustc --explain E0061`.
+error: could not compile `ignite-rustgen` (lib test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `ignite-rustgen` (lib) due to 1 previous error
+EXIT=101 2026-11-02T07:13:05+01:00

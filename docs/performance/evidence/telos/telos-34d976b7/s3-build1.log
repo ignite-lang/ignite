@@ -1,0 +1,34 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s3-out-rust; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling telos-std v0.0.0-bb296fc919d2cd58 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s3-out-rust/std)
+error[E0308]: `match` arms have incompatible types
+   --> std/src/lib.rs:358:47
+    |
+353 | /             match String::from_utf8_lossy(&command).into_owned().trim().to_string() {
+354 | |                 __m if ((*(&__m) == "quit") || (*(&__m) == "close")) => {
+355 | |                     let _ = stream.close();
+356 | |                     telos_io::Process::exit(0)
+    | |                     -------------------------- this is found to be of type `Result<(), IoError>`
+357 | |                 },
+358 | |                 __m if (*(&__m) == "help") => (telos_io::Stdout::write_all(COMMAND_HELP().clone().into_bytes()))?,
+    | |                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Result<(), IoError>`, found `()`
+...   |
+361 | |                 _ => (telos_io::Stdout::write_all((vec![117, 110, 107, 110, 111, 119, 110, 32, 99, 111, 109, 109, 97, 110, 100, 1...
+362 | |             };
+    | |_____________- `match` arms have incompatible types
+    |
+    = note:   expected enum `Result<(), IoError>`
+            found unit type `()`
+help: try wrapping the expression in `Ok`
+    |
+358 |                 __m if (*(&__m) == "help") => Ok((telos_io::Stdout::write_all(COMMAND_HELP().clone().into_bytes()))?),
+    |                                               +++                                                                   +
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `telos-std` (lib) due to 1 previous error
+error: cargo build failed with status 101
+RUST_EXIT=2
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s3-out-llvm/bin/terminald
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s3-out-llvm/bin/tn
+LLVM_EXIT=0

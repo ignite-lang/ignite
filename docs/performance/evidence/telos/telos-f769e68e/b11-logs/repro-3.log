@@ -1,0 +1,71 @@
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.60s
+BUILD_EXIT=0
+RT_EXIT=0
+===== bug_a rust
+running 3 tests
+test repro_a/indexed push writes through ... ok
+test repro_a/field of index push writes through ... ok
+test repro_a/nested index push writes through ... ok
+
+test result: ok. 3 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== bug_a llvm
+running 3 tests
+test repro_a/indexed push writes through ... ok
+test repro_a/field of index push writes through ... ok
+test repro_a/nested index push writes through ... ok
+
+test result: ok. 3 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== bug_b rust
+running 1 test
+test repro_b/map with enum key ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== bug_b llvm
+running 1 test
+test repro_b/map with enum key ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== bug_c rust
+running 1 test
+test repro_c/exposure as a value ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== bug_c llvm
+running 1 test
+test repro_c/exposure as a value ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== bug_d rust
+running 1 test
+test repro_d/a record named Box ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== bug_d llvm
+running 1 test
+test repro_d/a record named Box ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== names rust
+running 1 test
+test repro_names/prelude names ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== names llvm
+running 1 test
+test repro_names/prelude names ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+EXIT=0
+EXIT=0

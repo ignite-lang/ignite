@@ -1,0 +1,5 @@
+task: [compile-llvm] cargo build -q -p ignite
+task: [compile-llvm] cargo build -q -p ignite-rt --features runner --target-dir /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-ign/ignite-test/rt
+task: [compile-llvm] cargo run -q -p ignite -- build examples/terminal/terminal.ignite --target llvm --out target/ignite-llvm/terminal --runtime /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-ign/ignite-test/rt/debug/libignite_rt.a
+built target/ignite-llvm/terminal/bin/terminald
+built target/ignite-llvm/terminal/bin/tn

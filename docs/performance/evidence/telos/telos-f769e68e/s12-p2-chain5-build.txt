@@ -1,0 +1,608 @@
+warning: constant `DEFAULT_EPOCH` is never used
+  --> crates/ignite/src/run/mod.rs:30:11
+   |
+30 | pub const DEFAULT_EPOCH: &str = "2026-01-01T00:00:00Z";
+   |           ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+warning: function `parse_rfc3339` is never used
+  --> crates/ignite/src/run/mod.rs:35:8
+   |
+35 | pub fn parse_rfc3339(text: &str) -> Option<i64> {
+   |        ^^^^^^^^^^^^^
+warning: function `days_from_civil` is never used
+   --> crates/ignite/src/run/mod.rs:102:4
+    |
+102 | fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    |    ^^^^^^^^^^^^^^^
+warning: struct `Real` is never constructed
+  --> crates/ignite/src/run/clock.rs:14:12
+   |
+14 | pub struct Real {
+   |            ^^^^
+warning: associated items `start` and `now` are never used
+  --> crates/ignite/src/run/clock.rs:20:12
+   |
+18 | impl Real {
+   | --------- associated items in this implementation
+19 |     /// A clock whose zero is now.
+20 |     pub fn start() -> Real {
+   |            ^^^^^
+...
+27 |     pub fn now(&self) -> i64 {
+   |            ^^^
+warning: struct `Manual` is never constructed
+  --> crates/ignite/src/run/clock.rs:35:12
+   |
+35 | pub struct Manual {
+   |            ^^^^^^
+warning: methods `advance`, `next_due`, and `advance_to` are never used
+  --> crates/ignite/src/run/clock.rs:45:12
+   |
+39 | impl Manual {
+   | ----------- methods in this implementation
+...
+45 |     pub fn advance(&mut self, target: i64, timers: &[(i64, i64)]) -> Vec<(i64, i64)> {
+   |            ^^^^^^^
+...
+59 |     pub fn next_due(&mut self, target: i64, timers: &[(i64, i64)]) -> Option<(i64, i64)> {
+   |            ^^^^^^^^
+...
+70 |     pub fn advance_to(&mut self, target: i64) {
+   |            ^^^^^^^^^^
+warning: function `parse_duration` is never used
+  --> crates/ignite/src/run/clock.rs:81:8
+   |
+81 | pub fn parse_duration(text: &str) -> Option<i64> {
+   |        ^^^^^^^^^^^^^^
+warning: enum `Observation` is never used
+  --> crates/ignite/src/run/control.rs:45:10
+   |
+45 | pub enum Observation {
+   |          ^^^^^^^^^^^
+warning: struct `Counter` is never constructed
+  --> crates/ignite/src/run/control.rs:97:19
+   |
+97 | pub(super) struct Counter {
+   |                   ^^^^^^^
+warning: methods `lock`, `enter`, and `settle` are never used
+   --> crates/ignite/src/run/control.rs:103:8
+    |
+102 | impl Counter {
+    | ------------ methods in this implementation
+103 |     fn lock(&self) -> MutexGuard<'_, usize> {
+    |        ^^^^
+...
+108 |     pub(super) fn enter(self: &Arc<Counter>) -> InFlight {
+    |                   ^^^^^
+...
+114 |     fn settle(&self, limit: Duration) -> bool {
+    |        ^^^^^^
+warning: struct `InFlight` is never constructed
+   --> crates/ignite/src/run/control.rs:134:12
+    |
+134 | pub struct InFlight(Arc<Counter>);
+    |            ^^^^^^^^
+warning: struct `Adapters` is never constructed
+   --> crates/ignite/src/run/control.rs:154:12
+    |
+154 | pub struct Adapters {
+    |            ^^^^^^^^
+warning: multiple associated items are never used
+   --> crates/ignite/src/run/control.rs:164:12
+    |
+162 | impl Adapters {
+    | ------------- associated items in this implementation
+163 |     /// Start the spawner thread; observations go to `observations`.
+164 |     pub fn start(observations: Sender<Observation>) -> io::Result<Adapters> {
+    |            ^^^^^
+...
+176 |     pub fn in_flight(&self) -> InFlight {
+    |            ^^^^^^^^^
+...
+182 |     pub fn settle(&self, limit: Duration) -> bool {
+    |            ^^^^^^
+...
+190 |     pub fn spawn(
+    |            ^^^^^
+...
+204 |     pub fn kill(&self, pid: i32, signal: i32) -> io::Result<()> {
+    |            ^^^^
+...
+212 |     pub fn await_release(&self, member: &str) -> bool {
+    |            ^^^^^^^^^^^^^
+...
+217 |     pub fn pids(&self, member: &str) -> Vec<(i64, i32)> {
+    |            ^^^^
+...
+227 |     pub fn attempt(&self, member: &str, id: i64, executable: &Path, refs: &[(String, String)]) {
+    |            ^^^^^^^
+...
+233 |     pub fn kill_attempt(&self, member: &str, id: i64) {
+    |            ^^^^^^^^^^^^
+warning: function `relay` is never used
+   --> crates/ignite/src/run/control.rs:239:15
+    |
+239 | pub(super) fn relay(member: &str, line: &str) {
+    |               ^^^^^
+warning: function `read_control` is never used
+   --> crates/ignite/src/run/control.rs:250:8
+    |
+250 | pub fn read_control(observations: Sender<Observation>) {
+    |        ^^^^^^^^^^^^
+warning: static `SIGNAL_PIPE` is never used
+   --> crates/ignite/src/run/control.rs:272:8
+    |
+272 | static SIGNAL_PIPE: AtomicI32 = AtomicI32::new(-1);
+    |        ^^^^^^^^^^^
+warning: function `on_signal` is never used
+   --> crates/ignite/src/run/control.rs:274:15
+    |
+274 | extern "C" fn on_signal(signal: i32) {
+    |               ^^^^^^^^^
+warning: function `watch_signals` is never used
+   --> crates/ignite/src/run/control.rs:288:8
+    |
+288 | pub fn watch_signals(observations: Sender<Observation>) -> io::Result<()> {
+    |        ^^^^^^^^^^^^^
+warning: constant `JOURNAL_VERSION` is never used
+  --> crates/ignite/src/run/engine.rs:26:11
+   |
+26 | pub const JOURNAL_VERSION: &str = "ignite-journal/0.1";
+   |           ^^^^^^^^^^^^^^^
+warning: struct `Record` is never constructed
+  --> crates/ignite/src/run/engine.rs:32:12
+   |
+32 | pub struct Record {
+   |            ^^^^^^
+warning: methods `line` and `human` are never used
+  --> crates/ignite/src/run/engine.rs:44:12
+   |
+42 | impl Record {
+   | ----------- methods in this implementation
+43 |     /// The journal line without its newline: keys in byte order, compact.
+44 |     pub fn line(&self) -> String {
+   |            ^^^^
+...
+60 |     pub fn human(&self) -> String {
+   |            ^^^^^
+warning: function `summary` is never used
+  --> crates/ignite/src/run/engine.rs:79:4
+   |
+79 | fn summary(value: &Json) -> String {
+   |    ^^^^^^^
+warning: enum `Dispatch` is never used
+   --> crates/ignite/src/run/engine.rs:150:10
+    |
+150 | pub enum Dispatch {
+    |          ^^^^^^^^
+warning: struct `MachineState` is never constructed
+   --> crates/ignite/src/run/engine.rs:161:12
+    |
+161 | pub struct MachineState {
+    |            ^^^^^^^^^^^^
+warning: methods `variant`, `field`, and `state` are never used
+   --> crates/ignite/src/run/engine.rs:172:12
+    |
+170 | impl MachineState {
+    | ----------------- methods in this implementation
+171 |     /// The `Machine` variant.
+172 |     pub fn variant(&self) -> &str {
+    |            ^^^^^^^
+...
+180 |     pub fn field(&self, name: &str) -> Option<&Value> {
+    |            ^^^^^
+...
+188 |     pub fn state(&self) -> Option<&str> {
+    |            ^^^^^
+warning: struct `Core` is never constructed
+   --> crates/ignite/src/run/engine.rs:197:12
+    |
+197 | pub struct Core<'a, 'p> {
+    |            ^^^^
+warning: multiple associated items are never used
+   --> crates/ignite/src/run/engine.rs:221:12
+    |
+219 | impl<'a, 'p> Core<'a, 'p> {
+    | ------------------------- associated items in this implementation
+220 |     /// The machines of `model` in their initial state, `seq` 1 next.
+221 |     pub fn new(evaluator: &'a mut Evaluator<'p>, model: &Model) -> Core<'a, 'p> {
+    |            ^^^
+...
+249 |     pub fn machines(&self) -> &[MachineState] {
+    |            ^^^^^^^^
+...
+253 |     pub fn machine(&self, id: &str) -> Option<usize> {
+    |            ^^^^^^^
+...
+258 |     pub fn machines_of(&self, member: &str, variant: &str) -> Vec<usize> {
+    |            ^^^^^^^^^^^
+...
+268 |     pub fn with_variant(&self, variant: &str) -> Vec<usize> {
+    |            ^^^^^^^^^^^^
+...
+277 |     pub fn next_seq(&self) -> u64 {
+    |            ^^^^^^^^
+...
+283 |     pub fn set_next_seq(&mut self, seq: u64) {
+    |            ^^^^^^^^^^^^
+...
+289 |     pub fn failed(&self) -> bool {
+    |            ^^^^^^
+...
+298 |     pub fn standings(&self) -> Vec<Standing> {
+    |            ^^^^^^^^^
+...
+309 |     pub fn next_timer_at(&self) -> Option<i64> {
+    |            ^^^^^^^^^^^^^
+...
+315 |     pub fn next_due(&mut self, until: i64) -> Option<(i64, usize, i64)> {
+    |            ^^^^^^^^
+...
+323 |     pub fn take_attempt(&mut self, member: &str, id: i64) -> Option<usize> {
+    |            ^^^^^^^^^^^^
+...
+327 |     pub fn take_build(&mut self, member: &str) -> Option<usize> {
+    |            ^^^^^^^^^^
+...
+331 |     pub fn take_release(&mut self, member: &str) -> Option<usize> {
+    |            ^^^^^^^^^^^^
+...
+337 |     pub fn record(
+    |            ^^^^^^
+...
+362 |     pub fn feed(&mut self, machine: usize, at: i64, kind: Value) -> Vec<Record> {
+    |            ^^^^
+...
+410 |     fn error(&mut self, at: i64, machine: &str, report: &str) -> Record {
+    |        ^^^^^
+...
+433 |     fn effect(
+    |        ^^^^^^
+warning: function `kind` is never used
+   --> crates/ignite/src/run/engine.rs:584:8
+    |
+584 | pub fn kind(variant: &str, fields: Vec<Value>) -> Value {
+    |        ^^^^
+warning: function `event` is never used
+   --> crates/ignite/src/run/engine.rs:593:8
+    |
+593 | pub fn event(at: i64, kind: Value) -> Value {
+    |        ^^^^^
+warning: function `segment` is never used
+   --> crates/ignite/src/run/engine.rs:604:8
+    |
+604 | pub fn segment(start: i64, stop: Option<i64>, clock: &str, generation: i64, declared: &[String]) -> Value {
+    |        ^^^^^^^
+warning: function `duration_json` is never used
+   --> crates/ignite/src/run/engine.rs:627:8
+    |
+627 | pub fn duration_json(ns: i64) -> Json {
+    |        ^^^^^^^^^^^^^
+warning: function `enum_parts` is never used
+   --> crates/ignite/src/run/engine.rs:635:8
+    |
+635 | pub fn enum_parts(value: &Value) -> Option<(&str, &[Value])> {
+    |        ^^^^^^^^^^
+warning: function `field` is never used
+   --> crates/ignite/src/run/engine.rs:645:8
+    |
+645 | pub fn field<'v>(record: &'v Value, name: &str) -> Option<&'v Value> {
+    |        ^^^^^
+warning: function `set_field` is never used
+   --> crates/ignite/src/run/engine.rs:652:4
+    |
+652 | fn set_field(record: &mut Value, name: &str, value: Value) {
+    |    ^^^^^^^^^
+warning: function `text` is never used
+   --> crates/ignite/src/run/engine.rs:660:8
+    |
+660 | pub fn text(value: &Value) -> Option<String> {
+    |        ^^^^
+warning: function `int` is never used
+   --> crates/ignite/src/run/engine.rs:668:8
+    |
+668 | pub fn int(value: &Value) -> Option<i64> {
+    |        ^^^
+warning: function `split_step` is never used
+   --> crates/ignite/src/run/engine.rs:676:4
+    |
+676 | fn split_step(step: Value) -> Option<(Value, Vec<Value>)> {
+    |    ^^^^^^^^^^
+warning: constant `FILE` is never used
+  --> crates/ignite/src/run/journal.rs:19:11
+   |
+19 | pub const FILE: &str = "journal.jsonl";
+   |           ^^^^
+warning: constant `LOCK` is never used
+  --> crates/ignite/src/run/journal.rs:21:11
+   |
+21 | pub const LOCK: &str = "lock";
+   |           ^^^^
+warning: enum `JournalError` is never used
+  --> crates/ignite/src/run/journal.rs:25:10
+   |
+25 | pub enum JournalError {
+   |          ^^^^^^^^^^^^
+warning: struct `Journal` is never constructed
+  --> crates/ignite/src/run/journal.rs:53:12
+   |
+53 | pub struct Journal {
+   |            ^^^^^^^
+warning: associated items `open` and `append` are never used
+   --> crates/ignite/src/run/journal.rs:68:12
+    |
+ 65 | impl Journal {
+    | ------------ associated items in this implementation
+...
+ 68 |     pub fn open(state: &Path, fresh: bool) -> Result<Journal, JournalError> {
+    |            ^^^^
+...
+123 |     pub fn append(&mut self, record: &str, durable: bool) -> io::Result<u64> {
+    |            ^^^^^^
+warning: function `archive_name` is never used
+   --> crates/ignite/src/run/journal.rs:138:4
+    |
+138 | fn archive_name(state: &Path) -> PathBuf {
+    |    ^^^^^^^^^^^^
+warning: type alias `Builder` is never used
+  --> crates/ignite/src/run/live.rs:49:10
+   |
+49 | pub type Builder = Arc<dyn Fn() -> Result<BTreeMap<String, PathBuf>, String> + Send + Sync>;
+   |          ^^^^^^^
+warning: struct `Config` is never constructed
+  --> crates/ignite/src/run/live.rs:52:12
+   |
+52 | pub struct Config {
+   |            ^^^^^^
+warning: struct `Listener` is never constructed
+  --> crates/ignite/src/run/live.rs:81:8
+   |
+81 | struct Listener {
+   |        ^^^^^^^^
+warning: struct `Members` is never constructed
+  --> crates/ignite/src/run/live.rs:88:8
+   |
+88 | struct Members {
+   |        ^^^^^^^
+warning: associated function `of` is never used
+  --> crates/ignite/src/run/live.rs:95:8
+   |
+94 | impl Members {
+   | ------------ associated function in this implementation
+95 |     fn of(model: &Model) -> Members {
+   |        ^^
+warning: struct `Live` is never constructed
+   --> crates/ignite/src/run/live.rs:144:12
+    |
+144 | pub struct Live<'a, 'p> {
+    |            ^^^^
+warning: constant `SIGKILL` is never used
+   --> crates/ignite/src/run/live.rs:164:7
+    |
+164 | const SIGKILL: i32 = 9;
+    |       ^^^^^^^
+warning: constant `STOP_DEADLINE` is never used
+   --> crates/ignite/src/run/live.rs:165:7
+    |
+165 | const STOP_DEADLINE: Duration = Duration::from_secs(10);
+    |       ^^^^^^^^^^^^^
+warning: constant `AFTER_KILL` is never used
+   --> crates/ignite/src/run/live.rs:166:7
+    |
+166 | const AFTER_KILL: Duration = Duration::from_secs(2);
+    |       ^^^^^^^^^^
+warning: multiple associated items are never used
+   --> crates/ignite/src/run/live.rs:172:12
+    |
+168 | impl<'a, 'p> Live<'a, 'p> {
+    | ------------------------- associated items in this implementation
+...
+172 |     pub fn new(
+    |            ^^^
+...
+215 |     fn now(&self) -> i64 {
+    |        ^^^
+...
+223 |     fn clock_name(&self) -> &'static str {
+    |        ^^^^^^^^^^
+...
+227 |     fn note(&self, text: &str) {
+    |        ^^^^
+...
+233 |     pub fn run(mut self) -> io::Result<i32> {
+    |            ^^^
+...
+296 |     fn process(&mut self, records: Vec<Record>) -> io::Result<()> {
+    |        ^^^^^^^
+...
+314 |     fn executable(&self, member: &str, generation: i64) -> Option<PathBuf> {
+    |        ^^^^^^^^^^
+...
+325 |     fn port_of(&self, listener: &Listener) -> u16 {
+    |        ^^^^^^^
+...
+334 |     fn endpoint_of(&self, member: &str) -> Option<String> {
+    |        ^^^^^^^^^^^
+...
+341 |     fn refs_of(&self, member: &str) -> Vec<(String, String)> {
+    |        ^^^^^^^
+...
+354 |     fn dispatch(&mut self, dispatch: Dispatch) {
+    |        ^^^^^^^^
+...
+439 |     fn fire_due(&mut self) -> io::Result<()> {
+    |        ^^^^^^^^
+...
+450 |     fn lifecycle(&self, member: &str) -> Vec<usize> {
+    |        ^^^^^^^^^
+...
+471 |     fn feed_all(&mut self, machines: &[usize], kind: Value) -> io::Result<()> {
+    |        ^^^^^^^^
+...
+480 |     fn feed_one(&mut self, machine: Option<usize>, fallback: Vec<usize>, kind: Value) -> io::Result<()> {
+    |        ^^^^^^^^
+...
+489 |     fn observe(&mut self, observation: Observation, advancing: bool) -> io::Result<()> {
+    |        ^^^^^^^
+...
+610 |     fn control(&mut self, line: &str) -> io::Result<()> {
+    |        ^^^^^^^
+...
+659 |     fn advance(&mut self, d: i64) -> io::Result<()> {
+    |        ^^^^^^^
+...
+682 |     fn settle_and_drain(&mut self) -> io::Result<()> {
+    |        ^^^^^^^^^^^^^^^^
+...
+707 |     fn status(&mut self) -> io::Result<()> {
+    |        ^^^^^^
+...
+765 |     fn stop_deadline(&self) -> Duration {
+    |        ^^^^^^^^^^^^^
+...
+788 |     fn stop(&mut self) -> io::Result<i32> {
+    |        ^^^^
+warning: function `copy_into` is never used
+   --> crates/ignite/src/run/live.rs:850:8
+    |
+850 | pub fn copy_into(bin: &Path, built: &BTreeMap<String, PathBuf>) -> io::Result<()> {
+    |        ^^^^^^^^^
+warning: struct `Attempt` is never constructed
+  --> crates/ignite/src/run/probe.rs:23:8
+   |
+23 | struct Attempt {
+   |        ^^^^^^^
+warning: struct `Table` is never constructed
+  --> crates/ignite/src/run/probe.rs:32:19
+   |
+32 | pub(super) struct Table {
+   |                   ^^^^^
+warning: function `lock` is never used
+  --> crates/ignite/src/run/probe.rs:36:4
+   |
+36 | fn lock(table: &Mutex<Table>) -> MutexGuard<'_, Table> {
+   |    ^^^^
+warning: function `attempt` is never used
+  --> crates/ignite/src/run/probe.rs:41:15
+   |
+41 | pub(super) fn attempt(
+   |               ^^^^^^^
+warning: function `kill_attempt` is never used
+   --> crates/ignite/src/run/probe.rs:139:15
+    |
+139 | pub(super) fn kill_attempt(adapters: &Adapters, member: &str, id: i64) {
+    |               ^^^^^^^^^^^^
+warning: struct `Request` is never constructed
+  --> crates/ignite/src/run/process.rs:27:8
+   |
+27 | struct Request {
+   |        ^^^^^^^
+warning: struct `Spawner` is never constructed
+  --> crates/ignite/src/run/process.rs:34:19
+   |
+34 | pub(super) struct Spawner {
+   |                   ^^^^^^^
+warning: associated items `start` and `spawn` are never used
+  --> crates/ignite/src/run/process.rs:40:19
+   |
+38 | impl Spawner {
+   | ------------ associated items in this implementation
+39 |     /// Start the thread.
+40 |     pub(super) fn start() -> io::Result<Spawner> {
+   |                   ^^^^^
+...
+54 |     pub(super) fn spawn(&self, mut command: Command) -> io::Result<Child> {
+   |                   ^^^^^
+warning: enum `Release` is never used
+  --> crates/ignite/src/run/process.rs:74:6
+   |
+74 | enum Release {
+   |      ^^^^^^^
+warning: struct `Live` is never constructed
+  --> crates/ignite/src/run/process.rs:83:8
+   |
+83 | struct Live {
+   |        ^^^^
+warning: struct `Table` is never constructed
+  --> crates/ignite/src/run/process.rs:95:19
+   |
+95 | pub(super) struct Table {
+   |                   ^^^^^
+warning: function `lock` is never used
+  --> crates/ignite/src/run/process.rs:99:4
+   |
+99 | fn lock(table: &Mutex<Table>) -> MutexGuard<'_, Table> {
+   |    ^^^^
+warning: method `of_member` is never used
+   --> crates/ignite/src/run/process.rs:105:8
+    |
+103 | impl Table {
+    | ---------- method in this implementation
+104 |     /// The member's live children, oldest generation first.
+105 |     fn of_member(&mut self, member: &str) -> Vec<(i64, i32)> {
+    |        ^^^^^^^^^
+warning: function `listening` is never used
+   --> crates/ignite/src/run/process.rs:118:4
+    |
+118 | fn listening(line: &str) -> Option<(String, u16)> {
+    |    ^^^^^^^^^
+warning: function `released` is never used
+   --> crates/ignite/src/run/process.rs:125:4
+    |
+125 | fn released(line: &str) -> bool {
+    |    ^^^^^^^^
+warning: function `spawn` is never used
+   --> crates/ignite/src/run/process.rs:132:15
+    |
+132 | pub(super) fn spawn(
+    |               ^^^^^
+warning: function `kill` is never used
+   --> crates/ignite/src/run/process.rs:262:15
+    |
+262 | pub(super) fn kill(adapters: &Adapters, pid: i32, signal: i32) -> io::Result<()> {
+    |               ^^^^
+warning: function `await_release` is never used
+   --> crates/ignite/src/run/process.rs:281:15
+    |
+281 | pub(super) fn await_release(adapters: &Adapters, member: &str) -> bool {
+    |               ^^^^^^^^^^^^^
+warning: function `pids` is never used
+   --> crates/ignite/src/run/process.rs:304:15
+    |
+304 | pub(super) fn pids(adapters: &Adapters, member: &str) -> Vec<(i64, i32)> {
+    |               ^^^^
+warning: enum `ReplayError` is never used
+  --> crates/ignite/src/run/replay.rs:25:10
+   |
+25 | pub enum ReplayError {
+   |          ^^^^^^^^^^^
+warning: method `seq` is never used
+  --> crates/ignite/src/run/replay.rs:39:12
+   |
+37 | impl ReplayError {
+   | ---------------- method in this implementation
+38 |     /// The `seq` the diagnostic names.
+39 |     pub fn seq(&self) -> u64 {
+   |            ^^^
+warning: struct `Replayed` is never constructed
+  --> crates/ignite/src/run/replay.rs:66:12
+   |
+66 | pub struct Replayed {
+   |            ^^^^^^^^
+warning: struct `Line` is never constructed
+  --> crates/ignite/src/run/replay.rs:78:8
+   |
+78 | struct Line {
+   |        ^^^^
+warning: function `parse_line` is never used
+  --> crates/ignite/src/run/replay.rs:86:4
+   |
+86 | fn parse_line(position: u64, line: &str) -> Result<Line, ReplayError> {
+   |    ^^^^^^^^^^
+warning: function `replay` is never used
+   --> crates/ignite/src/run/replay.rs:137:8
+    |
+137 | pub fn replay(
+    |        ^^^^^^
+warning: `ignite` (lib) generated 80 warnings

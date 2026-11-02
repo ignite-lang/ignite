@@ -1,0 +1,69 @@
+plain run 1: 3.2775270938873291 s status 0
+plain run 2: 3.5644237995147705 s status 0
+     4.84%  [.] core::core_arch::x86::sse2::_mm_loadu_si128
+     4.36%  [.] 0x0000000000176411
+     3.38%  [.] <telos_check::Checker>::expr
+     2.87%  [.] <usize as core::cmp::PartialEq>::eq
+     2.73%  [.] <core::hash::sip::Sip13Rounds as core::hash::sip::Sip>::d_rounds
+     1.97%  [.] <*const ()>::is_aligned_to
+     1.86%  [.] core::ptr::copy_nonoverlapping::precondition_check
+     1.77%  [.] <core::str::pattern::TwoWaySearcher>::next::<core::str::pattern::MatchOnly>
+     1.49%  [.] <telos_types::typer::Typer>::expr_kind
+     1.46%  [.] alloc::fmt::format::format_inner
+     1.38%  [.] <core::hash::sip::Sip13Rounds as core::hash::sip::Sip>::c_rounds
+     1.38%  [.] core::intrinsics::rotate_left::<u64>
+     1.32%  [.] core::slice::raw::from_raw_parts::precondition_check
+     1.04%  [.] <usize as core::hash::Hash>::hash::<std::hash::random::DefaultHasher>
+     1.01%  [.] telos_check::called_names
+     1.01%  [.] 0x00000000001764a1
+     0.93%  [.] cfree
+     0.93%  [.] realloc
+     0.84%  [.] core::ptr::drop_glue::<telos_types::Ty>
+     0.82%  [.] <telos_llvm::lower::Lower>::binary
+     0.79%  [.] 0x00000000000a6328
+     0.76%  [.] 0x00000000000a79f9
+     0.73%  [.] <hashbrown::raw::RawTableInner>::find_or_find_insert_index_inner
+     0.70%  [.] <telos_rustgen::Generator>::expr
+     0.68%  [.] core::fmt::write
+--- children
+   100.00%     0.00%  [.] __rust_begin_short_backtrace<test::run_test::{closure_env#1}, ()> (inlined)
+   100.00%     0.00%  [.] call_once<(), (dyn core::ops::function::FnOnce<(), Output=()> + core::marker::Send), alloc::alloc::Global> (inlined)
+   100.00%     0.00%  [.] call_once<std::thread::lifecycle::spawn_unchecked::{closure_env#1}<test::run_test::{closure_env#1}, ()>, ()> (inlined)
+   100.00%     0.00%  [.] catch_unwind<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure_env#0}>, core::result::Result<(), alloc::string::String>> (inlined)
+   100.00%     0.00%  [.] catch_unwind<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure_env#0}>> (inlined)
+   100.00%     0.00%  [.] do_call<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure_env#0}>, core::result::Result<(), alloc::string::String>> (inlined)
+   100.00%     0.00%  [.] done (inlined)
+   100.00%     0.00%  [.] drop<(dyn core::ops::function::FnOnce<(), Output=()> + core::marker::Send), alloc::alloc::Global> (inlined)
+   100.00%     0.00%  [.] drop<core::option::Option<test::run_test::{closure_env#0}>> (inlined)
+   100.00%     0.00%  [.] drop_glue<std::sync::poison::mutex::MutexGuard<core::option::Option<test::run_test::{closure_env#0}>>> (inlined)
+   100.00%     0.00%  [.] for_value_raw<(dyn core::ops::function::FnOnce<(), Output=()> + core::marker::Send)> (inlined)
+   100.00%     0.00%  [.] run_test_in_process (inlined)
+   100.00%     0.00%  [.] size_of_val_raw<(dyn core::ops::function::FnOnce<(), Output=()> + core::marker::Send)> (inlined)
+   100.00%     0.00%  [.] thread_start (inlined)
+   100.00%     0.00%  [.] {closure#0} (inlined)
+   100.00%     0.00%  [.] {closure#1} (inlined)
+   100.00%     0.00%  [.] {closure#1}<test::run_test::{closure_env#1}, ()> (inlined)
+   100.00%     0.00%  [.] 0x00007f968b0980a2
+   100.00%     0.00%  [.] 0x00007f968b12080c
+     7.86%     0.17%  [.] alloc::fmt::format::{closure#0}
+     7.38%     0.00%  [.] format_inner (inlined)
+     5.58%     0.00%  [.] expect<(), core::fmt::Error> (inlined)
+     4.84%     4.84%  [.] core::core_arch::x86::sse2::_mm_loadu_si128
+     4.84%     0.00%  [.] _mm_loadu_si128 (inlined)
+     4.36%     4.36%  [.] 0x0000000000176411
+     4.36%     0.00%  [.] 0x00007f968b176411
+     4.28%     0.00%  [.] copy_nonoverlapping<u8> (inlined)
+     3.89%     0.00%  [.] write (inlined)
+     3.38%     3.38%  [.] <telos_check::Checker>::expr
+     3.27%     0.00%  [.] branch<(), core::fmt::Error> (inlined)
+     3.18%     0.00%  [.] write_str (inlined)
+     2.87%     2.87%  [.] <usize as core::cmp::PartialEq>::eq
+     2.73%     2.73%  [.] <core::hash::sip::Sip13Rounds as core::hash::sip::Sip>::d_rounds
+     2.73%     0.00%  [.] d_rounds (inlined)
+     2.70%     0.00%  [.] append_elements<u8, alloc::alloc::Global> (inlined)
+     2.70%     0.00%  [.] extend_from_slice<u8, alloc::alloc::Global> (inlined)
+     2.70%     0.00%  [.] push_str (inlined)
+     2.70%     0.00%  [.] spec_extend<u8, alloc::alloc::Global> (inlined)
+     2.59%     0.00%  [.] do_reserve_and_handle<alloc::alloc::Global> (inlined)
+     2.56%     0.00%  [.] reserve<alloc::alloc::Global> (inlined)
+EXIT=0

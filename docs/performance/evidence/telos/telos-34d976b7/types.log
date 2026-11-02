@@ -1,0 +1,40 @@
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-g/debug/deps/telos_types-7d8de7c732367ba9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fixtures.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-g/debug/deps/fixtures-ab6817c3eb0d62f0)
+
+running 2 tests
+test every_type_code_has_a_fixture ... ok
+test fixtures_match_expected ... FAILED
+
+failures:
+
+---- fixtures_match_expected stdout ----
+
+thread 'fixtures_match_expected' (1832154) panicked at crates/telos-types/tests/fixtures.rs:78:5:
+/home/timo/projects/telos/crates/telos-types/tests/fixtures/e046_match.telos
+--- expected
+--- actual
+e046_match.telos:8:10: error[E046]: match does not cover `Command.Quit`
+e046_match.telos:15:3: error[E046]: match does not cover `Some(Command.Quit)`
+e046_match.telos:23:10: error[E046]: match on `Int` does not cover every value; add a `_` arm or a binding arm
+e046_match.telos:36:10: error[E046]: match on `Text` does not cover every value; add a `_` arm or a binding arm
+e046_match.telos:49:10: error[E046]: match does not cover `Ok(_)`
+e046_match.telos:56:10: error[E046]: match does not cover `Eof`
+e046_match.telos:71:3: error[E046]: match on `Bool` does not cover every value; add a `_` arm or a binding arm
+e046_match.telos:79:10: error[E046]: match does not cover `Pair.Both(None, _)`
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    fixtures_match_expected
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p telos-types --test fixtures`

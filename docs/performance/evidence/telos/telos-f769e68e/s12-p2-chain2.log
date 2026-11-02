@@ -1,0 +1,56 @@
+/dev/nvme0n1p2  848G  760G   80G  91% /
+== inline fixture, rust
+/home/timo/projects/telos/std/policy.ignite:125:21: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:125:35: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:126:43: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:127:65: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:128:46: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:128:60: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:129:79: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:142:26: error[E041]: `DrainRollout` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:142:40: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:143:48: error[E041]: `DrainRollout` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:144:43: error[E041]: `DrainRollout` has no method `validate`
+STEP fixture-rust exit=2
+== inline fixture, llvm
+/home/timo/projects/telos/std/policy.ignite:125:21: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:125:35: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:126:43: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:127:65: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:128:46: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:128:60: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:129:79: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:142:26: error[E041]: `DrainRollout` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:142:40: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:143:48: error[E041]: `DrainRollout` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:144:43: error[E041]: `DrainRollout` has no method `validate`
+STEP fixture-llvm exit=2
+== todod pairs after unit 1
+START 2026-11-02T05:22:20+01:00 load=11.64 9.22 12.12 10/2917 3442546
+STEP baseust-dev:1 secs=3.521 load_before=11.64 load_after=12.47 exit=0
+STEP baseust-release:1 secs=3.515 load_before=12.47 load_after=12.47 exit=0
+STEP baselvm-dev:1 secs=0.416 load_before=12.47 load_after=12.47 exit=0
+STEP baselvm-release:1 secs=1.067 load_before=12.47 load_after=13.15 exit=0
+STEP newust-dev:1 secs=0.038 load_before=13.15 load_after=13.15 exit=1
+STEP newust-release:1 secs=0.038 load_before=13.15 load_after=13.15 exit=1
+STEP newlvm-dev:1 secs=0.038 load_before=13.15 load_after=13.15 exit=1
+STEP newlvm-release:1 secs=0.039 load_before=13.15 load_after=13.15 exit=1
+STEP baseust-dev:2 secs=2.572 load_before=13.15 load_after=13.15 exit=0
+STEP baseust-release:2 secs=2.858 load_before=13.15 load_after=13.38 exit=0
+STEP baselvm-dev:2 secs=0.429 load_before=13.38 load_after=13.38 exit=0
+STEP baselvm-release:2 secs=1.300 load_before=13.38 load_after=13.38 exit=0
+STEP newust-dev:2 secs=0.037 load_before=13.38 load_after=13.38 exit=1
+STEP newust-release:2 secs=0.037 load_before=13.38 load_after=13.38 exit=1
+STEP newlvm-dev:2 secs=0.039 load_before=13.38 load_after=13.38 exit=1
+STEP newlvm-release:2 secs=0.039 load_before=13.38 load_after=13.38 exit=1
+STEP baseust-dev:3 secs=1.979 load_before=13.38 load_after=13.99 exit=0
+STEP baseust-release:3 secs=2.908 load_before=13.99 load_after=13.99 exit=0
+STEP baselvm-dev:3 secs=0.428 load_before=13.99 load_after=13.99 exit=0
+STEP baselvm-release:3 secs=0.855 load_before=13.99 load_after=13.99 exit=0
+STEP newust-dev:3 secs=0.031 load_before=13.99 load_after=13.99 exit=1
+STEP newust-release:3 secs=0.033 load_before=13.99 load_after=13.99 exit=1
+STEP newlvm-dev:3 secs=0.032 load_before=13.99 load_after=13.99 exit=1
+STEP newlvm-release:3 secs=0.032 load_before=13.99 load_after=13.99 exit=1
+EXIT=0
+STEP todod exit=0
+EXIT=0

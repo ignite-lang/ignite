@@ -1,0 +1,51 @@
+START 01:06:18
+ 01:06:18 up 2 days, 20:15,  1 user,  load average: 13.80, 17.01, 19.40
+   Compiling terminal v0.0.0 (/home/timo/projects/telos/target/telos/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.66s
+built target/debug/terminald
+built target/debug/tn
+task compile EXIT=0 0.8 s
+task: [compile-llvm] cargo build -q -p telos-rt --features runner --target-dir target/telos-test/rt
+task: [compile-llvm] cargo run -q -p telos -- build examples/terminal/terminal.telos --target llvm --out target/telos-llvm/terminal
+error: /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/libtelos_rt.a: runtime archive not found
+task: Failed to run task "compile-llvm": exit status 3
+task compile-llvm EXIT=201 1.0 s
+note: building the generated Rust project in target/telos/todo; compiler messages refer to generated code
+   Compiling todo v0.0.0 (/home/timo/projects/telos/target/telos/todo)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.26s
+built target/debug/todod
+task compile-todo EXIT=0 0.4 s
+task: [compile-todo-llvm] cargo build -q -p telos-rt --features runner --target-dir target/telos-test/rt
+task: [compile-todo-llvm] cargo run -q -p telos -- build examples/todo/todo.telos --target llvm --out target/telos-llvm/todo
+error: /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/libtelos_rt.a: runtime archive not found
+task: Failed to run task "compile-todo-llvm": exit status 3
+task compile-todo-llvm EXIT=201 0.2 s
+-rwxr-xr-x 2 timo timo 5722768 Nov  2 01:06 target/debug/terminald
+-rwxr-xr-x 2 timo timo 5773456 Nov  2 01:06 target/debug/tn
+-rwxr-xr-x 2 timo timo 6343696 Nov  2 01:06 target/debug/todod
+
+target/telos-llvm/terminal/bin/:
+drwxr-xr-x 2 timo timo    4096 Nov  1 19:29 .
+drwxr-xr-x 4 timo timo    4096 Nov  1 09:43 ..
+-rwxr-xr-x 1 timo timo 5776544 Nov  1 19:29 terminald
+-rwxr-xr-x 1 timo timo 5905776 Nov  1 19:29 tn
+
+target/telos-llvm/todo/bin/:
+drwxr-xr-x 2 timo timo    4096 Nov  1 19:29 .
+drwxr-xr-x 4 timo timo    4096 Nov  1 13:07 ..
+-rwxr-xr-x 1 timo timo 5975648 Nov  1 19:29 todod
+todod rust dev cold run 1 EXIT=0 4.0 s
+todod rust release cold run 1 EXIT=0 4.4 s
+todod rust dev cold run 2 EXIT=0 3.3 s
+todod rust release cold run 2 EXIT=0 4.4 s
+todod llvm dev run 1 EXIT=0 0.4 s
+todod llvm release run 1 EXIT=0 1.2 s
+todod llvm dev run 2 EXIT=0 0.4 s
+todod llvm release run 2 EXIT=0 1.2 s
+ 2126 /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/gate-programs/cold-release-1/std/src/lib.rs
+  100 /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/gate-programs/cold-release-1/src/lib.rs
+   16 /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/gate-programs/cold-release-1/src/bin/todod.rs
+ 2242 total
+ 01:06:40 up 2 days, 20:16,  1 user,  load average: 11.18, 16.20, 19.08
+END 01:06:40
+EXIT=0

@@ -15,7 +15,7 @@ The roadmap in outline. The reasoning and the dependency analysis are in `docs/v
 | slice 12 contract (`docs/slice.md` section 16) | reviewed 2026-11-02 with 15 amendments |
 | slice 12, F3 run and control | done 2026-11-02, published in `9273349`: 16.0 items 1 to 11 and 13 pass; 636 cargo tests, 148 inline tests per target; item 12 (gate time) carried into 12b |
 | slice 12b: gate time back within 10 % of 11b (the frontend loads only the std modules a program reaches, rustgen emits a reachable-only `ignite-std`, `ignite_test.rs` cut back) | implementation and measurement complete 2026-11-02, published in `9273349`: 647 cargo tests, 148 inline tests per target; cold gate 57.14 → 66.11 s (1.157), warm 13.37 → 16.79 s (1.255) against 11b; timing exceptions and measured causes in `AGENTS.md`, baseline unchanged |
-| commit and push slices 11 to 12b | done 2026-11-02: `9273349` on `origin/main` |
+| commit and push slices 11 to 12b | done 2026-11-02: `9273349` on `origin/main`; after the commit-message rewrite of 2026-11-02 the same tree is `28dfc75` on `main`, and branch `bench/12b-checkpoint` keeps `9273349` |
 | slice 12c, restore the original performance budget | release tested fixes with documented gaps, 2026-11-02; performance acceptance remains open and further optimization is deferred by user; [`evidence`](docs/performance/12c/release-815cf74/README.md) |
 | slice 13 contract (`docs/slice.md` section 17), reviewed before agents are dispatched | next: review the slice-13 contract; user deferred remaining 12c performance work |
 

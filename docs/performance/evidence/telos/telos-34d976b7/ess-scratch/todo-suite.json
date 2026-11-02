@@ -1,0 +1,1342 @@
+{
+  "provenance": {
+    "suite_version": "ess-conformance/34",
+    "system": "todo",
+    "specification_version": "v1",
+    "spec_digest": "4fab963621d47043d38543f5141de315c8b798f376db1be3379011617c426950",
+    "contract_digest": "61667ec6c2605cc86fbc8234dc47d5c988a762a1b4cc97f18cbfd516628457d7",
+    "scenario_initial_state": "empty"
+  },
+  "scenarios": {
+    "todo.list.CreateTodo/outcome/created": {
+      "purpose": "`todo.list.CreateTodo` answers `created` for an input no other branch's guard claims",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "todo.list.CreateTodo",
+          "input": {
+            "title": {
+              "kind": "literal",
+              "value": "title"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created"
+          }
+        },
+        {
+          "step": "expect_event",
+          "event": "todo.list.TodoCreated",
+          "payload": {
+            "title": "title"
+          },
+          "shape": {
+            "id": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "title": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoChanged"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoDeleted"
+        },
+        {
+          "step": "execute_command",
+          "command": "todo.list.CreateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": false
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title-1"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "todo-2",
+          "entity": "todo.list.Todo",
+          "event": "todo.list.TodoCreated",
+          "field": "id"
+        },
+        {
+          "step": "query_view",
+          "view": "todo.list.Todos"
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "done": {
+                "kind": "literal",
+                "value": false
+              },
+              "id": {
+                "kind": "observed",
+                "event": "todo.list.TodoCreated",
+                "field": "id"
+              },
+              "title": {
+                "kind": "literal",
+                "value": "title"
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "counts",
+            "at_least": 2
+          }
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "ranked",
+            "order_by": [
+              "id asc"
+            ]
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "todo.list.Title"
+        },
+        {
+          "kind": "type",
+          "name": "todo.list.TodoId"
+        },
+        {
+          "kind": "entity",
+          "name": "todo.list.Todo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.CreateTodo"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoChanged"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoCreated"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoDeleted"
+        },
+        {
+          "kind": "view",
+          "name": "todo.list.Todos"
+        }
+      ]
+    },
+    "todo.list.CreateTodo/outcome/created-with-done": {
+      "purpose": "`todo.list.CreateTodo` answers `created-with-done` for an input that satisfies that branch's guard",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "todo.list.CreateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": true
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "step": "expect_event",
+          "event": "todo.list.TodoCreated",
+          "payload": {
+            "title": "title"
+          },
+          "shape": {
+            "id": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "title": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoChanged"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoDeleted"
+        },
+        {
+          "step": "execute_command",
+          "command": "todo.list.CreateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": false
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title-1"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "todo-2",
+          "entity": "todo.list.Todo",
+          "event": "todo.list.TodoCreated",
+          "field": "id"
+        },
+        {
+          "step": "query_view",
+          "view": "todo.list.Todos"
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "done": {
+                "kind": "literal",
+                "value": true
+              },
+              "id": {
+                "kind": "observed",
+                "event": "todo.list.TodoCreated",
+                "field": "id"
+              },
+              "title": {
+                "kind": "literal",
+                "value": "title"
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "counts",
+            "at_least": 2
+          }
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "ranked",
+            "order_by": [
+              "id asc"
+            ]
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "todo.list.Title"
+        },
+        {
+          "kind": "type",
+          "name": "todo.list.TodoId"
+        },
+        {
+          "kind": "entity",
+          "name": "todo.list.Todo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.CreateTodo"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoChanged"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoCreated"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoDeleted"
+        },
+        {
+          "kind": "view",
+          "name": "todo.list.Todos"
+        }
+      ]
+    },
+    "todo.list.DeleteTodo/outcome/deleted": {
+      "purpose": "`todo.list.DeleteTodo` answers `deleted` for an input no other branch's guard claims",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "todo.list.CreateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": true
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "todo",
+          "entity": "todo.list.Todo",
+          "event": "todo.list.TodoCreated",
+          "field": "id"
+        },
+        {
+          "step": "execute_command",
+          "command": "todo.list.DeleteTodo",
+          "input": {
+            "id": {
+              "kind": "instance",
+              "instance": "todo"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.DeleteTodo",
+            "outcome": "deleted"
+          }
+        },
+        {
+          "step": "expect_event_values",
+          "event": "todo.list.TodoDeleted",
+          "payload": {
+            "id": {
+              "kind": "instance",
+              "instance": "todo"
+            }
+          },
+          "shape": {
+            "id": {
+              "holds": "primitive",
+              "kind": "integer"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoChanged"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoCreated"
+        },
+        {
+          "step": "query_view",
+          "view": "todo.list.Todos"
+        },
+        {
+          "step": "expect_subject_absent",
+          "view": "todo.list.Todos",
+          "subject": {
+            "id": {
+              "kind": "instance",
+              "instance": "todo"
+            }
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "todo.list.DeleteTodo",
+          "input": {
+            "id": {
+              "kind": "instance",
+              "instance": "todo"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.DeleteTodo",
+            "outcome": "not-found"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "todo.list.TodoNotFound"
+        },
+        {
+          "step": "expect_no_events"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "todo.list.TodoId"
+        },
+        {
+          "kind": "entity",
+          "name": "todo.list.Todo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.CreateTodo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.DeleteTodo"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.DeleteTodo",
+            "outcome": "deleted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.DeleteTodo",
+            "outcome": "not-found"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoChanged"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoCreated"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoDeleted"
+        },
+        {
+          "kind": "error",
+          "name": "todo.list.TodoNotFound"
+        },
+        {
+          "kind": "view",
+          "name": "todo.list.Todos"
+        }
+      ]
+    },
+    "todo.list.DeleteTodo/outcome/not-found": {
+      "purpose": "`todo.list.DeleteTodo` for an identity no record carries takes `not-found` and reports `todo.list.TodoNotFound`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "todo.list.DeleteTodo",
+          "input": {
+            "id": {
+              "kind": "literal",
+              "value": 1048577.0
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.DeleteTodo",
+            "outcome": "not-found"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "todo.list.TodoNotFound"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoChanged"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoDeleted"
+        }
+      ],
+      "source": [
+        {
+          "kind": "entity",
+          "name": "todo.list.Todo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.DeleteTodo"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.DeleteTodo",
+            "outcome": "not-found"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoChanged"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoCreated"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoDeleted"
+        },
+        {
+          "kind": "error",
+          "name": "todo.list.TodoNotFound"
+        }
+      ]
+    },
+    "todo.list.GetTodo/outcome/not-found": {
+      "purpose": "`todo.list.GetTodo` for an identity no record carries takes `not-found` and reports `todo.list.TodoNotFound`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "todo.list.GetTodo",
+          "input": {
+            "id": {
+              "kind": "literal",
+              "value": 1048577.0
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.GetTodo",
+            "outcome": "not-found"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "todo.list.TodoNotFound"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoChanged"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoDeleted"
+        }
+      ],
+      "source": [
+        {
+          "kind": "entity",
+          "name": "todo.list.Todo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.GetTodo"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.GetTodo",
+            "outcome": "not-found"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoChanged"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoCreated"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoDeleted"
+        },
+        {
+          "kind": "error",
+          "name": "todo.list.TodoNotFound"
+        }
+      ]
+    },
+    "todo.list.UpdateTodo/outcome/not-found": {
+      "purpose": "`todo.list.UpdateTodo` for an identity no record carries takes `not-found` and reports `todo.list.TodoNotFound`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "todo.list.UpdateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": true
+            },
+            "id": {
+              "kind": "literal",
+              "value": 1048577.0
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.UpdateTodo",
+            "outcome": "not-found"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "todo.list.TodoNotFound"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoChanged"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoDeleted"
+        }
+      ],
+      "source": [
+        {
+          "kind": "entity",
+          "name": "todo.list.Todo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.UpdateTodo"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.UpdateTodo",
+            "outcome": "not-found"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoChanged"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoCreated"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoDeleted"
+        },
+        {
+          "kind": "error",
+          "name": "todo.list.TodoNotFound"
+        }
+      ]
+    },
+    "todo.list.UpdateTodo/outcome/updated-both": {
+      "purpose": "`todo.list.UpdateTodo` answers `updated-both` for an input that satisfies that branch's guard",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "todo.list.CreateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": true
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "todo",
+          "entity": "todo.list.Todo",
+          "event": "todo.list.TodoCreated",
+          "field": "id"
+        },
+        {
+          "step": "execute_command",
+          "command": "todo.list.UpdateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": false
+            },
+            "id": {
+              "kind": "instance",
+              "instance": "todo"
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title-1"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.UpdateTodo",
+            "outcome": "updated-both"
+          }
+        },
+        {
+          "step": "expect_event_values",
+          "event": "todo.list.TodoChanged",
+          "payload": {
+            "id": {
+              "kind": "instance",
+              "instance": "todo"
+            }
+          },
+          "shape": {
+            "id": {
+              "holds": "primitive",
+              "kind": "integer"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoDeleted"
+        },
+        {
+          "step": "execute_command",
+          "command": "todo.list.CreateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": false
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title-1"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "todo-2",
+          "entity": "todo.list.Todo",
+          "event": "todo.list.TodoCreated",
+          "field": "id"
+        },
+        {
+          "step": "query_view",
+          "view": "todo.list.Todos"
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "done": {
+                "kind": "literal",
+                "value": false
+              },
+              "id": {
+                "kind": "instance",
+                "instance": "todo"
+              },
+              "title": {
+                "kind": "literal",
+                "value": "title-1"
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "counts",
+            "at_least": 2
+          }
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "ranked",
+            "order_by": [
+              "id asc"
+            ]
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "todo.list.Title"
+        },
+        {
+          "kind": "type",
+          "name": "todo.list.TodoId"
+        },
+        {
+          "kind": "entity",
+          "name": "todo.list.Todo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.CreateTodo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.UpdateTodo"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.UpdateTodo",
+            "outcome": "updated-both"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoChanged"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoCreated"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoDeleted"
+        },
+        {
+          "kind": "view",
+          "name": "todo.list.Todos"
+        }
+      ]
+    },
+    "todo.list.UpdateTodo/outcome/updated-done": {
+      "purpose": "`todo.list.UpdateTodo` answers `updated-done` for an input that satisfies that branch's guard",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "todo.list.CreateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": true
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "todo",
+          "entity": "todo.list.Todo",
+          "event": "todo.list.TodoCreated",
+          "field": "id"
+        },
+        {
+          "step": "execute_command",
+          "command": "todo.list.UpdateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": false
+            },
+            "id": {
+              "kind": "instance",
+              "instance": "todo"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.UpdateTodo",
+            "outcome": "updated-done"
+          }
+        },
+        {
+          "step": "expect_event_values",
+          "event": "todo.list.TodoChanged",
+          "payload": {
+            "id": {
+              "kind": "instance",
+              "instance": "todo"
+            }
+          },
+          "shape": {
+            "id": {
+              "holds": "primitive",
+              "kind": "integer"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoDeleted"
+        },
+        {
+          "step": "execute_command",
+          "command": "todo.list.CreateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": false
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title-1"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "todo-2",
+          "entity": "todo.list.Todo",
+          "event": "todo.list.TodoCreated",
+          "field": "id"
+        },
+        {
+          "step": "query_view",
+          "view": "todo.list.Todos"
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "done": {
+                "kind": "literal",
+                "value": false
+              },
+              "id": {
+                "kind": "instance",
+                "instance": "todo"
+              },
+              "title": {
+                "kind": "literal",
+                "value": "title"
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "counts",
+            "at_least": 2
+          }
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "ranked",
+            "order_by": [
+              "id asc"
+            ]
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "todo.list.Title"
+        },
+        {
+          "kind": "type",
+          "name": "todo.list.TodoId"
+        },
+        {
+          "kind": "entity",
+          "name": "todo.list.Todo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.CreateTodo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.UpdateTodo"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.UpdateTodo",
+            "outcome": "updated-done"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoChanged"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoCreated"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoDeleted"
+        },
+        {
+          "kind": "view",
+          "name": "todo.list.Todos"
+        }
+      ]
+    },
+    "todo.list.UpdateTodo/outcome/updated-title": {
+      "purpose": "`todo.list.UpdateTodo` answers `updated-title` for an input that satisfies that branch's guard",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "todo.list.CreateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": true
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "todo",
+          "entity": "todo.list.Todo",
+          "event": "todo.list.TodoCreated",
+          "field": "id"
+        },
+        {
+          "step": "execute_command",
+          "command": "todo.list.UpdateTodo",
+          "input": {
+            "id": {
+              "kind": "instance",
+              "instance": "todo"
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title-1"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.UpdateTodo",
+            "outcome": "updated-title"
+          }
+        },
+        {
+          "step": "expect_event_values",
+          "event": "todo.list.TodoChanged",
+          "payload": {
+            "id": {
+              "kind": "instance",
+              "instance": "todo"
+            }
+          },
+          "shape": {
+            "id": {
+              "holds": "primitive",
+              "kind": "integer"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "todo.list.TodoDeleted"
+        },
+        {
+          "step": "execute_command",
+          "command": "todo.list.CreateTodo",
+          "input": {
+            "done": {
+              "kind": "literal",
+              "value": false
+            },
+            "title": {
+              "kind": "literal",
+              "value": "title-1"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "todo-2",
+          "entity": "todo.list.Todo",
+          "event": "todo.list.TodoCreated",
+          "field": "id"
+        },
+        {
+          "step": "query_view",
+          "view": "todo.list.Todos"
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "done": {
+                "kind": "literal",
+                "value": true
+              },
+              "id": {
+                "kind": "instance",
+                "instance": "todo"
+              },
+              "title": {
+                "kind": "literal",
+                "value": "title-1"
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "counts",
+            "at_least": 2
+          }
+        },
+        {
+          "step": "expect_view",
+          "view": "todo.list.Todos",
+          "expectation": {
+            "expect": "ranked",
+            "order_by": [
+              "id asc"
+            ]
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "todo.list.Title"
+        },
+        {
+          "kind": "type",
+          "name": "todo.list.TodoId"
+        },
+        {
+          "kind": "entity",
+          "name": "todo.list.Todo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.CreateTodo"
+        },
+        {
+          "kind": "command",
+          "name": "todo.list.UpdateTodo"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.CreateTodo",
+            "outcome": "created-with-done"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "todo.list.UpdateTodo",
+            "outcome": "updated-title"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoChanged"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoCreated"
+        },
+        {
+          "kind": "event",
+          "name": "todo.list.TodoDeleted"
+        },
+        {
+          "kind": "view",
+          "name": "todo.list.Todos"
+        }
+      ]
+    }
+  }
+}

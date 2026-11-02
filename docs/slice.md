@@ -2900,7 +2900,8 @@ Records:
 
 ### 16.1 Baseline and measurement
 
-- The baseline tree is `/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-before`.
+- The baseline tree is the coordinator's copy `s12-before`, kept as branch `bench/11b-recovered`
+  (all 741 files identical, `docs/performance/evidence/README.md`).
   - It is an rsync copy of `git ls-files -co --exclude-standard` of the working tree at
     slice-12 start (741 files), made by the coordinator.
   - It is not a `git archive`, because the slice-11 and 11b state is uncommitted. The copy

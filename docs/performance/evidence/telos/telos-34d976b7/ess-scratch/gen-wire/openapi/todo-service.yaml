@@ -1,0 +1,433 @@
+# generated from todo v1
+# model digest e168de3c30c9210d9e96898ee55dcd83ae405fe0796d6370de542ea04f1235cf
+# contract digest slice-sha256/2:603b6c8c8c5bc21486087f94a996d88cc84abaeb03079957f637f3db55782f7a
+# do not edit: regenerate with `ess generate`
+openapi: 3.1.0
+info:
+  title: todo-service
+  description: |-
+    The HTTP surface of `todo-service`, one of the components of `todo` v1.
+
+    Every path here is one semantic command, so the method is always POST and the path is the command's wire name under its domain's: a command is not a resource, and this document does not invent one. A status code is the outcome the specification declares — 202 for a branch that was taken, 422 for a refusal the input decides, 502 for a refusal decided outside the request — and the `outcome` property of every response body names the branch. Events emitted by a branch are published to consumers through the event transport, and the `published` property of every response body lists them too, in publication order. A branch that returns the command's response is carried out in the request that took it, so it is answered 200, and its body carries that response under `response`.
+
+    This component declares `reached_by: network`, so its callers are not deployed with it and this contract is the surface they reach it through. That declaration is also why the views its domains declare have paths here: a GET under `views` per projection, answering every row it holds. There is no page size, no cursor, no ordering and no filter parameter, because the specification states none — a view's filter is part of the projection, not of the request.
+
+    An `ess-http/1` binding declares the method and path of every operation marked `x-ess-route-source: binding`, so those are the protocol's and not derived from wire names. Each variable of such a path is a required path parameter carrying the input field or view parameter the binding maps to it, and a field carried in the path is not in the request body. Every other operation keeps the method and path described above.
+
+    The binding also declares how some of those operations are encoded and answered: a request body that is form-encoded, or input carried in the query string; the status, body and headers of an outcome; a redirect; a view that answers its one row; or a standard refusal's answer. Such an operation is described as the binding declares it, and each response of such a command lists the outcomes it answers under `x-ess-outcomes`, because a bare body carries no `outcome` naming the branch and no `published` list. A `WWW-Authenticate` challenge is a response header: the specification states what a refusal answers, not how a caller proves who it is, so no security scheme is declared.
+  version: v1
+  x-ess-provenance:
+    system: todo
+    specification_version: v1
+    source_digest: e168de3c30c9210d9e96898ee55dcd83ae405fe0796d6370de542ea04f1235cf
+    contract_digest: slice-sha256/2:603b6c8c8c5bc21486087f94a996d88cc84abaeb03079957f637f3db55782f7a
+  x-ess-reached-by: network
+tags:
+- name: list
+  description: A todo list kept in memory by one HTTP service.
+paths:
+  /todos:
+    get:
+      operationId: todo.list.Todos
+      x-ess-route-source: binding
+      summary: Todos
+      tags:
+      - list
+      x-ess-consistency: read_your_writes
+      responses:
+        '200':
+          description: 'Every row of `todo.list.Todos`, a projection of `todo.list.Todo`, as a bare JSON array, as the `ess-http/1` binding declares (`body: array`): no object around it.'
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/todo.list.Todos.Row'
+                type: array
+    post:
+      operationId: todo.list.CreateTodo
+      x-ess-route-source: binding
+      summary: CreateTodo
+      tags:
+      - list
+      requestBody:
+        description: The input `todo.list.CreateTodo` declares.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/todo.list.CreateTodo.Input'
+      responses:
+        '201':
+          description: 'Outcome `created-with-done`, answered 201 as the `ess-http/1` binding declares, with the command''s response, bare: no `outcome` names the branch and no `published` lists what it published. Outcome `created`, answered 201 as the `ess-http/1` binding declares, with the command''s response, bare: no `outcome` names the branch and no `published` lists what it published. Outcomes `created` and `created-with-done` are declared alike: one answer, which does not tell them apart.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/todo.list.CreateTodo.Result'
+          x-ess-outcomes:
+          - created-with-done
+          - created
+        '400':
+          description: 'No declared outcome: the `malformed` refusal, for a request whose input cannot be read, answered as the `ess-http/1` binding declares, with a body whose one member `error` is `bad_request`.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  error:
+                    const: bad_request
+                    type: string
+                required:
+                - error
+                type: object
+          x-ess-outcomes: []
+        '501':
+          description: 'No declared outcome: the realization is unfinished. Either a port this command runs reported an unmet obligation, and nothing was written: `committed` is `false`. Or the command''s effect was committed and delivering what this command published to a binding failed: `committed` is `true`, the effect and its events stand, and each binding whose delivery failed keeps its event and is attempted again on a later delivery, while no other binding receives it twice. Do not retry: after a failed delivery a retry performs the command a second time.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  committed:
+                    description: '`true` when the command''s effect and events were committed and delivering what it published failed; `false` when an unmet obligation stopped the command before anything was written.'
+                    type: boolean
+                  refused:
+                    description: What was left unfinished, in words.
+                    type: string
+                required:
+                - refused
+                - committed
+                type: object
+          x-ess-outcomes: []
+  /todos/{id}:
+    get:
+      operationId: todo.list.GetTodo
+      x-ess-route-source: binding
+      summary: GetTodo
+      tags:
+      - list
+      parameters:
+      - name: id
+        in: path
+        description: The input field `id`, carried in the path rather than the request body.
+        required: true
+        schema:
+          $ref: '#/components/schemas/todo.list.TodoId'
+      responses:
+        '200':
+          description: 'Outcome `found`, answered 200 as the `ess-http/1` binding declares, with the command''s response, bare: no `outcome` names the branch and no `published` lists what it published.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/todo.list.GetTodo.Result'
+          x-ess-outcomes:
+          - found
+        '400':
+          description: 'No declared outcome: the `malformed` refusal, for a request whose input cannot be read, answered as the `ess-http/1` binding declares, with a body whose one member `error` is `bad_request`.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  error:
+                    const: bad_request
+                    type: string
+                required:
+                - error
+                type: object
+          x-ess-outcomes: []
+        '404':
+          description: Outcome `not-found`, answered 404 as the `ess-http/1` binding declares, with no body.
+          x-ess-outcomes:
+          - not-found
+        '501':
+          description: 'No declared outcome: the realization is unfinished. Either a port this command runs reported an unmet obligation, and nothing was written: `committed` is `false`. Or the command''s effect was committed and delivering what this command published to a binding failed: `committed` is `true`, the effect and its events stand, and each binding whose delivery failed keeps its event and is attempted again on a later delivery, while no other binding receives it twice. Do not retry: after a failed delivery a retry performs the command a second time.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  committed:
+                    description: '`true` when the command''s effect and events were committed and delivering what it published failed; `false` when an unmet obligation stopped the command before anything was written.'
+                    type: boolean
+                  refused:
+                    description: What was left unfinished, in words.
+                    type: string
+                required:
+                - refused
+                - committed
+                type: object
+          x-ess-outcomes: []
+    delete:
+      operationId: todo.list.DeleteTodo
+      x-ess-route-source: binding
+      summary: DeleteTodo
+      tags:
+      - list
+      parameters:
+      - name: id
+        in: path
+        description: The input field `id`, carried in the path rather than the request body.
+        required: true
+        schema:
+          $ref: '#/components/schemas/todo.list.TodoId'
+      responses:
+        '204':
+          description: Outcome `deleted`, answered 204 as the `ess-http/1` binding declares, with no body.
+          x-ess-outcomes:
+          - deleted
+        '400':
+          description: 'No declared outcome: the `malformed` refusal, for a request whose input cannot be read, answered as the `ess-http/1` binding declares, with a body whose one member `error` is `bad_request`.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  error:
+                    const: bad_request
+                    type: string
+                required:
+                - error
+                type: object
+          x-ess-outcomes: []
+        '404':
+          description: Outcome `not-found`, answered 404 as the `ess-http/1` binding declares, with no body.
+          x-ess-outcomes:
+          - not-found
+        '501':
+          description: 'No declared outcome: the realization is unfinished. Either a port this command runs reported an unmet obligation, and nothing was written: `committed` is `false`. Or the command''s effect was committed and delivering what this command published to a binding failed: `committed` is `true`, the effect and its events stand, and each binding whose delivery failed keeps its event and is attempted again on a later delivery, while no other binding receives it twice. Do not retry: after a failed delivery a retry performs the command a second time.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  committed:
+                    description: '`true` when the command''s effect and events were committed and delivering what it published failed; `false` when an unmet obligation stopped the command before anything was written.'
+                    type: boolean
+                  refused:
+                    description: What was left unfinished, in words.
+                    type: string
+                required:
+                - refused
+                - committed
+                type: object
+          x-ess-outcomes: []
+    patch:
+      operationId: todo.list.UpdateTodo
+      x-ess-route-source: binding
+      summary: UpdateTodo
+      tags:
+      - list
+      parameters:
+      - name: id
+        in: path
+        description: The input field `id`, carried in the path rather than the request body.
+        required: true
+        schema:
+          $ref: '#/components/schemas/todo.list.TodoId'
+      requestBody:
+        description: The input `todo.list.UpdateTodo` declares.
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/todo.list.UpdateTodo.Input'
+      responses:
+        '200':
+          description: 'Outcome `updated-both`, answered 200 as the `ess-http/1` binding declares, with the command''s response, bare: no `outcome` names the branch and no `published` lists what it published. Outcome `updated-title`, answered 200 as the `ess-http/1` binding declares, with the command''s response, bare: no `outcome` names the branch and no `published` lists what it published. Outcome `updated-done`, answered 200 as the `ess-http/1` binding declares, with the command''s response, bare: no `outcome` names the branch and no `published` lists what it published. Outcome `unchanged`, answered 200 as the `ess-http/1` binding declares, with the command''s response, bare: no `outcome` names the branch and no `published` lists what it published. Outcomes `unchanged`, `updated-both`, `updated-done` and `updated-title` are declared alike: one answer, which does not tell them apart.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/todo.list.UpdateTodo.Result'
+          x-ess-outcomes:
+          - updated-both
+          - updated-title
+          - updated-done
+          - unchanged
+        '400':
+          description: 'No declared outcome: the `malformed` refusal, for a request whose input cannot be read, answered as the `ess-http/1` binding declares, with a body whose one member `error` is `bad_request`.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  error:
+                    const: bad_request
+                    type: string
+                required:
+                - error
+                type: object
+          x-ess-outcomes: []
+        '404':
+          description: Outcome `not-found`, answered 404 as the `ess-http/1` binding declares, with no body.
+          x-ess-outcomes:
+          - not-found
+        '501':
+          description: 'No declared outcome: the realization is unfinished. Either a port this command runs reported an unmet obligation, and nothing was written: `committed` is `false`. Or the command''s effect was committed and delivering what this command published to a binding failed: `committed` is `true`, the effect and its events stand, and each binding whose delivery failed keeps its event and is attempted again on a later delivery, while no other binding receives it twice. Do not retry: after a failed delivery a retry performs the command a second time.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  committed:
+                    description: '`true` when the command''s effect and events were committed and delivering what it published failed; `false` when an unmet obligation stopped the command before anything was written.'
+                    type: boolean
+                  refused:
+                    description: What was left unfinished, in words.
+                    type: string
+                required:
+                - refused
+                - committed
+                type: object
+          x-ess-outcomes: []
+components:
+  schemas:
+    todo.list.CreateTodo.Input:
+      title: CreateTodo input
+      x-ess-name: todo.list.CreateTodo
+      x-ess-kind: command-input
+      type: object
+      properties:
+        title:
+          $ref: '#/components/schemas/todo.list.Title'
+        done:
+          type: boolean
+      required:
+      - title
+      additionalProperties: false
+    todo.list.CreateTodo.Result:
+      title: CreateTodo response
+      x-ess-name: todo.list.CreateTodo
+      x-ess-kind: command-response
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/todo.list.TodoId'
+        title:
+          $ref: '#/components/schemas/todo.list.Title'
+        done:
+          type: boolean
+      required:
+      - id
+      - title
+      - done
+      additionalProperties: false
+    todo.list.GetTodo.Result:
+      title: GetTodo response
+      x-ess-name: todo.list.GetTodo
+      x-ess-kind: command-response
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/todo.list.TodoId'
+        title:
+          $ref: '#/components/schemas/todo.list.Title'
+        done:
+          type: boolean
+      required:
+      - id
+      - title
+      - done
+      additionalProperties: false
+    todo.list.Title:
+      title: Title
+      x-ess-name: todo.list.Title
+      x-ess-kind: newtype
+      type: string
+    todo.list.Todo.State:
+      title: State
+      x-ess-name: todo.list.Todo.State
+      x-ess-kind: enum
+      type: string
+      enum:
+      - Kept
+    todo.list.TodoId:
+      title: TodoId
+      x-ess-name: todo.list.TodoId
+      x-ess-kind: newtype
+      type: integer
+    todo.list.Todos.Row:
+      title: Todos row
+      x-ess-name: todo.list.Todos
+      x-ess-kind: view-row
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/todo.list.TodoId'
+        title:
+          $ref: '#/components/schemas/todo.list.Title'
+        done:
+          type: boolean
+        state:
+          $ref: '#/components/schemas/todo.list.Todo.State'
+      required:
+      - id
+      - title
+      - done
+      - state
+      additionalProperties: false
+    todo.list.UpdateTodo.Input:
+      title: UpdateTodo input
+      x-ess-name: todo.list.UpdateTodo
+      x-ess-kind: command-input
+      type: object
+      properties:
+        title:
+          $ref: '#/components/schemas/todo.list.Title'
+        done:
+          type: boolean
+      additionalProperties: false
+    todo.list.UpdateTodo.Result:
+      title: UpdateTodo response
+      x-ess-name: todo.list.UpdateTodo
+      x-ess-kind: command-response
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/todo.list.TodoId'
+        title:
+          $ref: '#/components/schemas/todo.list.Title'
+        done:
+          type: boolean
+      required:
+      - id
+      - title
+      - done
+      additionalProperties: false
+x-ess-entities:
+  todo.list.Title:
+    title: Title
+    x-ess-name: todo.list.Title
+    x-ess-kind: newtype
+    type: string
+  todo.list.Todo:
+    title: Todo
+    x-ess-name: todo.list.Todo
+    x-ess-kind: entity
+    type: object
+    properties:
+      id:
+        $ref: '#/x-ess-entities/todo.list.TodoId'
+      title:
+        $ref: '#/x-ess-entities/todo.list.Title'
+      done:
+        type: boolean
+      state:
+        $ref: '#/x-ess-entities/todo.list.Todo.State'
+    required:
+    - id
+    - title
+    - done
+    - state
+    additionalProperties: false
+  todo.list.Todo.State:
+    title: State
+    x-ess-name: todo.list.Todo.State
+    x-ess-kind: enum
+    type: string
+    enum:
+    - Kept
+  todo.list.TodoId:
+    title: TodoId
+    x-ess-name: todo.list.TodoId
+    x-ess-kind: newtype
+    type: integer

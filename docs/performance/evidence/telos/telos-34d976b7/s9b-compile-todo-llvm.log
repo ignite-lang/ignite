@@ -1,0 +1,6 @@
+task: [compile-todo-llvm] cargo build -q -p telos
+task: [compile-todo-llvm] cargo build -q -p telos-rt --features runner --target-dir target/telos-test/rt
+task: [compile-todo-llvm] cargo run -q -p telos -- build examples/todo/todo.telos --target llvm --out target/telos-llvm/todo
+built target/telos-llvm/todo/bin/todod
+WALL=0.6
+EXIT=0

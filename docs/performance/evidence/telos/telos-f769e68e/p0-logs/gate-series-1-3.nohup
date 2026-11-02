@@ -1,0 +1,21 @@
+START 2026-11-02T01:50:06+01:00 mode=warm run=1 load=2.56 6.35 11.04 3/2934 2157024
+STEP fmt secs=0.39 load_before=2.56 load_after=2.56 exit=0
+STEP clippy secs=2.05 load_before=2.56 load_after=2.56 exit=0
+STEP test secs=22.91 load_before=2.56 load_after=3.87 exit=0
+STEP test-ignite secs=0.65 load_before=3.87 load_after=3.87 exit=0
+TOTAL secs=26.03 load_end=3.87 6.35 10.92 2/2903 2209648
+EXIT=0
+START 2026-11-02T01:50:32+01:00 mode=warm run=2 load=3.87 6.35 10.92 2/2903 2209655
+STEP fmt secs=0.42 load_before=3.87 load_after=3.87 exit=0
+STEP clippy secs=2.00 load_before=3.87 load_after=3.87 exit=0
+STEP test secs=22.84 load_before=3.87 load_after=3.49 exit=0
+STEP test-ignite secs=0.67 load_before=3.49 load_after=3.49 exit=0
+TOTAL secs=25.94 load_end=3.49 6.08 10.71 1/2896 2216425
+EXIT=0
+START 2026-11-02T01:50:58+01:00 mode=warm run=3 load=3.49 6.08 10.71 1/2896 2216432
+STEP fmt secs=0.40 load_before=3.49 load_after=3.49 exit=0
+STEP clippy secs=2.05 load_before=3.49 load_after=3.49 exit=0
+STEP test secs=35.32 load_before=3.49 load_after=10.13 exit=0
+STEP test-ignite secs=0.86 load_before=10.13 load_after=9.56 exit=0
+TOTAL secs=38.64 load_end=9.56 7.44 10.98 1/2896 2224019
+EXIT=0

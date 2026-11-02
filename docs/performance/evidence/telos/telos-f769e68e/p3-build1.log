@@ -1,0 +1,220 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling ignite-syntax v0.1.0 (/home/timo/projects/telos/crates/ignite-syntax)
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling utf8parse v0.2.2
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+   Compiling anstyle v1.0.14
+   Compiling heck v0.5.0
+   Compiling strsim v0.11.1
+   Compiling clap_lex v1.1.1
+   Compiling anstyle-parse v1.0.0
+   Compiling anstream v1.0.0
+   Compiling clap_builder v4.6.7
+   Compiling ignite-check v0.1.0 (/home/timo/projects/telos/crates/ignite-check)
+   Compiling syn v3.0.9
+   Compiling ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+   Compiling clap_derive v4.6.7
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+   Compiling ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+   Compiling ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+error[E0308]: mismatched types
+   --> crates/ignite-eval/src/explain.rs:134:45
+    |
+134 |             Value::Record { fields, .. } => &fields.iter().find(|(f, _)| f == segment)?.1,
+    |                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Value`, found `&Value`
+    |
+help: consider removing the borrow
+    |
+134 -             Value::Record { fields, .. } => &fields.iter().find(|(f, _)| f == segment)?.1,
+134 +             Value::Record { fields, .. } => fields.iter().find(|(f, _)| f == segment)?.1,
+    |
+
+error[E0308]: mismatched types
+   --> crates/ignite-eval/src/explain.rs:136:17
+    |
+136 | /                 &entries
+137 | |                     .iter()
+138 | |                     .find(|(k, _)| matches!(k, Value::Text(t) if t == segment))?
+139 | |                     .1
+    | |______________________^ expected `Value`, found `&Value`
+    |
+help: consider removing the borrow
+    |
+136 -                 &entries
+136 +                 entries
+    |
+
+error[E0308]: `?` operator has incompatible types
+   --> crates/ignite-eval/src/explain.rs:141:35
+    |
+141 |             Value::List(items) => items.get(segment.parse::<usize>().ok()?)?,
+    |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Value`, found `&Value`
+    |
+    = note: `?` operator cannot convert from `&Value` to `Value`
+help: consider using clone here
+    |
+141 |             Value::List(items) => items.get(segment.parse::<usize>().ok()?)?.clone(),
+    |                                                                             ++++++++
+
+error[E0308]: mismatched types
+   --> crates/ignite-eval/src/explain.rs:146:61
+    |
+146 |     let mut out = format!("{path}: property {}", value_type(value));
+    |                                                  ---------- ^^^^^ expected `&Value`, found `Value`
+    |                                                  |
+    |                                                  arguments to this function are incorrect
+    |
+note: function defined here
+   --> crates/ignite-eval/src/explain.rs:202:4
+    |
+202 | fn value_type(value: &Value) -> String {
+    |    ^^^^^^^^^^ -------------
+help: consider borrowing here
+    |
+146 |     let mut out = format!("{path}: property {}", value_type(&value));
+    |                                                             +
+
+error[E0308]: mismatched types
+   --> crates/ignite-eval/src/explain.rs:155:66
+    |
+155 |                 out.push_str(&format!("  {field} = {}\n", render(value)));
+    |                                                           ------ ^^^^^ expected `&Value`, found `Value`
+    |                                                           |
+    |                                                           arguments to this function are incorrect
+    |
+note: function defined here
+   --> crates/ignite-eval/src/explain.rs:225:8
+    |
+225 | pub fn render(value: &Value) -> String {
+    |        ^^^^^^ -------------
+help: consider borrowing here
+    |
+155 |                 out.push_str(&format!("  {field} = {}\n", render(&value)));
+    |                                                                  +
+
+error[E0308]: mismatched types
+   --> crates/ignite-eval/src/explain.rs:158:65
+    |
+158 |         other => out.push_str(&format!("  value = {}\n", render(other))),
+    |                                                          ------ ^^^^^ expected `&Value`, found `Value`
+    |                                                          |
+    |                                                          arguments to this function are incorrect
+    |
+note: function defined here
+   --> crates/ignite-eval/src/explain.rs:225:8
+    |
+225 | pub fn render(value: &Value) -> String {
+    |        ^^^^^^ -------------
+help: consider borrowing here
+    |
+158 |         other => out.push_str(&format!("  value = {}\n", render(&other))),
+    |                                                                 +
+
+error[E0027]: pattern does not mention field `captures`
+   --> crates/ignite-eval/src/model.rs:210:9
+    |
+210 |         Value::Closure { module, offset } => Some(format!("a closure ({module} at byte {offset})")),
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing field `captures`
+    |
+help: include the missing field in the pattern
+    |
+210 |         Value::Closure { module, offset, captures } => Some(format!("a closure ({module} at byte {offset})")),
+    |                                        ++++++++++
+help: if you don't care about this missing field, you can explicitly ignore it
+    |
+210 |         Value::Closure { module, offset, captures: _ } => Some(format!("a closure ({module} at byte {offset})")),
+    |                                        +++++++++++++
+help: or always ignore missing fields here
+    |
+210 |         Value::Closure { module, offset, .. } => Some(format!("a closure ({module} at byte {offset})")),
+    |                                        ++++
+
+error[E0027]: pattern does not mention field `captures`
+   --> crates/ignite-eval/src/model.rs:948:9
+    |
+948 |         Value::Closure { module, offset } => tagged(
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing field `captures`
+    |
+help: include the missing field in the pattern
+    |
+948 |         Value::Closure { module, offset, captures } => tagged(
+    |                                        ++++++++++
+help: if you don't care about this missing field, you can explicitly ignore it
+    |
+948 |         Value::Closure { module, offset, captures: _ } => tagged(
+    |                                        +++++++++++++
+help: or always ignore missing fields here
+    |
+948 |         Value::Closure { module, offset, .. } => tagged(
+    |                                        ++++
+
+error[E0599]: no method named `call` found for mutable reference `&mut Evaluator<'_>` in the current scope
+   --> crates/ignite-eval/src/resolve.rs:174:25
+    |
+174 |         match evaluator.call(
+    |               ----------^^^^ method not found in `&mut Evaluator<'_>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+    = note: the following trait defines an item `call`, perhaps you need to implement it:
+            candidate #1: `std::ops::Fn`
+
+error[E0599]: no method named `call` found for mutable reference `&mut Evaluator<'_>` in the current scope
+   --> crates/ignite-eval/src/resolve.rs:192:51
+    |
+192 |         let hosted: Vec<String> = match evaluator.call(&includes, vec![binding.clone()]) {
+    |                                                   ^^^^ method not found in `&mut Evaluator<'_>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+    = note: the following trait defines an item `call`, perhaps you need to implement it:
+            candidate #1: `std::ops::Fn`
+
+error[E0004]: non-exhaustive patterns: `&Value::IoError { .. }` not covered
+   --> crates/ignite-eval/src/explain.rs:203:11
+    |
+203 |     match value {
+    |           ^^^^^ pattern `&Value::IoError { .. }` not covered
+    |
+note: `Value` defined here
+   --> crates/ignite-eval/src/value.rs:11:10
+    |
+ 11 | pub enum Value {
+    |          ^^^^^
+...
+ 63 |     IoError {
+    |     ------- not covered
+    = note: the matched value is of type `&Value`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+220 ~         Value::Closure { .. } => "Closure".to_string(),
+221 ~         &Value::IoError { .. } => todo!(),
+    |
+
+error[E0004]: non-exhaustive patterns: `&Value::IoError { .. }` not covered
+   --> crates/ignite-eval/src/explain.rs:233:11
+    |
+233 |     match value {
+    |           ^^^^^ pattern `&Value::IoError { .. }` not covered
+    |
+note: `Value` defined here
+   --> crates/ignite-eval/src/value.rs:11:10
+    |
+ 11 | pub enum Value {
+    |          ^^^^^
+...
+ 63 |     IoError {
+    |     ------- not covered
+    = note: the matched value is of type `&Value`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+    |
+270 ~         Value::Closure { .. } => "<closure>".to_string(),
+271 ~         &Value::IoError { .. } => todo!(),
+    |
+
+Some errors have detailed explanations: E0004, E0027, E0308, E0599.
+For more information about an error, try `rustc --explain E0004`.
+error: could not compile `ignite-eval` (lib) due to 12 previous errors
+warning: build failed, waiting for other jobs to finish...
+EXIT=101

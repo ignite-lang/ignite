@@ -1,0 +1,16 @@
+=== p3c_spawn_fieldarg build
+EXIT=0
+=== p5_params build
+EXIT=0
+=== p5_params test
+EXIT=0
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+=== p9_generics build
+EXIT=1
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p9_generics.telos:47:31: error[E045]: operator `==` is not defined for `Input`
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p9_generics.telos:49:51: error[E045]: operator `==` is not defined for `Option<Int>`
+=== p9_generics test
+EXIT=2
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p9_generics.telos:47:31: error[E045]: operator `==` is not defined for `Input`
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p9_generics.telos:49:51: error[E045]: operator `==` is not defined for `Option<Int>`
+EXIT=ALLDONE

@@ -1,0 +1,3 @@
+effects_a16_roles.telos:4:6: error[E030]: role `Echo.serve` takes 2 parameters (stream, application), found 1
+effects_a16_roles.telos:13:12: error[E016]: missing effect `stream.write` for `chat`; add it to the `requires` of `Echo.connect`
+effects_a16_roles.telos:18:3: error[E016]: missing effect `l.accept` for `Echo.serve`; add it to the `requires` of `caller`

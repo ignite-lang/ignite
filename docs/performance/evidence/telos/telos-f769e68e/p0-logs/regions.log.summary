@@ -1,0 +1,38 @@
+START 2026-11-02T02:14:25+01:00 load=7.39 11.18 14.68 4/3001 2763610
+STEP rust:main/closures_carried_across_loop_releases secs=0.09 load_before=7.39 load_after=7.39 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP rust:main/closures_in_a_list_and_nested_closures secs=0.09 load_before=7.39 load_after=7.39 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP rust:main/fn_fields_hold_closures secs=0.09 load_before=7.39 load_after=7.39 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP rust:main/store_update_with_a_capturing_closure_in_a_loop secs=0.09 load_before=7.39 load_after=7.39 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP rust:main/boxed_values_carried_across_releases_and_through_the_store secs=6.85 load_before=7.39 load_after=6.48 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 6.77s
+STEP rust:main/range_patterns_without_a_wildcard secs=0.09 load_before=6.48 load_after=6.48 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP rust:main/break_and_continue_as_values_in_carried_loops secs=0.09 load_before=6.48 load_after=6.48 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP rust:main/tuple_fields_and_record_updates_of_borrowed_places secs=0.09 load_before=6.48 load_after=6.48 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP rust:main/debug_text_of_nested_values secs=0.09 load_before=6.48 load_after=6.48 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP llvm:main/closures_carried_across_loop_releases secs=0.12 load_before=6.48 load_after=6.48 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.02s
+STEP llvm:main/closures_in_a_list_and_nested_closures secs=0.12 load_before=6.48 load_after=6.48 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP llvm:main/fn_fields_hold_closures secs=0.12 load_before=6.48 load_after=6.48 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP llvm:main/store_update_with_a_capturing_closure_in_a_loop secs=0.12 load_before=6.48 load_after=6.48 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.02s
+STEP llvm:main/boxed_values_carried_across_releases_and_through_the_store secs=2.36 load_before=6.48 load_after=6.48 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 2.25s
+STEP llvm:main/range_patterns_without_a_wildcard secs=0.11 load_before=6.48 load_after=6.48 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP llvm:main/break_and_continue_as_values_in_carried_loops secs=0.11 load_before=6.48 load_after=6.29 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP llvm:main/tuple_fields_and_record_updates_of_borrowed_places secs=0.12 load_before=6.29 load_after=6.29 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+STEP llvm:main/debug_text_of_nested_values secs=0.11 load_before=6.29 load_after=6.29 exit=0
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.01s
+EXIT=0

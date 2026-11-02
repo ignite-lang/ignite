@@ -1,0 +1,7 @@
+task: [compile-llvm] cargo build -q -p telos
+task: [compile-llvm] cargo build -q -p telos-rt --features runner --target-dir target/telos-test/rt
+task: [compile-llvm] cargo run -q -p telos -- build examples/terminal/terminal.telos --target llvm --out target/telos-llvm/terminal
+built target/telos-llvm/terminal/bin/terminald
+built target/telos-llvm/terminal/bin/tn
+WALL=0.7
+EXIT=0

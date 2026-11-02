@@ -1,0 +1,7 @@
+== rust
+error: ignite test needs FILE.ignite… and at most one FILTER
+rust EXIT=2 seconds=.002048650
+== llvm
+error: ignite test needs FILE.ignite… and at most one FILTER
+llvm EXIT=2 seconds=.001982310
+EXIT=done

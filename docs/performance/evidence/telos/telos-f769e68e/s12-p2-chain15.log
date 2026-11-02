@@ -1,0 +1,25 @@
+/dev/nvme0n1p2  848G  771G   69G  92% /
+== runtime check: terminald under TasksMax=2, first connection
+port=37661
+pid=1914720 threads: Threads:	2
+first connection received: b''
+stderr:
+listening on 127.0.0.1:37661
+cannot start a task: Resource temporarily unavailable (os error 11)
+STEP tasksmax-check exit=0
+== full cargo test -p ignite --test main
+test result: ok. 187 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 25.28s
+STEP main-tests exit=0
+main tests secs=28.3 load=16.02
+== drain:: again
+test drain::an_open_session_survives_sigterm_and_new_connects_are_refused ... ok
+test drain::rollout_drains_the_old_process_and_starts_the_new_rust ... ok
+test drain::rollout_drains_the_old_process_and_starts_the_new_llvm ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 188 filtered out; finished in 1.42s
+STEP drain-tests exit=0
+== clippy workspace
+STEP clippy exit=0
+== fmt
+STEP fmt exit=0
+EXIT=0
+EXIT=0

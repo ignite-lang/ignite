@@ -1,0 +1,52 @@
+START 2026-11-02T01:53:56+01:00 load=2.88 6.03 9.99 2/2871 2244950
+-rw-r--r-- 2 timo timo 29775138 Nov  2 01:49 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/ignite-test/rt/debug/libignite_rt.a
+-rw-r--r-- 2 timo timo 24694246 Nov  2 01:54 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/ignite-test/rt/release/libignite_rt.a
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/llvm-dev/bin/todod
+note: building the generated Rust project in /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling ignite-io v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s11-p0-tree/crates/ignite-io)
+   Compiling ignite-std v0.0.0-1c34cd22ef99d1fa (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev/std)
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.43s
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev-target/debug/todod
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/llvm-dev:
+bin
+llvm
+
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/llvm-dev/bin:
+todod
+
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/llvm-dev/llvm:
+main_todod.ll
+main_todod.o
+main_todod.o.stamp
+program.ll
+program.o
+program.o.stamp
+std.ll
+std.o
+std.o.stamp
+target.stamp
+todod.link.stamp
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev/Cargo.lock
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev/Cargo.toml
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev/src
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev/src/lib.rs
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev/src/bin
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev/src/bin/todod.rs
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev/std
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev/std/Cargo.toml
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev/std/src
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/rust-dev/std/src/lib.rs
+   976 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/llvm-dev/llvm/main_todod.ll
+  1715 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/llvm-dev/llvm/program.ll
+ 18120 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/probe/llvm-dev/llvm/std.ll
+ 20811 total
+EXIT=0

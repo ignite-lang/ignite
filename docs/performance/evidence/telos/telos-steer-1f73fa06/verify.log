@@ -1,0 +1,110 @@
+FMT_EXIT=0
+    Checking telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+    Checking telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+    Checking telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.81s
+CLIPPY_EXIT=0
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+   Compiling telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.39s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/telos_llvm-327c531d839c1b7e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/main-1d78e366ec046e08)
+
+running 14 tests
+test layout::records_have_c_layout ... ok
+test layout::copy_glue_only_where_buffers_are ... ok
+test layout::enums_are_tag_and_payload ... ok
+test layout::runtime_types_match_the_layouts ... ok
+test layout::scalars_and_builtins ... ok
+test layout::type_names_in_symbols ... ok
+test golden::loops_release_their_region ... ok
+test golden::symbols_are_module_qualified ... ok
+test golden::read_only_parameters_are_borrowed ... ok
+test golden::modules_name_target_and_source ... ok
+test tests_build::normal_build_drops_test_only_declarations ... ok
+test golden::small_program ... ok
+test tests_build::test_build_lowers_tests_and_a_runner_main ... ok
+test golden::syntax_program ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/telos_rt-5486d6c717fd62b7)
+
+running 19 tests
+test arena::tests::generated_code_and_runtime_share_the_bump_state ... ok
+test arena::tests::scratch_survives_a_release_of_the_task_arena ... ok
+test arena::tests::zero_size_is_aligned_and_non_null ... ok
+test arena::tests::release_is_due_above_the_larger_of_64_kib_and_four_times_kept ... ok
+test arena::tests::arenas_are_per_thread ... ok
+test arena::tests::task_end_frees_the_arena ... ok
+test net::tests::handles_encode_slot_and_generation ... ok
+test net::tests::segments_tile_the_indices ... ok
+test net::tests::a_released_slot_is_reused_under_a_new_handle ... ok
+test process::tests::args_port ... ok
+test process::tests::decode_args_skips_nulls ... ok
+test process::tests::io_error_new_has_exit_code_one ... ok
+test store::tests::values_are_copied_in_and_out_and_freed ... ok
+test text::tests::debug_escapes_as_section_13_6 ... ok
+test arena::tests::large_and_overaligned_requests_get_own_blocks ... ok
+test arena::tests::release_frees_what_came_after_the_mark ... ok
+test arena::tests::spare_chunks_are_bounded ... ok
+test arena::tests::allocations_are_aligned_and_disjoint ... ok
+test arena::tests::a_loop_of_release_does_not_grow ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/main-41130fff97fc3d0a)
+
+running 18 tests
+test abi::layouts_match_section_three ... ok
+test abi::os_errors_have_exit_code_one_and_the_os_message ... ok
+test abi::release_closes_the_socket_and_invalidates_the_handle ... ok
+test abi::text_helpers ... ok
+test terminal::child ... ok
+test abi::spawn_returns_when_the_child_ends_without_ready ... ok
+test terminal::exit_restores_the_terminal ... ok
+test terminal::fail_restores_the_terminal ... ok
+test terminal::panic_restores_the_terminal ... ok
+test terminal::normal_exit_restores_the_terminal_at_exit ... ok
+test terminal::non_terminal_stdin_is_a_no_op ... ok
+test terminal::rust_panic_restores_the_terminal ... ok
+test terminal::stdin_reads_until_eof ... ok
+test abi::tcp_round_trip_with_concurrent_read_and_write ... ok
+test abi::spawn_blocks_until_the_child_is_ready ... ok
+test c_abi::smoke_program_runs ... ok
+test c_abi::fail_panic_and_exit_statuses ... ok
+test c_abi::port_argument ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+   Doc-tests telos_llvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_rt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+CRATES_EXIT=0
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.28s
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/main-9d267f49cdec8647)
+
+running 2 tests
+test slice10_llvm::failures_fail_on_both_targets_with_the_same_report ... ok
+test slice10_llvm::features_pass_on_both_targets_with_the_same_report ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 143 filtered out; finished in 2.39s
+
+SLICE10_EXIT=0
+EXIT=0

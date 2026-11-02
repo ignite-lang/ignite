@@ -1,0 +1,9 @@
+== rt build
+rt EXIT=0
+== rust
+(eval):1: no such file or directory: /usr/bin/time
+rust EXIT=127
+== llvm
+(eval):1: no such file or directory: /usr/bin/time
+llvm EXIT=127
+EXIT=done

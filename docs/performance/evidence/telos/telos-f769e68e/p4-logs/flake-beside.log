@@ -1,0 +1,299 @@
+START 2026-11-02T03:09:13+01:00 n=30 load=1.92 2.41 2.47 2/2889 4151457
+   Compiling ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+   Compiling ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+   Compiling ignite-check v0.1.0 (/home/timo/projects/telos/crates/ignite-check)
+   Compiling ignite-syntax v0.1.0 (/home/timo/projects/telos/crates/ignite-syntax)
+   Compiling ignite-load v0.1.0 (/home/timo/projects/telos/crates/ignite-load)
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-rt v0.1.0 (/home/timo/projects/telos/crates/ignite-rt)
+   Compiling ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.78s
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite-e2bd19ba788f823b)
+  Executable unittests src/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite-2fdd1c5d8805d2e7)
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_check-8e7359fd2edf000b)
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-625bf336fa859c75)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_eval-2bc076bdfd01a6cd)
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-17eca3f1c638dc2a)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_io-7ca900d290ca2188)
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-2e2da2a0afa9c87b)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_llvm-0e4cc4a4d288685c)
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-f3b2d6796b761c6a)
+  Executable unittests src/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_load-ea77ab23ecc10c58)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_rt-244b00890ed96bd2)
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-7fc0dc40a904ea45)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_rustgen-8d46fc80f07c06b3)
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-5e4ab9ed9c9b052f)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_syntax-d8cc51728136adfa)
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-807151e0292813cb)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_types-75ebb7e5fa68d1f9)
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-1ec713e6db068368)
+workspace loop pid=4152367
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.12s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.12s
+
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.15s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.12s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.12s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.13s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.12s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.10s
+
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.11s
+
+RESULT beside pass=30 fail=0 load=2.55 2.52 2.51 3/2974 4158391
+workspace loop ended 2026-11-02T03:09:40+01:00
+1
+EXIT=0

@@ -1,0 +1,76 @@
+START load=6.71
+   Compiling ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+   Compiling nix v0.31.3
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-rt v0.1.0 (/home/timo/projects/telos/crates/ignite-rt)
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+   Compiling ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+   Compiling ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+error[E0027]: pattern does not mention field `captures`
+   --> crates/ignite-eval/src/model.rs:210:9
+    |
+210 |         Value::Closure { module, offset } => Some(format!("a closure ({module} at byte {offset})")),
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing field `captures`
+    |
+help: include the missing field in the pattern
+    |
+210 |         Value::Closure { module, offset, captures } => Some(format!("a closure ({module} at byte {offset})")),
+    |                                        ++++++++++
+help: if you don't care about this missing field, you can explicitly ignore it
+    |
+210 |         Value::Closure { module, offset, captures: _ } => Some(format!("a closure ({module} at byte {offset})")),
+    |                                        +++++++++++++
+help: or always ignore missing fields here
+    |
+210 |         Value::Closure { module, offset, .. } => Some(format!("a closure ({module} at byte {offset})")),
+    |                                        ++++
+
+error[E0027]: pattern does not mention field `captures`
+   --> crates/ignite-eval/src/model.rs:948:9
+    |
+948 |         Value::Closure { module, offset } => tagged(
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing field `captures`
+    |
+help: include the missing field in the pattern
+    |
+948 |         Value::Closure { module, offset, captures } => tagged(
+    |                                        ++++++++++
+help: if you don't care about this missing field, you can explicitly ignore it
+    |
+948 |         Value::Closure { module, offset, captures: _ } => tagged(
+    |                                        +++++++++++++
+help: or always ignore missing fields here
+    |
+948 |         Value::Closure { module, offset, .. } => tagged(
+    |                                        ++++
+
+error[E0599]: no method named `call` found for mutable reference `&mut Evaluator<'_>` in the current scope
+   --> crates/ignite-eval/src/resolve.rs:174:25
+    |
+174 |         match evaluator.call(
+    |               ----------^^^^ method not found in `&mut Evaluator<'_>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+    = note: the following trait defines an item `call`, perhaps you need to implement it:
+            candidate #1: `std::ops::Fn`
+
+error[E0599]: no method named `call` found for mutable reference `&mut Evaluator<'_>` in the current scope
+   --> crates/ignite-eval/src/resolve.rs:192:51
+    |
+192 |         let hosted: Vec<String> = match evaluator.call(&includes, vec![binding.clone()]) {
+    |                                                   ^^^^ method not found in `&mut Evaluator<'_>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+    = note: the following trait defines an item `call`, perhaps you need to implement it:
+            candidate #1: `std::ops::Fn`
+
+Some errors have detailed explanations: E0027, E0599.
+For more information about an error, try `rustc --explain E0027`.
+error: could not compile `ignite-eval` (lib) due to 4 previous errors
+warning: build failed, waiting for other jobs to finish...
+FILE slice9 wall=2.282297140 exit=101 load=6.41
+EXIT=101

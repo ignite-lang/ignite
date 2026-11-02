@@ -1,0 +1,43 @@
+   Compiling ignite-syntax v0.1.0 (/home/timo/projects/telos/crates/ignite-syntax)
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-rt v0.1.0 (/home/timo/projects/telos/crates/ignite-rt)
+   Compiling ignite-check v0.1.0 (/home/timo/projects/telos/crates/ignite-check)
+   Compiling ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+   Compiling ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.46s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-ign/debug/deps/main-1516246f4e04c1f5)
+
+running 6 tests
+test golden::read_only_parameters_are_borrowed ... ok
+test golden::loops_release_their_region ... ok
+test golden::modules_name_target_and_source ... ok
+test golden::symbols_are_module_qualified ... ok
+test golden::small_program ... ok
+test golden::syntax_program ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.11s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-ign/debug/deps/main-5e4ab9ed9c9b052f)
+
+running 16 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test golden::process_exit_diverges ... ok
+test golden::system_with_server_and_client ... ok
+test golden::constants_qualified_patterns_and_io_error ... ok
+test golden::pure_functions ... ok
+test golden::surface_syntax ... ok
+test golden::record_and_enum_with_match ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test golden::generics_stores_and_builtins ... ok
+test golden::variants_of_enums_not_imported ... ok
+test golden::executable_components ... ok
+test golden::terminal ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.07s
+
+EXIT=0

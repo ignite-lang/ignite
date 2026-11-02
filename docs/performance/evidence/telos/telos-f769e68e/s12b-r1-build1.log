@@ -1,0 +1,100 @@
+START 2026-11-02T07:14:29+01:00 load=9.24 free=72G
+   Compiling proc-macro2 v1.0.107
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling unicode-ident v1.0.27
+   Compiling ignite-syntax v0.1.0 (/home/timo/projects/telos/crates/ignite-syntax)
+   Compiling quote v1.0.47
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-query v1.1.5
+   Compiling anstyle v1.0.14
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling heck v0.5.0
+   Compiling strsim v0.11.1
+   Compiling clap_lex v1.1.1
+   Compiling nix v0.31.3
+   Compiling anstyle-parse v1.0.0
+   Compiling anstream v1.0.0
+   Compiling clap_builder v4.6.7
+   Compiling ignite-check v0.1.0 (/home/timo/projects/telos/crates/ignite-check)
+   Compiling syn v3.0.9
+   Compiling ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+   Compiling clap_derive v4.6.7
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-rt v0.1.0 (/home/timo/projects/telos/crates/ignite-rt)
+   Compiling ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+   Compiling ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+   Compiling clap v4.6.7
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.66s
+BUILD rc=0
+    Checking ignite-syntax v0.1.0 (/home/timo/projects/telos/crates/ignite-syntax)
+    Checking utf8parse v0.2.2
+    Checking cfg-if v1.0.5
+    Checking is_terminal_polyfill v1.70.2
+    Checking colorchoice v1.0.5
+    Checking anstyle-query v1.1.5
+    Checking anstyle v1.0.14
+    Checking bitflags v2.13.2
+    Checking strsim v0.11.1
+    Checking clap_lex v1.1.1
+    Checking libc v0.2.191
+    Checking anstyle-parse v1.0.0
+    Checking ignite-check v0.1.0 (/home/timo/projects/telos/crates/ignite-check)
+    Checking anstream v1.0.0
+    Checking clap_builder v4.6.7
+    Checking ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+    Checking nix v0.31.3
+    Checking ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+    Checking ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+    Checking ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+    Checking clap v4.6.7
+    Checking ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+    Checking ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Checking ignite-rt v0.1.0 (/home/timo/projects/telos/crates/ignite-rt)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.15s
+CLIPPY rc=0
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:820:
+ 
+ /// Generate both projects; diagnostics of a standard-library module or a
+ /// sibling are rendered with its file.
+[31m-fn generate(parsed: ParsedFile, library: &StdLibrary, substrate: PathBuf) -> Result<Emitted, Error> {
+(B[m[32m+fn generate(
+(B[m[32m+    parsed: ParsedFile,
+(B[m[32m+    library: &StdLibrary,
+(B[m[32m+    substrate: PathBuf,
+(B[m[32m+) -> Result<Emitted, Error> {
+(B[m     let typed = type_parsed(parsed, library)?;
+     let options = ignite_rustgen::Options {
+         substrate_path: substrate,
+Diff in /home/timo/projects/telos/crates/ignite-rustgen/tests/reachable.rs:48:
+     assert!(!out.contains("pub fn pump("), "{out}");
+     assert!(!out.contains("pub struct Endpoint"), "{out}");
+     assert!(out.contains("pub mod net { }"), "{out}");
+[31m-    assert!(out.contains("pub mod protocol { pub mod line { } }"), "{out}");
+(B[m[32m+    assert!(
+(B[m[32m+        out.contains("pub mod protocol { pub mod line { } }"),
+(B[m[32m+        "{out}"
+(B[m[32m+    );
+(B[m }
+ 
+ #[test]
+Diff in /home/timo/projects/telos/crates/ignite-rustgen/tests/reachable.rs:114:
+         .zip(&types)
+         .map(|((m, p, s), t)| (m.clone(), p, s, t))
+         .collect();
+[31m-    let std = norm(&generate_std_for(&inputs, &options, &project).unwrap().lib_rs);
+(B[m[32m+    let std = norm(
+(B[m[32m+        &generate_std_for(&inputs, &options, &project)
+(B[m[32m+            .unwrap()
+(B[m[32m+            .lib_rs,
+(B[m[32m+    );
+(B[m     assert!(std.contains("pub fn __ignite_test_"), "{std}");
+     assert!(std.contains("pub fn encode("), "{std}");
+     assert!(std.contains("pub fn parse("), "{std}");
+FMT rc=1
+EXIT=1 2026-11-02T07:14:41+01:00

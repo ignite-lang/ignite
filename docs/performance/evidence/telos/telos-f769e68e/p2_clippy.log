@@ -1,0 +1,5 @@
+    Checking ignite-syntax v0.1.0 (/home/timo/projects/telos/crates/ignite-syntax)
+    Checking ignite-check v0.1.0 (/home/timo/projects/telos/crates/ignite-check)
+    Checking ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+    Checking ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.32s

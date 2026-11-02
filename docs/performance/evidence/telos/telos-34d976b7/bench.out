@@ -1,0 +1,35 @@
+== build times (s)
+rust-debug-cold	2.916244425	exit=0
+rust-debug-warm	.291581177	exit=0
+rust-release-cold	8.137792756	exit=0
+rt-debug-cold	6.929098220	exit=0
+rt-release-cold	6.804182400	exit=0
+llvm-debug	.771041137	exit=0
+llvm-debug-again	.635057969	exit=0
+llvm-release	.488910894	exit=0
+== binaries
+rust-debug	terminald	size=8234056	stripped=1327400	shared=libgcc_s.so.1,libm.so.6,libc.so.6,/lib64/ld-linux-x86-64.so.2
+rust-debug	tn	size=8600328	stripped=1461456	shared=libgcc_s.so.1,libm.so.6,libc.so.6,/lib64/ld-linux-x86-64.so.2
+rust-release	terminald	size=1075744	stripped=749392	shared=libgcc_s.so.1,libm.so.6,libc.so.6,/lib64/ld-linux-x86-64.so.2
+rust-release	tn	size=1213512	stripped=838280	shared=libgcc_s.so.1,libm.so.6,libc.so.6,/lib64/ld-linux-x86-64.so.2
+llvm-debug	terminald	size=11335480	stripped=3094032	shared=libgcc_s.so.1,libm.so.6,libc.so.6,/lib64/ld-linux-x86-64.so.2
+llvm-debug	tn	size=11335424	stripped=3094032	shared=libgcc_s.so.1,libm.so.6,libc.so.6,/lib64/ld-linux-x86-64.so.2
+llvm-release	terminald	size=6840856	stripped=1873304	shared=libgcc_s.so.1,libm.so.6,libc.so.6,/lib64/ld-linux-x86-64.so.2
+llvm-release	tn	size=6836712	stripped=1869208	shared=libgcc_s.so.1,libm.so.6,libc.so.6,/lib64/ld-linux-x86-64.so.2
+== startup: 200 runs of terminald --port nope (exit 2), seconds total
+rust-debug	.287310380
+rust-release	.227788482
+llvm-debug	.132447140
+llvm-release	.118974007
+== memory: terminald VmRSS kB idle, after 20 sessions; threads idle
+rust-debug	idle=4368	after20=4408	threads=21
+rust-release	idle=3876	after20=3908	threads=21
+llvm-debug	idle=5072	after20=5072	threads=1
+llvm-release	idle=3992	after20=3992	threads=1
+== disk
+108M	/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/bench/rust-debug-target
+68M	/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/bench/rust-release-target
+223M	/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/bench/rt-target
+22M	/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/bench/llvm-debug
+14M	/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/bench/llvm-release
+EXIT=0

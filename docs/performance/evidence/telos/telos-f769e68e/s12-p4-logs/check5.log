@@ -1,0 +1,12 @@
+== std/control.ignite
+/home/timo/projects/telos/std/probe.ignite:94:39: error[E001]: expected identifier, found `{`
+== std/probe.ignite
+/home/timo/projects/telos/std/probe.ignite:94:39: error[E001]: expected identifier, found `{`
+== std/protocol/telnet.ignite
+/home/timo/projects/telos/std/probe.ignite:94:39: error[E001]: expected identifier, found `{`
+== std/contract.ignite
+/home/timo/projects/telos/std/probe.ignite:94:39: error[E001]: expected identifier, found `{`
+== examples/terminal/terminal.design.ignite
+/home/timo/projects/telos/std/probe.ignite:94:39: error[E001]: expected identifier, found `{`
+== examples/todo/todo.ignite
+/home/timo/projects/telos/std/probe.ignite:94:39: error[E001]: expected identifier, found `{`

@@ -1,0 +1,52 @@
+package probe_lang
+
+import std.sli.ProbeAttempt
+
+type Rec {
+  a: Int
+  b: Text = "x"
+  d: Duration = 0 ms
+}
+
+type Holder {
+  target: Ref<Rec>
+  out: Signal<ProbeAttempt>
+}
+
+fn ratio_of_ppm(ppm: Int) -> Ratio = ppm * 0.0001%
+
+fn ns_to_duration(ns: Int) -> Duration = ns * 1 ns
+
+fn update(r: Rec) -> Rec = Rec { a = r.a + 1, ..r }
+
+type Bare { r: Ref }
+fn bare(h: Holder) -> Bare = Bare { r = h.target }
+
+fn max_d(a: Duration, b: Duration) -> Duration = if a > b { a } else { b }
+
+fn div(a: Duration, b: Duration) -> Int = a.to_ns() / b.to_ns()
+
+fn mut_field() -> Int {
+  var r = Rec { a = 1 }
+  r.a = 5
+  var xs = [r, Rec { a = 2 }]
+  var last = xs[xs.len() - 1]
+  last.a = last.a + 10
+  xs.at(0).a + last.a
+}
+
+test "probes" {
+  assert ratio_of_ppm(999000) == 99.9%
+  assert ratio_of_ppm(1000000) == 100%
+  assert ns_to_duration(1000000) == 1 ms
+  assert update(Rec { a = 1 }).a == 2
+  assert max_d(1 ms, 2 ms) == 2 ms
+  assert div(1 second, 100 ms) == 10
+  assert (100 ms).debug() == "100 ms"
+  assert (1 second).debug() == "1 second"
+  assert (2592000 seconds).debug() == "30 days"
+  assert mut_field() == 13
+  assert (30 days).to_ms() * 1000000 == 2592000000000000
+  assert -(7 % 3) == -1
+  assert (-7) / 2 == -3
+}

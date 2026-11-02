@@ -1,0 +1,64 @@
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+     Running tests/slice9.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/slice9-57894dcf7bfffe57)
+
+running 6 tests
+test audit_probes_pass ... FAILED
+test rust_target_features_pass_on_llvm ... ok
+test var_aliases_leave_the_source_unchanged ... ok
+test failed_asserts_print_the_same_debug_text_on_both_targets has been running for over 60 seconds
+test long_chains_run_on_llvm has been running for over 60 seconds
+test slice9_values_across_regions has been running for over 60 seconds
+test long_chains_run_on_llvm ... FAILED
+test slice9_values_across_regions ... ok
+test failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+
+failures:
+
+---- audit_probes_pass stdout ----
+
+thread 'audit_probes_pass' (1241634) panicked at crates/telos/tests/slice9.rs:60:9:
+assertion `left == right` failed: /home/timo/projects/telos/crates/telos/../../docs/audit/2026-11-01/llvm/later_arg.telos on rust:
+
+error[E0506]: cannot assign to `x` because it is borrowed
+  --> src/lib.rs:25:9
+   |
+24 |     let r = pick(&x, &(if true {
+   |             ---- -- `x` is borrowed here
+   |             |
+   |             borrow later used by call
+25 |         x = String::from("zzz");
+   |         ^ `x` is assigned to here but it was already borrowed
+
+error[E0506]: cannot assign to `x` because it is borrowed
+  --> src/lib.rs:32:9
+   |
+31 |     let r2 = two(&x, &(if true {
+   |              --- -- `x` is borrowed here
+   |              |
+   |              borrow later used by call
+32 |         x = String::from("qqq");
+   |         ^ `x` is assigned to here but it was already borrowed
+
+For more information about this error, try `rustc --explain E0506`.
+error: could not compile `laterarg` (lib) due to 2 previous errors
+error: cargo build failed with status 101
+
+  left: 2
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- long_chains_run_on_llvm stdout ----
+
+thread 'long_chains_run_on_llvm' (1241636) panicked at crates/telos/tests/slice9.rs:51:38:
+telos test exits
+
+
+failures:
+    audit_probes_pass
+    long_chains_run_on_llvm
+
+test result: FAILED. 4 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 688.26s
+
+error: test failed, to rerun pass `-p telos --test slice9`
+EXIT=101

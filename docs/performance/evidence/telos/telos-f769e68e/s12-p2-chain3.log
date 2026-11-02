@@ -1,0 +1,159 @@
+/dev/nvme0n1p2  848G  760G   80G  91% /
+== build ignite (all targets)
+STEP build exit=0
+== unit tests of crates/ignite/src/run
+T.server: noise
+T.probe: /bin/sh: --ref: invalid option
+T.probe: Usage:	/bin/sh [GNU long option] [option] ...
+T.probe: 	/bin/sh [GNU long option] [option] script-file ...
+T.probe: GNU long options:
+T.probe: 	--debug
+T.probe: 	--debugger
+T.probe: 	--dump-po-strings
+T.probe: 	--dump-strings
+T.probe: 	--help
+T.probe: 	--init-file
+T.probe: 	--login
+T.probe: 	--noediting
+T.probe: 	--noprofile
+T.probe: 	--norc
+T.probe: 	--posix
+T.probe: 	--pretty-print
+T.probe: 	--rcfile
+T.probe: 	--restricted
+T.probe: 	--verbose
+T.probe: 	--version
+T.probe: Shell options:
+T.probe: 	-ilrsD or -c command or -O shopt_option		(invocation only)
+T.probe: 	-abefhkmnptuvxBCEHPT or -o option
+test run::probe::tests::the_first_line_is_the_result ... FAILED
+T.probe: /bin/sh: --ref: invalid option
+T.probe: Usage:	/bin/sh [GNU long option] [option] ...
+T.probe: /bin/sh: --ref: invalid option
+T.probe: 	/bin/sh [GNU long option] [option] script-file ...
+T.probe: Usage:	/bin/sh [GNU long option] [option] ...
+test run::journal::tests::a_torn_final_line_is_dropped_and_cut ... T.probe: GNU long options:
+okT.probe: 	/bin/sh [GNU long option] [option] script-file ...
+T.probe: 	--debug
+T.probe: GNU long options:
+T.probe: 	--debugger
+T.probe: 	--debug
+T.probe: 	--dump-po-strings
+T.probe: 	--debugger
+T.probe: 	--dump-strings
+T.probe: 	--dump-po-strings
+T.probe: 	--help
+T.probe: 	--dump-strings
+T.probe: 	--init-file
+T.probe: 	--help
+T.probe: 	--login
+T.probe: 	--init-file
+T.probe: 	--noediting
+T.probe: 	--login
+T.probe: 	--noprofile
+T.probe: 	--noediting
+T.probe: 	--norc
+T.probe: 	--noprofile
+T.probe: 	--posix
+T.probe: 	--norc
+T.probe: 	--pretty-print
+T.probe: 	--posix
+T.probe: 	--rcfile
+T.probe: 	--pretty-print
+T.probe: 	--restricted
+T.probe: 	--rcfile
+T.probe: 	--verbose
+T.probe: 	--restricted
+T.probe: 	--version
+T.probe: 	--verbose
+T.probe: Shell options:
+T.probe: 	--version
+T.probe: 	-ilrsD or -c command or -O shopt_option		(invocation only)
+T.probe: Shell options:
+T.probe: 	-abefhkmnptuvxBCEHPT or -o option
+T.probe: 	-ilrsD or -c command or -O shopt_option		(invocation only)
+T.probe: 	-abefhkmnptuvxBCEHPT or -o option
+test run::probe::tests::a_killed_attempt_sends_nothing ... FAILED
+test run::probe::tests::failures_are_attempt_failed ... FAILED
+failures:
+---- run::probe::tests::the_first_line_is_the_result stdout ----
+thread 'run::probe::tests::the_first_line_is_the_result' (3450754) panicked at crates/ignite/src/run/probe.rs:207:9:
+assertion `left == right` failed
+  left: Ok(AttemptFailed { member: "T.probe", id: 2, reason: "exit status 2: /bin/sh: --ref: invalid option" })
+ right: Ok(AttemptDone { member: "T.probe", id: 2, line: "{\"received\":true}" })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+---- run::probe::tests::a_killed_attempt_sends_nothing stdout ----
+thread 'run::probe::tests::a_killed_attempt_sends_nothing' (3450750) panicked at crates/ignite/src/run/probe.rs:248:9:
+a running probe is in flight
+---- run::probe::tests::failures_are_attempt_failed stdout ----
+thread 'run::probe::tests::failures_are_attempt_failed' (3450751) panicked at crates/ignite/src/run/probe.rs:223:17:
+assertion `left == right` failed
+  left: "exit status 2: /bin/sh: --ref: invalid option"
+ right: "exit status 3: boom"
+failures:
+    run::probe::tests::a_killed_attempt_sends_nothing
+    run::probe::tests::failures_are_attempt_failed
+    run::probe::tests::the_first_line_is_the_result
+test result: FAILED. 17 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+error: test failed, to rerun pass `-p ignite --lib`
+STEP run-tests exit=101
+== clippy
+STEP clippy exit=0
+== runner runtime
+STEP runner exit=0
+== inline fixture, rust
+/home/timo/projects/telos/std/policy.ignite:125:21: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:125:35: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:126:43: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:127:65: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:128:46: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:128:60: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:129:79: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:142:26: error[E041]: `DrainRollout` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:142:40: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:143:48: error[E041]: `DrainRollout` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:144:43: error[E041]: `DrainRollout` has no method `validate`
+STEP fixture-rust exit=2
+== inline fixture, llvm
+/home/timo/projects/telos/std/policy.ignite:125:21: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:125:35: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:126:43: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:127:65: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:128:46: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:128:60: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:129:79: error[E041]: `Restart` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:142:26: error[E041]: `DrainRollout` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:142:40: error[E042]: cannot infer the element type of `[]`; add a type annotation
+/home/timo/projects/telos/std/policy.ignite:143:48: error[E041]: `DrainRollout` has no method `validate`
+/home/timo/projects/telos/std/policy.ignite:144:43: error[E041]: `DrainRollout` has no method `validate`
+STEP fixture-llvm exit=2
+== runtimes for todod
+== todod pairs after unit 1
+START 2026-11-02T05:23:29+01:00 load=26.44 14.29 13.68 13/2943 3451595
+STEP base:rust-dev:1 secs=2.736 load_before=26.44 load_after=26.44 exit=0
+STEP base:rust-release:1 secs=5.003 load_before=26.44 load_after=25.20 exit=0
+STEP base:llvm-dev:1 secs=0.355 load_before=25.20 load_after=25.20 exit=0
+STEP base:llvm-release:1 secs=0.904 load_before=25.20 load_after=24.14 exit=0
+STEP new:rust-dev:1 secs=0.035 load_before=24.14 load_after=24.14 exit=1
+STEP new:rust-release:1 secs=0.034 load_before=24.14 load_after=24.14 exit=1
+STEP new:llvm-dev:1 secs=0.034 load_before=24.14 load_after=24.14 exit=1
+STEP new:llvm-release:1 secs=0.034 load_before=24.14 load_after=24.14 exit=1
+STEP base:rust-dev:2 secs=1.760 load_before=24.14 load_after=24.14 exit=0
+STEP base:rust-release:2 secs=2.357 load_before=24.14 load_after=24.14 exit=0
+STEP base:llvm-dev:2 secs=0.347 load_before=24.14 load_after=24.14 exit=0
+STEP base:llvm-release:2 secs=0.862 load_before=24.14 load_after=23.01 exit=0
+STEP new:rust-dev:2 secs=0.034 load_before=23.01 load_after=23.01 exit=1
+STEP new:rust-release:2 secs=0.034 load_before=23.01 load_after=23.01 exit=1
+STEP new:llvm-dev:2 secs=0.035 load_before=23.01 load_after=23.01 exit=1
+STEP new:llvm-release:2 secs=0.034 load_before=23.01 load_after=23.01 exit=1
+STEP base:rust-dev:3 secs=1.700 load_before=23.01 load_after=23.01 exit=0
+STEP base:rust-release:3 secs=2.339 load_before=23.01 load_after=23.01 exit=0
+STEP base:llvm-dev:3 secs=0.344 load_before=23.01 load_after=21.89 exit=0
+STEP base:llvm-release:3 secs=0.876 load_before=21.89 load_after=21.89 exit=0
+STEP new:rust-dev:3 secs=0.006 load_before=21.89 load_after=21.89 exit=1
+STEP new:rust-release:3 secs=0.007 load_before=21.89 load_after=21.89 exit=1
+STEP new:llvm-dev:3 secs=0.006 load_before=21.89 load_after=21.89 exit=1
+STEP new:llvm-release:3 secs=0.006 load_before=21.89 load_after=21.89 exit=1
+EXIT=0
+STEP todod exit=0
+EXIT=0

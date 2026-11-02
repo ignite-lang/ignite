@@ -1,0 +1,25 @@
+   Compiling telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.26s
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/main-9d267f49cdec8647)
+
+running 1 test
+
+thread 'llvm::index_out_of_range_panics_with_101' (1836346) panicked at crates/telos/tests/llvm.rs:126:5:
+stderr: error: index failed at /home/timo/projects/telos/crates/telos/tests/fixtures/probe.telos:151:22: index 5 out of range for length 2
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test llvm::index_out_of_range_panics_with_101 ... FAILED
+
+failures:
+
+failures:
+    llvm::index_out_of_range_panics_with_101
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 138 filtered out; finished in 0.43s
+
+error: test failed, to rerun pass `-p telos --test main`
+EXIT=101

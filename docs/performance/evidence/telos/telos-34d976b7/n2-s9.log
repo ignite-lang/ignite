@@ -1,0 +1,26 @@
+   Compiling telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+   Compiling telos-types v0.1.0 (/home/timo/projects/telos/crates/telos-types)
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.86s
+     Running tests/slice9.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/slice9-5ad2f9a91c65a894)
+
+running 1 test
+test slice9_features_pass ... FAILED
+
+failures:
+
+---- slice9_features_pass stdout ----
+
+thread 'slice9_features_pass' (1060822) panicked at crates/telos-rustgen/tests/common/mod.rs:53:29:
+parse failed:
+/home/timo/projects/telos/crates/telos-rustgen/tests/slice9/features.telos:166:37: error[E001]: empty `{}` in string; write `{{}}` for literal braces
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    slice9_features_pass
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p telos-rustgen --test slice9`
+EXIT=101

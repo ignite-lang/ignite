@@ -1,0 +1,25 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p3-build-rust; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-std v0.0.0-15703fb0a98334e3 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p3-build-rust/std)
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p3-build-rust)
+warning: ignoring -C extra-filename flag due to -o flag
+
+error[E0432]: unresolved import `ignite_std::net::Exposure`
+ --> src/lib.rs:2:5
+  |
+2 | use ignite_std::net::Exposure;
+  |     ^^^^^^^^^^^^^^^^^--------
+  |                      |
+  |                      no `Exposure` in `net`
+
+For more information about this error, try `rustc --explain E0432`.
+warning: `terminal` (lib) generated 1 warning
+error: could not compile `terminal` (lib) due to 1 previous error; 1 warning emitted
+error: cargo build failed with status 101

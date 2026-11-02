@@ -1,0 +1,3 @@
+e006_closure_capture.telos:5:5: error[E006]: cannot assign to `n` inside a closure; a closure captures `n` by copy
+e006_closure_capture.telos:6:5: error[E006]: cannot change `items` inside a closure; a closure captures `items` by copy
+e006_closure_capture.telos:7:5: error[E006]: cannot change `items` inside a closure; a closure captures `items` by copy

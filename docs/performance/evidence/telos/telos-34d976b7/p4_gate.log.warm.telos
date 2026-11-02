@@ -1,0 +1,204 @@
+task: [test-telos] cargo build -q -p telos
+task: [test-telos] cargo build -q -p telos-rt --features runner --target-dir /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-test/rt
+task: [test-telos] /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/telos test examples/terminal/command_schema.telos examples/terminal/commands.telos examples/terminal/terminal.telos examples/todo/todo.telos std/cli.telos std/console.telos std/contract.telos std/deploy.telos std/json.telos std/net.telos std/option.telos std/policy.telos std/probe.telos std/protocol/http.telos std/protocol/telnet.telos std/result.telos std/text.telos   --out /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-test --target-dir /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-test/cargo
+running 97 tests
+test examples.terminal.command_schema/the schema names the four commands ... ok
+test examples.terminal.commands/parse reads the four commands by their first word ... ok
+test examples.terminal.commands/answer replies to each command ... ok
+test examples.terminal.commands/respond trims the line and names unknown commands ... ok
+test examples.todo/to_json ... ok
+test examples.todo/handle creates, lists, reads, updates and deletes ... ok
+test examples.todo/handle answers 400, 404 and 405 ... ok
+test std.cli/arguments describe themselves ... ok
+test std.cli/usage joins the command and its arguments ... ok
+test std.console/first_word skips leading whitespace ... ok
+test std.console/rest_after_word drops the word and one whitespace byte ... ok
+test std.console/skip_space and skip_word move to the next boundary ... ok
+test std.console/a reply continues unless it says close ... ok
+test std.console/a declared console gives the console a protocol runs ... ok
+test std.console/a declared console lists its schema's commands ... ok
+test std.contract/windows and consequences are built by name ... ok
+test std.contract/missing_data reads the closed set ... ok
+test std.contract/meets compares good attempts against the target in ppm ... ok
+test std.deploy/bindings are built by name ... ok
+test std.deploy/only a native process includes other members ... ok
+test std.json/encode writes every kind compactly ... ok
+test std.json/encode escapes quote, backslash and control characters ... ok
+test std.json/parse reads every kind of value ... ok
+test std.json/parse decodes escapes ... ok
+test std.json/a lone or broken surrogate is an invalid escape ... ok
+test std.json/numbers are integers of at most 18 digits ... ok
+test std.json/nesting is limited to 64 levels ... ok
+test std.json/malformed input is an error at its offset ... ok
+test std.json/the accessors read members of the right kind ... ok
+test std.json/encode and parse round trip ... ok
+test std.option/unwrap_or gives the value or the fallback ... ok
+test std.option/map and and_then apply a fn to the value ... ok
+test std.option/is_some, is_none and ok_or ... ok
+test std.policy/an exponential backoff doubles up to its maximum ... ok
+test std.policy/a fixed backoff never changes ... ok
+test std.policy/Restart counts attempts against its maximum ... ok
+test std.policy/DrainRollout defaults to two minutes and disconnecting ... ok
+test std.probe/an attempt satisfies the outcomes it earned ... ok
+test std.probe/the prompt is seen at the start of the server's text ... ok
+test std.protocol.http/responses carry their reason, type and body ... ok
+test std.protocol.http/a header holding CR or LF turns the response into 500 ... ok
+test std.protocol.http/render writes the status line, headers, length and connection ... ok
+test std.protocol.http/a 204 response has no Content-Length and no body ... ok
+test std.protocol.http/header finds the first value of a lower-case name ... ok
+test std.protocol.http/segments are the non-empty parts of the path ... ok
+test std.protocol.http/HTTP/1.1 keeps the connection unless asked to close ... ok
+test std.protocol.http/HTTP/1.0 closes the connection unless asked to keep it ... ok
+test std.protocol.http/Connection is a list of options ... ok
+test std.protocol.http/tokens, field values and targets ... ok
+test std.protocol.http/parse_head reads the request line and headers ... ok
+test std.protocol.http/parse_head refuses a malformed request line ... ok
+test std.protocol.http/parse_head refuses a malformed header line ... ok
+test std.protocol.http/a Content-Length is 1 to 18 decimal digits ... ok
+test std.protocol.http/next_request reads a head, its body and keeps the rest ... ok
+test std.protocol.http/next_request takes a pipelined request from the buffer ... ok
+test std.protocol.http/next_request ends on a connection closed before a whole request ... ok
+test std.protocol.http/a head over 8 KiB is 431 ... ok
+test std.protocol.http/a body over 1 MiB is 413 ... ok
+test std.protocol.http/a malformed head or Content-Length is 400 ... ok
+test std.protocol.http/any Transfer-Encoding is 501, also with a Content-Length ... ok
+test std.protocol.http/the server answers pipelined requests until one asks to close ... ok
+test std.protocol.http/the server answers a rejected request and closes ... ok
+test std.protocol.telnet/the profile and the limits default to what Telnet implements ... ok
+test std.protocol.telnet/data bytes are literals ... ok
+test std.protocol.telnet/CR LF, CR NUL, a lone CR and a lone LF end one line ... ok
+test std.protocol.telnet/a CR LF split across reads ends one line ... ok
+test std.protocol.telnet/IAC IAC is the data byte 255 ... ok
+test std.protocol.telnet/DO is answered WONT and WILL is answered DONT ... ok
+test std.protocol.telnet/a negotiation split across reads is answered once complete ... ok
+test std.protocol.telnet/AYT and IP are reported and other commands ignored ... ok
+test std.protocol.telnet/a subnegotiation is skipped up to IAC SE ... ok
+test std.protocol.telnet/a subnegotiation is limited to 1024 bytes including the IAC of IAC SE ... ok
+test std.protocol.telnet/render ends each reply line with CR LF ... ok
+test std.protocol.telnet/encode_input writes NVT line ends and doubles IAC ... ok
+test std.protocol.telnet/encoded input decodes to the same lines ... ok
+test std.protocol.telnet/erase_last removes one UTF-8 character ... ok
+test std.protocol.telnet/apply_key edits the line ... ok
+test std.protocol.telnet/the server answers each line and ends on the console's close ... ok
+test std.protocol.telnet/the server answers options and AYT between lines ... ok
+test std.protocol.telnet/the server closes on an overlong line, IAC IP and an overlong subnegotiation ... ok
+test std.protocol.telnet/a client silent for the idle timeout ends the session ... ok
+test std.protocol.telnet/a telnet server runs a declared console, a client its session ... ok
+test std.result/unwrap_or gives the value or the fallback ... ok
+test std.result/map and map_err change one side ... ok
+test std.result/is_ok, is_err and ok ... ok
+test std.text/digit_value reads decimal digits only ... ok
+test std.text/is_whitespace is ASCII whitespace ... ok
+test std.text/slice takes byte offsets ... ok
+test std.text/find returns the first byte offset ... ok
+test std.text/contains, ends_with and strip_suffix ... ok
+test std.text/split keeps empty pieces ... ok
+test std.text/split_once splits at the first separator ... ok
+test std.text/replace replaces every occurrence ... ok
+test std.text/trim_start and trim_end drop ASCII whitespace ... ok
+test std.text/case mapping is ASCII only ... ok
+test std.text/lines splits at LF and drops CR before it ... ok
+test std.text/repeat concatenates copies ... ok
+
+test result: ok. 97 passed; 0 failed; 0 filtered out; finished in 0.17s
+task: [test-telos] /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/telos test examples/terminal/command_schema.telos examples/terminal/commands.telos examples/terminal/terminal.telos examples/todo/todo.telos std/cli.telos std/console.telos std/contract.telos std/deploy.telos std/json.telos std/net.telos std/option.telos std/policy.telos std/probe.telos std/protocol/http.telos std/protocol/telnet.telos std/result.telos std/text.telos   --target llvm --out /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-test --runtime /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-test/rt/debug/libtelos_rt.a
+running 97 tests
+test examples.terminal.command_schema/the schema names the four commands ... ok
+test examples.terminal.commands/parse reads the four commands by their first word ... ok
+test examples.terminal.commands/answer replies to each command ... ok
+test examples.terminal.commands/respond trims the line and names unknown commands ... ok
+test examples.todo/to_json ... ok
+test examples.todo/handle creates, lists, reads, updates and deletes ... ok
+test examples.todo/handle answers 400, 404 and 405 ... ok
+test std.cli/arguments describe themselves ... ok
+test std.cli/usage joins the command and its arguments ... ok
+test std.console/first_word skips leading whitespace ... ok
+test std.console/rest_after_word drops the word and one whitespace byte ... ok
+test std.console/skip_space and skip_word move to the next boundary ... ok
+test std.console/a reply continues unless it says close ... ok
+test std.console/a declared console gives the console a protocol runs ... ok
+test std.console/a declared console lists its schema's commands ... ok
+test std.contract/windows and consequences are built by name ... ok
+test std.contract/missing_data reads the closed set ... ok
+test std.contract/meets compares good attempts against the target in ppm ... ok
+test std.deploy/bindings are built by name ... ok
+test std.deploy/only a native process includes other members ... ok
+test std.json/encode writes every kind compactly ... ok
+test std.json/encode escapes quote, backslash and control characters ... ok
+test std.json/parse reads every kind of value ... ok
+test std.json/parse decodes escapes ... ok
+test std.json/a lone or broken surrogate is an invalid escape ... ok
+test std.json/numbers are integers of at most 18 digits ... ok
+test std.json/nesting is limited to 64 levels ... ok
+test std.json/malformed input is an error at its offset ... ok
+test std.json/the accessors read members of the right kind ... ok
+test std.json/encode and parse round trip ... ok
+test std.option/unwrap_or gives the value or the fallback ... ok
+test std.option/map and and_then apply a fn to the value ... ok
+test std.option/is_some, is_none and ok_or ... ok
+test std.policy/an exponential backoff doubles up to its maximum ... ok
+test std.policy/a fixed backoff never changes ... ok
+test std.policy/Restart counts attempts against its maximum ... ok
+test std.policy/DrainRollout defaults to two minutes and disconnecting ... ok
+test std.probe/an attempt satisfies the outcomes it earned ... ok
+test std.probe/the prompt is seen at the start of the server's text ... ok
+test std.protocol.http/responses carry their reason, type and body ... ok
+test std.protocol.http/a header holding CR or LF turns the response into 500 ... ok
+test std.protocol.http/render writes the status line, headers, length and connection ... ok
+test std.protocol.http/a 204 response has no Content-Length and no body ... ok
+test std.protocol.http/header finds the first value of a lower-case name ... ok
+test std.protocol.http/segments are the non-empty parts of the path ... ok
+test std.protocol.http/HTTP/1.1 keeps the connection unless asked to close ... ok
+test std.protocol.http/HTTP/1.0 closes the connection unless asked to keep it ... ok
+test std.protocol.http/Connection is a list of options ... ok
+test std.protocol.http/tokens, field values and targets ... ok
+test std.protocol.http/parse_head reads the request line and headers ... ok
+test std.protocol.http/parse_head refuses a malformed request line ... ok
+test std.protocol.http/parse_head refuses a malformed header line ... ok
+test std.protocol.http/a Content-Length is 1 to 18 decimal digits ... ok
+test std.protocol.http/next_request reads a head, its body and keeps the rest ... ok
+test std.protocol.http/next_request takes a pipelined request from the buffer ... ok
+test std.protocol.http/next_request ends on a connection closed before a whole request ... ok
+test std.protocol.http/a head over 8 KiB is 431 ... ok
+test std.protocol.http/a body over 1 MiB is 413 ... ok
+test std.protocol.http/a malformed head or Content-Length is 400 ... ok
+test std.protocol.http/any Transfer-Encoding is 501, also with a Content-Length ... ok
+test std.protocol.http/the server answers pipelined requests until one asks to close ... ok
+test std.protocol.http/the server answers a rejected request and closes ... ok
+test std.protocol.telnet/the profile and the limits default to what Telnet implements ... ok
+test std.protocol.telnet/data bytes are literals ... ok
+test std.protocol.telnet/CR LF, CR NUL, a lone CR and a lone LF end one line ... ok
+test std.protocol.telnet/a CR LF split across reads ends one line ... ok
+test std.protocol.telnet/IAC IAC is the data byte 255 ... ok
+test std.protocol.telnet/DO is answered WONT and WILL is answered DONT ... ok
+test std.protocol.telnet/a negotiation split across reads is answered once complete ... ok
+test std.protocol.telnet/AYT and IP are reported and other commands ignored ... ok
+test std.protocol.telnet/a subnegotiation is skipped up to IAC SE ... ok
+test std.protocol.telnet/a subnegotiation is limited to 1024 bytes including the IAC of IAC SE ... ok
+test std.protocol.telnet/render ends each reply line with CR LF ... ok
+test std.protocol.telnet/encode_input writes NVT line ends and doubles IAC ... ok
+test std.protocol.telnet/encoded input decodes to the same lines ... ok
+test std.protocol.telnet/erase_last removes one UTF-8 character ... ok
+test std.protocol.telnet/apply_key edits the line ... ok
+test std.protocol.telnet/the server answers each line and ends on the console's close ... ok
+test std.protocol.telnet/the server answers options and AYT between lines ... ok
+test std.protocol.telnet/the server closes on an overlong line, IAC IP and an overlong subnegotiation ... ok
+test std.protocol.telnet/a client silent for the idle timeout ends the session ... ok
+test std.protocol.telnet/a telnet server runs a declared console, a client its session ... ok
+test std.result/unwrap_or gives the value or the fallback ... ok
+test std.result/map and map_err change one side ... ok
+test std.result/is_ok, is_err and ok ... ok
+test std.text/digit_value reads decimal digits only ... ok
+test std.text/is_whitespace is ASCII whitespace ... ok
+test std.text/slice takes byte offsets ... ok
+test std.text/find returns the first byte offset ... ok
+test std.text/contains, ends_with and strip_suffix ... ok
+test std.text/split keeps empty pieces ... ok
+test std.text/split_once splits at the first separator ... ok
+test std.text/replace replaces every occurrence ... ok
+test std.text/trim_start and trim_end drop ASCII whitespace ... ok
+test std.text/case mapping is ASCII only ... ok
+test std.text/lines splits at LF and drops CR before it ... ok
+test std.text/repeat concatenates copies ... ok
+
+test result: ok. 97 passed; 0 failed; 0 filtered out; finished in 0.15s

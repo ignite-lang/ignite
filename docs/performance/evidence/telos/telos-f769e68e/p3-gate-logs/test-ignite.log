@@ -1,0 +1,333 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/debug/deps/ignite-e2bd19ba788f823b)
+
+running 21 tests
+test run::clock::tests::advance_fires_due_timers_in_order ... ok
+T.probe: warn
+T.probe: boom
+test run::clock::tests::durations_parse ... ok
+test run::clock::tests::next_due_steps_one_instant_at_a_time ... ok
+test run::clock::tests::the_real_clock_is_monotonic ... ok
+test run::control::tests::a_signal_becomes_an_interrupt ... ok
+test run::journal::tests::the_lock_admits_one_run ... ok
+test run::journal::tests::fresh_renames_the_old_journal ... ok
+test run::process::tests::lines_are_recognised ... ok
+test run::tests::rfc3339_instants ... ok
+test run::process::tests::a_missing_executable_fails_to_spawn ... ok
+test run::probe::tests::the_first_line_is_the_result ... ok
+T.server: noise
+test run::probe::tests::refs_become_ref_arguments ... ok
+test run::process::tests::a_child_is_started_ready_and_signalled ... ok
+test run::process::tests::an_exit_before_ready_ends_the_flight ... ok
+test run::probe::tests::failures_are_attempt_failed ... ok
+test run::process::tests::two_generations_are_told_apart_by_pid ... ok
+test run::journal::tests::a_torn_final_line_is_dropped_and_cut ... ok
+test run::journal::tests::records_get_consecutive_seqs_and_persist ... ok
+test run::control::tests::settle_waits_for_every_guard ... ok
+test run::process::tests::released_is_reported_once_awaited ... ok
+test run::probe::tests::a_killed_attempt_sends_nothing ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/debug/deps/ignite-371d03ed7f6fd3b3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/debug/deps/main-90b129b53e45974f)
+
+running 188 tests
+test cli::default_substrate_is_the_sibling_crate ... ok
+test cli::default_std_is_the_repository_std ... ok
+test cli::no_arguments_is_exit_2 ... ok
+test cli::std_diagnostic_is_rendered_with_its_file ... ok
+test cli::std_import_cycle_is_e032 ... ok
+test decode::json_parse_is_the_inverse_of_compact ... ok
+test cli::missing_std_root_is_exit_3 ... ok
+test cli::std_package_mismatch_is_e031_in_the_std_file ... ok
+test cli::std_modules_are_checked_in_import_order ... ok
+test cli::std_file_without_package_is_e031 ... ok
+test cli::emit_with_std_fixture ... ok
+test cli::check_reports_unsupported_component_kind ... ok
+test cli::check_design_file_is_silent ... ok
+test eval::e118_closures_are_unencodable ... ok
+test cli::check_unknown_name_is_e003 ... ok
+test cli::missing_file_is_exit_3 ... ok
+test eval::e117_failures_carry_the_target_report ... ok
+test eval::design_file_properties_evaluate_within_default_fuel ... ok
+test decode::decode_errors_name_the_path ... ok
+test cli::check_acceptance_program_is_silent ... ok
+test decode::machines_of_the_design_model_round_trip ... ok
+test cli::emit_uses_given_substrate ... ok
+test cli::emit_prints_the_program_and_the_std_crate ... ok
+test eval::fixture_covers_every_family ... ok
+test decode::events_effects_and_standings_of_the_trace_round_trip ... ok
+test generics::llvm_generics_and_store_serve ... ok
+test generics::llvm_store_ids_and_updates_are_atomic_across_connections ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+test eval::e115_limits ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test failover::a_failing_session_does_not_end_the_service ... ok
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s
+test control_trace::reducers_agree_across_the_evaluator_and_both_targets ... ok
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+test eval::evaluator_agrees_with_the_llvm_target ... ok
+test llvm::clang_failure_is_exit_2 ... ok
+test failover::ten_thousand_failing_sessions_leak_nothing ... ok
+test llvm::client_exits_3_when_nothing_listens ... ok
+test llvm::index_out_of_range_panics_with_101 ... ok
+test llvm::probe_runs_every_check ... ok
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test cli::build_std_and_program_then_run_both_executables ... ok
+test llvm::llvm_build_runs_neither_cargo_nor_rustc ... ok
+test cli::client_exit_statuses ... ok
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-std v0.0.0-15703fb0a98334e3 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/tmp/eval-equivalence/std)
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+   Compiling eval_equivalence v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/tmp/eval-equivalence)
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test ignite_test::endpoint_of_reads_the_ref_binding_on_both_targets ... ok
+test llvm_build::failed_compile_is_retried ... ok
+test llvm_memory::loop_regions_keep_carried_values ... ok
+test llvm_memory::pushing_in_a_loop_is_linear ... ok
+test plan::design_model_has_no_expression_text ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.61s
+test eval::evaluator_agrees_with_the_rust_target ... ok
+test plan::design_model_is_canonical_and_every_value_is_encoded_as_15_4_says ... FAILED
+test plan::design_model_resolves_each_of_the_five_members_once ... ok
+test plan::design_model_is_byte_identical_across_processes_and_directories ... ok
+test llvm_memory::terminald_memory_is_flat_over_a_long_session ... ok
+test llvm_memory::tn_memory_is_flat_over_a_long_session ... ok
+test plan::exit_statuses ... ok
+test plan::terminal_example_model_matches_golden ... ok
+test plan::e114_covers_an_unknown_assembly_name_and_check_passes ... FAILED
+test plan::todo_example_model_matches_golden ... ok
+test run::e125_nothing_to_run ... ok
+test run::e126_journal_mismatch ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test plan::explain_unknown_path_is_e119 ... ok
+test ignite_test::compile_error_exits_2 ... ok
+test plan::explain_matches_the_goldens_of_15_8 ... ok
+test run::e128_reducer_failed ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+test run::e127_replay_diverged ... ok
+test run::exhausted_restarts_give_up_and_stop_exits_1 ... ok
+test run::killing_terminald_restarts_it_in_real_time ... ok
+test run::pinned_port_survives_a_restart ... ok
+test run::terminal_runs_under_ignite_run ... ok
+test run::killing_terminald_restarts_it_within_backoff ... ok
+test run::terminal_runs_under_ignite_run_on_the_llvm_target ... ok
+test run::zero_attempts_give_insufficient_evidence ... ok
+test run::good_attempts_across_the_period_fire_no_consequence ... ok
+test slice9::long_chains_100k_lower_quickly ... ignored
+test slice9::long_chains_100k_run_on_llvm ... ignored
+test siblings::llvm_build_links_a_module_sibling ... ok
+test siblings::llvm_test_runs_a_module_sibling ... ok
+test run::two_manual_runs_give_equal_journals_after_masking ... ok
+test slice9::long_chains_lower_quickly ... ok
+test plan::fixtures_match_expected ... ok
+test ignite_test::files_share_one_executable ... ok
+test syntax::llvm_target_runs_every_feature ... ok
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling nix v0.31.3
+test run::probe_timeout_is_visible_in_journal_and_standing ... ok
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-std v0.0.0-15703fb0a98334e3 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/tmp/terminal/std)
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+test ignite_test::substrate_builtins_run_on_both_targets ... ok
+   Compiling ignite-std v0.0.0-15703fb0a98334e3 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/tmp/syntax-rust/std)
+test slice10_llvm::failures_fail_on_both_targets_with_the_same_report ... ok
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... ok
+test terminal::llvm::a_silent_session_is_closed_after_the_idle_timeout ... ok
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/tmp/terminal)
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/tmp/syntax-rust)
+test terminal::llvm::are_you_there_is_answered ... ok
+test terminal::llvm::do_echo_is_refused_with_wont ... ok
+test terminal::llvm::cr_nul_ends_a_line ... ok
+test terminal::llvm::iac_iac_is_a_literal_byte ... ok
+test terminal::llvm::accept_survives_running_out_of_descriptors ... ok
+test terminal::llvm::interrupt_process_closes ... ok
+test terminal::llvm::line_of_4096_bytes_is_accepted ... ok
+test terminal::llvm::overlong_line_is_refused_and_closed ... ok
+test terminal::llvm::subnegotiation_is_skipped ... ok
+test terminal::llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::llvm::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::llvm::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::llvm::tn_exits_2_for_a_malformed_port ... ok
+test terminal::llvm::tn_exits_3_when_nothing_listens ... ok
+test terminal::llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+error: subnegotiation longer than 1024 bytes
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.03s
+test terminal::llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+test slice10_llvm::features_pass_on_both_targets_with_the_same_report ... ok
+test terminal::llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::llvm::fragmented_input_is_reassembled ... ok
+test terminal::llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::llvm::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::llvm::will_naws_is_refused_with_dont ... ok
+test terminal::llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::llvm::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::llvm::tn_refuses_options_and_strips_commands ... ok
+test terminal::rust::accept_survives_running_out_of_descriptors ... ok
+test terminal::rust::are_you_there_is_answered ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.23s
+test terminal::rust::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::rust::do_echo_is_refused_with_wont ... ok
+test terminal::no_target_links_tokio ... ok
+test terminal::rust::iac_iac_is_a_literal_byte ... ok
+test terminal::rust::interrupt_process_closes ... ok
+test terminal::rust::line_of_4096_bytes_is_accepted ... ok
+test terminal::rust::overlong_line_is_refused_and_closed ... ok
+test syntax::rust_target_runs_every_feature ... ok
+test terminal::rust::subnegotiation_is_skipped ... ok
+test terminal::rust::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::rust::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::rust::cr_nul_ends_a_line ... ok
+test terminal::rust::tn_exits_2_for_a_malformed_port ... ok
+test terminal::rust::tn_exits_3_when_nothing_listens ... ok
+test terminal::rust::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::rust::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::rust::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::rust::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+    Blocking waiting for file lock on package cache
+test terminal::rust::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::rust::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::rust::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::rust::fragmented_input_is_reassembled ... ok
+    Updating crates.io index
+test terminal::rust::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::rust::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::rust::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::rust::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::rust::will_naws_is_refused_with_dont ... ok
+test terminal::rust::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::rust::tn_refuses_options_and_strips_commands ... ok
+test terminal::llvm::transcript_on_raw_socket ... ok
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+test terminal::rust::transcript_on_raw_socket ... ok
+   Compiling nix v0.31.3
+test todo::todo::llvm::crud_flow ... ok
+test todo::todo::llvm::content_length ... ok
+test todo::todo::llvm::error_statuses ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test todo::todo::llvm::header_framing ... ok
+test todo::todo::llvm::keep_alive ... ok
+test todo::todo::llvm::limits ... ok
+test todo::todo::llvm::rejection_is_read ... ok
+test todo::todo::llvm::concurrent_posts ... ok
+test todo::todo::llvm::concurrent_patches ... ok
+    Updating crates.io index
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling ignite-std v0.0.0-5834904ce2a9ca50 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/tmp/short-idle-Rust/out/std)
+   Compiling nix v0.31.3
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/tmp/short-idle-Rust/out)
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-std v0.0.0-15703fb0a98334e3 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/tmp/todo/std)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.80s
+test terminal::idle_terminald_runs_one_thread ... ok
+test ignite_test::std_module_as_the_file ... ok
+test terminal::rust::a_silent_session_is_closed_after_the_idle_timeout ... ok
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/tmp/todo)
+test ignite_test::filter_exact_and_list ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.77s
+test todo::todo::rust::limits ... ok
+test todo::todo::rust::header_framing ... ok
+test todo::todo::rust::keep_alive ... ok
+test todo::todo::rust::content_length ... ok
+test todo::todo::rust::crud_flow ... ok
+test todo::todo::rust::error_statuses ... ok
+test todo::todo::rust::rejection_is_read ... ok
+test todo::todo::rust::concurrent_posts ... ok
+test todo::todo::rust::concurrent_patches ... ok
+test control_trace::a7_evaluator_steps_10000_emissions_into_a_30_day_window ... ok
+test slice9::long_chains_run_on_llvm ... ok
+test slice9::rust_target_features_pass_on_llvm ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+test slice9::audit_io_probes_pass ... ok
+test slice9::audit_probes_pass ... ok
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test slice9::slice9_values_across_regions ... ok
+test slice9::var_aliases_leave_the_source_unchanged ... ok
+
+failures:
+
+---- plan::design_model_is_canonical_and_every_value_is_encoded_as_15_4_says stdout ----
+
+thread 'plan::design_model_is_canonical_and_every_value_is_encoded_as_15_4_says' (365881) panicked at crates/ignite/tests/plan.rs:224:9:
+assertion failed: ["uses", "references", "observes", "hosts"].contains(&kind)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- plan::e114_covers_an_unknown_assembly_name_and_check_passes stdout ----
+
+thread 'plan::e114_covers_an_unknown_assembly_name_and_check_passes' (366624) panicked at crates/ignite/tests/plan.rs:402:5:
+hosted: assembly std.deploy.Deployment of S (e114_assembly_selection.ignite:36:1)
+  S.h via S.w = NativeProcess([S.h])
+  S.ingress = LocalSocket
+  S.w = NativeProcess([S.h]), executable w
+  S.watch = ScheduledProbeHost, executable watch
+
+
+
+failures:
+    plan::design_model_is_canonical_and_every_value_is_encoded_as_15_4_says
+    plan::e114_covers_an_unknown_assembly_name_and_check_passes
+
+test result: FAILED. 183 passed; 2 failed; 3 ignored; 0 measured; 0 filtered out; finished in 23.71s
+
+error: test failed, to rerun pass `-p ignite --test main`

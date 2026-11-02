@@ -1,0 +1,851 @@
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.50s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos-2748d864c8d1f1a4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos-a1c8e2c934e88fdb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cli.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/cli-ea6f2823b82aaa1d)
+
+running 18 tests
+test default_std_is_the_repository_std ... ok
+test default_substrate_is_the_sibling_crate ... ok
+test missing_std_root_is_exit_3 ... ok
+test std_package_mismatch_is_e031_in_the_std_file ... ok
+test emit_with_std_fixture ... ok
+test no_arguments_is_exit_2 ... ok
+test std_file_without_package_is_e031 ... ok
+test std_import_cycle_is_e032 ... ok
+test std_diagnostic_is_rendered_with_its_file ... ok
+test std_modules_are_checked_in_import_order ... ok
+test check_unknown_name_is_e003 ... ok
+test missing_file_is_exit_3 ... ok
+test emit_uses_given_substrate ... ok
+test emit_prints_the_program_and_the_std_crate ... ok
+test check_reports_unsupported_component_kind ... ok
+test check_acceptance_program_is_silent ... ok
+test build_std_and_program_then_run_both_executables ... ok
+test client_exit_statuses ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+
+     Running tests/generics.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/generics-cf7be19eb27c2fc5)
+
+running 2 tests
+test llvm_generics_and_store_serve ... ok
+test llvm_store_ids_and_updates_are_atomic_across_connections ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/llvm.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/llvm-2c9b76b7338e5dc1)
+
+running 5 tests
+test clang_failure_is_exit_2 ... ok
+test client_exits_3_when_nothing_listens ... ok
+test index_out_of_range_panics_with_101 ... ok
+test probe_runs_every_check ... ok
+test llvm_build_runs_neither_cargo_nor_rustc ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/llvm_build.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/llvm_build-19a581268f92eebe)
+
+running 4 tests
+test bench ... ignored, benchmark; run with task bench
+test default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test failed_compile_is_retried ... ok
+test rebuild_compiles_only_what_changed ... ok
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.27s
+
+     Running tests/llvm_memory.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/llvm_memory-aaa16ae2d8bc56e4)
+
+running 4 tests
+test pushing_in_a_loop_is_linear ... ok
+test loop_regions_keep_carried_values ... ok
+test terminald_memory_is_flat_over_a_long_session ... ok
+test tn_memory_is_flat_over_a_long_session ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+     Running tests/syntax.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/syntax-7440e355f829adc4)
+
+running 2 tests
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test rust_target_runs_every_feature ... ok
+test llvm_target_runs_every_feature ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/telos_test.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_test-6f0c6e4a25440780)
+
+running 9 tests
+test captured_output_only_for_failures ... ok
+test assert_and_try_reports ... ok
+test counts_results_and_failures ... ok
+test both_targets_print_the_same_report ... ok
+test each_file_runs_its_own_tests ... ok
+test std_module_as_the_file ... ok
+test timeout_kills_a_test ... ok
+test compile_error_exits_2 ... ok
+test filter_exact_and_list ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.31s
+
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/terminal-4d96e1914b98f0fc)
+
+running 64 tests
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test llvm::iac_iac_is_a_literal_byte ... ok
+test llvm::subnegotiation_is_skipped ... ok
+test llvm::interrupt_process_closes ... ok
+test llvm::subnegotiation_over_1024_bytes_closes ... ok
+test llvm::overlong_line_is_refused_and_closed ... ok
+test llvm::line_of_4096_bytes_is_accepted ... ok
+test llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+test llvm::do_echo_is_refused_with_wont ... ok
+test llvm::are_you_there_is_answered ... ok
+test llvm::tn_exits_3_when_nothing_listens ... ok
+test llvm::tn_exits_2_for_a_malformed_port ... ok
+error: subnegotiation longer than 1024 bytes
+test llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+test llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test llvm::tn_on_a_terminal_erases_with_backspace ... ok
+test llvm::will_naws_is_refused_with_dont ... ok
+test llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test llvm::tn_with_piped_input_prints_the_transcript ... ok
+test rust::are_you_there_is_answered ... ok
+test llvm::cr_nul_ends_a_line ... ok
+test llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test rust::do_echo_is_refused_with_wont ... ok
+test llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test rust::iac_iac_is_a_literal_byte ... ok
+test rust::interrupt_process_closes ... ok
+test llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test rust::line_of_4096_bytes_is_accepted ... ok
+test llvm::accept_survives_running_out_of_descriptors ... ok
+test rust::overlong_line_is_refused_and_closed ... ok
+test llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test rust::subnegotiation_is_skipped ... ok
+test rust::subnegotiation_of_1024_bytes_is_skipped ... ok
+test rust::subnegotiation_over_1024_bytes_closes ... ok
+test llvm::tn_refuses_options_and_strips_commands ... ok
+test rust::tn_exits_2_for_a_malformed_port ... ok
+test rust::tn_exits_3_when_nothing_listens ... ok
+error: subnegotiation longer than 1024 bytes
+test rust::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test rust::tn_exits_when_input_ends_and_terminald_closes ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test llvm::a_task_that_cannot_start_closes_only_its_connection ... ok
+test rust::accept_survives_running_out_of_descriptors ... ok
+test rust::cr_nul_ends_a_line ... ok
+test rust::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test rust::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test rust::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test rust::will_naws_is_refused_with_dont ... ok
+test rust::tn_on_a_terminal_erases_with_backspace ... ok
+test rust::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test rust::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test rust::a_task_that_cannot_start_closes_only_its_connection ... ok
+test no_target_links_tokio ... ok
+test rust::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test rust::tn_with_piped_input_prints_the_transcript ... ok
+test rust::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test rust::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test rust::tn_refuses_options_and_strips_commands ... ok
+test llvm::fragmented_input_is_reassembled ... ok
+test rust::fragmented_input_is_reassembled ... ok
+test llvm::transcript_on_raw_socket ... ok
+test rust::transcript_on_raw_socket ... ok
+test llvm::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test rust::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test idle_terminald_runs_one_thread ... ok
+
+test result: ok. 64 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.05s
+
+     Running tests/todo.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/todo-a7b0977cd3ce6f7f)
+
+running 18 tests
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test todo::rust::keep_alive ... ok
+test todo::rust::limits ... ok
+test todo::rust::header_framing ... ok
+test todo::rust::crud_flow ... ok
+test todo::rust::error_statuses ... ok
+test todo::rust::content_length ... ok
+test todo::rust::rejection_is_read ... ok
+test probe::rust::std_modules ... ok
+test todo::rust::concurrent_posts ... ok
+test todo::llvm::keep_alive ... ok
+test todo::llvm::limits ... ok
+test todo::llvm::header_framing ... ok
+test todo::llvm::crud_flow ... ok
+test todo::llvm::content_length ... ok
+test todo::llvm::error_statuses ... ok
+test todo::llvm::rejection_is_read ... ok
+test probe::llvm::std_modules ... ok
+test todo::llvm::concurrent_posts ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_check-fe8934d655f8a278)
+
+running 10 tests
+test tests::ambiguous_variants_are_left_to_the_type_checker ... ok
+test tests::duplicate_top_level_names ... ok
+test tests::assignment_needs_a_var ... ok
+test tests::effect_rules ... ok
+test tests::let_value_is_checked_before_binding ... ok
+test tests::inner_let_shadows_outer_var_for_assignment ... ok
+test tests::for_variable_is_scoped_to_its_body ... ok
+test tests::arm_bindings_are_scoped_to_their_arm ... ok
+test tests::let_shadows_and_inner_block_does_not_leak ... ok
+test tests::path_calls_resolve_variants_and_statics ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fixtures.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/fixtures-d24daeb1dae3e3ed)
+
+running 2 tests
+test every_checker_code_has_a_fixture ... ok
+test fixtures_match_expected ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/limits.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/limits-35df5b23683925b1)
+
+running 2 tests
+test mutual_recursion_reaches_a_fixed_point ... ok
+test effect_inference_is_linear_in_either_order ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/modules.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/modules-d82696e6cd64a417)
+
+running 4 tests
+test check_is_check_module_without_modules ... ok
+test only_named_imports_enter_scope ... ok
+test constants_are_exported_imported_and_listed ... ok
+test imported_definitions_enter_symbols ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/terminal-19f7f24536edf12e)
+
+running 2 tests
+test standard_library_checks_in_import_order ... ok
+test terminal_checks_clean_against_the_standard_library ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_io-755f4e5010ba1bc8)
+
+running 26 tests
+test args::tests::checked_port ... ok
+test args::tests::joined_value ... ok
+test args::tests::missing_value_is_none ... ok
+test args::tests::out_of_range_is_none ... ok
+test args::tests::absent_is_none ... ok
+test args::tests::separate_value ... ok
+test net::tests::descriptor_and_memory_shortages_are_transient ... ok
+test report::tests::reports ... ok
+test idle::tests::zero_removes_the_timeout ... ok
+test idle::tests::data_before_the_timeout_is_read ... ok
+test store::tests::get_returns_a_copy ... ok
+test store::tests::a_panic_in_update_keeps_the_old_value_and_the_store ... ok
+test store::tests::put_get_remove_values ... ok
+test store::tests::ids_start_at_one_and_count_up ... ok
+test store::tests::update_missing_id_does_not_call_f ... ok
+test test::tests::selection ... ok
+test test::tests::verdict_words ... ok
+error: plain
+test tests::io_error_from_std ... error: no peer
+ok
+error: --port abc
+test tests::io_error_exit_codes ... ok
+test tests::io_error_display_is_message ... ok
+test tests::run_returns_the_exit_code_of_the_error ... ok
+test tests::port_outside_range_is_error ... ok
+test test::tests::arguments ... ok
+test store::tests::concurrent_ids_and_updates_lose_nothing ... ok
+test task::tests::workers_are_reused_and_run_every_task_once ... ok
+test idle::tests::an_idle_read_ends_with_eof ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/stdio.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/stdio-8dc72fb660d182be)
+
+running 4 tests
+test child_echo ... ok
+test child_pending_stdin_read ... ok
+test stdin_reads_up_to_maximum_and_ends_with_eof ... ok
+test run_returns_while_a_stdin_read_is_pending ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/tcp.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/tcp-0d630dc14f554c81)
+
+running 14 tests
+error: failed
+test bind_port_out_of_range_fails ... ok
+test bind_twice_on_one_port_fails ... ok
+test bind_port_zero_picks_a_port ... ok
+test clone_shares_the_socket ... ok
+test run_returns_one_on_err ... ok
+test run_returns_zero_on_ok ... ok
+test round_trip_and_half_close ... ok
+test read_respects_maximum ... ok
+test a_thread_sends_what_it_wrote_when_it_ends ... ok
+test spawn_inside_run_executes ... ok
+test writes_are_sent_together_at_the_next_wait ... ok
+test close_proceeds_while_a_read_is_pending ... ok
+test spawn_runs_tasks_in_parallel ... ok
+test write_proceeds_while_a_read_is_pending ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/terminal-9f9c47a35df1dbf4)
+
+running 10 tests
+test child_raw_then_error ... ok
+test child_not_a_terminal ... ok
+test child_raw_round_trip ... ok
+test child_raw_then_panic ... ok
+test child_raw_then_process_exit ... ok
+test process_exit_restores_the_terminal_and_exits_with_the_code ... ok
+test set_raw_is_a_no_op_on_a_pipe ... ok
+test set_raw_switches_and_run_restores_on_return ... ok
+test run_restores_the_terminal_when_main_fails ... ok
+test run_restores_the_terminal_when_main_panics ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_llvm-439193a6a1588923)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/golden.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/golden-af3c267287bafd27)
+
+running 5 tests
+test read_only_parameters_are_borrowed ... ok
+test loops_release_their_region ... ok
+test symbols_are_module_qualified ... ok
+test small_program ... ok
+test syntax_program ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/layout.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/layout-a437d852b50671ab)
+
+running 6 tests
+test records_have_c_layout ... ok
+test copy_glue_only_where_buffers_are ... ok
+test type_names_in_symbols ... ok
+test enums_are_tag_and_payload ... ok
+test scalars_and_builtins ... ok
+test runtime_types_match_the_layouts ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/tests_build.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/tests_build-78f5ae34c5546456)
+
+running 2 tests
+test normal_build_drops_test_only_declarations ... ok
+test test_build_lowers_tests_and_a_runner_main ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_load-948cc5d69bdf04b6)
+
+running 3 tests
+test matrix::tests::cells_parse ... ok
+test matrix::tests::median_of_odd_and_even_counts ... ok
+test matrix::tests::reads_fields_of_a_result_line ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_rt-79762514af730b3d)
+
+running 18 tests
+test arena::tests::release_is_due_above_the_larger_of_64_kib_and_four_times_kept ... ok
+test arena::tests::arenas_are_per_thread ... ok
+test arena::tests::task_end_frees_the_arena ... ok
+test arena::tests::generated_code_and_runtime_share_the_bump_state ... ok
+test arena::tests::zero_size_is_aligned_and_non_null ... ok
+test arena::tests::scratch_survives_a_release_of_the_task_arena ... ok
+test net::tests::handles_encode_slot_and_generation ... ok
+test net::tests::a_released_slot_is_reused_under_a_new_handle ... ok
+test net::tests::segments_tile_the_indices ... ok
+test arena::tests::release_frees_what_came_after_the_mark ... ok
+test process::tests::args_port ... ok
+test arena::tests::spare_chunks_are_bounded ... ok
+test process::tests::decode_args_skips_nulls ... ok
+test process::tests::io_error_new_has_exit_code_one ... ok
+test store::tests::values_are_copied_in_and_out_and_freed ... ok
+test arena::tests::large_and_overaligned_requests_get_own_blocks ... ok
+test arena::tests::allocations_are_aligned_and_disjoint ... ok
+test arena::tests::a_loop_of_release_does_not_grow ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/abi.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/abi-716c1a673ce89526)
+
+running 7 tests
+test layouts_match_section_three ... ok
+test text_helpers ... ok
+test spawn_returns_when_the_child_ends_without_ready ... ok
+test os_errors_have_exit_code_one_and_the_os_message ... ok
+test release_closes_the_socket_and_invalidates_the_handle ... ok
+test tcp_round_trip_with_concurrent_read_and_write ... ok
+test spawn_blocks_until_the_child_is_ready ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/c_abi.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/c_abi-0d0cc0797e639c1d)
+
+running 3 tests
+test smoke_program_runs ... ok
+test fail_panic_and_exit_statuses ... ok
+test port_argument ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/terminal-90882c67c80ad1b8)
+
+running 8 tests
+test child ... ok
+test fail_restores_the_terminal ... ok
+test exit_restores_the_terminal ... ok
+test panic_restores_the_terminal ... ok
+test normal_exit_restores_the_terminal_at_exit ... ok
+test stdin_reads_until_eof ... ok
+test non_terminal_stdin_is_a_no_op ... ok
+test rust_panic_restores_the_terminal ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_rustgen-5d2638f7ab6de329)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/compiles.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/compiles-d64630510774239f)
+
+running 7 tests
+    Blocking waiting for file lock on package cache
+    Blocking    Blocking waiting for file lock on package cache
+ waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+test variants_of_enums_not_imported_build ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Blocking waiting for file lock on build directory
+test std_crate_and_program_build ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test generics_and_store_serve ... ok
+test constants_across_modules_build ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test store_ids_and_updates_are_atomic_across_connections ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test terminal_project_builds ... ok
+test process_exit_without_try_builds_and_exits ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/golden.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/golden-6ee125d81c6cfa55)
+
+running 17 tests
+test acceptance_copy_is_current ... ok
+test syntax_copy_is_current ... ok
+test a_listener_the_component_does_not_bind_is_not_a_value ... ok
+test element_reads_copy_only_non_copy_elements ... ok
+test store_resources_take_one_type_argument_and_no_properties ... ok
+test parameters_are_borrowed_unless_changed ... ok
+test pure_functions ... ok
+test the_own_listener_as_a_value_is_bound_first ... ok
+test process_exit_diverges ... ok
+test system_with_service_and_client ... ok
+test record_and_enum_with_match ... ok
+test protocol_import_spawn_and_function_values ... ok
+test variants_of_enums_not_imported ... ok
+test constants_qualified_patterns_and_io_error ... ok
+test surface_syntax ... ok
+test generics_stores_and_builtins ... ok
+test terminal ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/units.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/units-b19561da1420093c)
+
+running 52 tests
+test aliases_and_field_defaults ... ok
+test bindings_are_scoped ... ok
+test e020_bad_properties ... ok
+test e020_client_rejects_application_and_listener ... ok
+test e020_component_kind ... ok
+test bool_or_and_tuple_patterns_are_native ... ok
+test e020_missing_properties ... ok
+test block_values ... ok
+test e020_duplicate_executable ... ok
+test constants_are_zero_argument_functions ... ok
+test e020_resource_kind ... ok
+test e020_protocol_that_is_not_a_protocol ... ok
+test e030_protocol_without_the_role ... ok
+test effectful_function_is_a_plain_fn ... ok
+test else_if_chain_keeps_statement_position ... ok
+test generate_std_rejects_a_system ... ok
+test executable_defaults_to_component_name ... ok
+test imported_constant_and_local_shadowing ... ok
+test header_and_declarations ... ok
+test functions_and_variants_are_not_places ... ok
+test function_types_and_values ... ok
+test no_system_is_a_library_without_executables ... ok
+test imports_become_use_lines ... ok
+test function_body_value_depends_on_return_type ... ok
+test int_literals_are_plain_digits ... ok
+test generate_std_nests_modules ... ok
+test own_protocol_is_known_without_symbols ... ok
+test package_name_defaults_to_program ... ok
+test list_and_text_patterns_are_guarded_arms ... ok
+test imported_protocol_is_known_from_symbols ... ok
+test receiver_that_is_not_atomic_is_parenthesized ... ok
+test ownership_non_value_positions_do_not_clone ... ok
+test return_expressions ... ok
+test qualified_variant_patterns ... ok
+test protocol_lowering ... ok
+test substrate_imports_need_no_std_crate ... ok
+test string_escaping ... ok
+test rust_keywords_are_escaped ... ok
+test tuple_type ... ok
+test std_version_follows_the_library_text ... ok
+test tuples_and_pattern_lets ... ok
+test type_table ... ok
+test typed_let ... ok
+test spawn_lowering ... ok
+test unit_value_and_type ... ok
+test system_lowering ... ok
+test write_project_creates_layout ... ok
+test resource_named_like_a_main_binding_is_renamed ... ok
+test variant_patterns ... ok
+test ownership_value_positions_clone_places ... ok
+test variant_expressions ... ok
+test builtin_methods ... ok
+
+test result: ok. 52 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_syntax-f2603e94cd8ba5a5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fixtures.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/fixtures-8389f9cb0bcf0ef1)
+
+running 1 test
+test fixtures_match_expected_diagnostics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/grammar.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/grammar-71bce15046d53c72)
+
+running 111 tests
+test additive_is_left_associative ... ok
+test chained_equality_is_e001 ... ok
+test assert_statements ... ok
+test comments_everywhere ... ok
+test chained_comparison_is_e001 ... ok
+test call_on_a_call ... ok
+test const_is_a_keyword_and_a_recovery_point ... ok
+test const_needs_type_and_value ... ok
+test const_declarations ... ok
+test const_span_covers_keyword_to_value ... ok
+test byte_literals ... ok
+test declarations_need_a_newline_between_them ... ok
+test bool_tuple_list_and_or_patterns ... ok
+test else_if_chain_across_lines ... ok
+test effectful_fn_types ... ok
+test else_on_next_line_is_e001 ... ok
+test eof_inside_block_is_e002 ... ok
+test expression_body ... ok
+test field_defaults_and_aliases ... ok
+test fn_type_lists_params_then_return ... ok
+test field_punning_and_commas ... ok
+test fn_type_in_param_and_return_position ... ok
+test fn_type_missing_paren_is_e001 ... ok
+test fn_type_without_return_is_unit ... ok
+test fn_type_nests ... ok
+test for_over_bytes ... ok
+test hex_escape_produces_character ... ok
+test hex_integer ... ok
+test if_as_let_initializer ... ok
+test generic_declarations ... ok
+test import_forms ... ok
+test if_else_if_else_nests ... ok
+test integer_beyond_i64_is_e001 ... ok
+test integer_with_separators ... ok
+test interpolated_expression_spans_point_into_the_string ... ok
+test keywords_are_path_segments ... ok
+test interpolation_errors ... ok
+test keywords_still_name_paths_and_fields ... ok
+test interpolation_desugars_to_concatenation ... ok
+test keywords_are_property_names ... ok
+test largest_integer_is_accepted ... ok
+test lowercase_name_with_payload_or_path_is_a_variant_pattern ... ok
+test lowercase_name_before_brace_is_not_a_record ... ok
+test match_arms_separated_by_commas ... ok
+test let_patterns ... ok
+test match_arms_separated_by_newlines ... ok
+test match_binding_pattern ... ok
+test match_block_and_expression_bodies ... ok
+test match_literal_and_wildcard_patterns ... ok
+test match_qualified_pattern ... ok
+test match_nested_patterns ... ok
+test newline_after_assign_continues ... ok
+test newline_after_binary_operator_continues ... ok
+test newline_after_comma_continues ... ok
+test newline_before_binary_operator_ends_the_statement ... ok
+test newlines_inside_brackets_are_skipped ... ok
+test newlines_inside_parentheses_are_skipped ... ok
+test parentheses_produce_no_node ... ok
+test path_calls ... ok
+test postfix_chain ... ok
+test no_record_literal_in_conditions ... ok
+test postfix_paren_on_next_line_starts_a_statement ... ok
+test precedence_full_ladder ... ok
+test precedence_unary_operators ... ok
+test protocol_and_spawn_are_keywords ... ok
+test protocol_may_be_empty_and_on_one_line ... ok
+test protocol_member_must_be_fn ... ok
+test protocol_declares_roles ... ok
+test qualified_patterns_with_payload ... ok
+test record_literal_directly_in_a_condition_is_not_parsed ... ok
+test record_literal_with_commas ... ok
+test record_literal_allowed_in_bodies_and_after_conditions ... ok
+test record_literal_with_newlines ... ok
+test record_literal_in_brackets_inside_a_condition ... ok
+test recovery_keeps_good_declarations_parseable ... ok
+test recovery_reports_each_bad_declaration_once ... ok
+test recovery_resumes_at_protocol ... ok
+test recovery_skips_the_rest_of_a_broken_protocol ... ok
+test spans_cover_first_to_last_token ... ok
+test semicolon_separates_statements ... ok
+test role_requires_breaks_across_lines ... ok
+test return_expression ... ok
+test spawn_span_covers_operand ... ok
+test spawn_is_a_prefix_operator ... ok
+test spawn_without_operand_is_an_error ... ok
+test statement_cannot_start_with_dot ... ok
+test stmt_assign_to_call_is_e001 ... ok
+test stmt_break_and_continue ... ok
+test stmt_assign_to_field_path ... ok
+test stmt_expression ... ok
+test stmt_for ... ok
+test stmt_let ... ok
+test stmt_loop ... ok
+test stmt_let_with_type_annotation ... ok
+test stmt_return ... ok
+test stmt_var ... ok
+test stmt_while ... ok
+test store_resource_without_properties ... ok
+test string_escapes ... ok
+test test_declaration ... ok
+test test_and_assert_errors ... ok
+test test_only_items ... ok
+test trailing_semicolon ... ok
+test try_span_ends_at_the_question_mark ... ok
+test two_statements_on_one_line_need_a_separator ... ok
+test unary_neg_on_literal ... ok
+test tuple_types ... ok
+test unknown_escape_is_e001 ... ok
+test tuple_values_and_unit ... ok
+test unterminated_string_is_e001 ... ok
+test vertical_tab_and_form_feed_escapes ... ok
+
+test result: ok. 111 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/parse_terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/parse_terminal-bea815c819b82372)
+
+running 6 tests
+test console_has_a_function_typed_field ... ok
+test every_fn_span_ends_at_its_closing_brace ... ok
+test example_imports_the_standard_library ... ok
+test example_system_has_server_and_client ... ok
+test telnet_is_a_protocol_with_both_roles ... ok
+test std_files_parse_and_name_their_module ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/robustness.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/robustness-4bcf76fc9d41d9e8)
+
+running 14 tests
+test backslash_at_end_of_line_is_an_unterminated_string ... ok
+test byte_strings_take_an_escaped_single_quote ... ok
+test byte_literals_with_brace_or_quote_inside_interpolation ... ok
+test lexer_error_does_not_hide_earlier_parser_errors ... ok
+test greater_equal_after_type_arguments ... ok
+test nested_fn_gives_one_error ... ok
+test one_element_tuple_type_is_e001 ... ok
+test smallest_integer_is_a_literal ... ok
+test postfix_and_else_do_not_cross_a_line_inside_brackets ... ok
+test unclosed_brace_in_interpolation ... ok
+test unknown_escape_shows_one_backslash ... ok
+test long_chains_parse ... ok
+test nesting_is_limited_to_256_levels ... ok
+test rendering_many_diagnostics_is_linear ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_types-7d8de7c732367ba9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fixtures.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/fixtures-ab6817c3eb0d62f0)
+
+running 2 tests
+test every_type_code_has_a_fixture ... ok
+test fixtures_match_expected ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/generics.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/generics-7b23876583649ff3)
+
+running 6 tests
+test component_protocol_carries_the_role_instance ... ok
+test every_expression_is_typed ... ok
+test effectful_fn_types ... ok
+test instances_of_generic_uses ... ok
+test store_and_new_builtins ... ok
+test type_parameters_are_exported ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/inline_tests.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/inline_tests-01482fefe3c43ff3)
+
+running 5 tests
+test a_program_without_package_is_main ... ok
+test assert_message_is_typed ... ok
+test tests_are_listed_in_declaration_order ... ok
+test test_try_covers_only_test_bodies ... ok
+test assert_compare_records_operand_and_show ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/limits.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/limits-d3c06f8fad3073b9)
+
+running 1 test
+test exhaustiveness_is_polynomial_in_bool_columns ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/surface.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/surface-9681d7514b648277)
+
+running 9 tests
+test bare_variants_take_the_expected_enum ... ok
+test tuples_and_unit ... ok
+test every_expression_is_typed ... ok
+test aliases_resolve_to_their_targets ... ok
+test inferred_effects_reach_the_signature ... ok
+test field_defaults ... ok
+test interpolation_is_text_concatenation_with_to_text ... ok
+test return_is_never_and_constant_patterns_are_recorded ... ok
+test ufcs_and_field_fn_calls ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/terminal-ff1bb3a71f6a33ac)
+
+running 3 tests
+test standard_library_types_in_import_order ... ok
+test terminal_program_types_against_the_standard_library ... ok
+test standard_library_expressions_are_typed ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests telos
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_check
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_io
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_llvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_rt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_rustgen
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_syntax
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_types
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

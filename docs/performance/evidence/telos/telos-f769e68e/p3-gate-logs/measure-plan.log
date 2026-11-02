@@ -1,0 +1,33 @@
+plan before 78 ms rc=0 load=4.18
+plan after 108 ms rc=0 load=4.18
+plan before 60 ms rc=0 load=4.18
+plan after 108 ms rc=0 load=4.18
+plan before 60 ms rc=0 load=4.18
+plan after 109 ms rc=0 load=4.18
+plan before 60 ms rc=0 load=4.18
+plan after 107 ms rc=0 load=4.18
+plan before 60 ms rc=0 load=4.18
+plan after 107 ms rc=0 load=4.18
+plan before 60 ms rc=0 load=4.18
+plan after 109 ms rc=0 load=4.18
+plan before 60 ms rc=0 load=4.18
+plan after 111 ms rc=0 load=4.18
+plan before 59 ms rc=0 load=4.18
+plan after 111 ms rc=0 load=4.18
+plan before 60 ms rc=0 load=4.18
+plan after 108 ms rc=0 load=4.18
+plan before 59 ms rc=0 load=4.18
+plan after 109 ms rc=0 load=4.18
+plan before 60 ms rc=0 load=4.18
+plan after 108 ms rc=0 load=4.18
+plan before 59 ms rc=0 load=4.18
+plan after 108 ms rc=0 load=4.18
+plan before 60 ms rc=0 load=4.18
+plan after 109 ms rc=0 load=4.18
+plan before 59 ms rc=0 load=4.18
+plan after 107 ms rc=0 load=4.18
+plan before 61 ms rc=0 load=4.18
+plan after 107 ms rc=0 load=4.18
+before bytes: 15029
+after bytes: 28563
+EXIT=0

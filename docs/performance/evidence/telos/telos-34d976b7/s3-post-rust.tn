@@ -1,0 +1,11 @@
+terminal> help
+echo <text>
+status
+quit
+terminal> hi
+terminal> ready
+terminal> bye
+
+--stderr--
+
+--exit 0

@@ -1,0 +1,327 @@
+     6.26%  [.] core::core_arch::x86::sse2::_mm_loadu_si128
+     5.19%  [.] 0x0000000000176411
+     3.60%  [.] <telos_check::Checker>::expr
+     3.19%  [.] <usize as core::cmp::PartialEq>::eq
+     2.89%  [.] <telos_types::typer::Typer>::expr_kind
+     2.36%  [.] <usize as core::hash::Hash>::hash::<std::hash::random::DefaultHasher>
+     2.13%  [.] 0x00000000001764a1
+     1.83%  [.] <core::hash::sip::Sip13Rounds as core::hash::sip::Sip>::d_rounds
+     1.59%  [.] core::ptr::drop_glue::<telos_types::Ty>
+     1.48%  [.] telos_check::called_names
+     1.42%  [.] alloc::fmt::format::format_inner
+     1.42%  [.] core::intrinsics::rotate_left::<u64>
+     1.36%  [.] <telos_llvm::lower::Lower>::binary
+     1.30%  [.] <telos_llvm::lower::Lower>::expr
+     1.24%  [.] core::ptr::copy_nonoverlapping::precondition_check
+     1.18%  [.] <*const ()>::is_aligned_to
+     1.18%  [.] core::slice::raw::from_raw_parts::precondition_check
+     1.18%  [.] 0x00000000000a79f9
+     1.06%  [.] cfree
+     1.06%  [.] core::ptr::copy_nonoverlapping::precondition_check
+     1.06%  [.] core::ub_checks::maybe_is_nonoverlapping::runtime
+     1.00%  [.] telos_syntax::lexer::lex_into
+     0.94%  [.] <core::hash::sip::Sip13Rounds as core::hash::sip::Sip>::c_rounds
+     0.94%  [.] telos_syntax::ast::take_operands
+     0.89%  [.] <telos_rustgen::Generator>::expr
+--- children
+     6.26%     6.26%  [.] core::core_arch::x86::sse2::_mm_loadu_si128
+     5.19%     5.19%  [.] 0x0000000000176411
+     5.19%     0.00%  [.] 0x00007f449fd76411
+     3.60%     3.60%  [.] <telos_check::Checker>::expr
+     3.19%     3.19%  [.] <usize as core::cmp::PartialEq>::eq
+     2.89%     2.89%  [.] <telos_types::typer::Typer>::expr_kind
+     2.48%     0.00%  [.] __libc_realloc (inlined)
+     2.36%     2.36%  [.] <usize as core::hash::Hash>::hash::<std::hash::random::DefaultHasher>
+     2.13%     2.13%  [.] 0x00000000001764a1
+     2.13%     0.00%  [.] 0x00007f449fd764a1
+     1.83%     1.83%  [.] <core::hash::sip::Sip13Rounds as core::hash::sip::Sip>::d_rounds
+     1.59%     1.59%  [.] core::ptr::drop_glue::<telos_types::Ty>
+     1.48%     1.48%  [.] telos_check::called_names
+     1.42%     1.42%  [.] alloc::fmt::format::format_inner
+     1.42%     1.42%  [.] core::intrinsics::rotate_left::<u64>
+     1.36%     1.36%  [.] <telos_llvm::lower::Lower>::binary
+     1.30%     1.30%  [.] <telos_llvm::lower::Lower>::expr
+     1.24%     1.24%  [.] core::ptr::copy_nonoverlapping::precondition_check
+     1.18%     1.18%  [.] <*const ()>::is_aligned_to
+     1.18%     1.18%  [.] core::slice::raw::from_raw_parts::precondition_check
+     1.18%     1.18%  [.] 0x00000000000a79f9
+     1.18%     0.00%  [.] 0x00007f449fca79f9
+     1.06%     1.06%  [.] cfree
+     1.06%     1.06%  [.] core::ptr::copy_nonoverlapping::precondition_check
+     1.06%     1.06%  [.] core::ub_checks::maybe_is_nonoverlapping::runtime
+     1.06%     0.00%  [.] __libc_free (inlined)
+     1.06%     0.00%  [.] 0x00007f449fca6336
+     1.00%     1.00%  [.] telos_syntax::lexer::lex_into
+     1.00%     0.00%  [.] 0x00007f449fca8100
+     0.94%     0.94%  [.] <core::hash::sip::Sip13Rounds as core::hash::sip::Sip>::c_rounds
+     0.94%     0.94%  [.] telos_syntax::ast::take_operands
+     0.94%     0.00%  [.] 0x00007f449fca79ed
+     0.89%     0.89%  [.] <telos_rustgen::Generator>::expr
+     0.89%     0.89%  [.] realloc
+     0.89%     0.89%  [.] 0x0000000000176446
+     0.89%     0.00%  [.] 0x00007f449fd76446
+     0.83%     0.83%  [.] <std::hash::random::RandomState as core::hash::BuildHasher>::build_hasher
+     0.83%     0.83%  [.] core::ptr::drop_glue::<telos_syntax::lexer::TokenKind>
+     0.71%     0.71%  [.] <alloc::string::String as core::fmt::Write>::write_str
+     0.71%     0.71%  [.] <alloc::vec::Vec<u8>>::append_elements
+     0.71%     0.71%  [.] malloc
+     0.71%     0.00%  [.] __libc_malloc (inlined)
+     0.65%     0.65%  [.] telos_rustgen::mutated_in
+     0.59%     0.59%  [.] <telos_syntax::parser::Parser>::start
+     0.53%     0.53%  [.] <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write
+     0.53%     0.53%  [.] <core::option::Option<bool>>::unwrap_or
+     0.53%     0.53%  [.] <telos_llvm::lower::Lower>::binary_step
+     0.53%     0.53%  [.] <telos_syntax::parser::Parser>::bump
+     0.53%     0.53%  [.] 0x0000000000176400
+     0.53%     0.00%  [.] 0x00007f449fca623d
+     0.53%     0.00%  [.] 0x00007f449fd76400
+     0.47%     0.47%  [.] <core::option::Option<telos_types::Ty> as core::clone::Clone>::clone
+     0.47%     0.47%  [.] telos_llvm::region::expr
+     0.47%     0.47%  [.] 0x00000000000a79dd
+     0.47%     0.00%  [.] 0x00007f449fca79dd
+     0.41%     0.41%  [.] <hashbrown::raw::RawTable<(usize, telos_types::Ty)>>::find::<hashbrown::map::equivalent_key<usize, usize, telos_types::Ty>::{closure#0}>
+     0.41%     0.41%  [.] <telos_types::typer::Typer>::binary_chain
+     0.41%     0.41%  [.] core::fmt::write
+     0.41%     0.41%  [.] 0x00000000000a6328
+     0.41%     0.41%  [.] 0x0000000000176707
+     0.41%     0.41%  [.] 0x0000000000176800
+     0.41%     0.00%  [.] 0x00007f449fca6328
+     0.41%     0.00%  [.] 0x00007f449fca8009
+     0.41%     0.00%  [.] 0x00007f449fd76707
+     0.41%     0.00%  [.] 0x00007f449fd76800
+     0.35%     0.35%  [.] <alloc::raw_vec::RawVecInner>::deallocate
+     0.35%     0.35%  [.] <alloc::string::String as core::clone::Clone>::clone
+     0.35%     0.35%  [.] <alloc::string::String>::push_str
+     0.35%     0.35%  [.] <alloc::vec::into_iter::IntoIter<(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr, &telos_syntax::ast::Expr)> as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
+     0.35%     0.35%  [.] <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds>>::reset
+     0.35%     0.35%  [.] <core::option::Option<&bool>>::copied
+     0.35%     0.35%  [.] <hashbrown::raw::RawTableInner>::find_insert_index_in_group
+     0.35%     0.35%  [.] <telos_types::Ty as core::clone::Clone>::clone
+     0.35%     0.35%  [.] <telos_types::typer::Typer>::binary_rest
+     0.35%     0.35%  [.] <usize as core::fmt::Display>::fmt
+     0.35%     0.35%  [.] 0x00000000000a633f
+     0.35%     0.00%  [.] 0x00007f449fca633f
+     0.35%     0.00%  [.] 0x00007f449fca77c2
+     0.30%     0.30%  [.] <[(usize, bool)]>::binary_search_by::<<[(usize, bool)]>::partition_point<<telos_llvm::ir::Module>::line_col::{closure#0}>::{closure#0}>
+     0.30%     0.30%  [.] <alloc::raw_vec::RawVecInner>::with_capacity_in
+     0.30%     0.30%  [.] <alloc::vec::Vec<telos_syntax::ast::Expr>>::pop
+     0.30%     0.30%  [.] <hashbrown::raw::RawTable<(usize, telos_types::Ty)>>::insert_tagged_at_index
+     0.30%     0.30%  [.] <telos_llvm::lower::Lower>::expr_kind
+     0.30%     0.30%  [.] <telos_rustgen::Generator>::chunked_spine
+     0.30%     0.30%  [.] <telos_syntax::ast::Expr as core::ops::drop::Drop>::drop
+     0.30%     0.30%  [.] <telos_syntax::lexer::TokenKind as core::cmp::PartialEq>::eq
+     0.30%     0.30%  [.] core::core_arch::x86::sse2::_mm_movemask_epi8
+     0.30%     0.30%  [.] core::hash::sip::u8to64_le
+     0.30%     0.30%  [.] core::ptr::drop_glue::<alloc::string::String>
+     0.30%     0.30%  [.] core::slice::raw::from_raw_parts::precondition_check
+     0.30%     0.30%  [.] core::ub_checks::maybe_is_nonoverlapping::runtime
+     0.30%     0.30%  [.] 0x00000000000a4f3d
+     0.30%     0.30%  [.] 0x00000000001764a6
+     0.30%     0.30%  [.] 0x00000000001764b5
+     0.30%     0.30%  [.] 0x00000000001764d6
+     0.30%     0.00%  [.] 0x00007f449fca4f3d
+     0.30%     0.00%  [.] 0x00007f449fd764a6
+     0.30%     0.00%  [.] 0x00007f449fd764b5
+     0.30%     0.00%  [.] 0x00007f449fd764d6
+     0.24%     0.24%  [.] <alloc::vec::Vec<telos_syntax::ast::Expr>>::push_mut
+     0.24%     0.24%  [.] <alloc::vec::drain::Drain<(u64, u64, alloc::string::String)> as core::ops::drop::Drop>::drop
+     0.24%     0.24%  [.] <core::ops::control_flow::ControlFlow<()> as core::cmp::PartialEq>::eq
+     0.24%     0.24%  [.] <core::slice::iter::Iter<alloc::string::String> as core::iter::traits::iterator::Iterator>::next
+     0.24%     0.24%  [.] <hashbrown::map::HashMap<usize, telos_types::Ty, std::hash::random::RandomState>>::get::<usize>
+     0.24%     0.24%  [.] <hashbrown::raw::RawIterRange<(usize, telos_types::Ty)>>::next_impl::<false>
+     0.24%     0.24%  [.] <hashbrown::raw::RawTableInner>::find_insert_index
+     0.24%     0.24%  [.] <hashbrown::raw::RawTableInner>::find_or_find_insert_index_inner
+     0.24%     0.24%  [.] <i64 as alloc::string::SpecToString>::spec_to_string
+     0.24%     0.24%  [.] <telos_llvm::ir::Func>::ins::<alloc::string::String>
+     0.24%     0.24%  [.] <telos_rustgen::Generator>::chunked
+     0.24%     0.24%  [.] <telos_syntax::parser::Parser>::newlines_insignificant
+     0.24%     0.24%  [.] <telos_syntax::parser::Parser>::peek_token
+     0.24%     0.24%  [.] <telos_types::typer::Typer>::operator
+     0.24%     0.24%  [.] __rustc::__rdl_alloc
+     0.24%     0.24%  [.] core::ptr::drop_glue::<alloc::vec::Vec<u8>>
+     0.24%     0.24%  [.] 0x0000000000176421
+     0.24%     0.24%  [.] 0x000000000017649d
+     0.24%     0.24%  [.] 0x00000000001764b2
+     0.24%     0.24%  [.] 0x00000000001767e0
+     0.24%     0.00%  [.] tcache_get (inlined)
+     0.24%     0.00%  [.] tcache_get_n (inlined)
+     0.24%     0.00%  [.] 0x00007f449fd76421
+     0.24%     0.00%  [.] 0x00007f449fd7649d
+     0.24%     0.00%  [.] 0x00007f449fd764b2
+     0.24%     0.00%  [.] 0x00007f449fd767e0
+     0.18%     0.18%  [.] <&str as core::fmt::Display>::fmt
+     0.18%     0.18%  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, core::option::Option<telos_types::Ty>>>::get::<str>
+     0.18%     0.18%  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, core::option::Option<telos_types::Ty>, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
+     0.18%     0.18%  [.] <alloc::raw_vec::RawVecInner>::try_allocate_in
+     0.18%     0.18%  [.] <alloc::string::String as core::iter::traits::collect::FromIterator<char>>::from_iter::<core::iter::adapters::filter::Filter<core::str::iter::Chars, telos_syntax::lexer::lex_int::{closure#0}>>
+     0.18%     0.18%  [.] <alloc::vec::Vec<(u64, u64, alloc::string::String)> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<(u64, u64, alloc::string::String), alloc::vec::drain::Drain<(u64, u64, alloc::string::String)>>>::from_iter
+     0.18%     0.18%  [.] <alloc::vec::Vec<telos_syntax::lexer::Token>>::push_mut
+     0.18%     0.18%  [.] <core::core_arch::simd::Simd<i8, 16>>::as_m128i
+     0.18%     0.18%  [.] <core::fmt::Formatter>::pad
+     0.18%     0.18%  [.] <core::fmt::Formatter>::pad_integral::write_prefix
+     0.18%     0.18%  [.] <core::iter::adapters::enumerate::Enumerate<core::str::iter::Bytes> as core::iter::traits::iterator::Iterator>::next
+     0.18%     0.18%  [.] <core::option::Option<&str>>::map_or_else::<alloc::string::String, alloc::fmt::format::{closure#0}, <str as alloc::borrow::ToOwned>::to_owned>
+     0.18%     0.18%  [.] <core::result::Result<telos_syntax::ast::Expr, telos_syntax::parser::Fail> as core::ops::try_trait::Try>::branch
+     0.18%     0.18%  [.] <core::slice::iter::Iter<&str> as core::iter::traits::iterator::Iterator>::any::<<&str as core::slice::cmp::SliceContains>::slice_contains::{closure#0}>
+     0.18%     0.18%  [.] <core::slice::iter::Iter<(u64, u64, alloc::string::String)> as core::iter::traits::iterator::Iterator>::size_hint
+     0.18%     0.18%  [.] <core::slice::iter::Iter<u8> as core::iter::traits::iterator::Iterator>::next
+     0.18%     0.18%  [.] <hashbrown::raw::RawTable<(usize, telos_types::Ty)>>::reserve_rehash::<hashbrown::map::make_hasher<usize, telos_types::Ty, std::hash::random::RandomState>::{closure#0}>
+     0.18%     0.18%  [.] <std::hash::random::RandomState as core::hash::BuildHasher>::hash_one::<&usize>
+     0.18%     0.18%  [.] <telos_syntax::parser::Parser>::binary_left
+     0.18%     0.18%  [.] <telos_types::Ty as core::cmp::PartialEq>::eq
+     0.18%     0.18%  [.] core::char::methods::encode_utf8_raw_unchecked
+     0.18%     0.18%  [.] core::ptr::drop_glue::<alloc::raw_vec::RawVec<u8>>
+     0.18%     0.18%  [.] core::ptr::drop_glue::<core::option::Option<telos_types::Ty>>
+     0.18%     0.18%  [.] core::slice::index::range::<core::ops::range::RangeFrom<usize>>
+     0.18%     0.18%  [.] core::str::validations::next_code_point::<core::slice::iter::Iter<u8>>
+     0.18%     0.18%  [.] telos_syntax::lexer::lex_int
+     0.18%     0.18%  [.] 0x0000000000176005
+     0.18%     0.18%  [.] 0x000000000017640d
+     0.18%     0.18%  [.] 0x0000000000176425
+     0.18%     0.18%  [.] 0x00000000001764c0
+     0.18%     0.18%  [.] 0x00000000001767c6
+     0.18%     0.00%  [.] 0x00007f449fd76005
+     0.18%     0.00%  [.] 0x00007f449fd7640d
+     0.18%     0.00%  [.] 0x00007f449fd76425
+     0.18%     0.00%  [.] 0x00007f449fd764c0
+     0.18%     0.00%  [.] 0x00007f449fd767c6
+     0.12%     0.12%  [.] <*const _>::offset_from_unsigned::precondition_check
+     0.12%     0.12%  [.] <[(usize, bool)]>::partition_point::<<telos_llvm::ir::Module>::line_col::{closure#0}>
+     0.12%     0.12%  [.] <[bool]>::last
+     0.12%     0.12%  [.] <alloc::alloc::Global as core::alloc::Allocator>::deallocate
+     0.12%     0.12%  [.] <alloc::alloc::Global>::alloc_impl_runtime
+     0.12%     0.12%  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::collections::btree::set_val::SetValZST>>::entry
+     0.12%     0.12%  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, telos_check::Local>>::get::<str>
+     0.12%     0.12%  [.] <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::kv_mut
+     0.12%     0.12%  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, &telos_syntax::diagnostic::SourceFile, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
+     0.12%     0.12%  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, &telos_syntax::diagnostic::SourceFile, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<str>
+     0.12%     0.12%  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, telos_check::Local, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<str>
+     0.12%     0.12%  [.] <alloc::raw_vec::RawVecInner>::finish_grow
+     0.12%     0.12%  [.] <alloc::raw_vec::RawVecInner>::finish_grow
+     0.12%     0.12%  [.] <alloc::string::String as core::fmt::Display>::fmt
+     0.12%     0.12%  [.] <alloc::string::String as core::ops::deref::Deref>::deref
+     0.12%     0.12%  [.] <alloc::vec::Vec<&telos_syntax::ast::Expr>>::push_mut
+     0.12%     0.12%  [.] <alloc::vec::Vec<bool> as core::ops::deref::Deref>::deref
+     0.12%     0.12%  [.] <alloc::vec::Vec<gimli::read::abbrev::AttributeSpecification> as core::ops::drop::Drop>::drop
+     0.12%     0.12%  [.] <alloc::vec::Vec<u8>>::reserve
+     0.12%     0.12%  [.] <alloc::vec::into_iter::IntoIter<&telos_syntax::ast::Expr> as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
+     0.12%     0.12%  [.] <core::core_arch::simd::Simd<i8, 16>>::splat
+     0.12%     0.12%  [.] <core::core_arch::x86::__m128i>::as_i8x16
+     0.12%     0.12%  [.] <core::fmt::Formatter>::pad_integral
+     0.12%     0.12%  [.] <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::finish
+     0.12%     0.12%  [.] <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<alloc::string::String>> as core::iter::traits::iterator::Iterator>::next
+     0.12%     0.12%  [.] <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<alloc::vec::Vec<u8>>> as core::iter::traits::iterator::Iterator>::next
+     0.12%     0.12%  [.] <core::iter::adapters::fuse::Fuse<core::iter::adapters::map::Map<core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<telos_llvm::lower::Local>>>, <telos_llvm::lower::Lower>::lookup::{closure#0}>> as core::iter::adapters::fuse::FuseImpl<core::iter::adapters::map::Map<core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<telos_llvm::lower::Local>>>, <telos_llvm::lower::Lower>::lookup::{closure#0}>>>::try_fold::<(), <core::iter::adapters::flatten::FlattenCompat<_, _>>::iter_try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, <core::iter::adapters::flatten::FlattenCompat<_, _> as core::iter::traits::iterator::Iterator>::try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, core::iter::traits::iterator::Iterator::find::check<&telos_llvm::lower::Local, <telos_llvm::lower::Lower>::lookup::{closure#1}>::{closure#0}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>>
+     0.12%     0.12%  [.] <core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<telos_llvm::lower::Local>>> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::adapters::map::map_try_fold<&alloc::vec::Vec<telos_llvm::lower::Local>, core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, <telos_llvm::lower::Lower>::lookup::{closure#0}, <core::iter::adapters::flatten::FlattenCompat<_, _>>::iter_try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, <core::iter::adapters::flatten::FlattenCompat<_, _> as core::iter::traits::iterator::Iterator>::try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, core::iter::traits::iterator::Iterator::find::check<&telos_llvm::lower::Local, <telos_llvm::lower::Lower>::lookup::{closure#1}>::{closure#0}>::{closure#0}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>>
+     0.12%     0.12%  [.] <core::range::Range<usize> as core::slice::index::SliceIndex<str>>::get
+     0.12%     0.12%  [.] <core::str::iter::Bytes as core::iter::traits::iterator::Iterator>::next
+     0.12%     0.12%  [.] <hashbrown::map::HashMap<usize, telos_types::Ty, std::hash::random::RandomState>>::insert
+     0.12%     0.12%  [.] <hashbrown::raw::RawTable<((usize, alloc::string::String), telos_syntax::ast::Span)>>::find::<hashbrown::map::equivalent_key<(usize, alloc::string::String), (usize, alloc::string::String), telos_syntax::ast::Span>::{closure#0}>
+     0.12%     0.12%  [.] <hashbrown::raw::RawTable<(usize, telos_types::Ty)>>::find_or_find_insert_index::<hashbrown::map::equivalent_key<usize, usize, telos_types::Ty>::{closure#0}, hashbrown::map::make_hasher<usize, telos_types::Ty, std::hash::random::RandomState>::{closure#0}>
+     0.12%     0.12%  [.] <hashbrown::raw::RawTableInner>::drop_elements::<(usize, telos_types::Ty)>
+     0.12%     0.12%  [.] <std::hash::random::DefaultHasher as core::hash::Hasher>::finish
+     0.12%     0.12%  [.] <str as core::cmp::Ord>::cmp
+     0.12%     0.12%  [.] <str as core::cmp::PartialEq>::eq
+     0.12%     0.12%  [.] <str as core::fmt::Display>::fmt
+     0.12%     0.12%  [.] <telos_llvm::ir::Func>::restore_location
+     0.12%     0.12%  [.] <telos_llvm::ir::Func>::val::<alloc::string::String>
+     0.12%     0.12%  [.] <telos_llvm::ir::Module>::line_col
+     0.12%     0.12%  [.] <telos_syntax::lexer::Token as core::clone::Clone>::clone
+     0.12%     0.12%  [.] <telos_syntax::lexer::TokenKind>::keyword
+     0.12%     0.12%  [.] <telos_syntax::parser::Parser>::at_line_break
+     0.12%     0.12%  [.] <telos_syntax::parser::Parser>::multiplicative::{closure#0}
+     0.12%     0.12%  [.] <telos_syntax::parser::Parser>::peek
+     0.12%     0.12%  [.] <usize as core::cmp::Ord>::max
+     0.12%     0.12%  [.] <usize as core::slice::index::SliceIndex<[_]>>::get_unchecked::precondition_check
+     0.12%     0.12%  [.] core::core_arch::x86::sse2::_mm_cmpeq_epi8
+     0.12%     0.12%  [.] core::core_arch::x86::sse2::_mm_set1_epi8
+     0.12%     0.12%  [.] core::iter::adapters::map::map_fold::<&(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr), (core::option::Option<telos_syntax::ast::BinaryOp>, &telos_syntax::ast::Expr), (), <telos_rustgen::Generator>::chunked::{closure#0}, core::iter::traits::iterator::Iterator::for_each::call<(core::option::Option<telos_syntax::ast::BinaryOp>, &telos_syntax::ast::Expr), <alloc::vec::Vec<(core::option::Option<telos_syntax::ast::BinaryOp>, &telos_syntax::ast::Expr)>>::extend_trusted<core::iter::adapters::chain::Chain<core::iter::sources::once::Once<(core::option::Option<telos_syntax::ast::BinaryOp>, &telos_syntax::ast::Expr)>, core::iter::adapters::map::Map<core::slice::iter::Iter<(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr)>, <telos_rustgen::Generator>::chunked::{closure#0}>>>::{closure#0}>::{closure#0}>::{closure#0}
+     0.12%     0.12%  [.] core::iter::traits::iterator::Iterator::all::check::<char, telos_syntax::lexer::lex_int::{closure#1}>::{closure#0}
+     0.12%     0.12%  [.] core::iter::traits::iterator::Iterator::find_map::check::<&alloc::collections::btree::map::BTreeMap<alloc::string::String, telos_check::Local>, &telos_check::Local, <telos_check::Checker>::local::{closure#0}>::{closure#0}
+     0.12%     0.12%  [.] core::ptr::drop_glue::<telos_llvm::lower::Val>
+     0.12%     0.12%  [.] telos_llvm::layout::scalar_type
+     0.12%     0.12%  [.] telos_syntax::lexer::lex_string
+     0.12%     0.12%  [.] telos_syntax::lexer::lex_string::{closure#0}
+     0.12%     0.12%  [.] telos_syntax::parser::binary
+     0.12%     0.12%  [.] 0x00000000000a7794
+     0.12%     0.12%  [.] 0x00000000000a7a06
+     0.12%     0.12%  [.] 0x00000000000a7fe8
+     0.12%     0.12%  [.] 0x0000000000175f99
+     0.12%     0.12%  [.] 0x0000000000176404
+     0.12%     0.12%  [.] 0x0000000000176454
+     0.12%     0.12%  [.] 0x00000000001764ac
+     0.12%     0.12%  [.] 0x00000000001764db
+     0.12%     0.12%  [.] 0x00000000001767e8
+     0.12%     0.00%  [.] arena_for_chunk (inlined)
+     0.12%     0.00%  [.] musable (inlined)
+     0.12%     0.00%  [.] 0x00007f449fca7794
+     0.12%     0.00%  [.] 0x00007f449fca7a06
+     0.12%     0.00%  [.] 0x00007f449fca7fe8
+     0.12%     0.00%  [.] 0x00007f449fd75f99
+     0.12%     0.00%  [.] 0x00007f449fd76404
+     0.12%     0.00%  [.] 0x00007f449fd76454
+     0.12%     0.00%  [.] 0x00007f449fd764ac
+     0.12%     0.00%  [.] 0x00007f449fd764db
+     0.12%     0.00%  [.] 0x00007f449fd767e8
+     0.06%     0.06%  [.] <&str as core::slice::cmp::SliceContains>::slice_contains::{closure#0}
+     0.06%     0.06%  [.] <&usize as core::hash::Hash>::hash::<std::hash::random::DefaultHasher>
+     0.06%     0.06%  [.] <(&telos_syntax::ast::Expr, telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr, &telos_syntax::ast::Expr, core::option::Option<telos_types::Ty>) as core::clone::Clone>::clone
+     0.06%     0.06%  [.] <(usize, alloc::string::String) as hashbrown::Equivalent<(usize, alloc::string::String)>>::equivalent
+     0.06%     0.06%  [.] <*const _>::offset_from_unsigned::precondition_check
+     0.06%     0.06%  [.] <[(usize, bool)]>::partition_point::<<telos_llvm::ir::Module>::line_col::{closure#0}>::{closure#0}
+     0.06%     0.06%  [.] <[alloc::collections::btree::map::BTreeMap<alloc::string::String, core::option::Option<telos_types::Ty>>]>::iter
+     0.06%     0.06%  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, &telos_syntax::diagnostic::SourceFile>>::get::<str>
+     0.06%     0.06%  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<(usize, bool)>> as core::ops::index::Index<&str>>::index
+     0.06%     0.06%  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, usize>>::get::<str>
+     0.06%     0.06%  [.] <alloc::collections::btree::map::BTreeMap<usize, alloc::collections::btree::set::BTreeSet<alloc::string::String>>>::entry
+     0.06%     0.06%  [.] <alloc::collections::btree::map::IntoIter<alloc::string::String, telos_types::FnSig>>::dying_next
+     0.06%     0.06%  [.] <alloc::collections::btree::map::entry::Entry<alloc::vec::Vec<u8>, alloc::string::String>>::or_try_insert_with::<<alloc::collections::btree::map::entry::Entry<alloc::vec::Vec<u8>, alloc::string::String>>::or_insert_with<<telos_llvm::ir::Module>::string::{closure#0}>::{closure#0}, !>
+     0.06%     0.06%  [.] <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Dying, alloc::string::String, usize, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::deallocating_next::<alloc::alloc::Global>
+     0.06%     0.06%  [.] <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, &telos_syntax::diagnostic::SourceFile, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::into_kv
+     0.06%     0.06%  [.] <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, telos_check::Local, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::into_kv
+     0.06%     0.06%  [.] <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, usize, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::into_kv
+     0.06%     0.06%  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, telos_check::Local, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
+     0.06%     0.06%  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
+     0.06%     0.06%  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<alloc::string::String>
+     0.06%     0.06%  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, core::option::Option<telos_types::Ty>, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
+     0.06%     0.06%  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, telos_check::FnInfo, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
+     0.06%     0.06%  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::vec::Vec<u8>, alloc::string::String, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::vec::Vec<u8>>
+     0.06%     0.06%  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::vec::Vec<u8>, alloc::string::String, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<alloc::vec::Vec<u8>>
+     0.06%     0.06%  [.] <alloc::raw_vec::RawVec<&str> as core::ops::drop::Drop>::drop
+     0.06%     0.06%  [.] <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+     0.06%     0.06%  [.] <alloc::raw_vec::RawVecInner>::grow_amortized
+     0.06%     0.06%  [.] <alloc::string::String>::push_str
+     0.06%     0.06%  [.] <alloc::vec::Vec<(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr, &telos_syntax::ast::Expr)> as core::iter::traits::collect::IntoIterator>::into_iter
+     0.06%     0.06%  [.] <alloc::vec::Vec<(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr, &telos_syntax::ast::Expr)>>::push_mut
+     0.06%     0.06%  [.] <alloc::vec::Vec<(u64, u64, alloc::string::String)> as core::iter::traits::collect::IntoIterator>::into_iter
+     0.06%     0.06%  [.] <alloc::vec::Vec<(u64, u64, alloc::string::String)>>::drain::<core::ops::range::RangeFrom<usize>>
+     0.06%     0.06%  [.] <alloc::vec::Vec<(u64, u64, alloc::string::String)>>::reserve
+     0.06%     0.06%  [.] <alloc::vec::Vec<alloc::vec::Vec<telos_llvm::lower::Local>> as core::ops::deref::Deref>::deref
+     0.06%     0.06%  [.] <alloc::vec::Vec<telos_check::called_names::Node>>::pop
+     0.06%     0.06%  [.] <alloc::vec::Vec<telos_check::called_names::Node>>::push
+     0.06%     0.06%  [.] <alloc::vec::Vec<telos_syntax::ast::Type>>::is_empty
+     0.06%     0.06%  [.] <alloc::vec::into_iter::IntoIter<&telos_syntax::ast::Expr> as core::ops::drop::Drop>::drop
+     0.06%     0.06%  [.] <alloc::vec::into_iter::IntoIter<(alloc::string::String, alloc::vec::Vec<telos_types::Ty>)> as core::iter::traits::iterator::Iterator>::zip::<alloc::vec::Vec<(alloc::vec::Vec<u64>, telos_llvm::layout::Layout)>>
+     0.06%     0.06%  [.] <alloc::vec::into_iter::IntoIter<(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr, &telos_syntax::ast::Expr)>>::as_raw_mut_slice
+     0.06%     0.06%  [.] <alloc::vec::into_iter::IntoIter<(u64, u64, alloc::string::String)> as core::ops::drop::Drop>::drop
+     0.06%     0.06%  [.] <char>::to_digit
+     0.06%     0.06%  [.] <core::fmt::Arguments>::new::<33, 4>
+     0.06%     0.06%  [.] <core::fmt::Arguments>::new::<4, 1>
+     0.06%     0.06%  [.] <core::fmt::rt::Argument>::new_display::<&str>
+     0.06%     0.06%  [.] <core::fmt::rt::Argument>::new_display::<alloc::string::String>
+     0.06%     0.06%  [.] <core::iter::adapters::flatten::FlatMap<core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<telos_llvm::lower::Local>>>, core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, <telos_llvm::lower::Lower>::lookup::{closure#0}> as core::iter::traits::iterator::Iterator>::find::<<telos_llvm::lower::Lower>::lookup::{closure#1}>
+     0.06%     0.06%  [.] <core::iter::adapters::flatten::FlattenCompat<_, _>>::iter_try_fold::flatten::<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, <core::iter::adapters::flatten::FlattenCompat<_, _> as core::iter::traits::iterator::Iterator>::try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, core::iter::traits::iterator::Iterator::find::check<&telos_llvm::lower::Local, <telos_llvm::lower::Lower>::lookup::{closure#1}>::{closure#0}>::{closure#0}>::{closure#0}
+     0.06%     0.06%  [.] <core::iter::adapters::flatten::FlattenCompat<core::iter::adapters::map::Map<core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<telos_llvm::lower::Local>>>, <telos_llvm::lower::Lower>::lookup::{closure#0}>, core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>>>::iter_try_fold::<(), <core::iter::adapters::flatten::FlattenCompat<_, _> as core::iter::traits::iterator::Iterator>::try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, core::iter::traits::iterator::Iterator::find::check<&telos_llvm::lower::Local, <telos_llvm::lower::Lower>::lookup::{closure#1}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>>
+     0.06%     0.06%  [.] <core::iter::adapters::peekable::Peekable<core::iter::adapters::map::Map<core::str::iter::CharIndices, telos_syntax::lexer::lex_string::{closure#0}>> as core::iter::traits::iterator::Iterator>::next
+     0.06%     0.06%  [.] <core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<alloc::string::String>>> as core::iter::traits::iterator::Iterator>::any::<<telos_rustgen::Generator>::is_local::{closure#0}>
+     0.06%     0.06%  [.] <core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>> as core::iter::traits::collect::IntoIterator>::into_iter
+     0.06%     0.06%  [.] <core::ops::range::Range<usize> as core::slice::index::SliceIndex<[_]>>::get_unchecked::precondition_check
+     0.06%     0.06%  [.] <core::ops::range::RangeFrom<usize> as core::ops::range::RangeBounds<usize>>::end_bound
+     0.06%     0.06%  [.] <core::ops::range::RangeFrom<usize> as core::ops::range::RangeBounds<usize>>::start_bound
+     0.06%     0.06%  [.] <core::option::Option<&&telos_syntax::diagnostic::SourceFile>>::copied
+     0.06%     0.06%  [.] <core::option::Option<&core::option::Option<telos_types::Ty>>>::cloned
+     0.06%     0.06%  [.] <core::option::Option<&telos_check::Local>>::map::<telos_check::Binding, <telos_check::Checker>::lookup::{closure#0}>
+     0.06%     0.06%  [.] <core::option::Option<&telos_types::Ty> as core::cmp::PartialEq>::eq
+     0.06%     0.06%  [.] <core::option::Option<alloc::string::String> as core::ops::try_trait::Try>::branch
+     0.06%     0.06%  [.] <core::option::Option<alloc::vec::Vec<alloc::string::String>>>::unwrap_or_default
+EXIT=0

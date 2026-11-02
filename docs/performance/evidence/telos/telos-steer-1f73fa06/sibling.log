@@ -1,0 +1,19 @@
+RT=/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/libtelos_rt-d439b641a2b5adcb.a
+=== check ===
+check EXIT=0
+=== build --target llvm ===
+built /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/sibling/out-build/bin/demo
+build EXIT=0
+=== nm for demo.ops.greeting ===
+000000000000ed10 T demo.ops.greeting
+000000000000ebd0 t fnval.demo.ops.greeting
+=== run built client against a listener ===
+CLIENT_WROTE b'hello'
+EXITCODE 0
+STDERR b''
+=== test --target llvm ===
+running 1 test
+test demo/module greeting ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+test EXIT=0

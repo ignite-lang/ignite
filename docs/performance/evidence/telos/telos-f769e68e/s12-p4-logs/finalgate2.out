@@ -1,0 +1,25 @@
+START 2026-11-02T06:47:45+01:00 load=10.32 15.28 14.55 5/3071 1936955 free=67G
+STEP tree=work label=fmt pair=0 secs=0.51 load_before=10.32 load_after=10.32 exit=0
+STEP tree=work label=clippy pair=0 secs=0.84 load_before=10.32 load_after=10.32 exit=0
+STEP tree=work label=test-workspace pair=0 secs=34.51 load_before=10.32 load_after=20.76 exit=0
+STEP tree=work label=test-ignite pair=0 secs=2.30 load_before=20.76 load_after=20.76 exit=0
+STEP tree=work label=task-gate pair=0 secs=28.10 load_before=20.76 load_after=24.22 exit=0
+STEP tree=work label=compile pair=0 secs=0.47 load_before=24.22 load_after=24.22 exit=0
+STEP tree=work label=compile-llvm pair=0 secs=1.00 load_before=24.22 load_after=24.22 exit=0
+STEP tree=work label=compile-todo pair=0 secs=0.43 load_before=24.22 load_after=24.22 exit=0
+STEP tree=work label=compile-todo-llvm pair=0 secs=0.47 load_before=24.22 load_after=24.22 exit=0
+COUNTS (all steps, double-counted by task gate) passed=1864 failed=0 ignored=10
+RUNNING      30 running 0 tests
+RUNNING       6 running 10 tests
+RUNNING       6 running 148 tests
+RUNNING       2 running 14 tests
+RUNNING       2 running 18 tests
+RUNNING       2 running 191 tests
+RUNNING       4 running 21 tests
+RUNNING       2 running 36 tests
+RUNNING       2 running 39 tests
+RUNNING       2 running 3 tests
+RUNNING       2 running 42 tests
+RUNNING       2 running 78 tests
+EXIT=0 failed_steps=[] free=67G
+finalgate EXIT=0

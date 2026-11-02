@@ -1,0 +1,28 @@
+START 2026-11-02T02:10:34+01:00 file=todo load=6.46 15.61 16.79 4/2969 2689359
+   0.010 +  0.010     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.011 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.011 +  0.001 
+   0.011 +  0.000 running 18 tests
+   0.147 +  0.136 test todo::todo::llvm::concurrent_patches ... ok
+   0.168 +  0.021 test todo::todo::llvm::concurrent_posts ... ok
+   0.170 +  0.002 test todo::todo::llvm::content_length ... ok
+   0.171 +  0.001 test todo::todo::llvm::crud_flow ... ok
+   0.173 +  0.001 test todo::todo::llvm::error_statuses ... ok
+   0.174 +  0.001 test todo::todo::llvm::header_framing ... ok
+   0.175 +  0.001 test todo::todo::llvm::keep_alive ... ok
+   0.176 +  0.001 test todo::todo::llvm::limits ... ok
+   0.178 +  0.003 test todo::todo::llvm::rejection_is_read ... ok
+   0.247 +  0.069 test todo::todo::rust::concurrent_patches ...     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+   0.292 +  0.045 ok
+   0.313 +  0.021 test todo::todo::rust::concurrent_posts ... ok
+   0.314 +  0.002 test todo::todo::rust::content_length ... ok
+   0.316 +  0.001 test todo::todo::rust::crud_flow ... ok
+   0.317 +  0.002 test todo::todo::rust::error_statuses ... ok
+   0.318 +  0.001 test todo::todo::rust::header_framing ... ok
+   0.319 +  0.001 test todo::todo::rust::keep_alive ... ok
+   0.321 +  0.001 test todo::todo::rust::limits ... ok
+   0.324 +  0.003 test todo::todo::rust::rejection_is_read ... ok
+   0.324 +  0.000 
+   0.324 +  0.000 test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 128 filtered out; finished in 0.31s
+   0.324 +  0.000 
+END load=6.46 15.61 16.79 2/2959 2689547

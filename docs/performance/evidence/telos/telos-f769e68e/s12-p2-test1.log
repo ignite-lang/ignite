@@ -1,0 +1,82 @@
+/dev/nvme0n1p2  848G  762G   78G  91% /
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.55s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.31s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.69s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.36s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.36s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.55s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.44s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.47s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.48s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.81s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.84s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.08s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.29s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.68s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.98s
+
+test result: ok. 77 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 11.45s
+
+   Doc-tests ignite_io
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_llvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_rt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_rustgen
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT=0

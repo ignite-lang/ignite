@@ -1,0 +1,15 @@
+START 2026-11-02T02:10:34+01:00 file=llvm_build load=6.46 15.61 16.79 2/2959 2689549
+   0.010 +  0.010     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.011 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.012 +  0.001 
+   0.012 +  0.000 running 6 tests
+   0.012 +  0.000 test llvm_build::bench ... ignored, benchmark; run with task bench
+   0.678 +  0.666 test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+   1.514 +  0.836 test llvm_build::failed_compile_is_retried ... ok
+   2.016 +  0.502 test llvm_build::ir_is_pinned_to_the_target ... ok
+   4.149 +  2.133 test llvm_build::rebuild_compiles_only_what_changed ... ok
+   4.264 +  0.115 test llvm_build::runtime_for_another_target_is_refused ... ok
+   4.264 +  0.000 
+   4.264 +  0.000 test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 140 filtered out; finished in 4.25s
+   4.264 +  0.000 
+END load=6.66 15.50 16.75 2/2951 2690268

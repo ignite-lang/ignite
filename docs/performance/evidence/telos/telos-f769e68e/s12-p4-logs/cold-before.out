@@ -1,0 +1,13 @@
+START 2026-11-02T05:43:36+01:00 tree=before load=3.14 3.06 7.78 3/3026 3991225 free=78G
+STEP tree=before label=gate-fmt pair=0 secs=0.47 load_before=3.14 load_after=3.14 exit=0
+STEP tree=before label=gate-clippy pair=0 secs=4.61 load_before=3.14 load_after=3.77 exit=0
+STEP tree=before label=gate-test pair=0 secs=43.54 load_before=3.77 load_after=6.00 exit=0
+STEP tree=before label=gate-test-ignite pair=0 secs=8.45 load_before=6.00 load_after=5.76 exit=0
+STEP tree=before label=gate-cold-total pair=0 secs=57.10 load_before=3.14 load_after=5.76 exit=0
+COUNTS tree=before passed=786 failed=0 ignored=4
+INLINE tree=before running 102 tests running 102 tests 
+stat: cannot statx 's': No such file or directory
+EXECUTABLES tree=before count=21 bytes=246784056
+STEP tree=before label=prep-rt-release pair=0 secs=4.64 load_before=5.76 load_after=5.38 exit=0
+EXIT=0 free=76G
+EXIT=0

@@ -1,0 +1,68 @@
+running 12 tests
+test fixtures.basics/arithmetic passes ... ok
+test fixtures.basics/int differs ... FAILED
+test fixtures.basics/text differs ... FAILED
+test fixtures.basics/record differs ... FAILED
+test fixtures.basics/custom message ... FAILED
+test fixtures.basics/try on err fails ... FAILED
+test fixtures.basics/try on none fails ... FAILED
+test fixtures.basics/index out of range panics ... FAILED
+test fixtures.basics/exit code 3 ... FAILED (exited with code 3)
+test fixtures.basics/output shown on failure ... FAILED
+test fixtures.basics/output hidden on success ... ok
+test fixtures.basics/tcp echo through a task ... ok
+
+failures:
+
+---- fixtures.basics/int differs stderr ----
+assertion failed: 1 + 1 == 3
+  left: 2
+  right: 3
+  at crates/telos/tests/fixtures/tests/basics.telos:33:3
+
+---- fixtures.basics/text differs stderr ----
+assertion failed: " ab ".trim() == "ab "
+  left: ab
+  right: ab 
+  at crates/telos/tests/fixtures/tests/basics.telos:37:3
+
+---- fixtures.basics/record differs stderr ----
+assertion failed: Point { x = 1, y = 2 } == Point { x = 1, y = 3 }
+  left: (1, 2)
+  right: (1, 3)
+  at crates/telos/tests/fixtures/tests/basics.telos:41:3
+
+---- fixtures.basics/custom message stderr ----
+assertion failed: n < 3
+  message: n is 4
+  at crates/telos/tests/fixtures/tests/basics.telos:46:3
+
+---- fixtures.basics/try on err fails stderr ----
+`?` failed on Err: not a number: x
+  at crates/telos/tests/fixtures/tests/basics.telos:50:21
+
+---- fixtures.basics/try on none fails stderr ----
+`?` failed on None
+  at crates/telos/tests/fixtures/tests/basics.telos:55:25
+
+---- fixtures.basics/index out of range panics stderr ----
+panic: index out of range
+
+---- fixtures.basics/output shown on failure stdout ----
+captured out
+---- fixtures.basics/output shown on failure stderr ----
+assertion failed: false
+  at crates/telos/tests/fixtures/tests/basics.telos:70:3
+
+failures:
+    fixtures.basics/int differs
+    fixtures.basics/text differs
+    fixtures.basics/record differs
+    fixtures.basics/custom message
+    fixtures.basics/try on err fails
+    fixtures.basics/try on none fails
+    fixtures.basics/index out of range panics
+    fixtures.basics/exit code 3
+    fixtures.basics/output shown on failure
+
+test result: FAILED. 3 passed; 9 failed; 0 filtered out; finished in 0.01s

@@ -1,0 +1,149 @@
+main_todod.ll: lines=976 define=28 declare=66 fn_body_lines=791
+program.ll: lines=1715 define=41 declare=62 fn_body_lines=1436
+std.ll: lines=18120 define=222 declare=63 fn_body_lines=15278
+std.ll: defined fns=222 reachable from program+mains=107 (48%)
+std.ll: fn body lines=15278 reachable body lines=9521 (62%) of 18120 total lines
+std module: defined fns / reachable fns, body lines / reachable body lines
+  std.json: 31/28, 5179/5098
+  std.protocol.telnet: 48/0, 3652/0
+  std.protocol.http: 31/31, 2880/2880
+  std.text: 21/11, 1333/657
+  std.console: 9/0, 338/0
+  std.option: 6/5, 222/183
+  (glue) List (glue): 5/5, 204/204
+  std.contract: 8/0, 203/0
+  std.policy: 9/0, 197/0
+  std.text (glue): 5/3, 188/122
+  std.cli: 8/0, 170/0
+  (glue) ignite: 7/7, 121/121
+  std.protocol.telnet (glue): 3/0, 113/0
+  std.deploy: 6/0, 109/0
+  std.probe: 5/0, 81/0
+  std.json (glue): 6/5, 63/58
+  (glue) Option (glue): 2/2, 42/42
+  (glue) Text (glue): 2/2, 38/38
+  std.protocol.http (glue): 2/2, 34/34
+  (glue) heap_copy: 1/1, 28/28
+  (glue) fn(Text)->std (glue): 1/0, 16/0
+  (glue) Result (glue): 1/1, 13/13
+  (glue) heap_free: 1/1, 13/13
+  (glue) (Text,Text) (glue): 1/1, 11/11
+  std.console (glue): 1/0, 11/0
+  (glue) (Text,std (glue): 1/1, 11/11
+  (glue) IoError (glue): 1/1, 8/8
+unreached std fns (115):
+  "closure.std.text.3"
+  "closure.std.text.4"
+  "copy.fn(Text)->std.console.Reply"
+  "copy.std.console.Console"
+  "fnval.std.json.as_int"
+  "spawn.std.protocol.telnet.edit_input.6"
+  "spawn.std.protocol.telnet.forward_input.7"
+  "spawn.std.protocol.telnet.serve_with.8"
+  "std.cli.Argument.kind"
+  "std.cli.Command.arguments"
+  "std.cli.Command.escape"
+  "std.cli.Command.terminal"
+  "std.cli.describe"
+  "std.cli.endpoint"
+  "std.cli.text"
+  "std.cli.usage"
+  "std.console.CommandConsole.command_schema"
+  "std.console.CommandConsole.maximum_line"
+  "std.console.Reply.action"
+  "std.console.command_names"
+  "std.console.console_of"
+  "std.console.first_word"
+  "std.console.rest_after_word"
+  "std.console.skip_space"
+  "std.console.skip_word"
+  "std.contract.Availability.missing_data"
+  "std.contract.SLA.exclusions"
+  "std.contract.ThresholdCompliance.missing_data"
+  "std.contract.calendar_month"
+  "std.contract.event"
+  "std.contract.meets"
+  "std.contract.missing_data"
+  "std.contract.rolling"
+  "std.deploy.includes"
+  "std.deploy.is_process"
+  "std.deploy.localSocket"
+  "std.deploy.nativeProcess"
+  "std.deploy.scheduledProbeHost"
+  "std.deploy.workstationExecutable"
+  "std.json.as_int"
+  "std.json.as_list"
+  "std.json.int"
+  "std.option.and_then<std.json.Json,Int>"
+  "std.policy.DrainRollout.deadline"
+  "std.policy.DrainRollout.on_deadline"
+  "std.policy.Restart.backoff"
+  "std.policy.Restart.interval"
+  "std.policy.Restart.maximum_attempts"
+  "std.policy.allows"
+  "std.policy.delay"
+  "std.policy.exponential"
+  "std.policy.fixed"
+  "std.probe.TelnetPrompt.close_after_probe"
+  "std.probe.TelnetPrompt.interval"
+  "std.probe.TelnetPrompt.timeout"
+  "std.probe.prompt_seen"
+  "std.probe.satisfies"
+  "std.protocol.telnet.AYT"
+  "std.protocol.telnet.BACKSPACE"
+  "std.protocol.telnet.COMMAND_HELP"
+  "std.protocol.telnet.COMMAND_PROMPT"
+  "std.protocol.telnet.CONTROL_C"
+  "std.protocol.telnet.CONTROL_D"
+  "std.protocol.telnet.DELETE"
+  "std.protocol.telnet.DO"
+  "std.protocol.telnet.DONT"
+  "std.protocol.telnet.ESCAPE"
+  "std.protocol.telnet.IAC"
+  "std.protocol.telnet.IP"
+  "std.protocol.telnet.MAXIMUM_SUBNEGOTIATION"
+  "std.protocol.telnet.SB"
+  "std.protocol.telnet.SE"
+  "std.protocol.telnet.SessionLimits.idle_timeout"
+  "std.protocol.telnet.SessionLimits.input_buffer"
+  "std.protocol.telnet.SessionLimits.maximum"
+  "std.protocol.telnet.SessionLimits.output_buffer"
+  "std.protocol.telnet.SessionLimits.slow_reader_deadline"
+  "std.protocol.telnet.Telnet.connect"
+  "std.protocol.telnet.Telnet.serve"
+  "std.protocol.telnet.TelnetClient.main"
+  "std.protocol.telnet.TelnetProfile.baseline"
+  "std.protocol.telnet.TelnetProfile.character_encoding"
+  "std.protocol.telnet.TelnetProfile.negotiation"
+  "std.protocol.telnet.TelnetProfile.unsupported_options"
+  "std.protocol.telnet.TelnetServer.main"
+  "std.protocol.telnet.TelnetServer.protocol"
+  "std.protocol.telnet.TelnetServer.recovery"
+  "std.protocol.telnet.TelnetServer.rollout"
+  "std.protocol.telnet.TelnetServer.sessions"
+  "std.protocol.telnet.WILL"
+  "std.protocol.telnet.WONT"
+  "std.protocol.telnet.answer_line"
+  "std.protocol.telnet.apply_key"
+  "std.protocol.telnet.connect"
+  "std.protocol.telnet.decode"
+  "std.protocol.telnet.edit_input"
+  "std.protocol.telnet.encode_input"
+  "std.protocol.telnet.erase_last"
+  "std.protocol.telnet.finish_input"
+  "std.protocol.telnet.forward_input"
+  "std.protocol.telnet.render"
+  "std.protocol.telnet.run_command"
+  "std.protocol.telnet.serve_with"
+  "std.protocol.telnet.session"
+  "std.protocol.telnet.write_text"
+  "std.text.ends_with"
+  "std.text.equals_ignore_case"
+  "std.text.is_whitespace"
+  "std.text.lines"
+  "std.text.repeat"
+  "std.text.replace"
+  "std.text.strip_suffix"
+  "std.text.to_upper"
+  "std.text.trim_end"
+  "std.text.trim_start"

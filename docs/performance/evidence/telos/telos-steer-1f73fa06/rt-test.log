@@ -1,0 +1,41 @@
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/main-41130fff97fc3d0a)
+
+running 18 tests
+test abi::layouts_match_section_three ... ok
+test abi::os_errors_have_exit_code_one_and_the_os_message ... ok
+test abi::text_helpers ... ok
+test abi::release_closes_the_socket_and_invalidates_the_handle ... ok
+test abi::spawn_returns_when_the_child_ends_without_ready ... ok
+test terminal::child ... ok
+test terminal::exit_restores_the_terminal ... ok
+test terminal::fail_restores_the_terminal ... ok
+test terminal::non_terminal_stdin_is_a_no_op ... ok
+test terminal::normal_exit_restores_the_terminal_at_exit ... ok
+test terminal::panic_restores_the_terminal ... ok
+test terminal::stdin_reads_until_eof ... ok
+test terminal::rust_panic_restores_the_terminal ... FAILED
+test abi::tcp_round_trip_with_concurrent_read_and_write ... ok
+test abi::spawn_blocks_until_the_child_is_ready ... ok
+test c_abi::smoke_program_runs ... ok
+test c_abi::fail_panic_and_exit_statuses ... ok
+test c_abi::port_argument ... ok
+
+failures:
+
+---- terminal::rust_panic_restores_the_terminal stdout ----
+
+thread 'terminal::rust_panic_restores_the_terminal' (1456047) panicked at crates/telos-rt/tests/terminal.rs:227:5:
+error: panic at crates/telos-rt/tests/terminal.rs:125:25: runtime bug
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    terminal::rust_panic_restores_the_terminal
+
+test result: FAILED. 17 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+error: test failed, to rerun pass `-p telos-rt --test main`
+EXIT=101

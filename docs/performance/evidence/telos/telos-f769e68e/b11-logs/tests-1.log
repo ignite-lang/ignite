@@ -1,0 +1,110 @@
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.73s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-11b/debug/deps/main-5e4ab9ed9c9b052f)
+
+running 1 test
+test golden::target_bugs_of_slice_11b ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 77 filtered out; finished in 0.01s
+
+BLESS_EXIT=0
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-11b/debug/deps/main-5e4ab9ed9c9b052f)
+
+running 17 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test golden::record_and_enum_with_match ... ok
+test golden::target_bugs_of_slice_11b ... ok
+test golden::process_exit_diverges ... ok
+test golden::pure_functions ... ok
+test golden::constants_qualified_patterns_and_io_error ... ok
+test golden::system_with_server_and_client ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test golden::generics_stores_and_builtins ... ok
+test golden::surface_syntax ... ok
+test golden::variants_of_enums_not_imported ... ok
+test golden::terminal ... ok
+test golden::executable_components ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.07s
+
+GOLDEN_EXIT=0
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-rt v0.1.0 (/home/timo/projects/telos/crates/ignite-rt)
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+error[E0507]: cannot move out of `*handle` which is behind a shared reference
+   --> crates/ignite/tests/ignite_test.rs:83:30
+    |
+ 83 |             .filter(|handle| handle.join().is_err())
+    |                              ^^^^^^ ------ `*handle` moved due to this method call
+    |                              |
+    |                              move occurs because `*handle` has type `ScopedJoinHandle<'_, ()>`, which does not implement the `Copy` trait
+    |
+note: `std::thread::ScopedJoinHandle::<'scope, T>::join` takes ownership of the receiver `self`, which moves `*handle`
+   --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/thread/scoped.rs:322:17
+    |
+322 |     pub fn join(self) -> Result<T> {
+    |                 ^^^^
+
+For more information about this error, try `rustc --explain E0507`.
+error: could not compile `ignite` (test "main") due to 1 previous error
+NORUN_EXIT=101
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+error[E0507]: cannot move out of `*handle` which is behind a shared reference
+   --> crates/ignite/tests/ignite_test.rs:83:30
+    |
+ 83 |             .filter(|handle| handle.join().is_err())
+    |                              ^^^^^^ ------ `*handle` moved due to this method call
+    |                              |
+    |                              move occurs because `*handle` has type `ScopedJoinHandle<'_, ()>`, which does not implement the `Copy` trait
+    |
+note: `std::thread::ScopedJoinHandle::<'scope, T>::join` takes ownership of the receiver `self`, which moves `*handle`
+   --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/thread/scoped.rs:322:17
+    |
+322 |     pub fn join(self) -> Result<T> {
+    |                 ^^^^
+
+For more information about this error, try `rustc --explain E0507`.
+error: could not compile `ignite` (test "main") due to 1 previous error
+IGNITE_TEST run=1 secs=.555093435 exit=101 load=7.15
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+error[E0507]: cannot move out of `*handle` which is behind a shared reference
+   --> crates/ignite/tests/ignite_test.rs:83:30
+    |
+ 83 |             .filter(|handle| handle.join().is_err())
+    |                              ^^^^^^ ------ `*handle` moved due to this method call
+    |                              |
+    |                              move occurs because `*handle` has type `ScopedJoinHandle<'_, ()>`, which does not implement the `Copy` trait
+    |
+note: `std::thread::ScopedJoinHandle::<'scope, T>::join` takes ownership of the receiver `self`, which moves `*handle`
+   --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/thread/scoped.rs:322:17
+    |
+322 |     pub fn join(self) -> Result<T> {
+    |                 ^^^^
+
+For more information about this error, try `rustc --explain E0507`.
+error: could not compile `ignite` (test "main") due to 1 previous error
+IGNITE_TEST run=2 secs=.537051315 exit=101 load=7.15
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+error[E0507]: cannot move out of `*handle` which is behind a shared reference
+   --> crates/ignite/tests/ignite_test.rs:83:30
+    |
+ 83 |             .filter(|handle| handle.join().is_err())
+    |                              ^^^^^^ ------ `*handle` moved due to this method call
+    |                              |
+    |                              move occurs because `*handle` has type `ScopedJoinHandle<'_, ()>`, which does not implement the `Copy` trait
+    |
+note: `std::thread::ScopedJoinHandle::<'scope, T>::join` takes ownership of the receiver `self`, which moves `*handle`
+   --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/thread/scoped.rs:322:17
+    |
+322 |     pub fn join(self) -> Result<T> {
+    |                 ^^^^
+
+For more information about this error, try `rustc --explain E0507`.
+error: could not compile `ignite` (test "main") due to 1 previous error
+EVAL run=1 secs=.578034786 exit=101
+EXIT=0

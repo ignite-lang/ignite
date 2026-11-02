@@ -1,0 +1,12 @@
+    Checking ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+    Checking ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+error: unused import: `Json`
+  --> crates/ignite/tests/decode.rs:10:52
+   |
+10 | use ignite_eval::{CONTROL_MODULE, Evaluator, Fuel, Json, Value, value_json};
+   |                                                    ^^^^
+   |
+   = note: `-D unused-imports` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(unused_imports)]`
+
+error: could not compile `ignite` (test "main") due to 1 previous error

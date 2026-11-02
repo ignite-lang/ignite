@@ -1,0 +1,49 @@
+/dev/nvme0n1p2  848G  761G   79G  91% /
+== fmt
+STEP fmt exit=0
+== clippy (errors by file)
+STEP clippy exit=101
+      1 crates/ignite/src/run/engine.rs
+      1 crates/ignite/src/run/live.rs
+== unit tests of crates/ignite/src/run
+T.server: noise
+T.probe: boom
+T.probe: warn
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+STEP run-tests exit=0
+== runtimes for todod
+== todod pairs after unit 1, cold through sccache
+START 2026-11-02T05:42:44+01:00 load=1.09 2.63 7.90 1/2964 3982942
+STEP base:rust-dev:1 secs=3.315 load_before=1.09 load_after=1.09 exit=0
+STEP base:rust-release:1 secs=4.242 load_before=1.09 load_after=1.09 exit=0
+STEP base:llvm-dev:1 secs=0.325 load_before=1.09 load_after=1.09 exit=0
+STEP base:llvm-release:1 secs=0.794 load_before=1.09 load_after=1.09 exit=0
+STEP new:rust-dev:1 secs=3.417 load_before=1.09 load_after=1.08 exit=0
+STEP new:rust-release:1 secs=4.669 load_before=1.08 load_after=4.36 exit=0
+STEP new:llvm-dev:1 secs=0.495 load_before=4.36 load_after=4.36 exit=0
+STEP new:llvm-release:1 secs=0.973 load_before=4.36 load_after=4.36 exit=0
+STEP base:rust-dev:2 secs=3.319 load_before=4.36 load_after=4.25 exit=0
+STEP base:rust-release:2 secs=4.252 load_before=4.25 load_after=4.07 exit=0
+STEP base:llvm-dev:2 secs=0.321 load_before=4.07 load_after=4.07 exit=0
+STEP base:llvm-release:2 secs=0.814 load_before=4.07 load_after=4.07 exit=0
+STEP new:rust-dev:2 secs=4.099 load_before=4.07 load_after=3.82 exit=0
+STEP new:rust-release:2 secs=4.757 load_before=3.82 load_after=3.76 exit=0
+STEP new:llvm-dev:2 secs=0.487 load_before=3.76 load_after=3.76 exit=0
+STEP new:llvm-release:2 secs=0.979 load_before=3.76 load_after=3.76 exit=0
+STEP base:rust-dev:3 secs=3.263 load_before=3.76 load_after=3.53 exit=0
+STEP base:rust-release:3 secs=4.292 load_before=3.53 load_after=3.33 exit=0
+STEP base:llvm-dev:3 secs=0.327 load_before=3.33 load_after=3.33 exit=0
+STEP base:llvm-release:3 secs=0.815 load_before=3.33 load_after=3.33 exit=0
+STEP new:rust-dev:3 secs=3.500 load_before=3.33 load_after=3.14 exit=0
+STEP new:rust-release:3 secs=5.221 load_before=3.14 load_after=3.77 exit=0
+STEP new:llvm-dev:3 secs=0.551 load_before=3.77 load_after=3.77 exit=0
+STEP new:llvm-release:3 secs=1.025 load_before=3.77 load_after=3.77 exit=0
+EXIT=0
+STEP todod exit=0
+== size attribution of the generated std (base vs new, pair 1)
+base rust: 2191 lines of generated std, 116 lines of program
+base llvm: 12361 lines std.ll, 107 defines; program.ll 1715 lines
+new rust: 3792 lines of generated std, 116 lines of program
+new llvm: 14646 lines std.ll, 107 defines; program.ll 1715 lines
+EXIT=0
+EXIT=0

@@ -1,0 +1,23 @@
+/dev/nvme0n1p2  848G  762G   78G  91% /
+warning: unused import: `FnDecl`
+ --> crates/ignite-types/src/typer/system.rs:8:83
+  |
+8 |     AssemblyDecl, BinaryOp, BraceEntry, ComponentDecl, Expr, ExprKind, FieldInit, FnDecl, Ident,
+  |                                                                                   ^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+error[E0599]: no method named `hook_signature` found for mutable reference `&mut Typer<'a>` in the current scope
+    --> crates/ignite-types/src/typer.rs:1315:30
+     |
+1315 |                         self.hook_signature(f);
+     |                              ^^^^^^^^^^^^^^
+     |
+help: there is a method `signatures` with a similar name
+     |
+1315 -                         self.hook_signature(f);
+1315 +                         self.signatures(f);
+     |
+For more information about this error, try `rustc --explain E0599`.
+warning: `ignite-types` (lib) generated 1 warning
+error: could not compile `ignite-types` (lib) due to 1 previous error; 1 warning emitted
+EXIT=101

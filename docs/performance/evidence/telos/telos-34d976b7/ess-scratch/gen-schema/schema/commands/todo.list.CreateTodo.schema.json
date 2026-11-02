@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CreateTodo input",
+  "x-ess-name": "todo.list.CreateTodo",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "title": {
+      "$ref": "#/$defs/todo.list.Title"
+    },
+    "done": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "title"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "todo",
+    "specification_version": "v1",
+    "source_digest": "4fab963621d47043d38543f5141de315c8b798f376db1be3379011617c426950",
+    "contract_digest": "slice-sha256/2:c189cf42728cdaaa9bf1b8bc9da47074a91f4eed2538ebcceb927a86f5fa3423",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "todo.list.Title": {
+      "title": "Title",
+      "x-ess-name": "todo.list.Title",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

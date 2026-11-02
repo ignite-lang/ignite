@@ -1,0 +1,8 @@
+FMT=0
+CLIPPY=0
+TEST=0
+TELOS=0
+cargo_tests passed=524 failed=0 ignored=3
+test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.03s
+test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.03s
+EXIT=0

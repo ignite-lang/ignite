@@ -1,0 +1,11 @@
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.12s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p2/debug/deps/main-90b129b53e45974f)
+
+running 3 tests
+test drain::an_open_session_survives_sigterm_and_new_connects_are_refused ... ok
+test drain::rollout_drains_the_old_process_and_starts_the_new_rust ... ok
+test drain::rollout_drains_the_old_process_and_starts_the_new_llvm ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 188 filtered out; finished in 1.75s
+

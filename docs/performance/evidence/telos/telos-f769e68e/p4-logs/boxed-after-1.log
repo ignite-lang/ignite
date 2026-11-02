@@ -1,0 +1,47 @@
+running 1 test
+test main/boxed values carried across releases and through the store ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.31s
+RUN target=rust rep=1 wall=.670612125 load=6.71
+running 1 test
+test main/boxed values carried across releases and through the store ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.31s
+RUN target=rust rep=2 wall=.395534822 load=6.71
+running 1 test
+test main/boxed values carried across releases and through the store ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.09s
+RUN target=llvm rep=1 wall=.347037241 load=6.71
+running 1 test
+test main/boxed values carried across releases and through the store ... ok
+
+test result: ok. 1 passed; 0 failed; 8 filtered out; finished in 0.09s
+RUN target=llvm rep=2 wall=.201421507 load=6.71
+running 9 tests
+test main/closures carried across loop releases ... ok
+test main/closures in a list and nested closures ... ok
+test main/fn fields hold closures ... ok
+test main/store update with a capturing closure in a loop ... ok
+test main/boxed values carried across releases and through the store ... ok
+test main/range patterns without a wildcard ... ok
+test main/break and continue as values in carried loops ... ok
+test main/tuple fields and record updates of borrowed places ... ok
+test main/debug text of nested values ... ok
+
+test result: ok. 9 passed; 0 failed; 0 filtered out; finished in 0.31s
+RUN-ALL target=rust wall=.394509740 load=6.71
+running 9 tests
+test main/closures carried across loop releases ... ok
+test main/closures in a list and nested closures ... ok
+test main/fn fields hold closures ... ok
+test main/store update with a capturing closure in a loop ... ok
+test main/boxed values carried across releases and through the store ... ok
+test main/range patterns without a wildcard ... ok
+test main/break and continue as values in carried loops ... ok
+test main/tuple fields and record updates of borrowed places ... ok
+test main/debug text of nested values ... ok
+
+test result: ok. 9 passed; 0 failed; 0 filtered out; finished in 0.09s
+RUN-ALL target=llvm wall=.201960108 load=6.71
+EXIT=0

@@ -1,0 +1,52 @@
+/dev/nvme0n1p2  848G  760G   80G  91% /
+== tests: ignite-io ignite-rt ignite-rustgen ignite-llvm
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p2/debug/deps/ignite_io-4711a1332dcc478e)
+error: plain
+error: no peer
+error: --port abc
+error: + failed at f.ignite:1:2: 9223372036854775807 + 1
+error: panic at crates/ignite-io/src/lib.rs:542:27: boom
+task ended with error: index failed at t.ignite:1:1: index 3 out of range for length 0
+test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p2/debug/deps/main-eedb70dee4a27746)
+error: failed
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p2/debug/deps/ignite_llvm-7881cc793d259bda)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p2/debug/deps/main-1516246f4e04c1f5)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p2/debug/deps/ignite_rt-625bc1c0a9875180)
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p2/debug/deps/main-a25fe021dbacda77)
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p2/debug/deps/ignite_rustgen-8d46fc80f07c06b3)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p2/debug/deps/main-5e4ab9ed9c9b052f)
+test slice9::long_chains_build_and_run_100k ... ignored
+ waiting for file lock on package cache
+test units::int_literals_are_plain_digits ...  `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+ok
+test result: ok. 77 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.95s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+STEP tests exit=0
+== runner runtime
+STEP runner exit=1
+== inline fixture, rust
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p2-builtins.ignite:31:21: error[E001]: expected expression, found `assert`
+STEP fixture-rust exit=2
+== inline fixture, llvm
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p2-builtins.ignite:31:21: error[E001]: expected expression, found `assert`
+STEP fixture-llvm exit=2
+== after-tree runtimes for todod
+STEP rt-dev exit=1
+STEP rt-release exit=1
+== baseline tree compiler and runtimes
+/dev/nvme0n1p2  848G  760G   80G  91% /
+STEP base-ignite exit=1
+STEP base-rt-dev exit=1
+STEP base-rt-release exit=1
+/dev/nvme0n1p2  848G  760G   80G  91% /
+EXIT=0

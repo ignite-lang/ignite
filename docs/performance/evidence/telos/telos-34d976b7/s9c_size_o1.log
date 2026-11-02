@@ -1,0 +1,6 @@
+clang -o /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-todo-before/todod --target=x86_64-pc-linux-gnu /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-todo-before/main_todod.o /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-todo-before/program.o /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-todo-before/std.o /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/rt/debug/libtelos_rt.a -Wl,--gc-sections -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc
+link=0
+-rwxr-xr-x 1 timo timo 6193128 Nov  1 19:13 /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-todo-before/todod
+.text                 524995    49264
+Total                5832684
+EXIT=0

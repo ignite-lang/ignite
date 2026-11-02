@@ -1,0 +1,3 @@
+e041_slice9.telos:5:4: error[E041]: fn `len` takes a `List<Int>` first, and `List<Int>` has the builtin method `len`, so `x.len(..)` could never call it; rename it
+e041_slice9.telos:8:11: error[E041]: `(Int, Text)` has no element `2`
+e041_slice9.telos:9:11: error[E041]: `Int` has no element `0`

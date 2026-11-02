@@ -1,0 +1,16 @@
+START 2026-11-02T03:44:07+01:00 pair=3 load=6.19 5.91 4.04 8/3010 731119
+STEP tree=before label=warm-test pair=3 secs=23.99 load_before=6.19 load_after=5.99 exit=101
+STEP tree=s11 label=warm-test pair=3 secs=16.68 load_before=5.99 load_after=6.41 exit=0
+STEP tree=after label=warm-test pair=3 secs=10.25 load_before=6.41 load_after=6.78 exit=0
+STEP tree=before label=file-ignite_test pair=3 secs=9.01 load_before=6.78 load_after=6.77 exit=0
+STEP tree=s11 label=file-ignite_test pair=3 secs=8.59 load_before=6.77 load_after=6.54 exit=0
+STEP tree=after label=file-ignite_test pair=3 secs=4.60 load_before=6.54 load_after=6.34 exit=0
+STEP tree=before label=todod-rust-dev pair=3 secs=3.36 load_before=6.34 load_after=5.99 exit=0
+STEP tree=before label=todod-llvm-dev pair=3 secs=0.40 load_before=5.99 load_after=5.99 exit=0
+STEP tree=after label=todod-rust-dev pair=3 secs=3.60 load_before=5.99 load_after=5.83 exit=0
+STEP tree=after label=todod-llvm-dev pair=3 secs=0.38 load_before=5.83 load_after=5.83 exit=0
+STEP tree=before label=todod-rust-release pair=3 secs=4.59 load_before=5.83 load_after=5.85 exit=0
+STEP tree=before label=todod-llvm-release pair=3 secs=1.26 load_before=5.85 load_after=5.85 exit=0
+STEP tree=after label=todod-rust-release pair=3 secs=4.74 load_before=5.85 load_after=5.70 exit=0
+STEP tree=after label=todod-llvm-release pair=3 secs=0.88 load_before=5.70 load_after=5.70 exit=0
+EXIT=0

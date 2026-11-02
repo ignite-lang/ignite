@@ -1,0 +1,58 @@
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-c/debug/deps/terminal-4987a12a88f77248)
+
+running 28 tests
+    Updating crates.io index
+     Locking 4 packages to highest Rust 1.99.1 compatible versions
+      Adding bitflags v2.13.2
+      Adding cfg-if v1.0.5
+      Adding cfg_aliases v0.2.2
+      Adding nix v0.31.3
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling errno v0.3.14
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.4
+   Compiling signal-hook-registry v1.4.8
+   Compiling tokio v1.54.1
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-std v0.0.0-988166c48030668e (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-c/tmp/terminal/std)
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-c/tmp/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.40s
+test subnegotiation_over_1024_bytes_closes ... ok
+test overlong_line_is_refused_and_closed ... ok
+test are_you_there_is_answered ... ok
+test interrupt_process_closes ... ok
+test tn_exits_2_for_a_malformed_port ... ok
+test do_echo_is_refused_with_wont ... ok
+error: subnegotiation longer than 1024 bytes
+test tn_exits_3_when_nothing_listens ... ok
+test tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test tn_exits_when_input_ends_and_terminald_closes ... ok
+test tn_with_piped_input_prints_the_transcript ... ok
+test will_naws_is_refused_with_dont ... ok
+test tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test subnegotiation_of_1024_bytes_is_skipped ... ok
+test line_of_4096_bytes_is_accepted ... ok
+test subnegotiation_is_skipped ... ok
+test iac_iac_is_a_literal_byte ... ok
+test tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test tn_refuses_options_and_strips_commands ... ok
+test tn_on_a_terminal_erases_with_backspace ... ok
+test tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test fragmented_input_is_reassembled ... ok
+test cr_nul_ends_a_line ... ok
+test transcript_on_raw_socket ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.95s
+
+EXIT=0

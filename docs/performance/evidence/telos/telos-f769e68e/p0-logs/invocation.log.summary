@@ -1,0 +1,23 @@
+START 2026-11-02T02:12:09+01:00 load=4.83 12.65 15.62 5/2991 2732272
+STEP slice9-audit-index_if:rust:1 secs=0.23 load_before=4.83 load_after=4.83 exit=0
+STEP ignite_test-basics:rust:1 secs=0.28 load_before=4.83 load_after=4.83 exit=1
+STEP slice9-regions:rust:1 secs=7.09 load_before=4.83 load_after=4.55 exit=0
+STEP slice9-audit-index_if:llvm:1 secs=0.35 load_before=4.55 load_after=4.55 exit=0
+STEP ignite_test-basics:llvm:1 secs=0.37 load_before=4.55 load_after=4.55 exit=1
+STEP slice9-regions:llvm:1 secs=2.63 load_before=4.55 load_after=4.55 exit=0
+STEP slice9-audit-index_if:rust:2 secs=0.09 load_before=4.55 load_after=4.55 exit=0
+STEP ignite_test-basics:rust:2 secs=0.09 load_before=4.55 load_after=4.55 exit=1
+STEP slice9-regions:rust:2 secs=7.08 load_before=4.55 load_after=4.47 exit=0
+STEP slice9-audit-index_if:llvm:2 secs=0.17 load_before=4.47 load_after=4.47 exit=0
+STEP ignite_test-basics:llvm:2 secs=0.18 load_before=4.47 load_after=4.47 exit=1
+STEP slice9-regions:llvm:2 secs=3.66 load_before=4.47 load_after=5.88 exit=0
+STEP slice9-audit-index_if:rust:3 secs=0.19 load_before=5.88 load_after=5.88 exit=0
+STEP ignite_test-basics:rust:3 secs=0.29 load_before=5.88 load_after=5.88 exit=1
+STEP slice9-regions:rust:3 secs=8.69 load_before=5.88 load_after=5.81 exit=0
+STEP slice9-audit-index_if:llvm:3 secs=0.12 load_before=5.81 load_after=5.81 exit=0
+STEP ignite_test-basics:llvm:3 secs=0.12 load_before=5.81 load_after=5.81 exit=1
+STEP slice9-regions:llvm:3 secs=2.38 load_before=5.81 load_after=5.74 exit=0
+STEP cargo-noop-in-audit-target-dir:1 secs=0.01 load_before=5.74 load_after=5.74 exit=101
+STEP cargo-noop-in-audit-target-dir:2 secs=0.01 load_before=5.74 load_after=5.74 exit=101
+STEP cargo-noop-in-audit-target-dir:3 secs=0.01 load_before=5.74 load_after=5.74 exit=101
+EXIT=0

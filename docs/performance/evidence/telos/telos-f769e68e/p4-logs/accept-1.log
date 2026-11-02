@@ -1,0 +1,73 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+BUILD exit=0
+== item 4: two plan runs from two working directories, byte-identical and equal to the golden
+wd1 abs exit=0
+repo rel exit=0
+wd2 --out exit=0
+plan1 == plan2
+plan1 == plan3
+plan1 == golden
+fbdd944a0a8f951c799c02483ddbb4a73a34e1bba8057c5b73b51c81fa0bf38a  /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-build/accept/plan1.json
+fbdd944a0a8f951c799c02483ddbb4a73a34e1bba8057c5b73b51c81fa0bf38a  /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-build/accept/plan2.json
+fbdd944a0a8f951c799c02483ddbb4a73a34e1bba8057c5b73b51c81fa0bf38a  /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-build/accept/plan3.json
+fbdd944a0a8f951c799c02483ddbb4a73a34e1bba8057c5b73b51c81fa0bf38a  /home/timo/projects/telos/crates/ignite/tests/golden/terminal.design.model.json
+== item 5: no expression text, no quantity with a unit
+calls: 0
+units: 0
+resolution entries: 5; per member: {'Terminal.client': 1, 'Terminal.console': 1, 'Terminal.ingress': 1, 'Terminal.promptProbe': 1, 'Terminal.server': 1}
+resources and components: ['Terminal.client', 'Terminal.console', 'Terminal.ingress', 'Terminal.promptProbe', 'Terminal.server']
+each exactly once: True
+values walked: 97; encoding problems: 0
+keys: ['assembly', 'components', 'contracts', 'edges', 'formatVersion', 'policies', 'resources', 'sourceMap', 'systemId']; formatVersion: ignite-model/0.1
+== item 6: ignite check of the design file
+check exit=0
+== item 11: fixtures E110 to E119
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-scripts/accept.sh:30: no matches found: /home/timo/projects/telos/crates/ignite/tests/fixtures/*/*e110*
+e110: MISSING
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-scripts/accept.sh:30: no matches found: /home/timo/projects/telos/crates/ignite/tests/fixtures/*/*e111*
+e111: MISSING
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-scripts/accept.sh:30: no matches found: /home/timo/projects/telos/crates/ignite/tests/fixtures/*/*e112*
+e112: MISSING
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-scripts/accept.sh:30: no matches found: /home/timo/projects/telos/crates/ignite/tests/fixtures/*/*e113*
+e113: MISSING
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-scripts/accept.sh:30: no matches found: /home/timo/projects/telos/crates/ignite/tests/fixtures/*/*e114*
+e114: MISSING
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-scripts/accept.sh:30: no matches found: /home/timo/projects/telos/crates/ignite/tests/fixtures/*e115*
+e115: MISSING
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-scripts/accept.sh:30: no matches found: /home/timo/projects/telos/crates/ignite/tests/fixtures/*e116*
+e116: MISSING
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-scripts/accept.sh:30: no matches found: /home/timo/projects/telos/crates/ignite/tests/fixtures/*e117*
+e117: MISSING
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-scripts/accept.sh:30: no matches found: /home/timo/projects/telos/crates/ignite/tests/fixtures/*e118*
+e118: MISSING
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p4-scripts/accept.sh:30: no matches found: /home/timo/projects/telos/crates/ignite/tests/fixtures/*/*e119*
+e119: MISSING
+EXIT=0
+== item 7: explain goldens
+explain Terminal.reachable exit=0
+explain Terminal.reachable == golden
+explain Terminal.server.recovery exit=0
+explain Terminal.server.recovery == golden
+explain local exit=0
+explain local == golden
+== plan:: tests
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 11 tests
+test plan::design_model_has_no_expression_text ... ok
+test plan::todo_example_model_matches_golden ... ok
+test plan::terminal_example_model_matches_golden ... ok
+test plan::design_model_resolves_each_of_the_five_members_once ... ok
+test plan::design_model_is_canonical_and_every_value_is_encoded_as_15_4_says ... ok
+test plan::exit_statuses ... ok
+test plan::design_model_is_byte_identical_across_processes_and_directories ... ok
+test plan::e114_covers_an_unknown_assembly_name_and_check_passes ... ok
+test plan::explain_unknown_path_is_e119 ... ok
+test plan::explain_matches_the_goldens_of_15_8 ... ok
+test plan::fixtures_match_expected ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 147 filtered out; finished in 0.34s
+
+PLAN exit=0
+EXIT=0

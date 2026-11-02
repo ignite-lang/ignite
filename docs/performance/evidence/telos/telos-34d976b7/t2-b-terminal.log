@@ -1,0 +1,6 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/terminal; compiler messages refer to generated code
+   Compiling telos-std v0.0.0-b17c4000f1710f29 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/terminal/std)
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.68s
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/debug/terminald
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/debug/tn

@@ -1,0 +1,31 @@
+`telos build --target llvm FILE --out DIR [--clang PATH] [--runtime PATH] [--release]`:
+writes `DIR/llvm/{std.ll, program.ll, main_<exe>.ll}`, runs
+`clang -c -O1 -ffunction-sections -fdata-sections -Wno-override-module` (`-O2` with
+`--release`) on each, links each executable with
+`clang -o DIR/bin/<exe> main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug] -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
+(`-Wl,--strip-debug` with `--release` only, as cargo's release profile drops debug
+information; the libraries are the list `cargo rustc -p telos-rt --print native-static-libs`
+prints, fixed in the driver), and prints `built DIR/bin/<exe>`. Exit statuses as for the Rust
+target; 2 also when clang fails (its output passed through).
+
+Size. Every function and datum is in its own section (rustc emits the runtime's code that
+way by default), so `--gc-sections` drops what no executable reaches, tokio code of
+`telos-io` included. The workspace builds `telos-rt` with `codegen-units = 1` in the release
+profile.
+
+Cache. A `.ll` file is rewritten only when its text changed. After a step succeeds the driver
+writes a stamp to `DIR/llvm`: `<unit>.o.stamp` holds the clang command and a hash of the
+unit's IR text, `<exe>.link.stamp` the link command, the stamps of its three objects and the
+runtime archive's canonical path, size and modification time. A step whose output exists and
+whose stamp equals the one the current build would write is skipped, so an unchanged rebuild
+runs no clang, and an edit to the program recompiles `program.ll` and relinks. The stamp is
+deleted before its step runs, so a failed step runs again. A clang upgraded in place under
+the same path is not noticed; delete `DIR/llvm`.
+
+`--clang` defaults to `clang` on `PATH`. `--runtime` defaults to the first file of: (1)
+`libtelos_rt.a` in the directory of the running executable, which `cargo build -p telos-rt`
+writes next to `target/<profile>/telos`; (2) `libtelos_rt.a` in that directory's parent, for
+a driver running in a test binary in `target/<profile>/deps`. When neither exists the error
+(exit 3) names the first. Tests pass `--runtime` with the newest `deps/libtelos_rt-*.a`,
+because a test build does not refresh the top-level copy. `task bench` prints sizes, build
+times and startup time of both targets.

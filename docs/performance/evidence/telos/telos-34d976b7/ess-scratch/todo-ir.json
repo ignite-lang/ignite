@@ -1,0 +1,901 @@
+{
+  "system": "todo",
+  "version": 1,
+  "naming": {},
+  "summary": "A todo list kept in memory by one HTTP service.",
+  "domains": {
+    "todo.list": {
+      "name": "todo.list",
+      "naming": {
+        "summary": "A todo list kept in memory by one HTTP service."
+      },
+      "types": [
+        "todo.list.Title",
+        "todo.list.Todo.State",
+        "todo.list.TodoId"
+      ],
+      "entities": [
+        "todo.list.Todo"
+      ],
+      "commands": [
+        "todo.list.CreateTodo",
+        "todo.list.DeleteTodo",
+        "todo.list.GetTodo",
+        "todo.list.UpdateTodo"
+      ],
+      "events": [
+        "todo.list.TodoChanged",
+        "todo.list.TodoCreated",
+        "todo.list.TodoDeleted"
+      ],
+      "errors": [
+        "todo.list.TodoNotFound"
+      ],
+      "views": [
+        "todo.list.Todos"
+      ],
+      "actors": []
+    }
+  },
+  "types": {
+    "todo.list.Title": {
+      "name": "todo.list.Title",
+      "body": {
+        "kind": "newtype",
+        "of": {
+          "kind": "primitive",
+          "name": "string"
+        },
+        "invariants": []
+      },
+      "naming": {}
+    },
+    "todo.list.Todo.State": {
+      "name": "todo.list.Todo.State",
+      "body": {
+        "kind": "enum",
+        "variants": [
+          "Kept"
+        ]
+      },
+      "naming": {}
+    },
+    "todo.list.TodoId": {
+      "name": "todo.list.TodoId",
+      "body": {
+        "kind": "newtype",
+        "of": {
+          "kind": "primitive",
+          "name": "integer"
+        },
+        "invariants": []
+      },
+      "naming": {}
+    }
+  },
+  "conversions": [],
+  "entities": {
+    "todo.list.Todo": {
+      "name": "todo.list.Todo",
+      "domain": "todo.list",
+      "identity": {
+        "name": "id",
+        "type_ref": {
+          "kind": "declared",
+          "name": "todo.list.TodoId"
+        },
+        "naming": {}
+      },
+      "fields": [
+        {
+          "name": "title",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.Title"
+          },
+          "naming": {}
+        },
+        {
+          "name": "done",
+          "type_ref": {
+            "kind": "primitive",
+            "name": "boolean"
+          },
+          "naming": {}
+        }
+      ],
+      "state_type": "todo.list.Todo.State",
+      "lifecycle": {
+        "states": [
+          "Kept"
+        ],
+        "initial": "Kept",
+        "terminal": [
+          "Kept"
+        ]
+      },
+      "invariants": [],
+      "naming": {}
+    }
+  },
+  "commands": {
+    "todo.list.CreateTodo": {
+      "name": "todo.list.CreateTodo",
+      "domain": "todo.list",
+      "input": [
+        {
+          "name": "title",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.Title"
+          },
+          "naming": {}
+        },
+        {
+          "name": "done",
+          "type_ref": {
+            "kind": "optional",
+            "of": {
+              "kind": "primitive",
+              "name": "boolean"
+            }
+          },
+          "naming": {
+            "presence": "omitted_when_absent"
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "name": "created-with-done",
+          "condition": {
+            "kind": "when",
+            "predicate": "defined(done)"
+          },
+          "subject": {
+            "entity": "todo.list.Todo",
+            "effect": "creates",
+            "instance": {
+              "from": "observed",
+              "event": "todo.list.TodoCreated",
+              "field": {
+                "name": "id",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.TodoId"
+                },
+                "naming": {}
+              }
+            }
+          },
+          "test_strategy": "construct_input",
+          "emits": [
+            "todo.list.TodoCreated"
+          ],
+          "payload": [
+            {
+              "event": "todo.list.TodoCreated",
+              "fields": [
+                {
+                  "target": "id",
+                  "target_type": {
+                    "kind": "declared",
+                    "name": "todo.list.TodoId"
+                  },
+                  "value": {
+                    "kind": "generated"
+                  }
+                },
+                {
+                  "target": "title",
+                  "target_type": {
+                    "kind": "declared",
+                    "name": "todo.list.Title"
+                  },
+                  "value": {
+                    "kind": "input_field",
+                    "field": "title",
+                    "type_ref": {
+                      "kind": "declared",
+                      "name": "todo.list.Title"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "sets": [
+            {
+              "target": "title",
+              "target_type": {
+                "kind": "declared",
+                "name": "todo.list.Title"
+              },
+              "value": {
+                "kind": "input_field",
+                "field": "title",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.Title"
+                }
+              }
+            },
+            {
+              "target": "done",
+              "target_type": {
+                "kind": "primitive",
+                "name": "boolean"
+              },
+              "value": {
+                "kind": "input_field",
+                "field": "done",
+                "type_ref": {
+                  "kind": "primitive",
+                  "name": "boolean"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "created",
+          "condition": {
+            "kind": "otherwise"
+          },
+          "subject": {
+            "entity": "todo.list.Todo",
+            "effect": "creates",
+            "instance": {
+              "from": "observed",
+              "event": "todo.list.TodoCreated",
+              "field": {
+                "name": "id",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.TodoId"
+                },
+                "naming": {}
+              }
+            }
+          },
+          "test_strategy": "default_branch",
+          "emits": [
+            "todo.list.TodoCreated"
+          ],
+          "payload": [
+            {
+              "event": "todo.list.TodoCreated",
+              "fields": [
+                {
+                  "target": "id",
+                  "target_type": {
+                    "kind": "declared",
+                    "name": "todo.list.TodoId"
+                  },
+                  "value": {
+                    "kind": "generated"
+                  }
+                },
+                {
+                  "target": "title",
+                  "target_type": {
+                    "kind": "declared",
+                    "name": "todo.list.Title"
+                  },
+                  "value": {
+                    "kind": "input_field",
+                    "field": "title",
+                    "type_ref": {
+                      "kind": "declared",
+                      "name": "todo.list.Title"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "sets": [
+            {
+              "target": "title",
+              "target_type": {
+                "kind": "declared",
+                "name": "todo.list.Title"
+              },
+              "value": {
+                "kind": "input_field",
+                "field": "title",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.Title"
+                }
+              }
+            },
+            {
+              "target": "done",
+              "target_type": {
+                "kind": "primitive",
+                "name": "boolean"
+              },
+              "value": {
+                "kind": "literal",
+                "value": "false"
+              }
+            }
+          ]
+        }
+      ],
+      "naming": {}
+    },
+    "todo.list.DeleteTodo": {
+      "name": "todo.list.DeleteTodo",
+      "domain": "todo.list",
+      "input": [
+        {
+          "name": "id",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.TodoId"
+          },
+          "naming": {}
+        }
+      ],
+      "outcomes": [
+        {
+          "name": "not-found",
+          "condition": {
+            "kind": "unknown_instance"
+          },
+          "test_strategy": "send_unknown_identity",
+          "emits": [],
+          "error": "todo.list.TodoNotFound"
+        },
+        {
+          "name": "deleted",
+          "condition": {
+            "kind": "otherwise"
+          },
+          "subject": {
+            "entity": "todo.list.Todo",
+            "effect": "deletes",
+            "instance": {
+              "from": "supplied",
+              "field": {
+                "name": "id",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.TodoId"
+                },
+                "naming": {}
+              }
+            }
+          },
+          "test_strategy": "default_branch",
+          "emits": [
+            "todo.list.TodoDeleted"
+          ],
+          "payload": [
+            {
+              "event": "todo.list.TodoDeleted",
+              "fields": [
+                {
+                  "target": "id",
+                  "target_type": {
+                    "kind": "declared",
+                    "name": "todo.list.TodoId"
+                  },
+                  "value": {
+                    "kind": "input_field",
+                    "field": "id",
+                    "type_ref": {
+                      "kind": "declared",
+                      "name": "todo.list.TodoId"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "naming": {}
+    },
+    "todo.list.GetTodo": {
+      "name": "todo.list.GetTodo",
+      "domain": "todo.list",
+      "input": [
+        {
+          "name": "id",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.TodoId"
+          },
+          "naming": {}
+        }
+      ],
+      "outcomes": [
+        {
+          "name": "not-found",
+          "condition": {
+            "kind": "unknown_instance"
+          },
+          "test_strategy": "send_unknown_identity",
+          "emits": [],
+          "error": "todo.list.TodoNotFound"
+        },
+        {
+          "name": "found",
+          "condition": {
+            "kind": "otherwise"
+          },
+          "subject": {
+            "entity": "todo.list.Todo",
+            "effect": "preserves",
+            "instance": {
+              "from": "supplied",
+              "field": {
+                "name": "id",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.TodoId"
+                },
+                "naming": {}
+              }
+            }
+          },
+          "test_strategy": "default_branch",
+          "emits": []
+        }
+      ],
+      "naming": {}
+    },
+    "todo.list.UpdateTodo": {
+      "name": "todo.list.UpdateTodo",
+      "domain": "todo.list",
+      "input": [
+        {
+          "name": "id",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.TodoId"
+          },
+          "naming": {}
+        },
+        {
+          "name": "title",
+          "type_ref": {
+            "kind": "optional",
+            "of": {
+              "kind": "declared",
+              "name": "todo.list.Title"
+            }
+          },
+          "naming": {
+            "presence": "omitted_when_absent"
+          }
+        },
+        {
+          "name": "done",
+          "type_ref": {
+            "kind": "optional",
+            "of": {
+              "kind": "primitive",
+              "name": "boolean"
+            }
+          },
+          "naming": {
+            "presence": "omitted_when_absent"
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "name": "not-found",
+          "condition": {
+            "kind": "unknown_instance"
+          },
+          "test_strategy": "send_unknown_identity",
+          "emits": [],
+          "error": "todo.list.TodoNotFound"
+        },
+        {
+          "name": "updated-both",
+          "condition": {
+            "kind": "when",
+            "predicate": {
+              "all": [
+                "defined(title)",
+                "defined(done)"
+              ]
+            }
+          },
+          "subject": {
+            "entity": "todo.list.Todo",
+            "effect": "updates",
+            "instance": {
+              "from": "supplied",
+              "field": {
+                "name": "id",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.TodoId"
+                },
+                "naming": {}
+              }
+            }
+          },
+          "test_strategy": "construct_input",
+          "emits": [
+            "todo.list.TodoChanged"
+          ],
+          "payload": [
+            {
+              "event": "todo.list.TodoChanged",
+              "fields": [
+                {
+                  "target": "id",
+                  "target_type": {
+                    "kind": "declared",
+                    "name": "todo.list.TodoId"
+                  },
+                  "value": {
+                    "kind": "input_field",
+                    "field": "id",
+                    "type_ref": {
+                      "kind": "declared",
+                      "name": "todo.list.TodoId"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "sets": [
+            {
+              "target": "title",
+              "target_type": {
+                "kind": "declared",
+                "name": "todo.list.Title"
+              },
+              "value": {
+                "kind": "input_field",
+                "field": "title",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.Title"
+                }
+              }
+            },
+            {
+              "target": "done",
+              "target_type": {
+                "kind": "primitive",
+                "name": "boolean"
+              },
+              "value": {
+                "kind": "input_field",
+                "field": "done",
+                "type_ref": {
+                  "kind": "primitive",
+                  "name": "boolean"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "updated-title",
+          "condition": {
+            "kind": "when",
+            "predicate": {
+              "all": [
+                "defined(title)",
+                {
+                  "not": "defined(done)"
+                }
+              ]
+            }
+          },
+          "subject": {
+            "entity": "todo.list.Todo",
+            "effect": "updates",
+            "instance": {
+              "from": "supplied",
+              "field": {
+                "name": "id",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.TodoId"
+                },
+                "naming": {}
+              }
+            }
+          },
+          "test_strategy": "construct_input",
+          "emits": [
+            "todo.list.TodoChanged"
+          ],
+          "payload": [
+            {
+              "event": "todo.list.TodoChanged",
+              "fields": [
+                {
+                  "target": "id",
+                  "target_type": {
+                    "kind": "declared",
+                    "name": "todo.list.TodoId"
+                  },
+                  "value": {
+                    "kind": "input_field",
+                    "field": "id",
+                    "type_ref": {
+                      "kind": "declared",
+                      "name": "todo.list.TodoId"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "sets": [
+            {
+              "target": "title",
+              "target_type": {
+                "kind": "declared",
+                "name": "todo.list.Title"
+              },
+              "value": {
+                "kind": "input_field",
+                "field": "title",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.Title"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "updated-done",
+          "condition": {
+            "kind": "when",
+            "predicate": {
+              "all": [
+                {
+                  "not": "defined(title)"
+                },
+                "defined(done)"
+              ]
+            }
+          },
+          "subject": {
+            "entity": "todo.list.Todo",
+            "effect": "updates",
+            "instance": {
+              "from": "supplied",
+              "field": {
+                "name": "id",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.TodoId"
+                },
+                "naming": {}
+              }
+            }
+          },
+          "test_strategy": "construct_input",
+          "emits": [
+            "todo.list.TodoChanged"
+          ],
+          "payload": [
+            {
+              "event": "todo.list.TodoChanged",
+              "fields": [
+                {
+                  "target": "id",
+                  "target_type": {
+                    "kind": "declared",
+                    "name": "todo.list.TodoId"
+                  },
+                  "value": {
+                    "kind": "input_field",
+                    "field": "id",
+                    "type_ref": {
+                      "kind": "declared",
+                      "name": "todo.list.TodoId"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "sets": [
+            {
+              "target": "done",
+              "target_type": {
+                "kind": "primitive",
+                "name": "boolean"
+              },
+              "value": {
+                "kind": "input_field",
+                "field": "done",
+                "type_ref": {
+                  "kind": "primitive",
+                  "name": "boolean"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "unchanged",
+          "condition": {
+            "kind": "when",
+            "predicate": {
+              "all": [
+                {
+                  "not": "defined(title)"
+                },
+                {
+                  "not": "defined(done)"
+                }
+              ]
+            }
+          },
+          "subject": {
+            "entity": "todo.list.Todo",
+            "effect": "preserves",
+            "instance": {
+              "from": "supplied",
+              "field": {
+                "name": "id",
+                "type_ref": {
+                  "kind": "declared",
+                  "name": "todo.list.TodoId"
+                },
+                "naming": {}
+              }
+            }
+          },
+          "test_strategy": "construct_input",
+          "emits": []
+        }
+      ],
+      "naming": {}
+    }
+  },
+  "events": {
+    "todo.list.TodoChanged": {
+      "name": "todo.list.TodoChanged",
+      "domain": "todo.list",
+      "fields": [
+        {
+          "name": "id",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.TodoId"
+          },
+          "naming": {}
+        }
+      ],
+      "naming": {}
+    },
+    "todo.list.TodoCreated": {
+      "name": "todo.list.TodoCreated",
+      "domain": "todo.list",
+      "fields": [
+        {
+          "name": "id",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.TodoId"
+          },
+          "naming": {}
+        },
+        {
+          "name": "title",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.Title"
+          },
+          "naming": {}
+        }
+      ],
+      "naming": {}
+    },
+    "todo.list.TodoDeleted": {
+      "name": "todo.list.TodoDeleted",
+      "domain": "todo.list",
+      "fields": [
+        {
+          "name": "id",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.TodoId"
+          },
+          "naming": {}
+        }
+      ],
+      "naming": {}
+    }
+  },
+  "errors": {
+    "todo.list.TodoNotFound": {
+      "name": "todo.list.TodoNotFound",
+      "domain": "todo.list",
+      "summary": "No todo has this id.",
+      "fields": [
+        {
+          "name": "id",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.TodoId"
+          },
+          "naming": {}
+        }
+      ]
+    }
+  },
+  "views": {
+    "todo.list.Todos": {
+      "name": "todo.list.Todos",
+      "domain": "todo.list",
+      "source": "todo.list.Todo",
+      "fields": [
+        {
+          "name": "id",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.TodoId"
+          },
+          "naming": {}
+        },
+        {
+          "name": "title",
+          "type_ref": {
+            "kind": "declared",
+            "name": "todo.list.Title"
+          },
+          "naming": {}
+        },
+        {
+          "name": "done",
+          "type_ref": {
+            "kind": "primitive",
+            "name": "boolean"
+          },
+          "naming": {}
+        }
+      ],
+      "order_by": [
+        "id asc"
+      ],
+      "consistency": "read_your_writes",
+      "assertion_style": "expect",
+      "naming": {}
+    }
+  },
+  "actors": {},
+  "bindings": {},
+  "components": {
+    "todo-service": {
+      "name": "todo-service",
+      "owns": [
+        "todo.list"
+      ],
+      "accepts": [
+        "todo.list.CreateTodo",
+        "todo.list.DeleteTodo",
+        "todo.list.GetTodo",
+        "todo.list.UpdateTodo"
+      ],
+      "publishes": [
+        "todo.list.TodoChanged",
+        "todo.list.TodoCreated",
+        "todo.list.TodoDeleted"
+      ],
+      "reached_by": "network",
+      "naming": {}
+    }
+  },
+  "workloads": {}
+}

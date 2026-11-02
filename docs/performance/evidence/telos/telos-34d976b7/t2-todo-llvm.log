@@ -1,0 +1,34 @@
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+     Running tests/todo.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/todo-167d56b148cb3c1b)
+
+running 18 tests
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-std v0.0.0-3fad3642c68a159e (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/std-probe/std)
+   Compiling telos-std v0.0.0-414c063a99a743c3 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/todo/std)
+   Compiling std_probe v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/std-probe)
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/todo)
+test probe::llvm::std_modules ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.79s
+test probe::rust::std_modules ... ok
+test todo::llvm::keep_alive ... ok
+test todo::llvm::limits ... ok
+test todo::llvm::crud_flow ... ok
+test todo::llvm::header_framing ... ok
+test todo::llvm::error_statuses ... ok
+test todo::llvm::content_length ... ok
+test todo::llvm::rejection_is_read ... ok
+test todo::llvm::concurrent_posts ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.90s
+test todo::rust::keep_alive ... ok
+test todo::rust::limits ... ok
+test todo::rust::crud_flow ... ok
+test todo::rust::error_statuses ... ok
+test todo::rust::content_length ... ok
+test todo::rust::header_framing ... ok
+test todo::rust::rejection_is_read ... ok
+test todo::rust::concurrent_posts ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+

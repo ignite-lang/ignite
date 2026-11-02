@@ -1,0 +1,13 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-rust-c; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling telos-io v0.1.0 (/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/tree/crates/telos-io)
+   Compiling telos-std v0.0.0-dd8d6c8b4f5f2d96 (/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-rust-c/std)
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-rust-c)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.94s
+built /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/target-rust-c/debug/todod

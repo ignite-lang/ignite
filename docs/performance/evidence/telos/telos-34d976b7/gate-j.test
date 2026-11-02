@@ -1,0 +1,66 @@
+   Compiling telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+   Compiling telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.59s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/telos-cb7fcf36cd2d3abd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/telos-9dba8a5761bf3c85)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cli.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/cli-6313fcaed0437d32)
+
+running 18 tests
+test default_substrate_is_the_sibling_crate ... ok
+test default_std_is_the_repository_std ... ok
+test missing_std_root_is_exit_3 ... ok
+test no_arguments_is_exit_2 ... ok
+test std_diagnostic_is_rendered_with_its_file ... ok
+test std_file_without_package_is_e031 ... ok
+test check_reports_unsupported_component_kind ... ok
+test missing_file_is_exit_3 ... ok
+test emit_with_std_fixture ... ok
+test emit_prints_the_program_and_the_std_crate ... ok
+test emit_uses_given_substrate ... ok
+test check_acceptance_program_is_silent ... ok
+test check_unknown_name_is_e003 ... ok
+test std_import_cycle_is_e032 ... ok
+test std_package_mismatch_is_e031_in_the_std_file ... ok
+test std_modules_are_checked_in_import_order ... ok
+test client_exit_statuses ... ok
+test build_std_and_program_then_run_both_executables ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.39s
+
+     Running tests/llvm.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/llvm-4a4ef380266c606f)
+
+running 5 tests
+test clang_failure_is_exit_2 ... ok
+test llvm_build_runs_neither_cargo_nor_rustc ... FAILED
+test client_exits_3_when_nothing_listens ... ok
+test index_out_of_range_panics_with_101 ... ok
+test probe_runs_every_check ... ok
+
+failures:
+
+---- llvm_build_runs_neither_cargo_nor_rustc stdout ----
+
+thread 'llvm_build_runs_neither_cargo_nor_rustc' (1908251) panicked at crates/telos/tests/llvm.rs:200:9:
+assertion failed: names.contains(" T examples.terminal.execute")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    llvm_build_runs_neither_cargo_nor_rustc
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.33s
+
+error: test failed, to rerun pass `-p telos --test llvm`

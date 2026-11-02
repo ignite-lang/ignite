@@ -1,0 +1,304 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::assert_and_try_reports ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 0.48s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::assert_and_try_reports ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 0.86s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::both_targets_print_the_same_report ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 0.35s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::both_targets_print_the_same_report ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 0.66s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::captured_output_only_for_failures ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 0.21s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::captured_output_only_for_failures ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 0.51s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::compile_error_exits_2 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 0.20s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::compile_error_exits_2 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 0.21s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::counts_results_and_failures ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 0.39s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::counts_results_and_failures ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 0.75s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 2.70s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 3.27s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::endpoint_of_reads_the_ref_binding_on_both_targets ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 1.50s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::files_share_one_executable ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 1.10s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::files_share_one_executable ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 1.39s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::filter_exact_and_list ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 1.90s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::filter_exact_and_list ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 4.88s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 2.53s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 3.06s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::std_module_as_the_file ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 0.81s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::std_module_as_the_file ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 0.53s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::substrate_builtins_run_on_both_targets ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 1.66s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 1.50s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 1.87s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 1 test
+test ignite_test::timeout_kills_a_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 165 filtered out; finished in 2.06s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test ignite_test::timeout_kills_a_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 2.46s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-before/debug/deps/main-6eaf5699a056c807)
+
+running 12 tests
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test ignite_test::files_share_one_executable ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::compile_error_exits_2 ... ok
+test ignite_test::std_module_as_the_file ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 154 filtered out; finished in 11.87s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 14 tests
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::endpoint_of_reads_the_ref_binding_on_both_targets ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... ok
+test ignite_test::compile_error_exits_2 ... ok
+test ignite_test::substrate_builtins_run_on_both_targets ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test ignite_test::std_module_as_the_file ... ok
+test ignite_test::files_share_one_executable ... ok
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 177 filtered out; finished in 15.55s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 14 tests
+test run::e126_journal_mismatch ... ok
+test run::e125_nothing_to_run ... ok
+test run::exhausted_restarts_give_up_and_stop_exits_1 ... ok
+test run::zero_attempts_give_insufficient_evidence ... ok
+test run::pinned_port_survives_a_restart ... ok
+test run::killing_terminald_restarts_it_within_backoff ... ok
+test run::killing_terminald_restarts_it_in_real_time ... ok
+test run::e128_reducer_failed ... ok
+test run::e127_replay_diverged ... ok
+test run::terminal_runs_under_ignite_run_on_the_llvm_target ... ok
+test run::terminal_runs_under_ignite_run ... ok
+test run::good_attempts_across_the_period_fire_no_consequence ... ok
+test run::two_manual_runs_give_equal_journals_after_masking ... ok
+test run::probe_timeout_is_visible_in_journal_and_standing ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 177 filtered out; finished in 4.00s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 3 tests
+test drain::an_open_session_survives_sigterm_and_new_connects_are_refused ... ok
+test drain::rollout_drains_the_old_process_and_starts_the_new_llvm ... ok
+test drain::rollout_drains_the_old_process_and_starts_the_new_rust ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 188 filtered out; finished in 1.98s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 3 tests
+test control_trace::a7_evaluator_steps_10000_emissions_into_a_30_day_window ... ignored
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test control_trace::reducers_agree_across_the_evaluator_and_both_targets ... ok
+test control_trace::a7_evaluator_steps_1000_emissions_into_a_30_day_window ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 188 filtered out; finished in 0.97s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4-after2/debug/deps/main-90b129b53e45974f)
+
+running 3 tests
+test decode::decode_errors_name_the_path ... ok
+test decode::machines_of_the_design_model_round_trip ... ok
+test decode::events_effects_and_standings_of_the_trace_round_trip ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 188 filtered out; finished in 0.31s
+

@@ -1,0 +1,11 @@
+START 2026-11-02T02:10:39+01:00 file=failover load=6.66 15.50 16.75 3/2951 2690303
+   0.010 +  0.010     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.011 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.012 +  0.001 
+   0.012 +  0.000 running 2 tests
+   0.106 +  0.094 test failover::a_failing_session_does_not_end_the_service ... ok
+   0.605 +  0.499 test failover::ten_thousand_failing_sessions_leak_nothing ... ok
+   0.605 +  0.000 
+   0.605 +  0.000 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 144 filtered out; finished in 0.59s
+   0.605 +  0.000 
+END load=6.66 15.50 16.75 2/2950 2690329

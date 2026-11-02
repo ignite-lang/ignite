@@ -1,0 +1,11 @@
+FMT=1
+CLIPPY=0
+TEST=101
+TELOS=0
+cargo_tests passed=522 failed=2 ignored=3
+test golden::small_program ... FAILED
+test golden::syntax_program ... FAILED
+test result: FAILED. 12 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.02s
+test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.02s
+EXIT=0

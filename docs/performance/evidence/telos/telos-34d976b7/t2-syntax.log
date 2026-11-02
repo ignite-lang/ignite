@@ -1,0 +1,14 @@
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running tests/syntax.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/syntax-a163620bc153578a)
+
+running 2 tests
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/syntax-rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.59s
+test rust_target_runs_every_feature ... ok
+test llvm_target_runs_every_feature ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.45s
+
+EXIT=0

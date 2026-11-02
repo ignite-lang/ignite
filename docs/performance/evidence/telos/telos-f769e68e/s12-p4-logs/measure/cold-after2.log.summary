@@ -1,0 +1,11 @@
+START 2026-11-02T06:51:50+01:00 tree=after2 load=14.59 17.82 15.95 4/3356 2140915 free=72G
+STEP tree=after label=gate-fmt pair=0 secs=0.52 load_before=14.59 load_after=14.59 exit=0
+STEP tree=after label=gate-clippy pair=0 secs=6.54 load_before=14.59 load_after=13.98 exit=0
+STEP tree=after label=gate-test pair=0 secs=60.43 load_before=13.98 load_after=10.56 exit=0
+STEP tree=after label=gate-test-ignite pair=0 secs=10.57 load_before=10.56 load_after=9.56 exit=0
+STEP tree=after2 label=gate-cold-total pair=0 secs=78.08 load_before=14.59 load_after=9.56 exit=0
+COUNTS tree=after2 passed=932 failed=0 ignored=5
+INLINE tree=after2 running 148 tests running 148 tests 
+EXECUTABLES tree=after2 count=21 bytes=264504944
+STEP tree=after label=prep-rt-release pair=0 secs=5.55 load_before=9.56 load_after=11.10 exit=0
+EXIT=0 failed_steps=[] free=88G

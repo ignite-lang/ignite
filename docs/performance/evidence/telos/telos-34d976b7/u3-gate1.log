@@ -1,0 +1,13 @@
+task: [check] cargo fmt --all -- --check
+Diff in /home/timo/projects/telos/crates/telos-types/src/typer.rs:161:
+                 || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "Store") && name.name == "new")
+         }
+         ExprKind::Method { receiver, name, .. } => {
+[31m-            is(receiver, "List") && name.name == "empty" || is(receiver, "Store") && name.name == "new"
+(B[m[32m+            is(receiver, "List") && name.name == "empty"
+(B[m[32m+                || is(receiver, "Store") && name.name == "new"
+(B[m         }
+         ExprKind::Block(block) => block_needs_expected(block, ambiguous),
+         ExprKind::If { then, .. } => block_needs_expected(then, ambiguous),
+task: Failed to run task "gate": task: Failed to run task "check": exit status 1
+EXIT=201

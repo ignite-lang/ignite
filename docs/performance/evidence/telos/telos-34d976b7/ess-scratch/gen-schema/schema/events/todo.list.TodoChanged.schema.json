@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TodoChanged payload",
+  "x-ess-name": "todo.list.TodoChanged",
+  "x-ess-kind": "event-payload",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/todo.list.TodoId"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "todo",
+    "specification_version": "v1",
+    "source_digest": "4fab963621d47043d38543f5141de315c8b798f376db1be3379011617c426950",
+    "contract_digest": "slice-sha256/2:1c0b496e5cc9c73f7966ccaa0392204cecef113ca8d1d64b00261ce50b0980a5",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "todo.list.TodoId": {
+      "title": "TodoId",
+      "x-ess-name": "todo.list.TodoId",
+      "x-ess-kind": "newtype",
+      "type": "integer"
+    }
+  }
+}

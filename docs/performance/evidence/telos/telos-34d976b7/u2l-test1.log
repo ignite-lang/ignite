@@ -1,0 +1,45 @@
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+   Compiling telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.16s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j2/debug/deps/telos_llvm-327c531d839c1b7e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/golden.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j2/debug/deps/golden-eb5b01fcb24cddfc)
+
+running 5 tests
+test loops_release_their_region ... ok
+test symbols_are_module_qualified ... ok
+test read_only_parameters_are_borrowed ... ok
+test small_program ... ok
+test syntax_program ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/layout.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j2/debug/deps/layout-23e1f102136cf5a8)
+
+running 6 tests
+test copy_glue_only_where_buffers_are ... ok
+test runtime_types_match_the_layouts ... ok
+test enums_are_tag_and_payload ... ok
+test records_have_c_layout ... ok
+test scalars_and_builtins ... ok
+test type_names_in_symbols ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_llvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT=0

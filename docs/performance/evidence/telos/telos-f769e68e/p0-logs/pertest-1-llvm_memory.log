@@ -1,0 +1,13 @@
+START 2026-11-02T02:10:39+01:00 file=llvm_memory load=6.66 15.50 16.75 2/2951 2690270
+   0.010 +  0.010     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.011 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.012 +  0.001 
+   0.012 +  0.000 running 4 tests
+   0.169 +  0.157 test llvm_memory::loop_regions_keep_carried_values ... ok
+   0.271 +  0.102 test llvm_memory::pushing_in_a_loop_is_linear ... ok
+   0.546 +  0.275 test llvm_memory::terminald_memory_is_flat_over_a_long_session ... ok
+   0.753 +  0.207 test llvm_memory::tn_memory_is_flat_over_a_long_session ... ok
+   0.753 +  0.000 
+   0.753 +  0.000 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 142 filtered out; finished in 0.74s
+   0.753 +  0.000 
+END load=6.66 15.50 16.75 3/2951 2690301

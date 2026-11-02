@@ -1,0 +1,2 @@
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p9_generics.telos:47:31: error[E045]: operator `==` is not defined for `Input`
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/p9_generics.telos:49:51: error[E045]: operator `==` is not defined for `Option<Int>`

@@ -1,0 +1,26 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling ignite-syntax v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-before/crates/ignite-syntax)
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling utf8parse v0.2.2
+   Compiling anstyle v1.0.14
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+   Compiling clap_lex v1.1.1
+   Compiling heck v0.5.0
+   Compiling strsim v0.11.1
+   Compiling anstyle-parse v1.0.0
+   Compiling anstream v1.0.0
+   Compiling clap_builder v4.6.7
+   Compiling ignite-check v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-before/crates/ignite-check)
+   Compiling syn v3.0.9
+   Compiling ignite-types v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-before/crates/ignite-types)
+   Compiling clap_derive v4.6.7
+   Compiling ignite-eval v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-before/crates/ignite-eval)
+   Compiling ignite-llvm v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-before/crates/ignite-llvm)
+   Compiling ignite-rustgen v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-before/crates/ignite-rustgen)
+   Compiling clap v4.6.7
+   Compiling ignite v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-before/crates/ignite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.12s
+EXIT=0

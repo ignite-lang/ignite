@@ -1,0 +1,367 @@
+package std.protocol.http
+
+import std.net.TcpStream
+import std.io.IoError
+import std.text.{bytes_find_from, split, split_once, contains, to_lower, is_digit}
+import std.json.{Json, encode}
+
+// HTTP/1.1 server (RFC 9112) over one TCP stream: requests with a
+// `Content-Length` body, keep-alive until the client asks to close, and a
+// fixed set of limits. A head over 8 KiB is answered 431, a body over
+// 1 MiB 413, a malformed request 400 and any `Transfer-Encoding` 501 (only
+// `Content-Length` framing is implemented, RFC 9112 section 6.1). Each of
+// those closes the connection after a lingering close: the reply is
+// written, the write half shut down, and up to 64 KiB of input drained for
+// at most 1 s, so the client reads the reply instead of a reset. A
+// connection idle for 30 s is closed.
+//
+// The head is parsed strictly, so a proxy in front cannot frame a request
+// differently (RFC 9112 sections 2.2, 5 and 6.3): a bare CR or LF, a
+// header name that is not a token (whitespace before the colon, a line
+// starting with whitespace), a control byte in a value, a repeated
+// `Content-Length` or one that is not 1 to 18 digits are all 400. A
+// response whose header name or value holds CR or LF is replaced by 500.
+
+type IoResult<T> = Result<T, IoError>
+
+// One request. `path` is the target without its query, `query` the text
+// after `?`; header names are in lower case, values trimmed.
+type Request {
+  method: Text
+  path: Text
+  query: Text
+  version: Text
+  headers: List<(Text, Text)>
+  body: Text
+}
+
+type Response {
+  status: Int
+  headers: List<(Text, Text)> = []
+  body: Text = ""
+}
+
+// What a server runs: shared state, and the handler called once per
+// request with that state.
+type HttpApp<S> {
+  state: S
+  handle: fn(state: S, request: Request) -> Response requires [state.*]
+}
+
+const MAXIMUM_HEAD: Int = 8192
+const MAXIMUM_BODY: Int = 1048576
+const IDLE_TIMEOUT_MS: Int = 30000
+const READ_SIZE: Int = 65536
+const MAXIMUM_DRAIN: Int = 65536
+const DRAIN_TIMEOUT_MS: Int = 1000
+const MAXIMUM_LENGTH_DIGITS: Int = 18
+
+protocol Http {
+  fn serve<S>(stream: TcpStream, application: HttpApp<S>) -> IoResult<Unit> requires [
+    stream.read, stream.write, application.*
+  ] {
+    stream.set_idle_timeout(IDLE_TIMEOUT_MS)?
+    let result = session(stream, application)
+    _ = stream.close()
+    result
+  }
+}
+
+// ---- responses ----------------------------------------------------------
+
+fn reason(status: Int) -> Text = match status {
+  200 => "OK"
+  201 => "Created"
+  204 => "No Content"
+  400 => "Bad Request"
+  404 => "Not Found"
+  405 => "Method Not Allowed"
+  413 => "Content Too Large"
+  431 => "Request Header Fields Too Large"
+  500 => "Internal Server Error"
+  501 => "Not Implemented"
+  _ => "Unknown"
+}
+
+// A JSON response: `json(201, value)`.
+fn json(status: Int, value: Json) -> Response =
+  Response { status, headers = [("Content-Type", "application/json")], body = encode(value) }
+
+// A plain-text response.
+fn plain(status: Int, body: Text) -> Response =
+  Response { status, headers = [("Content-Type", "text/plain; charset=utf-8")], body }
+
+// A response whose body is the reason phrase; 204 has no body.
+fn status_response(status: Int) -> Response =
+  if status == 204 { Response { status } } else { plain(status, reason(status) + "\n") }
+
+// 405 with the `Allow` header listing the methods the target supports.
+fn method_not_allowed(allow: Text) -> Response {
+  var response = status_response(405)
+  response.headers.push(("Allow", allow))
+  response
+}
+
+fn has_line_break(text: Text) -> Bool = text.contains("\r") || text.contains("\n")
+
+// `response`, or 500 when a header name or value holds CR or LF and
+// would split the head.
+fn checked(response: Response) -> Response {
+  for pair in response.headers {
+    let (name, value) = pair
+    if has_line_break(name) || has_line_break(value) {
+      return status_response(500)
+    }
+  }
+  response
+}
+
+fn render(response: Response, keep_alive: Bool) -> Bytes {
+  var head = "HTTP/1.1 {response.status} {reason(response.status)}\r\n"
+  for header in response.headers {
+    let (name, value) = header
+    head = head + "{name}: {value}\r\n"
+  }
+  let connection = if keep_alive { "keep-alive" } else { "close" }
+  head = head + "Content-Length: {response.body.len()}\r\nConnection: {connection}\r\n\r\n"
+  var out = head.to_bytes()
+  out.append(response.body.to_bytes())
+  out
+}
+
+// ---- requests -----------------------------------------------------------
+
+// The value of header `name` (lower case), the first if repeated.
+fn header(request: Request, name: Text) -> Option<Text> {
+  for pair in request.headers {
+    let (key, value) = pair
+    if key == name {
+      return Some(value)
+    }
+  }
+  None
+}
+
+// The non-empty segments of the path: "/todos/3" is ["todos", "3"].
+fn segments(request: Request) -> List<Text> {
+  var out: List<Text> = List.empty()
+  for segment in request.path.split("/") {
+    if !segment.is_empty() {
+      out.push(segment)
+    }
+  }
+  out
+}
+
+// HTTP/1.1 keeps the connection unless asked to close, HTTP/1.0 closes it
+// unless asked to keep it.
+fn keep_alive(request: Request) -> Bool {
+  let connection = match header(request, "connection") {
+    Some(value) => value.to_lower()
+    None => ""
+  }
+  if request.version == "HTTP/1.0" { connection == "keep-alive" } else { connection != "close" }
+}
+
+// RFC 9110 `tchar`.
+fn is_token_byte(b: Byte) -> Bool = match b {
+  b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' | b'^' | b'_' | b'`' => true
+  b'|' | b'~' => true
+  _ => is_digit(b) || b >= b'a' && b <= b'z' || b >= b'A' && b <= b'Z'
+}
+
+fn is_token(text: Text) -> Bool {
+  for b in text.to_bytes() {
+    if !is_token_byte(b) {
+      return false
+    }
+  }
+  !text.is_empty()
+}
+
+// A field value: no control byte except tab, so no bare CR or LF.
+fn is_field_value(text: Text) -> Bool {
+  for b in text.to_bytes() {
+    if b < b' ' && b != b'\t' || b == 127 {
+      return false
+    }
+  }
+  true
+}
+
+// A request target: visible bytes only.
+fn is_target(text: Text) -> Bool {
+  for b in text.to_bytes() {
+    if b <= b' ' || b == 127 {
+      return false
+    }
+  }
+  !text.is_empty()
+}
+
+// The request line and header lines of a head, without the blank line.
+fn parse_head(head: Text) -> Option<Request> {
+  let lines = head.split("\r\n")
+  let parts = lines.at(0).split(" ")
+  if parts.len() != 3 || !is_token(parts.at(0)) || !is_target(parts.at(1)) {
+    return None
+  }
+  if parts.at(2) != "HTTP/1.1" && parts.at(2) != "HTTP/1.0" {
+    return None
+  }
+  let (path, query) = match parts.at(1).split_once("?") {
+    Some(pair) => pair
+    None => (parts.at(1), "")
+  }
+  if !path.starts_with("/") {
+    return None
+  }
+  var headers: List<(Text, Text)> = List.empty()
+  for line in lines.slice(1, lines.len()) {
+    match line.split_once(":") {
+      Some((name, value)) => if is_token(name) && is_field_value(value) {
+        headers.push((name.to_lower(), value.trim()))
+      } else {
+        return None
+      }
+      None => return None
+    }
+  }
+  Some(Request { method = parts.at(0), path, query, version = parts.at(2), headers, body = "" })
+}
+
+// How reading a head ended.
+enum HeadRead { Complete(Int), Closed, TooLarge }
+
+// Reads until `buffer` holds a whole head: how it ended and the bytes
+// read. `Complete` carries the head's length including the blank line.
+fn read_head(stream: TcpStream, buffer: Bytes) -> IoResult<(HeadRead, Bytes)> {
+  var data = buffer
+  var from = 0
+  loop {
+    match bytes_find_from(data, b"\r\n\r\n", from) {
+      Some(at) => return Ok((if at + 4 > MAXIMUM_HEAD { TooLarge } else { Complete(at + 4) }, data))
+      None => {}
+    }
+    if data.len() > MAXIMUM_HEAD {
+      return Ok((TooLarge, data))
+    }
+    from = if data.len() > 3 { data.len() - 3 } else { 0 }
+    match stream.read(READ_SIZE)? {
+      Eof => return Ok((Closed, data))
+      Data(more) => data.append(more)
+    }
+  }
+}
+
+// Reads until `data` holds at least `end` bytes; `None` when the peer
+// closed first.
+fn read_body(stream: TcpStream, data: Bytes, end: Int) -> IoResult<Option<Bytes>> {
+  var out = data
+  while out.len() < end {
+    match stream.read(READ_SIZE)? {
+      Eof => return Ok(None)
+      Data(more) => out.append(more)
+    }
+  }
+  Ok(Some(out))
+}
+
+// What comes next on a connection: a request and the bytes after it, the
+// end of the connection, or a status to answer before closing.
+enum Next { Got(Request, Bytes), Close, Reject(Int) }
+
+fn next_request(stream: TcpStream, buffer: Bytes) -> IoResult<Next> {
+  let (outcome, data) = read_head(stream, buffer)?
+  let head_end = match outcome {
+    Complete(end) => end
+    Closed => return Ok(Close)
+    TooLarge => return Ok(Reject(431))
+  }
+  let request = match parse_head(data.slice(0, head_end - 4).to_text()) {
+    Some(parsed) => parsed
+    None => return Ok(Reject(400))
+  }
+  match header(request, "transfer-encoding") {
+    Some(_) => return Ok(Reject(501))
+    None => {}
+  }
+  var lengths: List<Text> = List.empty()
+  for pair in request.headers {
+    let (name, value) = pair
+    if name == "content-length" {
+      lengths.push(value)
+    }
+  }
+  let length = match lengths {
+    [] => 0
+    [text] => match parse_length(text) {
+      Some(n) => n
+      None => return Ok(Reject(400))
+    }
+    _ => return Ok(Reject(400))
+  }
+  if length > MAXIMUM_BODY {
+    return Ok(Reject(413))
+  }
+  match read_body(stream, data, head_end + length)? {
+    None => Ok(Close)
+    Some(all) => {
+      var full = request
+      full.body = all.slice(head_end, head_end + length).to_text()
+      Ok(Got(full, all.slice(head_end + length, all.len())))
+    }
+  }
+}
+
+// A `Content-Length` value: 1 to 18 decimal digits, nothing else.
+fn parse_length(text: Text) -> Option<Int> {
+  if text.is_empty() || text.len() > MAXIMUM_LENGTH_DIGITS {
+    return None
+  }
+  for b in text.to_bytes() {
+    if !is_digit(b) {
+      return None
+    }
+  }
+  Int.parse(text)
+}
+
+// Answer a rejected request and close lingering: the reply, the write half
+// shut down, then input drained (at most MAXIMUM_DRAIN bytes, each read
+// waiting at most DRAIN_TIMEOUT_MS) so unread input does not turn the
+// close into a reset that discards the reply at the client.
+fn reject(stream: TcpStream, status: Int) -> IoResult<Unit> {
+  stream.write_all(render(status_response(status), false))?
+  _ = stream.close()
+  stream.set_idle_timeout(DRAIN_TIMEOUT_MS)?
+  var drained = 0
+  while drained < MAXIMUM_DRAIN {
+    match stream.read(READ_SIZE) {
+      Ok(Data(more)) => {
+        drained = drained + more.len()
+      }
+      _ => return Ok(())
+    }
+  }
+  Ok(())
+}
+
+fn session<S>(stream: TcpStream, application: HttpApp<S>) -> IoResult<Unit> {
+  var buffer = Bytes.empty()
+  loop {
+    match next_request(stream, buffer)? {
+      Close => return Ok(())
+      Reject(status) => return reject(stream, status)
+      Got(request, rest) => {
+        let response = checked(application.handle(application.state, request))
+        let keep = keep_alive(request)
+        stream.write_all(render(response, keep))?
+        if !keep {
+          return Ok(())
+        }
+        buffer = rest
+      }
+    }
+  }
+}

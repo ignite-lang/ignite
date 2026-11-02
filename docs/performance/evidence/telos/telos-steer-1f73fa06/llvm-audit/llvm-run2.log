@@ -1,0 +1,60 @@
+===== index_if_only
+running 1 test
+test audit.indexifonly/index on an if expression ... FAILED
+
+failures:
+
+---- audit.indexifonly/index on an if expression stderr ----
+assertion failed: y == "a"
+  message: y is  len 0
+  left: 
+  right: a
+  at /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/llvm-audit/index_if_only.telos:8:3
+
+failures:
+    audit.indexifonly/index on an if expression
+
+test result: FAILED. 0 passed; 1 failed; 0 filtered out; finished in 0.01s
+EXIT=1
+===== len_match
+
+thread 'telos' (2502918) panicked at crates/telos-llvm/src/lower.rs:533:22:
+expected an aggregate, got Unit
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+EXIT=101
+===== for_push2
+running 1 test
+test audit.forpush2/push on a for element keeps the list valid ... FAILED
+
+failures:
+
+---- audit.forpush2/push on a for element keeps the list valid stderr ----
+assertion failed: words[0].to_text() == "aaa"
+  message: words[0] is ....., words[1] is .....
+  left: .....
+  right: aaa
+  at /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/llvm-audit/for_push2.telos:18:3
+
+failures:
+    audit.forpush2/push on a for element keeps the list valid
+
+test result: FAILED. 0 passed; 1 failed; 0 filtered out; finished in 0.01s
+EXIT=1
+===== match_push2
+running 1 test
+test audit.matchpush2/push on a match binding keeps the option valid ... FAILED
+
+failures:
+
+---- audit.matchpush2/push on a match binding keeps the option valid stderr ----
+assertion failed: b.to_text() == "abc"
+  message: payload is ...... len 6
+  left: ......
+  right: abc
+  at /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/llvm-audit/match_push2.telos:20:18
+
+failures:
+    audit.matchpush2/push on a match binding keeps the option valid
+
+test result: FAILED. 0 passed; 1 failed; 0 filtered out; finished in 0.01s
+EXIT=1

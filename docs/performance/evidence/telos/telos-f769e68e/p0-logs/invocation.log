@@ -1,0 +1,477 @@
+runtime=/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/libignite_rt-af44cb68cdc0262f.a
+running 2 tests
+test audit.indexif/index on an if expression ... ok
+test audit.indexif/len on a match expression ... ok
+
+test result: ok. 2 passed; 0 failed; 0 filtered out; finished in 0.01s
+running 12 tests
+test fixtures.basics/arithmetic passes ... ok
+test fixtures.basics/int differs ... FAILED
+test fixtures.basics/text differs ... FAILED
+test fixtures.basics/record differs ... FAILED
+test fixtures.basics/custom message ... FAILED
+test fixtures.basics/try on err fails ... FAILED
+test fixtures.basics/try on none fails ... FAILED
+test fixtures.basics/index out of range panics ... FAILED
+test fixtures.basics/exit code 3 ... FAILED (exited with code 3)
+test fixtures.basics/output shown on failure ... FAILED
+test fixtures.basics/output hidden on success ... ok
+test fixtures.basics/tcp echo through a task ... ok
+
+failures:
+
+---- fixtures.basics/int differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:33:3: 1 + 1 == 3
+  left: 2
+  right: 3
+
+---- fixtures.basics/text differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:37:3: " ab ".trim() == "ab "
+  left: ab
+  right: ab 
+
+---- fixtures.basics/record differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:41:3: Point { x = 1, y = 2 } == Point { x = 1, y = 3 }
+  left: (1, 2)
+  right: (1, 3)
+
+---- fixtures.basics/custom message stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:46:3: n < 3
+  message: n is 4
+
+---- fixtures.basics/try on err fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:50:21: Err(not a number: x)
+
+---- fixtures.basics/try on none fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:55:25: None
+
+---- fixtures.basics/index out of range panics stderr ----
+error: index failed at crates/ignite/tests/fixtures/tests/basics.ignite:61:10: index 5 out of range for length 2
+
+---- fixtures.basics/output shown on failure stdout ----
+captured out
+---- fixtures.basics/output shown on failure stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:70:3: false
+
+failures:
+    fixtures.basics/int differs
+    fixtures.basics/text differs
+    fixtures.basics/record differs
+    fixtures.basics/custom message
+    fixtures.basics/try on err fails
+    fixtures.basics/try on none fails
+    fixtures.basics/index out of range panics
+    fixtures.basics/exit code 3
+    fixtures.basics/output shown on failure
+
+test result: FAILED. 3 passed; 9 failed; 0 filtered out; finished in 0.01s
+running 9 tests
+test main/closures carried across loop releases ... ok
+test main/closures in a list and nested closures ... ok
+test main/fn fields hold closures ... ok
+test main/store update with a capturing closure in a loop ... ok
+test main/boxed values carried across releases and through the store ... ok
+test main/range patterns without a wildcard ... ok
+test main/break and continue as values in carried loops ... ok
+test main/tuple fields and record updates of borrowed places ... ok
+test main/debug text of nested values ... ok
+
+test result: ok. 9 passed; 0 failed; 0 filtered out; finished in 6.74s
+running 2 tests
+test audit.indexif/index on an if expression ... ok
+test audit.indexif/len on a match expression ... ok
+
+test result: ok. 2 passed; 0 failed; 0 filtered out; finished in 0.01s
+running 12 tests
+test fixtures.basics/arithmetic passes ... ok
+test fixtures.basics/int differs ... FAILED
+test fixtures.basics/text differs ... FAILED
+test fixtures.basics/record differs ... FAILED
+test fixtures.basics/custom message ... FAILED
+test fixtures.basics/try on err fails ... FAILED
+test fixtures.basics/try on none fails ... FAILED
+test fixtures.basics/index out of range panics ... FAILED
+test fixtures.basics/exit code 3 ... FAILED (exited with code 3)
+test fixtures.basics/output shown on failure ... FAILED
+test fixtures.basics/output hidden on success ... ok
+test fixtures.basics/tcp echo through a task ... ok
+
+failures:
+
+---- fixtures.basics/int differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:33:3: 1 + 1 == 3
+  left: 2
+  right: 3
+
+---- fixtures.basics/text differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:37:3: " ab ".trim() == "ab "
+  left: ab
+  right: ab 
+
+---- fixtures.basics/record differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:41:3: Point { x = 1, y = 2 } == Point { x = 1, y = 3 }
+  left: (1, 2)
+  right: (1, 3)
+
+---- fixtures.basics/custom message stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:46:3: n < 3
+  message: n is 4
+
+---- fixtures.basics/try on err fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:50:21: Err(not a number: x)
+
+---- fixtures.basics/try on none fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:55:25: None
+
+---- fixtures.basics/index out of range panics stderr ----
+error: index failed at crates/ignite/tests/fixtures/tests/basics.ignite:61:10: index 5 out of range for length 2
+
+---- fixtures.basics/output shown on failure stdout ----
+captured out
+---- fixtures.basics/output shown on failure stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:70:3: false
+
+failures:
+    fixtures.basics/int differs
+    fixtures.basics/text differs
+    fixtures.basics/record differs
+    fixtures.basics/custom message
+    fixtures.basics/try on err fails
+    fixtures.basics/try on none fails
+    fixtures.basics/index out of range panics
+    fixtures.basics/exit code 3
+    fixtures.basics/output shown on failure
+
+test result: FAILED. 3 passed; 9 failed; 0 filtered out; finished in 0.01s
+running 9 tests
+test main/closures carried across loop releases ... ok
+test main/closures in a list and nested closures ... ok
+test main/fn fields hold closures ... ok
+test main/store update with a capturing closure in a loop ... ok
+test main/boxed values carried across releases and through the store ... ok
+test main/range patterns without a wildcard ... ok
+test main/break and continue as values in carried loops ... ok
+test main/tuple fields and record updates of borrowed places ... ok
+test main/debug text of nested values ... ok
+
+test result: ok. 9 passed; 0 failed; 0 filtered out; finished in 2.28s
+running 2 tests
+test audit.indexif/index on an if expression ... ok
+test audit.indexif/len on a match expression ... ok
+
+test result: ok. 2 passed; 0 failed; 0 filtered out; finished in 0.01s
+running 12 tests
+test fixtures.basics/arithmetic passes ... ok
+test fixtures.basics/int differs ... FAILED
+test fixtures.basics/text differs ... FAILED
+test fixtures.basics/record differs ... FAILED
+test fixtures.basics/custom message ... FAILED
+test fixtures.basics/try on err fails ... FAILED
+test fixtures.basics/try on none fails ... FAILED
+test fixtures.basics/index out of range panics ... FAILED
+test fixtures.basics/exit code 3 ... FAILED (exited with code 3)
+test fixtures.basics/output shown on failure ... FAILED
+test fixtures.basics/output hidden on success ... ok
+test fixtures.basics/tcp echo through a task ... ok
+
+failures:
+
+---- fixtures.basics/int differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:33:3: 1 + 1 == 3
+  left: 2
+  right: 3
+
+---- fixtures.basics/text differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:37:3: " ab ".trim() == "ab "
+  left: ab
+  right: ab 
+
+---- fixtures.basics/record differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:41:3: Point { x = 1, y = 2 } == Point { x = 1, y = 3 }
+  left: (1, 2)
+  right: (1, 3)
+
+---- fixtures.basics/custom message stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:46:3: n < 3
+  message: n is 4
+
+---- fixtures.basics/try on err fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:50:21: Err(not a number: x)
+
+---- fixtures.basics/try on none fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:55:25: None
+
+---- fixtures.basics/index out of range panics stderr ----
+error: index failed at crates/ignite/tests/fixtures/tests/basics.ignite:61:10: index 5 out of range for length 2
+
+---- fixtures.basics/output shown on failure stdout ----
+captured out
+---- fixtures.basics/output shown on failure stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:70:3: false
+
+failures:
+    fixtures.basics/int differs
+    fixtures.basics/text differs
+    fixtures.basics/record differs
+    fixtures.basics/custom message
+    fixtures.basics/try on err fails
+    fixtures.basics/try on none fails
+    fixtures.basics/index out of range panics
+    fixtures.basics/exit code 3
+    fixtures.basics/output shown on failure
+
+test result: FAILED. 3 passed; 9 failed; 0 filtered out; finished in 0.01s
+running 9 tests
+test main/closures carried across loop releases ... ok
+test main/closures in a list and nested closures ... ok
+test main/fn fields hold closures ... ok
+test main/store update with a capturing closure in a loop ... ok
+test main/boxed values carried across releases and through the store ... ok
+test main/range patterns without a wildcard ... ok
+test main/break and continue as values in carried loops ... ok
+test main/tuple fields and record updates of borrowed places ... ok
+test main/debug text of nested values ... ok
+
+test result: ok. 9 passed; 0 failed; 0 filtered out; finished in 6.99s
+running 2 tests
+test audit.indexif/index on an if expression ... ok
+test audit.indexif/len on a match expression ... ok
+
+test result: ok. 2 passed; 0 failed; 0 filtered out; finished in 0.01s
+running 12 tests
+test fixtures.basics/arithmetic passes ... ok
+test fixtures.basics/int differs ... FAILED
+test fixtures.basics/text differs ... FAILED
+test fixtures.basics/record differs ... FAILED
+test fixtures.basics/custom message ... FAILED
+test fixtures.basics/try on err fails ... FAILED
+test fixtures.basics/try on none fails ... FAILED
+test fixtures.basics/index out of range panics ... FAILED
+test fixtures.basics/exit code 3 ... FAILED (exited with code 3)
+test fixtures.basics/output shown on failure ... FAILED
+test fixtures.basics/output hidden on success ... ok
+test fixtures.basics/tcp echo through a task ... ok
+
+failures:
+
+---- fixtures.basics/int differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:33:3: 1 + 1 == 3
+  left: 2
+  right: 3
+
+---- fixtures.basics/text differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:37:3: " ab ".trim() == "ab "
+  left: ab
+  right: ab 
+
+---- fixtures.basics/record differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:41:3: Point { x = 1, y = 2 } == Point { x = 1, y = 3 }
+  left: (1, 2)
+  right: (1, 3)
+
+---- fixtures.basics/custom message stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:46:3: n < 3
+  message: n is 4
+
+---- fixtures.basics/try on err fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:50:21: Err(not a number: x)
+
+---- fixtures.basics/try on none fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:55:25: None
+
+---- fixtures.basics/index out of range panics stderr ----
+error: index failed at crates/ignite/tests/fixtures/tests/basics.ignite:61:10: index 5 out of range for length 2
+
+---- fixtures.basics/output shown on failure stdout ----
+captured out
+---- fixtures.basics/output shown on failure stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:70:3: false
+
+failures:
+    fixtures.basics/int differs
+    fixtures.basics/text differs
+    fixtures.basics/record differs
+    fixtures.basics/custom message
+    fixtures.basics/try on err fails
+    fixtures.basics/try on none fails
+    fixtures.basics/index out of range panics
+    fixtures.basics/exit code 3
+    fixtures.basics/output shown on failure
+
+test result: FAILED. 3 passed; 9 failed; 0 filtered out; finished in 0.01s
+running 9 tests
+test main/closures carried across loop releases ... ok
+test main/closures in a list and nested closures ... ok
+test main/fn fields hold closures ... ok
+test main/store update with a capturing closure in a loop ... ok
+test main/boxed values carried across releases and through the store ... ok
+test main/range patterns without a wildcard ... ok
+test main/break and continue as values in carried loops ... ok
+test main/tuple fields and record updates of borrowed places ... ok
+test main/debug text of nested values ... ok
+
+test result: ok. 9 passed; 0 failed; 0 filtered out; finished in 3.48s
+running 2 tests
+test audit.indexif/index on an if expression ... ok
+test audit.indexif/len on a match expression ... ok
+
+test result: ok. 2 passed; 0 failed; 0 filtered out; finished in 0.01s
+running 12 tests
+test fixtures.basics/arithmetic passes ... ok
+test fixtures.basics/int differs ... FAILED
+test fixtures.basics/text differs ... FAILED
+test fixtures.basics/record differs ... FAILED
+test fixtures.basics/custom message ... FAILED
+test fixtures.basics/try on err fails ... FAILED
+test fixtures.basics/try on none fails ... FAILED
+test fixtures.basics/index out of range panics ... FAILED
+test fixtures.basics/exit code 3 ... FAILED (exited with code 3)
+test fixtures.basics/output shown on failure ... FAILED
+test fixtures.basics/output hidden on success ... ok
+test fixtures.basics/tcp echo through a task ... ok
+
+failures:
+
+---- fixtures.basics/int differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:33:3: 1 + 1 == 3
+  left: 2
+  right: 3
+
+---- fixtures.basics/text differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:37:3: " ab ".trim() == "ab "
+  left: ab
+  right: ab 
+
+---- fixtures.basics/record differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:41:3: Point { x = 1, y = 2 } == Point { x = 1, y = 3 }
+  left: (1, 2)
+  right: (1, 3)
+
+---- fixtures.basics/custom message stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:46:3: n < 3
+  message: n is 4
+
+---- fixtures.basics/try on err fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:50:21: Err(not a number: x)
+
+---- fixtures.basics/try on none fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:55:25: None
+
+---- fixtures.basics/index out of range panics stderr ----
+error: index failed at crates/ignite/tests/fixtures/tests/basics.ignite:61:10: index 5 out of range for length 2
+
+---- fixtures.basics/output shown on failure stdout ----
+captured out
+---- fixtures.basics/output shown on failure stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:70:3: false
+
+failures:
+    fixtures.basics/int differs
+    fixtures.basics/text differs
+    fixtures.basics/record differs
+    fixtures.basics/custom message
+    fixtures.basics/try on err fails
+    fixtures.basics/try on none fails
+    fixtures.basics/index out of range panics
+    fixtures.basics/exit code 3
+    fixtures.basics/output shown on failure
+
+test result: FAILED. 3 passed; 9 failed; 0 filtered out; finished in 0.02s
+running 9 tests
+test main/closures carried across loop releases ... ok
+test main/closures in a list and nested closures ... ok
+test main/fn fields hold closures ... ok
+test main/store update with a capturing closure in a loop ... ok
+test main/boxed values carried across releases and through the store ... ok
+test main/range patterns without a wildcard ... ok
+test main/break and continue as values in carried loops ... ok
+test main/tuple fields and record updates of borrowed places ... ok
+test main/debug text of nested values ... ok
+
+test result: ok. 9 passed; 0 failed; 0 filtered out; finished in 8.54s
+running 2 tests
+test audit.indexif/index on an if expression ... ok
+test audit.indexif/len on a match expression ... ok
+
+test result: ok. 2 passed; 0 failed; 0 filtered out; finished in 0.01s
+running 12 tests
+test fixtures.basics/arithmetic passes ... ok
+test fixtures.basics/int differs ... FAILED
+test fixtures.basics/text differs ... FAILED
+test fixtures.basics/record differs ... FAILED
+test fixtures.basics/custom message ... FAILED
+test fixtures.basics/try on err fails ... FAILED
+test fixtures.basics/try on none fails ... FAILED
+test fixtures.basics/index out of range panics ... FAILED
+test fixtures.basics/exit code 3 ... FAILED (exited with code 3)
+test fixtures.basics/output shown on failure ... FAILED
+test fixtures.basics/output hidden on success ... ok
+test fixtures.basics/tcp echo through a task ... ok
+
+failures:
+
+---- fixtures.basics/int differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:33:3: 1 + 1 == 3
+  left: 2
+  right: 3
+
+---- fixtures.basics/text differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:37:3: " ab ".trim() == "ab "
+  left: ab
+  right: ab 
+
+---- fixtures.basics/record differs stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:41:3: Point { x = 1, y = 2 } == Point { x = 1, y = 3 }
+  left: (1, 2)
+  right: (1, 3)
+
+---- fixtures.basics/custom message stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:46:3: n < 3
+  message: n is 4
+
+---- fixtures.basics/try on err fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:50:21: Err(not a number: x)
+
+---- fixtures.basics/try on none fails stderr ----
+error: ? failed at crates/ignite/tests/fixtures/tests/basics.ignite:55:25: None
+
+---- fixtures.basics/index out of range panics stderr ----
+error: index failed at crates/ignite/tests/fixtures/tests/basics.ignite:61:10: index 5 out of range for length 2
+
+---- fixtures.basics/output shown on failure stdout ----
+captured out
+---- fixtures.basics/output shown on failure stderr ----
+error: assert failed at crates/ignite/tests/fixtures/tests/basics.ignite:70:3: false
+
+failures:
+    fixtures.basics/int differs
+    fixtures.basics/text differs
+    fixtures.basics/record differs
+    fixtures.basics/custom message
+    fixtures.basics/try on err fails
+    fixtures.basics/try on none fails
+    fixtures.basics/index out of range panics
+    fixtures.basics/exit code 3
+    fixtures.basics/output shown on failure
+
+test result: FAILED. 3 passed; 9 failed; 0 filtered out; finished in 0.01s
+running 9 tests
+test main/closures carried across loop releases ... ok
+test main/closures in a list and nested closures ... ok
+test main/fn fields hold closures ... ok
+test main/store update with a capturing closure in a loop ... ok
+test main/boxed values carried across releases and through the store ... ok
+test main/range patterns without a wildcard ... ok
+test main/break and continue as values in carried loops ... ok
+test main/tuple fields and record updates of borrowed places ... ok
+test main/debug text of nested values ... ok
+
+test result: ok. 9 passed; 0 failed; 0 filtered out; finished in 2.26s
+error: manifest path `/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/tmp/ignite-slice9/audit/Cargo.toml` does not exist
+error: manifest path `/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/tmp/ignite-slice9/audit/Cargo.toml` does not exist
+error: manifest path `/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/tmp/ignite-slice9/audit/Cargo.toml` does not exist
+cargo
+tests
+cargo
+tests
+tests-2

@@ -1,0 +1,11 @@
+START 2026-11-02T02:11:15+01:00 file=slice10_llvm load=6.23 14.42 16.34 5/2964 2704732
+   0.011 +  0.011     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.012 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.013 +  0.001 
+   0.013 +  0.000 running 2 tests
+   0.449 +  0.436 test slice10_llvm::failures_fail_on_both_targets_with_the_same_report ... ok
+   0.910 +  0.462 test slice10_llvm::features_pass_on_both_targets_with_the_same_report ... ok
+   0.911 +  0.000 
+   0.911 +  0.000 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 144 filtered out; finished in 0.90s
+   0.911 +  0.000 
+END load=6.29 14.30 16.29 6/2967 2704987

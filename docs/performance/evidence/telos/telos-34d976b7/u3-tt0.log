@@ -1,0 +1,25 @@
+task: [test-telos] cargo build -q -p telos
+task: [test-telos] cargo build -q -p telos-rt --features runner --target-dir target/telos-test/rt
+task: [test-telos] target/debug/telos test examples/terminal/terminal.telos examples/todo/todo.telos std/console.telos std/json.telos std/protocol/http.telos std/protocol/telnet.telos std/text.telos   --out target/telos-test --target-dir target/telos-test/cargo
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 filtered out; finished in 0.00s
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 filtered out; finished in 0.00s
+running 1 test
+test std.text/split_once splits at the first separator ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+task: [test-telos] target/debug/telos test examples/terminal/terminal.telos examples/todo/todo.telos std/console.telos std/json.telos std/protocol/http.telos std/protocol/telnet.telos std/text.telos   --target llvm --out target/telos-test --runtime target/telos-test/rt/debug/libtelos_rt.a
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 filtered out; finished in 0.00s
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 filtered out; finished in 0.00s
+running 1 test
+test std.text/split_once splits at the first separator ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+EXIT=0

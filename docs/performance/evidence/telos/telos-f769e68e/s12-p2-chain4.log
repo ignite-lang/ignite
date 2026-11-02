@@ -1,0 +1,243 @@
+/dev/nvme0n1p2  848G  760G   80G  91% /
+== fmt
+STEP fmt exit=0
+== unit tests of crates/ignite/src/run
+error[E0631]: type mismatch in closure arguments
+    --> crates/ignite/src/run/engine.rs:481:54
+     |
+ 448 |         let int = |i: usize| -> i64 { fields.get(i).and_then(int).unwrap_or_default() };
+     |                   ----------------- found signature defined here
+...
+ 481 |                 let instant = fields.get(1).and_then(int).unwrap_or(at);
+     |                                             -------- ^^^ expected due to this
+     |                                             |
+     |                                             required by a bound introduced by this call
+     |
+     = note: expected closure signature `fn(&Value) -> _`
+                found closure signature `fn(usize) -> _`
+note: required by a bound in `std::option::Option::<T>::and_then`
+    --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:1539:12
+     |
+1537 |     pub const fn and_then<U, F>(self, f: F) -> Option<U>
+     |                  -------- required by a bound in this associated function
+1538 |     where
+1539 |         F: [const] FnOnce(T) -> Option<U> + [const] Destruct,
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Option::<T>::and_then`
+help: consider wrapping the function in a closure
+     |
+ 481 |                 let instant = fields.get(1).and_then(|arg0: &Value| int(/* usize */)).unwrap_or(at);
+     |                                                      ++++++++++++++    +++++++++++++
+error[E0631]: type mismatch in closure arguments
+    --> crates/ignite/src/run/engine.rs:519:35
+     |
+ 447 |         let text = |i: usize| -> String { fields.get(i).and_then(text).unwrap_or_default() };
+     |                    -------------------- found signature defined here
+...
+ 519 |                         .and_then(text)
+     |                          -------- ^^^^ expected due to this
+     |                          |
+     |                          required by a bound introduced by this call
+     |
+     = note: expected closure signature `fn(&Value) -> _`
+                found closure signature `fn(usize) -> _`
+note: required by a bound in `std::option::Option::<T>::and_then`
+    --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:1539:12
+     |
+1537 |     pub const fn and_then<U, F>(self, f: F) -> Option<U>
+     |                  -------- required by a bound in this associated function
+1538 |     where
+1539 |         F: [const] FnOnce(T) -> Option<U> + [const] Destruct,
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Option::<T>::and_then`
+help: consider wrapping the function in a closure
+     |
+ 519 |                         .and_then(|arg0: &Value| text(/* usize */))
+     |                                   ++++++++++++++     +++++++++++++
+error[E0631]: type mismatch in closure arguments
+    --> crates/ignite/src/run/engine.rs:535:35
+     |
+ 447 |         let text = |i: usize| -> String { fields.get(i).and_then(text).unwrap_or_default() };
+     |                    -------------------- found signature defined here
+...
+ 535 |                         .and_then(text)
+     |                          -------- ^^^^ expected due to this
+     |                          |
+     |                          required by a bound introduced by this call
+     |
+     = note: expected closure signature `fn(&Value) -> _`
+                found closure signature `fn(usize) -> _`
+note: required by a bound in `std::option::Option::<T>::and_then`
+    --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:1539:12
+     |
+1537 |     pub const fn and_then<U, F>(self, f: F) -> Option<U>
+     |                  -------- required by a bound in this associated function
+1538 |     where
+1539 |         F: [const] FnOnce(T) -> Option<U> + [const] Destruct,
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Option::<T>::and_then`
+help: consider wrapping the function in a closure
+     |
+ 535 |                         .and_then(|arg0: &Value| text(/* usize */))
+     |                                   ++++++++++++++     +++++++++++++
+error[E0631]: type mismatch in closure arguments
+    --> crates/ignite/src/run/engine.rs:542:77
+     |
+ 448 |         let int = |i: usize| -> i64 { fields.get(i).and_then(int).unwrap_or_default() };
+     |                   ----------------- found signature defined here
+...
+ 542 |                     let period_from = field(&fired, "period_from").and_then(int).unwrap_or(0);
+     |                                                                    -------- ^^^ expected due to this
+     |                                                                    |
+     |                                                                    required by a bound introduced by this call
+     |
+     = note: expected closure signature `fn(&Value) -> _`
+                found closure signature `fn(usize) -> _`
+note: required by a bound in `std::option::Option::<T>::and_then`
+    --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:1539:12
+     |
+1537 |     pub const fn and_then<U, F>(self, f: F) -> Option<U>
+     |                  -------- required by a bound in this associated function
+1538 |     where
+1539 |         F: [const] FnOnce(T) -> Option<U> + [const] Destruct,
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Option::<T>::and_then`
+help: consider wrapping the function in a closure
+     |
+ 542 |                     let period_from = field(&fired, "period_from").and_then(|arg0: &Value| int(/* usize */)).unwrap_or(0);
+     |                                                                             ++++++++++++++    +++++++++++++
+error[E0502]: cannot borrow `*self` as mutable because it is also borrowed as immutable
+   --> crates/ignite/src/run/engine.rs:374:26
+    |
+366 |             let Some(state) = self.machines.get(index) else {
+    |                               ------------- immutable borrow occurs here
+...
+374 |             let record = self.record("event", at, Some(id.clone()), value_json(&event), false, None);
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ mutable borrow occurs here
+375 |             out.push(record);
+376 |             let args = vec![state.value.clone(), event];
+    |                             ----------- immutable borrow later used here
+Some errors have detailed explanations: E0502, E0631.
+For more information about an error, try `rustc --explain E0502`.
+error: could not compile `ignite` (lib test) due to 5 previous errors
+STEP run-tests exit=101
+== build ignite
+error[E0631]: type mismatch in closure arguments
+    --> crates/ignite/src/run/engine.rs:481:54
+     |
+ 448 |         let int = |i: usize| -> i64 { fields.get(i).and_then(int).unwrap_or_default() };
+     |                   ----------------- found signature defined here
+...
+ 481 |                 let instant = fields.get(1).and_then(int).unwrap_or(at);
+     |                                             -------- ^^^ expected due to this
+     |                                             |
+     |                                             required by a bound introduced by this call
+     |
+     = note: expected closure signature `fn(&Value) -> _`
+                found closure signature `fn(usize) -> _`
+note: required by a bound in `std::option::Option::<T>::and_then`
+    --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:1539:12
+     |
+1537 |     pub const fn and_then<U, F>(self, f: F) -> Option<U>
+     |                  -------- required by a bound in this associated function
+1538 |     where
+1539 |         F: [const] FnOnce(T) -> Option<U> + [const] Destruct,
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Option::<T>::and_then`
+help: consider wrapping the function in a closure
+     |
+ 481 |                 let instant = fields.get(1).and_then(|arg0: &Value| int(/* usize */)).unwrap_or(at);
+     |                                                      ++++++++++++++    +++++++++++++
+error[E0631]: type mismatch in closure arguments
+    --> crates/ignite/src/run/engine.rs:519:35
+     |
+ 447 |         let text = |i: usize| -> String { fields.get(i).and_then(text).unwrap_or_default() };
+     |                    -------------------- found signature defined here
+...
+ 519 |                         .and_then(text)
+     |                          -------- ^^^^ expected due to this
+     |                          |
+     |                          required by a bound introduced by this call
+     |
+     = note: expected closure signature `fn(&Value) -> _`
+                found closure signature `fn(usize) -> _`
+note: required by a bound in `std::option::Option::<T>::and_then`
+    --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:1539:12
+     |
+1537 |     pub const fn and_then<U, F>(self, f: F) -> Option<U>
+     |                  -------- required by a bound in this associated function
+1538 |     where
+1539 |         F: [const] FnOnce(T) -> Option<U> + [const] Destruct,
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Option::<T>::and_then`
+help: consider wrapping the function in a closure
+     |
+ 519 |                         .and_then(|arg0: &Value| text(/* usize */))
+     |                                   ++++++++++++++     +++++++++++++
+error[E0631]: type mismatch in closure arguments
+    --> crates/ignite/src/run/engine.rs:535:35
+     |
+ 447 |         let text = |i: usize| -> String { fields.get(i).and_then(text).unwrap_or_default() };
+     |                    -------------------- found signature defined here
+...
+ 535 |                         .and_then(text)
+     |                          -------- ^^^^ expected due to this
+     |                          |
+     |                          required by a bound introduced by this call
+     |
+     = note: expected closure signature `fn(&Value) -> _`
+                found closure signature `fn(usize) -> _`
+note: required by a bound in `std::option::Option::<T>::and_then`
+    --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:1539:12
+     |
+1537 |     pub const fn and_then<U, F>(self, f: F) -> Option<U>
+     |                  -------- required by a bound in this associated function
+1538 |     where
+1539 |         F: [const] FnOnce(T) -> Option<U> + [const] Destruct,
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Option::<T>::and_then`
+help: consider wrapping the function in a closure
+     |
+ 535 |                         .and_then(|arg0: &Value| text(/* usize */))
+     |                                   ++++++++++++++     +++++++++++++
+error[E0631]: type mismatch in closure arguments
+    --> crates/ignite/src/run/engine.rs:542:77
+     |
+ 448 |         let int = |i: usize| -> i64 { fields.get(i).and_then(int).unwrap_or_default() };
+     |                   ----------------- found signature defined here
+...
+ 542 |                     let period_from = field(&fired, "period_from").and_then(int).unwrap_or(0);
+     |                                                                    -------- ^^^ expected due to this
+     |                                                                    |
+     |                                                                    required by a bound introduced by this call
+     |
+     = note: expected closure signature `fn(&Value) -> _`
+                found closure signature `fn(usize) -> _`
+note: required by a bound in `std::option::Option::<T>::and_then`
+    --> /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:1539:12
+     |
+1537 |     pub const fn and_then<U, F>(self, f: F) -> Option<U>
+     |                  -------- required by a bound in this associated function
+1538 |     where
+1539 |         F: [const] FnOnce(T) -> Option<U> + [const] Destruct,
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Option::<T>::and_then`
+help: consider wrapping the function in a closure
+     |
+ 542 |                     let period_from = field(&fired, "period_from").and_then(|arg0: &Value| int(/* usize */)).unwrap_or(0);
+     |                                                                             ++++++++++++++    +++++++++++++
+error[E0502]: cannot borrow `*self` as mutable because it is also borrowed as immutable
+   --> crates/ignite/src/run/engine.rs:374:26
+    |
+366 |             let Some(state) = self.machines.get(index) else {
+    |                               ------------- immutable borrow occurs here
+...
+374 |             let record = self.record("event", at, Some(id.clone()), value_json(&event), false, None);
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ mutable borrow occurs here
+375 |             out.push(record);
+376 |             let args = vec![state.value.clone(), event];
+    |                             ----------- immutable borrow later used here
+Some errors have detailed explanations: E0502, E0631.
+For more information about an error, try `rustc --explain E0502`.
+error: could not compile `ignite` (lib) due to 5 previous errors
+STEP build exit=101
+== inline fixture, rust
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+STEP fixture-rust exit=2
+== inline fixture, llvm
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+STEP fixture-llvm exit=2
+EXIT=0
+EXIT=0

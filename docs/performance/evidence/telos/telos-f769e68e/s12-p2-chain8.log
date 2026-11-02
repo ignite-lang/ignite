@@ -1,0 +1,58 @@
+/dev/nvme0n1p2  848G  763G   77G  91% /
+== build ignite
+warning: unused import: `TryRecvError`
+  --> crates/ignite/src/run/live.rs:36:59
+   |
+36 | use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, TryRecvError};
+   |                                                           ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+warning: `ignite` (lib) generated 1 warning (run `cargo fix --lib -p ignite` to apply 1 suggestion)
+STEP build exit=0
+== rustgen tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test slice9::long_chains_build_and_run_100k ... ignored
+test result: ok. 77 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.70s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+STEP rustgen-tests exit=0
+ M crates/ignite-rustgen/tests/golden/consts.std.rs
+ M crates/ignite-rustgen/tests/golden/modules.std.rs
+ M crates/ignite-rustgen/tests/golden/syntax.rs
+(golden status above: only targets.* are expected, P1's new files)
+== design file, rust
+note: building the generated Rust project in /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p2-design-rust/project; compiler messages refer to generated code
+    Updating crates.io index
+error[E0425]: cannot find function `exponential` in this scope
+  --> src/bin/terminald.rs:17:543
+   |
+17 | ...30000000000i64 }, recovery: Restart { backoff: exponential(&100000000i64, &10000000000i64), maximum_attempts: 10, interval: 30000...
+   |                                                   ^^^^^^^^^^^ not found in this scope
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `terminal` (bin "terminald") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: cargo build failed with status 101
+STEP design-rust exit=2
+== design file, llvm
+/usr/bin/ld: /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p2-design-llvm/llvm/main_promptProbe.o: in function `main':
+/home/timo/projects/telos/examples/terminal/terminal.design.ignite:73:(.text.main+0x15e): undefined reference to `std.probe.TelnetPrompt.attempts'
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+error: clang failed with status 1
+STEP design-llvm exit=2
+== split, rust: cold builds of ignite-io, ignite-std, the program (SCCACHE_RECACHE=1)
+SPLIT rust base dev run=1 io=2.435 std=0.388 program=0.280 load=4.02
+SPLIT rust base release run=1 io=2.968 std=0.687 program=0.518 load=3.78
+SPLIT rust new dev run=1 io=2.394 std=0.492 program=0.271 load=3.55
+SPLIT rust new release run=1 io=2.869 std=0.966 program=0.516 load=3.43
+SPLIT rust base dev run=2 io=2.428 std=0.378 program=0.259 load=3.43
+SPLIT rust base release run=2 io=2.956 std=0.728 program=0.528 load=3.64
+SPLIT rust new dev run=2 io=2.530 std=0.519 program=0.267 load=3.50
+SPLIT rust new release run=2 io=2.966 std=1.001 program=0.527 load=4.51
+== split, llvm: clang on std.ll and ignite check (3 runs)
+SPLIT llvm base run=1 clang_std_O0=0.059 clang_std_O2=0.505 clang_program_O2=0.084 check=0.058 emit_rust=0.070 load=4.51
+SPLIT llvm new run=1 clang_std_O0=0.059 clang_std_O2=0.512 clang_program_O2=0.082 check=0.102 emit_rust=0.124 load=4.51
+SPLIT llvm base run=2 clang_std_O0=0.058 clang_std_O2=0.497 clang_program_O2=0.084 check=0.058 emit_rust=0.069 load=4.51
+SPLIT llvm new run=2 clang_std_O0=0.058 clang_std_O2=0.509 clang_program_O2=0.083 check=0.102 emit_rust=0.125 load=4.51
+SPLIT llvm base run=3 clang_std_O0=0.057 clang_std_O2=0.531 clang_program_O2=0.088 check=0.058 emit_rust=0.072 load=4.51
+SPLIT llvm new run=3 clang_std_O0=0.059 clang_std_O2=0.514 clang_program_O2=0.082 check=0.111 emit_rust=0.124 load=4.31
+EXIT=0
+EXIT=0

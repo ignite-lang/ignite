@@ -1,0 +1,36 @@
+START 2026-11-02T07:15:58+01:00 load=23.04
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling ignite-syntax v0.1.0 (/home/timo/projects/telos/crates/ignite-syntax)
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling unicode-ident v1.0.27
+   Compiling utf8parse v0.2.2
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling colorchoice v1.0.5
+   Compiling anstyle v1.0.14
+   Compiling anstyle-query v1.1.5
+   Compiling strsim v0.11.1
+   Compiling heck v0.5.0
+   Compiling clap_lex v1.1.1
+   Compiling anstyle-parse v1.0.0
+   Compiling nix v0.31.3
+   Compiling anstream v1.0.0
+   Compiling ignite-check v0.1.0 (/home/timo/projects/telos/crates/ignite-check)
+   Compiling clap_builder v4.6.7
+   Compiling syn v3.0.9
+   Compiling ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+   Compiling clap_derive v4.6.7
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+   Compiling ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+   Compiling ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+   Compiling ignite-rt v0.1.0 (/home/timo/projects/telos/crates/ignite-rt)
+   Compiling clap v4.6.7
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.63s
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-12b-r3/debug/deps/main-90b129b53e45974f)
+END 2026-11-02T07:16:09+01:00 load=24.83
+EXIT=0

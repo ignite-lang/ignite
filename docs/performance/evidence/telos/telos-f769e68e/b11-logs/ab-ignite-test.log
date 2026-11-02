@@ -1,0 +1,8 @@
+STEP keep-1 load=24.36 test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 154 filtered out; finished in 5.20s
+STEP new-1 load=25.94 test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 154 filtered out; finished in 9.70s
+STEP keep-2 load=25.57 test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 154 filtered out; finished in 9.25s
+STEP new-2 load=27.39 test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 154 filtered out; finished in 11.25s
+STEP keep-3 load=29.45 test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 154 filtered out; finished in 6.93s
+STEP new-3 load=27.97 test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 154 filtered out; finished in 5.20s
+restored new version
+EXIT=0

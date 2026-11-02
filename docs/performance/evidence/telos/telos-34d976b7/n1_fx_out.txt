@@ -1,0 +1,48 @@
+   Compiling telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.19s
+     Running tests/fixtures.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/fixtures-d24daeb1dae3e3ed)
+
+running 2 tests
+test every_checker_code_has_a_fixture ... ok
+test fixtures_match_expected ... FAILED
+
+failures:
+
+---- fixtures_match_expected stdout ----
+
+thread 'fixtures_match_expected' (1120727) panicked at crates/telos-check/tests/fixtures.rs:65:5:
+/home/timo/projects/telos/crates/telos-check/tests/fixtures/e006_in_place.telos
+--- expected
+--- actual
+e006_in_place.telos:3:3: error[E006]: cannot `push` through the immutable binding `l`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+e006_in_place.telos:5:5: error[E006]: cannot `append` through the `for` element `w`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+e006_in_place.telos:8:16: error[E006]: cannot `clear` through the pattern binding `b`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+e006_in_place.telos:11:3: error[E006]: cannot `push` on the result of `to_bytes()`, which shares the text's buffer; bind it first: `var b = t.to_bytes()`
+
+
+/home/timo/projects/telos/crates/telos-check/tests/fixtures/e056_ambient_param.telos
+--- expected
+--- actual
+e056_ambient_param.telos:1:11: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it
+e056_ambient_param.telos:4:11: error[E056]: parameter `net` is named like the ambient capability `net`; rename it
+e056_ambient_param.telos:7:10: error[E056]: parameter `process` is named like the ambient capability `process`; rename it
+e056_ambient_param.telos:8:12: error[E056]: parameter `stdout` is named like the ambient capability `stdout`; rename it
+
+
+/home/timo/projects/telos/crates/telos-check/tests/fixtures/e057_unused_type_param.telos
+--- expected
+--- actual
+e057_unused_type_param.telos:3:13: error[E057]: type parameter `T` of `Marker` is never used; remove it or use it in a field
+e057_unused_type_param.telos:7:10: error[E057]: type parameter `T` of `Tag` is never used; remove it or use it in a field
+e057_unused_type_param.telos:12:12: error[E057]: type parameter `T` of `Alias` is never used; remove it or use it in a field
+e057_unused_type_param.telos:27:17: error[E057]: type parameter `B` of `Phantom` is never used; remove it or use it in a field
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    fixtures_match_expected
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p telos-check --test fixtures`

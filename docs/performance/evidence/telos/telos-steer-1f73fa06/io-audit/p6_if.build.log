@@ -1,0 +1,14 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/out/p6_if; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling ifs v0.0.0 (/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/out/p6_if)
+warning: path statement with no effect
+  --> src/lib.rs:24:5
+   |
+24 |     x;
+   |     ^^
+   |
+   = note: `#[warn(path_statements)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ifs` (lib) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s

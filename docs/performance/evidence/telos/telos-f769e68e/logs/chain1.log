@@ -1,0 +1,8 @@
+STEP=rt-test EXIT=0
+STEP=test-ignite EXIT=0
+STEP=compile EXIT=0
+STEP=compile-llvm EXIT=0
+STEP=compile-todo EXIT=0
+STEP=compile-todo-llvm EXIT=0
+STEP=iotest EXIT=0
+EXIT=0

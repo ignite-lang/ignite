@@ -1,0 +1,8 @@
+after cargo build status=0 0.0 s
+after todod llvm dev run1 status=0 0.47 s size=6107104
+after todod llvm dev run2 status=0 0.38 s size=6107104
+after todod llvm dev run3 status=0 0.40 s size=6107104
+after todod llvm release run1 status=0 1.45 s size=1182432
+after todod llvm release run2 status=0 1.28 s size=1182432
+EXIT=0
+EXIT=0

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeleteTodo input",
+  "x-ess-name": "todo.list.DeleteTodo",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/todo.list.TodoId"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "todo",
+    "specification_version": "v1",
+    "source_digest": "4fab963621d47043d38543f5141de315c8b798f376db1be3379011617c426950",
+    "contract_digest": "slice-sha256/2:1b2116e473cba8deb925c022eff1e9da5239d8e2b16ee8915ec19c6a9ca5e22f",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "todo.list.TodoId": {
+      "title": "TodoId",
+      "x-ess-name": "todo.list.TodoId",
+      "x-ess-kind": "newtype",
+      "type": "integer"
+    }
+  }
+}

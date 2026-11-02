@@ -1,0 +1,6 @@
+P0 slice-10 attribution (coordinator, 2026-11-02; raw logs p0-logs/):
+- Warm gate on 60aef38: 25.98 s at load under 5 (fmt 0.40, clippy 2.05, test 22.88, test-ignite 0.65); 75.4 s at load 18 to 44. Slice 10's 45.5 s was load, not a regression.
+- Warm test step: crates/ignite e2e binary 18.69 s = 82 %; slice9 file 17.4 s (serial behind one BUILDS mutex); the one inline test `boxed values carried across releases and through the store` (crates/ignite/tests/fixtures/slice9/regions.ignite:145) 9.1 s ~ 40 % (6.8 s Rust dev, 2.3 s LLVM -O0).
+- todod LLVM release 1.16 s: clang -O2 std.ll 0.834 s (70.5 %), emit 0.113, program.ll 0.084, main 0.064, link 0.063. P3 assigned reachable-only std emission (target <= 0.99 s).
+- todod Rust dev 3.04 s (= baseline 3.0 s); release 4.56 s against 3.9 s: libc + nix 52 % (recompiled every run under SCCACHE_RECACHE=1), generated ignite-std 16 %, program crate 12 %. Accepted; record this split in the notes.
+- Flake: 0/30 alone, 0/30 beside a workspace run.

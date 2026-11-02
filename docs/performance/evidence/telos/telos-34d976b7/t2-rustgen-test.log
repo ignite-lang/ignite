@@ -1,0 +1,167 @@
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 7 tests
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+   Compiling counters v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/generics)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.59s
+   Compiling telos-std v0.0.0-72cc406f1585941d (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/variants/std)
+.   Compiling variants v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/variants)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.85s
+   Compiling exits v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/exits)
+.    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.06s
+   Compiling telos-std v0.0.0-0baf04ec47b36c58 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/modules/std)
+.   Compiling modules v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/modules)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.52s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.52s
+   Compiling telos-std v0.0.0-b17c4000f1710f29 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/terminal/std)
+..   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.96s
+   Compiling consts v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/telos-rustgen-test/consts)
+.    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.08s
+.
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.09s
+
+
+running 17 tests
+.................
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 52 tests
+.............. 14/52
+effectful_function_is_a_plain_fn --- FAILED
+.. 17/52
+function_body_value_depends_on_return_type --- FAILED
+.. 20/52
+function_types_and_values --- FAILED
+.............. 35/52
+ownership_non_value_positions_do_not_clone --- FAILED
+.. 38/52
+spawn_lowering --- FAILED
+... 42/52
+type_table --- FAILED
+.. 45/52
+tuple_type --- FAILED
+......
+failures:
+
+---- effectful_function_is_a_plain_fn stdout ----
+
+thread 'effectful_function_is_a_plain_fn' (919617) panicked at crates/telos-rustgen/tests/units.rs:500:5:
+expected
+  pub fn h(mut s: telos_io::TcpStream) -> Result<(), telos_io::IoError> { return Ok(()); }
+in
+  #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)] #[derive(Clone, Debug)] pub enum Command { Help, Echo(String), } #[derive(Clone, Debug)] pub enum Action { Continue, Close, } #[derive(Clone, Debug)] pub struct Reply { pub lines: Vec<String>, pub action: Action, } pub fn h(s: &telos_io::TcpStream) -> Result<(), telos_io::IoError> { return Ok(()); }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- function_body_value_depends_on_return_type stdout ----
+
+thread 'function_body_value_depends_on_return_type' (919620) panicked at crates/telos-rustgen/tests/units.rs:840:5:
+expected
+  pub fn t(mut flag: bool) -> i64 { if flag { 1 } else { 2 } }
+in
+  #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)] #[derive(Clone, Debug)] pub enum Command { Help, Echo(String), } #[derive(Clone, Debug)] pub enum Action { Continue, Close, } #[derive(Clone, Debug)] pub struct Reply { pub lines: Vec<String>, pub action: Action, } pub fn a() -> i64 { 1 } pub fn u() -> () { 1; } pub fn n() { 1; } pub fn t(flag: &bool) -> i64 { let mut flag = flag.clone(); if flag { 1 } else { 2 } } pub fn r(flag: &bool) -> i64 { let mut flag = flag.clone(); return if flag { 1 } else { 2 }; } pub fn lp() -> i64 { loop { return 1; } }
+
+---- function_types_and_values stdout ----
+
+thread 'function_types_and_values' (919621) panicked at crates/telos-rustgen/tests/units.rs:1740:5:
+expected
+  pub fn apply(mut f: fn(String) -> Reply, mut g: fn() -> (), mut console: Console) -> Reply
+in
+  #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)] #[derive(Clone, Debug)] pub enum Command { Help, Echo(String), } #[derive(Clone, Debug)] pub enum Action { Continue, Close, } #[derive(Clone, Debug)] pub struct Reply { pub lines: Vec<String>, pub action: Action, } #[derive(Clone, Debug)] pub struct Console { pub respond: fn(String) -> Reply, } pub fn answer(line: &String) -> Reply { return Reply { lines: vec![], action: Action::Close }; } pub fn apply(f: &fn(String) -> Reply, g: &fn() -> (), console: &Console) -> Reply { let mut f = f.clone(); let mut g = g.clone(); let made = Console { respond: (|__a0| answer(&__a0)) }; let h = (|__a0| answer(&__a0)); let respond = console.respond.clone(); respond(String::from("x")); h(String::from("y")); return f(String::from("z")); }
+
+---- ownership_non_value_positions_do_not_clone stdout ----
+
+thread 'ownership_non_value_positions_do_not_clone' (919633) panicked at crates/telos-rustgen/tests/units.rs:720:5:
+expected
+  let e = (x == String::from("a")) || flag;
+in
+  #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)] #[derive(Clone, Debug)] pub enum Command { Help, Echo(String), } #[derive(Clone, Debug)] pub enum Action { Continue, Close, } #[derive(Clone, Debug)] pub struct Reply { pub lines: Vec<String>, pub action: Action, } pub fn f(x: &String, n: &i64, b: &Vec<u8>, l: &Vec<String>, r: &Reply, flag: &bool, c: &Command) { let mut n = n.clone(); let mut r = r.clone(); let mut flag = flag.clone(); let a = x.trim().to_string(); let a2 = (r.lines.len() as i64); r.action = Action::Close; let s = n + n; let e = ((*x) == String::from("a")) || flag; }
+
+---- spawn_lowering stdout ----
+
+thread 'spawn_lowering' (919642) panicked at crates/telos-rustgen/tests/units.rs:1788:5:
+expected
+  { let __spawn_0 = s.clone(); let __spawn_1 = 1; telos_io::spawn(move || { if let Err(error) = worker(__spawn_0, __spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+in
+  #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)] #[derive(Clone, Debug)] pub enum Command { Help, Echo(String), } #[derive(Clone, Debug)] pub enum Action { Continue, Close, } #[derive(Clone, Debug)] pub struct Reply { pub lines: Vec<String>, pub action: Action, } pub struct Line; impl Line { pub fn serve(mut stream: telos_io::TcpStream, mut application: Reply) -> Result<(), telos_io::IoError> { return Ok(()); } } pub fn worker(s: &telos_io::TcpStream, n: &i64) -> Result<(), telos_io::IoError> { let mut n = n.clone(); return Ok(()); } pub fn main_loop(s: &telos_io::TcpStream, r: &Reply) -> Result<(), telos_io::IoError> { { let __spawn_0 = s.clone(); let __spawn_1 = 1; telos_io::spawn(move || { if let Err(error) = worker(&__spawn_0, &__spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); }; { let __spawn_0 = s.clone(); let __spawn_1 = r.clone(); telos_io::spawn(move || { if let Err(error) = Line::serve(__spawn_0, __spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); }; { let __spawn_0 = s.clone(); let __spawn_1 = r.clone(); telos_io::spawn(move || { if let Err(error) = Line::serve(__spawn_0, __spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); }; return Ok(()); }
+
+---- type_table stdout ----
+
+thread 'type_table' (919649) panicked at crates/telos-rustgen/tests/units.rs:482:5:
+expected
+  pub fn g(mut a: String, mut b: Vec<u8>, mut c: u8, mut d: i64, mut e: bool, mut f: (), mut g: Vec<i64>, mut h: Option<String>, mut i: Result<(), telos_io::IoError>, mut j: telos_io::TcpListener, mut k: telos_io::TcpStream, mut m: telos_io::Input, mut o: Reply, mut p: Mystery<i64>) -> () {
+in
+  #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)] #[derive(Clone, Debug)] pub enum Command { Help, Echo(String), } #[derive(Clone, Debug)] pub enum Action { Continue, Close, } #[derive(Clone, Debug)] pub struct Reply { pub lines: Vec<String>, pub action: Action, } pub fn g(a: &String, b: &Vec<u8>, c: &u8, d: &i64, e: &bool, f: &(), g: &Vec<i64>, h: &Option<String>, i: &Result<(), telos_io::IoError>, j: &telos_io::TcpListener, k: &telos_io::TcpStream, m: &telos_io::Input, o: &Reply, p: &Mystery<i64>) -> () { let mut c = c.clone(); let mut d = d.clone(); let mut e = e.clone(); let mut f = f.clone(); }
+
+---- tuple_type stdout ----
+
+thread 'tuple_type' (919647) panicked at crates/telos-rustgen/tests/units.rs:1970:5:
+expected
+  pub fn swap(mut p: (i64, String)) -> (String, i64)
+in
+  #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)] #[derive(Clone, Debug)] pub enum Command { Help, Echo(String), } #[derive(Clone, Debug)] pub enum Action { Continue, Close, } #[derive(Clone, Debug)] pub struct Reply { pub lines: Vec<String>, pub action: Action, } pub fn swap(p: &(i64, String)) -> (String, i64) { (1, String::from("a")) }
+
+
+failures:
+    effectful_function_is_a_plain_fn
+    function_body_value_depends_on_return_type
+    function_types_and_values
+    ownership_non_value_positions_do_not_clone
+    spawn_lowering
+    tuple_type
+    type_table
+
+test result: FAILED. 45 passed; 7 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p telos-rustgen --test units`
+EXIT=101

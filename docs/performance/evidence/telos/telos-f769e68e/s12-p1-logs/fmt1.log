@@ -1,0 +1,50 @@
+Diff in /home/timo/projects/telos/crates/ignite-llvm/src/lower.rs:3552:
+             BytesEmpty | ListEmpty => self.empty_list(),
+             StoreNew => unreachable!("`Store.new()` is lowered by `store_new`"),
+             ClockMonotonic | EndpointOf => {
+[31m-                unimplemented!("slice 12: LLVM lowering of `Clock.monotonic` and `Endpoint.of` (16.13), P2")
+(B[m[32m+                unimplemented!(
+(B[m[32m+                    "slice 12: LLVM lowering of `Clock.monotonic` and `Endpoint.of` (16.13), P2"
+(B[m[32m+                )
+(B[m             }
+             BytesOf => {
+                 let aty = self.ty(&args[0]);
+Diff in /home/timo/projects/telos/crates/ignite-rustgen/src/lib.rs:2881:
+             }
+             ("Process", "exit", [code]) => format!("ignite_io::exit(({code}) as i32)"),
+             ("Clock", "monotonic", []) | ("Endpoint", "of", [_]) => {
+[31m-                unimplemented!("slice 12: Rust lowering of `Clock.monotonic` and `Endpoint.of` (16.13), P2")
+(B[m[32m+                unimplemented!(
+(B[m[32m+                    "slice 12: Rust lowering of `Clock.monotonic` and `Endpoint.of` (16.13), P2"
+(B[m[32m+                )
+(B[m             }
+             ("Int", "parse", [text]) => format!(
+                 "Some({text}).filter(|t: &String| !t.starts_with('+')).and_then(|t| t.parse::<i64>().ok())"
+Diff in /home/timo/projects/telos/crates/ignite-types/src/builtins.rs:146:
+         ("Stdout", "write_all") => sig(StdoutWriteAll, vec![bytes()], io(Ty::Unit)),
+         ("Process", "exit") => sig(ProcessExit, vec![Ty::Int], Ty::Never),
+         ("IoError", "new") => sig(IoErrorNew, vec![Ty::Text], Ty::IoError),
+[31m-        ("Clock", "monotonic") => sig(
+(B[m[31m-            ClockMonotonic,
+(B[m[31m-            vec![],
+(B[m[31m-            Ty::Quantity(QuantityKind::Duration),
+(B[m[31m-        ),
+(B[m[32m+        ("Clock", "monotonic") => sig(ClockMonotonic, vec![], Ty::Quantity(QuantityKind::Duration)),
+(B[m         ("Endpoint", "of") => sig(EndpointOf, vec![Ty::Ref(None)], io(endpoint())),
+         _ => None,
+     }
+Diff in /home/timo/projects/telos/crates/ignite-types/src/typer/system.rs:1432:
+         let tparams = self.generics_of(&q);
+         let machine = Ty::Enum(QualName::new("std.control", "Machine"));
+         let hooks: [(&str, &str, Vec<Ty>, Ty); 2] = [
+[31m-            (
+(B[m[31m-                "machine",
+(B[m[31m-                "id: Text",
+(B[m[31m-                vec![ty.clone(), Ty::Text],
+(B[m[31m-                machine,
+(B[m[31m-            ),
+(B[m[32m+            ("machine", "id: Text", vec![ty.clone(), Ty::Text], machine),
+(B[m             (
+                 "validate",
+                 "",
+EXIT=1

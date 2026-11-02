@@ -1,0 +1,21 @@
+# callgrind format
+version: 1
+creator: callgrind-3.25.1
+pid: 4105139
+cmd:  /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/llvm-release/bin/terminald --port 2641
+part: 2
+
+
+desc: I1 cache: 
+desc: D1 cache: 
+desc: LL cache: 
+
+desc: Timerange: Basic block 146822016 - 146822017
+desc: Trigger: Program termination
+
+positions: line
+events: Ir
+summary: 0
+
+
+totals: 0
