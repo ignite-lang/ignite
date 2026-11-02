@@ -5,7 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
     mpsc,
 };
@@ -23,7 +23,7 @@ type Reply = mpsc::Sender<Result<Json, Failure>>;
 enum Message {
     Request(Json, Reply),
     Prepared(Box<Result<Plan, Failure>>, Reply),
-    Record(String, Json, mpsc::Sender<io::Result<()>>),
+    Record(String, String, Json, mpsc::Sender<io::Result<()>>),
     Finished(String, Result<i32, String>),
     Initialized(String),
     Status,
@@ -32,6 +32,10 @@ enum Message {
 
 struct Runtime {
     operation: String,
+    controller_plan: String,
+    operation_sink: Arc<Mutex<String>>,
+    artifacts: Arc<Mutex<BTreeMap<String, PathBuf>>>,
+    minimum_generation: Option<i64>,
     control: mpsc::Sender<Observation>,
     ready: BTreeSet<String>,
     expected: BTreeSet<String>,
@@ -46,6 +50,8 @@ struct Host {
     recovery_reason: Option<String>,
     receipts: BTreeMap<String, Json>,
     owned: BTreeMap<String, Json>,
+    retiring: BTreeMap<String, Json>,
+    standings: BTreeMap<String, Json>,
     journal: File,
     last_digest: String,
     runtime: Option<Runtime>,
@@ -229,6 +235,20 @@ fn retained_plan(root: &Path, plan: &Plan) -> Result<Plan, Failure> {
     Ok(frozen)
 }
 
+fn reducer_inputs(plan: &Plan) -> BTreeMap<PathBuf, String> {
+    let root = plan.std.clone().unwrap_or_else(crate::default_std_path);
+    plan.inputs
+        .iter()
+        .filter_map(|input| {
+            input
+                .path
+                .strip_prefix(&root)
+                .ok()
+                .map(|path| (path.to_path_buf(), input.digest.clone()))
+        })
+        .collect()
+}
+
 impl Host {
     fn snapshot(&self, online: bool) -> Json {
         object([
@@ -243,6 +263,21 @@ impl Host {
             ),
             ("committedRevision", Json::Int(self.revision)),
             (
+                "desiredRevision",
+                Json::Int(if self.active.is_some() && self.active != self.committed {
+                    self.revision + 1
+                } else {
+                    self.revision
+                }),
+            ),
+            (
+                "desiredPlan",
+                self.active
+                    .as_ref()
+                    .or(self.committed.as_ref())
+                    .map_or(Json::Null, text),
+            ),
+            (
                 "committedPlan",
                 self.committed.as_ref().map_or(Json::Null, text),
             ),
@@ -256,6 +291,8 @@ impl Host {
             ),
             ("operations", Json::Object(self.receipts.clone())),
             ("ownership", Json::Object(self.owned.clone())),
+            ("retiringInstances", Json::Object(self.retiring.clone())),
+            ("lastStandings", Json::Object(self.standings.clone())),
         ])
     }
 
@@ -293,6 +330,7 @@ impl Host {
     fn complete(&mut self, id: &str) -> Result<(), Failure> {
         self.revision += 1;
         self.committed = Some(id.to_string());
+        self.contexts.remove(id);
         self.active = None;
         self.recovery_reason = None;
         let receipt = self
@@ -364,8 +402,7 @@ impl Host {
                 .get("runtime")
                 .and_then(Json::as_str)
                 .map(PathBuf::from),
-            build: Some(
-                self.root.join("build").join(format!(
+            build: Some(self.root.join("build").join(format!(
                     "{}-{}",
                     required(&payload, "target")?,
                     if payload
@@ -377,8 +414,7 @@ impl Host {
                     } else {
                         "dev"
                     }
-                )),
-            ),
+                ))),
             ..crate::RunOptions::default()
         };
         let root = self.root.join("preparations").join(format!(
@@ -452,30 +488,93 @@ impl Host {
         plan.verify_inputs().map_err(|reason| fail(2, reason))?;
         plan.verify_ownership(&Json::Object(self.owned.clone()))
             .map_err(|reason| fail(2, reason))?;
-        let unchanged = self
+        let previous_plan = self
             .committed
             .as_ref()
-            .map(|id| read_json(&self.root.join("plans").join(format!("{id}.json"))))
-            .transpose()?
-            .and_then(|old| {
-                old.get("operationalIdentity")
-                    .and_then(Json::as_str)
-                    .map(str::to_string)
+            .map(|id| {
+                read_json(&self.root.join("plans").join(format!("{id}.json")))
+                    .and_then(|value| Plan::parse(&value).map_err(|reason| fail(3, reason)))
             })
-            .as_deref()
-            == Some(&plan.operational_identity);
+            .transpose()?;
+        let unchanged = previous_plan
+            .as_ref()
+            .is_some_and(|old| old.operational_identity == plan.operational_identity);
+        let mut rollout_member = None;
         if !unchanged {
-            let actions = plan.actions.get("members").and_then(Json::as_array).ok_or_else(|| fail(2, "plan has no reviewed member actions"))?;
-            if self.owned.len() > 1 || self.owned.keys().any(|member| actions.iter().any(|action| action.get("member").and_then(Json::as_str) == Some(member) && action.get("action").and_then(Json::as_str) == Some("unchanged"))) {
-                return Err(fail(2, "unsupported partial revision: preserving unaffected owned members requires the differential transition driver"));
+            let actions = plan
+                .actions
+                .get("members")
+                .and_then(Json::as_array)
+                .ok_or_else(|| fail(2, "plan has no reviewed member actions"))?;
+            if self.owned.len() > 1
+                || self.owned.keys().any(|member| {
+                    actions.iter().any(|action| {
+                        action.get("member").and_then(Json::as_str) == Some(member)
+                            && action.get("action").and_then(Json::as_str) == Some("unchanged")
+                    })
+                })
+            {
+                return Err(fail(
+                    2,
+                    "unsupported partial revision: preserving unaffected owned members requires the differential transition driver",
+                ));
             }
         }
         if !unchanged {
             retain_context(&self.root, &plan)?;
             let context = super::revision::Context::load(retained_plan(&self.root, &plan)?)?;
-            let supervised: BTreeSet<_> = context.model.machines.iter().filter(|machine| machine.variant() == "Supervise").map(|machine| machine.member.as_str()).collect();
-            if context.model.edges.iter().any(|edge| supervised.contains(edge.from.as_str()) && supervised.contains(edge.to.as_str()) && matches!(edge.kind, ignite_eval::EdgeKind::Readiness | ignite_eval::EdgeKind::References | ignite_eval::EdgeKind::Uses)) {
-                return Err(fail(2, "unsupported required startup order between native processes"));
+            let supervised: BTreeSet<_> = context
+                .model
+                .machines
+                .iter()
+                .filter(|machine| machine.variant() == "Supervise")
+                .map(|machine| machine.member.as_str())
+                .collect();
+            if context.model.edges.iter().any(|edge| {
+                supervised.contains(edge.from.as_str())
+                    && supervised.contains(edge.to.as_str())
+                    && matches!(
+                        edge.kind,
+                        ignite_eval::EdgeKind::Readiness
+                            | ignite_eval::EdgeKind::References
+                            | ignite_eval::EdgeKind::Uses
+                    )
+            }) {
+                return Err(fail(
+                    2,
+                    "unsupported required startup order between native processes",
+                ));
+            }
+            if self.owned.len() == 1 && self.runtime.is_some() {
+                let (member, owner) = self.owned.first_key_value().unwrap();
+                let same_controller = previous_plan.as_ref().is_some_and(|old| {
+                    super::plan::semantic_model(&old.model)
+                        == super::plan::semantic_model(&plan.model)
+                        && reducer_inputs(old) == reducer_inputs(&plan)
+                });
+                let ready_instance = owner.get("ready").and_then(Json::as_bool) == Some(true)
+                    && owner
+                        .get("pid")
+                        .and_then(Json::as_i64)
+                        .zip(owner.get("instance").and_then(Json::as_str))
+                        .is_some_and(|(pid, instance)| {
+                            process_identity(pid).as_deref() == Some(instance)
+                        });
+                if same_controller
+                    && ready_instance
+                    && context
+                        .model
+                        .machines
+                        .iter()
+                        .any(|machine| machine.member == *member && machine.variant() == "Roll")
+                {
+                    rollout_member = Some(member.clone());
+                } else if !supervised.is_empty() {
+                    return Err(fail(
+                        2,
+                        "unsupported model/controller replacement; this host currently rolls implementation-only changes through the declared drain policy",
+                    ));
+                }
             }
             self.contexts.insert(plan.id.clone(), context);
         }
@@ -501,7 +600,47 @@ impl Host {
         self.active = Some(plan.id.clone());
         self.persist()?;
         self.waiters.entry(plan.id.clone()).or_default().push(reply);
-        if let Some(runtime) = &self.runtime {
+        if let Some(member) = rollout_member {
+            let frozen = &self.contexts.get(&plan.id).expect("admitted context").plan;
+            let artifacts: BTreeMap<_, _> = frozen
+                .artifacts
+                .iter()
+                .map(|(member, artifact)| (member.clone(), artifact.path.clone()))
+                .collect();
+            let controller_plan = self.runtime.as_ref().unwrap().controller_plan.clone();
+            self.append(
+                "revisionTransition",
+                object([
+                    ("operationId", text(&plan.id)),
+                    ("controllerPlanId", text(controller_plan)),
+                    ("member", text(&member)),
+                    ("artifacts", plan.json().get("artifacts").cloned().unwrap()),
+                ]),
+            )?;
+            let runtime = self.runtime.as_mut().unwrap();
+            *runtime
+                .artifacts
+                .lock()
+                .map_err(|_| fail(3, "artifact manifest lock failed"))? = artifacts;
+            *runtime
+                .operation_sink
+                .lock()
+                .map_err(|_| fail(3, "operation identity lock failed"))? = plan.id.clone();
+            runtime.operation = plan.id.clone();
+            runtime.minimum_generation = Some(
+                self.owned
+                    .get(&member)
+                    .and_then(|owner| owner.get("generation"))
+                    .and_then(Json::as_i64)
+                    .unwrap_or(1)
+                    + 1,
+            );
+            runtime.ready.clear();
+            runtime
+                .control
+                .send(Observation::Control(format!("rollout {member}")))
+                .map_err(|_| fail(1, "revision controller is unavailable"))?;
+        } else if let Some(runtime) = &self.runtime {
             runtime
                 .control
                 .send(Observation::Control("stop".into()))
@@ -527,12 +666,23 @@ impl Host {
             .collect();
         let (control, rx) = mpsc::channel();
         let tx = self.tx.clone();
-        let operation = id.clone();
+        let operation_sink = Arc::new(Mutex::new(id.clone()));
+        let operation = Arc::clone(&operation_sink);
+        let controller_plan = id.clone();
         let sink: crate::run::live::RecordSink = Box::new(move |record| {
             let (ack, wait) = mpsc::channel();
             let value = Json::parse(&record.line()).map_err(io::Error::other)?;
-            tx.send(Message::Record(operation.clone(), value, ack))
-                .map_err(io::Error::other)?;
+            let operation = operation
+                .lock()
+                .map_err(|_| io::Error::other("operation identity lock failed"))?
+                .clone();
+            tx.send(Message::Record(
+                operation,
+                controller_plan.clone(),
+                value,
+                ack,
+            ))
+            .map_err(io::Error::other)?;
             wait.recv().map_err(io::Error::other)?
         });
         let tx = self.tx.clone();
@@ -552,8 +702,27 @@ impl Host {
                 ("controllerAbi", text(super::plan::CONTROLLER_ABI)),
             ]),
         )?;
+        let artifacts = Arc::new(Mutex::new(
+            context
+                .plan
+                .artifacts
+                .iter()
+                .map(|(member, artifact)| (member.clone(), artifact.path.clone()))
+                .collect::<BTreeMap<_, _>>(),
+        ));
+        let builder_artifacts = Arc::clone(&artifacts);
+        let builder: crate::run::live::Builder = Arc::new(move || {
+            builder_artifacts
+                .lock()
+                .map(|artifacts| artifacts.clone())
+                .map_err(|_| "artifact manifest lock failed".to_string())
+        });
         self.runtime = Some(Runtime {
             operation: id.clone(),
+            controller_plan: id.clone(),
+            operation_sink,
+            artifacts,
+            minimum_generation: None,
             control,
             ready: BTreeSet::new(),
             expected,
@@ -566,20 +735,44 @@ impl Host {
                     .send(Message::Initialized(initialized_id))
                     .map_err(io::Error::other)
             });
-            let result =
-                super::revision::run(context, &runtime_state, thread_control, rx, sink, started)
-                    .map_err(|error| error.to_string());
+            let result = super::revision::run(
+                context,
+                &runtime_state,
+                thread_control,
+                rx,
+                sink,
+                started,
+                builder,
+            )
+            .map_err(|error| error.to_string());
             let _ = tx.send(Message::Finished(id, result));
         });
         Ok(())
     }
 
-    fn record(&mut self, operation: &str, record: Json) -> Result<(), Failure> {
+    fn record(&mut self, operation: &str, controller: &str, record: Json) -> Result<(), Failure> {
         self.append(
             "revisionRecord",
-            object([("operationId", text(operation)), ("record", record.clone())]),
+            object([
+                ("operationId", text(operation)),
+                ("controllerPlanId", text(controller)),
+                ("record", record.clone()),
+            ]),
         )?;
         let kind = record.get("kind").and_then(Json::as_str);
+        if let Some(Json::Object(receipt)) = self.receipts.get_mut(operation)
+            && matches!(
+                receipt.get("state").and_then(Json::as_str),
+                Some("accepted" | "applying")
+            )
+        {
+            receipt.insert("progress".into(), record.clone());
+        }
+        if kind == Some("standing")
+            && let Some(machine) = record.get("machine").and_then(Json::as_str)
+        {
+            self.standings.insert(machine.to_string(), record.clone());
+        }
         if kind == Some("effect") && self.recovery_reason.is_some() {
             return Err(fail(1, "effect dispatch blocked by unresolved recovery"));
         }
@@ -620,6 +813,24 @@ impl Host {
                     .and_then(|fields| fields.first())
                     .and_then(Json::as_i64)
                 {
+                    if let Some(previous) = self.owned.get(member)
+                        && let Some(old_pid) = previous.get("pid").and_then(Json::as_i64)
+                        && old_pid != pid
+                        && previous
+                            .get("instance")
+                            .and_then(Json::as_str)
+                            .is_some_and(|instance| {
+                                process_identity(old_pid).as_deref() == Some(instance)
+                            })
+                    {
+                        self.retiring.insert(old_pid.to_string(), previous.clone());
+                    }
+                    let generation = event
+                        .and_then(|value| value.get("fields"))
+                        .and_then(Json::as_array)
+                        .and_then(|fields| fields.get(1))
+                        .and_then(Json::as_i64)
+                        .unwrap_or(1);
                     self.owned.insert(
                         member.to_string(),
                         object([
@@ -627,6 +838,7 @@ impl Host {
                             ("ready", Json::Bool(false)),
                             ("operationId", text(operation)),
                             ("instance", process_identity(pid).map_or(Json::Null, text)),
+                            ("generation", Json::Int(generation)),
                         ]),
                     );
                 }
@@ -637,7 +849,49 @@ impl Host {
                 .and_then(|owned| owned.get("pid"))
                 .and_then(Json::as_i64)
                 == pid;
-            if variant == Some("Ready") && matches_instance {
+            let desired_generation = self
+                .owned
+                .get(member)
+                .and_then(|owner| owner.get("generation"))
+                .and_then(Json::as_i64)
+                .is_some_and(|generation| {
+                    self.runtime
+                        .as_ref()
+                        .and_then(|runtime| runtime.minimum_generation)
+                        .is_none_or(|minimum| generation >= minimum)
+                });
+            if variant == Some("Ready") && matches_instance && desired_generation {
+                if let Some(id) = self.active.as_ref().or(self.committed.as_ref()) {
+                    let manifest = read_json(&self.root.join("plans").join(format!("{id}.json")))?;
+                    let expected = manifest
+                        .get("artifacts")
+                        .and_then(|artifacts| artifacts.get(member))
+                        .and_then(|artifact| artifact.get("digest"))
+                        .and_then(Json::as_str);
+                    if let Some(pid) = pid {
+                        let actual =
+                            match super::digest::file(Path::new(&format!("/proc/{pid}/exe"))) {
+                                Ok(digest) => digest,
+                                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                                    return Ok(());
+                                }
+                                Err(error) => {
+                                    return Err(fail(
+                                        1,
+                                        format!("cannot prove ready process artifact: {error}"),
+                                    ));
+                                }
+                            };
+                        if expected != Some(actual.as_str()) {
+                            let id = id.clone();
+                            self.reject_operation(
+                                &id,
+                                "ready process artifact differs from the admitted desired artifact",
+                            )?;
+                            return Err(fail(1, "ready artifact identity mismatch"));
+                        }
+                    }
+                }
                 if let Some(Json::Object(owned)) = self.owned.get_mut(member) {
                     owned.insert("ready".into(), Json::Bool(true));
                 }
@@ -651,6 +905,11 @@ impl Host {
                     runtime.ready.remove(machine);
                 }
             }
+            if matches!(variant, Some("Exited" | "Signalled"))
+                && let Some(pid) = pid
+            {
+                self.retiring.remove(&pid.to_string());
+            }
             if variant == Some("SpawnFailed") && self.active.as_deref() == Some(operation) {
                 if let Some(runtime) = &mut self.runtime {
                     runtime.ready.remove(machine);
@@ -659,6 +918,7 @@ impl Host {
             }
         }
         if self.recovery_reason.is_none()
+            && self.retiring.is_empty()
             && self.active.as_deref() == Some(operation)
             && self.runtime.as_ref().is_some_and(|runtime| {
                 !runtime.expected.is_empty() && runtime.expected.is_subset(&runtime.ready)
@@ -766,6 +1026,8 @@ pub fn run(state: &Path) -> Result<i32, Failure> {
         recovery_reason: None,
         receipts: BTreeMap::new(),
         owned: BTreeMap::new(),
+        retiring: BTreeMap::new(),
+        standings: BTreeMap::new(),
         journal,
         last_digest,
         runtime: None,
@@ -803,6 +1065,16 @@ pub fn run(state: &Path) -> Result<i32, Failure> {
             .unwrap_or_default();
         host.owned = previous
             .get("ownership")
+            .and_then(Json::as_object)
+            .cloned()
+            .unwrap_or_default();
+        host.retiring = previous
+            .get("retiringInstances")
+            .and_then(Json::as_object)
+            .cloned()
+            .unwrap_or_default();
+        host.standings = previous
+            .get("lastStandings")
             .and_then(Json::as_object)
             .cloned()
             .unwrap_or_default();
@@ -881,6 +1153,7 @@ pub fn run(state: &Path) -> Result<i32, Failure> {
             }
         }
     });
+    let mut checked_plans = BTreeSet::new();
     if root.join("revisions").is_dir() {
         for entry in std::fs::read_dir(root.join("revisions"))? {
             let path = entry?.path();
@@ -894,11 +1167,20 @@ pub fn run(state: &Path) -> Result<i32, Failure> {
                 return Err(fail(3, "unsupported historical host/reducer version"));
             }
             let id = required(&metadata, "planId")?;
+            checked_plans.insert(id.to_string());
             let value = read_json(&root.join("plans").join(format!("{id}.json")))?;
             let plan = Plan::parse(&value).map_err(|reason| fail(3, reason))?;
             let context = super::revision::Context::load(retained_plan(&root, &plan)?)?;
             super::revision::verify(context, &path)?;
         }
+    }
+    for (id, receipt) in &host.receipts {
+        if receipt.get("noop").and_then(Json::as_bool) == Some(true) || checked_plans.contains(id) {
+            continue;
+        }
+        let value = read_json(&root.join("plans").join(format!("{id}.json")))?;
+        let plan = Plan::parse(&value).map_err(|reason| fail(3, reason))?;
+        super::revision::Context::load(retained_plan(&root, &plan)?)?;
     }
     let resume = if host.recovery_reason.is_none() {
         host.active.clone().or_else(|| host.committed.clone())
@@ -906,16 +1188,22 @@ pub fn run(state: &Path) -> Result<i32, Failure> {
         None
     };
     if let Some(id) = resume {
-        let live_owned = host.owned.values().any(|owned| {
-            let pid = owned.get("pid").and_then(Json::as_i64);
-            let instance = owned.get("instance").and_then(Json::as_str);
-            pid.zip(instance)
-                .is_some_and(|(pid, instance)| process_identity(pid).as_deref() == Some(instance))
-        });
+        let live_owned = host
+            .owned
+            .values()
+            .chain(host.retiring.values())
+            .any(|owned| {
+                let pid = owned.get("pid").and_then(Json::as_i64);
+                let instance = owned.get("instance").and_then(Json::as_str);
+                pid.zip(instance).is_some_and(|(pid, instance)| {
+                    process_identity(pid).as_deref() == Some(instance)
+                })
+            });
         if live_owned || generation_process_exists(&root)? {
             host.reject_operation(&id, "an earlier owned process instance still exists; listener adoption requires reconciliation")?;
         } else {
             host.owned.clear();
+            host.retiring.clear();
             host.append("reconciledRevision", object([
                 ("planId", text(&id)), ("priorIntents", Json::Bool(intents.contains(&id))),
                 ("observation", text("previous owned instances ended; no retained-generation process remains")),
@@ -983,8 +1271,8 @@ pub fn run(state: &Path) -> Result<i32, Failure> {
                 });
                 let _ = reply.send(result);
             }
-            Message::Record(id, record, ack) => {
-                let result = host.record(&id, record);
+            Message::Record(id, controller, record, ack) => {
+                let result = host.record(&id, &controller, record);
                 let failed = result.as_ref().is_err_and(|error| error.status == 3);
                 let _ = ack.send(result.map_err(|error| io::Error::other(error.to_string())));
                 if failed {
@@ -995,6 +1283,7 @@ pub fn run(state: &Path) -> Result<i32, Failure> {
             Message::Finished(id, result) => {
                 host.runtime = None;
                 host.owned.clear();
+                host.retiring.clear();
                 if shutdown {
                     break;
                 }

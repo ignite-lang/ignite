@@ -607,3 +607,228 @@ fn tampered_host_history_is_rejected_before_startup() {
         Some(false)
     );
 }
+
+struct TerminalSession(TcpStream);
+
+impl TerminalSession {
+    fn connect(port: u16) -> TerminalSession {
+        let stream =
+            TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), LIVE_TIMEOUT).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        stream
+            .set_write_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut session = TerminalSession(stream);
+        session.prompt();
+        session
+    }
+
+    fn prompt(&mut self) -> String {
+        let deadline = Instant::now() + LIVE_TIMEOUT;
+        let mut response = Vec::new();
+        while !response.ends_with(b"terminal> ") {
+            assert!(
+                Instant::now() < deadline,
+                "session prompt deadline: {response:?}"
+            );
+            let mut bytes = [0; 1024];
+            let count = self
+                .0
+                .read(&mut bytes)
+                .expect("read persistent terminal session");
+            assert!(count > 0, "session ended before prompt: {response:?}");
+            response.extend_from_slice(&bytes[..count]);
+        }
+        String::from_utf8_lossy(&response).into_owned()
+    }
+
+    fn status(&mut self, expected: &str) {
+        self.0.write_all(b"status\r\n").unwrap();
+        let response = self.prompt();
+        assert!(
+            response.lines().any(|line| line.trim() == expected),
+            "expected status line {expected:?}: {response:?}"
+        );
+    }
+
+    fn quit(mut self) {
+        self.0.write_all(b"quit\r\n").unwrap();
+    }
+}
+
+#[test]
+fn changed_command_body_replaces_ready_server_while_old_sessions_drain() {
+    let _build_guard = APPLY_BUILDS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let reserved = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = reserved.local_addr().unwrap().port();
+    let flow = Flow::new("replacement", port);
+    let mut host = Host::start(&flow, "host");
+    let first = flow.prepare("first", "rust");
+    let first_plan =
+        ignite::apply::plan::Plan::parse(&Json::parse(&read(&first)).unwrap()).unwrap();
+    drop(reserved);
+    let receipt = flow.apply("first-apply", &first);
+    assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(1));
+    let old_pid = owned_pid(&flow.inspect());
+    let mut old_session = TerminalSession::connect(port);
+    old_session.status("ready");
+
+    let commands = flow.source.parent().unwrap().join("commands.ignite");
+    let original = read(&commands);
+    assert!(original.contains("Status => Reply { lines = [\"ready\"] }"));
+    fs::write(
+        &commands,
+        original.replace(
+            "Status => Reply { lines = [\"ready\"] }",
+            "Status => Reply { lines = [\"replacement-ready\"] }",
+        ),
+    )
+    .unwrap();
+    let replacement = flow.prepare("replacement", "rust");
+    let replacement_plan =
+        ignite::apply::plan::Plan::parse(&Json::parse(&read(&replacement)).unwrap()).unwrap();
+    assert_eq!(
+        ignite::apply::plan::semantic_model(&first_plan.model),
+        ignite::apply::plan::semantic_model(&replacement_plan.model),
+        "command-body change preserves the model"
+    );
+    assert_ne!(
+        first_plan.operational_identity,
+        replacement_plan.operational_identity
+    );
+    let stdout = flow.root.join("replacement-apply.stdout");
+    let stderr = flow.root.join("replacement-apply.stderr");
+    let mut client = Client(
+        Command::new(env!("CARGO_BIN_EXE_ignite"))
+            .arg("apply")
+            .arg(&replacement)
+            .arg("--state")
+            .arg(&flow.state)
+            .current_dir(repo())
+            .stdin(Stdio::null())
+            .stdout(File::create(&stdout).unwrap())
+            .stderr(File::create(&stderr).unwrap())
+            .spawn()
+            .unwrap(),
+    );
+    let deadline = Instant::now() + LIVE_TIMEOUT;
+    let new_pid = loop {
+        let status = flow.inspect();
+        let ready_pid = status
+            .get("ownership")
+            .and_then(Json::as_object)
+            .into_iter()
+            .flat_map(|owned| owned.values())
+            .filter(|owned| owned.get("ready").and_then(Json::as_bool) == Some(true))
+            .filter_map(|owned| owned.get("pid").and_then(Json::as_i64))
+            .find(|pid| *pid != old_pid);
+        if let Some(pid) = ready_pid {
+            break pid;
+        }
+        assert!(
+            client.0.try_wait().unwrap().is_none(),
+            "replacement finished before new server readiness\n{}\n{}",
+            read(&stdout),
+            read(&stderr)
+        );
+        assert!(
+            Instant::now() < deadline,
+            "replacement server readiness deadline: {status:?}\n{}",
+            read(&host.stderr)
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let mut new_session = TerminalSession::connect(port);
+    new_session.status("replacement-ready");
+    old_session.status("ready");
+    assert!(
+        client.0.try_wait().unwrap().is_none(),
+        "apply must wait for the old session to drain"
+    );
+    old_session.quit();
+    let result =
+        wait(&mut client.0, LIVE_TIMEOUT).expect("replacement completes after old session closes");
+    assert!(
+        result.success(),
+        "replacement apply: {}\n{}",
+        read(&stdout),
+        read(&stderr)
+    );
+    let completed = Json::parse(&read(&stdout)).unwrap();
+    assert_eq!(completed.get("revision").and_then(Json::as_i64), Some(2));
+    assert_eq!(
+        completed.get("state").and_then(Json::as_str),
+        Some("completed")
+    );
+    assert_eq!(owned_pid(&flow.inspect()), new_pid);
+    let generation_root = flow.state.join("revisions");
+    let server_name = &replacement_plan
+        .artifacts
+        .get("Terminal.server")
+        .unwrap()
+        .name;
+    let servers: Vec<i64> = fs::read_dir("/proc")
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let pid = entry.file_name().to_string_lossy().parse().ok()?;
+            let executable = fs::read_link(entry.path().join("exe")).ok()?;
+            (executable.starts_with(&generation_root)
+                && executable
+                    .file_name()
+                    .is_some_and(|name| name == server_name.as_str()))
+            .then_some(pid)
+        })
+        .collect();
+    assert_eq!(
+        servers,
+        vec![new_pid],
+        "old OS process retires after draining"
+    );
+    let historical = flow.apply("historical-first-plan-retry", &first);
+    assert_eq!(historical.get("operationId"), receipt.get("operationId"));
+    assert_eq!(historical.get("revision").and_then(Json::as_i64), Some(1));
+    assert_eq!(
+        historical.get("currentRevision").and_then(Json::as_i64),
+        Some(2)
+    );
+    assert_eq!(owned_pid(&flow.inspect()), new_pid);
+    new_session.status("replacement-ready");
+    new_session.quit();
+    host.stop();
+    fs::write(&commands, "invalid workspace after committed replacement\n").unwrap();
+    let mut restored = Host::start(&flow, "replacement-restarted");
+    let deadline = Instant::now() + LIVE_TIMEOUT;
+    loop {
+        let status = flow.inspect();
+        if status
+            .get("ownership")
+            .and_then(Json::as_object)
+            .is_some_and(|owned| {
+                owned.len() == 1
+                    && owned
+                        .values()
+                        .all(|owner| owner.get("ready").and_then(Json::as_bool) == Some(true))
+            })
+        {
+            assert_eq!(
+                status.get("committedRevision").and_then(Json::as_i64),
+                Some(2)
+            );
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "committed replacement did not resume: {status:?}"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let mut restored_session = TerminalSession::connect(port);
+    restored_session.status("replacement-ready");
+    restored_session.quit();
+    restored.stop();
+}

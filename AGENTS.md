@@ -19,6 +19,7 @@ the IO substrate (Rust) that compiled programs link.
 | `crates/ignite-eval/` | compile-time evaluator (`docs/slice.md` section 15): interprets property expressions over the typed modules with fuel (E115, E117, E118), builds the system model `ignite plan` prints, resolves assemblies through `std.deploy`'s `admits` and `includes` (E110 to E114), renders `ignite explain`; steps the reducers of `std.control` for `ignite run` and `ignite replay` (`docs/slice.md` 16.2, O27); used by `check`, `plan`, `explain`, `run` and `replay` only, linked by no backend and no compiled program |
 | `crates/ignite/` | `ignite` CLI: `check`, `emit`, `build`, `test`, `plan`, `explain`, `run`, `replay`; end-to-end tests of the example in `tests/terminal.rs`, model and explain goldens in `tests/golden/` |
 | `crates/ignite/src/run/` | the driver of `ignite run` and `ignite replay` (`docs/slice.md` 16.3): `engine` steps the `std.control` reducers in `ignite-eval`, `live` runs the adapters `process`, `probe`, `clock` and `control` that turn effects into processes, attempts, timers and stdin commands and feed events back, `journal` records every event, effect, signal, standing and consequence (16.5), `replay` re-steps a journal and compares (E127) |
+| `crates/ignite/src/apply/` | the local host and source-bound saved plans (`docs/slice.md` 17): `plan` owns input/artifact identities and action manifests, `host` owns the state lock, socket queue, durable receipts and host journal, `revision` owns retained source/type/model contexts and calls the existing `run` driver; implementation-only server replacements use `std.control`'s existing rollout through a pinned artifact builder |
 | `crates/ignite-load/` | `ignite-load`: load generator for `terminald` (workloads `rr`, `pipe`, `connect`; `ignite-load matrix` for `task bench-throughput`); not linked into compiled programs |
 | `std/` | standard library in Ignite; module `std.a.b` is `std/a/b.ignite` |
 | `std/console.ignite` | `Console`, `Reply`, `Action`: a line-oriented console application, independent of the protocol that carries it; `CommandConsole` (the declared form: `implementation: Module<ConsoleCommands>`, `command_schema`), `console_of`, `command_names` |
@@ -389,6 +390,8 @@ cold comparison against each baseline meets the start-load rule and has no faile
 - `docs/slice.md` is the contract between the compiler crates. Change it and the tests together;
   do not let a crate's doc comment restate it.
 - Public APIs of the compiler crates are the frozen skeletons' shapes; add, do not rename.
+- Backend generation changes also update `apply::plan::CODEGEN_REVISION`; saved plans
+  distinguish generation semantics from their separate exact compiler-byte pin.
 - Generated Rust is an artifact: never edit it, never commit it. `target/ignite/` holds it.
 - Tests exercise behaviour through public APIs: the parser through source text, the checker
   through fixtures with `.expected` diagnostics, the generator through golden files and a real
@@ -430,6 +433,9 @@ raw samples and exclusions: `docs/performance/12c/release-815cf74/README.md`.
   published-comparison workspace evidence is insufficient. No baseline moved.
 - `ignite test --target=all` enumerates all supported native CLI targets.
 
-Next roadmap step: review/finalize the slice-13 contract for `ignite apply` before
-implementation. The remaining 12c gaps are deferred, not a reason to silently
-change its acceptance limits or claim recovery.
+Slice 13 implementation is authorized and in progress. The first host/plan/apply/inspect
+workflow, retained restart and implementation-only draining replacement are implemented;
+the complete acceptance matrix remains open. Model/controller changes and partial updates
+of multiple owned workloads are rejected until differential revision transitions exist.
+Continue runtime implementation rather than reopening contract approval. The remaining
+12c gaps stay deferred; its acceptance limits and recovery claim are unchanged.

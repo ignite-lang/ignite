@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, mpsc};
+use std::sync::mpsc;
 use std::time::Duration;
 
 use crate::run::{
@@ -88,6 +88,7 @@ pub(super) fn run(
     rx: mpsc::Receiver<Observation>,
     sink: RecordSink,
     started: Box<dyn FnOnce() -> std::io::Result<()> + Send>,
+    builder: crate::run::live::Builder,
 ) -> Result<i32, crate::Error> {
     let Context {
         plan,
@@ -137,7 +138,7 @@ pub(super) fn run(
         executables,
         generation: 1,
         start_at: 0,
-        builder: Arc::new(move || Ok(built.clone())),
+        builder,
     };
     Live::new(core, &model, types, config, journal, adapters, tx, rx)
         .with_record_sink(sink)
