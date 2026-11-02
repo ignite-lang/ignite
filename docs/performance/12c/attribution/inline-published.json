@@ -1,0 +1,72 @@
+[
+  {
+    "label": "warmup-rust",
+    "seconds": 3.448864919017069,
+    "exit": 0
+  },
+  {
+    "label": "warmup-llvm",
+    "seconds": 1.5302378059714101,
+    "exit": 0
+  },
+  {
+    "label": "0-rust-full",
+    "seconds": 0.3944431690033525,
+    "exit": 0
+  },
+  {
+    "label": "0-rust-list",
+    "seconds": 0.2541520560043864,
+    "exit": 0
+  },
+  {
+    "label": "0-llvm-full",
+    "seconds": 0.6639682890381664,
+    "exit": 0
+  },
+  {
+    "label": "0-llvm-list",
+    "seconds": 0.5345973909716122,
+    "exit": 0
+  },
+  {
+    "label": "1-rust-full",
+    "seconds": 0.393978487001732,
+    "exit": 0
+  },
+  {
+    "label": "1-rust-list",
+    "seconds": 0.2571074010338634,
+    "exit": 0
+  },
+  {
+    "label": "1-llvm-full",
+    "seconds": 0.6845962149673142,
+    "exit": 0
+  },
+  {
+    "label": "1-llvm-list",
+    "seconds": 0.5724632029887289,
+    "exit": 0
+  },
+  {
+    "label": "2-rust-full",
+    "seconds": 0.3969481780077331,
+    "exit": 0
+  },
+  {
+    "label": "2-rust-list",
+    "seconds": 0.2540188319981098,
+    "exit": 0
+  },
+  {
+    "label": "2-llvm-full",
+    "seconds": 0.6795638900366612,
+    "exit": 0
+  },
+  {
+    "label": "2-llvm-list",
+    "seconds": 0.5438165999948978,
+    "exit": 0
+  }
+]

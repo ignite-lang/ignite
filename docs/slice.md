@@ -3872,3 +3872,9 @@ remain internal AST addresses; untrusted identifier maps retain their existing h
 Evaluator worker reuse is scoped to one check/model operation, with fuel, allocations and
 frames reset separately for every property/hook call as before. O30 effect durability,
 manual-clock backoff, real-clock restart limits and journal replay remain unchanged.
+
+Cold validation exposed a shutdown race: retiring a member before publishing its completion
+allowed the closing segment to omit exit events. The process adapter now publishes completion
+before exposing quiescence. Stop processes the finite queued prefix through an internal fence
+before closing the segment, using the ordinary reducer/journal path. This preserves every
+completion without letting later control input extend shutdown; effect syncs remain unchanged.

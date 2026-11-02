@@ -48,6 +48,13 @@ The source revision and roots must match existing evidence; use new evidence for
 candidate. Program-build outputs are unique per process, so stale Cargo output is not counted
 as a fresh program build.
 
+For a controlled offline batch, set `CARGO_NET_OFFLINE=true` for every phase and every source
+revision after verifying all locked/generated-project dependencies are cached. The flag is
+recorded in `run.json`; changing it requires a new evidence directory. This excludes registry
+index/cache-admission delays while preserving fresh target builds and `SCCACHE_RECACHE=1`.
+Missing dependencies still fail the command. Fetching dependencies is setup, never a timed
+compiler gain. Preserve earlier failed online batches; do not mix online and offline samples.
+
 Defaults implement the performance plan:
 
 - Same toolchain and environment for both sides: incremental off, dev debug line tables,
@@ -61,7 +68,9 @@ Defaults implement the performance plan:
   and start a new affected validation batch instead of collecting green runs around it.
 - Coverage requires at least 647 passed Rust tests with five ignored and at least 148 inline
   tests on each target. Acceptance also checks every timing ratio, the 10.8 s workspace goal
-  under comparable load (default maximum 9), and the 4.6 s `ignite_test.rs` goal.
+  under comparable load (default maximum 9), the 4.6 s `ignite_test.rs` goal, and three matched
+  Rust-generator integration runs at most their 11b time (ratio ≤1.0). The latter uses
+  `cargo test -p ignite-rustgen --test main`; missing samples keep step 1 open.
 - All required comparison samples against the published checkpoint must be present, although
   only the frozen 11b source defines the budget. Closure checks its exact Git tree identity;
   alternative baselines are diagnostic and cannot produce an accepted 12c result. Executable counts use actual Cargo
@@ -76,6 +85,8 @@ limits above two warm passes/one cold pair force `accepted=false` even if timing
 
 The harness records tool versions, environment, exact source commits/hashes, per-command
 loads/times/exits/test counts, source integrity, and copied real-clock restart journals.
+Each capture records the executing harness SHA256 and retains that exact Python source in
+`evidence/harness/`, so criteria refinements are auditable even when production code is unchanged.
 It refuses unknown build directories, changed source bytes, reused evidence for another
 configuration, and storage below the configured guard (20 GiB by default).
 

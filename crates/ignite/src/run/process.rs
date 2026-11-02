@@ -233,7 +233,6 @@ pub(super) fn spawn(
         .name(format!("{member} waiter"))
         .spawn(move || {
             let status = child.wait();
-            drop(lock(&processes).live.remove(&pid));
             let observation = match status {
                 Ok(status) => match (status.code(), status.signal()) {
                     (Some(code), _) => Observation::Exited {
@@ -261,7 +260,12 @@ pub(super) fn spawn(
                     }
                 }
             };
+            // Publish completion before making quiescence visible. The stop
+            // loop checks this table, then drains the observations already
+            // queued; neither it nor settle may see the child retired first.
+            let mut table = lock(&processes);
             let _ = observations.send(observation);
+            drop(table.live.remove(&pid));
         });
 }
 
@@ -402,15 +406,17 @@ mod tests {
         let Ok(Observation::Started { pid, .. }) = observations.recv_timeout(LIMIT) else {
             panic!("no Started");
         };
+        assert!(adapters.settle(LIMIT), "the child has exited before ready");
+        assert!(adapters.pids("T.quick").is_empty());
         assert_eq!(
-            observations.recv_timeout(LIMIT),
+            observations.try_recv(),
             Ok(Observation::Exited {
                 member: "T.quick".to_string(),
                 pid,
                 code: 3,
-            })
+            }),
+            "quiescence must not precede publication of the exit"
         );
-        assert!(adapters.settle(LIMIT));
     }
 
     #[test]

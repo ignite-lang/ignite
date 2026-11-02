@@ -1,0 +1,47 @@
+[
+  {
+    "run": 1,
+    "exit": 0,
+    "seconds": 0.9821320250048302,
+    "journal_lengths": [
+      58,
+      58
+    ]
+  },
+  {
+    "run": 2,
+    "exit": 0,
+    "seconds": 1.1409582940395921,
+    "journal_lengths": [
+      58,
+      58
+    ]
+  },
+  {
+    "run": 3,
+    "exit": 0,
+    "seconds": 1.1948259539785795,
+    "journal_lengths": [
+      58,
+      58
+    ]
+  },
+  {
+    "run": 4,
+    "exit": 0,
+    "seconds": 1.3449764139950275,
+    "journal_lengths": [
+      58,
+      58
+    ]
+  },
+  {
+    "run": 5,
+    "exit": 0,
+    "seconds": 1.3155594309791923,
+    "journal_lengths": [
+      58,
+      58
+    ]
+  }
+]

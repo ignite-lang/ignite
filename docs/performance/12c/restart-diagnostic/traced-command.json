@@ -1,0 +1,22 @@
+{
+  "command": [
+    "strace",
+    "-f",
+    "-ttT",
+    "-e",
+    "trace=fdatasync",
+    "-o",
+    "/home/timo/.cache/scratch/ignite-perf12c/restart-diagnostic/fdatasync.strace",
+    "/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/main-b624c508ef07abba",
+    "run::killing_terminald_restarts_it_in_real_time",
+    "--exact",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "seconds": 0.4835255690268241,
+  "load_after": [
+    10.9140625,
+    16.58349609375,
+    12.294921875
+  ]
+}

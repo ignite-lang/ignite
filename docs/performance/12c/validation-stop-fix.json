@@ -1,0 +1,31 @@
+{
+  "purpose": "Full workspace passed; following integrated gate failed real-clock restart at869.31ms; not a readiness close",
+  "path": "/home/timo/.cache/scratch/ignite-perf12c/validation/1793620227368762794",
+  "steps": [
+    {
+      "step": "fmt",
+      "seconds": 1.2479090559645556,
+      "exit": 0
+    },
+    {
+      "step": "clippy",
+      "seconds": 0.13206168200122193,
+      "exit": 0
+    },
+    {
+      "step": "workspace",
+      "seconds": 31.665085957036354,
+      "exit": 0
+    },
+    {
+      "step": "inline",
+      "seconds": 8.80097499297699,
+      "exit": 0
+    },
+    {
+      "step": "gate",
+      "seconds": 15.288536668987945,
+      "exit": 201
+    }
+  ]
+}
