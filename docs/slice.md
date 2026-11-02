@@ -3935,3 +3935,233 @@ the measured gate does not alternate dependency feature sets and rebuild the CLI
 dependency is added. Test-only work also shares the checked AST/type pair for immutable std
 fixtures, and the giant-chain assertion avoids a pattern search only when its required marker
 is absent; every assertion, case, ignore and failure condition is preserved.
+
+## 17 Slice 13: local apply (proposed contract)
+
+**Status: proposed, awaiting user review; not implemented.** This section fixes the
+contract and acceptance design only. It adds no running host, schema implementation or
+passing tests. Slice 12c's remaining performance work stays deferred.
+
+### 17.1 Scope and command surface
+
+`apply` submits a reviewed desired revision to an explicit foreground local host. The
+host owns supervision, probes, the journal and recovery after the client exits. There is
+no automatic daemon, cloud provider, portable bundle, in-place update or stateful migration.
+Changes use replacement and the existing drain protocol (16.12).
+
+```
+ignite host --state DIR
+ignite plan FILE --for-apply --state DIR --out PLAN [--assembly NAME]
+            [--target rust|llvm] [--release] [--std DIR] [--runtime FILE] [--fuel N]
+ignite apply PLAN --state DIR
+ignite inspect --state DIR [--operation ID] [--json]
+```
+
+A new host state starts empty. An apply revision with zero hosted machines is valid: removing the
+last workload leaves the host idle and available for later applies. Existing `run` E125
+behavior is unchanged.
+
+`host` creates or opens one state namespace, runs until SIGINT, SIGTERM or stdin `stop`,
+and accepts stdin `status`. It uses the real clock. Explicit startup is required; `apply`
+never launches a host. Restarting the same host resumes accepted work and reconciles its
+last committed desired revision. Normal shutdown drains owned children; a crash kills them
+under the existing parent-death rule. Neither promises workload survival during host outage.
+
+Ordinary `plan` keeps its existing model JSON and options. `--for-apply` requires a live
+host and explicit output file; it obtains a consistent base revision and ownership snapshot,
+checks the source, and prepares immutable local artifacts without changing running resources.
+Target defaults to Rust; profile defaults to dev. LLVM runtime selection follows `build`.
+`--fuel` still bounds planning evaluation. Artifact preparation may build; ordinary planning
+continues to generate no executables. No native build may occur after destructive cutover.
+
+`apply` waits for completion; disconnecting its client cancels neither accepted intent nor
+host work. Exit 0 means completed or already completed; 1 means failed, outcome unknown or
+recovery required; 2 means rejected plan, admission or revision; 3 means host/storage failure.
+A disconnected caller must inspect or retry, rather than infer rejection. `inspect` reports
+host/state identity, committed and desired revisions, operation id/state, action progress,
+observed ownership, readiness and any recovery reason/next action. Its successful exit means
+the status was read, not that an operation succeeded. With no host, it may read a durable
+status explicitly labelled offline; it must not infer live health.
+
+### 17.2 Host ownership and transport
+
+The host alone holds `<state>/lock` for its lifetime and writes the journal. A second host
+or `run` using that state is rejected before builds or resource changes. Clients use
+`<state>/control.sock`, a local Unix-domain socket restricted to the host user. Requests and
+replies are versioned, length-framed UTF-8 JSON with a request id; unsupported versions,
+malformed frames and oversized requests fail before admission. A client cannot supply an
+arbitrary journal or executable path as a dispatch instruction.
+
+The state has a durable unique identity, distinct from its directory spelling. Every plan
+and request targets that identity. A stale socket is replaced only by a process holding the
+state lock; neither socket presence nor a PID file proves ownership. Requests enter the
+same serialized controller queue as adapter observations. There is one active apply per
+state; another distinct apply is rejected as busy. Inspection and retries remain available.
+No remote listener or multi-user authorization model is added.
+
+### 17.3 Saved plan and identity
+
+Apply accepts a separate versioned `ignite-apply-plan/0.1` envelope, not
+`ignite-model/0.1`. It records:
+
+- state identity, base revision and relevant observed ownership/resource revisions;
+- selected assembly, complete canonical desired model, change actions and dependency order;
+- source roots and cryptographic content digests of every reached source, configuration,
+  compiler, standard-library/reducer input and build/runtime input;
+- target/profile, immutable artifact references and content digests, controller ABI and
+  reducer revision, ownership and removal authority; and
+- a plan id hashing the canonical envelope, excluding its own id field, including admission assumptions.
+
+Digests use SHA-256 with explicit format/domain separation. Paths and the existing private
+`build_stamp` are not identities. The plan is source-bound: referenced inputs must match
+before first acceptance; it contains no source or executable bundle. The host verifies and
+retains the admitted artifacts in its own immutable generation paths, not mutable build
+outputs. Missing/mismatched inputs, artifacts, required capabilities or controller versions
+are rejected before resource mutation. An accepted operation recovers from its retained
+inputs; later workspace edits must never silently rebuild it as different code.
+
+Raw source/admission identity and operational identity are different. Source locations,
+comments and system-member declaration order do not cause deployment changes after
+replanning. Operational identity covers canonical model semantics plus canonical resolved
+implementation bodies, types/constants and dependencies, target/profile, runtime contract
+and versioned compiler/backend code-generation semantics. That codegen revision changes whenever
+generation behavior may change; exact admitted compiler bytes remain separately pinned.
+The implementation projection excludes locations/trivia and orders module/declaration sets
+by qualified name, but preserves statement, parameter, record-field, enum-variant and other
+meaningful order. Artifact bytes remain separately pinned and verified: identical model JSON
+with changed implementation is not a no-op. Semantic model comparison excludes `sourceMap`
+and normalizes member/edge collections already defined as unordered; it never sorts arbitrary
+lists. Stale raw inputs still invalidate an unaccepted plan even when its operational diff
+would be empty. Replanning is required, not automatic substitution at apply time.
+
+### 17.4 Changes and authority
+
+The plan shows `add`, `replace`, `remove`, `detach` or `unchanged` per stable member id,
+with reasons and the exact affected dependent closure. Unsupported changes are rejected,
+not labelled updates. A change of implementation or operational properties replaces the
+owned executable and any dependent whose configuration/endpoint changes. There is no generic
+in-place mutation hook in this slice. Stateful members requiring migration are inadmissible.
+
+Prepare all additions/replacements first: build and verify artifacts without starting a
+listener that conflicts with an owned one. Independent additions start providers before
+readiness-dependent consumers. For an occupied listener, first drain/release the old listener,
+then start its replacement, require `Ready`, and only then start affected dependents. Old
+accepted connections continue under the existing drain/deadline protocol (16.12); use its
+explicit deadline policy without silently changing it. Stop/remove dependents before their
+providers. Reject cycles in required action ordering; signal/dataflow edges are not
+automatically startup dependencies. Failure before cutover retains the old generation where
+possible; failure after destructive progress reports actual state and forward recovery,
+not an invented rollback guarantee.
+
+Ownership records distinguish host-created processes/listeners, included members and external
+bindings. Host creation grants drain/stop authority over that exact process instance and release
+of its owned listener after dependents drain: this is the supported `nativeProcess` ownership default.
+Journal/history and inactive artifacts are retained by default; further deletion requires
+explicit recorded authority. The client envelope cannot manufacture authority absent the source
+and host ownership records. External resources are observed and detached, never killed or
+deleted; a reference, matching address or historical PID does not grant authority. A binding whose vocabulary cannot express the required authority
+is unsupported. Listener adoption requires matching durable ownership and OS process identity;
+port availability alone is insufficient. Resource adoption that cannot be proved is blocked.
+
+### 17.5 Durability, revision and recovery
+
+This needs a distinct versioned host journal, not an altered interpretation of
+`ignite-journal/0.1`. Existing `run`/`replay`, full-model header checks, record order and O30
+remain unchanged. The host journal records admitted plans, base/new revisions, immutable input
+identities, per-action intents and observed completions, operation outcomes and revision
+commit. Historical model/configuration and controller provenance remain replayable; unsupported
+schema/reducer upgrades are rejected. Contract evidence retains the definition under which it
+was accumulated, rather than being reinterpreted by a changed contract.
+
+Persist and sync acceptance before acknowledging it. Persist and sync every effect intent
+before dispatch, and its observed completion before advancing dependent destructive work.
+The desired revision is committed only when all required actions converge. A failed operation
+leaves its prior committed revision and explicit partial observed state; it does not pretend
+that resources reverted. No unrelated operation may overwrite unresolved recovery.
+
+The retry key is state identity plus plan id. Validate envelope integrity and payload/id
+agreement first; a mismatched payload is rejected. A repeated accepted request returns the
+same operation/result without a second dispatch. Receipt lookup precedes stale-base rejection
+for that known operation; an unknown plan still requires admission. Retrying an old completed
+operation reports its historical revision and the current one without rolling back. A completed
+receipt describes that operation, not present workload health. A newly planned operational no-op causes no replacement or
+revision increment. Normal probes and supervision may continue; no-op does not mean freezing
+all controller activity.
+
+Recovery inspects each durable intent without a recorded completion. It reconciles effects
+using stable action/generation identity and provable ownership before retrying. A missing
+owned child may be restarted after verifying the old instance ended; a historical PID must
+never be signalled after reuse. If an effect may have succeeded but its outcome/authority
+cannot be established, mark `outcome_unknown`/`recovery_required`, block dependent mutation,
+and expose the evidence needed to resolve it. Never blind-spawn a duplicate or adopt another
+process to make recovery appear successful. Losing durable storage stops new mutations.
+
+Host restart resumes pending operations automatically when reconciliation proves it safe;
+retrying `apply` attaches to that work. Client disconnection needs no operator recovery.
+Stopping/restarting a host is not a new apply. The current replay implementation only verifies
+recorded transitions and tolerates an incomplete final step; it does not already implement
+this intent reconciliation. Recovery completeness is an acceptance obligation below.
+
+### 17.6 Terminal walkthrough
+
+Before: no resources are owned and revision is zero. Keep the host terminal open:
+
+```
+# terminal A
+ignite host --state .ignite/terminal
+# terminal B
+ignite plan examples/terminal/terminal.design.ignite --assembly local \
+  --for-apply --state .ignite/terminal --out terminal.apply.json
+ignite apply terminal.apply.json --state .ignite/terminal
+ignite inspect --state .ignite/terminal --json
+```
+
+After: revision 1 is committed, `terminald` is ready, probes/standings continue in terminal A,
+and the client has exited. Reapply the same file: same completed operation, no replacement.
+Change the command implementation, then replan/apply: the diff shows replacement even if
+properties are identical; existing connections drain and the new implementation becomes ready.
+For removal, remove server, ingress, included console, promptProbe and its three dependent
+contracts and their bindings together; retain the workstation client. Replan/apply drains
+the server and stops its probes, leaving no hosted machines while the host stays running.
+Its dependent removals and release order are explicit. External references produce detach only. Disconnect terminal B after acceptance: inspect/retry
+finds the same operation. Kill terminal A during a dispatch, restart the same host, then inspect:
+reconciliation resumes safely or reports recovery required, with no duplicate owned process.
+
+### 17.7 Acceptance and implementation owners
+
+These are required future checks, not results. Run the local process scenarios with both Rust
+and LLVM artifacts; compare semantic actions/results while masking only physical PID/time.
+
+| Input / interruption | Action | Required observation |
+|---|---|---|
+| Empty state, terminal design | plan/apply | Revision 1; one owned server; probe/standing and status work |
+| Same accepted plan | retry, including concurrent retry | Same operation; no second dispatch/revision |
+| Reformatted/reordered system members | replan/apply | Operational no-op; fresh admission pins |
+| Same model, changed command body | replan/apply | Replacement and new observable command behavior |
+| Stale base, changed source/artifact, wrong state/version | apply | Rejected before mutation; original service remains |
+| Changed compiler/backend semantics with unchanged model | replan/apply | Replacement; exact artifact pin checked |
+| Add/remove dependent, external reference | apply | Provider/start and dependent/stop order; external untouched |
+| Remove the final hosted workload | apply, then inspect/reapply | Host remains idle/running; no owned children; same plan is a no-op |
+| Connection active during replacement | apply | Existing drain/deadline behavior; replacement readiness |
+| Client disconnect before/after durable acceptance | retry/inspect | Rejected or same durable operation, never duplicate |
+| Crash after intent, after dispatch, before completion/commit | restart host/retry | Reconciled single effect or explicit blocked unknown outcome |
+| Reused PID, foreign listener, second host | recover/start | No foreign signal/adoption; lock/ownership refusal |
+| Storage sync failure, unsupported migration or action cycle | apply/recover | No unsafe subsequent effect; clear recovery/rejection |
+| Multiple committed/pending host revisions | replay/recover history | Every action/result uses its original model/input/reducer provenance; divergence is rejected |
+| Old run journal and existing commands | run/replay/ordinary plan | Existing contracts and goldens unchanged |
+
+The following are future implementation tasks, not dispatch authorization:
+
+| Owner | Deliverable | Dependencies | Acceptance |
+|---|---|---|---|
+| Evaluator/frontend and existing build driver | Canonical operational projection, saved-plan admission and pinned artifact manifest | Reviewed contract | Source-only no-op; changed code/codegen replacement; exact input validation |
+| Ignite control/kind modules | Pure diff, ordering, replacement and reconciliation transitions | Plan/action contracts | Reducer traces agree in evaluator and both backends; preserve std layering (O45) |
+| Driver host/control/journal | Socket client/host, owned revision context, durable receipts and revision replay | Projection and reducer interfaces | Single owner; retry precedence; multi-revision crash recovery |
+| Existing process/probe/build adapters | Instance identity, immutable generations and existing drain/release dispatch | Durable action interface | No foreign mutation/duplicate spawn; occupied-port cutover |
+| Existing integration/inline test owners | Walkthrough and fault-injection matrix above | Host and adapter implementation | Both targets; unchanged run/replay/ordinary-plan coverage |
+
+`Live` currently borrows one `Loaded` model/evaluator context, and `Core` owns a fixed machine
+set. The host task must introduce an owned revision context and explicit transition boundary;
+it cannot hot-swap borrowed AST/type tables or treat a new segment as plan replacement.
+Runtime implementation requires explicit user approval of this contract; completing independent
+review of this documentation batch does not grant that authorization.
