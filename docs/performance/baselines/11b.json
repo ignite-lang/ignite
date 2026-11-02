@@ -1,0 +1,10 @@
+{
+  "commit": "df7ccb9bed4440824a2d108fa112eba3fea25f99",
+  "parent": "60aef38246435400e70fecfcd758ef0355336972",
+  "provenance": "Recovered snapshot, committed at recovery time, not historical",
+  "ref": "refs/heads/bench/11b-recovered",
+  "schema": "ignite-performance/1",
+  "source_files": 741,
+  "source_manifest_sha256": "ebc7831f9d720c10756768672b4d18a58210a5c308ddf4332939c8af8e09b595",
+  "tree": "5d0bc8b3edc716e4b7473ed860204d548bab2db8"
+}

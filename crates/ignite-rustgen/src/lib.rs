@@ -45,6 +45,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use ignite_check::{BUILTIN_ENUMS, BUILTIN_STATICS, Symbols};
 use ignite_syntax::ast::{
@@ -405,7 +406,7 @@ pub fn generate_std(
         .iter()
         .map(|(path, program, symbols)| (path.clone(), *program, *symbols, None))
         .collect();
-    std_project(&modules, options, None)
+    prepare_std(&modules, options).map(|prepared| prepared.generate_all(&options.substrate_path))
 }
 
 /// A [`StdModule`] with its types.
@@ -416,11 +417,23 @@ pub fn generate_std_typed(
     modules: &[TypedStdModule<'_>],
     options: &Options,
 ) -> Result<GeneratedProject, Vec<(String, Vec<Diagnostic>)>> {
+    prepare_std_typed(modules, options)
+        .map(|prepared| prepared.generate_all(&options.substrate_path))
+}
+
+/// Lower typed standard-library items once, before choosing program roots.
+/// The returned template owns its lowered text and keeps no AST references.
+/// Test-module selection and each std module's source positions are frozen
+/// from `options`; the substrate path is supplied to each rendering instead.
+pub fn prepare_std_typed(
+    modules: &[TypedStdModule<'_>],
+    options: &Options,
+) -> Result<PreparedStd, Vec<(String, Vec<Diagnostic>)>> {
     let modules: Vec<_> = modules
         .iter()
         .map(|(path, program, symbols, types)| (path.clone(), *program, *symbols, Some(*types)))
         .collect();
-    std_project(&modules, options, None)
+    prepare_std(&modules, options)
 }
 
 /// [`generate_std_typed`] holding only the items `roots` reach
@@ -439,11 +452,8 @@ pub fn generate_std_reachable(
     options: &Options,
     roots: &[&str],
 ) -> Result<GeneratedProject, Vec<(String, Vec<Diagnostic>)>> {
-    let modules: Vec<_> = modules
-        .iter()
-        .map(|(path, program, symbols, types)| (path.clone(), *program, *symbols, Some(*types)))
-        .collect();
-    std_project(&modules, options, Some(roots))
+    prepare_std_typed(modules, options)
+        .map(|prepared| prepared.generate_reachable(&options.substrate_path, roots))
 }
 
 /// [`generate_std_reachable`] with the roots of `program`: its `lib.rs`
@@ -453,16 +463,75 @@ pub fn generate_std_for(
     options: &Options,
     program: &GeneratedProject,
 ) -> Result<GeneratedProject, Vec<(String, Vec<Diagnostic>)>> {
-    let mut roots = vec![program.lib_rs.as_str()];
-    roots.extend(program.executables.iter().map(|e| e.source.as_str()));
-    generate_std_reachable(modules, options, &roots)
+    prepare_std_typed(modules, options)
+        .map(|prepared| prepared.generate_for(&options.substrate_path, program))
+}
+
+/// Immutable lowered standard-library items. Each rendering independently
+/// computes reachability; rendering one program cannot prune a later one.
+#[derive(Debug)]
+pub struct PreparedStd {
+    modules: Vec<LoweredModule>,
+    testing: bool,
+    dependencies: OnceLock<StdDependencies>,
+}
+
+impl PreparedStd {
+    /// Render every prepared item without pruning.
+    pub fn generate_all(&self, substrate: &Path) -> GeneratedProject {
+        self.render(substrate, None)
+    }
+
+    /// Render only the prepared items reached by Rust source `roots`.
+    pub fn generate_reachable(&self, substrate: &Path, roots: &[&str]) -> GeneratedProject {
+        let dependencies = self
+            .dependencies
+            .get_or_init(|| StdDependencies::new(&self.modules));
+        let retained = dependencies.reachable(&self.modules, roots);
+        self.render(substrate, Some(&retained))
+    }
+
+    /// Render for the program's library and all its executable sources.
+    pub fn generate_for(&self, substrate: &Path, program: &GeneratedProject) -> GeneratedProject {
+        let mut roots = vec![program.lib_rs.as_str()];
+        roots.extend(
+            program
+                .executables
+                .iter()
+                .map(|executable| executable.source.as_str()),
+        );
+        self.generate_reachable(substrate, &roots)
+    }
+
+    fn render(&self, substrate: &Path, retained: Option<&RetainedStd>) -> GeneratedProject {
+        let mut tree = ModuleTree::default();
+        for (index, module) in self.modules.iter().enumerate() {
+            let text = module.render(
+                retained.map(|retained| retained.items[index].as_slice()),
+                retained.map(|retained| &retained.names),
+            );
+            tree.insert(&std_segments(&module.path), text);
+        }
+        let mut lib = String::new();
+        if self.testing {
+            lib.push_str(TEST_HEADER);
+        }
+        lib.push_str(FILE_HEADER);
+        tree.render(&mut lib, 0);
+        GeneratedProject {
+            package_name: STD_PACKAGE.to_string(),
+            cargo_toml: std_cargo_toml(substrate, &lib),
+            lib_rs: lib,
+            executables: Vec::new(),
+        }
+    }
 }
 
 type StdInput<'a> = (String, &'a Program, &'a Symbols, Option<&'a TypedProgram>);
 
-/// One lowered standard-library module before rendering: its `use`
-/// targets and its items, each with the name it defines, so
-/// [`prune_std`] can drop what no root reaches.
+/// One lowered standard-library module before rendering: its imports
+/// and items stay intact when a [`PreparedStd`] renders different roots.
+#[derive(Debug)]
 struct LoweredModule {
     path: String,
     uses: Vec<UseTarget>,
@@ -470,15 +539,22 @@ struct LoweredModule {
 }
 
 impl LoweredModule {
-    /// The module's text as [`module_items`] renders it.
-    fn render(&self) -> String {
+    fn render(&self, keep: Option<&[bool]>, referenced: Option<&BTreeSet<String>>) -> String {
         let mut out = String::new();
         for target in &self.uses {
-            out.push_str(&target.render());
-            out.push('\n');
+            let line = match referenced {
+                Some(referenced) => target.render_referenced(referenced),
+                None => Some(target.render()),
+            };
+            if let Some(line) = line {
+                out.push_str(&line);
+                out.push('\n');
+            }
         }
-        for item in &self.items {
-            out.push_str(&item.text);
+        for (index, item) in self.items.iter().enumerate() {
+            if keep.is_none_or(|keep| keep[index]) {
+                out.push_str(&item.text);
+            }
         }
         out
     }
@@ -486,6 +562,7 @@ impl LoweredModule {
 
 /// One item of a module: the Rust name it defines, without a raw
 /// identifier's `r#`, and its text as [`Writer`] lines at indentation 0.
+#[derive(Debug)]
 struct Item {
     name: String,
     text: String,
@@ -493,6 +570,7 @@ struct Item {
 
 /// The target of one `use` line: the Rust path of the module and the
 /// names taken from it, as emitted (`*` for a glob).
+#[derive(Debug)]
 struct UseTarget {
     path: String,
     names: Vec<String>,
@@ -503,6 +581,20 @@ impl UseTarget {
         match self.names.as_slice() {
             [single] => format!("use {}::{single};", self.path),
             _ => format!("use {}::{{{}}};", self.path, self.names.join(", ")),
+        }
+    }
+
+    fn render_referenced(&self, referenced: &BTreeSet<String>) -> Option<String> {
+        let names: Vec<&str> = self
+            .names
+            .iter()
+            .filter(|name| name.as_str() == "*" || referenced.contains(plain_ident(name)))
+            .map(String::as_str)
+            .collect();
+        match names.as_slice() {
+            [] => None,
+            [single] => Some(format!("use {}::{single};", self.path)),
+            _ => Some(format!("use {}::{{{}}};", self.path, names.join(", "))),
         }
     }
 }
@@ -568,64 +660,76 @@ fn plain_ident(rust: &str) -> &str {
     rust.strip_prefix("r#").unwrap_or(rust)
 }
 
-/// Drop every item of `modules` no root reaches, and every imported name
-/// that is dropped ([`generate_std_reachable`]).
-fn prune_std(modules: &mut [LoweredModule], roots: &[&str]) {
-    let (kept, referenced) = {
-        let mut index: BTreeMap<&str, Vec<(usize, usize)>> = BTreeMap::new();
-        for (m, module) in modules.iter().enumerate() {
-            for (i, item) in module.items.iter().enumerate() {
-                index.entry(item.name.as_str()).or_default().push((m, i));
+/// Dependencies are source identifiers under the same conservative rule
+/// as the original pruning walk. Compute them once per immutable template.
+#[derive(Debug)]
+struct StdDependencies {
+    definitions: BTreeMap<String, Vec<(usize, usize)>>,
+    references: Vec<Vec<Vec<String>>>,
+}
+
+struct RetainedStd {
+    items: Vec<Vec<bool>>,
+    names: BTreeSet<String>,
+}
+
+impl StdDependencies {
+    fn new(modules: &[LoweredModule]) -> Self {
+        let mut definitions: BTreeMap<String, Vec<(usize, usize)>> = BTreeMap::new();
+        let mut references = Vec::new();
+        for (module_index, module) in modules.iter().enumerate() {
+            let mut items = Vec::new();
+            for (item_index, item) in module.items.iter().enumerate() {
+                definitions
+                    .entry(item.name.clone())
+                    .or_default()
+                    .push((module_index, item_index));
+                let mut names = Vec::new();
+                rust_identifiers(&item.text, &mut names);
+                names.sort_unstable();
+                names.dedup();
+                items.push(names);
             }
+            references.push(items);
         }
-        let mut pending = Vec::new();
+        Self {
+            definitions,
+            references,
+        }
+    }
+
+    fn reachable(&self, modules: &[LoweredModule], roots: &[&str]) -> RetainedStd {
+        let mut root_names = Vec::new();
         for root in roots {
-            rust_identifiers(root, &mut pending);
+            rust_identifiers(root, &mut root_names);
         }
-        let mut referenced = BTreeSet::new();
-        let mut kept: Vec<Vec<bool>> = modules
+        let mut pending: Vec<&str> = root_names.iter().map(String::as_str).collect();
+        let mut names = BTreeSet::new();
+        let mut items: Vec<Vec<bool>> = modules
             .iter()
             .map(|module| vec![false; module.items.len()])
             .collect();
         while let Some(name) = pending.pop() {
-            let Some(defined) = index.get(name.as_str()) else {
-                referenced.insert(name);
-                continue;
-            };
-            if !referenced.insert(name) {
+            if !names.insert(name.to_string()) {
                 continue;
             }
-            for &(m, i) in defined {
-                if kept[m][i] {
-                    continue;
+            if let Some(defined) = self.definitions.get(name) {
+                for &(module, item) in defined {
+                    if !items[module][item] {
+                        items[module][item] = true;
+                        pending.extend(self.references[module][item].iter().map(String::as_str));
+                    }
                 }
-                kept[m][i] = true;
-                rust_identifiers(&modules[m].items[i].text, &mut pending);
             }
         }
-        (kept, referenced)
-    };
-    for (m, module) in modules.iter_mut().enumerate() {
-        let mut i = 0;
-        module.items.retain(|_| {
-            let keep = kept[m][i];
-            i += 1;
-            keep
-        });
-        for target in &mut module.uses {
-            target
-                .names
-                .retain(|name| name == "*" || referenced.contains(plain_ident(name)));
-        }
-        module.uses.retain(|target| !target.names.is_empty());
+        RetainedStd { items, names }
     }
 }
 
-fn std_project(
+fn prepare_std(
     modules: &[StdInput<'_>],
     options: &Options,
-    roots: Option<&[&str]>,
-) -> Result<GeneratedProject, Vec<(String, Vec<Diagnostic>)>> {
+) -> Result<PreparedStd, Vec<(String, Vec<Diagnostic>)>> {
     let mut errors = Vec::new();
     let mut lowered = Vec::new();
     for (path, program, symbols, types) in modules {
@@ -660,24 +764,10 @@ fn std_project(
     if !errors.is_empty() {
         return Err(errors);
     }
-    if let Some(roots) = roots {
-        prune_std(&mut lowered, roots);
-    }
-    let mut tree = ModuleTree::default();
-    for module in &lowered {
-        tree.insert(&std_segments(&module.path), module.render());
-    }
-    let mut lib = String::new();
-    if !options.test_modules.is_empty() {
-        lib.push_str(TEST_HEADER);
-    }
-    lib.push_str(FILE_HEADER);
-    tree.render(&mut lib, 0);
-    Ok(GeneratedProject {
-        package_name: STD_PACKAGE.to_string(),
-        cargo_toml: std_cargo_toml(&options.substrate_path, &lib),
-        lib_rs: lib,
-        executables: Vec::new(),
+    Ok(PreparedStd {
+        modules: lowered,
+        testing: !options.test_modules.is_empty(),
+        dependencies: OnceLock::new(),
     })
 }
 

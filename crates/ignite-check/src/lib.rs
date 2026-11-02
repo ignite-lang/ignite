@@ -71,6 +71,7 @@
 //!   path here; the driver keys `Modules` by module path and owns that
 //!   `E031`, and the import-cycle check `E032`.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use ignite_syntax::ast::{
@@ -1961,7 +1962,7 @@ impl Checker {
         if ty.is_fn() {
             return false;
         }
-        let ty = self.expand(ty);
+        let ty = self.expand_ref(ty);
         let name = ty.name.name.as_str();
         match name {
             "Int" | "Text" | "Bool" | "Byte" | "Bytes" | "Unit" | "IoError" | "Input" => {
@@ -1980,18 +1981,22 @@ impl Checker {
             .symbols
             .type_params
             .get(name)
-            .cloned()
-            .unwrap_or_default();
-        let members: Vec<Type> = if let Some(fields) = self.symbols.record_field_types.get(name) {
-            fields.iter().map(|(_, t)| t.clone()).collect()
-        } else if let Some(payloads) = self.symbols.enum_payload_types.get(name) {
-            payloads.clone()
-        } else {
-            return true;
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let holds = |member: &Type| {
+            if params.is_empty() || ty.args.is_empty() {
+                self.can_hold_handle(member, depth + 1)
+            } else {
+                self.can_hold_handle(&substitute_type(member, params, &ty.args), depth + 1)
+            }
         };
-        members
-            .iter()
-            .any(|m| self.can_hold_handle(&substitute_type(m, &params, &ty.args), depth + 1))
+        if let Some(fields) = self.symbols.record_field_types.get(name) {
+            fields.iter().any(|(_, ty)| holds(ty))
+        } else if let Some(payloads) = self.symbols.enum_payload_types.get(name) {
+            payloads.iter().any(holds)
+        } else {
+            true
+        }
     }
 
     /// Whether `receiver.name(..)` is a builtin method call: `name` is a
@@ -2649,7 +2654,12 @@ impl Checker {
 
     /// `ty` with aliases at its head expanded, their arguments substituted.
     fn expand(&self, ty: &Type) -> Type {
-        let mut ty = ty.clone();
+        self.expand_ref(ty).into_owned()
+    }
+
+    /// Most declared types have no alias at their head and can be borrowed.
+    fn expand_ref<'t>(&self, ty: &'t Type) -> Cow<'t, Type> {
+        let mut ty = Cow::Borrowed(ty);
         for _ in 0..32 {
             if self.type_params.contains(&ty.name.name) {
                 break;
@@ -2663,7 +2673,7 @@ impl Checker {
                 .get(&ty.name.name)
                 .cloned()
                 .unwrap_or_default();
-            ty = substitute_type(target, &params, &ty.args);
+            ty = Cow::Owned(substitute_type(target, &params, &ty.args));
         }
         ty
     }
@@ -2671,7 +2681,7 @@ impl Checker {
     /// The declared type of field `field` of a value of record type
     /// `record`, the record's type arguments substituted.
     fn field_type(&self, record: &Type, field: &str) -> Option<Type> {
-        let record = self.expand(record);
+        let record = self.expand_ref(record);
         let fields = self.symbols.record_field_types.get(&record.name.name)?;
         let (_, ty) = fields.iter().find(|(n, _)| n == field)?;
         let params = self

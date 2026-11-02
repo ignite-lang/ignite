@@ -1,7 +1,8 @@
 //! Memory layouts of Ignite types (`docs/llvm.md` section 3) and the
 //! type environment they are computed in.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Mutex, PoisonError};
 
 use ignite_types::{FnSig, ModuleTypes, QualName, Ty, TypedModules};
 
@@ -62,12 +63,30 @@ impl EnumLayout {
 }
 
 /// Every record, enum, fn, constant and protocol signature by module path.
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct TypeEnv {
     pub modules: TypedModules,
     /// Per function symbol, whether each parameter is only read by the
     /// body (`docs/llvm.md` section 3, borrowed parameters).
     read_only: BTreeMap<String, Vec<bool>>,
+    layout_cache: Option<Mutex<LayoutCache>>,
+}
+
+#[derive(Debug, Default)]
+struct LayoutCache {
+    layouts: HashMap<Ty, Layout>,
+    fields: HashMap<Ty, (Vec<u64>, Layout)>,
+    enums: HashMap<Ty, EnumLayout>,
+}
+
+impl Clone for TypeEnv {
+    fn clone(&self) -> Self {
+        Self {
+            modules: self.modules.clone(),
+            read_only: self.read_only.clone(),
+            layout_cache: None,
+        }
+    }
 }
 
 impl TypeEnv {
@@ -75,7 +94,14 @@ impl TypeEnv {
         TypeEnv {
             modules,
             read_only: BTreeMap::new(),
+            layout_cache: None,
         }
+    }
+
+    /// Enable memoization only for the emitter's completed, private environment.
+    /// Public environments retain mutable `modules`, and clones start uncached.
+    pub(crate) fn cache_layouts(&mut self) {
+        self.layout_cache = Some(Mutex::new(LayoutCache::default()));
     }
 
     fn module(&self, module: &str) -> Option<&ModuleTypes> {
@@ -146,6 +172,17 @@ impl TypeEnv {
     /// Field offsets and layout of a record type (see [`TypeEnv::fields_of`]).
     /// A boxed field (`docs/slice.md` section 13.4) is a pointer.
     pub fn fields_layout(&self, ty: &Ty) -> (Vec<u64>, Layout) {
+        if let Some(cache) = &self.layout_cache {
+            let found = cache
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .fields
+                .get(ty)
+                .cloned();
+            if let Some(found) = found {
+                return found;
+            }
+        }
         let fields: Vec<Layout> = self
             .fields_of(ty)
             .iter()
@@ -157,7 +194,15 @@ impl TypeEnv {
                 }
             })
             .collect();
-        c_struct(&fields)
+        let result = c_struct(&fields);
+        if let Some(cache) = &self.layout_cache {
+            cache
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .fields
+                .insert(ty.clone(), result.clone());
+        }
+        result
     }
 
     /// Whether field `field` of the record type `ty` holds a pointer to its
@@ -255,6 +300,40 @@ impl TypeEnv {
     }
 
     pub fn layout(&self, ty: &Ty) -> Layout {
+        let aggregate = matches!(
+            ty,
+            Ty::Tuple(_)
+                | Ty::Record(_)
+                | Ty::GenericRecord(..)
+                | Ty::Option(_)
+                | Ty::Result(..)
+                | Ty::Input
+                | Ty::Enum(_)
+                | Ty::GenericEnum(..)
+        );
+        if !aggregate || self.layout_cache.is_none() {
+            return self.layout_uncached(ty);
+        }
+        let cache = self.layout_cache.as_ref().unwrap();
+        let found = cache
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .layouts
+            .get(ty)
+            .copied();
+        if let Some(found) = found {
+            return found;
+        }
+        let layout = self.layout_uncached(ty);
+        cache
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .layouts
+            .insert(ty.clone(), layout);
+        layout
+    }
+
+    fn layout_uncached(&self, ty: &Ty) -> Layout {
         match ty {
             Ty::Tuple(elements) => self.tuple_layout(elements).1,
             Ty::Int | Ty::Quantity(_) | Ty::TcpListener | Ty::TcpStream | Ty::Store(_) => {
@@ -315,6 +394,17 @@ impl TypeEnv {
     }
 
     pub fn enum_layout(&self, ty: &Ty) -> EnumLayout {
+        if let Some(cache) = &self.layout_cache {
+            let found = cache
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .enums
+                .get(ty)
+                .cloned();
+            if let Some(found) = found {
+                return found;
+            }
+        }
         let variants = self.variants(ty);
         let payloads: Vec<(Vec<u64>, Layout)> = variants
             .iter()
@@ -357,14 +447,22 @@ impl TypeEnv {
                 (name, fields)
             })
             .collect();
-        EnumLayout {
+        let result = EnumLayout {
             payload_offset,
             variants,
             layout: Layout {
                 size: round_up(size, 8),
                 align: 8,
             },
+        };
+        if let Some(cache) = &self.layout_cache {
+            cache
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .enums
+                .insert(ty.clone(), result.clone());
         }
+        result
     }
 
     /// Whether copying a value of `ty` must copy heap buffers (a list or

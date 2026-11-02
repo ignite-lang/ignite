@@ -31,7 +31,7 @@ pub use diagnostic::{Diagnostic, SourceFile};
 /// only see the cut-off end).
 pub fn parse(source: &SourceFile) -> Result<Program, Vec<Diagnostic>> {
     let (tokens, lex_error) = lexer::lex_partial(&source.text);
-    let parsed = parser::parse(&tokens);
+    let parsed = parser::parse_owned(tokens, parser::ParseOptions::default());
     let Some(lex_error) = lex_error else {
         return parsed;
     };

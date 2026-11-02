@@ -217,6 +217,34 @@ fn e115_limits() {
     );
 }
 
+/// Sharing a model's stack must preserve independent budgets for every
+/// property, including the properties after a failed evaluation.
+#[test]
+fn model_properties_keep_fresh_fuel_budgets() {
+    let loaded =
+        ignite::load(&fixture("eval_scoped_fuel.ignite"), None).unwrap_or_else(|e| panic!("{e}"));
+    let modules = loaded.modules();
+    let mut reference = Evaluator::new(&modules, Fuel::default());
+    assert_eq!(
+        reference.evaluate(loaded.types(), property(&loaded, "first")),
+        Ok(Value::Int(20))
+    );
+    let units = reference.units_used();
+    assert!(units > 1);
+    let mut exact = Evaluator::new(&modules, Fuel::with_units(units));
+    for _ in 0..2 {
+        ignite_eval::Model::check(&mut exact, loaded.types()).unwrap();
+    }
+    let mut short = Evaluator::new(&modules, Fuel::with_units(units - 1));
+    let errors = ignite_eval::Model::check(&mut short, loaded.types()).unwrap_err();
+    assert_eq!(errors.len(), 2, "the shorter third property still succeeds");
+    assert!(errors.iter().all(|error| error.code == "E115"));
+    assert_eq!(
+        ignite_eval::Model::check(&mut short, loaded.types()),
+        Err(errors)
+    );
+}
+
 fn failed(result: Result<Value, EvalError>) -> String {
     match result {
         Err(EvalError::Failed { report }) => report,

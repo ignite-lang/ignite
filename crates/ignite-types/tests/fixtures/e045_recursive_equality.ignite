@@ -1,0 +1,13 @@
+type A { child: Option<B>, callback: fn() -> Int }
+type B { parent: Option<A> }
+type Good { next: Option<Good> }
+fn zero() -> Int = 0
+test "recursive equality queries start without another root's assumptions" {
+  let a = A { child = None, callback = zero }
+  let b = B { parent = None }
+  assert a == a
+  assert b == b
+  let good = Good { next = None }
+  assert good == good
+  assert good == good
+}

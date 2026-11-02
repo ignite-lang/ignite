@@ -10,7 +10,7 @@ autotests = false
 nix = { workspace = true, features = ["signal"] }
 
 [features]
-runner = []
+runner = ["nix/poll"]
 
 [[test]]
 name = "main"

@@ -1168,22 +1168,27 @@ impl Model {
         evaluator: &mut Evaluator<'_>,
         program: &TypedProgram,
     ) -> Result<(), Vec<Diagnostic>> {
-        let mut builder = Builder::new(evaluator, program);
-        for system in program.systems() {
-            builder.system(program, system);
+        if program.systems().is_empty() && program.assemblies().is_empty() {
+            return Ok(());
         }
-        for assembly in program.assemblies() {
-            let system = assembly
-                .system
-                .as_deref()
-                .and_then(|name| program.systems().iter().find(|s| s.name == name));
-            builder.assembly(program, assembly, system);
-        }
-        if builder.diagnostics.is_empty() {
-            Ok(())
-        } else {
-            Err(builder.diagnostics)
-        }
+        evaluator.with_stack(|evaluator| {
+            let mut builder = Builder::new(evaluator, program);
+            for system in program.systems() {
+                builder.system(program, system);
+            }
+            for assembly in program.assemblies() {
+                let system = assembly
+                    .system
+                    .as_deref()
+                    .and_then(|name| program.systems().iter().find(|s| s.name == name));
+                builder.assembly(program, assembly, system);
+            }
+            if builder.diagnostics.is_empty() {
+                Ok(())
+            } else {
+                Err(builder.diagnostics)
+            }
+        })
     }
 
     /// The members with declaration `declaration`, in id order.
@@ -1896,19 +1901,21 @@ pub fn model(
     assembly: Option<&str>,
 ) -> Result<Model, Vec<Diagnostic>> {
     let (system, assembly) = select(program, assembly)?;
-    let mut builder = Builder::new(evaluator, program);
-    let members = builder.system(program, system);
-    let assembly = assembly.and_then(|a| builder.assembly(program, a, Some(system)));
-    if !builder.diagnostics.is_empty() {
-        return Err(builder.diagnostics);
-    }
-    Ok(Model {
-        system_id: system.name.clone(),
-        members,
-        assembly,
-        edges: builder.edges.into_iter().collect(),
-        source_map: builder.source_map,
-        machines: builder.machines,
-        observations: builder.observations,
+    evaluator.with_stack(|evaluator| {
+        let mut builder = Builder::new(evaluator, program);
+        let members = builder.system(program, system);
+        let assembly = assembly.and_then(|a| builder.assembly(program, a, Some(system)));
+        if !builder.diagnostics.is_empty() {
+            return Err(builder.diagnostics);
+        }
+        Ok(Model {
+            system_id: system.name.clone(),
+            members,
+            assembly,
+            edges: builder.edges.into_iter().collect(),
+            source_map: builder.source_map,
+            machines: builder.machines,
+            observations: builder.observations,
+        })
     })
 }

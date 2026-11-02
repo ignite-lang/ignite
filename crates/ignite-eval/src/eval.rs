@@ -7,7 +7,7 @@
 //! Values have value semantics: a `let` copies, a `var` is a place, and the
 //! mutating builtins (`push`, `append`, `clear`, `put`, `remove`) and
 //! assignments write through a place path rooted in a local (13.11 a).
-//! Each evaluation runs on its own thread with a large stack, so that a
+//! Evaluations run on a thread with a large stack, so that a
 //! deeply recursive fn meets the depth limit ([`Limit::Depth`]) instead of
 //! overflowing the compiler's stack.
 
@@ -169,6 +169,8 @@ pub struct Evaluator<'p> {
     stack: Vec<QualName>,
     /// Closure literals by module and byte offset, indexed on first use.
     closures: HashMap<String, HashMap<usize, &'p Expr>>,
+    /// A model operation may share its stack across independent evaluations.
+    on_stack: bool,
 }
 
 impl<'p> Evaluator<'p> {
@@ -188,6 +190,7 @@ impl<'p> Evaluator<'p> {
             frames: Vec::new(),
             stack: Vec::new(),
             closures: HashMap::new(),
+            on_stack: false,
         }
     }
 
@@ -243,7 +246,7 @@ impl<'p> Evaluator<'p> {
         self.run(move |ev| ev.call_fn(&fn_name, args))
     }
 
-    /// One evaluation: fresh budgets, its own thread and stack, flows
+    /// One evaluation: fresh budgets on the evaluation stack, flows
     /// mapped to errors and the result checked for encodability (E118).
     fn run(
         &mut self,
@@ -254,16 +257,7 @@ impl<'p> Evaluator<'p> {
         self.frames.clear();
         self.frames.push(Frame::default());
         self.stack.clear();
-        let result = std::thread::scope(|scope| {
-            let handle = std::thread::Builder::new()
-                .name("ignite-eval".to_string())
-                .stack_size(Evaluator::STACK_BYTES)
-                .spawn_scoped(scope, || f(self))
-                .expect("spawn the evaluation thread");
-            handle
-                .join()
-                .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-        });
+        let result = self.with_stack(f);
         self.frames.clear();
         self.stack.clear();
         match result {
@@ -278,6 +272,29 @@ impl<'p> Evaluator<'p> {
                 report: "evaluation failed: `break` or `continue` outside a loop".to_string(),
             }),
         }
+    }
+
+    /// Reuse one scoped worker for the evaluations belonging to an operation.
+    /// `run` still resets every expression's fuel, allocations and call frames.
+    pub(crate) fn with_stack<R: Send>(&mut self, f: impl FnOnce(&mut Self) -> R + Send) -> R {
+        if self.on_stack {
+            return f(self);
+        }
+        std::thread::scope(|scope| {
+            let handle = std::thread::Builder::new()
+                .name("ignite-eval".to_string())
+                .stack_size(Evaluator::STACK_BYTES)
+                .spawn_scoped(scope, || {
+                    self.on_stack = true;
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(self)));
+                    self.on_stack = false;
+                    result.unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+                })
+                .expect("spawn the evaluation thread");
+            handle
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+        })
     }
 
     // ---- budgets --------------------------------------------------------

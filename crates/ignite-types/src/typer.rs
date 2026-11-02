@@ -13,6 +13,7 @@ use ignite_syntax::diagnostic::Diagnostic;
 mod effects;
 mod system;
 
+use crate::address::AddressMap;
 use crate::builtins::{self, bytes, io};
 use crate::exhaustive;
 use crate::{
@@ -25,18 +26,18 @@ use crate::{
 /// What [`Typer::run`] produces for a module without diagnostics.
 pub(crate) struct Typed {
     pub module: String,
-    pub types: HashMap<usize, Ty>,
-    pub callees: HashMap<usize, Callee>,
+    pub types: AddressMap<Ty>,
+    pub callees: AddressMap<Callee>,
     pub bindings: HashMap<Span, Ty>,
-    pub pattern_consts: HashMap<usize, QualName>,
-    pub type_exprs: HashMap<usize, Ty>,
+    pub pattern_consts: AddressMap<QualName>,
+    pub type_exprs: AddressMap<Ty>,
     pub exports: ModuleTypes,
-    pub instances: HashMap<usize, Vec<Ty>>,
+    pub instances: AddressMap<Vec<Ty>>,
     pub tests: Vec<TestInfo>,
-    pub assert_compares: HashMap<usize, AssertCompare>,
-    pub test_tries: HashMap<usize, TestTry>,
-    pub closures: HashMap<usize, ClosureInfo>,
-    pub ranges: HashMap<usize, (i64, i64)>,
+    pub assert_compares: AddressMap<AssertCompare>,
+    pub test_tries: AddressMap<TestTry>,
+    pub closures: AddressMap<ClosureInfo>,
+    pub ranges: AddressMap<(i64, i64)>,
     pub places: HashMap<Span, Ty>,
     pub system: SystemTables,
 }
@@ -45,16 +46,16 @@ pub(crate) struct Typed {
 /// walk and moved into [`crate::TypedProgram`].
 #[derive(Default)]
 pub(crate) struct SystemTables {
-    pub quantities: HashMap<usize, (QuantityKind, i64)>,
-    pub named: HashMap<usize, Vec<usize>>,
-    pub braces: HashMap<usize, BraceKind>,
-    pub references: HashMap<usize, Reference>,
-    pub module_records: HashMap<usize, ModuleRecord>,
+    pub quantities: AddressMap<(QuantityKind, i64)>,
+    pub named: AddressMap<Vec<usize>>,
+    pub braces: AddressMap<BraceKind>,
+    pub references: AddressMap<Reference>,
+    pub module_records: AddressMap<ModuleRecord>,
     pub executables: Vec<ExecutableInfo>,
-    pub failures: HashMap<usize, FailureSite>,
+    pub failures: AddressMap<FailureSite>,
     pub systems: Vec<SystemInfo>,
     pub assemblies: Vec<AssemblyInfo>,
-    pub effects: HashMap<usize, EffectSet>,
+    pub effects: AddressMap<EffectSet>,
 }
 
 /// How an expression is used. `Value(Some(t))` checks it against `t`,
@@ -286,7 +287,7 @@ pub(crate) struct Typer<'a> {
     /// Type parameters of the generic declaration being resolved or walked.
     type_params: Vec<String>,
     /// Type arguments of generic uses, by expression address.
-    instances: HashMap<usize, Vec<Ty>>,
+    instances: AddressMap<Vec<Ty>>,
     /// Local bindings; `None` when the binding's type is unknown after an
     /// error.
     scopes: Vec<BTreeMap<String, Option<Ty>>>,
@@ -297,11 +298,11 @@ pub(crate) struct Typer<'a> {
     /// Whether the pattern being checked is a `match` arm's: there a bare
     /// name that is a constant is a constant pattern, not a binding.
     in_arm: bool,
-    types: HashMap<usize, Ty>,
-    callees: HashMap<usize, Callee>,
+    types: AddressMap<Ty>,
+    callees: AddressMap<Callee>,
     bindings: HashMap<Span, Ty>,
-    pattern_consts: HashMap<usize, QualName>,
-    type_exprs: HashMap<usize, Ty>,
+    pattern_consts: AddressMap<QualName>,
+    type_exprs: AddressMap<Ty>,
     diagnostics: Vec<Diagnostic>,
     /// Whether the walk is inside a test body or a test-only declaration,
     /// where test-only items may be used (E051).
@@ -310,10 +311,13 @@ pub(crate) struct Typer<'a> {
     /// test instead of returning.
     in_test_body: bool,
     tests: Vec<TestInfo>,
-    assert_compares: HashMap<usize, AssertCompare>,
-    test_tries: HashMap<usize, TestTry>,
-    closures: HashMap<usize, ClosureInfo>,
-    ranges: HashMap<usize, (i64, i64)>,
+    assert_compares: AddressMap<AssertCompare>,
+    /// Complete structural-equality results. Nested coinductive visits must
+    /// not be cached, because a parent may still contain an unequal field.
+    equatable_cache: HashMap<Ty, bool>,
+    test_tries: AddressMap<TestTry>,
+    closures: AddressMap<ClosureInfo>,
+    ranges: AddressMap<(i64, i64)>,
     /// The type that owns the last field of an assignment place, by
     /// the place's span.
     places: HashMap<Span, Ty>,
@@ -388,24 +392,25 @@ impl<'a> Typer<'a> {
             resolving: Vec::new(),
             alias_params: Vec::new(),
             type_params: Vec::new(),
-            instances: HashMap::new(),
+            instances: AddressMap::default(),
             scopes: Vec::new(),
             ret: None,
             loops: Vec::new(),
             in_arm: false,
-            types: HashMap::new(),
-            callees: HashMap::new(),
+            types: AddressMap::default(),
+            callees: AddressMap::default(),
             bindings: HashMap::new(),
-            pattern_consts: HashMap::new(),
-            type_exprs: HashMap::new(),
+            pattern_consts: AddressMap::default(),
+            type_exprs: AddressMap::default(),
             diagnostics: Vec::new(),
             in_test: false,
             in_test_body: false,
             tests: Vec::new(),
-            assert_compares: HashMap::new(),
-            test_tries: HashMap::new(),
-            closures: HashMap::new(),
-            ranges: HashMap::new(),
+            assert_compares: AddressMap::default(),
+            equatable_cache: HashMap::new(),
+            test_tries: AddressMap::default(),
+            closures: AddressMap::default(),
+            ranges: AddressMap::default(),
             places: HashMap::new(),
             system: SystemTables::default(),
             binding_spans: HashMap::new(),
@@ -421,23 +426,19 @@ impl<'a> Typer<'a> {
         }
     }
 
-    /// Walk a body with `walk`; when a value left a type parameter
-    /// undecided, walk it again with holes to learn the binding types later
-    /// uses decide, then a third time with those types as if annotated.
+    /// Probe local inference during the first body walk. Bodies without a
+    /// hole finish in one pass; otherwise resolve the binding hints and
+    /// verify once more without holes. The final walk owns diagnostics.
     fn with_local_inference(&mut self, walk: &dyn Fn(&mut Self)) {
         let diagnostics = self.diagnostics.len();
         let tests = self.tests.len();
         self.hole_wanted = false;
-        walk(self);
-        if !self.hole_wanted {
-            return;
-        }
-        self.hole_wanted = false;
-        self.diagnostics.truncate(diagnostics);
-        self.tests.truncate(tests);
         self.holes = Some(Holes::default());
         walk(self);
         let holes = self.holes.take().unwrap_or_default();
+        if holes.next == 0 && !self.hole_wanted {
+            return;
+        }
         self.diagnostics.truncate(diagnostics);
         self.tests.truncate(tests);
         for (span, ty) in &holes.lets {
@@ -1209,14 +1210,48 @@ impl<'a> Typer<'a> {
         }
     }
 
+    /// Look up one constructor without copying every sibling's payload.
+    fn selected_variant(&self, ty: &Ty, name: &str) -> Option<(QualName, usize, Vec<Ty>)> {
+        let (q, args) = match ty {
+            Ty::Enum(q) if !q.module.is_empty() => (q, None),
+            Ty::GenericEnum(q, args) => (q, Some(args)),
+            _ => {
+                let (q, variants) = self.variants(ty)?;
+                let (index, (_, payload)) = variants
+                    .into_iter()
+                    .enumerate()
+                    .find(|(_, (v, _))| v == name)?;
+                return Some((q, index, payload));
+            }
+        };
+        let module = self.module_types(&q.module)?;
+        let (index, (_, payload)) = module
+            .enums
+            .get(&q.name)?
+            .iter()
+            .enumerate()
+            .find(|(_, (v, _))| v == name)?;
+        let payload = if let Some(args) = args {
+            let params = module
+                .generics
+                .get(&q.name)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            payload
+                .iter()
+                .map(|ty| ty.substitute(params, args))
+                .collect()
+        } else {
+            payload.clone()
+        };
+        Some((q.clone(), index, payload))
+    }
+
     /// Payload types of `variant` of the user enum named `owner` in scope.
     fn user_payload(&self, owner: &str, variant: &str) -> Option<Vec<Ty>> {
         let q = self.enums.get(owner)?;
-        let (_, variants) = self.variants(&Ty::Enum(q.clone()))?;
-        variants
-            .into_iter()
-            .find(|(v, _)| v == variant)
-            .map(|(_, payload)| payload)
+        self.selected_variant(&Ty::Enum(q.clone()), variant)
+            .map(|(_, _, payload)| payload)
     }
 
     fn lookup(&self, name: &str) -> Option<Option<Ty>> {
@@ -1420,7 +1455,7 @@ impl<'a> Typer<'a> {
                 }
             };
             self.record(cond, Some(Ty::Bool));
-            if !self.equatable(&operand, &mut Vec::new()) {
+            if !self.assert_equatable(&operand) {
                 let op = if matches!(
                     cond.kind,
                     ExprKind::Binary {
@@ -1456,6 +1491,18 @@ impl<'a> Typer<'a> {
                 format!("`assert` needs a `Bool` condition, found `{found}`"),
             );
         }
+    }
+
+    /// A complete equality query starts with no coinductive assumptions.
+    /// Reuse only its final result: caching a nested successful visit could
+    /// hide a function field encountered later in a recursive parent.
+    fn assert_equatable(&mut self, ty: &Ty) -> bool {
+        if let Some(result) = self.equatable_cache.get(ty) {
+            return *result;
+        }
+        let result = self.equatable(ty, &mut Vec::new());
+        self.equatable_cache.insert(ty.clone(), result);
+        result
     }
 
     /// Whether values of `ty` can be compared with structural equality in
@@ -1767,7 +1814,9 @@ impl<'a> Typer<'a> {
     /// or `Never`. Returns the type found.
     fn check(&mut self, expr: &Expr, expected: &Ty) -> Option<Ty> {
         let found = self.expr(expr, Mode::Value(Some(expected)));
-        if let (Some(holes), Some(found)) = (&mut self.holes, &found) {
+        if let (Some(holes), Some(found)) = (&mut self.holes, &found)
+            && holes.next > 0
+        {
             let mut binds = BTreeMap::new();
             unify(expected, found, &mut binds);
             unify(found, expected, &mut binds);
@@ -2189,9 +2238,8 @@ impl<'a> Typer<'a> {
         if let Some(q) = self.expected_enum(&name.name, expected) {
             let owner = q.name.clone();
             let payload = self
-                .variants(&Ty::Enum(q.clone()))
-                .and_then(|(_, vs)| vs.into_iter().find(|(v, _)| *v == name.name))
-                .map_or(0, |(_, payload)| payload.len());
+                .selected_variant(&Ty::Enum(q.clone()), &name.name)
+                .map_or(0, |(_, _, payload)| payload.len());
             if payload > 0 && self.symbols.enum_of_variant(&name.name) != Some(owner.as_str()) {
                 self.error(
                     "E003",
@@ -2485,9 +2533,8 @@ impl<'a> Typer<'a> {
     fn constructor_type(&mut self, callee: &Expr, ty: Option<&Ty>, variant: &str) {
         let Some(ty) = ty else { return };
         let payload = self
-            .variants(ty)
-            .and_then(|(_, variants)| variants.into_iter().find(|(v, _)| v == variant))
-            .map(|(_, payload)| payload);
+            .selected_variant(ty, variant)
+            .map(|(_, _, payload)| payload);
         if let Some(payload) = payload {
             self.record(callee, Some(fn_ty(payload, ty.clone())));
         }
@@ -2759,8 +2806,17 @@ impl<'a> Typer<'a> {
         let (Some(Ty::Enum(q)) | Some(Ty::GenericEnum(q, _))) = expected else {
             return None;
         };
-        let (q, variants) = self.variants(&Ty::Enum(q.clone()))?;
-        variants.iter().any(|(v, _)| v == name).then_some(q)
+        if !q.module.is_empty() {
+            return self
+                .module_types(&q.module)?
+                .enums
+                .get(&q.name)?
+                .iter()
+                .any(|(v, _)| v == name)
+                .then(|| q.clone());
+        }
+        self.selected_variant(&Ty::Enum(q.clone()), name)
+            .map(|(q, _, _)| q)
     }
 
     /// `E003` for a bare variant of an enum that is not in scope and not
@@ -2835,14 +2891,10 @@ impl<'a> Typer<'a> {
         expected: Option<&Ty>,
     ) -> Option<Ty> {
         let what = format!("{owner}.{}", variant.name);
-        let found = q.as_ref().and_then(|q| {
-            let (_, variants) = self.variants(&Ty::Enum(q.clone()))?;
-            variants
-                .into_iter()
-                .enumerate()
-                .find(|(_, (v, _))| *v == variant.name)
-        });
-        let (Some(q), Some((index, (_, payload)))) = (q, found) else {
+        let found = q
+            .as_ref()
+            .and_then(|q| self.selected_variant(&Ty::Enum(q.clone()), &variant.name));
+        let (Some(q), Some((_, index, payload))) = (q, found) else {
             for arg in args.unwrap_or(&[]) {
                 self.synth(arg);
             }
@@ -3237,14 +3289,18 @@ impl<'a> Typer<'a> {
     fn field_type(&self, receiver: &Ty, name: &str) -> Option<Ty> {
         match receiver {
             Ty::Record(q) => self
-                .record_fields(q)?
-                .into_iter()
+                .module_types(&q.module)?
+                .records
+                .get(&q.name)?
+                .iter()
                 .find(|(n, _)| n == name)
-                .map(|(_, ty)| ty),
+                .map(|(_, ty)| ty.clone()),
             Ty::GenericRecord(q, args) => {
                 let params = self.generics_of(q);
-                self.record_fields(q)?
-                    .into_iter()
+                self.module_types(&q.module)?
+                    .records
+                    .get(&q.name)?
+                    .iter()
                     .find(|(n, _)| n == name)
                     .map(|(_, ty)| ty.substitute(&params, args))
             }
