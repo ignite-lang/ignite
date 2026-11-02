@@ -69,11 +69,18 @@ impl Spawner {
     /// Spawn `command` from the spawner thread with
     /// `PR_SET_PDEATHSIG(SIGKILL)` set in the child.
     pub(super) fn spawn(&self, mut command: Command) -> io::Result<Child> {
+        let parent = std::process::id() as nix::libc::pid_t;
         // SAFETY: `prctl` is async-signal-safe and the closure touches
         // nothing else.
         unsafe {
-            command.pre_exec(|| {
-                nix::sys::prctl::set_pdeathsig(Signal::SIGKILL).map_err(io::Error::from)
+            command.pre_exec(move || {
+                nix::sys::prctl::set_pdeathsig(Signal::SIGKILL).map_err(io::Error::from)?;
+                // If the host died before prctl, its death cannot deliver the
+                // newly installed signal. Refuse exec after that reparenting.
+                if nix::libc::getppid() != parent {
+                    return Err(io::Error::from_raw_os_error(nix::libc::ECHILD));
+                }
+                Ok(())
             })
         };
         let (reply, result) = channel();

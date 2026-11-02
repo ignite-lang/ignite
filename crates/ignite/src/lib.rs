@@ -12,6 +12,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub mod apply;
 mod llvm_build;
 pub mod run;
 mod test_build;

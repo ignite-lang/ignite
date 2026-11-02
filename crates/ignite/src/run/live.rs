@@ -48,6 +48,10 @@ use super::journal::Journal;
 /// member id to the built executable (16.3); a rollout calls it again.
 pub type Builder = Arc<dyn Fn() -> Result<BTreeMap<String, PathBuf>, String> + Send + Sync>;
 
+/// A host receives each record before its effect can be dispatched. Returning
+/// an error stops the live driver, including when durable host storage fails.
+pub type RecordSink = Box<dyn FnMut(&Record) -> io::Result<()> + Send>;
+
 /// What a run is given besides the model.
 pub struct Config {
     /// The state directory: `bin/<generation>/` holds the executables.
@@ -162,6 +166,8 @@ pub struct Live<'a, 'p> {
     /// Complete the current reducer/effect turn before delivering them.
     completions: VecDeque<Observation>,
     deferred: VecDeque<Observation>,
+    record_sink: Option<RecordSink>,
+    started_hook: Option<Box<dyn FnOnce() -> io::Result<()> + Send>>,
 }
 
 const SIGKILL: i32 = 9;
@@ -213,7 +219,23 @@ impl<'a, 'p> Live<'a, 'p> {
             stopping: false,
             completions: VecDeque::new(),
             deferred: VecDeque::new(),
+            record_sink: None,
+            started_hook: None,
         }
+    }
+
+    /// Attach an owning host's durable revision journal without changing the
+    /// existing run journal format or the reducer's dispatch ordering.
+    pub fn with_record_sink(mut self, sink: RecordSink) -> Self {
+        self.record_sink = Some(sink);
+        self
+    }
+
+    /// Notify a host after every initial machine turn has been dispatched.
+    /// This hook adds no record to an existing run journal.
+    pub fn with_started_hook(mut self, hook: Box<dyn FnOnce() -> io::Result<()> + Send>) -> Self {
+        self.started_hook = Some(hook);
+        self
     }
 
     fn now(&self) -> i64 {
@@ -255,6 +277,9 @@ impl<'a, 'p> Live<'a, 'p> {
             );
             let records = self.core.feed(index, at, start);
             self.process(records)?;
+        }
+        if let Some(hook) = self.started_hook.take() {
+            hook()?;
         }
         while !self.stopping {
             if !self.completions.is_empty() {
@@ -323,6 +348,9 @@ impl<'a, 'p> Live<'a, 'p> {
         for record in records {
             let line = record.line();
             self.journal.append(&line, record.durable)?;
+            if let Some(sink) = &mut self.record_sink {
+                sink(&record)?;
+            }
             if self.config.json {
                 let stdout = io::stdout();
                 let mut out = stdout.lock();

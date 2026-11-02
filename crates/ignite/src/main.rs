@@ -6,6 +6,10 @@
 //! ignite build <file.ignite> [--target rust|llvm] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE]
 //! ignite test <file.ignite>… [FILTER] [--target rust|llvm|all] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE]
 //! ignite plan <file.ignite> [--assembly NAME] [--out FILE] [--fuel N] [--std PATH]
+//! ignite plan <file.ignite> --for-apply --state DIR --out PLAN [--assembly NAME] [--target rust|llvm] [--release] [--std PATH] [--runtime FILE] [--fuel N]
+//! ignite host --state DIR
+//! ignite apply PLAN --state DIR
+//! ignite inspect --state DIR [--operation ID] [--json]
 //! ignite explain <file.ignite> <path> [--assembly NAME] [--fuel N] [--std PATH]
 //! ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target rust|llvm] [--release] [--clock real|manual] [--epoch RFC3339] [--settle DURATION] [--port RESOURCE=PORT]... [--json] [--fresh] [--std PATH] [--fuel N] [--runtime PATH] [--target-dir DIR]
 //! ignite replay <file.ignite> [--assembly NAME] [--state DIR] [--std PATH] [--fuel N]
@@ -32,7 +36,7 @@ use clap::{Parser, Subcommand};
 #[command(
     name = "ignite",
     version,
-    about = "Check, emit, build, plan and explain Ignite programs"
+    about = "Check, build, plan and operate Ignite programs"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -135,6 +139,12 @@ enum Commands {
     /// Print the system model of a program as canonical JSON (`docs/slice.md` section 15.5).
     Plan {
         file: PathBuf,
+        /// Prepare a source-bound plan for a running local host.
+        #[arg(long, requires_all = ["state", "out"])]
+        for_apply: bool,
+        /// State directory of the running local host.
+        #[arg(long, requires = "for_apply")]
+        state: Option<PathBuf>,
         /// The assembly to select (default: the program's only one).
         #[arg(long)]
         assembly: Option<String>,
@@ -147,6 +157,38 @@ enum Commands {
         /// Root of the standard library.
         #[arg(long)]
         std: Option<PathBuf>,
+        /// Native target for an apply plan.
+        #[arg(long, value_enum, default_value = "rust", requires = "for_apply")]
+        target: TargetArg,
+        /// Build apply artifacts with optimizations.
+        #[arg(long, requires = "for_apply")]
+        release: bool,
+        /// Runtime archive for an LLVM apply plan.
+        #[arg(long, requires = "for_apply")]
+        runtime: Option<PathBuf>,
+    },
+    /// Own and supervise a local state directory until stopped.
+    Host {
+        #[arg(long)]
+        state: PathBuf,
+    },
+    /// Apply a saved plan through its running local host and wait for completion.
+    Apply {
+        /// Source-bound saved plan produced by `plan --for-apply`.
+        file: PathBuf,
+        #[arg(long)]
+        state: PathBuf,
+    },
+    /// Read host status or a durable snapshot labelled offline.
+    Inspect {
+        #[arg(long)]
+        state: PathBuf,
+        /// Inspect a particular accepted operation.
+        #[arg(long)]
+        operation: Option<String>,
+        /// Print compact JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Explain one system, member, property path or assembly of a program (`docs/slice.md`
     /// section 15.8).
@@ -490,16 +532,37 @@ fn run() {
         }
         Commands::Plan {
             file,
+            for_apply,
+            state,
             assembly,
             out,
             fuel,
             std,
+            target,
+            release,
+            runtime,
         } => {
             let options = ignite::PlanOptions {
                 assembly,
                 fuel,
                 std,
             };
+            if for_apply {
+                let build = ignite::RunOptions {
+                    target: target.into(),
+                    release,
+                    runtime,
+                    ..ignite::RunOptions::default()
+                };
+                apply_result(ignite::apply::prepare(
+                    &file,
+                    state.as_deref().expect("--for-apply requires --state"),
+                    out.as_deref().expect("--for-apply requires --out"),
+                    &options,
+                    &build,
+                ));
+                return;
+            }
             ignite::plan(&file, &options).and_then(|model| match out {
                 Some(out) => std::fs::write(&out, &model)
                     .map_err(|error| ignite::Error::Io { path: out, error }),
@@ -508,6 +571,27 @@ fn run() {
                     Ok(())
                 }
             })
+        }
+        Commands::Host { state } => std::process::exit(apply_result(ignite::apply::host(&state))),
+        Commands::Apply { file, state } => {
+            let operation = apply_result(ignite::apply::apply(&file, &state));
+            println!("{}", operation.compact());
+            Ok(())
+        }
+        Commands::Inspect {
+            state,
+            operation,
+            json,
+        } => {
+            let status = apply_result(ignite::apply::inspect(&state, operation.as_deref()));
+            if json {
+                println!("{}", status.compact());
+            } else {
+                let mut output = String::new();
+                status.write(&mut output, 0);
+                println!("{output}");
+            }
+            Ok(())
         }
         Commands::Explain {
             file,
@@ -549,6 +633,16 @@ fn run() {
             _ => eprintln!("error: {error}"),
         }
         std::process::exit(error.exit_status());
+    }
+}
+
+fn apply_result<T>(result: Result<T, ignite::apply::Failure>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("error: {error}");
+            std::process::exit(error.status);
+        }
     }
 }
 

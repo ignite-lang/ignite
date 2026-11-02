@@ -3935,11 +3935,12 @@ dependency is added. Test-only work also shares the checked AST/type pair for im
 fixtures, and the giant-chain assertion avoids a pattern search only when its required marker
 is absent; every assertion, case, ignore and failure condition is preserved.
 
-## 17 Slice 13: local apply (proposed contract)
+## 17 Slice 13: local apply
 
-**Status: proposed, awaiting user review; not implemented.** This section fixes the
-contract and acceptance design only. It adds no running host, schema implementation or
-passing tests. Slice 12c's remaining performance work stays deferred.
+**Status: approved for implementation; implementation and acceptance checks in progress.**
+The user's instruction to implement the plan authorizes this work without another
+contract approval. The checks below remain obligations until verified. Slice 12c's
+remaining performance work stays deferred.
 
 ### 17.1 Scope and command surface
 
@@ -4149,7 +4150,7 @@ and LLVM artifacts; compare semantic actions/results while masking only physical
 | Multiple committed/pending host revisions | replay/recover history | Every action/result uses its original model/input/reducer provenance; divergence is rejected |
 | Old run journal and existing commands | run/replay/ordinary plan | Existing contracts and goldens unchanged |
 
-The following are future implementation tasks, not dispatch authorization:
+The following are implementation tasks authorized by the approved plan:
 
 | Owner | Deliverable | Dependencies | Acceptance |
 |---|---|---|---|
@@ -4162,5 +4163,5 @@ The following are future implementation tasks, not dispatch authorization:
 `Live` currently borrows one `Loaded` model/evaluator context, and `Core` owns a fixed machine
 set. The host task must introduce an owned revision context and explicit transition boundary;
 it cannot hot-swap borrowed AST/type tables or treat a new segment as plan replacement.
-Runtime implementation requires explicit user approval of this contract; completing independent
-review of this documentation batch does not grant that authorization.
+The user approved implementation of the plan. Independent review and the acceptance
+checks above remain required verification, without reopening that approval.
