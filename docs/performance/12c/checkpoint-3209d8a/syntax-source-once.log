@@ -1,0 +1,12 @@
+   Compiling ignite v0.1.0 (/home/timo/.local/state/worktree/trees/codewandler/ignite-lang/ignite-perf12c/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.40s
+     Running tests/main.rs (/home/timo/.cache/scratch/ignite-perf12c/target-main/debug/deps/main-b624c508ef07abba)
+
+running 2 tests
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/ignite-perf12c/target-main/tmp/syntax-rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s
+test syntax::rust_target_runs_every_feature ... ok
+test syntax::llvm_target_runs_every_feature ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 198 filtered out; finished in 0.35s
+

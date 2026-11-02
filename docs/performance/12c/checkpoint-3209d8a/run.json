@@ -1,0 +1,38 @@
+{
+  "builds": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/builds",
+  "commits": {
+    "baseline": "df7ccb9bed4440824a2d108fa112eba3fea25f99",
+    "candidate": "3209d8a7cdbaa0e7785fa7a687a2ce22311218e0",
+    "comparison": "92733498f8406d8f0663a571be85351c548ea99e"
+  },
+  "controls": {
+    "absolute_max_load": 9,
+    "check_pairs": 15,
+    "cold_retries": 1,
+    "extra_warm_passes": 2,
+    "load_delta": 5,
+    "warm_pairs": 3
+  },
+  "environment": {
+    "CARGO_BUILD_JOBS": null,
+    "CARGO_BUILD_TARGET": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_RELEASE_DEBUG": "0",
+    "RUSTC_WORKSPACE_WRAPPER": null,
+    "RUSTC_WRAPPER": null,
+    "RUSTFLAGS": null,
+    "RUSTUP_TOOLCHAIN": null,
+    "SCCACHE_DISABLE": null
+  },
+  "load_delta": 5,
+  "refs": {
+    "baseline": "origin/bench/11b-recovered",
+    "candidate": "3209d8a",
+    "comparison": "9273349"
+  },
+  "schema": "ignite-performance/1",
+  "sources": "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources"
+}

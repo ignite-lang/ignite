@@ -1,0 +1,15 @@
+[package]
+name = "program"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[profile.release]
+overflow-checks = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ignite-io = { path = "/home/timo/.cache/scratch/ignite-perf12c/final-bench/sources/candidate-3209d8a7cdba/crates/ignite-io" }
