@@ -1,0 +1,9 @@
+{
+  "fix": "Publish the shared immutable syntax fixture once before either backend can parse it",
+  "rust_passed": 653,
+  "inline_counts": [
+    148,
+    148
+  ],
+  "gate_exit": 0
+}
