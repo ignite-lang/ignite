@@ -79,6 +79,10 @@ Rules of the layout:
 | explain one system, member, property or assembly | `target/debug/ignite explain FILE PATH [--assembly NAME]` (`Terminal.reachable`, `Terminal.server.recovery`, `local`; `docs/slice.md` 15.8) |
 | run a system in the foreground | `target/debug/ignite run FILE [--assembly NAME] [--state DIR] [--build DIR] [--target rust\|llvm] [--release] [--clock real\|manual] [--epoch RFC3339] [--port RESOURCE=PORT] [--json] [--fresh]` (`docs/slice.md` 16.3; stdin takes `status`, `rollout <member>`, `stop`, `advance <quantity>`; state defaults to `target/ignite-run/<assembly>/`; exit 0 on a requested stop, 1 when a machine gave up, 2 on a diagnostic; `--fuel N` bounds each reducer step only, the plan inside `run` and `replay` keeps the default fuel) |
 | replay a run's journal | `target/debug/ignite replay FILE [--assembly NAME] [--state DIR]` (re-steps the reducers over the journaled events, compares every effect and standing record, E127, prints the final standings) |
+| host a state directory | `target/debug/ignite host --state DIR` (`docs/slice.md` 17; owns the state lock and the control socket until stopped; exit 2 when another host or run holds the state, 3 on a host or storage failure) |
+| save a plan for apply | `target/debug/ignite plan FILE --for-apply [--assembly NAME] [--target rust\|llvm] [--release] [--runtime ARCHIVE] --out PLAN` (source-bound plan, `ignite-apply-plan/0.1`) |
+| apply a saved plan | `target/debug/ignite apply --state DIR PLAN` (waits for completion; exit 0 completed, 1 failed or recovery required, 2 rejected, 3 host or storage failure) |
+| inspect a host | `target/debug/ignite inspect --state DIR [--operation ID] [--json]` (live status, or the durable snapshot labelled offline) |
 
 `task` is go-task. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
 invocation in automation sets `CARGO_INCREMENTAL=0`. `task test-ignite` honours
@@ -436,9 +440,19 @@ raw samples and exclusions: `docs/performance/12c/release-815cf74/README.md`.
   published-comparison workspace evidence is insufficient. No baseline moved.
 - `ignite test --target=all` enumerates all supported native CLI targets.
 
-Slice 13 implementation is authorized and in progress. The first host/plan/apply/inspect
-workflow, retained restart and implementation-only draining replacement are implemented;
-the complete acceptance matrix remains open. Model/controller changes and partial updates
-of multiple owned workloads are rejected until differential revision transitions exist.
-Continue runtime implementation rather than reopening contract approval. The remaining
-12c gaps stay deferred; its acceptance limits and recovery claim are unchanged.
+## Slice 13 `ignite apply` (2026-11-03)
+
+Implemented: `ignite host`, `ignite plan --for-apply`, `ignite apply`, `ignite inspect`, the
+`Transition` reducer, durable receipts, crash recovery and the `docs/slice.md` 17.7 matrix on
+both targets (coverage table after 17.7, standing in `STATUS.md`). Known gaps: the two
+precedence cases in 17.5 "As landed (U5)".
+
+- Gate at the close, `task gate` on `feat/slice13-local-apply` (d93f059), 2026-11-03 03:39:49
+  to 03:46:39 UTC, 410 s, exit 0, one cargo build on the host, `RUST_TEST_THREADS=4`: 746 cargo
+  tests passed, 0 failed, 5 ignored; 160 inline tests per target. The `crates/ignite`
+  end-to-end binary is 388.31 s of it, set by the `apply*` files (`apply::` 46 tests 448.83 s
+  alone, `apply_transition::` 10 tests 273.78 s alone).
+- Gate budget: slice 13 is recorded as an exception, as 12c was; no baseline moved. The
+  warm-step budget of 10.8 s is not reachable while the live `apply*` suites run inside
+  `cargo test --workspace`. Analysis and the proposed tiered budget:
+  `docs/performance/13/verdict.md`.
