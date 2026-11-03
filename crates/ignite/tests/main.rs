@@ -9,6 +9,7 @@ mod apply_host;
 mod apply_recovery;
 mod apply_transition;
 mod build_cache;
+mod clauses;
 mod cli;
 mod common;
 mod control_trace;
