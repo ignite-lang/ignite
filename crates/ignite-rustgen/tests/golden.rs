@@ -506,7 +506,6 @@ fn bounded_streams() {
 /// at `make`'s declaration; the Rust turbofish `tagged::<S, S>` names the
 /// type parameter twice. The program checks and types, so it must build.
 #[test]
-#[ignore = "a type parameter that shadows a record name, story:rustgen-type-parameter-shadowing"]
 fn bounded_turbofish_keeps_a_record_named_like_a_bound() {
     let source = "package examples.shadow\n\
 \n\
@@ -544,4 +543,44 @@ fn outer<S: ByteStream>(stream: S) -> IoResult<Int> requires [stream.write] {\n\
         program.lib_rs
     );
     cargo_build(&program, &std, "adv-shadow");
+}
+
+/// story:rustgen-type-parameter-shadowing: inside `fn outer<S>` the
+/// literal `S { .. }` is the record `S`, and inside `fn pick<E>` the
+/// variants `E.A` and `E.B(n)` are the enum `E`'s; the generated Rust
+/// must not name the type parameter for either. The program checks and
+/// types, so it must build.
+#[test]
+fn record_and_enum_named_like_a_type_parameter() {
+    let source = "package examples.shadowlit\n\
+\n\
+type S { value: Int }\n\
+\n\
+enum E { A, B(Int) }\n\
+\n\
+fn outer<S>(item: S) -> Int {\n\
+  let record = S { value = 4 }\n\
+  record.value\n\
+}\n\
+\n\
+fn pick<E>(item: E) -> Int {\n\
+  let chosen = E.B(2)\n\
+  match chosen {\n\
+    E.A => 0\n\
+    E.B(n) => n\n\
+  }\n\
+}\n";
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| common::workspace().join("target"));
+    let dir = target
+        .join("ignite-rustgen-test")
+        .join("shadow-literal-src");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("shadowlit.ignite");
+    std::fs::write(&file, source).unwrap();
+    let substrate = common::workspace().join("crates/ignite-io");
+    let substrate = substrate.canonicalize().unwrap_or(substrate);
+    let (program, std) = common::lower_typed(&file, &common::golden_std(), &substrate);
+    cargo_build(&program, &std, "shadow-literal");
 }
