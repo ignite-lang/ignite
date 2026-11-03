@@ -1,0 +1,4 @@
+e013_adv_stream_spawn.ignite:8:3: error[E013]: `spawn` of a substrate operation; spawn a call to an effectful function or protocol role
+e013_adv_stream_spawn.ignite:9:3: error[E013]: `spawn` of a substrate operation; spawn a call to an effectful function or protocol role
+e013_adv_stream_spawn.ignite:14:3: error[E013]: `spawn` of a substrate operation; spawn a call to an effectful function or protocol role
+e013_adv_stream_spawn.ignite:15:3: error[E013]: `spawn` of a substrate operation; spawn a call to an effectful function or protocol role

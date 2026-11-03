@@ -1,0 +1,29 @@
+type Config { port: Int }
+
+fn same<S: ByteStream>(stream: S) -> S = stream
+
+fn relay<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  let input = (stream.read(16))?
+  return stream.write_all("x".to_bytes())
+}
+
+fn with_int() -> Int = same(1)
+
+fn with_record(config: Config) -> Config = same(config)
+
+fn passed_on<T>(value: T) -> T = same(value)
+
+fn as_value() -> Int {
+  let f: fn(Int) -> Int = same
+  return f(1)
+}
+
+fn spawned() -> Result<Unit, IoError> requires [] {
+  spawn relay(7)
+  return Ok(Unit)
+}
+
+fn accepted<S: ByteStream>(stream: S, tcp: TcpStream) -> S {
+  let other = same(tcp)
+  return same(stream)
+}

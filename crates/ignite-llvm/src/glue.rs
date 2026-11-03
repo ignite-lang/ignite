@@ -1089,6 +1089,7 @@ fn debug_function(module: &mut Module<'_>, ty: &Ty) -> String {
         }
         Ty::Fn(..) | Ty::EffectFn(..) => append_literal(module, &mut f, buf, "<fn>"),
         Ty::TcpStream => append_literal(module, &mut f, buf, "<TcpStream>"),
+        Ty::PipeStream => append_literal(module, &mut f, buf, "<PipeStream>"),
         Ty::TcpListener => append_literal(module, &mut f, buf, "<TcpListener>"),
         Ty::Store(_) => append_literal(module, &mut f, buf, "<Store>"),
         Ty::Param(name) => append_literal(module, &mut f, buf, &format!("<{name}>")),

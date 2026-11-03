@@ -3723,6 +3723,18 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     Ty::Unit,
                 )
             }
+            PipePair
+            | PipeStreamRead
+            | PipeStreamWriteAll
+            | PipeStreamClose
+            | PipeStreamSetIdleTimeout
+            | PipeStreamReceivedBatches
+            | StreamRead
+            | StreamWriteAll
+            | StreamClose
+            | StreamSetIdleTimeout => {
+                unimplemented!("slice 14: lowering of `{b:?}` (docs/slice.md 18.11)")
+            }
             StoreNextId => {
                 let r = recv(self);
                 let s = self.scalar(&r);

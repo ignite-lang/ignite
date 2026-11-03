@@ -70,6 +70,27 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
         (Ty::TcpStream, "read") => sig(TcpStreamRead, vec![Ty::Int], io(Ty::Input)),
         (Ty::TcpStream, "write_all") => sig(TcpStreamWriteAll, vec![bytes()], io(Ty::Unit)),
         (Ty::TcpStream, "close") => sig(TcpStreamClose, vec![], io(Ty::Unit)),
+        (Ty::PipeStream, "read") => sig(PipeStreamRead, vec![Ty::Int], io(Ty::Input)),
+        (Ty::PipeStream, "write_all") => sig(PipeStreamWriteAll, vec![bytes()], io(Ty::Unit)),
+        (Ty::PipeStream, "close") => sig(PipeStreamClose, vec![], io(Ty::Unit)),
+        (Ty::PipeStream, "set_idle_timeout") => {
+            sig(PipeStreamSetIdleTimeout, vec![Ty::Int], io(Ty::Unit))
+        }
+        (Ty::PipeStream, "received_batches") => sig(PipeStreamReceivedBatches, vec![], Ty::Int),
+        _ => None,
+    }
+}
+
+/// `receiver.name(..)` for a receiver whose type is a type parameter bounded
+/// by `ByteStream` (`docs/slice.md` 18.3): the four stream methods, with
+/// the signatures of `TcpStream`'s. `copy` comes from [`method`].
+pub(crate) fn stream_method(name: &str) -> Option<Sig> {
+    use Builtin::*;
+    match name {
+        "read" => sig(StreamRead, vec![Ty::Int], io(Ty::Input)),
+        "write_all" => sig(StreamWriteAll, vec![bytes()], io(Ty::Unit)),
+        "close" => sig(StreamClose, vec![], io(Ty::Unit)),
+        "set_idle_timeout" => sig(StreamSetIdleTimeout, vec![Ty::Int], io(Ty::Unit)),
         _ => None,
     }
 }
@@ -149,6 +170,11 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
         ("IoError", "new") => sig(IoErrorNew, vec![Ty::Text], Ty::IoError),
         ("Clock", "monotonic") => sig(ClockMonotonic, vec![], Ty::Quantity(QuantityKind::Duration)),
         ("Endpoint", "of") => sig(EndpointOf, vec![Ty::Ref(None)], io(endpoint())),
+        ("Pipe", "pair") => sig(
+            PipePair,
+            vec![],
+            Ty::Tuple(vec![Ty::PipeStream, Ty::PipeStream]),
+        ),
         _ => None,
     }
 }

@@ -1,3 +1,5 @@
 type Tuple { x: Int }
 
 enum Bytes { Raw }
+
+type PipeStream {}

@@ -1923,6 +1923,7 @@ impl<'a> Generator<'a> {
             Ty::Tuple(items) => format!("({})", list(items)),
             Ty::TcpListener => "ignite_io::TcpListener".to_string(),
             Ty::TcpStream => "ignite_io::TcpStream".to_string(),
+            Ty::PipeStream => "ignite_io::PipeStream".to_string(),
             Ty::IoError => "ignite_io::IoError".to_string(),
             Ty::Input => "ignite_io::Input".to_string(),
             Ty::Param(name) => ident(name),
@@ -2271,6 +2272,11 @@ impl<'a> Generator<'a> {
     /// `role` takes its parameters by value (a generated `main` calls it);
     /// every other fn takes them by reference (section 6, parameters).
     fn function_line(&mut self, w: &mut Writer, decl: &FnDecl, spaced: bool, role: bool) {
+        if !decl.bounds.is_empty() {
+            unimplemented!(
+                "slice 14: bounded type parameters and the turbofish rule (docs/slice.md 18.10)"
+            );
+        }
         let mut mutated = BTreeSet::new();
         mutated_names(&decl.body, self.types, &mut mutated);
         let mut prologue = Vec::new();
@@ -3246,6 +3252,7 @@ impl<'a> Generator<'a> {
             ("List", "empty", []) => "Vec::new()".to_string(),
             ("Map", "empty", []) => "std::collections::BTreeMap::new()".to_string(),
             ("Store", "new", []) => "ignite_io::Store::new()".to_string(),
+            ("Pipe", "pair", []) => unimplemented!("slice 14: `Pipe.pair()` (docs/slice.md 18.10)"),
             ("Int", "to_text", [value]) => {
                 format!("{}.to_string()", wrap(&args[0], value.clone()))
             }
@@ -3318,6 +3325,19 @@ impl<'a> Generator<'a> {
             Some(Callee::Fn(q)) => {
                 let target = self.fn_path(q);
                 return self.fn_call(expr, target, Some(receiver), args);
+            }
+            Some(Callee::Builtin(
+                builtin @ (Builtin::PipeStreamRead
+                | Builtin::PipeStreamWriteAll
+                | Builtin::PipeStreamClose
+                | Builtin::PipeStreamSetIdleTimeout
+                | Builtin::PipeStreamReceivedBatches
+                | Builtin::StreamRead
+                | Builtin::StreamWriteAll
+                | Builtin::StreamClose
+                | Builtin::StreamSetIdleTimeout),
+            )) => {
+                unimplemented!("slice 14: the stream builtin `{builtin:?}` (docs/slice.md 18.10)")
             }
             _ if mutates_receiver(expr, &name.name, self.types) && self.indexed_place(receiver) => {
                 return self.indexed_mutation(expr, receiver, name, args);
@@ -4054,6 +4074,7 @@ impl<'a> Generator<'a> {
             Ty::Never => String::new(),
             Ty::Fn(..) | Ty::EffectFn(..) => fixed("<fn>"),
             Ty::TcpStream => fixed("<TcpStream>"),
+            Ty::PipeStream => fixed("<PipeStream>"),
             Ty::TcpListener => fixed("<TcpListener>"),
             Ty::Store(_) => fixed("<Store>"),
             Ty::Param(name) => fixed(&format!("<{name}>")),

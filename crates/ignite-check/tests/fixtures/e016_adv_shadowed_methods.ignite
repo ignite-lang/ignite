@@ -1,0 +1,7 @@
+fn read(n: Int) -> Int = n
+
+fn set_idle_timeout(n: Int) -> Int = n
+
+fn peek<S: ByteStream>(stream: S) -> Result<Input, IoError> requires [] = stream.read(1)
+
+fn idle<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read] = stream.set_idle_timeout(1)

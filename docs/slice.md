@@ -157,6 +157,9 @@ resource   := 'resource' ident ':' ident ('<' type (',' type)* '>')?
 component  := 'component' ident ':' ident '{' (ident '=' expr sep)* (ident '=' expr)? '}'
 ```
 
+Since slice 14 the type parameters of a fn, an associated fn and a role take a bound
+(`<S: ByteStream>`); `fn_type_params` is in section 18.3.
+
 `type N = ...` and `type N<P> = ...` are aliases; `type N { ... }` and `type N<P> { ... }`
 are records. A `requires` after a fn type's return type belongs to the innermost fn type
 (section 11.7). A one-element tuple, `(a,)` as a value, type or pattern, is E001. In a type, a
@@ -264,6 +267,8 @@ call on the identifier `Action`; the checker turns an uppercase-first identifier
 - A role is called as `Name.serve(stream, app)` / `Name.connect(stream)`; both calls are
   effectful.
 - Message grammars, negotiation state and roles beyond these two are a later slice.
+- Since slice 14 a role's stream may be a `ByteStream`-bounded type parameter and `serve` may
+  take a limits record as a third parameter (section 18.6).
 
 ### 4.3 Constants
 
@@ -837,18 +842,19 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E017 | effectful function used as a value where no effectful fn type covering its effects is expected (section 4.5); reported by the type checker since slice 7 |
 | E020 | unsupported or malformed resource, component, contract, policy or assembly (also: a kind that is no record type, two components with one executable name, a `system` in a std module); reported by the type checker since slice 10. The Rust backend keeps E020 for a malformed resource and, when it runs without the typed program, for every component (a component is executable only through the type checker) |
 | E021 | reserved (unused since slice 1) |
-| E030 | protocol role missing or malformed, a role without `requires`, a call to a role the protocol lacks (the component rules of slices 1 to 9, `Client` without `connect` and `Service` without `serve`, retired with those kinds in slice 10: a kind's `main` calls the role, and a missing role is this E030 at the call) |
+| E030 | protocol role missing or malformed, a role without `requires`, a call to a role the protocol lacks (the component rules of slices 1 to 9, `Client` without `connect` and `Service` without `serve`, retired with those kinds in slice 10: a kind's `main` calls the role, and a missing role is this E030 at the call); since slice 14 a `serve` role takes 2 parameters `(stream, application)` or 3 `(stream, limits, application)` (section 18.6) |
 | E031 | unknown module or imported name (including a name imported from `std.net` or `std.io` that is neither a builtin nor declared in that module's file), or an import from a module that is neither `std.*` nor a sibling of the program's package (section 14.4) |
 | E032 | import cycle |
 | E049 | a binding inside an or-pattern |
 | E050 | two tests of one module with the same name (section 12.2) |
-| E051 | a test-only item used outside tests and test-only items, or imported (section 12.2), or `Store.new()` there (section 12.3); a UFCS use is reported by the type checker |
+| E051 | a test-only item used outside tests and test-only items, or imported (section 12.2), or `Store.new()` there (section 12.3), or `Pipe.pair()` there (section 18.4); a UFCS use is reported by the type checker |
 | E053 | a test name that is empty or interpolated; reported by the parser (section 12.1) |
 | E041 | (slice 9) a name two glob imports provide, used without an explicit import (section 13.1 row 6) |
 | E054 | nesting deeper than 256 levels of brackets, type arguments, prefix operators or `return` (section 3); string literals nested deeper than 32 interpolations (section 13.1 row 1) |
 | E055 | a record that contains itself through fields and tuples alone, so a value would be infinite; recursion through an enum payload, `Option`, `Result` or `List` is allowed and boxed (section 13.4) |
 | E056 | a parameter of a fn, role, fn type or closure named like an ambient capability: `stdin`, `stdout`, `process`, `net` (section 13.11) |
 | E057 | a type parameter of a generic record, enum or alias that no field, payload or aliased type uses (section 13.11) |
+| E099 | (slice 14) a bound naming an interface other than `ByteStream` or more than one interface, or `ByteStream` in a type position (section 18.7) |
 
 Keywords are accepted as names in package and import paths, property names and
 record-literal field names.
@@ -862,7 +868,8 @@ whose effects `ignite-check` could not check, section 11.7), E043 wrong number o
 E045 operator not defined for the operand type (also `==` on a type that is not comparable, section 13.5, a constant pattern of a type without
 `==`, and a range bound that is no literal or constant with a literal value), E046 `match` not exhaustive (ranges split `Int` and `Byte` into intervals, section 13.7), E047 record literal with a missing (and not defaulted),
 unknown or duplicate field, E048 unknown type name, wrong number of type arguments or an
-alias that refers to itself, E052 `assert` condition not `Bool` (section 12.3).
+alias that refers to itself, E052 `assert` condition not `Bool` (section 12.3). Since slice 14 also E096: a use instantiates a `ByteStream`-bounded type
+parameter with a type that does not implement `ByteStream` (section 18.7).
 `ignite-check` reports E047 and E048 (an unknown record in a record literal is E048, not
 E003); `ignite-types` reports them too for a module it is given unchecked, and alone reports
 alias cycles.
@@ -901,9 +908,9 @@ text). Fixtures: all under `crates/ignite/tests/fixtures`, named as in section 1
 Fixtures: E001 (including a keyword as a variable, fn and type name, beside
 `valid_keyword_fields`), E002, E053 and E054 under `crates/ignite-syntax/tests/fixtures`;
 E003, E004, E006, E010, E013, E015, E016, E030, E031, E041 (glob conflict), E047, E048, E049,
-E050, E051, E055, E056 and E057 under `crates/ignite-check/tests/fixtures`; E003 (variant out
+E050, E051, E055, E056, E057 and E099 under `crates/ignite-check/tests/fixtures`; E003 (variant out
 of scope, payload variant used bare), E005, E017, E040 to E046, E048 (alias cycle), E051
-(UFCS), E052 and E100 to E109 (E104 three fixtures: `e104_required_field`,
+(UFCS), E052, E096 and E100 to E109 (E104 three fixtures: `e104_required_field`,
 `e104_output_field`, `e104_loopback`; `valid_system` mirrors the design file with kinds
 declared locally, because the fixture standard library has no `std/protocol` and the
 fixture must type without it; the real kinds are checked by `cli::check_design_file_is_silent`)
@@ -1097,7 +1104,8 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
   `fn swap<A, B>(p: Pair<A, B>) -> Pair<B, A> = ...`, `fn serve<S>(stream: TcpStream, app: HttpApp<S>) ...`.
 - No bounds. A type parameter supports only what every type supports: binding, passing,
   returning, storing in records, lists, tuples, `Option`, `Result`, `Store`. `==`, operators,
-  methods and `to_text` on a type parameter are E045/E041.
+  methods and `to_text` on a type parameter are E045/E041. Since slice 14 a fn or role type
+  parameter may be bounded by `ByteStream`, which gives it the stream methods (section 18.3).
 - Type arguments are inferred at calls from the arguments and the expected type; explicit
   arguments are not in the grammar (E042 when inference fails; annotate the binding).
 - `Ty::Param(String)` inside generic bodies; `Ty::Record`/`Ty::Enum` gain type arguments
@@ -4485,6 +4493,15 @@ already holds for every type parameter (18.2). The E041 on an unbounded paramete
 `ignite-types`' `builtins::method`, which gains the `ByteStream` arms for a bounded
 `Ty::Param`.
 
+As landed (U1): the E001 of a bound on a record, enum or alias is at the bound; the E099 of
+two interfaces is at the second, that of an unknown interface at it, and that of `ByteStream`
+in a type position at the type name. The checker resolves the four methods (and `copy`,
+`debug`) of a bounded receiver in `builtin_method`, from the fn's set of bounded parameters,
+before `builtin_applies` is asked; the typer looks a bounded `Ty::Param`'s method up in
+`builtins::stream_method` (the `Stream*` builtins) before `builtins::method`. E096 is checked
+where the typer records a generic instance: calls, role calls, UFCS calls and `spawn` through
+`generic_call_refs`, fn values through the name path, at the use's span.
+
 ### 18.4 `Pipe` and `PipeStream`
 
 | builtin | signature | effect on the receiver's root | where it may be called |
@@ -4547,6 +4564,10 @@ What is written on one end is read on the other. Each end works as follows.
   fn lives until the process exits. A pipe test therefore closes every end whose `Eof` it
   expects, explicitly; `Telnet.serve` and `Http.serve` close their stream, so the helpers of
   18.12 do.
+
+As landed (U1): `Pipe.pair()` needs no `requires` entry, as the table says, but the typer's
+pure-context set counts it as the ambient operation `pipe.pair`, as `Store.new` is
+`store.new`, so a property expression or constant that calls it is E116 (18.17).
 
 ### 18.5 Limits records
 
@@ -4616,6 +4637,12 @@ Further fixture obligations:
   `e099` and `e096`.
 
 E097 is not used. See D3.
+
+As landed (U1): beyond the list, `e016_effects` gains a bounded fn missing `stream.write`,
+`e030_protocol_roles` a valid 3-parameter `serve`, the check fixture `valid_imports` imports
+`ByteStream`, `Pipe` and `PipeStream` from `std.net`, and `e001_bound_on_record` also covers
+an enum and an alias. The new message of E030 also changes
+`crates/ignite-types/tests/audit/effects_a16_roles.expected`, which no unit owns.
 
 ### 18.8 Substrate (`crates/ignite-io`)
 
@@ -4822,6 +4849,10 @@ SessionLimits, Console]`.
 | `ignite-io` | `Pipe`, `PipeStream`, `ByteStream` |
 | `ignite-rt` | the entries of 18.9 |
 
+As landed (U1): `crates/ignite-types/tests/surface.rs` has no `FnDecl` literal, so only
+`crates/ignite-rustgen/tests/units.rs` and the checker's own unit test gained `bounds`. A
+role's key in `ModuleTypes.bounds` and in `bound` is `Protocol.role`, as in `generics`.
+
 ### 18.14 Stale points in the sources
 
 1. protocols.md §3.3, §5.3 and §7 make E097 "`Store.new()` outside a test". Since slice 8 that
@@ -4939,6 +4970,11 @@ placeholder:
 - `debug` in `glue.rs` and in rustgen (`<PipeStream>`);
 - `ignite-eval`: like `TcpStream`, not evaluable; the typer keeps the new builtins out of
   property expressions (E116).
+
+As landed (U1): four placeholders. Rust target three: one in `function_line` for any fn with
+a bound (bounded parameters and the turbofish rule together), one for `Pipe.pair()` in
+`static_call`, one for the `PipeStream*` and `Stream*` builtins in `method`; its `rust_ty` of
+`Ty::PipeStream` is final (`ignite_io::PipeStream`). LLVM one arm for all ten builtins.
 
 ### 18.18 Gate time
 

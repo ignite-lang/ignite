@@ -73,7 +73,7 @@ fn every_checker_code_has_a_fixture() {
         .collect();
     for code in [
         "e003", "e004", "e006", "e010", "e013", "e015", "e016", "e030", "e031", "e047", "e048",
-        "e049", "e050", "e051", "e055", "e056", "e057",
+        "e049", "e050", "e051", "e055", "e056", "e057", "e099",
     ] {
         assert!(
             names.iter().any(|n| n.starts_with(code)),

@@ -1,0 +1,5 @@
+e051_adv_pipe_pair_places.ignite:2:41: error[E051]: `Pipe.pair()` is test-only; a program's streams come from a listener or a connect
+e051_adv_pipe_pair_places.ignite:5:45: error[E051]: `Pipe.pair()` is test-only; a program's streams come from a listener or a connect
+e051_adv_pipe_pair_places.ignite:7:48: error[E051]: `Pipe.pair()` is test-only; a program's streams come from a listener or a connect
+e051_adv_pipe_pair_places.ignite:10:22: error[E051]: `Pipe.pair()` is test-only; a program's streams come from a listener or a connect
+e051_adv_pipe_pair_places.ignite:15:21: error[E051]: `Pipe.pair()` is test-only; a program's streams come from a listener or a connect

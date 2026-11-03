@@ -3,6 +3,7 @@
 //! invariant 9). Each file is a module; harness names are
 //! `<file>::<test>`.
 
+mod adversary_bounds;
 mod audit;
 mod common;
 mod fixtures;

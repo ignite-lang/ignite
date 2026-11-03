@@ -1,0 +1,10 @@
+type Holder<S: ByteStream> { stream: S }
+
+enum Either<A, B: ByteStream> {
+  Left(A)
+  Right(B)
+}
+
+type Alias<S: ByteStream> = List<S>
+
+fn relay<S: ByteStream, T>(stream: S, other: T) -> S = stream

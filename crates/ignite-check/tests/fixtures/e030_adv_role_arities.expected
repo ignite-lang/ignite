@@ -1,0 +1,4 @@
+e030_adv_role_arities.ignite:2:6: error[E030]: role `Bare.serve` takes 2 parameters (stream, application) or 3 (stream, limits, application), found 0
+e030_adv_role_arities.ignite:8:6: error[E030]: role `Narrow.serve` takes 2 parameters (stream, application) or 3 (stream, limits, application), found 1
+e030_adv_role_arities.ignite:14:6: error[E030]: role `Generic.serve` takes 2 parameters (stream, application) or 3 (stream, limits, application), found 4
+e030_adv_role_arities.ignite:18:6: error[E030]: role `Generic.connect` takes 1 parameter (stream), found 2

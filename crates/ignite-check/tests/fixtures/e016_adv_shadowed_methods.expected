@@ -1,0 +1,2 @@
+e016_adv_shadowed_methods.ignite:5:75: error[E016]: missing effect `stream.read` for `stream.read`; add it to the `requires` of `peek`
+e016_adv_shadowed_methods.ignite:7:85: error[E016]: missing effect `stream.write` for `stream.set_idle_timeout`; add it to the `requires` of `idle`

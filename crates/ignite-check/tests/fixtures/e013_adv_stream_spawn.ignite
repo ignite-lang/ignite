@@ -1,0 +1,17 @@
+fn close(n: Int) -> Int = n
+
+fn read(n: Int) -> Int = n
+
+fn received_batches(n: Int) -> Int = n
+
+fn bounded<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  spawn stream.close()
+  spawn stream.read(1)
+  return Ok(Unit)
+}
+
+fn piped(end: PipeStream) -> Result<Unit, IoError> requires [end.read, end.write] {
+  spawn end.write_all("x".to_bytes())
+  spawn end.received_batches()
+  return Ok(Unit)
+}
