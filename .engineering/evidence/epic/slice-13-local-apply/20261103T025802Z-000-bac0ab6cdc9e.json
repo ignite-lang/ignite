@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T02:58:02Z",
+  "actor": "human:timo",
+  "artifact": "epic:slice-13-local-apply",
+  "kind": "epic",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 1854725 exit 0, 746 cargo tests passed, 160 inline per target; released v0.2.0",
+    "reference": "https://github.com/ignite-lang/ignite/releases/tag/v0.2.0"
+  }
+}

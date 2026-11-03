@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T02:58:02Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-13-acceptance-matrix",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p ignite --test main apply (46 passed, 0 failed); task gate on 1854725 exit 0, 746 cargo tests passed",
+    "reference": "https://github.com/ignite-lang/ignite/pull/2"
+  }
+}
