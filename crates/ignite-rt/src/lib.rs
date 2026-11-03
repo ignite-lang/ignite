@@ -216,3 +216,11 @@ mod test;
 pub use test::IgniteTest;
 #[cfg(feature = "runner")]
 pub use test::ignite_rt_test_main;
+
+// Slice 14 (`docs/slice.md` 18.9): the pipe entries, after the tests for
+// the same reason.
+mod pipe;
+pub use pipe::{
+    ignite_rt_pipe_close, ignite_rt_pipe_pair, ignite_rt_pipe_read,
+    ignite_rt_pipe_received_batches, ignite_rt_pipe_set_idle_timeout, ignite_rt_pipe_write_all,
+};

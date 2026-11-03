@@ -690,6 +690,9 @@ The only hand-written Rust a generated program runs, and the one implementation 
 every target: the Rust target's generated code calls it directly, the LLVM target through the
 C ABI adapter `ignite-rt` (`docs/llvm.md` section 5).
 
+Slice 14 adds `Pipe`, `PipeStream`, `ByteStream` and the `ignite_rt_pipe_*` entries: 18.8 and
+18.9 supersede this section where they differ.
+
 Slice 4: blocking. Sockets are `std::net`, standard input is one unbuffered `read(0)` per
 call, every task is an OS thread (`spawn`), and there is no event loop and no tokio. An
 operation that may wait is a plain `fn` with the name and signature its async version will
@@ -4650,6 +4653,21 @@ Tests in `crates/ignite-io/tests/pipe.rs`, a new module of `tests/main.rs`:
 - `task_end_delivers`
 - `clones_share_the_end`
 
+As landed (U2):
+
+- One pending list: `net.rs`'s `PENDING` holds weak references to a crate-private trait
+  `Buffered` (`flush_kept`), implemented by the TCP stream and the pipe end. `ByteStream` is in
+  `stream.rs`.
+- Only a delivery made by a flush keeps its error. A delivery made by `write_all` at
+  `SEND_BUFFER`, or by `close`, returns `pipe queue full` or `pipe peer is gone` to that call,
+  as a `TcpStream`'s send at the threshold or on close does. Neither queues a byte or counts a
+  batch.
+- `close` closes the write half also when it returns a kept or a delivery error, so the peer
+  still reads `Eof`. A `TcpStream`'s `close` returns before its shutdown in that case.
+- Dropping the last handle of an end also discards the unread bytes of its own queue.
+- One more test, `byte_stream_dispatches_to_the_pipe`, calls the trait as `<S as
+  ignite_io::ByteStream>::read(..)`, the form of 18.10.
+
 ### 18.9 Runtime ABI (`crates/ignite-rt`)
 
 - The handle table gains `Handle::Pipe(PipeStream)`. A pipe handle is a slot like any other,
@@ -4673,6 +4691,11 @@ Tests in `crates/ignite-io/tests/pipe.rs`, a new module of `tests/main.rs`:
   - `pair_write_read_and_batches_through_the_abi`
   - `release_of_the_last_handle_closes_the_peer`
   - `a_pipe_entry_refuses_a_tcp_handle`
+
+As landed (U2): `ignite_rt_pipe_received_batches` has no error out-parameter; given a handle
+that is not a pipe it returns 0, as `ignite_rt_tcp_local_port` does for one that is not a
+listener. A TCP entry given a pipe gives "`<h>` is not a TCP stream", and `tcp_accept` "`<h>` is
+not a TCP listener". `tcp_read` and `pipe_read` share one arena-read helper.
 
 ### 18.10 Rust target
 

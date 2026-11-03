@@ -1,5 +1,5 @@
 //! Ignite IO substrate (`docs/slice.md` section 7): the one implementation of
-//! TCP, standard input and output, terminal mode, process arguments, tasks
+//! TCP, in-memory pipes, standard input and output, terminal mode, process arguments, tasks
 //! and the process entry point. Both targets call it: the Rust target's
 //! generated code directly, the LLVM target through the C ABI adapter
 //! `ignite-rt`.
@@ -615,3 +615,11 @@ pub use task::{live_tasks, wait_for_tasks};
 pub fn drain() {
     drain::install();
 }
+
+// Slice 14 (`docs/slice.md` 18.8): the in-memory stream pair and the
+// stream interface both targets dispatch on, after the tests for the same
+// reason. Owner: U2.
+mod pipe;
+mod stream;
+pub use pipe::{PIPE_CAPACITY, Pipe, PipeStream};
+pub use stream::ByteStream;
