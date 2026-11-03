@@ -1,4 +1,4 @@
-# Ignite slices 1 to 14: language subset, standard library, substrate and lowering
+# Ignite slices 1 to 15: language subset, standard library, substrate and lowering
 
 Status: implementation contract for the compiler slice, 2026-11-01. It narrows
 `design.md` to what `examples/terminal/terminal.ignite` and `std/` need. Where the two
@@ -855,6 +855,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E056 | a parameter of a fn, role, fn type or closure named like an ambient capability: `stdin`, `stdout`, `process`, `net` (section 13.11) |
 | E057 | a type parameter of a generic record, enum or alias that no field, payload or aliased type uses (section 13.11) |
 | E099 | (slice 14) a bound naming an interface other than `ByteStream` or more than one interface, or `ByteStream` in a type position (section 18.7) |
+| E091 | (slice 15) a catalogue constant, of type `std.rfc.Requirement` or `std.rfc.Spec`, whose value is not literal data (section 19.4); the consistency trigger is the evaluator's (below) |
 
 Keywords are accepted as names in package and import paths, property names and
 record-literal field names.
@@ -904,6 +905,19 @@ member whose kind lacks the entry its host needs; from `ignite run` and `ignite 
 E125 nothing to run, E126 journal of another model or format, or a held lock, E127 journal
 that does not replay (first diverging `seq`), E128 reducer failure at run time (14.8 report
 text). Fixtures: all under `crates/ignite/tests/fixtures`, named as in section 16.17.
+
+Codes of slice 15 (section 19.12). Clauses also give E001 (malformed clause), E003 (unknown
+spec or requirement), E004 (a spec named twice in `conforms`) and E040 (a clause argument of
+the wrong type), section 19.6.
+
+| code | meaning |
+|---|---|
+| E090 | a MUST-class requirement in scope of a conforming protocol with no status, or a requirement with two statuses (two messages); from `ignite-eval`, through `ignite check` and `ignite conformance` (section 19.7) |
+| E091 | a catalogue constant that is not literal data, from `ignite-check`; an inconsistent catalogue (a repeated section and ordinal, a name that is not the id, a requirement not listed once in the `Spec`, a foreign `rfc`, two `Spec` constants), from `ignite-eval` (section 19.4) |
+| E092 | a `satisfies`, `verifies` or status naming a requirement of a spec that its protocol, or no protocol of its module, conforms to; from `ignite-eval` (section 19.7) |
+
+Fixtures: E091 (literal data) under `crates/ignite-check/tests/fixtures`; E090, E091
+(consistency) and E092 under `crates/ignite/tests/fixtures`, named as in section 19.12.
 
 Fixtures: E001 (including a keyword as a variable, fn and type name, beside
 `valid_keyword_fields`), E002, E053 and E054 under `crates/ignite-syntax/tests/fixtures`;
@@ -5063,3 +5077,740 @@ Records:
 ### 18.19 Open questions
 
 None. Every conflict between the sources had a default, recorded in 18.14 and 18.15.
+
+## 19 Slice 15: RFC catalogues and the conformance matrix (protocols P2)
+
+**Status: contract written 2026-11-03. An independent review against `docs/vision.md` §6
+follows in `docs/slice15-review.md`. Implementation has not started.** The rows of 19.0 are
+required checks, not results.
+
+Sources:
+
+- `docs/protocols.md` §3.1 to §3.3, §3.7, §6.1, §7 row P2 and §8 (Q4).
+- `docs/vision.md` §4 row "G protocols P2 to P5", §6, §7 (T2, T3, T4), invariants 3, 5 and 9.
+- This file: sections 3, 4.2, 4.3, 8, 12.1, 12.7, 15 (the evaluator), 18.0 to 18.19 (the
+  structure this section follows). Also `docs/layering.md`.
+- The RFC texts: RFC 854, 855, 1143 (plain text) and RFC 9110, 9112 (RFCXML v3, prepped), read
+  from the RFC Editor on 2026-11-03; digests in 19.9.
+
+The base of the slice is commit `296f849` (`main`). The before tree of 19.17 is taken from it.
+Everything in this section cites files and symbols, not lines (vision T3). If `main` moves
+before the slice closes, the base becomes the merge base of the slice branch and `main` at the
+close.
+
+By T2, the P2 row of `protocols.md` becomes a contract here. Where `protocols.md` disagrees
+with the code or with a decision of 19.15, this section wins and records the point in 19.14.
+
+For protocols, fns, records, fields and tests, this section extends the grammar of section 3
+by the clauses of 19.5. Clauses are declarations about the code, not code: no backend reads
+them.
+
+The slice adds:
+
+- the vocabulary module `std.rfc` (`Level`, `Party`, `Source`, `Requirement`, `Spec`);
+- five catalogue modules, `std.rfc.rfc854`, `rfc855`, `rfc1143`, `rfc9112` and `rfc9110`, whose
+  constants are literal data;
+- the six clauses `conforms`, `scope`, `satisfies`, `verifies`, `unsupported` and
+  `not_applicable`, contextual words, not keywords;
+- the claim model in `ignite-eval`, and E090, E091 and E092;
+- `ignite rfc import` and `ignite rfc check`, with a hand-written XML reader;
+- `ignite conformance FILE [--target rust|llvm]`;
+- the claims of `Telnet` (RFC 854, RFC 855) and `Http` (RFC 9112, RFC 9110 server subset).
+
+### 19.0 Acceptance
+
+Every row is a required check. "Exit 0, silent" means exit status 0, empty stdout and empty
+stderr. A test name is `<file>::<test>` in its crate's single integration-test binary
+(`cargo test -p <crate> --test main <file>::<test>`). Rows 1 to 3 are the three acceptance tests
+of the `protocols.md` P2 row. `STATUS.md` gets one dated row per row of this table (row 7).
+
+| # | check | command | required observation | unit |
+|---|---|---|---|---|
+| 1 | P2 test 1: removing one `satisfies` from a MUST is E090 | `cargo test -p ignite --test main conformance::removing_a_satisfies_from_a_must_is_e090` | The test copies `std/` into a fresh directory under `target/`. Unchanged, `ignite check --std <copy> <copy>/protocol/telnet.ignite` exits 0, silent. The test then removes `RFC854.RP14_1` (the IAC-doubling rule, 19.4) from every `satisfies` clause of the copy, deleting a clause it leaves empty. `ignite check` of the copy then exits 1, and stderr is exactly one line, `…/protocol/telnet.ignite:<line>:<col>: error[E090]: …`, naming `RFC854.RP14_1` | U6 |
+| 2 | P2 test 2: the HTTP matrix lists the §7.1 and §3.2 gaps and claims nothing | `cargo test -p ignite --test main conformance::http_matrix_lists_the_chunked_and_host_gaps` | The test runs `ignite conformance std/protocol/http.ignite --target rust`, then the same with `--target llvm`. The `rfc9112` block holds the row of `R7_1_2` (§7.1, "A recipient MUST be able to parse and decode the chunked transfer coding.") and the row of `R3_2_6` (§3.2, the 400 for a missing or repeated Host). Each row has level `MUST`, status `unsupported` and verdict `gap`. The block ends with `claim conformance of Http to rfc9112: no (` followed by the counts (19.10). Exit 1. Both targets print byte-identical stdout | U6 |
+| 3 | P2 test 3: the Telnet matrix claims RFC 854 for an NVT that refuses every option | `cargo test -p ignite --test main conformance::telnet_matrix_claims_rfc854_for_an_nvt_that_refuses_every_option` | `ignite conformance std/protocol/telnet.ignite`, once per target. Stdout holds `claim conformance of Telnet to rfc854: yes (0 gaps, 0 failures, 0 inconclusive)` and `claim conformance of Telnet to rfc855: yes (0 gaps, 0 failures, 0 inconclusive)`. The RFC 855 option-negotiation rows `RFC855.RP2_3` (a receiver may find the end of a subnegotiation by IAC SE) and `RFC855.RP2_4` (either party may refuse by sending WON'T or DON'T) each print verdict `pass`. Their evidence names `decode_within`, the fn that answers `DO` with `WONT` and `WILL` with `DONT`, and the tests "a subnegotiation is skipped up to IAC SE" and "DO is answered WONT and WILL is answered DONT" as passed. Exit 0. Both targets print byte-identical stdout | U6 |
+| 4 | the std protocol modules carry complete claims | `cargo test -p ignite --test main conformance::std_protocol_modules_check_silently` | `ignite check std/protocol/telnet.ignite` and `ignite check std/protocol/http.ignite` each exit 0, silent | U6 |
+| 5 | catalogues do not reach compiled programs | `cargo test -p ignite --test main conformance::emitted_programs_carry_no_catalogue` | `ignite emit` of `examples/todo/todo.ignite` and of `examples/terminal/terminal.ignite`, on each target: stdout contains none of the five `Spec` digests (`sha256:…`, 19.9) | U6 |
+| 6 | inline tests | `target/debug/ignite test std/protocol/telnet.ignite --target all`; the same for `http.ignite` | at least 37 passed per target for Telnet, at least 41 for HTTP, 0 failed | U6 |
+| 7 | records and gate | `task gate` on the slice branch; read `STATUS.md`, `AGENTS.md`, `PLAN.md` | exit 0. Every row of this table has a dated `STATUS.md` row that names its command and says pass. `AGENTS.md` has a "Slice 15" section with the merge gate's time, counts and exit, and layout rows for `std/rfc.ignite`, `std/rfc/` and `docs/rfc/`. `PLAN.md` row 15 says done. `docs/performance/15/` holds the records of 19.17 | U6 |
+| 8 | the vocabulary checks | `target/debug/ignite check std/rfc.ignite`; `cargo test -p ignite-check --test main terminal::standard_library_checks_in_import_order` | exit 0, silent; the test passes with `std.rfc` among the modules | U1 |
+| 9 | E091, first trigger: a catalogue constant that is not literal data | `cargo test -p ignite-check --test main fixtures::` | fixture `crates/ignite-check/tests/fixtures/e091_non_literal_catalogue` reports exactly its `.expected`: one E091 for each case of 19.4 (a call, an interpolated text, a name of a constant that is no `Requirement`, an alias `const A: Requirement = R2_1_1`, a list built with `+`). `every_checker_code_has_a_fixture` lists `e091` | U1 |
+| 10 | clause syntax | `cargo test -p ignite-syntax --test main fixtures::` | fixture `valid_clauses` parses, silent; fixture `e001_malformed_clause` reports one E001 per case: `satisfies` without `[`, a status without a reason, `scope` before `conforms`, a `verifies` after a test's block, a requirement reference with one segment | U1 |
+| 11 | clause names resolve and type | `cargo test -p ignite-check --test main fixtures::`; `cargo test -p ignite-types --test main fixtures::` | fixtures `e003_unknown_requirement` (E003, unknown requirement in a known spec; unknown spec) and `e040_conforms_not_a_spec` (E040, `conforms` naming a constant of another type; E040, a `scope` party that is no `Party`) and `e004_conforms_twice` (E004) report exactly their `.expected`; `valid_clauses` is silent in both crates | U1 |
+| 12 | a clause-bearing program checks, tests and emits as without clauses | `cargo test -p ignite --test main clauses::` | `clauses::clause_fixture_checks_silently`: `ignite check` of `crates/ignite/tests/fixtures/clauses/claims.ignite` (a protocol with `conforms`, `scope`, `unsupported`, `not_applicable`, `satisfies` on a fn, a type and a limits-record field, and a test with `verifies`, with a status for every requirement of its own catalogue, so it stays silent after U2) exits 0, silent. `clauses::clause_fixture_tests_pass_on_both_targets`: `ignite test` of it passes with `--target rust` and with `--target llvm`. `clauses::clauses_emit_nothing_on_either_target`: `ignite emit` of it and of `stripped.ignite` (the same file with every clause deleted) print byte-identical stdout, once per target | U1 |
+| 13 | the layer of `std.rfc` | `cargo test -p ignite-check --test main layering::` | passes with the prefix rule of 19.11; `docs/layering.md` and `LAYERS` agree | U1 |
+| 14 | E090, missing status | `cargo test -p ignite --test main plan::fixtures_match_expected` | `e090_missing_status.ignite`: a protocol conforming to a fixture catalogue with one requirement at each of MUST, MUST NOT, REQUIRED, SHALL and SHALL NOT, and no status: exit 1, five E090 as its `.expected` says. `e090_complete_claim.ignite`, the same with a status on each: exit 0, empty `.expected`. `e090_scope.ignite`, the first with one more MUST outside the `scope` sections and one more whose party `scope` excludes: exactly five E090 | U2 |
+| 15 | E090, two statuses | same | `e090_two_statuses.ignite`: one requirement both satisfied and `unsupported`, one both `unsupported` and `not_applicable`: two E090 with the two-status message of 19.12 | U2 |
+| 16 | E092 | same | `e092_satisfies_foreign.ignite`, `e092_verifies_foreign.ignite`, `e092_status_foreign.ignite`: each names a requirement of a spec the protocol does not conform to; one E092 each | U2 |
+| 17 | E091, second trigger | same | `e091_duplicate_id.ignite`: one E091 per case of 19.4 (two requirements with one section and ordinal, a name that does not match its section and ordinal, a requirement not listed in the `Spec`, one listed twice, an `rfc` that differs from the `Spec`'s, two `Spec` constants in one module) | U2 |
+| 18 | the claim model API | `cargo test -p ignite-eval --test main claims::` | `claims::should_without_status_is_unclassified`: a SHOULD with no status reads as `Status::None` and in scope. `claims::limit_below_minimum_does_not_meet_it`: a field default of `7999` against `minimum = Some(8000)` reads `meets == Some(false)`, `8 KiB` reads `Some(true)` | U2 |
+| 19 | import is deterministic and checks | `cargo test -p ignite --test main rfc::` | `rfc::import_writes_the_golden_twice`: `ignite rfc import` of `crates/ignite/tests/fixtures/rfc/sample.xml` writes a module byte-identical to `sample.ignite`, twice in a row. `rfc::imported_golden_checks_silently`: `ignite check` of the golden exits 0, silent | U3 |
+| 20 | keyword rule | same | `rfc::lowercase_must_is_no_requirement`: a sentence with a plain "must" yields no requirement. `rfc::marked_must_is_one_requirement`: a sentence with `<bcp14>MUST</bcp14>` and `<bcp14>SHOULD</bcp14>` yields one requirement with `level = Must` | U3 |
+| 21 | ids, sections and the filter | same | `rfc::sections_filter_keeps_ordinals`: with `--sections 2`, the fixture's §2.1 and §2.2 requirements appear with the same ids and ordinals as without the filter, and §3 requirements do not | U3 |
+| 22 | digest check | same | `rfc::check_matches_the_source`: `ignite rfc check sample.ignite sample.xml` exit 0, silent. `rfc::check_names_the_catalogue_when_a_byte_changes`: after one byte of a copy of the source changes, exit 1, and stderr names the catalogue file and both digests | U3 |
+| 23 | reader errors | same | `rfc::malformed_xml_is_exit_2`: an unclosed element, an unknown entity and a DOCTYPE with an internal subset each give exit 2 and one line `<file>:<line>:<col>: <message>` | U3 |
+| 24 | no network client | `cargo tree -p ignite -e normal` | lists none of `reqwest`, `ureq`, `hyper`, `curl`, `isahc`, `attohttpc` | U3 |
+| 25 | catalogues check | `cargo test -p ignite --test main rfc::committed_catalogues_check_silently` | `ignite check` of each of `std/rfc/rfc854.ignite`, `rfc855.ignite`, `rfc1143.ignite`, `rfc9112.ignite`, `rfc9110.ignite` exits 0, silent | U4 |
+| 26 | catalogues match their sources | `cargo test -p ignite --test main rfc::committed_catalogues_match_their_sources` | `ignite rfc check std/rfc/rfcN.ignite docs/rfc/rfcN.<txt\|xml>` exit 0 for each of the five | U4 |
+| 27 | the prose catalogues | `cargo test -p ignite --test main rfc::prose_catalogues_quote_their_rfcs` | `rfc854.ignite` holds `RP14_1` with `source = Prose` whose `text` contains "only the IAC need be doubled to be sent as data". `rfc855.ignite` equals the table of 19.4 (ids, levels, parties, texts). `rfc1143.ignite` holds at least one `source = Prose` requirement whose `text` is a sentence of RFC 1143 verbatim. Each requirement is listed in its module's `Spec` | U4 |
+| 28 | the RFC 9112 extent | `cargo test -p ignite --test main rfc::rfc9112_holds_sections_2_to_9` | `rfc9112.ignite` holds requirements from sections 2 to 9 only, at least one from each. It holds `R7_1_2` and `R3_2_6`, both `level = Must`, with the texts of row 2 | U4 |
+| 29 | the RFC 9110 server subset | `cargo test -p ignite --test main rfc::rfc9110_holds_exactly_the_server_subset` | every requirement's section is one of D4's list or below it, and every listed section with a BCP 14 mark has at least one requirement | U4 |
+| 30 | the hand review changes only parties | `cargo test -p ignite --test main rfc::reimport_changes_only_party_lines` | re-running `ignite rfc import` with the flags recorded in each imported catalogue's header and diffing against the committed file changes only `party =` lines. The commit that adds a catalogue states how many it changed | U4 |
+| 31 | one row per verdict | `cargo test -p ignite --test main conformance::each_verdict_prints_its_row` | one fixture each under `crates/ignite/tests/fixtures/conformance/` for pass, fail, gap, deviation, inconclusive, n/a, out of scope and unclassified. Each prints its row as its `.expected` says | U5 |
+| 32 | a failing test | `conformance::a_failing_verifies_test_fails_the_row_and_the_claim` | the row prints `fail`, the claim line `no (0 gaps, 1 failures, 0 inconclusive)`, exit 1 | U5 |
+| 33 | satisfied without a passing test | `conformance::satisfied_without_a_passing_test_is_inconclusive` | the row prints `inconclusive`, evidence `no test` | U5 |
+| 34 | a claim that holds | `conformance::a_complete_claim_holds` | every MUST row `pass`; claim line `yes (0 gaps, 0 failures, 0 inconclusive)`; exit 0 | U5 |
+| 35 | an inconclusive MUST | `conformance::an_inconclusive_must_breaks_the_claim` | the only non-pass MUST row is `inconclusive`; claim line `no (0 gaps, 0 failures, 1 inconclusive)`; exit 1 | U5 |
+| 36 | determinism and targets | `conformance::output_is_deterministic`, `conformance::both_targets_print_the_same_matrix` | two runs print byte-identical stdout; `--target rust` and `--target llvm` print byte-identical stdout | U5 |
+| 37 | exit statuses | `conformance::conformance_exit_statuses` | a file with a diagnostic: exit 2, the diagnostic on stderr, no stdout. A file with no conforming protocol: exit 2. A test build that fails: exit 3 | U5 |
+| 38 | the workspace | `cargo test --workspace` after each unit | passes; no golden of `crates/ignite-rustgen/tests/golden/` or `crates/ignite-llvm/tests/` changes in U1 to U5 | every unit |
+
+### 19.1 Scope and non-goals
+
+In scope: the vocabulary, five catalogues, the six clauses, literal-data rules, the claim
+model with E090 to E092, the importer and the digest check, the conformance command, the two
+std claims, and the records.
+
+Not in scope:
+
+- `grammar` blocks in catalogues and everything else of P3 (§3.4 to §3.6 of `protocols.md`,
+  E093 to E095). The P2 catalogues hold requirements only.
+- Requirement aliases (`const BARE_CR: Requirement = R2_2_3`, §3.1). In P2 an alias is E091
+  (19.4).
+- A `minimum` in an imported catalogue. The importer never writes one, and P2 adds none by
+  hand, so row 30 holds. P3's limits work adds them.
+- Claims of RFC 1143. Its catalogue lands; the Telnet Q method that would satisfy it is P5.
+- Implementing the HTTP §7.1 chunked coding or the §3.2 Host check (P3). They stay gaps (row 2).
+- Fetching RFCs over the network. The importer reads a local file (D6).
+- A skip verdict in the test runner. A `verifies` test with no result line counts as not run
+  (19.10).
+- ESS traces (Q7) and mutation audits of `verifies` tests (Q4).
+
+### 19.2 Current state (at `296f849`)
+
+| fact | where |
+|---|---|
+| A protocol body holds roles only; the grammar is `protocol := 'protocol' ident '{' NL* (fn NL*)* '}'` | section 3; `ProtocolDecl { name, fns, span }` in `crates/ignite-syntax/src/ast.rs` |
+| A test is `'test' STRING block`; the AST holds name, body and span | section 3 and 12.1; `TestDecl` in `ast.rs` |
+| A fn has `requires` and then a block or `= expr`; a record `type Name tparams? { fields }`; a field `name: Type (= default)?` | section 3; `FnDecl`, `RecordDecl`, `Field` in `ast.rs` |
+| `crates/ignite-rustgen/tests/units.rs` and `crates/ignite-types/tests/surface.rs` build `FnDecl`, `RecordDecl`, `Field`, `ConstDecl` and `ProtocolDecl` as full struct literals, so a new AST field breaks them | `crates/ignite-rustgen/tests/units.rs`, `crates/ignite-types/tests/surface.rs`, `crates/ignite-check/src/lib.rs` (grep `ProtocolDecl {`) |
+| No std or example file uses `conforms`, `scope`, `verifies`, `unsupported`, `not_applicable`, `parties` or `sections` as a name. `std.sli` declares a fn `satisfies`, so the clause words must stay contextual | `grep -rnw` over `std/` and `examples/`; `satisfies` in `std/sli.ignite` |
+| A constant of any type compiles on both targets: Rust emits it as a fn, LLVM defines it through `Lower::define_const` | `constant` in `crates/ignite-rustgen/src/lib.rs`; the `Decl::Const` arm in `crates/ignite-llvm/src/lib.rs`, `Lower::define_const` in `crates/ignite-llvm/src/lower.rs` |
+| Std emission is reachable-only on both targets. Rust keeps an item when a reachable item's text names it (`reachable`). LLVM keeps the functions reachable from its roots. An unreferenced constant is not emitted | `reachable` in `crates/ignite-rustgen/src/lib.rs`; the doc of the module builder in `crates/ignite-llvm/src/lib.rs` ("with `roots`, only the functions reachable"); `AGENTS.md`, slice 12b |
+| The frontend loads only the std modules a program reaches | `AGENTS.md`, slice 12b; `PLAN.md` row 12b |
+| The evaluator evaluates constants | `find_const` in `crates/ignite-eval/src/eval.rs` |
+| `Model::check` returns `Ok` before any work when the program has no systems and no assemblies | `Model::check` in `crates/ignite-eval/src/model.rs` |
+| `ignite check` runs `Model::check` through `Checked::check` | `check_with_std`, `Checked::check` in `crates/ignite/src/lib.rs` |
+| A test verdict is `Passed`, `Failed`, `Exited`, `Signal` or `TimedOut`; there is no skip. A result line is `test <module>/<name> ... ok`, `... FAILED` or `... FAILED (<reason>)` | `Verdict`, `Verdict::word` in `crates/ignite-io/src/test.rs` |
+| `test_build` builds one test executable per target for the files given; the module is private to the crate | `build_tests`, `test_targets`, `TestOptions` in `crates/ignite/src/test_build.rs`; `mod test_build;` in `crates/ignite/src/lib.rs` |
+| `ignite check` takes `--std DIR` | `cli::missing_std_root_is_exit_3` in `crates/ignite/tests/cli.rs` |
+| `plan::fixtures_match_expected` runs `crates/ignite/tests/fixtures/e11*` and `e12*` except `e125` to `e128` | `fixtures_match_expected` in `crates/ignite/tests/plan.rs` |
+| `every_checker_code_has_a_fixture` lists the checker's codes | `crates/ignite-check/tests/fixtures.rs` |
+| The layering test knows four layers, a protocol prefix `std.protocol.` and a table of non-protocol modules. Rule 5 fails any line under `crates/*/src` whose lowercase text contains a protocol name (`telnet`, `http`), so it also fails `https` | `Layer`, `LAYERS`, `PROTOCOL_PREFIX`, `compiler_crates_name_no_application_protocol` in `crates/ignite-check/tests/layering.rs`; `docs/layering.md` rules 1 to 5 |
+| `sha2` is a normal dependency of `crates/ignite`; no XML crate is in `Cargo.lock` | `crates/ignite/Cargo.toml`; `Cargo.lock` |
+| Telnet answers `DO` with `WONT` and `WILL` with `DONT`, ignores `DONT` and `WONT`, and skips a subnegotiation up to `IAC SE` | `decode_within` in `std/protocol/telnet.ignite`; tests "DO is answered WONT and WILL is answered DONT", "a subnegotiation is skipped up to IAC SE" |
+| The HTTP server answers any `Transfer-Encoding` with 501 and does not check Host | the module comment and `parse_head` in `std/protocol/http.ignite` |
+| Limits are quantities: `HttpLimits.head: ByteSize = 8 KiB`, `SessionLimits.maximum: Int = 1000` | `HttpLimits` in `std/protocol/http.ignite`, `SessionLimits` in `std/protocol/telnet.ignite` |
+| Enum variants are written bare in std (`Exponential(initial, maximum)`); no std enum has a variant named like one of 19.3 | `std/policy.ignite`; grep of `std/` |
+| Codes E096 and E099 are taken (slice 14). `protocols.md` §3.3 assigns E093 to E095 and E098 to P3 and P4, and keeps E097 unused | section 8; `docs/protocols.md` §3.3 |
+| RFC 9112's RFCXML has 149 `<bcp14>` marks: 11 in §1.1 (notation), 137 in §2 to §9, 1 in §10.1. RFC 9110 has 445; the D4 subset has 75 | count of `<bcp14>` per innermost `<section pn>` over the files of 19.9 |
+
+### 19.3 The vocabulary, `std.rfc` (D1)
+
+File `std/rfc.ignite`, module `std.rfc` (the rule "module `std.a.b` is `std/a/b.ignite`").
+The catalogues are `std/rfc/rfcN.ignite`, modules `std.rfc.rfcN`. The text, which U1 writes
+and the importer targets:
+
+```ignite
+package std.rfc
+
+// The requirement keywords of BCP 14 (RFC 2119, RFC 8174).
+enum Level { Must, MustNot, Required, Shall, ShallNot, Should, ShouldNot, Recommended,
+  NotRecommended, May, Optional }
+
+// Whom a requirement addresses.
+enum Party { Any, Sender, Recipient, Client, Server, Proxy }
+
+// Bcp14: extracted from a <bcp14> mark; Prose: written by hand from an RFC that predates BCP 14.
+enum Source { Bcp14, Prose }
+
+type Requirement {
+  rfc: Int
+  section: Text
+  ordinal: Int
+  level: Level
+  party: Party = Any
+  source: Source = Bcp14
+  minimum: Option<Int> = None
+  text: Text
+}
+
+type Spec {
+  rfc: Int
+  title: Text
+  url: Text
+  digest: Text
+  requirements: List<Requirement>
+}
+```
+
+Level classes, used by 19.7 and 19.10:
+
+| class | levels |
+|---|---|
+| MUST | `Must`, `MustNot`, `Required`, `Shall`, `ShallNot` |
+| SHOULD | `Should`, `ShouldNot`, `Recommended`, `NotRecommended` |
+| MAY | `May`, `Optional` |
+
+The module declares no fn. Tests of the module, if any, are inline.
+
+### 19.4 Catalogues, ids and literal data
+
+A catalogue module is a module that declares a constant of type `std.rfc.Spec`. It holds:
+
+- exactly one `Spec` constant, named `RFC<n>` (`RFC9112`);
+- one `Requirement` constant per requirement, each listed exactly once, in declaration order, in
+  the `Spec`'s `requirements`;
+- an `import std.rfc.{Level, Party, Source, Requirement, Spec}` (unused names allowed) and
+  nothing else.
+
+**Ids.** A requirement's constant name is its id: `R` + its `section` with each `.` replaced by
+`_` and letters upper-cased + `_` + its `ordinal`. The ordinal is 1-based within the
+requirement's innermost section, in document order. Section 3.2's sixth requirement is
+`R3_2_6`.
+
+- Numbered sections (RFC 1143, RFC 9110, RFC 9112): `section` is the section number.
+- RFC 854 and RFC 855 number no sections. `section` is `p<page>`, the page of the plain-text
+  RFC on which the sentence starts (`p14`), and the id is `RP14_1`.
+
+**Literal data.** The value of every constant whose declared type is `std.rfc.Requirement` or
+`std.rfc.Spec`, in any module, is literal data. Literal data is:
+
+- an Int literal, also with a leading `-`;
+- a Text literal without interpolation, or a `+` chain of such literals;
+- a variant of `Level`, `Party` or `Source`, bare or qualified;
+- `None`, or `Some(` Int literal `)`;
+- a `Requirement { .. }` literal whose field values are literal data;
+- a `Spec { .. }` literal whose fields are literal data and whose `requirements` is a list
+  literal of names of `Requirement` constants of the same module.
+
+Anything else is E091 (first trigger, `ignite-check`): a call, a name of any other constant
+(an alias), an interpolated text, a list built with `+`, `if`, `match` or a block. The
+message names the constant and what was found: "catalogue constant `R2_1_1` must be literal
+data, found a call".
+
+E091 (second trigger, `ignite-eval`), per catalogue module, from the constants' values:
+
+- two requirements with one `section` and `ordinal`;
+- a constant name that differs from the id of its `section` and `ordinal`, or an `ordinal`
+  under 1;
+- a `Requirement` constant not listed in the `Spec`, or listed twice;
+- a requirement whose `rfc` differs from the `Spec`'s;
+- two `Spec` constants in one module.
+
+The checker cannot see these: they need the values.
+
+**The RFC 855 catalogue**, fixed here because rows 3 and 27 name its ids. One requirement
+per sentence that says what an implementation, an option designer or the option registrar
+must, should or may do, all `source = Prose`, texts verbatim with whitespace collapsed:
+
+| id | level | party | text |
+|---|---|---|---|
+| `RP1_1` | `Should` | `Any` | "Nevertheless, it is envisioned that options which prove to be generally useful will eventually be supported by many hosts; therefore it is desirable that options should be carefully documented and well publicized." |
+| `RP1_2` | `Must` | `Any` | "In addition, it is necessary to insure that a single option code is not used for several different options." |
+| `RP1_3` | `Required` | `Any` | "The individual responsible for assignment of option codes may waive the requirement for complete documentation for some cases of experimentation, but in general documentation will be required prior to code assignment." |
+| `RP1_4` | `Should` | `Any` | "Documentation of options should contain at least the following sections:" |
+| `RP1_5` | `Should` | `Any` | "The meaning of each possible TELNET command relevant to this option should be described." |
+| `RP2_1` | `Must` | `Any` | "The default assumptions for hosts which do not implement, or use, the option must be described." |
+| `RP2_2` | `Should` | `Any` | "Therefore, a more complete description should be furnished in most cases." |
+| `RP2_3` | `May` | `Recipient` | "On the other hand, the receiver may locate the end of a parameter string by searching for the SE command (i.e., the string IAC SE), even if the receiver is unable to parse the parameters." |
+| `RP2_4` | `May` | `Any` | "Of course, either party may refuse to pursue further subnegotiation at any time by sending a WON'T or DON'T to the other party." |
+| `RP3_1` | `Must` | `Any` | "Designers of options requiring \"subnegotiation\" must take great care to avoid unending loops in the subnegotiation process." |
+| `RP3_2` | `Must` | `Sender` | "Finally, if parameters in an option \"subnegotiation\" include a byte with a value of 255, it is necessary to double this byte in accordance the general TELNET rules." |
+
+The `Spec`: `rfc = 855`, `title = "Telnet Option Specifications"`,
+`url = "https://www.rfc-editor.org/rfc/rfc855"`, digest of `docs/rfc/rfc855.txt` (19.9).
+RFC 854 and RFC 1143 follow the same rule; their ids are U4's, except `RFC854.RP14_1`, the
+sentence "With the current set-up, only the IAC need be doubled to be sent as data, and the
+other 255 codes may be passed transparently." at `Must`, `Any` (rows 1 and 27).
+
+### 19.5 Clauses (D3)
+
+The grammar of section 3 changes in these productions. `conforms`, `scope`, `satisfies`,
+`verifies`, `unsupported`, `not_applicable`, `parties` and `sections` are identifiers, read as
+clause words only in the positions below.
+
+```
+protocol   := 'protocol' ident conforms? '{' NL* ((fn | status) NL*)* '}'
+conforms   := 'conforms' '[' path (',' path)* ','? ']' scope?
+scope      := 'scope' '{' (scope_item sep)* scope_item? '}'
+scope_item := 'parties' '=' '[' (ident (',' ident)* ','?)? ']'
+            | 'sections' '=' '[' (STRING (',' STRING)* ','?)? ']'
+status     := ('unsupported' | 'not_applicable') reqref STRING
+satisfies  := 'satisfies' '[' reqref (',' reqref)* ','? ']'
+verifies   := 'verifies' '[' reqref (',' reqref)* ','? ']'
+reqref     := ident '.' ident
+fn         := 'fn' ident tparams? '(' params ')' ('->' type)? requires? satisfies? (block | '=' expr)
+record     := 'type' ident tparams? satisfies? '{' (field sep)* field? '}'
+field      := ident ':' type ('=' expr)? satisfies?
+test       := 'test' STRING verifies? block
+```
+
+- `conforms` lists `Spec` constants, local or imported: `import std.rfc.rfc9112.{RFC9112}`.
+- A `reqref` is `Spec.Id`: the first segment names a `Spec` constant in scope, the second a
+  `Requirement` constant declared in that constant's module. The requirement need not be
+  imported. Bare ids are not accepted, because every catalogue reuses ids such as `R2_1_1`.
+- `scope` narrows the claim. A requirement is in scope when its `party` is in `parties` and its
+  `section` equals an entry of `sections` or starts with that entry followed by `.`. A missing
+  `parties` or `sections`, or a missing `scope`, admits everything. Each item at most once
+  (E001 otherwise).
+- A `satisfies` on a fn or role, a type or a field says that the declaration implements the
+  requirements. It counts for every protocol of its module that conforms to the requirement's
+  spec, inside or outside the protocol body.
+- A `verifies` on a test says that the test is evidence for the requirements. It counts in the
+  same way.
+- `unsupported REF "reason"` and `not_applicable REF "reason"` are members of a protocol body.
+  The reason is a non-empty Text literal without interpolation (E001 otherwise).
+- A requirement may be satisfied by several declarations. That is one status, "satisfied".
+- A `satisfies` on a field of a record: the field's default is the configured value of 19.7.
+- Malformed clauses are E001 (row 10).
+
+Examples, as U6 writes them:
+
+```ignite
+import std.rfc.{Party}
+import std.rfc.rfc9112.{RFC9112}
+import std.rfc.rfc9110.{RFC9110}
+
+protocol Http conforms [RFC9112, RFC9110] scope { parties = [Server, Sender, Recipient, Any] } {
+  fn serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> requires [stream.read, stream.write, application.*] satisfies [RFC9112.R2_2_3] { .. }
+  unsupported RFC9112.R7_1_2 "only Content-Length framing; any Transfer-Encoding is 501"
+  unsupported RFC9112.R3_2_6 "Host is not checked"
+}
+
+test "bare CR is 400" verifies [RFC9112.R2_2_3] { .. }
+```
+
+The ids in this example other than `R7_1_2` and `R3_2_6` are illustrative.
+
+### 19.6 Resolution and typing
+
+| rule | crate | diagnostic |
+|---|---|---|
+| A `conforms` entry or the first segment of a `reqref` that names nothing | `ignite-check` | E003 |
+| The second segment of a `reqref` that names no constant of the spec's module | `ignite-check` | E003 "`RFC9112` has no requirement `R9_9_9`" |
+| A `conforms` entry that is not a constant of type `Spec`; a `reqref` whose first segment is not one; a `reqref` whose second segment is not a `Requirement` | `ignite-types` | E040 |
+| A `parties` entry that is no variant of `Party` | `ignite-types` | E040 |
+| A `conforms` that names one spec twice | `ignite-check` | E004 |
+| A non-literal catalogue constant | `ignite-check` | E091 (first trigger) |
+
+The checker records, in `Symbols`, the resolved constant of every `conforms` entry and
+`reqref` (add-only, 19.13). The claim model reads them from there.
+
+### 19.7 The claim model and E090 to E092
+
+The claim model is computed by `ignite-eval` (U2) from the typed program of the checked file
+and the values of the catalogue constants its protocols name. It covers the protocols of the
+checked file only. A program that imports `std.protocol.http` does not re-check `Http`'s claim:
+row 4 does that.
+
+`Model::check` computes it first, before its early return for a program without systems and
+assemblies, and reports its diagnostics with the model's. No change in `crates/ignite/src/`
+is needed for `ignite check` (`Checked::check` already calls `Model::check`).
+
+For each protocol P that `conforms`, and each spec S in its list, one row per requirement of S,
+in `requirements` order:
+
+- **in scope**: by 19.5's `scope` rule;
+- **status**: `satisfied` (by one or more declarations), `unsupported` (reason),
+  `not_applicable` (reason), or none;
+- **satisfiers**: the declarations, named `f` (fn), `Owner.f` (associated fn), `P.role`,
+  `Name` (type) or `Record.field`;
+- **tests**: the full names (`<module>/<name>`, 12.7) of the tests that verify it;
+- **limit**: for a satisfier that is a field and a requirement with `minimum = Some(m)`, the
+  configured value, which is the field's default as an Int (an `Int` value, or a `ByteSize` in
+  bytes), and whether it is at least `m`. A field with no default, or of another type, has no
+  configured value.
+
+Diagnostics:
+
+| code | rule | crate, story |
+|---|---|---|
+| E090 | A requirement in scope of P, at MUST class, with no status. Message: "requirement `RFC9112.R7_1_2` (MUST, section 7.1) is in scope of `Http` and has no status; add `satisfies`, `unsupported` or `not_applicable`". Position: the spec's entry in P's `conforms`. Several at one position are ordered by `requirements` order | `ignite-eval`, claim-model (U2) |
+| E090 | A requirement of P, at any level, with two statuses: satisfied and `unsupported`, satisfied and `not_applicable`, `unsupported` and `not_applicable`, or one status kind twice. Message: "requirement `RFC9112.R3_2_6` has two statuses in `Http`: satisfied by `parse_head` and unsupported". Position: the later clause | `ignite-eval`, U2 |
+| E091 | First trigger: 19.4, literal data | `ignite-check`, frontend (U1) |
+| E091 | Second trigger: 19.4, the five cases | `ignite-eval`, U2 |
+| E092 | A `satisfies` or `verifies` naming a requirement of a spec that no protocol of its module conforms to; a status in P naming a requirement of a spec P does not conform to. Message: "`RFC9110.R9_3_1_1` belongs to RFC 9110, which `Http` does not conform to" or "…, which no protocol of this module conforms to". Position: the `reqref` | `ignite-eval`, U2 |
+
+A status on a requirement out of scope is allowed; its row's verdict is `out of scope`. A
+SHOULD or MAY with no status is not an error; its row is `unclassified`.
+
+The second-trigger E091 checks run for every `Spec` constant declared in the checked file and
+for every spec a protocol of the file conforms to. `ignite check std/rfc/rfc9112.ignite`
+therefore validates the catalogue itself.
+
+### 19.8 `ignite rfc import` and `ignite rfc check` (D6)
+
+```
+ignite rfc import FILE [--sections LIST] [--package NAME] [--url URL] [--out FILE]
+ignite rfc check CATALOGUE SOURCE
+```
+
+`import` reads a local RFCXML v3 file (prepped, as the RFC Editor publishes it). It never opens
+a network connection.
+
+**Reader.** `crates/ignite/src/rfc/xml.rs`, hand-written, no dependency. It reads:
+
+- elements, attributes in single or double quotes, and character data;
+- CDATA sections, comments, processing instructions and the XML declaration, which it skips;
+- a DOCTYPE without an internal subset, which it skips;
+- the five predefined entities and numeric character references.
+
+Any other entity, a DOCTYPE with an internal subset, a mismatched or unclosed element, or a
+file over 16 MiB is an error. The error is `<file>:<line>:<col>: <message>` on stderr, exit 2.
+There is no validation and no namespace processing. Prefixed names are kept as written.
+
+**Extraction**, in document order:
+
+1. The section of a node is the `pn` attribute of its innermost `<section>`, without the
+   `section-` prefix. Front and back matter (`<front>`, `<back>`) are skipped.
+2. A text block is a `<t>`, or an `<li>`, `<dd>`, `<td>` or `<th>` with no `<t>` child.
+3. A block's text is its character data with the markup removed, plus these renderings:
+   - `<bcp14>`, `<em>`, `<strong>`, `<tt>`, `<sub>`, `<sup>` and an `<xref>` or `<eref>` with
+     content: the content;
+   - an empty `<xref>` with a `section` attribute: `Section <section> of [<derivedContent>]`,
+     or `[<derivedContent>], Section <section>` when `sectionFormat="comma"`;
+   - an empty `<xref>` without one: `[<derivedContent>]` when its target is a `<reference>`
+     anchor, else `derivedContent`;
+   - an empty `<eref>`: its `target`;
+   - `<iref>`: nothing.
+
+   Runs of whitespace become one space, and the text is trimmed.
+4. Sentences end at `.`, `?` or `!`, optionally followed by `)` or `"`, then a space and an
+   upper-case ASCII letter, `"` or `(`.
+5. A sentence that contains at least one `<bcp14>` mark is one requirement. Its level is the
+   first mark's keyword (`MUST NOT` gives `MustNot`, `NOT RECOMMENDED` gives `NotRecommended`).
+   Keywords outside `<bcp14>` never count, so a lowercase "must" yields nothing (RFC 8174).
+6. Ordinals count requirements per section, over the whole file. `--sections` filters after
+   counting, so ids do not depend on the filter.
+7. The party is the last party word before the first mark, case-insensitive, whole words:
+   `server`, `servers`, `origin server` give `Server`; `client`, `clients`, `user agent`,
+   `user agents` give `Client`; `sender`, `senders` give `Sender`; `recipient`, `recipients`,
+   `receiver` give `Recipient`; `proxy`, `proxies`, `intermediary`, `intermediaries`,
+   `gateway`, `cache`, `caches` give `Proxy`. With none, `Any`. A human reviews every party
+   (row 30).
+
+**Flags.**
+
+- `--sections` is a comma-separated list of section numbers. A requirement is kept when its
+  section equals one or starts with one followed by `.`. Without the flag, every section is
+  kept.
+- `--package` defaults to `std.rfc.rfc<number>`, from the root's `number` attribute.
+- `--url` defaults to the `href` of the root's first `<link rel="alternate">`.
+- Without `--out`, the module goes to stdout.
+
+**Output.** One file, in this order:
+
+1. A header comment naming the RFC number, the title, the source path as given, and the exact
+   flags. Row 30 re-runs the import from it.
+2. `package`, then `import std.rfc.{Level, Party, Source, Requirement, Spec}`.
+3. The `Spec` constant: `rfc`, `title` from the root `<front><title>`, `url`, `digest`, and
+   `requirements` with one name per line.
+4. One `Requirement` constant per requirement. Each field is on its own line, in the order
+   `rfc`, `section`, `ordinal`, `level`, `party`, `text`. `party` is written even when it is
+   `Any`; `source` and `minimum` are never written.
+
+Texts escape `\` as `\\`, `"` as `\"`, `{` as `{{` and `}` as `}}`. Output is deterministic:
+no time, no absolute path beyond what was given.
+
+**Digest.** `"sha256:" + lowercase hex` of the source file's bytes, with the `sha2` crate
+`crates/ignite` already depends on.
+
+**`rfc check`** parses CATALOGUE with `ignite-syntax`, finds the single `Spec` constant's
+`digest` Text literal, and compares it with the digest of SOURCE's bytes. It works for prose
+catalogues and their `.txt` sources too.
+
+- Exit 0, silent: the digests match.
+- Exit 1: they differ. One line on stderr names CATALOGUE and both digests.
+- Exit 2: CATALOGUE has no single `Spec` constant with a literal `digest`.
+- Exit 3: a file cannot be read.
+
+**Layering rule 5.** No file under `crates/*/src` may contain a protocol name, so the importer's
+source holds no URL literal (`https` contains `http`) and no RFC title. URLs and titles come
+from the source file or from flags.
+
+### 19.9 Sources and licence (D5)
+
+The sources are vendored unmodified under `docs/rfc/` by U4:
+
+| file | from | bytes | sha256 |
+|---|---|---|---|
+| `docs/rfc/rfc854.txt` | `https://www.rfc-editor.org/rfc/rfc854.txt` | 38,517 | `f9cb6d4a7d7a67e5a1ac5ae3c2962b1183fb26119632a1617f3c8379820dfb10` |
+| `docs/rfc/rfc855.txt` | `https://www.rfc-editor.org/rfc/rfc855.txt` | 6,049 | `c8c4744c9fa7650c0ae78d140f560b26e26b2935391e1ff624476c5fdbf4e03a` |
+| `docs/rfc/rfc1143.txt` | `https://www.rfc-editor.org/rfc/rfc1143.txt` | 22,771 | `4d2ef5878b0b88742c860fc777d6d91ad61580633fe277eae06410a6eee04bdf` |
+| `docs/rfc/rfc9110.xml` | `https://www.rfc-editor.org/rfc/rfc9110.xml` | 1,223,686 | `09ec9ad4d1664623adcb298577e3fb9cd5c285f1bbe6b24d8c715b29f218e721` |
+| `docs/rfc/rfc9112.xml` | `https://www.rfc-editor.org/rfc/rfc9112.xml` | 262,821 | `ce82219c272374005115c909244a79e587687df3858edca4112b8563c02ccf19` |
+
+The sizes and digests are those of the downloads of 2026-11-03. If a fresh download differs,
+U4 records the new values in its commit and in this table.
+
+`docs/rfc/README.md` (U4) says that the files are RFCs published by the RFC Editor, unmodified,
+subject to the IETF Trust Legal Provisions (`https://trustee.ietf.org/license-info`), and that
+they are vendored so that `ignite rfc check` runs offline in the gate. Inferred, not verified
+with the IETF Trust: the Legal Provisions permit reproducing an RFC in full without
+modification. The steering review checks this (19.18, Q3).
+
+### 19.10 `ignite conformance` (D8)
+
+```
+ignite conformance FILE [--target rust|llvm] [the build flags of `ignite test`]
+```
+
+1. Load and check FILE as `ignite check` does. A diagnostic: print it as `ignite check` does,
+   exit 2, no stdout.
+2. Read the claim model (19.7). No protocol of FILE conforms: one line on stderr, exit 2.
+3. If any row names a test, build FILE's test executable on the target (default `rust`)
+   through `test_build::build_tests`, run it once without arguments, and read its stdout. A
+   build or run failure is exit 3. A line `test <module>/<name> ... ok` is a pass. A line
+   `test <module>/<name> ... FAILED…` is a failure. A named test with no line is `not run`.
+   Test output is not echoed.
+4. Print one block per (protocol, spec), in protocol then `conforms` order, with a blank line
+   between blocks.
+
+Block:
+
+```
+rfc<n> <title>, protocol <P>, parties <names|all>, sections <list|all>
+<row>
+...
+claim conformance of <P> to rfc<n>: <yes|no> (<g> gaps, <f> failures, <i> inconclusive)
+```
+
+A row has six columns: id, section, level, status, evidence, verdict. Columns are joined by
+two spaces and padded with spaces to the widest entry of their column within the block. The
+last column is not padded, and no line ends in a space.
+
+- **level**: `MUST`, `MUST NOT`, `REQUIRED`, `SHALL`, `SHALL NOT`, `SHOULD`, `SHOULD NOT`,
+  `RECOMMENDED`, `NOT RECOMMENDED`, `MAY`, `OPTIONAL`.
+- **status**: one of
+  - `satisfied`;
+  - `limit` (satisfied, with a limit satisfier);
+  - `unsupported`;
+  - `not_applicable`;
+  - `none`.
+- **evidence**:
+  - satisfied: the satisfiers joined by `, `, then `; `, then each test as `test "<name>"
+    passed|failed|not run` joined by `, `, or `no test`;
+  - limit: `<Record.field> = <value>, minimum <m>`, or `<Record.field> has no value,
+    minimum <m>`;
+  - unsupported and not_applicable: the reason in double quotes;
+  - none: `-`.
+- **verdict**, the first rule that applies:
+  1. not in scope: `out of scope`;
+  2. `not_applicable`: `n/a`;
+  3. `unsupported`: `gap` at MUST class, `deviation` at SHOULD class, `n/a` at MAY class;
+  4. no status: `unclassified`;
+  5. satisfied:
+     - `fail` when a test failed or a limit is below its minimum;
+     - else `pass` when a test passed, or when every limit meets its minimum and there is at
+       least one limit;
+     - else `inconclusive`, which covers no test, tests not run, and a limit with no value.
+
+The claim holds (`yes`) when no MUST-class row in scope is `fail`, `gap` or `inconclusive`.
+The counts are over all rows in scope, at any level: `gaps` counts `gap`, `failures` counts
+`fail`, and `inconclusive` counts `inconclusive`.
+
+Exit 0 when every claim in the output holds, 1 otherwise.
+
+A `not run` test is what `protocols.md` §3.3 calls skipped. The runner at `296f849` has no skip
+(19.2), so a named test without a result line, for example after the executable died, is the
+only case.
+
+Illustrative, not a golden (ids other than `R7_1_2` and `R3_2_6` are made up):
+
+```
+rfc9112 HTTP/1.1, protocol Http, parties Server Sender Recipient Any, sections all
+R2_2_3  2.2  MUST         satisfied    parse_head; test "bare CR is 400" passed                        pass
+R3_2_6  3.2  MUST         unsupported  "Host is not checked"                                           gap
+R6_1_6  6.1  SHOULD       satisfied    next_request; test "unknown coding is 501" not run              inconclusive
+R7_1_2  7.1  MUST         unsupported  "only Content-Length framing; any Transfer-Encoding is 501"     gap
+claim conformance of Http to rfc9112: no (2 gaps, 0 failures, 1 inconclusive)
+```
+
+`crates/ignite/src/conformance.rs` and the CLI dispatch hold no protocol name (rule 5).
+
+### 19.11 Layering (D7)
+
+A prefix rule, as for `std.protocol.*`:
+
+- `std.rfc` and every `std.rfc.*` module are layer **leaf**. They import base and leaf only. A
+  catalogue imports `std.rfc`, which is leaf.
+- Protocol modules import every layer, so `std.protocol.telnet` and `std.protocol.http` may
+  import the catalogues. No general or base module may.
+- `docs/layering.md`: the leaf row reads "`std.sli`, `std.time`, `std.policy` (O45), `std.rfc`
+  and every `std.rfc.*`". `crates/ignite-check/tests/layering.rs` gets an `RFC_PREFIX` beside
+  `PROTOCOL_PREFIX`, with the same effect in `layer_of`. U1 makes both changes; U4 adds no
+  layering row.
+- Rule 3 applies to the catalogues: no item, field or variant name contains a protocol name.
+  The spec constants are `RFC854` and `RFC9112`, not names of the protocols. Titles and texts
+  are Text values, not names.
+
+### 19.12 Diagnostics E090, E091 and E092
+
+| code | rule | phase | fixture |
+|---|---|---|---|
+| E090 | 19.7: a MUST-class requirement in scope with no status; a requirement with two statuses (separate message) | eval (`ignite-eval`), through `ignite check` and `ignite conformance` | `crates/ignite/tests/fixtures/e090_missing_status`, `e090_complete_claim` (silent), `e090_scope`, `e090_two_statuses` |
+| E091 | 19.4: first trigger, a catalogue constant that is not literal data | check (`ignite-check`) | `crates/ignite-check/tests/fixtures/e091_non_literal_catalogue` |
+| E091 | 19.4: second trigger, an inconsistent catalogue (the five cases) | eval (`ignite-eval`) | `crates/ignite/tests/fixtures/e091_duplicate_id` |
+| E092 | 19.7: a clause naming a requirement of a spec its protocol, or no protocol of its module, conforms to | eval (`ignite-eval`) | `crates/ignite/tests/fixtures/e092_satisfies_foreign`, `e092_verifies_foreign`, `e092_status_foreign` |
+
+No other new code (D2, D3). E093 to E095 and E098 stay with P3 and P4, and E097 stays unused.
+`plan::fixtures_match_expected`'s filter gains `e090`, `e091` and `e092` (U2).
+
+### 19.13 Typed API (add-only)
+
+Names may change in review. Shapes are what implementors build against. Nothing existing is
+renamed.
+
+`ignite-syntax` (U1):
+
+- `ProtocolDecl` gains `conforms: Vec<Path>`, `scope: Option<Scope>` and
+  `statuses: Vec<StatusDecl>`.
+- `pub struct Scope { pub parties: Option<Vec<Ident>>, pub sections: Option<Vec<(String, Span)>>, pub span: Span }`.
+- `pub struct StatusDecl { pub kind: StatusKind, pub requirement: Path, pub reason: String, pub span: Span }`,
+  with `pub enum StatusKind { Unsupported, NotApplicable }`.
+- `FnDecl`, `RecordDecl` and `Field` gain `satisfies: Vec<Path>`.
+- `TestDecl` gains `verifies: Vec<Path>`.
+- A `reqref` is a `Path` of two segments.
+
+`ignite-check` (U1): `Symbols` gains the resolution of every `conforms` entry and `reqref`
+to a qualified constant name (`std.rfc.rfc9112.RFC9112`, `std.rfc.rfc9112.R7_1_2`), keyed by
+the reference's span.
+
+`ignite-eval` (U2):
+
+```rust
+pub struct Claims { pub protocols: Vec<ProtocolClaim> }
+impl Claims {
+    pub fn of(evaluator: &mut Evaluator<'_>, program: &TypedProgram) -> Result<Claims, Vec<Diagnostic>>;
+}
+pub struct ProtocolClaim { pub protocol: String, pub specs: Vec<SpecClaim> }
+pub struct SpecClaim {
+    pub constant: String, pub rfc: i64, pub title: String, pub url: String, pub digest: String,
+    pub parties: Option<Vec<Party>>, pub sections: Option<Vec<String>>, pub rows: Vec<Row>,
+}
+pub struct Row {
+    pub id: String, pub section: String, pub ordinal: i64, pub level: Level, pub party: Party,
+    pub source: Source, pub minimum: Option<i64>, pub text: String,
+    pub in_scope: bool, pub status: Status, pub tests: Vec<String>,
+}
+pub enum Status { None, Satisfied(Vec<Satisfier>), Unsupported(String), NotApplicable(String) }
+pub struct Satisfier { pub declaration: String, pub limit: Option<Limit> }
+pub struct Limit { pub configured: Option<i64>, pub minimum: i64, pub meets: Option<bool> }
+pub enum Level { Must, MustNot, Required, Shall, ShallNot, Should, ShouldNot, Recommended, NotRecommended, May, Optional }
+pub enum LevelClass { Must, Should, May }
+impl Level { pub fn class(self) -> LevelClass; pub fn keyword(self) -> &'static str; }
+pub enum Party { Any, Sender, Recipient, Client, Server, Proxy }
+pub enum Source { Bcp14, Prose }
+```
+
+`Model::check` calls `Claims::of` first (19.7).
+
+`ignite` (U3, U5): `pub mod rfc;` (`rfc::import`, `rfc::check`) and `pub mod conformance;`
+(`conformance::run(file, options) -> Result<i32, Error>`). The verdict rules of 19.10 live in
+`conformance`. `test_build` stays private; `conformance` uses it inside the crate.
+
+### 19.14 Stale points
+
+| # | where | stale text | resolution |
+|---|---|---|---|
+| 1 | `protocols.md` §3.1 | a catalogue holds "the RFC's collected ABNF, verbatim, in a `grammar` block" | phase 3; P2 catalogues hold requirements only (19.1). Marked "(phase 3)" there |
+| 2 | `protocols.md` §3.1 | "a module may alias one (`const BARE_CR: Requirement = R2_2_3`)" | deferred; in P2 an alias is E091 (19.4). Noted there |
+| 3 | `protocols.md` §3.1 | "`ignite rfc import 9112` reads RFCXML" | the importer takes a local file path (D6). Edited there |
+| 4 | `protocols.md` §3.2 | `satisfies [R2_2_3, ..]`, `unsupported R7_1_1 "reason"`: bare ids | references are `Spec.Id` (19.5). Edited there |
+| 5 | `protocols.md` §3.3 | the illustrative ids `R3_2_4` (Host) and `R7_1_1` (chunked) | by the id rule of 19.4 they are `R3_2_6` and `R7_1_2`. Inferred from the XML read by hand; row 28 confirms it. Edited there |
+| 6 | `protocols.md` §3.3 | the example's status column shows `gap` for an unsupported row, and "skipped" for a test | the status is `unsupported`, the verdict `gap`; a test without a result is `not run` (19.10). The example is replaced by 19.10's format |
+| 7 | `protocols.md` §3.3 | claim line `claim conformance to rfc9112: …` | `claim conformance of Http to rfc9112: …`, because a file may hold two protocols conforming to one spec (19.10). Edited there |
+| 8 | `protocols.md` §3.1 | the vocabulary block shows `package std.rfc` with no file; the stories name `std/rfc/rfc.ignite` | `std/rfc/rfc.ignite` would be module `std.rfc.rfc`; the vocabulary is `std/rfc.ignite` (D1). Noted there |
+| 9 | `protocols.md` §3.1 | ids `R<section>_<ordinal>` | RFC 854 and 855 number no sections; their `section` is `p<page>` (19.4). Noted there |
+| 10 | `protocols.md` §3.3, E096 row | "missing impl, an impl method needing more effects than its interface, or a stream-kind mismatch" | slice 14 gives E096 only "does not implement `ByteStream`" (18.7); the other meanings are P4's. Not edited: outside P2 |
+| 11 | `protocols.md` §3.1 | the example catalogue constant sets `minimum = Some(8000)` | the importer writes no `minimum`, and P2 adds none (19.1). Noted there |
+| 12 | `protocols.md` §3.3 | "prints one row per requirement in scope" | every requirement of each claimed spec gets a row; those outside `scope` print `out of scope`, the verdict §3.3 lists (19.10). Edited there |
+
+### 19.15 Decisions
+
+| # | decision | alternative | why |
+|---|---|---|---|
+| D1 | The vocabulary is 19.3's text, in `std/rfc.ignite`, module `std.rfc`, as `protocols.md` §3.1 gives it. The spec constant is `RFC<n>`. Requirement ids are 19.4's | `std/rfc/rfc.ignite` (the stories' path) | that path is module `std.rfc.rfc` by the module-path rule; §3.1's `package std.rfc` needs `std/rfc.ignite` |
+| D2 | Catalogue constants are ordinary constants (section 4.3). Clauses are no expressions: no backend reads them and no reachability walk starts at them, so a catalogue reaches generated code only through an expression that names one of its constants. No runtime-use diagnostic, no new code. Rows 12 and 5 make "clauses emit nothing" observable | compile-time only, with a diagnostic for a runtime use | both targets already compile record, list and Text constants, and reachable-only emission drops unreferenced ones (19.2). A new code would need a number outside E090 to E099's free slots (E093 to E095 and E098 are P3's and P4's, E097 is kept unused). A test may read a requirement's `minimum` |
+| D3 | Clause grammar as 19.5. A requirement reference is `Spec.Id`. E091's first trigger is in `ignite-check` (U1); its second trigger, E090 and E092 are in `ignite-eval` (U2). Two statuses on one requirement is E090 with its own message | bare ids; E092 for two statuses | ids repeat across catalogues; E090 is "status count is not one", while E092 means "outside the protocol's specs" |
+| D4 | RFC 9112 is truncated at import to sections 2 to 9 (`--sections 2,3,4,5,6,7,8,9`). The RFC 9110 server subset is sections 5, 6, 7.2, 9.1, 9.2, 9.3.1, 9.3.2, 9.3.3 and 9.3.5 (fields, message abstraction, Host and `:authority`, method overview and properties, GET, HEAD, POST, DELETE), 75 marks. `Http` narrows parties by `scope { parties = [Server, Sender, Recipient, Any] }`, which leaves out `Client` and `Proxy` | 9112 whole, narrowed by `scope` | §1.1 is the notation boilerplate (11 marks) and §10.1 is security prose (1). Truncating keeps the catalogue to what the claim judges. The 9110 subset is what an origin server for `todod`'s routes (GET, POST, PATCH, DELETE; PATCH is RFC 5789) must classify |
+| D5 | The five sources are vendored unmodified under `docs/rfc/`, with `docs/rfc/README.md` citing the IETF Trust Legal Provisions (19.9) | not vendored; tests download | the gate runs offline; `rfc check` needs the bytes; 1.55 MB in total |
+| D6 | `ignite rfc import FILE [--sections] [--package] [--url] [--out]` reads a local RFCXML v3 file with a hand-written reader (`crates/ignite/src/rfc/xml.rs`, no dependency, so the commit needs no "replaces" line). The digest is `sha256:<hex>` through the existing `sha2` dependency. Extraction as 19.8 | an XML crate | RFCXML uses a small subset of XML; no new dependency |
+| D7 | `std.rfc` and `std.rfc.*` are leaf by a prefix rule (19.11), in `docs/layering.md` and `layering.rs`; U1 adds it | one row per module | five catalogues now and more with every protocol; a prefix rule needs no edit per catalogue |
+| D8 | `ignite conformance FILE [--target rust\|llvm]`, default `rust`. It builds FILE's test executable on that target through `test_build`, runs it once, and reads the result lines. Output and verdicts as 19.10, with the claim line `claim conformance of <P> to rfc<n>: yes\|no (<g> gaps, <f> failures, <i> inconclusive)`. Exit 0 when every claim holds, 1 when one does not, 2 on a diagnostic, 3 on a build failure | run on all targets at once; JSON output | one target per run matches `ignite test --target`; rows 2, 3 and 36 run both and compare. JSON can be added later without changing the text |
+| D9 | Seven units as 19.16, one per story, in five waves | merge importer and catalogues | the stories are already cut this way; their file scopes do not overlap within a wave |
+
+### 19.16 Work split
+
+| unit | story | owns | depends on | first failing test | rows |
+|---|---|---|---|---|---|
+| U0 | `story:slice-15-contract` | this section, the section-8 rows, `docs/protocols.md` stale points | — | — | — |
+| U1 | `story:slice-15-frontend` | `crates/ignite-syntax/` (clauses, AST fields); `crates/ignite-check/` (resolution, E091 first trigger, `Symbols`); `crates/ignite-types/` (E040 on clauses); the AST literals in `crates/ignite-rustgen/tests/units.rs` and `crates/ignite-types/tests/surface.rs`; `std/rfc.ignite`; the prefix rule in `docs/layering.md` and `layering.rs`; `crates/ignite/tests/clauses.rs`, its `mod clauses;` line, `crates/ignite/tests/fixtures/clauses/` | `story:rustgen-type-parameter-shadowing` (shared rustgen test binary) | `fixtures::fixtures_match_expected` (ignite-syntax) on `valid_clauses` | 8 to 13 |
+| U2 | `story:slice-15-claim-model` | `crates/ignite-eval/` (`Claims`, E090, E092, E091 second trigger, the call in `Model::check`); `crates/ignite-eval/tests/claims.rs` and its `mod` line; `crates/ignite/tests/fixtures/e090_*`, `e091_*`, `e092_*`; the filter of `plan::fixtures_match_expected` | U1 | `plan::fixtures_match_expected` on `e090_missing_status` | 14 to 18 |
+| U3 | `story:slice-15-rfc-importer` | `crates/ignite/src/rfc/`; `pub mod rfc;` in `crates/ignite/src/lib.rs`; `rfc` in `crates/ignite/src/main.rs`; `crates/ignite/tests/rfc.rs`, its `mod rfc;` line, `crates/ignite/tests/fixtures/rfc/` | U1 | `rfc::import_writes_the_golden_twice` | 19 to 24 |
+| U4 | `story:slice-15-catalogues` | `std/rfc/rfc854.ignite`, `rfc855.ignite`, `rfc1143.ignite`, `rfc9112.ignite`, `rfc9110.ignite`; `docs/rfc/` (sources, README); its tests appended to `crates/ignite/tests/rfc.rs` | U1, U3 | `rfc::committed_catalogues_check_silently` | 25 to 30 |
+| U5 | `story:slice-15-conformance-command` | `crates/ignite/src/conformance.rs`; `pub mod conformance;` in `lib.rs`; `conformance` in `main.rs`; `crates/ignite/tests/conformance.rs`, its `mod conformance;` line, `crates/ignite/tests/fixtures/conformance/` | U2, U3 (shared `main.rs`, `lib.rs`, `tests/main.rs`) | `conformance::each_verdict_prints_its_row` | 31 to 37 |
+| U6 | `story:slice-15-protocol-claims` | the clauses in `std/protocol/telnet.ignite` and `std/protocol/http.ignite`; rows 1 to 5 appended to `crates/ignite/tests/conformance.rs`; `STATUS.md`, `AGENTS.md`, `PLAN.md`, `docs/performance/15/` | U4, U5 | `conformance::telnet_matrix_claims_rfc854_for_an_nvt_that_refuses_every_option` | 1 to 7 |
+
+Row 38 belongs to every unit.
+
+Order: W1 U0 (with `story:rustgen-type-parameter-shadowing`); W2 U1; W3 U2 and U3; W4 U4 and U5;
+W5 U6.
+
+Shared files:
+
+- W3: U2 and U3 both touch `crates/ignite/tests/`. U2 adds fixtures only and edits `plan.rs`;
+  U3 adds `rfc.rs` and the `mod rfc;` line in `tests/main.rs`. Neither edits the other's file.
+- W4: U4 appends to `rfc.rs` and edits nothing in `src/`. U5 edits `lib.rs`, `main.rs` and
+  `tests/main.rs`.
+- U6 appends to `conformance.rs` after U5 merged.
+
+Rules: one integration-test binary per crate (`AGENTS.md`), so every new test file is a `mod`
+line in its crate's `tests/main.rs`. Layering rule 5 holds for `crates/ignite/src/rfc/` and
+`conformance.rs`. Each unit's commit names the rows of 19.0 it makes pass.
+
+Planning store: the stories' bodies differ from this split in the points of the contract
+report ("Story updates"). The steering session updates them; U0 does not edit the store.
+
+### 19.17 Gate time
+
+Method of 18.18 (`docs/slice.md` 15.1). "Before" is a `git archive 296f849` copy and "after"
+the closed tree, each with its own `CARGO_TARGET_DIR`. One cold gate per tree, then three
+interleaved warm passes. A pair whose two 1-minute loads differ by more than 5 is dropped.
+Report the medians of the pair ratios next to the absolute times.
+
+Units: those of 18.18, plus:
+
+- `ignite check examples/todo/todo.ignite` (15 pairs). `std.protocol.http` now imports two
+  catalogues (about 200 requirement constants), and every program that reaches it loads them.
+  The rise is the expected cost of the slice;
+- `ignite conformance std/protocol/telnet.ignite` and `…/http.ignite`, per target, cold and
+  warm (after only);
+- `ignite rfc import docs/rfc/rfc9110.xml` with D4's sections (after only, 5 runs).
+
+A unit that rises over 10 % gets a measured cause, or the record labels the cause inferred. No
+baseline moves. The apply suites stay the slice-13 exception.
+
+Records: a "Slice 15" paragraph in `AGENTS.md`'s gate-time section; raw logs and scripts under
+`docs/performance/15/`.
+
+### 19.18 Open questions
+
+Each has a default, which the units follow unless the review changes it.
+
+| # | question | default |
+|---|---|---|
+| Q1 | An RFC 854 MUST that the refuse-everything NVT does not meet would make row 3 fail | U6 may narrow `scope` by party only where RFC 854 addresses a party `Telnet` does not implement, with the reason in the commit. It never marks an implemented party's MUST `not_applicable` to make the claim hold. If a MUST stays unmet, U6 implements it when the change fits the story. Otherwise it reports a blocker |
+| Q2 | `ignite check` of `todo.ignite` (and every HTTP program) rises over 10 % from loading the catalogues (19.17) | record the measured cause as a slice-15 exception, as 12c and 13 did. A later milestone loads catalogue modules only for `check` and `conformance` |
+| Q3 | Whether the IETF Trust Legal Provisions permit vendoring the five RFCs unmodified (19.9, inferred) | vendor with the README note. If the review finds otherwise, the sources leave the repository, and rows 26 and 30 read them from a path given by the environment, skipping when it is unset |

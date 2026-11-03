@@ -226,7 +226,10 @@ imports `ignite:io/pipe` and nothing that touches the network.
 
 - one `Requirement` constant per requirement;
 - a `Spec` constant listing them, with the URL and a digest of the source they were extracted from;
-- the RFC's collected ABNF, verbatim, in a `grammar` block (section 3.4).
+- the RFC's collected ABNF, verbatim, in a `grammar` block (section 3.4; phase 3, the P2
+  catalogues hold requirements only, slice §19.1).
+
+The vocabulary module `std.rfc` is `std/rfc.ignite` (slice §19.3).
 
 ```ignite
 package std.rfc
@@ -246,14 +249,17 @@ const R3_0_4: Requirement = Requirement { rfc = 9112, section = "3", ordinal = 4
   "and recipients support, at a minimum, request-line lengths of 8000 octets." }
 ```
 
-Requirement ids in this document are illustrative; the importer assigns the real ones.
+Requirement ids in this document are illustrative; the importer assigns the real ones. The
+importer writes no `minimum`; P2 adds none (slice §19.1).
 
-- **Extraction.** `ignite rfc import 9112` reads RFCXML and makes one requirement per sentence that
+- **Extraction.** `ignite rfc import docs/rfc/rfc9112.xml` reads a local RFCXML file (slice §19.8)
+  and makes one requirement per sentence that
   contains a `<bcp14>` mark (RFC 7991 §2.9 [P14]); keywords count "only when they are in all
   capitals" (RFC 8174 [P13]). Existing extractors work by keyword on text [P15] or XML [P16]; Ignite
   uses XML wherever it exists.
-- **Ids** are `R<section>_<ordinal>`; a module may alias one (`const BARE_CR: Requirement = R2_2_3`).
-  The importer guesses the party ("A server MUST") and a human reviews it.
+- **Ids** are `R<section>_<ordinal>`; RFC 854 and 855 number no sections, so their section is
+  the page, `p14`, and the id `RP14_1` (slice §19.4). A module may alias one (`const BARE_CR:
+  Requirement = R2_2_3`) after P2; in P2 an alias is E091. The importer guesses the party ("A server MUST") and a human reviews it.
 - **Prose RFCs.** RFC 854 (1983), 855 [P2] and 1143 [P3] predate BCP 14 and RFCXML. Their catalogues are
   hand-written with `source = Prose`, quoting the text, e.g. "only the IAC need be doubled to be
   sent as data" [P1].
@@ -269,9 +275,12 @@ unimplemented); a `spec` declaration form (requirements are data, and protocol p
 |---|---|---|
 | `conforms [RFC9112, ..]` | `protocol P conforms [..] { .. }` | P claims these specs; every requirement in scope needs a status |
 | `scope { parties = [Server, Recipient, Any], sections = ["2", .., "9"] }` | after `conforms` | narrows the claim; the rest is out of scope |
-| `satisfies [R2_2_3, ..]` | after a fn's `requires`, on a type, or on a `Limits` field | the declaration implements these requirements (a claim) |
-| `verifies [R2_2_3, ..]` | `test ".." verifies [..] { .. }` | the test is evidence for them |
-| `unsupported R7_1_1 "reason"`, `not_applicable R3_2_1 "reason"` | protocol body | an explicit status |
+| `satisfies [RFC9112.R2_2_3, ..]` | after a fn's `requires`, on a type, or on a `Limits` field | the declaration implements these requirements (a claim) |
+| `verifies [RFC9112.R2_2_3, ..]` | `test ".." verifies [..] { .. }` | the test is evidence for them |
+| `unsupported RFC9112.R7_1_2 "reason"`, `not_applicable RFC9112.R3_2_1 "reason"` | protocol body | an explicit status |
+
+A requirement is named `Spec.Id`, because every catalogue reuses ids such as `R2_1_1`; the
+grammar is slice §19.5.
 
 Each requirement in scope at MUST, MUST NOT, REQUIRED, SHALL or SHALL NOT level needs exactly one of
 three statuses: satisfied by a declaration, unsupported, or not applicable. A missing status is
@@ -283,7 +292,8 @@ not keywords.
 
 ### 3.3 The conformance matrix
 
-`ignite conformance <file>` prints one row per requirement in scope. Verdicts follow ESS's runners:
+`ignite conformance <file>` prints one row per requirement of each claimed spec, rows outside
+`scope` included as `out of scope` (slice §19.10). Verdicts follow ESS's runners:
 a skip is not a failure, and any skip makes the result inconclusive (compare-ess.md §4, citing ESS
 `runners.md`, "Hold your own implementation to the suite").
 
@@ -300,16 +310,17 @@ The claim holds when no MUST-level row is fail, gap or inconclusive. Today's HTT
 hold it. RFC 9112 says "A recipient MUST be able to parse and decode the chunked transfer coding"
 (§7.1), and that a server MUST answer 400 to an HTTP/1.1 request lacking Host (§3.2) [P5]. The
 current server answers any `Transfer-Encoding` with 501 and does not check Host
-(the module comment of `std/protocol/http.ignite`, `next_request`, `parse_head`). Illustrative output:
+(the module comment of `std/protocol/http.ignite`, `next_request`, `parse_head`). Illustrative
+output; the format is slice §19.10, where a test without a result line is `not run`:
 
 ```
-rfc9112 HTTP/1.1, parties Server Recipient Any, sections 2-9
-R2_2_3  2.2  MUST         satisfied  test "bare CR is 400" passed                  pass
-R3_0_4  3    RECOMMENDED  limit      request_line = 8000, minimum 8000             pass
-R3_2_4  3.2  MUST         gap        "Host is not checked"                         gap
-R6_1_6  6.1  SHOULD       satisfied  test "unknown coding is 501" skipped          inconclusive
-R7_1_1  7.1  MUST         gap        "only Content-Length framing; 501 otherwise"  gap
-claim conformance to rfc9112: no (2 gaps, 0 failures, 1 inconclusive)
+rfc9112 HTTP/1.1, protocol Http, parties Server Sender Recipient Any, sections all
+R2_2_3  2.2  MUST         satisfied    parse_head; test "bare CR is 400" passed            pass
+R3_0_4  3    RECOMMENDED  limit        HttpLimits.request_line = 8000, minimum 8000        pass
+R3_2_6  3.2  MUST         unsupported  "Host is not checked"                               gap
+R6_1_6  6.1  SHOULD       satisfied    next_request; test "unknown coding is 501" not run  inconclusive
+R7_1_2  7.1  MUST         unsupported  "only Content-Length framing; 501 otherwise"        gap
+claim conformance of Http to rfc9112: no (2 gaps, 0 failures, 1 inconclusive)
 ```
 
 Diagnostics. E090–E098 lie in the range `vision.md` §7 (T4) gives this document, E090 to E099,
