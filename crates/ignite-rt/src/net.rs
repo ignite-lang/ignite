@@ -1,6 +1,7 @@
 //! TCP: the handle table and the C ABI over `ignite_io::{TcpListener,
-//! TcpStream}`. A handle names a slot of a process-wide table and stays
-//! valid until `tcp_release`. A table entry is a clone of the `ignite-io`
+//! TcpStream}`; the table also holds the pipe ends of `crate::pipe`. A
+//! handle names a slot of a process-wide table and stays valid until
+//! `tcp_release`. A table entry is a clone of the `ignite-io`
 //! handle; the socket closes when the last operation that was already using
 //! it at release time ends. Locking, reads, writes and shutdown are
 //! `ignite-io`'s.
@@ -23,7 +24,7 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use ignite_io::{IoError, TcpListener, TcpStream};
+use ignite_io::{IoError, PipeStream, TcpListener, TcpStream};
 
 use crate::{IgniteInput, IgniteIoError, IgniteList, arena, bytes, status};
 
@@ -35,8 +36,9 @@ thread_local! {
     static OWNED: RefCell<Vec<i64>> = const { RefCell::new(Vec::new()) };
 }
 
-/// `void tcp_own(i64 handle)`: mark `handle` as the current task's, so a
-/// failure ([`crate::fail`]) releases it before the task ends.
+/// `void tcp_own(i64 handle)`: mark `handle`, any handle (a listener, a TCP
+/// stream or a pipe end), as the current task's, so a failure
+/// ([`crate::fail`]) releases it before the task ends.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_own(handle: i64) {
     let _ = OWNED.try_with(|owned| owned.borrow_mut().push(handle));
@@ -55,9 +57,11 @@ pub(crate) fn release_task_handles() {
 }
 
 #[derive(Clone)]
-enum Handle {
+pub(crate) enum Handle {
     Listener(TcpListener),
     Stream(TcpStream),
+    /// An end of an in-memory pipe (`crate::pipe`).
+    Pipe(PipeStream),
 }
 
 /// One table entry: the generation of the handle it holds or will hold
@@ -156,7 +160,7 @@ fn decode(handle: i64) -> Option<(usize, u32)> {
     (index < ISSUED.load(Ordering::Acquire)).then_some((index, generation))
 }
 
-fn register(handle: Handle) -> i64 {
+pub(crate) fn register(handle: Handle) -> i64 {
     let reused = lock(&FREE).pop();
     let index = reused.unwrap_or_else(|| ISSUED.fetch_add(1, Ordering::AcqRel));
     if index >= u32::MAX as usize {
@@ -190,14 +194,28 @@ fn lookup(handle: i64) -> Result<Handle, IoError> {
 fn listener(handle: i64) -> Result<TcpListener, IoError> {
     match lookup(handle)? {
         Handle::Listener(listener) => Ok(listener),
-        Handle::Stream(_) => Err(IoError::new(format!("{handle} is not a TCP listener"))),
+        Handle::Stream(_) | Handle::Pipe(_) => {
+            Err(IoError::new(format!("{handle} is not a TCP listener")))
+        }
     }
 }
 
 fn stream(handle: i64) -> Result<TcpStream, IoError> {
     match lookup(handle)? {
         Handle::Stream(stream) => Ok(stream),
-        Handle::Listener(_) => Err(IoError::new(format!("{handle} is not a TCP stream"))),
+        Handle::Listener(_) | Handle::Pipe(_) => {
+            Err(IoError::new(format!("{handle} is not a TCP stream")))
+        }
+    }
+}
+
+/// The pipe end `handle` names; any other handle is "`<h>` is not a pipe".
+pub(crate) fn pipe(handle: i64) -> Result<PipeStream, IoError> {
+    match lookup(handle)? {
+        Handle::Pipe(pipe) => Ok(pipe),
+        Handle::Listener(_) | Handle::Stream(_) => {
+            Err(IoError::new(format!("{handle} is not a pipe")))
+        }
     }
 }
 
@@ -258,33 +276,42 @@ pub extern "C" fn ignite_rt_tcp_read(
     out: *mut IgniteInput,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let read = stream(handle).and_then(|stream| {
-        let size = usize::try_from(maximum.max(1))
-            .unwrap_or(MAX_READ)
-            .min(MAX_READ);
-        let block = arena::alloc(size, 1);
-        // SAFETY: `block` is a fresh arena block of `size` bytes, nothing
-        // else refers to it, and arena memory is always initialized (its
-        // blocks are allocated zeroed).
-        let buffer = unsafe { std::slice::from_raw_parts_mut(block, size) };
-        let count = stream.read_into(buffer);
-        let used = count.as_ref().map_or(0, |count| *count);
-        arena::trim(block, size, used);
-        let count = count?;
-        Ok(if count == 0 {
-            IgniteInput::eof()
-        } else {
-            IgniteInput {
-                tag: 0,
-                data: IgniteList {
-                    ptr: block,
-                    len: count as i64,
-                    cap: count as i64,
-                },
-            }
-        })
-    });
+    let read = stream(handle)
+        .and_then(|stream| read_into_arena(maximum, |buffer| stream.read_into(buffer)));
     status(read, out, err)
+}
+
+/// One read by `read_into` of up to `maximum` bytes (clamped to `1..=1
+/// MiB`) straight into the task's arena: a block of `maximum` bytes whose
+/// unused tail goes back to the arena. Zero bytes is `Eof`.
+pub(crate) fn read_into_arena(
+    maximum: i64,
+    read_into: impl FnOnce(&mut [u8]) -> Result<usize, IoError>,
+) -> Result<IgniteInput, IoError> {
+    let size = usize::try_from(maximum.max(1))
+        .unwrap_or(MAX_READ)
+        .min(MAX_READ);
+    let block = arena::alloc(size, 1);
+    // SAFETY: `block` is a fresh arena block of `size` bytes, nothing
+    // else refers to it, and arena memory is always initialized (its
+    // blocks are allocated zeroed).
+    let buffer = unsafe { std::slice::from_raw_parts_mut(block, size) };
+    let count = read_into(buffer);
+    let used = count.as_ref().map_or(0, |count| *count);
+    arena::trim(block, size, used);
+    let count = count?;
+    Ok(if count == 0 {
+        IgniteInput::eof()
+    } else {
+        IgniteInput {
+            tag: 0,
+            data: IgniteList {
+                ptr: block,
+                len: count as i64,
+                cap: count as i64,
+            },
+        }
+    })
 }
 
 /// `i32 tcp_write_all(i64 stream, List* bytes, IoError* err)`.
@@ -319,9 +346,11 @@ pub extern "C" fn ignite_rt_tcp_close(handle: i64, err: *mut IgniteIoError) -> i
     status(closed, std::ptr::null_mut(), err)
 }
 
-/// `void tcp_release(i64 handle)`: drop a listener or stream handle from the
-/// table. Later use of it is an error (exit code 1); releasing twice, or a
-/// handle that was never issued, does nothing.
+/// `void tcp_release(i64 handle)`: drop any handle (a listener, a TCP stream
+/// or a pipe end) from the table. Later use of it is an error (exit code
+/// 1); releasing twice, or a handle that was never issued, does nothing.
+/// Releasing the last handle of a pipe end delivers what it wrote and
+/// closes it.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_release(handle: i64) {
     let _ = OWNED.try_with(|owned| owned.borrow_mut().retain(|owned| *owned != handle));

@@ -16,7 +16,8 @@
 //! at once. A task therefore sends what it wrote before it waits for
 //! anything, and a server that answers a batch of pipelined requests sends
 //! the answers with one system call. A failed send is reported by the next
-//! `read`, `write_all` or `close` of that stream.
+//! `read`, `write_all` or `close` of that stream. The ends of a pipe
+//! (`crate::pipe`) share the task's pending list and every flush point.
 
 use std::cell::RefCell;
 use std::io::{ErrorKind, Read, Write};
@@ -134,13 +135,20 @@ struct Out {
     failed: Option<IoError>,
 }
 
+/// A stream with a send buffer that the writing task's [`flush`] sends: a
+/// `TcpStream` or an end of a pipe (`crate::pipe`).
+pub(crate) trait Buffered: Send + Sync {
+    /// Send the buffer, keeping a failure for the stream's next operation.
+    fn flush_kept(&self);
+}
+
 /// Streams a thread wrote to since it last flushed; sent when the thread
 /// ends, so a thread that is not a task (one `std::thread` started) does not
 /// lose what it wrote. The references are weak: the list must not keep a
 /// stream alive, because dropping the last handle sends the buffer and
 /// closes the socket at once (`Stream`'s `Drop`), not at the next flush.
 #[derive(Default)]
-struct Pending(Vec<Weak<Stream>>);
+struct Pending(Vec<Weak<dyn Buffered>>);
 
 impl Drop for Pending {
     fn drop(&mut self) {
@@ -155,9 +163,27 @@ thread_local! {
     static PENDING: RefCell<Pending> = const { RefCell::new(Pending(Vec::new())) };
 }
 
-/// Send everything the current task wrote and has not sent yet. A failed
-/// send is kept with its stream and reported by the stream's next `read`,
-/// `write_all` or `close`.
+/// Register `stream` with the current task's pending list, once. `false`
+/// when the thread's list is already gone (the thread is ending): the
+/// caller sends at once.
+pub(crate) fn register<T: Buffered + 'static>(stream: &Arc<T>) -> bool {
+    PENDING
+        .try_with(|pending| {
+            let pending = &mut pending.borrow_mut().0;
+            if !pending
+                .iter()
+                .any(|known| std::ptr::addr_eq(Weak::as_ptr(known), Arc::as_ptr(stream)))
+            {
+                let weak: Weak<T> = Arc::downgrade(stream);
+                pending.push(weak);
+            }
+        })
+        .is_ok()
+}
+
+/// Send everything the current task wrote and has not sent yet, to
+/// sockets and to pipes. A failed send is kept with its stream and
+/// reported by the stream's next `read`, `write_all` or `close`.
 pub fn flush() {
     let pending = PENDING
         .try_with(|pending| std::mem::take(&mut pending.borrow_mut().0))
@@ -185,15 +211,6 @@ impl Stream {
         sent.map_err(IoError::from)
     }
 
-    /// Send the buffer, keeping a failure for the stream's next operation.
-    fn flush_kept(&self) {
-        let mut out = self.out();
-        if let Err(error) = self.send(&mut out) {
-            out.failed = Some(error);
-            self.failed.store(true, Ordering::Release);
-        }
-    }
-
     /// The failure of an earlier send, taken; the caller holds the write
     /// lock.
     fn take_failure(&self, out: &mut Out) -> Result<(), IoError> {
@@ -214,6 +231,16 @@ impl Stream {
         }
         let mut out = self.out();
         self.take_failure(&mut out)
+    }
+}
+
+impl Buffered for Stream {
+    fn flush_kept(&self) {
+        let mut out = self.out();
+        if let Err(error) = self.send(&mut out) {
+            out.failed = Some(error);
+            self.failed.store(true, Ordering::Release);
+        }
     }
 }
 
@@ -381,16 +408,7 @@ impl TcpStream {
             return stream.send(&mut out);
         }
         drop(out);
-        let registered = PENDING.try_with(|pending| {
-            let pending = &mut pending.borrow_mut().0;
-            if !pending
-                .iter()
-                .any(|known| std::ptr::eq(Weak::as_ptr(known), Arc::as_ptr(stream)))
-            {
-                pending.push(Arc::downgrade(stream));
-            }
-        });
-        if registered.is_err() {
+        if !register(stream) {
             let mut out = stream.out();
             return stream.send(&mut out);
         }
