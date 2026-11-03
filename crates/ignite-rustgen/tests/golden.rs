@@ -776,3 +776,48 @@ fn call<P>(item: P, end: PipeStream) -> IoResult<Int> requires [end.write] = P.s
     );
     cargo_build(&program, &std, "adv-protocol-shadow");
 }
+
+/// `docs/slice.md` D2 and 19.13: a clause roots nothing, so a program whose
+/// only use of a catalogue is `conforms [RFC855]` emits none of the
+/// catalogue's constants: not the `use` line in the program crate and not
+/// the constants or their text in `ignite-std`. The LLVM target drops them
+/// in `prune`. A program that reads `RFC855.title` keeps them, and both
+/// programs build.
+#[test]
+fn a_clause_only_catalogue_emits_none_of_its_constants() {
+    let serve = "  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {\n    return stream.write_all(b\"ok\")\n  }\n";
+    let clause = format!(
+        "package examples.clauseonly\n\nimport std.rfc.rfc855.{{RFC855}}\n\nprotocol Echo conforms [RFC855] {{\n{serve}}}\n\nfn total() -> Int = 1\n"
+    );
+    let read = format!(
+        "package examples.clauseread\n\nimport std.rfc.rfc855.{{RFC855}}\n\nprotocol Echo conforms [RFC855] {{\n{serve}}}\n\nfn title() -> Text = RFC855.title\n"
+    );
+    let dir = adversary_sources(
+        "clause-only-src",
+        &[("clauseonly.ignite", &clause), ("clauseread.ignite", &read)],
+    );
+    let substrate = adversary_substrate();
+    let std_root = common::repository_std();
+    let catalogue = [
+        "pub fn RFC855(",
+        "pub fn RP1_1(",
+        "Telnet Option Specifications",
+        "carefully documented",
+    ];
+    let (program, std) = common::lower_typed(&dir.join("clauseonly.ignite"), &std_root, &substrate);
+    assert!(!program.lib_rs.contains("RFC855"), "{}", program.lib_rs);
+    for text in catalogue {
+        assert!(!std.lib_rs.contains(text), "{text} in:\n{}", std.lib_rs);
+    }
+    cargo_build(&program, &std, "clause-only");
+    let (program, std) = common::lower_typed(&dir.join("clauseread.ignite"), &std_root, &substrate);
+    assert!(program.lib_rs.contains("RFC855"), "{}", program.lib_rs);
+    for text in catalogue {
+        assert!(
+            std.lib_rs.contains(text),
+            "{text} missing from:\n{}",
+            std.lib_rs
+        );
+    }
+    cargo_build(&program, &std, "clause-read");
+}

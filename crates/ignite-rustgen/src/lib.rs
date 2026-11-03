@@ -266,7 +266,7 @@ fn generate_program(
         return Err(own(diagnostics));
     }
 
-    let uses = use_lines(&program.imports, "ignite_std", &in_lib);
+    let uses = use_targets(&program.imports, "ignite_std", &in_lib);
     let mut lib = Writer::new();
     if !options.test_modules.is_empty() {
         lib.raw(TEST_HEADER);
@@ -307,7 +307,7 @@ fn generate_program(
             continue;
         }
         let segments: Vec<&str> = relative.split('.').collect();
-        let sibling_uses = use_lines(&sibling.imports, "ignite_std", &in_lib);
+        let sibling_uses = use_targets(&sibling.imports, "ignite_std", &in_lib);
         tree.insert(
             &segments,
             module_items(
@@ -328,7 +328,7 @@ fn generate_program(
     lib.raw(&siblings_text);
 
     let testing = !options.test_modules.is_empty();
-    let bin_uses = use_lines(&program.imports, "ignite_std", &in_bin);
+    let bin_uses = use_targets(&program.imports, "ignite_std", &in_bin);
     let mut executables = Vec::new();
     if let Some(types) = types {
         for info in executable_infos {
@@ -920,18 +920,50 @@ impl Package {
     }
 }
 
+/// The `use` lines of a program module or executable whose generated text
+/// is `body`: [`UseTarget::render`] of each target, without the imported
+/// constants `body` does not name. A clause (`conforms [RFC855]`) is not
+/// generated, so a catalogue imported only for a clause leaves no `use`
+/// line, and no `use` line roots its constants in the reachable
+/// `ignite-std` (`docs/slice.md` D2 and 19.13; LLVM's `prune` drops them
+/// the same way). Every other imported name keeps its `use`.
+fn kept_use_lines(targets: &[UseTarget], symbols: &Symbols, body: &str) -> Vec<String> {
+    let constants: BTreeSet<String> = symbols
+        .constants
+        .iter()
+        .filter(|name| symbols.imported.contains_key(*name))
+        .map(|name| ident(name))
+        .collect();
+    let mut referenced = BTreeSet::new();
+    rust_identifiers(body, |name| {
+        referenced.insert(name);
+    });
+    targets
+        .iter()
+        .filter_map(|target| {
+            let names: Vec<String> = target
+                .names
+                .iter()
+                .filter(|name| {
+                    !constants.contains(name.as_str()) || referenced.contains(plain_ident(name))
+                })
+                .cloned()
+                .collect();
+            (!names.is_empty()).then(|| {
+                UseTarget {
+                    path: target.path.clone(),
+                    names,
+                }
+                .render()
+            })
+        })
+        .collect()
+}
+
 /// `use <root>::a::b::{X, Y};` per standard-library import and
 /// `use <package root>::c::{f};` per import from a module of the
 /// program's package; nothing for the substrate's own names or for imports
 /// of a module that is neither.
-fn use_lines(imports: &[Import], root: &str, package: &Package) -> Vec<String> {
-    use_targets(imports, root, package)
-        .iter()
-        .map(UseTarget::render)
-        .collect()
-}
-
-/// The targets of [`use_lines`], before rendering.
 fn use_targets(imports: &[Import], root: &str, package: &Package) -> Vec<UseTarget> {
     imports
         .iter()
@@ -957,24 +989,27 @@ fn use_targets(imports: &[Import], root: &str, package: &Package) -> Vec<UseTarg
         .collect()
 }
 
-/// The `use` lines and every record, enum, protocol and fn of one module,
-/// without the file header. `root` is the Rust path of the `ignite-std`
-/// crate from this module: `ignite_std` in a program, `crate` inside it.
+/// The `use` lines ([`kept_use_lines`]) and every record, enum, protocol
+/// and fn of one program module, without the file header. `root` is the
+/// Rust path of the `ignite-std` crate from this module: `ignite_std` in a
+/// program.
 fn module_items(
     program: &Program,
     symbols: &Symbols,
     types: Option<&TypedProgram>,
-    uses: &[String],
+    uses: &[UseTarget],
     root: &'static str,
     module: &ModuleOptions<'_>,
 ) -> String {
-    let mut w = Writer::new();
-    for line in uses {
-        w.line(line);
-    }
+    let mut items = String::new();
     for item in module_item_list(program, symbols, types, root, module) {
-        w.raw(&item.text);
+        items.push_str(&item.text);
     }
+    let mut w = Writer::new();
+    for line in kept_use_lines(uses, symbols, &items) {
+        w.line(&line);
+    }
+    w.raw(&items);
     w.finish()
 }
 
@@ -5203,7 +5238,7 @@ fn endpoint_variable(name: &str) -> String {
 #[allow(clippy::too_many_arguments)]
 fn executable_main(
     crate_name: &str,
-    uses: &[String],
+    uses: &[UseTarget],
     program: &Program,
     symbols: &Symbols,
     types: &TypedProgram,
@@ -5226,12 +5261,10 @@ fn executable_main(
             ),
         ));
     };
+    let mut head = Writer::new();
+    head.raw(FILE_HEADER);
+    head.line(&format!("use {crate_name}::*;"));
     let mut w = Writer::new();
-    w.raw(FILE_HEADER);
-    w.line(&format!("use {crate_name}::*;"));
-    for line in uses {
-        w.line(line);
-    }
     w.line("");
     w.open("fn main() {");
     w.open("std::process::exit(ignite_io::run(|| {");
@@ -5361,7 +5394,12 @@ fn executable_main(
     w.close("}))");
     w.close("}");
     w.raw(&generator.glue_items());
-    Ok(w.finish())
+    let body = w.finish();
+    for line in kept_use_lines(uses, symbols, &body) {
+        head.line(&line);
+    }
+    head.raw(&body);
+    Ok(head.finish())
 }
 
 /// The record value of component `decl` of kind `kind` (`docs/slice.md`
