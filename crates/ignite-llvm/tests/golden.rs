@@ -747,6 +747,125 @@ fn adversary_std_bounded_fn_instantiated_by_the_program() {
     }
 }
 
+/// Constants are lowered on demand (`docs/slice.md` 19.13, row 39): a
+/// constant nothing references leaves no definition, no string and no
+/// debug node, in the standard-library module (emitted for roots) and in
+/// the program module (emitted whole); a referenced constant keeps its
+/// definition, its string and its `DISubprogram`, and every module
+/// compiles.
+#[test]
+fn unreferenced_constants_leave_no_trace() {
+    let std_text = "package std.probe\n\
+        const DIGEST: Text = \"sha256:probe-unreferenced-constant-text\"\n\
+        const GREETING: Text = \"probe-referenced-constant-text\"\n\
+        fn greeting() -> Text = GREETING\n";
+    let program_text = "package tests.consts\n\
+        import std.probe.{greeting}\n\
+        const UNUSED: Text = \"program-unreferenced-constant-text\"\n\
+        const USED: Text = \"program-referenced-constant-text\"\n\
+        fn both() -> Text = greeting() + USED\n\
+        test \"the referenced constants are there\" {\n\
+          assert both() == \"probe-referenced-constant-textprogram-referenced-constant-text\"\n\
+        }\n";
+    let (std_source, std_program, std_symbols, std_types) = typed(
+        "std/probe.ignite",
+        std_text,
+        &Default::default(),
+        &Default::default(),
+    )
+    .unwrap_or_else(|d| panic!("{d:?}"));
+    let modules: ignite_check::Modules = [("std.probe".to_string(), std_symbols.clone())].into();
+    let typed_std: ignite_types::TypedModules =
+        [("std.probe".to_string(), std_types.exports())].into();
+    let (source, program, symbols, types) =
+        typed("consts.ignite", program_text, &modules, &typed_std)
+            .unwrap_or_else(|d| panic!("{d:?}"));
+    let std_input = ignite_llvm::ModuleInput {
+        path: &std_types.module,
+        program: &std_program,
+        symbols: &std_symbols,
+        types: &std_types,
+    };
+    let input = ignite_llvm::ModuleInput {
+        path: &types.module,
+        program: &program,
+        symbols: &symbols,
+        types: &types,
+    };
+    for tests in [false, true] {
+        let options = ignite_llvm::Options {
+            sources: [
+                (std_types.module.clone(), &std_source),
+                (types.module.clone(), &source),
+            ]
+            .into(),
+            target: Some(target()),
+            test_modules: if tests {
+                vec![types.module.clone()]
+            } else {
+                Vec::new()
+            },
+            ..Default::default()
+        };
+        let generated = ignite_llvm::generate_with(&[std_input], &input, &options);
+        for (module, ir, unused, used) in [
+            (
+                "std",
+                &generated.std,
+                "std.probe.DIGEST",
+                "std.probe.GREETING",
+            ),
+            (
+                "program",
+                &generated.program,
+                "tests.consts.UNUSED",
+                "tests.consts.USED",
+            ),
+        ] {
+            let (unused_text, used_text) = if module == "std" {
+                (
+                    "sha256:probe-unreferenced-constant-text",
+                    "probe-referenced-constant-text",
+                )
+            } else {
+                (
+                    "program-unreferenced-constant-text",
+                    "program-referenced-constant-text",
+                )
+            };
+            assert!(!ir.contains(unused_text), "{module}: {unused_text}:\n{ir}");
+            assert!(
+                !ir.lines()
+                    .any(|l| l.contains(unused) && l.contains("DISubprogram")),
+                "{module}: a DISubprogram of {unused}:\n{ir}"
+            );
+            assert!(
+                !ir.lines()
+                    .any(|l| l.starts_with("define ") && l.contains(&format!("@\"{unused}\"("))),
+                "{module}: {unused} is defined:\n{ir}"
+            );
+            assert!(
+                ir.lines()
+                    .any(|l| l.starts_with("define ") && l.contains(&format!("@\"{used}\"("))),
+                "{module}: {used} is not defined:\n{ir}"
+            );
+            assert!(ir.contains(used_text), "{module}: no {used_text}:\n{ir}");
+            assert!(
+                ir.lines()
+                    .any(|l| l.contains(used) && l.contains("DISubprogram")),
+                "{module}: no DISubprogram of {used}:\n{ir}"
+            );
+        }
+        if tests {
+            let test = ignite_llvm::test_symbol(&types.tests()[0].module, types.tests()[0].decl);
+            run_test_build("consts-test", &generated, &test);
+        } else {
+            compiles("consts_std", &generated.std);
+            compiles("consts_program", &generated.program);
+        }
+    }
+}
+
 /// Adversary (slice 14 U4): an end and its copies share one handle (18.4
 /// "its clones share it"). A copy moved into a task is owned by it
 /// (`fresh_let` of a method call), so the task's release must not take the
