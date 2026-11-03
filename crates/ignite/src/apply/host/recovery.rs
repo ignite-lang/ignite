@@ -463,11 +463,7 @@ impl Host {
 
     /// `status` on stdin: a blocked recovery examines its evidence again.
     pub(super) fn recheck(&mut self) -> Result<(), Failure> {
-        let blocked = self
-            .recovery
-            .as_ref()
-            .is_some_and(|recovery| recovery.get("blocking").and_then(Json::as_bool) == Some(true));
-        if blocked && self.runtime.is_none() && self.transition.is_none() {
+        if self.blocked() && self.runtime.is_none() && self.transition.is_none() {
             self.recover()?;
             self.persist()?;
         }
@@ -477,6 +473,12 @@ impl Host {
     /// Block operation `id` as `recovery_required` for `reason`: no apply
     /// other than its retry is admitted and no effect is dispatched until a
     /// recovery lifts it.
+    ///
+    /// An unresolved recovery ([`Host::unresolved`], such as `gave_up`) is
+    /// never overwritten (17.5): its receipt, the active operation and the
+    /// recovery reason stay, admission refuses every apply but a retry, the
+    /// block lives in `recovery` alone and names that operation as
+    /// `unresolved`, and lifting it leaves the unresolved recovery as it was.
     fn block(
         &mut self,
         id: &str,
@@ -484,26 +486,72 @@ impl Host {
         next_action: &str,
         evidence: Json,
     ) -> Result<(), Failure> {
-        self.reject_operation(id, reason)?;
-        if let Some(Json::Object(receipt)) = self.receipts.get_mut(id)
-            && receipt.get("state").and_then(Json::as_str) == Some("recovery_required")
-        {
-            receipt.insert("nextAction".into(), text(next_action));
-            receipt.insert("evidence".into(), evidence.clone());
-        }
-        self.recovery = Some(object([
+        let unresolved = self.active.clone().filter(|active| self.unresolved(active));
+        let mut recovery = object([
             ("state", text("recovery_required")),
             ("reason", text(reason)),
             ("planId", text(id)),
             ("nextAction", text(next_action)),
             ("blocking", Json::Bool(true)),
-            ("evidence", evidence),
-        ]));
+            ("evidence", evidence.clone()),
+        ]);
+        if let Some(active) = &unresolved {
+            if let Json::Object(fields) = &mut recovery {
+                fields.insert(
+                    "unresolved".into(),
+                    object([
+                        ("operationId", text(active)),
+                        (
+                            "reason",
+                            self.recovery_reason.as_deref().map_or(Json::Null, text),
+                        ),
+                    ]),
+                );
+            }
+            self.recovery = Some(recovery);
+            return self.persist();
+        }
+        self.reject_operation(id, reason)?;
+        if let Some(Json::Object(receipt)) = self.receipts.get_mut(id)
+            && receipt.get("state").and_then(Json::as_str) == Some("recovery_required")
+        {
+            receipt.insert("nextAction".into(), text(next_action));
+            receipt.insert("evidence".into(), evidence);
+        }
+        self.recovery = Some(recovery);
         self.persist()
     }
 
+    /// Whether `active` carries a recovery no block may overwrite: a reason
+    /// other than a block's own, on an operation whose receipt is
+    /// `recovery_required` or on the committed revision itself (its
+    /// controller ended; its receipt stays `completed`).
+    fn unresolved(&self, active: &str) -> bool {
+        let reason = self
+            .recovery_reason
+            .as_deref()
+            .is_some_and(|reason| !matches!(reason, OUTCOME_UNKNOWN | FOREIGN_LISTENER));
+        let failed = self.committed.as_deref() == Some(active)
+            || self
+                .receipts
+                .get(active)
+                .and_then(|receipt| receipt.get("state"))
+                .and_then(Json::as_str)
+                == Some("recovery_required");
+        reason && failed
+    }
+
+    /// Whether a startup recovery block (`outcome_unknown`,
+    /// `foreign_listener`) holds: no apply is admitted while it does.
+    pub(super) fn blocked(&self) -> bool {
+        self.recovery
+            .as_ref()
+            .is_some_and(|recovery| recovery.get("blocking").and_then(Json::as_bool) == Some(true))
+    }
+
     /// Lift the block of [`Host::block`]: the operation is accepted again,
-    /// or, for the committed revision, no operation is active.
+    /// or, for the committed revision, no operation is active. A block over
+    /// an unresolved recovery changed neither, so it has nothing to undo.
     fn unblock(&mut self) {
         let reason = self.recovery_reason.take();
         let Some(id) = self.active.clone() else {
@@ -584,5 +632,254 @@ mod tests {
         child.wait().unwrap();
         assert!(settle(|| generation_processes(&generations).is_empty()));
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// A host on `root` with `committed` at revision 1 and `active` as the
+    /// operation a machine gave up on (D3: only a corrective apply clears it).
+    fn gave_up_host(root: &Path) -> Host {
+        let journal = super::super::journal::open(&root.join("host-journal.jsonl")).unwrap();
+        let (tx, _rx) = std::sync::mpsc::channel::<super::super::Message>();
+        let receipt = |id: &str, state: &str| {
+            let mut receipt = object([
+                ("operationId", text(id)),
+                ("planId", text(id)),
+                ("state", text(state)),
+                ("noop", Json::Bool(false)),
+            ]);
+            if state == "recovery_required"
+                && let Json::Object(fields) = &mut receipt
+            {
+                fields.insert("reason".into(), text("gave_up"));
+            }
+            receipt
+        };
+        Host {
+            root: root.to_path_buf(),
+            identity: "state".into(),
+            revision: 1,
+            committed: Some("committed".into()),
+            active: Some("failed".into()),
+            recovery_reason: Some("gave_up".into()),
+            receipts: [
+                ("committed".to_string(), receipt("committed", "completed")),
+                ("failed".to_string(), receipt("failed", "recovery_required")),
+            ]
+            .into_iter()
+            .collect(),
+            owned: Default::default(),
+            retiring: Default::default(),
+            standings: Default::default(),
+            journal,
+            last_digest: String::new(),
+            runtime: None,
+            transition: None,
+            contexts: Default::default(),
+            recovery: None,
+            history: Vec::new(),
+            pending: Vec::new(),
+            storage_failed: None,
+            journaled_ownership: Default::default(),
+            preparing: false,
+            waiters: Default::default(),
+            tx,
+        }
+    }
+
+    /// D3 and 17.5 "No unrelated operation may overwrite unresolved
+    /// recovery": an operation a machine gave up on stays `recovery_required`
+    /// (`gave_up`) through an `outcome_unknown` block at restart and its
+    /// lifting by `status`; it is never re-admitted as `accepted` and driven
+    /// again without a corrective apply.
+    #[test]
+    fn an_outcome_unknown_block_never_turns_a_gave_up_operation_back_into_accepted() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/adversary-u5")
+            .join(format!(
+                "gave-up-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+        let bin = root.join("revisions/2-1-1/bin/1");
+        std::fs::create_dir_all(&bin).unwrap();
+        let root = std::fs::canonicalize(&root).unwrap();
+        let sleep = root.join("revisions/2-1-1/bin/1/sleep");
+        std::fs::copy("/bin/sleep", &sleep).unwrap();
+        let mut unknown = Command::new(&sleep).arg("30").spawn().unwrap();
+        let mut host = gave_up_host(&root);
+
+        let blocked = host.recover();
+        let after_block = host.receipts.get("failed").cloned();
+        let block_reason = host
+            .recovery
+            .as_ref()
+            .and_then(|recovery| recovery.get("reason"))
+            .and_then(Json::as_str)
+            .map(str::to_string);
+        unknown.kill().unwrap();
+        unknown.wait().unwrap();
+        // `status` on stdin once the unknown process ended; the plan files
+        // are absent here, so the resume after the lift fails to read one.
+        let _ = host.recheck();
+        let after_status = host.receipts.get("failed").cloned();
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(blocked.is_ok(), "{blocked:?}");
+        assert_eq!(
+            block_reason.as_deref(),
+            Some(OUTCOME_UNKNOWN),
+            "the unknown generation process blocks recovery"
+        );
+        let state = |receipt: &Option<Json>, key: &str| {
+            receipt
+                .as_ref()
+                .and_then(|receipt| receipt.get(key))
+                .and_then(Json::as_str)
+                .map(str::to_string)
+        };
+        assert_eq!(
+            state(&after_status, "state").as_deref(),
+            Some("recovery_required"),
+            "a gave-up operation is cleared only by a corrective apply, \
+             never resumed by lifting an outcome_unknown block: {after_status:?}"
+        );
+        assert_eq!(
+            state(&after_block, "reason").as_deref(),
+            Some("gave_up"),
+            "the outcome_unknown block overwrote the unresolved gave_up: {after_block:?}"
+        );
+    }
+
+    /// The same rule where the unresolved recovery is the committed
+    /// revision's own (its controller ended; its receipt stays `completed`,
+    /// so only the host's recovery reason records it): an `outcome_unknown`
+    /// block and its lifting leave that reason and the committed revision
+    /// active, and recovery does not resume a revision it was told to keep
+    /// for inspection.
+    #[test]
+    fn an_outcome_unknown_block_keeps_an_unresolved_committed_revision() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/adversary-u5")
+            .join(format!(
+                "committed-ended-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+        std::fs::create_dir_all(root.join("revisions/2-1-1/bin/1")).unwrap();
+        let root = std::fs::canonicalize(&root).unwrap();
+        let sleep = root.join("revisions/2-1-1/bin/1/sleep");
+        std::fs::copy("/bin/sleep", &sleep).unwrap();
+        let mut unknown = Command::new(&sleep).arg("30").spawn().unwrap();
+        let ended = "committed revision controller ended: Ok(1)";
+        let mut host = gave_up_host(&root);
+        host.receipts.remove("failed");
+        host.active = Some("committed".into());
+        host.recovery_reason = Some(ended.into());
+
+        let blocked = host.recover();
+        let during = (
+            host.active.clone(),
+            host.recovery_reason.clone(),
+            host.blocked(),
+        );
+        unknown.kill().unwrap();
+        unknown.wait().unwrap();
+        let lifted = host.recheck();
+        let after = (
+            host.active.clone(),
+            host.recovery_reason.clone(),
+            host.blocked(),
+        );
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(blocked.is_ok(), "{blocked:?}");
+        assert_eq!(
+            during,
+            (Some("committed".into()), Some(ended.into()), true),
+            "the block keeps the unresolved reason"
+        );
+        assert!(lifted.is_ok(), "nothing is resumed: {lifted:?}");
+        assert_eq!(
+            after,
+            (Some("committed".into()), Some(ended.into()), false),
+            "lifting the block restores the unresolved recovery"
+        );
+    }
+
+    /// The same rule for the other block: a gave-up operation whose committed
+    /// revision cannot resume because another process holds its listener port
+    /// (`recover` blocks the committed plan with `foreign_listener`) keeps the
+    /// failed operation active and `gave_up`, through the journaled snapshot
+    /// a restart restores, and the block admits no apply while it holds.
+    #[test]
+    fn a_foreign_listener_block_of_the_committed_revision_keeps_the_gave_up_operation() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/adversary-u5")
+            .join(format!(
+                "foreign-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+        std::fs::create_dir_all(&root).unwrap();
+        let mut host = gave_up_host(&root);
+        let blocked = host.block(
+            "committed",
+            FOREIGN_LISTENER,
+            "free the port",
+            object([("port", Json::Int(1))]),
+        );
+        let snapshot = host.snapshot(true);
+        let mut restarted = gave_up_host(&root);
+        restarted.active = None;
+        restarted.recovery_reason = None;
+        let restored = restarted.restore(&snapshot);
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(blocked.is_ok(), "{blocked:?}");
+        assert!(restored.is_ok(), "{restored:?}");
+        for host in [&host, &restarted] {
+            assert_eq!(
+                host.active.as_deref(),
+                Some("failed"),
+                "the gave-up operation stays active"
+            );
+            assert_eq!(host.recovery_reason.as_deref(), Some("gave_up"));
+            let failed = host.receipts.get("failed");
+            assert_eq!(
+                failed
+                    .and_then(|receipt| receipt.get("reason"))
+                    .and_then(Json::as_str),
+                Some("gave_up"),
+                "{failed:?}"
+            );
+            let committed = host.receipts.get("committed");
+            assert_eq!(
+                committed
+                    .and_then(|receipt| receipt.get("state"))
+                    .and_then(Json::as_str),
+                Some("completed"),
+                "{committed:?}"
+            );
+            assert!(
+                host.blocked(),
+                "the foreign listener blocks: {:?}",
+                host.recovery
+            );
+            let unresolved = host
+                .recovery
+                .as_ref()
+                .and_then(|recovery| recovery.get("unresolved"))
+                .and_then(|unresolved| unresolved.get("operationId"))
+                .and_then(Json::as_str);
+            assert_eq!(unresolved, Some("failed"));
+        }
     }
 }

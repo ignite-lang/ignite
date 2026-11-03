@@ -668,6 +668,64 @@ fn crash_mid_transition_resumes_once_and_a_foreign_listener_is_never_adopted() {
     host.stop();
 }
 
+/// Set the server's `maximum_attempts` from `from` to `to`.
+fn set_attempts(flow: &Flow, from: i64, to: i64) {
+    let source = read(&flow.source);
+    let before = format!("maximum_attempts = {from}");
+    assert!(source.contains(&before), "terminal fixture attempts");
+    fs::write(
+        &flow.source,
+        source.replace(&before, &format!("maximum_attempts = {to}")),
+    )
+    .unwrap();
+}
+
+/// D3 and 17.5: a corrective apply after `gave_up` whose acceptance was
+/// durable when the host crashed is resumed by the next host and
+/// completes; it never stays `accepted` behind the `gave_up` it resolved.
+#[test]
+fn a_crash_after_accepting_a_corrective_resumes_the_corrective() {
+    let flow = Flow::new("corrective");
+    set_attempts(&flow, 10, 1);
+    let occupied = TcpListener::bind(("127.0.0.1", flow.port)).expect("occupy the server port");
+    let mut host = Host::start(&flow, "gives-up", &[]);
+    let failing = flow.prepare("failing");
+    let (code, _) = flow.apply_fails("apply-gives-up", &failing);
+    assert_eq!(code, Some(1), "a machine that gives up fails the operation");
+    let status = flow.inspect();
+    assert_eq!(
+        status.get("recoveryReason").and_then(Json::as_str),
+        Some("gave_up"),
+        "{status:?}"
+    );
+    host.stop();
+    drop(occupied);
+
+    set_attempts(&flow, 1, 10);
+    let mut host = Host::start(&flow, "after-intent", &[(FAULT, "after_intent")]);
+    let corrective = flow.prepare("corrective");
+    let plan = plan_of(&corrective);
+    flow.apply_fails("apply-corrective-crashes-after-intent", &corrective);
+    host.crashed("after_intent");
+
+    let mut host = Host::start(&flow, "resumed", &[]);
+    let pid = await_converged(&flow, &host, 1);
+    let receipt = flow.apply("retry-after-resume", &corrective);
+    assert_eq!(
+        receipt.get("operationId").and_then(Json::as_str),
+        Some(plan.id.as_str())
+    );
+    assert_eq!(
+        receipt.get("state").and_then(Json::as_str),
+        Some("completed")
+    );
+    assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(1));
+    assert_eq!(flow.inspect().get("recoveryReason"), Some(&Json::Null));
+    assert_eq!(flow.servers(&server_name(&plan)), vec![pid]);
+    assert!(terminal_status(flow.port).contains("ready"));
+    host.stop();
+}
+
 /// Row 13: a journal sync that fails, of the acceptance or of an effect
 /// intent, stops the host before the operation it records goes on; no
 /// effect runs, and the next host recovers from the synced journal.

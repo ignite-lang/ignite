@@ -1012,13 +1012,28 @@ impl Host {
         });
         let tx = self.tx.clone();
         let thread_control = control.clone();
-        let runtime_state = self.root.join("revisions").join(format!(
-            "{}-{}-{}",
-            self.revision + 1,
-            std::process::id(),
-            crate::apply::NEXT_REQUEST.fetch_add(1, Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&runtime_state)?;
+        // A revision state of the same name can only be a crashed earlier
+        // host's with this pid (a container's pid 1): its journal is never
+        // reused. The new directory's entry, and that of `revisions/` when
+        // it is new, are synced before anything runs in it (17.5).
+        let revisions = self.root.join("revisions");
+        std::fs::create_dir_all(&revisions)?;
+        let runtime_state = loop {
+            let candidate = revisions.join(format!(
+                "{}-{}-{}",
+                self.revision + 1,
+                std::process::id(),
+                crate::apply::NEXT_REQUEST.fetch_add(1, Ordering::Relaxed)
+            ));
+            match std::fs::create_dir(&candidate) {
+                Ok(()) => break candidate,
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(error.into()),
+            }
+        };
+        for directory in [&revisions, &self.root] {
+            std::fs::File::open(directory)?.sync_all()?;
+        }
         save_json(
             &runtime_state.join("context.json"),
             &object([

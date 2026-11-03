@@ -254,7 +254,14 @@ impl Host {
         // listener could not be bound) is resolved by a corrective plan whose
         // base is the committed revision, while that failed operation is the
         // only one: no transition in flight, the active operation's receipt
-        // `recovery_required`.
+        // `recovery_required`. A startup recovery block (`outcome_unknown`,
+        // `foreign_listener`) admits no apply until it is lifted.
+        if self.blocked() {
+            return Err(fail(
+                2,
+                "host recovery is blocked; send `status` to the host or restart it once the evidence is resolved",
+            ));
+        }
         let corrective = self.transition.is_none()
             && self
                 .runtime
@@ -362,8 +369,12 @@ impl Host {
             let _ = reply.send(Ok(self.receipt(&plan.id)));
             return Ok(());
         }
-        let resolved = if reverting { self.active.take() } else { None };
+        // A corrective resolves the failed operation when it is admitted
+        // (D3): the corrective is the active operation from here on, and a
+        // host that restarts after this acceptance resumes it.
+        let resolved = if corrective { self.active.take() } else { None };
         if let Some(failed) = &resolved {
+            self.recovery_reason = None;
             self.append(
                 "recoveryResolved",
                 object([
@@ -375,7 +386,7 @@ impl Host {
         self.active = Some(plan.id.clone());
         self.persist()?;
         self.waiters.entry(plan.id.clone()).or_default().push(reply);
-        match resolved {
+        match resolved.filter(|_| reverting) {
             Some(failed) => self.revert(plan, &failed),
             None => self.dispatch(plan),
         }

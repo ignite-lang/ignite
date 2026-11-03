@@ -36,10 +36,16 @@ pub(super) fn sync_directories(root: &Path) -> io::Result<()> {
     File::open(root)?.sync_all()
 }
 
+/// Write `value` to `path` through a synced temporary and a rename. Every
+/// write runs on the host's queue thread, one at a time, so a temporary of
+/// the same name that exists already is the leftover of a crashed earlier
+/// process with this pid (a restarted container's pid 1): it is truncated
+/// and written over, never a reason to fail.
 pub(super) fn save_json(path: &Path, value: &Json) -> Result<(), Failure> {
     let temporary = path.with_extension(format!("{}.writing", std::process::id()));
     let mut file = OpenOptions::new()
-        .create_new(true)
+        .create(true)
+        .truncate(true)
         .write(true)
         .open(&temporary)?;
     file.write_all((value.compact() + "\n").as_bytes())?;
@@ -650,5 +656,35 @@ mod tests {
             append_to(&mut file, &history.last_digest, "state", &object([]), false).unwrap();
         let reloaded = History::load(&path).unwrap();
         assert_eq!(reloaded.last_digest, digest, "the chain continues intact");
+    }
+
+    /// A host killed between creating `status.<pid>.writing` and its rename
+    /// leaves the temporary behind; a restarted host with the same pid (pid 1
+    /// of a container, any pid namespace) must still persist its snapshot, or
+    /// it can never start again on that state.
+    #[test]
+    fn a_crash_leftover_temporary_does_not_block_the_next_save() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/adversary-u5")
+            .join(format!(
+                "leftover-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("status.json");
+        let temporary = path.with_extension(format!("{}.writing", std::process::id()));
+        std::fs::write(&temporary, b"{\"torn\":").unwrap();
+        let saved = save_json(&path, &object([("saved", Json::Bool(true))]));
+        let content = std::fs::read_to_string(&path).unwrap_or_default();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            saved.is_ok(),
+            "a crash leftover blocks every later save: {saved:?}"
+        );
+        assert_eq!(content, "{\"saved\":true}\n");
     }
 }

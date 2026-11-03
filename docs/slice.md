@@ -4169,14 +4169,27 @@ applies are refused and no effect runs. Otherwise a `reconciled` record settles 
 the active, else committed, revision starts afresh (after `gave_up` or `listener_unavailable`
 the committed one). A fixed listener port of that revision that another process holds blocks it
 as `foreign_listener`, without a signal. `status` on the host's stdin, or the next start, lifts
-either block and examines the evidence again. Decision D2: a revision whose reducer revision
+either block and examines the evidence again. A block never overwrites an unresolved recovery:
+while one holds (the active operation is `recovery_required`, such as `gave_up`, or the committed
+revision's controller ended), the block lives in `recovery` alone, naming that operation as
+`recovery.unresolved`; the operation keeps its receipt and reason, every apply but a retry is
+refused, and lifting the block leaves that recovery as it was. Admitting a corrective apply
+resolves the failed operation (`recoveryResolved`) and clears its reason at once, so a host that
+crashes after the acceptance resumes the corrective. Each revision state directory gets
+a name no earlier host of the state used, and `revisions/` and the state root are synced once it
+is created; a temporary that a crash left behind never blocks the next write. Decision D2: a revision whose reducer revision
 differs from the host's is neither re-stepped nor driven; the snapshot's `history` lists each
 revision state with `restepped`, and `recovery` is `recovery_required`, `reducer_revision_changed`,
 next action "replan and apply", without blocking an apply; the next commit clears it. Debug
 builds read `IGNITE_DEBUG_HOST_FAULT` (`after_intent`, `before_dispatch`, `after_dispatch`,
 `mid_transition` crash the host with SIGKILL there; `sync_intent`, `sync_effect` fail that
 sync) and `IGNITE_DEBUG_HOST_REDUCER_REVISION` (the reducer revision the host claims); release
-builds read neither.
+builds read neither. Known gaps:
+
+- A `foreign_listener` block of the committed revision replaces a `reducer_revision_changed`
+  report in `recovery`; the not-driven operation's receipt keeps the reason.
+- A reducer failure of the committed revision's run while a `gave_up` is unresolved makes the
+  committed revision the active operation, replacing that recovery reason.
 
 ### 17.6 Terminal walkthrough
 
