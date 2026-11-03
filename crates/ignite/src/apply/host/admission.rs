@@ -87,18 +87,11 @@ fn retain_context(root: &Path, plan: &Plan) -> Result<(), Failure> {
 /// ([`Plan::verify_inputs`]), not a startup condition; what a retained
 /// revision needs from this host is its reducer revision, because the host's
 /// evaluator re-steps the revision's `std.control` machines over the retained
-/// standard library. A differing reducer revision is refused here with the
-/// reason `reducer_revision_changed`.
+/// standard library. Startup recovery neither re-steps nor drives a revision
+/// whose reducer revision differs from this host's and reports it as
+/// `reducer_revision_changed` (`recovery`); admission refuses such a plan
+/// ([`Plan::verify_controller`]).
 pub(super) fn retained_plan(root: &Path, plan: &Plan) -> Result<Plan, Failure> {
-    if plan.reducer_revision != plan.host_reducer_revision() {
-        return Err(fail(
-            3,
-            format!(
-                "reducer_revision_changed: revision {} was admitted under reducer revision {}; replan and apply",
-                plan.id, plan.reducer_revision
-            ),
-        ));
-    }
     let generation = root.join("retained").join(&plan.id);
     let mut frozen = plan.clone();
     frozen.source = generation.join("source").join(
@@ -315,6 +308,14 @@ impl Host {
         let unchanged = previous_plan.as_ref().is_some_and(|old| {
             old.operational_identity == plan.operational_identity || every_member_unchanged
         });
+        // Decision D2: while the committed revision is not driven because
+        // its reducer revision differs from this host's, the replanned apply
+        // starts its members afresh even when nothing else changed.
+        let unchanged = unchanged
+            && !self.recovery.as_ref().is_some_and(|recovery| {
+                recovery.get("reason").and_then(Json::as_str)
+                    == Some(super::recovery::REDUCER_CHANGED)
+            });
         // A corrective plan back to the committed revision while the running
         // revision is still the failed operation's: a transition from that
         // revision back, which stops what the failed operation started.

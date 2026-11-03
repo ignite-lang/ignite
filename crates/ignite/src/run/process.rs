@@ -93,6 +93,97 @@ impl Spawner {
     }
 }
 
+/// The environment variable a debug build of `ignite host` reads for fault
+/// injection (`docs/slice.md` 17.5): `after_intent`, `before_dispatch`,
+/// `after_dispatch` and `mid_transition` crash the host with SIGKILL at that
+/// point, `sync_intent` and `sync_effect` fail the sync of that journal
+/// record. A release build never reads it.
+pub const FAULT: &str = "IGNITE_DEBUG_HOST_FAULT";
+
+/// Whether the injected fault is `point`; always false in a release build.
+pub fn fault(point: &str) -> bool {
+    #[cfg(debug_assertions)]
+    {
+        std::env::var(FAULT).is_ok_and(|value| value == point)
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = point;
+        false
+    }
+}
+
+/// Crash this process with SIGKILL, as a power cut or `kill -9` would, when
+/// the injected fault is `point`. Its children end by the parent-death rule.
+pub fn crash_at(point: &str) {
+    if fault(point) {
+        eprintln!("ignite host: injected crash at {point}");
+        let _ = nix::sys::signal::kill(Pid::this(), Signal::SIGKILL);
+        loop {
+            std::thread::park();
+        }
+    }
+}
+
+/// The start time of live process `pid` (field 22 of `/proc/<pid>/stat`,
+/// clock ticks since boot): with the pid, the identity of one OS process
+/// instance. `None` when no such process lives or it is a zombie.
+pub fn start_time(pid: i64) -> Option<String> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let fields = stat.rsplit_once(") ")?.1;
+    if matches!(fields.split_whitespace().next(), Some("Z" | "X")) {
+        return None;
+    }
+    Some(fields.split_whitespace().nth(19)?.to_string())
+}
+
+/// Send `signal` to `pid` only while it is the instance that started at
+/// `started`: the pid is pinned with a pidfd first and the start time read
+/// after, so a pid reused by another process is never signalled. False when
+/// the instance has ended (the pid is absent or another process has it).
+pub fn signal_instance(pid: i64, started: &str, signal: i32) -> io::Result<bool> {
+    let Ok(raw) = nix::libc::pid_t::try_from(pid) else {
+        return Ok(false);
+    };
+    // SAFETY: `pidfd_open` takes a pid and flags and returns a new file
+    // descriptor or -1; it touches no memory of this process.
+    let fd = unsafe { nix::libc::syscall(nix::libc::SYS_pidfd_open, raw, 0) };
+    if fd < 0 {
+        let error = io::Error::last_os_error();
+        return match error.raw_os_error() {
+            Some(nix::libc::ESRCH) => Ok(false),
+            _ => Err(error),
+        };
+    }
+    // SAFETY: `fd` is a descriptor this call just opened and nothing else
+    // owns.
+    let pidfd = unsafe {
+        <std::os::fd::OwnedFd as std::os::fd::FromRawFd>::from_raw_fd(fd as std::os::fd::RawFd)
+    };
+    if start_time(pid).as_deref() != Some(started) {
+        return Ok(false);
+    }
+    // SAFETY: the descriptor is valid for the call and the info pointer is
+    // null, which the kernel accepts.
+    let sent = unsafe {
+        nix::libc::syscall(
+            nix::libc::SYS_pidfd_send_signal,
+            std::os::fd::AsRawFd::as_raw_fd(&pidfd),
+            signal,
+            std::ptr::null::<nix::libc::siginfo_t>(),
+            0,
+        )
+    };
+    if sent < 0 {
+        let error = io::Error::last_os_error();
+        return match error.raw_os_error() {
+            Some(nix::libc::ESRCH) => Ok(false),
+            _ => Err(error),
+        };
+    }
+    Ok(true)
+}
+
 /// Whether the `released` line of a live child was awaited or seen.
 #[derive(Debug, Default)]
 enum Release {
@@ -184,6 +275,7 @@ pub(super) fn spawn(
             return;
         }
     };
+    crash_at("after_dispatch");
     let pid = child.id() as i32;
     lock(&adapters.processes).live.insert(
         pid,
@@ -431,6 +523,33 @@ mod tests {
         let status = status.expect("retry the transient executable write conflict");
         controlled.unwrap();
         assert_eq!(status.code(), Some(7));
+    }
+
+    #[test]
+    fn only_the_instance_that_started_at_the_recorded_time_is_signalled() {
+        let mut child = Command::new("/bin/sleep").arg("30").spawn().unwrap();
+        let pid = i64::from(child.id());
+        let started = start_time(pid).expect("a live child has a start time");
+        assert_eq!(start_time(pid).as_deref(), Some(started.as_str()));
+        let reused = format!("{started}0");
+        assert!(!signal_instance(pid, &reused, 9).unwrap());
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(
+            child.try_wait().unwrap().is_none(),
+            "a pid with another start time is another process"
+        );
+        assert!(signal_instance(pid, &started, 9).unwrap());
+        assert_eq!(child.wait().unwrap().signal(), Some(9));
+        assert_eq!(start_time(pid), None);
+        assert!(!signal_instance(pid, &started, 9).unwrap());
+    }
+
+    #[test]
+    fn no_fault_is_injected_without_the_variable() {
+        if std::env::var_os(FAULT).is_none() {
+            assert!(!fault("after_dispatch"));
+            crash_at("after_dispatch");
+        }
     }
 
     #[test]

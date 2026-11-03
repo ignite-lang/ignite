@@ -1,0 +1,808 @@
+//! Host durability and crash recovery (`docs/slice.md` 17.5, 17.7 rows 10 to
+//! 14) through the real CLI, host socket and native program. A debug build
+//! of the host crashes itself (SIGKILL) at the point named by
+//! `IGNITE_DEBUG_HOST_FAULT`, or fails a named journal sync; the next host
+//! on the same state must end with exactly one server generation running,
+//! or report `outcome_unknown` for what it cannot prove.
+
+use std::cell::Cell;
+use std::fs::{self, File};
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::os::unix::process::ExitStatusExt;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::Mutex;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use ignite_eval::Json;
+
+const FAULT: &str = "IGNITE_DEBUG_HOST_FAULT";
+const LIVE_TIMEOUT: Duration = Duration::from_secs(20);
+const BUILD_TIMEOUT: Duration = Duration::from_secs(180);
+/// The tests of this file share one build directory; `ignite build` owns
+/// the generated project it writes, so one preparation runs at a time.
+static BUILDS: Mutex<()> = Mutex::new(());
+
+fn repo() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn read(path: &Path) -> String {
+    fs::read_to_string(path).unwrap_or_default()
+}
+
+fn wait(child: &mut Child, timeout: Duration) -> Option<ExitStatus> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child.try_wait().expect("read child exit") {
+            return Some(status);
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn until(what: &str, mut done: impl FnMut() -> bool, context: impl Fn() -> String) {
+    let deadline = Instant::now() + LIVE_TIMEOUT;
+    while !done() {
+        assert!(Instant::now() < deadline, "{what}: {}", context());
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn free_port() -> u16 {
+    TcpListener::bind(("127.0.0.1", 0))
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
+}
+
+struct Host {
+    child: Option<Child>,
+    stderr: PathBuf,
+}
+
+impl Host {
+    /// Start a host on `flow`'s state with `env`, without waiting for it.
+    fn spawn(flow: &Flow, label: &str, env: &[(&str, &str)]) -> Host {
+        let stderr = flow.root.join(format!("{label}.stderr"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
+        command
+            .args(["host", "--state"])
+            .arg(&flow.state)
+            .current_dir(repo())
+            .env("CARGO_INCREMENTAL", "0")
+            .env("CARGO_PROFILE_DEV_DEBUG", "line-tables-only")
+            .env_remove(FAULT)
+            .stdin(Stdio::piped())
+            .stdout(File::create(flow.root.join(format!("{label}.stdout"))).unwrap())
+            .stderr(File::create(&stderr).unwrap());
+        for (key, value) in env {
+            command.env(key, value);
+        }
+        Host {
+            child: Some(command.spawn().expect("start foreground host")),
+            stderr,
+        }
+    }
+
+    /// Start a host and wait until it answers on its socket.
+    fn start(flow: &Flow, label: &str, env: &[(&str, &str)]) -> Host {
+        let mut host = Host::spawn(flow, label, env);
+        until(
+            "host socket",
+            || {
+                assert!(
+                    host.child.as_mut().unwrap().try_wait().unwrap().is_none(),
+                    "host exited: {}",
+                    read(&host.stderr)
+                );
+                ignite::apply::inspect(&flow.state, None)
+                    .is_ok_and(|status| status.get("online").and_then(Json::as_bool) == Some(true))
+            },
+            || read(&host.stderr),
+        );
+        host
+    }
+
+    /// The host ends by itself: its exit status.
+    fn ended(&mut self) -> ExitStatus {
+        let child = self.child.as_mut().expect("host is running");
+        let status = wait(child, LIVE_TIMEOUT);
+        let Some(status) = status else {
+            let _ = child.kill();
+            let _ = child.wait();
+            self.child = None;
+            panic!("host did not end: {}", read(&self.stderr));
+        };
+        self.child = None;
+        status
+    }
+
+    /// The host crashed itself at the injected fault point.
+    fn crashed(&mut self, point: &str) {
+        let status = self.ended();
+        assert_eq!(
+            status.signal(),
+            Some(9),
+            "host must crash with SIGKILL at {point}: {status:?}\n{}",
+            read(&self.stderr)
+        );
+        assert!(
+            read(&self.stderr).contains(&format!("injected crash at {point}")),
+            "{}",
+            read(&self.stderr)
+        );
+    }
+
+    fn line(&mut self, line: &str) {
+        let stdin = self.child.as_mut().unwrap().stdin.as_mut().unwrap();
+        writeln!(stdin, "{line}").unwrap();
+        stdin.flush().unwrap();
+    }
+
+    fn stop(&mut self) {
+        self.line("stop");
+        let status = self.ended();
+        assert!(
+            status.success(),
+            "host stop failed: {status:?}\n{}",
+            read(&self.stderr)
+        );
+    }
+}
+
+impl Drop for Host {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take()
+            && child.try_wait().ok().flatten().is_none()
+        {
+            if let Some(stdin) = child.stdin.as_mut() {
+                let _ = writeln!(stdin, "stop");
+                let _ = stdin.flush();
+            }
+            if wait(&mut child, Duration::from_secs(5)).is_none() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+}
+
+/// A child of the test that is killed when the test ends.
+struct Owned(Child);
+
+impl Drop for Owned {
+    fn drop(&mut self) {
+        if self.0.try_wait().ok().flatten().is_none() {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+}
+
+struct Flow {
+    root: PathBuf,
+    state: PathBuf,
+    source: PathBuf,
+    port: u16,
+    counter: Cell<u64>,
+}
+
+impl Flow {
+    /// A fresh copy of the terminal design on a free port and a fresh state
+    /// whose `build` is one directory shared by the tests of this file (O41).
+    fn new(label: &str) -> Flow {
+        let port = free_port();
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = Path::new(env!("CARGO_TARGET_TMPDIR"))
+            .join(format!("recovery-{label}-{}-{stamp}", std::process::id()));
+        let fixture = root.join("terminal");
+        fs::create_dir_all(&fixture).unwrap();
+        for entry in fs::read_dir(repo().join("examples/terminal")).unwrap() {
+            let path = entry.unwrap().path();
+            if path
+                .extension()
+                .is_some_and(|extension| extension == "ignite")
+            {
+                fs::copy(&path, fixture.join(path.file_name().unwrap())).unwrap();
+            }
+        }
+        let source = fixture.join("terminal.design.ignite");
+        let original = fs::read_to_string(&source).unwrap();
+        assert!(original.contains("port = 2323"), "terminal fixture port");
+        fs::write(
+            &source,
+            original.replace("port = 2323", &format!("port = {port}")),
+        )
+        .unwrap();
+        let state = root.join("state");
+        fs::create_dir_all(&state).unwrap();
+        let shared = Path::new(env!("CARGO_TARGET_TMPDIR")).join("apply-recovery-build");
+        fs::create_dir_all(&shared).unwrap();
+        std::os::unix::fs::symlink(&shared, state.join("build")).unwrap();
+        Flow {
+            root,
+            state,
+            source,
+            port,
+            counter: Cell::new(0),
+        }
+    }
+
+    /// Run the CLI with `args`: its exit code and stdout.
+    fn run(&self, label: &str, args: &[&str]) -> (Option<i32>, String, String) {
+        let sequence = self.counter.get();
+        self.counter.set(sequence + 1);
+        let stdout = self.root.join(format!("{sequence}-{label}.stdout"));
+        let stderr = self.root.join(format!("{sequence}-{label}.stderr"));
+        let mut child = Command::new(env!("CARGO_BIN_EXE_ignite"))
+            .args(args)
+            .current_dir(repo())
+            .env("CARGO_INCREMENTAL", "0")
+            .env("CARGO_PROFILE_DEV_DEBUG", "line-tables-only")
+            .stdin(Stdio::null())
+            .stdout(File::create(&stdout).unwrap())
+            .stderr(File::create(&stderr).unwrap())
+            .spawn()
+            .expect("start CLI client");
+        let limit = if args.first() == Some(&"plan") {
+            BUILD_TIMEOUT
+        } else {
+            LIVE_TIMEOUT
+        };
+        let Some(status) = wait(&mut child, limit) else {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!(
+                "{label} exceeded {limit:?}\n{}\n{}",
+                read(&stdout),
+                read(&stderr)
+            );
+        };
+        (status.code(), read(&stdout), read(&stderr))
+    }
+
+    fn cli(&self, label: &str, args: &[&str], expected: i32) -> String {
+        let (code, stdout, stderr) = self.run(label, args);
+        assert_eq!(code, Some(expected), "{label}\n{stdout}\n{stderr}");
+        stdout
+    }
+
+    fn prepare(&self, label: &str) -> PathBuf {
+        let _guard = BUILDS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let output = self.root.join(format!("{label}.json"));
+        self.cli(
+            label,
+            &[
+                "plan",
+                self.source.to_str().unwrap(),
+                "--assembly",
+                "local",
+                "--for-apply",
+                "--state",
+                self.state.to_str().unwrap(),
+                "--out",
+                output.to_str().unwrap(),
+                "--target",
+                "rust",
+            ],
+            0,
+        );
+        output
+    }
+
+    fn apply_args<'a>(&'a self, plan: &'a Path) -> [&'a str; 4] {
+        [
+            "apply",
+            plan.to_str().unwrap(),
+            "--state",
+            self.state.to_str().unwrap(),
+        ]
+    }
+
+    fn apply(&self, label: &str, plan: &Path) -> Json {
+        let output = self.cli(label, &self.apply_args(plan), 0);
+        Json::parse(&output).unwrap_or_else(|reason| panic!("{label}: {reason}\n{output}"))
+    }
+
+    /// An apply the host does not complete: its exit code.
+    fn apply_fails(&self, label: &str, plan: &Path) -> (Option<i32>, String) {
+        let (code, _, stderr) = self.run(label, &self.apply_args(plan));
+        assert_ne!(code, Some(0), "{label} must not complete: {stderr}");
+        (code, stderr)
+    }
+
+    fn inspect(&self) -> Json {
+        ignite::apply::inspect(&self.state, None).expect("inspect")
+    }
+
+    /// The journal's records of `kind`.
+    fn journal(&self, kind: &str) -> Vec<Json> {
+        read(&self.state.join("host-journal.jsonl"))
+            .lines()
+            .filter_map(|line| Json::parse(line).ok())
+            .filter(|record| record.get("kind").and_then(Json::as_str) == Some(kind))
+            .filter_map(|record| record.get("value").cloned())
+            .collect()
+    }
+
+    /// The `revisionRecord`s of `operation` whose run record is an effect
+    /// of `variant` or an event of `variant`.
+    fn run_records(&self, operation: &str, kind: &str, variant: &str) -> usize {
+        self.journal("revisionRecord")
+            .iter()
+            .filter(|value| value.get("operationId").and_then(Json::as_str) == Some(operation))
+            .filter_map(|value| value.get("record"))
+            .filter(|record| record.get("kind").and_then(Json::as_str) == Some(kind))
+            .filter(|record| {
+                let value = record.get("value");
+                let found = match kind {
+                    "effect" => value.and_then(|v| v.get("variant")),
+                    _ => value
+                        .and_then(|v| v.get("fields"))
+                        .and_then(|f| f.get("kind"))
+                        .and_then(|k| k.get("variant")),
+                };
+                found.and_then(Json::as_str) == Some(variant)
+            })
+            .count()
+    }
+
+    /// Every live process whose executable is `name` in this state's
+    /// generations.
+    fn servers(&self, name: &str) -> Vec<i64> {
+        let generations = self.state.join("revisions");
+        let mut found: Vec<i64> = fs::read_dir("/proc")
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                let pid = entry.file_name().to_string_lossy().parse().ok()?;
+                let stat = fs::read_to_string(entry.path().join("stat")).ok()?;
+                let state = stat.rsplit_once(") ")?.1.split_whitespace().next()?;
+                if matches!(state, "Z" | "X") {
+                    return None;
+                }
+                let executable = fs::read_link(entry.path().join("exe")).ok()?;
+                (executable.starts_with(&generations)
+                    && executable
+                        .file_name()
+                        .is_some_and(|file| file.to_string_lossy().starts_with(name)))
+                .then_some(pid)
+            })
+            .collect();
+        found.sort();
+        found
+    }
+}
+
+fn plan_of(path: &Path) -> ignite::apply::plan::Plan {
+    ignite::apply::plan::Plan::parse(&Json::parse(&read(path)).unwrap()).unwrap()
+}
+
+fn server_name(plan: &ignite::apply::plan::Plan) -> String {
+    plan.artifacts
+        .get("Terminal.server")
+        .expect("server artifact")
+        .name
+        .clone()
+}
+
+/// The one owned, ready server of a converged status at `revision`.
+fn converged(status: &Json, revision: i64) -> Option<i64> {
+    let owned = status.get("ownership").and_then(Json::as_object)?;
+    let ready = owned.len() == 1
+        && owned
+            .values()
+            .all(|owner| owner.get("ready").and_then(Json::as_bool) == Some(true));
+    (ready
+        && status.get("committedRevision").and_then(Json::as_i64) == Some(revision)
+        && status.get("activeOperation") == Some(&Json::Null))
+    .then(|| owned.values().next()?.get("pid").and_then(Json::as_i64))
+    .flatten()
+}
+
+fn await_converged(flow: &Flow, host: &Host, revision: i64) -> i64 {
+    let mut pid = None;
+    until(
+        "convergence",
+        || {
+            pid = converged(&flow.inspect(), revision);
+            pid.is_some()
+        },
+        || format!("{:?}\n{}", flow.inspect(), read(&host.stderr)),
+    );
+    pid.unwrap()
+}
+
+/// Send `status` to the terminal on `port` and return the reply.
+fn terminal_status(port: u16) -> String {
+    let mut stream = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), LIVE_TIMEOUT)
+        .expect("connect to the applied server");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let prompt = |stream: &mut TcpStream| {
+        let deadline = Instant::now() + LIVE_TIMEOUT;
+        let mut received = Vec::new();
+        while !received.ends_with(b"terminal> ") {
+            assert!(Instant::now() < deadline, "prompt deadline: {received:?}");
+            let mut bytes = [0; 1024];
+            let count = stream.read(&mut bytes).expect("read the terminal");
+            assert!(count > 0, "server closed before prompt: {received:?}");
+            received.extend_from_slice(&bytes[..count]);
+        }
+        String::from_utf8_lossy(&received).into_owned()
+    };
+    prompt(&mut stream);
+    stream.write_all(b"status\r\n").unwrap();
+    let reply = prompt(&mut stream);
+    let _ = stream.write_all(b"quit\r\n");
+    reply
+}
+
+/// Rows 10 and 11: a host that crashes after durable acceptance, after an
+/// effect intent and after its dispatch is restarted each time; a process
+/// of the owned generation the journal cannot account for blocks recovery as
+/// `outcome_unknown`, is neither signalled nor adopted, and once it ended a
+/// `status` resumes the operation, which completes with one server. Every
+/// retry attaches to the one operation.
+#[test]
+fn crash_after_intent_before_dispatch_yields_one_server_or_outcome_unknown() {
+    let flow = Flow::new("intent");
+    let mut host = Host::start(&flow, "after-intent", &[(FAULT, "after_intent")]);
+    let saved = flow.prepare("first");
+    let plan = plan_of(&saved);
+    let name = server_name(&plan);
+    flow.apply_fails("apply-crashes-after-intent", &saved);
+    host.crashed("after_intent");
+    let journaled = flow.journal("state").pop().unwrap();
+    assert_eq!(
+        journaled.get("activeOperation").and_then(Json::as_str),
+        Some(plan.id.as_str()),
+        "acceptance was durable before the crash: {journaled:?}"
+    );
+    assert_eq!(flow.run_records(&plan.id, "effect", "Spawn"), 0);
+    assert!(flow.servers(&name).is_empty());
+
+    let mut host = Host::spawn(&flow, "before-dispatch", &[(FAULT, "before_dispatch")]);
+    host.crashed("before_dispatch");
+    assert_eq!(flow.run_records(&plan.id, "effect", "Spawn"), 1);
+    assert_eq!(flow.run_records(&plan.id, "event", "Started"), 0);
+    assert!(
+        flow.servers(&name).is_empty(),
+        "the intent was not dispatched"
+    );
+
+    let mut host = Host::spawn(&flow, "after-dispatch", &[(FAULT, "after_dispatch")]);
+    host.crashed("after_dispatch");
+    assert_eq!(flow.run_records(&plan.id, "effect", "Spawn"), 2);
+    assert_eq!(flow.run_records(&plan.id, "event", "Started"), 0);
+    until(
+        "the dispatched child ends with its host (parent-death rule)",
+        || flow.servers(&name).is_empty(),
+        || format!("{:?}", flow.servers(&name)),
+    );
+    let reconciled = flow.journal("reconciled");
+    assert!(
+        reconciled.iter().any(|value| value
+            .get("intents")
+            .and_then(Json::as_array)
+            .is_some_and(|intents| !intents.is_empty())),
+        "the undispatched intent was reconciled: {reconciled:?}"
+    );
+
+    // A process of the owned generation that no record accounts for: the
+    // host cannot prove it is the dispatched instance or a foreign one.
+    let generation = fs::read_dir(flow.state.join("revisions"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path().join("bin/1").join(&name))
+        .find(|path| path.is_file())
+        .expect("a generation executable");
+    let unproven_port = free_port();
+    let mut unproven = Owned(
+        Command::new(&generation)
+            .args(["--port", &unproven_port.to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let unproven_pid = i64::from(unproven.0.id());
+    until(
+        "the unproven process runs from the generation",
+        || flow.servers(&name) == vec![unproven_pid],
+        || format!("{:?}", flow.servers(&name)),
+    );
+
+    let mut host = Host::start(&flow, "unknown", &[]);
+    let status = flow.inspect();
+    assert_eq!(
+        status.get("recoveryReason").and_then(Json::as_str),
+        Some("outcome_unknown"),
+        "{status:?}"
+    );
+    let evidence = status
+        .get("recovery")
+        .and_then(|recovery| recovery.get("evidence"))
+        .map(Json::compact)
+        .unwrap_or_default();
+    assert!(
+        evidence.contains(&unproven_pid.to_string()),
+        "the evidence names the unproven process: {status:?}"
+    );
+    assert_eq!(
+        status
+            .get("ownership")
+            .and_then(Json::as_object)
+            .map(|owned| owned.len()),
+        Some(0)
+    );
+    let (code, _) = flow.apply_fails("retry-while-unknown", &saved);
+    assert_eq!(code, Some(1), "an unknown outcome blocks the operation");
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(
+        unproven.0.try_wait().unwrap().is_none(),
+        "an unproven process is never signalled"
+    );
+    assert_eq!(
+        flow.servers(&name),
+        vec![unproven_pid],
+        "no duplicate spawn"
+    );
+
+    unproven.0.kill().unwrap();
+    unproven.0.wait().unwrap();
+    host.line("status");
+    let pid = await_converged(&flow, &host, 1);
+    let receipt = flow.apply("retry-after-recovery", &saved);
+    assert_eq!(
+        receipt.get("operationId").and_then(Json::as_str),
+        Some(plan.id.as_str())
+    );
+    assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(1));
+    assert_eq!(
+        receipt.get("state").and_then(Json::as_str),
+        Some("completed")
+    );
+    assert_eq!(flow.servers(&name), vec![pid], "exactly one server");
+    assert!(terminal_status(flow.port).contains("ready"));
+    host.stop();
+}
+
+/// Change the console's `status` reply, which replaces the server without
+/// changing the model.
+fn change_command_body(flow: &Flow) {
+    let commands = flow.source.parent().unwrap().join("commands.ignite");
+    let original = read(&commands);
+    let before = "Status => Reply { lines = [\"ready\"] }";
+    assert!(original.contains(before), "terminal fixture commands");
+    fs::write(
+        &commands,
+        original.replace(
+            before,
+            "Status => Reply { lines = [\"replacement-ready\"] }",
+        ),
+    )
+    .unwrap();
+}
+
+/// Rows 11 and 12: a host that crashes after journaling a transition step,
+/// before its effects ran, is restarted and drives the desired revision to
+/// one ready server; a later restart whose listener port a foreign process
+/// holds neither signals nor adopts it and blocks as `foreign_listener`
+/// until a `status` finds the port free.
+#[test]
+fn crash_mid_transition_resumes_once_and_a_foreign_listener_is_never_adopted() {
+    let flow = Flow::new("transition");
+    let mut host = Host::start(&flow, "first", &[]);
+    let first = flow.prepare("first");
+    let name = server_name(&plan_of(&first));
+    flow.apply("first-apply", &first);
+    let old = await_converged(&flow, &host, 1);
+    host.stop();
+
+    change_command_body(&flow);
+    let mut host = Host::start(&flow, "mid-transition", &[(FAULT, "mid_transition")]);
+    await_converged(&flow, &host, 1);
+    let replacement = flow.prepare("replacement");
+    let plan = plan_of(&replacement);
+    let steps = flow.journal("transition").len();
+    flow.apply_fails("apply-crashes-mid-transition", &replacement);
+    host.crashed("mid_transition");
+    assert_eq!(
+        flow.journal("transition").len(),
+        steps + 1,
+        "the crash follows the first journaled step"
+    );
+    until(
+        "the committed instance ends with its host",
+        || flow.servers(&name).is_empty(),
+        || format!("{:?}", flow.servers(&name)),
+    );
+
+    let mut host = Host::start(&flow, "resumed", &[]);
+    let pid = await_converged(&flow, &host, 2);
+    assert_ne!(pid, old);
+    assert_eq!(flow.servers(&name), vec![pid], "one server generation");
+    assert!(terminal_status(flow.port).contains("replacement-ready"));
+    let receipt = flow.apply("retry-after-resume", &replacement);
+    assert_eq!(
+        receipt.get("operationId").and_then(Json::as_str),
+        Some(plan.id.as_str())
+    );
+    assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(2));
+    host.stop();
+
+    let foreign = TcpListener::bind(("127.0.0.1", flow.port)).expect("a foreign listener");
+    let mut host = Host::start(&flow, "foreign", &[]);
+    let status = flow.inspect();
+    assert_eq!(
+        status.get("recoveryReason").and_then(Json::as_str),
+        Some("foreign_listener"),
+        "{status:?}"
+    );
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(flow.servers(&name).is_empty(), "nothing started or adopted");
+    assert_eq!(
+        foreign.local_addr().unwrap().port(),
+        flow.port,
+        "the foreign listener is untouched"
+    );
+    drop(foreign);
+    host.line("status");
+    let pid = await_converged(&flow, &host, 2);
+    assert_eq!(flow.servers(&name), vec![pid]);
+    assert!(terminal_status(flow.port).contains("replacement-ready"));
+    host.stop();
+}
+
+/// Row 13: a journal sync that fails, of the acceptance or of an effect
+/// intent, stops the host before the operation it records goes on; no
+/// effect runs, and the next host recovers from the synced journal.
+#[test]
+fn a_failed_journal_sync_stops_the_host_before_any_dependent_effect() {
+    let flow = Flow::new("sync");
+    let mut host = Host::start(&flow, "sync-intent", &[(FAULT, "sync_intent")]);
+    let saved = flow.prepare("first");
+    let plan = plan_of(&saved);
+    let name = server_name(&plan);
+    let (code, _) = flow.apply_fails("apply-intent-not-durable", &saved);
+    assert_eq!(code, Some(3), "a storage failure is exit 3");
+    let ended = host.ended();
+    assert_eq!(ended.code(), Some(3), "{}", read(&host.stderr));
+    assert!(
+        read(&host.stderr).contains("not durable"),
+        "{}",
+        read(&host.stderr)
+    );
+    assert!(
+        flow.journal("state")
+            .iter()
+            .all(|state| state.get("activeOperation").and_then(Json::as_str) != Some(&plan.id)),
+        "the acceptance whose sync failed is not in the journal"
+    );
+
+    let mut host = Host::start(&flow, "sync-effect", &[(FAULT, "sync_effect")]);
+    let (code, _) = flow.apply_fails("apply-effect-not-durable", &saved);
+    assert_ne!(code, Some(0));
+    let ended = host.ended();
+    assert_eq!(ended.code(), Some(3), "{}", read(&host.stderr));
+    assert!(
+        read(&host.stderr).contains("not durable"),
+        "{}",
+        read(&host.stderr)
+    );
+    assert_eq!(
+        flow.run_records(&plan.id, "effect", "Spawn"),
+        0,
+        "the intent whose sync failed is not in the journal"
+    );
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(
+        flow.servers(&name).is_empty(),
+        "the effect was not dispatched"
+    );
+
+    let mut host = Host::start(&flow, "recovered", &[]);
+    let pid = await_converged(&flow, &host, 1);
+    let receipt = flow.apply("retry-after-storage-failure", &saved);
+    assert_eq!(
+        receipt.get("operationId").and_then(Json::as_str),
+        Some(plan.id.as_str())
+    );
+    assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(1));
+    assert_eq!(flow.servers(&name), vec![pid]);
+    host.stop();
+}
+
+/// Decision D2 and row 14: a host whose reducer revision differs from the
+/// committed revision's starts, re-steps no segment of that history, drives
+/// nothing, and reports `reducer_revision_changed` with the next action
+/// "replan and apply"; the replanned apply starts the members afresh, and a
+/// host of the same reducer revision re-steps every segment again.
+#[test]
+fn a_changed_reducer_revision_starts_the_host_without_driving_and_asks_to_replan() {
+    let flow = Flow::new("reducer");
+    let mut host = Host::start(&flow, "first", &[]);
+    let first = flow.prepare("first");
+    let name = server_name(&plan_of(&first));
+    flow.apply("first-apply", &first);
+    await_converged(&flow, &host, 1);
+    host.stop();
+
+    let mut host = Host::start(
+        &flow,
+        "changed-reducer",
+        &[(
+            "IGNITE_DEBUG_HOST_REDUCER_REVISION",
+            "sha256:another-reducer",
+        )],
+    );
+    let status = flow.inspect();
+    assert_eq!(
+        status.get("recoveryReason").and_then(Json::as_str),
+        Some("reducer_revision_changed"),
+        "{status:?}"
+    );
+    let recovery = status.get("recovery").expect("recovery");
+    assert_eq!(
+        recovery.get("state").and_then(Json::as_str),
+        Some("recovery_required")
+    );
+    assert_eq!(
+        recovery.get("nextAction").and_then(Json::as_str),
+        Some("replan and apply")
+    );
+    let history = status.get("history").and_then(Json::as_array).unwrap();
+    assert!(
+        !history.is_empty()
+            && history
+                .iter()
+                .all(|entry| entry.get("restepped") == Some(&Json::Bool(false))),
+        "{history:?}"
+    );
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(flow.servers(&name).is_empty(), "the revision is not driven");
+    assert_eq!(
+        status
+            .get("ownership")
+            .and_then(Json::as_object)
+            .map(|owned| owned.len()),
+        Some(0)
+    );
+
+    change_command_body(&flow);
+    let replanned = flow.prepare("replanned");
+    let receipt = flow.apply("replanned-apply", &replanned);
+    assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(2));
+    let pid = await_converged(&flow, &host, 2);
+    assert_eq!(flow.servers(&name), vec![pid]);
+    assert_eq!(flow.inspect().get("recoveryReason"), Some(&Json::Null));
+    host.stop();
+
+    let mut host = Host::start(&flow, "same-reducer", &[]);
+    await_converged(&flow, &host, 2);
+    let status = flow.inspect();
+    let history = status.get("history").and_then(Json::as_array).unwrap();
+    assert!(
+        history
+            .iter()
+            .filter(|entry| entry.get("planId").and_then(Json::as_str).is_some())
+            .all(|entry| entry.get("restepped") == Some(&Json::Bool(true))),
+        "{history:?}"
+    );
+    assert!(terminal_status(flow.port).contains("replacement-ready"));
+    host.stop();
+}
