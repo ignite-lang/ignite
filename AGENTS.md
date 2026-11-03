@@ -21,6 +21,7 @@ the IO substrate (Rust) that compiled programs link.
 | `crates/ignite/src/run/` | the driver of `ignite run` and `ignite replay` (`docs/slice.md` 16.3): `engine` steps the `std.control` reducers in `ignite-eval`, `live` runs the adapters `process`, `probe`, `clock` and `control` that turn effects into processes, attempts, timers and stdin commands and feed events back, `journal` records every event, effect, signal, standing and consequence (16.5), `replay` re-steps a journal and compares (E127) |
 | `crates/ignite/src/apply/` | the local host and source-bound saved plans (`docs/slice.md` 17): `plan` owns input/artifact identities and action manifests, `host` owns the state lock, socket queue, durable receipts and host journal, `revision` owns retained source/type/model contexts and calls the existing `run` driver; implementation-only server replacements use `std.control`'s existing rollout through a pinned artifact builder |
 | `crates/ignite-load/` | `ignite-load`: load generator for `terminald` (workloads `rr`, `pipe`, `connect`; `ignite-load matrix` for `task bench-throughput`); not linked into compiled programs |
+| `tools/ignite-perf/` | `ignite-perf`: the performance budget harness (modes `self-check`, `recover-baseline`, `smoke`, `prepare`, `cold`, `warm`, `programs`, `cli`, `all`, `summarize`; records `ignite-performance/1`, `docs/performance/README.md`) and `verify-llvm-readiness`; replaced `scripts/*.py`; not linked into compiled programs |
 | `std/` | standard library in Ignite; module `std.a.b` is `std/a/b.ignite` |
 | `std/console.ignite` | `Console`, `Reply`, `Action`: a line-oriented console application, independent of the protocol that carries it; `CommandConsole` (the declared form: `implementation: Module<ConsoleCommands>`, `command_schema`), `console_of`, `command_names` |
 | `std/text.ignite` | text operations called by UFCS (`split`, `contains`, `to_lower`, `is_digit`, …) |
@@ -81,7 +82,7 @@ Rules of the layout:
 | run a system in the foreground | `target/debug/ignite run FILE [--assembly NAME] [--state DIR] [--build DIR] [--target rust\|llvm] [--release] [--clock real\|manual] [--epoch RFC3339] [--port RESOURCE=PORT] [--json] [--fresh]` (`docs/slice.md` 16.3; stdin takes `status`, `rollout <member>`, `stop`, `advance <quantity>`; state defaults to `target/ignite-run/<assembly>/`; exit 0 on a requested stop, 1 when a machine gave up, 2 on a diagnostic; `--fuel N` bounds each reducer step only, the plan inside `run` and `replay` keeps the default fuel) |
 | replay a run's journal | `target/debug/ignite replay FILE [--assembly NAME] [--state DIR]` (re-steps the reducers over the journaled events, compares every effect and standing record, E127, prints the final standings) |
 | host a state directory | `target/debug/ignite host --state DIR` (`docs/slice.md` 17; owns the state lock and the control socket until stopped; exit 2 when another host or run holds the state, 3 on a host or storage failure) |
-| save a plan for apply | `target/debug/ignite plan FILE --for-apply [--assembly NAME] [--target rust\|llvm] [--release] [--runtime ARCHIVE] --out PLAN` (source-bound plan, `ignite-apply-plan/0.1`) |
+| save a plan for apply | `target/debug/ignite plan FILE --for-apply --state DIR [--assembly NAME] [--target rust\|llvm] [--release] [--runtime ARCHIVE] --out PLAN` (needs the running `ignite host` of DIR, exit 3 without one; source-bound plan, `ignite-apply-plan/0.1`) |
 | apply a saved plan | `target/debug/ignite apply --state DIR PLAN` (waits for completion; exit 0 completed, 1 failed or recovery required, 2 rejected, 3 host or storage failure) |
 | inspect a host | `target/debug/ignite inspect --state DIR [--operation ID] [--json]` (live status, or the durable snapshot labelled offline) |
 
@@ -394,7 +395,7 @@ cold comparison against each baseline meets the start-load rule and has no faile
   syscall-traced HTTP failures are diagnostic interference, not readiness evidence.
 
 - No comments in `Cargo.toml`, `Taskfile.yml` or any other config file.
-- Tooling, checks and scripts are Rust (Timo, 2026-11-02): a `#[test]` in the crate that owns the rule, or a Rust binary. No new Python; Bash only for one-line invocations in `Taskfile.yml`. `scripts/*.py` are being ported (`story:rust-tooling`); scripts under `docs/performance/` are recorded evidence and stay as they are.
+- Tooling, checks and scripts are Rust (Timo, 2026-11-02): a `#[test]` in the crate that owns the rule, or a Rust binary. No new Python; Bash only for one-line invocations in `Taskfile.yml`. The former `scripts/*.py` are `tools/ignite-perf` and the serial `cargo fmt --all -- --check` of `task check` (`story:rust-tooling`); scripts under `docs/performance/` are recorded evidence and stay as they are.
 - Commit titles follow Conventional Commits: `type(scope): summary` with `type` one of `feat`,
   `fix`, `perf`, `docs`, `test`, `refactor`, `chore`, `build`, `ci`; the scope is optional. Every
   commit has a body: a blank line after the title, then bullets on what changed and why.

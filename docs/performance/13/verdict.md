@@ -1,7 +1,7 @@
 # Gate-time budget (invariant 9): verdict B, not reachable without changing the gate
 
-Budget: every required unit ≤1.10 × frozen 11b (`scripts/performance.py:147`, `:454`), warm
-`cargo test --workspace` ≤10.8 s (`scripts/performance.py:464`, `docs/performance-plan.md:24,32`).
+Budget: every required unit ≤1.10 × frozen 11b (`within_budget` and `required_units` in `tools/ignite-perf/src/perf.rs`, formerly `scripts/performance.py:147`, `:454`), warm
+`cargo test --workspace` ≤10.8 s (`summarize_rows` there, formerly `scripts/performance.py:464`, `docs/performance-plan.md:24,32`).
 Sources are main at 8a71252 and branch `feat/slice13-local-apply` (bb783b3). No builds were run.
 Abbreviations: REL = `docs/performance/12c/release-815cf74/`, REC = `REL/records.jsonl`.
 
@@ -50,7 +50,7 @@ Abbreviations: REL = `docs/performance/12c/release-815cf74/`, REC = `REL/records
 | live tier (`apply*`, run by `task gate` as its own step) | ≤360 s wall now; ≤120 s after the mutex covers builds only | 343.66 s measured; 120 s is inferred (D2), measure after the fix |
 | cold gate | ≤1.10 × 11b for the fast tier | never collected at release (REL `README.md:35-37`); no evidence to move it |
 
-Re-measure M5 at low load with `scripts/performance.py` once the build slot is free. Every slice-13 number here is from unit reports at load 8 to 33.
+Re-measure M5 at low load with `ignite-perf` (`docs/performance/README.md`) once the build slot is free. Every slice-13 number here is from unit reports at load 8 to 33.
 
 ## At the close (2026-11-03)
 

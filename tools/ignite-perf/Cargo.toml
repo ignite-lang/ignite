@@ -1,0 +1,26 @@
+[package]
+name = "ignite-perf"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Performance budget harness and LLVM readiness verifier of the Ignite repository; never linked into compiled programs."
+autotests = false
+
+[lib]
+test = false
+bench = false
+
+[[bin]]
+name = "ignite-perf"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+clap.workspace = true
+sha2 = "0.10"
+nix = { workspace = true, features = ["fs", "signal"] }
+
+[[test]]
+name = "main"
+path = "tests/main.rs"

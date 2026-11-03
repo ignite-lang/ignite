@@ -223,6 +223,15 @@ name = "ignite-load"
 version = "0.2.0"
 
 [[package]]
+name = "ignite-perf"
+version = "0.2.0"
+dependencies = [
+ "clap",
+ "nix",
+ "sha2",
+]
+
+[[package]]
 name = "ignite-rt"
 version = "0.2.0"
 dependencies = [

@@ -43,7 +43,7 @@ tasks:
   check:
     desc: Format check and clippy with warnings denied
     cmds:
-      - python3 scripts/check-format.py
+      - cargo fmt --all -- --check
       - cargo clippy --workspace --all-targets -- -D warnings
 
   fmt:

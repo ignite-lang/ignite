@@ -1,8 +1,11 @@
 # Reproducing the performance budget
 
-The executable entry point is `scripts/performance.py` (Python standard library only).
-It exports immutable Git archives to a source root, uses a separate owned build root, and
-writes records/logs outside disposable caches. It never modifies the caller's checkout or
+The executable entry point is `ignite-perf` (crate `tools/ignite-perf`, run as
+`cargo run -q -p ignite-perf -- <mode> …`). It replaced `scripts/performance.py` with the
+same modes, flags and record fields, and writes the same JSON bytes, so records of both
+harnesses compare line by line (its tests rebuild `12c/release-815cf74/records.jsonl` and
+`summary.json` from the retained logs). It exports the immutable committed trees to a
+source root, uses a separate owned build root, and writes records/logs outside disposable caches. It never modifies the caller's checkout or
 Git index. All commands are sequential; coordinate with other build owners on a shared host.
 
 ## Frozen sources
@@ -23,7 +26,7 @@ A fresh clone can fetch the benchmark reference with:
 
 ```bash
 git fetch origin refs/heads/bench/11b-recovered:refs/remotes/origin/bench/11b-recovered
-python3 scripts/performance.py self-check
+cargo run -q -p ignite-perf -- self-check
 ```
 
 ## Running
@@ -31,7 +34,7 @@ python3 scripts/performance.py self-check
 Use three distinct, non-nested absolute directories outside the checkout. Example:
 
 ```bash
-python3 scripts/performance.py smoke \
+cargo run -q -p ignite-perf -- smoke \
   --baseline origin/bench/11b-recovered --candidate HEAD --comparison 9273349 \
   --sources /home/timo/.cache/scratch/ignite-perf12c/sources \
   --builds /home/timo/.cache/scratch/ignite-perf12c/builds \
@@ -66,15 +69,13 @@ index/cache-admission delays while preserving fresh target builds and `SCCACHE_R
 Missing dependencies still fail the command. Fetching dependencies is setup, never a timed
 compiler gain. Preserve earlier failed online batches; do not mix online and offline samples.
 
-The candidate's format unit runs `python3 scripts/check-format.py` when that committed entry
-point exists. It checks the complete workspace in at most four whole-package CargoFmt groups;
-CargoFmt still discovers every target and recursive module with the same edition, config,
-toolchain, inherited environment and `-- --check` flags. All groups finish, failure output is
-reported in deterministic group order, and success is silent. Local path dependencies outside
-the workspace fall back to the original serial `cargo fmt --all -- --check`. `task check` uses
-the same full-scope entry point; the writing `task fmt` remains unchanged. Baseline and published
-comparison format units always run their original serial command, and each harness row records
-the actual command used. This changes workflow scheduling, never the checked sources, compiler
+The format unit runs the serial `cargo fmt --all -- --check`, which is also what `task check`
+runs. A frozen candidate source that still carries `scripts/check-format.py` (sources before
+the Rust port, such as `815cf74`) runs that committed entry point instead, so its candidate
+format unit stays comparable with the records taken of it: it checked the complete workspace
+in at most four whole-package CargoFmt groups, with the same discovery, edition, config,
+toolchain, environment and `-- --check` flags. Baseline and published comparison format units
+always run their original serial command, and each harness row records the actual command used. This changes workflow scheduling, never the checked sources, compiler
 profile, required units or acceptance budgets. The prototype's exact root coverage, isolated
 nested-module failure parity and three timing pairs (including metadata/Python startup) are
 retained in `12c/attribution/format-parallel-d8a9cb7/`; those diagnostics do not establish final
@@ -110,8 +111,16 @@ limits above two warm passes/one cold pair force `accepted=false` even if timing
 
 The harness records tool versions, environment, exact source commits/hashes, per-command
 loads/times/exits/test counts, source integrity, and copied real-clock restart journals.
-Each capture records the executing harness SHA256 and retains that exact Python source in
-`evidence/harness/`, so criteria refinements are auditable even when production code is unchanged.
+Each capture records the executing harness SHA256 and retains that exact source in
+`evidence/harness/`, so criteria refinements are auditable even when production code is unchanged:
+for `ignite-perf` the SHA256 is of its source bundle (every file of `tools/ignite-perf/src` and
+its `Cargo.toml`, compiled into the binary), kept as `evidence/harness/<sha>.rs`; captures of the
+Python harness kept `<sha>.py`.
+
+The LLVM readiness check of a frozen candidate (`12c/readiness-c6b22cf/`) is
+`cargo run -q -p ignite-perf -- verify-llvm-readiness --cli … --repo … --runtime … --work …
+--candidate … --source-manifest …`, the former `scripts/verify-llvm-readiness.py` with the
+same flags, scenarios and `report.json` fields; its tests replay the retained c6b22cf runs.
 It refuses unknown build directories, changed source bytes, reused evidence for another
 configuration, and storage below the configured guard (20 GiB by default).
 
@@ -127,7 +136,7 @@ in the report; exact-final gate samples are labelled separately.
 The original recovery operation, if auditing another retained copy, is:
 
 ```bash
-python3 scripts/performance.py recover-baseline \
+cargo run -q -p ignite-perf -- recover-baseline \
   --source /path/to/s12-before --manifest /path/to/source-before.json \
   --evidence /path/to/recovery-evidence
 ```
