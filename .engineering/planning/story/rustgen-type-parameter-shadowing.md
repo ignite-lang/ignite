@@ -2,12 +2,19 @@
 format: aep.planning-md/3
 id: story:rustgen-type-parameter-shadowing
 kind: story
-status: draft
+status: proposed
 title: Generated Rust names a type parameter where a record of the same name is meant
 summary: A type parameter named like a record in scope breaks the generated Rust (turbofish and record literals)
 relations:
 - derived_from: epic:slice-14-protocols-p1
-revision: 1
+scope:
+- confidence: inferred
+  path: crates/ignite-rustgen/src
+- confidence: inferred
+  path: crates/ignite-rustgen/tests/golden.rs
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
 ---
 
 # Story: rustgen-type-parameter-shadowing
@@ -15,7 +22,7 @@ revision: 1
 ## Outcome
 
 A program in which a type parameter has the same name as a record or enum in scope builds on the
-Rust target, or is rejected by the checker with a diagnostic, instead of failing in `rustc`.
+Rust target, instead of failing in `rustc`.
 
 ## Context
 
@@ -30,7 +37,15 @@ left open on purpose:
   bd05809, before slice 14: the generator spells record and enum types by their bare name
   (`enum_name`, `rust_ty`) and does not know the enclosing fn's type parameters.
 
+## Scope
+
+- `crates/ignite-rustgen/src/` and `crates/ignite-rustgen/tests/golden.rs` only. No checker change,
+  no new diagnostic, no AST change.
+- Runs in slice-15 wave 1, before `story:slice-15-frontend`, which edits
+  `crates/ignite-rustgen/tests/units.rs` in the same test binary.
+
 ## Acceptance
 
-The ignored test passes without `#[ignore]`, and a record literal of a shadowed record builds too;
-or the checker reports the shadowing at the type parameter's declaration with a fixture.
+- `golden::bounded_turbofish_keeps_a_record_named_like_a_bound` passes without `#[ignore]`.
+- A new golden test with a record literal `S { .. }` inside `fn outer<S>` builds with `cargo build`.
+- `cargo test -p ignite-rustgen --test main` passes with no other golden changed.
