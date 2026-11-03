@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:slice-14-frontend
 kind: story
-status: active
+status: implemented
 title: Bounds, ByteStream and Pipe in the frontend
 summary: 'U1 of docs/slice.md 18.16: syntax, check and types for bounds, E096 and E099, placeholder arms'
 relations:
 - decomposes: epic:slice-14-protocols-p1
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T05:41:33Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-03T05:41:33Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-03T07:51:40Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 
 ## Scope

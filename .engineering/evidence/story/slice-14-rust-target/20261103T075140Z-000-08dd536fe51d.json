@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T07:51:40Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-14-rust-target",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p ignite-rustgen --test main: 85 passed, 2 ignored at 6b46228; task gate on 65d6cd3 exit 0, 819 cargo tests passed",
+    "reference": "https://github.com/ignite-lang/ignite/pull/4"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T07:51:40Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-14-frontend",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p ignite-syntax -p ignite-check -p ignite-types: 148, 12, 43 passed at 43a5815; task gate on 65d6cd3 exit 0, 819 cargo tests passed",
+    "reference": "https://github.com/ignite-lang/ignite/pull/4"
+  }
+}

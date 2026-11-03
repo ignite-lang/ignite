@@ -2,17 +2,18 @@
 format: aep.planning-md/3
 id: story:slice-14-rust-target
 kind: story
-status: active
+status: implemented
 title: Bounded generics on the Rust target
 summary: 'U3 of docs/slice.md 18.16: rustgen arms, turbofish on bounded generics, CODEGEN_REVISION bump'
 relations:
 - decomposes: epic:slice-14-protocols-p1
 - depends_on: story:slice-14-frontend
 - depends_on: story:slice-14-substrate
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T05:41:33Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-03T05:41:33Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-03T07:51:40Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 
 ## Scope

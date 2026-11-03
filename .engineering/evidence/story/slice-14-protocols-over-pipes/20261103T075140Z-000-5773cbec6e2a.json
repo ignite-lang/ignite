@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T07:51:40Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-14-protocols-over-pipes",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "ignite test telnet, http, commands --target all: 37, 41, 4 passed per target at caf31fc; task gate on 65d6cd3 exit 0, 819 cargo tests passed, 191 inline per target",
+    "reference": "https://github.com/ignite-lang/ignite/pull/4"
+  }
+}

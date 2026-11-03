@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T07:51:40Z",
+  "actor": "human:timo",
+  "artifact": "epic:slice-14-protocols-p1",
+  "kind": "epic",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 65d6cd3 exit 0, 819 cargo tests passed, 6 ignored, 191 inline per target; merged 26b7586; released v0.3.0",
+    "reference": "https://github.com/ignite-lang/ignite/releases/tag/v0.3.0"
+  }
+}

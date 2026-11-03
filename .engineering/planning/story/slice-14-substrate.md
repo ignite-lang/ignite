@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:slice-14-substrate
 kind: story
-status: active
+status: implemented
 title: Pipe and ByteStream in the substrate and runtime ABI
 summary: 'U2 of docs/slice.md 18.16: ignite-io pipe.rs, ByteStream trait, ignite-rt pipe entries'
 relations:
 - decomposes: epic:slice-14-protocols-p1
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T05:41:33Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-03T05:41:33Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-03T07:51:40Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 
 ## Scope

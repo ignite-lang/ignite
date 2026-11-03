@@ -2,17 +2,18 @@
 format: aep.planning-md/3
 id: story:slice-14-protocols-over-pipes
 kind: story
-status: active
+status: implemented
 title: Telnet and Http over pipes, acceptance and records
 summary: 'U5 of docs/slice.md 18.16: std roles generic over the stream, pipe tests, goldens, gate time, docs'
 relations:
 - decomposes: epic:slice-14-protocols-p1
 - depends_on: story:slice-14-rust-target
 - depends_on: story:slice-14-llvm-target
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T05:41:34Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-03T05:41:34Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-03T07:51:40Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 
 ## Scope
