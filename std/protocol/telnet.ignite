@@ -257,8 +257,10 @@ type TelnetPrompt {
 // measure the latency from the start of the attempt, close if asked, and
 // print one line, the model encoding of the `ProbeAttempt` (15.4). A
 // refused or reset connection, a closed stream before the prompt and a
-// read past `timeout` are bad attempts (`received = false`). Exit 0 in
-// every case; the driver's deadline ends an attempt that hangs.
+// read past `timeout` are bad attempts (`received = false`) and exit 0.
+// No `--ref` binding for the target, a failed idle-timeout setting or a
+// failed write of the line exits 1; a malformed `--ref` exits 2 (16.9).
+// The driver's deadline ends an attempt that hangs.
 fn TelnetPrompt.main(self: TelnetPrompt) -> IoResult<Unit> {
   let started = Clock.monotonic()
   let endpoint = Endpoint.of(self.target)?
