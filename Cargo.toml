@@ -11,6 +11,7 @@ members = [
     "crates/ignite-llvm",
     "crates/ignite-load",
     "crates/ignite-eval",
+    "tools/ignite-perf",
 ]
 
 [workspace.package]
