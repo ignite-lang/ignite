@@ -2,12 +2,13 @@
 format: aep.planning-md/3
 id: epic:slice-15-protocols-p2
 kind: epic
-status: proposed
+status: active
 title: 'Slice 15, wave B protocols P2: RFC catalogues and the conformance matrix'
 summary: std/rfc catalogues, conforms/scope/satisfies/verifies and statuses, E090 to E092, ignite rfc import and check, ignite conformance (docs/protocols.md 3, P2 row)
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-03T16:07:58Z", actor: "human:timo", revision: 4, correlation: "slice-15-wave-1"}
 ---
 
 # Epic: slice-15-protocols-p2

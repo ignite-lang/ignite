@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:rustgen-type-parameter-shadowing
 kind: story
-status: proposed
+status: active
 title: Generated Rust names a type parameter where a record of the same name is meant
 summary: A type parameter named like a record in scope breaks the generated Rust (turbofish and record literals)
 relations:
@@ -12,9 +12,10 @@ scope:
   path: crates/ignite-rustgen/src
 - confidence: inferred
   path: crates/ignite-rustgen/tests/golden.rs
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-11-03T16:07:59Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":1}}, correlation: "slice-15-wave-1"}
 ---
 
 # Story: rustgen-type-parameter-shadowing

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-15-rfc-importer
 kind: story
-status: proposed
+status: active
 title: ignite rfc import and ignite rfc check
 summary: RFCXML to catalogue module, bcp14 extraction, digest check, offline
 relations:
@@ -22,9 +22,10 @@ scope:
   path: crates/ignite/tests/main.rs
 - confidence: inferred
   path: crates/ignite/tests/rfc.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-11-03T16:07:59Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":3}}, correlation: "slice-15-wave-1"}
 ---
 
 # Story: slice-15-rfc-importer

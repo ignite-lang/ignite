@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-15-claim-model
 kind: story
-status: proposed
+status: active
 title: Catalogue evaluation, the claim model and E090
 summary: Evaluator reads catalogue constants, computes requirements in scope and statuses, reports E090
 relations:
@@ -21,9 +21,10 @@ scope:
   path: crates/ignite/tests/fixtures/e092
 - confidence: inferred
   path: crates/ignite/tests/plan.rs
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"review_outcome":4}}}
+- {from: "proposed", to: "active", at: "2026-11-03T16:07:59Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"review_outcome":4}}, correlation: "slice-15-wave-1"}
 ---
 
 # Story: slice-15-claim-model
