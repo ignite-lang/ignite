@@ -1,0 +1,23 @@
+package tests.conformance.adversary_conforms_rfc855
+
+import std.net.TcpStream
+import std.io.IoError
+import std.rfc.rfc855.{RFC855}
+
+// U6's adversary, row 5 of 19.0 for a program that claims conformance of
+// its own protocol to a std catalogue: the import of `RFC855` is used by
+// the `conforms` clause only, and D2 says "Clauses are no expressions: no
+// backend reads them and no reachability walk starts at them".
+
+protocol Quiet conforms [RFC855] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    (stream.write_all(application("quiet").to_bytes()))?
+    return Ok(Unit)
+  }
+
+  not_applicable RFC855.RP1_2 "the fixture assigns no option code"
+  not_applicable RFC855.RP1_3 "the fixture assigns no option code"
+  not_applicable RFC855.RP2_1 "the fixture defines no option"
+  not_applicable RFC855.RP3_1 "the fixture defines no option"
+  not_applicable RFC855.RP3_2 "the fixture sends no subnegotiation"
+}

@@ -1135,3 +1135,276 @@ fn telnet_matrix_claims_rfc854_for_an_nvt_that_refuses_every_option() {
     }
     assert_eq!(outputs[0], outputs[1]);
 }
+
+// U6's adversary: the claims of `std/protocol/telnet.ignite` and
+// `http.ignite` against their RFC sentences, and rows 1 and 5 of 19.0 at
+// their edges.
+
+/// `ignite test <fixture> [filter] --target <target>`, its builds under
+/// `tmp`, the Rust builds in the shared cargo target directory.
+fn adversary_inline(name: &str, filter: Option<&str>, target: &str) -> Output {
+    let _guard = BUILDS.lock().unwrap_or_else(|e| e.into_inner());
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
+    command.arg("test").arg(fixture(name));
+    if let Some(filter) = filter {
+        command.arg(filter);
+    }
+    command
+        .args(["--target", target, "--out"])
+        .arg(tmp(&format!("inline-{name}-{target}")));
+    if target == "rust" {
+        command.arg("--target-dir").arg(tmp("cargo"));
+    } else {
+        command.arg("--runtime").arg(common::runner_archive());
+    }
+    command.output().expect("run ignite test")
+}
+
+/// The inline test `test` of fixture `name` passes on both targets.
+fn assert_inline_passes(name: &str, test: &str) {
+    let line = format!("test tests.conformance.{name}/{test} ... ok\n");
+    let mut failed = Vec::new();
+    for target in ["rust", "llvm"] {
+        let output = adversary_inline(name, Some(test), target);
+        let stdout = text(&output.stdout);
+        if !stdout.contains(&line) || output.status.code() != Some(0) {
+            failed.push(format!(
+                "{target}: exit {:?}\n{stdout}{}",
+                output.status.code(),
+                text(&output.stderr)
+            ));
+        }
+    }
+    assert!(failed.is_empty(), "{}", failed.join("\n"));
+}
+
+/// RFC 854 p11, `RFC854.RP11_3`, and p14, `RP14_1`, which `render`,
+/// `encode_input`, `answer_line` and `session` claim: a reply line with a
+/// bare CR, a bare LF and the text made of the byte 255, and the prompt
+/// `"\r>\n"` both before and after a reply, reach the client as CR NUL and
+/// CR LF, with no byte 255, on both targets. U6's own pipe test closes on
+/// its first line, so the prompt that `answer_line` sends after a reply is
+/// covered only here.
+#[test]
+fn adversary_telnet_replies_and_prompts_are_nvt_data_on_both_targets() {
+    assert_inline_passes(
+        "adversary_std_telnet",
+        "adversary: replies and the prompt after a reply are NVT data",
+    );
+}
+
+/// `source` with `requirement` removed from every `<word> [..]` clause,
+/// and a clause it leaves empty deleted with the space before it; the
+/// number of clauses that named it.
+fn adversary_without(source: &str, word: &str, requirement: &str) -> (String, usize) {
+    let opening = format!(" {word} [");
+    let mut out = String::new();
+    let mut rest = source;
+    let mut removed = 0;
+    while let Some(at) = rest.find(&opening) {
+        let open = at + opening.len();
+        let close = open + rest[open..].find(']').expect("a closed clause");
+        let entries: Vec<&str> = rest[open..close]
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+            .collect();
+        let kept: Vec<&str> = entries
+            .iter()
+            .copied()
+            .filter(|entry| *entry != requirement)
+            .collect();
+        if kept.len() == entries.len() {
+            out.push_str(&rest[..=close]);
+        } else {
+            removed += 1;
+            out.push_str(&rest[..at]);
+            if !kept.is_empty() {
+                out.push_str(&format!("{opening}{}]", kept.join(", ")));
+            }
+        }
+        rest = &rest[close + 1..];
+    }
+    out.push_str(rest);
+    (out, removed)
+}
+
+/// Row 1 of 19.0 at its edges. 19.7: the E090 message is "requirement
+/// `RFC9112.R7_1_2` (MUST, section 7.1) is in scope of `Http` and has no
+/// status; add `satisfies`, `unsupported` or `not_applicable`", at "the
+/// spec's entry in P's `conforms`". With `RFC854.RP14_1` gone from every
+/// `satisfies`, and then also from every `verifies`, stderr is that one
+/// line at the `RFC854` of `protocol Telnet conforms [RFC854, RFC855]`.
+#[test]
+fn adversary_row1_e090_is_the_contract_line_at_the_conforms_entry() {
+    let std = tmp("adversary-row1-std");
+    copy_tree(&repository().join("std"), &std);
+    let telnet = std.join("protocol/telnet.ignite");
+    let source = std::fs::read_to_string(&telnet).unwrap();
+    let (line, column) = source
+        .lines()
+        .enumerate()
+        .find_map(|(i, line)| {
+            line.strip_prefix("protocol Telnet conforms [")
+                .map(|_| (i + 1, "protocol Telnet conforms [".len() + 1))
+        })
+        .expect("the conforms line of Telnet");
+    let want = format!(
+        "{}:{line}:{column}: error[E090]: requirement `RFC854.RP14_1` (MUST, section p14) is in scope of `Telnet` and has no status; add `satisfies`, `unsupported` or `not_applicable`\n",
+        telnet.display()
+    );
+
+    let (satisfied_nowhere, removed) = adversary_without(&source, "satisfies", "RFC854.RP14_1");
+    assert_eq!(removed, 3, "decode_within, render and encode_input");
+    std::fs::write(&telnet, &satisfied_nowhere).unwrap();
+    let output = check_with_std(&std, &telnet);
+    assert_eq!(text(&output.stderr), want);
+    assert_eq!(text(&output.stdout), "");
+    assert_eq!(output.status.code(), Some(1));
+
+    let (verified_nowhere, removed) =
+        adversary_without(&satisfied_nowhere, "verifies", "RFC854.RP14_1");
+    assert!(removed >= 4, "{removed} verifies clauses named RP14_1");
+    std::fs::write(&telnet, &verified_nowhere).unwrap();
+    let output = check_with_std(&std, &telnet);
+    assert_eq!(text(&output.stderr), want);
+    assert_eq!(text(&output.stdout), "");
+    assert_eq!(output.status.code(), Some(1));
+}
+
+/// Row 5 of 19.0 for a program that imports `std.rfc` directly and names
+/// `Level`, `Requirement` and `Spec`, but no catalogue.
+#[test]
+fn adversary_row5_a_program_importing_std_rfc_carries_no_catalogue() {
+    assert_carries_no_catalogue("adversary_imports_rfc", "rfc-types");
+}
+
+/// Row 5 of 19.0 for a program whose own protocol `conforms [RFC855]`,
+/// the import of `RFC855` used by that clause only. D2: "Clauses are no
+/// expressions: no backend reads them and no reachability walk starts at
+/// them", and "an unreferenced constant leaves no text or debug entry on
+/// either target". LLVM holds none; the generated `ignite-std` of
+/// `ignite emit` holds all of `std.rfc.rfc855`, because D2 also makes "a
+/// program's `use` lines" roots on Rust.
+#[test]
+#[ignore = "adversary: a clause-only import of RFC855 puts the whole catalogue into ignite emit's ignite-std, D2"]
+fn adversary_row5_a_program_conforming_to_a_std_catalogue_carries_none() {
+    assert_carries_no_catalogue("adversary_conforms_rfc855", "rfc855-claim");
+}
+
+/// `ignite emit` of fixture `name` and every `.ll` of its `ignite build
+/// --target llvm` hold none of the five digests of 19.9 and no requirement
+/// text of RFC 854, 855 or 9112.
+fn assert_carries_no_catalogue(name: &str, out: &str) {
+    let file = fixture(name);
+    let check = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("check")
+        .arg(&file)
+        .output()
+        .expect("run ignite check");
+    assert_eq!(check.status.code(), Some(0), "{}", text(&check.stderr));
+    assert_eq!(text(&check.stderr), "");
+    let emit = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("emit")
+        .arg(&file)
+        .output()
+        .expect("run ignite emit");
+    assert_eq!(emit.status.code(), Some(0), "{}", text(&emit.stderr));
+    let mut emitted = vec![("ignite emit".to_string(), text(&emit.stdout))];
+    assert!(!emitted[0].1.is_empty());
+    let out = tmp(&format!("adversary-row5-{out}"));
+    let _ = std::fs::remove_dir_all(&out);
+    let build = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .args(["build", "--target", "llvm"])
+        .arg(&file)
+        .arg("--out")
+        .arg(&out)
+        .arg("--runtime")
+        .arg(common::runtime_archive())
+        .output()
+        .expect("run ignite build");
+    assert_eq!(build.status.code(), Some(0), "{}", text(&build.stderr));
+    let mut pending = vec![out.clone()];
+    while let Some(path) = pending.pop() {
+        for entry in std::fs::read_dir(&path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|e| e == "ll") {
+                let content = std::fs::read_to_string(&path).unwrap();
+                emitted.push((path.display().to_string(), content));
+            }
+        }
+    }
+    assert!(
+        emitted.iter().any(|(name, _)| name.ends_with("/std.ll")),
+        "{:?}",
+        emitted.iter().map(|(name, _)| name).collect::<Vec<_>>()
+    );
+    for (name, content) in &emitted {
+        for digest in SPEC_DIGESTS {
+            assert!(!content.contains(digest), "{name} holds {digest}");
+        }
+        for requirement in [
+            "parse and decode the chunked transfer coding",
+            "only the IAC need be doubled to be sent as data",
+            "Telnet Option Specifications",
+            "either party may refuse to pursue further subnegotiation",
+        ] {
+            assert!(!content.contains(requirement), "{name} holds {requirement}");
+        }
+    }
+}
+
+/// RFC 9112 6.3, `RFC9112.R6_3_4` and `R6_3_5`, claimed satisfied by
+/// `next_request` and `parse_length`. `parse_head` trims field values with
+/// `trim`, Rust's Unicode `str::trim` on both targets, so
+/// `Content-Length: 3<U+00A0>` (also U+0085, U+3000) is read as 3 and the
+/// request is served instead of answered 400.
+#[test]
+#[ignore = "adversary: Content-Length 3 followed by U+00A0 is served as 3, RFC 9112 6.3 requires 400"]
+fn adversary_http_content_length_beside_a_unicode_space_is_400() {
+    assert_inline_passes(
+        "adversary_std_http",
+        "adversary: a Content-Length beside a Unicode space is 400",
+    );
+}
+
+/// RFC 9112 9.6, `RFC9112.R9_6_6` and `R9_6_7`, claimed satisfied by
+/// `reject` and `session`: a response whose application headers carry
+/// `Connection: close` is sent with it, and the server answers the next
+/// pipelined request on the same connection.
+#[test]
+#[ignore = "adversary: a response carrying the close option keeps the connection and serves the next request, RFC 9112 9.6"]
+fn adversary_http_a_response_with_the_close_option_ends_the_connection() {
+    assert_inline_passes(
+        "adversary_std_http",
+        "adversary: a response with the close option ends the connection",
+    );
+}
+
+/// RFC 9112 6.1, `RFC9112.R6_1_4`, marked `not_applicable` "Http applies
+/// no transfer coding: every response is framed by Content-Length": an
+/// application's `Transfer-Encoding: gzip` is sent beside Http's
+/// Content-Length on a kept connection, the case `http.ignite`'s sibling
+/// statuses R6_1_7, R6_1_8, R6_1_11 and R6_2_1 call `unsupported`.
+#[test]
+#[ignore = "adversary: Transfer-Encoding gzip from the application is sent on a kept connection, RFC 9112 6.1 R6_1_4 is not n/a"]
+fn adversary_http_a_response_with_a_transfer_coding_ends_the_connection() {
+    assert_inline_passes(
+        "adversary_std_http",
+        "adversary: a response with a transfer coding other than chunked ends the connection",
+    );
+}
+
+/// RFC 9112 2.2, `RFC9112.R2_2_1`, claimed satisfied by `parse_head` and
+/// `read_head`: the head is decoded to text before it is parsed, so the
+/// obs-text octet 0xE9 reaches the application as U+FFFD, three octets.
+#[test]
+#[ignore = "adversary: the head is parsed as lossy UTF-8 text, octet 0xE9 reaches the application as U+FFFD, RFC 9112 2.2"]
+fn adversary_http_an_obs_text_octet_reaches_the_application_as_one_octet() {
+    assert_inline_passes(
+        "adversary_std_http",
+        "adversary: an obs-text octet reaches the application as one octet",
+    );
+}
