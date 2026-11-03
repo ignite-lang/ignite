@@ -475,6 +475,12 @@ fn describe(snapshot: &Json, state: &Path, live: Option<Liveness>) -> Json {
             "start `ignite host --state {}`; this is the last durable status, not live health",
             state.display()
         )
+    } else if let Some(next) = snapshot
+        .get("recovery")
+        .and_then(|recovery| recovery.get("nextAction"))
+        .and_then(Json::as_str)
+    {
+        next.to_string()
     } else if recovery.is_some() {
         receipt_text("nextAction")
             .unwrap_or("inspect retained ownership and the host journal")

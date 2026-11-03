@@ -4148,6 +4148,49 @@ Stopping/restarting a host is not a new apply. The current replay implementation
 recorded transitions and tolerates an incomplete final step; it does not already implement
 this intent reconciliation. Recovery completeness is an acceptance obligation below.
 
+As landed (U5): every host journal record is written and `sync_data`ed before the host acts on
+it: the acceptance before the reply, a run record (an effect intent among them) before its
+acknowledgement lets the run driver dispatch, a `transition` step before its effects. When a run
+record changes the owned or retiring instances, an `ownership` record (pid, OS start time,
+generation, operation) is synced before that acknowledgement too. A failed write or sync
+truncates the journal to its last synced record, fails the request with exit 3 and stops the
+host before anything else is handled; its children end by the parent-death rule. At the next
+start the retained context of a plan without a receipt (an admission that never became durable)
+is removed and journaled as `discarded`, so the plan can be admitted again. Recovery takes
+the last `state` snapshot and the `ownership` records after it, and the pending intents: `Spawn`
+effects with no later `Started` or `SpawnFailed` of that member and no later `reconciled`
+record. A recorded instance whose pid is absent or held by a process with another start time
+ended and is never signalled; one whose pid and start time match is killed through a pidfd that
+re-checks the start time, and recovery waits until it ended. Any other live process whose
+executable lies under `<state>/revisions/` is unaccounted for: it is neither signalled nor
+adopted, and the active (else committed) operation becomes `recovery_required` with the reason
+`outcome_unknown` and the processes and pending intents as `recovery.evidence`; the other
+applies are refused and no effect runs. Otherwise a `reconciled` record settles the intents and
+the active, else committed, revision starts afresh (after `gave_up` or `listener_unavailable`
+the committed one). A fixed listener port of that revision that another process holds blocks it
+as `foreign_listener`, without a signal. `status` on the host's stdin, or the next start, lifts
+either block and examines the evidence again. A block never overwrites an unresolved recovery:
+while one holds (the active operation is `recovery_required`, such as `gave_up`, or the committed
+revision's controller ended), the block lives in `recovery` alone, naming that operation as
+`recovery.unresolved`; the operation keeps its receipt and reason, every apply but a retry is
+refused, and lifting the block leaves that recovery as it was. Admitting a corrective apply
+resolves the failed operation (`recoveryResolved`) and clears its reason at once, so a host that
+crashes after the acceptance resumes the corrective. Each revision state directory gets
+a name no earlier host of the state used, and `revisions/` and the state root are synced once it
+is created; a temporary that a crash left behind never blocks the next write. Decision D2: a revision whose reducer revision
+differs from the host's is neither re-stepped nor driven; the snapshot's `history` lists each
+revision state with `restepped`, and `recovery` is `recovery_required`, `reducer_revision_changed`,
+next action "replan and apply", without blocking an apply; the next commit clears it. Debug
+builds read `IGNITE_DEBUG_HOST_FAULT` (`after_intent`, `before_dispatch`, `after_dispatch`,
+`mid_transition` crash the host with SIGKILL there; `sync_intent`, `sync_effect` fail that
+sync) and `IGNITE_DEBUG_HOST_REDUCER_REVISION` (the reducer revision the host claims); release
+builds read neither. Known gaps:
+
+- A `foreign_listener` block of the committed revision replaces a `reducer_revision_changed`
+  report in `recovery`; the not-driven operation's receipt keeps the reason.
+- A reducer failure of the committed revision's run while a `gave_up` is unresolved makes the
+  committed revision the active operation, replacing that recovery reason.
+
 ### 17.6 Terminal walkthrough
 
 Before: no resources are owned and revision is zero. Keep the host terminal open:

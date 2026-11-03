@@ -1343,15 +1343,7 @@ pub fn prepare(
             static NEXT_TEMPORARY: std::sync::atomic::AtomicU64 =
                 std::sync::atomic::AtomicU64::new(0);
             let sequence = NEXT_TEMPORARY.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let temporary = parent.join(format!(".{name}.{}.{sequence}", std::process::id()));
-            std::fs::copy(&path, &temporary).map_err(|error| io_error(&temporary, error))?;
-            let mut permissions = std::fs::metadata(&temporary)
-                .map_err(|error| io_error(&temporary, error))?
-                .permissions();
-            permissions.set_readonly(true);
-            std::fs::set_permissions(&temporary, permissions)
-                .map_err(|error| io_error(&temporary, error))?;
-            std::fs::rename(&temporary, &retained).map_err(|error| io_error(&retained, error))?;
+            retain_artifact(&path, &retained, sequence)?;
         }
         artifacts.insert(
             member,
@@ -1409,6 +1401,35 @@ pub fn prepare(
         .verify_inputs()
         .map_err(|why| invalid(&result.source, why))?;
     Ok(result)
+}
+
+/// Copy the built `path` to the read-only `retained` through the temporary
+/// `.<name>.<pid>.<sequence>` beside it and a rename. A temporary of that
+/// name that exists already is the leftover of a crashed earlier process with
+/// this pid (a container's pid 1), possibly read-only, which a copy could not
+/// write over: it is removed first.
+fn retain_artifact(path: &Path, retained: &Path, sequence: u64) -> Result<(), crate::Error> {
+    let parent = retained.parent().expect("artifact parent");
+    let name = retained
+        .file_name()
+        .expect("artifact name")
+        .to_string_lossy();
+    let temporary = parent.join(format!(".{name}.{}.{sequence}", std::process::id()));
+    std::fs::remove_file(&temporary)
+        .or_else(|error| match error.kind() {
+            io::ErrorKind::NotFound => Ok(()),
+            _ => Err(error),
+        })
+        .map_err(|error| io_error(&temporary, error))?;
+    std::fs::copy(path, &temporary).map_err(|error| io_error(&temporary, error))?;
+    let mut permissions = std::fs::metadata(&temporary)
+        .map_err(|error| io_error(&temporary, error))?
+        .permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&temporary, permissions)
+        .map_err(|error| io_error(&temporary, error))?;
+    std::fs::rename(&temporary, retained).map_err(|error| io_error(retained, error))?;
+    Ok(())
 }
 
 fn configuration() -> BTreeMap<String, Option<String>> {
@@ -2244,5 +2265,48 @@ mod tests {
             .annotate(None, &Json::Object(BTreeMap::new()))
             .unwrap_err();
         assert!(error.contains("cycle: a -> b -> c -> a"), "{error}");
+    }
+
+    /// A preparation killed between `set_readonly` and the rename leaves a
+    /// read-only temporary; a later process with the same pid (a container's
+    /// pid 1) and the same sequence must still retain the artifact.
+    #[test]
+    fn a_read_only_leftover_temporary_does_not_block_retaining_an_artifact() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/plan-leftover")
+            .join(format!(
+                "{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+        let store = dir.join("store");
+        std::fs::create_dir_all(&store).unwrap();
+        let built = dir.join("built");
+        std::fs::write(&built, b"artifact").unwrap();
+        let leftover = store.join(format!(".terminald.{}.7", std::process::id()));
+        std::fs::write(&leftover, b"torn").unwrap();
+        let mut permissions = std::fs::metadata(&leftover).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&leftover, permissions).unwrap();
+        let retained = store.join("terminald");
+
+        let result = retain_artifact(&built, &retained, 7);
+        let content = std::fs::read(&retained).ok();
+        let read_only = std::fs::metadata(&retained)
+            .map(|metadata| metadata.permissions().readonly())
+            .ok();
+        let left = leftover.exists();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            result.is_ok(),
+            "a crash leftover blocks retaining: {result:?}"
+        );
+        assert_eq!(content.as_deref(), Some(&b"artifact"[..]));
+        assert_eq!(read_only, Some(true));
+        assert!(!left, "the leftover is gone");
     }
 }
