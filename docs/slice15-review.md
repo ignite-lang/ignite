@@ -1,6 +1,6 @@
 # Slice 15 contract review
 
-Status: review of the drafted contract, findings open, 2026-11-03.
+Status: review of the drafted contract, 2026-11-03; findings resolved in section 19 (see "Resolution").
 
 Independent review of `docs/slice.md` section 19 (slice 15, protocols P2: RFC catalogues,
 linking clauses, E090 to E092, `ignite rfc import` and `check`, `ignite conformance`) as
@@ -322,3 +322,30 @@ recomputed.
   "DO is answered WONT and WILL is answered DONT" (line 486) and "a subnegotiation is skipped
   up to IAC SE" (line 511); `HttpLimits` (line 57), `parse_head` (line 330), `next_request`
   (line 460); 37 and 41 inline tests, as row 6 requires.
+
+## Resolution
+
+Folded into `docs/slice.md` section 19 on `s15/contract`, 2026-11-03. Section numbers below
+are of that text.
+
+| finding | resolution |
+|---|---|
+| B1 (1), row 12 emit identity | 19.0 row 12: one path, one working directory, the clause characters blanked to spaces so every token keeps its line and column; `ignite emit` stdout and every `.ll` of `ignite build --target llvm` compared byte for byte |
+| B2 (2), LLVM keeps unreferenced constants | steering option 1, the smaller correct one: on-demand constant lowering in `ignite-llvm` (19.13, D2), owned by U1 with `crates/ignite-llvm/src/` and the `CODEGEN_REVISION` step (19.16); new row 39; row 5 checks the `.ll` files; row 38 allows only the removal of unreferenced constants in the `.ll` goldens; 19.2 row on reachability corrected. Prefix exclusion rejected in D2 |
+| S1 (3), `Symbols` not in `ignite-eval` | clause resolutions recorded in `TypedProgram` (19.6, 19.13 `ignite-types`, D3); `ignite_eval::Module` and `Loaded::modules` unchanged; `ignite-check` dev-dependency of `ignite-eval` for row 18 (19.13) |
+| S2 (4), fixture harnesses | rows 9 and 11 name the fixture-std module lists of both crates and a `valid_clauses` per crate; silent fixture renamed `claim_ok_complete`, checked by row 41 outside the filter (19.12); U1 and U2 scopes list them (19.16) |
+| S3 (5), sibling catalogue, two `Spec`s | 19.4: "nothing else" only under `std/rfc/`, a program module may declare one `Spec`; E092 fixtures run with `--std claims_std` (19.12), whose `rfc.ignite` row 40 keeps equal to `std/rfc.ignite` |
+| S4 (6), E091 position in another file | 19.4 and 19.7: catalogue consistency runs on the constants of the checked file only; row 25 covers the std catalogues |
+| S5 (7), overlapping E091 cases | 19.4: numbered precedence (ordinal under 1, then name mismatch, then listing, then `rfc`); a duplicate is E004 or the name mismatch; row 17 lists the ordinal case |
+| S6 (8), pass with a test not run | 19.10 verdict rule 5: any failure is `fail`, any test not run is `inconclusive`, `pass` needs at least one test and all passed; row 33 adds the not-run case through the verdict function |
+| S7 (9), exit statuses | 19.10 exit table and run-failure definition; 19.8 exit statuses of `rfc import` and of `rfc check` without SOURCE; D8; mapped in `main.rs` (19.13); row 37 adds the signal case |
+| S8 (10), clause-only imports | D2 restated: a catalogue reaches generated code through a name the program imports or an expression uses; rows 5 and 12 assert what holds |
+| S9 (11), layering sentence | 19.11: the sentence removed; `StdModule::layer` named beside `layer_of`; rule 4's text gets the prefix |
+| S10 (12), prose levels | 19.4 "Level words" table and the strongest-word rule; the two excluded sentences listed; RFC 855 page-1 sentence added as `RP1_4`, later ids `RP1_5`, `RP1_6`; row 27 checks levels against the table |
+
+Notes: 13 (`Loaded::check`), 14 (struct literals), 15 (`test_build` re-exports), 16 (19.14 item
+8, `protocols.md` P2 row), 17 (19.14 item 11), 18 (19.10 step 3), 19 (row 28 quotes `R3_2_6`
+in row 2), 20 (row 3 "each"), 21 (19.5 `conforms` takes names), 22 (row 30), 23 (19.10: one
+space, since `, ` would collide with the header's own commas), 24 (19.14 item 13, D4), 25 (19.14 item 14, 19.18 Q4, not split per steering), 26 (row
+7, U6 owns `docs/vision.md`), 27 (D5: only RFC 9112 and 9110 vendored, Q3 closed), 28 (19.17
+through `tools/ignite-perf`), 29 (19.11 paragraph in `docs/layering.md`, U2).
