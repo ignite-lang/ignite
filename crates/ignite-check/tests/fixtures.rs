@@ -87,3 +87,88 @@ fn every_checker_code_has_a_fixture() {
         );
     }
 }
+
+/// Adversary (slice 15 U1): `text` checked against the fixture standard
+/// library as `probe.ignite`, rendered as `fixtures_match_expected` does.
+fn check_probe(text: &str) -> String {
+    let (_, modules) = common::load_std(&fixture_dir().join("std"))
+        .unwrap_or_else(|e| panic!("fixture standard library:\n{e}"));
+    let source = SourceFile::new("probe.ignite", text.to_string());
+    let program = ignite_syntax::parse(&source)
+        .unwrap_or_else(|d| panic!("parse failed:\n{}", source.render_all(&d)));
+    match ignite_check::check_module(&program, &modules) {
+        Ok(_) => String::new(),
+        Err(diagnostics) => format!("{}\n", source.render_all(&diagnostics)),
+    }
+}
+
+/// Adversary (slice 15 U1, `docs/slice.md` 19.4): "The value of every
+/// constant whose declared type is `std.rfc.Requirement` or
+/// `std.rfc.Spec` ... is literal data". A constant declared through an
+/// alias of `Requirement` has that declared type, so a call in its value
+/// is E091 as it is without the alias.
+#[test]
+fn adversary_e091_through_an_alias_of_requirement() {
+    let actual = check_probe(
+        "import std.rfc.{Level, Requirement}\n\
+         type Req = Requirement\n\
+         fn section() -> Text = \"2\"\n\
+         const R2_1: Req = Requirement { rfc = 9, section = section(), ordinal = 1, level = Must, text = \"a call\" }\n",
+    );
+    assert_eq!(
+        actual,
+        "probe.ignite:4:52: error[E091]: catalogue constant `R2_1` must be literal data, found a call\n"
+    );
+}
+
+/// Adversary (slice 15 U1, 19.4): the `requirements` of a `Spec` is "a
+/// list literal of names of `Requirement` constants of the same module";
+/// a `Requirement` constant declared through an alias is one, so a literal
+/// catalogue written that way is silent.
+#[test]
+fn adversary_e091_spec_lists_a_requirement_declared_through_an_alias() {
+    let actual = check_probe(
+        "import std.rfc.{Level, Requirement, Spec}\n\
+         type Req = Requirement\n\
+         const R2_1: Req = Requirement { rfc = 9, section = \"2\", ordinal = 1, level = Must, text = \"t\" }\n\
+         const RFC9: Spec = Spec { rfc = 9, title = \"t\", url = \"u\", digest = \"d\", requirements = [R2_1] }\n",
+    );
+    assert_eq!(actual, "");
+}
+
+/// Adversary (slice 15 U1, 19.4): a glob import of the vocabulary makes
+/// `Requirement` the `std.rfc` record as an explicit import does, so the
+/// literal-data rule applies.
+#[test]
+fn adversary_e091_under_a_glob_import_of_the_vocabulary() {
+    let actual = check_probe(
+        "import std.rfc.*\n\
+         fn section() -> Text = \"2\"\n\
+         const R2_1: Requirement = Requirement { rfc = 9, section = section(), ordinal = 1, level = Must, text = \"a call\" }\n",
+    );
+    assert_eq!(
+        actual,
+        "probe.ignite:3:60: error[E091]: catalogue constant `R2_1` must be literal data, found a call\n"
+    );
+}
+
+/// Adversary (slice 15 U1, 19.5, 19.6): the second segment of `Spec.Id`
+/// names a constant of the spec's module: a local constant of the same
+/// name does not hide the imported spec's requirement, and a local spec
+/// does not reach a requirement the program only imports.
+#[test]
+fn adversary_reqref_resolves_in_the_spec_module_not_by_local_names() {
+    let actual = check_probe(
+        "import std.rfc.{Level, Requirement, Spec}\n\
+         import std.rfc.rfc1.{RFC1, R3_1}\n\
+         const R2_1: Int = 1\n\
+         const RFC7: Spec = Spec { rfc = 7, title = \"t\", url = \"u\", digest = \"d\", requirements = [R1_1] }\n\
+         const R1_1: Requirement = Requirement { rfc = 7, section = \"1\", ordinal = 1, level = Must, text = \"t\" }\n\
+         fn shadowed() -> Int satisfies [RFC1.R2_1] = R2_1\n\
+         fn imported() -> Int satisfies [RFC7.R3_1] = 1\n",
+    );
+    assert_eq!(
+        actual,
+        "probe.ignite:7:38: error[E003]: `RFC7` has no requirement `R3_1`\n"
+    );
+}

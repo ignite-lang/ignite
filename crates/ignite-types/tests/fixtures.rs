@@ -309,3 +309,60 @@ fn every_type_code_has_a_fixture() {
         );
     }
 }
+
+/// Adversary (slice 15 U1, `docs/slice.md` 19.5, 19.6, 19.13): the second
+/// segment of `Spec.Id` is looked up in the spec's module, so a local
+/// requirement of the same id does not capture a reference through an
+/// imported spec; a spec declared through an alias of `Spec` is a `Spec`
+/// constant; an empty `parties` list is no E040.
+#[test]
+fn adversary_reqrefs_resolve_through_their_spec_module() {
+    let std = common::load_std(&fixture_dir().join("std"))
+        .unwrap_or_else(|e| panic!("fixture standard library:\n{e}"));
+    let text = "package fixtures.probe\n\
+        import std.rfc.{Level, Requirement, Spec}\n\
+        import std.rfc.rfc1.{RFC1}\n\
+        type S = Spec\n\
+        const RFC7: S = Spec { rfc = 7, title = \"t\", url = \"u\", digest = \"d\", requirements = [R2_1] }\n\
+        const R2_1: Requirement = Requirement { rfc = 7, section = \"2\", ordinal = 1, level = Must, text = \"t\" }\n\
+        protocol Echo conforms [RFC1, RFC7] scope { parties = [] } {\n\
+          fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] satisfies [RFC1.R2_1, RFC7.R2_1] {\n\
+            return stream.write_all(b\"ok\")\n\
+          }\n\
+        }\n";
+    let source = SourceFile::new("probe.ignite", text.to_string());
+    let program = ignite_syntax::parse(&source).unwrap();
+    let symbols = ignite_check::check_module(&program, &std.modules)
+        .unwrap_or_else(|d| panic!("check failed:\n{}", source.render_all(&d)));
+    let typed = ignite_types::type_module(&program, &symbols, &std.typed)
+        .unwrap_or_else(|d| panic!("type failed:\n{}", source.render_all(&d)));
+    let ignite_syntax::ast::Decl::Protocol(p) = program
+        .decls
+        .iter()
+        .find(|d| matches!(d, ignite_syntax::ast::Decl::Protocol(_)))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let resolved: Vec<String> = p
+        .conforms
+        .iter()
+        .map(|c| c.span)
+        .chain(p.fns[0].satisfies.iter().map(|r| r.span))
+        .map(|span| {
+            typed
+                .clause_constant(span)
+                .map(|q| format!("{}.{}", q.module, q.name))
+                .unwrap_or_else(|| "unresolved".to_string())
+        })
+        .collect();
+    assert_eq!(
+        resolved,
+        [
+            "std.rfc.rfc1.RFC1",
+            "fixtures.probe.RFC7",
+            "std.rfc.rfc1.R2_1",
+            "fixtures.probe.R2_1",
+        ]
+    );
+}

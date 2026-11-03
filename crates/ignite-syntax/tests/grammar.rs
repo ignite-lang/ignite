@@ -1782,3 +1782,101 @@ fn clauses_fill_the_ast() {
     assert_eq!(f.name.name, "scope");
     assert!(f.satisfies.is_empty());
 }
+
+/// Adversary (slice 15 U1, `docs/slice.md` 19.5): the eight clause words
+/// are identifiers outside the clause positions: records, fields, enums,
+/// variants, fns, params, protocols, roles, locals.
+#[test]
+fn adversary_clause_words_are_names_outside_clause_positions() {
+    let program = program(
+        "type scope {\n\
+           conforms: Int = 1\n\
+           satisfies: Int\n\
+           verifies: Int = 2\n\
+           unsupported: Int\n\
+         }\n\
+         enum parties { unsupported, not_applicable, sections }\n\
+         fn conforms(satisfies: Int, verifies: Int) -> Int = satisfies + verifies\n\
+         protocol not_applicable {\n\
+           fn unsupported(scope: TcpStream) -> Int {\n\
+             let sections = 1\n\
+             let parties = sections\n\
+             return parties\n\
+           }\n\
+         }\n\
+         test \"names\" {\n\
+           let verifies = conforms(1, 2)\n\
+           assert verifies == 3\n\
+         }\n",
+    );
+    let Decl::Record(r) = &program.decls[0] else {
+        panic!("record")
+    };
+    let fields: Vec<&str> = r.fields.iter().map(|f| f.name.name.as_str()).collect();
+    assert_eq!(fields, ["conforms", "satisfies", "verifies", "unsupported"]);
+    assert!(r.fields.iter().all(|f| f.satisfies.is_empty()));
+    let Decl::Protocol(p) = &program.decls[3] else {
+        panic!("protocol")
+    };
+    assert!(p.conforms.is_empty() && p.statuses.is_empty());
+    assert_eq!(p.fns[0].name.name, "unsupported");
+}
+
+/// Adversary (slice 15 U1, 19.5): a clause outside its production, an
+/// empty list where the grammar asks for one entry, and a `scope` entry
+/// of the wrong kind are each E001, never parsed silently.
+#[test]
+fn adversary_clauses_outside_their_productions_are_e001() {
+    for (case, text) in [
+        ("const", "const X: Int = 1 satisfies [A.B]\n"),
+        ("enum", "enum E satisfies [A.B] { X }\n"),
+        (
+            "test satisfies",
+            "test \"t\" satisfies [A.B] { assert true }\n",
+        ),
+        ("fn verifies", "fn f() -> Int verifies [A.B] = 1\n"),
+        ("fn after body", "fn f() -> Int = 1 satisfies [A.B]\n"),
+        (
+            "satisfies before requires",
+            "fn f(s: TcpStream) -> Int satisfies [A.B] requires [s.read] = 1\n",
+        ),
+        ("record conforms", "type T conforms [A] { x: Int }\n"),
+        (
+            "field before default",
+            "type T { x: Int satisfies [A.B] = 1 }\n",
+        ),
+        ("top-level status", "unsupported A.B \"r\"\n"),
+        ("empty conforms", "protocol P conforms [] {\n}\n"),
+        ("empty satisfies", "fn f() -> Int satisfies [] = 1\n"),
+        ("empty verifies", "test \"t\" verifies [] { assert true }\n"),
+        (
+            "two scopes",
+            "protocol P conforms [A] scope { } scope { } {\n}\n",
+        ),
+        (
+            "qualified party",
+            "protocol P conforms [A] scope { parties = [Party.Server] } {\n}\n",
+        ),
+        (
+            "numeric section",
+            "protocol P conforms [A] scope { sections = [2] } {\n}\n",
+        ),
+        (
+            "empty reason",
+            "protocol P conforms [A] {\n  unsupported A.B \"\"\n}\n",
+        ),
+        ("three segments", "fn f() -> Int satisfies [A.B.C] = 1\n"),
+        (
+            "parties twice",
+            "protocol P conforms [A] scope { parties = [Any], parties = [Server] } {\n}\n",
+        ),
+    ] {
+        let found = errors(text);
+        assert!(
+            found
+                .first()
+                .is_some_and(|e| e.starts_with("E001@1:") || e.starts_with("E001@2:")),
+            "{case}: {found:?}"
+        );
+    }
+}

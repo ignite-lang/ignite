@@ -207,3 +207,169 @@ fn clauses_emit_nothing_on_either_target() {
         assert!(with == without, "{name} differs without the clauses");
     }
 }
+
+/// Adversary (slice 15 U1): a program whose constants are reached only
+/// through another constant, a closure, a spawn's arguments, a test or a
+/// component's declaration, beside a catalogue and constants nothing
+/// reaches.
+const REACH: &str = "package tests.reach
+
+import std.rfc.{Level, Requirement, Spec}
+
+const LEAF: Text = \"e2e-leaf-only-through-a-constant\"
+const CHAIN: List<Text> = [LEAF, \"e2e-chain\"]
+const ONLY_TEST: Text = \"e2e-only-from-a-test\"
+const UNUSED_SHARED: Text = \"e2e-only-from-a-test\"
+const ONLY_CLOSURE: Int = 5
+const ONLY_SPAWN: Int = 6
+const ONLY_MAIN: Text = \"e2e-named-only-by-a-component\"
+const DIGEST: Text = \"sha256:e2e-probe-unreferenced-constant-text\"
+const DROPPED: Text = if ONLY_CLOSURE > 1 { \"e2e-dropped-a\" } else { \"e2e-dropped-b\" }
+
+const RFC7001: Spec = Spec {
+  rfc = 7001
+  title = \"e2e catalogue title\"
+  url = \"https://example.invalid/rfc7001\"
+  digest = \"sha256:e2e-spec-digest\"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7001
+  section = \"2\"
+  ordinal = 1
+  level = Must
+  text = \"An e2e requirement text MUST stay out of emitted code.\"
+}
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int = f(x)
+
+fn closed(x: Int) -> Int = apply(|y| y + ONLY_CLOSURE, x)
+
+fn chain() -> List<Text> = CHAIN
+
+fn sink(stream: TcpStream, n: Int) -> Result<Unit, IoError> requires [stream.write] {
+  if n > 0 {
+    stream.write_all(b\"x\")?
+  }
+  return Ok(Unit)
+}
+
+type Hub {
+  listener: TcpListener
+  greeting: Text
+  executable: Text
+}
+
+fn Hub.main(self: Hub) -> Result<Unit, IoError> {
+  let first = chain()
+  let stream = self.listener.accept()?
+  stream.write_all(self.greeting.to_bytes())?
+  stream.write_all(first[0].to_bytes())?
+  spawn sink(stream, ONLY_SPAWN)
+  return Ok(Unit)
+}
+
+system Reach {
+  resource ingress: TcpListener { address = \"127.0.0.1\", port = 7404 }
+  component hub: Hub { listener = ingress, greeting = ONLY_MAIN, executable = \"hub\" }
+}
+
+test \"constants reached only through kept code keep their values\" {
+  let c = chain()
+  assert c[0] == \"e2e-leaf-only-through-a-constant\"
+  assert ONLY_TEST == \"e2e-only-from-a-test\"
+  assert closed(1) == 6
+}
+";
+
+/// Adversary (slice 15 U1, `docs/slice.md` 19.13, rows 12 and 39): the
+/// program above checks silently and its test passes with `--target all`;
+/// `ignite build --target llvm --release` (`-O2 -g`) builds `hub`, every
+/// `.ll` it writes keeps the text of the constants kept code reaches, and
+/// none holds the text of a constant nothing reaches: the unreferenced
+/// probe, the dropped branches, the catalogue's digest and requirement
+/// text, the test-only constant in a build without tests.
+#[test]
+fn adversary_constants_reached_only_through_kept_code_on_both_targets() {
+    let dir = tmp("adversary-reach");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("reach.ignite"), REACH).unwrap();
+    let check = ignite(&dir, &["check", "reach.ignite"]);
+    assert_eq!(check.status.code(), Some(0), "{}", text(&check.stderr));
+    assert_eq!(text(&check.stderr), "");
+    let runner = common::runner_archive();
+    let test = ignite(
+        &dir,
+        &[
+            "test",
+            "reach.ignite",
+            "--target",
+            "all",
+            "--out",
+            "test-out",
+            "--target-dir",
+            "cargo",
+            "--runtime",
+            runner.to_str().expect("runner path"),
+        ],
+    );
+    let stdout = text(&test.stdout);
+    assert_eq!(
+        test.status.code(),
+        Some(0),
+        "stdout: {stdout}\nstderr: {}",
+        text(&test.stderr)
+    );
+    assert_eq!(
+        stdout
+            .matches("test result: ok. 1 passed; 0 failed;")
+            .count(),
+        2,
+        "{stdout}"
+    );
+    let runtime = common::runtime_archive();
+    let build = ignite(
+        &dir,
+        &[
+            "build",
+            "--target",
+            "llvm",
+            "--release",
+            "reach.ignite",
+            "--out",
+            "out",
+            "--runtime",
+            runtime.to_str().expect("runtime path"),
+        ],
+    );
+    assert_eq!(build.status.code(), Some(0), "{}", text(&build.stderr));
+    let mut ll = String::new();
+    let mut pending = vec![dir.join("out")];
+    let mut executables = Vec::new();
+    while let Some(path) = pending.pop() {
+        for entry in std::fs::read_dir(&path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|e| e == "ll") {
+                ll.push_str(&std::fs::read_to_string(&path).unwrap());
+            } else if path.file_name().is_some_and(|n| n == "hub") {
+                executables.push(path);
+            }
+        }
+    }
+    assert_eq!(executables.len(), 1, "no hub under out");
+    assert!(ll.contains("e2e-leaf-only-through-a-constant"), "{ll}");
+    for absent in [
+        "sha256:e2e-probe-unreferenced-constant-text",
+        "e2e-dropped-a",
+        "sha256:e2e-spec-digest",
+        "e2e catalogue title",
+        "An e2e requirement text",
+        "e2e-only-from-a-test",
+    ] {
+        assert!(!ll.contains(absent), "{absent} is emitted:\n{ll}");
+    }
+}
