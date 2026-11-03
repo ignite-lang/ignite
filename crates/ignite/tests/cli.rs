@@ -191,7 +191,7 @@ fn emit_prints_the_program_and_the_std_crate() {
     let output = ignite(&["emit", "examples/terminal/terminal.ignite"]);
     assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
     let stdout = text(&output.stdout);
-    assert!(stdout.contains("pub fn serve("), "{stdout}");
+    assert!(stdout.contains("pub fn serve<S: ignite_io::ByteStream"), "{stdout}");
     assert!(stdout.contains("[[bin]]"));
     assert!(stdout.contains("name = \"terminald\""));
     assert!(stdout.contains("ignite-std = { path = \"std\" }"));
