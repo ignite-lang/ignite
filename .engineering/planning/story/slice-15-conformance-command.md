@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-15-conformance-command
 kind: story
-status: active
+status: implemented
 title: ignite conformance prints the matrix
 summary: Rows and verdicts per protocols.md 3.3 from the claim model and verifies test results
 relations:
@@ -24,10 +24,11 @@ scope:
   path: crates/ignite/tests/fixtures/conformance
 - confidence: inferred
   path: crates/ignite/tests/main.rs
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":2}}}
 - {from: "proposed", to: "active", at: "2026-11-03T16:07:59Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":2}}, correlation: "slice-15-wave-1"}
+- {from: "active", to: "implemented", at: "2026-11-03T22:05:00Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 
 # Story: slice-15-conformance-command

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-15-catalogues
 kind: story
-status: active
+status: implemented
 title: Catalogues for RFC 854, 855, 1143, 9112 and 9110
 summary: Prose catalogues by hand, 9112 sections 2 to 9 and the 9110 server subset imported
 relations:
@@ -24,10 +24,11 @@ scope:
   path: std/rfc/rfc9110.ignite
 - confidence: inferred
   path: std/rfc/rfc9112.ignite
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":2}}}
 - {from: "proposed", to: "active", at: "2026-11-03T16:07:59Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":2}}, correlation: "slice-15-wave-1"}
+- {from: "active", to: "implemented", at: "2026-11-03T22:05:00Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 
 # Story: slice-15-catalogues
