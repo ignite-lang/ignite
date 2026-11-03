@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adversary fixture (docs/slice.md 19.8, "Extraction" rules 1 and 6, "--sections"): nested
+     sections with blocks after their subsections, and a section 20 beside section 2. -->
+<rfc number="7004" version="3">
+  <link rel="alternate" href="https://example.invalid/rfc7004"/>
+  <front>
+    <title>Sections</title>
+  </front>
+  <middle>
+    <section pn="section-2">
+      <t pn="section-2-1">A server <bcp14>MUST</bcp14> do one.</t>
+      <section pn="section-2.1">
+        <t pn="section-2.1-1">A server <bcp14>MUST</bcp14> do two.</t>
+        <section pn="section-2.1.1">
+          <t pn="section-2.1.1-1">A server <bcp14>MUST</bcp14> do three.</t>
+        </section>
+        <t pn="section-2.1-2">A server <bcp14>MUST</bcp14> do four.</t>
+      </section>
+      <t pn="section-2-2">A server <bcp14>MUST</bcp14> do five.</t>
+    </section>
+    <section pn="section-20">
+      <t pn="section-20-1">A server <bcp14>MUST</bcp14> do six.</t>
+    </section>
+    <section pn="section-3">
+      <t pn="section-3-1">A server <bcp14>MUST</bcp14> do seven.</t>
+    </section>
+  </middle>
+</rfc>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adversary fixture (docs/slice.md 19.8, "Output"): backslashes, quotes, braces, non-ASCII
+     and control characters in a title and a text must come out as Text literals that check. -->
+<rfc number="7005" version="3">
+  <link rel="alternate" href="https://example.invalid/rfc7005?a=&quot;b&quot;&amp;c={d}"/>
+  <front>
+    <title>Esc {a} "b" \c</title>
+  </front>
+  <middle>
+    <section pn="section-1">
+      <t pn="section-1-1">A server <bcp14>MUST</bcp14> keep \ and \\ and "q" and {x} and {{y}} and }} and caf&#xe9; &#x65e5;&#x672c; and &#x80;&#x9f;&#x7f; as data.</t>
+    </section>
+  </middle>
+</rfc>
