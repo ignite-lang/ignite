@@ -1,4 +1,4 @@
-# Ignite slices 1 to 12: language subset, standard library, substrate and lowering
+# Ignite slices 1 to 14: language subset, standard library, substrate and lowering
 
 Status: implementation contract for the compiler slice, 2026-11-01. It narrows
 `design.md` to what `examples/terminal/terminal.ignite` and `std/` need. Where the two
@@ -4278,3 +4278,688 @@ set. The host task must introduce an owned revision context and explicit transit
 it cannot hot-swap borrowed AST/type tables or treat a new segment as plan replacement.
 The user approved implementation of the plan. Independent review and the acceptance
 checks above remain required verification, without reopening that approval.
+
+## 18 Slice 14: in-process streams and generic protocol roles (protocols P1)
+
+**Status: contract written 2026-11-03 and approved in advance by the user. The independent
+review (`docs/slice14-review.md`, 22 findings) is resolved in this text. Implementation has
+not started.** The rows of 18.0 are required checks, not results.
+
+Sources:
+
+- `docs/protocols.md` §1.2, §2.2, §3.3, §3.6, §5.1, §5.3, §6.1 to §6.3, §7 row P1 and §8.
+- `docs/vision.md` §4 row "B protocols P1", §6 (X16, X17, X18), §7 (T2, T3, T4), invariants
+  3, 5, 6, 7 and 9.
+- This file: sections 3, 4.2, 5, 7, 8, 9 item 4, 11 (generics), 12.3, 12.7, 13.3, 14.4, 14.8,
+  and 16.18 to 16.20 (the skeleton pattern). Also `docs/layering.md`.
+
+The base of the slice is commit `340f782` (`main`, which adds `tools/ignite-perf`). Every
+`git diff` in 18.0 and the before tree of 18.18 are taken from it. The line numbers in 18.2 are
+those of `340f782`. They are not maintained (vision T3). Each row also names the enclosing
+symbol, and everything else in this section cites symbols. Between `c33442a` and `340f782`,
+none of the cited files under `crates/`, `std/` or `examples/` changed. If `main` moves before
+the slice closes, the base becomes the merge base of the slice branch and `main` at the close,
+for rows 9 and 15 and for 18.18.
+
+By T2, the P1 row of `protocols.md` becomes a contract here. Where `protocols.md` disagrees
+with the code, this section follows the code and records the point in 18.14.
+
+For fns and roles, this section supersedes the type-parameter grammar of section 3, the role
+arities of 4.2 and the E030 rule, the substrate surface of section 7, and the generics rules
+of 11.1. Each of those sections gets a one-line forward reference to 18 from the unit that
+owns the change (18.16).
+
+The slice adds:
+
+- a bound on a type parameter of a fn or role, `<S: ByteStream>`, with one compiler-known
+  interface;
+- an in-memory stream pair, `Pipe.pair()`, whose ends coalesce writes as `TcpStream` does and
+  count the batches they receive;
+- `Telnet.serve`, `Telnet.connect` and `Http.serve` generic over the stream; each server role
+  takes its protocol's limits record;
+- inline protocol tests over pipes on both targets.
+
+### 18.0 Acceptance
+
+- `ignite` is `target/debug/ignite`.
+- "Both targets" is `--target all` (12.7).
+- Test names in quotes are the inline tests of 18.12. A name ending in `::` is a harness name
+  of the crate's `tests/main.rs`.
+
+| # | check | command | required observation | unit |
+|---|---|---|---|---|
+| 1 | Telnet inline suite | `ignite test std/protocol/telnet.ignite --target all` | exit 0; every test passes on `rust` and on `llvm`; `--list` shows the pipe tests of 18.12 | U5 |
+| 2 | HTTP inline suite | `ignite test std/protocol/http.ignite --target all` | the same | U5 |
+| 3 | Slice 9 item 4's transcript over a pipe | `ignite test examples/terminal/commands.ignite --target all` | "the terminal transcript over a pipe" passes. Input `help\r\necho hello\r\nstatus\r\nfrobnicate x\r\nquit\r\n`; the client reads exactly `terminal> `, `help\r\necho <text>\r\nstatus\r\nquit\r\nterminal> `, `hello\r\nterminal> `, `ready\r\nterminal> `, `unknown command: frobnicate\r\nterminal> ` and `bye\r\n`, then end of stream. These are the replies of the table in `crates/ignite/tests/terminal.rs` | U5 |
+| 4 | `IAC DO ECHO` over a pipe | row 1 | "a pipe session answers IAC DO ECHO with IAC WONT ECHO": the bytes 255 252 1 follow the prompt, before the reply to the next line | U5 |
+| 5 | `IAC IAC` over a pipe | row 1 | "over a pipe IAC IAC is one data byte", using the echo console with `maximum_line = 2`. Input: 255 255 255 255 13 10, then 255 255 255 255 255 255 13 10. Output: exactly `> `, EF BF BD EF BF BD 0D 0A (two data bytes 255, which `to_text` decodes lossily as two U+FFFD on both targets), `> `, `line too long\r\n`, then end of stream | U5 |
+| 6 | Oversized subnegotiation over a pipe | row 1 | "the server closes on an overlong line, IAC IP and an overlong subnegotiation", now over a pipe: `IAC SB` with 1,025 data bytes ends the session after the prompt. "a session limit bounds the subnegotiation", under `SessionLimits { maximum_subnegotiation = 16 bytes }`. The count includes the IAC of `IAC SE`, as `decode` does today. `IAC SB`, 15 data bytes, `IAC SE`, `bye\r\n` answers `bye\r\n`. `IAC SB`, 16 data bytes, `IAC SE`, `bye\r\n` ends the session after the prompt | U5 |
+| 7 | Pipelined requests in one batch | row 2 | "three pipelined requests over a pipe are answered in one batch". The client sends three requests in one `write_all`, the third with `Connection: close`. It reads three responses, then end of stream, and `client.received_batches() == 1` | U5 |
+| 8 | 400, 413 and 431 over a pipe | row 2 | "a pipe client gets 400, 413 and 431": each case is the status line and `Connection: close`, then end of stream. "the limits record bounds the body": `HttpLimits { body = 4 bytes }` answers a 5-byte body with 413 and a 4-byte body with 200 | U5 |
+| 9 | TCP behaviour unchanged | `cargo test -p ignite --test main -- terminal:: todo::` and `git diff --exit-code 340f782 -- crates/ignite/tests/terminal.rs crates/ignite/tests/todo.rs` | both suites pass on both targets (their per-target cases), and neither file has changed | U5 |
+| 10 | Rust static dispatch | `cargo test -p ignite-rustgen --test main streams::` | the reachable `ignite-std` of `examples/terminal/terminal.ignite` (`generate_std_reachable` over the repository std) contains `Telnet::serve::<ignite_io::TcpStream>(` in `TelnetServer__main` and `Telnet::connect::<ignite_io::TcpStream>(` in `TelnetClient__main`. Neither it nor the program crate contains `dyn ignite_io::ByteStream`, and every `dyn` in either is a `dyn Fn` of a fn value (13.3) | U5 |
+| 11 | LLVM: each instance calls its own entries | `cargo test -p ignite-llvm --test main streams::` | the std IR of the terminal program defines the `TcpStream` instance of `Telnet.serve` (named by `instance_symbol`), whose callees include `@ignite_rt_tcp_set_idle_timeout` and `@ignite_rt_tcp_close`. The test IR of `std/protocol/telnet.ignite` defines the `PipeStream` instance of `session`, which calls `@ignite_rt_pipe_read`. No instance of a bounded fn calls an entry of the other stream kind | U5 |
+| 12 | Diagnostics | `cargo test -p ignite-syntax --test main fixtures::`, the same for `ignite-check` and `ignite-types` | the fixtures of 18.7 match. `every_checker_code_has_a_fixture` lists `e099`, and `every_type_code_has_a_fixture` lists `e096` | U1 |
+| 13 | Substrate | `cargo test -p ignite-io --test main pipe::` and `cargo test -p ignite-rt --test main pipe::` | the tests of 18.8 and 18.9 pass | U2 |
+| 14 | Generators on a bounded fixture | `cargo test -p ignite-rustgen --test main golden::bounded_streams` and `cargo test -p ignite-llvm --test main golden::bounded_streams` | the goldens of 18.10 and 18.11 match. The generated Rust builds with cargo, and the IR compiles with clang, as the existing compile checks of each crate do | U3, U4 |
+| 15 | No new dependency | `git diff 340f782 -- Cargo.lock` and every `Cargo.toml` | `Cargo.lock` gains no `[[package]]`, and no `Cargo.toml` gains a dependency line | all |
+| 16 | Goldens move only as named | `cargo test -p ignite --test main -- plan:: eval::` | `terminal.model.json`, `terminal.design.model.json`, `todo.model.json` and the explain goldens differ from `340f782` in these ways only: (a) source positions inside `std/protocol/*.ignite`; (b) the field `maximum_subnegotiation` of the server's `sessions`; (c) the property `limits` of the todo server, in its three places: `defaults`, a `sources` entry pointing into `std/protocol/http.ignite`, and `properties` | U5 |
+| 17 | Codegen revision | `grep -n 'ignite-codegen/0.1.0-2' crates/ignite/src/apply/plan.rs`, and `cargo test -p ignite --test main apply_admission::` | one match, on `CODEGEN_REVISION`; the admission tests that read `CODEGEN_REVISION` pass | U3 |
+| 18 | Gate | `task gate` | exit 0; the measurements of 18.18 are recorded in `AGENTS.md` | U5 |
+
+### 18.1 Scope and non-goals
+
+In scope:
+
+- the bound syntax;
+- `ByteStream` with `read`, `write_all`, `close` and `set_idle_timeout`;
+- `Pipe.pair()` and `PipeStream` with `received_batches`;
+- the limits records: Telnet's existing `SessionLimits`, extended, and the new `HttpLimits`;
+- the generic roles;
+- the pipe tests on both targets;
+- E096 and E099.
+
+Not in this slice:
+
+- From later protocol phases:
+  - user `interface` and `impl` declarations, associated types and `Eq` (P4);
+  - a second interface in a bound (`A + B`, P4);
+  - `ByteStream.info` from protocols.md §1.2 (P4, the transports);
+  - `std/transport/*`, `Listener { transport = .. }`, TLS and Unix sockets (P4);
+  - the split of HTTP's head limit into request line and field section (P3);
+  - catalogues, `conforms` and `satisfies` (P2);
+  - the Q method (P5).
+- Bound and interface forms:
+  - bounds on record, enum or alias type parameters;
+  - an interface used as a type (`dyn`);
+  - an interface as a value.
+- Callers that stay on `TcpStream`: `await_prompt`, `TelnetPrompt.main`, `TelnetClient.main`,
+  and the `connect` field of `std.cli`'s session handler.
+- Pipe features:
+  - backpressure on a pipe: a full queue fails the writer and never blocks it (D6);
+  - a pipe between processes;
+  - `Pipe.pair()` outside tests.
+- No change to the model format, `ignite run`, `ignite apply`, the journal or any TCP
+  behaviour. The new fields reach the model as ordinary record properties.
+
+### 18.2 Current state (at `340f782`)
+
+| fact | where |
+|---|---|
+| A type parameter is a bare identifier, `('<' ident (',' ident)* '>')?`, stored in `FnDecl.type_params: Vec<Ident>` | `crates/ignite-syntax/src/parser.rs:800` (`type_params`), `crates/ignite-syntax/src/ast.rs:276` |
+| The Rust target gives every type parameter `Clone + Send + Sync + 'static` | `crates/ignite-rustgen/src/lib.rs:1479` (`PARAM_BOUNDS`), `:1483` (`bounded_params`) |
+| A role call is emitted without a turbofish (`Lines::serve(__spawn_0, __spawn_1)`). A turbofish appears only on fn values, associated calls and record literals, from `TypedProgram::instance` | `crates/ignite-rustgen/tests/golden/generics.rs:160`; `crates/ignite-rustgen/src/lib.rs:1935` (`turbofish`), used at `:1849`, `:2675`, `:2875` and `:4376`; `crates/ignite-types/src/lib.rs:1292` |
+| A fn value is `Arc<dyn Fn(..) + Send + Sync>` | 13.3; `crates/ignite-rustgen/src/lib.rs:1848` (`fn_value`) |
+| The LLVM target monomorphises generics and names an instance `"<module>.<name><A,B>"`, joining `mangle` of each type argument. A `TcpStream` is an `i64` handle | `crates/ignite-llvm/src/lower.rs:4165` (`instance_symbol`); `crates/ignite-llvm/src/layout.rs:588` (`mangle`), `:601`; the `i64` layout at `layout.rs:339` and `:571` |
+| A task owns a `TcpStream` moved into `spawn` and releases it when the task ends. No other type is treated so | `crates/ignite-llvm/src/lower.rs:4019` (`spawn_with`), `:4073`, `:4110` |
+| `read`, `write_all`, `close` and `set_idle_timeout` exist only on `TcpStream`. On a type parameter they are E041 from `ignite-types`: `builtins::method` has no `Ty::Param` arm, and gives such a receiver only `copy`. `ignite-check`'s `builtin_applies` decides only builtin against UFCS | `crates/ignite-types/src/builtins.rs:30` (`method`), `:57` to `:72`; `crates/ignite-check/src/lib.rs:3598` (`builtin_applies`); fixture `crates/ignite-types/tests/fixtures/e041_param_method` |
+| `can_hold_handle` already holds for every type parameter | `crates/ignite-check/src/lib.rs:1958` (`can_hold_handle`) |
+| The effect of a substrate method follows from its name: `read` needs `<root>.read`, the other three need `<root>.write` | `crates/ignite-check/src/lib.rs:292` (`method_effect`) |
+| `Store.new()` outside a test is E051, and the message names only `Store.new()` | `crates/ignite-check/src/lib.rs:3156` (in `path_call`); 12.3 |
+| A declaration named like a builtin type, builtin function or static owner is E004. An import from `std.net` accepts a name that `is_builtin_name` knows: builtin types, variants and functions. The fixture `e016_effects` declares `protocol Pipe` | `crates/ignite-check/src/lib.rs:931` (in `collect`), `:582` (`is_builtin_name`); `crates/ignite-check/tests/fixtures/e016_effects.ignite:1` |
+| The builtin tables `BUILTIN_METHODS`, `EFFECTFUL_METHODS` and `BUILTIN_STATIC_ARITIES` list each method and static by name | `crates/ignite-check/src/lib.rs:163`, `:149`, `:226` |
+| E030 checks only the number of a role's parameters, from the public `PROTOCOL_ROLES: &[(&str, usize)] = &[("serve", 2), ("connect", 1)]` | `crates/ignite-check/src/lib.rs:210` (`PROTOCOL_ROLES`), `:1346` (in `protocol_roles`) |
+| `ModuleTypes::query_snapshot` keeps only records, enums, defaults and generics for the retained queries. A new query must extend it | `crates/ignite-types/src/lib.rs:654` (`query_snapshot`) |
+| Write coalescing (section 7): `write_all` appends to the stream's buffer and registers the stream in the task's `PENDING`. `flush()` sends every pending buffer. It runs before every read, on `close`, at task end and at the end of `run`. A buffer of `SEND_BUFFER` (64 KiB) is sent at once, and dropping the last handle sends and closes | `crates/ignite-io/src/net.rs:32`, `:143` to `:169`, `:223`, `:325` to `:351`, `:372`, `:404`; `crates/ignite-io/src/task.rs:132` (in `work`, task end); `crates/ignite-io/src/lib.rs:144` (in `exit`), `:248` and `:258` (in `run`) |
+| An idle timeout makes a waiting read return `Eof`. A value of 0 or less removes it, and clones share it | `crates/ignite-io/src/idle.rs:13` |
+| `ignite-io` has no pipe, no `received_batches` and no stream trait | `crates/ignite-io/src/lib.rs:25` (the exports) |
+| The runtime handle table holds a `Listener` or a `Stream`. `tcp_own` and `tcp_release` take any handle | `crates/ignite-rt/src/net.rs:57` (`enum Handle`), `:41` (`ignite_rt_tcp_own`), `:326` (`ignite_rt_tcp_release`) |
+| `Telnet.serve(stream: TcpStream, application: Console)` calls `serve_with(.., SessionLimits {})`. `TelnetServer.main` spawns `serve_with` directly, so outside the tests no std code calls `Telnet.serve` | `std/protocol/telnet.ignite:21` to `:27`, `:96`, `:144` |
+| `SessionLimits` (slice 10) has the fields `maximum`, `idle_timeout`, `input_buffer`, `output_buffer` and `slow_reader_deadline`. Only `idle_timeout` has behaviour | `std/protocol/telnet.ignite:118` (`SessionLimits`) |
+| The subnegotiation bound is the constant `MAXIMUM_SUBNEGOTIATION = 1024`. `decode` uses it for both server and client, and counts the IAC of `IAC SE` toward it | `std/protocol/telnet.ignite:89` (`MAXIMUM_SUBNEGOTIATION`), `:390` (`decode`); the test "a subnegotiation is limited to 1024 bytes including the IAC of IAC SE" |
+| `BytesToText` is lossy on both targets: an invalid byte becomes U+FFFD | `String::from_utf8_lossy` in `ignite-rustgen`, `text_from_bytes_lossy` in `ignite-llvm`; `crates/ignite/tests/terminal.rs` expects `\u{FFFD}` |
+| `examples/terminal/commands.ignite` is copied and edited by tests. `llvm_build::rebuild_compiles_only_what_changed` replaces every `lines = ["ready"]` with `lines = ["ready now"]` and asserts that the text changed. Tests in `apply::` and `apply_recovery::` replace `Status => Reply { lines = ["ready"] }` | `crates/ignite/tests/llvm_build.rs` (`rebuild_compiles_only_what_changed`), `crates/ignite/tests/apply.rs`, `crates/ignite/tests/apply_recovery.rs` |
+| A sibling module is a file beside the program whose package is `<program package>.<stem>`. So a file with its own package below `examples.terminal` cannot import `examples.terminal.commands` (E031) | `crates/ignite/src/lib.rs:877` (`parse_siblings`); 14.4 |
+| `maximum_line` is a field of `Console` and of `CommandConsole`, not of a limits record | `std/console.ignite:13`, `:40` |
+| HTTP's limits are the module constants `MAXIMUM_HEAD` 8192, `MAXIMUM_BODY` 1048576, `IDLE_TIMEOUT_MS` 30000, `MAXIMUM_DRAIN` 65536 and `DRAIN_TIMEOUT_MS` 1000. The role is `Http.serve<S>(stream: TcpStream, application: HttpApp<S>)`. One head limit covers both the request line and the fields (431) | `std/protocol/http.ignite:52` to `:69`, `:412` |
+| Every inline Telnet and HTTP session test runs over loopback TCP | `std/protocol/telnet.ignite:831` (`exchange`), `:873` (`exchange_with`); `std/protocol/http.ignite:557` (`connected`), `:657` (`served`) |
+| Three tests pin the shape of `Telnet.serve` | `crates/ignite-syntax/tests/parse_terminal.rs:111`, `crates/ignite-check/tests/terminal.rs:59`, `crates/ignite-types/tests/terminal.rs:131` |
+| Saved plans pin the backend generation as `CODEGEN_REVISION = "ignite-codegen/0.1.0-1"` | `crates/ignite/src/apply/plan.rs:17` |
+| No code from E090 to E099 is emitted | section 8 |
+
+### 18.3 Bounds and `ByteStream`
+
+Grammar. The rule replaces section 3's type parameters for fns; records, enums and aliases
+keep theirs:
+
+```
+fn_type_params := '<' fn_type_param (',' fn_type_param)* '>'
+fn_type_param  := ident (':' ident ('+' ident)*)?
+```
+
+- It applies to `fn` declarations, associated fns and protocol roles.
+- A `:` in the type-parameter list of a record, enum or alias is E001 with the message "a
+  bound is allowed on the type parameters of a fn or role only".
+- The parser accepts `+`, so the shape is protocols.md §2.2's. The checker refuses a second
+  interface (E099).
+- No keyword is added (invariant 6): `ByteStream` is a builtin name.
+
+`ByteStream` is the only interface. Its methods, for `S` the bounded parameter:
+
+| method | signature | effect on the receiver's root |
+|---|---|---|
+| `read` | `(stream: S, maximum: Int) -> IoResult<Input>` | `read` |
+| `write_all` | `(stream: S, data: Bytes) -> IoResult<Unit>` | `write` |
+| `close` | `(stream: S) -> IoResult<Unit>` | `write` |
+| `set_idle_timeout` | `(stream: S, ms: Int) -> IoResult<Unit>` | `write` |
+
+The signatures and effects are those of `TcpStream` today. The methods are called as methods
+(`stream.read(n)`) or by UFCS, as `TcpStream`'s are.
+
+`ByteStream` is implemented by `TcpStream`, by `PipeStream`, and by a type parameter bounded
+by `ByteStream`. Nothing else implements it.
+
+`ByteStream`, `Pipe` and `PipeStream` are builtin names, visible in every module as `TcpStream`
+is:
+
+- `import std.net.{ByteStream, Pipe, PipeStream}` is accepted. Section 8's E031 rule names the
+  builtins of `std.net`, and this slice adds the three. `is_builtin_name` therefore also accepts
+  `Pipe` and the names in `BUILTIN_INTERFACES` (18.13).
+- A program that declares one of these names gets E004 (D15).
+
+Rules:
+
+- In the body of a fn with `<S: ByteStream>`, a value of type `S` has these four methods and
+  `copy`, which every type but `Never` has. Any other method or field is E041, and `==` on it
+  is E045, as today.
+- A use that instantiates `S` with a type that does not implement `ByteStream` is E096. Uses
+  are:
+  - a direct call, a role call, a UFCS call and a `spawn`;
+  - a fn value of the generic fn.
+
+  The type is the one the typer infers for `S` at that use (11.7).
+- `ByteStream` in a type position is E099: a parameter, a field, a return type or a type
+  argument.
+- A bound that names anything else, or names two interfaces, is E099.
+- An unbounded type parameter keeps today's rules: `s.read(..)` on it is E041.
+
+Effects (section 5): the rules are unchanged. The root of `stream.read` is the parameter
+`stream`, so `requires [stream.read, stream.write]` covers a bounded stream as it covers a
+`TcpStream`. `ignite-check` runs before types. It therefore treats a receiver whose declared
+type is a `ByteStream`-bounded parameter like `TcpStream` in `builtin_applies`, so the four
+methods resolve as builtins and not by UFCS. `can_hold_handle` needs no change, because it
+already holds for every type parameter (18.2). The E041 on an unbounded parameter comes from
+`ignite-types`' `builtins::method`, which gains the `ByteStream` arms for a bounded
+`Ty::Param`.
+
+### 18.4 `Pipe` and `PipeStream`
+
+| builtin | signature | effect on the receiver's root | where it may be called |
+|---|---|---|---|
+| `Pipe.pair()` | `() -> (PipeStream, PipeStream)` | none | in tests and test-only items; elsewhere E051, as `Store.new()` (12.3) |
+| `PipeStream.read` | as in `ByteStream` | `read` | anywhere |
+| `PipeStream.write_all`, `.close`, `.set_idle_timeout` | as in `ByteStream` | `write` | anywhere |
+| `PipeStream.received_batches` | `(stream: PipeStream) -> Int` | `read` | anywhere |
+
+What is written on one end is read on the other. Each end works as follows.
+
+- **Handles.**
+  - An end is a handle, and its clones share it, as a `TcpStream`'s do (section 7).
+  - `PipeStream` is a handle type wherever `TcpStream` is one: in `can_hold_handle`, for E045,
+    for `debug` (which prints `<PipeStream>`) and in the region rules of the LLVM target.
+- **Writing.**
+  - `write_all(data)` appends to the end's send buffer and registers the end in the current
+    task's pending list, exactly as for `TcpStream`.
+  - The buffer is delivered by the writing task's next flush: before any of its reads (on any
+    stream), on `close`, at task end, at the end of `run`, at exit, or by
+    `ignite_io::flush()`.
+  - It is also delivered at once when it reaches `SEND_BUFFER`, or when the end's last handle
+    is dropped.
+- **Delivery.**
+  - A delivery moves the whole buffer to the peer's receive queue in one step and adds one to
+    the peer's batch counter.
+  - An empty buffer delivers nothing and is not counted.
+  - The receive queue is bounded (D6): `PIPE_CAPACITY` is 16 MiB of unread bytes. A delivery
+    that would take the queue past it fails as a whole. None of its bytes are queued, no batch
+    is counted, and the error `pipe queue full` is kept on the writing end, as a peer that is
+    gone is (below). A delivery never blocks.
+  - A test that needs more than 16 MiB in flight reads it in parts.
+- **Reading.**
+  - `read(maximum)` first flushes the current task. `maximum` is clamped to `1..=1 MiB`, as
+    for `TcpStream`.
+  - It returns up to `maximum` bytes from the receive queue. One read may span several
+    deliveries.
+  - It blocks while the queue is empty and the peer's write half is open.
+  - It returns `Eof` when the queue is empty and the peer's write half is closed (by `close`,
+    or when the peer's last handle is dropped). It also returns `Eof` when the idle timeout
+    expires.
+- **`received_batches()`** is the number of deliveries into this end's queue since
+  `Pipe.pair()`. Reads do not change it (D7).
+- **Closing.**
+  - `close()` delivers the buffer, then closes the end's write half. The peer reads the queue,
+    then `Eof`.
+  - After `close`, a `write_all` on any handle of the end returns the `TcpStream` error `write
+    to a closed stream`. That error is the writer's and is not kept.
+  - A second `close` is not an error. Reads on the closed end continue.
+- **A peer that is gone.** When every handle of one end is gone, a delivery from the other
+  end fails. The error `pipe peer is gone` is kept, and the writing end's next `read`,
+  `write_all` or `close` returns it, as a failed `TcpStream` send's error is kept (section 7).
+- **Idle timeout.** `set_idle_timeout(ms)` sets the read timeout of this end, shared by its
+  clones. A value of 0 or less removes it.
+- **Concurrency.** Two tasks reading one end are serialised, as on a `TcpStream`. A read and a
+  write on the same end do not wait for each other.
+- **When an end is dropped differs between the targets.** On the Rust target a `spawn` clones
+  its arguments, so the spawner's binding keeps the end alive until its scope ends. On the LLVM
+  target an end moved into a task is released when that task ends, and an end held by a test
+  fn lives until the process exits. A pipe test therefore closes every end whose `Eof` it
+  expects, explicitly; `Telnet.serve` and `Http.serve` close their stream, so the helpers of
+  18.12 do.
+
+### 18.5 Limits records
+
+**Telnet.** The existing `SessionLimits` is Telnet's limits record (D4). It gains one field:
+
+```ignite
+maximum_subnegotiation: ByteSize = 1 KiB
+```
+
+- `Telnet.serve` reads `idle_timeout` (as `serve_with` does today) and `maximum_subnegotiation`.
+- The other fields keep their slice-10 status: declared and validated, without behaviour.
+- `maximum_line` stays on `Console`.
+- The client role `connect` takes no limits, since its arity is 1 (4.2). It keeps
+  `MAXIMUM_SUBNEGOTIATION`, so slice 9 item 8 holds: `tn` exits 4.
+
+**HTTP.** A new record in `std/protocol/http.ignite` (D5):
+
+```ignite
+type HttpLimits {
+  head: ByteSize = 8 KiB
+  body: ByteSize = 1 MiB
+  idle_timeout: Duration = 30 seconds
+  drain: ByteSize = 64 KiB
+  drain_timeout: Duration = 1 second
+}
+```
+
+- The five constants it replaces are removed: `MAXIMUM_HEAD`, `MAXIMUM_BODY`,
+  `IDLE_TIMEOUT_MS`, `MAXIMUM_DRAIN` and `DRAIN_TIMEOUT_MS`.
+- `READ_SIZE` and `MAXIMUM_LENGTH_DIGITS` stay constants. They are framing facts, not limits.
+- The defaults equal today's constants, so the behaviour of `todod` is unchanged.
+
+### 18.6 Roles and E030
+
+| role | signature after the slice |
+|---|---|
+| `Telnet.serve` | `serve<S: ByteStream>(stream: S, limits: SessionLimits, application: Console) -> IoResult<Unit> requires [stream.read, stream.write]` |
+| `Telnet.connect` | `connect<S: ByteStream>(stream: S) -> IoResult<Unit> requires [stream.read, stream.write, stdin.read, stdin.mode, stdout.write, process.exit]` |
+| `Http.serve` | `serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> requires [stream.read, stream.write, application.*]` |
+
+E030 accepts a `serve` role with 2 parameters `(stream, application)` or with 3 parameters
+`(stream, limits, application)` (D12). The message for any other count is "role `P.serve`
+takes 2 parameters (stream, application) or 3 (stream, limits, application), found N".
+`connect` keeps 1 parameter.
+
+### 18.7 Diagnostics E096 and E099
+
+| code | rule | phase | fixture |
+|---|---|---|---|
+| E096 | A use instantiates a `ByteStream`-bounded type parameter with a type that does not implement `ByteStream` (18.3). The message is "`T` does not implement `ByteStream`, which `S` of `f` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`" | types (`ignite-types`) | `crates/ignite-types/tests/fixtures/e096_bound_not_met`, with one case each: `Int`, a record, an unbounded type parameter passed on, a fn value of the generic fn, and a `spawn` |
+| E099 | A bound naming an interface other than `ByteStream` ("unknown interface `X`; the only interface is `ByteStream`"). A bound naming two interfaces ("`S` has more than one bound; only `ByteStream` exists"). `ByteStream` in a type position ("`ByteStream` is an interface, not a type; declare a type parameter `<S: ByteStream>`") | check (`ignite-check`) | `crates/ignite-check/tests/fixtures/e099_malformed_bound`, one case per message |
+
+Further fixture obligations:
+
+- `crates/ignite-syntax/tests/fixtures/e001_bound_on_record`: a bound on a record type
+  parameter.
+- `crates/ignite-check/tests/fixtures/e051_pipe_pair`: `Pipe.pair()` in a fn is E051, and in a
+  test it is silent. The message is "`Pipe.pair()` is test-only; a program's streams come from
+  a listener or a connect". `Store.new()` keeps its message.
+- `e030_protocol_roles` gains a `serve` with 4 parameters.
+- `e004_builtin_name` gains `type PipeStream {}`.
+- `e016_effects` renames its protocol `Pipe` to `Relay`, together with its `.expected` file.
+- `crates/ignite-types/tests/fixtures/valid_bounds` checks silently. It contains a bounded fn
+  instantiated with `TcpStream`, with `PipeStream` and with an outer bounded parameter; a
+  generic role; UFCS on a bounded value; and a `spawn` of a bounded instance.
+- The code lists of `every_checker_code_has_a_fixture` and `every_type_code_has_a_fixture` gain
+  `e099` and `e096`.
+
+E097 is not used. See D3.
+
+### 18.8 Substrate (`crates/ignite-io`)
+
+- A new module `pipe.rs` provides the following, exported from `lib.rs`:
+  - `pub struct Pipe;` with `Pipe::pair() -> (PipeStream, PipeStream)`;
+  - `#[derive(Clone, Debug)] pub struct PipeStream`, with the inherent methods `read(&self,
+    i64) -> Result<Input, IoError>`, `read_into(&self, &mut [u8]) -> Result<usize, IoError>`,
+    `write_all(&self, Vec<u8>)`, `write_from(&self, &[u8])`, `close(&self)`,
+    `set_idle_timeout(&self, i64)` and `received_batches(&self) -> i64`. Their semantics are
+    those of 18.4.
+- `pub trait ByteStream: Clone + Send + Sync + 'static` has the methods `read`, `write_all`,
+  `close` and `set_idle_timeout`, over `&self` with the inherent signatures. It is implemented
+  for `TcpStream` and for `PipeStream` by delegation, and exported.
+- The pending list covers both kinds. `flush()` and every existing flush point deliver pipe
+  buffers as well as socket buffers: before a read, on close, at task end, at run end, at
+  exit and on drop. One list or two is the implementer's choice; the order of deliveries
+  within one flush is not specified.
+- Each end has its receive queue behind a mutex and a condvar, and its own batch counter,
+  idle timeout, closed flag and kept failure. A clone shares all of them.
+- `PIPE_CAPACITY` is a constant of `pipe.rs`, 16 MiB (18.4, D6).
+- No TCP behaviour changes. `flush()` and `PENDING` in `net.rs` change to cover pipes; the
+  existing `tcp::` and `terminal::` tests pass unchanged.
+
+Tests in `crates/ignite-io/tests/pipe.rs`, a new module of `tests/main.rs`:
+
+- `three_writes_before_a_read_arrive_as_one_batch`
+- `a_read_flushes_the_reading_task_first`
+- `send_buffer_threshold_delivers_at_once`
+- `close_delivers_then_eof`
+- `write_after_close_is_the_writers_error`
+- `dropping_the_last_handle_delivers_and_closes`
+- `a_vanished_peer_fails_the_next_operation`
+- `a_full_queue_fails_the_writer_and_queues_nothing`
+- `idle_timeout_reads_eof`
+- `task_end_delivers`
+- `clones_share_the_end`
+
+### 18.9 Runtime ABI (`crates/ignite-rt`)
+
+- The handle table gains `Handle::Pipe(PipeStream)`. A pipe handle is a slot like any other,
+  with the same generation and reuse rules.
+- New entries, add-only:
+
+| entry | C signature |
+|---|---|
+| `ignite_rt_pipe_pair` | `void (i64* first, i64* second)` |
+| `ignite_rt_pipe_read` | `i32 (i64 pipe, i64 maximum, Input* out, IoError* err)`; reads straight into the task's arena, as `tcp_read` does |
+| `ignite_rt_pipe_write_all` | `i32 (i64 pipe, List* bytes, IoError* err)` |
+| `ignite_rt_pipe_close` | `i32 (i64 pipe, IoError* err)` |
+| `ignite_rt_pipe_set_idle_timeout` | `i32 (i64 pipe, i64 ms, IoError* err)` |
+| `ignite_rt_pipe_received_batches` | `i64 (i64 pipe)` |
+
+- `ignite_rt_tcp_own` and `ignite_rt_tcp_release` keep their names and take a pipe handle as
+  well. Their doc comments say "any handle".
+- A `pipe_*` entry given a TCP handle is an error, and the reverse too: "`<h>` is not a pipe"
+  and "`<h>` is not a TCP stream".
+- Tests in `crates/ignite-rt/tests/pipe.rs`, a new module:
+  - `pair_write_read_and_batches_through_the_abi`
+  - `release_of_the_last_handle_closes_the_peer`
+  - `a_pipe_entry_refuses_a_tcp_handle`
+
+### 18.10 Rust target
+
+- A bounded parameter is emitted as `S: ignite_io::ByteStream + Clone + Send + Sync +
+  'static`. An unbounded parameter keeps `PARAM_BOUNDS`.
+- A call of one of the four methods on a receiver of a bounded type is fully qualified with
+  the type: `<S as ignite_io::ByteStream>::read(&stream, n)`. Parameters are passed by
+  reference (`stream: &S`), so `&stream` is `&&S`. Naming `S` fixes the expected type `&S`,
+  and the `&&S` coerces; the unqualified `ignite_io::ByteStream::read(&stream, n)` would infer
+  `Self = &S` and fail with E0277. The other arguments follow the convention of the existing
+  `TcpStream` builtins.
+- A call on a concrete `TcpStream` or `PipeStream` stays an inherent method call.
+- Any use of a fn or role with at least one bounded type parameter carries a turbofish of all
+  its type arguments: a call, a role call, a `spawn` or a fn value. Examples are
+  `Telnet::serve::<ignite_io::TcpStream>(..)` and `Http::serve::<ignite_io::TcpStream, S>(..)`.
+  Calls of unbounded generic fns are emitted as today, so no existing golden moves (D8).
+- `Ty::PipeStream` is emitted as `ignite_io::PipeStream`, `Pipe.pair()` as
+  `ignite_io::Pipe::pair()`, and `debug` gives `<PipeStream>`.
+- `apply::plan::CODEGEN_REVISION` becomes `ignite-codegen/0.1.0-2`. This one bump covers both
+  backends of the slice.
+- Golden: `crates/ignite-rustgen/tests/golden/bounds.ignite` with `bounds.rs`, checked by
+  `golden::bounded_streams` and built by cargo. It holds:
+  - a bounded `relay<S: ByteStream>` and a role of a local protocol generic over the stream;
+  - calls with `TcpStream` and with a `PipeStream` parameter of a non-test fn;
+  - a `spawn` of a bounded instance.
+
+### 18.11 LLVM target
+
+- `Ty::PipeStream` has the `i64` layout and mangles as `PipeStream`. Instances are named by
+  `instance_symbol`, as today.
+- The typer resolves the four methods on a bounded receiver to `Builtin::Stream{Read,
+  WriteAll, Close, SetIdleTimeout}`. Lowering an instance takes the substituted receiver type:
+  `TcpStream` lowers to the `ignite_rt_tcp_*` entries, and `PipeStream` to the
+  `ignite_rt_pipe_*` entries. No run-time dispatch remains (D11).
+- `Pipe.pair()` calls `ignite_rt_pipe_pair` and builds the tuple. The `PipeStream*` builtins
+  call their entries.
+- `spawn_with` owns and releases a moved `PipeStream` as it does a `TcpStream`. The same
+  applies to the release in the failed-spawn path.
+- `region.rs` `mutates`: none of the new builtins mutates. `glue.rs` `debug` gives
+  `<PipeStream>`.
+- Golden: `crates/ignite-llvm/tests/golden/bounds.*` from the same `bounds.ignite`, checked by
+  `golden::bounded_streams`. It shows two instances of `relay`, `relay<TcpStream>` calling
+  `@ignite_rt_tcp_read` and `relay<PipeStream>` calling `@ignite_rt_pipe_read`, and it
+  compiles with clang.
+
+### 18.12 Standard library and examples
+
+`std/protocol/telnet.ignite`:
+
+- `Telnet.serve` takes the signature of 18.6. Its body is today's `serve_with` with
+  `limits`, and `serve_with` is removed.
+- `TelnetServer.main` spawns `Telnet.serve(stream, self.sessions, console)`.
+- `session`, `answer_line`, `write_text`, `forward_input`, `finish_input`, `run_command` and
+  `edit_input` become generic over `<S: ByteStream>`. `session` also takes `limits:
+  SessionLimits`, which `Telnet.serve` passes on, because its decoding reads
+  `limits.maximum_subnegotiation`.
+- `Telnet.connect` becomes generic, and `TelnetClient.main` calls its `TcpStream` instance.
+  The module fn `connect(stream: TcpStream)` stays, because it fills `std.cli`'s
+  `SessionHandler.connect`, whose type is `fn(stream: TcpStream)`.
+- The server's session decodes with `decode_within(state, b,
+  limits.maximum_subnegotiation.to_int())`. `decode(state, b)` stays as `decode_within(state,
+  b, MAXIMUM_SUBNEGOTIATION)`, so the decoder tests and the client are unchanged.
+- `exchange` and `exchange_with` use `Pipe.pair()` with a 5000 ms idle timeout on the client.
+  The test "await_prompt returns the text before each prompt and fails when the server
+  closes" stays on TCP (D13).
+- New tests:
+  - "a pipe session answers IAC DO ECHO with IAC WONT ECHO"
+  - "over a pipe IAC IAC is one data byte"
+  - "a session limit bounds the subnegotiation"
+  - "a pipe session ends on its idle timeout" (the renamed "a client silent for the idle
+    timeout ends the session")
+- The test "the profile and the limits default to what Telnet implements" asserts
+  `maximum_subnegotiation == 1 KiB`.
+
+`std/protocol/http.ignite`:
+
+- `HttpLimits` is added (18.5), and `Http.serve` takes the signature of 18.6.
+- `session`, `next_request`, `read_head`, `read_body` and `reject` take `<T: ByteStream>` and
+  `limits`.
+- `HttpServer<S>` gains `limits: HttpLimits = HttpLimits {}`. Its `main` spawns
+  `Http.serve(stream, self.limits, self.application)`.
+- `connected()` returns a `Pipe.pair()`. A helper `served_over_tcp` keeps "the server answers
+  pipelined requests until one asks to close" on TCP as well (D13).
+- New tests:
+  - "three pipelined requests over a pipe are answered in one batch"
+  - "a pipe client gets 400, 413 and 431"
+  - "the limits record bounds the body"
+
+`examples/terminal/commands.ignite` gains one test at its end, "the terminal transcript over a
+pipe" (18.0 row 3, D14). It serves `Console { prompt = "terminal> ", respond = respond,
+maximum_line = 4096 }` with `Telnet.serve` over `Pipe.pair()`. It imports only `std.*`, which a
+program may (14.4), and calls the module's own `respond`.
+
+- The test must not contain the text `lines = ["ready"]`. The edits of 18.2
+  (`llvm_build::rebuild_compiles_only_what_changed`, `apply::`, `apply_recovery::`) replace
+  that text, so the expected `ready\r\n` is written as bytes, not as a `Reply`.
+- `terminal.ignite` stays unchanged, and so do its model goldens: a model holds no tests, and
+  no golden names a position in `commands.ignite`. The terminal's source-bound plan inputs do
+  change, since `commands.ignite` is a sibling; no test pins their digest.
+- `commands.ignite` already holds three inline tests, so `task test-ignite` runs it today.
+
+Unchanged:
+
+- `examples/terminal/terminal.ignite`, `examples/todo/todo.ignite` and
+  `terminal.design.ignite`;
+- `std/cli.ignite`;
+- `std/net.ignite` apart from its doc comment, which names the new builtins.
+
+Goldens, re-blessed with the diff named in 18.0 row 16:
+
+- `crates/ignite/tests/golden/*.json`;
+- `crates/ignite/tests/golden/*.txt`.
+
+Tests that pin the shape of `Telnet.serve` (18.2) expect 3 parameters `[Param(S),
+SessionLimits, Console]`.
+
+### 18.13 Typed API (add-only)
+
+| crate | addition |
+|---|---|
+| `ignite-syntax` | `pub struct Bound { pub param: Ident, pub interfaces: Vec<Ident>, pub span: Span }` and `FnDecl.bounds: Vec<Bound>`, one entry per bounded parameter. Every `FnDecl { .. }` literal in the workspace gets `bounds: Vec::new()` |
+| `ignite-check` | `BUILTIN_TYPES` gains `PipeStream`. `BUILTIN_STATICS` gains `("Pipe", "pair")`, and `BUILTIN_STATIC_ARITIES` gains `("Pipe", "pair", 0)`; `Pipe` is a static owner. `BUILTIN_METHODS` and `EFFECTFUL_METHODS` gain `received_batches`, and `method_effect("received_batches")` is `read`. A new `pub const BUILTIN_INTERFACES: &[&str] = &["ByteStream"]`. `is_builtin_name` also accepts `Pipe` and the names in `BUILTIN_INTERFACES` (imports, 18.3), and the E004 check in `collect` also consults `BUILTIN_INTERFACES`. A new `pub const SERVE_ARITIES: &[usize] = &[2, 3]` gives the `serve` arities of D12; `PROTOCOL_ROLES` stays, unchanged, and E030 reads `SERVE_ARITIES` for `serve` |
+| `ignite-types` | `Ty::PipeStream`. The `Builtin` variants `PipePair`, `PipeStreamRead`, `PipeStreamWriteAll`, `PipeStreamClose`, `PipeStreamSetIdleTimeout`, `PipeStreamReceivedBatches`, `StreamRead`, `StreamWriteAll`, `StreamClose` and `StreamSetIdleTimeout`. `ModuleTypes.bounds: BTreeMap<String, BTreeMap<String, String>>` (fn key, then parameter, then interface). `TypedProgram::bound(&self, fn_name: &QualName, param: &str) -> Option<&str>`. `ModuleTypes::query_snapshot` keeps `bounds`, because `bound` is a retained query, and the ownership regression named in its doc comment covers it |
+| `ignite-io` | `Pipe`, `PipeStream`, `ByteStream` |
+| `ignite-rt` | the entries of 18.9 |
+
+### 18.14 Stale points in the sources
+
+1. protocols.md §3.3, §5.3 and §7 make E097 "`Store.new()` outside a test". Since slice 8 that
+   is E051 (12.3, section 8). E097 stays unused, and `Pipe.pair()` joins E051 (D3).
+2. protocols.md §6.1 says "the program crate contains no `dyn`". Since slice 9, fn values are
+   `Arc<dyn Fn>` (13.3). Row 10 checks no `dyn ByteStream` and no `dyn` other than `dyn Fn`
+   (D9).
+3. protocols.md §7's obligation "the Rust golden shows `Telnet::serve::<ignite_io::TcpStream>`"
+   does not fit the code. Since slice 10 the role call is in std's `TelnetServer.main`, which
+   calls `serve_with`, and the Rust target emits no turbofish on role calls (18.2). This slice
+   makes `TelnetServer.main` call `Telnet.serve` and checks the generated `ignite-std` (D10).
+4. protocols.md §3.6 has `TelnetLimits` and `HttpLimits` with `Int` and `_ms` fields. Since
+   slice 10, `SessionLimits` exists with quantity fields, and `maximum_line` is the
+   console's (D4, D5).
+5. protocols.md §5.1 writes `assert(..)` as a call, uses `TelnetLimits {}`, and takes
+   `read_text` and `read_bytes` from `std/transport/pipe.ignite`. `assert` is a statement
+   (12.3), and P1 has no `std/transport`.
+6. protocols.md §7 P1 says "`ByteStream` (from `std.net`)". §4 and vision §2's L2 row put
+   `Pipe` and the stream interface in `std/transport/`. P1 follows §7 and uses `std.net`. P4
+   moves them, which costs one import line, as §7 says.
+7. protocols.md §7 "phase 1 is proposed as slice 8.1". It is slice 14 (vision §4).
+8. protocols.md §1.2's `ByteStream` also has `info`. P1 has the four methods only.
+9. protocols.md §5.3 moves the todo imports to `std.http`. The module is
+   `std.protocol.http` and stays so.
+10. vision X17 (stale line and keyword counts in protocols.md) and X18 (line citations) are
+    still open in protocols.md. U5 corrects only the P1 lines named above.
+11. vision T4 gives slice 13 the range E130 to E139 and no range to slice 14. P1's codes come
+    from the protocols range E090 to E099, which T4 assigns.
+12. This file's title said "slices 1 to 12". It now says "1 to 14" (the X15 precedent).
+13. protocols.md §3.6 decides that roles read limits only from the limits record, and rejects
+    module constants. This slice keeps three: `MAXIMUM_SUBNEGOTIATION` for the client role,
+    whose arity 1 leaves no limits parameter (D17), and HTTP's `READ_SIZE` and
+    `MAXIMUM_LENGTH_DIGITS`, which are framing facts, not limits (18.5). Besides
+    `maximum_line` (item 4), these are the slice's deviations from §3.6.
+14. Section 10's acceptance, as vision X16 resolves it, bounds `std/protocol/telnet.ignite`
+    at 400 lines excluding tests. At
+    `340f782` it has about 655 non-test lines (an approximate awk count), and this slice adds
+    more. The bound is already exceeded; the slice records it and does not restore it.
+15. vision invariant 3's list of handle types lacks `PipeStream`, and vision §4.1's row `14+ |
+    B, C, D, E, G, H` does not say that slice 14 is B. U5 corrects both.
+
+### 18.15 Decisions
+
+| # | decision | alternative | why |
+|---|---|---|---|
+| D1 | Bounds only on fns, associated fns and roles: `<S: ByteStream>`. `+` parses, and the checker refuses it | `where` clauses; bounds on records and enums | protocols.md §2.2's shape. P1 needs fn bounds only. Record bounds need Rust where-clauses on structs and LLVM layout rules that no P1 row uses |
+| D2 | `ByteStream` is compiler-known and not declared in Ignite | `interface ByteStream` in `std/net.ignite` now | `interface` is P4's keyword (invariant 6). P1 fixes the names, and P4 declares them (protocols.md §7) |
+| D3 | E096 means a bound not met, from the typer. E099 means a malformed bound or an interface used as a type, from the checker. E097 is unused, and `Pipe.pair()` outside a test is E051 | reuse E097 for the malformed bound | a code keeps one meaning across documents (T4). E097's meaning is E051's, and E099 was free |
+| D4 | Telnet's limits record is the existing `SessionLimits`, plus `maximum_subnegotiation: ByteSize` | protocols.md's `TelnetLimits { maximum_line, maximum_subnegotiation, idle_timeout_ms }` | `SessionLimits` is in the design file, the model and `validate` (slices 10 and 12), so two records would split one concern. Quantities are the slice-10 style. `maximum_line` is the console's |
+| D5 | `HttpLimits` has one `head` limit and quantity fields with today's defaults | protocols.md §3.6's six `Int` fields | P1 keeps behaviour, and the split is P3's acceptance |
+| D6 | A pipe's receive queue is bounded at `PIPE_CAPACITY` (16 MiB of unread bytes). A delivery that would exceed it fails as a whole with the kept error `pipe queue full`, and it never blocks | an unbounded queue, recorded as an exception to vision invariant 5; or a bounded queue with blocking delivery | vision invariant 5 is "no silent loss: bounded queues". D16 compiles the pipe into every binary, so the bound holds everywhere and no exception is needed. The failure is loud, as a failed TCP send is. Blocking delivery would add a deadlock between a test's two ends in one task, and no P1 row needs backpressure. Slow-reader limits are P4 and wave C |
+| D7 | `received_batches` counts deliveries, one per non-empty flush, including the threshold, close and drop sends | count reads, or count `write_all` calls | protocols.md §5.3 defines it as "the deliveries caused by the peer's flushes". It observes coalescing (§6.3), which is what row 7 tests |
+| D8 | Rust: the trait `ignite_io::ByteStream`, fully qualified calls on bounded receivers, and a turbofish on uses of bounded generics only | `dyn ByteStream`, or an enum of stream kinds | static dispatch (protocols.md §6.1) and the golden obligation. Turbofish only for bounded generics, so no existing golden moves |
+| D9 | "No `dyn`" means no `dyn ByteStream`, and every `dyn` is a fn value's `dyn Fn` | remove `dyn Fn` from fn values | that is out of scope, and protocols.md §6.1 predates 13.3 |
+| D10 | The static-dispatch check reads the generated `ignite-std` of the terminal. `TelnetServer.main` calls `Telnet.serve`, and `serve_with` is removed | a program-crate golden with a user role | the obligation names `Telnet::serve`, which exists only in std. With `serve_with` gone, the role is the one server entry |
+| D11 | LLVM: one handle table for both kinds; new `ignite_rt_pipe_*` entries; `Stream*` builtins resolved by the instance's receiver type | one `ignite_rt_stream_*` family that dispatches on the handle kind at run time | protocols.md §6.2: the target calls the concrete entry. Run-time dispatch would be a hidden `dyn` |
+| D12 | E030 accepts `serve` with 2 or 3 parameters | always 3, migrating every fixture and golden protocol | the existing protocols `Lines`, `Greeting` and `Line` of the goldens stay valid. Whether a protocol has limits is its own decision |
+| D13 | Inline session tests move to pipes. One TCP test per protocol stays, so `ignite test` builds both instances | run every session test on both stream kinds | TCP stays covered end to end by `terminal.rs` and `todo.rs`, and duplicates cost gate time |
+| D14 | Row 3's transcript is an inline test at the end of `examples/terminal/commands.ignite`, which calls its own `respond` | a new `examples/terminal/transcript.ignite`; std (which cannot see the example's commands); `terminal.ignite` | a `transcript.ignite` with package `examples.terminal.transcript` has no siblings, so its import of `examples.terminal.commands` is E031 (14.4, observed by the review). It would also be a sibling of `terminal.ignite` and change that program's inputs. `terminal.ignite` and its model goldens stay unchanged |
+| D15 | `ByteStream`, `Pipe` and `PipeStream` are builtin names: declaring one is E004, and `e016_effects` renames its `protocol Pipe` | names that only `std.net` provides and that need an import | `TcpStream` works that way, so there is one rule |
+| D16 | `Pipe` is always compiled into `ignite-io` and `ignite-rt`, with no cargo feature. E051 alone keeps it in tests | a feature such as `runner` | no feature plumbing in generated crates, and the code is small |
+| D17 | `decode_within` takes the server's subnegotiation limit. `decode` and the client keep the constant | a limit parameter on `connect` | `connect`'s arity is 1 (4.2), and slice 9 item 8 fixes the client at 1024 |
+
+### 18.16 Work split
+
+| unit | owns | depends on | first failing test |
+|---|---|---|---|
+| U1 frontend and skeleton | `crates/ignite-syntax/src/**`, `crates/ignite-check/src/**`, `crates/ignite-types/src/**`; the arms for the new variants in `crates/ignite-eval/src/{eval,value}.rs`; the fixtures of 18.7 and the code lists in the three `fixtures.rs`; the `FnDecl` literals in `crates/ignite-types/tests/surface.rs` and `crates/ignite-rustgen/tests/units.rs`; the doc comment of `std/net.ignite`; the placeholder arms of 18.17; the rows of section 8 (E096 and E099 added, E051 and E030 amended per 18.4 and 18.6), written when the fixtures land so that every listed code has a fixture; the one-line forward references to 18 in sections 3, 4.2 and 11.1 | none | `cargo test -p ignite-check --test main fixtures::fixtures_match_expected` with the new `e099_malformed_bound` fixture |
+| U2 substrate and runtime ABI | `crates/ignite-io/src/**` (new `pipe.rs`; `net.rs`, `lib.rs`, `idle.rs`), `crates/ignite-io/tests/{pipe.rs,main.rs}`, `crates/ignite-rt/src/**`, `crates/ignite-rt/tests/{pipe.rs,main.rs}`; the one-line forward reference to 18 in section 7 | none (runs beside U1) | `cargo test -p ignite-io --test main pipe::three_writes_before_a_read_arrive_as_one_batch` |
+| U3 Rust target | `crates/ignite-rustgen/src/**` (replacing U1's placeholders), `crates/ignite-rustgen/tests/golden.rs`, `crates/ignite-rustgen/tests/golden/bounds.*`, `crates/ignite/src/apply/plan.rs` (`CODEGEN_REVISION`) | U1; U2 for the cargo build of the golden | `cargo test -p ignite-rustgen --test main golden::bounded_streams` |
+| U4 LLVM target | `crates/ignite-llvm/src/**` (replacing U1's placeholders), `crates/ignite-llvm/tests/golden.rs`, `crates/ignite-llvm/tests/golden/bounds.*` | U1; U2 for linking | `cargo test -p ignite-llvm --test main golden::bounded_streams` |
+| U5 std, examples, acceptance and records | `std/protocol/telnet.ignite`, `std/protocol/http.ignite`, `examples/terminal/commands.ignite` (the transcript test only), `crates/ignite-rustgen/tests/streams.rs` and `crates/ignite-llvm/tests/streams.rs` with their `mod` lines in those crates' `tests/main.rs`, the role-shape assertions of the three tests in 18.2, `crates/ignite/tests/golden/**`, `AGENTS.md` (the layout rows for `commands.ignite` and the pipe, and the slice-14 gate-time paragraph), `STATUS.md` (the 18.0 rows), `docs/protocols.md` (the corrections of 18.14), `docs/vision.md` (invariant 3 and the §4.1 row, 18.14 item 15), `PLAN.md`, `docs/performance/14/` | U1 to U4 | `ignite test std/protocol/http.ignite --target all` with "three pipelined requests over a pipe are answered in one batch" added first (E040: `PipeStream` passed where `TcpStream` is expected) |
+
+Order:
+
+- U1 and U2 run first, in parallel.
+- U3 and U4 start when U1 has merged, and run in parallel. Each closes only after U2 has
+  merged, because its first test needs U2: the golden of U3 builds against
+  `ignite_io::ByteStream`, and the IR of U4 links against `ignite_rt_pipe_*`.
+- U5 starts when U1 to U4 have merged, and it closes the slice: 18.0 and 18.18.
+
+Planning store: the coordinator creates `epic:slice-14-protocols-p1` in `.engineering/` and
+one story per unit (U1 to U5), each citing its row of this table, before the first unit is
+dispatched. No unit writes to the planning store.
+
+Rules:
+
+- Shared files:
+  - `docs/slice.md` §18 takes "As landed (Ux)" lines, each in the subsection its unit owns.
+  - U5 owns 18.0 and 18.18.
+  - The `tests/main.rs` of `ignite-io` and of `ignite-rt` are U2's. Those of `ignite-rustgen`
+    and `ignite-llvm` change only by U5's `mod streams;` lines, and U3 and U4 add no file
+    there.
+- One integration-test binary per crate: a new test file is a `mod` line, never a `[[test]]`.
+- Layering (`docs/layering.md` rule 5): no file under `crates/*/src` names a protocol. The new
+  substrate and generator code speaks of streams and pipes only.
+
+### 18.17 Placeholder arms
+
+U1 adds the new `Ty` and `Builtin` variants. The workspace must still build with
+`--all-targets`, so U1 adds placeholders wherever a match must cover them. Each placeholder is
+`unimplemented!("slice 14: …")`, and `grep -rn 'slice 14: ' crates/` counts them.
+
+| owner | file | covers |
+|---|---|---|
+| U3 | `crates/ignite-rustgen/src/lib.rs`: the arms for `Pipe.pair()`, the `PipeStream*` and `Stream*` builtins, bounded parameters and the turbofish rule | 18.10 |
+| U4 | `crates/ignite-llvm/src/lower.rs`: the `PipePair`, `PipeStream*` and `Stream*` arms of the builtin lowering | 18.11 |
+
+U1 writes these arms in their final form, because this contract fixes them, so they need no
+placeholder:
+
+- the `Ty::PipeStream` layout (`i64`) and mangle (`PipeStream`) in
+  `crates/ignite-llvm/src/layout.rs`;
+- `mutates` in `region.rs` (false for every new builtin);
+- `debug` in `glue.rs` and in rustgen (`<PipeStream>`);
+- `ignite-eval`: like `TcpStream`, not evaluable; the typer keeps the new builtins out of
+  property expressions (E116).
+
+### 18.18 Gate time
+
+Measure as slices 12 and 13 did (15.1, 16.1).
+
+Trees:
+
+- Before: a `git archive 340f782` copy. It includes the workspace member `tools/ignite-perf`.
+- After: the closed slice-14 tree, which includes `tools/ignite-perf` as well. Both trees
+  therefore have the same workspace members, and fmt, clippy and test cover the same crates
+  plus the slice's changes.
+- Each tree has its own target directory. Every build sets `CARGO_INCREMENTAL=0`.
+
+Method:
+
+- One cold gate per tree, then three interleaved warm passes.
+- Record the 1-minute load for every run, and drop a pair whose two loads differ by more than 5.
+- Report the median of the pair ratios next to the absolute times.
+
+Units:
+
+- the warm gate with the apply suites skipped (`cargo test --workspace -- --skip apply`), with
+  fmt, clippy, test and test-ignite timed separately;
+- `task test-ignite`, warm;
+- `ignite test std/protocol/telnet.ignite --target all` and the same for `http.ignite`, cold
+  (fresh `--out` and target) and warm;
+- `ignite check` and `ignite plan` of the design file (15 pairs);
+- `todod` and `terminald`, Rust and LLVM, dev and release (3 pairs, fresh `--out` and target,
+  `SCCACHE_RECACHE=1`);
+- `--no-run` after `touch crates/ignite-check/src/lib.rs`;
+- one full `task gate` per tree, recorded as slice 13 recorded it: wall time, exit status,
+  counts and the end-to-end binary's time.
+
+The apply suites inside `task gate` are the slice-13 exception (`AGENTS.md`, "Slice 13"). No
+budget applies to them, and they are reported apart.
+
+A unit that rises over 10 % gets a measured cause, or the record labels the cause inferred. No
+baseline moves.
+
+Records:
+
+- a "Slice 14" paragraph in `AGENTS.md`'s gate-time section;
+- the raw logs and scripts under `docs/performance/14/`.
+
+### 18.19 Open questions
+
+None. Every conflict between the sources had a default, recorded in 18.14 and 18.15.
