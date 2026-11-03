@@ -336,9 +336,12 @@ impl TypeEnv {
     fn layout_uncached(&self, ty: &Ty) -> Layout {
         match ty {
             Ty::Tuple(elements) => self.tuple_layout(elements).1,
-            Ty::Int | Ty::Quantity(_) | Ty::TcpListener | Ty::TcpStream | Ty::Store(_) => {
-                Layout::scalar(8)
-            }
+            Ty::Int
+            | Ty::Quantity(_)
+            | Ty::TcpListener
+            | Ty::TcpStream
+            | Ty::PipeStream
+            | Ty::Store(_) => Layout::scalar(8),
             Ty::Fn(..) | Ty::EffectFn(..) => Layout { size: 16, align: 8 },
             Ty::Bool | Ty::Byte => Layout::scalar(1),
             Ty::Unit | Ty::Never => Layout::ZERO,
@@ -568,7 +571,7 @@ pub fn is_void(ty: &Ty) -> bool {
 /// The LLVM type of a scalar in a register; `None` for aggregates and void.
 pub fn scalar_type(ty: &Ty) -> Option<&'static str> {
     match ty {
-        Ty::Int | Ty::Quantity(_) | Ty::TcpListener | Ty::TcpStream => Some("i64"),
+        Ty::Int | Ty::Quantity(_) | Ty::TcpListener | Ty::TcpStream | Ty::PipeStream => Some("i64"),
         Ty::Bool => Some("i1"),
         Ty::Byte => Some("i8"),
         Ty::Store(_) => Some("ptr"),
@@ -599,6 +602,7 @@ pub fn mangle(ty: &Ty) -> String {
         Ty::Never => "Never".into(),
         Ty::TcpListener => "TcpListener".into(),
         Ty::TcpStream => "TcpStream".into(),
+        Ty::PipeStream => "PipeStream".into(),
         Ty::IoError => "IoError".into(),
         Ty::Input => "Input".into(),
         Ty::List(t) => format!("List<{}>", mangle(t)),

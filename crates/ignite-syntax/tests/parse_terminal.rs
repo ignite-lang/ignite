@@ -108,10 +108,15 @@ fn telnet_is_a_protocol_with_both_roles() {
         })
         .expect("std.protocol.telnet declares protocol Telnet");
     let serve = telnet.role("serve").expect("Telnet.serve");
-    assert_eq!(serve.params.len(), 2);
+    let names: Vec<&str> = serve.params.iter().map(|p| p.name.name.as_str()).collect();
+    assert_eq!(names, ["stream", "limits", "application"]);
+    assert_eq!(serve.bounds.len(), 1);
+    assert_eq!(serve.bounds[0].param.name, "S");
+    assert_eq!(serve.bounds[0].interfaces[0].name, "ByteStream");
     assert!(serve.is_effectful());
     let connect = telnet.role("connect").expect("Telnet.connect");
     assert_eq!(connect.params.len(), 1);
+    assert_eq!(connect.bounds.len(), 1);
     assert!(connect.is_effectful());
 }
 

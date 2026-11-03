@@ -99,6 +99,9 @@ const SUBSTRATE_NAMES: &[&str] = &[
     "Data",
     "Eof",
     "Exposure",
+    "ByteStream",
+    "Pipe",
+    "PipeStream",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -1453,7 +1456,8 @@ pub fn rust_type(ty: &Type) -> String {
         "Unit" => "()".to_string(),
         "Tuple" => format!("({})", args.join(", ")),
         "List" => generic("Vec"),
-        "TcpListener" | "TcpStream" | "Stdin" | "Stdout" | "Input" | "IoError" | "Exposure" => {
+        "TcpListener" | "TcpStream" | "PipeStream" | "Stdin" | "Stdout" | "Input" | "IoError"
+        | "Exposure" => {
             format!("ignite_io::{}", ty.name.name)
         }
         "Store" => generic("ignite_io::Store"),
@@ -1487,6 +1491,30 @@ fn bounded_params(params: &[Ident]) -> String {
     let params: Vec<String> = params
         .iter()
         .map(|p| format!("{}: {PARAM_BOUNDS}", ident(&p.name)))
+        .collect();
+    format!("<{}>", params.join(", "))
+}
+
+/// [`bounded_params`] for a fn, associated fn or role: a parameter bounded
+/// by `ByteStream` also carries the substrate's trait
+/// (`S: ignite_io::ByteStream + Clone + ..`, `docs/slice.md` 18.10).
+fn fn_type_params(decl: &FnDecl) -> String {
+    if decl.bounds.is_empty() {
+        return bounded_params(&decl.type_params);
+    }
+    let params: Vec<String> = decl
+        .type_params
+        .iter()
+        .map(|p| {
+            let interfaces: String = decl
+                .bounds
+                .iter()
+                .filter(|b| b.param.name == p.name)
+                .flat_map(|b| &b.interfaces)
+                .map(|i| format!("ignite_io::{} + ", ident(&i.name)))
+                .collect();
+            format!("{}: {interfaces}{PARAM_BOUNDS}", ident(&p.name))
+        })
         .collect();
     format!("<{}>", params.join(", "))
 }
@@ -1923,6 +1951,7 @@ impl<'a> Generator<'a> {
             Ty::Tuple(items) => format!("({})", list(items)),
             Ty::TcpListener => "ignite_io::TcpListener".to_string(),
             Ty::TcpStream => "ignite_io::TcpStream".to_string(),
+            Ty::PipeStream => "ignite_io::PipeStream".to_string(),
             Ty::IoError => "ignite_io::IoError".to_string(),
             Ty::Input => "ignite_io::Input".to_string(),
             Ty::Param(name) => ident(name),
@@ -1939,6 +1968,33 @@ impl<'a> Generator<'a> {
                 format!("::<{}>", args.join(", "))
             }
             _ => String::new(),
+        }
+    }
+
+    /// [`Generator::turbofish`] for a call, role call or `spawn` of a fn or
+    /// role with at least one bounded type parameter, nothing for any other
+    /// (`docs/slice.md` 18.10, D8): the calls of unbounded generic fns stay
+    /// as they were.
+    fn bounded_turbofish(&self, expr: &Expr) -> String {
+        let Some(types) = self.types else {
+            return String::new();
+        };
+        let (name, params) = match self.callee(expr) {
+            Some(Callee::Fn(q)) => (q.clone(), types.type_params(q)),
+            Some(Callee::Role { protocol, role }) => (
+                QualName::new(protocol.module.clone(), format!("{}.{role}", protocol.name)),
+                types.role_type_params(protocol, role),
+            ),
+            _ => return String::new(),
+        };
+        let bounded = params
+            .unwrap_or(&[])
+            .iter()
+            .any(|p| types.bound(&name, p).is_some());
+        if bounded {
+            self.turbofish(expr)
+        } else {
+            String::new()
         }
     }
 
@@ -2322,7 +2378,7 @@ impl<'a> Generator<'a> {
         let name = fn_symbol(decl);
         w.line(&format!(
             "pub fn {name}{}({}){ret} {body}",
-            bounded_params(&decl.type_params),
+            fn_type_params(decl),
             params.join(", ")
         ));
     }
@@ -2655,6 +2711,7 @@ impl<'a> Generator<'a> {
                                 Some(Callee::Fn(q)) if !q.name.contains('.') => self.fn_path(q),
                                 _ => self.name(id),
                             };
+                            let target = format!("{target}{}", self.bounded_turbofish(expr));
                             self.fn_call(expr, target, None, args)
                         }
                         None => self.call(expr, callee, args),
@@ -3114,7 +3171,7 @@ impl<'a> Generator<'a> {
                     let arg = self.value(&args[0]);
                     return format!("ignite_io::log(&({arg}))");
                 }
-                let target = self.name(id);
+                let target = format!("{}{}", self.name(id), self.bounded_turbofish(expr));
                 format!("{target}({})", self.args(args).join(", "))
             }
             ExprKind::Field { receiver, name } => {
@@ -3138,6 +3195,7 @@ impl<'a> Generator<'a> {
     /// position, so places are cloned) before the task starts; the task
     /// logs an `Err` result.
     fn spawn(&mut self, operand: &Expr) -> String {
+        let instance = self.bounded_turbofish(operand);
         let (target, args, by_ref): (Option<String>, Vec<&Expr>, bool) = match &operand.kind {
             ExprKind::Call { callee, args } => match &callee.kind {
                 ExprKind::Name(id) if !self.is_local(&id.name) => {
@@ -3166,7 +3224,7 @@ impl<'a> Generator<'a> {
             _ => (None, Vec::new(), false),
         };
         const LOG: &str = "ignite_io::log(&format!(\"task ended with error: {}\", error));";
-        let Some(target) = target else {
+        let Some(target) = target.map(|target| format!("{target}{instance}")) else {
             let task = self.value(operand);
             return format!(
                 "{{ ignite_io::spawn(move || {{ if let Err(error) = ({task}) {{ {LOG} }} }}); }}"
@@ -3217,9 +3275,10 @@ impl<'a> Generator<'a> {
         if self.protocols.contains(owner) {
             let texts = self.args(args);
             return Some(format!(
-                "{}::{}({})",
+                "{}::{}{}({})",
                 ident(owner),
                 ident(&name.name),
+                self.bounded_turbofish(expr),
                 texts.join(", ")
             ));
         }
@@ -3246,6 +3305,7 @@ impl<'a> Generator<'a> {
             ("List", "empty", []) => "Vec::new()".to_string(),
             ("Map", "empty", []) => "std::collections::BTreeMap::new()".to_string(),
             ("Store", "new", []) => "ignite_io::Store::new()".to_string(),
+            ("Pipe", "pair", []) => "ignite_io::Pipe::pair()".to_string(),
             ("Int", "to_text", [value]) => {
                 format!("{}.to_string()", wrap(&args[0], value.clone()))
             }
@@ -3316,8 +3376,38 @@ impl<'a> Generator<'a> {
                 return self.assoc_call(expr, q, args);
             }
             Some(Callee::Fn(q)) => {
-                let target = self.fn_path(q);
+                let target = format!("{}{}", self.fn_path(q), self.bounded_turbofish(expr));
                 return self.fn_call(expr, target, Some(receiver), args);
+            }
+            Some(Callee::Builtin(
+                Builtin::PipeStreamRead
+                | Builtin::PipeStreamWriteAll
+                | Builtin::PipeStreamClose
+                | Builtin::PipeStreamSetIdleTimeout
+                | Builtin::PipeStreamReceivedBatches,
+            )) => {
+                let r = self.receiver(receiver);
+                let a = self.args(args);
+                return format!("{r}.{}({})", ident(&name.name), a.join(", "));
+            }
+            Some(Callee::Builtin(
+                Builtin::StreamRead
+                | Builtin::StreamWriteAll
+                | Builtin::StreamClose
+                | Builtin::StreamSetIdleTimeout,
+            )) => {
+                let stream = self
+                    .type_of(receiver)
+                    .map(|ty| self.rust_ty(ty))
+                    .expect("a bounded receiver has a type");
+                let r = self.receiver(receiver);
+                let a = self.args(args);
+                let a: Vec<String> = std::iter::once(format!("&{r}")).chain(a).collect();
+                return format!(
+                    "<{stream} as ignite_io::ByteStream>::{}({})",
+                    ident(&name.name),
+                    a.join(", ")
+                );
             }
             _ if mutates_receiver(expr, &name.name, self.types) && self.indexed_place(receiver) => {
                 return self.indexed_mutation(expr, receiver, name, args);
@@ -4054,6 +4144,7 @@ impl<'a> Generator<'a> {
             Ty::Never => String::new(),
             Ty::Fn(..) | Ty::EffectFn(..) => fixed("<fn>"),
             Ty::TcpStream => fixed("<TcpStream>"),
+            Ty::PipeStream => fixed("<PipeStream>"),
             Ty::TcpListener => fixed("<TcpListener>"),
             Ty::Store(_) => fixed("<Store>"),
             Ty::Param(name) => fixed(&format!("<{name}>")),

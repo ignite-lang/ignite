@@ -1,0 +1,11 @@
+package fixtures.adv_pipe_property
+
+type Holder {
+  ends: (PipeStream, PipeStream)
+}
+
+system S {
+  component holder: Holder {
+    ends = Pipe.pair()
+  }
+}

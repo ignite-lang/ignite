@@ -5,4 +5,5 @@
 
 mod golden;
 mod layout;
+mod streams;
 mod tests_build;

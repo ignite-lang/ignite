@@ -1,0 +1,3 @@
+fn read<S: ByteStream>(stream: S, maximum: Int) -> Int = maximum
+
+fn received_batches(end: PipeStream) -> Int = 0

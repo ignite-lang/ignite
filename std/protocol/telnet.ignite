@@ -1,29 +1,39 @@
 package std.protocol.telnet
 
-import std.net.{TcpStream, Endpoint}
+import std.net.{ByteStream, Pipe, PipeStream, TcpStream, Endpoint}
 import std.io.IoError
 import std.console.{Console, Reply, Action, CommandConsole, ConsoleCommands, console_of}
 import std.policy.{Restart, DrainRollout}
 import std.control.{Machine, Supervisor, ProbeScheduler}
 import std.sli.ProbeAttempt
 
-// Telnet over one TCP stream (RFC 854): a Network Virtual Terminal with
-// every option refused. Both roles decode the incoming byte stream with
-// `decode`, one byte at a time, so commands split across reads are handled.
+// Telnet over one byte stream (RFC 854): a Network Virtual Terminal with
+// every option refused. Both roles are generic over the stream
+// (`docs/slice.md` 18.6): a `TcpStream` in programs, a `PipeStream` in
+// tests. Both decode the incoming byte stream with `decode_within`, one
+// byte at a time, so commands split across reads are handled.
 // The component kinds `TelnetServer`, `TelnetClient` and `TelnetPrompt`
 // (`docs/slice.md` 14.5, 16.8) hold the accept loop, the client's exit codes
 // and one probe attempt in their `main` fns. `await_prompt` is the probe's
 // side of a session: a protocol has the roles `serve` and `connect` only
-// (4.2), so it is a module fn beside the protocol, as `serve_with` is.
+// (4.2), so it is a module fn beside the protocol.
 
 type IoResult<T> = Result<T, IoError>
 
 protocol Telnet {
-  // Server role with the default session limits: `serve_with`.
-  fn serve(stream: TcpStream, application: Console) -> IoResult<Unit> requires [
+  // Server role: show the console's prompt, pass each input line to the
+  // console and send its reply. The session ends on the console's Close
+  // action, end of input, IAC IP, an overlong line or a subnegotiation
+  // longer than `limits.maximum_subnegotiation`. A client silent for
+  // `limits.idle_timeout` reads as end of input, so an abandoned
+  // connection does not hold its task forever.
+  fn serve<S: ByteStream>(stream: S, limits: SessionLimits, application: Console) -> IoResult<Unit> requires [
     stream.read, stream.write
   ] {
-    serve_with(stream, application, SessionLimits {})
+    stream.set_idle_timeout(limits.idle_timeout.to_ms())?
+    let result = session(stream, limits, application)
+    _ = stream.close()
+    result
   }
 
   // Client role: the server's text, with Telnet commands removed and line
@@ -31,7 +41,7 @@ protocol Telnet {
   // from a terminal through the local line editor (`edit_input`), otherwise
   // as NVT lines (`forward_input`). Ends with Ok when the server closes the
   // connection, with Err on an overlong subnegotiation.
-  fn connect(stream: TcpStream) -> IoResult<Unit> requires [
+  fn connect<S: ByteStream>(stream: S) -> IoResult<Unit> requires [
     stream.read, stream.write, stdin.read, stdin.mode, stdout.write, process.exit
   ] {
     if Stdin.is_terminal()? {
@@ -84,23 +94,10 @@ const AYT: Byte = 246
 const IP: Byte = 244
 const SE: Byte = 240
 
-// The longest subnegotiation skipped, in bytes. A longer one ends the
-// server's session and fails the client.
+// The longest subnegotiation the client and the probe skip, in bytes. A
+// longer one fails them. The server's bound is its session limit
+// `maximum_subnegotiation`, 1 KiB by default.
 const MAXIMUM_SUBNEGOTIATION: Int = 1024
-
-// Show the console's prompt, pass each input line to the console and send
-// its reply. The session ends on the console's Close action, end of input,
-// IAC IP, an overlong line or an overlong subnegotiation. A client silent
-// for `sessions.idle_timeout` reads as end of input, so an abandoned
-// connection does not hold its task forever.
-fn serve_with(stream: TcpStream, application: Console, sessions: SessionLimits) -> IoResult<Unit> requires [
-  stream.read, stream.write
-] {
-  stream.set_idle_timeout(sessions.idle_timeout.to_ms())?
-  let result = session(stream, application)
-  _ = stream.close()
-  result
-}
 
 // The Telnet dialect a server speaks (design section 11.3). Each field is a
 // closed set written as text in slice 10; the defaults are what `Telnet`
@@ -113,20 +110,23 @@ type TelnetProfile {
   character_encoding: Text = "nvt_ascii"
 }
 
-// Limits of a server's sessions. `idle_timeout` is the one with behaviour
-// in slice 10 (`serve_with`).
+// Limits of a server's sessions, Telnet's limits record (`docs/slice.md`
+// 18.5). `Telnet.serve` reads `idle_timeout` and `maximum_subnegotiation`;
+// the other fields are declared and validated, without behaviour.
 type SessionLimits {
   maximum: Int = 1000
   idle_timeout: Duration = 10 minutes
   input_buffer: ByteSize = 16 KiB
   output_buffer: ByteSize = 64 KiB
   slow_reader_deadline: Duration = 30 seconds
+  maximum_subnegotiation: ByteSize = 1 KiB
 }
 
 // A Telnet server over a listener, serving a declared console. The
 // executable binds the listener, accepts connections and runs
-// `serve_with` in one task per connection; a session that fails ends its
-// task and the server goes on accepting (`docs/slice.md` section 14.8).
+// `Telnet.serve` under `sessions` in one task per connection; a session
+// that fails ends its task and the server goes on accepting
+// (`docs/slice.md` section 14.8).
 type TelnetServer {
   listener: TcpListener
   application: CommandConsole
@@ -141,7 +141,7 @@ fn TelnetServer.main(self: TelnetServer) -> IoResult<Unit> {
   let console = console_of(self.application)
   loop {
     let stream = self.listener.accept()?
-    spawn serve_with(stream, console, self.sessions)
+    spawn Telnet.serve(stream, self.sessions, console)
   }
 }
 
@@ -359,6 +359,7 @@ test "the profile and the limits default to what Telnet implements" {
   assert limits.input_buffer == 16 KiB
   assert limits.output_buffer == 64 KiB
   assert limits.slow_reader_deadline == 30 seconds
+  assert limits.maximum_subnegotiation == 1 KiB
   assert SessionLimits { idle_timeout = 15 minutes }.idle_timeout.to_ms() == 900000
 }
 
@@ -386,14 +387,18 @@ enum Event {
 // One byte of the incoming stream: the decoder's next state and the byte's
 // event. CR LF, CR NUL, a lone CR and a lone LF end a line; IAC IAC is the
 // data byte 255; DO is answered WONT and WILL is answered DONT;
-// subnegotiation is skipped.
-fn decode(state: Decoder, b: Byte) -> (Decoder, Event) = match (state, b) {
+// subnegotiation is skipped up to `MAXIMUM_SUBNEGOTIATION` bytes.
+fn decode(state: Decoder, b: Byte) -> (Decoder, Event) = decode_within(state, b, MAXIMUM_SUBNEGOTIATION)
+
+// `decode` with a subnegotiation skipped up to `maximum` bytes, counting
+// the IAC of IAC SE; one byte more is `SubnegotiationTooLong`.
+fn decode_within(state: Decoder, b: Byte, maximum: Int) -> (Decoder, Event) = match (state, b) {
   (Ground, IAC) => (Interpret, Nothing)
   (Ground, b'\r') => (CarriageReturn, EndOfLine)
   (Ground, b'\n') => (Ground, EndOfLine)
   (Ground, _) => (Ground, Literal(b))
   (CarriageReturn, b'\n' | b'\0') => (Ground, Nothing)
-  (CarriageReturn, _) => decode(Ground, b)
+  (CarriageReturn, _) => decode_within(Ground, b, maximum)
   (Interpret, IAC) => (Ground, Literal(IAC))
   (Interpret, WILL | WONT | DO | DONT) => (Negotiation(b), Nothing)
   (Interpret, SB) => (Subnegotiation(0), Nothing)
@@ -403,7 +408,7 @@ fn decode(state: Decoder, b: Byte) -> (Decoder, Event) = match (state, b) {
   (Negotiation(DO), _) => (Ground, Answer([IAC, WONT, b]))
   (Negotiation(WILL), _) => (Ground, Answer([IAC, DONT, b]))
   (Negotiation(_), _) => (Ground, Nothing)
-  (Subnegotiation(count), _) => if count + 1 > MAXIMUM_SUBNEGOTIATION {
+  (Subnegotiation(count), _) => if count + 1 > maximum {
     (Ground, SubnegotiationTooLong)
   } else if b == IAC {
     (SubnegotiationInterpret(count + 1), Nothing)
@@ -531,7 +536,7 @@ test "a subnegotiation is limited to 1024 bytes including the IAC of IAC SE" {
   assert feed(Ground, over) == (Ground, [SubnegotiationTooLong, Literal(b'a'), Literal(b'b')])
 }
 
-fn write_text(stream: TcpStream, text: Text) -> IoResult<Unit> = stream.write_all(text.to_bytes())
+fn write_text<S: ByteStream>(stream: S, text: Text) -> IoResult<Unit> = stream.write_all(text.to_bytes())
 
 // Each reply line followed by CR LF.
 fn render(reply: Reply) -> Bytes {
@@ -588,7 +593,7 @@ test "encoded input decodes to the same lines" {
 
 // The client's input pump for piped standard input: standard input to the
 // stream until end of input, then the stream's write half is closed.
-fn forward_input(stream: TcpStream) -> IoResult<Unit> {
+fn forward_input<S: ByteStream>(stream: S) -> IoResult<Unit> {
   loop {
     match Stdin.read(4096)? {
       Eof => return stream.close()
@@ -681,7 +686,7 @@ test "apply_key edits the line" {
 
 // End of the client's input: the terminal back in its saved mode, the
 // stream's write half closed. The session ends when the server closes.
-fn finish_input(stream: TcpStream) -> IoResult<Unit> {
+fn finish_input<S: ByteStream>(stream: S) -> IoResult<Unit> {
   Stdin.set_raw(false)?
   stream.close()
 }
@@ -689,7 +694,7 @@ fn finish_input(stream: TcpStream) -> IoResult<Unit> {
 // Run one local command. `quit` and `close` end the session at once,
 // also when the server keeps the connection open: the stream is closed and
 // the process exits with status 0, restoring the terminal.
-fn run_command(stream: TcpStream, command: Bytes) -> IoResult<Unit> {
+fn run_command<S: ByteStream>(stream: S, command: Bytes) -> IoResult<Unit> {
   match command.to_text().trim() {
     "quit" | "close" => {
       _ = stream.close()
@@ -708,7 +713,7 @@ fn run_command(stream: TcpStream, command: Bytes) -> IoResult<Unit> {
 // on an empty line closes the stream's write half, and Ctrl+] reads one
 // local command after the `telnet> ` prompt (`run_command`). Leaving the
 // command prompt shows the session line edited so far again.
-fn edit_input(stream: TcpStream) -> IoResult<Unit> {
+fn edit_input<S: ByteStream>(stream: S) -> IoResult<Unit> {
   var line = Bytes.empty()
   var command = Bytes.empty()
   var commanding = false
@@ -765,7 +770,7 @@ fn edit_input(stream: TcpStream) -> IoResult<Unit> {
 // Answer one input line: the reply and, unless the console closed the
 // session, the next prompt, in one write. Ok(false) when the console
 // closed the session.
-fn answer_line(stream: TcpStream, application: Console, line: Bytes) -> IoResult<Bool> {
+fn answer_line<S: ByteStream>(stream: S, application: Console, line: Bytes) -> IoResult<Bool> {
   let reply = application.respond(line.to_text())
   var out = render(reply)
   match reply.action {
@@ -781,7 +786,10 @@ fn answer_line(stream: TcpStream, application: Console, line: Bytes) -> IoResult
   }
 }
 
-fn session(stream: TcpStream, application: Console) -> IoResult<Unit> {
+// The server's side of one session, `Telnet.serve` without the idle
+// timeout and the close.
+fn session<S: ByteStream>(stream: S, limits: SessionLimits, application: Console) -> IoResult<Unit> {
+  let maximum = limits.maximum_subnegotiation.to_int()
   write_text(stream, application.prompt)?
   var state = Ground
   var line = Bytes.empty()
@@ -790,7 +798,7 @@ fn session(stream: TcpStream, application: Console) -> IoResult<Unit> {
       Eof => return Ok(())
       Data(bytes) => {
         for b in bytes {
-          let (next, event) = decode(state, b)
+          let (next, event) = decode_within(state, b, maximum)
           state = next
           match event {
             Nothing => {}
@@ -824,17 +832,21 @@ test fn echo(line: Text) -> Reply = if line == "bye" {
   Reply { lines = [line] }
 }
 
-// Everything the server sends after `input`, until it closes the
-// connection, from `Telnet.serve` with the echo console on a real socket.
-// The client gives up on a server silent for 5 s, so a session that does
-// not close fails the test instead of hanging it.
-test fn exchange(input: Bytes) -> IoResult<Bytes> {
-  let listener = TcpListener.bind("127.0.0.1", 0)?
-  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+// Everything the server sends after `input` under `limits`, until it
+// closes the stream, from `Telnet.serve` with the echo console and
+// `maximum_line` over a pipe. The client gives up on a server silent for
+// 5 s, so a session that does not close fails the test instead of hanging
+// it.
+test fn exchange_over_pipe(input: Bytes, limits: SessionLimits, maximum_line: Int) -> IoResult<Bytes> {
+  let (client, server) = Pipe.pair()
   client.set_idle_timeout(5000)?
-  let server = listener.accept()?
-  spawn Telnet.serve(server, Console { prompt = "> ", respond = echo, maximum_line = 8 })
+  spawn Telnet.serve(server, limits, Console { prompt = "> ", respond = echo, maximum_line })
   client.write_all(input)?
+  rest(client)
+}
+
+// Everything `client` reads until the end of the stream.
+test fn rest(client: PipeStream) -> IoResult<Bytes> {
   var out = Bytes.empty()
   loop {
     match client.read(4096)? {
@@ -843,6 +855,50 @@ test fn exchange(input: Bytes) -> IoResult<Bytes> {
     }
   }
 }
+
+// At least `count` bytes from `client`, fewer only at the end of the stream.
+test fn read_at_least(client: PipeStream, count: Int) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  while out.len() < count {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out)
+}
+
+// Flushes the task's pending writes as their own delivery and waits 50 ms,
+// so the next write is a separate delivery the server reads on its own.
+test fn pause() -> IoResult<Unit> {
+  let (a, b) = Pipe.pair()
+  a.set_idle_timeout(50)?
+  _ = a.read(1)?
+  _ = b.close()
+  Ok(())
+}
+
+// `parts` written as separate deliveries to the echo console's server
+// under `limits` and `maximum_line`, the client closing its write half
+// after the last; everything the server sends. The client gives up on a
+// server silent for 5 s.
+test fn exchange_parts(parts: List<Bytes>, limits: SessionLimits, maximum_line: Int) -> IoResult<Bytes> {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  spawn Telnet.serve(server, limits, Console { prompt = "> ", respond = echo, maximum_line })
+  for part in parts {
+    client.write_all(part)?
+    pause()?
+  }
+  _ = client.close()
+  rest(client)
+}
+
+// `exchange_over_pipe` with a line of at most 8 bytes.
+test fn exchange_with(input: Bytes, limits: SessionLimits) -> IoResult<Bytes> = exchange_over_pipe(input, limits, 8)
+
+// `exchange_with` under the default session limits.
+test fn exchange(input: Bytes) -> IoResult<Bytes> = exchange_with(input, SessionLimits {})
 
 test "the server answers each line and ends on the console's close" {
   assert exchange(b"hi\r\n\r\nbye\r\nlost\r\n")? == b"> hi\r\n> \r\n> bye\r\n"
@@ -868,26 +924,126 @@ test "the server closes on an overlong line, IAC IP and an overlong subnegotiati
   assert exchange(long)? == b"> "
 }
 
-// Everything the server sends after `input` under `limits`, until it
-// closes the connection, from `serve_with` with the echo console.
-test fn exchange_with(input: Bytes, limits: SessionLimits) -> IoResult<Bytes> {
-  let listener = TcpListener.bind("127.0.0.1", 0)?
-  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
-  client.set_idle_timeout(5000)?
-  let server = listener.accept()?
-  spawn serve_with(server, Console { prompt = "> ", respond = echo, maximum_line = 8 }, limits)
-  client.write_all(input)?
-  var out = Bytes.empty()
-  loop {
-    match client.read(4096)? {
-      Eof => return Ok(out)
-      Data(bytes) => out.append(bytes)
-    }
-  }
+test "a pipe session answers IAC DO ECHO with IAC WONT ECHO" {
+  var input = [IAC, DO, 1]
+  input.append(b"hi\r\nbye\r\n")
+  var expected = b"> "
+  expected.append([IAC, WONT, 1])
+  expected.append(b"hi\r\n> bye\r\n")
+  assert exchange(input)? == expected
 }
 
-test "a client silent for the idle timeout ends the session" {
+test "over a pipe IAC IAC is one data byte" {
+  let input = [IAC, IAC, IAC, IAC, 13, 10, IAC, IAC, IAC, IAC, IAC, IAC, 13, 10]
+  var expected = b"> "
+  expected.append([0xEF, 0xBF, 0xBD, 0xEF, 0xBF, 0xBD, 0x0D, 0x0A])
+  expected.append(b"> line too long\r\n")
+  assert exchange_over_pipe(input, SessionLimits {}, 2)? == expected
+}
+
+test "a session limit bounds the subnegotiation" {
+  let limits = SessionLimits { maximum_subnegotiation = 16 bytes }
+  var within = [IAC, SB]
+  within.append(filled(15, b'x'))
+  within.append([IAC, SE])
+  within.append(b"bye\r\n")
+  assert exchange_with(within, limits)? == b"> bye\r\n"
+  var over = [IAC, SB]
+  over.append(filled(16, b'x'))
+  over.append([IAC, SE])
+  over.append(b"bye\r\n")
+  assert exchange_with(over, limits)? == b"> "
+}
+
+test "a pipe session ends on its idle timeout" {
   assert exchange_with(b"hi\r\n", SessionLimits { idle_timeout = 100 ms })? == b"> hi\r\n> "
+}
+
+// The client has no idle timeout and never closes, and its input is
+// written before the server starts, so only the server's
+// `limits.idle_timeout` can end the session: if it is ignored, the test
+// hangs until `ignite test` kills it.
+test "the Telnet idle timeout alone ends a pipe session" {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(0)?
+  client.write_all(b"hi\r\n")?
+  spawn Telnet.serve(server, SessionLimits { idle_timeout = 20 ms }, Console { prompt = "> ", respond = echo, maximum_line = 8 })
+  assert rest(client)? == b"> hi\r\n> "
+}
+
+test "an IAC at the end of one delivery, its command in the next" {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  spawn Telnet.serve(server, SessionLimits {}, Console { prompt = "> ", respond = echo, maximum_line = 8 })
+  assert read_at_least(client, 2)? == b"> "
+  var first = b"x\r\n"
+  first.push(IAC)
+  client.write_all(first)?
+  assert read_at_least(client, 5)? == b"x\r\n> "
+  client.write_all([DO, 1])?
+  assert read_at_least(client, 3)? == [IAC, WONT, 1]
+  client.write_all(b"bye\r\n")?
+  assert rest(client)? == b"bye\r\n"
+}
+
+test "IAC IAC split across deliveries is one data byte" {
+  var first = b"a"
+  first.push(IAC)
+  var second = [IAC]
+  second.append(b"\r\nbye\r\n")
+  var expected = b"> a"
+  expected.append([0xEF, 0xBF, 0xBD])
+  expected.append(b"\r\n> bye\r\n")
+  assert exchange_parts([first, second], SessionLimits {}, 8)? == expected
+}
+
+test "CR at the end of one delivery, LF in the next, is one line end" {
+  assert exchange_parts([b"hi\r", b"\nbye\r\n"], SessionLimits {}, 8)? == b"> hi\r\n> bye\r\n"
+}
+
+test "a lone CR ends a line" {
+  assert exchange(b"a\rb\rbye\r")? == b"> a\r\n> b\r\n> bye\r\n"
+}
+
+test "a subnegotiation at exactly the limit, split across three deliveries" {
+  let limits = SessionLimits { maximum_subnegotiation = 16 bytes }
+  var first = [IAC, SB]
+  first.append(filled(8, b'x'))
+  var second = filled(7, b'x')
+  second.push(IAC)
+  var third = [SE]
+  third.append(b"bye\r\n")
+  assert exchange_parts([first, second, third], limits, 8)? == b"> bye\r\n"
+  var over = filled(8, b'x')
+  over.push(IAC)
+  assert exchange_parts([first, over, third], limits, 8)? == b"> "
+}
+
+test "the default subnegotiation limit is 1024 bytes over a pipe" {
+  var within = [IAC, SB]
+  within.append(filled(1023, b'x'))
+  within.append([IAC, SE])
+  within.append(b"bye\r\n")
+  assert exchange(within)? == b"> bye\r\n"
+  var over = [IAC, SB]
+  over.append(filled(1024, b'x'))
+  over.append([IAC, SE])
+  over.append(b"bye\r\n")
+  assert exchange(over)? == b"> "
+}
+
+test "a line of exactly maximum_line 4096 is answered, 4097 is too long" {
+  var input = filled(4096, b'a')
+  input.append(b"\r\n")
+  input.append(filled(4097, b'b'))
+  var expected = b"> "
+  expected.append(filled(4096, b'a'))
+  expected.append(b"\r\n> line too long\r\n")
+  assert exchange_over_pipe(input, SessionLimits {}, 4096)? == expected
+}
+
+test "a client closing mid-line gets no answer for the partial line" {
+  assert exchange_parts([b"hi\r\nhal"], SessionLimits {}, 8)? == b"> hi\r\n> "
 }
 
 test "await_prompt returns the text before each prompt and fails when the server closes" {
@@ -895,7 +1051,7 @@ test "await_prompt returns the text before each prompt and fails when the server
   let client = TcpStream.connect("127.0.0.1", listener.local_port())?
   client.set_idle_timeout(5000)?
   let server = listener.accept()?
-  spawn Telnet.serve(server, Console { prompt = "> ", respond = echo, maximum_line = 8 })
+  spawn Telnet.serve(server, SessionLimits {}, Console { prompt = "> ", respond = echo, maximum_line = 8 })
   assert await_prompt(client, "> ")? == ""
   var input = [IAC, DO, 1]
   input.append(b"hi\r\n")

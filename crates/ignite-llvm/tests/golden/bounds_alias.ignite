@@ -1,0 +1,32 @@
+package tests.bounds_alias
+
+fn relay<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  match stream.read(4096)? {
+    Eof => return stream.close()
+    Data(bytes) => stream.write_all(bytes)?
+  }
+  return stream.close()
+}
+
+test "a copy of a pipe end moved into a task leaves the end the test holds usable" {
+  let (near, far) = Pipe.pair()
+  near.set_idle_timeout(5000)?
+  let mine = far.copy()
+  spawn relay(mine)
+  near.write_all("a".to_bytes())?
+  let echoed = match near.read(16)? {
+    Eof => "eof"
+    Data(bytes) => bytes.to_text()
+  }
+  assert echoed == "a"
+  let last = match near.read(16)? {
+    Eof => "eof"
+    Data(bytes) => bytes.to_text()
+  }
+  assert last == "eof"
+  var i = 0
+  while i < 2000000 {
+    assert far.received_batches() == 1, "far lost its handle after {i} polls"
+    i = i + 1
+  }
+}

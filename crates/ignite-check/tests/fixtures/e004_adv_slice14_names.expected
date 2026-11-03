@@ -1,0 +1,3 @@
+e004_adv_slice14_names.ignite:1:6: error[E004]: duplicate definition of builtin `Pipe`
+e004_adv_slice14_names.ignite:3:6: error[E004]: duplicate definition of builtin `ByteStream`
+e004_adv_slice14_names.ignite:5:10: error[E004]: duplicate definition of builtin `PipeStream`

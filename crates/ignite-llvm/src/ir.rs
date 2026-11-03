@@ -69,6 +69,37 @@ pub const RUNTIME: &[&str] = &[
     "declare { i8, i1 } @llvm.umul.with.overflow.i8(i8, i8)",
 ];
 
+/// The pipe entries of the runtime's C ABI (`docs/llvm.md` section 5,
+/// `docs/slice.md` 18.9), each with its declaration. Unlike [`RUNTIME`], a
+/// module declares one only when it calls it, so a module without pipes
+/// keeps the text it had before slice 14.
+pub const PIPE_RUNTIME: &[(&str, &str)] = &[
+    (
+        "ignite_rt_pipe_pair",
+        "declare void @ignite_rt_pipe_pair(ptr, ptr)",
+    ),
+    (
+        "ignite_rt_pipe_read",
+        "declare i32 @ignite_rt_pipe_read(i64, i64, ptr, ptr)",
+    ),
+    (
+        "ignite_rt_pipe_write_all",
+        "declare i32 @ignite_rt_pipe_write_all(i64, ptr, ptr)",
+    ),
+    (
+        "ignite_rt_pipe_close",
+        "declare i32 @ignite_rt_pipe_close(i64, ptr)",
+    ),
+    (
+        "ignite_rt_pipe_set_idle_timeout",
+        "declare i32 @ignite_rt_pipe_set_idle_timeout(i64, i64, ptr)",
+    ),
+    (
+        "ignite_rt_pipe_received_batches",
+        "declare i64 @ignite_rt_pipe_received_batches(i64)",
+    ),
+];
+
 /// A quoted global symbol: `@"std.console.first_word"`.
 pub fn global(symbol: &str) -> String {
     format!("@\"{symbol}\"")
@@ -528,6 +559,16 @@ impl<'e> Module<'e> {
         self.declared
             .entry(symbol.to_string())
             .or_insert_with(|| text.to_string());
+    }
+
+    /// Declare the runtime entry `symbol` of [`PIPE_RUNTIME`], once per
+    /// module.
+    pub fn declare_pipe(&mut self, symbol: &str) {
+        let (_, text) = PIPE_RUNTIME
+            .iter()
+            .find(|(name, _)| *name == symbol)
+            .unwrap_or_else(|| panic!("`{symbol}` is not a pipe entry of the runtime"));
+        self.declare_raw(symbol, text);
     }
 
     /// The global holding the bytes of a string literal.

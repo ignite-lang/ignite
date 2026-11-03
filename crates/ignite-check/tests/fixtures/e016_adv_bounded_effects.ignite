@@ -1,0 +1,9 @@
+fn peek<S: ByteStream>(stream: S) -> Result<Input, IoError> = stream.read(1)
+
+fn caller(tcp: TcpStream) -> Result<Input, IoError> requires [tcp.write] = peek(tcp)
+
+fn batches(end: PipeStream) -> Int requires [end.write] = end.received_batches()
+
+fn generic_caller<S: ByteStream>(stream: S) -> Result<Input, IoError> requires [stream.write] = peek(stream)
+
+fn timeout<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read] = stream.set_idle_timeout(5)

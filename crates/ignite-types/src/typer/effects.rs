@@ -43,11 +43,19 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         StoreNew => (Effect::Ambient("store.new"), "Store.new"),
         ClockMonotonic => (Effect::Ambient("clock.read"), "Clock.monotonic"),
         EndpointOf => (Effect::Ambient("process.args"), "Endpoint.of"),
+        PipePair => (Effect::Ambient("pipe.pair"), "Pipe.pair"),
         TcpListenerAccept => (Effect::Receiver("accept"), "accept"),
         TcpStreamRead => (Effect::Receiver("read"), "read"),
         TcpStreamWriteAll => (Effect::Receiver("write"), "write_all"),
         TcpStreamClose => (Effect::Receiver("write"), "close"),
         TcpStreamSetIdleTimeout => (Effect::Receiver("write"), "set_idle_timeout"),
+        PipeStreamRead | StreamRead => (Effect::Receiver("read"), "read"),
+        PipeStreamWriteAll | StreamWriteAll => (Effect::Receiver("write"), "write_all"),
+        PipeStreamClose | StreamClose => (Effect::Receiver("write"), "close"),
+        PipeStreamSetIdleTimeout | StreamSetIdleTimeout => {
+            (Effect::Receiver("write"), "set_idle_timeout")
+        }
+        PipeStreamReceivedBatches => (Effect::Receiver("read"), "received_batches"),
         StoreGet => (Effect::Receiver("read"), "get"),
         StoreValues => (Effect::Receiver("read"), "values"),
         StoreNextId => (Effect::Receiver("write"), "next_id"),

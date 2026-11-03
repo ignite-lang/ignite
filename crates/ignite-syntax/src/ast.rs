@@ -280,6 +280,20 @@ pub struct FnDecl {
     /// `Response` of the same module, called `Response.json(..)`
     /// (`docs/slice.md` section 13); `None` for a free fn.
     pub owner: Option<Ident>,
+    /// `fn relay<S: ByteStream>(..)`: one entry per bounded type parameter,
+    /// in the order of `type_params` (`docs/slice.md` 18.3).
+    pub bounds: Vec<Bound>,
+}
+
+/// `S: A + B` in the type parameters of a fn or role: the parameter and
+/// the interfaces it names, as written. `ignite-check` accepts exactly one,
+/// `ByteStream` (E099).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Bound {
+    pub param: Ident,
+    pub interfaces: Vec<Ident>,
+    /// From the parameter to the last interface.
+    pub span: Span,
 }
 
 impl FnDecl {

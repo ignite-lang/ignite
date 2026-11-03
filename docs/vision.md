@@ -65,7 +65,7 @@ Invariants shared by every document:
 2. Everything above IO is Ignite in `std/` or the program. Nothing named after an application
    protocol lives under `crates/`.
 3. Value semantics everywhere. The only shared things are handle types: `TcpStream`,
-   `TcpListener`, `Store<T>`, `Buffer` (wasm G2), `Address<M>` (actors). Copying a handle copies
+   `PipeStream` (slice 14), `TcpListener`, `Store<T>`, `Buffer` (wasm G2), `Address<M>` (actors). Copying a handle copies
    8 bytes and shares the resource.
 4. Effects are capabilities on parameters. Authority is passed, never ambient. A component's
    imports (wasm) and an actor's reach (actors) derive from the same effect sets.
@@ -147,7 +147,8 @@ steering session against section 6 before agents are dispatched.
 | 11 (done 2026-11-02, uncommitted: 580 cargo tests, 102 inline tests per target; gate cold 54.5 s, warm 16.8 s; `todod` LLVM release 0.80 s; 11b the same day: four target bugs fixed, 582 cargo tests, warm test step 10.8 s at load 6 to 9) | F2 plan and explain | `ignite plan` emits the versioned system model (D7, JSON, deterministic per design §6.3); `ignite explain`; assembly bindings resolved; the pure evaluator with fuel (D5) for property expressions such as `exponential(100 ms, 10 seconds)` and `rolling(30 days)` | the model for `terminal.design.ignite` is byte-identical across two runs and golden-tested; every property value in it is evaluated, none is source text |
 | 12 (done 2026-11-02, uncommitted, `docs/slice.md` section 16: 636 cargo tests, 148 inline tests per target; gate time rose over 10 % on 7 units, measured causes std 3,033 to 5,135 lines loaded per spawn and `ignite-std` 2,191 to 3,792 lines, carried into 12b: reachable-only std loading and emission) | F3 run and control | `ignite run <assembly>` and `ignite replay` over its journal: probes as protocol clients (`TelnetPrompt` over the telnet `connect` role), SLI windows and contract evaluation (design §4.1), `Restart` with backoff and `DrainRollout` (design §4.2, §7.4), event journal, `event("…")` consequences | the terminal system runs under `ignite run`; killing `terminald` restarts it within the policy's backoff; a probe timeout is visible in the journal and in the contract's standing |
 | 13 | F4 apply | `ignite apply` with plan diff, changes and deletion (design §7.3), recovery of a half-applied plan from the journal | a second `apply` of the same plan is a no-op; an interrupted `apply` resumes |
-| 14+ | B, C, D, E, G, H | as the table above, in that order | as the table above |
+| 14 | B protocols P1 | `Pipe.pair()` and `PipeStream`, the bound `<S: ByteStream>` on fns and roles, `Telnet` and `Http` generic over the stream with their limits records (`docs/slice.md` section 18) | the 18.0 matrix of `docs/slice.md` |
+| 15+ | B (P2 on), C, D, E, G, H | as the table above, in that order | as the table above |
 
 Consequences for the open decisions of section 8: D5 moves from the start of H to slice 11;
 D6 moves from "before wasm P1" to slice 10; D7 is scheduled at slice 11; D3 reads "after F,

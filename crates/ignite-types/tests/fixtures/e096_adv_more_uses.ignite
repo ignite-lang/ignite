@@ -1,0 +1,39 @@
+package fixtures.adv_uses
+
+type Config { port: Int }
+
+type Box<T> { value: T }
+
+protocol Relay {
+  fn serve<S: ByteStream>(stream: S, application: Int) -> Result<Unit, IoError> requires [stream.read, stream.write] = stream.close()
+}
+
+fn same<S: ByteStream>(stream: S) -> S = stream
+
+fn Config.open<S: ByteStream>(stream: S) -> S = stream
+
+fn boxed<S: ByteStream>(holder: Box<S>) -> Int = 0
+
+fn make<S: ByteStream>() -> Option<S> = None
+
+fn by_ufcs() -> Int = 1.same()
+
+fn by_role() -> Result<Unit, IoError> requires [] = Relay.serve(1, 2)
+
+fn by_spawned_role() -> Result<Unit, IoError> requires [] {
+  spawn Relay.serve(1, 2)
+  return Ok(Unit)
+}
+
+fn by_associated() -> Int = Config.open(1)
+
+fn by_nested() -> Int = boxed(Box { value = 1 })
+
+fn by_expected() -> Option<Int> = make()
+
+fn by_generic_value<T>(value: T) -> T {
+  let f: fn(T) -> T = same
+  return f(value)
+}
+
+fn by_text() -> Text = same("x")

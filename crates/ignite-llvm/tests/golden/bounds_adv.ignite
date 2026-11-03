@@ -1,0 +1,42 @@
+package tests.bounds_adv
+
+fn relay<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  match stream.read(4096)? {
+    Eof => return stream.close()
+    Data(bytes) => stream.write_all(bytes)?
+  }
+  return stream.close()
+}
+
+fn hand<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  let mine = stream.copy()
+  spawn relay(mine)
+  return Ok(())
+}
+
+fn hand_pipe(end: PipeStream) -> Result<Unit, IoError> requires [end.read, end.write] = hand(end)
+
+fn hand_tcp(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, stream.write] = hand(stream)
+
+test "a fn value of a bounded instance, debug and a spawn from inside an instance" {
+  let (client, server) = Pipe.pair()
+  let f: fn(stream: PipeStream) -> Result<Unit, IoError> requires [stream.read, stream.write] = relay
+  client.write_all("ab".to_bytes())?
+  client.close()?
+  f(server)?
+  let reply = match client.read(16)? {
+    Eof => "eof"
+    Data(bytes) => bytes.to_text()
+  }
+  assert reply == "ab"
+  assert server.debug() == "<PipeStream>"
+  let (near, far) = Pipe.pair()
+  near.set_idle_timeout(5000)?
+  hand(far)?
+  near.write_all("q".to_bytes())?
+  let echoed = match near.read(16)? {
+    Eof => "eof"
+    Data(bytes) => bytes.to_text()
+  }
+  assert echoed == "q"
+}

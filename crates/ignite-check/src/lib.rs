@@ -37,7 +37,12 @@
 //! * A protocol role that is not `serve` or `connect`, a pure role, a role
 //!   with the wrong parameter count, a protocol without roles and a call to
 //!   a role the protocol does not declare are `E030`; a role declared twice
-//!   is `E004`.
+//!   is `E004`. A `serve` role takes 2 or 3 parameters ([`SERVE_ARITIES`]).
+//! * A bound `<S: ByteStream>` on a fn or role makes `S` a receiver of the
+//!   four stream methods, resolved as builtins like `TcpStream`'s. A bound
+//!   naming anything else or two interfaces, and an interface in a type
+//!   position, are `E099` (`docs/slice.md` 18.3, 18.7). Whether a use meets
+//!   the bound is the type checker's `E096`.
 //! * `spawn` of an effectful substrate operation is `E013`: only user
 //!   functions and protocol roles can be spawned.
 //! * Receiver types are unknown here. A method named in
@@ -101,6 +106,7 @@ pub const BUILTIN_TYPES: &[&str] = &[
     "Result",
     "TcpListener",
     "TcpStream",
+    "PipeStream",
     "Stdin",
     "Stdout",
     "Input",
@@ -137,6 +143,7 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Map", "empty"),
     ("Clock", "monotonic"),
     ("Endpoint", "of"),
+    ("Pipe", "pair"),
 ];
 
 /// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
@@ -154,6 +161,7 @@ pub const EFFECTFUL_METHODS: &[&str] = &[
     "write_all",
     "close",
     "set_idle_timeout",
+    "received_batches",
 ];
 
 /// Every builtin method name (`docs/slice.md` sections 6, 7, 10 and 13).
@@ -197,6 +205,7 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "to_ns",
     "ppm",
     "with_exit_code",
+    "received_batches",
 ];
 
 /// Free builtin functions.
@@ -208,6 +217,16 @@ pub const SUBSTRATE_MODULES: &[&str] = &["std.net", "std.io"];
 
 /// The protocol roles and their parameter counts.
 pub const PROTOCOL_ROLES: &[(&str, usize)] = &[("serve", 2), ("connect", 1)];
+
+/// The parameter counts a `serve` role may have (`docs/slice.md` 18.6,
+/// D12): `(stream, application)` or `(stream, limits, application)`. E030
+/// reads this for `serve`; [`PROTOCOL_ROLES`] keeps the two-parameter form.
+pub const SERVE_ARITIES: &[usize] = &[2, 3];
+
+/// The interfaces a type parameter of a fn or role may be bounded by
+/// (`docs/slice.md` 18.3): compiler-known, not declared in Ignite. Each is
+/// a builtin name (E004, imports from `std.net`) and no type (E099).
+pub const BUILTIN_INTERFACES: &[&str] = &["ByteStream"];
 
 /// Payload count of each builtin variant, in the order of [`BUILTIN_ENUMS`].
 const BUILTIN_VARIANT_PAYLOADS: &[(&str, usize)] = &[
@@ -241,6 +260,7 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Map", "empty", 0),
     ("Clock", "monotonic", 0),
     ("Endpoint", "of", 1),
+    ("Pipe", "pair", 0),
 ];
 
 /// Builtin statics that are effectful substrate operations.
@@ -286,12 +306,12 @@ impl EffectSig {
 }
 
 /// The effect a substrate method needs on the value it is called on, by
-/// method name: `read` needs `<root>.read`, `write_all` and `close` (which
-/// shuts down the write half) need `<root>.write`, `accept` needs
-/// `<root>.accept`.
+/// method name: `read` and `received_batches` need `<root>.read`,
+/// `write_all` and `close` (which shuts down the write half) need
+/// `<root>.write`, `accept` needs `<root>.accept`.
 pub fn method_effect(method: &str) -> Option<&'static str> {
     match method {
-        "read" => Some("read"),
+        "read" | "received_batches" => Some("read"),
         "write_all" | "close" | "set_idle_timeout" => Some("write"),
         "accept" => Some("accept"),
         _ => None,
@@ -529,6 +549,10 @@ struct Checker {
     const_refs: BTreeSet<String>,
     /// Parameters of the type alias being checked.
     type_params: BTreeSet<String>,
+    /// The type parameters of the fn or role being walked that are bounded
+    /// by `ByteStream` (`docs/slice.md` 18.3): a receiver of such a declared
+    /// type takes the stream methods as builtins, as a `TcpStream` does.
+    bounded: BTreeSet<String>,
     /// Variant names of the enums the given modules define, in scope or
     /// not. A bare one that is not in scope is left to the type checker,
     /// which resolves it against the expected type.
@@ -580,7 +604,11 @@ fn is_builtin_enum(name: &str) -> bool {
 
 /// A name a substrate module (`std.net`, `std.io`) provides.
 fn is_builtin_name(name: &str) -> bool {
-    BUILTIN_TYPES.contains(&name) || is_builtin_variant(name) || BUILTIN_FUNCTIONS.contains(&name)
+    BUILTIN_TYPES.contains(&name)
+        || is_builtin_variant(name)
+        || BUILTIN_FUNCTIONS.contains(&name)
+        || BUILTIN_INTERFACES.contains(&name)
+        || name == "Pipe"
 }
 
 fn plural(count: usize, word: &str) -> String {
@@ -930,6 +958,7 @@ impl Checker {
             let name = decl.name();
             if BUILTIN_TYPES.contains(&name.name.as_str())
                 || BUILTIN_FUNCTIONS.contains(&name.name.as_str())
+                || BUILTIN_INTERFACES.contains(&name.name.as_str())
                 || (is_static_owner(&name.name)
                     && !STD_RECORD_STATIC_OWNERS.contains(&name.name.as_str()))
                 || name.name == "Tuple"
@@ -1344,19 +1373,22 @@ impl Checker {
                     format!("role `{name}.{role}` must be effectful; add a `requires` clause"),
                 );
             }
-            if f.params.len() != *expected {
-                let shape = if role == "serve" {
-                    "(stream, application)"
-                } else {
-                    "(stream)"
-                };
+            let found = f.params.len();
+            if role == "serve" && !SERVE_ARITIES.contains(&found) {
                 self.error(
                     "E030",
                     f.name.span,
                     format!(
-                        "role `{name}.{role}` takes {} {shape}, found {}",
+                        "role `{name}.serve` takes 2 parameters (stream, application) or 3 (stream, limits, application), found {found}"
+                    ),
+                );
+            } else if role != "serve" && found != *expected {
+                self.error(
+                    "E030",
+                    f.name.span,
+                    format!(
+                        "role `{name}.{role}` takes {} (stream), found {found}",
                         plural(*expected, "parameter"),
-                        f.params.len()
                     ),
                 );
             }
@@ -1610,6 +1642,7 @@ impl Checker {
     fn check_fn(&mut self, decl: &FnDecl, display: String) {
         self.in_test = decl.test_only;
         self.type_params = decl.type_params.iter().map(|p| p.name.clone()).collect();
+        self.bounds(decl);
         for param in &decl.params {
             self.ambient_name(&param.name);
             self.check_type(&param.ty);
@@ -1637,7 +1670,37 @@ impl Checker {
         self.ctx = Ctx::None;
         self.requires.clear();
         self.type_params.clear();
+        self.bounded.clear();
         self.in_test = false;
+    }
+
+    /// E099 for a bound that names an interface other than `ByteStream`
+    /// or more than one interface (`docs/slice.md` 18.7); sets `bounded`
+    /// to the parameters bounded by `ByteStream`.
+    fn bounds(&mut self, decl: &FnDecl) {
+        self.bounded.clear();
+        for bound in &decl.bounds {
+            let param = &bound.param.name;
+            match bound.interfaces.as_slice() {
+                [interface] if BUILTIN_INTERFACES.contains(&interface.name.as_str()) => {
+                    self.bounded.insert(param.clone());
+                }
+                [interface] => self.error(
+                    "E099",
+                    interface.span,
+                    format!(
+                        "unknown interface `{}`; the only interface is `ByteStream`",
+                        interface.name
+                    ),
+                ),
+                [_, second, ..] => self.error(
+                    "E099",
+                    second.span,
+                    format!("`{param}` has more than one bound; only `ByteStream` exists"),
+                ),
+                [] => {}
+            }
+        }
     }
 
     /// Settle the effect sets of the fns without `requires` before the
@@ -1754,6 +1817,19 @@ impl Checker {
             self.ambient_name(param);
         }
         let name = ty.name.name.as_str();
+        if BUILTIN_INTERFACES.contains(&name) {
+            self.error(
+                "E099",
+                ty.name.span,
+                format!(
+                    "`{name}` is an interface, not a type; declare a type parameter `<S: {name}>`"
+                ),
+            );
+            for arg in &ty.args {
+                self.check_type(arg);
+            }
+            return;
+        }
         let known = BUILTIN_TYPES.contains(&name)
             || self.symbols.records.contains(name)
             || self.symbols.enums.contains_key(name)
@@ -1953,7 +2029,7 @@ impl Checker {
     }
 
     /// Whether a value of declared type `ty` may hold a `TcpStream`,
-    /// `TcpListener`, `Store`, `Stdin` or `Stdout`, directly or in a
+    /// `PipeStream`, `TcpListener`, `Store`, `Stdin` or `Stdout`, directly or in a
     /// field, payload, element or type argument. Unknown types may.
     fn can_hold_handle(&self, ty: &Type, depth: usize) -> bool {
         if depth > 16 {
@@ -1968,7 +2044,9 @@ impl Checker {
             "Int" | "Text" | "Bool" | "Byte" | "Bytes" | "Unit" | "IoError" | "Input" => {
                 return false;
             }
-            "TcpStream" | "TcpListener" | "Store" | "Stdin" | "Stdout" => return true,
+            "TcpStream" | "PipeStream" | "TcpListener" | "Store" | "Stdin" | "Stdout" => {
+                return true;
+            }
             "List" | "Option" | "Result" | "Tuple" => {
                 return ty.args.iter().any(|a| self.can_hold_handle(a, depth + 1));
             }
@@ -2014,6 +2092,9 @@ impl Checker {
         }
         match self.static_type(receiver) {
             None => true,
+            Some(ty) if ty.args.is_empty() && self.bounded.contains(&ty.name.name) => {
+                is_stream_method(&name.name) || matches!(name.name.as_str(), "copy" | "debug")
+            }
             Some(ty) => builtin_applies(&ty, &name.name),
         }
     }
@@ -3160,6 +3241,14 @@ impl Checker {
                     "`Store.new()` is test-only; a program's stores are `resource`s".to_string(),
                 );
             }
+            if ty.name == "Pipe" && name.name == "pair" && !self.in_test {
+                self.error(
+                    "E051",
+                    name.span,
+                    "`Pipe.pair()` is test-only; a program's streams come from a listener or a connect"
+                        .to_string(),
+                );
+            }
             if is_effectful_static(&ty.name, &name.name) {
                 let needed = static_effect(&ty.name, &name.name)
                     .map(str::to_string)
@@ -3577,10 +3666,6 @@ pub fn substitute_type(ty: &Type, params: &[String], args: &[Type]) -> Type {
     }
 }
 
-/// Whether the builtin method `method` applies to a receiver of declared
-/// type `ty` (`docs/slice.md` sections 6, 7 and 13): the table of
-/// `ignite-types`' builtins by type name. A type parameter or a fn type
-/// takes none but `copy`.
 /// The name a place `x`, `x.f`, `x[i]` or `x.0` (nested) is rooted in.
 fn place_root(expr: &Expr) -> Option<&Ident> {
     let mut current = expr;
@@ -3595,6 +3680,17 @@ fn place_root(expr: &Expr) -> Option<&Ident> {
     }
 }
 
+/// The methods of `ByteStream` (`docs/slice.md` 18.3), which `TcpStream`,
+/// `PipeStream` and a `ByteStream`-bounded type parameter have.
+fn is_stream_method(method: &str) -> bool {
+    matches!(method, "read" | "write_all" | "close" | "set_idle_timeout")
+}
+
+/// Whether the builtin method `method` applies to a receiver of declared
+/// type `ty` (`docs/slice.md` sections 6, 7 and 13): the table of
+/// `ignite-types`' builtins by type name. A type parameter or a fn type
+/// takes none but `copy`; [`Checker::builtin_method`] gives a
+/// `ByteStream`-bounded one the stream methods.
 fn builtin_applies(ty: &Type, method: &str) -> bool {
     let name = ty.name.name.as_str();
     if method == "copy" || method == "debug" {
@@ -3631,7 +3727,8 @@ fn builtin_applies(ty: &Type, method: &str) -> bool {
             "next_id" | "get" | "put" | "remove" | "values" | "update"
         ),
         "TcpListener" => matches!(method, "accept" | "local_port"),
-        "TcpStream" => matches!(method, "read" | "write_all" | "close" | "set_idle_timeout"),
+        "TcpStream" => is_stream_method(method),
+        "PipeStream" => is_stream_method(method) || method == "received_batches",
         "Map" => matches!(
             method,
             "get" | "put" | "remove" | "keys" | "len" | "contains"
@@ -3768,6 +3865,7 @@ mod tests {
             type_params: Vec::new(),
             test_only: false,
             owner: None,
+            bounds: Vec::new(),
         })
     }
 

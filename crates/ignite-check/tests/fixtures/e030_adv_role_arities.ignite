@@ -1,0 +1,31 @@
+protocol Bare {
+  fn serve() -> Result<Unit, IoError> requires [stdout.write] {
+    return Ok(Unit)
+  }
+}
+
+protocol Narrow {
+  fn serve(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read] {
+    return Ok(Unit)
+  }
+}
+
+protocol Generic {
+  fn serve<S: ByteStream>(stream: S, limits: Int, application: Int, extra: Int) -> Result<Unit, IoError> requires [stream.read] {
+    return Ok(Unit)
+  }
+
+  fn connect<S: ByteStream>(stream: S, limits: Int) -> Result<Unit, IoError> requires [stream.read] {
+    return Ok(Unit)
+  }
+}
+
+protocol Fine {
+  fn serve<S: ByteStream>(stream: S, limits: Int, application: Int) -> Result<Unit, IoError> requires [stream.read] {
+    return Ok(Unit)
+  }
+
+  fn connect<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read] {
+    return Ok(Unit)
+  }
+}

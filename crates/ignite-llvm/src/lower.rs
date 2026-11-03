@@ -3227,6 +3227,37 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         Val::Ptr(result, true)
     }
 
+    /// The runtime entry (without `ignite_rt_`) of the stream method `op`
+    /// that builtin `b` calls (`docs/slice.md` 18.11, D11): `tcp_<op>` for
+    /// a `TcpStream`, `pipe_<op>` for a `PipeStream`. A `Stream*` builtin
+    /// of a `ByteStream`-bounded receiver takes the kind of the receiver's
+    /// substituted type, so each instance calls its own entries and no
+    /// dispatch is left for run time.
+    fn stream_entry(&mut self, b: Builtin, receiver: Option<&Expr>, op: &str) -> String {
+        use Builtin::*;
+        let pipe = match b {
+            TcpStreamRead | TcpStreamWriteAll | TcpStreamClose | TcpStreamSetIdleTimeout => false,
+            PipeStreamRead | PipeStreamWriteAll | PipeStreamClose | PipeStreamSetIdleTimeout => {
+                true
+            }
+            _ => match self.ty(receiver.expect("a stream method has a receiver")) {
+                Ty::TcpStream => false,
+                Ty::PipeStream => true,
+                other => panic!(
+                    "`{b:?}` on a receiver of type {other:?}: an instance substitutes \
+                     `TcpStream` or `PipeStream` for a `ByteStream` bound"
+                ),
+            },
+        };
+        if pipe {
+            let entry = format!("pipe_{op}");
+            self.m.declare_pipe(&format!("ignite_rt_{entry}"));
+            entry
+        } else {
+            format!("tcp_{op}")
+        }
+    }
+
     /// A runtime call `void ignite_rt_<name>(ptr out, args..)` producing `ty`.
     fn rt_out(&mut self, name: &str, ty: &Ty, args: &[String]) -> Val {
         let out = self.temp(ty);
@@ -3635,30 +3666,33 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                         .val(format!("call i64 @ignite_rt_tcp_local_port(i64 {l})")),
                 )
             }
-            TcpStreamRead => {
+            TcpStreamRead | PipeStreamRead | StreamRead => {
+                let entry = self.stream_entry(b, receiver, "read");
                 let r = recv(self);
                 let s = self.scalar(&r);
                 let max = self.scalar_arg(&args[0]);
                 self.rt_result(
-                    "tcp_read",
+                    &entry,
                     &[format!("i64 {s}"), format!("i64 {max}")],
                     Ty::Input,
                 )
             }
-            TcpStreamWriteAll => {
+            TcpStreamWriteAll | PipeStreamWriteAll | StreamWriteAll => {
+                let entry = self.stream_entry(b, receiver, "write_all");
                 let r = recv(self);
                 let s = self.scalar(&r);
                 let data = self.read_arg(&args[0]);
                 self.rt_result(
-                    "tcp_write_all",
+                    &entry,
                     &[format!("i64 {s}"), format!("ptr {data}")],
                     Ty::Unit,
                 )
             }
-            TcpStreamClose => {
+            TcpStreamClose | PipeStreamClose | StreamClose => {
+                let entry = self.stream_entry(b, receiver, "close");
                 let r = recv(self);
                 let s = self.scalar(&r);
-                self.rt_result("tcp_close", &[format!("i64 {s}")], Ty::Unit)
+                self.rt_result(&entry, &[format!("i64 {s}")], Ty::Unit)
             }
             StdinRead => {
                 let max = self.scalar_arg(&args[0]);
@@ -3713,15 +3747,32 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     .ins(format!("store i8 {byte}, ptr {payload}, align 1"));
                 Val::Ptr(result, true)
             }
-            TcpStreamSetIdleTimeout => {
+            TcpStreamSetIdleTimeout | PipeStreamSetIdleTimeout | StreamSetIdleTimeout => {
+                let entry = self.stream_entry(b, receiver, "set_idle_timeout");
                 let r = recv(self);
                 let s = self.scalar(&r);
                 let ms = self.scalar_arg(&args[0]);
-                self.rt_result(
-                    "tcp_set_idle_timeout",
-                    &[format!("i64 {s}"), format!("i64 {ms}")],
-                    Ty::Unit,
-                )
+                self.rt_result(&entry, &[format!("i64 {s}"), format!("i64 {ms}")], Ty::Unit)
+            }
+            PipeStreamReceivedBatches => {
+                self.m.declare_pipe("ignite_rt_pipe_received_batches");
+                let r = recv(self);
+                let s = self.scalar(&r);
+                Val::Scalar(self.f.val(format!(
+                    "call i64 @ignite_rt_pipe_received_batches(i64 {s})"
+                )))
+            }
+            PipePair => {
+                self.m.declare_pipe("ignite_rt_pipe_pair");
+                let ends = [Ty::PipeStream, Ty::PipeStream];
+                let (offsets, _) = self.env.tuple_layout(&ends);
+                let pair = self.temp(&Ty::Tuple(ends.to_vec()));
+                let first = self.gep(&pair, offsets[0]);
+                let second = self.gep(&pair, offsets[1]);
+                self.f.ins(format!(
+                    "call void @ignite_rt_pipe_pair(ptr {first}, ptr {second})"
+                ));
+                Val::Ptr(pair, true)
             }
             StoreNextId => {
                 let r = recv(self);
@@ -4008,11 +4059,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// runs `symbol` with copies of them, and start it (`docs/llvm.md`
     /// section 4). `values` are deep-copied into the environment and
     /// `ignite_rt_spawn` waits until the thunk has copied them again into its
-    /// own arena. A `TcpStream` flagged as moved belongs to the task from
-    /// then on: the thunk registers it with `tcp_own`, so a failure closes
-    /// it, and releases it when `symbol` returns, which closes the connection
-    /// once the session is over (the accept loop of a server kind's `main`
-    /// hands each accepted stream to its task this way). When no
+    /// own arena. A stream ([`is_stream`]) flagged as moved belongs to the
+    /// task from then on: the thunk registers it with `tcp_own`, so a
+    /// failure closes it, and releases it when `symbol` returns, which closes
+    /// the connection or pipe end once the session is over (the accept loop
+    /// of a server kind's `main` hands each accepted stream to its task this
+    /// way; `docs/slice.md` 18.11 for pipe ends). When no
     /// thread can start, the moved streams are released at once instead. A
     /// stream not moved stays the parent's (a client role keeps reading
     /// the stream `forward_input` writes to).
@@ -4070,7 +4122,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 operands.push(Some(format!("ptr {own}")));
             } else if let Some(llty) = scalar_type(ty) {
                 let x = t.load_scalar(ty, &src);
-                if *moved && *ty == Ty::TcpStream {
+                if *moved && is_stream(ty) {
                     streams.push(x.clone());
                 }
                 operands.push(Some(format!("{llty} {x}")));
@@ -4107,7 +4159,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let parents: Vec<String> = values
             .iter()
             .filter_map(|(ty, v, moved)| match v {
-                Val::Scalar(stream) if *moved && *ty == Ty::TcpStream => Some(stream.clone()),
+                Val::Scalar(stream) if *moved && is_stream(ty) => Some(stream.clone()),
                 _ => None,
             })
             .collect();
@@ -4186,6 +4238,13 @@ fn instance_linkage(
     } else {
         ("", "")
     }
+}
+
+/// Whether `ty` is a stream handle that a task owns when it is moved to
+/// it: a `TcpStream` or a `PipeStream` end (`ignite_rt_tcp_own` and
+/// `ignite_rt_tcp_release` take any handle, `docs/slice.md` 18.9).
+fn is_stream(ty: &Ty) -> bool {
+    matches!(ty, Ty::TcpStream | Ty::PipeStream)
 }
 
 /// `sig` with `params` replaced by `args`.

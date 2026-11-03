@@ -1,0 +1,7 @@
+e099_adv_type_positions.ignite:1:16: error[E099]: `ByteStream` is an interface, not a type; declare a type parameter `<S: ByteStream>`
+e099_adv_type_positions.ignite:4:7: error[E099]: `ByteStream` is an interface, not a type; declare a type parameter `<S: ByteStream>`
+e099_adv_type_positions.ignite:7:23: error[E099]: `ByteStream` is an interface, not a type; declare a type parameter `<S: ByteStream>`
+e099_adv_type_positions.ignite:9:27: error[E099]: `ByteStream` is an interface, not a type; declare a type parameter `<S: ByteStream>`
+e099_adv_type_positions.ignite:12:10: error[E099]: `ByteStream` is an interface, not a type; declare a type parameter `<S: ByteStream>`
+e099_adv_type_positions.ignite:17:15: error[E099]: `ByteStream` is an interface, not a type; declare a type parameter `<S: ByteStream>`
+e099_adv_type_positions.ignite:21:18: error[E099]: `ByteStream` is an interface, not a type; declare a type parameter `<S: ByteStream>`

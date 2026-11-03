@@ -1290,6 +1290,15 @@ impl<'p> Evaluator<'p> {
                 | Builtin::TcpStreamWriteAll
                 | Builtin::TcpStreamClose
                 | Builtin::TcpStreamSetIdleTimeout
+                | Builtin::PipeStreamRead
+                | Builtin::PipeStreamWriteAll
+                | Builtin::PipeStreamClose
+                | Builtin::PipeStreamSetIdleTimeout
+                | Builtin::PipeStreamReceivedBatches
+                | Builtin::StreamRead
+                | Builtin::StreamWriteAll
+                | Builtin::StreamClose
+                | Builtin::StreamSetIdleTimeout
                 | Builtin::StoreNextId
                 | Builtin::StoreGet
                 | Builtin::StorePut
@@ -2079,6 +2088,7 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::ModuleRecord
             | Builtin::ClockMonotonic
             | Builtin::EndpointOf
+            | Builtin::PipePair
     )
 }
 

@@ -1,0 +1,11 @@
+type Holder { stream: ByteStream }
+
+fn unknown<S: Readable>(stream: S) -> S = stream
+
+fn two<S: ByteStream + Readable>(stream: S) -> S = stream
+
+fn as_type(stream: ByteStream) -> Int = 0
+
+fn as_argument(streams: List<ByteStream>) -> Int = 0
+
+fn bounded<S: ByteStream>(stream: S) -> S = stream

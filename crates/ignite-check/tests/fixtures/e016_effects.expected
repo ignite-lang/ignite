@@ -1,9 +1,10 @@
-e016_effects.ignite:4:6: error[E016]: missing effect `stdout.write` for `Stdout.write_all`; add it to the `requires` of `Pipe.connect`
-e016_effects.ignite:5:12: error[E016]: missing effect `stream.write` for `relay`; add it to the `requires` of `Pipe.connect`
-e016_effects.ignite:5:12: error[E016]: missing effect `stdin.read` for `relay`; add it to the `requires` of `Pipe.connect`
+e016_effects.ignite:4:6: error[E016]: missing effect `stdout.write` for `Stdout.write_all`; add it to the `requires` of `Relay.connect`
+e016_effects.ignite:5:12: error[E016]: missing effect `stream.write` for `relay`; add it to the `requires` of `Relay.connect`
+e016_effects.ignite:5:12: error[E016]: missing effect `stdin.read` for `relay`; add it to the `requires` of `Relay.connect`
 e016_effects.ignite:16:4: error[E016]: missing effect `stream.write` for `s.close`; add it to the `requires` of `alias`
 e016_effects.ignite:17:9: error[E016]: missing effect `stream.write` for `relay`; add it to the `requires` of `alias`
 e016_effects.ignite:24:4: error[E016]: missing effect `stdin.mode` for `Stdin.set_raw`; add it to the `requires` of `owned`
 e016_effects.ignite:25:10: error[E016]: missing effect `stdin.read` for `relay`; add it to the `requires` of `owned`
 e016_effects.ignite:29:17: error[E016]: missing effect `listener.accept` for `listener.accept`; add it to the `requires` of `serve_one`
 e016_effects.ignite:38:10: error[E016]: missing effect `b.write` for `target.write_all`; add it to the `requires` of `reassigned`
+e016_effects.ignite:43:10: error[E016]: missing effect `stream.write` for `stream.write_all`; add it to the `requires` of `bounded`

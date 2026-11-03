@@ -1,0 +1,1 @@
+e116_adv_pipe_pair_property.ignite:9:12: error[E116]: effectful call `Pipe.pair` in the property `ends` of component `holder`: a property expression is pure

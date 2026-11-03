@@ -15,7 +15,7 @@ the IO substrate (Rust) that compiled programs link.
 | `crates/ignite-rustgen/` | Rust target: the `ignite-std` crate and the program crate |
 | `crates/ignite-llvm/` | LLVM target: IR text for std, program and one main per executable |
 | `crates/ignite-rt/` | runtime of the LLVM target, `libignite_rt.a`: C ABI adapter over `ignite-io` (value conversion, handle table), arenas and regions, the spawn handshake; no IO of its own |
-| `crates/ignite-io/` | IO substrate of both targets, blocking: TCP listener and stream, stdin, stdout, terminal mode, tasks (one thread each), `run`, process arguments and exit, the reports of `assert` and `?`, the test runner (feature `runner`) |
+| `crates/ignite-io/` | IO substrate of both targets, blocking: TCP listener and stream, the in-process pipe (`Pipe.pair()`, `PipeStream`, coalescing as TCP, bounded at `PIPE_CAPACITY`, `received_batches`; `docs/slice.md` 18.4, 18.8) and the `ByteStream` trait both streams implement, stdin, stdout, terminal mode, tasks (one thread each), `run`, process arguments and exit, the reports of `assert` and `?`, the test runner (feature `runner`) |
 | `crates/ignite-eval/` | compile-time evaluator (`docs/slice.md` section 15): interprets property expressions over the typed modules with fuel (E115, E117, E118), builds the system model `ignite plan` prints, resolves assemblies through `std.deploy`'s `admits` and `includes` (E110 to E114), renders `ignite explain`; steps the reducers of `std.control` for `ignite run` and `ignite replay` (`docs/slice.md` 16.2, O27); used by `check`, `plan`, `explain`, `run` and `replay` only, linked by no backend and no compiled program |
 | `crates/ignite/` | `ignite` CLI: `check`, `emit`, `build`, `test`, `plan`, `explain`, `run`, `replay`; end-to-end tests of the example in `tests/terminal.rs`, model and explain goldens in `tests/golden/` |
 | `crates/ignite/src/run/` | the driver of `ignite run` and `ignite replay` (`docs/slice.md` 16.3): `engine` steps the `std.control` reducers in `ignite-eval`, `live` runs the adapters `process`, `probe`, `clock` and `control` that turn effects into processes, attempts, timers and stdin commands and feed events back, `journal` records every event, effect, signal, standing and consequence (16.5), `replay` re-steps a journal and compares (E127) |
@@ -27,15 +27,15 @@ the IO substrate (Rust) that compiled programs link.
 | `std/text.ignite` | text operations called by UFCS (`split`, `contains`, `to_lower`, `is_digit`, …) |
 | `std/option.ignite`, `std/result.ignite` | UFCS helpers on `Option` and `Result` (`unwrap_or`, `map`, `and_then`, `ok_or`, `map_err`, `ok`, …); the shared names make a glob import of both E041 at use |
 | `std/json.ignite` | `Json` with integer numbers (RFC 8259): `encode`, `parse` |
-| `std/net.ignite` | `Endpoint { address, port }`: the client-side target a bare `TcpListener` resource name gives where `Endpoint` is expected (slice 10); the module is also the substrate builtins `TcpListener`, `TcpStream`, `Exposure`; `Endpoint.of(ref)` is the substrate builtin that resolves a `Ref` through `ignite run`'s `--ref` arguments (16.9) |
+| `std/net.ignite` | `Endpoint { address, port }`: the client-side target a bare `TcpListener` resource name gives where `Endpoint` is expected (slice 10); the module is also the substrate builtins `TcpListener`, `TcpStream`, `Exposure` and, since slice 14, the interface `ByteStream`, the test-only `Pipe.pair()` and its ends `PipeStream` (`docs/slice.md` 18.3, 18.4); `Endpoint.of(ref)` is the substrate builtin that resolves a `Ref` through `ignite run`'s `--ref` arguments (16.9) |
 | `std/sli.ignite` | probe attempts, windows, missing data and the meets check; the leaf module that `std.control`, `std.contract` and `std.protocol.telnet` import |
 | `std/time.ignite` | civil time for calendar windows, a leaf: `month_start` and `next_month_start` of an instant in `UTC` or `Europe/Berlin` (EU summer-time rule), `zone_known` |
 | `std/control.ignite` | the pure reducers `ignite run` steps (`docs/slice.md` 16.5 to 16.12): `Machine` (`Supervise`, `Schedule`, `Evaluate`, `Roll`), `Event`, `Effect`, `Standing`, `Fired`, `step(machine, event) -> Step`, `companions(machine)`; imports only the leaves `std.sli`, `std.policy`, `std.time` (O45), tested inline with synthetic event lists; `crates/ignite/tests/fixtures/control_trace.ignite` steps the same reducers in the evaluator and on both targets (`control_trace::reducers_agree_across_the_evaluator_and_both_targets`) and times A7 (`control_trace::a7_evaluator_steps_10000_emissions_into_a_30_day_window`) |
-| `std/protocol/telnet.ignite` | `protocol Telnet`: server role `serve`, client role `connect`; the executable kinds `TelnetServer` (accept loop, `SessionLimits`, `TelnetProfile`), `TelnetClient` (exit 3 and 4) and the probe `TelnetPrompt` (`main` runs one attempt, the probe process of `docs/slice.md` 16.8; `machine` its scheduler) |
-| `std/protocol/http.ignite` | `protocol Http`: server role `serve` over `HttpApp<S>`; `Request`, `Response`; the executable kind `HttpServer<S>` |
+| `std/protocol/telnet.ignite` | `protocol Telnet`: server role `serve(stream, limits: SessionLimits, application)`, client role `connect`, both generic over `S: ByteStream` (`docs/slice.md` 18.6); its session tests run over a pipe, one stays on TCP; the executable kinds `TelnetServer` (accept loop, `SessionLimits`, `TelnetProfile`), `TelnetClient` (exit 3 and 4) and the probe `TelnetPrompt` (`main` runs one attempt, the probe process of `docs/slice.md` 16.8; `machine` its scheduler) |
+| `std/protocol/http.ignite` | `protocol Http`: server role `serve(stream: T, limits: HttpLimits, application: HttpApp<S>)`, generic over `T: ByteStream`; `Request`, `Response`, `HttpLimits`; the executable kind `HttpServer<S>`; its session tests run over a pipe, one also on TCP |
 | `std/contract.ignite`, `std/policy.ignite`, `std/deploy.ignite`, `std/cli.ignite` | the declaration vocabulary of design section 11.3 (`SLA`, `Availability`, `Restart`, `DrainRollout`, `Deployment`, `Application`, …; the Telnet probe `TelnetPrompt` is in `std/protocol/telnet.ignite`), checked and tested; `std.deploy`'s `Member`, `admits` and `includes` are what the compiler calls to resolve an assembly (`docs/slice.md` 15.6); since slice 12 each runnable kind has the hooks `machine` and `validate` of 16.16 (`ignite run` steps the machines, `ignite check` reports `validate`'s reasons as E120) and `std.deploy.entries` names the entries a binding needs (E129) |
 | `examples/terminal/terminal.ignite` | the terminal system in component form (`CommandConsole`, `TelnetServer`, `TelnetClient`); `ignite build` emits `terminald` and `tn` |
-| `examples/terminal/commands.ignite`, `command_schema.ignite` | sibling modules of the terminal: the console's commands (`respond`) and their names (`commands`), filled into the declaration by `module(..)` |
+| `examples/terminal/commands.ignite`, `command_schema.ignite` | sibling modules of the terminal: the console's commands (`respond`) and their names (`commands`), filled into the declaration by `module(..)`; `commands.ignite` ends with the test "the terminal transcript over a pipe", slice 9 item 4's transcript through `Telnet.serve` over `Pipe.pair()` (`docs/slice.md` 18.0 row 3); tests elsewhere rewrite its `lines = ["ready"]`, so that test writes `ready` as bytes |
 | `examples/terminal/terminal.design.ignite` | the full declaration from design section 11.3; `ignite check` passes it (`cli::check_design_file_is_silent`); `ignite run` builds it; `task compile` builds `terminal.ignite` |
 | `examples/todo/` | the todo system: an HTTP JSON backend over `Store<Todo>`; `ignite build` emits `todod` |
 | `docs/vision.md` | direction: target architecture, sequencing of waves and slices, contradictions between documents, open and taken decisions |
@@ -462,3 +462,48 @@ precedence cases in 17.5 "As landed (U5)".
   warm-step budget of 10.8 s is not reachable while the live `apply*` suites run inside
   `cargo test --workspace`. Analysis and the proposed tiered budget:
   `docs/performance/13/verdict.md`.
+
+## Slice 14 in-process streams (2026-11-03)
+
+- Gate at the close (the slice's merge gate), `task gate` on `s14/u5b-records` (65d6cd3),
+  2026-11-03 07:21:14 to 07:27:37 UTC, 383.2 s, exit 0, start load 3.14, the worktree's own
+  target warm from an earlier attempt, `RUST_TEST_THREADS=4`: 819 cargo tests passed, 0 failed,
+  6 ignored; 191 inline tests per target. The `crates/ignite` end-to-end binary is 359.82 s of
+  it (243 passed, 4 ignored). The before tree's full `task gate`: 369.0 s, exit 0, load 3.02, 777
+  passed, 5 ignored, 160 inline per target, end-to-end binary 360.32 s.
+- 18.18 method (`docs/slice.md` 15.1): "before" is a `git archive 340f782` copy, "after" the
+  65d6cd3 tree. One cold gate per tree, then three interleaved warm passes at load 2.9 to 6.9. No
+  pair was dropped by the load rule. Medians of pair ratios; raw logs, scripts and every pair are
+  in `docs/performance/14/` (`pairs.md`, `counts.txt`).
+
+| unit | before s | after s | ratio | pairs |
+|---|---|---|---|---|
+| gate, cold (fmt, clippy, test without apply, test-ignite) | 77.79 (0.72, 4.94, 63.56, 8.55) | 86.84 (0.79, 6.11, 70.42, 9.50) | 1.12 (1.09, 1.24, 1.11, 1.11) | 1 |
+| gate, warm after the touch | 21.34 (0.70, 3.35, 16.42, 0.80) | 23.16 (0.73, 3.50, 17.72, 1.23) | 1.09 (1.03, 1.03, 1.08, 1.51) | 3 |
+| `task test-ignite`, warm | 0.750 | 1.205 | 1.62 | 3 |
+| `--no-run` after the touch | 2.741 | 2.894 | 1.01 | 3 |
+| `ignite check`, `ignite plan` of the design file | 0.071, 0.070 | 0.073, 0.073 | 1.03, 1.06 | 15 |
+| `ignite test` telnet.ignite, cold / warm | 3.866 / 0.385 | 4.582 / 0.798 | 1.19 / 2.07 | 3 |
+| `ignite test` http.ignite, cold / warm | 3.498 / 0.113 | 4.016 / 0.433 | 1.16 / 3.84 | 3 |
+| todod Rust dev / release | 3.102 / 4.216 | 3.125 / 4.177 | 1.01 / 0.99 | 3 |
+| todod LLVM dev / release | 0.270 / 0.718 | 0.286 / 0.733 | 1.01 / 1.00 | 3 |
+| terminald Rust dev / release | 3.089 / 3.900 | 3.114 / 4.051 | 1.02 / 1.01 | 3 |
+| terminald LLVM dev / release | 0.419 / 0.520 | 0.436 / 0.522 | 1.05 / 1.01 | 3 |
+
+- Rises over 10 %:
+  - `task test-ignite` (gate step 1.51, standalone 1.62): the inline tests went from 160 to 191
+    per target and their execution (`finished in`) from 0.13 to 0.34 s per target, both measured;
+    that is 0.21 s of the 0.45 s rise. The rest is inferred: the frontend on the larger std
+    (`std/` and `examples/` +505 lines).
+  - `ignite test` warm, telnet 2.07 and http 3.84: tests 25 to 37 and 23 to 41, execution 0.11
+    to 0.31 s and 0.01 to 0.16 s, measured; that is 0.20 s of 0.41 s and 0.15 s of 0.32 s. That
+    the new pipe idle-timeout tests set the execution time is inferred, as is the rest of each
+    rise (frontend, the larger test program).
+  - `ignite test` cold, telnet 1.19 and http 1.16: the same execution growth, measured; the
+    compile of the larger test program is inferred.
+  - Cold gate 1.12 (clippy 1.24, test 1.11, test-ignite 1.11), one pair: cargo tests without
+    apply 695 to 737 passed and 5 to 6 ignored, measured; crate sources +1,218 lines in `src/` and
+    +4,045 in `tests/` (`git diff --shortstat 340f782 65d6cd3`), measured. The split between
+    compile and execution is inferred.
+- No baseline moved. The apply suites stay the slice-13 exception and inside the full
+  `task gate` only.

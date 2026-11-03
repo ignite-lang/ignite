@@ -3,3 +3,4 @@ e030_protocol_roles.ignite:4:6: error[E030]: `listen` is not a protocol role; th
 e030_protocol_roles.ignite:8:6: error[E030]: role `Broken.serve` must be effectful; add a `requires` clause
 e030_protocol_roles.ignite:12:6: error[E030]: role `Broken.connect` takes 1 parameter (stream), found 2
 e030_protocol_roles.ignite:19:17: error[E030]: protocol `Echo` has no role `serve`
+e030_protocol_roles.ignite:24:6: error[E030]: role `Wide.serve` takes 2 parameters (stream, application) or 3 (stream, limits, application), found 4

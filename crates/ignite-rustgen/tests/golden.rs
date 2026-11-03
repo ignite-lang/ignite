@@ -30,6 +30,7 @@ const TYPED: &[&str] = &[
     "services",
     "modules",
     "targets",
+    "bounds",
 ];
 
 fn lower(stem: &str, std_root: &Path) -> (GeneratedProject, GeneratedProject) {
@@ -420,4 +421,127 @@ fn acceptance_copy_is_current() {
         copy, original,
         "tests/golden/terminal.ignite is a copy of examples/terminal/terminal.ignite; refresh it and its goldens"
     );
+}
+
+/// Write `project` and `std` under the test run's target directory as
+/// `ignite-rustgen-test/<name>` and build them with cargo there.
+fn cargo_build(project: &GeneratedProject, std: &GeneratedProject, name: &str) {
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| common::workspace().join("target"));
+    let out = target.join("ignite-rustgen-test").join(name);
+    ignite_rustgen::write_project(project, &out).unwrap();
+    ignite_rustgen::write_project(std, &out.join("std")).unwrap();
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let status = std::process::Command::new(cargo)
+        .arg("build")
+        .arg("--manifest-path")
+        .arg(out.join("Cargo.toml"))
+        .arg("--target-dir")
+        .arg(&target)
+        .env("CARGO_INCREMENTAL", "0")
+        .status()
+        .unwrap();
+    assert!(status.success(), "cargo build of {} failed", out.display());
+}
+
+/// Slice 14 (`docs/slice.md` 18.10): a parameter bounded by `ByteStream`
+/// is `S: ignite_io::ByteStream + ..`; the four stream methods on it are
+/// calls of the trait qualified with the type; every use of a bounded fn
+/// or role names its type arguments, every call of an unbounded generic
+/// fn does not; `PipeStream` and `Pipe.pair()` are the substrate's. The
+/// program and its test build both build with cargo.
+#[test]
+fn bounded_streams() {
+    let project = check_program("bounds", &common::golden_std(), false);
+    assert_eq!(executable_names(&project), ["relayd"]);
+    let lib = norm(&project.lib_rs);
+    for expected in [
+        "pub fn relay<S: ignite_io::ByteStream + Clone + Send + Sync + 'static>(stream: &S) -> IoResult<()>",
+        "pub fn serve<S: ignite_io::ByteStream + Clone + Send + Sync + 'static>(mut stream: S, mut limit: i64)",
+        "pub fn identity<T: Clone + Send + Sync + 'static>(value: &T) -> T",
+        "<S as ignite_io::ByteStream>::read(&stream, 16)",
+        "<S as ignite_io::ByteStream>::set_idle_timeout(&stream, limit.clone())",
+        "<S as ignite_io::ByteStream>::close(&stream)",
+        "<S as ignite_io::ByteStream>::write_all(&copy, ",
+        "identity(",
+        "once::<T>(inner)",
+        "relay::<T>(inner)",
+        "relay::<ignite_io::TcpStream>(stream)",
+        "forward::<ignite_io::TcpStream>(stream)",
+        "Relay::serve::<ignite_io::TcpStream>(",
+        "relay::<ignite_io::PipeStream>(end)",
+        "once::<ignite_io::PipeStream>(end)",
+        "forward::<ignite_io::PipeStream>(end)",
+        "Relay::serve::<ignite_io::PipeStream>(",
+        "pub fn over_pipe(end: &ignite_io::PipeStream) -> IoResult<i64>",
+        "end.received_batches()",
+        "stream.set_idle_timeout(100)",
+        "end.set_idle_timeout(100)",
+    ] {
+        assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
+    }
+    assert!(!lib.contains("identity::<"), "{lib}");
+    assert!(!lib.contains("dyn ignite_io::ByteStream"), "{lib}");
+    let main = norm(&project.executables[0].source);
+    assert!(!main.contains("dyn ignite_io::ByteStream"), "{main}");
+
+    let file = golden_dir().join("bounds.ignite");
+    let substrate = common::workspace().join("crates/ignite-io");
+    let substrate = substrate.canonicalize().unwrap_or(substrate);
+    let (tests, tests_std) = common::lower_tests(&file, &common::golden_std(), &substrate);
+    let test_lib = norm(&tests.lib_rs);
+    assert!(
+        test_lib.contains("ignite_io::Pipe::pair()"),
+        "no `ignite_io::Pipe::pair()` in\n{test_lib}"
+    );
+    let (program, std) = common::lower_typed(&file, &common::golden_std(), &substrate);
+    cargo_build(&program, &std, "bounds");
+    cargo_build(&tests, &tests_std, "bounds-tests");
+}
+
+/// Adversary (slice 14, U3): the turbofish of a bounded call (18.10, D8)
+/// spells every type argument with `rust_ty`. Inside `outer<S: ByteStream>`
+/// the second argument of `tagged` is the record `S`, which Ignite resolves
+/// at `make`'s declaration; the Rust turbofish `tagged::<S, S>` names the
+/// type parameter twice. The program checks and types, so it must build.
+#[test]
+#[ignore = "a type parameter that shadows a record name, story:rustgen-type-parameter-shadowing"]
+fn bounded_turbofish_keeps_a_record_named_like_a_bound() {
+    let source = "package examples.shadow\n\
+\n\
+import std.net.ByteStream\n\
+import std.io.IoError\n\
+\n\
+type IoResult<T> = Result<T, IoError>\n\
+\n\
+type S { value: Int }\n\
+\n\
+fn make() -> S = S { value = 4 }\n\
+\n\
+fn tagged<T: ByteStream, U>(stream: T, tag: U) -> IoResult<U> requires [stream.write] {\n\
+  stream.write_all(\"t\".to_bytes())?\n\
+  Ok(tag)\n\
+}\n\
+\n\
+fn outer<S: ByteStream>(stream: S) -> IoResult<Int> requires [stream.write] {\n\
+  let record = tagged(stream, make())?\n\
+  Ok(record.value)\n\
+}\n";
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| common::workspace().join("target"));
+    let dir = target.join("ignite-rustgen-test").join("adv-shadow-src");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("shadow.ignite");
+    std::fs::write(&file, source).unwrap();
+    let substrate = common::workspace().join("crates/ignite-io");
+    let substrate = substrate.canonicalize().unwrap_or(substrate);
+    let (program, std) = common::lower_typed(&file, &common::golden_std(), &substrate);
+    assert!(
+        !norm(&program.lib_rs).contains("tagged::<S, S>("),
+        "the turbofish names the type parameter `S` for the record `S`:\n{}",
+        program.lib_rs
+    );
+    cargo_build(&program, &std, "adv-shadow");
 }
