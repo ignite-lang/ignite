@@ -15,6 +15,7 @@
 //! ignite replay <file.ignite> [--assembly NAME] [--state DIR] [--std PATH] [--fuel N]
 //! ignite rfc import FILE [--sections LIST] [--package NAME] [--url URL] [--out FILE]
 //! ignite rfc check CATALOGUE [SOURCE]
+//! ignite conformance <file.ignite> [--target rust|llvm] [--std DIR] [--out DIR] [--clang PATH] [--runtime PATH] [--target-dir DIR] [--release] [--triple TRIPLE]
 //! ```
 //!
 //! `--std` is the standard-library root (default: the repository's `std/`
@@ -29,7 +30,10 @@
 //! `ignite run` exits with the run's status (section 16.3: 0 a requested
 //! stop, 1 a machine gave up or failed), 2 for a diagnostic before the
 //! start; `ignite replay` prints the final standings. `ignite rfc import` and
-//! `ignite rfc check` have their own statuses (section 19.8).
+//! `ignite rfc check` have their own statuses (section 19.8). `ignite
+//! conformance` prints the conformance matrix (section 19.10) and exits 0
+//! when every claim holds, 1 when one does not, 2 for a diagnostic or a file
+//! without a conforming protocol, 3 when the test build or run fails.
 
 use std::path::PathBuf;
 
@@ -285,6 +289,36 @@ enum Commands {
         #[command(subcommand)]
         command: RfcCommand,
     },
+    /// Print the conformance matrix of a file's protocols, running the verifying tests on one
+    /// target (`docs/slice.md` section 19.10). Exit 0 every claim holds, 1 one does not,
+    /// 2 a diagnostic or no conforming protocol, 3 a test build or run failure.
+    Conformance {
+        file: PathBuf,
+        /// `rust` (default) or `llvm`.
+        #[arg(long, value_enum, default_value = "rust")]
+        target: TargetArg,
+        /// Root of the standard library.
+        #[arg(long)]
+        std: Option<PathBuf>,
+        /// Root of the test builds (default `target/ignite-test`).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// clang for `--target llvm`.
+        #[arg(long)]
+        clang: Option<PathBuf>,
+        /// LLVM runtime archive with the test runner for `--target llvm`.
+        #[arg(long)]
+        runtime: Option<PathBuf>,
+        /// Cargo target directory for `--target rust`.
+        #[arg(long)]
+        target_dir: Option<PathBuf>,
+        /// Build the tests with the release profile.
+        #[arg(long)]
+        release: bool,
+        /// Target triple for `--target llvm`, passed to clang.
+        #[arg(long)]
+        triple: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -435,6 +469,46 @@ fn run() {
     if let Commands::Rfc { command } = cli.command {
         std::process::exit(rfc(command));
     }
+    if let Commands::Conformance {
+        file,
+        target,
+        std,
+        out,
+        clang,
+        runtime,
+        target_dir,
+        release,
+        triple,
+    } = cli.command
+    {
+        let options = ignite::TestOptions {
+            build: ignite::BuildOptions {
+                target: target.into(),
+                clang,
+                runtime,
+                out,
+                target_dir,
+                std,
+                release,
+                triple,
+                ..ignite::BuildOptions::default()
+            },
+            runner: Vec::new(),
+        };
+        match ignite::conformance::run(&file, &options) {
+            Ok(status) => std::process::exit(status),
+            Err(error) => {
+                match &error {
+                    ignite::Error::Diagnostics { .. } => eprintln!("{error}"),
+                    _ => eprintln!("error: {error}"),
+                }
+                std::process::exit(match error {
+                    ignite::Error::Diagnostics { .. } => ignite::conformance::DIAGNOSTIC,
+                    _ => ignite::conformance::FAILURE,
+                });
+            }
+        }
+    }
     if let Commands::Test {
         args,
         target,
@@ -573,7 +647,10 @@ fn run() {
         }
     }
     let result = match cli.command {
-        Commands::Test { .. } | Commands::Run { .. } | Commands::Rfc { .. } => {
+        Commands::Test { .. }
+        | Commands::Run { .. }
+        | Commands::Rfc { .. }
+        | Commands::Conformance { .. } => {
             unreachable!("handled above")
         }
         Commands::Check { file, std } => ignite::check_with_std(&file, std.as_deref()),

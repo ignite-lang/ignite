@@ -1,0 +1,3 @@
+rfc7108 Line Echo, protocol Echo, parties all, sections all
+R2_1  2  MAY  none  -  unclassified
+claim conformance of Echo to rfc7108: yes (0 gaps, 0 failures, 0 inconclusive)

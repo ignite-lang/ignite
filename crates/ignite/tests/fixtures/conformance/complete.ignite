@@ -1,0 +1,70 @@
+package tests.conformance.complete
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7110: Spec = Spec {
+  rfc = 7110
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7110"
+  digest = "sha256:7110"
+  requirements = [R2_1, R2_2, R2_3, R3_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7110
+  section = "2"
+  ordinal = 1
+  level = Must
+  party = Server
+  text = "A server MUST echo every line."
+}
+
+const R2_2: Requirement = Requirement {
+  rfc = 7110
+  section = "2"
+  ordinal = 2
+  level = MustNot
+  party = Server
+  text = "A server MUST NOT add bytes to a line it echoes."
+}
+
+const R2_3: Requirement = Requirement {
+  rfc = 7110
+  section = "2"
+  ordinal = 3
+  level = Must
+  party = Server
+  minimum = Some(64)
+  text = "A server MUST accept lines of at least 64 bytes."
+}
+
+const R3_1: Requirement = Requirement {
+  rfc = 7110
+  section = "3"
+  ordinal = 1
+  level = Should
+  party = Server
+  text = "A server SHOULD answer within a second."
+}
+
+type EchoLimits {
+  line_bytes: Int = 64 satisfies [RFC7110.R2_3]
+}
+
+fn echo(line: Text) -> Text satisfies [RFC7110.R2_1, RFC7110.R2_2] = line
+
+protocol Echo conforms [RFC7110] scope { parties = [Server] } {
+  fn serve(stream: TcpStream, limits: EchoLimits, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] satisfies [RFC7110.R2_1] {
+    return stream.write_all(b"ok")
+  }
+
+  unsupported RFC7110.R3_1 "no answer is timed"
+}
+
+test "a line is echoed" verifies [RFC7110.R2_1, RFC7110.R2_2] {
+  assert echo("hi") == "hi"
+}
+
+test "an empty line is echoed" verifies [RFC7110.R2_1] {
+  assert echo("") == ""
+}

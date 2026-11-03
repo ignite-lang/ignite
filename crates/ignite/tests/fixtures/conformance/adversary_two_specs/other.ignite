@@ -1,0 +1,27 @@
+package tests.adversary.two.other
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7202: Spec = Spec {
+  rfc = 7202
+  title = "Line Echo Two"
+  url = "https://example.invalid/rfc7202"
+  digest = "sha256:7202"
+  requirements = [R1_1, R1_2]
+}
+
+const R1_1: Requirement = Requirement {
+  rfc = 7202
+  section = "1"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+const R1_2: Requirement = Requirement {
+  rfc = 7202
+  section = "1"
+  ordinal = 2
+  level = Should
+  text = "A server SHOULD echo at once."
+}

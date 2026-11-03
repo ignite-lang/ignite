@@ -12,6 +12,7 @@ mod build_cache;
 mod clauses;
 mod cli;
 mod common;
+mod conformance;
 mod control_trace;
 mod decode;
 mod drain;

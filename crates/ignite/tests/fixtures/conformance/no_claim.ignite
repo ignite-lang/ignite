@@ -1,0 +1,11 @@
+package tests.conformance.no_claim
+
+protocol Echo {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}
+
+test "nothing is claimed" {
+  assert true
+}

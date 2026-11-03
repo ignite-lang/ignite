@@ -1,0 +1,25 @@
+package tests.conformance.adversary_empty_scope
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7304: Spec = Spec {
+  rfc = 7304
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7304"
+  digest = "sha256:7304"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7304
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+protocol Echo conforms [RFC7304] scope { parties = [], sections = [] } {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}

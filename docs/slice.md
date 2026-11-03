@@ -5630,10 +5630,14 @@ ignite conformance FILE [--target rust|llvm] [the build flags of `ignite test`]
 2. Read the claim model (19.7). No protocol of FILE conforms: one line on stderr, exit 2.
 3. If any row names a test, build FILE's test executable on the target (default `rust`)
    through `ignite::build_tests`, run it once without arguments, and read its stdout. Result
-   lines are read only between the `running N tests` line and the first blank line after it,
-   so the `failures:` section, which echoes test output, is never parsed. A line
-   `test <module>/<name> ... ok` is a pass. A line `test <module>/<name> ... FAILED…` is a
-   failure. A named test with no line is `not run`. Test output is not echoed.
+   lines are read after the `running N tests` line, one entry per test of FILE in the order
+   the runner runs them (declaration order, 12.7), each matched against that test's exact
+   full name, which may hold `\n`; the first entry that does not match ends them, so a name
+   cannot end the section early, and the `failures:` section, which echoes test output, is
+   never parsed. An entry `test <module>/<name> ... ok` is a pass, `test <module>/<name> ...
+   FAILED…` a failure. A test with more than one result keeps the worst (failed over not run
+   over passed), so a forged line never raises a verdict. A named test with no entry is `not
+   run`. Test output is not echoed.
    - A build failure is exit 3.
    - A run failure is exit 3: the executable cannot be spawned, ends by a signal, exits with a
      status other than 0 or 1, or prints no `test result:` line.
@@ -5650,7 +5654,8 @@ claim conformance of <P> to rfc<n>: <yes|no> (<g> gaps, <f> failures, <i> inconc
 ```
 
 `<names>` is the `parties` list and `<list>` the `sections` list, each entry joined by one
-space; `all` when the item is absent. A row has six columns: id, section, level, status,
+space; `all` when the item is absent, `none` when its list is empty (`parties = []`). A row
+has six columns: id, section, level, status,
 evidence, verdict. Columns are joined by two spaces and padded with spaces to the widest
 entry of their column within the block. The last column is not padded, and no line ends in a
 space.
