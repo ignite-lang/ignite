@@ -5855,6 +5855,7 @@ run`'s.
 | 12 | `protocols.md` §3.3 | "prints one row per requirement in scope" | every requirement of each claimed spec gets a row; those outside `scope` print `out of scope`, the verdict §3.3 lists (19.10). Edited there |
 | 13 | D4, `protocols.md` §3.3 | the RFC 9110 subset leaves out §8.6 (Content-Length, 13 marks) and §15 (status codes, 77 marks), which `http.ignite` implements | deferred: §15 alone is more than D4's 75 marks, and §8.6 framing is judged through RFC 9112 §6 in this slice. A later slice widens D4; the `Http` claim of row 2 says nothing about them |
 | 14 | `docs/vision.md` X16, slice 10 acceptance | "`std/protocol/telnet.ignite` at most 400 lines", excluding tests | known deviation, not fixed in this slice: at `296f849` the file has 1,086 lines, 762 outside top-level `test` blocks (the review's awk count; slice 14 item 14 recorded about 655). U6 adds clauses to it. Not split in slice 15; Q4 |
+| 15 | 19.4 "Level words", `std/rfc/rfc854.ignite` | a prose requirement "takes the level of its sentence's strongest word" | known limits of the mechanical classification, kept as written for this slice (steering, 2026-11-03): `RFC854.RP5_3` reads `Must` from "find it necessary", `RP7_1` `Required` from "not required … may treat", `RP12_1` `May` because "the protocol requires" has no word in the table. Two obligations have no word in the table and are not in the catalogue: "is obliged to provide" (p7) and "shall be capable" (p12, whose "reguired" is the RFC's typo). A later slice may widen the table |
 
 ### 19.15 Decisions
 

@@ -1,10 +1,11 @@
 // RFC 1143: The Q Method of Implementing TELNET Option Negotiation
 // Quoted by hand from https://www.rfc-editor.org/rfc/rfc1143.txt (22,771 bytes, read
 // 2026-11-03), which is not vendored (docs/slice.md 19.9): `ignite rfc check` reports this
-// catalogue unchecked. One requirement per sentence of the rules that says what an
-// implementation must, should or may do; text marked DISCUSSION, which the RFC's note says
-// a compliance check need not read, and the example state machine of section 7 are left
-// out. `section` is the section number, the level that of the strongest word (19.4).
+// catalogue unchecked. One requirement per sentence outside the text marked DISCUSSION
+// (which the RFC's note exempts from compliance) that says what an implementation must,
+// should or may do, section 7's example included; the note's own definitions of compliance
+// describe the RFC's standing and are no requirement. `section` is the section number, the
+// level that of the sentence's strongest word (19.4); a row label such as "NO" is left out.
 
 package std.rfc.rfc1143
 
@@ -40,7 +41,9 @@ const RFC1143: Spec = Spec {
     R5_10,
     R5_11,
     R6_1,
-    R7_1
+    R7_1,
+    R7_2,
+    R7_3
   ]
 }
 
@@ -292,4 +295,24 @@ const R7_1: Requirement = Requirement {
   party = Any
   source = Prose
   text = "All TELNET implementations compliant with this RFC SHOULD follow the procedures shown here."
+}
+
+const R7_2: Requirement = Requirement {
+  rfc = 1143
+  section = "7"
+  ordinal = 2
+  level = Required
+  party = Any
+  source = Prose
+  text = "\"Error\" below means that producing diagnostic information may be a good idea, though it isn't required."
+}
+
+const R7_3: Requirement = Requirement {
+  rfc = 1143
+  section = "7"
+  ordinal = 3
+  level = Should
+  party = Recipient
+  source = Prose
+  text = "If we agree that he should enable, him=YES, send DO; otherwise, send DONT."
 }

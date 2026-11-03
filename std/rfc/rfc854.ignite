@@ -26,14 +26,18 @@ const RFC854: Spec = Spec {
     RP3_2,
     RP3_3,
     RP3_4,
+    RP3_5,
     RP4_1,
     RP4_2,
+    RP4_3,
+    RP4_4,
     RP5_1,
     RP5_2,
     RP5_3,
     RP5_4,
     RP6_1,
     RP6_2,
+    RP6_3,
     RP7_1,
     RP7_2,
     RP7_3,
@@ -46,14 +50,17 @@ const RFC854: Spec = Spec {
     RP11_1,
     RP11_2,
     RP11_3,
+    RP11_4,
     RP12_1,
     RP12_2,
     RP12_3,
+    RP12_4,
     RP13_1,
     RP13_2,
     RP13_3,
     RP13_4,
     RP13_5,
+    RP13_6,
     RP14_1,
     RP14_2
   ]
@@ -153,6 +160,16 @@ const RP3_4: Requirement = Requirement {
   rfc = 854
   section = "p3"
   ordinal = 4
+  level = ShouldNot
+  party = Any
+  source = Prose
+  text = "Option designers should not feel constrained by the somewhat limited syntax available for option negotiation."
+}
+
+const RP3_5: Requirement = Requirement {
+  rfc = 854
+  section = "p3"
+  ordinal = 5
   level = Should
   party = Any
   source = Prose
@@ -173,10 +190,30 @@ const RP4_2: Requirement = Requirement {
   rfc = 854
   section = "p4"
   ordinal = 2
+  level = Required
+  party = Any
+  source = Prose
+  text = "It is hoped, but not absolutely required, that options will further this intent."
+}
+
+const RP4_3: Requirement = Requirement {
+  rfc = 854
+  section = "p4"
+  ordinal = 3
   level = Should
   party = Any
   source = Prose
   text = "A companion document, \"TELNET Option Specifications,\" should be consulted for information about the procedure for establishing new options."
+}
+
+const RP4_4: Requirement = Requirement {
+  rfc = 854
+  section = "p4"
+  ordinal = 4
+  level = Required
+  party = Any
+  source = Prose
+  text = "\"Echoes\" will not be expected to traverse the network (although options exist to enable a \"remote\" echoing mode of operation, no host is required to implement this option)."
 }
 
 const RP5_1: Requirement = Requirement {
@@ -237,6 +274,16 @@ const RP6_2: Requirement = Requirement {
   party = Client
   source = Prose
   text = "In this direction, GAs may be sent at any time, but need not ever be sent."
+}
+
+const RP6_3: Requirement = Requirement {
+  rfc = 854
+  section = "p6"
+  ordinal = 3
+  level = Required
+  party = Any
+  source = Prose
+  text = "Finally, for terminal-to-terminal communication, GAs may be required in neither, one, or both directions."
 }
 
 const RP7_1: Requirement = Requirement {
@@ -333,26 +380,36 @@ const RP11_1: Requirement = Requirement {
   rfc = 854
   section = "p11"
   ordinal = 1
-  level = May
+  level = Required
   party = Any
   source = Prose
-  text = "Neither end of a TELNET connection may assume that the other party will take, or will have taken, any particular action upon receipt or transmission of these:"
+  text = "In addition, the following codes shall have defined, but not required, effects on the NVT printer."
 }
 
 const RP11_2: Requirement = Requirement {
   rfc = 854
   section = "p11"
   ordinal = 2
-  level = Must
+  level = May
   party = Any
   source = Prose
-  text = "Therefore, the sequence \"CR LF\" must be treated as a single \"new line\" character and used whenever their combined action is intended; the sequence \"CR NUL\" must be used where a carriage return alone is actually desired; and the CR character must be avoided in other contexts."
+  text = "Neither end of a TELNET connection may assume that the other party will take, or will have taken, any particular action upon receipt or transmission of these:"
 }
 
 const RP11_3: Requirement = Requirement {
   rfc = 854
   section = "p11"
   ordinal = 3
+  level = Must
+  party = Any
+  source = Prose
+  text = "Therefore, the sequence \"CR LF\" must be treated as a single \"new line\" character and used whenever their combined action is intended; the sequence \"CR NUL\" must be used where a carriage return alone is actually desired; and the CR character must be avoided in other contexts."
+}
+
+const RP11_4: Requirement = Requirement {
+  rfc = 854
+  section = "p11"
+  ordinal = 4
   level = Required
   party = Any
   source = Prose
@@ -389,6 +446,16 @@ const RP12_3: Requirement = Requirement {
   text = "The actual code assignments for these \"characters\" are in the TELNET Command section, because they are viewed as being, in some sense, generic and should be available even when the data stream is interpreted as being some other character set."
 }
 
+const RP12_4: Requirement = Requirement {
+  rfc = 854
+  section = "p12"
+  ordinal = 4
+  level = Required
+  party = Any
+  source = Prose
+  text = "The pair DM-Urgent is to have required meaning as defined previously."
+}
+
 const RP13_1: Requirement = Requirement {
   rfc = 854
   section = "p13"
@@ -413,26 +480,36 @@ const RP13_3: Requirement = Requirement {
   rfc = 854
   section = "p13"
   ordinal = 3
-  level = Should
-  party = Recipient
+  level = Must
+  party = Any
   source = Prose
-  text = "Just as the NVT data byte 68 (104 octal) should be mapped into whatever the local code for \"uppercase D\" is, so the EC character should be mapped into whatever the local \"Erase Character\" function is."
+  text = "The spirit of these \"extra\" keys, and also the printer format effectors, is that they should represent a natural extension of the mapping that already must be done from \"NVT\" into \"local\"."
 }
 
 const RP13_4: Requirement = Requirement {
   rfc = 854
   section = "p13"
   ordinal = 4
-  level = May
+  level = Should
   party = Recipient
   source = Prose
-  text = "Further, just as the mapping for 124 (174 octal) is somewhat arbitrary in an environment that has no \"vertical bar\" character, the EL character may have a somewhat arbitrary mapping (or none at all) if there is no local \"Erase Line\" facility."
+  text = "Just as the NVT data byte 68 (104 octal) should be mapped into whatever the local code for \"uppercase D\" is, so the EC character should be mapped into whatever the local \"Erase Character\" function is."
 }
 
 const RP13_5: Requirement = Requirement {
   rfc = 854
   section = "p13"
   ordinal = 5
+  level = May
+  party = Recipient
+  source = Prose
+  text = "Further, just as the mapping for 124 (174 octal) is somewhat arbitrary in an environment that has no \"vertical bar\" character, the EL character may have a somewhat arbitrary mapping (or none at all) if there is no local \"Erase Line\" facility."
+}
+
+const RP13_6: Requirement = Requirement {
+  rfc = 854
+  section = "p13"
+  ordinal = 6
   level = Should
   party = Recipient
   source = Prose

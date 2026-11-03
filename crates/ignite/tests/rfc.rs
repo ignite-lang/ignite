@@ -1484,7 +1484,6 @@ fn adversary_prose_texts_are_verbatim_on_their_cited_pages() {
 /// ("standard, but not required, meanings") does, so `rfc854.ignite` holds it at the level
 /// the table gives, on its page.
 #[test]
-#[ignore = "adversary: rfc854.ignite leaves out seven sentences that 19.4's word table classifies"]
 fn adversary_rfc854_holds_every_sentence_the_word_table_classifies() {
     let module = catalogue("rfc854");
     let held: Vec<(String, String, String)> = requirements(&module)
@@ -1525,9 +1524,9 @@ import std.rfc.rfc9112.{RFC9112, R7_1_2}
 import std.rfc.rfc9110.RFC9110
 
 test "the committed catalogues read the same on every target" {
-  assert RFC854.requirements.len() == 40
+  assert RFC854.requirements.len() == 47
   assert RFC855.requirements.len() == 12
-  assert RFC1143.requirements.len() == 25
+  assert RFC1143.requirements.len() == 27
   assert RFC9112.requirements.len() == 131
   assert RFC9110.requirements.len() == 73
   assert RFC855.url == "https://www.rfc-editor.org/rfc/rfc855"
@@ -1537,7 +1536,7 @@ test "the committed catalogues read the same on every target" {
   assert RP3_1.text == "Designers of options requiring \"subnegotiation\" must take great care to avoid unending loops in the subnegotiation process."
   assert RP14_1.section == "p14"
   assert RP14_1.ordinal == 1
-  assert RFC854.requirements[38].text == RP14_1.text
+  assert RFC854.requirements[45].text == RP14_1.text
   assert R7_1_2.text == "A recipient MUST be able to parse and decode the chunked transfer coding."
   assert RFC1143.requirements[24].section == "7"
 }
