@@ -125,6 +125,9 @@ and journal replay (`ignite replay`) work. Applying changes (`ignite apply`) is 
 
 ## Read more
 
+The website, [ignite-lang.github.io/ignite](https://ignite-lang.github.io/ignite/), has the
+guide, the language design and the reference; its source is [`site/`](site/).
+
 | document | what is in it |
 |---|---|
 | [`docs/design.md`](docs/design.md) | the language design |
