@@ -10,9 +10,15 @@ relations:
 - depends_on: story:slice-15-frontend
 scope:
 - confidence: inferred
+  path: crates/ignite-eval/Cargo.toml
+- confidence: inferred
   path: crates/ignite-eval/src
 - confidence: inferred
   path: crates/ignite-eval/tests
+- confidence: inferred
+  path: crates/ignite/tests/fixtures/claim_ok_complete
+- confidence: inferred
+  path: crates/ignite/tests/fixtures/claims_std
 - confidence: inferred
   path: crates/ignite/tests/fixtures/e090
 - confidence: inferred
@@ -21,7 +27,9 @@ scope:
   path: crates/ignite/tests/fixtures/e092
 - confidence: inferred
   path: crates/ignite/tests/plan.rs
-revision: 9
+- confidence: inferred
+  path: docs/layering.md
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"review_outcome":4}}}
 - {from: "proposed", to: "active", at: "2026-11-03T16:07:59Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"review_outcome":4}}, correlation: "slice-15-wave-1"}
@@ -75,3 +83,7 @@ this story: the evaluator (`crates/ignite-eval`, `docs/slice.md` 15) reads catal
 ## Depends on
 
 `story:slice-15-frontend` (clauses in the AST, resolved names).
+
+## Contract
+
+Unit U2 of `docs/slice.md` 19.16 (merged on `feat/slice15-protocols-p2` as c98a41f): its "owns" cell is this story's file list, its rows of 19.0 are 14 to 18, 38, 40, 41, its first failing test is `plan::fixtures_match_expected` on `e090_missing_status`. Where this body and section 19 differ, section 19 holds; the differences are listed in the contract report and in `docs/slice15-review.md` "Resolution".

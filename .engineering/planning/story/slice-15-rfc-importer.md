@@ -22,7 +22,7 @@ scope:
   path: crates/ignite/tests/main.rs
 - confidence: inferred
   path: crates/ignite/tests/rfc.rs
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":3}}}
 - {from: "proposed", to: "active", at: "2026-11-03T16:07:59Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":3}}, correlation: "slice-15-wave-1"}
@@ -71,3 +71,7 @@ reader, digest and any section filter are the contract's D4 and D6.
 ## Out of Scope
 
 Writing the real catalogues (`story:slice-15-catalogues`).
+
+## Contract
+
+Unit U3 of `docs/slice.md` 19.16 (merged on `feat/slice15-protocols-p2` as c98a41f): its "owns" cell is this story's file list, its rows of 19.0 are 19 to 24, 38, its first failing test is `rfc::import_writes_the_golden_twice`. Where this body and section 19 differ, section 19 holds; the differences are listed in the contract report and in `docs/slice15-review.md` "Resolution".

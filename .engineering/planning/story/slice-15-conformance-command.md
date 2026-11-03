@@ -24,7 +24,7 @@ scope:
   path: crates/ignite/tests/fixtures/conformance
 - confidence: inferred
   path: crates/ignite/tests/main.rs
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":2}}}
 - {from: "proposed", to: "active", at: "2026-11-03T16:07:59Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":2}}, correlation: "slice-15-wave-1"}
@@ -70,3 +70,7 @@ inconclusive. The output format and how tests are run are the contract's D8.
 
 `story:slice-15-claim-model` (the claim model API), `story:slice-15-rfc-importer` (shared
 `main.rs` and `tests/main.rs`).
+
+## Contract
+
+Unit U5 of `docs/slice.md` 19.16 (merged on `feat/slice15-protocols-p2` as c98a41f): its "owns" cell is this story's file list, its rows of 19.0 are 31 to 37, 38, its first failing test is `conformance::each_verdict_prints_its_row`. Where this body and section 19 differ, section 19 holds; the differences are listed in the contract report and in `docs/slice15-review.md` "Resolution".
