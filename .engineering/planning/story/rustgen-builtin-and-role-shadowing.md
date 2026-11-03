@@ -2,12 +2,22 @@
 format: aep.planning-md/3
 id: story:rustgen-builtin-and-role-shadowing
 kind: story
-status: draft
+status: active
 title: Generated Rust breaks when a type parameter is named like a protocol or a builtin type
 summary: Type parameters named like a protocol, Option or Text fail on the Rust target; three ignored golden tests
 relations:
 - derived_from: epic:slice-15-protocols-p2
-revision: 1
+scope:
+- confidence: cited
+  path: crates/ignite-rustgen/src
+- confidence: cited
+  path: crates/ignite-rustgen/tests/golden.rs
+- confidence: cited
+  path: crates/ignite/src/apply/plan.rs
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-03T22:38:33Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-03T22:38:33Z", actor: "human:timo", revision: 3}
 ---
 
 # Story: rustgen-builtin-and-role-shadowing
