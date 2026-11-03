@@ -1,6 +1,6 @@
 # Slice 16 contract review
 
-Status: review of the drafted contract, 2026-11-04; findings open.
+Status: review of the drafted contract, 2026-11-04; findings resolved (see "Resolution").
 
 Independent review of `docs/slice.md` section 20 (slice 16, language gaps wave A: last-use moves,
 calls of fn-typed expressions, rest patterns, E076) and its rows in section 8 (the E076 row of the
@@ -315,3 +315,29 @@ arm, an assignment inside a later argument). Every other finding is read from so
   and 2 say; `docs/friction.md` lists rows 1, 2, 4, 7, 8, 9, 10, 12, 13, 15 and 17 under "Solved
   in slice 9" and has no row for `assert` as an arm body (20.8 item 9).
 - The `docs/actors.md` and `docs/syntax.md` quotes of 20.8 items 5 to 7 are verbatim.
+
+## Resolution
+
+Folded into `docs/slice.md` section 20 on `feat/slice16-language-gaps`, 2026-11-04. Section
+numbers below are of that text. Every blocker and should-fix is folded; no finding was rejected.
+
+| finding | resolution |
+|---|---|
+| B1, consumed rule | 20.3.3: in-place changes listed by builtin (`push`, `append`, `clear`, `put`, `remove`, assignments), named as the union of `region::mutates` and `mutates_receiver` with `mutated_names`, `consumed` a superset of both; a move of any place rooted at `p` consumes `p`. 20.1 gains the fact row. Row 4 adds `d(m)` with `m.put` and `e(p)` passing `p.items` |
+| B2, shadowing and assignments in a later argument | 20.3.1: liveness on resolved bindings, a shadowing binding is a new variable. 20.3.2: the same-call exclusion covers any mention of an overlapping place, assignments included, with the LLVM slot-overwrite reason. Row 2 adds both cases |
+| B3, exhaustiveness | 20.5: rustc's split, every length up to `max(m, P + S - 1)` checked, representative `max(m + 1, P + S)`. Row 17 adds the counterexample with witness `[_, false, true, _]` and its valid completion |
+| B4, rows 1, 13, 14 | row 1 lists `next`; row 13 requires `x: &i64` and `step(s, &i)`, as 20.3.4 now says scalars keep `&T`; row 14 asserts no copy between the loop head and the call of `step` and allows the release block's `copy.State` |
+| S1, copy count | 20.3.3 and D3: a move consumes a parameter only when it happens on every path to an exit; a parameter that is not consumed is copied at the move point as today. `pick` and `unwrap_or`'s `fallback` stay unconsumed (row 4); the copy-count argument is restated for both kinds. Row 2 says `s` is a local |
+| S2, actor shapes | liveness per field path (20.3.2, D2): `a.state = a.handle(a.state, i)` and `Step { state = st.state, … }` move (row 3). `answer(state, reply, state.table.values())` still copies; the form that moves is in 20.3.2, 20.8 item 5 (U6's edit of actors R1) and 20.13 item 4 |
+| S3, harnesses | row 9 names the rustgen helpers of `slice9.rs` with the repository's `std/`, the exact filters and the runner's `finished in` figure; rows 10 and 12 run through `ignite test --target llvm` in `crates/ignite/tests/slice16.rs`, owned by U4 in W3 (20.10, shared files); row 14 says the LLVM golden is self-contained; row 18 follows |
+| S4, checker already types callees | 20.4.2 and D4: the non-name arms of `call` use `static_type` and `fn_value_effects`; E042 only where `static_type` gives no type (a call's result). Row 7: `hs[0](conn)` and `(h.send)(conn)` are valid, `pick_sender(true)(conn)` is the E042 case; 20.7 and section 8 reworded; 20.1 fact row added |
+| S5, Rust roles by value | 20.3.4: role parameters stay `mut name: T`; a moving argument to a role is emitted bare. 20.1 fact row; row 13's golden has a role call |
+
+Notes: N1 (20.1 fact on `exhaustive.rs`; U5 owns the new list arm), N2 (row 16 and U5's first
+failing test name `fixtures_match_expected_diagnostics`), N3 (not folded as a new test: the E076
+fixture of row 16 is the check, as for the other syntax codes), N4 (row 22 adds `\u{..}` and an
+interpolation holding a string literal), N5 (20.5 witness order; row 17 adds `[false]`), N6 (a
+pattern `let` initializer is no move position, 20.3.1, row 3), N7 (20.6), N8 (20.3.1: type
+parameters tracked, fn types not; 20.13 item 4), N9 (U1's cell names the 64 KiB requirement,
+20.3.5), N10 (20.3.4, 20.8 item 11), N11 (row 15: one step for U3 and U4 together), N12 (20.3.5
+last item), N13 (rows 9 and 10 use the ratio alone), N14 (20.8 item 10, row 27, U6's cell).
