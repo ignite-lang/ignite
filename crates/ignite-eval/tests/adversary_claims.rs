@@ -145,7 +145,6 @@ fn requirement(id: &str, section: &str, ordinal: i64, extra: &str) -> String {
 /// names a requirement twice in its `satisfies` is one declaration, as a
 /// test verifying twice is one entry of `tests`.
 #[test]
-#[ignore = "adversary: one fn naming a requirement twice in `satisfies` is listed twice among the satisfiers"]
 fn adversary_one_declaration_satisfying_twice_is_one_satisfier() {
     let text = format!(
         "{HEAD}\n{}\n{}\nfn answer(x: Int) -> Int satisfies [RFC7200.R2_1, RFC7200.R2_1] = x\n\nprotocol Echo conforms [RFC7200] {{\n  {SERVE} {{\n    return stream.write_all(b\"ok\")\n  }}\n}}\n",
@@ -469,7 +468,6 @@ fn adversary_requirement_declared_through_a_type_alias_is_consistency_checked() 
 /// per requirement. A requirement the checked file's `Spec` lists twice is
 /// one E091 (19.4), and still one requirement with no status.
 #[test]
-#[ignore = "adversary: a requirement listed twice in the Spec gives two identical E090 lines and two rows"]
 fn adversary_requirement_listed_twice_is_one_e090() {
     let text = format!(
         "{HEAD}\n{}\n{}\nprotocol Echo conforms [RFC7200] {{\n  {SERVE} {{\n    return stream.write_all(b\"ok\")\n  }}\n}}\n",

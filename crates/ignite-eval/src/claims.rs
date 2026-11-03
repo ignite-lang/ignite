@@ -546,23 +546,30 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
         protocol: &str,
         clauses: &[Clause],
     ) -> Status {
-        let satisfiers: Vec<Satisfier> = clauses
-            .iter()
-            .filter_map(|c| match &c.said {
-                Said::Satisfied { declaration, field } => Some(Satisfier {
-                    declaration: declaration.clone(),
-                    limit: requirement
-                        .minimum
-                        .zip(*field)
-                        .map(|(minimum, configured)| Limit {
-                            configured,
-                            minimum,
-                            meets: configured.map(|c| c >= minimum),
-                        }),
-                }),
-                Said::Status { .. } => None,
-            })
-            .collect();
+        // One satisfier per declaration: a declaration that names the
+        // requirement twice is still one of "the declarations" (19.7).
+        let mut satisfiers: Vec<Satisfier> = Vec::new();
+        for satisfier in clauses.iter().filter_map(|c| match &c.said {
+            Said::Satisfied { declaration, field } => Some(Satisfier {
+                declaration: declaration.clone(),
+                limit: requirement
+                    .minimum
+                    .zip(*field)
+                    .map(|(minimum, configured)| Limit {
+                        configured,
+                        minimum,
+                        meets: configured.map(|c| c >= minimum),
+                    }),
+            }),
+            Said::Status { .. } => None,
+        }) {
+            if !satisfiers
+                .iter()
+                .any(|s| s.declaration == satisfier.declaration)
+            {
+                satisfiers.push(satisfier);
+            }
+        }
         let describe = |said: &Said| match said {
             Said::Satisfied { .. } => format!(
                 "satisfied by {}",
@@ -673,11 +680,15 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
             Some(Value::List(items)) => items.clone(),
             _ => Vec::new(),
         };
-        let requirements = names
-            .iter()
-            .zip(&values)
-            .filter_map(|(name, value)| requirement(&name.name, value))
-            .collect();
+        // One row per requirement (19.7): a name listed twice, which is
+        // E091 in its own module, keeps its first place only.
+        let mut requirements: Vec<Requirement> = Vec::new();
+        for (name, value) in names.iter().zip(&values) {
+            if requirements.iter().any(|r| r.id == name.name) {
+                continue;
+            }
+            requirements.extend(requirement(&name.name, value));
+        }
         Some(Spec {
             constant: q.name.clone(),
             rfc: int(&value, "rfc")?,
