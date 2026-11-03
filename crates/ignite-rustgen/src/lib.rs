@@ -1434,12 +1434,25 @@ fn variant_path(owner: &str, variant: &str) -> String {
 
 /// A Ignite type as Rust.
 pub fn rust_type(ty: &Type) -> String {
+    rust_type_in(ty, &BTreeSet::new())
+}
+
+/// [`rust_type`] of an annotation inside a declaration whose type
+/// parameters are `params`: a bare name among them is the parameter, even
+/// when a builtin type has the same name (`fn keep<Text>(value: Text)`), and
+/// a builtin enum they shadow is spelled by its path
+/// ([`builtin_enum_path`]).
+fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
+    let recurse = |t: &Type| rust_type_in(t, params);
     if ty.is_fn() {
-        let params: Vec<String> = ty.fn_params().iter().map(rust_type).collect();
-        let ret = ty.fn_ret().map_or_else(|| "()".to_string(), rust_type);
-        return fn_value_type(&params, &ret);
+        let ps: Vec<String> = ty.fn_params().iter().map(recurse).collect();
+        let ret = ty.fn_ret().map_or_else(|| "()".to_string(), recurse);
+        return fn_value_type(&ps, &ret);
     }
-    let args: Vec<String> = ty.args.iter().map(rust_type).collect();
+    if ty.args.is_empty() && params.contains(&ty.name.name) {
+        return ident(&ty.name.name);
+    }
+    let args: Vec<String> = ty.args.iter().map(recurse).collect();
     let generic = |base: &str| {
         if args.is_empty() {
             base.to_string()
@@ -1465,7 +1478,24 @@ pub fn rust_type(ty: &Type) -> String {
         "Duration" | "ByteSize" | "Ratio" => "i64".to_string(),
         "Ref" | "Signal" | "SystemRef" | "Protocol" => "String".to_string(),
         "Module" if args.len() == 1 => args[0].clone(),
+        name @ ("Option" | "Result") => generic(&builtin_enum_path(name, params)),
         other => generic(&ident(other)),
+    }
+}
+
+/// The Rust name of the builtin enum `Option` or `Result`: the bare name,
+/// or its `std` path when a type parameter in `params` has the same name
+/// (Rust would read the bare name as the parameter, E0109). `ident` leaves
+/// both names as they are, so no other spelling of a parameter reaches
+/// them.
+fn builtin_enum_path(name: &str, params: &BTreeSet<String>) -> String {
+    if !params.contains(name) {
+        return name.to_string();
+    }
+    match name {
+        "Option" => "std::option::Option".to_string(),
+        "Result" => "std::result::Result".to_string(),
+        _ => name.to_string(),
     }
 }
 
@@ -1517,6 +1547,11 @@ fn fn_type_params(decl: &FnDecl) -> String {
         })
         .collect();
     format!("<{}>", params.join(", "))
+}
+
+/// The names of a declaration's type parameters.
+fn param_names(params: &[Ident]) -> BTreeSet<String> {
+    params.iter().map(|p| p.name.clone()).collect()
 }
 
 /// `<A, B>` for a declaration's type parameters, or nothing.
@@ -1751,11 +1786,13 @@ impl<'a> Generator<'a> {
         self.package.path(module)
     }
 
-    /// The Rust name of the user record or enum `name` as written in the
-    /// source: the name unchanged, or its module path when a type parameter in
-    /// scope has the same name.
+    /// The Rust name of the user record, enum or protocol `name` as written
+    /// in the source: the name unchanged, or its module path when a type
+    /// parameter in scope has the same name (`crate::P::serve` inside
+    /// `fn call<P>`).
     fn unshadowed(&self, name: &str) -> String {
         let user_type = self.symbols.records.contains(name)
+            || self.protocols.contains(name)
             || (self.symbols.enums.contains_key(name)
                 && !BUILTIN_ENUMS.iter().any(|(e, _)| *e == name));
         if !user_type || !self.type_params.contains(name) {
@@ -1771,6 +1808,12 @@ impl<'a> Generator<'a> {
             Some(path) => format!("{path}::{}", ident(name)),
             None => name.to_string(),
         }
+    }
+
+    /// [`rust_type`] of an annotation in the item being generated, with its
+    /// type parameters in scope ([`rust_type_in`]).
+    fn annotation(&self, ty: &Type) -> String {
+        rust_type_in(ty, &self.type_params)
     }
 
     /// `"<file>", <line>, <col>` of a failure site (`docs/slice.md`
@@ -1985,8 +2028,17 @@ impl<'a> Generator<'a> {
             Ty::Unit | Ty::Never => "()".to_string(),
             Ty::Text => "String".to_string(),
             Ty::List(item) => format!("Vec<{}>", self.rust_ty(item)),
-            Ty::Option(item) => format!("Option<{}>", self.rust_ty(item)),
-            Ty::Result(ok, err) => format!("Result<{}, {}>", self.rust_ty(ok), self.rust_ty(err)),
+            Ty::Option(item) => format!(
+                "{}<{}>",
+                builtin_enum_path("Option", &self.type_params),
+                self.rust_ty(item)
+            ),
+            Ty::Result(ok, err) => format!(
+                "{}<{}, {}>",
+                builtin_enum_path("Result", &self.type_params),
+                self.rust_ty(ok),
+                self.rust_ty(err)
+            ),
             Ty::Record(q) | Ty::Enum(q) => self.enum_name(q),
             Ty::GenericRecord(q, args) | Ty::GenericEnum(q, args) => {
                 format!("{}<{}>", self.enum_name(q), list(args))
@@ -2096,7 +2148,7 @@ impl<'a> Generator<'a> {
         w.line(&format!(
             "pub type {}{params} = {};",
             ident(&alias.name.name),
-            rust_type(&alias.ty)
+            rust_type_in(&alias.ty, &param_names(&alias.params))
         ));
     }
 
@@ -2120,7 +2172,7 @@ impl<'a> Generator<'a> {
             };
             self.scopes = vec![Vec::new()];
             self.indent = w.indent + 1;
-            self.type_params = record.type_params.iter().map(|p| p.name.clone()).collect();
+            self.type_params = param_names(&record.type_params);
             let value = self.value(default);
             self.type_params.clear();
             self.scopes.clear();
@@ -2128,7 +2180,7 @@ impl<'a> Generator<'a> {
             w.open(&format!(
                 "pub fn {}() -> {} {{",
                 default_fn(&field.name.name),
-                rust_type(&field.ty)
+                rust_type_in(&field.ty, &param_names(&record.type_params))
             ));
             w.line(&value);
             w.close("}");
@@ -2198,7 +2250,7 @@ impl<'a> Generator<'a> {
                 (Some(types), Some(q)) => types.boxed_field(q, &field.name.name),
                 _ => false,
             };
-            let ty = rust_type(&field.ty);
+            let ty = rust_type_in(&field.ty, &param_names(&record.type_params));
             let ty = if boxed { format!("Box<{ty}>") } else { ty };
             w.line(&format!("pub {}: {ty},", ident(&field.name.name)));
         }
@@ -2223,6 +2275,7 @@ impl<'a> Generator<'a> {
             ident(&decl.name.name),
             bounded_params(&decl.type_params)
         ));
+        let params = param_names(&decl.type_params);
         for (v, variant) in decl.variants.iter().enumerate() {
             if variant.payload.is_empty() {
                 w.line(&format!("{},", ident(&variant.name.name)));
@@ -2237,9 +2290,9 @@ impl<'a> Generator<'a> {
                             _ => false,
                         };
                         if boxed {
-                            format!("Box<{}>", rust_type(ty))
+                            format!("Box<{}>", rust_type_in(ty, &params))
                         } else {
-                            rust_type(ty)
+                            rust_type_in(ty, &params)
                         }
                     })
                     .collect();
@@ -2385,12 +2438,13 @@ impl<'a> Generator<'a> {
         mutated_names(&decl.body, self.types, &mut mutated);
         let mut prologue = Vec::new();
         self.borrowed.clear();
+        self.type_params = decl.type_params.iter().map(|p| p.name.clone()).collect();
         let params: Vec<String> = decl
             .params
             .iter()
             .map(|p| {
                 let name = ident(&p.name.name);
-                let ty = rust_type(&p.ty);
+                let ty = self.annotation(&p.ty);
                 if role {
                     return format!("mut {name}: {ty}");
                 }
@@ -2403,7 +2457,7 @@ impl<'a> Generator<'a> {
             })
             .collect();
         let ret = match &decl.ret {
-            Some(ty) => format!(" -> {}", rust_type(ty)),
+            Some(ty) => format!(" -> {}", self.annotation(ty)),
             None => String::new(),
         };
         let value = decl
@@ -2412,7 +2466,6 @@ impl<'a> Generator<'a> {
             .is_some_and(|ty| !(ty.name.name == "Unit" && ty.args.is_empty()));
         self.scopes = vec![decl.params.iter().map(|p| p.name.name.clone()).collect()];
         self.indent = w.indent;
-        self.type_params = decl.type_params.iter().map(|p| p.name.clone()).collect();
         let mut body = self.block(&decl.body, value);
         self.type_params.clear();
         self.scopes.clear();
@@ -2568,7 +2621,7 @@ impl<'a> Generator<'a> {
                 let value = self.value(value);
                 self.bind(&name.name);
                 let ty = match ty {
-                    Some(ty) => format!(": {}", rust_type(ty)),
+                    Some(ty) => format!(": {}", self.annotation(ty)),
                     None => String::new(),
                 };
                 let mutability = if *mutable { "mut " } else { "" };
@@ -3309,7 +3362,11 @@ impl<'a> Generator<'a> {
         if SUBSTRATE_OWNERS.contains(&owner) {
             return Some(format!("ignite_io::{owner}::{}", ident(&name.name)));
         }
-        Some(format!("{}::{}", ident(owner), ident(&name.name)))
+        Some(format!(
+            "{}::{}",
+            ident(&self.unshadowed(owner)),
+            ident(&name.name)
+        ))
     }
 
     /// `Owner.name(args)` where `Owner` is a substrate type, a builtin
@@ -3332,7 +3389,7 @@ impl<'a> Generator<'a> {
             let texts = self.args(args);
             return Some(format!(
                 "{}::{}{}({})",
-                ident(owner),
+                ident(&self.unshadowed(owner)),
                 ident(&name.name),
                 self.bounded_turbofish(expr),
                 texts.join(", ")
@@ -4597,7 +4654,7 @@ impl<'a> Generator<'a> {
                 };
                 let ty = match (info, &p.ty) {
                     (Some(info), _) => format!(": {}", self.rust_ty(&info.params[i].1)),
-                    (None, Some(ty)) => format!(": {}", rust_type(ty)),
+                    (None, Some(ty)) => format!(": {}", self.annotation(ty)),
                     (None, None) => String::new(),
                 };
                 format!("{mutability}{}{ty}", ident(&p.name.name))

@@ -704,7 +704,6 @@ fn bare<F>(item: F) -> Int = match make_f() {\n\
 /// return type is `Option<i64>`, which rustc reads as the parameter
 /// (E0109). The LLVM target builds and passes the same program.
 #[test]
-#[ignore = "a type parameter named like the builtin enum Option, outside story:rustgen-type-parameter-shadowing"]
 fn type_parameter_named_like_a_builtin_enum() {
     let source = "package examples.builtinenum\n\
 \n\
@@ -733,7 +732,6 @@ fn total() -> Int = opt(1)\n";
 /// Rust fn takes `&String` (E0308). The LLVM target builds and passes the
 /// same program.
 #[test]
-#[ignore = "a type parameter named like the builtin type Text, outside story:rustgen-type-parameter-shadowing"]
 fn type_parameter_named_like_a_builtin_type() {
     let source = "package examples.builtintype\n\
 \n\
@@ -754,7 +752,6 @@ fn total() -> Int = keep(5)\n";
 /// protocol `P`'s, and the Rust `P::serve::<..>(..)` names the type
 /// parameter (E0599). The LLVM target builds and passes the same program.
 #[test]
-#[ignore = "a type parameter named like a protocol, outside story:rustgen-type-parameter-shadowing"]
 fn type_parameter_named_like_a_protocol() {
     let source = "package examples.protoshadow\n\
 \n\
