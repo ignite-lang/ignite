@@ -131,7 +131,11 @@ fn standard_library_types_in_import_order() {
     let serve = &telnet.protocols["Telnet"]["serve"];
     assert_eq!(
         serve.params,
-        vec![Ty::TcpStream, Ty::Record(qual("std.console", "Console"))]
+        vec![
+            Ty::Param("S".to_string()),
+            Ty::Record(qual("std.protocol.telnet", "SessionLimits")),
+            Ty::Record(qual("std.console", "Console"))
+        ]
     );
     assert_eq!(serve.ret, io(Ty::Unit));
     assert!(serve.effectful);
@@ -179,9 +183,18 @@ fn standard_library_expressions_are_typed() {
         type_of_text(&typed, src, prog, "stream.read(4096)"),
         io(Ty::Input)
     );
+    // Slice 14: `Telnet.connect` and `session` are generic over
+    // `S: ByteStream`, so their reads are the bound's `StreamRead`;
+    // `await_prompt` keeps a `TcpStream` receiver (`docs/slice.md` 18.5).
+    let reads = find(src, prog, "stream.read(4096)");
+    let callees: Vec<_> = reads.iter().map(|e| typed.callee(e)).collect();
     assert_eq!(
-        typed.callee(find(src, prog, "stream.read(4096)")[0]),
-        Some(&Callee::Builtin(Builtin::TcpStreamRead))
+        callees,
+        [
+            Some(&Callee::Builtin(Builtin::StreamRead)),
+            Some(&Callee::Builtin(Builtin::TcpStreamRead)),
+            Some(&Callee::Builtin(Builtin::StreamRead)),
+        ]
     );
     assert_eq!(type_of_text(&typed, src, prog, "4096"), Ty::Int);
     assert_eq!(type_of_text(&typed, src, prog, "bytes.at(i)"), Ty::Byte);
@@ -266,7 +279,7 @@ fn standard_library_expressions_are_typed() {
         })
     );
     assert_eq!(
-        typed.callee(find(src, prog, "session(stream, application)")[0]),
+        typed.callee(find(src, prog, "session(stream, limits, application)")[0]),
         Some(&Callee::Fn(qual("std.protocol.telnet", "session")))
     );
     assert_eq!(type_of_text(&typed, src, prog, "Ok(true)"), io(Ty::Bool));

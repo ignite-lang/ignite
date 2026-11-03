@@ -4857,6 +4857,29 @@ Goldens, re-blessed with the diff named in 18.0 row 16:
 Tests that pin the shape of `Telnet.serve` (18.2) expect 3 parameters `[Param(S),
 SessionLimits, Console]`.
 
+As landed (U5): `read_body` takes `limits` for the uniform signature but does not read it,
+because `next_request` checks the length against `limits.body` before calling it. The pipe
+helpers are `exchange_over_pipe(input, limits, maximum_line)` under `exchange_with` and
+`exchange` (Telnet), and `next_with(input, limits)`, `served_with(input, limits)` and the
+generic `read_to_end<T: ByteStream>` (HTTP). One more test, "the limits default to 8 KiB, 1 MiB,
+30 s, 64 KiB and 1 s", pins `HttpLimits {}`. "the server answers pipelined requests until one
+asks to close" asserts the same answer from `served` (pipe) and `served_over_tcp`. The 413 and
+431 thresholds are read from `HttpLimits`; `READ_SIZE` and `MAXIMUM_LENGTH_DIGITS` stay
+constants (framing, not policy). `commands.ignite` adds `Console` to its `std.console` import
+and imports `std.protocol.telnet.{Telnet, SessionLimits}`; `Pipe` and `PipeStream` are
+builtin names and need no import. Its `read_once` returns the empty text at end
+of stream rather than `None`, because `crates/ignite-types/tests/terminal.rs` requires every
+`None` of the module to have the type `Option<Command>`. That test (18.2) also expects the
+three `stream.read(4096)` of `std.protocol.telnet` as `StreamRead` (`Telnet.connect`),
+`TcpStreamRead` (`await_prompt`) and `StreamRead` (`session`), and finds the call
+`session(stream, limits, application)`; the test helpers of the module therefore name their
+pipe end `client`. The review's boundary probes are inline tests of the two modules (9 Telnet,
+14 HTTP): deliveries split where the decoder or the framing keeps state, written through
+`exchange_parts` and `served_parts`, which `pause` between parts, and the limits at their exact
+value. In "the Telnet idle timeout alone ends a pipe session" and "the HTTP idle timeout alone
+ends a pipe connection" the client has no idle timeout, writes its input before the server starts
+and never closes, so only `limits.idle_timeout` (20 ms) ends the session.
+
 ### 18.13 Typed API (add-only)
 
 | crate | addition |

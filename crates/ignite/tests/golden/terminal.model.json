@@ -128,6 +128,10 @@
               "type": "ByteSize"
             },
             "maximum": 1000,
+            "maximum_subnegotiation": {
+              "bytes": 1024,
+              "type": "ByteSize"
+            },
             "output_buffer": {
               "bytes": 65536,
               "type": "ByteSize"

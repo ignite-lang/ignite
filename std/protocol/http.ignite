@@ -1,15 +1,16 @@
 package std.protocol.http
 
-import std.net.TcpStream
+import std.net.{ByteStream, Pipe, PipeStream, TcpStream}
 import std.io.IoError
 import std.text.*
 import std.option.unwrap_or
 import std.json.{Json, encode}
 
-// HTTP/1.1 server (RFC 9112) over one TCP stream: requests with a
-// `Content-Length` body, keep-alive until the client asks to close, and a
-// fixed set of limits. A head over 8 KiB is answered 431, a body over
-// 1 MiB 413, a malformed request 400 and any `Transfer-Encoding` 501 (only
+// HTTP/1.1 server (RFC 9112) over one byte stream (a `TcpStream`, or a
+// `PipeStream` in tests): requests with a `Content-Length` body, keep-alive
+// until the client asks to close, and the limits of `HttpLimits`. By
+// default a head over 8 KiB is answered 431, a body over 1 MiB 413, a
+// malformed request 400 and any `Transfer-Encoding` 501 (only
 // `Content-Length` framing is implemented, RFC 9112 section 6.1). Each of
 // those closes the connection after a lingering close: the reply is
 // written, the write half shut down, and up to 64 KiB of input drained for
@@ -49,20 +50,29 @@ type HttpApp<S> {
   handle: fn(state: S, request: Request) -> Response requires [state.*]
 }
 
-const MAXIMUM_HEAD: Int = 8192
-const MAXIMUM_BODY: Int = 1048576
-const IDLE_TIMEOUT_MS: Int = 30000
+// The limits of a server's connections (`docs/slice.md` 18.5): the
+// longest head (request line and fields, else 431) and body (else 413),
+// the idle time after which a connection is closed, and how much input a
+// lingering close drains, each read waiting at most `drain_timeout`.
+type HttpLimits {
+  head: ByteSize = 8 KiB
+  body: ByteSize = 1 MiB
+  idle_timeout: Duration = 30 seconds
+  drain: ByteSize = 64 KiB
+  drain_timeout: Duration = 1 second
+}
+
+// Framing facts, not limits: the size of one read and the longest
+// `Content-Length` value.
 const READ_SIZE: Int = 65536
-const MAXIMUM_DRAIN: Int = 65536
-const DRAIN_TIMEOUT_MS: Int = 1000
 const MAXIMUM_LENGTH_DIGITS: Int = 18
 
 protocol Http {
-  fn serve<S>(stream: TcpStream, application: HttpApp<S>) -> IoResult<Unit> requires [
+  fn serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> requires [
     stream.read, stream.write, application.*
   ] {
-    stream.set_idle_timeout(IDLE_TIMEOUT_MS)?
-    let result = session(stream, application)
+    stream.set_idle_timeout(limits.idle_timeout.to_ms())?
+    let result = session(stream, limits, application)
     _ = stream.close()
     result
   }
@@ -70,18 +80,19 @@ protocol Http {
 
 // An HTTP server over a listener (`docs/slice.md` section 14.5): the
 // executable binds the listener, accepts connections and runs `Http.serve`
-// in one task per connection; a connection whose handler fails ends its
-// task and the server goes on accepting.
+// under `limits` in one task per connection; a connection whose handler
+// fails ends its task and the server goes on accepting.
 type HttpServer<S> {
   listener: TcpListener
   application: HttpApp<S>
   executable: Text
+  limits: HttpLimits = HttpLimits {}
 }
 
 fn HttpServer.main<S>(self: HttpServer<S>) -> IoResult<Unit> {
   loop {
     let stream = self.listener.accept()?
-    spawn Http.serve(stream, self.application)
+    spawn Http.serve(stream, self.limits, self.application)
   }
 }
 
@@ -409,15 +420,16 @@ enum HeadRead { Complete(Int), Closed, TooLarge }
 
 // Reads until `buffer` holds a whole head: how it ended and the bytes
 // read. `Complete` carries the head's length including the blank line.
-fn read_head(stream: TcpStream, buffer: Bytes) -> IoResult<(HeadRead, Bytes)> {
+fn read_head<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> IoResult<(HeadRead, Bytes)> {
+  let maximum = limits.head.to_int()
   var data = buffer
   var from = 0
   loop {
     match bytes_find_from(data, b"\r\n\r\n", from) {
-      Some(at) => return Ok((if at + 4 > MAXIMUM_HEAD { TooLarge } else { Complete(at + 4) }, data))
+      Some(at) => return Ok((if at + 4 > maximum { TooLarge } else { Complete(at + 4) }, data))
       None => {}
     }
-    if data.len() > MAXIMUM_HEAD {
+    if data.len() > maximum {
       return Ok((TooLarge, data))
     }
     from = if data.len() > 3 { data.len() - 3 } else { 0 }
@@ -429,8 +441,8 @@ fn read_head(stream: TcpStream, buffer: Bytes) -> IoResult<(HeadRead, Bytes)> {
 }
 
 // Reads until `data` holds at least `end` bytes; `None` when the peer
-// closed first.
-fn read_body(stream: TcpStream, data: Bytes, end: Int) -> IoResult<Option<Bytes>> {
+// closed first. The length was checked against `limits.body` already.
+fn read_body<T: ByteStream>(stream: T, limits: HttpLimits, data: Bytes, end: Int) -> IoResult<Option<Bytes>> {
   var out = data
   while out.len() < end {
     match stream.read(READ_SIZE)? {
@@ -445,8 +457,8 @@ fn read_body(stream: TcpStream, data: Bytes, end: Int) -> IoResult<Option<Bytes>
 // end of the connection, or a status to answer before closing.
 enum Next { Got(Request, Bytes), Close, Reject(Int) }
 
-fn next_request(stream: TcpStream, buffer: Bytes) -> IoResult<Next> {
-  let (outcome, data) = read_head(stream, buffer)?
+fn next_request<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> IoResult<Next> {
+  let (outcome, data) = read_head(stream, limits, buffer)?
   let head_end = match outcome {
     Complete(end) => end
     Closed => return Ok(Close)
@@ -473,10 +485,10 @@ fn next_request(stream: TcpStream, buffer: Bytes) -> IoResult<Next> {
     }
     _ => return Ok(Reject(400))
   }
-  if length > MAXIMUM_BODY {
+  if length > limits.body.to_int() {
     return Ok(Reject(413))
   }
-  match read_body(stream, data, head_end + length)? {
+  match read_body(stream, limits, data, head_end + length)? {
     None => Ok(Close)
     Some(all) => {
       var full = request
@@ -515,15 +527,16 @@ test "a Content-Length is 1 to 18 decimal digits" {
 }
 
 // Answer a rejected request and close lingering: the reply, the write half
-// shut down, then input drained (at most MAXIMUM_DRAIN bytes, each read
-// waiting at most DRAIN_TIMEOUT_MS) so unread input does not turn the
-// close into a reset that discards the reply at the client.
-fn reject(stream: TcpStream, status: Int) -> IoResult<Unit> {
+// shut down, then input drained (at most `limits.drain`, each read waiting
+// at most `limits.drain_timeout`) so unread input does not turn the close
+// into a reset that discards the reply at the client.
+fn reject<T: ByteStream>(stream: T, limits: HttpLimits, status: Int) -> IoResult<Unit> {
   stream.write_all(render(status_response(status), false))?
   _ = stream.close()
-  stream.set_idle_timeout(DRAIN_TIMEOUT_MS)?
+  stream.set_idle_timeout(limits.drain_timeout.to_ms())?
+  let maximum = limits.drain.to_int()
   var drained = 0
-  while drained < MAXIMUM_DRAIN {
+  while drained < maximum {
     match stream.read(READ_SIZE) {
       Ok(Data(more)) => {
         drained = drained + more.len()
@@ -534,12 +547,12 @@ fn reject(stream: TcpStream, status: Int) -> IoResult<Unit> {
   Ok(())
 }
 
-fn session<S>(stream: TcpStream, application: HttpApp<S>) -> IoResult<Unit> {
+fn session<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> {
   var buffer = Bytes.empty()
   loop {
-    match next_request(stream, buffer)? {
+    match next_request(stream, limits, buffer)? {
       Close => return Ok(())
-      Reject(status) => return reject(stream, status)
+      Reject(status) => return reject(stream, limits, status)
       Got(request, rest) => {
         let response = checked(application.handle(application.state, request))
         let keep = keep_alive(request)
@@ -553,24 +566,27 @@ fn session<S>(stream: TcpStream, application: HttpApp<S>) -> IoResult<Unit> {
   }
 }
 
-// A connected pair of streams: the client and the server end.
-test fn connected() -> IoResult<(TcpStream, TcpStream)> {
-  let listener = TcpListener.bind("127.0.0.1", 0)?
-  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+// A connected pair of pipe ends: the client and the server end. Each
+// gives up on a peer silent for 5 s, so a session that does not close
+// fails the test instead of hanging it.
+test fn connected() -> IoResult<(PipeStream, PipeStream)> {
+  let (client, server) = Pipe.pair()
   client.set_idle_timeout(5000)?
-  let server = listener.accept()?
   server.set_idle_timeout(5000)?
   Ok((client, server))
 }
 
-// What `next_request` makes of `input`, sent with the write half closed
-// after it.
-test fn next_of(input: Bytes) -> IoResult<Next> {
+// What `next_request` makes of `input` under `limits`, sent with the
+// write half closed after it.
+test fn next_with(input: Bytes, limits: HttpLimits) -> IoResult<Next> {
   let (client, server) = connected()?
   client.write_all(input)?
   _ = client.close()
-  next_request(server, Bytes.empty())
+  next_request(server, limits, Bytes.empty())
 }
+
+// What `next_request` makes of `input` under the default limits.
+test fn next_of(input: Bytes) -> IoResult<Next> = next_with(input, HttpLimits {})
 
 // `input` with `count` filler bytes in an `X` header before its blank line.
 test fn padded(input: Text, count: Int) -> Bytes {
@@ -600,7 +616,7 @@ test "next_request takes a pipelined request from the buffer" {
   let (client, server) = connected()?
   _ = client.close()
   let buffer = b"GET / HTTP/1.1\r\n\r\nGET / HTTP/1.0\r\n\r\n"
-  assert next_request(server, buffer)? == Got(get("HTTP/1.1", []), b"GET / HTTP/1.0\r\n\r\n")
+  assert next_request(server, HttpLimits {}, buffer)? == Got(get("HTTP/1.1", []), b"GET / HTTP/1.0\r\n\r\n")
 }
 
 test "next_request ends on a connection closed before a whole request" {
@@ -653,11 +669,8 @@ test fn answer(state: Unit, request: Request) -> Response = if request.path == "
   Response.plain(200, "{request.method} {request.path}?{request.query} {request.body}")
 }
 
-// Everything `Http.serve` sends for `input` until it closes the connection.
-test fn served(input: Bytes) -> IoResult<Text> {
-  let (client, server) = connected()?
-  spawn Http.serve(server, HttpApp { state = (), handle = answer })
-  client.write_all(input)?
+// Everything `client` reads until the end of the stream.
+test fn read_to_end<T: ByteStream>(client: T) -> IoResult<Text> requires [client.read] {
   var out = Bytes.empty()
   loop {
     match client.read(4096)? {
@@ -665,6 +678,30 @@ test fn served(input: Bytes) -> IoResult<Text> {
       Data(bytes) => out.append(bytes)
     }
   }
+}
+
+// Everything `Http.serve` sends for `input` under `limits` until it
+// closes the connection, over a pipe.
+test fn served_with(input: Bytes, limits: HttpLimits) -> IoResult<Text> {
+  let (client, server) = connected()?
+  spawn Http.serve(server, limits, HttpApp { state = (), handle = answer })
+  client.write_all(input)?
+  read_to_end(client)
+}
+
+// `served_with` under the default limits.
+test fn served(input: Bytes) -> IoResult<Text> = served_with(input, HttpLimits {})
+
+// The same over loopback TCP, so the test build has the `TcpStream`
+// instance of `Http.serve` too (`docs/slice.md` D13).
+test fn served_over_tcp(input: Bytes) -> IoResult<Text> {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  client.set_idle_timeout(5000)?
+  let server = listener.accept()?
+  spawn Http.serve(server, HttpLimits {}, HttpApp { state = (), handle = answer })
+  client.write_all(input)?
+  read_to_end(client)
 }
 
 test fn reply(body: Text, connection: Text) -> Text {
@@ -676,7 +713,9 @@ test "the server answers pipelined requests until one asks to close" {
   let input = b"GET /a?x HTTP/1.1\r\n\r\nPOST /b HTTP/1.1\r\nContent-Length: 2\r\n\r\nhiGET /c HTTP/1.1\r\nConnection: close\r\n\r\n"
   let expected = reply("GET /a?x ", "keep-alive") + reply("POST /b? hi", "keep-alive") + reply("GET /c? ", "close")
   assert served(input)? == expected
+  assert served_over_tcp(input)? == expected
   assert served(b"GET /e HTTP/1.0\r\n\r\n")? == reply("GET /e? ", "close")
+  assert served_over_tcp(b"GET /e HTTP/1.0\r\n\r\n")? == reply("GET /e? ", "close")
 }
 
 test "the server answers a rejected request and closes" {
@@ -684,4 +723,163 @@ test "the server answers a rejected request and closes" {
   assert served(b"GET /a HTTP/1.1\r\n\r\nBAD\r\n\r\nGET /b HTTP/1.1\r\n\r\n")? == reply("GET /a? ", "keep-alive") + rejected
   let server_error = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 22\r\nConnection: close\r\n\r\nInternal Server Error\n"
   assert served(b"GET /bad HTTP/1.1\r\nConnection: close\r\n\r\n")? == server_error
+}
+
+test "three pipelined requests over a pipe are answered in one batch" {
+  let (client, server) = connected()?
+  spawn Http.serve(server, HttpLimits {}, HttpApp { state = (), handle = answer })
+  client.write_all(b"GET /a HTTP/1.1\r\n\r\nGET /b HTTP/1.1\r\n\r\nGET /c HTTP/1.1\r\nConnection: close\r\n\r\n")?
+  let out = read_to_end(client)?
+  assert out == reply("GET /a? ", "keep-alive") + reply("GET /b? ", "keep-alive") + reply("GET /c? ", "close")
+  assert client.received_batches() == 1
+}
+
+test "a pipe client gets 400, 413 and 431" {
+  assert served(b"NONSENSE\r\n\r\n")? == render(status_response(400), false).to_text()
+  assert served(b"POST / HTTP/1.1\r\nContent-Length: 1048577\r\n\r\n")? == render(status_response(413), false).to_text()
+  assert served(padded("GET / HTTP/1.1\r\n", 8193))? == render(status_response(431), false).to_text()
+  assert render(status_response(431), false).to_text().starts_with("HTTP/1.1 431 Request Header Fields Too Large\r\n")
+  assert render(status_response(413), false).to_text().contains("\r\nConnection: close\r\n")
+}
+
+test "the limits record bounds the body" {
+  let limits = HttpLimits { body = 4 bytes }
+  assert next_with(b"POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nabcde", limits)? == Reject(413)
+  assert served_with(b"POST /b HTTP/1.1\r\nContent-Length: 5\r\n\r\nabcde", limits)? == render(status_response(413), false).to_text()
+  assert served_with(b"POST /b HTTP/1.1\r\nContent-Length: 4\r\nConnection: close\r\n\r\nabcd", limits)? == reply("POST /b? abcd", "close")
+}
+
+test "the limits default to 8 KiB, 1 MiB, 30 s, 64 KiB and 1 s" {
+  let limits = HttpLimits {}
+  assert limits.head.to_int() == 8192
+  assert limits.body.to_int() == 1048576
+  assert limits.idle_timeout.to_ms() == 30000
+  assert limits.drain.to_int() == 65536
+  assert limits.drain_timeout.to_ms() == 1000
+}
+
+// Flushes the task's pending writes as their own delivery and waits 50 ms,
+// so the next write is a separate delivery the server reads on its own.
+test fn pause() -> IoResult<Unit> {
+  let (a, b) = Pipe.pair()
+  a.set_idle_timeout(50)?
+  _ = a.read(1)?
+  _ = b.close()
+  Ok(())
+}
+
+// `parts` written as separate deliveries to `Http.serve` under `limits`
+// over a pipe, the client closing its write half after the last when
+// `close` holds; everything the server sends until it closes.
+test fn served_parts(parts: List<Bytes>, limits: HttpLimits, close: Bool) -> IoResult<Text> {
+  let (client, server) = connected()?
+  spawn Http.serve(server, limits, HttpApp { state = (), handle = answer })
+  for part in parts {
+    client.write_all(part)?
+    pause()?
+  }
+  if close {
+    _ = client.close()
+  }
+  read_to_end(client)
+}
+
+// The status line of a response.
+test fn status_line(text: Text) -> Text = text.split("\r\n").at(0)
+
+test "a head of exactly HttpLimits.head is served, one byte more is 431" {
+  let limits = HttpLimits { head = 64 bytes }
+  assert padded("GET / HTTP/1.0\r\n", 64).len() == 64
+  assert served_with(padded("GET / HTTP/1.0\r\n", 64), limits)? == reply("GET /? ", "close")
+  assert status_line(served_with(padded("GET / HTTP/1.0\r\n", 65), limits)?) == "HTTP/1.1 431 Request Header Fields Too Large"
+}
+
+test "the default head of exactly 8192 bytes is served, 8193 is 431" {
+  assert served(padded("GET / HTTP/1.0\r\n", 8192))? == reply("GET /? ", "close")
+  assert status_line(served(padded("GET / HTTP/1.0\r\n", 8193))?) == "HTTP/1.1 431 Request Header Fields Too Large"
+}
+
+test "a request line alone at the head limit" {
+  let limits = HttpLimits { head = 64 bytes }
+  let at = "/" + repeat("a", 45)
+  assert "GET {at} HTTP/1.0\r\n\r\n".len() == 63
+  assert served_with("GET {at} HTTP/1.0\r\n\r\n".to_bytes(), limits)? == reply("GET {at}? ", "close")
+  let fits = "/" + repeat("a", 46)
+  assert served_with("GET {fits} HTTP/1.0\r\n\r\n".to_bytes(), limits)? == reply("GET {fits}? ", "close")
+  let over = "/" + repeat("a", 47)
+  assert status_line(served_with("GET {over} HTTP/1.0\r\n\r\n".to_bytes(), limits)?) == "HTTP/1.1 431 Request Header Fields Too Large"
+}
+
+test "a body of exactly the default 1 MiB is served" {
+  let body = repeat("a", 1048576)
+  let input = "POST / HTTP/1.0\r\nContent-Length: 1048576\r\n\r\n{body}"
+  assert served(input.to_bytes())? == reply("POST /? {body}", "close")
+}
+
+test "a body split across three deliveries" {
+  let parts = [b"POST /b HTTP/1.0\r\nContent-Length: 5\r\n\r\nab", b"cd", b"e"]
+  assert served_parts(parts, HttpLimits { body = 5 bytes }, false)? == reply("POST /b? abcde", "close")
+}
+
+test "a head split across deliveries at its blank line" {
+  let parts = [b"GET /h HTTP/1.0\r\n\r", b"\n"]
+  assert served_parts(parts, HttpLimits {}, false)? == reply("GET /h? ", "close")
+}
+
+test "a Content-Length longer than the body, then close, gets no answer" {
+  assert served_parts([b"POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nabc"], HttpLimits {}, true)? == ""
+}
+
+test "a Content-Length shorter than the body leaves the rest as the next head" {
+  let input = b"POST / HTTP/1.1\r\nContent-Length: 2\r\n\r\nabGET /n HTTP/1.0\r\n\r\n"
+  assert served(input)? == reply("POST /? ab", "keep-alive") + reply("GET /n? ", "close")
+}
+
+test "a request after Connection: close is not answered" {
+  let input = b"GET /a HTTP/1.1\r\nConnection: close\r\n\r\nGET /b HTTP/1.1\r\n\r\n"
+  assert served(input)? == reply("GET /a? ", "close")
+}
+
+test "pipelined heads whose total crosses the head limit are each within it" {
+  let limits = HttpLimits { head = 64 bytes }
+  var input = padded("GET /a HTTP/1.1\r\n", 60)
+  input.append(padded("GET /b HTTP/1.1\r\n", 60))
+  input.append(padded("GET /c HTTP/1.0\r\n", 60))
+  assert served_with(input, limits)? == reply("GET /a? ", "keep-alive") + reply("GET /b? ", "keep-alive") + reply("GET /c? ", "close")
+}
+
+test "a pipelined request over the head limit after two within it" {
+  let limits = HttpLimits { head = 64 bytes }
+  var input = padded("GET /a HTTP/1.1\r\n", 60)
+  input.append(padded("GET /b HTTP/1.1\r\n", 64))
+  input.append(padded("GET /c HTTP/1.0\r\n", 65))
+  let out = served_with(input, limits)?
+  assert out.starts_with(reply("GET /a? ", "keep-alive") + reply("GET /b? ", "keep-alive") + "HTTP/1.1 431 ")
+}
+
+test "pipelined bodies whose total crosses the body limit are each within it" {
+  let limits = HttpLimits { body = 4 bytes }
+  let input = b"POST /a HTTP/1.1\r\nContent-Length: 4\r\n\r\nabcdPOST /b HTTP/1.0\r\nContent-Length: 4\r\n\r\nefgh"
+  assert served_with(input, limits)? == reply("POST /a? abcd", "keep-alive") + reply("POST /b? efgh", "close")
+}
+
+test "an empty write delivers nothing and the closed connection gets no answer" {
+  let (a, b) = Pipe.pair()
+  a.write_all(Bytes.empty())?
+  _ = a.close()
+  b.set_idle_timeout(5000)?
+  assert b.read(10)? == Eof
+  assert b.received_batches() == 0
+  assert served_parts([Bytes.empty()], HttpLimits {}, true)? == ""
+}
+
+// As the Telnet case: the client has no idle timeout and never closes,
+// and the server end has none of its own before `Http.serve` sets one,
+// so only `limits.idle_timeout` can end the connection.
+test "the HTTP idle timeout alone ends a pipe connection" {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(0)?
+  client.write_all(b"GET /i HTTP/1.1\r\n\r\n")?
+  spawn Http.serve(server, HttpLimits { idle_timeout = 20 ms }, HttpApp { state = (), handle = answer })
+  assert read_to_end(client)? == reply("GET /i? ", "keep-alive")
 }

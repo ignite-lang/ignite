@@ -56,7 +56,7 @@ fn standard_library_checks_in_import_order() {
 
     let telnet = &modules["std.protocol.telnet"];
     let roles = &telnet.protocols["Telnet"];
-    assert_eq!(roles["serve"].arity, 2);
+    assert_eq!(roles["serve"].arity, 3);
     assert_eq!(roles["connect"].arity, 1);
     assert!(telnet.exports("Telnet"));
     assert_eq!(

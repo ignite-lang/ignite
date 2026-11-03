@@ -9,4 +9,5 @@ mod golden;
 mod reachable;
 mod slice10;
 mod slice9;
+mod streams;
 mod units;

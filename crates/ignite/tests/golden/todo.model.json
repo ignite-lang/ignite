@@ -3,7 +3,9 @@
   "components": [
     {
       "declaration": "component",
-      "defaults": [],
+      "defaults": [
+        "limits"
+      ],
       "executable": "todod",
       "id": "TodoService.server",
       "kind": "std.protocol.http.HttpServer<Store<examples.todo.Todo>>",
@@ -23,6 +25,31 @@
           "type": "std.protocol.http.HttpApp"
         },
         "executable": "todod",
+        "limits": {
+          "fields": {
+            "body": {
+              "bytes": 1048576,
+              "type": "ByteSize"
+            },
+            "drain": {
+              "bytes": 65536,
+              "type": "ByteSize"
+            },
+            "drain_timeout": {
+              "ns": 1000000000,
+              "type": "Duration"
+            },
+            "head": {
+              "bytes": 8192,
+              "type": "ByteSize"
+            },
+            "idle_timeout": {
+              "ns": 30000000000,
+              "type": "Duration"
+            }
+          },
+          "type": "std.protocol.http.HttpLimits"
+        },
         "listener": {
           "ref": "TodoService.ingress",
           "type": "Ref"
@@ -88,6 +115,7 @@
     "TodoService.server": "todo.ignite:84:3",
     "TodoService.server.application": "todo.ignite:86:19",
     "TodoService.server.executable": "todo.ignite:87:18",
+    "TodoService.server.limits": "std/protocol/http.ignite:89:24",
     "TodoService.server.listener": "todo.ignite:85:16",
     "TodoService.todos": "todo.ignite:82:3"
   },
