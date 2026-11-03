@@ -137,8 +137,9 @@ emission and at every period boundary.
 The population is the executed attempts in the window; missing are the expected slots that
 were not executed. The status is decided in this order:
 
-1. apply `missing_data`: `counts_as_good` or `counts_as_bad` fill the missing slots;
-2. no executed attempt: `InsufficientEvidence`;
+1. apply `missing_data`: `counts_as_good` or `counts_as_bad` fill the missing slots, which then
+   count as executed;
+2. no executed attempt, filled slots included: `InsufficientEvidence`;
 3. with `insufficient_evidence`, completeness under `minimum_completeness`:
    `InsufficientEvidence`;
 4. `meets(target, good, executed)`: `Compliant`, otherwise `Violated`.

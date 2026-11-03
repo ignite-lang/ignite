@@ -31,7 +31,7 @@ Two rules keep it small and shared:
 
 Today the substrate is blocking: `std::net`, one OS thread per task, no event loop. An async
 substrate (tokio inside `ignite-io`, Rust futures and LLVM coroutines running on it) is
-planned as slice 5 and is not built; see the [roadmap](../roadmap.md).
+planned and not built; see the [roadmap](../roadmap.md).
 
 ## The Rust target
 
@@ -101,19 +101,20 @@ non-native code:
 | async | can reuse a Rust executor | must specify suspension, scheduling and cancellation |
 | dependencies | the Rust toolchain | LLVM tools, the runtime archive, a linker |
 
-The design names the LLVM route's strengths as "control of representation, fewer semantic
-compromises through a host language, and a natural long-term backend", and calls Rust code
-generation "a credible shortcut". It treats faster builds, smaller binaries and higher
-throughput as "hypotheses to benchmark". The measured build times are in the
+The design says: "The strongest benefits of the LLVM route are control of representation,
+fewer semantic compromises through a host language, and a natural long-term backend for the
+implementation subset." And: "Rust code generation remains a credible shortcut to the first
+native controller." It calls faster builds, smaller binaries and higher throughput
+"hypotheses to benchmark". The measured build times are in the
 [targets guide](../guide/targets.md#build-times-as-measured).
 
 ## Which target is the default
 
-Both targets stay, the Rust target stays the default, and every feature lands on both. The
-sources:
+Today both targets stay, `--target rust` is the default of `ignite build` and `ignite test`
+(their `--help`), and every feature lands on both. The sources:
 
-- [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md), invariants every slice
-  keeps: "Both targets agree: the Rust target stays the default (D2), every feature lands on
+- [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md), its standing
+  invariants: "Both targets agree: the Rust target stays the default (D2), every feature lands on
   both."
 - [`docs/llvm.md`](https://github.com/ignite-lang/ignite/blob/main/docs/llvm.md): "The Rust
   target stays and stays the default."
@@ -123,8 +124,11 @@ sources:
   invariant 7: "Every language feature lands on both native targets with a golden and a
   fixture, until D2 says otherwise."
 
-So `--target rust` is what `ignite build` and `ignite test` use without a flag, and
-`--target llvm` is a full peer, not an experiment.
+The sources disagree about the future. Decision D2 in `docs/vision.md` section 8 is recorded
+there as taken with option B, "LLVM primary": LLVM becomes the default `--target` and the Rust
+target stays the test oracle. `PLAN.md` summarises the same decision as "D2 B two targets,
+Rust default". The code follows the second reading. Either way `--target llvm` is a full
+peer, not an experiment.
 
 ## Where the code lives
 

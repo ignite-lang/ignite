@@ -74,11 +74,11 @@ task server TARGET=llvm
 
 ## Build times, as measured
 
-The repository records program build times at every slice. At the v0.3.0 close (slice 14),
+The repository records program build times at every step. At the v0.3.0 close,
 building `todod` from a fresh output and target directory took about 3.1 s (Rust, dev)
 and 4.2 s (Rust, release), and 0.29 s (LLVM, dev) and 0.73 s (LLVM, release), over three
 measured pairs. The method and every run are in
-[`AGENTS.md`](https://github.com/ignite-lang/ignite/blob/main/AGENTS.md) ("Slice 14") and
+[`AGENTS.md`](https://github.com/ignite-lang/ignite/blob/main/AGENTS.md) (the section "in-process streams") and
 [`docs/performance/`](https://github.com/ignite-lang/ignite/tree/main/docs/performance).
 Whether one target produces faster or smaller programs is, by the design, a question for
 benchmarks, not an assumption.

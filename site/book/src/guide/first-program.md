@@ -91,10 +91,20 @@ ignite build hello.ignite
 target/ignite/hello/target/debug/hello
 ```
 
+Shortened, the output of both commands:
+
 ```text
+note: building the generated Rust project in target/ignite/hello; compiler messages refer to generated code
+    Updating crates.io index
+   Compiling ignite-io v0.3.0 (…/crates/ignite-io)
+   Compiling hello v0.0.0 (…/target/ignite/hello)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.90s
 built target/ignite/hello/target/debug/hello
 Hello, Ignite!
 ```
+
+The lines between `note:` and `built` are cargo's. A build into a fresh output directory
+resolves the substrate's dependencies from crates.io, so it needs network access.
 
 `ignite build` writes a generated Rust project into `--out` (default `target/ignite/<package>`),
 runs cargo on it and prints one `built <path>` line per executable. The generated Rust is an

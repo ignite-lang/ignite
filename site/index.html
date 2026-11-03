@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ignite: say what your system is for</title>
-  <meta name="description" content="Ignite is an intent-oriented language for specifying, building, deploying and operating systems. One file describes the components, the network, the contracts and the policies, and the compiler turns it into native executables.">
+  <meta name="description" content="Ignite is an intent-oriented language for specifying, building, deploying and operating systems. One program describes the components, the network, the contracts and the policies, and the compiler turns it into native executables.">
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0f0a14">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
@@ -27,7 +27,10 @@
         <img src="assets/logo.svg" alt="" width="34" height="34">
         <span>Ignite</span>
       </a>
-      <nav class="nav" aria-label="Main">
+      <button class="menu-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="main-nav">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <nav class="nav" id="main-nav" aria-label="Main">
         <a href="book/guide/install.html">Guide</a>
         <a href="book/design/index.html">Design</a>
         <a href="book/reference/index.html">Reference</a>
@@ -71,9 +74,9 @@
         <div class="hero-copy">
           <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> v0.3.0 &middot; an early prototype</p>
           <h1 id="hero-title">Say what your system is for. <span class="flame-text">Ignite builds it, runs it and keeps it honest.</span></h1>
-          <p class="lede">An intent-oriented language for specifying, building, deploying and operating systems. One file describes the components, the network, the contracts and the policies, and the compiler turns it into native executables.</p>
+          <p class="lede">An intent-oriented language for specifying, building, deploying and operating systems. One program describes the components, the network, the contracts and the policies, and the compiler turns it into native executables.</p>
           <div class="cta">
-            <a class="btn btn-primary" href="#quickstart">Start in 5 minutes</a>
+            <a class="btn btn-primary" href="#quickstart">Get started</a>
             <a class="btn btn-ghost" href="book/design/index.html">Read the design</a>
             <a class="btn btn-ghost" href="https://github.com/ignite-lang/ignite">Source on GitHub</a>
           </div>
@@ -89,7 +92,7 @@
             <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
             <div class="tabs" role="tablist" aria-label="Example files">
               <button role="tab" id="tab-system" aria-controls="panel-system" aria-selected="true">terminal.ignite</button>
-              <button role="tab" id="tab-commands" aria-controls="panel-commands" aria-selected="false" tabindex="-1">commands.ignite</button>
+              <button role="tab" id="tab-commands" aria-controls="panel-commands" aria-selected="false" tabindex="-1">commands.ignite, excerpt</button>
               <button role="tab" id="tab-session" aria-controls="panel-session" aria-selected="false" tabindex="-1">session</button>
             </div>
           </div>
@@ -175,7 +178,7 @@ ready
 terminal&gt; quit
 bye</code></pre>
           </div>
-          <p class="window-note">The whole terminal system from <a href="https://github.com/ignite-lang/ignite/tree/main/examples/terminal">examples/terminal</a>: <code>ignite build</code> turns it into the server <code>terminald</code> and the client <code>tn</code>.</p>
+          <p class="window-note">The terminal system from <a href="https://github.com/ignite-lang/ignite/tree/main/examples/terminal">examples/terminal</a>, <code>terminal.ignite</code> in full and an excerpt of <code>commands.ignite</code> (it leaves out <code>respond</code> and most tests; a third file, <code>command_schema.ignite</code>, lists the command names): <code>ignite build</code> turns it into the server <code>terminald</code> and the client <code>tn</code>.</p>
         </div>
       </div>
     </section>
@@ -183,7 +186,7 @@ bye</code></pre>
     <section class="lifecycle" aria-labelledby="lifecycle-title">
       <div class="wrap">
         <p class="kicker">One toolchain, source to operations</p>
-        <h2 id="lifecycle-title">From one file to a running, supervised system</h2>
+        <h2 id="lifecycle-title">From one program to a running, supervised system</h2>
         <ol class="fuse">
           <li><code>check</code><span>Parse and check the program and the standard library. No output on success.</span></li>
           <li><code>test</code><span>Build the inline tests and run them, on Rust, LLVM or both.</span></li>
@@ -251,7 +254,7 @@ bye</code></pre>
           <h2 id="showcase-title">An objective with a measurement behind it</h2>
           <p>The full terminal declaration adds a probe, three contracts, a restart policy and a drain rollout. The compiler evaluates every property, and <code>ignite explain</code> shows what a declaration means, where it came from and which machine will enforce it.</p>
           <ul class="ticks">
-            <li>Missing telemetry is <em>insufficient evidence</em>, never a success.</li>
+            <li>Missing telemetry is <em>insufficient evidence</em> by default, not a success; a contract that wants otherwise says <code>counts_as_good</code> or <code>counts_as_bad</code>.</li>
             <li>A contract is bound to the signal it observes, checked before anything runs.</li>
             <li>The machines are pure reducers in <code>std.control</code>, stepped by <code>ignite run</code>.</li>
           </ul>
@@ -312,7 +315,7 @@ task ended with error: + failed at &lt;file&gt;:&lt;line&gt;:&lt;column&gt;: 922
     <section class="quickstart" id="quickstart" aria-labelledby="qs-title">
       <div class="wrap">
         <p class="kicker">Quickstart</p>
-        <h2 id="qs-title">Five minutes to your first Ignite system</h2>
+        <h2 id="qs-title">From a clone to your first Ignite system</h2>
         <p class="section-lede">You need git and Rust (stable, with cargo). The Rust target builds programs with cargo; the LLVM target needs clang. Ignite installs from source.</p>
         <ol class="steps">
           <li>

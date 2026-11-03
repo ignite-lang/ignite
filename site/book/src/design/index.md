@@ -21,7 +21,7 @@ Ignite's answer is one typed model. Executables, control behaviour, command line
 and explanations are all derived from it, so there is one place to change and one place to
 check.
 
-## What one file says
+## What one declaration says
 
 The terminal reference system in
 [`terminal.design.ignite`](https://github.com/ignite-lang/ignite/blob/main/examples/terminal/terminal.design.ignite)
@@ -49,7 +49,8 @@ contract reachable: Availability {
 }
 ```
 
-`ignite build` turns the components into the executables `terminald` and `tn`.
+`ignite build` turns the server into the executable `terminald` and the probe into
+`promptProbe`; the client is declared as an `Application` without a `main`, so it is not built.
 `ignite plan` evaluates every property and prints the system model. `ignite run` starts the
 server, probes it every 10 seconds and evaluates `reachable` on every attempt. The
 [terminal walkthrough](../guide/terminal.md) and

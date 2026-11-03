@@ -194,18 +194,19 @@ and the stop at 30 seconds:
 91 30 seconds segment: { clock: "manual", declared: ["Terminal.client"], generation: 1, start: 0 ns, stop: Some(30 seconds) }
 ```
 
-The second `status` printed the standings on stdout, after four probe attempts:
+The second `status` printed on stdout, after four probe attempts (shortened to the reachability
+standing and the port; the machine states are left out):
 
 ```text
 standing Terminal.reachable: Standing { contract: "Terminal.reachable", status: Status.Compliant, good: 4, executed: 4, expected: 4, completeness: 100%, from: 0 ns, to: 30 seconds, coverage: 0.0011%, calculation: "ignite-sli/0.1", version: 84 }
 port Terminal.ingress: 33517
-declared, not buildable in slice 12: Terminal.client
 ```
 
-The first `status`, before any attempt, printed `status: Status.InsufficientEvidence` with
-`executed: 0`: zero traffic does not prove compliance. `coverage` is the share of the 30-day
-window that the evidence covers. `Terminal.client` is an `Application` without a `main`, so
-the run lists it as declared but does not build it.
+With `missing_data = "insufficient_evidence"`, a window without an executed attempt has the
+status `Status.InsufficientEvidence`: zero traffic does not prove compliance. `coverage` is the
+share of the 30-day window that the evidence covers. `Terminal.client` is an `Application`
+without a `main`, so `status` also lists it as declared and not buildable, and the run does not
+build it.
 
 How the run works:
 

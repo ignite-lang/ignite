@@ -17,9 +17,9 @@ Options:   -h, --help     Print help
 
 | option | commands | meaning |
 |---|---|---|
-| `--std DIR` | all that read a program | root of the standard library (default: the repository's `std/`, next to the compiler's crate) |
+| `--std DIR` | all that read a program | root of the standard library (default: the `std/` of the source tree `ignite` was built from) |
 | `--assembly NAME` | `plan`, `explain`, `run`, `replay` | the assembly to select (default: the program's only one) |
-| `--fuel N` | `plan`, `explain`, `run`, `replay` | fuel per property expression (`run`: and per reducer step; `replay`: per reducer step only), default 1,000,000 units |
+| `--fuel N` | `plan`, `explain`, `run`, `replay` | `plan`, `explain`: fuel per property expression; `run`, `replay`: fuel per reducer step only, the plan inside them keeps the default; default 1,000,000 units |
 | `--target rust\|llvm` | `build`, `test`, `run`, `plan --for-apply` | native target, default `rust`; `test` also takes `all` |
 | `--release` | `build`, `test`, `run`, `plan --for-apply` | optimised build (release profile on Rust, clang `-O2` on LLVM) |
 | `--runtime FILE` | `build`, `test`, `run`, `plan --for-apply` | the LLVM runtime archive `libignite_rt.a` (default: next to `ignite`) |
@@ -222,11 +222,14 @@ status was read, not that an operation succeeded.
 The generated `main` of an executable binds the `TcpListener` resources its component uses
 and prints `listening on <address>:<port>` for each. `--port N` overrides the port of the
 first listener, or of an `Endpoint` the component connects to; `--port 0` binds a free port
-and the `listening on` line reports it.
+and the `listening on` line reports it. `--ref <path>=<address>:<port>` (or
+`--ref=<path>=…`) binds a reference for `Endpoint.of`; `ignite run` passes it to a probe. The
+first binding with the path wins; no binding with that path is the error `no binding for
+<path>`.
 
 | exit | meaning |
 |---|---|
 | 0 | `main` returned normally |
-| 1 | binding the listener failed, or `main` returned an error without an exit code of its own |
-| 2 | `--port` malformed or out of range |
+| 1 | binding the listener failed, `Endpoint.of` found no `--ref` binding, or `main` returned an error without an exit code of its own |
+| 2 | `--port` or `--ref` malformed, or a port out of range |
 | 3, 4 | the terminal client `tn`: connecting failed, or the session ended with an error |

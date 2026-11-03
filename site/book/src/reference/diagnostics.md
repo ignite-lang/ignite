@@ -1,7 +1,9 @@
 # Diagnostics
 
 Every error Ignite reports about a program has a code, `E001` to `E129`. This page lists
-each code, what it means, which command reports it, and a small program that triggers it.
+each code, what it means and which command reports it. Most codes come with a small program
+that triggers it; E032 and E125 show an excerpt, and E054, E114, E119 and E126 to E128 show
+the output of a repository fixture.
 
 ## Reading a diagnostic
 
@@ -37,11 +39,12 @@ check`, `ignite test`, `ignite build`, `ignite plan`, `ignite explain`, `ignite 
 
 | codes | phase | reported by |
 |---|---|---|
-| E001 to E099 | syntax, names, effects, types | every command that reads a program |
+| E001 to E099 | syntax, names, effects, types, and E020, an unsupported or malformed declaration | every command that reads a program |
 | E100 to E109, E116 | system declarations, from the type checker | every command that reads a program |
-| E110 to E113, E115, E117, E118 | the compile-time evaluator | `check`, `plan`, `explain` |
-| E114, E119 | selecting an assembly or a path | `plan`, `explain` |
-| E120 to E124, E129 | run-time rules checked ahead of time | `check`, `plan`, `run` |
+| E110 to E113, E115, E117, E118 | the compile-time evaluator | `check`, `plan`, `explain`, `run`, `replay` |
+| E114 | selecting an assembly | `plan`, `explain`, `run`, `replay` |
+| E119 | selecting an explain path | `explain` |
+| E120 to E124, E129 | run-time rules checked ahead of time | `check`, `plan`, `explain`, `run`, `replay` |
 | E125 to E128 | running and replaying | `run`, `replay` |
 
 Exit status when a program has an error, measured with the v0.3.0 CLI:
@@ -55,8 +58,8 @@ Exit status when a program has an error, measured with the v0.3.0 CLI:
 read is no diagnostic: it prints `error: <file>: <reason>` and exits 3. See
 [Command line](cli.md) for every command's options and exit statuses.
 
-The examples on this page are complete programs. Each one is checked against the
-standard library with `ignite check`, and the output shown below it is the real output,
+The examples on this page marked checked are complete programs. Each one is checked against
+the standard library with `ignite check`, and the output shown below it is the real output,
 with the file named `example.ignite`. Most fixtures in the repository have more cases; each
 section links them.
 
@@ -118,7 +121,7 @@ example.ignite:3:6: error[E053]: a test name cannot be empty; describe what the 
 
 Brackets, type arguments, prefix operators or `return` nested deeper than 256 levels, or
 string literals nested deeper than 32 interpolations. The message is `nesting deeper than
-256; split the expression`. The fixture is one line of 257 parentheses:
+256; split the expression`. The fixture is a five-line program whose second line nests 257 parentheses:
 [`e054_nesting.ignite`](https://github.com/ignite-lang/ignite/blob/main/crates/ignite-syntax/tests/fixtures/e054_nesting.ignite).
 
 ## Names and modules
@@ -363,7 +366,7 @@ example.ignite:1:20: error[E099]: `ByteStream` is an interface, not a type; decl
 
 ## Effects and protocols
 
-Reported by the name checker (E010 to E030) and the type checker (E017). See
+Reported by the name checker (E010 to E016 and E018 to E030) and the type checker (E017). See
 [Effects](effects.md).
 
 ### E010 Effectful call in a pure context {#e010}
@@ -403,8 +406,8 @@ example.ignite:4:3: error[E013]: `spawn` needs a call to an effectful function o
 
 ### E015 Constant cycle {#e015}
 
-A constant whose value depends on itself, directly or through other constants and
-functions.
+A constant whose value depends on itself, directly or through other constants. A cycle
+through a function body (`const A: Int = f()` with `fn f() -> Int = A + 1`) is not detected.
 
 ```ignite,fails=E015
 const A: Int = B * 2
@@ -892,7 +895,8 @@ example.ignite:8:36: error[E116]: effectful call `noisy` in the property `input`
 
 The compile-time evaluator computes every property and resolves each assembly through the
 `admits` and `includes` functions of its binding type (`std.deploy` for the standard
-bindings). `ignite check`, `ignite plan` and `ignite explain` report these codes. Fixtures:
+bindings). `ignite check`, `ignite plan`, `ignite explain`, `ignite run` and `ignite replay`
+report these codes, since `run` and `replay` plan first. Fixtures:
 [`crates/ignite/tests/fixtures`](https://github.com/ignite-lang/ignite/blob/main/crates/ignite/tests/fixtures).
 See [The compile-time evaluator](../design/evaluator.md) and
 [Plan, explain, run and replay](../guide/operate.md).
@@ -1063,7 +1067,8 @@ example.ignite:29:5: error[E113]: binding of `S.w` does not include `S.h`, which
 
 The program declares several assemblies and the command got no `--assembly`, or
 `--assembly` names one that does not exist. `ignite check` accepts such a program, because
-it checks every assembly; `ignite plan` and `ignite explain` must pick one. From the
+it checks every assembly; `ignite plan`, `ignite explain`, `ignite run` and `ignite replay`
+must pick one. From the
 fixture
 [`e114_assembly_selection.ignite`](https://github.com/ignite-lang/ignite/blob/main/crates/ignite/tests/fixtures/e114_assembly_selection.ignite),
 which declares the assemblies `hosted` and `workstation`:
@@ -1077,9 +1082,10 @@ e114_assembly_selection.ignite:1:1: error[E114]: no assembly named `nowhere`: th
 
 ### E115 Evaluation limit exceeded {#e115}
 
-Evaluating a property ran out of fuel or built a value that is too large. The default is
-1,000,000 fuel units (expressions, iterations, calls) per property expression and 1,000,000
-nodes per value; `--fuel N` changes the fuel.
+Evaluating a property ran out of fuel, built a value that is too large, or nested calls too
+deeply. The limits are 1,000,000 fuel units (expressions, iterations, calls) per property
+expression, 1,000,000 nodes per value and 10,000 nested fn and closure calls; `--fuel N` on
+`plan` and `explain` changes the fuel.
 
 ```ignite,fails=E115
 type Worker {
@@ -1159,8 +1165,8 @@ e119_unknown_path.ignite:1:1: error[E119]: `S.w.nowhere` names no system, member
 ## Rules for running, checked ahead of time
 
 These rules concern what `ignite run` will do, but they are checked before anything runs:
-`ignite check` and `ignite plan` report them for every assembly, and `ignite run` reports
-them too. E120, E123 and E124 are checked per system, so a program without an assembly gets
+`ignite check` and `ignite plan` report them for every assembly, and `ignite explain`,
+`ignite run` and `ignite replay` report them too. E120, E123 and E124 are checked per system, so a program without an assembly gets
 them too. E121, E122 and E129 are checked per assembly. Fixtures:
 [`crates/ignite/tests/fixtures`](https://github.com/ignite-lang/ignite/blob/main/crates/ignite/tests/fixtures).
 
@@ -1407,7 +1413,7 @@ example.ignite:32:5: error[E129]: `S.w` is hosted by a binding that runs it, but
 ## Running and replaying
 
 Reported by `ignite run` and `ignite replay` only. `ignite check` and `ignite plan` accept
-these programs. `ignite run` exits 2 on E125 and E126; `ignite replay` exits 1 on E127.
+these programs. `ignite run` exits 2 on E125 and E126; `ignite replay` exits 1 on E126 and E127.
 The fixtures in
 [`crates/ignite/tests/fixtures`](https://github.com/ignite-lang/ignite/blob/main/crates/ignite/tests/fixtures)
 name the command on their first line. See [Plan, explain, run and replay](../guide/operate.md).
@@ -1440,7 +1446,8 @@ The other message is ``assembly `<name>` runs nothing: no member it hosts has a 
 
 The state directory's journal was written for another model or another format version, or
 another `ignite run` or `ignite host` holds the state directory's lock, or the directory is
-the state of an `ignite host`. It is reported before anything is built. Use another
+the state of an `ignite host`. `ignite run` reports it before anything is built; `ignite replay`
+reports it for a journal without a header or written for another model. Use another
 `--state`, or `--fresh` to start a new journal.
 
 ```text

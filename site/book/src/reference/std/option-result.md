@@ -9,8 +9,9 @@ the operators `==` and `!=`, and `?` are builtin and need no import.
   [`std/result.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/result.ignite).
 - Import: `import std.option.{unwrap_or, map}`, `import std.result.{map_err, ok}`.
 
-The two modules use the same names for the same ideas. A module that needs both imports the
-names it uses by name, each from one of the two. Importing both with `*` makes a call such as
+The two modules share the names `unwrap_or` and `map`; the others differ (`is_some` and
+`is_ok`, `ok_or` and `ok`). A module that needs both imports the shared names by name from the
+one it means. Importing both with `*` makes a call such as
 `x.map(f)` ambiguous (E041).
 
 ## std.option

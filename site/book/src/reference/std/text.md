@@ -45,7 +45,7 @@ fn bytes_match_at(bytes: Bytes, needle: Bytes, at: Int) -> Bool
 | `bytes_find_from` | `find_from` on `Bytes` |
 | `bytes_match_at` | whether `needle` occurs in `bytes` at offset `at` |
 
-An empty needle is found at offset 0.
+An empty needle is found at offset 0 by `find` and at `start` by `find_from`.
 
 ## Cutting
 

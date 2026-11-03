@@ -44,7 +44,8 @@ A fn without a return type returns `Unit`. `()` is the Unit type as well as its 
 | `&& \|\| !` | no | no | yes | no |
 
 - Both operands of a binary operator have the same type. `Byte + Int` is E040; convert one
-  side with `b.to_int()` or `i.to_byte()`.
+  side with `b.to_int()`, or with `i.to_byte()`, which returns `Option<Byte>` (`None` outside
+  0 to 255).
 - Integer division rounds toward zero; `%` is the remainder of that division.
 - `&&` and `||` evaluate their right operand only when needed.
 - Any other combination is E045.
@@ -250,7 +251,8 @@ test "records" {
   (E047 otherwise). An unknown or repeated field is E047 too.
 - `Server { port }` is short for `Server { port = port }`.
 - `Server { port = 1, ..s }` copies `s` and replaces the fields given.
-- `s.port = 1` assigns a field of a `var` or parameter.
+- `s.port = 1` assigns a field of a `var`. Parameters are immutable, so assigning a field
+  of one is E006.
 - Where the expected type is a record, the name may be left out: `{ host = "x" }` is a brace
   literal of that record. Without an expected type a brace literal is E100.
 - `fn Server.local()` is an associated fn of `Server`, called `Server.local()`. The record

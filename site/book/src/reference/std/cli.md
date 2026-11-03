@@ -42,7 +42,8 @@ type SessionHandler {
 - `Application` is the application: its executable and its commands by name.
 - `Command` is one command. `handler` names the module whose `connect` runs the session over a
   connected stream, with the terminal and the process at hand. `terminal` and `escape` are
-  closed sets written as text.
+  plain text today (defaults `"interactive"` and `"Ctrl+]"`); the source calls them closed
+  sets, but lists no other members and nothing checks the value.
 - `Argument` is one argument and its kind.
 - `SessionHandler` is what a handler module provides. `module("std.protocol.telnet")` fills it
   with Telnet's `connect`.

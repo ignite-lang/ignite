@@ -23,8 +23,9 @@ With the default limits:
 | nothing for 30 s | the connection is closed |
 
 Each rejection closes the connection after a lingering close: the reply is written, the write
-half shut down, and up to 64 KiB of input drained for at most 1 s, so the client reads the
-reply instead of a reset.
+half shut down, and up to 64 KiB of input drained, each read waiting at most 1 s, so the
+client reads the reply instead of a reset. Both limits are `HttpLimits` fields (`drain`,
+`drain_timeout`).
 
 The head is parsed strictly, so a proxy in front cannot frame a request differently: a bare CR
 or LF, a header name that is not a token (whitespace before the colon, a line starting with

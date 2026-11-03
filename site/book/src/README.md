@@ -3,7 +3,7 @@
 **Say what your system is for. Ignite builds it, runs it and keeps it honest.**
 
 Ignite is an intent-oriented language for specifying, building, deploying and operating
-systems. One file describes the components, the network, the contracts and the policies, and
+systems. One program describes the components, the network, the contracts and the policies, and
 the compiler turns it into native executables.
 
 This is what a complete Ignite system looks like, a Telnet console with a server and a client:

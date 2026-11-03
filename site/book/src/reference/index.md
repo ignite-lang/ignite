@@ -15,7 +15,7 @@ diagnostic.
 | [Tests and assertions](tests.md) | `test` blocks, `assert`, test-only declarations, how `ignite test` runs them |
 | [Standard library](std/index.md) | every module of `std/`, its layer and its public items |
 | [Command line](cli.md) | every `ignite` command, its options and its exit statuses |
-| [Diagnostics](diagnostics.md) | every error code, `E001` to `E129`, with a program that triggers it |
+| [Diagnostics](diagnostics.md) | every error code, `E001` to `E129`, most with a program that triggers it |
 
 ## Conventions on these pages
 

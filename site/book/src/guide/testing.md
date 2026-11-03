@@ -75,19 +75,27 @@ shown only when it fails.
 
 ## When a test fails
 
-A failed `assert` prints the source of the condition, both sides of a comparison and the
-position, then the test fails (exit code 101 of the test process):
+A failed `assert` prints its position, the source of the condition, the message if one was
+given, and both sides of a comparison; then the test fails (exit code 101 of the test
+process). The report is shown under the test's name in the `failures:` section:
 
 ```text
-assertion failed: trim(" a ") == "a "
-  left: a
-  right: a
-  at std/text.ignite:120:3
+---- main/assert message stderr ----
+error: assert failed at fail.ignite:9:3: 1 + 1 == 3
+  message: arithmetic
+  left: 2
+  right: 3
 ```
 
-A `?` that meets an error prints ``` `?` failed on Err: <error> ``` with its position. A test
-also fails when it times out (`FAILED (timed out after 60 s)`), exits with another code or
-is killed by a signal.
+A `?` that meets an `Err` or a `None` prints the position and the value it met:
+
+```text
+error: ? failed at fail.ignite:13:17: Err(boom)
+error: ? failed at fail.ignite:18:17: None
+```
+
+A test also fails when it times out (`FAILED (timed out after 60 s)`), exits with another
+code or is killed by a signal.
 
 `ignite test` exits 0 when every selected test passed (or none exist, or with `--list`), 1
 when a test failed, and 2 for a compile error, with diagnostics as for `ignite check`.

@@ -71,12 +71,13 @@ is [E116](../reference/diagnostics.md#e116) ([Effects and capabilities](effects.
 ## Limits
 
 Evaluation is bounded by fuel: one unit per expression evaluated, per loop iteration and per
-call, 1,000,000 units per property expression. `--fuel N` on `check`, `plan` and `explain`
-changes it. A value of more than 1,000,000 nodes stops the evaluation too.
+call, 1,000,000 units per property expression. `--fuel N` on `plan` and `explain`
+changes it; `ignite check` has no `--fuel` and always uses the default. A value of more than 1,000,000 nodes, or more than 10,000 nested fn and closure calls, stops
+the evaluation too.
 
 | diagnostic | cause |
 |---|---|
-| [E115](../reference/diagnostics.md#e115) | the fuel or the value size ran out; names the limit and the function that was running |
+| [E115](../reference/diagnostics.md#e115) | the fuel, the value size or the call depth ran out; names the limit and the function that was running |
 | [E117](../reference/diagnostics.md#e117) | a failure: `assert`, overflow, an index, a `match`, `?` on `Err`; with the same report text the targets print |
 | [E118](../reference/diagnostics.md#e118) | a result the model cannot encode: a closure, a function value that is not a named top-level function, a handle not produced by a member name |
 

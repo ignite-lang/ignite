@@ -5,7 +5,7 @@ being built and not released, and what exists only as a design document. Only th
 described in the rest of this book.
 
 <span class="badge">released</span> in a tagged release &nbsp;
-<span class="badge next">unreleased</span> work in progress, not in any release &nbsp;
+<span class="badge wip">unreleased</span> work in progress, not in any release &nbsp;
 <span class="badge design">design</span> a design document; nothing of it is implemented
 
 The roadmap in outline is
@@ -21,10 +21,11 @@ dependencies between the waves are in
 | **v0.2.0** | local apply: `ignite host`, `ignite plan --for-apply`, `ignite apply`, `ignite inspect`; source-bound saved plans, durable receipts and crash recovery ([guide](guide/apply.md)) |
 | **v0.3.0** | in-process streams: `Pipe.pair()`, the `ByteStream` bound `<S: ByteStream>`, the Telnet and HTTP roles generic over the stream with `SessionLimits` and `HttpLimits`, protocol tests without a network on both targets |
 
-## Being built: RFC catalogues and conformance <span class="badge next">unreleased</span>
+## Being built: RFC catalogues and conformance <span class="badge wip">unreleased</span>
 
-The next slice ("protocols P2") is being implemented on a branch and is in no release. Its
-contract, in `docs/slice.md` section 19 of that branch, adds:
+The next step ("protocols P2") is being implemented on the branch
+[`feat/slice15-protocols-p2`](https://github.com/ignite-lang/ignite/tree/feat/slice15-protocols-p2)
+and is in no release. Its contract, in `docs/slice.md` section 19 of that branch, adds:
 
 - `std.rfc`, a vocabulary for requirements (`Level`, the BCP 14 keywords; `Party`; `Spec`;
   `Requirement`), and catalogue modules for RFC 854, 855, 1143, 9112 and 9110 whose
@@ -57,16 +58,16 @@ Each has a design document or a row in the plan; none of it is implemented.
 | H self-hosting M5 to M7 | packages and manifests, the frontend in Ignite, an emitter in Ignite, a bootstrap chain | [`docs/design.md`](https://github.com/ignite-lang/ignite/blob/main/docs/design.md) section 12 |
 
 [`docs/syntax.md`](https://github.com/ignite-lang/ignite/blob/main/docs/syntax.md) is a
-proposal for syntactic sugar. It, too, is not implemented; an item enters a slice only when
-that slice's declarations need it.
+proposal for syntactic sugar. It, too, is not implemented; an item is implemented only when
+the declarations of a planned step need it.
 
-## Rules every slice keeps
+## Rules every step keeps
 
 From [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md):
 
 - Both targets agree: the Rust target stays the default, and every feature lands on both.
 - Compile time is a budget: the gate time and the program build times are measured before and
-  after each slice and recorded; a rise over 10 % is a deviation to explain.
-- Each slice starts with a contract section in `docs/slice.md`, reviewed before work starts,
+  after each step and recorded; a rise over 10 % is a deviation to explain.
+- Each step starts with a contract section in `docs/slice.md`, reviewed before work starts,
   and each diagnostic code gets a fixture.
 - Future designs stay proposals until a wave adopts them.

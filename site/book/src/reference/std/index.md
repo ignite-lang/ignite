@@ -1,9 +1,9 @@
 # Standard library
 
-The standard library (std) is Ignite code. Every module except the two substrate
-modules is a file under
-[`std/`](https://github.com/ignite-lang/ignite/tree/main/std): module `std.a.b` is
-the file `std/a/b.ignite`. The compiler has no special knowledge of text handling, JSON,
+The standard library (std) is Ignite code. Every module but `std.io` is a file under
+[`std/`](https://github.com/ignite-lang/ignite/tree/main/std): module `std.a.b` is the file
+`std/a/b.ignite`. The two substrate modules, `std.net` and `std.io`, are
+builtins implemented in the substrate; `std/net.ignite` declares only the `Endpoint` record. The compiler has no special knowledge of text handling, JSON,
 consoles, contracts or deployment. Those are ordinary records, enums and functions, checked
 and tested like your own code.
 
@@ -16,7 +16,7 @@ runtime know sockets and byte streams, not application protocols.
 | module | layer | import | purpose |
 |---|---|---|---|
 | `std.net` | base (substrate) | `import std.net.{TcpStream, Endpoint}` | sockets, in-process pipes, the `ByteStream` interface and the `Endpoint` record; see [std.net](net.md) |
-| `std.io` | base (substrate) | `import std.io.IoError` | the other builtins of the substrate: standard input and output, `Input`, `IoError`, `Process`; it has no file and no page of its own |
+| `std.io` | base (substrate) | `import std.io.IoError` | the other builtins of the substrate: standard input and output, `Input`, `IoError`, `Process`, `Clock` and the free function `log`; it has no file and no page of its own |
 | `std.text` | base | `import std.text.{split, trim_end}` | text operations called as methods: `split`, `find`, `contains`, `to_lower`, `lines`, ...; see [std.text](text.md) |
 | `std.option` | base | `import std.option.{unwrap_or, map}` | helpers on `Option`: `unwrap_or`, `map`, `and_then`, `ok_or`, ...; see [std.option and std.result](option-result.md) |
 | `std.result` | base | `import std.result.{map_err, ok}` | helpers on `Result`: `unwrap_or`, `map`, `map_err`, `ok`, ...; see [std.option and std.result](option-result.md) |
@@ -40,8 +40,10 @@ runtime know sockets and byte streams, not application protocols.
   protocol it defines. Imports are not re-exported.
 - An imported enum brings its variants into scope: after `import std.json.Json` you can write
   `Null` or `Str("x")`.
-- `std.net` and `std.io` are the substrate. Their names are builtins, usable without any
-  import; an import from them only checks that the name is a builtin.
+- `std.net` and `std.io` are the substrate. Their builtin names are usable without any
+  import; an import of one only checks that the name is a builtin. `Endpoint` is a record
+  declared in `std/net.ignite`, not a builtin: it needs `import std.net.Endpoint` (E048
+  without it).
 - An unknown module or name is E031. See [Modules and imports](../modules.md) and
   [Diagnostics](../diagnostics.md).
 
@@ -62,8 +64,8 @@ test "std functions are called as methods" {
 }
 ```
 
-`std.option` and `std.result` share names (`unwrap_or`, `map`, `is_some`/`is_ok`, ...). A
-module that needs both imports the names it uses by name from one of the two: importing both
+`std.option` and `std.result` share two names, `unwrap_or` and `map`. A module that needs
+both imports those by name from the one it means: importing both
 with `*` makes a call such as `x.map(f)` ambiguous (E041).
 
 ## Layers

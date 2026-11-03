@@ -12,8 +12,8 @@ A system holds resources, components, contracts and policies. Each member has an
 
 | edge | meaning | terminal example |
 |---|---|---|
-| `uses` | a bare member name in a property: the value is embedded | `Terminal.server` uses `Terminal.ingress` |
-| `references` | a `Ref` value: the member is named, not embedded | `Terminal.promptProbe` references `Terminal.server` |
+| `uses` | a member name where a value is expected: the value is embedded | `Terminal.server` uses `Terminal.ingress` |
+| `references` | a member name where a `Ref` is expected, bare or qualified: the member is named, not embedded | `Terminal.promptProbe` references `Terminal.server` |
 | `observes` | a `Signal` value | `Terminal.reachable` observes `Terminal.promptProbe.attempts` |
 | `hosts` | from the assembly: one member runs inside another | `Terminal.server` hosts `Terminal.console` |
 | `provisioning` | a resource and the component that binds it | `Terminal.ingress` to `Terminal.server` |
@@ -178,8 +178,8 @@ The result is the model's `assembly.resolution`: per resource and component, its
 
 | command | what it does with the assembly |
 |---|---|
-| `ignite check` | resolves every assembly and reports E110 to E114, E121, E122 and E129 |
-| `ignite plan`, `ignite explain` | resolve the selected one and print it in the model |
+| `ignite check` | resolves every assembly and reports E110 to E113, E121, E122 and E129 |
+| `ignite plan`, `ignite explain` | resolve the selected one and print it in the model; E114 when none is selected |
 | `ignite run` | starts what the resolution says runs, in the foreground ([guide](../guide/operate.md)) |
 | `ignite apply` | applies a saved plan of the assembly through a local host ([guide](../guide/apply.md)) |
 | `ignite build` | does not read assemblies; it builds every executable component |

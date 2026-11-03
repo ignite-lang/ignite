@@ -117,7 +117,7 @@ Every failure ends the task that ran it with one report of the form
 `Ok(70000)`, the second test would report:
 
 ```text
-assert failed at app.ignite:13:3: result == Err("out of range: 70000")
+error: assert failed at app.ignite:13:3: result == Err("out of range: 70000")
   message: got Ok(70000)
   left: Ok(70000)
   right: Err("out of range: 70000")

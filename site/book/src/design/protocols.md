@@ -65,7 +65,7 @@ The bound is resolved statically. The generated Rust calls
 emits one instance of a bounded function per stream type, and each instance calls only the
 runtime entries of its own stream kind.
 
-The roles after slice 14:
+The roles:
 
 | role | signature |
 |---|---|
@@ -119,8 +119,9 @@ fn TelnetServer.main(self: TelnetServer) -> IoResult<Unit> {
 }
 ```
 
-A failing session ends its own task; the server goes on accepting. `TelnetClient`,
-`TelnetPrompt` and `HttpServer<S>` follow the same pattern.
+A failing session ends its own task; the server goes on accepting. `HttpServer<S>` has the same
+accept loop. `TelnetClient` and `TelnetPrompt` are kinds with a `main` too, but they connect
+once instead of accepting.
 [Components](components.md) explains how a kind with `main` becomes an executable.
 
 ## Tests without a network

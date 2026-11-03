@@ -3,7 +3,8 @@
 The pure reducers that `ignite run` steps. A machine is a value, an event is a value, and
 `step` is a pure function from both to the next machine and the effects to dispatch. The
 driver of `ignite run` knows these types, the hook names `machine` and `validate`, and the
-functions `step` and `companions`, nothing else. Reducers read no clock: every event carries
+functions `step` and `companions`; `ignite apply` also calls the constructors
+`member_action` and `transition` and steps `Transition` with `transit` (below). Reducers read no clock: every event carries
 `at`, a `Duration` since the start of the run's journal. The module also holds the
 `Transition` reducer that orders the changes of one `ignite apply`.
 
@@ -158,7 +159,7 @@ policy does.
 - An exit or signal that no `Kill` of this machine requested is a failure, exit 0 included,
   and so is a failed spawn.
 - After a failure the attempt number is the number of failures within the policy's
-  `interval`, plus 1. If the policy `allows` it, the supervisor waits the backoff's `delay`
+  trailing `interval`, this one included. If the policy `allows` it, the supervisor waits the backoff's `delay`
   and spawns again; otherwise it is `Failed` and notes `gave_up`. Other machines go on.
 - `Control("stop")` drains the process with SIGTERM; its exit is then no failure.
 
@@ -271,8 +272,10 @@ fn expected_slots(horizon: Duration, interval: Duration, from: Duration, to: Dur
 4. Otherwise [`meets`](sli.md) decides: `Compliant` or `Violated`.
 
 `completeness` is the executed share of the expected slots before filling; `coverage` is the
-share of the window inside the evidence horizon. `version` and `standing_seq` are 0 from the
-reducer; the driver fills them with the journal record's sequence number. `expected_slots`
+share of the window inside the evidence horizon. `version` is 0 from the reducer; the
+driver fills it with the journal sequence number of the standing record. A `Fired` record's
+`standing_seq` is filled by the driver too, with the sequence number of the standing it rests
+on. `expected_slots`
 counts the slots of `interval` from the horizon within `from` to `to`.
 
 ## Rollout

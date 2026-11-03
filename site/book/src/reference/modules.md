@@ -70,8 +70,9 @@ the module you mean, and the rest by glob.
 
 ## The standard library root
 
-`std.a.b` is the file `std/a/b.ignite` under the standard library root. The CLI looks for the
-`std/` directory that ships next to it; `--std DIR` names another root. The modules are listed
+`std.a.b` is the file `std/a/b.ignite` under the standard library root. By default the CLI reads the
+`std/` directory of the source tree it was built from (an installed `ignite` keeps reading its
+clone); `--std DIR` names another root. The modules are listed
 in the [standard library reference](std/index.md).
 
 ## Sibling modules

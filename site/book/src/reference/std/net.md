@@ -30,7 +30,7 @@ Operations on streams and listeners need effects on the value they are called on
 | `TcpListener.bind(a, p)` | `net.listen` |
 | `TcpStream.connect(a, p)` | `net.connect` |
 | `x.accept()` | `x.accept` |
-| `x.read(n)` | `x.read` |
+| `x.read(n)`, `x.received_batches()` | `x.read` |
 | `x.write_all(b)`, `x.close()`, `x.set_idle_timeout(ms)` | `x.write` |
 | `x.local_port()`, `Pipe.pair()` | none |
 | `Endpoint.of(ref)` | `process.args` |

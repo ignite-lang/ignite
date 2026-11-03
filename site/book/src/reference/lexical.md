@@ -39,8 +39,9 @@ An identifier is an ASCII letter or `_`, followed by ASCII letters, digits and `
 The parser does not enforce case, with two exceptions that make case meaningful:
 
 - `Name { ... }` is a record literal only when `Name` starts with an uppercase letter.
-- In a pattern, a single lowercase name without arguments binds a new variable. An
-  uppercase name, or a name with arguments, is a variant.
+- In a pattern, a name without arguments that names a constant in scope is a constant
+  pattern, whatever its case. Otherwise a single lowercase name without arguments binds a
+  new variable, and an uppercase name, or a name with arguments, is a variant.
 
 `_` alone is the wildcard: in patterns, and in `_ = e` to discard a value.
 

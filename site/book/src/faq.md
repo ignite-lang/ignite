@@ -50,9 +50,12 @@ is checked and tested like yours. See the [standard library](reference/std/index
 
 ## What happens when a contract has no data?
 
-It is not reported as met. With no executed probe attempt, or with too few of the expected
-ones, a contract's standing is `InsufficientEvidence`, not `Compliant`: zero traffic does not
-prove compliance. See [Contracts, signals and policies](design/contracts.md).
+By default it is not reported as met. With `missing_data = "insufficient_evidence"`, the
+default of `Availability` and `ThresholdCompliance` and the only rule of `SLA`, a contract with
+no executed probe attempt, or with fewer than `minimum_completeness` of the expected ones, has
+the standing `InsufficientEvidence`, not `Compliant`: zero traffic does not prove compliance.
+A contract that declares `missing_data = "counts_as_good"` or `"counts_as_bad"` fills the
+missing attempts instead. See [Contracts, signals and policies](design/contracts.md).
 
 ## Can a crash in one connection take the server down?
 
@@ -75,5 +78,5 @@ larger file are marked as excerpts. See the [reference conventions](reference/in
 ## Where is the exact specification?
 
 [`docs/slice.md`](https://github.com/ignite-lang/ignite/blob/main/docs/slice.md) is the
-contract between the compiler's crates, slice by slice. The design document is
+contract between the compiler's crates. The design document is
 [`docs/design.md`](https://github.com/ignite-lang/ignite/blob/main/docs/design.md).

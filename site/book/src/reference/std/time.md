@@ -51,7 +51,7 @@ fn seconds(instant: Duration) -> Int
 |---|---|
 | `days_from_civil` | days since 1970-01-01 of a proleptic Gregorian date |
 | `civil_from_days` | the date `(year, month, day)` of a day count |
-| `last_sunday` | the day of the last Sunday of `month` in `year` |
+| `last_sunday` | the last Sunday of `month` in `year`, in days since 1970-01-01 |
 | `berlin_summer` | whether Central European Summer Time holds at the UTC second `utc` |
 | `offset` | the offset of `zone` from UTC at `utc`, in seconds |
 | `local_midnight_utc` | the UTC second of 00:00 on the first of `month` in `zone` |

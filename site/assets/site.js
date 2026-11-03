@@ -14,6 +14,21 @@
     });
   }
 
+  var menu = document.querySelector(".menu-toggle");
+  var header = document.querySelector(".top");
+  if (menu && header) {
+    menu.addEventListener("click", function () {
+      var open = header.classList.toggle("open");
+      menu.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    header.querySelectorAll(".nav a").forEach(function (link) {
+      link.addEventListener("click", function () {
+        header.classList.remove("open");
+        menu.setAttribute("aria-expanded", "false");
+      });
+    });
+  }
+
   var KEYWORDS = new Set((
     "package import type enum fn const system resource component contract policy assembly " +
     "protocol let var return match if else while loop for in break continue spawn requires " +

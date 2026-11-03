@@ -241,10 +241,11 @@ summary:focus-visible {
 
 /* Inline code and code blocks. */
 
-:not(pre) > code {
+:not(pre) > code,
+.content :not(pre) > .hljs {
     background: var(--ignite-inline-code-bg);
     color: var(--inline-code-color);
-    padding: 0.12em 0.38em;
+    padding: 0.08em 0.2em;
     border-radius: 5px;
     font-size: 0.86em;
 }
@@ -394,11 +395,11 @@ pre > .buttons {
     color: #c3a7ff;
 }
 
-.badge.next {
+.badge.wip {
     color: #0b7a55;
 }
 
-.coal .badge.next {
+.coal .badge.wip {
     color: #7fe0b5;
 }
 
@@ -407,5 +408,30 @@ pre > .buttons {
         transition: none !important;
         animation: none !important;
         scroll-behavior: auto !important;
+    }
+}
+
+/* Tables on narrow screens. */
+
+@media (max-width: 620px) {
+    .content table {
+        font-size: 0.84em;
+        scrollbar-width: thin;
+        scrollbar-color: #ff8a00 transparent;
+    }
+
+    .content table td,
+    .content table th {
+        padding: 0.4em 0.5em;
+        min-width: 6.5em;
+    }
+
+    .content table td code {
+        white-space: normal;
+        overflow-wrap: break-word;
+    }
+
+    .content td:first-child > code:only-child {
+        white-space: normal;
     }
 }

@@ -110,10 +110,11 @@ declarations in the source changes nothing in the model.
 
 A name can be used in two ways inside a system:
 
-- **bare**, `application = console`, the member's value: the console's record is embedded in
-  the server;
-- **qualified**, `target = Terminal.server` or `Terminal.ingress = localSocket()`, a
-  reference of type `Ref<K>`: it names the member without embedding it.
+- **as a value**, `application = console`: the console's record is embedded in the server;
+- **as a reference** of type `Ref<K>`, `target = Terminal.server` or `Terminal.ingress =
+  localSocket()`: it names the member without embedding it. A bare name where a `Ref<K>` is
+  expected is a reference too, so `target = server` in a probe means the same as
+  `target = Terminal.server`.
 
 From these uses the compiler derives the edges of the system graph, each with a kind:
 
@@ -154,5 +155,5 @@ names. So a new protocol, policy or deployment target is meant to be a library c
 a compiler change. The rule and its remaining exceptions are in
 [`docs/layering.md`](https://github.com/ignite-lang/ignite/blob/main/docs/layering.md).
 
-The cost of this rule is a small keyword set: 32 keywords today, inside the design's budget
-of 30 to 50. The [lexical reference](../reference/lexical.md) lists them.
+The cost of this rule is a small keyword set: 32 keywords today (the lexer's table), inside the
+budget of 30 to 50 reserved words that design section 1.5 sets. The [lexical reference](../reference/lexical.md) lists them.

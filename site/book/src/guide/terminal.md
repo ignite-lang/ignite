@@ -3,7 +3,7 @@
 The reference system of Ignite is a small Telnet command console: a server, `terminald`, and
 a client, `tn`. It answers `help`, `echo`, `status` and `quit`. It lives in
 [`examples/terminal/`](https://github.com/ignite-lang/ignite/tree/main/examples/terminal) and
-is split over three files:
+is split over three files, and a fourth holds the full design declaration:
 
 | file | what it holds |
 |---|---|

@@ -33,7 +33,8 @@ name:
 | `x.accept` | `x.accept()` on a `TcpListener` |
 | `x.*` | every effect on `x` |
 
-`log(text)` is not an effect: it is pure and returns `Unit`.
+`log(text)` writes a line to stderr and returns `Unit`, but it is not a tracked effect: it
+needs no `requires` entry and may be called where only pure code is allowed.
 
 ## Declaring effects with `requires`
 
@@ -54,8 +55,8 @@ fn send(stream: TcpStream, line: Text) -> Result<Unit, IoError> requires [stream
   not list is E016.
 - Listing an effect the body does not need is allowed.
 - Ambient effects are listed by their full name. `requires [net]` is accepted but covers
-  nothing: `TcpListener.bind` still needs `net.listen`. Only a parameter root has the
-  wildcard `x.*`.
+  nothing: `TcpListener.bind` still needs `net.listen`. `x.*` covers every effect on the root `x`,
+  a parameter or an ambient root such as `stdout.*`.
 - The list may span lines inside its brackets.
 - A parameter may not be named `stdin`, `stdout`, `process` or `net` (E056), so a
   parameter effect never looks like an ambient one.

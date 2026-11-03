@@ -17,7 +17,7 @@ Three consequences follow, and the rest of the language depends on them:
 
 - **Authority is passed, never ambient.** An effect is a capability on a parameter. A
   function that writes to `stream` needs `stream.write`; it cannot write to a stream it was
-  not given. Only a few process-wide operations (`stdin.read`, `stdout.write`,
+  not given. Only a few process-wide operations (`stdin.read`, `stdin.mode`, `stdout.write`,
   `process.exit`, `net.listen`, `net.connect`, `clock.read`, `process.args`) are named
   directly.
 - **Declarations can be evaluated at compile time.** Property expressions must be pure, so
@@ -168,6 +168,7 @@ visible at every step.
   enforces a boundary only where access is mediated, and that in-process native code is
   trusted. The substrate behind the builtins is such code.
 - Declaring an effect the body does not need is allowed.
-- `log(text)` is not an effect: it is pure and returns `Unit`.
+- `log(text)` writes a line to stderr, but it is not a tracked effect: it needs no
+  `requires` entry.
 
 Next: [Protocols and roles](protocols.md).

@@ -54,8 +54,10 @@ type SLA {
 | `ThresholdCompliance` | at least `target` of the attempts in `window` are `good` within `threshold` |
 | `SLA` | a commitment: `target` of the attempts in each `period` are `good`, else `consequence` |
 
-- Evidence covering less than `minimum_completeness` of the expected attempts is
-  insufficient.
+- With `missing_data = "insufficient_evidence"` (the default), evidence covering less than
+  `minimum_completeness` of the expected attempts is insufficient. With `"counts_as_good"` or
+  `"counts_as_bad"` the missing attempts are filled instead, and `minimum_completeness` does
+  not apply.
 - For an `SLA`, missing attempts are always insufficient evidence. `exclusions` (named
   maintenance windows) are not evaluated yet, so none may be declared.
 

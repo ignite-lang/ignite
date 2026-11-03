@@ -145,7 +145,9 @@ fn TelnetPrompt.validate(self: TelnetPrompt) -> List<Text>
   the option negotiation until the prompt, measures the latency, closes if asked, and prints
   one line: the [`ProbeAttempt`](sli.md) in the model encoding. A refused connection, a
   stream closed before the prompt and a read past `timeout` are bad attempts
-  (`received = false`). It exits 0 in every case.
+  (`received = false`) and exit 0. A target with no `--ref` binding, or a failed
+  `set_idle_timeout` or write of the line, ends `main` with the error: exit 1
+  (exit 2 for a malformed `--ref`).
 - `machine` gives `ignite run` the probe scheduler: one attempt per `interval` from the
   target's first readiness, each with a deadline of `timeout`.
 - `validate` refuses an empty `expected_prompt` (E120). The timing rules (positive `interval`

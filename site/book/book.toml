@@ -9,7 +9,7 @@ default-theme = "light"
 preferred-dark-theme = "coal"
 site-url = "/book/"
 git-repository-url = "https://github.com/ignite-lang/ignite"
-edit-url-template = "https://github.com/ignite-lang/ignite/edit/main/site/book/src/{path}"
+edit-url-template = "https://github.com/ignite-lang/ignite/edit/main/site/book/{path}"
 additional-css = ["theme/ignite.css"]
 
 [output.html.fold]
