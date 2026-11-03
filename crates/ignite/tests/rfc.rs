@@ -1314,3 +1314,273 @@ fn reimport_changes_only_party_lines() {
         }
     }
 }
+
+// Adversary cases for U4 (slice 15, `docs/slice.md` 19.4, 19.9, rows 25 to 30).
+
+/// Sentences of RFC 854 that hold a word of 19.4's table and say what an implementation or
+/// an option designer must, should or may do, with the page each starts on and the level the
+/// table gives. Each reads like a sentence the catalogue does hold: three say "not required"
+/// as `RP7_1` does, one "is to have required meaning", one "must be done", one is addressed
+/// to option designers with "should not" as `RP3_4` is with "should never".
+const RFC854_UNCATALOGUED: [(&str, &str, &str); 7] = [
+    (
+        "p3",
+        "ShouldNot",
+        "Option designers should not feel constrained by the somewhat limited syntax available for option negotiation.",
+    ),
+    (
+        "p4",
+        "Required",
+        "It is hoped, but not absolutely required, that options will further this intent.",
+    ),
+    (
+        "p4",
+        "Required",
+        "\"Echoes\" will not be expected to traverse the network (although options exist to enable a \"remote\" echoing mode of operation, no host is required to implement this option).",
+    ),
+    (
+        "p6",
+        "Required",
+        "Finally, for terminal-to-terminal communication, GAs may be required in neither, one, or both directions.",
+    ),
+    (
+        "p11",
+        "Required",
+        "In addition, the following codes shall have defined, but not required, effects on the NVT printer.",
+    ),
+    (
+        "p12",
+        "Required",
+        "The pair DM-Urgent is to have required meaning as defined previously.",
+    ),
+    (
+        "p13",
+        "Must",
+        "The spirit of these \"extra\" keys, and also the printer format effectors, is that they should represent a natural extension of the mapping that already must be done from \"NVT\" into \"local\".",
+    ),
+];
+
+fn collapse(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// A plain-text RFC with its page headers and footers removed and its whitespace collapsed,
+/// with the page and the last numbered section heading of each word.
+struct PlainText {
+    text: String,
+    starts: Vec<usize>,
+    pages: Vec<u32>,
+    sections: Vec<String>,
+}
+
+impl PlainText {
+    fn read(raw: &str, rfc: &str) -> PlainText {
+        let header = format!("RFC {rfc} ");
+        let mut out = PlainText {
+            text: String::new(),
+            starts: Vec::new(),
+            pages: Vec::new(),
+            sections: Vec::new(),
+        };
+        let mut page = 1;
+        let mut section = String::new();
+        for line in raw.lines() {
+            let line = line.trim_start_matches('\u{c}');
+            if line.contains("[Page ") && line.trim_end().ends_with(']') {
+                page += 1;
+                continue;
+            }
+            if line.starts_with(&header) {
+                continue;
+            }
+            if let Some((number, _)) = line.split_once(". ")
+                && !number.is_empty()
+                && number.chars().all(|c| c.is_ascii_digit())
+            {
+                section = number.to_string();
+            }
+            for word in line.split_whitespace() {
+                if !out.text.is_empty() {
+                    out.text.push(' ');
+                }
+                out.starts.push(out.text.len());
+                out.pages.push(page);
+                out.sections.push(section.clone());
+                out.text.push_str(word);
+            }
+        }
+        out
+    }
+
+    /// The word index at which `sentence` first starts, if it occurs.
+    fn find(&self, sentence: &str) -> Option<usize> {
+        let at = self.text.find(&collapse(sentence))?;
+        Some(self.starts.partition_point(|start| *start <= at) - 1)
+    }
+}
+
+/// Adversary (19.4, 19.9, D5, row 27): every `text` of the three prose catalogues is in its
+/// published text file, whitespace aside; `section` is the page on which the sentence starts
+/// (RFC 854, 855) or its numbered section (RFC 1143); declaration order is document order. The
+/// sources are not vendored (D5), so the case reads them from `IGNITE_RFC_TEXT_DIR`
+/// (`rfc854.txt`, `rfc855.txt`, `rfc1143.txt`, each checked against the catalogue's digest)
+/// and fails when that is unset. It also checks the quotations of
+/// [`RFC854_UNCATALOGUED`] against the same file.
+#[test]
+#[ignore = "adversary: run with --ignored and IGNITE_RFC_TEXT_DIR set to the unvendored text files of 19.9"]
+fn adversary_prose_texts_are_verbatim_on_their_cited_pages() {
+    let dir = std::env::var_os("IGNITE_RFC_TEXT_DIR")
+        .map(PathBuf::from)
+        .expect("IGNITE_RFC_TEXT_DIR names a directory with rfc854.txt, rfc855.txt, rfc1143.txt");
+    let mut problems = Vec::new();
+    for (name, digest_19_9) in PROSE {
+        let rfc = name.strip_prefix("rfc").unwrap();
+        let bytes = std::fs::read(dir.join(format!("{name}.txt"))).unwrap();
+        assert_eq!(digest(&bytes), digest_19_9, "{name}.txt is not 19.9's file");
+        let source = PlainText::read(&String::from_utf8(bytes).unwrap(), rfc);
+        let mut previous: Option<(String, usize)> = None;
+        for (id, decl) in requirements(&catalogue(name)) {
+            let section = unescape(field(&decl, "section").unwrap());
+            let text = unescape(field(&decl, "text").unwrap());
+            let Some(word) = source.find(&text) else {
+                problems.push(format!("{name}.{id}: not verbatim in {name}.txt: {text:?}"));
+                continue;
+            };
+            let cited = if name == "rfc1143" {
+                source.sections[word].clone()
+            } else {
+                format!("p{}", source.pages[word])
+            };
+            if section != cited {
+                problems.push(format!(
+                    "{name}.{id}: section {section:?}, but the sentence starts in {cited:?}"
+                ));
+            }
+            if let Some((before, at)) = &previous
+                && *at >= word
+            {
+                problems.push(format!("{name}.{id}: comes before {before} in {name}.txt"));
+            }
+            previous = Some((id, word));
+        }
+        if name == "rfc854" {
+            for (page, _, sentence) in RFC854_UNCATALOGUED {
+                match source.find(sentence) {
+                    Some(word) if format!("p{}", source.pages[word]) == page => {}
+                    found => problems.push(format!(
+                        "adversary quotation {sentence:?} at {page}: found at {:?}",
+                        found.map(|word| source.pages[word])
+                    )),
+                }
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// Adversary (19.4 "Level words" and the RFC 855 rule it applies to RFC 854; row 27): each
+/// sentence of [`RFC854_UNCATALOGUED`] holds a word of the table and says what an
+/// implementation or an option designer must, should or may do, as the catalogued `RP7_1`
+/// ("standard, but not required, meanings") does, so `rfc854.ignite` holds it at the level
+/// the table gives, on its page.
+#[test]
+#[ignore = "adversary: rfc854.ignite leaves out seven sentences that 19.4's word table classifies"]
+fn adversary_rfc854_holds_every_sentence_the_word_table_classifies() {
+    let module = catalogue("rfc854");
+    let held: Vec<(String, String, String)> = requirements(&module)
+        .into_iter()
+        .map(|(_, decl)| {
+            (
+                unescape(field(&decl, "section").unwrap()),
+                field(&decl, "level").unwrap().to_string(),
+                collapse(&unescape(field(&decl, "text").unwrap())),
+            )
+        })
+        .collect();
+    let mut missing = Vec::new();
+    for (page, level, sentence) in RFC854_UNCATALOGUED {
+        assert!(
+            word_levels(sentence).contains(&level),
+            "the table gives {level} for {sentence:?}"
+        );
+        let entry = (page.to_string(), level.to_string(), collapse(sentence));
+        if !held.contains(&entry) {
+            missing.push(format!("{page} {level}: {sentence:?}"));
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "rfc854.ignite has no requirement for:\n{}",
+        missing.join("\n")
+    );
+}
+
+/// A program that reads the five committed catalogues, field by field, in a test.
+const CATALOGUE_READER: &str = r#"package tests.catalogues
+
+import std.rfc.rfc854.{RFC854, RP14_1}
+import std.rfc.rfc855.{RFC855, RP3_1}
+import std.rfc.rfc1143.RFC1143
+import std.rfc.rfc9112.{RFC9112, R7_1_2}
+import std.rfc.rfc9110.RFC9110
+
+test "the committed catalogues read the same on every target" {
+  assert RFC854.requirements.len() == 40
+  assert RFC855.requirements.len() == 12
+  assert RFC1143.requirements.len() == 25
+  assert RFC9112.requirements.len() == 131
+  assert RFC9110.requirements.len() == 73
+  assert RFC855.url == "https://www.rfc-editor.org/rfc/rfc855"
+  assert RFC9112.url == "https://dx.doi.org/10.17487/rfc9112"
+  assert RFC9112.digest == "sha256:ce82219c272374005115c909244a79e587687df3858edca4112b8563c02ccf19"
+  assert RFC855.requirements[10].text == RP3_1.text
+  assert RP3_1.text == "Designers of options requiring \"subnegotiation\" must take great care to avoid unending loops in the subnegotiation process."
+  assert RP14_1.section == "p14"
+  assert RP14_1.ordinal == 1
+  assert RFC854.requirements[38].text == RP14_1.text
+  assert R7_1_2.text == "A recipient MUST be able to parse and decode the chunked transfer coding."
+  assert RFC1143.requirements[24].section == "7"
+}
+"#;
+
+/// Adversary (19.2 "A constant of any type compiles on both targets", 19.13, rows 25 and 38):
+/// U4 ran the catalogues through the Rust target only. A program importing all five reads
+/// their counts, URLs, a digest and escaped texts identically with `--target all`.
+#[test]
+fn adversary_committed_catalogues_read_the_same_on_both_targets() {
+    let dir = scratch("adversary-catalogue-reader");
+    std::fs::write(dir.join("reader.ignite"), CATALOGUE_READER).unwrap();
+    let check = ignite(&dir, &["check", "reader.ignite"]);
+    assert_eq!(check.status.code(), Some(0), "{}", text(&check.stderr));
+    assert_eq!(text(&check.stderr), "");
+    let runner = crate::common::runner_archive();
+    let test = ignite(
+        &dir,
+        &[
+            "test",
+            "reader.ignite",
+            "--target",
+            "all",
+            "--out",
+            "test-out",
+            "--target-dir",
+            "cargo",
+            "--runtime",
+            runner.to_str().expect("runner path"),
+        ],
+    );
+    let stdout = text(&test.stdout);
+    assert_eq!(
+        test.status.code(),
+        Some(0),
+        "stdout: {stdout}\nstderr: {}",
+        text(&test.stderr)
+    );
+    assert_eq!(
+        stdout
+            .matches("test result: ok. 1 passed; 0 failed;")
+            .count(),
+        2,
+        "{stdout}"
+    );
+}
