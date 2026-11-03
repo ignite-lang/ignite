@@ -1,0 +1,38 @@
+START 2026-11-02T07:04:51+01:00 pass=1 trees=before after2 load=19.87 23.44 21.31 58/3218 2518305 free=82G
+STEP tree=before label=no-run-warm pair=1 secs=0.14 load_before=19.87 load_after=19.87 exit=0
+STEP tree=after label=no-run-warm pair=1 secs=0.08 load_before=19.87 load_after=19.87 exit=0
+TESTS assert_and_try_reports both_targets_print_the_same_report captured_output_only_for_failures compile_error_exits_2 counts_results_and_failures each_unnamed_file_runs_its_own_tests endpoint_of_reads_the_ref_binding_on_both_targets files_share_one_executable filter_exact_and_list overflow_fails_the_same_everywhere std_module_as_the_file substrate_builtins_run_on_both_targets target_bugs_of_slice_11b_are_fixed timeout_kills_a_test 
+STEP tree=before label=test-assert_and_try_reports pair=1 secs=0.53 load_before=19.87 load_after=19.87 exit=0
+STEP tree=after label=test-assert_and_try_reports pair=1 secs=0.90 load_before=19.87 load_after=19.87 exit=0
+STEP tree=before label=test-both_targets_print_the_same_report pair=1 secs=0.38 load_before=19.87 load_after=19.87 exit=0
+STEP tree=after label=test-both_targets_print_the_same_report pair=1 secs=0.69 load_before=19.87 load_after=19.87 exit=0
+STEP tree=before label=test-captured_output_only_for_failures pair=1 secs=0.25 load_before=19.87 load_after=19.87 exit=0
+STEP tree=after label=test-captured_output_only_for_failures pair=1 secs=0.54 load_before=19.87 load_after=19.56 exit=0
+STEP tree=before label=test-compile_error_exits_2 pair=1 secs=0.26 load_before=19.56 load_after=19.56 exit=0
+STEP tree=after label=test-compile_error_exits_2 pair=1 secs=0.26 load_before=19.56 load_after=19.56 exit=0
+STEP tree=before label=test-counts_results_and_failures pair=1 secs=0.47 load_before=19.56 load_after=19.56 exit=0
+STEP tree=after label=test-counts_results_and_failures pair=1 secs=0.84 load_before=19.56 load_after=19.56 exit=0
+STEP tree=before label=test-each_unnamed_file_runs_its_own_tests pair=1 secs=2.77 load_before=19.56 load_after=22.56 exit=0
+STEP tree=after label=test-each_unnamed_file_runs_its_own_tests pair=1 secs=3.39 load_before=22.56 load_after=22.56 exit=0
+STEP tree=after label=test-endpoint_of_reads_the_ref_binding_on_both_targets pair=1 secs=1.58 load_before=22.56 load_after=24.52 exit=0
+STEP tree=before label=test-files_share_one_executable pair=1 secs=1.23 load_before=24.52 load_after=24.52 exit=0
+STEP tree=after label=test-files_share_one_executable pair=1 secs=1.46 load_before=24.52 load_after=24.52 exit=0
+STEP tree=before label=test-filter_exact_and_list pair=1 secs=1.97 load_before=24.52 load_after=24.52 exit=0
+STEP tree=after label=test-filter_exact_and_list pair=1 secs=5.00 load_before=26.08 load_after=27.67 exit=0
+STEP tree=before label=test-overflow_fails_the_same_everywhere pair=1 secs=2.65 load_before=27.67 load_after=27.67 exit=0
+STEP tree=after label=test-overflow_fails_the_same_everywhere pair=1 secs=3.21 load_before=27.67 load_after=29.62 exit=0
+STEP tree=before label=test-std_module_as_the_file pair=1 secs=0.88 load_before=29.62 load_after=29.62 exit=0
+STEP tree=after label=test-std_module_as_the_file pair=1 secs=0.61 load_before=29.62 load_after=29.62 exit=0
+STEP tree=after label=test-substrate_builtins_run_on_both_targets pair=1 secs=1.75 load_before=29.62 load_after=29.62 exit=0
+STEP tree=before label=test-target_bugs_of_slice_11b_are_fixed pair=1 secs=1.59 load_before=29.62 load_after=30.77 exit=0
+STEP tree=after label=test-target_bugs_of_slice_11b_are_fixed pair=1 secs=1.97 load_before=30.77 load_after=30.77 exit=0
+STEP tree=before label=test-timeout_kills_a_test pair=1 secs=2.29 load_before=30.77 load_after=31.51 exit=0
+STEP tree=after label=test-timeout_kills_a_test pair=1 secs=2.58 load_before=31.51 load_after=31.51 exit=0
+STEP tree=before label=file-ignite_test pair=1 secs=12.00 load_before=31.51 load_after=34.75 exit=0
+STEP tree=after label=file-ignite_test pair=1 secs=15.67 load_before=34.75 load_after=33.23 exit=0
+STEP tree=after label=file-run pair=1 secs=4.08 load_before=33.23 load_after=33.23 exit=0
+STEP tree=after label=file-drain pair=1 secs=2.05 load_before=33.23 load_after=34.17 exit=0
+STEP tree=after label=file-control_trace pair=1 secs=1.02 load_before=34.17 load_after=34.17 exit=0
+STEP tree=after label=file-decode pair=1 secs=0.34 load_before=34.17 load_after=34.17 exit=0
+EXIT=0 failed_steps=[] free=81G
+EXIT=0

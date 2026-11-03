@@ -1,0 +1,46 @@
+  %t17 = call i32 @telos_rt_tcp_connect(ptr %t13, i64 %t12, ptr %t16, ptr %t1), !dbg !5
+  %t18 = icmp ne i32 %t17, 0, !dbg !5
+  br i1 %t18, label %L19, label %L20, !dbg !5
+L19:
+  %t21 = getelementptr inbounds i8, ptr %t1, i64 24, !dbg !5
+  store i32 3, ptr %t21, align 4, !dbg !5
+  call void @telos_rt_fail(ptr %t1), !dbg !5
+  unreachable, !dbg !5
+L20:
+  %t22 = load i64, ptr %t16, align 8, !dbg !5
+  call void @"tests.syntax.Syntax.connect"(ptr %t23, i64 %t22), !dbg !5
+  %t24 = load i32, ptr %t23, align 4, !dbg !5
+  %t25 = icmp eq i32 %t24, 1, !dbg !5
+  br i1 %t25, label %L26, label %L27, !dbg !5
+L26:
+  %t28 = getelementptr inbounds i8, ptr %t23, i64 8, !dbg !5
+  %t29 = getelementptr inbounds i8, ptr %t28, i64 24, !dbg !5
+  store i32 4, ptr %t29, align 4, !dbg !5
+  call void @telos_rt_fail(ptr %t28), !dbg !5
+  unreachable, !dbg !5
+L27:
+  call void @telos_rt_exit(i32 0), !dbg !5
+  unreachable, !dbg !5
+}
+
+!llvm.dbg.cu = !{!1}
+!llvm.module.flags = !{!6, !7}
+!0 = !DIFile(filename: "main_syntax.ll", directory: ".")
+!1 = distinct !DICompileUnit(language: DW_LANG_C, file: !0, producer: "telos", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, nameTableKind: None)
+!2 = !DISubroutineType(types: !{})
+!3 = !DIFile(filename: "syntax.telos", directory: "./tests/golden")
+!4 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !3, file: !3, line: 1, type: !2, scopeLine: 1, spFlags: DISPFlagDefinition, unit: !1)
+!5 = !DILocation(line: 1, column: 1, scope: !4)
+!6 = !{i32 7, !"Dwarf Version", i32 5}
+!7 = !{i32 2, !"Debug Info Version", i32 3}
+
+
+
+failures:
+    golden::small_program
+    golden::syntax_program
+
+test result: FAILED. 4 passed; 2 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p telos-llvm --test main`
+EXIT=101

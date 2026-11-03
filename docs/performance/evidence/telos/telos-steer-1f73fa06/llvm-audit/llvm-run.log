@@ -1,0 +1,76 @@
+===== to_bytes_push
+running 2 tests
+test audit.tobytes/to_bytes push on a borrowed parameter leaves the caller unchanged ... FAILED
+test audit.tobytes/to_bytes push in a loop keeps the text valid ... FAILED
+
+failures:
+
+---- audit.tobytes/to_bytes push on a borrowed parameter leaves the caller unchanged stderr ----
+assertion failed: s == "abc"
+  message: s is abc! (len 4), callee saw len 4
+  left: abc!
+  right: abc
+  at /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/llvm-audit/to_bytes_push.telos:15:3
+
+---- audit.tobytes/to_bytes push in a loop keeps the text valid stderr ----
+assertion failed: s.to_bytes().slice(0, 3).to_text() == "abc"
+  message: prefix is ... len 20003
+  left: ...
+  right: abc
+  at /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/llvm-audit/to_bytes_push.telos:26:3
+
+failures:
+    audit.tobytes/to_bytes push on a borrowed parameter leaves the caller unchanged
+    audit.tobytes/to_bytes push in a loop keeps the text valid
+
+test result: FAILED. 0 passed; 2 failed; 0 filtered out; finished in 0.01s
+EXIT=1
+===== for_push
+running 1 test
+test audit.forpush/push on a for element keeps the list valid ... FAILED
+
+failures:
+
+---- audit.forpush/push on a for element keeps the list valid stderr ----
+panic: unsafe precondition(s) violated: ptr::copy_nonoverlapping requires that both pointer arguments are aligned and non-null and the specified memory ranges do not overlap
+
+This indicates a bug in the program. This Undefined Behavior check is optional, and cannot be relied on for safety.
+
+failures:
+    audit.forpush/push on a for element keeps the list valid
+
+test result: FAILED. 0 passed; 1 failed; 0 filtered out; finished in 0.01s
+EXIT=1
+===== match_push
+running 1 test
+test audit.matchpush/push on a match binding keeps the option valid ... FAILED
+
+failures:
+
+---- audit.matchpush/push on a match binding keeps the option valid stderr ----
+panic: unsafe precondition(s) violated: ptr::copy_nonoverlapping requires that both pointer arguments are aligned and non-null and the specified memory ranges do not overlap
+
+This indicates a bug in the program. This Undefined Behavior check is optional, and cannot be relied on for safety.
+
+failures:
+    audit.matchpush/push on a match binding keeps the option valid
+
+test result: FAILED. 0 passed; 1 failed; 0 filtered out; finished in 0.01s
+EXIT=1
+===== index_if
+
+thread 'telos' (2489874) panicked at crates/telos-llvm/src/lower.rs:533:22:
+expected an aggregate, got Unit
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+EXIT=101
+===== sound_ok
+running 6 tests
+test audit.soundok/callee results aliasing borrowed arguments survive releases ... ok
+test audit.soundok/break out of an inner loop with a carried variable ... ok
+test audit.soundok/generic instance carried across releases ... ok
+test audit.soundok/store update allocating under the lock ... ok
+test audit.soundok/for over a list the body reassigns ... ok
+test audit.soundok/match on a place an arm mutates through a nested loop ... ok
+
+test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.65s
+EXIT=0

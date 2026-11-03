@@ -1,0 +1,14 @@
+task: [check] cargo fmt --all -- --check
+Diff in /home/timo/projects/telos/crates/telos-llvm/src/glue.rs:22:
+         "@telos.msg.rem_zero",
+         "attempt to calculate the remainder with a divisor of zero",
+     ),
+[31m-    ("@telos.msg.rem", "attempt to calculate the remainder with overflow"),
+(B[m[32m+    (
+(B[m[32m+        "@telos.msg.rem",
+(B[m[32m+        "attempt to calculate the remainder with overflow",
+(B[m[32m+    ),
+(B[m ];
+ 
+ /// The length of the panic message `global` of [`MESSAGES`].
+task: Failed to run task "check": exit status 1

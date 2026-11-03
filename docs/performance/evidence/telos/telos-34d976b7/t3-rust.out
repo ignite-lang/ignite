@@ -1,0 +1,29 @@
+1
+3
+none
+0
+true false
+true false true
+<report>
+none
+[a|b||c]
+[]
+[a|b|]
+[abc]
+Host/example: 1
+none
+a::b::c
+<x y 	
+>
+< 	 x y>
+mixed 42 Ä
+MIXED 42 ä
+true false
+[GET / HTTP/1.1|Host: x|]
+[one|two]
+ababab||
+ell
+7 none
+done
+stderr: 
+exit: 0

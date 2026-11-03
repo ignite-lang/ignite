@@ -1,0 +1,2 @@
+llvm_to_bytes_push.telos:4:3: error[E006]: cannot `push` on the result of `to_bytes()`, which shares the text's buffer; bind it first: `var b = t.to_bytes()`
+llvm_to_bytes_push.telos:22:5: error[E006]: cannot `push` on the result of `to_bytes()`, which shares the text's buffer; bind it first: `var b = t.to_bytes()`

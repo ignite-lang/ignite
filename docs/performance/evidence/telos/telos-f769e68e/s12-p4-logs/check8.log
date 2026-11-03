@@ -1,0 +1,30 @@
+== std/control.ignite
+exit=0
+== std/probe.ignite
+exit=0
+== std/protocol/telnet.ignite
+exit=0
+== std/contract.ignite
+exit=0
+== std/time.ignite
+exit=0
+== std/sli.ignite
+exit=0
+== std/policy.ignite
+exit=0
+== std/deploy.ignite
+exit=0
+== std/net.ignite
+exit=0
+== examples/terminal/terminal.design.ignite
+exit=0
+== examples/terminal/terminal.ignite
+exit=0
+== examples/todo/todo.ignite
+exit=0
+== /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p4-probe2.ignite
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p4-probe2.ignite:3:26: error[E101]: operator `>` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p4-probe2.ignite:3:30: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p4-probe2.ignite:9:26: error[E101]: operator `<=` mixes `Ratio` and `Int`: quantity arithmetic takes two values of one quantity type (`+`, `-`, comparisons) or a quantity and an `Int` (`*`, `/`)
+/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p4-probe2.ignite:9:31: error[E040]: type mismatch: expected `fn() -> Bool`, found `Int`
+exit=1

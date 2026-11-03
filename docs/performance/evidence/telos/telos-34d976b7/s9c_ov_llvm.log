@@ -1,0 +1,74 @@
+running 14 tests
+test fixtures.overflow/int add ... FAILED
+test fixtures.overflow/int sub ... FAILED
+test fixtures.overflow/int mul ... FAILED
+test fixtures.overflow/int neg ... FAILED
+test fixtures.overflow/int div by zero ... FAILED
+test fixtures.overflow/int div overflow ... FAILED
+test fixtures.overflow/int rem by zero ... FAILED
+test fixtures.overflow/int rem overflow ... FAILED
+test fixtures.overflow/byte add ... FAILED
+test fixtures.overflow/byte sub ... FAILED
+test fixtures.overflow/byte mul ... FAILED
+test fixtures.overflow/byte div by zero ... FAILED
+test fixtures.overflow/byte rem by zero ... FAILED
+test fixtures.overflow/in range passes ... ok
+
+failures:
+
+---- fixtures.overflow/int add stderr ----
+panic: attempt to add with overflow
+
+---- fixtures.overflow/int sub stderr ----
+panic: attempt to subtract with overflow
+
+---- fixtures.overflow/int mul stderr ----
+panic: attempt to multiply with overflow
+
+---- fixtures.overflow/int neg stderr ----
+panic: attempt to negate with overflow
+
+---- fixtures.overflow/int div by zero stderr ----
+panic: attempt to divide by zero
+
+---- fixtures.overflow/int div overflow stderr ----
+panic: attempt to divide with overflow
+
+---- fixtures.overflow/int rem by zero stderr ----
+panic: attempt to calculate the remainder with a divisor of zero
+
+---- fixtures.overflow/int rem overflow stderr ----
+panic: attempt to calculate the remainder with overflow
+
+---- fixtures.overflow/byte add stderr ----
+panic: attempt to add with overflow
+
+---- fixtures.overflow/byte sub stderr ----
+panic: attempt to subtract with overflow
+
+---- fixtures.overflow/byte mul stderr ----
+panic: attempt to multiply with overflow
+
+---- fixtures.overflow/byte div by zero stderr ----
+panic: attempt to divide by zero
+
+---- fixtures.overflow/byte rem by zero stderr ----
+panic: attempt to calculate the remainder with a divisor of zero
+
+failures:
+    fixtures.overflow/int add
+    fixtures.overflow/int sub
+    fixtures.overflow/int mul
+    fixtures.overflow/int neg
+    fixtures.overflow/int div by zero
+    fixtures.overflow/int div overflow
+    fixtures.overflow/int rem by zero
+    fixtures.overflow/int rem overflow
+    fixtures.overflow/byte add
+    fixtures.overflow/byte sub
+    fixtures.overflow/byte mul
+    fixtures.overflow/byte div by zero
+    fixtures.overflow/byte rem by zero
+
+test result: FAILED. 1 passed; 13 failed; 0 filtered out; finished in 0.01s
+EXIT=1

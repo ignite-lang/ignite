@@ -1,0 +1,270 @@
+=== RUN 1 1793581023.424856981
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.21s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 1.17s
+
+=== RUN 2 1793581025.012469759
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.39s
+
+=== RUN 3 1793581025.697377368
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.71s
+
+=== RUN 4 1793581026.722558749
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.41s
+
+=== RUN 5 1793581027.371587452
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.78s
+
+=== RUN 6 1793581028.401119959
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 1.17s
+
+=== RUN 7 1793581029.770997172
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.86s
+
+=== RUN 8 1793581031.016112603
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.52s
+
+=== RUN 9 1793581031.805855413
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 1.43s
+
+=== RUN 10 1793581033.482474839
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 1.31s
+
+=== RUN 11 1793581035.188717487
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.21s
+
+=== RUN 12 1793581035.555788704
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.37s
+
+=== RUN 13 1793581036.033301000
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.42s
+
+=== RUN 14 1793581036.676686593
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 1.16s
+
+=== RUN 15 1793581038.010585305
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 1.02s
+
+=== RUN 16 1793581039.199326252
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.12s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.33s
+
+=== RUN 17 1793581039.706480400
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.11s
+
+=== RUN 18 1793581039.846280407
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.14s
+
+=== RUN 19 1793581040.013069958
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.11s
+
+=== RUN 20 1793581040.154927583
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.10s
+
+=== RUN 21 1793581040.291778208
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.11s
+
+=== RUN 22 1793581040.428762472
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.10s
+
+=== RUN 23 1793581040.565830104
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.11s
+
+=== RUN 24 1793581040.704083993
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.11s
+
+=== RUN 25 1793581040.844039979
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.16s
+
+=== RUN 26 1793581041.045638455
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.16s
+
+=== RUN 27 1793581041.248105131
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.16s
+
+=== RUN 28 1793581041.448982317
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.16s
+
+=== RUN 29 1793581041.656274469
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.18s
+
+=== RUN 30 1793581041.876320640
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 1 test
+test failover::a_failing_session_does_not_end_the_service ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.17s
+

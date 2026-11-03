@@ -1,0 +1,6 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/gen; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling counters v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/gen)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.44s
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/debug/countersd

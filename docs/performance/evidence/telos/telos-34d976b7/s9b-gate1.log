@@ -1,0 +1,76 @@
+task: [check] cargo fmt --all -- --check
+Diff in /home/timo/projects/telos/crates/telos/src/llvm_build.rs:164:
+         "powerpc64" => (2, BE, 21),
+         "s390x" => (2, BE, 22),
+         "loongarch64" => (2, LE, 258),
+[31m-        _ if arch.starts_with("armv") || arch == "arm" || arch.starts_with("thumb") => {
+(B[m[31m-            (1, LE, 40)
+(B[m[31m-        }
+(B[m[32m+        _ if arch.starts_with("armv") || arch == "arm" || arch.starts_with("thumb") => (1, LE, 40),
+(B[m         _ => return None,
+     })
+ }
+Diff in /home/timo/projects/telos/crates/telos/src/llvm_build.rs:221:
+             format!(
+                 "the runtime archive is not built for the target {triple}: its objects are ELF{} {} machine {machine}, the target needs machine {} (build telos-rt for {triple} and pass it with --runtime)",
+                 if class == 2 { 64 } else { 32 },
+[31m-                if order == 2 { "big-endian" } else { "little-endian" },
+(B[m[32m+                if order == 2 {
+(B[m[32m+                    "big-endian"
+(B[m[32m+                } else {
+(B[m[32m+                    "little-endian"
+(B[m[32m+                },
+(B[m                 expected.2
+             ),
+         ),
+Diff in /home/timo/projects/telos/crates/telos/tests/telos_test.rs:335:
+                 "---- fixtures.overflow/byte rem by zero stderr ----\npanic: attempt to calculate the remainder with a divisor of zero\n",
+                 "test fixtures.overflow/in range passes ... ok",
+             ] {
+[31m-                assert!(run.stdout.contains(line), "{label}: no `{line}` in\n{}", run.stdout);
+(B[m[32m+                assert!(
+(B[m[32m+                    run.stdout.contains(line),
+(B[m[32m+                    "{label}: no `{line}` in\n{}",
+(B[m[32m+                    run.stdout
+(B[m[32m+                );
+(B[m             }
+             reports.push((label, without_time(&run.stdout)));
+         }
+Diff in /home/timo/projects/telos/crates/telos/tests/telos_test.rs:342:
+     }
+     for (label, report) in &reports[1..] {
+[31m-        assert_eq!(report, &reports[0].1, "{label} differs from {}", reports[0].0);
+(B[m[32m+        assert_eq!(
+(B[m[32m+            report, &reports[0].1,
+(B[m[32m+            "{label} differs from {}",
+(B[m[32m+            reports[0].0
+(B[m[32m+        );
+(B[m     }
+ }
+ 
+Diff in /home/timo/projects/telos/crates/telos-llvm/src/glue.rs:22:
+         "@telos.msg.rem_zero",
+         "attempt to calculate the remainder with a divisor of zero",
+     ),
+[31m-    ("@telos.msg.rem", "attempt to calculate the remainder with overflow"),
+(B[m[32m+    (
+(B[m[32m+        "@telos.msg.rem",
+(B[m[32m+        "attempt to calculate the remainder with overflow",
+(B[m[32m+    ),
+(B[m ];
+ 
+ /// The length of the panic message `global` of [`MESSAGES`].
+Diff in /home/timo/projects/telos/crates/telos-llvm/src/lower.rs:2233:
+                 self.fail_if(&zero, message);
+                 if signed {
+                     let minus_one = self.f.val(format!("icmp eq i64 {b}, -1"));
+[31m-                    let min = self
+(B[m[31m-                        .f
+(B[m[31m-                        .val(format!("icmp eq i64 {a}, {}", i64::MIN));
+(B[m[32m+                    let min = self.f.val(format!("icmp eq i64 {a}, {}", i64::MIN));
+(B[m                     let over = self.f.val(format!("and i1 {minus_one}, {min}"));
+                     let message = if rem {
+                         "@telos.msg.rem"
+task: Failed to run task "gate": task: Failed to run task "check": exit status 1
+WALL=0.4
+EXIT=201

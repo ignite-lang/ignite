@@ -1,0 +1,44 @@
+== build 2026-11-02T06:12:20+01:00 load=1.15
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+   Compiling ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+   Compiling ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.79s
+build EXIT=0
+== item 11 plan
+plan exit=0
+design plan == golden
+terminal plan == golden
+todo plan == golden
+== item 6 check design
+check exit=0
+== tests 2026-11-02T06:12:23+01:00 load=1.15
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-rt v0.1.0 (/home/timo/projects/telos/crates/ignite-rt)
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.75s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4/debug/deps/main-90b129b53e45974f)
+
+running 47 tests
+test control_trace::a7_evaluator_steps_10000_emissions_into_a_30_day_window ... ignored
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-std v0.0.0-15703fb0a98334e3 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4/tmp/control-trace/std)
+   Compiling control_trace v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p4/tmp/control-trace)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.61s
+
+test result: ok. 46 passed; 0 failed; 1 ignored; 0 measured; 141 filtered out; finished in 7.73s
+
+tests EXIT=0 seconds=9.494789184 load=1.66
+EXIT=done

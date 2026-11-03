@@ -1,0 +1,13 @@
+START 2026-11-02T03:09:40+01:00 load=3.01 2.62 2.54 1/2960 4163198
+STEP tree=work label=item8-eval pair=0 secs=0.38 load_before=3.01 load_after=3.01 exit=0
+STEP tree=work label=fmt pair=0 secs=0.44 load_before=3.01 load_after=3.01 exit=0
+STEP tree=work label=clippy pair=0 secs=3.29 load_before=3.01 load_after=3.41 exit=0
+STEP tree=work label=test-workspace pair=0 secs=13.98 load_before=3.41 load_after=3.28 exit=0
+STEP tree=work label=test-ignite pair=0 secs=2.46 load_before=3.28 load_after=3.28 exit=0
+STEP tree=work label=task-gate pair=0 secs=13.35 load_before=3.28 load_after=5.42 exit=0
+STEP tree=work label=compile pair=0 secs=0.68 load_before=5.42 load_after=5.42 exit=0
+STEP tree=work label=compile-llvm pair=0 secs=0.46 load_before=5.42 load_after=5.42 exit=0
+STEP tree=work label=compile-todo pair=0 secs=0.38 load_before=5.42 load_after=5.42 exit=0
+STEP tree=work label=compile-todo-llvm pair=0 secs=0.38 load_before=5.42 load_after=5.42 exit=0
+COUNTS (all steps, double-counted by task gate) passed=1575 failed=0 ignored=8
+EXIT=0

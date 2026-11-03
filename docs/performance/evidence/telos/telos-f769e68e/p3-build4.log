@@ -1,0 +1,7 @@
+   Compiling ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+   Compiling ignite-rt v0.1.0 (/home/timo/projects/telos/crates/ignite-rt)
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.22s
+EXIT=0

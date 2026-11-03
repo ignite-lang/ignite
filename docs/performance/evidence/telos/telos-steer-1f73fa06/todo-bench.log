@@ -1,0 +1,32 @@
+nproc=20 rustc=rustc 1.99.1 (58cf8f9c3 2026-10-13) clang=clang version 22.1.8 wrapper=
+compiler_build secs=4.0 status=0
+check status=0
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-rust-a)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.49s
+built /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/target-rust-a/debug/todod
+rust_cold_sccache secs=1.6 status=0
+note: building the generated Rust project in /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-rust-a; compiler messages refer to generated code
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+built /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/target-rust-a/debug/todod
+rust_warm_sccache secs=0.1 status=0
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-rust-b)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.97s
+built /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/target-rust-b/debug/todod
+rust_cold_nowrapper secs=2.1 status=0
+note: building the generated Rust project in /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-rust-b; compiler messages refer to generated code
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+built /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/target-rust-b/debug/todod
+rust_warm_nowrapper secs=0.1 status=0
+llvm_runtime_cold_sccache secs=3.0 status=0
+built /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-llvm-a/bin/todod
+llvm_cold_program secs=0.8 status=0
+built /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-llvm-a/bin/todod
+llvm_warm_program secs=0.1 status=0
+llvm_runtime_cold_nowrapper secs=2.2 status=0
+sizes:
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench.sh:36: no matches found: /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-rust-a/target/debug/*
+6194792 /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-llvm-a/bin/todod
+29546980 /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/trt-a/debug/libtelos_rt.a
+/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench.sh:39: no matches found: /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-llvm-a/*.ll
+ll_lines=0 rust_gen_lines=93
+EXIT=0

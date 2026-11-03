@@ -1,0 +1,11 @@
+=== p9b_generics build
+EXIT=0
+=== p9b_generics test
+EXIT=0
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+=== p10_misc build
+EXIT=0
+=== p10_misc test
+EXIT=0
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+EXIT=ALLDONE

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Todo",
+  "x-ess-name": "todo.list.Todo",
+  "x-ess-kind": "entity",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/todo.list.TodoId"
+    },
+    "title": {
+      "$ref": "#/$defs/todo.list.Title"
+    },
+    "done": {
+      "type": "boolean"
+    },
+    "state": {
+      "$ref": "#/$defs/todo.list.Todo.State"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "done",
+    "state"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "todo",
+    "specification_version": "v1",
+    "source_digest": "4fab963621d47043d38543f5141de315c8b798f376db1be3379011617c426950",
+    "contract_digest": "slice-sha256/2:6791993ee73c354216d415e19efd234822a4e137843d6db73e26e70a0b7e2bc7",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "todo.list.Title": {
+      "title": "Title",
+      "x-ess-name": "todo.list.Title",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "todo.list.Todo.State": {
+      "title": "State",
+      "x-ess-name": "todo.list.Todo.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Kept"
+      ]
+    },
+    "todo.list.TodoId": {
+      "title": "TodoId",
+      "x-ess-name": "todo.list.TodoId",
+      "x-ess-kind": "newtype",
+      "type": "integer"
+    }
+  }
+}

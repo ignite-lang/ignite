@@ -1,0 +1,11 @@
+running 7 tests
+test std.deploy/bindings are built by name ... ok
+test std.deploy/only a native process includes other members ... ok
+test std.deploy/a local socket admits a TcpListener resource only ... ok
+test std.deploy/a native process admits an executable component only ... ok
+test std.deploy/a workstation executable admits any component ... ok
+test std.deploy/a scheduled probe host admits a component with an output ... ok
+test std.deploy/no binding admits a contract or a policy ... ok
+
+test result: ok. 7 passed; 0 failed; 0 filtered out; finished in 0.01s
+EXIT=0

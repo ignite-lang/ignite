@@ -1,0 +1,11 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/debug/deps/main-90b129b53e45974f)
+
+running 4 tests
+test decode::json_parse_is_the_inverse_of_compact ... ok
+test decode::decode_errors_name_the_path ... ok
+test decode::machines_of_the_design_model_round_trip ... ok
+test decode::events_effects_and_standings_of_the_trace_round_trip ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 184 filtered out; finished in 0.19s
+

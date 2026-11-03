@@ -1,0 +1,420 @@
+START 00:58:27
+Diff in /home/timo/projects/telos/crates/telos/tests/llvm_build.rs:122:
+     let source = dir.join("terminal.telos");
+     std::fs::create_dir_all(&dir).unwrap();
+     for sibling in ["terminal.telos", "commands.telos", "command_schema.telos"] {
+[31m-        std::fs::copy(
+(B[m[31m-            terminal_source().with_file_name(sibling),
+(B[m[31m-            dir.join(sibling),
+(B[m[31m-        )
+(B[m[31m-        .unwrap();
+(B[m[32m+        std::fs::copy(terminal_source().with_file_name(sibling), dir.join(sibling)).unwrap();
+(B[m     }
+     let log = dir.join("clang.log");
+     let clang = logging_clang(&dir, &log);
+Diff in /home/timo/projects/telos/crates/telos-llvm/src/lib.rs:580:
+         override_port = Some((has, port));
+     }
+     for (index, name) in listeners.iter().enumerate() {
+[31m-        let resource = listener(name)
+(B[m[31m-            .unwrap_or_else(|| panic!("resource `{name}` is not a `TcpListener`"));
+(B[m[32m+        let resource =
+(B[m[32m+            listener(name).unwrap_or_else(|| panic!("resource `{name}` is not a `TcpListener`"));
+(B[m         let (address, declared) = listener_values(&mut l, resource);
+         let port = match (&override_port, index) {
+             (Some((has, given)), 0) => {
+Diff in /home/timo/projects/telos/crates/telos-llvm/src/lib.rs:596:
+         ));
+         fail_unless_ok(&mut l, &status, &err, 1);
+         let bound = l.f.val(format!("load i64, ptr {handle}, align 8"));
+[31m-        let local_port = l.f.val(format!("call i64 @telos_rt_tcp_local_port(i64 {bound})"));
+(B[m[32m+        let local_port =
+(B[m[32m+            l.f.val(format!("call i64 @telos_rt_tcp_local_port(i64 {bound})"));
+(B[m         let prefix = l.literal_ref(b"listening on ");
+         let colon = l.literal_ref(b":");
+         let number = l.temp(&Ty::Text);
+Diff in /home/timo/projects/telos/crates/telos-llvm/src/lib.rs:620:
+     }
+     let mut endpoint_values: Vec<(String, Val)> = Vec::new();
+     for (name, ty) in &endpoints {
+[31m-        let resource = listener(name)
+(B[m[31m-            .unwrap_or_else(|| panic!("resource `{name}` is not a `TcpListener`"));
+(B[m[32m+        let resource =
+(B[m[32m+            listener(name).unwrap_or_else(|| panic!("resource `{name}` is not a `TcpListener`"));
+(B[m         let (address, declared) = listener_values(&mut l, resource);
+         let port = match &override_port {
+[31m-            Some((has, given)) => l.f.val(format!("select i1 {has}, i64 {given}, i64 {declared}")),
+(B[m[32m+            Some((has, given)) => {
+(B[m[32m+                l.f.val(format!("select i1 {has}, i64 {given}, i64 {declared}"))
+(B[m[32m+            }
+(B[m             None => declared,
+         };
+         let fixed = [
+Diff in /home/timo/projects/telos/crates/telos-llvm/src/lib.rs:643:
+             .iter()
+             .find(|c| c.name.name == *name)
+             .unwrap_or_else(|| {
+[31m-                panic!("component `{name}` of system `{}` is not declared", info.system)
+(B[m[32m+                panic!(
+(B[m[32m+                    "component `{name}` of system `{}` is not declared",
+(B[m[32m+                    info.system
+(B[m[32m+                )
+(B[m             });
+         value = component_value(&mut l, &info.system, component, ty, &endpoint_values);
+         l.bind_local(name, ty, value.clone());
+Diff in /home/timo/projects/telos/crates/telos-llvm/src/lower.rs:1395:
+     /// `main` of `docs/slice.md` section 14.5: the `Endpoint` of a listener,
+     /// an omitted `executable`, a `Signal` output) and the kind's defaults
+     /// for every other field.
+[31m-    pub fn record_with(&mut self, ty: &Ty, inits: &[(&str, &Expr)], fixed: &[(String, Val)]) -> Val {
+(B[m[32m+    pub fn record_with(
+(B[m[32m+        &mut self,
+(B[m[32m+        ty: &Ty,
+(B[m[32m+        inits: &[(&str, &Expr)],
+(B[m[32m+        fixed: &[(String, Val)],
+(B[m[32m+    ) -> Val {
+(B[m         let t = self.temp(ty);
+         for (field, value) in inits {
+             if fixed.iter().any(|(f, _)| f == field) {
+Diff in /home/timo/projects/telos/crates/telos-llvm/src/region.rs:277:
+         .rev()
+         .find_map(|stmt| match &stmt.kind {
+             StmtKind::Let {
+[31m-                name: bound,
+(B[m[31m-                value,
+(B[m[31m-                ..
+(B[m[32m+                name: bound, value, ..
+(B[m             } if bound.name == name => Some(matches!(
+                 value.kind,
+                 ExprKind::Try(_)
+Diff in /home/timo/projects/telos/crates/telos-llvm/src/region.rs:295:
+ fn stmt_mentions(stmt: &Stmt, name: &str) -> bool {
+     match &stmt.kind {
+         StmtKind::Let {
+[31m-            name: bound,
+(B[m[31m-            value,
+(B[m[31m-            ..
+(B[m[32m+            name: bound, value, ..
+(B[m         } => bound.name == name || mentions(value, name),
+         StmtKind::LetPattern { pattern, value, .. } => {
+             pattern_binds(pattern, name) || mentions(value, name)
+Diff in /home/timo/projects/telos/crates/telos-llvm/src/region.rs:315:
+             pattern,
+             iter,
+             body,
+[31m-        } => {
+(B[m[31m-            pattern_binds(pattern, name) || mentions(iter, name) || mentioned(&body.stmts, name)
+(B[m[31m-        }
+(B[m[32m+        } => pattern_binds(pattern, name) || mentions(iter, name) || mentioned(&body.stmts, name),
+(B[m         StmtKind::Break | StmtKind::Continue => false,
+         StmtKind::Expr(e) => mentions(e, name),
+         StmtKind::Assert { cond, message } => {
+Diff in /home/timo/projects/telos/crates/telos-llvm/tests/golden.rs:213:
+         main.contains("call void @telos_rt_fail(ptr %"),
+         "an Err from the component's main is reported with the error's exit code"
+     );
+[31m-    assert!(main.contains("call void @telos_rt_exit(i32 0)"), "Ok is exit 0");
+(B[m[32m+    assert!(
+(B[m[32m+        main.contains("call void @telos_rt_exit(i32 0)"),
+(B[m[32m+        "Ok is exit 0"
+(B[m[32m+    );
+(B[m }
+ 
+ /// `docs/llvm.md` sections 1 and 7: every module starts with the target
+Diff in /home/timo/projects/telos/crates/telos-rustgen/tests/common/mod.rs:308:
+         .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+         .map(|entry| entry.unwrap().path())
+         .filter(|p| {
+[31m-            p.extension().is_some_and(|e| e == "telos") && p.is_file() && p.canonicalize().ok() != own
+(B[m[32m+            p.extension().is_some_and(|e| e == "telos")
+(B[m[32m+                && p.is_file()
+(B[m[32m+                && p.canonicalize().ok() != own
+(B[m         })
+         .collect();
+     entries.sort();
+Diff in /home/timo/projects/telos/crates/telos-types/src/typer.rs:5:
+ 
+ use telos_check::{BUILTIN_METHODS, SUBSTRATE_MODULES, Symbols};
+ use telos_syntax::ast::{
+[31m-    AliasDecl, Arm, BinaryOp, Block, Closure, Decl, Expr, ExprKind, FieldInit,
+(B[m[31m-    FnDecl, Ident, Pattern, PatternKind, Place, Program, Span, Stmt, StmtKind, TestDecl, Type,
+(B[m[31m-    UnaryOp,
+(B[m[32m+    AliasDecl, Arm, BinaryOp, Block, Closure, Decl, Expr, ExprKind, FieldInit, FnDecl, Ident,
+(B[m[32m+    Pattern, PatternKind, Place, Program, Span, Stmt, StmtKind, TestDecl, Type, UnaryOp,
+(B[m };
+ use telos_syntax::diagnostic::Diagnostic;
+ 
+fmt EXIT=1
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.40s
+clippy EXIT=0
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.07s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos-2748d864c8d1f1a4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos-a1c8e2c934e88fdb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-9d267f49cdec8647)
+
+running 146 tests
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test slice9::long_chains_100k_run_on_llvm ... ignored
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/tmp/syntax-rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+error: subnegotiation longer than 1024 bytes
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+error: subnegotiation longer than 1024 bytes
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+
+test result: ok. 144 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 19.98s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_check-fe8934d655f8a278)
+
+running 10 tests
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-ecb9e8dc90602e40)
+
+running 10 tests
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_io-755f4e5010ba1bc8)
+
+running 36 tests
+error: plain
+error: + failed at f.telos:1:2: 9223372036854775807 + 1
+error: no peer
+error: --port abc
+error: panic at crates/telos-io/src/lib.rs:414:27: boom
+task ended with error: index failed at t.telos:1:1: index 3 out of range for length 0
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-5a9fc731511ffbe4)
+
+running 36 tests
+error: failed
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_llvm-439193a6a1588923)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-a73bc2d46bfd8f58)
+
+running 14 tests
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_load-948cc5d69bdf04b6)
+
+running 3 tests
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_rt-79762514af730b3d)
+
+running 19 tests
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-3560463862c13ef8)
+
+running 18 tests
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_rustgen-5d2638f7ab6de329)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-7833c6a20e9dcc9e)
+
+running 77 tests
+test slice9::long_chains_build_and_run_100k ... ignored
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished waiting for file lock on build directory
+ `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on shared package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+
+test result: ok. 76 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.64s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_syntax-f2603e94cd8ba5a5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-5656a90372c4f3f9)
+
+running 148 tests
+
+test result: ok. 148 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_types-7d8de7c732367ba9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-4d4730ae5e8142a1)
+
+running 38 tests
+test terminal::terminal_program_types_against_the_standard_library ... FAILED
+
+failures:
+
+---- terminal::terminal_program_types_against_the_standard_library stdout ----
+
+thread 'terminal::terminal_program_types_against_the_standard_library' (964986) panicked at crates/telos-types/tests/terminal.rs:333:29:
+type failed:
+terminal.telos:20:29: error[E102]: module `examples.terminal.commands` not found; `module(..)` names a standard-library module or a sibling file `<name>.telos` of the program's package
+terminal.telos:23:29: error[E102]: module `examples.terminal.command_schema` not found; `module(..)` names a standard-library module or a sibling file `<name>.telos` of the program's package
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    terminal::terminal_program_types_against_the_standard_library
+
+test result: FAILED. 37 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+error: test failed, to rerun pass `-p telos-types --test main`
+   Doc-tests telos
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_check
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_io
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_llvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_rt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_rustgen
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_syntax
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_types
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 1 target failed:
+    `-p telos-types --test main`
+test EXIT=101
+test std.protocol.http/any Transfer-Encoding is 501, also with a Content-Length ... ok
+test std.protocol.http/the server answers pipelined requests until one asks to close ... ok
+test std.protocol.http/the server answers a rejected request and closes ... ok
+test std.protocol.telnet/the profile and the limits default to what Telnet implements ... ok
+test std.protocol.telnet/data bytes are literals ... ok
+test std.protocol.telnet/CR LF, CR NUL, a lone CR and a lone LF end one line ... ok
+test std.protocol.telnet/a CR LF split across reads ends one line ... ok
+test std.protocol.telnet/IAC IAC is the data byte 255 ... ok
+test std.protocol.telnet/DO is answered WONT and WILL is answered DONT ... ok
+test std.protocol.telnet/a negotiation split across reads is answered once complete ... ok
+test std.protocol.telnet/AYT and IP are reported and other commands ignored ... ok
+test std.protocol.telnet/a subnegotiation is skipped up to IAC SE ... ok
+test std.protocol.telnet/a subnegotiation is limited to 1024 bytes including the IAC of IAC SE ... ok
+test std.protocol.telnet/render ends each reply line with CR LF ... ok
+test std.protocol.telnet/encode_input writes NVT line ends and doubles IAC ... ok
+test std.protocol.telnet/encoded input decodes to the same lines ... ok
+test std.protocol.telnet/erase_last removes one UTF-8 character ... ok
+test std.protocol.telnet/apply_key edits the line ... ok
+test std.protocol.telnet/the server answers each line and ends on the console's close ... ok
+test std.protocol.telnet/the server answers options and AYT between lines ... ok
+test std.protocol.telnet/the server closes on an overlong line, IAC IP and an overlong subnegotiation ... ok
+test std.protocol.telnet/a client silent for the idle timeout ends the session ... ok
+test std.protocol.telnet/a telnet server runs a declared console, a client its session ... ok
+test std.result/unwrap_or gives the value or the fallback ... ok
+test std.result/map and map_err change one side ... ok
+test std.result/is_ok, is_err and ok ... ok
+test std.text/digit_value reads decimal digits only ... ok
+test std.text/is_whitespace is ASCII whitespace ... ok
+test std.text/slice takes byte offsets ... ok
+test std.text/find returns the first byte offset ... ok
+test std.text/contains, ends_with and strip_suffix ... ok
+test std.text/split keeps empty pieces ... ok
+test std.text/split_once splits at the first separator ... ok
+test std.text/replace replaces every occurrence ... ok
+test std.text/trim_start and trim_end drop ASCII whitespace ... ok
+test std.text/case mapping is ASCII only ... ok
+test std.text/lines splits at LF and drops CR before it ... ok
+test std.text/repeat concatenates copies ... ok
+
+test result: ok. 97 passed; 0 failed; 0 filtered out; finished in 0.12s
+test-telos EXIT=0
+END 00:58:58
+EXIT=0

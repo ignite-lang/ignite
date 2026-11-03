@@ -1,0 +1,8 @@
+   Compiling telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+   Compiling telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+   Compiling telos-types v0.1.0 (/home/timo/projects/telos/crates/telos-types)
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+   Compiling telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.76s
+EXIT=0

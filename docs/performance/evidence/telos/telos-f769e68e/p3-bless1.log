@@ -1,0 +1,45 @@
+   Compiling ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.68s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p3/debug/deps/main-6eaf5699a056c807)
+
+running 11 tests
+test plan::fixtures_match_expected ... FAILED
+test plan::todo_example_model_matches_golden ... ok
+test plan::design_model_has_no_expression_text ... ok
+test plan::design_model_resolves_each_of_the_five_members_once ... ok
+test plan::design_model_is_canonical_and_every_value_is_encoded_as_15_4_says ... ok
+test plan::terminal_example_model_matches_golden ... ok
+test plan::exit_statuses ... ok
+test plan::design_model_is_byte_identical_across_processes_and_directories ... ok
+test plan::e114_covers_an_unknown_assembly_name_and_check_passes ... FAILED
+test plan::explain_unknown_path_is_e119 ... ok
+test plan::explain_matches_the_goldens_of_15_8 ... ok
+
+failures:
+
+---- plan::fixtures_match_expected stdout ----
+
+thread 'plan::fixtures_match_expected' (3451755) panicked at crates/ignite/tests/plan.rs:334:9:
+assertion `left == right` failed: e110_unbound_member.ignite: 
+  left: Some(0)
+ right: Some(1)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- plan::e114_covers_an_unknown_assembly_name_and_check_passes stdout ----
+
+thread 'plan::e114_covers_an_unknown_assembly_name_and_check_passes' (3451751) panicked at crates/ignite/tests/plan.rs:49:5:
+assertion `left == right` failed: e114_assembly_selection.ignite:40:5: error[E113]: binding of `S.w` does not include `S.h`, which `S.w` embeds
+
+  left: Some(1)
+ right: Some(0)
+
+
+failures:
+    plan::e114_covers_an_unknown_assembly_name_and_check_passes
+    plan::fixtures_match_expected
+
+test result: FAILED. 9 passed; 2 failed; 0 ignored; 0 measured; 147 filtered out; finished in 0.30s
+
+error: test failed, to rerun pass `-p ignite --test main`
+EXIT=101

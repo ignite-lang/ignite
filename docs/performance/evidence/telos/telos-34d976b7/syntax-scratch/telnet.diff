@@ -1,0 +1,96 @@
+--- current
++++ proposed
+@@ -20,9 +20,5 @@
+   (Negotiation(_), _) => (Ground, Nothing)
+-  (Subnegotiation(count), _) => if count + 1 > MAXIMUM_SUBNEGOTIATION {
+-    (Ground, SubnegotiationTooLong)
+-  } else if b == IAC {
+-    (SubnegotiationInterpret(count + 1), Nothing)
+-  } else {
+-    (Subnegotiation(count + 1), Nothing)
+-  }
++  (Subnegotiation(count), _) if count + 1 > MAXIMUM_SUBNEGOTIATION => (Ground, SubnegotiationTooLong)
++  (Subnegotiation(count), IAC) => (SubnegotiationInterpret(count + 1), Nothing)
++  (Subnegotiation(count), _) => (Subnegotiation(count + 1), Nothing)
+   (SubnegotiationInterpret(_), SE) => (Ground, Nothing)
+@@ -39,6 +35,3 @@
+     at = next
+-    match event {
+-      Nothing => {}
+-      _ => events.push(event)
+-    }
++    if event != Nothing { events.push(event) }
+   }
+@@ -48,6 +41,3 @@
+ // The events of `bytes` decoded from `Ground`.
+-test fn events(bytes: Bytes) -> List<Event> {
+-  let (_, out) = feed(Ground, bytes)
+-  out
+-}
++test fn events(bytes: Bytes) -> List<Event> = feed(Ground, bytes).1
+ 
+@@ -56,5 +46,3 @@
+   var out = Bytes.empty()
+-  while out.len() < count {
+-    out.push(b)
+-  }
++  for _ in 0..count { out.push(b) }
+   out
+@@ -65,6 +53,3 @@
+   var out = Bytes.empty()
+-  for line in reply.lines {
+-    out.append(line.to_bytes())
+-    out.append(b"\r\n")
+-  }
++  for line in reply.lines { out += line.to_bytes() + b"\r\n" }
+   out
+@@ -76,13 +61,9 @@
+   var out = Bytes.empty()
+-  var i = 0
+-  while i < bytes.len() {
+-    let b = bytes.at(i)
+-    i = i + 1
+-    match b {
++  for i in 0..bytes.len() {
++    match bytes.at(i) {
+       b'\n' => out.append(b"\r\n")
+-      b'\r' => if i >= bytes.len() || bytes.at(i) != b'\n' {
+-        out.append(b"\r\0")
+-      }
++      b'\r' if i + 1 == bytes.len() || bytes.at(i + 1) != b'\n' => out.append(b"\r\0")
++      b'\r' => {}
+       IAC => out.append([IAC, IAC])
+-      _ => out.push(b)
++      other => out.push(other)
+     }
+@@ -95,5 +76,3 @@
+   var end = line.len() - 1
+-  while end > 0 && line.at(end) >= 128 && line.at(end) < 192 {
+-    end = end - 1
+-  }
++  while end > 0 && line.at(end) is 0x80..=0xBF { end -= 1 }
+   line.slice(0, end)
+@@ -108,17 +87,10 @@
+   b'\r' | b'\n' => (Bytes.empty(), Enter(line))
+-  BACKSPACE | DELETE => if line.is_empty() {
+-    (line, Unchanged)
+-  } else {
+-    (erase_last(line), Show(b"\x08 \x08"))
+-  }
++  BACKSPACE | DELETE if line.is_empty() => (line, Unchanged)
++  BACKSPACE | DELETE => (erase_last(line), Show(b"\x08 \x08"))
+   CONTROL_C => (Bytes.empty(), Interrupt)
+-  CONTROL_D => if line.is_empty() { (line, EndOfInput) } else { (line, Unchanged) }
++  CONTROL_D if line.is_empty() => (line, EndOfInput)
++  CONTROL_D => (line, Unchanged)
+   ESCAPE => (line, Escape)
+-  _ => if b < b' ' {
+-    (line, Unchanged)
+-  } else {
+-    var longer = line
+-    longer.push(b)
+-    (longer, Show([b]))
+-  }
++  0x00..=0x1F => (line, Unchanged)
++  _ => (line + [b], Show([b]))
+ }

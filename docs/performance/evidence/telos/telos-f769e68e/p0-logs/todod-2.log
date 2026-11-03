@@ -1,0 +1,56 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-dev; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling ignite-io v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s11-p0-tree/crates/ignite-io)
+   Compiling ignite-std v0.0.0-1c34cd22ef99d1fa (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-dev/std)
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-dev)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.95s
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-dev-target/debug/todod
+note: building the generated Rust project in /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-dev-strace; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+   Compiling nix v0.31.3
+   Compiling ignite-io v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s11-p0-tree/crates/ignite-io)
+   Compiling ignite-std v0.0.0-1c34cd22ef99d1fa (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-dev-strace/std)
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-dev-strace)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.04s
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-dev-strace-target/debug/todod
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/llvm-dev/bin/todod
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/llvm-dev-strace/bin/todod
+note: building the generated Rust project in /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-release; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+   Compiling nix v0.31.3
+   Compiling ignite-io v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s11-p0-tree/crates/ignite-io)
+   Compiling ignite-std v0.0.0-1c34cd22ef99d1fa (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-release/std)
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-release)
+    Finished `release` profile [optimized] target(s) in 4.00s
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-release-target/release/todod
+note: building the generated Rust project in /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-release-strace; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling ignite-io v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s11-p0-tree/crates/ignite-io)
+   Compiling ignite-std v0.0.0-1c34cd22ef99d1fa (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-release-strace/std)
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-release-strace)
+    Finished `release` profile [optimized] target(s) in 4.09s
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/rust-release-strace-target/release/todod
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/llvm-release/bin/todod
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-2/llvm-release-strace/bin/todod

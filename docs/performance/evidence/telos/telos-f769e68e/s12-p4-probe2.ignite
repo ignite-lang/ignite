@@ -1,0 +1,33 @@
+package probe2
+
+fn a(t: Ratio) -> Bool = t > 100% || (t <= 0%)
+
+fn b(t: Ratio) -> Bool = t > 100%
+
+fn c(t: Ratio) -> Bool = (t > 100%) || (t <= 0%)
+
+fn d(t: Ratio) -> Bool = t <= 0% || t > 100%
+
+fn e(t: Ratio) -> Bool {
+  if (t > 100%) {
+    true
+  } else {
+    false
+  }
+}
+
+fn f(t: Ratio) -> Bool {
+  if t > 100.0% {
+    true
+  } else {
+    false
+  }
+}
+
+test "ratios" {
+  assert b(101%)
+  assert !b(100%)
+  assert c(0%)
+  assert e(100.5%)
+  assert f(100.5%)
+}

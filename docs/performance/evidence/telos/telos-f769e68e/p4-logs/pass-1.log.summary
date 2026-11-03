@@ -1,0 +1,114 @@
+START 2026-11-02T03:01:37+01:00 pair=1 load=3.92 2.19 2.43 1/2955 3940583
+STEP tree=before label=gate-fmt pair=1 secs=0.40 load_before=3.92 load_after=3.92 exit=0
+STEP tree=before label=gate-clippy pair=1 secs=1.99 load_before=3.92 load_after=3.92 exit=0
+STEP tree=before label=gate-test pair=1 secs=23.09 load_before=3.92 load_after=3.50 exit=0
+STEP tree=before label=gate-test-ignite pair=1 secs=0.65 load_before=3.50 load_after=3.50 exit=0
+STEP tree=before label=gate-warm-total pair=1 secs=26.15 load_before=3.92 load_after=3.50 exit=0
+STEP tree=after label=gate-fmt pair=1 secs=0.45 load_before=3.50 load_after=3.50 exit=0
+STEP tree=after label=gate-clippy pair=1 secs=2.19 load_before=3.50 load_after=3.50 exit=0
+STEP tree=after label=gate-test pair=1 secs=13.49 load_before=3.50 load_after=3.30 exit=101
+STEP tree=after label=gate-test-ignite pair=1 secs=0.66 load_before=3.30 load_after=3.30 exit=0
+STEP tree=after label=gate-warm-total pair=1 secs=16.80 load_before=3.50 load_after=3.30 exit=0
+STEP tree=before label=perfile-no-run pair=1 secs=3.80 load_before=3.30 load_after=3.12 exit=0
+STEP tree=after label=perfile-no-run pair=1 secs=4.05 load_before=3.12 load_after=3.11 exit=0
+STEP tree=before label=file-cli pair=1 secs=0.62 load_before=3.11 load_after=3.11 exit=0
+STEP tree=after label=file-cli pair=1 secs=0.59 load_before=3.11 load_after=3.11 exit=0
+STEP tree=after label=file-eval pair=1 secs=0.37 load_before=3.11 load_after=3.11 exit=0
+STEP tree=before label=file-failover pair=1 secs=0.59 load_before=3.11 load_after=3.11 exit=0
+STEP tree=after label=file-failover pair=1 secs=0.61 load_before=3.11 load_after=3.11 exit=0
+STEP tree=before label=file-generics pair=1 secs=0.05 load_before=3.11 load_after=3.11 exit=0
+STEP tree=after label=file-generics pair=1 secs=0.05 load_before=3.11 load_after=3.11 exit=0
+STEP tree=before label=file-ignite_test pair=1 secs=9.43 load_before=3.11 load_after=2.71 exit=0
+STEP tree=after label=file-ignite_test pair=1 secs=8.07 load_before=2.71 load_after=2.60 exit=0
+STEP tree=before label=file-llvm pair=1 secs=0.16 load_before=2.60 load_after=2.60 exit=0
+STEP tree=after label=file-llvm pair=1 secs=0.16 load_before=2.60 load_after=2.60 exit=0
+STEP tree=before label=file-llvm_build pair=1 secs=2.08 load_before=2.60 load_after=2.60 exit=0
+STEP tree=after label=file-llvm_build pair=1 secs=1.45 load_before=2.60 load_after=2.71 exit=0
+STEP tree=before label=file-llvm_memory pair=1 secs=0.34 load_before=2.71 load_after=2.71 exit=0
+STEP tree=after label=file-llvm_memory pair=1 secs=0.34 load_before=2.71 load_after=2.71 exit=0
+STEP tree=after label=file-plan pair=1 secs=0.66 load_before=2.71 load_after=2.71 exit=0
+STEP tree=before label=file-siblings pair=1 secs=0.15 load_before=2.71 load_after=2.71 exit=0
+STEP tree=after label=file-siblings pair=1 secs=0.16 load_before=2.71 load_after=2.71 exit=0
+STEP tree=before label=file-slice10_llvm pair=1 secs=0.68 load_before=2.71 load_after=2.71 exit=0
+STEP tree=after label=file-slice10_llvm pair=1 secs=0.69 load_before=2.71 load_after=2.71 exit=0
+STEP tree=before label=file-slice9 pair=1 secs=17.39 load_before=2.71 load_after=2.35 exit=0
+STEP tree=after label=file-slice9 pair=1 secs=3.63 load_before=2.35 load_after=2.33 exit=0
+STEP tree=before label=file-syntax pair=1 secs=0.26 load_before=2.33 load_after=2.33 exit=0
+STEP tree=after label=file-syntax pair=1 secs=0.26 load_before=2.33 load_after=2.33 exit=0
+STEP tree=before label=file-terminal pair=1 secs=2.12 load_before=2.33 load_after=2.33 exit=0
+STEP tree=after label=file-terminal pair=1 secs=2.12 load_before=2.33 load_after=2.33 exit=0
+STEP tree=before label=file-todo pair=1 secs=0.17 load_before=2.33 load_after=2.14 exit=0
+STEP tree=after label=file-todo pair=1 secs=0.18 load_before=2.14 load_after=2.14 exit=0
+STEP tree=before label=no-run-warm pair=1 secs=0.91 load_before=2.14 load_after=2.14 exit=0
+STEP tree=after label=no-run-warm pair=1 secs=0.98 load_before=2.14 load_after=2.14 exit=0
+STEP tree=before label=no-run-touch pair=1 secs=1.33 load_before=2.14 load_after=2.14 exit=0
+STEP tree=after label=no-run-touch pair=1 secs=1.61 load_before=2.14 load_after=2.37 exit=0
+STEP tree=before label=todod-rust-dev-total pair=1 secs=3.09 load_before=2.37 load_after=2.37 exit=0
+STEP tree=before label=todod-rust-dev-io pair=1 secs=2.25 load_before=2.37 load_after=2.26 exit=0
+STEP tree=before label=todod-rust-dev-std pair=1 secs=0.35 load_before=2.26 load_after=2.26 exit=0
+STEP tree=before label=todod-rust-dev-program pair=1 secs=0.25 load_before=2.26 load_after=2.26 exit=0
+STEP tree=before label=todod-llvm-dev-total pair=1 secs=0.34 load_before=2.26 load_after=2.26 exit=0
+LINES tree=before profile=dev file=main_todod lines=976 pair=1
+STEP tree=before label=todod-llvm-dev-clang-main_todod pair=1 secs=0.02 load_before=2.26 load_after=2.26 exit=0
+LINES tree=before profile=dev file=program lines=1715 pair=1
+STEP tree=before label=todod-llvm-dev-clang-program pair=1 secs=0.02 load_before=2.26 load_after=2.26 exit=0
+LINES tree=before profile=dev file=std lines=18120 pair=1
+STEP tree=before label=todod-llvm-dev-clang-std pair=1 secs=0.08 load_before=2.26 load_after=2.26 exit=0
+STEP tree=before label=todod-llvm-dev-link pair=1 secs=0.10 load_before=2.26 load_after=2.26 exit=0
+STEP tree=after label=todod-rust-dev-total pair=1 secs=3.10 load_before=2.26 load_after=2.26 exit=0
+STEP tree=after label=todod-rust-dev-io pair=1 secs=2.30 load_before=2.26 load_after=2.32 exit=0
+STEP tree=after label=todod-rust-dev-std pair=1 secs=0.35 load_before=2.32 load_after=2.32 exit=0
+STEP tree=after label=todod-rust-dev-program pair=1 secs=0.24 load_before=2.32 load_after=2.32 exit=0
+STEP tree=after label=todod-llvm-dev-total pair=1 secs=0.32 load_before=2.32 load_after=2.32 exit=0
+LINES tree=after profile=dev file=main_todod lines=976 pair=1
+STEP tree=after label=todod-llvm-dev-clang-main_todod pair=1 secs=0.02 load_before=2.32 load_after=2.32 exit=0
+LINES tree=after profile=dev file=program lines=1715 pair=1
+STEP tree=after label=todod-llvm-dev-clang-program pair=1 secs=0.02 load_before=2.32 load_after=2.32 exit=0
+LINES tree=after profile=dev file=std lines=12361 pair=1
+STEP tree=after label=todod-llvm-dev-clang-std pair=1 secs=0.06 load_before=2.32 load_after=2.32 exit=0
+STEP tree=after label=todod-llvm-dev-link pair=1 secs=0.10 load_before=2.32 load_after=2.32 exit=0
+STEP tree=before label=todod-rust-release-total pair=1 secs=4.06 load_before=2.32 load_after=2.21 exit=0
+STEP tree=before label=todod-rust-release-io pair=1 secs=2.72 load_before=2.21 load_after=2.44 exit=0
+STEP tree=before label=todod-rust-release-std pair=1 secs=0.64 load_before=2.44 load_after=2.44 exit=0
+STEP tree=before label=todod-rust-release-program pair=1 secs=0.50 load_before=2.44 load_after=2.44 exit=0
+STEP tree=before label=todod-llvm-release-total pair=1 secs=1.10 load_before=2.44 load_after=2.44 exit=0
+LINES tree=before profile=release file=main_todod lines=976 pair=1
+STEP tree=before label=todod-llvm-release-clang-main_todod pair=1 secs=0.06 load_before=2.44 load_after=2.44 exit=0
+LINES tree=before profile=release file=program lines=1715 pair=1
+STEP tree=before label=todod-llvm-release-clang-program pair=1 secs=0.08 load_before=2.44 load_after=2.44 exit=0
+LINES tree=before profile=release file=std lines=18120 pair=1
+STEP tree=before label=todod-llvm-release-clang-std pair=1 secs=0.78 load_before=2.44 load_after=2.44 exit=0
+STEP tree=before label=todod-llvm-release-link pair=1 secs=0.06 load_before=2.44 load_after=2.44 exit=0
+STEP tree=after label=todod-rust-release-total pair=1 secs=4.15 load_before=2.44 load_after=2.32 exit=0
+STEP tree=after label=todod-rust-release-io pair=1 secs=2.72 load_before=2.32 load_after=2.21 exit=0
+STEP tree=after label=todod-rust-release-std pair=1 secs=0.66 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=todod-rust-release-program pair=1 secs=0.50 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=todod-llvm-release-total pair=1 secs=0.80 load_before=2.21 load_after=2.21 exit=0
+LINES tree=after profile=release file=main_todod lines=976 pair=1
+STEP tree=after label=todod-llvm-release-clang-main_todod pair=1 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+LINES tree=after profile=release file=program lines=1715 pair=1
+STEP tree=after label=todod-llvm-release-clang-program pair=1 secs=0.08 load_before=2.21 load_after=2.21 exit=0
+LINES tree=after profile=release file=std lines=12361 pair=1
+STEP tree=after label=todod-llvm-release-clang-std pair=1 secs=0.48 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=todod-llvm-release-link pair=1 secs=0.05 load_before=2.21 load_after=2.21 exit=0
+STEP tree=before label=check-design pair=1-1 secs=0.05 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=check-design pair=1-1 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=plan-design pair=1-1 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=explain-design pair=1-1 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=before label=check-design pair=1-2 secs=0.05 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=check-design pair=1-2 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=plan-design pair=1-2 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=explain-design pair=1-2 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=before label=check-design pair=1-3 secs=0.05 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=check-design pair=1-3 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=plan-design pair=1-3 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=explain-design pair=1-3 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=before label=check-design pair=1-4 secs=0.05 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=check-design pair=1-4 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=plan-design pair=1-4 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=explain-design pair=1-4 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=before label=check-design pair=1-5 secs=0.05 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=check-design pair=1-5 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=plan-design pair=1-5 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+STEP tree=after label=explain-design pair=1-5 secs=0.06 load_before=2.21 load_after=2.21 exit=0
+EXIT=0

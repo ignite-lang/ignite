@@ -1,0 +1,178 @@
+START 2026-11-02T07:14:44+01:00 load=9.88 16.70 19.73 7/3156 2770357 free=72G
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.78s
+BUILD rc=0 2026-11-02T07:14:45+01:00
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-12b-r2/debug/deps/main-5e4ab9ed9c9b052f)
+
+running 65 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::syntax_copy_is_current ... ok
+test reachable::methods_fields_and_ranges_do_not_name_items ... FAILED
+test reachable::keeps_what_the_roots_name_and_what_that_names ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test reachable::follows_roles_into_their_module_and_its_imports ... ok
+test units::aliases_and_field_defaults ... ok
+test units::bindings_are_scoped ... ok
+test units::block_values ... ok
+test units::bool_or_and_tuple_patterns_are_native ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test units::e020_bad_properties ... ok
+test units::e020_components_without_types ... ok
+test units::e020_resource_kind ... ok
+test reachable::naming_everything_gives_the_whole_library ... FAILED
+test units::constants_are_zero_argument_functions ... ok
+test units::effectful_function_is_a_plain_fn ... ok
+test units::else_if_chain_keeps_statement_position ... ok
+test units::functions_and_variants_are_not_places ... ok
+test units::function_body_value_depends_on_return_type ... ok
+test units::function_types_and_values ... ok
+test units::generate_std_rejects_a_system ... ok
+test units::generate_std_nests_modules ... ok
+test units::header_and_declarations ... ok
+test units::imported_constant_and_local_shadowing ... ok
+test units::imports_become_use_lines ... ok
+test units::no_system_is_a_library_without_executables ... ok
+test units::int_literals_are_plain_digits ... ok
+test units::list_and_text_patterns_are_guarded_arms ... ok
+test units::own_protocol_is_known_without_symbols ... ok
+test units::ownership_non_value_positions_do_not_clone ... ok
+test units::package_name_defaults_to_program ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test units::protocol_lowering ... ok
+test units::ownership_value_positions_clone_places ... ok
+test units::std_version_follows_the_library_text ... ok
+test units::spawn_lowering ... ok
+test units::substrate_imports_need_no_std_crate ... ok
+test units::tuple_type ... ok
+test units::receiver_that_is_not_atomic_is_parenthesized ... ok
+test units::tuples_and_pattern_lets ... ok
+test units::rust_keywords_are_escaped ... ok
+test units::string_escaping ... ok
+test units::unit_value_and_type ... ok
+test units::qualified_variant_patterns ... ok
+test units::return_expressions ... ok
+test units::builtin_methods ... ok
+test units::write_project_creates_layout ... ok
+test golden::pure_functions ... ok
+test units::type_table ... ok
+test golden::record_and_enum_with_match ... ok
+test golden::target_bugs_of_slice_11b ... ok
+test units::typed_let ... ok
+test units::variant_expressions ... ok
+test units::variant_patterns ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test golden::system_with_server_and_client ... ok
+test golden::process_exit_diverges ... ok
+test golden::constants_qualified_patterns_and_io_error ... FAILED
+test golden::surface_syntax ... ok
+test golden::generics_stores_and_builtins ... ok
+test golden::variants_of_enums_not_imported ... FAILED
+test reachable::a_test_build_keeps_the_selected_tests_and_what_they_reach ... ok
+test golden::executable_components ... ok
+test golden::terminal ... ok
+
+failures:
+
+---- reachable::methods_fields_and_ranges_do_not_name_items stdout ----
+
+thread 'reachable::methods_fields_and_ranges_do_not_name_items' (2770682) panicked at crates/ignite-rustgen/tests/reachable.rs:69:5:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)] pub mod net { } pub mod protocol { pub mod line { } } pub mod text { }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- reachable::naming_everything_gives_the_whole_library stdout ----
+
+thread 'reachable::naming_everything_gives_the_whole_library' (2770683) panicked at crates/ignite-rustgen/tests/reachable.rs:91:5:
+assertion `left == right` failed
+  left: "#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]\n\npub mod net {\n\n    #[derive(Clone)]\n    pub struct Endpoint {\n        pub address: String,\n        pub port: i64,\n    }\n}\n\npub mod protocol {\n\n    pub mod line {\n        use crate::text::Handler;\n\n        pub struct Line;\n\n        impl Line {\n            pub fn serve(mut stream: ignite_io::TcpStream, mut handler: Handler) -> Result<(), ignite_io::IoError> {\n                let apply = handler.apply.clone();\n                loop {\n                    let input = (stream.read(1024))?;\n                    match input.clone() {\n                        ignite_io::Input::Eof => {\n                            return Ok(());\n                        },\n                        ignite_io::Input::Data(bytes) => {\n                            let reply = apply(String::from_utf8_lossy(&bytes).into_owned());\n                            (stream.write_all(reply.clone().into_bytes()))?\n                        },\n                    };\n                }\n            }\n\n            pub fn connect(mut stream: ignite_io::TcpStream) -> Result<(), ignite_io::IoError> {\n                { let __spawn_0 = stream.clone(); ignite_io::spawn(move || { if let Err(error) = pump(&__spawn_0) { ignite_io::log(&format!(\"task ended with error: {}\", error)); } }); };\n                loop {\n                    let input = (stream.read(1024))?;\n                    match input.clone() {\n                        ignite_io::Input::Eof => {\n                            return Ok(());\n                        },\n                        ignite_io::Input::Data(bytes) => {\n                            (ignite_io::Stdout::write_all(bytes.clone()))?\n                        },\n                    };\n                }\n            }\n        }\n\n        pub fn pump(stream: &ignite_io::TcpStream) -> Result<(), ignite_io::IoError> {\n            loop {\n                let input = (ignite_io::Stdin::read(1024))?;\n                match input.clone() {\n                    ignite_io::Input::Eof => {\n                        (stream.close())?;\n                        return Ok(());\n                    },\n                    ignite_io::Input::Data(bytes) => {\n                        (stream.write_all(bytes.clone()))?\n                    },\n                };\n            }\n        }\n    }\n}\n\npub mod text {\n\n    #[derive(Clone)]\n    pub struct Handler {\n        pub name: String,\n        pub apply: std::sync::Arc<dyn Fn(String) -> String + Send + Sync>,\n    }\n\n    #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]\n    pub enum Mode {\n        Loud,\n        Quiet,\n    }\n\n    #[allow(non_snake_case)]\n    pub fn SUFFIX() -> String {\n        String::from(\"!\")\n    }\n}\n"
+ right: "#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]\n\npub mod net {\n\n    #[derive(Clone)]\n    pub struct Endpoint {\n        pub address: String,\n        pub port: i64,\n    }\n}\n\npub mod protocol {\n\n    pub mod line {\n        use crate::text::Handler;\n\n        pub struct Line;\n\n        impl Line {\n            pub fn serve(mut stream: ignite_io::TcpStream, mut handler: Handler) -> Result<(), ignite_io::IoError> {\n                let apply = handler.apply.clone();\n                loop {\n                    let input = (stream.read(1024))?;\n                    match input.clone() {\n                        ignite_io::Input::Eof => {\n                            return Ok(());\n                        },\n                        ignite_io::Input::Data(bytes) => {\n                            let reply = apply(String::from_utf8_lossy(&bytes).into_owned());\n                            (stream.write_all(reply.clone().into_bytes()))?\n                        },\n                    };\n                }\n            }\n\n            pub fn connect(mut stream: ignite_io::TcpStream) -> Result<(), ignite_io::IoError> {\n                { let __spawn_0 = stream.clone(); ignite_io::spawn(move || { if let Err(error) = pump(&__spawn_0) { ignite_io::log(&format!(\"task ended with error: {}\", error)); } }); };\n                loop {\n                    let input = (stream.read(1024))?;\n                    match input.clone() {\n                        ignite_io::Input::Eof => {\n                            return Ok(());\n                        },\n                        ignite_io::Input::Data(bytes) => {\n                            (ignite_io::Stdout::write_all(bytes.clone()))?\n                        },\n                    };\n                }\n            }\n        }\n\n        pub fn pump(stream: &ignite_io::TcpStream) -> Result<(), ignite_io::IoError> {\n            loop {\n                let input = (ignite_io::Stdin::read(1024))?;\n                match input.clone() {\n                    ignite_io::Input::Eof => {\n                        (stream.close())?;\n                        return Ok(());\n                    },\n                    ignite_io::Input::Data(bytes) => {\n                        (stream.write_all(bytes.clone()))?\n                    },\n                };\n            }\n        }\n    }\n}\n\npub mod text {\n\n    #[derive(Clone)]\n    pub struct Handler {\n        pub name: String,\n        pub apply: std::sync::Arc<dyn Fn(String) -> String + Send + Sync>,\n    }\n\n    #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]\n    pub enum Mode {\n        Loud,\n        Quiet,\n    }\n\n    #[allow(non_snake_case)]\n    pub fn SUFFIX() -> String {\n        String::from(\"!\")\n    }\n\n    pub fn shout(line: &String) -> String {\n        return format!(\"{}{}\", line, SUFFIX());\n    }\n}\n"
+
+---- golden::constants_qualified_patterns_and_io_error stdout ----
+
+thread 'golden::constants_qualified_patterns_and_io_error' (2770663) panicked at crates/ignite-rustgen/tests/golden.rs:97:5:
+/home/timo/projects/telos/crates/ignite-rustgen/tests/golden/consts.std.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+
+pub mod net {
+}
+
+pub mod protocol {
+
+    pub mod line {
+    }
+}
+
+pub mod text {
+
+    #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum Mode {
+        Loud,
+        Quiet,
+    }
+
+    #[allow(non_snake_case)]
+    pub fn SUFFIX() -> String {
+        String::from("!")
+    }
+
+    pub fn shout(line: &String) -> String {
+        return format!("{}{}", line, SUFFIX());
+    }
+}
+
+
+---- golden::variants_of_enums_not_imported stdout ----
+
+thread 'golden::variants_of_enums_not_imported' (2770678) panicked at crates/ignite-rustgen/tests/golden.rs:97:5:
+/home/timo/projects/telos/crates/ignite-rustgen/tests/golden/variants.std.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+
+pub mod apply {
+    use crate::modes::{level, pick};
+
+    pub fn describe(loud: &bool) -> String {
+        let mut loud = loud.clone();
+        match pick(&loud) {
+            crate::modes::Mode::Loud => String::from("loud"),
+            crate::modes::Mode::Quiet(_) => String::from("quiet"),
+        }
+    }
+}
+
+pub mod modes {
+
+    #[derive(Clone)]
+    pub enum Mode {
+        Loud,
+        Quiet(i64),
+    }
+
+    pub fn level(mode: &Mode) -> i64 {
+        match mode.clone() {
+            Mode::Loud => 10,
+            Mode::Quiet(n) => n,
+        }
+    }
+
+    pub fn pick(loud: &bool) -> Mode {
+        let mut loud = loud.clone();
+        if loud {
+            Mode::Loud
+        } else {
+            Mode::Quiet(1)
+        }
+    }
+}
+
+
+
+failures:
+    golden::constants_qualified_patterns_and_io_error
+    golden::variants_of_enums_not_imported
+    reachable::methods_fields_and_ranges_do_not_name_items
+    reachable::naming_everything_gives_the_whole_library
+
+test result: FAILED. 61 passed; 4 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.17s
+
+error: test failed, to rerun pass `-p ignite-rustgen --test main`
+EXIT=101 2026-11-02T07:14:46+01:00

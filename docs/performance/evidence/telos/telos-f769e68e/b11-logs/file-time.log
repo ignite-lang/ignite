@@ -1,0 +1,49 @@
+ 03:51:29 up 2 days, 23:01,  1 user,  load average: 13.80, 8.95, 5.76
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.73s
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+test ignite_test::compile_error_exits_2 ... ok
+test ignite_test::std_module_as_the_file ... ok
+test ignite_test::files_share_one_executable ... ok
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 154 filtered out; finished in 23.29s
+STEP file-ignite_test-1 25.07 s exit=0
+ 03:51:54 up 2 days, 23:01,  1 user,  load average: 21.15, 11.10, 6.56
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::files_share_one_executable ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+test ignite_test::compile_error_exits_2 ... ok
+test ignite_test::std_module_as_the_file ... ok
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 154 filtered out; finished in 11.56s
+STEP file-ignite_test-2 11.64 s exit=0
+ 03:52:05 up 2 days, 23:01,  1 user,  load average: 22.04, 11.62, 6.77
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+test ignite_test::compile_error_exits_2 ... ok
+test ignite_test::std_module_as_the_file ... ok
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... ok
+test ignite_test::files_share_one_executable ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 154 filtered out; finished in 8.39s
+STEP file-ignite_test-3 8.49 s exit=0
+EXIT=0

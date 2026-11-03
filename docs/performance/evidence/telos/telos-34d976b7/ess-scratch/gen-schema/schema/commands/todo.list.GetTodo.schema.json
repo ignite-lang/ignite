@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GetTodo input",
+  "x-ess-name": "todo.list.GetTodo",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/todo.list.TodoId"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "todo",
+    "specification_version": "v1",
+    "source_digest": "4fab963621d47043d38543f5141de315c8b798f376db1be3379011617c426950",
+    "contract_digest": "slice-sha256/2:697bcbdffe94dfbe5abe1ec0ca504b5a744777ea5f094f6ecb07229e22b56867",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "todo.list.TodoId": {
+      "title": "TodoId",
+      "x-ess-name": "todo.list.TodoId",
+      "x-ess-kind": "newtype",
+      "type": "integer"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+error: unexpected argument '--verbose' found
+
+  tip: to pass '--verbose' as a value, use '-- --verbose'
+
+Usage: telos build --target <TARGET> --runtime <RUNTIME> --out <OUT> --release <FILE>
+
+For more information, try '--help'.

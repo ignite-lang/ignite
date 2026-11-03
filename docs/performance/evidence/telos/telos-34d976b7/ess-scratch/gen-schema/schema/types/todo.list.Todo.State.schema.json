@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/todo.list.Todo.State",
+  "x-ess-provenance": {
+    "system": "todo",
+    "specification_version": "v1",
+    "source_digest": "4fab963621d47043d38543f5141de315c8b798f376db1be3379011617c426950",
+    "contract_digest": "slice-sha256/2:e7b0691c84d52e7621970676fbcf407493a6ae9b3bdd9f9b3dec5077030057bb",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "todo.list.Todo.State": {
+      "title": "State",
+      "x-ess-name": "todo.list.Todo.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Kept"
+      ]
+    }
+  }
+}

@@ -1,0 +1,20 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p2/debug/deps/main-6eaf5699a056c807)
+
+running 8 tests
+test eval::e118_closures_are_unencodable ... ok
+most expensive property: Terminal.client.commands (14 units of 39 properties)
+test eval::e117_failures_carry_the_target_report ... ok
+test eval::design_file_properties_evaluate_within_default_fuel ... ok
+test eval::fixture_covers_every_family ... ok
+note: building the generated Rust project in /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p2/tmp/eval-equivalence; compiler messages refer to generated code
+   Compiling eval_equivalence v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p2/tmp/eval-equivalence)
+test eval::e115_limits ... ok
+test eval::evaluator_agrees_with_the_llvm_target ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.43s
+test eval::evaluator_agrees_with_the_rust_target ... ok
+test plan::fixtures_match_expected ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 157 filtered out; finished in 0.64s
+
+EXIT=0

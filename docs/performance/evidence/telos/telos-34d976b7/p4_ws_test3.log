@@ -1,0 +1,2243 @@
+START 00:55:46
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+   Compiling telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+   Compiling telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.30s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos-2748d864c8d1f1a4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos-a1c8e2c934e88fdb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-9d267f49cdec8647)
+
+running 146 tests
+test cli::default_std_is_the_repository_std ... ok
+test cli::default_substrate_is_the_sibling_crate ... ok
+test cli::no_arguments_is_exit_2 ... ok
+test cli::std_package_mismatch_is_e031_in_the_std_file ... ok
+test cli::std_file_without_package_is_e031 ... ok
+test cli::missing_std_root_is_exit_3 ... ok
+test cli::std_diagnostic_is_rendered_with_its_file ... ok
+test cli::std_import_cycle_is_e032 ... ok
+test cli::std_modules_are_checked_in_import_order ... ok
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test cli::emit_with_std_fixture ... ok
+test cli::missing_file_is_exit_3 ... ok
+test cli::check_unknown_name_is_e003 ... ok
+test cli::check_acceptance_program_is_silent ... ok
+test cli::check_reports_unsupported_component_kind ... ok
+test cli::check_design_file_is_silent ... ok
+test llvm::clang_failure_is_exit_2 ... ok
+test cli::emit_uses_given_substrate ... ok
+test cli::emit_prints_the_program_and_the_std_crate ... ok
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test generics::llvm_generics_and_store_serve ... ok
+test generics::llvm_store_ids_and_updates_are_atomic_across_connections ... ok
+test failover::a_failing_session_does_not_end_the_service ... ok
+test siblings::llvm_build_links_a_module_sibling ... ok
+test llvm_memory::pushing_in_a_loop_is_linear ... ok
+test llvm_memory::loop_regions_keep_carried_values ... ok
+test slice9::long_chains_100k_run_on_llvm ... ignored
+test llvm::llvm_build_runs_neither_cargo_nor_rustc ... ok
+test llvm::client_exits_3_when_nothing_listens ... ok
+test llvm::index_out_of_range_panics_with_101 ... ok
+test llvm::probe_runs_every_check ... ok
+test siblings::llvm_test_runs_a_module_sibling ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+    Blocking waiting for file lock on package cache
+test llvm_memory::terminald_memory_is_flat_over_a_long_session ... ok
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test llvm_memory::tn_memory_is_flat_over_a_long_session ... ok
+test syntax::llvm_target_runs_every_feature ... ok
+test failover::ten_thousand_failing_sessions_leak_nothing ... FAILED
+test llvm_build::failed_compile_is_retried ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling telos-std v0.0.0-01d4b329d9c65dcb (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/tmp/syntax-rust/std)
+test cli::client_exit_statuses ... ok
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/tmp/syntax-rust)
+test cli::build_std_and_program_then_run_both_executables ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.39s
+test syntax::rust_target_runs_every_feature ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+test telos_test::both_targets_print_the_same_report ... ok
+test slice10_llvm::failures_fail_on_both_targets_with_the_same_report ... ok
+   Compiling telos-std v0.0.0-01d4b329d9c65dcb (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/tmp/terminal/std)
+test slice10_llvm::features_pass_on_both_targets_with_the_same_report ... ok
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/tmp/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.85s
+test slice9::long_chains_run_on_llvm ... ok
+test terminal::llvm::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test slice9::long_chains_lower_quickly ... ok
+test slice9::rust_target_features_pass_on_llvm ... ok
+test terminal::llvm::are_you_there_is_answered ... ok
+test terminal::llvm::do_echo_is_refused_with_wont ... ok
+test terminal::llvm::accept_survives_running_out_of_descriptors ... ok
+test terminal::llvm::iac_iac_is_a_literal_byte ... ok
+test terminal::llvm::interrupt_process_closes ... ok
+test terminal::llvm::line_of_4096_bytes_is_accepted ... ok
+test terminal::llvm::overlong_line_is_refused_and_closed ... ok
+test terminal::llvm::subnegotiation_is_skipped ... ok
+test terminal::llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::llvm::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::llvm::cr_nul_ends_a_line ... ok
+test terminal::llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::llvm::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::llvm::tn_exits_2_for_a_malformed_port ... ok
+test terminal::llvm::tn_exits_3_when_nothing_listens ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::llvm::fragmented_input_is_reassembled ... ok
+test terminal::llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::llvm::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::llvm::will_naws_is_refused_with_dont ... ok
+test terminal::llvm::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::llvm::tn_refuses_options_and_strips_commands ... ok
+test terminal::no_target_links_tokio ... ok
+test terminal::rust::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::rust::are_you_there_is_answered ... ok
+test terminal::rust::accept_survives_running_out_of_descriptors ... ok
+test terminal::rust::do_echo_is_refused_with_wont ... ok
+test terminal::rust::cr_nul_ends_a_line ... ok
+test terminal::rust::iac_iac_is_a_literal_byte ... ok
+test terminal::rust::interrupt_process_closes ... ok
+test terminal::rust::line_of_4096_bytes_is_accepted ... ok
+test terminal::rust::overlong_line_is_refused_and_closed ... ok
+test terminal::rust::subnegotiation_is_skipped ... ok
+test terminal::rust::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::rust::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::rust::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::rust::tn_exits_2_for_a_malformed_port ... ok
+test terminal::rust::tn_exits_3_when_nothing_listens ... ok
+test terminal::rust::fragmented_input_is_reassembled ... ok
+test terminal::llvm::transcript_on_raw_socket ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::rust::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::rust::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::rust::tn_on_a_terminal_echoes_and_sends_a_line ...    Compilingok telos-std v0.0.0-f24725f9caea67b6 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/tmp/short-idle-Rust/out/std)
+
+test terminal::rust::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::rust::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::rust::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::rust::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::rust::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::rust::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::rust::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::rust::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::rust::will_naws_is_refused_with_dont ... ok
+test terminal::rust::tn_refuses_options_and_strips_commands ... ok
+test telos_test::timeout_kills_a_test ... ok
+test terminal::rust::transcript_on_raw_socket ... ok
+test terminal::idle_terminald_runs_one_thread ... ok
+test todo::todo::llvm::content_length ... ok
+test todo::todo::llvm::crud_flow ... ok
+test todo::todo::llvm::error_statuses ... ok
+test todo::todo::llvm::header_framing ... ok
+test todo::todo::llvm::keep_alive ... ok
+test todo::todo::llvm::limits ... ok
+test todo::todo::llvm::rejection_is_read ... ok
+test todo::todo::llvm::concurrent_posts ... ok
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/tmp/short-idle-Rust/out)
+test todo::todo::llvm::concurrent_patches ... ok
+   Compiling telos-std v0.0.0-01d4b329d9c65dcb (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/tmp/todo/std)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.63s
+test terminal::rust::a_silent_session_is_closed_after_the_idle_timeout ... ok
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/tmp/todo)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.61s
+test todo::todo::rust::crud_flow ... ok
+test todo::todo::rust::header_framing ... ok
+test todo::todo::rust::error_statuses ... ok
+test todo::todo::rust::keep_alive ... ok
+test todo::todo::rust::limits ... ok
+test todo::todo::rust::content_length ... ok
+test todo::todo::rust::rejection_is_read ... ok
+test todo::todo::rust::concurrent_posts ... ok
+test todo::todo::rust::concurrent_patches ... ok
+test telos_test::each_unnamed_file_runs_its_own_tests ... ok
+test telos_test::assert_and_try_reports ... ok
+test telos_test::compile_error_exits_2 ... ok
+test telos_test::files_share_one_executable ... ok
+test telos_test::captured_output_only_for_failures ... ok
+test telos_test::std_module_as_the_file ... ok
+test telos_test::counts_results_and_failures ... ok
+test telos_test::overflow_fails_the_same_everywhere ... ok
+test slice9::slice9_values_across_regions ... ok
+test telos_test::filter_exact_and_list ... ok
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test slice9::var_aliases_leave_the_source_unchanged ... ok
+test slice9::audit_probes_pass ... ok
+test slice9::audit_io_probes_pass ... ok
+
+failures:
+
+---- failover::ten_thousand_failing_sessions_leak_nothing stdout ----
+
+thread 'failover::ten_thousand_failing_sessions_leak_nothing' (917512) panicked at crates/telos/tests/failover.rs:183:5:
+assertion `left == right` failed: handles leaked
+  left: 4
+ right: 5
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    failover::ten_thousand_failing_sessions_leak_nothing
+
+test result: FAILED. 143 passed; 1 failed; 2 ignored; 0 measured; 0 filtered out; finished in 46.21s
+
+error: test failed, to rerun pass `-p telos --test main`
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_check-fe8934d655f8a278)
+
+running 10 tests
+test tests::duplicate_top_level_names ... ok
+test tests::inner_let_shadows_outer_var_for_assignment ... ok
+test tests::let_value_is_checked_before_binding ... ok
+test tests::ambiguous_variants_are_left_to_the_type_checker ... ok
+test tests::for_variable_is_scoped_to_its_body ... ok
+test tests::assignment_needs_a_var ... ok
+test tests::let_shadows_and_inner_block_does_not_leak ... ok
+test tests::path_calls_resolve_variants_and_statics ... ok
+test tests::arm_bindings_are_scoped_to_their_arm ... ok
+test tests::effect_rules ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-ecb9e8dc90602e40)
+
+running 10 tests
+test fixtures::every_checker_code_has_a_fixture ... ok
+test limits::mutual_recursion_reaches_a_fixed_point ... ok
+test modules::check_is_check_module_without_modules ... ok
+test modules::constants_are_exported_imported_and_listed ... ok
+test modules::only_named_imports_enter_scope ... ok
+test modules::imported_definitions_enter_symbols ... ok
+test fixtures::fixtures_match_expected ... ok
+test terminal::terminal_checks_clean_against_the_standard_library ... ok
+test terminal::standard_library_checks_in_import_order ... ok
+test limits::effect_inference_is_linear_in_either_order ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_io-755f4e5010ba1bc8)
+
+running 36 tests
+test checked::tests::arithmetic_in_range ... ok
+test net::tests::descriptor_and_memory_shortages_are_transient ... ok
+test net::tests::pending_network_errors_of_accept_are_transient ... ok
+test args::tests::missing_value_is_none ... ok
+test args::tests::separate_value ... ok
+test args::tests::out_of_range_is_none ... ok
+test args::tests::absent_is_none ... ok
+test report::tests::reports ... ok
+test quantity::tests::byte_sizes ... ok
+test args::tests::joined_value ... ok
+test args::tests::checked_port ... ok
+test quantity::tests::durations ... ok
+test quantity::tests::ratios ... ok
+test store::tests::ids_start_at_one_and_count_up ... ok
+test report::tests::a_failure_is_caught_with_its_report ... ok
+test report::tests::a_rust_panic_is_reported_with_its_location ... ok
+test idle::tests::zero_removes_the_timeout ... ok
+test test::tests::verdict_words ... ok
+test idle::tests::data_before_the_timeout_is_read ... ok
+test checked::tests::index_and_slice ... ok
+test test::tests::selection ... okerror: plain
+
+error: no peer
+error: --port abc
+error: + failed at f.telos:1:2: 9223372036854775807 + 1
+test checked::tests::overflow_and_zero_division_report_the_operands ... ok
+error: panic at crates/telos-io/src/lib.rs:414:27: boom
+test tests::io_error_exit_codes ... ok
+test test::tests::arguments ... ok
+test tests::io_error_display_is_message ... ok
+test store::tests::get_returns_a_copy ... ok
+test store::tests::update_missing_id_does_not_call_f ... ok
+test store::tests::a_panic_in_update_keeps_the_old_value_and_the_store ... ok
+test tests::run_returns_the_exit_code_of_the_error ... ok
+test tests::run_returns_101_on_a_failure_or_panic ... ok
+test store::tests::put_get_remove_values ... ok
+test tests::io_error_from_std ... ok
+test tests::port_outside_range_is_error ... ok
+test store::tests::concurrent_ids_and_updates_lose_nothing ... ok
+task ended with error: index failed at t.telos:1:1: index 3 out of range for length 0
+test task::tests::workers_are_reused_and_run_every_task_once ... ok
+test idle::tests::an_idle_read_ends_with_eof ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-5a9fc731511ffbe4)
+
+running 36 tests
+test stdio::child_echo ... ok
+test stdio::child_exit_with_a_stalled_writer ... ok
+error: failed
+test stdio::child_pending_stdin_read ... ok
+test stdio::child_main_fails ... ok
+test stdio::child_failing_tasks ... ok
+test tcp::bind_port_out_of_range_fails ... ok
+test tcp::bind_twice_on_one_port_fails ... ok
+test tcp::clone_shares_the_socket ... ok
+test tcp::bind_port_zero_picks_a_port ... ok
+test tcp::a_write_after_close_is_the_writers_error ... ok
+test tcp::dropping_the_last_handle_sends_and_closes_at_once ... ok
+test tcp::a_thread_sends_what_it_wrote_when_it_ends ... ok
+test tcp::run_returns_one_on_err ... ok
+test tcp::run_returns_zero_on_ok ... ok
+test tcp::read_respects_maximum ... ok
+test tcp::spawn_inside_run_executes ... ok
+test tcp::round_trip_and_half_close ... ok
+test terminal::child_not_a_terminal ... ok
+test terminal::child_raw_round_trip ... ok
+test terminal::child_raw_then_error ... ok
+test terminal::child_raw_then_panic ... ok
+test terminal::child_raw_then_process_exit ... ok
+test stdio::a_failure_in_main_exits_101_with_its_report ... ok
+test stdio::stdin_reads_up_to_maximum_and_ends_with_eof ... ok
+test terminal::process_exit_restores_the_terminal_and_exits_with_the_code ... ok
+test terminal::run_restores_the_terminal_when_main_fails ... ok
+test terminal::set_raw_is_a_no_op_on_a_pipe ... ok
+test terminal::run_restores_the_terminal_when_main_panics ... ok
+test terminal::set_raw_switches_and_run_restores_on_return ... ok
+test tcp::close_proceeds_while_a_read_is_pending ... ok
+test tcp::spawn_runs_tasks_in_parallel ... ok
+test tcp::writes_are_sent_together_at_the_next_wait ... ok
+test tcp::write_proceeds_while_a_read_is_pending ... ok
+test stdio::run_returns_while_a_stdin_read_is_pending ... ok
+test stdio::a_failing_task_is_logged_and_the_process_continues ... ok
+test stdio::exit_returns_while_a_stdout_write_is_stalled ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_llvm-439193a6a1588923)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-a73bc2d46bfd8f58)
+
+running 14 tests
+test layout::records_have_c_layout ... ok
+test layout::copy_glue_only_where_buffers_are ... ok
+test layout::runtime_types_match_the_layouts ... ok
+test layout::enums_are_tag_and_payload ... ok
+test layout::scalars_and_builtins ... ok
+test layout::type_names_in_symbols ... ok
+test golden::read_only_parameters_are_borrowed ... ok
+test golden::loops_release_their_region ... ok
+test golden::modules_name_target_and_source ... ok
+test golden::symbols_are_module_qualified ... ok
+test tests_build::normal_build_drops_test_only_declarations ... ok
+test golden::small_program ... ok
+test tests_build::test_build_lowers_tests_and_a_runner_main ... ok
+test golden::syntax_program ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_load-948cc5d69bdf04b6)
+
+running 3 tests
+test matrix::tests::median_of_odd_and_even_counts ... ok
+test matrix::tests::cells_parse ... ok
+test matrix::tests::reads_fields_of_a_result_line ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_rt-79762514af730b3d)
+
+running 19 tests
+test arena::tests::generated_code_and_runtime_share_the_bump_state ... ok
+test arena::tests::release_is_due_above_the_larger_of_64_kib_and_four_times_kept ... ok
+test arena::tests::arenas_are_per_thread ... ok
+test arena::tests::scratch_survives_a_release_of_the_task_arena ... ok
+test arena::tests::task_end_frees_the_arena ... ok
+test arena::tests::zero_size_is_aligned_and_non_null ... ok
+test net::tests::a_released_slot_is_reused_under_a_new_handle ... ok
+test net::tests::handles_encode_slot_and_generation ... ok
+test net::tests::segments_tile_the_indices ... ok
+test process::tests::args_port ... ok
+test process::tests::decode_args_skips_nulls ... ok
+test process::tests::io_error_new_has_exit_code_one ... ok
+test arena::tests::large_and_overaligned_requests_get_own_blocks ... ok
+test store::tests::values_are_copied_in_and_out_and_freed ... ok
+test text::tests::debug_escapes_as_section_13_6 ... ok
+test arena::tests::release_frees_what_came_after_the_mark ... ok
+test arena::tests::spare_chunks_are_bounded ... ok
+test arena::tests::allocations_are_aligned_and_disjoint ... ok
+test arena::tests::a_loop_of_release_does_not_grow ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-3560463862c13ef8)
+
+running 18 tests
+test abi::layouts_match_section_three ... ok
+test abi::os_errors_have_exit_code_one_and_the_os_message ... ok
+test abi::release_closes_the_socket_and_invalidates_the_handle ... ok
+test abi::text_helpers ... ok
+test abi::spawn_returns_when_the_child_ends_without_ready ... ok
+test terminal::child ... ok
+test terminal::non_terminal_stdin_is_a_no_op ... ok
+test terminal::exit_restores_the_terminal ... ok
+test terminal::fail_restores_the_terminal ... ok
+test terminal::normal_exit_restores_the_terminal_at_exit ... ok
+test terminal::stdin_reads_until_eof ... ok
+test terminal::rust_panic_restores_the_terminal ... ok
+test terminal::panic_restores_the_terminal ... ok
+test abi::tcp_round_trip_with_concurrent_read_and_write ... ok
+test abi::spawn_blocks_until_the_child_is_ready ... ok
+test c_abi::smoke_program_runs ... ok
+test c_abi::fail_panic_and_exit_statuses ... ok
+test c_abi::port_argument ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_rustgen-5d2638f7ab6de329)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-7833c6a20e9dcc9e)
+
+running 77 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test golden::pure_functions ... FAILED
+test golden::process_exit_diverges ... FAILED
+test golden::constants_qualified_patterns_and_io_error ... FAILED
+test golden::record_and_enum_with_match ... FAILED
+test golden::protocol_import_spawn_and_function_values ... FAILED
+test golden::system_with_server_and_client ... FAILED
+test golden::generics_stores_and_builtins ... FAILED
+test slice9::long_chains_build_and_run_100k ... ignored
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test golden::variants_of_enums_not_imported ... FAILED
+    Blocking waiting for file lock on package cache
+test golden::surface_syntax ... FAILED
+test units::aliases_and_field_defaults ... ok
+    Blocking waiting for file lock on package cache
+test units::bindings_are_scoped ... ok
+    Blocking waiting for file lock on package cache
+test units::block_values ... ok
+test units::bool_or_and_tuple_patterns_are_native ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking    Blocking waiting for file lock on package cache
+ waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test units::builtin_methods ... ok
+test units::constants_are_zero_argument_functions ... ok
+test units::e020_bad_properties ... ok
+    Blocking waiting for file lock on package cache
+test units::e020_components_without_types ... ok
+test units::e020_resource_kind ... ok
+    Blocking waiting for file lock on package cache
+test units::effectful_function_is_a_plain_fn ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+test units::else_if_chain_keeps_statement_position ... ok
+    Blocking waiting for file lock on package cache
+test units::function_body_value_depends_on_return_type ... ok
+    Blocking waiting for file lock on package cache
+test units::function_types_and_values ... ok
+test units::functions_and_variants_are_not_places ... ok
+   Compiling telos-std v0.0.0-a937e4b76d0d0aab (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-test/consts/std)
+test units::generate_std_nests_modules ... ok
+test units::generate_std_rejects_a_system ... ok
+    Blocking waiting for file lock on package cache
+test units::header_and_declarations ... ok
+test units::imported_constant_and_local_shadowing ... ok
+test units::imports_become_use_lines ... ok
+test units::int_literals_are_plain_digits ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test units::list_and_text_patterns_are_guarded_arms ... ok
+test units::no_system_is_a_library_without_executables ... ok
+test units::own_protocol_is_known_without_symbols ... ok
+test units::ownership_non_value_positions_do_not_clone ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+test units::ownership_value_positions_clone_places ... ok
+    Blocking waiting for file lock on build directory
+test units::package_name_defaults_to_program ... ok
+    Blocking waiting for file lock on build directory
+test units::protocol_lowering ... ok
+test units::qualified_variant_patterns ... ok
+test units::receiver_that_is_not_atomic_is_parenthesized ... ok
+test units::return_expressions ... ok
+test units::rust_keywords_are_escaped ... ok
+test units::spawn_lowering ... ok
+    Blocking waiting for file lock on build directory
+test units::std_version_follows_the_library_text ... ok
+test units::string_escaping ... ok
+test units::substrate_imports_need_no_std_crate ... ok
+test units::tuple_type ... ok
+test units::tuples_and_pattern_lets ... ok
+test units::type_table ... ok
+   Compiling telos-std v0.0.0-7f69cbbec0ba4913 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice9/assign/std)
+test units::typed_let ... ok
+test units::unit_value_and_type ... ok
+test units::variant_expressions ... ok
+test units::variant_patterns ... ok
+test units::write_project_creates_layout ... ok
+test slice10::generate_tests_lays_a_program_out_by_its_module_path ... ok
+   Compiling telos-std v0.0.0-75d1f568ceb59eff (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice10/crash/std)
+   Compiling telos-std v0.0.0-75d1f568ceb59eff (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice10/components/std)
+test golden::executable_components ... FAILED
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test golden::terminal ... FAILED
+   Compiling telos-std v0.0.0-20be75047ed80062 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice10/failures/std)
+   Compiling telos-std v0.0.0-20be75047ed80062 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice9/features/std)
+    Blocking waiting for file lock on package cache
+   Compiling telos-std v0.0.0-20be75047ed80062 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice9/failures/std)
+    Blocking waiting for file lock on build directory
+   Compiling telos-std v0.0.0-20be75047ed80062 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice10/features/std)
+   Compiling program v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice9/assign)
+   Compiling telos-std v0.0.0-20be75047ed80062 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice9/chains/std)
+   Compiling consts v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-test/consts)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.45s
+   Compiling exits v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-test/exits)
+test compiles::constants_across_modules_build ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.50s
+test slice9::assignments_box_by_the_fields_owner ... ok
+   Compiling crash v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice10/crash)
+   Compiling program v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice9/failures)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.70s
+   Compiling telos-std v0.0.0-78ad78bda2147276 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-test/variants/std)
+   Compiling program v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice9/features)
+test compiles::process_exit_without_try_builds_and_exits ... ok
+   Compiling failures v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice10/failures)
+   Compiling components v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice10/components)
+   Compiling features v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice10/features)
+   Compiling variants v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-test/variants)
+   Compiling program v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-slice9/chains)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.90s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.88s
+test slice9::failed_asserts_show_debug_text ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.02s
+   Compiling counters v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-test/generics)
+test compiles::variants_of_enums_not_imported_build ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.95s
+test slice10::crashd_survives_failing_handlers ... ok
+test slice10::failures_report_the_operation_and_position ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.01s
+test slice10::executable_component_main_runs_and_maps_the_exit_code ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.10s
+test slice9::slice9_features_pass ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.13s
+test slice10::slice10_features_pass ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.33s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.34s
+   Compiling modules v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-test/modules)
+test compiles::generics_and_store_serve ... ok
+test compiles::store_ids_and_updates_are_atomic_across_connections ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.54s
+   Compiling telos-std v0.0.0-75d1f568ceb59eff (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-test/terminal/std)
+test compiles::std_crate_and_program_build ... ok
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-rustgen-test/terminal)
+test slice9::long_chains_lower_without_overflow ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.00s
+test compiles::terminal_project_builds ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.82s
+test slice9::long_chains_build_and_run ... ok
+
+failures:
+
+---- golden::pure_functions stdout ----
+
+thread 'golden::pure_functions' (938795) panicked at crates/telos-rustgen/tests/golden.rs:96:5:
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/pure.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+
+pub fn add(a: &i64, b: &i64) -> i64 {
+    let mut a = a.clone();
+    let mut b = b.clone();
+    telos_io::checked::add(a, b, "crates/telos-rustgen/tests/golden/pure.telos", 4, 3)
+}
+
+pub fn clamp(x: &i64, low: &i64, high: &i64) -> i64 {
+    let mut x = x.clone();
+    let mut low = low.clone();
+    let mut high = high.clone();
+    if x < low {
+        return low.clone();
+    };
+    if x > high {
+        return high.clone();
+    };
+    x
+}
+
+pub fn sum(values: &Vec<i64>) -> i64 {
+    let mut total = 0;
+    for v in (values.clone()) {
+        total = telos_io::checked::add(total, v, "crates/telos-rustgen/tests/golden/pure.telos", 16, 13);
+    }
+    return total.clone();
+}
+
+pub fn greet(name: &String) -> String {
+    format!("{}{}", String::from("hello, "), name.clone())
+}
+
+pub fn sign(x: &i64) -> i64 {
+    let mut x = x.clone();
+    if x < 0 {
+        telos_io::checked::neg(1, "crates/telos-rustgen/tests/golden/pure.telos", 26, 14)
+    } else if x == 0 {
+        0
+    } else {
+        1
+    }
+}
+
+pub fn countdown(n: &i64) -> Vec<i64> {
+    let mut n = n.clone();
+    let mut out = Vec::new();
+    let mut i = n.clone();
+    while i > 0 {
+        out.push(i.clone());
+        i = telos_io::checked::sub(i, 1, "crates/telos-rustgen/tests/golden/pure.telos", 34, 9);
+    }
+    return out.clone();
+}
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- golden::process_exit_diverges stdout ----
+
+thread 'golden::process_exit_diverges' (938793) panicked at crates/telos-rustgen/tests/golden.rs:96:5:
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/exits.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use telos_std::net::Endpoint;
+
+pub struct Exiting;
+
+impl Exiting {
+    pub fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+        let input = (stream.read(16))?;
+        match input.clone() {
+            telos_io::Input::Eof => telos_io::exit((5) as i32),
+            telos_io::Input::Data(_) => telos_io::exit((6) as i32),
+        }
+    }
+}
+
+pub fn stop(code: &i64) -> Result<(), telos_io::IoError> {
+    let mut code = code.clone();
+    telos_io::log(&(String::from("stopping")));
+    telos_io::exit((code.clone()) as i32)
+}
+
+pub fn stop_tried() -> i64 {
+    telos_io::exit((7) as i32)
+}
+
+#[derive(Clone)]
+pub struct Exiter {
+    pub target: Endpoint,
+    pub executable: String,
+}
+
+#[allow(non_snake_case)]
+pub fn Exiter__main(self_: &Exiter) -> Result<(), telos_io::IoError> {
+    let stream = match telos_io::TcpStream::connect(self_.target.address.clone(), self_.target.port.clone()) {
+        Ok(stream) => stream,
+        Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
+    };
+    match Exiting::connect(stream.clone()) {
+        Ok(_) => Ok(()),
+        Err(error) => Err(error.clone().with_exit_code((4) as i32)),
+    }
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/exits.main.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use exits::*;
+use telos_std::net::Endpoint;
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let port = telos_io::args::port()?;
+        let back_endpoint = Endpoint { address: String::from("127.0.0.1"), port: port.unwrap_or(7002) };
+        let exiter = Exiter { target: back_endpoint.clone(), executable: String::from("exiter") };
+        Exiter__main(&exiter)
+    }))
+}
+
+
+---- golden::constants_qualified_patterns_and_io_error stdout ----
+
+thread 'golden::constants_qualified_patterns_and_io_error' (938787) panicked at crates/telos-rustgen/tests/golden.rs:96:5:
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/consts.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use telos_std::text::{Mode, SUFFIX, shout};
+
+#[allow(non_snake_case)]
+pub fn LIMIT() -> i64 {
+    4096
+}
+
+#[allow(non_snake_case)]
+pub fn DOUBLE_LIMIT() -> i64 {
+    telos_io::checked::mul(LIMIT(), 2, "crates/telos-rustgen/tests/golden/consts.telos", 7, 27)
+}
+
+#[allow(non_snake_case)]
+pub fn GREETING() -> String {
+    format!("{}{}", String::from("hello"), SUFFIX())
+}
+
+#[allow(non_snake_case)]
+pub fn LOUD() -> Mode {
+    Mode::Loud
+}
+
+#[derive(Clone)]
+pub enum Verdict {
+    Accept(i64),
+    Reject(String),
+}
+
+pub fn judge(size: &i64) -> Verdict {
+    let mut size = size.clone();
+    if size > LIMIT() {
+        return Verdict::Reject(format!("{}{}", String::from("too long: "), size.clone().to_string()));
+    };
+    return Verdict::Accept(telos_io::checked::sub(DOUBLE_LIMIT(), size, "crates/telos-rustgen/tests/golden/consts.telos", 20, 25));
+}
+
+pub fn describe(verdict: &Verdict, mode: &Mode) -> String {
+    match verdict.clone() {
+        Verdict::Accept(room) => {
+            match mode.clone() {
+                Mode::Loud => shout(&GREETING()),
+                Mode::Quiet => room.clone().to_string(),
+            }
+        },
+        Verdict::Reject(reason) => reason,
+    }
+}
+
+pub fn admit(size: &i64) -> Result<i64, telos_io::IoError> {
+    let mut size = size.clone();
+    match judge(&size) {
+        Verdict::Accept(room) => Ok(room.clone()),
+        Verdict::Reject(reason) => Err(telos_io::IoError::new(reason.clone())),
+    }
+}
+
+pub fn or_limit(value: &Option<i64>) -> i64 {
+    match value.clone() {
+        Some(v) => v,
+        None => LIMIT(),
+    }
+}
+
+pub fn default_mode() -> Mode {
+    return LOUD();
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/consts.std.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+
+pub mod net {
+
+    #[derive(Clone)]
+    pub struct Endpoint {
+        pub address: String,
+        pub port: i64,
+    }
+}
+
+pub mod protocol {
+
+    pub mod line {
+        use crate::text::Handler;
+
+        pub struct Line;
+
+        impl Line {
+            pub fn serve(mut stream: telos_io::TcpStream, mut handler: Handler) -> Result<(), telos_io::IoError> {
+                let apply = handler.apply.clone();
+                loop {
+                    let input = (stream.read(1024))?;
+                    match input.clone() {
+                        telos_io::Input::Eof => {
+                            return Ok(());
+                        },
+                        telos_io::Input::Data(bytes) => {
+                            let reply = apply(String::from_utf8_lossy(&bytes).into_owned());
+                            (stream.write_all(reply.clone().into_bytes()))?
+                        },
+                    };
+                }
+            }
+
+            pub fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+                { let __spawn_0 = stream.clone(); telos_io::spawn(move || { if let Err(error) = pump(&__spawn_0) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+                loop {
+                    let input = (stream.read(1024))?;
+                    match input.clone() {
+                        telos_io::Input::Eof => {
+                            return Ok(());
+                        },
+                        telos_io::Input::Data(bytes) => {
+                            (telos_io::Stdout::write_all(bytes.clone()))?
+                        },
+                    };
+                }
+            }
+        }
+
+        pub fn pump(stream: &telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+            loop {
+                let input = (telos_io::Stdin::read(1024))?;
+                match input.clone() {
+                    telos_io::Input::Eof => {
+                        (stream.close())?;
+                        return Ok(());
+                    },
+                    telos_io::Input::Data(bytes) => {
+                        (stream.write_all(bytes.clone()))?
+                    },
+                };
+            }
+        }
+    }
+}
+
+pub mod text {
+
+    #[derive(Clone)]
+    pub struct Handler {
+        pub name: String,
+        pub apply: std::sync::Arc<dyn Fn(String) -> String + Send + Sync>,
+    }
+
+    #[derive(Clone)]
+    pub enum Mode {
+        Loud,
+        Quiet,
+    }
+
+    #[allow(non_snake_case)]
+    pub fn SUFFIX() -> String {
+        String::from("!")
+    }
+
+    pub fn shout(line: &String) -> String {
+        return format!("{}{}", line, SUFFIX());
+    }
+}
+
+
+---- golden::record_and_enum_with_match stdout ----
+
+thread 'golden::record_and_enum_with_match' (938796) panicked at crates/telos-rustgen/tests/golden.rs:96:5:
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/shapes.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+
+#[derive(Clone)]
+pub enum Shape {
+    Circle(i64),
+    Rect(i64, i64),
+    Empty,
+}
+
+#[derive(Clone)]
+pub struct Labelled {
+    pub label: String,
+    pub shape: Shape,
+}
+
+pub fn area(shape: &Shape) -> i64 {
+    match shape.clone() {
+        Shape::Circle(r) => telos_io::checked::mul((telos_io::checked::mul(3, r, "crates/telos-rustgen/tests/golden/shapes.telos", 16, 18)), r, "crates/telos-rustgen/tests/golden/shapes.telos", 16, 18),
+        Shape::Rect(w, h) => telos_io::checked::mul(w, h, "crates/telos-rustgen/tests/golden/shapes.telos", 17, 19),
+        Shape::Empty => 0,
+    }
+}
+
+pub fn describe(item: &Labelled) -> String {
+    let size = area(&item.shape);
+    match item.shape.clone() {
+        Shape::Empty => format!("{}{}", item.label, String::from(" is empty")),
+        _ => format!("{}{}", format!("{}{}", item.label, String::from(": ")), size.clone().to_string()),
+    }
+}
+
+pub fn unit_square() -> Labelled {
+    Labelled { label: String::from("unit"), shape: Shape::Rect(1, 1) }
+}
+
+pub fn largest(items: &Vec<Labelled>) -> Option<Labelled> {
+    let mut best = None;
+    let mut best_area = telos_io::checked::sub(0, 1, "crates/telos-rustgen/tests/golden/shapes.telos", 36, 19);
+    for item in (items.clone()) {
+        let a = area(&item.shape);
+        if a > best_area {
+            best_area = a.clone();
+            best = Some(item.clone());
+        };
+    }
+    return best.clone();
+}
+
+
+---- golden::protocol_import_spawn_and_function_values stdout ----
+
+thread 'golden::protocol_import_spawn_and_function_values' (938794) panicked at crates/telos-rustgen/tests/golden.rs:96:5:
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/modules.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use telos_std::text::{Handler, Mode, shout};
+use telos_std::protocol::line::Line;
+use telos_std::net::Endpoint;
+
+pub fn quiet(line: &String) -> String {
+    return line.trim().to_string();
+}
+
+pub fn pick(mode: &Mode) -> std::sync::Arc<dyn Fn(String) -> String + Send + Sync> {
+    match mode.clone() {
+        Mode::Loud => (std::sync::Arc::new(|__a0: String| shout(&__a0)) as std::sync::Arc<dyn Fn(String) -> String + Send + Sync>),
+        Mode::Quiet => (std::sync::Arc::new(|__a0: String| quiet(&__a0)) as std::sync::Arc<dyn Fn(String) -> String + Send + Sync>),
+    }
+}
+
+pub fn apply_twice(f: &std::sync::Arc<dyn Fn(String) -> String + Send + Sync>, line: &String) -> String {
+    let mut f = f.clone();
+    return f(f(line.clone()));
+}
+
+pub fn relay(stream: &telos_io::TcpStream, handler: &Handler) -> Result<(), telos_io::IoError> {
+    let copy = handler.clone();
+    { let __spawn_0 = stream.clone(); let __spawn_1 = copy.clone(); telos_io::spawn(move || { if let Err(error) = Line::serve(__spawn_0, __spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+    { let __spawn_0 = stream.clone(); let __spawn_1 = handler.name.clone(); telos_io::spawn(move || { if let Err(error) = relay_log(&__spawn_0, &__spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+    return Line::serve(stream.clone(), handler.clone());
+}
+
+pub fn relay_log(stream: &telos_io::TcpStream, name: &String) -> Result<(), telos_io::IoError> {
+    telos_io::log(&(name.clone()));
+    return Ok(());
+}
+
+#[derive(Clone)]
+pub struct Echod {
+    pub listener: telos_io::TcpListener,
+    pub application: Handler,
+    pub executable: String,
+}
+
+#[allow(non_snake_case)]
+pub fn Echod__main(self_: &Echod) -> Result<(), telos_io::IoError> {
+    loop {
+        let stream = (self_.listener.accept())?;
+        { let __spawn_0 = stream.clone(); let __spawn_1 = self_.application.clone(); telos_io::spawn(move || { if let Err(error) = Line::serve(__spawn_0, __spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+    }
+}
+
+#[derive(Clone)]
+pub struct Echo {
+    pub target: Endpoint,
+    pub executable: String,
+}
+
+#[allow(non_snake_case)]
+pub fn Echo__main(self_: &Echo) -> Result<(), telos_io::IoError> {
+    let stream = match telos_io::TcpStream::connect(self_.target.address.clone(), self_.target.port.clone()) {
+        Ok(stream) => stream,
+        Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
+    };
+    match Line::connect(stream.clone()) {
+        Ok(_) => Ok(()),
+        Err(error) => Err(error.clone().with_exit_code((4) as i32)),
+    }
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/modules.main.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use modules::*;
+use telos_std::text::{Handler, Mode, shout};
+use telos_std::protocol::line::Line;
+use telos_std::net::Endpoint;
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let port = telos_io::args::port()?;
+        let front = telos_io::TcpListener::bind(String::from("127.0.0.1"), port.unwrap_or(7000))?;
+        telos_io::log(&format!("listening on 127.0.0.1:{}", front.local_port()));
+        let server = Echod { listener: front.clone(), application: Handler { name: String::from("shout"), apply: pick(&Mode::Loud) }, executable: String::from("echod") };
+        Echod__main(&server)
+    }))
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/modules.echo.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use modules::*;
+use telos_std::text::{Handler, Mode, shout};
+use telos_std::protocol::line::Line;
+use telos_std::net::Endpoint;
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let port = telos_io::args::port()?;
+        let front_endpoint = Endpoint { address: String::from("127.0.0.1"), port: port.unwrap_or(7000) };
+        let client = Echo { target: front_endpoint.clone(), executable: String::from("echo") };
+        Echo__main(&client)
+    }))
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/modules.std.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+
+pub mod net {
+
+    #[derive(Clone)]
+    pub struct Endpoint {
+        pub address: String,
+        pub port: i64,
+    }
+}
+
+pub mod protocol {
+
+    pub mod line {
+        use crate::text::Handler;
+
+        pub struct Line;
+
+        impl Line {
+            pub fn serve(mut stream: telos_io::TcpStream, mut handler: Handler) -> Result<(), telos_io::IoError> {
+                let apply = handler.apply.clone();
+                loop {
+                    let input = (stream.read(1024))?;
+                    match input.clone() {
+                        telos_io::Input::Eof => {
+                            return Ok(());
+                        },
+                        telos_io::Input::Data(bytes) => {
+                            let reply = apply(String::from_utf8_lossy(&bytes).into_owned());
+                            (stream.write_all(reply.clone().into_bytes()))?
+                        },
+                    };
+                }
+            }
+
+            pub fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+                { let __spawn_0 = stream.clone(); telos_io::spawn(move || { if let Err(error) = pump(&__spawn_0) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+                loop {
+                    let input = (stream.read(1024))?;
+                    match input.clone() {
+                        telos_io::Input::Eof => {
+                            return Ok(());
+                        },
+                        telos_io::Input::Data(bytes) => {
+                            (telos_io::Stdout::write_all(bytes.clone()))?
+                        },
+                    };
+                }
+            }
+        }
+
+        pub fn pump(stream: &telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+            loop {
+                let input = (telos_io::Stdin::read(1024))?;
+                match input.clone() {
+                    telos_io::Input::Eof => {
+                        (stream.close())?;
+                        return Ok(());
+                    },
+                    telos_io::Input::Data(bytes) => {
+                        (stream.write_all(bytes.clone()))?
+                    },
+                };
+            }
+        }
+    }
+}
+
+pub mod text {
+
+    #[derive(Clone)]
+    pub struct Handler {
+        pub name: String,
+        pub apply: std::sync::Arc<dyn Fn(String) -> String + Send + Sync>,
+    }
+
+    #[derive(Clone)]
+    pub enum Mode {
+        Loud,
+        Quiet,
+    }
+
+    #[allow(non_snake_case)]
+    pub fn SUFFIX() -> String {
+        String::from("!")
+    }
+
+    pub fn shout(line: &String) -> String {
+        return format!("{}{}", line, SUFFIX());
+    }
+}
+
+
+---- golden::system_with_server_and_client stdout ----
+
+thread 'golden::system_with_server_and_client' (938799) panicked at crates/telos-rustgen/tests/golden.rs:96:5:
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/services.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use telos_std::net::Endpoint;
+
+pub struct Greeting;
+
+impl Greeting {
+    pub fn serve(mut stream: telos_io::TcpStream, mut text: String) -> Result<(), telos_io::IoError> {
+        (stream.write_all(text.clone().into_bytes()))?;
+        (stream.close())?;
+        return Ok(());
+    }
+
+    pub fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+        loop {
+            let input = (stream.read(1024))?;
+            match input.clone() {
+                telos_io::Input::Eof => {
+                    return Ok(());
+                },
+                telos_io::Input::Data(bytes) => {
+                    telos_io::log(&((bytes.len() as i64).to_string()))
+                },
+            };
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Greeter {
+    pub listener: telos_io::TcpListener,
+    pub text: String,
+    pub executable: String,
+}
+
+#[allow(non_snake_case)]
+pub fn Greeter__main(self_: &Greeter) -> Result<(), telos_io::IoError> {
+    loop {
+        let stream = (self_.listener.accept())?;
+        { let __spawn_0 = stream.clone(); let __spawn_1 = self_.text.clone(); telos_io::spawn(move || { if let Err(error) = Greeting::serve(__spawn_0, __spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+    }
+}
+
+#[derive(Clone)]
+pub struct Reader {
+    pub target: Endpoint,
+    pub executable: String,
+}
+
+#[allow(non_snake_case)]
+pub fn Reader__main(self_: &Reader) -> Result<(), telos_io::IoError> {
+    let stream = match telos_io::TcpStream::connect(self_.target.address.clone(), self_.target.port.clone()) {
+        Ok(stream) => stream,
+        Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
+    };
+    match Greeting::connect(stream.clone()) {
+        Ok(_) => Ok(()),
+        Err(error) => Err(error.clone().with_exit_code((4) as i32)),
+    }
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/services.main.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use services::*;
+use telos_std::net::Endpoint;
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let port = telos_io::args::port()?;
+        let front = telos_io::TcpListener::bind(String::from("127.0.0.1"), port.unwrap_or(7000))?;
+        telos_io::log(&format!("listening on 127.0.0.1:{}", front.local_port()));
+        let greeter = Greeter { listener: front.clone(), text: String::from("hello\r\n"), executable: String::from("greeter") };
+        Greeter__main(&greeter)
+    }))
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/services.readerc.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use services::*;
+use telos_std::net::Endpoint;
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let port = telos_io::args::port()?;
+        let back_endpoint = Endpoint { address: String::from("0.0.0.0"), port: port.unwrap_or(7001) };
+        let reader = Reader { target: back_endpoint.clone(), executable: String::from("readerc") };
+        Reader__main(&reader)
+    }))
+}
+
+
+---- golden::generics_stores_and_builtins stdout ----
+
+thread 'golden::generics_stores_and_builtins' (938790) panicked at crates/telos-rustgen/tests/golden.rs:96:5:
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/generics.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+
+pub type IoResult<T> = Result<T, telos_io::IoError>;
+
+#[derive(Clone)]
+pub struct Pair<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static> {
+    pub first: A,
+    pub second: B,
+}
+
+#[derive(Clone)]
+pub struct Labelled<T: Clone + Send + Sync + 'static> {
+    pub value: T,
+    pub label: String,
+}
+
+impl<T: Clone + Send + Sync + 'static> Labelled<T> {
+    #[allow(non_snake_case)]
+    pub fn default_label() -> String {
+        String::from("none")
+    }
+}
+
+#[derive(Clone)]
+pub enum Choice<T: Clone + Send + Sync + 'static> {
+    Nothing,
+    One(T),
+    Two(T, T),
+}
+
+#[derive(Clone)]
+pub struct App<S: Clone + Send + Sync + 'static> {
+    pub state: S,
+    pub handle: std::sync::Arc<dyn Fn(S, String) -> String + Send + Sync>,
+}
+
+pub fn swap<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static>(p: &Pair<A, B>) -> Pair<B, A> {
+    Pair { first: p.second.clone(), second: p.first.clone() }
+}
+
+pub fn or<T: Clone + Send + Sync + 'static>(value: &Option<T>, fallback: &T) -> T {
+    match value.clone() {
+        Some(present) => present,
+        None => fallback.clone(),
+    }
+}
+
+pub fn count<T: Clone + Send + Sync + 'static>(choice: &Choice<T>) -> i64 {
+    match choice.clone() {
+        Choice::Nothing => 0,
+        Choice::One(_) => 1,
+        Choice::Two(_, _) => 2,
+    }
+}
+
+pub fn twice<T: Clone + Send + Sync + 'static>(f: &std::sync::Arc<dyn Fn(T) -> T + Send + Sync>, value: &T) -> T {
+    let mut f = f.clone();
+    f(f(value.clone()))
+}
+
+pub fn identity<T: Clone + Send + Sync + 'static>(value: &T) -> T {
+    value.clone()
+}
+
+pub fn bump(n: &i64) -> i64 {
+    let mut n = n.clone();
+    telos_io::checked::add(n, 1, "crates/telos-rustgen/tests/golden/generics.telos", 43, 26)
+}
+
+pub fn show(n: &i64) -> String {
+    let mut n = n.clone();
+    n.to_string()
+}
+
+pub fn generic_line() -> String {
+    let pair = swap(&(Pair { first: 1, second: String::from("one") }));
+    let labelled = Labelled { value: pair.second.clone(), label: Labelled::<i64>::default_label() };
+    let choice: Choice<String> = Choice::Two(String::from("a"), String::from("b"));
+    let id: std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync> = (std::sync::Arc::new(|__a0: i64| identity::<i64>(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>);
+    format!("{}{}{}{}{}{}{}{}{}", pair.first.clone(), String::from(" "), labelled.value.to_string(), String::from(" "), labelled.label.clone(), String::from(" "), count(&choice).to_string(), String::from(" "), twice(&(std::sync::Arc::new(|__a0: i64| bump(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>), &id(5)).to_string())
+}
+
+pub fn number(line: &String, command: &String) -> Option<i64> {
+    match line.strip_prefix(&command.clone()).map(|s| s.to_string()) {
+        Some(rest) => Some(rest.clone()).filter(|t: &String| !t.starts_with('+')).and_then(|t| t.parse::<i64>().ok()),
+        None => None,
+    }
+}
+
+pub fn respond(counts: &telos_io::Store<i64>, line: &String) -> String {
+    if (*line) == String::from("new") {
+        let id = counts.next_id();
+        counts.put(id.clone(), 0);
+        return id.to_string();
+    };
+    if (*line) == String::from("all") {
+        return counts.values().iter().cloned().map(&*(std::sync::Arc::new(|__a0: i64| show(&__a0)) as std::sync::Arc<dyn Fn(i64) -> String + Send + Sync>)).collect::<Vec<_>>().join(&String::from(","));
+    };
+    if (*line) == String::from("generic") {
+        return generic_line();
+    };
+    match number(line, &String::from("inc ")) {
+        Some(id) => return show(&or(&counts.update(id.clone(), &*(std::sync::Arc::new(|__a0: i64| bump(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>)), &(telos_io::checked::neg(1, "crates/telos-rustgen/tests/golden/generics.telos", 73, 57)))),
+        None => {
+        },
+    };
+    match number(line, &String::from("get ")) {
+        Some(id) => return match counts.get(id.clone()) {
+            Some(value) => show(&value),
+            None => String::from("missing"),
+        },
+        None => {
+        },
+    };
+    match number(line, &String::from("del ")) {
+        Some(id) => return match counts.remove(id.clone()) {
+            Some(value) => format!("{}{}", String::from("removed "), value.to_string()),
+            None => String::from("missing"),
+        },
+        None => {
+        },
+    };
+    match number(line, &String::from("byte ")) {
+        Some(n) => match u8::try_from(n).ok() {
+            Some(b) => format!("{}{}", String::from("byte "), (b as i64).to_string()),
+            None => String::from("not a byte"),
+        },
+        None => String::from("unknown"),
+    }
+}
+
+pub struct Lines;
+
+impl Lines {
+    pub fn serve<S: Clone + Send + Sync + 'static>(mut stream: telos_io::TcpStream, mut app: App<S>) -> IoResult<()> {
+        (stream.set_idle_timeout(5000))?;
+        loop {
+            match (stream.read(4096))? {
+                telos_io::Input::Eof => return Ok(()),
+                telos_io::Input::Data(bytes) => {
+                    let reply = (app.handle)(app.state.clone(), String::from_utf8_lossy(&bytes).into_owned().trim().to_string());
+                    (stream.write_all((format!("{}{}", reply, String::from("\n"))).clone().into_bytes()))?
+                },
+            };
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Server<S: Clone + Send + Sync + 'static> {
+    pub listener: telos_io::TcpListener,
+    pub application: App<S>,
+    pub executable: String,
+}
+
+#[allow(non_snake_case)]
+pub fn Server__main<S: Clone + Send + Sync + 'static>(self_: &Server<S>) -> IoResult<()> {
+    loop {
+        let stream = (self_.listener.accept())?;
+        { let __spawn_0 = stream.clone(); let __spawn_1 = self_.application.clone(); telos_io::spawn(move || { if let Err(error) = Lines::serve(__spawn_0, __spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+    }
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/generics.main.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use counters::*;
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let counts: telos_io::Store<i64> = telos_io::Store::new();
+        let port = telos_io::args::port()?;
+        let ingress = telos_io::TcpListener::bind(String::from("127.0.0.1"), port.unwrap_or(7400))?;
+        telos_io::log(&format!("listening on 127.0.0.1:{}", ingress.local_port()));
+        let server = Server::<telos_io::Store<i64>> { listener: ingress.clone(), application: App { state: counts.clone(), handle: (std::sync::Arc::new(|__a0: telos_io::Store<i64>, __a1: String| respond(&__a0, &__a1)) as std::sync::Arc<dyn Fn(telos_io::Store<i64>, String) -> String + Send + Sync>) }, executable: String::from("countersd") };
+        Server__main(&server)
+    }))
+}
+
+
+---- golden::variants_of_enums_not_imported stdout ----
+
+thread 'golden::variants_of_enums_not_imported' (938801) panicked at crates/telos-rustgen/tests/golden.rs:96:5:
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/variants.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use telos_std::modes::{level, pick};
+use telos_std::apply::describe;
+
+pub fn program_level(n: &i64) -> i64 {
+    let mut n = n.clone();
+    telos_io::checked::add(level(&telos_std::modes::Mode::Loud), level(&telos_std::modes::Mode::Quiet(n.clone())), "crates/telos-rustgen/tests/golden/variants.telos", 6, 35)
+}
+
+pub fn quietness(loud: &bool) -> i64 {
+    let mut loud = loud.clone();
+    match pick(&loud) {
+        telos_std::modes::Mode::Loud => 0,
+        telos_std::modes::Mode::Quiet(n) => n,
+    }
+}
+
+pub fn both(loud: &bool) -> String {
+    let mut loud = loud.clone();
+    describe(&loud)
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/variants.std.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+
+pub mod apply {
+    use crate::modes::{level, pick};
+
+    pub fn louder(n: &i64) -> i64 {
+        let mut n = n.clone();
+        telos_io::checked::add(level(&crate::modes::Mode::Loud), level(&crate::modes::Mode::Quiet(n.clone())), "crates/telos-rustgen/tests/golden/variants/std/apply.telos", 5, 28)
+    }
+
+    pub fn describe(loud: &bool) -> String {
+        let mut loud = loud.clone();
+        match pick(&loud) {
+            crate::modes::Mode::Loud => String::from("loud"),
+            crate::modes::Mode::Quiet(_) => String::from("quiet"),
+        }
+    }
+}
+
+pub mod modes {
+
+    #[derive(Clone)]
+    pub enum Mode {
+        Loud,
+        Quiet(i64),
+    }
+
+    pub fn level(mode: &Mode) -> i64 {
+        match mode.clone() {
+            Mode::Loud => 10,
+            Mode::Quiet(n) => n,
+        }
+    }
+
+    pub fn pick(loud: &bool) -> Mode {
+        let mut loud = loud.clone();
+        if loud {
+            Mode::Loud
+        } else {
+            Mode::Quiet(1)
+        }
+    }
+}
+
+
+---- golden::surface_syntax stdout ----
+
+thread 'golden::surface_syntax' (938797) panicked at crates/telos-rustgen/tests/golden.rs:96:5:
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/syntax.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+
+pub type IoResult<T> = Result<T, telos_io::IoError>;
+
+#[derive(Clone)]
+pub struct Reply {
+    pub lines: Vec<String>,
+    pub action: Action,
+    pub code: i64,
+}
+
+impl Reply {
+    #[allow(non_snake_case)]
+    pub fn default_action() -> Action {
+        Action::Continue
+    }
+    #[allow(non_snake_case)]
+    pub fn default_code() -> i64 {
+        telos_io::checked::add(BASE(), 1, "crates/telos-rustgen/tests/golden/syntax.telos", 12, 15)
+    }
+}
+
+#[derive(Clone)]
+pub enum Action {
+    Continue,
+    Close,
+}
+
+#[derive(Clone)]
+pub enum Light {
+    Off,
+    On,
+}
+
+#[derive(Clone)]
+pub enum Power {
+    Off,
+    Full,
+}
+
+#[derive(Clone)]
+pub struct Handler {
+    pub name: String,
+    pub respond: std::sync::Arc<dyn Fn(String) -> String + Send + Sync>,
+}
+
+#[allow(non_snake_case)]
+pub fn BASE() -> i64 {
+    41
+}
+
+#[allow(non_snake_case)]
+pub fn QUIT() -> String {
+    String::from("quit")
+}
+
+#[allow(non_snake_case)]
+pub fn SPACE() -> u8 {
+    32
+}
+
+#[allow(non_snake_case)]
+pub fn lowest() -> i64 {
+    3
+}
+
+pub fn shout(t: &String) -> String {
+    format!("{}{}", t, String::from("!"))
+}
+
+pub fn twice(x: &i64) -> i64 {
+    let mut x = x.clone();
+    telos_io::checked::mul(x, 2, "crates/telos-rustgen/tests/golden/syntax.telos", 30, 27)
+}
+
+pub fn lower_case(n: &i64) -> String {
+    let mut n = n.clone();
+    match n.clone() {
+        __m if (*(&__m) == lowest()) => String::from("lowest"),
+        other => format!("{}{}", String::from("other "), other.to_string()),
+    }
+}
+
+pub fn swap(p: &(i64, String)) -> (String, i64) {
+    let (n, t) = p.clone();
+    (t.clone(), n.clone())
+}
+
+pub fn describe(n: &i64) -> String {
+    let mut n = n.clone();
+    match n.clone() {
+        0 | 1 => String::from("small"),
+        __m if (*(&__m) == BASE()) => String::from("base"),
+        _ => String::from("other"),
+    }
+}
+
+pub fn classify(words: &Vec<String>) -> String {
+    match words.clone() {
+        __m if ((&__m).len() == 0) => String::from("none"),
+        __m if ((&__m).len() == 1) => { let w = ((&(&__m)[0])).clone(); format!("{}{}", String::from("one "), w) },
+        __m if ((&__m).len() == 2 && { let __p2 = &(&__m)[0]; (*__p2 == QUIT()) }) => String::from("quit with argument"),
+        __m if ((&__m).len() == 2) => { let a = ((&(&__m)[0])).clone(); let b = ((&(&__m)[1])).clone(); format!("{}{}{}", String::from("two "), a, b) },
+        _ => String::from("many"),
+    }
+}
+
+pub fn nested(v: &Option<(bool, Vec<i64>)>) -> String {
+    match v.clone() {
+        __m if (match (&__m) { Some(__p6) => { let (__p7, __p8) = __p6; (*__p7 == true) && (__p8.len() == 2) }, _ => false }) => { let x = ((&(&(match (&__m) { Some(__x) => __x, _ => unreachable!() }).1)[0])).clone(); let y = ((&(&(match (&__m) { Some(__x) => __x, _ => unreachable!() }).1)[1])).clone(); format!("{}{}{}{}", String::from("pair "), x.to_string(), String::from(" "), y.to_string()) },
+        Some((false, _)) | None => String::from("off or none"),
+        Some((true, _)) => String::from("other"),
+        #[allow(unreachable_patterns)]
+        _ => telos_io::fail("match", "crates/telos-rustgen/tests/golden/syntax.telos", 63, 3, "no arm matched"),
+    }
+}
+
+pub fn vowel(w: &String) -> bool {
+    match w.clone() {
+        __m if ((*(&__m) == "a") || (*(&__m) == "e") || (*(&__m) == "i") || (*(&__m) == "o") || (*(&__m) == "u")) => true,
+        _ => false,
+    }
+}
+
+pub fn first_positive(values: &Vec<i64>) -> i64 {
+    for v in (values.clone()) {
+        if v > 0 {
+            return v.clone();
+        };
+    }
+    0
+}
+
+pub fn sign(n: &i64) -> String {
+    let mut n = n.clone();
+    let s = match n.clone() {
+        0 => return String::from("zero"),
+        _ => if n > 0 {
+            String::from("+")
+        } else {
+            String::from("-")
+        },
+    };
+    s
+}
+
+pub fn count_spaces(bytes: &Vec<u8>) -> i64 {
+    let mut n = 0;
+    for c in (bytes.clone()) {
+        match c.clone() {
+            __m if (*(&__m) == SPACE()) => {
+                n = telos_io::checked::add(n, 1, "crates/telos-rustgen/tests/golden/syntax.telos", 99, 13);
+            },
+            _ => {
+            },
+        };
+    }
+    n
+}
+
+pub fn show(text: &String) -> IoResult<()> {
+    let mut bytes = text.clone().into_bytes();
+    bytes.push(10);
+    telos_io::Stdout::write_all(bytes.clone())
+}
+
+pub struct Syntax;
+
+impl Syntax {
+    pub fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+        let (word, number) = swap(&(7, String::from("seven")));
+        (show(&(format!("{}{}{}", word.clone(), String::from(" "), number.to_string()))))?;
+        (show(&(format!("{}{}{}{}{}", describe(&0), String::from(" "), describe(&41), String::from(" "), describe(&9)))))?;
+        (show(&classify(&vec![])))?;
+        (show(&classify(&vec![String::from("x")])))?;
+        (show(&classify(&vec![String::from("quit"), String::from("now")])))?;
+        (show(&classify(&vec![String::from("a"), String::from("b")])))?;
+        (show(&classify(&vec![String::from("a"), String::from("b"), String::from("c")])))?;
+        (show(&nested(&Some((true, vec![1, 2])))))?;
+        (show(&nested(&Some((false, vec![1])))))?;
+        (show(&nested(&None)))?;
+        (show(&nested(&Some((true, vec![3])))))?;
+        let e = vowel(&String::from("e"));
+        let x = vowel(&String::from("x"));
+        (show(&(format!("{}{}{}", e.to_string(), String::from(" "), x.to_string()))))?;
+        (show(&first_positive(&vec![telos_io::checked::neg(1, "crates/telos-rustgen/tests/golden/syntax.telos", 130, 26), 0, 5, 6]).to_string()))?;
+        (show(&(format!("{}{}{}", sign(&0), sign(&3), sign(&(telos_io::checked::neg(3, "crates/telos-rustgen/tests/golden/syntax.telos", 131, 35)))))))?;
+        (show(&count_spaces(&String::from("a b c ").clone().into_bytes()).to_string()))?;
+        let n = 21;
+        (show(&twice(&n).to_string()))?;
+        (show(&shout(&String::from("hey"))))?;
+        let h = Handler { name: String::from("h"), respond: (std::sync::Arc::new(|__a0: String| shout(&__a0)) as std::sync::Arc<dyn Fn(String) -> String + Send + Sync>) };
+        (show(&(h.respond)(h.name.clone())))?;
+        let r = Reply { lines: vec![String::from("l")], action: Reply::default_action(), code: Reply::default_code() };
+        (show(&(format!("{}{}", String::from("code "), r.code.to_string()))))?;
+        match r.action.clone() {
+            Action::Continue => (show(&String::from("continue")))?,
+            Action::Close => (show(&String::from("close")))?,
+        };
+        let flag = true;
+        let space = SPACE();
+        (show(&(format!("{}{}{}{}{}", flag.to_string(), String::from(" "), space.to_string(), String::from(" "), String::from("t").clone()))))?;
+        let mut pair = (0, String::from(""));
+        let mut i = 0;
+        while i < 3000 {
+            let (count, text) = pair.clone();
+            pair = (telos_io::checked::add(count, 1, "crates/telos-rustgen/tests/golden/syntax.telos", 151, 15), format!("{}{}", text, String::from("x")));
+            i = telos_io::checked::add(i, 1, "crates/telos-rustgen/tests/golden/syntax.telos", 152, 11);
+        }
+        let (count, text) = pair.clone();
+        let size = (text.len() as i64);
+        (show(&(format!("{}{}{}", count.to_string(), String::from(" "), size.to_string()))))?;
+        let spare = (1, String::from("a"));
+        let (mut p, mut q) = spare.clone();
+        p = telos_io::checked::add(p, 1, "crates/telos-rustgen/tests/golden/syntax.telos", 159, 9);
+        q = format!("{}{}", q, String::from("b"));
+        (show(&(format!("{}{}", p.to_string(), q.clone()))))?;
+        let _ = twice(&1);
+        let _ = twice(&2);
+        let light: Light = Light::Off;
+        match light.clone() {
+            Light::Off => (show(&String::from("light off")))?,
+            Light::On => (show(&String::from("light on")))?,
+        };
+        (show(&(format!("{}{}{}", lower_case(&3), String::from(" "), lower_case(&4)))))?;
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct Runner {
+    pub address: String,
+    pub port: i64,
+}
+
+#[allow(non_snake_case)]
+pub fn Runner__main(self_: &Runner) -> Result<(), telos_io::IoError> {
+    let stream = match telos_io::TcpStream::connect(self_.address.clone(), self_.port.clone()) {
+        Ok(stream) => stream,
+        Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
+    };
+    match Syntax::connect(stream.clone()) {
+        Ok(_) => Ok(()),
+        Err(error) => Err(error.clone().with_exit_code((4) as i32)),
+    }
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/syntax.main.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use syntax::*;
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let syntax = Runner { address: String::from("127.0.0.1"), port: 1 };
+        Runner__main(&syntax)
+    }))
+}
+
+
+---- golden::executable_components stdout ----
+
+thread 'golden::executable_components' (938789) panicked at crates/telos-rustgen/tests/golden.rs:96:5:
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/components.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use telos_std::net::Endpoint;
+
+#[derive(Clone)]
+pub struct Banner {
+    pub text: String,
+    pub width: i64,
+}
+
+impl Banner {
+    #[allow(non_snake_case)]
+    pub fn default_width() -> i64 {
+        80i64
+    }
+}
+
+#[derive(Clone)]
+pub struct Greeter {
+    pub listener: telos_io::TcpListener,
+    pub seen: telos_io::Store<String>,
+    pub banner: Banner,
+    pub idle: i64,
+    pub executable: String,
+}
+
+impl Greeter {
+    #[allow(non_snake_case)]
+    pub fn default_idle() -> i64 {
+        30000000000i64
+    }
+    #[allow(non_snake_case)]
+    pub fn default_executable() -> String {
+        String::from("greeter")
+    }
+}
+
+#[allow(non_snake_case)]
+pub fn Greeter__main(self_: &Greeter) -> Result<(), telos_io::IoError> {
+    let stream = (self_.listener.accept())?;
+    let id = self_.seen.next_id();
+    self_.seen.put(id.clone(), self_.banner.text.clone());
+    (stream.write_all((format!("{}{}", self_.banner.text, format!("{}{}{}{}{}", String::from(" "), { let __telos_v = &self_.banner.width; let mut __telos_text = String::new(); (&mut __telos_text).push_str(&telos_io::quantity_debug(telos_io::Quantity::ByteSize, *__telos_v)); __telos_text }.clone(), String::from(" "), { let __telos_v = &self_.idle; let mut __telos_text = String::new(); (&mut __telos_text).push_str(&telos_io::quantity_debug(telos_io::Quantity::Duration, *__telos_v)); __telos_text }.clone(), String::from("\n")))).clone().into_bytes()))?;
+    match (stream.read(4096))? {
+        telos_io::Input::Eof => Ok(()),
+        telos_io::Input::Data(bytes) => if String::from_utf8_lossy(&bytes).into_owned().trim().to_string() == String::from("fail") {
+            Err(telos_io::IoError::new(String::from("asked to fail")).with_exit_code((3) as i32))
+        } else {
+            Ok(())
+        },
+    }
+}
+
+#[derive(Clone)]
+pub struct Pinger {
+    pub target: Endpoint,
+    pub executable: String,
+}
+
+impl Pinger {
+    #[allow(non_snake_case)]
+    pub fn default_executable() -> String {
+        String::from("ping")
+    }
+}
+
+#[allow(non_snake_case)]
+pub fn Pinger__main(self_: &Pinger) -> Result<(), telos_io::IoError> {
+    let stream = (telos_io::TcpStream::connect(self_.target.address.clone(), self_.target.port.clone()))?;
+    match (stream.read(4096))? {
+        telos_io::Input::Eof => Err(telos_io::IoError::new(String::from("no banner"))),
+        telos_io::Input::Data(bytes) => {
+            (stream.write_all(String::from("hello\n").clone().into_bytes()))?;
+            Ok(())
+        },
+    }
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/components.main.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use components::*;
+use telos_std::net::Endpoint;
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let seen: telos_io::Store<String> = telos_io::Store::new();
+        let port = telos_io::args::port()?;
+        let ingress = telos_io::TcpListener::bind(String::from("127.0.0.1"), port.unwrap_or(2500))?;
+        telos_io::log(&format!("listening on 127.0.0.1:{}", ingress.local_port()));
+        let banner = Banner { text: String::from("hello"), width: Banner::default_width() };
+        let server = Greeter { listener: ingress.clone(), seen: seen.clone(), banner: banner.clone(), executable: String::from("greeterd"), idle: Greeter::default_idle() };
+        Greeter__main(&server)
+    }))
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/components.pinger.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use components::*;
+use telos_std::net::Endpoint;
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let port = telos_io::args::port()?;
+        let ingress_endpoint = Endpoint { address: String::from("127.0.0.1"), port: port.unwrap_or(2500) };
+        let client = Pinger { target: ingress_endpoint.clone(), executable: String::from("pinger") };
+        Pinger__main(&client)
+    }))
+}
+
+
+---- golden::terminal stdout ----
+
+thread 'golden::terminal' (938800) panicked at crates/telos-rustgen/tests/golden.rs:96:5:
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/terminal.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use telos_std::console::CommandConsole;
+use telos_std::protocol::telnet::{TelnetServer, TelnetClient};
+
+pub mod command_schema {
+
+    pub fn commands() -> Vec<String> {
+        vec![String::from("help"), String::from("echo"), String::from("status"), String::from("quit")]
+    }
+}
+
+pub mod commands {
+    use telos_std::console::{Reply, Action, first_word, rest_after_word};
+
+    #[derive(Clone)]
+    pub enum Command {
+        Help,
+        Echo(String),
+        Status,
+        Quit,
+    }
+
+    pub fn answer(command: &Command) -> Reply {
+        match command.clone() {
+            Command::Help => Reply { lines: vec![String::from("help"), String::from("echo <text>"), String::from("status"), String::from("quit")], action: Reply::default_action() },
+            Command::Echo(text) => Reply { lines: vec![text.clone()], action: Reply::default_action() },
+            Command::Status => Reply { lines: vec![String::from("ready")], action: Reply::default_action() },
+            Command::Quit => Reply { lines: vec![String::from("bye")], action: Action::Close },
+        }
+    }
+
+    pub fn parse(line: &String) -> Option<Command> {
+        match first_word(line) {
+            __m if (*(&__m) == "help") => Some(Command::Help),
+            __m if (*(&__m) == "status") => Some(Command::Status),
+            __m if (*(&__m) == "quit") => Some(Command::Quit),
+            __m if (*(&__m) == "echo") => Some(Command::Echo(rest_after_word(line))),
+            _ => None,
+        }
+    }
+
+    pub fn respond(line: &String) -> Reply {
+        let trimmed = line.trim().to_string();
+        if trimmed.is_empty() {
+            Reply { lines: vec![], action: Reply::default_action() }
+        } else {
+            match parse(&trimmed) {
+                Some(command) => answer(&command),
+                None => Reply { lines: vec![format!("{}{}", String::from("unknown command: "), first_word(&trimmed).clone())], action: Reply::default_action() },
+            }
+        }
+    }
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/terminal.main.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use terminal::*;
+use telos_std::console::CommandConsole;
+use telos_std::protocol::telnet::{TelnetServer, TelnetClient};
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let port = telos_io::args::port()?;
+        let ingress = telos_io::TcpListener::bind(String::from("127.0.0.1"), port.unwrap_or(2323))?;
+        telos_io::log(&format!("listening on 127.0.0.1:{}", ingress.local_port()));
+        let console = CommandConsole { implementation: telos_std::console::ConsoleCommands { respond: (std::sync::Arc::new(|__a0: String| terminal::commands::respond(&__a0)) as std::sync::Arc<dyn Fn(String) -> telos_std::console::Reply + Send + Sync>) }, prompt: String::from("terminal> "), maximum_line: 4096i64, command_schema: Some(telos_std::console::CommandSchema { commands: (std::sync::Arc::new(|| terminal::command_schema::commands()) as std::sync::Arc<dyn Fn() -> Vec<String> + Send + Sync>) }) };
+        let server = TelnetServer { listener: ingress.clone(), application: console.clone(), executable: String::from("terminald"), protocol: TelnetServer::default_protocol(), sessions: TelnetServer::default_sessions(), recovery: TelnetServer::default_recovery(), rollout: TelnetServer::default_rollout() };
+        telos_std::protocol::telnet::TelnetServer__main(&server)
+    }))
+}
+
+
+/home/timo/projects/telos/crates/telos-rustgen/tests/golden/terminal.tn.rs differs from the generated text:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+use terminal::*;
+use telos_std::console::CommandConsole;
+use telos_std::protocol::telnet::{TelnetServer, TelnetClient};
+
+fn main() {
+    std::process::exit(telos_io::run(|| {
+        let port = telos_io::args::port()?;
+        let ingress_endpoint = telos_std::net::Endpoint { address: String::from("127.0.0.1"), port: port.unwrap_or(2323) };
+        let client = TelnetClient { target: ingress_endpoint.clone(), executable: String::from("tn") };
+        telos_std::protocol::telnet::TelnetClient__main(&client)
+    }))
+}
+
+
+
+failures:
+    golden::constants_qualified_patterns_and_io_error
+    golden::executable_components
+    golden::generics_stores_and_builtins
+    golden::process_exit_diverges
+    golden::protocol_import_spawn_and_function_values
+    golden::pure_functions
+    golden::record_and_enum_with_match
+    golden::surface_syntax
+    golden::system_with_server_and_client
+    golden::terminal
+    golden::variants_of_enums_not_imported
+
+test result: FAILED. 65 passed; 11 failed; 1 ignored; 0 measured; 0 filtered out; finished in 3.12s
+
+error: test failed, to rerun pass `-p telos-rustgen --test main`
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_syntax-f2603e94cd8ba5a5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-5656a90372c4f3f9)
+
+running 148 tests
+test grammar::break_and_continue_are_expressions ... ok
+test grammar::byte_literals ... ok
+test grammar::call_on_a_call ... ok
+test grammar::chained_equality_is_e001 ... ok
+test grammar::brace_literal_keys_are_names_or_references ... ok
+test grammar::assert_statements ... ok
+test grammar::bool_tuple_list_and_or_patterns ... ok
+test grammar::associated_fn ... ok
+test grammar::closures ... ok
+test grammar::additive_is_left_associative ... ok
+test grammar::chained_comparison_is_e001 ... ok
+test grammar::else_if_chain_across_lines ... ok
+test grammar::effectful_fn_types ... ok
+test grammar::const_is_a_keyword_and_a_recovery_point ... ok
+test grammar::else_on_next_line_is_e001 ... ok
+test grammar::expression_body ... ok
+test grammar::eof_inside_block_is_e002 ... ok
+test grammar::fn_type_lists_params_then_return ... ok
+test grammar::fn_type_without_return_is_unit ... ok
+test grammar::declarations_need_a_newline_between_them ... ok
+test grammar::const_declarations ... ok
+test grammar::for_over_bytes ... ok
+test grammar::field_defaults_and_aliases ... ok
+test grammar::fn_type_missing_paren_is_e001 ... ok
+test grammar::fn_type_in_param_and_return_position ... ok
+test grammar::const_needs_type_and_value ... ok
+test grammar::field_punning_and_commas ... ok
+test grammar::hex_integer ... ok
+test grammar::integer_with_separators ... ok
+test grammar::glob_import ... ok
+test grammar::fn_type_nests ... ok
+test grammar::if_else_if_else_nests ... ok
+test grammar::if_as_let_initializer ... ok
+test grammar::contracts_policies_and_assemblies ... ok
+test grammar::for_with_a_tuple_pattern ... ok
+test grammar::const_span_covers_keyword_to_value ... ok
+test grammar::comments_everywhere ... ok
+test grammar::interpolation_errors ... ok
+test grammar::interpolation_desugars_to_concatenation ... ok
+test grammar::import_forms ... ok
+test fixtures::fixtures_match_expected_diagnostics ... ok
+test grammar::interpolated_expression_spans_point_into_the_string ... ok
+test grammar::integer_beyond_i64_is_e001 ... ok
+test grammar::hex_escape_produces_character ... ok
+test grammar::generic_declarations ... ok
+test grammar::let_patterns ... ok
+test grammar::interpolation_holds_string_literals ... ok
+test grammar::match_binding_pattern ... ok
+test grammar::match_block_and_expression_bodies ... ok
+test grammar::keywords_are_path_segments ... ok
+test grammar::newline_after_binary_operator_continues ... ok
+test grammar::match_arms_separated_by_commas ... ok
+test grammar::lowercase_name_before_brace_is_not_a_record ... ok
+test grammar::keywords_as_field_names ... ok
+test grammar::named_arguments ... ok
+test grammar::match_nested_patterns ... ok
+test grammar::largest_integer_is_accepted ... ok
+test grammar::lowercase_name_with_payload_or_path_is_a_variant_pattern ... ok
+test grammar::newline_after_assign_continues ... ok
+test grammar::match_arms_separated_by_newlines ... ok
+test grammar::keywords_still_name_paths_and_fields ... ok
+test grammar::match_literal_and_wildcard_patterns ... ok
+test grammar::keywords_are_property_names ... ok
+test grammar::match_qualified_pattern ... ok
+test grammar::newline_after_comma_continues ... ok
+test grammar::newline_before_binary_operator_ends_the_statement ... ok
+test grammar::newlines_inside_brackets_are_skipped ... ok
+test grammar::parentheses_produce_no_node ... ok
+test grammar::qualified_patterns_with_payload ... ok
+test grammar::protocol_and_spawn_are_keywords ... ok
+test grammar::protocol_member_must_be_fn ... ok
+test grammar::record_literal_allowed_in_bodies_and_after_conditions ... ok
+test grammar::record_literal_with_newlines ... ok
+test grammar::record_literal_directly_in_a_condition_is_not_parsed ... ok
+test grammar::recovery_reports_each_bad_declaration_once ... ok
+test grammar::return_expression ... ok
+test grammar::precedence_full_ladder ... ok
+test grammar::postfix_chain ... ok
+test grammar::range_patterns ... ok
+test grammar::role_requires_breaks_across_lines ... ok
+test grammar::recovery_resumes_at_protocol ... ok
+test grammar::record_literal_with_commas ... ok
+test grammar::no_record_literal_in_conditions ... ok
+test grammar::spawn_without_operand_is_an_error ... ok
+test grammar::spawn_span_covers_operand ... ok
+test grammar::statement_cannot_start_with_dot ... ok
+test grammar::record_update ... ok
+test grammar::stmt_assign_to_field_path ... ok
+test grammar::stmt_expression ... ok
+test grammar::stmt_for ... ok
+test grammar::stmt_break_and_continue ... ok
+test grammar::stmt_let ... ok
+test grammar::stmt_loop ... ok
+test grammar::record_literal_in_brackets_inside_a_condition ... ok
+test grammar::stmt_let_with_type_annotation ... ok
+test grammar::stmt_var ... ok
+test grammar::stmt_return ... ok
+test grammar::stmt_while ... ok
+test grammar::recovery_keeps_good_declarations_parseable ... ok
+test grammar::string_escapes ... ok
+test grammar::test_declaration ... ok
+test grammar::test_and_assert_errors ... ok
+test grammar::test_only_items ... ok
+test grammar::store_resource_without_properties ... ok
+test grammar::precedence_unary_operators ... ok
+test grammar::postfix_paren_on_next_line_starts_a_statement ... ok
+test grammar::protocol_may_be_empty_and_on_one_line ... ok
+test grammar::path_calls ... ok
+test grammar::tuple_values_and_unit ... ok
+test grammar::try_span_ends_at_the_question_mark ... ok
+test grammar::recovery_skips_the_rest_of_a_broken_protocol ... ok
+test grammar::tuple_fields ... ok
+test grammar::quantity_literals ... ok
+test grammar::newlines_inside_parentheses_are_skipped ... ok
+test grammar::unterminated_string_is_e001 ... ok
+test grammar::tuple_types ... ok
+test grammar::unary_neg_on_literal ... ok
+test grammar::spans_cover_first_to_last_token ... ok
+test grammar::raw_strings_and_unicode_escapes ... ok
+test parse_terminal::example_system_has_server_and_client ... ok
+test grammar::stmt_assign_to_call_is_e001 ... ok
+test grammar::semicolon_separates_statements ... ok
+test grammar::protocol_declares_roles ... ok
+test grammar::spawn_is_a_prefix_operator ... ok
+test robustness::backslash_at_end_of_line_is_an_unterminated_string ... ok
+test grammar::trailing_semicolon ... ok
+test robustness::byte_literals_with_brace_or_quote_inside_interpolation ... ok
+test robustness::byte_strings_take_an_escaped_single_quote ... ok
+test grammar::two_statements_on_one_line_need_a_separator ... ok
+test robustness::greater_equal_after_type_arguments ... ok
+test parse_terminal::example_imports_the_standard_library ... ok
+test robustness::lexer_error_does_not_hide_earlier_parser_errors ... ok
+test grammar::unknown_escape_is_e001 ... ok
+test parse_terminal::every_fn_span_ends_at_its_closing_brace ... ok
+test grammar::vertical_tab_and_form_feed_escapes ... ok
+test robustness::postfix_and_else_do_not_cross_a_line_inside_brackets ... ok
+test robustness::smallest_integer_is_a_literal ... ok
+test robustness::one_element_tuple_type_is_e001 ... ok
+test robustness::unclosed_brace_in_interpolation ... ok
+test robustness::unknown_escape_shows_one_backslash ... ok
+test robustness::nested_fn_gives_one_error ... ok
+test parse_terminal::console_has_a_function_typed_field ... ok
+test parse_terminal::telnet_is_a_protocol_with_both_roles ... ok
+test parse_terminal::std_files_parse_and_name_their_module ... ok
+test robustness::line_col_computes_the_line_table_once ... ok
+test robustness::nesting_is_limited_to_256_levels ... ok
+test robustness::long_chains_parse ... ok
+test robustness::rendering_many_diagnostics_is_linear ... ok
+
+test result: ok. 148 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_types-7d8de7c732367ba9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-4d4730ae5e8142a1)
+
+running 38 tests
+test audit::copies_match_the_audit_directory ... ok
+test fixtures::every_type_code_has_a_fixture ... ok
+test inline_tests::a_program_without_package_is_main ... ok
+test inline_tests::assert_message_is_typed ... ok
+test inline_tests::test_try_covers_only_test_bodies ... ok
+test generics::instances_of_generic_uses ... ok
+test generics::type_parameters_are_exported ... ok
+test generics::store_and_new_builtins ... ok
+test slice9::boxing ... ok
+test generics::effectful_fn_types ... ok
+test slice9::closure_captures_in_order_of_first_use ... ok
+test inline_tests::tests_are_listed_in_declaration_order ... ok
+test slice9::closure_effects_on_captures_and_ambient ... ok
+test inline_tests::assert_compare_records_operand_and_show ... ok
+test generics::component_kind_carries_the_type_arguments ... ok
+test slice9::debug_and_associated_fns ... ok
+test slice9::every_expression_is_typed ... ok
+test slice9::equality_kinds ... ok
+test slice9::range_bounds_evaluate_constants ... ok
+test generics::every_expression_is_typed ... ok
+test surface::inferred_effects_reach_the_signature ... ok
+test surface::aliases_resolve_to_their_targets ... ok
+test limits::exhaustiveness_is_polynomial_in_bool_columns ... ok
+test surface::tuples_and_unit ... ok
+test surface::ufcs_and_field_fn_calls ... ok
+test surface::return_is_never_and_constant_patterns_are_recorded ... ok
+test surface::interpolation_is_text_concatenation_with_to_text ... ok
+test surface::field_defaults ... ok
+test surface::bare_variants_take_the_expected_enum ... ok
+test surface::every_expression_is_typed ... ok
+test fixtures::fixtures_match_expected ... ok
+test terminal::standard_library_expressions_are_typed ... ok
+test terminal::terminal_program_types_against_the_standard_library ... FAILED
+test terminal::standard_library_types_in_import_order ... ok
+test terminal::todo_program_types_against_the_standard_library ... ok
+test audit::audit_probes_match_expected ... ok
+test limits::long_plus_chain_does_not_overflow ... ok
+test limits::failure_site_positions_of_the_long_chain_are_cheap ... ok
+
+failures:
+
+---- terminal::terminal_program_types_against_the_standard_library stdout ----
+
+thread 'terminal::terminal_program_types_against_the_standard_library' (940647) panicked at crates/telos-types/tests/terminal.rs:333:29:
+type failed:
+terminal.telos:20:29: error[E102]: module `examples.terminal.commands` not found; `module(..)` names a standard-library module or a sibling file `<name>.telos` of the program's package
+terminal.telos:23:29: error[E102]: module `examples.terminal.command_schema` not found; `module(..)` names a standard-library module or a sibling file `<name>.telos` of the program's package
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    terminal::terminal_program_types_against_the_standard_library
+
+test result: FAILED. 37 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+error: test failed, to rerun pass `-p telos-types --test main`
+   Doc-tests telos
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_check
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_io
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_llvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_rt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_rustgen
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_syntax
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_types
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 3 targets failed:
+    `-p telos --test main`
+    `-p telos-rustgen --test main`
+    `-p telos-types --test main`
+cargo EXIT=101
+END 00:56:41
+EXIT=0

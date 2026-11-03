@@ -1,0 +1,108 @@
+Diff in /home/timo/projects/telos/crates/ignite/src/run/control.rs:58:
+     /// The child exited with `code`.
+     Exited { member: String, pid: i32, code: i32 },
+     /// The child was ended by `signal`.
+[31m-    Signalled { member: String, pid: i32, signal: i32 },
+(B[m[32m+    Signalled {
+(B[m[32m+        member: String,
+(B[m[32m+        pid: i32,
+(B[m[32m+        signal: i32,
+(B[m[32m+    },
+(B[m     /// The child could not be started.
+     SpawnFailed { member: String, reason: String },
+     /// A probe attempt printed `line` and exited 0; the engine decodes it.
+Diff in /home/timo/projects/telos/crates/ignite/src/run/control.rs:65:
+[31m-    AttemptDone { member: String, id: i64, line: String },
+(B[m[32m+    AttemptDone {
+(B[m[32m+        member: String,
+(B[m[32m+        id: i64,
+(B[m[32m+        line: String,
+(B[m[32m+    },
+(B[m     /// A probe attempt could not run, exited with another status or
+     /// printed nothing (16.8).
+     AttemptFailed {
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/validate.rs:42:
+         Decl::Fn(f) => {
+             !f.test_only
+                 && f.name.name == name
+[31m-                && f.owner.as_ref().is_some_and(|owner| owner.name == kind.name)
+(B[m[32m+                && f.owner
+(B[m[32m+                    .as_ref()
+(B[m[32m+                    .is_some_and(|owner| owner.name == kind.name)
+(B[m         }
+         _ => false,
+     })
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/validate.rs:54:
+ }
+ 
+ /// The members of the system by id, with their declaration info.
+[31m-fn infos<'s>(system: &'s SystemInfo, members: &'s [ModelMember]) -> Vec<(&'s ModelMember, &'s MemberInfo)> {
+(B[m[32m+fn infos<'s>(
+(B[m[32m+    system: &'s SystemInfo,
+(B[m[32m+    members: &'s [ModelMember],
+(B[m[32m+) -> Vec<(&'s ModelMember, &'s MemberInfo)> {
+(B[m     members
+         .iter()
+         .filter_map(|member| {
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/validate.rs:61:
+[31m-            let name = member.id.strip_prefix(system.name.as_str())?.strip_prefix('.')?;
+(B[m[32m+            let name = member
+(B[m[32m+                .id
+(B[m[32m+                .strip_prefix(system.name.as_str())?
+(B[m[32m+                .strip_prefix('.')?;
+(B[m             Some((member, system.member(name)?))
+         })
+         .collect()
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/validate.rs:131:
+ /// The member `value` names, as `System.member`.
+ fn member_ref(value: &Value) -> Option<String> {
+     match value {
+[31m-        Value::Member { system, member } | Value::Reference(Reference::Member { system, member }) => {
+(B[m[32m+        Value::Member { system, member }
+(B[m[32m+        | Value::Reference(Reference::Member { system, member }) => {
+(B[m             Some(format!("{system}.{member}"))
+         }
+         _ => None,
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/validate.rs:207:
+                 validate_value(evaluator, name, value.clone(), path, span, diagnostics);
+             }
+             for (field, inner) in fields {
+[31m-                validate_nested(evaluator, inner, &format!("{path}.{field}"), span, diagnostics);
+(B[m[32m+                validate_nested(
+(B[m[32m+                    evaluator,
+(B[m[32m+                    inner,
+(B[m[32m+                    &format!("{path}.{field}"),
+(B[m[32m+                    span,
+(B[m[32m+                    diagnostics,
+(B[m[32m+                );
+(B[m             }
+         }
+         Value::List(items) | Value::Tuple(items) | Value::Enum { fields: items, .. } => {
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/validate.rs:250:
+             && declares_hook(evaluator.modules(), kind, "validate")
+         {
+             let value = member_value(program, system, info, member, kind);
+[31m-            validate_value(evaluator, kind, value, &member.id, member_span, &mut diagnostics);
+(B[m[32m+            validate_value(
+(B[m[32m+                evaluator,
+(B[m[32m+                kind,
+(B[m[32m+                value,
+(B[m[32m+                &member.id,
+(B[m[32m+                member_span,
+(B[m[32m+                &mut diagnostics,
+(B[m[32m+            );
+(B[m         }
+         for (field, value) in &member.properties {
+             let path = format!("{}.{field}", member.id);
+Diff in /home/timo/projects/telos/crates/ignite-rt/src/process.rs:287:
+             endpoint(&[], "Terminal.server"),
+             Err(("no binding for Terminal.server".to_string(), 1))
+         );
+[31m-        let (message, code) = endpoint(&["--ref", "Terminal.server=x"], "Terminal.server")
+(B[m[31m-            .unwrap_err();
+(B[m[32m+        let (message, code) =
+(B[m[32m+            endpoint(&["--ref", "Terminal.server=x"], "Terminal.server").unwrap_err();
+(B[m         assert_eq!(code, 2);
+         assert!(message.starts_with("--ref"), "{message}");
+     }
+EXIT=1

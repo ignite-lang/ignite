@@ -1,0 +1,45 @@
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.00s
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-c/debug/deps/terminal-e41c8c967291ceee)
+
+running 17 tests
+    Updating crates.io index
+     Locking 17 packages to highest Rust 1.99.1 compatible versions
+   Compiling libc v0.2.191
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling bytes v1.12.1
+   Compiling pin-project-lite v0.2.17
+   Compiling syn v3.0.9
+   Compiling errno v0.3.14
+   Compiling mio v1.2.4
+   Compiling socket2 v0.6.5
+   Compiling signal-hook-registry v1.4.8
+   Compiling tokio-macros v2.7.2
+   Compiling tokio v1.54.1
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-std v0.0.0-b93c6cce6bfd7ecf (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-c/tmp/terminal/std)
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-c/tmp/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 47.37s
+test do_echo_is_refused_with_wont ... ok
+test interrupt_process_closes ... ok
+test overlong_line_is_refused_and_closed ... ok
+test are_you_there_is_answered ... ok
+test will_naws_is_refused_with_dont ... ok
+test subnegotiation_over_1024_bytes_closes ... ok
+test tn_exits_when_input_ends_and_terminald_closes ... ok
+test tn_with_piped_input_prints_the_transcript ... ok
+test tn_refuses_options_and_strips_commands ... ok
+test tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test line_of_4096_bytes_is_accepted ... ok
+test subnegotiation_of_1024_bytes_is_skipped ... ok
+test iac_iac_is_a_literal_byte ... ok
+test subnegotiation_is_skipped ... ok
+test fragmented_input_is_reassembled ... ok
+test cr_nul_ends_a_line ... ok
+test transcript_on_raw_socket ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 47.89s
+
+EXIT=0

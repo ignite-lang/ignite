@@ -1,0 +1,9 @@
+O0 fresh status=0 wall=0.71009063720703125 test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.02s 
+O0 cached status=0 wall=0.28623414039611816 test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.02s 
+O1 fresh status=0 wall=2.9706637859344482 test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.02s 
+O1 cached status=0 wall=0.30390524864196777 test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.02s 
+O0 fresh status=0 wall=0.88596916198730469 test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.02s 
+O0 cached status=0 wall=0.32140827178955078 test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.02s 
+O1 fresh status=0 wall=3.1233999729156494 test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.02s 
+O1 cached status=0 wall=0.29152798652648926 test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.02s 
+EXIT=0

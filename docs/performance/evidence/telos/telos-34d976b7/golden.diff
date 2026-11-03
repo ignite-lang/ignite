@@ -1,0 +1,210 @@
+diff -r /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/golden-orig/consts.std.rs crates/telos-rustgen/tests/golden/consts.std.rs
+11c11
+<             pub async fn serve(mut stream: telos_io::TcpStream, mut handler: Handler) -> Result<(), telos_io::IoError> {
+---
+>             pub fn serve(mut stream: telos_io::TcpStream, mut handler: Handler) -> Result<(), telos_io::IoError> {
+14c14
+<                     let input = ((stream.read(1024)).await)?;
+---
+>                     let input = ((stream.read(1024)))?;
+21c21
+<                             ((stream.write_all(reply.clone().into_bytes())).await)?
+---
+>                             ((stream.write_all(reply.clone().into_bytes())))?
+27,28c27,28
+<             pub async fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+<                 { let __spawn_0 = stream.clone(); telos_io::spawn(async move { if let Err(error) = pump(__spawn_0).await { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+---
+>             pub fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+>                 { let __spawn_0 = stream.clone(); telos_io::spawn(move || { if let Err(error) = pump(__spawn_0) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+30c30
+<                     let input = ((stream.read(1024)).await)?;
+---
+>                     let input = ((stream.read(1024)))?;
+36c36
+<                             ((telos_io::Stdout::write_all(bytes.clone())).await)?
+---
+>                             ((telos_io::Stdout::write_all(bytes.clone())))?
+43c43
+<         pub async fn pump(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+---
+>         pub fn pump(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+45c45
+<                 let input = ((telos_io::Stdin::read(1024)).await)?;
+---
+>                 let input = ((telos_io::Stdin::read(1024)))?;
+48c48
+<                         ((stream.close()).await)?;
+---
+>                         ((stream.close()))?;
+52c52
+<                         ((stream.write_all(bytes.clone())).await)?
+---
+>                         ((stream.write_all(bytes.clone())))?
+diff -r /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/golden-orig/modules.echo.rs crates/telos-rustgen/tests/golden/modules.echo.rs
+7c7
+<     std::process::exit(telos_io::run(async {
+---
+>     std::process::exit(telos_io::run(|| {
+9,10c9,10
+<         let stream = telos_io::TcpStream::connect(String::from("127.0.0.1"), port).await.map_err(|error| error.with_exit_code(3))?;
+<         Line::connect(stream).await.map_err(|error| error.with_exit_code(4))
+---
+>         let stream = telos_io::TcpStream::connect(String::from("127.0.0.1"), port).map_err(|error| error.with_exit_code(3))?;
+>         Line::connect(stream).map_err(|error| error.with_exit_code(4))
+diff -r /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/golden-orig/modules.main.rs crates/telos-rustgen/tests/golden/modules.main.rs
+7c7
+<     std::process::exit(telos_io::run(async {
+---
+>     std::process::exit(telos_io::run(|| {
+10c10
+<         let front = telos_io::TcpListener::bind(String::from("127.0.0.1"), port).await?;
+---
+>         let front = telos_io::TcpListener::bind(String::from("127.0.0.1"), port)?;
+13c13
+<             let stream = front.accept().await?;
+---
+>             let stream = front.accept()?;
+15,16c15,16
+<             telos_io::spawn(async move {
+<                 if let Err(error) = Line::serve(stream, application).await {
+---
+>             telos_io::spawn(move || {
+>                 if let Err(error) = Line::serve(stream, application) {
+diff -r /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/golden-orig/modules.rs crates/telos-rustgen/tests/golden/modules.rs
+20c20
+< pub async fn relay(mut stream: telos_io::TcpStream, mut handler: Handler) -> Result<(), telos_io::IoError> {
+---
+> pub fn relay(mut stream: telos_io::TcpStream, mut handler: Handler) -> Result<(), telos_io::IoError> {
+22,24c22,24
+<     { let __spawn_0 = stream.clone(); let __spawn_1 = copy.clone(); telos_io::spawn(async move { if let Err(error) = Line::serve(__spawn_0, __spawn_1).await { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+<     { let __spawn_0 = stream.clone(); let __spawn_1 = handler.name.clone(); telos_io::spawn(async move { if let Err(error) = relay_log(__spawn_0, __spawn_1).await { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+<     return (Line::serve(stream.clone(), handler.clone())).await;
+---
+>     { let __spawn_0 = stream.clone(); let __spawn_1 = copy.clone(); telos_io::spawn(move || { if let Err(error) = Line::serve(__spawn_0, __spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+>     { let __spawn_0 = stream.clone(); let __spawn_1 = handler.name.clone(); telos_io::spawn(move || { if let Err(error) = relay_log(__spawn_0, __spawn_1) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+>     return (Line::serve(stream.clone(), handler.clone()));
+27c27
+< pub async fn relay_log(mut stream: telos_io::TcpStream, mut name: String) -> Result<(), telos_io::IoError> {
+---
+> pub fn relay_log(mut stream: telos_io::TcpStream, mut name: String) -> Result<(), telos_io::IoError> {
+diff -r /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/golden-orig/modules.std.rs crates/telos-rustgen/tests/golden/modules.std.rs
+11c11
+<             pub async fn serve(mut stream: telos_io::TcpStream, mut handler: Handler) -> Result<(), telos_io::IoError> {
+---
+>             pub fn serve(mut stream: telos_io::TcpStream, mut handler: Handler) -> Result<(), telos_io::IoError> {
+14c14
+<                     let input = ((stream.read(1024)).await)?;
+---
+>                     let input = ((stream.read(1024)))?;
+21c21
+<                             ((stream.write_all(reply.clone().into_bytes())).await)?
+---
+>                             ((stream.write_all(reply.clone().into_bytes())))?
+27,28c27,28
+<             pub async fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+<                 { let __spawn_0 = stream.clone(); telos_io::spawn(async move { if let Err(error) = pump(__spawn_0).await { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+---
+>             pub fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+>                 { let __spawn_0 = stream.clone(); telos_io::spawn(move || { if let Err(error) = pump(__spawn_0) { telos_io::log(&format!("task ended with error: {}", error)); } }); };
+30c30
+<                     let input = ((stream.read(1024)).await)?;
+---
+>                     let input = ((stream.read(1024)))?;
+36c36
+<                             ((telos_io::Stdout::write_all(bytes.clone())).await)?
+---
+>                             ((telos_io::Stdout::write_all(bytes.clone())))?
+43c43
+<         pub async fn pump(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+---
+>         pub fn pump(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+45c45
+<                 let input = ((telos_io::Stdin::read(1024)).await)?;
+---
+>                 let input = ((telos_io::Stdin::read(1024)))?;
+48c48
+<                         ((stream.close()).await)?;
+---
+>                         ((stream.close()))?;
+52c52
+<                         ((stream.write_all(bytes.clone())).await)?
+---
+>                         ((stream.write_all(bytes.clone())))?
+diff -r /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/golden-orig/services.main.rs crates/telos-rustgen/tests/golden/services.main.rs
+5c5
+<     std::process::exit(telos_io::run(async {
+---
+>     std::process::exit(telos_io::run(|| {
+8c8
+<         let front = telos_io::TcpListener::bind(String::from("127.0.0.1"), port).await?;
+---
+>         let front = telos_io::TcpListener::bind(String::from("127.0.0.1"), port)?;
+11c11
+<             let stream = front.accept().await?;
+---
+>             let stream = front.accept()?;
+13,14c13,14
+<             telos_io::spawn(async move {
+<                 if let Err(error) = Greeting::serve(stream, application).await {
+---
+>             telos_io::spawn(move || {
+>                 if let Err(error) = Greeting::serve(stream, application) {
+diff -r /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/golden-orig/services.readerc.rs crates/telos-rustgen/tests/golden/services.readerc.rs
+5c5
+<     std::process::exit(telos_io::run(async {
+---
+>     std::process::exit(telos_io::run(|| {
+7,8c7,8
+<         let stream = telos_io::TcpStream::connect(String::from("0.0.0.0"), port).await.map_err(|error| error.with_exit_code(3))?;
+<         Greeting::connect(stream).await.map_err(|error| error.with_exit_code(4))
+---
+>         let stream = telos_io::TcpStream::connect(String::from("0.0.0.0"), port).map_err(|error| error.with_exit_code(3))?;
+>         Greeting::connect(stream).map_err(|error| error.with_exit_code(4))
+diff -r /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/golden-orig/services.rs crates/telos-rustgen/tests/golden/services.rs
+6,8c6,8
+<     pub async fn serve(mut stream: telos_io::TcpStream, mut text: String) -> Result<(), telos_io::IoError> {
+<         ((stream.write_all(text.clone().into_bytes())).await)?;
+<         ((stream.close()).await)?;
+---
+>     pub fn serve(mut stream: telos_io::TcpStream, mut text: String) -> Result<(), telos_io::IoError> {
+>         ((stream.write_all(text.clone().into_bytes())))?;
+>         ((stream.close()))?;
+12c12
+<     pub async fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+---
+>     pub fn connect(mut stream: telos_io::TcpStream) -> Result<(), telos_io::IoError> {
+14c14
+<             let input = ((stream.read(1024)).await)?;
+---
+>             let input = ((stream.read(1024)))?;
+diff -r /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/golden-orig/terminal.main.rs crates/telos-rustgen/tests/golden/terminal.main.rs
+7c7
+<     std::process::exit(telos_io::run(async {
+---
+>     std::process::exit(telos_io::run(|| {
+10c10
+<         let ingress = telos_io::TcpListener::bind(String::from("127.0.0.1"), port).await?;
+---
+>         let ingress = telos_io::TcpListener::bind(String::from("127.0.0.1"), port)?;
+13c13
+<             let stream = ingress.accept().await?;
+---
+>             let stream = ingress.accept()?;
+15,16c15,16
+<             telos_io::spawn(async move {
+<                 if let Err(error) = Telnet::serve(stream, application).await {
+---
+>             telos_io::spawn(move || {
+>                 if let Err(error) = Telnet::serve(stream, application) {
+diff -r /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/golden-orig/terminal.tn.rs crates/telos-rustgen/tests/golden/terminal.tn.rs
+7c7
+<     std::process::exit(telos_io::run(async {
+---
+>     std::process::exit(telos_io::run(|| {
+9,10c9,10
+<         let stream = telos_io::TcpStream::connect(String::from("127.0.0.1"), port).await.map_err(|error| error.with_exit_code(3))?;
+<         Telnet::connect(stream).await.map_err(|error| error.with_exit_code(4))
+---
+>         let stream = telos_io::TcpStream::connect(String::from("127.0.0.1"), port).map_err(|error| error.with_exit_code(3))?;
+>         Telnet::connect(stream).map_err(|error| error.with_exit_code(4))

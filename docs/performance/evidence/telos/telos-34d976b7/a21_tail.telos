@@ -1,0 +1,17 @@
+type Svc {
+  listener: TcpListener
+  application: App
+  executable: Text
+}
+
+system S {
+  resource ingress: TcpListener {
+    address = "127.0.0.1"
+    port = 0
+  }
+  component svc: Svc {
+    executable = "svc"
+    listener = ingress
+    application = App { n = noisy() }
+  }
+}

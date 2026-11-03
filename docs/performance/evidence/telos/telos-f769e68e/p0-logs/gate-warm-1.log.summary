@@ -1,0 +1,7 @@
+START 2026-11-02T01:50:06+01:00 mode=warm run=1 load=2.56 6.35 11.04 3/2934 2157024
+STEP fmt secs=0.39 load_before=2.56 load_after=2.56 exit=0
+STEP clippy secs=2.05 load_before=2.56 load_after=2.56 exit=0
+STEP test secs=22.91 load_before=2.56 load_after=3.87 exit=0
+STEP test-ignite secs=0.65 load_before=3.87 load_after=3.87 exit=0
+TOTAL secs=26.03 load_end=3.87 6.35 10.92 2/2903 2209648
+EXIT=0

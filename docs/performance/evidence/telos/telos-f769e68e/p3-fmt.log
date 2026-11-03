@@ -1,0 +1,576 @@
+Diff in /home/timo/projects/telos/crates/ignite/src/lib.rs:722:
+             program: &file.program,
+             types: &file.types,
+         };
+[31m-        std.chain(siblings).chain(std::iter::once(program)).collect()
+(B[m[32m+        std.chain(siblings)
+(B[m[32m+            .chain(std::iter::once(program))
+(B[m[32m+            .collect()
+(B[m     }
+ 
+     /// The program's types.
+Diff in /home/timo/projects/telos/crates/ignite/tests/plan.rs:197:
+     let assembly = top["assembly"].object();
+     assert_eq!(
+         keys(assembly),
+[31m-        ["defaults", "id", "kind", "properties", "resolution", "system"]
+(B[m[32m+        [
+(B[m[32m+            "defaults",
+(B[m[32m+            "id",
+(B[m[32m+            "kind",
+(B[m[32m+            "properties",
+(B[m[32m+            "resolution",
+(B[m[32m+            "system"
+(B[m[32m+        ]
+(B[m     );
+     for value in assembly["properties"].object().values() {
+         check_value(value);
+Diff in /home/timo/projects/telos/crates/ignite/tests/plan.rs:268:
+ #[test]
+ fn explain_matches_the_goldens_of_15_8() {
+     for (path, golden) in [
+[31m-        ("Terminal.reachable", "terminal.design.explain.Terminal.reachable.txt"),
+(B[m         (
+[32m+            "Terminal.reachable",
+(B[m[32m+            "terminal.design.explain.Terminal.reachable.txt",
+(B[m[32m+        ),
+(B[m[32m+        (
+(B[m             "Terminal.server.recovery",
+             "terminal.design.explain.Terminal.server.recovery.txt",
+         ),
+Diff in /home/timo/projects/telos/crates/ignite/tests/plan.rs:289:
+ 
+ #[test]
+ fn explain_unknown_path_is_e119() {
+[31m-    for path in ["Terminal.nothing", "Nothing", "Terminal.server.nothing", "remote"] {
+(B[m[32m+    for path in [
+(B[m[32m+        "Terminal.nothing",
+(B[m[32m+        "Nothing",
+(B[m[32m+        "Terminal.server.nothing",
+(B[m[32m+        "remote",
+(B[m[32m+    ] {
+(B[m         let output = ignite(&["explain", DESIGN, path]);
+         assert_eq!(output.status.code(), Some(1), "{path}");
+         assert!(output.stdout.is_empty());
+Diff in /home/timo/projects/telos/crates/ignite/tests/plan.rs:296:
+         let stderr = text(&output.stderr);
+         assert!(
+[31m-            stderr.contains("terminal.design.ignite:1:1: error[E119]: `")
+(B[m[31m-                && stderr.contains(path),
+(B[m[32m+            stderr.contains("terminal.design.ignite:1:1: error[E119]: `") && stderr.contains(path),
+(B[m             "{path}: {stderr}"
+         );
+     }
+Diff in /home/timo/projects/telos/crates/ignite/tests/plan.rs:331:
+         let mut args = vec![words[0], name];
+         args.extend_from_slice(&words[1..]);
+         let output = ignite_in(&fixtures_dir(), &args);
+[31m-        assert_eq!(output.status.code(), Some(1), "{name}: {}", text(&output.stderr));
+(B[m[32m+        assert_eq!(
+(B[m[32m+            output.status.code(),
+(B[m[32m+            Some(1),
+(B[m[32m+            "{name}: {}",
+(B[m[32m+            text(&output.stderr)
+(B[m[32m+        );
+(B[m         assert!(output.stdout.is_empty(), "{name}: {}", text(&output.stdout));
+         let code = &name[..4].to_uppercase();
+         let stderr = text(&output.stderr);
+Diff in /home/timo/projects/telos/crates/ignite/tests/plan.rs:338:
+[31m-        assert!(stderr.contains(&format!("error[{code}]")), "{name}: {stderr}");
+(B[m[32m+        assert!(
+(B[m[32m+            stderr.contains(&format!("error[{code}]")),
+(B[m[32m+            "{name}: {stderr}"
+(B[m[32m+        );
+(B[m         compare(&fixture.with_extension("expected"), &stderr);
+     }
+ }
+Diff in /home/timo/projects/telos/crates/ignite/tests/plan.rs:359:
+         &["plan", fixture, "--assembly", "workstation"],
+     ));
+     assert!(selected.contains("\"id\": \"workstation\""), "{selected}");
+[31m-    assert!(selected.contains("\"variant\": \"WorkstationExecutable\""), "{selected}");
+(B[m[32m+    assert!(
+(B[m[32m+        selected.contains("\"variant\": \"WorkstationExecutable\""),
+(B[m[32m+        "{selected}"
+(B[m[32m+    );
+(B[m     let explained = success(&ignite_in(
+         &fixtures_dir(),
+         &["explain", fixture, "hosted", "--assembly", "hosted"],
+Diff in /home/timo/projects/telos/crates/ignite/tests/plan.rs:370:
+         ),
+         "{explained}"
+     );
+[31m-    assert!(explained.contains("  S.watch = ScheduledProbeHost\n"), "{explained}");
+(B[m[32m+    assert!(
+(B[m[32m+        explained.contains("  S.watch = ScheduledProbeHost\n"),
+(B[m[32m+        "{explained}"
+(B[m[32m+    );
+(B[m }
+ 
+ #[test]
+Diff in /home/timo/projects/telos/crates/ignite/tests/plan.rs:383:
+     assert_eq!(output.status.code(), Some(2));
+     let output = ignite(&["plan", DESIGN, "--fuel", "1"]);
+     assert_eq!(output.status.code(), Some(1));
+[31m-    assert!(text(&output.stderr).contains("error[E115]"), "{}", text(&output.stderr));
+(B[m[32m+    assert!(
+(B[m[32m+        text(&output.stderr).contains("error[E115]"),
+(B[m[32m+        "{}",
+(B[m[32m+        text(&output.stderr)
+(B[m[32m+    );
+(B[m }
+ 
+ fn keys(object: &BTreeMap<String, Json>) -> Vec<&str> {
+Diff in /home/timo/projects/telos/crates/ignite/tests/plan.rs:626:
+                         b'b' => out.push('\u{8}'),
+                         b'f' => out.push('\u{c}'),
+                         b'u' => {
+[31m-                            let hex = std::str::from_utf8(&self.bytes[self.at..self.at + 4]).unwrap();
+(B[m[32m+                            let hex =
+(B[m[32m+                                std::str::from_utf8(&self.bytes[self.at..self.at + 4]).unwrap();
+(B[m                             self.at += 4;
+[31m-                            out.push(char::from_u32(u32::from_str_radix(hex, 16).unwrap()).unwrap());
+(B[m[32m+                            out.push(
+(B[m[32m+                                char::from_u32(u32::from_str_radix(hex, 16).unwrap()).unwrap(),
+(B[m[32m+                            );
+(B[m                         }
+                         other => panic!("unknown escape {:?}", other as char),
+                     }
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:16:
+ 
+ use ignite_syntax::SourceFile;
+ use ignite_syntax::ast::{
+[31m-    Arm, BinaryOp, Block, BraceEntry, ConstDecl, Decl, EnumDecl, Expr, ExprKind, FnDecl,
+(B[m[31m-    Pattern, PatternKind, Program, RecordDecl, Stmt, StmtKind, UnaryOp,
+(B[m[32m+    Arm, BinaryOp, Block, BraceEntry, ConstDecl, Decl, EnumDecl, Expr, ExprKind, FnDecl, Pattern,
+(B[m[32m+    PatternKind, Program, RecordDecl, Stmt, StmtKind, UnaryOp,
+(B[m };
+ use ignite_types::{
+     AssertCompare, BraceKind, Builtin, Callee, EXPOSURE_VARIANTS, FailureOp, MemberInfo,
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:217:
+         }
+         let Some(module) = self.modules.get(&program.module) else {
+             return Err(EvalError::Failed {
+[31m-                report: format!("evaluation failed: module `{}` is not loaded", program.module),
+(B[m[32m+                report: format!(
+(B[m[32m+                    "evaluation failed: module `{}` is not loaded",
+(B[m[32m+                    program.module
+(B[m[32m+                ),
+(B[m             });
+         };
+         let system = enclosing_system(module, expr.span.start);
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:430:
+         }
+         self.tick()?;
+         self.enter()?;
+[31m-        let mut frame = Frame { locals: captures, scopes: Vec::new() };
+(B[m[32m+        let mut frame = Frame {
+(B[m[32m+            locals: captures,
+(B[m[32m+            scopes: Vec::new(),
+(B[m[32m+        };
+(B[m         for (param, value) in closure.params.iter().zip(args) {
+             frame.locals.push((param.name.name.clone(), value));
+         }
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:505:
+             .get(module)
+             .ok_or_else(|| internal(format!("module `{module}` is not loaded")))?;
+         let expr = field_default(m.program, record, field).ok_or_else(|| {
+[31m-            internal(format!("field `{record}.{field}` of `{module}` has no default"))
+(B[m[32m+            internal(format!(
+(B[m[32m+                "field `{record}.{field}` of `{module}` has no default"
+(B[m[32m+            ))
+(B[m         })?;
+         let cx = Cx {
+             module: m,
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:951:
+             Some(Callee::Role { protocol, role }) => Err(internal(format!(
+                 "protocol role `{protocol}.{role}` has no value at compile time"
+             ))),
+[31m-            Some(Callee::FieldFn { field, .. }) => {
+(B[m[31m-                Err(internal(format!("call of field `{field}` without a receiver")))
+(B[m[31m-            }
+(B[m[32m+            Some(Callee::FieldFn { field, .. }) => Err(internal(format!(
+(B[m[32m+                "call of field `{field}` without a receiver"
+(B[m[32m+            ))),
+(B[m             None => Err(internal("call without a callee")),
+         }
+     }
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:1362:
+             ExprKind::Name(name) if self.is_local(cx, &name.name) => {
+                 Ok(Some((name.name.clone(), Vec::new())))
+             }
+[31m-            ExprKind::Field { receiver, name } => Ok(self.place_path(cx, receiver)?.map(
+(B[m[31m-                |(base, mut steps)| {
+(B[m[32m+            ExprKind::Field { receiver, name } => {
+(B[m[32m+                Ok(self.place_path(cx, receiver)?.map(|(base, mut steps)| {
+(B[m                     steps.push(Step::Field(name.name.clone()));
+                     (base, steps)
+[31m-                },
+(B[m[31m-            )),
+(B[m[32m+                }))
+(B[m[32m+            }
+(B[m             ExprKind::Index { receiver, index } => {
+                 let Some((base, mut steps)) = self.place_path(cx, receiver)? else {
+                     return Ok(None);
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:1378:
+                 steps.push(Step::Index(i, e.span.start));
+                 Ok(Some((base, steps)))
+             }
+[31m-            ExprKind::TupleField { receiver, index } => Ok(self.place_path(cx, receiver)?.map(
+(B[m[31m-                |(base, mut steps)| {
+(B[m[32m+            ExprKind::TupleField { receiver, index } => {
+(B[m[32m+                Ok(self.place_path(cx, receiver)?.map(|(base, mut steps)| {
+(B[m                     steps.push(Step::Tuple(*index));
+                     (base, steps)
+[31m-                },
+(B[m[31m-            )),
+(B[m[32m+                }))
+(B[m[32m+            }
+(B[m             _ => Ok(None),
+         }
+     }
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:1497:
+         Ok(acc)
+     }
+ 
+[31m-    fn binary(&mut self, cx: &Cx<'p>, node: &Expr, op: BinaryOp, l: Value, r: Value) -> Eval<Value> {
+(B[m[32m+    fn binary(
+(B[m[32m+        &mut self,
+(B[m[32m+        cx: &Cx<'p>,
+(B[m[32m+        node: &Expr,
+(B[m[32m+        op: BinaryOp,
+(B[m[32m+        l: Value,
+(B[m[32m+        r: Value,
+(B[m[32m+    ) -> Eval<Value> {
+(B[m         use BinaryOp::*;
+         match op {
+             Eq => return Ok(Value::Bool(l == r)),
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:1561:
+                 self.alloc(joined.len() as u64 / 64)?;
+                 Ok(Value::Text(joined))
+             }
+[31m-            (Value::Quantity(k, a), Value::Quantity(_, b)) if matches!(op, Add | Sub) => int(*a, *b)
+(B[m[31m-                .map(|v| Value::Quantity(*k, v))
+(B[m[31m-                .ok_or_else(|| overflow(self, *a, *b)),
+(B[m[32m+            (Value::Quantity(k, a), Value::Quantity(_, b)) if matches!(op, Add | Sub) => {
+(B[m[32m+                int(*a, *b)
+(B[m[32m+                    .map(|v| Value::Quantity(*k, v))
+(B[m[32m+                    .ok_or_else(|| overflow(self, *a, *b))
+(B[m[32m+            }
+(B[m             (Value::Quantity(k, a), Value::Int(b)) if matches!(op, Mul | Div) => int(*a, *b)
+                 .map(|v| Value::Quantity(*k, v))
+                 .ok_or_else(|| overflow(self, *a, *b)),
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:1866:
+                 .into_iter()
+                 .map(|(k, v)| Value::Tuple(vec![k, v]))
+                 .collect()),
+[31m-            other => Err(internal(format!(
+(B[m[31m-                "`for` over `{}`",
+(B[m[31m-                other.debug_text()
+(B[m[31m-            ))),
+(B[m[32m+            other => Err(internal(format!("`for` over `{}`", other.debug_text()))),
+(B[m         }
+     }
+ 
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:2057:
+ 
+ /// Follow `steps` from `root`; an index out of range gives the offset of the
+ /// index expression and the `index` failure detail.
+[31m-fn navigate<'v>(mut value: &'v mut Value, steps: &[Step]) -> Result<&'v mut Value, (usize, String)> {
+(B[m[32m+fn navigate<'v>(
+(B[m[32m+    mut value: &'v mut Value,
+(B[m[32m+    steps: &[Step],
+(B[m[32m+) -> Result<&'v mut Value, (usize, String)> {
+(B[m     for step in steps {
+         value = match step {
+             Step::Field(name) => match value {
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:2064:
+[31m-                Value::Record { fields, .. } => {
+(B[m[31m-                    match fields.iter_mut().find(|(n, _)| n == name) {
+(B[m[31m-                        Some((_, field)) => field,
+(B[m[31m-                        None => return Err((0, format!("no field `{name}`"))),
+(B[m[31m-                    }
+(B[m[31m-                }
+(B[m[32m+                Value::Record { fields, .. } => match fields.iter_mut().find(|(n, _)| n == name) {
+(B[m[32m+                    Some((_, field)) => field,
+(B[m[32m+                    None => return Err((0, format!("no field `{name}`"))),
+(B[m[32m+                },
+(B[m                 _ => return Err((0, "field of a value that is no record".to_string())),
+             },
+             Step::Index(index, offset) => match value {
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:2138:
+             Decl::Protocol(p) => blocks.extend(p.fns.iter().map(|f| &f.body)),
+             Decl::Test(t) => blocks.push(&t.body),
+             Decl::System(s) => {
+[31m-                pending.extend(s.resources.iter().flat_map(|r| r.properties.iter().map(|p| &p.value)));
+(B[m[31m-                for component in s
+(B[m[31m-                    .components
+(B[m[31m-                    .iter()
+(B[m[31m-                    .chain(&s.contracts)
+(B[m[31m-                    .chain(&s.policies)
+(B[m[31m-                {
+(B[m[32m+                pending.extend(
+(B[m[32m+                    s.resources
+(B[m[32m+                        .iter()
+(B[m[32m+                        .flat_map(|r| r.properties.iter().map(|p| &p.value)),
+(B[m[32m+                );
+(B[m[32m+                for component in s.components.iter().chain(&s.contracts).chain(&s.policies) {
+(B[m                     pending.extend(component.properties.iter().map(|p| &p.value));
+                 }
+             }
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/eval.rs:2258:
+ }
+ 
+ /// Where `key` is in `entries`, or where it would be inserted.
+[31m-fn map_find(modules: &Modules<'_>, entries: &[(Value, Value)], key: &Value) -> Result<usize, usize> {
+(B[m[32m+fn map_find(
+(B[m[32m+    modules: &Modules<'_>,
+(B[m[32m+    entries: &[(Value, Value)],
+(B[m[32m+    key: &Value,
+(B[m[32m+) -> Result<usize, usize> {
+(B[m     entries.binary_search_by(|(k, _)| key_cmp(modules, k, key))
+ }
+ 
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/explain.rs:28:
+     if let Some(member) = model.member(path) {
+         return Ok(member_text(model, member));
+     }
+[31m-    if let Some((member, rest)) = model
+(B[m[31m-        .members
+(B[m[31m-        .iter()
+(B[m[31m-        .find_map(|m| path.strip_prefix(m.id.as_str())?.strip_prefix('.').map(|r| (m, r)))
+(B[m[31m-        && let Some(text) = property_text(model, member, path, rest)
+(B[m[32m+    if let Some((member, rest)) = model.members.iter().find_map(|m| {
+(B[m[32m+        path.strip_prefix(m.id.as_str())?
+(B[m[32m+            .strip_prefix('.')
+(B[m[32m+            .map(|r| (m, r))
+(B[m[32m+    }) && let Some(text) = property_text(model, member, path, rest)
+(B[m     {
+         return Ok(text);
+     }
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/explain.rs:179:
+                     out.push_str(&format!(" via {}", entry.via));
+                 }
+                 out.push_str(&format!(" = {}", render(&entry.binding)));
+[31m-                if let Some(executable) = model.member(&entry.member).and_then(|m| m.executable.as_ref()) {
+(B[m[32m+                if let Some(executable) = model
+(B[m[32m+                    .member(&entry.member)
+(B[m[32m+                    .and_then(|m| m.executable.as_ref())
+(B[m[32m+                {
+(B[m                     out.push_str(&format!(", executable {executable}"));
+                 }
+                 out.push('\n');
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/explain.rs:224:
+ 
+ /// The text of a value in an explanation (module doc).
+ pub fn render(value: &Value) -> String {
+[31m-    let list = |items: &[Value]| {
+(B[m[31m-        items
+(B[m[31m-            .iter()
+(B[m[31m-            .map(render)
+(B[m[31m-            .collect::<Vec<_>>()
+(B[m[31m-            .join(", ")
+(B[m[31m-    };
+(B[m[32m+    let list = |items: &[Value]| items.iter().map(render).collect::<Vec<_>>().join(", ");
+(B[m     match value {
+         Value::Unit => "()".to_string(),
+         Value::Bool(b) => b.to_string(),
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:137:
+ /// and enums as `module.Name`, builtin types by their bare name, type
+ /// arguments qualified the same way.
+ pub fn type_name(ty: &Ty) -> String {
+[31m-    let list = |args: &[Ty]| {
+(B[m[31m-        args.iter()
+(B[m[31m-            .map(type_name)
+(B[m[31m-            .collect::<Vec<_>>()
+(B[m[31m-            .join(", ")
+(B[m[31m-    };
+(B[m[32m+    let list = |args: &[Ty]| args.iter().map(type_name).collect::<Vec<_>>().join(", ");
+(B[m     match ty {
+         Ty::Record(q) | Ty::Enum(q) => q.to_string(),
+         Ty::GenericRecord(q, args) | Ty::GenericEnum(q, args) => format!("{q}<{}>", list(args)),
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:323:
+                 }
+             }
+             PropertySource::Default(q) if q.is_builtin() => {
+[31m-                self.source_map
+(B[m[31m-                    .insert(path.clone(), self.position(offset));
+(B[m[32m+                self.source_map.insert(path.clone(), self.position(offset));
+(B[m                 let value = match q.name.as_str() {
+                     "TcpListener.exposure" => Value::Enum {
+                         name: QualName::builtin("Exposure"),
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:352:
+                 }
+             }
+             PropertySource::ComponentName => {
+[31m-                self.source_map
+(B[m[31m-                    .insert(path.clone(), self.position(offset));
+(B[m[32m+                self.source_map.insert(path.clone(), self.position(offset));
+(B[m                 (Value::Text(name.to_string()), true)
+             }
+         };
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:447:
+             if let Some(expr) = set {
+                 self.uses(&member.id, system, expr);
+             }
+[31m-            match self.property(
+(B[m[31m-                &member.id,
+(B[m[31m-                &member.name,
+(B[m[31m-                field,
+(B[m[31m-                source,
+(B[m[31m-                set,
+(B[m[31m-                member.offset,
+(B[m[31m-            ) {
+(B[m[32m+            match self.property(&member.id, &member.name, field, source, set, member.offset) {
+(B[m                 Some((value, defaulted)) => {
+                     value_edges(&member.id, &value, &mut self.edges);
+                     if defaulted {
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:680:
+     /// and every assembly whose `system` names a system of the program is
+     /// resolved; E110 to E113, E115, E117 and E118 as `model` reports them,
+     /// never E114.
+[31m-    pub fn check(evaluator: &mut Evaluator<'_>, program: &TypedProgram) -> Result<(), Vec<Diagnostic>> {
+(B[m[32m+    pub fn check(
+(B[m[32m+        evaluator: &mut Evaluator<'_>,
+(B[m[32m+        program: &TypedProgram,
+(B[m[32m+    ) -> Result<(), Vec<Diagnostic>> {
+(B[m         let mut builder = Builder::new(evaluator, program);
+         for system in program.systems() {
+             builder.system(program, system);
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:739:
+             "components".to_string(),
+             members(MemberDeclaration::Component),
+         );
+[31m-        top.insert("contracts".to_string(), members(MemberDeclaration::Contract));
+(B[m         top.insert(
+[32m+            "contracts".to_string(),
+(B[m[32m+            members(MemberDeclaration::Contract),
+(B[m[32m+        );
+(B[m[32m+        top.insert(
+(B[m             "edges".to_string(),
+             Json::Array(self.edges.iter().map(Edge::json).collect()),
+         );
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:749:
+             Json::Str(FORMAT_VERSION.to_string()),
+         );
+         top.insert("policies".to_string(), members(MemberDeclaration::Policy));
+[31m-        top.insert("resources".to_string(), members(MemberDeclaration::Resource));
+(B[m         top.insert(
+[32m+            "resources".to_string(),
+(B[m[32m+            members(MemberDeclaration::Resource),
+(B[m[32m+        );
+(B[m[32m+        top.insert(
+(B[m             "sourceMap".to_string(),
+             Json::Object(
+                 self.source_map
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:773:
+         );
+         entry.insert(
+             "defaults".to_string(),
+[31m-            Json::Array(
+(B[m[31m-                self.defaults
+(B[m[31m-                    .iter()
+(B[m[31m-                    .map(|d| Json::Str(d.clone()))
+(B[m[31m-                    .collect(),
+(B[m[31m-            ),
+(B[m[32m+            Json::Array(self.defaults.iter().map(|d| Json::Str(d.clone())).collect()),
+(B[m         );
+         entry.insert(
+             "executable".to_string(),
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:807:
+         let mut entry = BTreeMap::new();
+         entry.insert(
+             "defaults".to_string(),
+[31m-            Json::Array(
+(B[m[31m-                self.defaults
+(B[m[31m-                    .iter()
+(B[m[31m-                    .map(|d| Json::Str(d.clone()))
+(B[m[31m-                    .collect(),
+(B[m[31m-            ),
+(B[m[32m+            Json::Array(self.defaults.iter().map(|d| Json::Str(d.clone())).collect()),
+(B[m         );
+         entry.insert("id".to_string(), Json::Str(self.id.clone()));
+         entry.insert("kind".to_string(), Json::Str(self.kind.clone()));
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:843:
+     fn json(&self) -> Json {
+         let mut entry = BTreeMap::new();
+         entry.insert("from".to_string(), Json::Str(self.from.clone()));
+[31m-        entry.insert("kind".to_string(), Json::Str(self.kind.as_str().to_string()));
+(B[m[32m+        entry.insert(
+(B[m[32m+            "kind".to_string(),
+(B[m[32m+            Json::Str(self.kind.as_str().to_string()),
+(B[m[32m+        );
+(B[m         entry.insert("to".to_string(), Json::Str(self.to.clone()));
+         Json::Object(entry)
+     }
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:899:
+         } => {
+             let mut entries = vec![("variant", Json::Str(variant.clone()))];
+             if !fields.is_empty() {
+[31m-                entries.push(("fields", Json::Array(fields.iter().map(value_json).collect())));
+(B[m[32m+                entries.push((
+(B[m[32m+                    "fields",
+(B[m[32m+                    Json::Array(fields.iter().map(value_json).collect()),
+(B[m[32m+                ));
+(B[m             }
+             tagged(&name.to_string(), entries)
+         }
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/model.rs:932:
+             };
+             tagged(ty, vec![("ref", Json::Str(reference.text()))])
+         }
+[31m-        Value::Member { system, member } => {
+(B[m[31m-            tagged("Ref", vec![("ref", Json::Str(format!("{system}.{member}")))])
+(B[m[31m-        }
+(B[m[32m+        Value::Member { system, member } => tagged(
+(B[m[32m+            "Ref",
+(B[m[32m+            vec![("ref", Json::Str(format!("{system}.{member}")))],
+(B[m[32m+        ),
+(B[m         Value::Module { module, fns } => tagged(
+             "Module",
+             vec![
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/resolve.rs:7:
+ use ignite_syntax::ast::{Decl, ExprKind, Span};
+ use ignite_syntax::diagnostic::Diagnostic;
+ use ignite_types::{
+[31m-    AssemblyInfo, MemberDeclaration, MemberInfo, QualName, Reference, SystemInfo, Ty,
+(B[m[31m-    TypedProgram,
+(B[m[32m+    AssemblyInfo, MemberDeclaration, MemberInfo, QualName, Reference, SystemInfo, Ty, TypedProgram,
+(B[m };
+ 
+ use crate::model::{eval_diagnostic, type_name};
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/resolve.rs:175:
+             &admits,
+             vec![binding.clone(), member_value(member, executable.is_some())],
+         ) {
+[31m-            Ok(Value::Enum { variant, fields, .. }) if variant == "Some" => {
+(B[m[32m+            Ok(Value::Enum {
+(B[m[32m+                variant, fields, ..
+(B[m[32m+            }) if variant == "Some" => {
+(B[m                 let reason = match fields.first() {
+                     Some(Value::Text(reason)) => reason.clone(),
+                     _ => "not admitted".to_string(),
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/value.rs:127:
+             Value::List(items) | Value::Tuple(items) => {
+                 1 + items.iter().map(Value::nodes).sum::<u64>()
+             }
+[31m-            Value::Record { fields, .. } | Value::Closure { captures: fields, .. } => {
+(B[m[31m-                1 + fields.iter().map(|(_, v)| v.nodes()).sum::<u64>()
+(B[m[31m-            }
+(B[m[32m+            Value::Record { fields, .. }
+(B[m[32m+            | Value::Closure {
+(B[m[32m+                captures: fields, ..
+(B[m[32m+            } => 1 + fields.iter().map(|(_, v)| v.nodes()).sum::<u64>(),
+(B[m             Value::Enum { fields, .. } => 1 + fields.iter().map(Value::nodes).sum::<u64>(),
+             Value::Map(entries) => {
+                 1 + entries
+Diff in /home/timo/projects/telos/crates/ignite-eval/src/value.rs:210:
+                 variant,
+                 fields,
+             } => {
+[31m-                let bare = name.is_builtin() && matches!(name.name.as_str(), "Option" | "Result" | "Input");
+(B[m[32m+                let bare = name.is_builtin()
+(B[m[32m+                    && matches!(name.name.as_str(), "Option" | "Result" | "Input");
+(B[m                 if !bare {
+                     out.push_str(&name.name);
+                     out.push('.');

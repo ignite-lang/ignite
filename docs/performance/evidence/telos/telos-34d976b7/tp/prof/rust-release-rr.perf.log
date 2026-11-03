@@ -1,0 +1,2 @@
+[ perf record: Woken up 41 times to write data ]
+[ perf record: Captured and wrote 11.520 MB /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/tp/prof/rust-release-rr.perf.data (174225 samples) ]

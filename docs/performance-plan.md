@@ -38,8 +38,8 @@ slow result merely because it misses the target. Preserve the already-passing li
 
 Owner: benchmark harness and repository documentation, following `docs/slice.md` 15.1.
 
-- Preserve the exact recovered 11b tree currently at
-  `/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-before` as a
+- Preserve the exact recovered 11b tree `s12-before` (formerly in the telos coordinator's
+  scratch directory, now branch `bench/11b-recovered`) as a
   benchmark-only Git ref with a source manifest. Label it as a recovered snapshot based on
   `60aef38`, not as a historical commit that already existed. Verify its source against the
   retained 12b measurement manifest. Do not use `9273349` as a replacement baseline.

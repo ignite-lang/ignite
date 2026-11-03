@@ -1,0 +1,257 @@
+/// The `system` and the component declaration of the executable `info`.
+fn executable_decl<'p>(
+    program: &'p Program,
+    info: &ExecutableInfo,
+) -> Option<(&'p SystemDecl, &'p ComponentDecl)> {
+    let system = program.decls.iter().find_map(|decl| match decl {
+        Decl::System(system) if system.name.name == info.system => Some(system),
+        _ => None,
+    })?;
+    let component = system
+        .components
+        .iter()
+        .find(|c| c.name.name == info.component)?;
+    Some((system, component))
+}
+
+/// The declared `address` (a `Text` value) and `port` (an `i64` operand)
+/// of the `TcpListener` resource `resource`.
+fn listener_values(l: &mut Lower<'_, '_, '_>, resource: &ResourceDecl) -> (Val, String) {
+    let property = |name: &str| {
+        resource
+            .properties
+            .iter()
+            .find(|p| p.name.name == name)
+            .map(|p| &p.value)
+    };
+    let address = match property("address") {
+        Some(e) => l.expr(e, true),
+        None => l.text_literal(b""),
+    };
+    let port = match property("port") {
+        Some(e) => {
+            let v = l.expr(e, true);
+            l.scalar(&v)
+        }
+        None => "0".to_string(),
+    };
+    (address, port)
+}
+
+/// The record value of component `decl` of kind `kind` (`docs/slice.md`
+/// section 14.4): its properties as fields, with a `TcpListener` resource
+/// named where a record (`Endpoint`) is expected replaced by its endpoint
+/// value, an omitted `executable` set to the component's name, an omitted
+/// `Signal` output set to its reference text, and the kind's defaults for
+/// every other omitted field.
+fn component_value(
+    l: &mut Lower<'_, '_, '_>,
+    system: &str,
+    decl: &ComponentDecl,
+    kind: &Ty,
+    endpoints: &[(String, Val)],
+) -> Val {
+    let declared = l.env.fields_of(kind);
+    let mut fixed: Vec<(String, Val)> = Vec::new();
+    for (field, ty) in &declared {
+        if decl.properties.iter().any(|p| p.name.name == *field) {
+            continue;
+        }
+        if field == "executable" {
+            let v = l.text_literal(decl.name.name.as_bytes());
+            fixed.push((field.clone(), v));
+        } else if let Ty::Signal(_) = ty {
+            let text = format!("{system}.{}.{field}", decl.name.name);
+            let v = l.text_literal(text.as_bytes());
+            fixed.push((field.clone(), v));
+        }
+    }
+    for property in &decl.properties {
+        if let ExprKind::Name(id) = &property.value.kind
+            && let Some((_, endpoint)) = endpoints.iter().find(|(n, _)| *n == id.name)
+            && declared.iter().any(|(field, ty)| {
+                *field == property.name.name && matches!(ty, Ty::Record(_) | Ty::GenericRecord(..))
+            })
+        {
+            fixed.push((property.name.name.clone(), endpoint.clone()));
+        }
+    }
+    let inits: Vec<(&str, &Expr)> = decl
+        .properties
+        .iter()
+        .map(|p| (p.name.name.as_str(), &p.value))
+        .collect();
+    l.record_with(kind, &inits, &fixed)
+}
+
+/// `main_<executable>.ll` of an executable component (`docs/slice.md`
+/// section 14.5, `docs/llvm.md` section 6): `init`, the `Store` resources
+/// the component uses, `--port` (exit 2 when malformed), each
+/// `TcpListener` resource bound (the first with the `--port` override;
+/// exit 1 when the bind fails) and logged as `listening on
+/// <address>:<port>`, the `Endpoint` of each listener the component names
+/// as a target (`--port` applies to it), the embedded components' values
+/// in dependency order, the component's own value, then `K.main(value)`:
+/// `Ok` exits 0, `Err` prints `error: <message>` and exits with the
+/// error's exit code.
+fn executable_main_in<'e>(
+    env: &'e TypeEnv,
+    sources: &[ModuleInput<'e>],
+    program: &ModuleInput<'_>,
+    info: &ExecutableInfo,
+    options: &Options<'e>,
+) -> String {
+    let (system, decl) = executable_decl(program.program, info).unwrap_or_else(|| {
+        panic!(
+            "component `{}` of system `{}` is not declared",
+            info.component, info.system
+        )
+    });
+    let listener = |name: &str| {
+        system
+            .resources
+            .iter()
+            .find(|r| r.name.name == name && r.kind.name == "TcpListener")
+    };
+    let mut m = Module::new(env, &format!("main_{}", info.executable));
+    configure(&mut m, options);
+    add_sources(&mut m, sources);
+    let cx = Ctx::new(
+        program.path,
+        program.program,
+        program.symbols,
+        program.types,
+    );
+    let header = "define i32 @main(i32 %argc, ptr %argv)".to_string();
+    let mut l = Lower::new(&mut m, &cx, Func::new(header), Ty::Unit);
+    l.debug_scope("main", decl.span.start);
+    l.f.ins("call void @telos_rt_init(i32 %argc, ptr %argv)");
+    let mut created: Vec<&str> = Vec::new();
+    for (name, ty) in &info.resources {
+        if let Ty::Store(element) = ty
+            && !created.contains(&name.as_str())
+        {
+            created.push(name);
+            l.create_store(name, element);
+        }
+    }
+    let mut listeners: Vec<&str> = Vec::new();
+    let mut endpoints: Vec<(&str, &Ty)> = Vec::new();
+    for (name, ty) in &info.resources {
+        match ty {
+            Ty::TcpListener if !listeners.contains(&name.as_str()) => listeners.push(name),
+            Ty::Record(_) | Ty::GenericRecord(..)
+                if listener(name).is_some() && !endpoints.iter().any(|(n, _)| *n == name) =>
+            {
+                endpoints.push((name, ty));
+            }
+            _ => {}
+        }
+    }
+    let err = l.temp(&Ty::IoError);
+    let mut override_port: Option<(String, String)> = None;
+    if !listeners.is_empty() || !endpoints.is_empty() {
+        let port_slot = l.temp(&Ty::Int);
+        let present = l.f.alloca(Layout::scalar(4));
+        let status = l.f.val(format!(
+            "call i32 @telos_rt_args_port(ptr {port_slot}, ptr {present}, ptr {err})"
+        ));
+        fail_unless_ok(&mut l, &status, &err, 2);
+        let given = l.f.val(format!("load i32, ptr {present}, align 4"));
+        let has = l.f.val(format!("icmp ne i32 {given}, 0"));
+        let port = l.f.val(format!("load i64, ptr {port_slot}, align 8"));
+        override_port = Some((has, port));
+    }
+    for (index, name) in listeners.iter().enumerate() {
+        let resource = listener(name)
+            .unwrap_or_else(|| panic!("resource `{name}` is not a `TcpListener`"));
+        let (address, declared) = listener_values(&mut l, resource);
+        let port = match (&override_port, index) {
+            (Some((has, given)), 0) => {
+                l.f.val(format!("select i1 {has}, i64 {given}, i64 {declared}"))
+            }
+            _ => declared,
+        };
+        let address = l.ptr(&address);
+        let handle = l.temp(&Ty::Int);
+        let status = l.f.val(format!(
+            "call i32 @telos_rt_tcp_bind(ptr {address}, i64 {port}, ptr {handle}, ptr {err})"
+        ));
+        fail_unless_ok(&mut l, &status, &err, 1);
+        let bound = l.f.val(format!("load i64, ptr {handle}, align 8"));
+        let local_port = l.f.val(format!("call i64 @telos_rt_tcp_local_port(i64 {bound})"));
+        let prefix = l.literal_ref(b"listening on ");
+        let colon = l.literal_ref(b":");
+        let number = l.temp(&Ty::Text);
+        l.f.ins(format!(
+            "call void @telos_rt_int_to_text(ptr {number}, i64 {local_port})"
+        ));
+        let head = l.temp(&Ty::Text);
+        l.f.ins(format!(
+            "call void @telos_rt_text_concat(ptr {head}, ptr {prefix}, ptr {address})"
+        ));
+        let with_colon = l.temp(&Ty::Text);
+        l.f.ins(format!(
+            "call void @telos_rt_text_concat(ptr {with_colon}, ptr {head}, ptr {colon})"
+        ));
+        let line = l.temp(&Ty::Text);
+        l.f.ins(format!(
+            "call void @telos_rt_text_concat(ptr {line}, ptr {with_colon}, ptr {number})"
+        ));
+        l.f.ins(format!("call void @telos_rt_log(ptr {line})"));
+        l.bind_local(name, &Ty::TcpListener, Val::Scalar(bound));
+    }
+    let mut endpoint_values: Vec<(String, Val)> = Vec::new();
+    for (name, ty) in &endpoints {
+        let resource = listener(name)
+            .unwrap_or_else(|| panic!("resource `{name}` is not a `TcpListener`"));
+        let (address, declared) = listener_values(&mut l, resource);
+        let port = match &override_port {
+            Some((has, given)) => l.f.val(format!("select i1 {has}, i64 {given}, i64 {declared}")),
+            None => declared,
+        };
+        let fixed = [
+            ("address".to_string(), address),
+            ("port".to_string(), Val::Scalar(port)),
+        ];
+        let value = l.record_with(ty, &[], &fixed);
+        let p = l.ptr(&value);
+        endpoint_values.push(((*name).to_string(), Val::Ptr(p, false)));
+    }
+    let own = (info.component.clone(), info.kind.clone());
+    let mut value = Val::Unit;
+    for (name, ty) in info.embedded.iter().chain(std::iter::once(&own)) {
+        let component = system
+            .components
+            .iter()
+            .find(|c| c.name.name == *name)
+            .unwrap_or_else(|| {
+                panic!("component `{name}` of system `{}` is not declared", info.system)
+            });
+        value = component_value(&mut l, &info.system, component, ty, &endpoint_values);
+        l.bind_local(name, ty, value.clone());
+    }
+    let (main_symbol, sig) = l
+        .fn_instance_with(&info.main, &info.main_args)
+        .unwrap_or_else(|| panic!("no signature for {}", symbol(&info.main)));
+    let callee = l.function(&main_symbol, &sig.params, &sig.ret);
+    let self_ptr = l.ptr(&value);
+    let result = l.call(&callee, &sig.ret, vec![Some(format!("ptr {self_ptr}"))]);
+    let p = l.ptr(&result);
+    let layout = env.enum_layout(&sig.ret);
+    let tag = l.f.val(format!("load i32, ptr {p}, align 4"));
+    let failed = l.f.val(format!("icmp eq i32 {tag}, 1"));
+    let (bad, good) = (l.f.label(), l.f.label());
+    l.f.cond_br(&failed, &bad, &good);
+    l.f.place(&bad);
+    let error = l.gep(&p, layout.variants[1].1[0].1);
+    l.f.ins(format!("call void @telos_rt_fail(ptr {error})"));
+    l.f.term("unreachable");
+    l.f.place(&good);
+    l.f.ins("call void @telos_rt_exit(i32 0)");
+    l.f.term("unreachable");
+    let text = l.f.finish("unreachable");
+    m.define("main", text);
+    m.finish()
+}
+

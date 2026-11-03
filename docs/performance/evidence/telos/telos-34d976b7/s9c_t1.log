@@ -1,0 +1,38 @@
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.44s
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/main-9d267f49cdec8647)
+
+running 16 tests
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test slice9::long_chains_100k_run_on_llvm ... ignored
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test llvm_build::failed_compile_is_retried ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+test slice9::long_chains_lower_quickly ... FAILED
+test slice9::rust_target_features_pass_on_llvm ... ok
+test telos_test::overflow_fails_the_same_everywhere ... ok
+test slice9::slice9_values_across_regions ... ok
+test slice9::long_chains_run_on_llvm ... ok
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test slice9::audit_probes_pass ... ok
+test slice9::var_aliases_leave_the_source_unchanged ... ok
+test slice9::audit_io_probes_pass ... ok
+
+failures:
+
+---- slice9::long_chains_lower_quickly stdout ----
+
+thread 'slice9::long_chains_lower_quickly' (3046414) panicked at crates/telos/tests/slice9.rs:203:5:
+lowering took 5.895397005s
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    slice9::long_chains_lower_quickly
+
+test result: FAILED. 13 passed; 1 failed; 2 ignored; 0 measured; 123 filtered out; finished in 46.56s
+
+error: test failed, to rerun pass `-p telos --test main`
+EXIT=101

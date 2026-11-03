@@ -1,0 +1,2 @@
+[ perf record: Woken up 59 times to write data ]
+[ perf record: Captured and wrote 17.570 MB /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/tp/prof/llvm-release-pipe.perf.data (271929 samples) ]

@@ -1,0 +1,6 @@
+2026-11-02T01:57:03+01:00 start flake.sh alone 30 load=25.75
+2026-11-02T01:57:22+01:00 end flake.sh alone 30 load=32.47
+2026-11-02T01:57:22+01:00 start flake.sh beside 30 load=32.47
+2026-11-02T01:57:48+01:00 end flake.sh beside 30 load=24.69
+2026-11-02T01:57:48+01:00 wait load<4.5 for todod.sh 1 (load=24.69)
+2026-11-02T02:04:33+01:00 series3 killed by P0 (coordinator: no load wait; series4)

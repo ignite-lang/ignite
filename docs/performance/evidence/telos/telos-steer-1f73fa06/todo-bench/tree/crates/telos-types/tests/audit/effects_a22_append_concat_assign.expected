@@ -1,0 +1,1 @@
+effects_a22_append_concat_assign.telos:28:3: error[E001]: the left side of `=` must be a name or a field path such as `a.b`

@@ -1,0 +1,6 @@
+    Checking telos-check v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-check)
+    Checking telos-types v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-types)
+    Checking telos-llvm v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-llvm)
+    Checking telos-rustgen v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-rustgen)
+    Checking telos v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.04s

@@ -1,0 +1,50 @@
+   Compiling telos-syntax v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-syntax)
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+   Compiling utf8parse v0.2.2
+   Compiling anstyle v1.0.14
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+   Compiling heck v0.5.0
+   Compiling strsim v0.11.1
+   Compiling clap_lex v1.1.1
+   Compiling telos-load v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-load)
+   Compiling nix v0.31.3
+   Compiling anstyle-parse v1.0.0
+   Compiling anstream v1.0.0
+   Compiling telos-check v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-check)
+   Compiling clap_builder v4.6.7
+   Compiling syn v3.0.9
+   Compiling telos-types v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-types)
+   Compiling telos-io v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-io)
+   Compiling telos-rustgen v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-rustgen)
+   Compiling telos-llvm v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-llvm)
+   Compiling clap_derive v4.6.7
+   Compiling telos-rt v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos-rt)
+   Compiling clap v4.6.7
+   Compiling telos v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-after-tree/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.95s
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/telos-2748d864c8d1f1a4)
+  Executable unittests src/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/telos-a1c8e2c934e88fdb)
+  Executable tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/main-9d267f49cdec8647)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/telos_check-fe8934d655f8a278)
+  Executable tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/main-ecb9e8dc90602e40)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/telos_io-755f4e5010ba1bc8)
+  Executable tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/main-5a9fc731511ffbe4)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/telos_llvm-439193a6a1588923)
+  Executable tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/main-a73bc2d46bfd8f58)
+  Executable unittests src/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/telos_load-948cc5d69bdf04b6)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/telos_rt-79762514af730b3d)
+  Executable tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/main-3560463862c13ef8)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/telos_rustgen-5d2638f7ab6de329)
+  Executable tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/main-7833c6a20e9dcc9e)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/telos_syntax-f2603e94cd8ba5a5)
+  Executable tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/main-5656a90372c4f3f9)
+  Executable unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/telos_types-7d8de7c732367ba9)
+  Executable tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/debug/deps/main-4d4730ae5e8142a1)

@@ -1,0 +1,19 @@
+ok   std/cli.ignite
+ok   std/console.ignite
+ok   std/contract.ignite
+ok   std/control.ignite
+ok   std/deploy.ignite
+ok   std/json.ignite
+ok   std/net.ignite
+ok   std/option.ignite
+ok   std/policy.ignite
+ok   std/probe.ignite
+ok   std/protocol/http.ignite
+ok   std/protocol/telnet.ignite
+ok   std/result.ignite
+ok   std/sli.ignite
+ok   std/text.ignite
+ok   examples/terminal/terminal.ignite
+ok   examples/todo/todo.ignite
+ok   examples/terminal/terminal.design.ignite
+EXIT=0

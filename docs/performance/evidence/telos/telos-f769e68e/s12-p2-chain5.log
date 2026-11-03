@@ -1,0 +1,8 @@
+WAIT try=1 05:28:27 build=101 fixture=9
+WAIT try=2 05:29:57 build=101 fixture=9
+WAIT try=3 05:31:28 build=0 fixture=2
+WAIT try=4 05:32:58 build=0 fixture=2
+WAIT try=5 05:34:29 build=0 fixture=2
+WAIT try=6 05:35:59 build=0 fixture=2
+WAIT try=7 05:37:31 build=0 fixture=2
+EXIT=143

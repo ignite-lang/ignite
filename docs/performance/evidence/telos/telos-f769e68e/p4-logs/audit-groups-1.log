@@ -1,0 +1,125 @@
+running 14 tests
+test audit.indexif/index on an if expression ... ok
+test audit.indexif/len on a match expression ... ok
+test audit.indexifonly/index on an if expression ... ok
+test audit.lenmatch/len on a match expression ... ok
+test audit.laterarg/later argument that modifies the borrowed place ... ok
+test audit.laterarg/fn field call and fn pointer call copy their arguments ... ok
+test audit.soundok/callee results aliasing borrowed arguments survive releases ... ok
+test audit.soundok/break out of an inner loop with a carried variable ... ok
+test audit.soundok/generic instance carried across releases ... ok
+test audit.soundok/store update allocating under the lock ... ok
+test audit.soundok/for over a list the body reassigns ... ok
+test audit.soundok/match on a place an arm mutates through a nested loop ... ok
+test main/every byte lands in its range ... ok
+test main/Int values around every bound land in their range ... ok
+
+test result: ok. 14 passed; 0 failed; 0 filtered out; finished in 0.26s
+RUN group=llvm target=rust rep=1 exit=0 wall=1.657919267 load=11.43
+running 14 tests
+test audit.indexif/index on an if expression ... ok
+test audit.indexif/len on a match expression ... ok
+test audit.indexifonly/index on an if expression ... ok
+test audit.lenmatch/len on a match expression ... ok
+test audit.laterarg/later argument that modifies the borrowed place ... ok
+test audit.laterarg/fn field call and fn pointer call copy their arguments ... ok
+test audit.soundok/callee results aliasing borrowed arguments survive releases ... ok
+test audit.soundok/break out of an inner loop with a carried variable ... ok
+test audit.soundok/generic instance carried across releases ... ok
+test audit.soundok/store update allocating under the lock ... ok
+test audit.soundok/for over a list the body reassigns ... ok
+test audit.soundok/match on a place an arm mutates through a nested loop ... ok
+test main/every byte lands in its range ... ok
+test main/Int values around every bound land in their range ... ok
+
+test result: ok. 14 passed; 0 failed; 0 filtered out; finished in 0.73s
+RUN group=llvm target=llvm rep=1 exit=0 wall=1.098971178 load=10.75
+running 5 tests
+test probe.guarded/guarded arms ... ok
+test probe.params/params ... ok
+test probe.ifs/ifs ... ok
+test probe.generics/generics ... ok
+test probe.misc/misc ... ok
+
+test result: ok. 5 passed; 0 failed; 0 filtered out; finished in 0.01s
+running 1 test
+test probe.generics/generics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+RUN group=io target=rust rep=1 exit=0 wall=2.146395003 load=10.75
+running 5 tests
+test probe.guarded/guarded arms ... ok
+test probe.params/params ... ok
+test probe.ifs/ifs ... ok
+test probe.generics/generics ... ok
+test probe.misc/misc ... ok
+
+test result: ok. 5 passed; 0 failed; 0 filtered out; finished in 0.01s
+running 1 test
+test probe.generics/generics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+RUN group=io target=llvm rep=1 exit=0 wall=.679915266 load=10.75
+running 14 tests
+test audit.indexif/index on an if expression ... ok
+test audit.indexif/len on a match expression ... ok
+test audit.indexifonly/index on an if expression ... ok
+test audit.lenmatch/len on a match expression ... ok
+test audit.laterarg/later argument that modifies the borrowed place ... ok
+test audit.laterarg/fn field call and fn pointer call copy their arguments ... ok
+test audit.soundok/callee results aliasing borrowed arguments survive releases ... ok
+test audit.soundok/break out of an inner loop with a carried variable ... ok
+test audit.soundok/generic instance carried across releases ... ok
+test audit.soundok/store update allocating under the lock ... ok
+test audit.soundok/for over a list the body reassigns ... ok
+test audit.soundok/match on a place an arm mutates through a nested loop ... ok
+test main/every byte lands in its range ... ok
+test main/Int values around every bound land in their range ... ok
+
+test result: ok. 14 passed; 0 failed; 0 filtered out; finished in 0.27s
+RUN group=llvm target=rust rep=2 exit=0 wall=.356319596 load=10.75
+running 14 tests
+test audit.indexif/index on an if expression ... ok
+test audit.indexif/len on a match expression ... ok
+test audit.indexifonly/index on an if expression ... ok
+test audit.lenmatch/len on a match expression ... ok
+test audit.laterarg/later argument that modifies the borrowed place ... ok
+test audit.laterarg/fn field call and fn pointer call copy their arguments ... ok
+test audit.soundok/callee results aliasing borrowed arguments survive releases ... ok
+test audit.soundok/break out of an inner loop with a carried variable ... ok
+test audit.soundok/generic instance carried across releases ... ok
+test audit.soundok/store update allocating under the lock ... ok
+test audit.soundok/for over a list the body reassigns ... ok
+test audit.soundok/match on a place an arm mutates through a nested loop ... ok
+test main/every byte lands in its range ... ok
+test main/Int values around every bound land in their range ... ok
+
+test result: ok. 14 passed; 0 failed; 0 filtered out; finished in 0.77s
+RUN group=llvm target=llvm rep=2 exit=0 wall=.880913563 load=10.75
+running 5 tests
+test probe.guarded/guarded arms ... ok
+test probe.params/params ... ok
+test probe.ifs/ifs ... ok
+test probe.generics/generics ... ok
+test probe.misc/misc ... ok
+
+test result: ok. 5 passed; 0 failed; 0 filtered out; finished in 0.01s
+running 1 test
+test probe.generics/generics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+RUN group=io target=rust rep=2 exit=0 wall=.476826780 load=10.75
+running 5 tests
+test probe.guarded/guarded arms ... ok
+test probe.params/params ... ok
+test probe.ifs/ifs ... ok
+test probe.generics/generics ... ok
+test probe.misc/misc ... ok
+
+test result: ok. 5 passed; 0 failed; 0 filtered out; finished in 0.01s
+running 1 test
+test probe.generics/generics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+RUN group=io target=llvm rep=2 exit=0 wall=.183785106 load=10.75
+EXIT=0

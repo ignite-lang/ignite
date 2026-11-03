@@ -1,0 +1,38 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+   Compiling telos-syntax v0.1.0 (/home/timo/projects/telos/crates/telos-syntax)
+   Compiling utf8parse v0.2.2
+   Compiling cfg_aliases v0.2.2
+   Compiling anstyle-query v1.1.5
+   Compiling libc v0.2.191
+   Compiling anstyle v1.0.14
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling heck v0.5.0
+   Compiling strsim v0.11.1
+   Compiling clap_lex v1.1.1
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling anstyle-parse v1.0.0
+   Compiling anstream v1.0.0
+   Compiling clap_builder v4.6.7
+   Compiling telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+   Compiling syn v3.0.9
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling clap_derive v4.6.7
+   Compiling telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+warning: ignoring -C extra-filename flag due to -o flag
+
+error[E0425]: cannot find function `trim` in module `arena`
+   --> crates/telos-rt/src/net.rs:204:16
+    |
+204 |         arena::trim(block, size, used);
+    |                ^^^^ not found in `arena`
+
+For more information about this error, try `rustc --explain E0425`.
+warning: `telos-rt` (lib) generated 1 warning
+error: could not compile `telos-rt` (lib) due to 1 previous error; 1 warning emitted
+warning: build failed, waiting for other jobs to finish...
+EXIT=101

@@ -1,0 +1,2151 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 7 tests
+test eval::e118_closures_are_unencodable ... ok
+test eval::e117_failures_carry_the_target_report ... ok
+test eval::design_file_properties_evaluate_within_default_fuel ... ok
+test eval::fixture_covers_every_family ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test eval::evaluator_agrees_with_the_rust_target ... ok
+test eval::evaluator_agrees_with_the_llvm_target ... ok
+test eval::e115_limits ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 158 filtered out; finished in 0.35s
+
+    Checking ignite-syntax v0.1.0 (/home/timo/projects/telos/crates/ignite-syntax)
+    Checking bitflags v2.13.2
+    Checking cfg-if v1.0.5
+    Checking utf8parse v0.2.2
+    Checking is_terminal_polyfill v1.70.2
+    Checking colorchoice v1.0.5
+    Checking anstyle-query v1.1.5
+    Checking anstyle v1.0.14
+    Checking strsim v0.11.1
+    Checking clap_lex v1.1.1
+    Checking ignite-load v0.1.0 (/home/timo/projects/telos/crates/ignite-load)
+    Checking libc v0.2.191
+    Checking anstyle-parse v1.0.0
+    Checking ignite-check v0.1.0 (/home/timo/projects/telos/crates/ignite-check)
+    Checking anstream v1.0.0
+    Checking clap_builder v4.6.7
+    Checking ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+    Checking nix v0.31.3
+    Checking ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+    Checking ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+    Checking ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+    Checking clap v4.6.7
+    Checking ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Checking ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+    Checking ignite-rt v0.1.0 (/home/timo/projects/telos/crates/ignite-rt)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.14s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite-e2bd19ba788f823b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite-2fdd1c5d8805d2e7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 165 tests
+test cli::default_substrate_is_the_sibling_crate ... ok
+test cli::default_std_is_the_repository_std ... ok
+test cli::missing_std_root_is_exit_3 ... ok
+test cli::std_package_mismatch_is_e031_in_the_std_file ... ok
+test cli::std_file_without_package_is_e031 ... ok
+test cli::std_diagnostic_is_rendered_with_its_file ... ok
+test cli::std_import_cycle_is_e032 ... ok
+test cli::no_arguments_is_exit_2 ... ok
+test cli::std_modules_are_checked_in_import_order ... ok
+test cli::emit_with_std_fixture ... ok
+test generics::llvm_generics_and_store_serve ... ok
+test generics::llvm_store_ids_and_updates_are_atomic_across_connections ... ok
+test cli::missing_file_is_exit_3 ... ok
+test cli::check_acceptance_program_is_silent ... ok
+test cli::check_unknown_name_is_e003 ... ok
+test cli::check_reports_unsupported_component_kind ... ok
+test eval::e118_closures_are_unencodable ... ok
+test eval::e117_failures_carry_the_target_report ... ok
+test cli::check_design_file_is_silent ... ok
+test eval::fixture_covers_every_family ... ok
+test eval::design_file_properties_evaluate_within_default_fuel ... ok
+test cli::emit_prints_the_program_and_the_std_crate ... ok
+test cli::emit_uses_given_substrate ... ok
+test llvm::clang_failure_is_exit_2 ... ok
+test failover::a_failing_session_does_not_end_the_service ... ok
+test llvm::client_exits_3_when_nothing_listens ... ok
+test llvm::index_out_of_range_panics_with_101 ... ok
+test llvm_build::bench ... ignored, benchmark; run with task bench
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test eval::evaluator_agrees_with_the_rust_target ... ok
+test llvm::probe_runs_every_check ... ok
+test eval::evaluator_agrees_with_the_llvm_target ... ok
+test llvm::llvm_build_runs_neither_cargo_nor_rustc ... ok
+test eval::e115_limits ... ok
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test cli::client_exit_statuses ... ok
+test llvm_memory::pushing_in_a_loop_is_linear ... ok
+test llvm_memory::loop_regions_keep_carried_values ... ok
+test plan::design_model_has_no_expression_text ... ok
+test failover::ten_thousand_failing_sessions_leak_nothing ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+test plan::design_model_is_canonical_and_every_value_is_encoded_as_15_4_says ... ok
+test plan::design_model_resolves_each_of_the_five_members_once ... ok
+test cli::build_std_and_program_then_run_both_executables ... ok
+test llvm_memory::terminald_memory_is_flat_over_a_long_session ... ok
+test plan::design_model_is_byte_identical_across_processes_and_directories ... ok
+test llvm_memory::tn_memory_is_flat_over_a_long_session ... ok
+test plan::exit_statuses ... ok
+test plan::terminal_example_model_matches_golden ... ok
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test llvm_build::failed_compile_is_retried ... ok
+test plan::todo_example_model_matches_golden ... ok
+test plan::e114_covers_an_unknown_assembly_name_and_check_passes ... ok
+test siblings::llvm_build_links_a_module_sibling ... ok
+test plan::explain_unknown_path_is_e119 ... ok
+test siblings::llvm_test_runs_a_module_sibling ... ok
+test slice9::long_chains_100k_lower_quickly ... ignored
+test slice9::long_chains_100k_run_on_llvm ... ignored
+test plan::explain_matches_the_goldens_of_15_8 ... ok
+test plan::fixtures_match_expected ... ok
+test slice9::long_chains_lower_quickly ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+test slice10_llvm::failures_fail_on_both_targets_with_the_same_report ... ok
+test syntax::llvm_target_runs_every_feature ... ok
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/tmp/syntax-rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.05s
+test slice10_llvm::features_pass_on_both_targets_with_the_same_report ... ok
+test syntax::rust_target_runs_every_feature ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test terminal::llvm::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test terminal::llvm::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::llvm::accept_survives_running_out_of_descriptors ... ok
+test terminal::llvm::are_you_there_is_answered ... ok
+test terminal::llvm::cr_nul_ends_a_line ... ok
+test terminal::llvm::do_echo_is_refused_with_wont ... ok
+test terminal::llvm::fragmented_input_is_reassembled ... ok
+test terminal::llvm::iac_iac_is_a_literal_byte ... ok
+test terminal::llvm::interrupt_process_closes ... ok
+test terminal::llvm::line_of_4096_bytes_is_accepted ... ok
+test terminal::llvm::overlong_line_is_refused_and_closed ... ok
+test terminal::llvm::subnegotiation_is_skipped ... ok
+test terminal::llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::llvm::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::llvm::tn_exits_2_for_a_malformed_port ... ok
+test terminal::llvm::tn_exits_3_when_nothing_listens ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::llvm::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test slice9::long_chains_run_on_llvm ... ok
+test terminal::llvm::tn_refuses_options_and_strips_commands ... ok
+test terminal::llvm::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::llvm::will_naws_is_refused_with_dont ... ok
+test terminal::no_target_links_tokio ... ok
+test slice9::rust_target_features_pass_on_llvm ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test terminal::rust::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::rust::accept_survives_running_out_of_descriptors ... ok
+test terminal::rust::are_you_there_is_answered ... ok
+test terminal::llvm::transcript_on_raw_socket ... ok
+test terminal::rust::do_echo_is_refused_with_wont ... ok
+test terminal::rust::cr_nul_ends_a_line ... ok
+test terminal::rust::iac_iac_is_a_literal_byte ... ok
+test terminal::rust::interrupt_process_closes ... ok
+test terminal::rust::line_of_4096_bytes_is_accepted ... ok
+test terminal::rust::overlong_line_is_refused_and_closed ... ok
+test terminal::rust::subnegotiation_is_skipped ... ok
+test terminal::rust::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::rust::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::rust::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::rust::tn_exits_2_for_a_malformed_port ... ok
+test terminal::rust::tn_exits_3_when_nothing_listens ... ok
+test terminal::rust::fragmented_input_is_reassembled ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::rust::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::rust::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::rust::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::rust::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::rust::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test terminal::rust::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::rust::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::rust::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::rust::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::rust::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::rust::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::rust::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::rust::will_naws_is_refused_with_dont ... ok
+test terminal::rust::tn_refuses_options_and_strips_commands ... ok
+test todo::todo::llvm::concurrent_posts ... ok
+test todo::todo::llvm::content_length ... ok
+test todo::todo::llvm::crud_flow ... ok
+test todo::todo::llvm::error_statuses ... ok
+test todo::todo::llvm::header_framing ... ok
+test todo::todo::llvm::keep_alive ... ok
+test todo::todo::llvm::limits ... ok
+test todo::todo::llvm::rejection_is_read ... ok
+test todo::todo::llvm::concurrent_patches ... ok
+test terminal::idle_terminald_runs_one_thread ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test todo::todo::rust::content_length ... ok
+test todo::todo::rust::crud_flow ... ok
+test todo::todo::rust::error_statuses ... ok
+test terminal::rust::transcript_on_raw_socket ... ok
+test todo::todo::rust::keep_alive ... ok
+test todo::todo::rust::header_framing ... ok
+test todo::todo::rust::limits ... ok
+test todo::todo::rust::rejection_is_read ... ok
+test slice9::slice9_values_across_regions ... ok
+test todo::todo::rust::concurrent_posts ... ok
+test todo::todo::rust::concurrent_patches ... ok
+test slice9::audit_io_probes_pass ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test slice9::audit_probes_pass ... ok
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test slice9::var_aliases_leave_the_source_unchanged ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::compile_error_exits_2 ... ok
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::files_share_one_executable ... ok
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+test ignite_test::std_module_as_the_file ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+
+test result: ok. 162 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 10.78s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_check-8e7359fd2edf000b)
+
+running 10 tests
+test tests::ambiguous_variants_are_left_to_the_type_checker ... ok
+test tests::assignment_needs_a_var ... ok
+test tests::arm_bindings_are_scoped_to_their_arm ... ok
+test tests::duplicate_top_level_names ... ok
+test tests::for_variable_is_scoped_to_its_body ... ok
+test tests::effect_rules ... ok
+test tests::let_value_is_checked_before_binding ... ok
+test tests::let_shadows_and_inner_block_does_not_leak ... ok
+test tests::inner_let_shadows_outer_var_for_assignment ... ok
+test tests::path_calls_resolve_variants_and_statics ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-625bf336fa859c75)
+
+running 10 tests
+test fixtures::every_checker_code_has_a_fixture ... ok
+test limits::mutual_recursion_reaches_a_fixed_point ... ok
+test modules::check_is_check_module_without_modules ... ok
+test modules::constants_are_exported_imported_and_listed ... ok
+test modules::only_named_imports_enter_scope ... ok
+test modules::imported_definitions_enter_symbols ... ok
+test fixtures::fixtures_match_expected ... ok
+test terminal::standard_library_checks_in_import_order ... ok
+test terminal::terminal_checks_clean_against_the_standard_library ... ok
+test limits::effect_inference_is_linear_in_either_order ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_eval-2bc076bdfd01a6cd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-17eca3f1c638dc2a)
+
+running 9 tests
+test value::closures_and_io_errors_are_unencodable ... ok
+test fuel::default_limits_are_one_million ... ok
+test fuel::with_units_keeps_the_node_limit ... ok
+test value::references_fns_modules_and_errors ... ok
+test value::scalars_and_text_escapes ... ok
+test value::collections ... ok
+test value::nodes_count_items_recursively ... ok
+test value::quantities_print_the_largest_exact_unit ... ok
+test value::records_and_enums ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_io-7ca900d290ca2188)
+
+running 36 tests
+test args::tests::absent_is_none ... ok
+test args::tests::joined_value ... ok
+test args::tests::checked_port ... ok
+test checked::tests::arithmetic_in_range ... ok
+test args::tests::missing_value_is_none ... ok
+test args::tests::separate_value ... ok
+test args::tests::out_of_range_is_none ... ok
+test checked::tests::index_and_slice ... ok
+test net::tests::descriptor_and_memory_shortages_are_transient ... ok
+test net::tests::pending_network_errors_of_accept_are_transient ... ok
+test checked::tests::overflow_and_zero_division_report_the_operands ... ok
+test quantity::tests::byte_sizes ... ok
+test idle::tests::zero_removes_the_timeout ... ok
+test idle::tests::data_before_the_timeout_is_read ... ok
+test quantity::tests::durations ... ok
+test quantity::tests::ratios ... ok
+test report::tests::a_failure_is_caught_with_its_report ... ok
+test report::tests::a_rust_panic_is_reported_with_its_location ... ok
+test report::tests::reports ... ok
+test store::tests::get_returns_a_copy ... ok
+error: + failed at f.ignite:1:2: 9223372036854775807 + 1
+test store::tests::ids_start_at_one_and_count_up ... ok
+test store::tests::a_panic_in_update_keeps_the_old_value_and_the_store ... ok
+test store::tests::put_get_remove_values ... ok
+test store::tests::update_missing_id_does_not_call_f ... ok
+error: panic at crates/ignite-io/src/lib.rs:414:27: boom
+test test::tests::verdict_words ... ok
+test test::tests::selection ... ok
+test tests::io_error_display_is_message ... ok
+test tests::run_returns_101_on_a_failure_or_panic ... ok
+error: plain
+error: no peer
+error: --port abc
+test test::tests::arguments ... ok
+test tests::run_returns_the_exit_code_of_the_error ... ok
+test tests::io_error_exit_codes ... ok
+test tests::io_error_from_std ... ok
+test tests::port_outside_range_is_error ... ok
+test store::tests::concurrent_ids_and_updates_lose_nothing ... ok
+task ended with error: index failed at t.ignite:1:1: index 3 out of range for length 0
+test task::tests::workers_are_reused_and_run_every_task_once ... ok
+test idle::tests::an_idle_read_ends_with_eof ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-2e2da2a0afa9c87b)
+
+running 36 tests
+test stdio::child_echo ... ok
+test stdio::child_exit_with_a_stalled_writer ... ok
+error: failed
+test stdio::child_failing_tasks ... ok
+test stdio::child_main_fails ... ok
+test stdio::child_pending_stdin_read ... ok
+test tcp::bind_port_out_of_range_fails ... ok
+test tcp::bind_port_zero_picks_a_port ... ok
+test tcp::bind_twice_on_one_port_fails ... ok
+test tcp::a_write_after_close_is_the_writers_error ... ok
+test tcp::clone_shares_the_socket ... ok
+test tcp::dropping_the_last_handle_sends_and_closes_at_once ... ok
+test tcp::run_returns_one_on_err ... ok
+test tcp::read_respects_maximum ... ok
+test tcp::run_returns_zero_on_ok ... ok
+test tcp::spawn_inside_run_executes ... ok
+test tcp::round_trip_and_half_close ... ok
+test terminal::child_not_a_terminal ... ok
+test terminal::child_raw_then_process_exit ... ok
+test terminal::child_raw_then_panic ... ok
+test tcp::a_thread_sends_what_it_wrote_when_it_ends ... ok
+test terminal::child_raw_then_error ... ok
+test terminal::child_raw_round_trip ... ok
+test stdio::a_failure_in_main_exits_101_with_its_report ... ok
+test stdio::stdin_reads_up_to_maximum_and_ends_with_eof ... ok
+test terminal::process_exit_restores_the_terminal_and_exits_with_the_code ... ok
+test terminal::set_raw_is_a_no_op_on_a_pipe ... ok
+test terminal::set_raw_switches_and_run_restores_on_return ... ok
+test terminal::run_restores_the_terminal_when_main_fails ... ok
+test terminal::run_restores_the_terminal_when_main_panics ... ok
+test tcp::close_proceeds_while_a_read_is_pending ... ok
+test tcp::spawn_runs_tasks_in_parallel ... ok
+test tcp::writes_are_sent_together_at_the_next_wait ... ok
+test tcp::write_proceeds_while_a_read_is_pending ... ok
+test stdio::run_returns_while_a_stdin_read_is_pending ... ok
+test stdio::a_failing_task_is_logged_and_the_process_continues ... ok
+test stdio::exit_returns_while_a_stdout_write_is_stalled ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_llvm-0e4cc4a4d288685c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-f3b2d6796b761c6a)
+
+running 14 tests
+test layout::records_have_c_layout ... ok
+test layout::runtime_types_match_the_layouts ... ok
+test layout::copy_glue_only_where_buffers_are ... ok
+test layout::type_names_in_symbols ... ok
+test layout::enums_are_tag_and_payload ... ok
+test layout::scalars_and_builtins ... ok
+test golden::read_only_parameters_are_borrowed ... ok
+test golden::loops_release_their_region ... ok
+test golden::modules_name_target_and_source ... ok
+test golden::symbols_are_module_qualified ... ok
+test tests_build::normal_build_drops_test_only_declarations ... ok
+test golden::small_program ... ok
+test tests_build::test_build_lowers_tests_and_a_runner_main ... ok
+test golden::syntax_program ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_load-ea77ab23ecc10c58)
+
+running 3 tests
+test matrix::tests::cells_parse ... ok
+test matrix::tests::median_of_odd_and_even_counts ... ok
+test matrix::tests::reads_fields_of_a_result_line ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_rt-244b00890ed96bd2)
+
+running 19 tests
+test arena::tests::scratch_survives_a_release_of_the_task_arena ... ok
+test arena::tests::release_is_due_above_the_larger_of_64_kib_and_four_times_kept ... ok
+test arena::tests::generated_code_and_runtime_share_the_bump_state ... ok
+test arena::tests::task_end_frees_the_arena ... ok
+test arena::tests::zero_size_is_aligned_and_non_null ... ok
+test arena::tests::arenas_are_per_thread ... ok
+test net::tests::handles_encode_slot_and_generation ... ok
+test net::tests::segments_tile_the_indices ... ok
+test net::tests::a_released_slot_is_reused_under_a_new_handle ... ok
+test process::tests::args_port ... ok
+test process::tests::decode_args_skips_nulls ... ok
+test store::tests::values_are_copied_in_and_out_and_freed ... ok
+test process::tests::io_error_new_has_exit_code_one ... ok
+test text::tests::debug_escapes_as_section_13_6 ... ok
+test arena::tests::large_and_overaligned_requests_get_own_blocks ... ok
+test arena::tests::spare_chunks_are_bounded ... ok
+test arena::tests::release_frees_what_came_after_the_mark ... ok
+test arena::tests::allocations_are_aligned_and_disjoint ... ok
+test arena::tests::a_loop_of_release_does_not_grow ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-7fc0dc40a904ea45)
+
+running 18 tests
+test abi::layouts_match_section_three ... ok
+test abi::os_errors_have_exit_code_one_and_the_os_message ... ok
+test terminal::child ... ok
+test abi::text_helpers ... ok
+test abi::spawn_returns_when_the_child_ends_without_ready ... ok
+test terminal::non_terminal_stdin_is_a_no_op ... ok
+test terminal::fail_restores_the_terminal ... ok
+test terminal::panic_restores_the_terminal ... ok
+test terminal::stdin_reads_until_eof ... ok
+test terminal::rust_panic_restores_the_terminal ... ok
+test terminal::normal_exit_restores_the_terminal_at_exit ... ok
+test terminal::exit_restores_the_terminal ... ok
+test abi::tcp_round_trip_with_concurrent_read_and_write ... ok
+test abi::spawn_blocks_until_the_child_is_ready ... ok
+test c_abi::smoke_program_runs ... ok
+test c_abi::fail_panic_and_exit_statuses ... ok
+test c_abi::port_argument ... ok
+test abi::release_closes_the_socket_and_invalidates_the_handle ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_rustgen-8d46fc80f07c06b3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-5e4ab9ed9c9b052f)
+
+running 77 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test golden::pure_functions ... ok
+test golden::process_exit_diverges ... ok
+test golden::constants_qualified_patterns_and_io_error ... ok
+test golden::system_with_server_and_client ... ok
+test golden::record_and_enum_with_match ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test golden::generics_stores_and_builtins ... ok
+test slice9::long_chains_build_and_run_100k ... ignored
+test golden::surface_syntax ... ok
+test golden::variants_of_enums_not_imported ... ok
+test units::aliases_and_field_defaults ... ok
+test units::bindings_are_scoped ... ok
+test units::block_values ... ok
+test units::bool_or_and_tuple_patterns_are_native ... ok
+    Blocking    Blocking waiting for file lock on package cache
+ waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test units::builtin_methods ... ok
+    Blocking waiting for file lock on package cache
+test units::constants_are_zero_argument_functions ... ok
+test units::e020_bad_properties ... ok
+test units::e020_components_without_types ... ok
+test units::e020_resource_kind ... ok
+    Blocking waiting for file lock on package cache
+test units::effectful_function_is_a_plain_fn ... ok
+test units::else_if_chain_keeps_statement_position ... ok
+test units::function_body_value_depends_on_return_type ... ok
+    Blocking waiting for file lock on package cache
+test units::function_types_and_values ... ok
+test units::functions_and_variants_are_not_places ... ok
+test units::generate_std_nests_modules ... ok
+test units::generate_std_rejects_a_system ... ok
+    Blocking waiting for file lock on package cache
+test units::header_and_declarations ... ok
+test units::imported_constant_and_local_shadowing ... ok
+test units::imports_become_use_lines ... ok
+test units::int_literals_are_plain_digits ... ok
+    Blocking waiting for file lock on package cache
+test units::list_and_text_patterns_are_guarded_arms ... ok
+test units::no_system_is_a_library_without_executables ... ok
+test units::own_protocol_is_known_without_symbols ... ok
+    Blocking waiting for file lock on package cache
+test units::ownership_non_value_positions_do_not_clone ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test units::ownership_value_positions_clone_places ... ok
+test units::package_name_defaults_to_program ... ok
+test units::protocol_lowering ... ok
+test units::qualified_variant_patterns ... ok
+test compiles::std_crate_and_program_build ... ok
+test units::receiver_that_is_not_atomic_is_parenthesized ... ok
+test units::return_expressions ... ok
+    Blocking waiting for file lock on package cache
+test units::rust_keywords_are_escaped ... ok
+test units::spawn_lowering ... ok
+test units::std_version_follows_the_library_text ... ok
+test units::substrate_imports_need_no_std_crate ... ok
+test units::string_escaping ... ok
+test units::tuple_type ... ok
+test units::tuples_and_pattern_lets ... ok
+test units::type_table ... ok
+test units::typed_let ... ok
+test units::unit_value_and_type ... ok
+    Blocking waiting for file lock on package cache
+test units::variant_patterns ... ok
+test units::write_project_creates_layout ... ok
+    Blocking waiting for file lock on package cache
+test units::variant_expressions ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on shared package cache
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+test compiles::constants_across_modules_build ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+test compiles::variants_of_enums_not_imported_build ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+test compiles::generics_and_store_serve ... ok
+test slice9::assignments_box_by_the_fields_owner ... ok
+test compiles::store_ids_and_updates_are_atomic_across_connections ... ok
+test compiles::process_exit_without_try_builds_and_exits ... ok
+test golden::executable_components ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test compiles::terminal_project_builds ... ok
+test slice10::generate_tests_lays_a_program_out_by_its_module_path ... ok
+test golden::terminal ... ok
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test slice10::slice10_features_pass ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test slice9::failed_asserts_show_debug_text ... ok
+test slice10::failures_report_the_operation_and_position ... ok
+test slice9::slice9_features_pass ... ok
+test slice10::executable_component_main_runs_and_maps_the_exit_code ... ok
+test slice10::crashd_survives_failing_handlers ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test slice9::long_chains_build_and_run ... ok
+test slice9::long_chains_lower_without_overflow ... ok
+
+test result: ok. 76 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.67s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_syntax-d8cc51728136adfa)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-807151e0292813cb)
+
+running 148 tests
+test grammar::additive_is_left_associative ... ok
+test grammar::associated_fn ... ok
+test grammar::assert_statements ... ok
+test grammar::brace_literal_keys_are_names_or_references ... ok
+test grammar::chained_comparison_is_e001 ... ok
+test grammar::chained_equality_is_e001 ... ok
+test grammar::break_and_continue_are_expressions ... ok
+test grammar::call_on_a_call ... ok
+test grammar::bool_tuple_list_and_or_patterns ... ok
+test grammar::comments_everywhere ... ok
+test grammar::byte_literals ... ok
+test grammar::const_declarations ... ok
+test grammar::const_span_covers_keyword_to_value ... ok
+test grammar::const_is_a_keyword_and_a_recovery_point ... ok
+test grammar::const_needs_type_and_value ... ok
+test grammar::closures ... ok
+test grammar::declarations_need_a_newline_between_them ... ok
+test grammar::contracts_policies_and_assemblies ... ok
+test grammar::else_if_chain_across_lines ... ok
+test grammar::eof_inside_block_is_e002 ... ok
+test grammar::else_on_next_line_is_e001 ... ok
+test grammar::effectful_fn_types ... ok
+test grammar::field_defaults_and_aliases ... ok
+test grammar::fn_type_lists_params_then_return ... ok
+test grammar::fn_type_missing_paren_is_e001 ... ok
+test grammar::field_punning_and_commas ... ok
+test grammar::expression_body ... ok
+test grammar::fn_type_in_param_and_return_position ... ok
+test grammar::fn_type_nests ... ok
+test grammar::fn_type_without_return_is_unit ... ok
+test grammar::for_over_bytes ... ok
+test grammar::glob_import ... ok
+test grammar::for_with_a_tuple_pattern ... ok
+test grammar::hex_escape_produces_character ... ok
+test grammar::hex_integer ... ok
+test grammar::generic_declarations ... ok
+test grammar::import_forms ... ok
+test grammar::if_as_let_initializer ... ok
+test grammar::if_else_if_else_nests ... ok
+test grammar::integer_beyond_i64_is_e001 ... ok
+test grammar::integer_with_separators ... ok
+test grammar::interpolated_expression_spans_point_into_the_string ... ok
+test grammar::interpolation_errors ... ok
+test grammar::keywords_are_path_segments ... ok
+test grammar::interpolation_desugars_to_concatenation ... ok
+test grammar::keywords_are_property_names ... ok
+test grammar::keywords_still_name_paths_and_fields ... ok
+test grammar::largest_integer_is_accepted ... ok
+test grammar::keywords_as_field_names ... ok
+test grammar::interpolation_holds_string_literals ... ok
+test grammar::lowercase_name_before_brace_is_not_a_record ... ok
+test grammar::lowercase_name_with_payload_or_path_is_a_variant_pattern ... ok
+test grammar::let_patterns ... ok
+test grammar::match_binding_pattern ... ok
+test grammar::match_arms_separated_by_newlines ... ok
+test grammar::match_arms_separated_by_commas ... ok
+test grammar::match_block_and_expression_bodies ... ok
+test grammar::match_literal_and_wildcard_patterns ... ok
+test grammar::match_nested_patterns ... ok
+test grammar::match_qualified_pattern ... ok
+test grammar::newline_after_assign_continues ... ok
+test grammar::named_arguments ... ok
+test grammar::newline_after_binary_operator_continues ... ok
+test grammar::newline_after_comma_continues ... ok
+test grammar::newline_before_binary_operator_ends_the_statement ... ok
+test grammar::newlines_inside_brackets_are_skipped ... ok
+test grammar::newlines_inside_parentheses_are_skipped ... ok
+test grammar::parentheses_produce_no_node ... ok
+test grammar::path_calls ... ok
+test grammar::postfix_chain ... ok
+test grammar::postfix_paren_on_next_line_starts_a_statement ... ok
+test grammar::no_record_literal_in_conditions ... ok
+test grammar::precedence_full_ladder ... ok
+test grammar::precedence_unary_operators ... ok
+test grammar::protocol_and_spawn_are_keywords ... ok
+test grammar::protocol_may_be_empty_and_on_one_line ... ok
+test grammar::protocol_member_must_be_fn ... ok
+test grammar::protocol_declares_roles ... ok
+test grammar::qualified_patterns_with_payload ... ok
+test grammar::quantity_literals ... ok
+test grammar::range_patterns ... ok
+test grammar::record_literal_directly_in_a_condition_is_not_parsed ... ok
+test grammar::raw_strings_and_unicode_escapes ... ok
+test grammar::record_literal_with_commas ... ok
+test grammar::record_literal_allowed_in_bodies_and_after_conditions ... ok
+test grammar::record_literal_with_newlines ... ok
+test grammar::record_literal_in_brackets_inside_a_condition ... ok
+test grammar::recovery_keeps_good_declarations_parseable ... ok
+test grammar::record_update ... ok
+test grammar::recovery_reports_each_bad_declaration_once ... ok
+test grammar::recovery_resumes_at_protocol ... ok
+test grammar::recovery_skips_the_rest_of_a_broken_protocol ... ok
+test grammar::spans_cover_first_to_last_token ... ok
+test grammar::semicolon_separates_statements ... ok
+test grammar::role_requires_breaks_across_lines ... ok
+test grammar::spawn_span_covers_operand ... ok
+test grammar::return_expression ... ok
+test grammar::spawn_without_operand_is_an_error ... ok
+test grammar::spawn_is_a_prefix_operator ... ok
+test grammar::statement_cannot_start_with_dot ... ok
+test grammar::stmt_assign_to_call_is_e001 ... ok
+test grammar::stmt_break_and_continue ... ok
+test grammar::stmt_assign_to_field_path ... ok
+test grammar::stmt_expression ... ok
+test grammar::stmt_let ... ok
+test grammar::stmt_for ... ok
+test grammar::stmt_loop ... ok
+test grammar::stmt_let_with_type_annotation ... ok
+test grammar::stmt_return ... ok
+test grammar::stmt_var ... ok
+test grammar::stmt_while ... ok
+test grammar::store_resource_without_properties ... ok
+test grammar::string_escapes ... ok
+test grammar::test_declaration ... ok
+test grammar::test_only_items ... ok
+test grammar::test_and_assert_errors ... ok
+test grammar::trailing_semicolon ... ok
+test grammar::try_span_ends_at_the_question_mark ... ok
+test grammar::tuple_fields ... ok
+test grammar::two_statements_on_one_line_need_a_separator ... ok
+test grammar::tuple_types ... ok
+test grammar::unary_neg_on_literal ... ok
+test grammar::tuple_values_and_unit ... ok
+test grammar::unknown_escape_is_e001 ... ok
+test grammar::unterminated_string_is_e001 ... ok
+test grammar::vertical_tab_and_form_feed_escapes ... ok
+test parse_terminal::every_fn_span_ends_at_its_closing_brace ... ok
+test parse_terminal::example_imports_the_standard_library ... ok
+test parse_terminal::example_system_has_server_and_client ... ok
+test fixtures::fixtures_match_expected_diagnostics ... ok
+test robustness::backslash_at_end_of_line_is_an_unterminated_string ... ok
+test robustness::byte_strings_take_an_escaped_single_quote ... ok
+test robustness::byte_literals_with_brace_or_quote_inside_interpolation ... ok
+test robustness::lexer_error_does_not_hide_earlier_parser_errors ... ok
+test robustness::greater_equal_after_type_arguments ... ok
+test robustness::one_element_tuple_type_is_e001 ... ok
+test robustness::nested_fn_gives_one_error ... ok
+test robustness::postfix_and_else_do_not_cross_a_line_inside_brackets ... ok
+test robustness::unknown_escape_shows_one_backslash ... ok
+test robustness::unclosed_brace_in_interpolation ... ok
+test robustness::smallest_integer_is_a_literal ... ok
+test parse_terminal::console_has_a_function_typed_field ... ok
+test parse_terminal::telnet_is_a_protocol_with_both_roles ... ok
+test parse_terminal::std_files_parse_and_name_their_module ... ok
+test robustness::nesting_is_limited_to_256_levels ... ok
+test robustness::long_chains_parse ... ok
+test robustness::line_col_computes_the_line_table_once ... ok
+test robustness::rendering_many_diagnostics_is_linear ... ok
+
+test result: ok. 148 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_types-75ebb7e5fa68d1f9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-1ec713e6db068368)
+
+running 39 tests
+test fixtures::every_type_code_has_a_fixture ... ok
+test inline_tests::a_program_without_package_is_main ... ok
+test inline_tests::assert_message_is_typed ... ok
+test audit::copies_match_the_audit_directory ... ok
+test inline_tests::assert_compare_records_operand_and_show ... ok
+test inline_tests::tests_are_listed_in_declaration_order ... ok
+test inline_tests::test_try_covers_only_test_bodies ... ok
+test slice9::equality_kinds ... ok
+test slice9::boxing ... ok
+test slice9::closure_effects_on_captures_and_ambient ... ok
+test slice9::debug_and_associated_fns ... ok
+test slice9::closure_captures_in_order_of_first_use ... ok
+test generics::component_kind_carries_the_type_arguments ... ok
+test generics::instances_of_generic_uses ... ok
+test generics::effectful_fn_types ... ok
+test generics::every_expression_is_typed ... ok
+test generics::type_parameters_are_exported ... ok
+test generics::store_and_new_builtins ... ok
+test limits::exhaustiveness_is_polynomial_in_bool_columns ... ok
+test slice9::range_bounds_evaluate_constants ... ok
+test slice9::every_expression_is_typed ... ok
+test surface::aliases_resolve_to_their_targets ... ok
+test surface::interpolation_is_text_concatenation_with_to_text ... ok
+test fixtures::valid_system_describes_its_system_and_assembly ... ok
+test surface::inferred_effects_reach_the_signature ... ok
+test surface::bare_variants_take_the_expected_enum ... ok
+test surface::every_expression_is_typed ... ok
+test surface::tuples_and_unit ... ok
+test surface::return_is_never_and_constant_patterns_are_recorded ... ok
+test surface::field_defaults ... ok
+test surface::ufcs_and_field_fn_calls ... ok
+test fixtures::fixtures_match_expected ... ok
+test terminal::standard_library_types_in_import_order ... ok
+test terminal::todo_program_types_against_the_standard_library ... ok
+test terminal::terminal_program_types_against_the_standard_library ... ok
+test terminal::standard_library_expressions_are_typed ... ok
+test audit::audit_probes_match_expected ... ok
+test limits::long_plus_chain_does_not_overflow ... ok
+test limits::failure_site_positions_of_the_long_chain_are_cheap ... ok
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+   Doc-tests ignite
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_check
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_eval
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_io
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_llvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_rt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_rustgen
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_syntax
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_types
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+task: [test-ignite] cargo build -q -p ignite
+task: [test-ignite] cargo build -q -p ignite-rt --features runner --target-dir /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test/rt
+task: [test-ignite] /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/ignite test examples/terminal/command_schema.ignite examples/terminal/commands.ignite examples/terminal/terminal.ignite examples/todo/todo.ignite std/cli.ignite std/console.ignite std/contract.ignite std/deploy.ignite std/json.ignite std/net.ignite std/option.ignite std/policy.ignite std/probe.ignite std/protocol/http.ignite std/protocol/telnet.ignite std/result.ignite std/text.ignite   --out /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test --target-dir /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test/cargo
+running 102 tests
+test examples.terminal.command_schema/the schema names the four commands ... ok
+test examples.terminal.commands/parse reads the four commands by their first word ... ok
+test examples.terminal.commands/answer replies to each command ... ok
+test examples.terminal.commands/respond trims the line and names unknown commands ... ok
+test examples.todo/to_json ... ok
+test examples.todo/handle creates, lists, reads, updates and deletes ... ok
+test examples.todo/handle answers 400, 404 and 405 ... ok
+test std.cli/arguments describe themselves ... ok
+test std.cli/usage joins the command and its arguments ... ok
+test std.console/first_word skips leading whitespace ... ok
+test std.console/rest_after_word drops the word and one whitespace byte ... ok
+test std.console/skip_space and skip_word move to the next boundary ... ok
+test std.console/a reply continues unless it says close ... ok
+test std.console/a declared console gives the console a protocol runs ... ok
+test std.console/a declared console lists its schema's commands ... ok
+test std.contract/windows and consequences are built by name ... ok
+test std.contract/missing_data reads the closed set ... ok
+test std.contract/meets compares good attempts against the target in ppm ... ok
+test std.deploy/bindings are built by name ... ok
+test std.deploy/only a native process includes other members ... ok
+test std.deploy/a local socket admits a TcpListener resource only ... ok
+test std.deploy/a native process admits an executable component only ... ok
+test std.deploy/a workstation executable admits any component ... ok
+test std.deploy/a scheduled probe host admits a component with an output ... ok
+test std.deploy/no binding admits a contract or a policy ... ok
+test std.json/encode writes every kind compactly ... ok
+test std.json/encode escapes quote, backslash and control characters ... ok
+test std.json/parse reads every kind of value ... ok
+test std.json/parse decodes escapes ... ok
+test std.json/a lone or broken surrogate is an invalid escape ... ok
+test std.json/numbers are integers of at most 18 digits ... ok
+test std.json/nesting is limited to 64 levels ... ok
+test std.json/malformed input is an error at its offset ... ok
+test std.json/the accessors read members of the right kind ... ok
+test std.json/encode and parse round trip ... ok
+test std.option/unwrap_or gives the value or the fallback ... ok
+test std.option/map and and_then apply a fn to the value ... ok
+test std.option/is_some, is_none and ok_or ... ok
+test std.policy/an exponential backoff doubles up to its maximum ... ok
+test std.policy/a fixed backoff never changes ... ok
+test std.policy/Restart counts attempts against its maximum ... ok
+test std.policy/DrainRollout defaults to two minutes and disconnecting ... ok
+test std.probe/an attempt satisfies the outcomes it earned ... ok
+test std.probe/the prompt is seen at the start of the server's text ... ok
+test std.protocol.http/responses carry their reason, type and body ... ok
+test std.protocol.http/a header holding CR or LF turns the response into 500 ... ok
+test std.protocol.http/render writes the status line, headers, length and connection ... ok
+test std.protocol.http/a 204 response has no Content-Length and no body ... ok
+test std.protocol.http/header finds the first value of a lower-case name ... ok
+test std.protocol.http/segments are the non-empty parts of the path ... ok
+test std.protocol.http/HTTP/1.1 keeps the connection unless asked to close ... ok
+test std.protocol.http/HTTP/1.0 closes the connection unless asked to keep it ... ok
+test std.protocol.http/Connection is a list of options ... ok
+test std.protocol.http/tokens, field values and targets ... ok
+test std.protocol.http/parse_head reads the request line and headers ... ok
+test std.protocol.http/parse_head refuses a malformed request line ... ok
+test std.protocol.http/parse_head refuses a malformed header line ... ok
+test std.protocol.http/a Content-Length is 1 to 18 decimal digits ... ok
+test std.protocol.http/next_request reads a head, its body and keeps the rest ... ok
+test std.protocol.http/next_request takes a pipelined request from the buffer ... ok
+test std.protocol.http/next_request ends on a connection closed before a whole request ... ok
+test std.protocol.http/a head over 8 KiB is 431 ... ok
+test std.protocol.http/a body over 1 MiB is 413 ... ok
+test std.protocol.http/a malformed head or Content-Length is 400 ... ok
+test std.protocol.http/any Transfer-Encoding is 501, also with a Content-Length ... ok
+test std.protocol.http/the server answers pipelined requests until one asks to close ... ok
+test std.protocol.http/the server answers a rejected request and closes ... ok
+test std.protocol.telnet/the profile and the limits default to what Telnet implements ... ok
+test std.protocol.telnet/data bytes are literals ... ok
+test std.protocol.telnet/CR LF, CR NUL, a lone CR and a lone LF end one line ... ok
+test std.protocol.telnet/a CR LF split across reads ends one line ... ok
+test std.protocol.telnet/IAC IAC is the data byte 255 ... ok
+test std.protocol.telnet/DO is answered WONT and WILL is answered DONT ... ok
+test std.protocol.telnet/a negotiation split across reads is answered once complete ... ok
+test std.protocol.telnet/AYT and IP are reported and other commands ignored ... ok
+test std.protocol.telnet/a subnegotiation is skipped up to IAC SE ... ok
+test std.protocol.telnet/a subnegotiation is limited to 1024 bytes including the IAC of IAC SE ... ok
+test std.protocol.telnet/render ends each reply line with CR LF ... ok
+test std.protocol.telnet/encode_input writes NVT line ends and doubles IAC ... ok
+test std.protocol.telnet/encoded input decodes to the same lines ... ok
+test std.protocol.telnet/erase_last removes one UTF-8 character ... ok
+test std.protocol.telnet/apply_key edits the line ... ok
+test std.protocol.telnet/the server answers each line and ends on the console's close ... ok
+test std.protocol.telnet/the server answers options and AYT between lines ... ok
+test std.protocol.telnet/the server closes on an overlong line, IAC IP and an overlong subnegotiation ... ok
+test std.protocol.telnet/a client silent for the idle timeout ends the session ... ok
+test std.protocol.telnet/a telnet server runs a declared console, a client its session ... ok
+test std.result/unwrap_or gives the value or the fallback ... ok
+test std.result/map and map_err change one side ... ok
+test std.result/is_ok, is_err and ok ... ok
+test std.text/digit_value reads decimal digits only ... ok
+test std.text/is_whitespace is ASCII whitespace ... ok
+test std.text/slice takes byte offsets ... ok
+test std.text/find returns the first byte offset ... ok
+test std.text/contains, ends_with and strip_suffix ... ok
+test std.text/split keeps empty pieces ... ok
+test std.text/split_once splits at the first separator ... ok
+test std.text/replace replaces every occurrence ... ok
+test std.text/trim_start and trim_end drop ASCII whitespace ... ok
+test std.text/case mapping is ASCII only ... ok
+test std.text/lines splits at LF and drops CR before it ... ok
+test std.text/repeat concatenates copies ... ok
+
+test result: ok. 102 passed; 0 failed; 0 filtered out; finished in 0.12s
+task: [test-ignite] /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/ignite test examples/terminal/command_schema.ignite examples/terminal/commands.ignite examples/terminal/terminal.ignite examples/todo/todo.ignite std/cli.ignite std/console.ignite std/contract.ignite std/deploy.ignite std/json.ignite std/net.ignite std/option.ignite std/policy.ignite std/probe.ignite std/protocol/http.ignite std/protocol/telnet.ignite std/result.ignite std/text.ignite   --target llvm --out /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test --runtime /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test/rt/debug/libignite_rt.a
+running 102 tests
+test examples.terminal.command_schema/the schema names the four commands ... ok
+test examples.terminal.commands/parse reads the four commands by their first word ... ok
+test examples.terminal.commands/answer replies to each command ... ok
+test examples.terminal.commands/respond trims the line and names unknown commands ... ok
+test examples.todo/to_json ... ok
+test examples.todo/handle creates, lists, reads, updates and deletes ... ok
+test examples.todo/handle answers 400, 404 and 405 ... ok
+test std.cli/arguments describe themselves ... ok
+test std.cli/usage joins the command and its arguments ... ok
+test std.console/first_word skips leading whitespace ... ok
+test std.console/rest_after_word drops the word and one whitespace byte ... ok
+test std.console/skip_space and skip_word move to the next boundary ... ok
+test std.console/a reply continues unless it says close ... ok
+test std.console/a declared console gives the console a protocol runs ... ok
+test std.console/a declared console lists its schema's commands ... ok
+test std.contract/windows and consequences are built by name ... ok
+test std.contract/missing_data reads the closed set ... ok
+test std.contract/meets compares good attempts against the target in ppm ... ok
+test std.deploy/bindings are built by name ... ok
+test std.deploy/only a native process includes other members ... ok
+test std.deploy/a local socket admits a TcpListener resource only ... ok
+test std.deploy/a native process admits an executable component only ... ok
+test std.deploy/a workstation executable admits any component ... ok
+test std.deploy/a scheduled probe host admits a component with an output ... ok
+test std.deploy/no binding admits a contract or a policy ... ok
+test std.json/encode writes every kind compactly ... ok
+test std.json/encode escapes quote, backslash and control characters ... ok
+test std.json/parse reads every kind of value ... ok
+test std.json/parse decodes escapes ... ok
+test std.json/a lone or broken surrogate is an invalid escape ... ok
+test std.json/numbers are integers of at most 18 digits ... ok
+test std.json/nesting is limited to 64 levels ... ok
+test std.json/malformed input is an error at its offset ... ok
+test std.json/the accessors read members of the right kind ... ok
+test std.json/encode and parse round trip ... ok
+test std.option/unwrap_or gives the value or the fallback ... ok
+test std.option/map and and_then apply a fn to the value ... ok
+test std.option/is_some, is_none and ok_or ... ok
+test std.policy/an exponential backoff doubles up to its maximum ... ok
+test std.policy/a fixed backoff never changes ... ok
+test std.policy/Restart counts attempts against its maximum ... ok
+test std.policy/DrainRollout defaults to two minutes and disconnecting ... ok
+test std.probe/an attempt satisfies the outcomes it earned ... ok
+test std.probe/the prompt is seen at the start of the server's text ... ok
+test std.protocol.http/responses carry their reason, type and body ... ok
+test std.protocol.http/a header holding CR or LF turns the response into 500 ... ok
+test std.protocol.http/render writes the status line, headers, length and connection ... ok
+test std.protocol.http/a 204 response has no Content-Length and no body ... ok
+test std.protocol.http/header finds the first value of a lower-case name ... ok
+test std.protocol.http/segments are the non-empty parts of the path ... ok
+test std.protocol.http/HTTP/1.1 keeps the connection unless asked to close ... ok
+test std.protocol.http/HTTP/1.0 closes the connection unless asked to keep it ... ok
+test std.protocol.http/Connection is a list of options ... ok
+test std.protocol.http/tokens, field values and targets ... ok
+test std.protocol.http/parse_head reads the request line and headers ... ok
+test std.protocol.http/parse_head refuses a malformed request line ... ok
+test std.protocol.http/parse_head refuses a malformed header line ... ok
+test std.protocol.http/a Content-Length is 1 to 18 decimal digits ... ok
+test std.protocol.http/next_request reads a head, its body and keeps the rest ... ok
+test std.protocol.http/next_request takes a pipelined request from the buffer ... ok
+test std.protocol.http/next_request ends on a connection closed before a whole request ... ok
+test std.protocol.http/a head over 8 KiB is 431 ... ok
+test std.protocol.http/a body over 1 MiB is 413 ... ok
+test std.protocol.http/a malformed head or Content-Length is 400 ... ok
+test std.protocol.http/any Transfer-Encoding is 501, also with a Content-Length ... ok
+test std.protocol.http/the server answers pipelined requests until one asks to close ... ok
+test std.protocol.http/the server answers a rejected request and closes ... ok
+test std.protocol.telnet/the profile and the limits default to what Telnet implements ... ok
+test std.protocol.telnet/data bytes are literals ... ok
+test std.protocol.telnet/CR LF, CR NUL, a lone CR and a lone LF end one line ... ok
+test std.protocol.telnet/a CR LF split across reads ends one line ... ok
+test std.protocol.telnet/IAC IAC is the data byte 255 ... ok
+test std.protocol.telnet/DO is answered WONT and WILL is answered DONT ... ok
+test std.protocol.telnet/a negotiation split across reads is answered once complete ... ok
+test std.protocol.telnet/AYT and IP are reported and other commands ignored ... ok
+test std.protocol.telnet/a subnegotiation is skipped up to IAC SE ... ok
+test std.protocol.telnet/a subnegotiation is limited to 1024 bytes including the IAC of IAC SE ... ok
+test std.protocol.telnet/render ends each reply line with CR LF ... ok
+test std.protocol.telnet/encode_input writes NVT line ends and doubles IAC ... ok
+test std.protocol.telnet/encoded input decodes to the same lines ... ok
+test std.protocol.telnet/erase_last removes one UTF-8 character ... ok
+test std.protocol.telnet/apply_key edits the line ... ok
+test std.protocol.telnet/the server answers each line and ends on the console's close ... ok
+test std.protocol.telnet/the server answers options and AYT between lines ... ok
+test std.protocol.telnet/the server closes on an overlong line, IAC IP and an overlong subnegotiation ... ok
+test std.protocol.telnet/a client silent for the idle timeout ends the session ... ok
+test std.protocol.telnet/a telnet server runs a declared console, a client its session ... ok
+test std.result/unwrap_or gives the value or the fallback ... ok
+test std.result/map and map_err change one side ... ok
+test std.result/is_ok, is_err and ok ... ok
+test std.text/digit_value reads decimal digits only ... ok
+test std.text/is_whitespace is ASCII whitespace ... ok
+test std.text/slice takes byte offsets ... ok
+test std.text/find returns the first byte offset ... ok
+test std.text/contains, ends_with and strip_suffix ... ok
+test std.text/split keeps empty pieces ... ok
+test std.text/split_once splits at the first separator ... ok
+test std.text/replace replaces every occurrence ... ok
+test std.text/trim_start and trim_end drop ASCII whitespace ... ok
+test std.text/case mapping is ASCII only ... ok
+test std.text/lines splits at LF and drops CR before it ... ok
+test std.text/repeat concatenates copies ... ok
+
+test result: ok. 102 passed; 0 failed; 0 filtered out; finished in 0.13s
+task: [check] cargo fmt --all -- --check
+task: [check] cargo clippy --workspace --all-targets -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
+task: [test] cargo test --workspace
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite-e2bd19ba788f823b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite-2fdd1c5d8805d2e7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 165 tests
+test cli::default_substrate_is_the_sibling_crate ... ok
+test cli::default_std_is_the_repository_std ... ok
+test cli::no_arguments_is_exit_2 ... ok
+test cli::missing_std_root_is_exit_3 ... ok
+test cli::std_diagnostic_is_rendered_with_its_file ... ok
+test cli::std_import_cycle_is_e032 ... ok
+test cli::std_file_without_package_is_e031 ... ok
+test cli::emit_with_std_fixture ... ok
+test cli::std_modules_are_checked_in_import_order ... ok
+test cli::std_package_mismatch_is_e031_in_the_std_file ... ok
+test generics::llvm_generics_and_store_serve ... ok
+test generics::llvm_store_ids_and_updates_are_atomic_across_connections ... ok
+test cli::missing_file_is_exit_3 ... ok
+test cli::check_unknown_name_is_e003 ... ok
+test eval::e118_closures_are_unencodable ... ok
+test eval::e117_failures_carry_the_target_report ... ok
+test cli::check_reports_unsupported_component_kind ... ok
+test eval::design_file_properties_evaluate_within_default_fuel ... ok
+test cli::check_design_file_is_silent ... ok
+test eval::fixture_covers_every_family ... ok
+test cli::emit_prints_the_program_and_the_std_crate ... ok
+test cli::check_acceptance_program_is_silent ... ok
+test cli::emit_uses_given_substrate ... ok
+test llvm::clang_failure_is_exit_2 ... ok
+test failover::a_failing_session_does_not_end_the_service ... ok
+test llvm::client_exits_3_when_nothing_listens ... ok
+test llvm::index_out_of_range_panics_with_101 ... ok
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test llvm::probe_runs_every_check ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test eval::evaluator_agrees_with_the_rust_target ... ok
+test llvm::llvm_build_runs_neither_cargo_nor_rustc ... ok
+test eval::evaluator_agrees_with_the_llvm_target ... ok
+test eval::e115_limits ... ok
+test cli::client_exit_statuses ... ok
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test llvm_memory::pushing_in_a_loop_is_linear ... ok
+test llvm_memory::loop_regions_keep_carried_values ... ok
+test cli::build_std_and_program_then_run_both_executables ... ok
+test plan::design_model_has_no_expression_text ... ok
+test plan::design_model_is_canonical_and_every_value_is_encoded_as_15_4_says ... ok
+test llvm_memory::terminald_memory_is_flat_over_a_long_session ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+test failover::ten_thousand_failing_sessions_leak_nothing ... ok
+test plan::design_model_resolves_each_of_the_five_members_once ... ok
+test llvm_memory::tn_memory_is_flat_over_a_long_session ... ok
+test plan::design_model_is_byte_identical_across_processes_and_directories ... ok
+test plan::exit_statuses ... ok
+test plan::terminal_example_model_matches_golden ... ok
+test plan::todo_example_model_matches_golden ... ok
+test plan::e114_covers_an_unknown_assembly_name_and_check_passes ... ok
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test siblings::llvm_build_links_a_module_sibling ... ok
+test llvm_build::failed_compile_is_retried ... ok
+test plan::explain_unknown_path_is_e119 ... ok
+test plan::explain_matches_the_goldens_of_15_8 ... ok
+test slice9::long_chains_100k_lower_quickly ... ignored
+test slice9::long_chains_100k_run_on_llvm ... ignored
+test siblings::llvm_test_runs_a_module_sibling ... ok
+test plan::fixtures_match_expected ... ok
+test slice9::long_chains_lower_quickly ... ok
+test slice10_llvm::failures_fail_on_both_targets_with_the_same_report ... ok
+test ignite_test::files_share_one_executable ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/tmp/syntax-rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.06s
+test syntax::rust_target_runs_every_feature ... ok
+test slice10_llvm::features_pass_on_both_targets_with_the_same_report ... ok
+test syntax::llvm_target_runs_every_feature ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test terminal::llvm::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::llvm::accept_survives_running_out_of_descriptors ... ok
+test terminal::llvm::are_you_there_is_answered ... ok
+test terminal::llvm::cr_nul_ends_a_line ... ok
+test terminal::llvm::do_echo_is_refused_with_wont ... ok
+test ignite_test::std_module_as_the_file ... ok
+test terminal::llvm::iac_iac_is_a_literal_byte ... ok
+test terminal::llvm::interrupt_process_closes ... ok
+test terminal::llvm::line_of_4096_bytes_is_accepted ... ok
+test terminal::llvm::overlong_line_is_refused_and_closed ... ok
+test terminal::llvm::subnegotiation_is_skipped ... ok
+test terminal::llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::llvm::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::llvm::fragmented_input_is_reassembled ... ok
+test terminal::llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::llvm::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test terminal::llvm::tn_exits_2_for_a_malformed_port ... ok
+test terminal::llvm::tn_exits_3_when_nothing_listens ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::llvm::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::llvm::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::llvm::will_naws_is_refused_with_dont ... ok
+test terminal::llvm::tn_refuses_options_and_strips_commands ... ok
+test terminal::no_target_links_tokio ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test ignite_test::assert_and_try_reports ... ok
+test terminal::rust::accept_survives_running_out_of_descriptors ... ok
+test terminal::rust::are_you_there_is_answered ... ok
+test terminal::rust::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::rust::do_echo_is_refused_with_wont ... ok
+test terminal::rust::cr_nul_ends_a_line ... ok
+test terminal::rust::iac_iac_is_a_literal_byte ... ok
+test terminal::rust::interrupt_process_closes ... ok
+test terminal::rust::line_of_4096_bytes_is_accepted ... ok
+test terminal::rust::overlong_line_is_refused_and_closed ... ok
+test terminal::rust::subnegotiation_is_skipped ... ok
+test terminal::rust::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::rust::subnegotiation_over_1024_bytes_closes ... ok
+test slice9::audit_probes_pass ... ok
+test terminal::rust::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::llvm::transcript_on_raw_socket ... ok
+test terminal::rust::tn_exits_2_for_a_malformed_port ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test terminal::rust::tn_exits_3_when_nothing_listens ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::rust::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::rust::fragmented_input_is_reassembled ... ok
+test terminal::rust::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::rust::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::rust::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::rust::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::rust::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::rust::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::rust::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::rust::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::rust::will_naws_is_refused_with_dont ... ok
+test terminal::rust::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::rust::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::rust::tn_refuses_options_and_strips_commands ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test terminal::rust::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test todo::todo::llvm::crud_flow ... ok
+test todo::todo::llvm::error_statuses ... ok
+test todo::todo::llvm::header_framing ... ok
+test todo::todo::llvm::content_length ... ok
+test todo::todo::llvm::keep_alive ... ok
+test todo::todo::llvm::limits ... ok
+test ignite_test::compile_error_exits_2 ... ok
+test todo::todo::llvm::rejection_is_read ... ok
+test todo::todo::llvm::concurrent_posts ... ok
+test todo::todo::llvm::concurrent_patches ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test todo::todo::rust::keep_alive ... ok
+test todo::todo::rust::header_framing ... ok
+test todo::todo::rust::crud_flow ... ok
+test todo::todo::rust::content_length ... ok
+test todo::todo::rust::limits ... ok
+test todo::todo::rust::error_statuses ... ok
+test todo::todo::rust::rejection_is_read ... ok
+test todo::todo::rust::concurrent_posts ... ok
+test terminal::rust::transcript_on_raw_socket ... ok
+test todo::todo::rust::concurrent_patches ... ok
+test ignite_test::counts_results_and_failures ... ok
+test slice9::long_chains_run_on_llvm ... ok
+test slice9::rust_target_features_pass_on_llvm ... ok
+test slice9::slice9_values_across_regions ... ok
+test terminal::idle_terminald_runs_one_thread ... ok
+test slice9::audit_io_probes_pass ... ok
+test slice9::var_aliases_leave_the_source_unchanged ... ok
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+
+test result: ok. 162 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 8.88s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_check-8e7359fd2edf000b)
+
+running 10 tests
+test tests::ambiguous_variants_are_left_to_the_type_checker ... ok
+test tests::duplicate_top_level_names ... ok
+test tests::let_value_is_checked_before_binding ... ok
+test tests::inner_let_shadows_outer_var_for_assignment ... ok
+test tests::path_calls_resolve_variants_and_statics ... ok
+test tests::arm_bindings_are_scoped_to_their_arm ... ok
+test tests::let_shadows_and_inner_block_does_not_leak ... ok
+test tests::for_variable_is_scoped_to_its_body ... ok
+test tests::assignment_needs_a_var ... ok
+test tests::effect_rules ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-625bf336fa859c75)
+
+running 10 tests
+test fixtures::every_checker_code_has_a_fixture ... ok
+test limits::mutual_recursion_reaches_a_fixed_point ... ok
+test modules::check_is_check_module_without_modules ... ok
+test modules::only_named_imports_enter_scope ... ok
+test modules::constants_are_exported_imported_and_listed ... ok
+test modules::imported_definitions_enter_symbols ... ok
+test fixtures::fixtures_match_expected ... ok
+test terminal::standard_library_checks_in_import_order ... ok
+test terminal::terminal_checks_clean_against_the_standard_library ... ok
+test limits::effect_inference_is_linear_in_either_order ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_eval-2bc076bdfd01a6cd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-17eca3f1c638dc2a)
+
+running 9 tests
+test fuel::default_limits_are_one_million ... ok
+test fuel::with_units_keeps_the_node_limit ... ok
+test value::nodes_count_items_recursively ... ok
+test value::closures_and_io_errors_are_unencodable ... ok
+test value::collections ... ok
+test value::records_and_enums ... ok
+test value::references_fns_modules_and_errors ... ok
+test value::scalars_and_text_escapes ... ok
+test value::quantities_print_the_largest_exact_unit ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_io-7ca900d290ca2188)
+
+running 36 tests
+test args::tests::checked_port ... ok
+test args::tests::absent_is_none ... ok
+test args::tests::missing_value_is_none ... ok
+test args::tests::separate_value ... ok
+test args::tests::joined_value ... ok
+test checked::tests::arithmetic_in_range ... ok
+test args::tests::out_of_range_is_none ... ok
+test checked::tests::index_and_slice ... ok
+test checked::tests::overflow_and_zero_division_report_the_operands ... ok
+test net::tests::descriptor_and_memory_shortages_are_transient ... ok
+test net::tests::pending_network_errors_of_accept_are_transient ... ok
+test quantity::tests::byte_sizes ... ok
+test idle::tests::zero_removes_the_timeout ... ok
+test idle::tests::data_before_the_timeout_is_read ... ok
+test quantity::tests::durations ... ok
+test quantity::tests::ratios ... ok
+test report::tests::a_failure_is_caught_with_its_report ... ok
+test report::tests::a_rust_panic_is_reported_with_its_location ... ok
+test report::tests::reports ... ok
+test store::tests::get_returns_a_copy ... ok
+test store::tests::a_panic_in_update_keeps_the_old_value_and_the_store ... ok
+test store::tests::put_get_remove_values ... ok
+test store::tests::ids_start_at_one_and_count_up ... ok
+test store::tests::update_missing_id_does_not_call_f ... ok
+test test::tests::selection ... ok
+test test::tests::verdict_words ... ok
+test tests::io_error_exit_codes ... ok
+test tests::io_error_from_std ... ok
+test tests::io_error_display_is_message ... ok
+test test::tests::arguments ... ok
+error: plain
+error: no peer
+error: --port abc
+test tests::port_outside_range_is_error ... ok
+test tests::run_returns_the_exit_code_of_the_error ... ok
+error: + failed at f.ignite:1:2: 9223372036854775807 + 1
+error: panic at crates/ignite-io/src/lib.rs:414:27: boom
+test tests::run_returns_101_on_a_failure_or_panic ... ok
+test store::tests::concurrent_ids_and_updates_lose_nothing ... ok
+task ended with error: index failed at t.ignite:1:1: index 3 out of range for length 0
+test task::tests::workers_are_reused_and_run_every_task_once ... ok
+test idle::tests::an_idle_read_ends_with_eof ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-2e2da2a0afa9c87b)
+
+running 36 tests
+test stdio::child_echo ... ok
+test stdio::child_exit_with_a_stalled_writer ... ok
+error: failed
+test stdio::child_failing_tasks ... ok
+test stdio::child_pending_stdin_read ... ok
+test stdio::child_main_fails ... ok
+test tcp::bind_port_out_of_range_fails ... ok
+test tcp::bind_port_zero_picks_a_port ... ok
+test tcp::bind_twice_on_one_port_fails ... ok
+test tcp::clone_shares_the_socket ... ok
+test tcp::a_write_after_close_is_the_writers_error ... ok
+test tcp::a_thread_sends_what_it_wrote_when_it_ends ... ok
+test tcp::run_returns_one_on_err ... ok
+test tcp::dropping_the_last_handle_sends_and_closes_at_once ... ok
+test tcp::run_returns_zero_on_ok ... ok
+test tcp::read_respects_maximum ... ok
+test tcp::round_trip_and_half_close ... ok
+test tcp::spawn_inside_run_executes ... ok
+test terminal::child_not_a_terminal ... ok
+test terminal::child_raw_round_trip ... ok
+test terminal::child_raw_then_error ... ok
+test terminal::child_raw_then_panic ... ok
+test terminal::child_raw_then_process_exit ... ok
+test stdio::a_failure_in_main_exits_101_with_its_report ... ok
+test stdio::stdin_reads_up_to_maximum_and_ends_with_eof ... ok
+test terminal::run_restores_the_terminal_when_main_fails ... ok
+test terminal::process_exit_restores_the_terminal_and_exits_with_the_code ... ok
+test terminal::run_restores_the_terminal_when_main_panics ... ok
+test terminal::set_raw_is_a_no_op_on_a_pipe ... ok
+test terminal::set_raw_switches_and_run_restores_on_return ... ok
+test tcp::close_proceeds_while_a_read_is_pending ... ok
+test tcp::spawn_runs_tasks_in_parallel ... ok
+test tcp::write_proceeds_while_a_read_is_pending ... ok
+test tcp::writes_are_sent_together_at_the_next_wait ... ok
+test stdio::run_returns_while_a_stdin_read_is_pending ... ok
+test stdio::a_failing_task_is_logged_and_the_process_continues ... ok
+test stdio::exit_returns_while_a_stdout_write_is_stalled ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_llvm-0e4cc4a4d288685c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-f3b2d6796b761c6a)
+
+running 14 tests
+test layout::records_have_c_layout ... ok
+test layout::runtime_types_match_the_layouts ... ok
+test layout::copy_glue_only_where_buffers_are ... ok
+test layout::scalars_and_builtins ... ok
+test layout::enums_are_tag_and_payload ... ok
+test layout::type_names_in_symbols ... ok
+test golden::read_only_parameters_are_borrowed ... ok
+test golden::loops_release_their_region ... ok
+test golden::symbols_are_module_qualified ... ok
+test golden::modules_name_target_and_source ... ok
+test tests_build::normal_build_drops_test_only_declarations ... ok
+test golden::small_program ... ok
+test tests_build::test_build_lowers_tests_and_a_runner_main ... ok
+test golden::syntax_program ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_load-ea77ab23ecc10c58)
+
+running 3 tests
+test matrix::tests::cells_parse ... ok
+test matrix::tests::median_of_odd_and_even_counts ... ok
+test matrix::tests::reads_fields_of_a_result_line ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_rt-244b00890ed96bd2)
+
+running 19 tests
+test arena::tests::generated_code_and_runtime_share_the_bump_state ... ok
+test arena::tests::release_is_due_above_the_larger_of_64_kib_and_four_times_kept ... ok
+test arena::tests::scratch_survives_a_release_of_the_task_arena ... ok
+test arena::tests::arenas_are_per_thread ... ok
+test arena::tests::zero_size_is_aligned_and_non_null ... ok
+test net::tests::handles_encode_slot_and_generation ... ok
+test net::tests::a_released_slot_is_reused_under_a_new_handle ... ok
+test arena::tests::task_end_frees_the_arena ... ok
+test net::tests::segments_tile_the_indices ... ok
+test process::tests::decode_args_skips_nulls ... ok
+test process::tests::args_port ... ok
+test process::tests::io_error_new_has_exit_code_one ... ok
+test text::tests::debug_escapes_as_section_13_6 ... ok
+test store::tests::values_are_copied_in_and_out_and_freed ... ok
+test arena::tests::large_and_overaligned_requests_get_own_blocks ... ok
+test arena::tests::release_frees_what_came_after_the_mark ... ok
+test arena::tests::spare_chunks_are_bounded ... ok
+test arena::tests::allocations_are_aligned_and_disjoint ... ok
+test arena::tests::a_loop_of_release_does_not_grow ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-7fc0dc40a904ea45)
+
+running 18 tests
+test abi::layouts_match_section_three ... ok
+test abi::os_errors_have_exit_code_one_and_the_os_message ... ok
+test abi::text_helpers ... ok
+test abi::spawn_returns_when_the_child_ends_without_ready ... ok
+test terminal::child ... ok
+test terminal::fail_restores_the_terminal ... ok
+test terminal::non_terminal_stdin_is_a_no_op ... ok
+test terminal::panic_restores_the_terminal ... ok
+test terminal::exit_restores_the_terminal ... ok
+test terminal::stdin_reads_until_eof ... ok
+test terminal::rust_panic_restores_the_terminal ... ok
+test terminal::normal_exit_restores_the_terminal_at_exit ... ok
+test abi::tcp_round_trip_with_concurrent_read_and_write ... ok
+test abi::spawn_blocks_until_the_child_is_ready ... ok
+test c_abi::smoke_program_runs ... ok
+test c_abi::fail_panic_and_exit_statuses ... ok
+test c_abi::port_argument ... ok
+test abi::release_closes_the_socket_and_invalidates_the_handle ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_rustgen-8d46fc80f07c06b3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-5e4ab9ed9c9b052f)
+
+running 77 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test golden::pure_functions ... ok
+test golden::process_exit_diverges ... ok
+test golden::constants_qualified_patterns_and_io_error ... ok
+test golden::record_and_enum_with_match ... ok
+test golden::system_with_server_and_client ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test golden::generics_stores_and_builtins ... ok
+test slice9::long_chains_build_and_run_100k ... ignored
+test golden::surface_syntax ... ok
+test golden::variants_of_enums_not_imported ... ok
+test units::aliases_and_field_defaults ... ok
+    Blocking waiting for file lock on package cache
+test units::bindings_are_scoped ... ok
+    Blocking waiting for file lock on package cache
+test units::block_values ... ok
+    Blocking waiting for file lock on package cache
+test units::bool_or_and_tuple_patterns_are_native ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Blocking waiting for file lock on package cache
+test units::builtin_methods ... ok
+    Blocking waiting for file lock on package cache
+test units::constants_are_zero_argument_functions ... ok
+test units::e020_bad_properties ... ok
+test units::e020_components_without_types ... ok
+test units::e020_resource_kind ... ok
+test units::effectful_function_is_a_plain_fn ... ok
+test units::else_if_chain_keeps_statement_position ... ok
+test compiles::variants_of_enums_not_imported_build ... ok
+test units::function_body_value_depends_on_return_type ... ok
+    Blocking waiting for file lock on package cache
+test units::function_types_and_values ... ok
+test units::functions_and_variants_are_not_places ... ok
+test units::generate_std_rejects_a_system ... ok
+test units::generate_std_nests_modules ... ok
+test units::header_and_declarations ... ok
+test units::imported_constant_and_local_shadowing ... ok
+test units::imports_become_use_lines ... ok
+test units::int_literals_are_plain_digits ... ok
+test units::no_system_is_a_library_without_executables ... ok
+test units::list_and_text_patterns_are_guarded_arms ... ok
+test units::own_protocol_is_known_without_symbols ... ok
+    Blocking waiting for file lock on package cache
+test units::ownership_non_value_positions_do_not_clone ... ok
+test units::package_name_defaults_to_program ... ok
+    Blocking waiting for file lock on package cache
+test units::protocol_lowering ... ok
+test units::qualified_variant_patterns ... ok
+test units::receiver_that_is_not_atomic_is_parenthesized ... ok
+test units::return_expressions ... ok
+test units::rust_keywords_are_escaped ... ok
+    Blocking waiting for file lock on package cache
+test units::spawn_lowering ... ok
+test units::std_version_follows_the_library_text ... ok
+    Blocking waiting for file lock on package cache
+test units::ownership_value_positions_clone_places ... ok
+test units::string_escaping ... ok
+    Blocking waiting for file lock on package cache
+test units::substrate_imports_need_no_std_crate ... ok
+test units::tuple_type ... ok
+    Blocking waiting for file lock on package cache
+test units::tuples_and_pattern_lets ... ok
+test units::type_table ... ok
+test units::typed_let ... ok
+test units::unit_value_and_type ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+test units::variant_patterns ... ok
+test units::write_project_creates_layout ... ok
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test units::variant_expressions ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on shared package cache
+    Blocking waiting for file lock on shared package cache
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Blocking waiting for file lock on build directory
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+test compiles::generics_and_store_serve ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+test slice9::assignments_box_by_the_fields_owner ... ok
+test compiles::constants_across_modules_build ... ok
+test compiles::std_crate_and_program_build ... ok
+test compiles::process_exit_without_try_builds_and_exits ... ok
+test compiles::store_ids_and_updates_are_atomic_across_connections ... ok
+test golden::executable_components ... ok
+test golden::terminal ... ok
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test compiles::terminal_project_builds ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test slice10::slice10_features_pass ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test slice10::generate_tests_lays_a_program_out_by_its_module_path ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+test slice9::failed_asserts_show_debug_text ... ok
+    Blocking waiting for file lock on shared package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test slice10::failures_report_the_operation_and_position ... ok
+test slice9::slice9_features_pass ... ok
+test slice10::executable_component_main_runs_and_maps_the_exit_code ... ok
+test slice10::crashd_survives_failing_handlers ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test slice9::long_chains_build_and_run ... ok
+test slice9::long_chains_lower_without_overflow ... ok
+
+test result: ok. 76 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.66s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_syntax-d8cc51728136adfa)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-807151e0292813cb)
+
+running 148 tests
+test grammar::associated_fn ... ok
+test grammar::assert_statements ... ok
+test grammar::additive_is_left_associative ... ok
+test grammar::bool_tuple_list_and_or_patterns ... ok
+test grammar::break_and_continue_are_expressions ... ok
+test grammar::brace_literal_keys_are_names_or_references ... ok
+test grammar::call_on_a_call ... ok
+test grammar::chained_equality_is_e001 ... ok
+test grammar::chained_comparison_is_e001 ... ok
+test grammar::comments_everywhere ... ok
+test grammar::closures ... ok
+test grammar::byte_literals ... ok
+test grammar::const_is_a_keyword_and_a_recovery_point ... ok
+test grammar::const_declarations ... ok
+test grammar::const_needs_type_and_value ... ok
+test grammar::const_span_covers_keyword_to_value ... ok
+test grammar::contracts_policies_and_assemblies ... ok
+test grammar::declarations_need_a_newline_between_them ... ok
+test grammar::else_if_chain_across_lines ... ok
+test grammar::effectful_fn_types ... ok
+test grammar::else_on_next_line_is_e001 ... ok
+test grammar::expression_body ... ok
+test grammar::field_defaults_and_aliases ... ok
+test grammar::eof_inside_block_is_e002 ... ok
+test grammar::fn_type_nests ... ok
+test grammar::if_as_let_initializer ... ok
+test grammar::fn_type_missing_paren_is_e001 ... ok
+test grammar::interpolated_expression_spans_point_into_the_string ... ok
+test grammar::fn_type_without_return_is_unit ... ok
+test grammar::fn_type_in_param_and_return_position ... ok
+test grammar::generic_declarations ... ok
+test grammar::fn_type_lists_params_then_return ... ok
+test grammar::import_forms ... ok
+test grammar::field_punning_and_commas ... ok
+test grammar::hex_integer ... ok
+test grammar::glob_import ... ok
+test grammar::keywords_are_path_segments ... ok
+test grammar::integer_with_separators ... ok
+test grammar::keywords_still_name_paths_and_fields ... ok
+test grammar::keywords_are_property_names ... ok
+test grammar::interpolation_desugars_to_concatenation ... ok
+test grammar::if_else_if_else_nests ... ok
+test grammar::keywords_as_field_names ... ok
+test grammar::for_with_a_tuple_pattern ... ok
+test grammar::interpolation_holds_string_literals ... ok
+test grammar::interpolation_errors ... ok
+test grammar::lowercase_name_with_payload_or_path_is_a_variant_pattern ... ok
+test grammar::hex_escape_produces_character ... ok
+test grammar::lowercase_name_before_brace_is_not_a_record ... ok
+test grammar::integer_beyond_i64_is_e001 ... ok
+test grammar::match_binding_pattern ... ok
+test grammar::largest_integer_is_accepted ... ok
+test grammar::for_over_bytes ... ok
+test grammar::match_arms_separated_by_commas ... ok
+test grammar::match_block_and_expression_bodies ... ok
+test grammar::match_arms_separated_by_newlines ... ok
+test grammar::match_literal_and_wildcard_patterns ... ok
+test grammar::match_nested_patterns ... ok
+test grammar::let_patterns ... ok
+test grammar::match_qualified_pattern ... ok
+test grammar::newline_after_assign_continues ... ok
+test grammar::named_arguments ... ok
+test grammar::newline_after_binary_operator_continues ... ok
+test grammar::newline_after_comma_continues ... ok
+test grammar::newline_before_binary_operator_ends_the_statement ... ok
+test grammar::newlines_inside_brackets_are_skipped ... ok
+test grammar::newlines_inside_parentheses_are_skipped ... ok
+test grammar::parentheses_produce_no_node ... ok
+test grammar::path_calls ... ok
+test grammar::postfix_chain ... ok
+test grammar::postfix_paren_on_next_line_starts_a_statement ... ok
+test grammar::no_record_literal_in_conditions ... ok
+test grammar::precedence_full_ladder ... ok
+test grammar::precedence_unary_operators ... ok
+test grammar::protocol_and_spawn_are_keywords ... ok
+test grammar::protocol_may_be_empty_and_on_one_line ... ok
+test grammar::protocol_declares_roles ... ok
+test grammar::protocol_member_must_be_fn ... ok
+test grammar::qualified_patterns_with_payload ... ok
+test grammar::quantity_literals ... ok
+test grammar::range_patterns ... ok
+test grammar::record_literal_directly_in_a_condition_is_not_parsed ... ok
+test grammar::raw_strings_and_unicode_escapes ... ok
+test grammar::record_literal_with_commas ... ok
+test grammar::record_literal_with_newlines ... ok
+test grammar::record_literal_allowed_in_bodies_and_after_conditions ... ok
+test grammar::recovery_keeps_good_declarations_parseable ... ok
+test grammar::record_literal_in_brackets_inside_a_condition ... ok
+test grammar::recovery_reports_each_bad_declaration_once ... ok
+test grammar::record_update ... ok
+test grammar::recovery_resumes_at_protocol ... ok
+test grammar::recovery_skips_the_rest_of_a_broken_protocol ... ok
+test grammar::role_requires_breaks_across_lines ... ok
+test grammar::semicolon_separates_statements ... ok
+test grammar::spans_cover_first_to_last_token ... ok
+test grammar::return_expression ... ok
+test grammar::spawn_span_covers_operand ... ok
+test grammar::spawn_without_operand_is_an_error ... ok
+test grammar::spawn_is_a_prefix_operator ... ok
+test grammar::statement_cannot_start_with_dot ... ok
+test grammar::stmt_assign_to_call_is_e001 ... ok
+test grammar::stmt_break_and_continue ... ok
+test grammar::stmt_assign_to_field_path ... ok
+test grammar::stmt_expression ... ok
+test grammar::stmt_for ... ok
+test grammar::stmt_let ... ok
+test grammar::stmt_let_with_type_annotation ... ok
+test grammar::stmt_loop ... ok
+test grammar::stmt_var ... ok
+test grammar::stmt_while ... ok
+test grammar::stmt_return ... ok
+test grammar::string_escapes ... ok
+test grammar::test_only_items ... ok
+test grammar::store_resource_without_properties ... ok
+test grammar::try_span_ends_at_the_question_mark ... ok
+test grammar::test_and_assert_errors ... ok
+test grammar::trailing_semicolon ... ok
+test grammar::test_declaration ... ok
+test grammar::tuple_fields ... ok
+test grammar::two_statements_on_one_line_need_a_separator ... ok
+test grammar::unary_neg_on_literal ... ok
+test grammar::unknown_escape_is_e001 ... ok
+test grammar::tuple_values_and_unit ... ok
+test grammar::unterminated_string_is_e001 ... ok
+test grammar::tuple_types ... ok
+test fixtures::fixtures_match_expected_diagnostics ... ok
+test grammar::vertical_tab_and_form_feed_escapes ... ok
+test parse_terminal::every_fn_span_ends_at_its_closing_brace ... ok
+test robustness::backslash_at_end_of_line_is_an_unterminated_string ... ok
+test parse_terminal::example_system_has_server_and_client ... ok
+test parse_terminal::example_imports_the_standard_library ... ok
+test robustness::byte_strings_take_an_escaped_single_quote ... ok
+test robustness::lexer_error_does_not_hide_earlier_parser_errors ... ok
+test robustness::greater_equal_after_type_arguments ... ok
+test robustness::byte_literals_with_brace_or_quote_inside_interpolation ... ok
+test robustness::nested_fn_gives_one_error ... ok
+test robustness::one_element_tuple_type_is_e001 ... ok
+test robustness::unclosed_brace_in_interpolation ... ok
+test robustness::unknown_escape_shows_one_backslash ... ok
+test robustness::smallest_integer_is_a_literal ... ok
+test parse_terminal::console_has_a_function_typed_field ... ok
+test robustness::postfix_and_else_do_not_cross_a_line_inside_brackets ... ok
+test parse_terminal::telnet_is_a_protocol_with_both_roles ... ok
+test parse_terminal::std_files_parse_and_name_their_module ... ok
+test robustness::long_chains_parse ... ok
+test robustness::nesting_is_limited_to_256_levels ... ok
+test robustness::rendering_many_diagnostics_is_linear ... ok
+test robustness::line_col_computes_the_line_table_once ... ok
+
+test result: ok. 148 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/ignite_types-75ebb7e5fa68d1f9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-1ec713e6db068368)
+
+running 39 tests
+test fixtures::every_type_code_has_a_fixture ... ok
+test inline_tests::a_program_without_package_is_main ... ok
+test inline_tests::assert_message_is_typed ... ok
+test audit::copies_match_the_audit_directory ... ok
+test inline_tests::assert_compare_records_operand_and_show ... ok
+test inline_tests::tests_are_listed_in_declaration_order ... ok
+test inline_tests::test_try_covers_only_test_bodies ... ok
+test generics::component_kind_carries_the_type_arguments ... ok
+test slice9::closure_effects_on_captures_and_ambient ... ok
+test slice9::boxing ... ok
+test slice9::closure_captures_in_order_of_first_use ... ok
+test generics::store_and_new_builtins ... ok
+test slice9::debug_and_associated_fns ... ok
+test generics::effectful_fn_types ... ok
+test generics::every_expression_is_typed ... ok
+test generics::instances_of_generic_uses ... ok
+test limits::exhaustiveness_is_polynomial_in_bool_columns ... ok
+test generics::type_parameters_are_exported ... ok
+test slice9::every_expression_is_typed ... ok
+test slice9::range_bounds_evaluate_constants ... ok
+test surface::bare_variants_take_the_expected_enum ... ok
+test surface::aliases_resolve_to_their_targets ... ok
+test surface::return_is_never_and_constant_patterns_are_recorded ... ok
+test fixtures::valid_system_describes_its_system_and_assembly ... ok
+test slice9::equality_kinds ... ok
+test surface::interpolation_is_text_concatenation_with_to_text ... ok
+test surface::every_expression_is_typed ... ok
+test surface::field_defaults ... ok
+test surface::inferred_effects_reach_the_signature ... ok
+test surface::tuples_and_unit ... ok
+test surface::ufcs_and_field_fn_calls ... ok
+test fixtures::fixtures_match_expected ... ok
+test terminal::standard_library_types_in_import_order ... ok
+test terminal::terminal_program_types_against_the_standard_library ... ok
+test terminal::todo_program_types_against_the_standard_library ... ok
+test terminal::standard_library_expressions_are_typed ... ok
+test audit::audit_probes_match_expected ... ok
+test limits::long_plus_chain_does_not_overflow ... ok
+test limits::failure_site_positions_of_the_long_chain_are_cheap ... ok
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+   Doc-tests ignite
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_check
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_eval
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_io
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_llvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_rt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_rustgen
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_syntax
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_types
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+task: [test-ignite] cargo build -q -p ignite
+task: [test-ignite] cargo build -q -p ignite-rt --features runner --target-dir /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test/rt
+task: [test-ignite] /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/ignite test examples/terminal/command_schema.ignite examples/terminal/commands.ignite examples/terminal/terminal.ignite examples/todo/todo.ignite std/cli.ignite std/console.ignite std/contract.ignite std/deploy.ignite std/json.ignite std/net.ignite std/option.ignite std/policy.ignite std/probe.ignite std/protocol/http.ignite std/protocol/telnet.ignite std/result.ignite std/text.ignite   --out /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test --target-dir /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test/cargo
+running 102 tests
+test examples.terminal.command_schema/the schema names the four commands ... ok
+test examples.terminal.commands/parse reads the four commands by their first word ... ok
+test examples.terminal.commands/answer replies to each command ... ok
+test examples.terminal.commands/respond trims the line and names unknown commands ... ok
+test examples.todo/to_json ... ok
+test examples.todo/handle creates, lists, reads, updates and deletes ... ok
+test examples.todo/handle answers 400, 404 and 405 ... ok
+test std.cli/arguments describe themselves ... ok
+test std.cli/usage joins the command and its arguments ... ok
+test std.console/first_word skips leading whitespace ... ok
+test std.console/rest_after_word drops the word and one whitespace byte ... ok
+test std.console/skip_space and skip_word move to the next boundary ... ok
+test std.console/a reply continues unless it says close ... ok
+test std.console/a declared console gives the console a protocol runs ... ok
+test std.console/a declared console lists its schema's commands ... ok
+test std.contract/windows and consequences are built by name ... ok
+test std.contract/missing_data reads the closed set ... ok
+test std.contract/meets compares good attempts against the target in ppm ... ok
+test std.deploy/bindings are built by name ... ok
+test std.deploy/only a native process includes other members ... ok
+test std.deploy/a local socket admits a TcpListener resource only ... ok
+test std.deploy/a native process admits an executable component only ... ok
+test std.deploy/a workstation executable admits any component ... ok
+test std.deploy/a scheduled probe host admits a component with an output ... ok
+test std.deploy/no binding admits a contract or a policy ... ok
+test std.json/encode writes every kind compactly ... ok
+test std.json/encode escapes quote, backslash and control characters ... ok
+test std.json/parse reads every kind of value ... ok
+test std.json/parse decodes escapes ... ok
+test std.json/a lone or broken surrogate is an invalid escape ... ok
+test std.json/numbers are integers of at most 18 digits ... ok
+test std.json/nesting is limited to 64 levels ... ok
+test std.json/malformed input is an error at its offset ... ok
+test std.json/the accessors read members of the right kind ... ok
+test std.json/encode and parse round trip ... ok
+test std.option/unwrap_or gives the value or the fallback ... ok
+test std.option/map and and_then apply a fn to the value ... ok
+test std.option/is_some, is_none and ok_or ... ok
+test std.policy/an exponential backoff doubles up to its maximum ... ok
+test std.policy/a fixed backoff never changes ... ok
+test std.policy/Restart counts attempts against its maximum ... ok
+test std.policy/DrainRollout defaults to two minutes and disconnecting ... ok
+test std.probe/an attempt satisfies the outcomes it earned ... ok
+test std.probe/the prompt is seen at the start of the server's text ... ok
+test std.protocol.http/responses carry their reason, type and body ... ok
+test std.protocol.http/a header holding CR or LF turns the response into 500 ... ok
+test std.protocol.http/render writes the status line, headers, length and connection ... ok
+test std.protocol.http/a 204 response has no Content-Length and no body ... ok
+test std.protocol.http/header finds the first value of a lower-case name ... ok
+test std.protocol.http/segments are the non-empty parts of the path ... ok
+test std.protocol.http/HTTP/1.1 keeps the connection unless asked to close ... ok
+test std.protocol.http/HTTP/1.0 closes the connection unless asked to keep it ... ok
+test std.protocol.http/Connection is a list of options ... ok
+test std.protocol.http/tokens, field values and targets ... ok
+test std.protocol.http/parse_head reads the request line and headers ... ok
+test std.protocol.http/parse_head refuses a malformed request line ... ok
+test std.protocol.http/parse_head refuses a malformed header line ... ok
+test std.protocol.http/a Content-Length is 1 to 18 decimal digits ... ok
+test std.protocol.http/next_request reads a head, its body and keeps the rest ... ok
+test std.protocol.http/next_request takes a pipelined request from the buffer ... ok
+test std.protocol.http/next_request ends on a connection closed before a whole request ... ok
+test std.protocol.http/a head over 8 KiB is 431 ... ok
+test std.protocol.http/a body over 1 MiB is 413 ... ok
+test std.protocol.http/a malformed head or Content-Length is 400 ... ok
+test std.protocol.http/any Transfer-Encoding is 501, also with a Content-Length ... ok
+test std.protocol.http/the server answers pipelined requests until one asks to close ... ok
+test std.protocol.http/the server answers a rejected request and closes ... ok
+test std.protocol.telnet/the profile and the limits default to what Telnet implements ... ok
+test std.protocol.telnet/data bytes are literals ... ok
+test std.protocol.telnet/CR LF, CR NUL, a lone CR and a lone LF end one line ... ok
+test std.protocol.telnet/a CR LF split across reads ends one line ... ok
+test std.protocol.telnet/IAC IAC is the data byte 255 ... ok
+test std.protocol.telnet/DO is answered WONT and WILL is answered DONT ... ok
+test std.protocol.telnet/a negotiation split across reads is answered once complete ... ok
+test std.protocol.telnet/AYT and IP are reported and other commands ignored ... ok
+test std.protocol.telnet/a subnegotiation is skipped up to IAC SE ... ok
+test std.protocol.telnet/a subnegotiation is limited to 1024 bytes including the IAC of IAC SE ... ok
+test std.protocol.telnet/render ends each reply line with CR LF ... ok
+test std.protocol.telnet/encode_input writes NVT line ends and doubles IAC ... ok
+test std.protocol.telnet/encoded input decodes to the same lines ... ok
+test std.protocol.telnet/erase_last removes one UTF-8 character ... ok
+test std.protocol.telnet/apply_key edits the line ... ok
+test std.protocol.telnet/the server answers each line and ends on the console's close ... ok
+test std.protocol.telnet/the server answers options and AYT between lines ... ok
+test std.protocol.telnet/the server closes on an overlong line, IAC IP and an overlong subnegotiation ... ok
+test std.protocol.telnet/a client silent for the idle timeout ends the session ... ok
+test std.protocol.telnet/a telnet server runs a declared console, a client its session ... ok
+test std.result/unwrap_or gives the value or the fallback ... ok
+test std.result/map and map_err change one side ... ok
+test std.result/is_ok, is_err and ok ... ok
+test std.text/digit_value reads decimal digits only ... ok
+test std.text/is_whitespace is ASCII whitespace ... ok
+test std.text/slice takes byte offsets ... ok
+test std.text/find returns the first byte offset ... ok
+test std.text/contains, ends_with and strip_suffix ... ok
+test std.text/split keeps empty pieces ... ok
+test std.text/split_once splits at the first separator ... ok
+test std.text/replace replaces every occurrence ... ok
+test std.text/trim_start and trim_end drop ASCII whitespace ... ok
+test std.text/case mapping is ASCII only ... ok
+test std.text/lines splits at LF and drops CR before it ... ok
+test std.text/repeat concatenates copies ... ok
+
+test result: ok. 102 passed; 0 failed; 0 filtered out; finished in 0.13s
+task: [test-ignite] /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/ignite test examples/terminal/command_schema.ignite examples/terminal/commands.ignite examples/terminal/terminal.ignite examples/todo/todo.ignite std/cli.ignite std/console.ignite std/contract.ignite std/deploy.ignite std/json.ignite std/net.ignite std/option.ignite std/policy.ignite std/probe.ignite std/protocol/http.ignite std/protocol/telnet.ignite std/result.ignite std/text.ignite   --target llvm --out /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test --runtime /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test/rt/debug/libignite_rt.a
+running 102 tests
+test examples.terminal.command_schema/the schema names the four commands ... ok
+test examples.terminal.commands/parse reads the four commands by their first word ... ok
+test examples.terminal.commands/answer replies to each command ... ok
+test examples.terminal.commands/respond trims the line and names unknown commands ... ok
+test examples.todo/to_json ... ok
+test examples.todo/handle creates, lists, reads, updates and deletes ... ok
+test examples.todo/handle answers 400, 404 and 405 ... ok
+test std.cli/arguments describe themselves ... ok
+test std.cli/usage joins the command and its arguments ... ok
+test std.console/first_word skips leading whitespace ... ok
+test std.console/rest_after_word drops the word and one whitespace byte ... ok
+test std.console/skip_space and skip_word move to the next boundary ... ok
+test std.console/a reply continues unless it says close ... ok
+test std.console/a declared console gives the console a protocol runs ... ok
+test std.console/a declared console lists its schema's commands ... ok
+test std.contract/windows and consequences are built by name ... ok
+test std.contract/missing_data reads the closed set ... ok
+test std.contract/meets compares good attempts against the target in ppm ... ok
+test std.deploy/bindings are built by name ... ok
+test std.deploy/only a native process includes other members ... ok
+test std.deploy/a local socket admits a TcpListener resource only ... ok
+test std.deploy/a native process admits an executable component only ... ok
+test std.deploy/a workstation executable admits any component ... ok
+test std.deploy/a scheduled probe host admits a component with an output ... ok
+test std.deploy/no binding admits a contract or a policy ... ok
+test std.json/encode writes every kind compactly ... ok
+test std.json/encode escapes quote, backslash and control characters ... ok
+test std.json/parse reads every kind of value ... ok
+test std.json/parse decodes escapes ... ok
+test std.json/a lone or broken surrogate is an invalid escape ... ok
+test std.json/numbers are integers of at most 18 digits ... ok
+test std.json/nesting is limited to 64 levels ... ok
+test std.json/malformed input is an error at its offset ... ok
+test std.json/the accessors read members of the right kind ... ok
+test std.json/encode and parse round trip ... ok
+test std.option/unwrap_or gives the value or the fallback ... ok
+test std.option/map and and_then apply a fn to the value ... ok
+test std.option/is_some, is_none and ok_or ... ok
+test std.policy/an exponential backoff doubles up to its maximum ... ok
+test std.policy/a fixed backoff never changes ... ok
+test std.policy/Restart counts attempts against its maximum ... ok
+test std.policy/DrainRollout defaults to two minutes and disconnecting ... ok
+test std.probe/an attempt satisfies the outcomes it earned ... ok
+test std.probe/the prompt is seen at the start of the server's text ... ok
+test std.protocol.http/responses carry their reason, type and body ... ok
+test std.protocol.http/a header holding CR or LF turns the response into 500 ... ok
+test std.protocol.http/render writes the status line, headers, length and connection ... ok
+test std.protocol.http/a 204 response has no Content-Length and no body ... ok
+test std.protocol.http/header finds the first value of a lower-case name ... ok
+test std.protocol.http/segments are the non-empty parts of the path ... ok
+test std.protocol.http/HTTP/1.1 keeps the connection unless asked to close ... ok
+test std.protocol.http/HTTP/1.0 closes the connection unless asked to keep it ... ok
+test std.protocol.http/Connection is a list of options ... ok
+test std.protocol.http/tokens, field values and targets ... ok
+test std.protocol.http/parse_head reads the request line and headers ... ok
+test std.protocol.http/parse_head refuses a malformed request line ... ok
+test std.protocol.http/parse_head refuses a malformed header line ... ok
+test std.protocol.http/a Content-Length is 1 to 18 decimal digits ... ok
+test std.protocol.http/next_request reads a head, its body and keeps the rest ... ok
+test std.protocol.http/next_request takes a pipelined request from the buffer ... ok
+test std.protocol.http/next_request ends on a connection closed before a whole request ... ok
+test std.protocol.http/a head over 8 KiB is 431 ... ok
+test std.protocol.http/a body over 1 MiB is 413 ... ok
+test std.protocol.http/a malformed head or Content-Length is 400 ... ok
+test std.protocol.http/any Transfer-Encoding is 501, also with a Content-Length ... ok
+test std.protocol.http/the server answers pipelined requests until one asks to close ... ok
+test std.protocol.http/the server answers a rejected request and closes ... ok
+test std.protocol.telnet/the profile and the limits default to what Telnet implements ... ok
+test std.protocol.telnet/data bytes are literals ... ok
+test std.protocol.telnet/CR LF, CR NUL, a lone CR and a lone LF end one line ... ok
+test std.protocol.telnet/a CR LF split across reads ends one line ... ok
+test std.protocol.telnet/IAC IAC is the data byte 255 ... ok
+test std.protocol.telnet/DO is answered WONT and WILL is answered DONT ... ok
+test std.protocol.telnet/a negotiation split across reads is answered once complete ... ok
+test std.protocol.telnet/AYT and IP are reported and other commands ignored ... ok
+test std.protocol.telnet/a subnegotiation is skipped up to IAC SE ... ok
+test std.protocol.telnet/a subnegotiation is limited to 1024 bytes including the IAC of IAC SE ... ok
+test std.protocol.telnet/render ends each reply line with CR LF ... ok
+test std.protocol.telnet/encode_input writes NVT line ends and doubles IAC ... ok
+test std.protocol.telnet/encoded input decodes to the same lines ... ok
+test std.protocol.telnet/erase_last removes one UTF-8 character ... ok
+test std.protocol.telnet/apply_key edits the line ... ok
+test std.protocol.telnet/the server answers each line and ends on the console's close ... ok
+test std.protocol.telnet/the server answers options and AYT between lines ... ok
+test std.protocol.telnet/the server closes on an overlong line, IAC IP and an overlong subnegotiation ... ok
+test std.protocol.telnet/a client silent for the idle timeout ends the session ... ok
+test std.protocol.telnet/a telnet server runs a declared console, a client its session ... ok
+test std.result/unwrap_or gives the value or the fallback ... ok
+test std.result/map and map_err change one side ... ok
+test std.result/is_ok, is_err and ok ... ok
+test std.text/digit_value reads decimal digits only ... ok
+test std.text/is_whitespace is ASCII whitespace ... ok
+test std.text/slice takes byte offsets ... ok
+test std.text/find returns the first byte offset ... ok
+test std.text/contains, ends_with and strip_suffix ... ok
+test std.text/split keeps empty pieces ... ok
+test std.text/split_once splits at the first separator ... ok
+test std.text/replace replaces every occurrence ... ok
+test std.text/trim_start and trim_end drop ASCII whitespace ... ok
+test std.text/case mapping is ASCII only ... ok
+test std.text/lines splits at LF and drops CR before it ... ok
+test std.text/repeat concatenates copies ... ok
+
+test result: ok. 102 passed; 0 failed; 0 filtered out; finished in 0.13s
+task: [compile] cargo run -q -p ignite -- build examples/terminal/terminal.ignite --out target/ignite/terminal --target-dir target
+note: building the generated Rust project in target/ignite/terminal; compiler messages refer to generated code
+   Compiling ignite-std v0.0.0-323e75bcde3e23b0 (/home/timo/projects/telos/target/ignite/terminal/std)
+   Compiling terminal v0.0.0 (/home/timo/projects/telos/target/ignite/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.54s
+built target/debug/terminald
+built target/debug/tn
+task: [compile-llvm] cargo build -q -p ignite
+task: [compile-llvm] cargo build -q -p ignite-rt --features runner --target-dir /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test/rt
+task: [compile-llvm] cargo run -q -p ignite -- build examples/terminal/terminal.ignite --target llvm --out target/ignite-llvm/terminal --runtime /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test/rt/debug/libignite_rt.a
+built target/ignite-llvm/terminal/bin/terminald
+built target/ignite-llvm/terminal/bin/tn
+task: [compile-todo] cargo run -q -p ignite -- build examples/todo/todo.ignite --out target/ignite/todo --target-dir target
+note: building the generated Rust project in target/ignite/todo; compiler messages refer to generated code
+   Compiling todo v0.0.0 (/home/timo/projects/telos/target/ignite/todo)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+built target/debug/todod
+task: [compile-todo-llvm] cargo build -q -p ignite
+task: [compile-todo-llvm] cargo build -q -p ignite-rt --features runner --target-dir /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test/rt
+task: [compile-todo-llvm] cargo run -q -p ignite -- build examples/todo/todo.ignite --target llvm --out target/ignite-llvm/todo --runtime /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/ignite-test/rt/debug/libignite_rt.a
+built target/ignite-llvm/todo/bin/todod

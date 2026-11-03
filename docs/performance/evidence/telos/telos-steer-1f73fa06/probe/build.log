@@ -1,0 +1,47 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/probe/out; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling letpush v0.0.0 (/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/probe/out)
+error[E0596]: cannot borrow `l` as mutable, as it is not declared as mutable
+ --> src/lib.rs:5:5
+  |
+5 |     l.push(2);
+  |     ^ cannot borrow as mutable
+  |
+help: consider changing this to be mutable
+  |
+4 |     let mut l = vec![1];
+  |         +++
+
+error[E0596]: cannot borrow `w` as mutable, as it is not declared as mutable
+  --> src/lib.rs:12:9
+   |
+12 |         w.push(1);
+   |         ^ cannot borrow as mutable
+   |
+help: consider changing this to be mutable
+   |
+11 |     for mut w in (words.clone()) {
+   |         +++
+
+error[E0596]: cannot borrow `b` as mutable, as it is not declared as mutable
+  --> src/lib.rs:21:13
+   |
+21 |             b.push(1);
+   |             ^ cannot borrow as mutable
+   |
+help: consider changing this to be mutable
+   |
+20 |         Some(mut b) => {
+   |              +++
+
+For more information about this error, try `rustc --explain E0596`.
+error: could not compile `letpush` (lib) due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: cargo build failed with status 101

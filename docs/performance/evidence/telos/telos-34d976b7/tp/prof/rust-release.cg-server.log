@@ -1,0 +1,25 @@
+==4163702== Callgrind, a call-graph generating cache profiler
+==4163702== Copyright (C) 2002-2017, and GNU GPL'd, by Josef Weidendorfer et al.
+==4163702== Using Valgrind-3.25.1 and LibVEX; rerun with -h for copyright info
+==4163702== Command: /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald --port 2642
+==4163702== 
+==4163702== For interactive control, run 'callgrind_control -h'.
+listening on 127.0.0.1:2642
+==4163702== 
+==4163702== Process terminating with default action of signal 15 (SIGTERM)
+==4163702==    at 0x4BCF4ED: syscall (syscall.S:38)
+==4163702==    by 0x4081924: <std::sys::sync::condvar::futex::Condvar>::wait (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald)
+==4163702==    by 0x4066418: <tokio::runtime::park::Inner>::park (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald)
+==4163702==    by 0x403ECE3: <tokio::runtime::park::CachedParkThread>::block_on::<terminald::main::{closure#0}> (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald)
+==4163702==    by 0x4039E03: tokio::runtime::context::runtime::enter_runtime::<<tokio::runtime::scheduler::multi_thread::MultiThread>::block_on<terminald::main::{closure#0}>::{closure#0}, core::result::Result<(), telos_io::IoError>> (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald)
+==4163702==    by 0x403CBDA: telos_io::run::<terminald::main::{closure#0}> (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald)
+==4163702==    by 0x403DAA5: terminald::main (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald)
+==4163702==    by 0x4039A9A: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald)
+==4163702==    by 0x403DA78: std::rt::lang_start::<()>::{closure#0} (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald)
+==4163702==    by 0x4092698: std::rt::lang_start_internal (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald)
+==4163702==    by 0x403DFA4: main (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/rust-target/release/terminald)
+==4163702== 
+==4163702== Events    : Ir
+==4163702== Collected : 394984360
+==4163702== 
+==4163702== I   refs:      394,984,360

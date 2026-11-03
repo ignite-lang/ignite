@@ -1,0 +1,19 @@
+task: [compile-llvm] cargo build -q -p telos
+task: [compile-llvm] cargo build -q -p telos-rt --features runner --target-dir target/telos-test/rt
+task: [compile-llvm] cargo run -q -p telos -- build examples/terminal/terminal.telos --target llvm --out /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-compile/terminal
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-compile/terminal/bin/terminald
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-compile/terminal/bin/tn
+task: [compile-todo-llvm] cargo build -q -p telos
+task: [compile-todo-llvm] cargo build -q -p telos-rt --features runner --target-dir target/telos-test/rt
+task: [compile-todo-llvm] cargo run -q -p telos -- build examples/todo/todo.telos --target llvm --out /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-compile/todo
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-compile/todo/bin/todod
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-compile/terminal/bin:
+total 11928
+-rwxr-xr-x 1 timo timo 6042032 Nov  1 19:14 terminald
+-rwxr-xr-x 1 timo timo 6167456 Nov  1 19:14 tn
+
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9c-compile/todo/bin:
+total 6092
+-rwxr-xr-x 1 timo timo 6237064 Nov  1 19:14 todod
+compile-llvm=0 compile-todo-llvm=0
+EXIT=0

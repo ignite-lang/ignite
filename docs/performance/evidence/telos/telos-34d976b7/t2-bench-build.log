@@ -1,0 +1,17 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/bench; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-std v0.0.0-b17c4000f1710f29 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/bench/std)
+   Compiling bench v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/bench)
+    Finished `release` profile [optimized] target(s) in 8.55s
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/release/benchd
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/release/bjson
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/release/bfind
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/release/bsplit
+built /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t2-out/tgt/release/brepeat

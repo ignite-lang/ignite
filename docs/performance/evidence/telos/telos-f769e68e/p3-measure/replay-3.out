@@ -1,0 +1,3 @@
+Terminal.customerAccess Standing { contract: "Terminal.customerAccess", status: Status.Compliant, good: 591, executed: 591, expected: 591, completeness: 100%, from: 0 ns, to: 5900 seconds, coverage: 0.2202%, calculation: "ignite-sli/0.1", version: 10057 }
+Terminal.promptFast Standing { contract: "Terminal.promptFast", status: Status.Compliant, good: 361, executed: 361, expected: 361, completeness: 100%, from: 2300 seconds, to: 5900 seconds, coverage: 100%, calculation: "ignite-sli/0.1", version: 10060 }
+Terminal.reachable Standing { contract: "Terminal.reachable", status: Status.Compliant, good: 591, executed: 591, expected: 591, completeness: 100%, from: 0 ns, to: 5900 seconds, coverage: 0.2276%, calculation: "ignite-sli/0.1", version: 10063 }

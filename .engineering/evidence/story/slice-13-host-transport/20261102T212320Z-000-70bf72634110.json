@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-02T21:23:20Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-13-host-transport",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "feat/slice13-local-apply 912fd9e: cargo test -p ignite --test main -- apply_host:: apply_admission::, 18 passed 0 failed, 2026-11-02 22:22"
+  }
+}

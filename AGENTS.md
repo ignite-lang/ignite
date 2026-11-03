@@ -40,6 +40,7 @@ the IO substrate (Rust) that compiled programs link.
 | `docs/vision.md` | direction: target architecture, sequencing of waves and slices, contradictions between documents, open and taken decisions |
 | `PLAN.md` | the roadmap in outline: slices, waves, state; reasoning stays in `docs/vision.md` |
 | `docs/` | design document, slice contract, `llvm.md` (LLVM target); `friction.md` (language friction backlog); research: `research/lean.md`, `research/ess.md` (comparisons); future designs, not implemented: `wasm.md` (WebAssembly target, runtime in Ignite, hot reload), `actors.md` (typed actors, pub/sub, supervision), `protocols.md` (RFC-bound protocols, pluggable transports) |
+| `.engineering/` | AEP planning store (`aep plan artifact list`): epics and stories of live work, from slice 13 on; slices 1 to 12c stay in `PLAN.md` |
 
 Rules of the layout:
 
@@ -101,7 +102,7 @@ warnings`, `cargo test --workspace --no-fail-fast`, `task test-ignite`, run one 
 
 | measurement | command | before 9b | after 9b |
 |---|---|---|---|
-| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
+| gate, cold | the gate with `SCCACHE_RECACHE=1` after `cargo clean` | 129.9 s | 86.5 s |
 | gate, warm | the gate after `touch crates/ignite-check/src/lib.rs` | 35.4 s | 25.9 s |
 | test executables | `cargo test --workspace --no-run` | 49, 666 MB | 18, 202 MB |
 | integration-test binaries | same | 39 | 8, one per crate |
@@ -129,7 +130,7 @@ sessions (load average 11 to 23), sccache on, own `CARGO_TARGET_DIR`; "before" i
 
 | measurement | command | before (9b) | slice 10 |
 |---|---|---|---|
-| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
+| gate, cold | `cargo clean`, `SCCACHE_RECACHE=1`, the gate | 86.5 s | 72.3 s (fmt 0.9, clippy 7.4, test 55.5, test-ignite 8.5) |
 | gate, warm | after `touch crates/ignite-check/src/lib.rs` | 25.9 s | 45.5 s (fmt 0.4, clippy 2.1, test 41.7, test-ignite 1.3) |
 | test executables | `cargo test --workspace --no-run` | 18, 202 MB | 18, 210 MB |
 | `--no-run`, warm | same, repeated | 0.0 s | 0.1 s |
@@ -167,11 +168,11 @@ once per tree in a fresh target dir with `SCCACHE_RECACHE=1`, then three interle
 running every warm unit once on the before copy and once on the after copy; the 1-minute load is
 recorded per run, a pair whose two loads differ by more than 5 is discarded (none was), and the
 ratio is the median of the pair ratios. Warm = after `touch crates/ignite-check/src/lib.rs`.
-Scripts and raw logs: the slice's scratch directory, `p4-scripts/` and `p4-logs/`.
+Scripts and raw logs: `docs/performance/evidence/telos/telos-f769e68e/p4-scripts/` and `p4-logs/`.
 
 | measurement | command | before (60aef38) | slice 11 | ratio |
 |---|---|---|---|---|
-| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
+| gate, cold | fresh target dir, `SCCACHE_RECACHE=1`, the gate (1 pair) | 64.8 s (fmt 0.4, clippy 4.2, test 51.9, test-ignite 8.2) | 54.5 s (0.5, 4.3, 41.6, 8.2) | 0.84 |
 | gate, warm | the gate after the touch (3 pairs) | 25.9 s (25.9 to 26.2) | 16.8 s (16.8 to 17.1) | 0.65 |
 | warm `cargo test --workspace` step | same (3 pairs) | 22.9 to 23.1 s | 13.5 to 13.8 s | 0.59 |
 | warm fmt, clippy, test-ignite steps | same | 0.38, 1.98, 0.65 s | 0.45, 2.19, 0.68 s | 1.16, 1.11, 1.03 |
@@ -191,7 +192,7 @@ Scripts and raw logs: the slice's scratch directory, `p4-scripts/` and `p4-logs/
   lowering); 97 inline tests per target before, 102 after (std/deploy +5). `cargo test
   --workspace` on the working tree at the close: 580 passed, 0 failed, 4 ignored, 13.98 s at load
   3.3; `task gate` 13.4 s warm.
-- Slice 10's carry-overs (P0 on 60aef38, raw logs in the scratch directory `p0-logs/`): the warm
+- Slice 10's carry-overs (P0 on 60aef38, raw logs in `docs/performance/evidence/telos/telos-f769e68e/p0-logs/`): the warm
   gate is 25.98 s at load under 5 (fmt 0.40, clippy 2.05, test 22.88, test-ignite 0.65) and 75.4 s
   at load 18 to 44, so slice 10's 45.5 s was load, not a regression. Of the warm test step the
   `crates/ignite` end-to-end binary was 18.69 s (82 %): `slice9.rs` 17.4 s serial behind its
@@ -241,13 +242,13 @@ sccache on. Method as slice 11 (`docs/slice.md` 16.1): "before" is the coordinat
 `s12-before` copy of the slice-12 start tree, "after" the snapshot `s12-p4-after2` of the closed
 tree (every test green), each with its own `CARGO_TARGET_DIR`; one cold gate per tree, then three
 interleaved passes; a pair whose two 1-minute loads differ by more than 5 is discarded. No run
-of either tree happened under load 5. Scripts and raw logs: the slice's scratch directory,
-`s12-p4-scripts/` and `s12-p4-logs/measure/` (`pairs2.txt` is the summary; `pairs.txt` the
+of either tree happened under load 5. Scripts and raw logs:
+`docs/performance/evidence/telos/telos-f769e68e/s12-p4-scripts/` and `s12-p4-logs/measure/`; the P2 and P3 paths below (`p3-measure/`, `s12-p2-bench-unit1cold/`) are in the same directory (`pairs2.txt` is the summary; `pairs.txt` the
 earlier set over the snapshot that still held 4 failing tests, see the note below).
 
 | measurement | command | before (s12-before) | slice 12 | ratio |
 |---|---|---|---|---|
-| gate, cold | 57.141 → 66.111 s; ×1.157 (1 kept/0 discarded) | 68.727 → 66.111 s; ×0.962 (1 kept/0 discarded) |
+| gate, cold | fresh target dir, SCCACHE_RECACHE=1, the gate (1 pair, discarded by the load rule: loads 3.1 and 14.6) | 57.1 s (fmt 0.47, clippy 4.61, test 43.54, test-ignite 8.45) | 78.1 s (0.52, 6.54, 60.43, 10.57) | 1.37, not valid |
 | gate, warm | the gate after the touch (pairs 2 and 3 kept, loads 27 to 35; pair 1 discarded, loads 11 and 34) | 23.5 s (19.8, 27.3) | 33.1 s (29.5, 36.7) | 1.42 (1.35, 1.49) |
 | warm `cargo test --workspace` step | same (pairs 2 and 3) | 17.5 s (14.4, 20.6) at load 28 to 31 | 26.3 s (23.1, 29.5) at load 27 to 31 | 1.52 (1.43, 1.61) |
 | warm fmt, clippy steps | same (pairs 2 and 3) | 0.86, 4.25 s | 0.81, 4.37 s | 0.95, 1.04 |
@@ -321,8 +322,8 @@ earlier set over the snapshot that still held 4 failing tests, see the note belo
 Slice 12b (2026-11-02, completed after recovering the interrupted batch). The 11b baseline
 stays unchanged; the remaining timing exceptions are recorded rather than accepted as a new
 baseline. Full evidence, named-test timings and attribution:
-`/home/timo/.cache/scratch/ignite12b-codex/measure/report.md`, `summary-final.md`,
-`records.jsonl`, source hashes, Cargo timing HTML/JSON, and retained restart journals.
+`docs/performance/12b/report.md`, `summary-final.md`, `records.jsonl` and the restart journals;
+the Cargo timing HTML/JSON was not retained (`docs/performance/evidence/README.md`).
 
 One exact-final cold before/final/slice-12 pass uses fresh owned targets and
 `SCCACHE_RECACHE=1` (start loads 3.71/4.66/0.98); three interleaved warm passes compare `s12-before`, final and
@@ -393,6 +394,10 @@ cold comparison against each baseline meets the start-load rule and has no faile
   syscall-traced HTTP failures are diagnostic interference, not readiness evidence.
 
 - No comments in `Cargo.toml`, `Taskfile.yml` or any other config file.
+- Tooling, checks and scripts are Rust (Timo, 2026-11-02): a `#[test]` in the crate that owns the rule, or a Rust binary. No new Python; Bash only for one-line invocations in `Taskfile.yml`. `scripts/*.py` are being ported (`story:rust-tooling`); scripts under `docs/performance/` are recorded evidence and stay as they are.
+- Commit titles follow Conventional Commits: `type(scope): summary` with `type` one of `feat`,
+  `fix`, `perf`, `docs`, `test`, `refactor`, `chore`, `build`, `ci`; the scope is optional. Every
+  commit has a body: a blank line after the title, then bullets on what changed and why.
 - Reasoning lives in doc comments, `docs/slice.md` and commit messages, not in reports.
 - `docs/slice.md` is the contract between the compiler crates. Change it and the tests together;
   do not let a crate's doc comment restate it.

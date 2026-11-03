@@ -1,0 +1,33 @@
+RUSTC_WRAPPER env=unset
+49:rustc-wrapper = "sccache"
+Compile requests                 728447
+Compile requests executed        585527
+Cache hits                       534463
+Cache hits (Assembler)            85920
+Cache hits (C/C++)               202567
+rust_cold_true_dev secs=3.0 status=0 compiling_lines=8
+rust_cold_true_release secs=3.9 status=0 compiling_lines=8
+llvm_runtime_cold_true_dev secs=3.0 status=0 compiling_lines=0
+llvm_runtime_cold_true_release secs=4.7 status=0 compiling_lines=0
+llvm_program_cold_dev secs=0.8 status=0 compiling_lines=0
+llvm_program_cold_release secs=0.9 status=0 compiling_lines=0
+llvm_program_warm_release secs=0.1 status=0 compiling_lines=0
+crates compiled in rust_cold_true_dev:
+libc cfg_aliases cfg-if bitflags nix telos-io telos-std todo 
+Compile requests                 728529
+Compile requests executed        585560
+Cache hits                       534463
+Cache hits (Assembler)            85920
+Cache hits (C/C++)               202567
+sizes:
+6033536 /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/target-rust-c/debug/todod
+698416 /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/target-rust-d/release/todod
+6194792 /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-llvm-c/bin/todod
+671872 /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-llvm-d/bin/todod
+29546980 /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/trt-c/debug/libtelos_rt.a
+24645352 /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/trt-d/release/libtelos_rt.a
+ll files:
+822 /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-llvm-c/llvm/main_todod.ll
+1001 /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-llvm-c/llvm/program.ll
+11221 /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/todo-bench/out-llvm-c/llvm/std.ll
+EXIT=0

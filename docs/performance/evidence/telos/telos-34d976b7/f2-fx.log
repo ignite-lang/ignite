@@ -1,0 +1,47 @@
+
+running 2 tests
+test every_checker_code_has_a_fixture ... ok
+test fixtures_match_expected ... FAILED
+
+failures:
+
+---- fixtures_match_expected stdout ----
+
+thread 'fixtures_match_expected' (3522502) panicked at crates/telos-check/tests/fixtures.rs:65:5:
+/home/timo/projects/telos/crates/telos-check/tests/fixtures/e016_roots.telos
+--- expected
+--- actual
+e016_roots.telos:9:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_record`
+e016_roots.telos:14:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_if`
+e016_roots.telos:24:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_block_local`
+e016_roots.telos:32:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_match`
+e016_roots.telos:40:10: error[E016]: missing effect `o.read` for `t.read`; add it to the `requires` of `via_match_binding`
+e016_roots.telos:45:10: error[E016]: missing effect `ls.read` for `t.read`; add it to the `requires` of `via_at`
+e016_roots.telos:49:10: error[E016]: missing effect `ls.write` for `write_all`; add it to the `requires` of `via_at_write`
+e016_roots.telos:54:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_list`
+e016_roots.telos:60:16: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_some`
+e016_roots.telos:75:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_requires_empty`
+e016_roots.telos:79:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_requires_empty_ufcs`
+e016_roots.telos:84:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_effectful`
+
+
+/home/timo/projects/telos/crates/telos-check/tests/fixtures/e055_recursive_type.telos
+--- expected
+--- actual
+e055_recursive_type.telos:3:6: error[E055]: recursive type `Node` contains itself without `List` indirection; hold the nested `Node` values in a `List`
+e055_recursive_type.telos:8:6: error[E055]: recursive type `Expr` contains itself without `List` indirection; hold the nested `Expr` values in a `List`
+e055_recursive_type.telos:13:6: error[E055]: recursive type `Chain` contains itself without `List` indirection; hold the nested `Chain` values in a `List`
+e055_recursive_type.telos:17:6: error[E055]: recursive type `Ping` contains itself without `List` indirection; hold the nested `Ping` values in a `List`
+e055_recursive_type.telos:21:6: error[E055]: recursive type `Pong` contains itself without `List` indirection; hold the nested `Pong` values in a `List`
+e055_recursive_type.telos:30:6: error[E055]: recursive type `Wrapped` contains itself without `List` indirection; hold the nested `Wrapped` values in a `List`
+e055_recursive_type.telos:49:6: error[E055]: recursive type `Holder` contains itself without `List` indirection; hold the nested `Holder` values in a `List`
+e055_recursive_type.telos:55:6: error[E055]: recursive type `Looped` contains itself without `List` indirection; hold the nested `Looped` values in a `List`
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    fixtures_match_expected
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

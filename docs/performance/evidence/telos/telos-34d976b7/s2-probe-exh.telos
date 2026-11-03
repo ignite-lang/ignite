@@ -1,0 +1,23 @@
+package probe
+
+fn a(v: Option<(Bool, Int)>) -> Int {
+  match v {
+    Some((false, _)) | None => 0
+    Some((true, _)) => 1
+  }
+}
+
+fn b(v: Option<(Bool, Int)>) -> Int {
+  match v {
+    Some((false, _)) => 0
+    None => 0
+    Some((true, _)) => 1
+  }
+}
+
+fn c(v: Option<Bool>) -> Int {
+  match v {
+    Some(false) | None => 0
+    Some(true) => 1
+  }
+}

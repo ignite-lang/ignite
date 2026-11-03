@@ -1,0 +1,61 @@
+===== to_bytes_push
+running 2 tests
+test audit.tobytes/to_bytes push on a borrowed parameter leaves the caller unchanged ... ok
+test audit.tobytes/to_bytes push in a loop keeps the text valid ... ok
+
+test result: ok. 2 passed; 0 failed; 0 filtered out; finished in 0.01s
+EXIT=0
+===== for_push
+error[E0596]: cannot borrow `w` as mutable, as it is not declared as mutable
+  --> src/lib.rs:12:9
+   |
+12 |     for w in (words.clone()) {
+   |         ^ not mutable
+13 |         w.push(120);
+   |         - cannot borrow as mutable
+14 |         w.push(121);
+   |         - cannot borrow as mutable
+   |
+help: consider changing this to be mutable
+   |
+12 |     for mut w in (words.clone()) {
+   |         +++
+
+For more information about this error, try `rustc --explain E0596`.
+error: could not compile `forpush` (lib) due to 1 previous error
+error: cargo build failed with status 101
+EXIT=2
+===== match_push
+error[E0596]: cannot borrow `b` as mutable, as it is not declared as mutable
+  --> src/lib.rs:15:17
+   |
+15 |                 b.push(120)
+   |                 ^ cannot borrow as mutable
+   |
+help: consider changing this to be mutable
+   |
+14 |             Some(mut b) => {
+   |                  +++
+
+For more information about this error, try `rustc --explain E0596`.
+error: could not compile `matchpush` (lib) due to 1 previous error
+error: cargo build failed with status 101
+EXIT=2
+===== index_if
+running 2 tests
+test audit.indexif/index on an if expression ... ok
+test audit.indexif/len on a match expression ... ok
+
+test result: ok. 2 passed; 0 failed; 0 filtered out; finished in 0.01s
+EXIT=0
+===== sound_ok
+running 6 tests
+test audit.soundok/callee results aliasing borrowed arguments survive releases ... ok
+test audit.soundok/break out of an inner loop with a carried variable ... ok
+test audit.soundok/generic instance carried across releases ... ok
+test audit.soundok/store update allocating under the lock ... ok
+test audit.soundok/for over a list the body reassigns ... ok
+test audit.soundok/match on a place an arm mutates through a nested loop ... ok
+
+test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.26s
+EXIT=0

@@ -1,0 +1,10 @@
+START 2026-11-02T02:04:33+01:00 run=1 load=21.58 24.67 17.91 10/3075 2488598
+STEP rust-dev secs=3.48 load_before=21.58 load_after=20.73 exit=0
+STEP rust-dev-strace secs=3.40 load_before=20.73 load_after=20.73 exit=0
+STEP llvm-dev secs=0.83 load_before=20.73 load_after=20.73 exit=0
+STEP llvm-dev-strace secs=0.41 load_before=20.73 load_after=20.51 exit=0
+STEP rust-release secs=4.56 load_before=20.51 load_after=20.51 exit=0
+STEP rust-release-strace secs=4.53 load_before=20.51 load_after=19.51 exit=0
+STEP llvm-release secs=1.25 load_before=19.51 load_after=18.27 exit=0
+STEP llvm-release-strace secs=1.19 load_before=18.27 load_after=18.27 exit=0
+EXIT=0

@@ -1,0 +1,40 @@
+START 00:31:05
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-7833c6a20e9dcc9e)
+
+running 16 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test golden::system_with_server_and_client ... ok
+test golden::generics_stores_and_builtins ... FAILED
+test golden::pure_functions ... ok
+test golden::record_and_enum_with_match ... ok
+test golden::process_exit_diverges ... ok
+test golden::constants_qualified_patterns_and_io_error ... ok
+test golden::variants_of_enums_not_imported ... ok
+test golden::surface_syntax ... ok
+test golden::executable_components ... ok
+test golden::terminal ... ok
+
+failures:
+
+---- golden::generics_stores_and_builtins stdout ----
+
+thread 'golden::generics_stores_and_builtins' (245929) panicked at crates/telos-rustgen/tests/golden.rs:282:10:
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, clippy::all)] use counters::*; fn main() { std::process::exit(telos_io::run(|| { let counts: telos_io::Store<i64> = telos_io::Store::new(); let port = telos_io::args::port()?; let ingress = telos_io::TcpListener::bind(String::from("127.0.0.1"), port.unwrap_or(7400))?; telos_io::log(&format!("listening on 127.0.0.1:{}", ingress.local_port())); let server = Server::<telos_io::Store<i64>> { listener: ingress.clone(), application: App { state: counts.clone(), handle: (std::sync::Arc::new(|__a0: telos_io::Store<i64>, __a1: String| respond(&__a0, &__a1)) as std::sync::Arc<dyn Fn(telos_io::Store<i64>, String) -> String + Send + Sync>) }, executable: String::from("countersd") }; Server__main(&server) })) }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    golden::generics_stores_and_builtins
+
+test result: FAILED. 15 passed; 1 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.15s
+
+error: test failed, to rerun pass `-p telos-rustgen --test main`
+cargo EXIT=101
+END 00:31:06
+EXIT=0

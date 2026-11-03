@@ -1,0 +1,28 @@
+/dev/nvme0n1p2  848G  752G   88G  90% /
+ 19:06:55 up 2 days, 14:16,  1 user,  load average: 2.61, 6.97, 7.62
+norun_cached	7.0	exit=0
+norun_cached	executables=18	size=202M
+norun_warm	0.0	exit=0
+norun_touch	1.3	exit=0
+cold_fmt	0.3	exit=1
+cold_clippy	4.2	exit=0
+cold_test	63.5	exit=101
+cold_telos	18.4	exit=0
+gate_cold	86.5
+warm_fmt	0.6	exit=1
+warm_clippy	4.1	exit=0
+warm_test	20.7	exit=101
+warm_telos	0.6	exit=0
+gate_warm	25.9
+telos_again	0.6	exit=0
+cargo_tests	passed=518 failed=2 ignored=3
+integration_binaries	8
+      8 main 
+test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.07s
+test result: ok. 78 passed; 0 failed; 0 filtered out; finished in 0.04s
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/telos-test/tests/llvm/bin/telos-test
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/telos-test/tests/rust/telos-test
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-after/telos-test/cargo/debug/telos-test
+/dev/nvme0n1p2  848G  746G   94G  89% /
+ 19:08:56 up 2 days, 14:18,  1 user,  load average: 13.49, 9.79, 8.59
+EXIT=0

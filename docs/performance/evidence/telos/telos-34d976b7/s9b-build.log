@@ -1,0 +1,5 @@
+task: [build] cargo build --workspace
+   Compiling telos-load v0.1.0 (/home/timo/projects/telos/crates/telos-load)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s
+WALL=0.3
+EXIT=0

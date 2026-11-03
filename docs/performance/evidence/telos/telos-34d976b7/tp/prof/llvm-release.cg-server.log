@@ -1,0 +1,20 @@
+==4105139== Callgrind, a call-graph generating cache profiler
+==4105139== Copyright (C) 2002-2017, and GNU GPL'd, by Josef Weidendorfer et al.
+==4105139== Using Valgrind-3.25.1 and LibVEX; rerun with -h for copyright info
+==4105139== Command: /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/llvm-release/bin/terminald --port 2641
+==4105139== 
+==4105139== For interactive control, run 'callgrind_control -h'.
+listening on 127.0.0.1:2641
+==4105139== 
+==4105139== Process terminating with default action of signal 15 (SIGTERM)
+==4105139==    at 0x4B06952: __syscall_cancel_arch (syscall_cancel.S:56)
+==4105139==    by 0x4B88717: accept4 (sysdep-cancel.h:53)
+==4105139==    by 0x402A5B3: <std::sys::net::connection::socket::unix::Socket>::accept (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/llvm-release/bin/terminald)
+==4105139==    by 0x402F4BB: <std::net::tcp::TcpListener>::accept (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/llvm-release/bin/terminald)
+==4105139==    by 0x4017128: telos_rt_tcp_accept (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/llvm-release/bin/terminald)
+==4105139==    by 0x400D758: main (in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/srv/llvm-release/bin/terminald)
+==4105139== 
+==4105139== Events    : Ir
+==4105139== Collected : 458306606
+==4105139== 
+==4105139== I   refs:      458,306,606

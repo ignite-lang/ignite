@@ -1,0 +1,19 @@
+type Runner {
+  address: Text
+  port: Int
+}
+
+fn Runner.main(self: Runner) -> Result<Unit, IoError> {
+  let stream = match TcpStream.connect(self.address, self.port) {
+    Ok(stream) => stream
+    Err(error) => return Err(error.with_exit_code(3))
+  }
+  match Syntax.connect(stream) {
+    Ok(_) => Ok(())
+    Err(error) => Err(error.with_exit_code(4))
+  }
+}
+
+system Run {
+  component syntax: Runner { address = "127.0.0.1", port = 1 }
+}

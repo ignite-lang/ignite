@@ -1,0 +1,11 @@
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.71s
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/main-9d267f49cdec8647)
+
+running 2 tests
+test siblings::llvm_build_links_a_module_sibling ... ok
+test siblings::llvm_test_runs_a_module_sibling ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 139 filtered out; finished in 0.84s
+
+EXIT=0

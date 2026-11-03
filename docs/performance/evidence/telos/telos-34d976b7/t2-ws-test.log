@@ -1,0 +1,3447 @@
+   Compiling telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+   Compiling telos-types v0.1.0 (/home/timo/projects/telos/crates/telos-types)
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+   Compiling telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+   Compiling telos-syntax v0.1.0 (/home/timo/projects/telos/crates/telos-syntax)
+   Compiling telos-load v0.1.0 (/home/timo/projects/telos/crates/telos-load)
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.21s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos-7860a65bd5659434)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos-300d7881df956401)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cli.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/cli-2bd990c5ce0aa5a0)
+
+running 18 tests
+test default_std_is_the_repository_std ... ok
+test default_substrate_is_the_sibling_crate ... ok
+test missing_std_root_is_exit_3 ... ok
+test no_arguments_is_exit_2 ... ok
+test std_diagnostic_is_rendered_with_its_file ... ok
+test std_file_without_package_is_e031 ... ok
+test std_package_mismatch_is_e031_in_the_std_file ... ok
+test std_import_cycle_is_e032 ... ok
+test std_modules_are_checked_in_import_order ... ok
+test emit_with_std_fixture ... ok
+test missing_file_is_exit_3 ... ok
+test check_unknown_name_is_e003 ... ok
+test check_reports_unsupported_component_kind ... ok
+test emit_uses_given_substrate ... ok
+test emit_prints_the_program_and_the_std_crate ... ok
+test check_acceptance_program_is_silent ... ok
+test client_exit_statuses ... ok
+test build_std_and_program_then_run_both_executables ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s
+
+     Running tests/llvm.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/llvm-947012e813c17fee)
+
+running 5 tests
+test clang_failure_is_exit_2 ... ok
+test llvm_build_runs_neither_cargo_nor_rustc ... ok
+test client_exits_3_when_nothing_listens ... ok
+test index_out_of_range_panics_with_101 ... ok
+test probe_runs_every_check ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.00s
+
+     Running tests/llvm_build.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/llvm_build-66ee3c8fb85613c2)
+
+running 4 tests
+test bench ... ignored, benchmark; run with task bench
+test default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test failed_compile_is_retried ... ok
+test rebuild_compiles_only_what_changed ... ok
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.92s
+
+     Running tests/llvm_memory.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/llvm_memory-27e574d1f0885364)
+
+running 3 tests
+test loop_regions_keep_carried_values ... ok
+test terminald_memory_is_flat_over_a_long_session ... ok
+test tn_memory_is_flat_over_a_long_session ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+     Running tests/syntax.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/syntax-a163620bc153578a)
+
+running 2 tests
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/syntax-rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
+test rust_target_runs_every_feature ... ok
+test llvm_target_runs_every_feature ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/terminal-faabe13ece9cfe8a)
+
+running 58 tests
+   Compiling telos-std v0.0.0-b17c4000f1710f29 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/terminal/std)
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s
+test llvm::iac_iac_is_a_literal_byte ... ok
+test llvm::do_echo_is_refused_with_wont ... ok
+test llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+test llvm::subnegotiation_over_1024_bytes_closes ... ok
+test llvm::overlong_line_is_refused_and_closed ... ok
+test llvm::are_you_there_is_answered ... ok
+test llvm::line_of_4096_bytes_is_accepted ... ok
+test llvm::interrupt_process_closes ... ok
+test llvm::subnegotiation_is_skipped ... ok
+test llvm::will_naws_is_refused_with_dont ... ok
+error: subnegotiation longer than 1024 bytes
+test llvm::tn_exits_2_for_a_malformed_port ... ok
+test llvm::tn_exits_3_when_nothing_listens ... ok
+test llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test rust::are_you_there_is_answered ... ok
+test rust::do_echo_is_refused_with_wont ... ok
+test rust::iac_iac_is_a_literal_byte ... ok
+test llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test llvm::tn_on_a_terminal_erases_with_backspace ... ok
+test rust::interrupt_process_closes ... ok
+test rust::line_of_4096_bytes_is_accepted ... ok
+test rust::overlong_line_is_refused_and_closed ... ok
+test rust::subnegotiation_of_1024_bytes_is_skipped ... ok
+test llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test rust::subnegotiation_over_1024_bytes_closes ... ok
+test llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+test rust::subnegotiation_is_skipped ... ok
+test llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test llvm::tn_with_piped_input_prints_the_transcript ... ok
+test llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test llvm::cr_nul_ends_a_line ... ok
+test llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test rust::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test llvm::tn_refuses_options_and_strips_commands ... ok
+test rust::tn_exits_2_for_a_malformed_port ... ok
+test rust::tn_exits_3_when_nothing_listens ... ok
+test rust::tn_exits_when_input_ends_and_terminald_closes ... ok
+test rust::will_naws_is_refused_with_dont ... ok
+test llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+error: subnegotiation longer than 1024 bytes
+test rust::cr_nul_ends_a_line ... ok
+test rust::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test rust::tn_on_a_terminal_erases_with_backspace ... ok
+test rust::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test rust::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test rust::tn_with_piped_input_prints_the_transcript ... ok
+test rust::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test rust::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test rust::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test rust::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test rust::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test rust::tn_refuses_options_and_strips_commands ... ok
+test no_target_links_tokio ... ok
+test llvm::fragmented_input_is_reassembled ... ok
+test rust::fragmented_input_is_reassembled ... ok
+test llvm::transcript_on_raw_socket ... ok
+test rust::transcript_on_raw_socket ... ok
+test idle_terminald_runs_one_thread ... ok
+
+test result: ok. 58 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.32s
+
+     Running tests/todo.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/todo-167d56b148cb3c1b)
+
+running 18 tests
+test todo::llvm::concurrent_posts ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::content_length ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::crud_flow ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::error_statuses ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::header_framing ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::keep_alive ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::limits ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::rejection_is_read ... ignored, slice 7: needs T2 (LLVM target)
+   Compiling telos-std v0.0.0-3fad3642c68a159e (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/std-probe/std)
+   Compiling telos-std v0.0.0-414c063a99a743c3 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/todo/std)
+   Compiling std_probe v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/std-probe)
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/tmp/todo)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.77s
+test probe::rust::std_modules ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.93s
+test todo::rust::keep_alive ... ok
+test todo::rust::crud_flow ... ok
+test todo::rust::content_length ... ok
+test todo::rust::limits ... ok
+test todo::rust::header_framing ... ok
+test todo::rust::error_statuses ... ok
+test todo::rust::rejection_is_read ... ok
+test todo::rust::concurrent_posts ... ok
+test probe::llvm::std_modules ... ok
+
+test result: ok. 10 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 1.29s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_check-fe8934d655f8a278)
+
+running 10 tests
+test tests::ambiguous_variants_are_left_to_the_type_checker ... ok
+test tests::arm_bindings_are_scoped_to_their_arm ... ok
+test tests::assignment_needs_a_var ... ok
+test tests::duplicate_top_level_names ... ok
+test tests::for_variable_is_scoped_to_its_body ... ok
+test tests::inner_let_shadows_outer_var_for_assignment ... ok
+test tests::let_shadows_and_inner_block_does_not_leak ... ok
+test tests::let_value_is_checked_before_binding ... ok
+test tests::effect_rules ... ok
+test tests::path_calls_resolve_variants_and_statics ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fixtures.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/fixtures-d24daeb1dae3e3ed)
+
+running 2 tests
+test every_checker_code_has_a_fixture ... ok
+test fixtures_match_expected ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/modules.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/modules-d82696e6cd64a417)
+
+running 4 tests
+test check_is_check_module_without_modules ... ok
+test constants_are_exported_imported_and_listed ... ok
+test only_named_imports_enter_scope ... ok
+test imported_definitions_enter_symbols ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/terminal-19f7f24536edf12e)
+
+running 2 tests
+test standard_library_checks_in_import_order ... ok
+test terminal_checks_clean_against_the_standard_library ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_io-a4029cbd576ede9e)
+
+running 21 tests
+test args::tests::absent_is_none ... ok
+test args::tests::joined_value ... ok
+test args::tests::checked_port ... ok
+test args::tests::missing_value_is_none ... ok
+test args::tests::out_of_range_is_none ... ok
+test args::tests::separate_value ... error: plain
+ok
+error: no peer
+error: --port abc
+test idle::tests::data_before_the_timeout_is_read ... ok
+test idle::tests::zero_removes_the_timeout ... ok
+test store::tests::get_returns_a_copy ... ok
+test store::tests::ids_start_at_one_and_count_up ... ok
+test store::tests::a_panic_in_update_keeps_the_old_value_and_the_store ... ok
+test store::tests::put_get_remove_values ... ok
+test store::tests::update_missing_id_does_not_call_f ... ok
+test tests::io_error_display_is_message ... ok
+test tests::io_error_exit_codes ... ok
+test tests::port_outside_range_is_error ... ok
+test tests::run_returns_the_exit_code_of_the_error ... ok
+test tests::io_error_from_std ... ok
+test task::tests::workers_are_reused_and_run_every_task_once ... ok
+test store::tests::concurrent_ids_and_updates_lose_nothing ... ok
+test idle::tests::an_idle_read_ends_with_eof ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/stdio.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/stdio-574ddb112871acad)
+
+running 4 tests
+test child_echo ... ok
+test child_pending_stdin_read ... ok
+test stdin_reads_up_to_maximum_and_ends_with_eof ... ok
+test run_returns_while_a_stdin_read_is_pending ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/tcp.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/tcp-e8fad75f5f4bf15a)
+
+running 14 tests
+error: failed
+test bind_port_out_of_range_fails ... ok
+test bind_port_zero_picks_a_port ... ok
+test bind_twice_on_one_port_fails ... ok
+test a_thread_sends_what_it_wrote_when_it_ends ... ok
+test run_returns_one_on_err ... ok
+test read_respects_maximum ... ok
+test round_trip_and_half_close ... ok
+test clone_shares_the_socket ... ok
+test run_returns_zero_on_ok ... ok
+test spawn_inside_run_executes ... ok
+test close_proceeds_while_a_read_is_pending ... ok
+test spawn_runs_tasks_in_parallel ... ok
+test write_proceeds_while_a_read_is_pending ... ok
+test writes_are_sent_together_at_the_next_wait ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/terminal-a072fe6c3c6f7998)
+
+running 10 tests
+test child_not_a_terminal ... ok
+test child_raw_round_trip ... ok
+test child_raw_then_panic ... ok
+test child_raw_then_error ... ok
+test child_raw_then_process_exit ... ok
+test set_raw_is_a_no_op_on_a_pipe ... ok
+test process_exit_restores_the_terminal_and_exits_with_the_code ... ok
+test run_restores_the_terminal_when_main_panics ... ok
+test run_restores_the_terminal_when_main_fails ... ok
+test set_raw_switches_and_run_restores_on_return ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/telos_llvm-327c531d839c1b7e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/golden.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/golden-eb5b01fcb24cddfc)
+
+running 5 tests
+test read_only_parameters_are_borrowed ... ok
+test loops_release_their_region ... ok
+test small_program ... FAILED
+test symbols_are_module_qualified ... ok
+test syntax_program ... FAILED
+
+failures:
+
+---- small_program stdout ----
+
+thread 'small_program' (1987029) panicked at crates/telos-llvm/tests/golden.rs:85:5:
+/home/timo/projects/telos/crates/telos-llvm/tests/golden/small.program.ll differs from the generated IR (TELOS_BLESS=1 to accept):
+; ModuleID = 'tests.small'
+source_filename = "tests.small"
+
+@telos.empty = private constant [8 x i8] zeroinitializer, align 8
+@telos.msg.index = private unnamed_addr constant [18 x i8] c"index out of range", align 1
+@telos.msg.slice = private unnamed_addr constant [18 x i8] c"slice out of range", align 1
+@telos.msg.divide = private unnamed_addr constant [25 x i8] c"attempt to divide by zero", align 1
+@telos.msg.match = private unnamed_addr constant [12 x i8] c"no match arm", align 1
+@.str.1 = private unnamed_addr constant [1 x i8] c"!", align 1
+@.str.0 = private unnamed_addr constant [1 x i8] c"=", align 1
+@.str.3 = private unnamed_addr constant [4 x i8] c"area", align 1
+@.str.2 = private unnamed_addr constant [8 x i8] c"negative", align 1
+
+declare void @telos_rt_init(i32, ptr)
+declare ptr @telos_rt_alloc(i64, i64)
+declare void @telos_rt_spawn(ptr, ptr)
+declare void @telos_rt_spawn_ready()
+declare void @telos_rt_task_end()
+declare i64 @telos_rt_arena_mark()
+declare void @telos_rt_arena_release(i64)
+declare i8 @telos_rt_arena_due(i64, i64)
+declare void @telos_rt_arena_scratch(i8)
+declare void @telos_rt_arena_scratch_clear()
+declare ptr @telos_rt_arena_state() nounwind willreturn speculatable memory(none)
+declare void @telos_rt_spawn_copy(ptr, ptr, i64)
+declare i32 @telos_rt_args_port(ptr, ptr, ptr)
+declare void @telos_rt_exit(i32) noreturn
+declare void @telos_rt_fail(ptr) noreturn
+declare void @telos_rt_panic(ptr) noreturn
+declare void @telos_rt_log(ptr)
+declare i32 @telos_rt_tcp_bind(ptr, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_accept(i64, ptr, ptr)
+declare i64 @telos_rt_tcp_local_port(i64)
+declare i32 @telos_rt_tcp_connect(ptr, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_read(i64, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_write_all(i64, ptr, ptr)
+declare i32 @telos_rt_tcp_close(i64, ptr)
+declare void @telos_rt_tcp_release(i64)
+declare i32 @telos_rt_stdin_read(i64, ptr, ptr)
+declare i32 @telos_rt_stdin_is_terminal(ptr, ptr)
+declare i32 @telos_rt_stdin_set_raw(i8, ptr)
+declare i32 @telos_rt_stdout_write_all(ptr, ptr)
+declare void @telos_rt_io_error_new(ptr, ptr)
+declare void @telos_rt_text_from_bytes_lossy(ptr, ptr)
+declare void @telos_rt_text_trim(ptr, ptr)
+declare void @telos_rt_text_concat(ptr, ptr, ptr)
+declare i8 @telos_rt_text_eq(ptr, ptr)
+declare i8 @telos_rt_text_starts_with(ptr, ptr)
+declare void @telos_rt_text_join(ptr, ptr, ptr)
+declare void @telos_rt_int_to_text(ptr, i64)
+declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)
+
+define internal void @telos.panic(ptr %bytes, i64 %len) cold noreturn {
+entry:
+  %text = alloca [24 x i8], align 8
+  store ptr %bytes, ptr %text, align 8
+  %lenp = getelementptr inbounds i8, ptr %text, i64 8
+  store i64 %len, ptr %lenp, align 8
+  %capp = getelementptr inbounds i8, ptr %text, i64 16
+  store i64 %len, ptr %capp, align 8
+  call void @telos_rt_panic(ptr %text)
+  unreachable
+}
+
+define internal void @telos.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) {
+entry:
+  %lenp = getelementptr inbounds i8, ptr %list, i64 8
+  %len = load i64, ptr %lenp, align 8
+  %capp = getelementptr inbounds i8, ptr %list, i64 16
+  %cap = load i64, ptr %capp, align 8
+  %need = add i64 %len, %extra
+  %fits = icmp sle i64 %need, %cap
+  br i1 %fits, label %done, label %grow
+grow:
+  %double = mul i64 %cap, 2
+  %big = icmp sgt i64 %double, %need
+  %c1 = select i1 %big, i64 %double, i64 %need
+  %small = icmp slt i64 %c1, 4
+  %newcap = select i1 %small, i64 4, i64 %c1
+  %bytes = mul i64 %newcap, %size
+  %new = call ptr @telos.alloc(i64 %bytes, i64 %align)
+  %old = load ptr, ptr %list, align 8
+  %used = mul i64 %len, %size
+  call void @llvm.memcpy.p0.p0.i64(ptr %new, ptr %old, i64 %used, i1 false)
+  store ptr %new, ptr %list, align 8
+  store i64 %newcap, ptr %capp, align 8
+  br label %done
+done:
+  ret void
+}
+
+define internal void @telos.check_index(i64 %i, i64 %len) {
+entry:
+  %ok = icmp ult i64 %i, %len
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.index, i64 18)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.check_slice(i64 %i, i64 %j, i64 %len) {
+entry:
+  %a = icmp sge i64 %i, 0
+  %b = icmp sle i64 %i, %j
+  %c = icmp sle i64 %j, %len
+  %ab = and i1 %a, %b
+  %ok = and i1 %ab, %c
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.slice, i64 18)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.check_divisor(i64 %d) {
+entry:
+  %ok = icmp ne i64 %d, 0
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.divide, i64 25)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.no_match() cold noreturn {
+entry:
+  call void @telos.panic(ptr @telos.msg.match, i64 12)
+  unreachable
+}
+
+define internal ptr @telos.alloc(i64 %size, i64 %align) alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %limp = getelementptr inbounds i8, ptr %st, i64 8
+  %lim = load ptr, ptr %limp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %li = ptrtoint ptr %lim to i64
+  %am1 = sub i64 %align, 1
+  %up = add i64 %ci, %am1
+  %mask = sub i64 0, %align
+  %start = and i64 %up, %mask
+  %end = add i64 %start, %size
+  %small = icmp ult i64 %size, 65536
+  %fits = icmp ult i64 %end, %li
+  %ok = and i1 %small, %fits
+  br i1 %ok, label %fast, label %slow
+fast:
+  %skip = sub i64 %start, %ci
+  %p = getelementptr i8, ptr %cur, i64 %skip
+  %next = getelementptr i8, ptr %p, i64 %size
+  store ptr %next, ptr %st, align 8
+  ret ptr %p
+slow:
+  %q = call ptr @telos_rt_alloc(i64 %size, i64 %align)
+  ret ptr %q
+}
+
+define internal i64 @telos.arena_mark() alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %offp = getelementptr inbounds i8, ptr %st, i64 16
+  %off = load i64, ptr %offp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %pos = add i64 %ci, %off
+  ret i64 %pos
+}
+
+define internal i1 @telos.arena_due(i64 %mark, i64 %kept) alwaysinline {
+entry:
+  %pos = call i64 @telos.arena_mark()
+  %above = sub i64 %pos, %mark
+  %four = shl i64 %kept, 2
+  %big = icmp sgt i64 %four, 65536
+  %limit = select i1 %big, i64 %four, i64 65536
+  %due = icmp sgt i64 %above, %limit
+  ret i1 %due
+}
+
+define internal void @telos.arena_release(i64 %mark) alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %offp = getelementptr inbounds i8, ptr %st, i64 16
+  %off = load i64, ptr %offp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %pos = add i64 %ci, %off
+  %nothing = icmp sge i64 %mark, %pos
+  br i1 %nothing, label %done, label %down
+down:
+  %basep = getelementptr inbounds i8, ptr %st, i64 24
+  %base = load ptr, ptr %basep, align 8
+  %bi = ptrtoint ptr %base to i64
+  %bpos = add i64 %bi, %off
+  %inside = icmp sge i64 %mark, %bpos
+  br i1 %inside, label %chunk, label %slow
+chunk:
+  %back = sub i64 %mark, %bpos
+  %new = getelementptr i8, ptr %base, i64 %back
+  store ptr %new, ptr %st, align 8
+  br label %done
+slow:
+  call void @telos_rt_arena_release(i64 %mark)
+  br label %done
+done:
+  ret void
+}
+
+define i64 @"tests.small.SCALE"() {
+entry:
+  ret i64 2
+}
+
+define i64 @"tests.small.area"(ptr %p0) {
+entry:
+  %t1 = alloca [8 x i8], align 8
+  %t13 = alloca [8 x i8], align 8
+  %t4 = load i32, ptr %p0, align 4
+  %t5 = icmp eq i32 %t4, 0
+  br i1 %t5, label %L6, label %L3
+L6:
+  store i64 0, ptr %t1, align 8
+  br label %L2
+L3:
+  %t8 = load i32, ptr %p0, align 4
+  %t9 = icmp eq i32 %t8, 1
+  br i1 %t9, label %L10, label %L7
+L10:
+  %t11 = getelementptr inbounds i8, ptr %p0, i64 8
+  %t12 = load i64, ptr %t11, align 8
+  store i64 %t12, ptr %t13, align 8
+  %t14 = call i64 @"tests.small.SCALE"()
+  %t15 = load i64, ptr %t13, align 8
+  %t16 = mul i64 %t14, %t15
+  %t17 = load i64, ptr %t13, align 8
+  %t18 = mul i64 %t16, %t17
+  store i64 %t18, ptr %t1, align 8
+  br label %L2
+L7:
+  call void @telos.no_match()
+  unreachable
+L2:
+  %t19 = load i64, ptr %t1, align 8
+  ret i64 %t19
+}
+
+define void @"tests.small.label"(ptr %sret, ptr %p0) {
+entry:
+  %t3 = alloca [24 x i8], align 8
+  %t6 = alloca [24 x i8], align 8
+  %t8 = alloca [24 x i8], align 8
+  %t16 = alloca [24 x i8], align 8
+  %t19 = alloca [24 x i8], align 8
+  %t20 = alloca [24 x i8], align 8
+  %t1 = call ptr @telos.alloc(i64 24, i64 8)
+  %t2 = getelementptr inbounds i8, ptr %p0, i64 8
+  call void @"copy.Text"(ptr %t1, ptr %t2)
+  store ptr %t1, ptr %t3, align 8
+  %t4 = getelementptr inbounds i8, ptr %t3, i64 8
+  store i64 1, ptr %t4, align 8
+  %t5 = getelementptr inbounds i8, ptr %t3, i64 16
+  store i64 1, ptr %t5, align 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t6, ptr %t3, i64 24, i1 false)
+  %t7 = load i64, ptr %p0, align 8
+  call void @telos_rt_int_to_text(ptr %t8, i64 %t7)
+  call void @telos.reserve(ptr %t6, i64 1, i64 24, i64 8)
+  %t9 = getelementptr inbounds i8, ptr %t6, i64 8
+  %t10 = load i64, ptr %t9, align 8
+  %t11 = load ptr, ptr %t6, align 8
+  %t12 = mul i64 %t10, 24
+  %t13 = getelementptr inbounds i8, ptr %t11, i64 %t12
+  call void @llvm.memcpy.p0.p0.i64(ptr %t13, ptr %t8, i64 24, i1 false)
+  %t14 = add i64 %t10, 1
+  %t15 = getelementptr inbounds i8, ptr %t6, i64 8
+  store i64 %t14, ptr %t15, align 8
+  store ptr @.str.0, ptr %t16, align 8
+  %t17 = getelementptr inbounds i8, ptr %t16, i64 8
+  store i64 1, ptr %t17, align 8
+  %t18 = getelementptr inbounds i8, ptr %t16, i64 16
+  store i64 1, ptr %t18, align 8
+  call void @"copy.Text"(ptr %t19, ptr %t16)
+  call void @telos_rt_text_join(ptr %t20, ptr %t6, ptr %t19)
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t20, i64 24, i1 false)
+  ret void
+}
+
+define void @"tests.small.repeat"(ptr %sret, ptr %p0, i64 %p1) {
+entry:
+  %t1 = alloca [8 x i8], align 8
+  %t2 = alloca [24 x i8], align 8
+  %t5 = alloca [24 x i8], align 8
+  %t6 = alloca [24 x i8], align 8
+  %t7 = alloca [8 x i8], align 8
+  %t8 = alloca [24 x i8], align 8
+  %t10 = alloca [8 x i8], align 8
+  %t18 = alloca [24 x i8], align 8
+  %t26 = alloca [24 x i8], align 8
+  %t27 = alloca [8 x i8], align 8
+  %t41 = alloca [1 x i8], align 1
+  store i64 %p1, ptr %t1, align 8
+  store ptr @telos.empty, ptr %t2, align 8
+  %t3 = getelementptr inbounds i8, ptr %t2, i64 8
+  store i64 0, ptr %t3, align 8
+  %t4 = getelementptr inbounds i8, ptr %t2, i64 16
+  store i64 0, ptr %t4, align 8
+  call void @"copy.Text"(ptr %t5, ptr %t2)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t6, ptr %t5, i64 24, i1 false)
+  store i64 0, ptr %t7, align 8
+  %t9 = call i64 @telos.arena_mark()
+  store i64 0, ptr %t10, align 8
+  br label %L11
+L11:
+  %t15 = load i64, ptr %t7, align 8
+  %t16 = load i64, ptr %t1, align 8
+  %t17 = icmp slt i64 %t15, %t16
+  br i1 %t17, label %L12, label %L14
+L12:
+  call void @telos_rt_text_concat(ptr %t18, ptr %t6, ptr %p0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t6, ptr %t18, i64 24, i1 false)
+  %t19 = load i64, ptr %t7, align 8
+  %t20 = add i64 %t19, 1
+  store i64 %t20, ptr %t7, align 8
+  br label %L13
+L13:
+  %t21 = load i64, ptr %t10, align 8
+  %t22 = call i1 @telos.arena_due(i64 %t9, i64 %t21)
+  br i1 %t22, label %L23, label %L11
+L23:
+  call void @telos_rt_arena_scratch(i8 1)
+  call void @"copy.Text"(ptr %t8, ptr %t6)
+  call void @telos_rt_arena_scratch(i8 0)
+  call void @telos_rt_arena_release(i64 %t9)
+  call void @"copy.Text"(ptr %t6, ptr %t8)
+  call void @telos_rt_arena_scratch_clear()
+  %t24 = call i64 @telos.arena_mark()
+  %t25 = sub i64 %t24, %t9
+  store i64 %t25, ptr %t10, align 8
+  br label %L11
+L14:
+  call void @"copy.List<Byte>"(ptr %t26, ptr %p0)
+  store i64 0, ptr %t27, align 8
+  %t28 = call i64 @telos.arena_mark()
+  br label %L29
+L29:
+  %t33 = load i64, ptr %t27, align 8
+  %t34 = getelementptr inbounds i8, ptr %t26, i64 8
+  %t35 = load i64, ptr %t34, align 8
+  %t36 = icmp slt i64 %t33, %t35
+  br i1 %t36, label %L30, label %L32
+L30:
+  %t37 = load ptr, ptr %t26, align 8
+  %t38 = mul i64 %t33, 1
+  %t39 = getelementptr inbounds i8, ptr %t37, i64 %t38
+  %t40 = load i8, ptr %t39, align 1
+  store i8 %t40, ptr %t41, align 1
+  %t42 = load i64, ptr %t7, align 8
+  %t43 = add i64 %t42, 1
+  store i64 %t43, ptr %t7, align 8
+  br label %L31
+L31:
+  %t44 = load i64, ptr %t27, align 8
+  %t45 = add i64 %t44, 1
+  store i64 %t45, ptr %t27, align 8
+  call void @telos.arena_release(i64 %t28)
+  br label %L29
+L32:
+  call void @"copy.Text"(ptr %sret, ptr %t6)
+  ret void
+}
+
+define void @"tests.small.shout"(ptr %sret, ptr %p0) {
+entry:
+  %t1 = alloca [24 x i8], align 8
+  %t4 = alloca [24 x i8], align 8
+  %t5 = alloca [24 x i8], align 8
+  store ptr @.str.1, ptr %t1, align 8
+  %t2 = getelementptr inbounds i8, ptr %t1, i64 8
+  store i64 1, ptr %t2, align 8
+  %t3 = getelementptr inbounds i8, ptr %t1, i64 16
+  store i64 1, ptr %t3, align 8
+  call void @"copy.Text"(ptr %t4, ptr %t1)
+  call void @telos_rt_text_concat(ptr %t5, ptr %p0, ptr %t4)
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t5, i64 24, i1 false)
+  ret void
+}
+
+define void @"tests.small.greet"(ptr %sret, ptr %p0) {
+entry:
+  %t1 = alloca [24 x i8], align 8
+  call void @"tests.small.shout"(ptr %t1, ptr %p0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t1, i64 24, i1 false)
+  ret void
+}
+
+define void @"tests.small.checked"(ptr %sret, i64 %p0) {
+entry:
+  %t1 = alloca [8 x i8], align 8
+  %t7 = alloca [24 x i8], align 8
+  %t10 = alloca [24 x i8], align 8
+  %t11 = alloca [32 x i8], align 8
+  %t12 = alloca [40 x i8], align 8
+  %t16 = alloca [16 x i8], align 8
+  %t19 = alloca [40 x i8], align 8
+  store i64 %p0, ptr %t1, align 8
+  %t2 = load i64, ptr %t1, align 8
+  %t3 = icmp slt i64 %t2, 0
+  br i1 %t3, label %L4, label %L5
+L4:
+  store ptr @.str.2, ptr %t7, align 8
+  %t8 = getelementptr inbounds i8, ptr %t7, i64 8
+  store i64 8, ptr %t8, align 8
+  %t9 = getelementptr inbounds i8, ptr %t7, i64 16
+  store i64 8, ptr %t9, align 8
+  call void @"copy.Text"(ptr %t10, ptr %t7)
+  call void @telos_rt_io_error_new(ptr %t11, ptr %t10)
+  store i32 1, ptr %t12, align 4
+  %t13 = getelementptr inbounds i8, ptr %t12, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t13, ptr %t11, i64 32, i1 false)
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t12, i64 40, i1 false)
+  ret void
+L14:
+  br label %L6
+L5:
+  br label %L6
+L6:
+  %t15 = load i64, ptr %t1, align 8
+  store i32 1, ptr %t16, align 4
+  %t17 = getelementptr inbounds i8, ptr %t16, i64 8
+  store i64 %t15, ptr %t17, align 8
+  %t18 = call i64 @"tests.small.area"(ptr %t16)
+  store i32 0, ptr %t19, align 4
+  %t20 = getelementptr inbounds i8, ptr %t19, i64 8
+  store i64 %t18, ptr %t20, align 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t19, i64 40, i1 false)
+  ret void
+}
+
+define void @"tests.small.Echo.connect"(ptr %sret, i64 %p0) {
+entry:
+  %t1 = alloca [8 x i8], align 8
+  %t2 = alloca [40 x i8], align 8
+  %t11 = alloca [8 x i8], align 8
+  %t12 = alloca [32 x i8], align 8
+  %t14 = alloca [24 x i8], align 8
+  %t17 = alloca [24 x i8], align 8
+  %t19 = alloca [24 x i8], align 8
+  %t20 = alloca [24 x i8], align 8
+  %t22 = alloca [40 x i8], align 8
+  %t23 = alloca [32 x i8], align 8
+  store i64 %p0, ptr %t1, align 8
+  call void @"tests.small.checked"(ptr %t2, i64 3)
+  %t3 = load i32, ptr %t2, align 4
+  %t4 = icmp eq i32 %t3, 1
+  br i1 %t4, label %L5, label %L6
+L5:
+  store i32 1, ptr %sret, align 4
+  %t7 = getelementptr inbounds i8, ptr %t2, i64 8
+  %t8 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t8, ptr %t7, i64 32, i1 false)
+  ret void
+L6:
+  %t9 = getelementptr inbounds i8, ptr %t2, i64 8
+  %t10 = load i64, ptr %t9, align 8
+  store i64 %t10, ptr %t11, align 8
+  %t13 = load i64, ptr %t11, align 8
+  store i64 %t13, ptr %t12, align 8
+  store ptr @.str.3, ptr %t14, align 8
+  %t15 = getelementptr inbounds i8, ptr %t14, i64 8
+  store i64 4, ptr %t15, align 8
+  %t16 = getelementptr inbounds i8, ptr %t14, i64 16
+  store i64 4, ptr %t16, align 8
+  call void @"copy.Text"(ptr %t17, ptr %t14)
+  %t18 = getelementptr inbounds i8, ptr %t12, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t18, ptr %t17, i64 24, i1 false)
+  call void @"tests.small.label"(ptr %t19, ptr %t12)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t20, ptr %t19, i64 24, i1 false)
+  %t21 = load i64, ptr %t1, align 8
+  %t24 = call i32 @telos_rt_tcp_write_all(i64 %t21, ptr %t20, ptr %t23)
+  %t25 = icmp ne i32 %t24, 0
+  br i1 %t25, label %L26, label %L27
+L26:
+  store i32 1, ptr %t22, align 4
+  %t29 = getelementptr inbounds i8, ptr %t22, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t29, ptr %t23, i64 32, i1 false)
+  br label %L28
+L27:
+  store i32 0, ptr %t22, align 4
+  br label %L28
+L28:
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t22, i64 40, i1 false)
+  ret void
+}
+
+define internal void @"copy.List<Byte>"(ptr %dst, ptr %src) {
+entry:
+  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %src, i64 24, i1 false)
+  %t1 = getelementptr inbounds i8, ptr %src, i64 8
+  %t2 = load i64, ptr %t1, align 8
+  %t3 = load ptr, ptr %src, align 8
+  %t4 = icmp sle i64 %t2, 0
+  br i1 %t4, label %L5, label %L6
+L5:
+  store ptr @telos.empty, ptr %dst, align 8
+  %t8 = getelementptr inbounds i8, ptr %dst, i64 8
+  store i64 0, ptr %t8, align 8
+  %t9 = getelementptr inbounds i8, ptr %dst, i64 16
+  store i64 0, ptr %t9, align 8
+  br label %L7
+L6:
+  %t10 = mul i64 %t2, 1
+  %t11 = call ptr @telos.alloc(i64 %t10, i64 1)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t11, ptr %t3, i64 %t10, i1 false)
+  store ptr %t11, ptr %dst, align 8
+  %t12 = getelementptr inbounds i8, ptr %dst, i64 8
+  store i64 %t2, ptr %t12, align 8
+  %t13 = getelementptr inbounds i8, ptr %dst, i64 16
+  store i64 %t2, ptr %t13, align 8
+  br label %L7
+L7:
+  ret void
+}
+
+define internal void @"copy.Text"(ptr %dst, ptr %src) {
+entry:
+  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %src, i64 24, i1 false)
+  %t1 = getelementptr inbounds i8, ptr %src, i64 8
+  %t2 = load i64, ptr %t1, align 8
+  %t3 = load ptr, ptr %src, align 8
+  %t4 = icmp sle i64 %t2, 0
+  br i1 %t4, label %L5, label %L6
+L5:
+  store ptr @telos.empty, ptr %dst, align 8
+  %t8 = getelementptr inbounds i8, ptr %dst, i64 8
+  store i64 0, ptr %t8, align 8
+  %t9 = getelementptr inbounds i8, ptr %dst, i64 16
+  store i64 0, ptr %t9, align 8
+  br label %L7
+L6:
+  %t10 = mul i64 %t2, 1
+  %t11 = call ptr @telos.alloc(i64 %t10, i64 1)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t11, ptr %t3, i64 %t10, i1 false)
+  store ptr %t11, ptr %dst, align 8
+  %t12 = getelementptr inbounds i8, ptr %dst, i64 8
+  store i64 %t2, ptr %t12, align 8
+  %t13 = getelementptr inbounds i8, ptr %dst, i64 16
+  store i64 %t2, ptr %t13, align 8
+  br label %L7
+L7:
+  ret void
+}
+
+
+/home/timo/projects/telos/crates/telos-llvm/tests/golden/small.main_small.ll differs from the generated IR (TELOS_BLESS=1 to accept):
+; ModuleID = 'main_small'
+source_filename = "main_small"
+
+@telos.empty = private constant [8 x i8] zeroinitializer, align 8
+@telos.msg.index = private unnamed_addr constant [18 x i8] c"index out of range", align 1
+@telos.msg.slice = private unnamed_addr constant [18 x i8] c"slice out of range", align 1
+@telos.msg.divide = private unnamed_addr constant [25 x i8] c"attempt to divide by zero", align 1
+@telos.msg.match = private unnamed_addr constant [12 x i8] c"no match arm", align 1
+@.str.0 = private unnamed_addr constant [9 x i8] c"127.0.0.1", align 1
+
+declare void @telos_rt_init(i32, ptr)
+declare ptr @telos_rt_alloc(i64, i64)
+declare void @telos_rt_spawn(ptr, ptr)
+declare void @telos_rt_spawn_ready()
+declare void @telos_rt_task_end()
+declare i64 @telos_rt_arena_mark()
+declare void @telos_rt_arena_release(i64)
+declare i8 @telos_rt_arena_due(i64, i64)
+declare void @telos_rt_arena_scratch(i8)
+declare void @telos_rt_arena_scratch_clear()
+declare ptr @telos_rt_arena_state() nounwind willreturn speculatable memory(none)
+declare void @telos_rt_spawn_copy(ptr, ptr, i64)
+declare i32 @telos_rt_args_port(ptr, ptr, ptr)
+declare void @telos_rt_exit(i32) noreturn
+declare void @telos_rt_fail(ptr) noreturn
+declare void @telos_rt_panic(ptr) noreturn
+declare void @telos_rt_log(ptr)
+declare i32 @telos_rt_tcp_bind(ptr, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_accept(i64, ptr, ptr)
+declare i64 @telos_rt_tcp_local_port(i64)
+declare i32 @telos_rt_tcp_connect(ptr, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_read(i64, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_write_all(i64, ptr, ptr)
+declare i32 @telos_rt_tcp_close(i64, ptr)
+declare void @telos_rt_tcp_release(i64)
+declare i32 @telos_rt_stdin_read(i64, ptr, ptr)
+declare i32 @telos_rt_stdin_is_terminal(ptr, ptr)
+declare i32 @telos_rt_stdin_set_raw(i8, ptr)
+declare i32 @telos_rt_stdout_write_all(ptr, ptr)
+declare void @telos_rt_io_error_new(ptr, ptr)
+declare void @telos_rt_text_from_bytes_lossy(ptr, ptr)
+declare void @telos_rt_text_trim(ptr, ptr)
+declare void @telos_rt_text_concat(ptr, ptr, ptr)
+declare i8 @telos_rt_text_eq(ptr, ptr)
+declare i8 @telos_rt_text_starts_with(ptr, ptr)
+declare void @telos_rt_text_join(ptr, ptr, ptr)
+declare void @telos_rt_int_to_text(ptr, i64)
+declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)
+declare void @"tests.small.Echo.connect"(ptr, i64)
+
+define internal void @telos.panic(ptr %bytes, i64 %len) cold noreturn {
+entry:
+  %text = alloca [24 x i8], align 8
+  store ptr %bytes, ptr %text, align 8
+  %lenp = getelementptr inbounds i8, ptr %text, i64 8
+  store i64 %len, ptr %lenp, align 8
+  %capp = getelementptr inbounds i8, ptr %text, i64 16
+  store i64 %len, ptr %capp, align 8
+  call void @telos_rt_panic(ptr %text)
+  unreachable
+}
+
+define internal void @telos.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) {
+entry:
+  %lenp = getelementptr inbounds i8, ptr %list, i64 8
+  %len = load i64, ptr %lenp, align 8
+  %capp = getelementptr inbounds i8, ptr %list, i64 16
+  %cap = load i64, ptr %capp, align 8
+  %need = add i64 %len, %extra
+  %fits = icmp sle i64 %need, %cap
+  br i1 %fits, label %done, label %grow
+grow:
+  %double = mul i64 %cap, 2
+  %big = icmp sgt i64 %double, %need
+  %c1 = select i1 %big, i64 %double, i64 %need
+  %small = icmp slt i64 %c1, 4
+  %newcap = select i1 %small, i64 4, i64 %c1
+  %bytes = mul i64 %newcap, %size
+  %new = call ptr @telos.alloc(i64 %bytes, i64 %align)
+  %old = load ptr, ptr %list, align 8
+  %used = mul i64 %len, %size
+  call void @llvm.memcpy.p0.p0.i64(ptr %new, ptr %old, i64 %used, i1 false)
+  store ptr %new, ptr %list, align 8
+  store i64 %newcap, ptr %capp, align 8
+  br label %done
+done:
+  ret void
+}
+
+define internal void @telos.check_index(i64 %i, i64 %len) {
+entry:
+  %ok = icmp ult i64 %i, %len
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.index, i64 18)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.check_slice(i64 %i, i64 %j, i64 %len) {
+entry:
+  %a = icmp sge i64 %i, 0
+  %b = icmp sle i64 %i, %j
+  %c = icmp sle i64 %j, %len
+  %ab = and i1 %a, %b
+  %ok = and i1 %ab, %c
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.slice, i64 18)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.check_divisor(i64 %d) {
+entry:
+  %ok = icmp ne i64 %d, 0
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.divide, i64 25)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.no_match() cold noreturn {
+entry:
+  call void @telos.panic(ptr @telos.msg.match, i64 12)
+  unreachable
+}
+
+define internal ptr @telos.alloc(i64 %size, i64 %align) alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %limp = getelementptr inbounds i8, ptr %st, i64 8
+  %lim = load ptr, ptr %limp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %li = ptrtoint ptr %lim to i64
+  %am1 = sub i64 %align, 1
+  %up = add i64 %ci, %am1
+  %mask = sub i64 0, %align
+  %start = and i64 %up, %mask
+  %end = add i64 %start, %size
+  %small = icmp ult i64 %size, 65536
+  %fits = icmp ult i64 %end, %li
+  %ok = and i1 %small, %fits
+  br i1 %ok, label %fast, label %slow
+fast:
+  %skip = sub i64 %start, %ci
+  %p = getelementptr i8, ptr %cur, i64 %skip
+  %next = getelementptr i8, ptr %p, i64 %size
+  store ptr %next, ptr %st, align 8
+  ret ptr %p
+slow:
+  %q = call ptr @telos_rt_alloc(i64 %size, i64 %align)
+  ret ptr %q
+}
+
+define internal i64 @telos.arena_mark() alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %offp = getelementptr inbounds i8, ptr %st, i64 16
+  %off = load i64, ptr %offp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %pos = add i64 %ci, %off
+  ret i64 %pos
+}
+
+define internal i1 @telos.arena_due(i64 %mark, i64 %kept) alwaysinline {
+entry:
+  %pos = call i64 @telos.arena_mark()
+  %above = sub i64 %pos, %mark
+  %four = shl i64 %kept, 2
+  %big = icmp sgt i64 %four, 65536
+  %limit = select i1 %big, i64 %four, i64 65536
+  %due = icmp sgt i64 %above, %limit
+  ret i1 %due
+}
+
+define internal void @telos.arena_release(i64 %mark) alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %offp = getelementptr inbounds i8, ptr %st, i64 16
+  %off = load i64, ptr %offp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %pos = add i64 %ci, %off
+  %nothing = icmp sge i64 %mark, %pos
+  br i1 %nothing, label %done, label %down
+down:
+  %basep = getelementptr inbounds i8, ptr %st, i64 24
+  %base = load ptr, ptr %basep, align 8
+  %bi = ptrtoint ptr %base to i64
+  %bpos = add i64 %bi, %off
+  %inside = icmp sge i64 %mark, %bpos
+  br i1 %inside, label %chunk, label %slow
+chunk:
+  %back = sub i64 %mark, %bpos
+  %new = getelementptr i8, ptr %base, i64 %back
+  store ptr %new, ptr %st, align 8
+  br label %done
+slow:
+  call void @telos_rt_arena_release(i64 %mark)
+  br label %done
+done:
+  ret void
+}
+
+define i32 @main(i32 %argc, ptr %argv) {
+entry:
+  %t1 = alloca [32 x i8], align 8
+  %t2 = alloca [8 x i8], align 8
+  %t3 = alloca [4 x i8], align 4
+  %t13 = alloca [24 x i8], align 8
+  %t16 = alloca [8 x i8], align 8
+  %t23 = alloca [40 x i8], align 8
+  call void @telos_rt_init(i32 %argc, ptr %argv)
+  %t4 = call i32 @telos_rt_args_port(ptr %t2, ptr %t3, ptr %t1)
+  %t5 = icmp ne i32 %t4, 0
+  br i1 %t5, label %L6, label %L7
+L6:
+  %t8 = getelementptr inbounds i8, ptr %t1, i64 24
+  store i32 2, ptr %t8, align 4
+  call void @telos_rt_fail(ptr %t1)
+  unreachable
+L7:
+  %t9 = load i32, ptr %t3, align 4
+  %t10 = icmp ne i32 %t9, 0
+  %t11 = load i64, ptr %t2, align 8
+  %t12 = select i1 %t10, i64 %t11, i64 7
+  store ptr @.str.0, ptr %t13, align 8
+  %t14 = getelementptr inbounds i8, ptr %t13, i64 8
+  store i64 9, ptr %t14, align 8
+  %t15 = getelementptr inbounds i8, ptr %t13, i64 16
+  store i64 9, ptr %t15, align 8
+  %t17 = call i32 @telos_rt_tcp_connect(ptr %t13, i64 %t12, ptr %t16, ptr %t1)
+  %t18 = icmp ne i32 %t17, 0
+  br i1 %t18, label %L19, label %L20
+L19:
+  %t21 = getelementptr inbounds i8, ptr %t1, i64 24
+  store i32 3, ptr %t21, align 4
+  call void @telos_rt_fail(ptr %t1)
+  unreachable
+L20:
+  %t22 = load i64, ptr %t16, align 8
+  call void @"tests.small.Echo.connect"(ptr %t23, i64 %t22)
+  %t24 = load i32, ptr %t23, align 4
+  %t25 = icmp eq i32 %t24, 1
+  br i1 %t25, label %L26, label %L27
+L26:
+  %t28 = getelementptr inbounds i8, ptr %t23, i64 8
+  %t29 = getelementptr inbounds i8, ptr %t28, i64 24
+  store i32 4, ptr %t29, align 4
+  call void @telos_rt_fail(ptr %t28)
+  unreachable
+L27:
+  call void @telos_rt_exit(i32 0)
+  unreachable
+}
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- syntax_program stdout ----
+
+thread 'syntax_program' (1987031) panicked at crates/telos-llvm/tests/golden.rs:107:5:
+/home/timo/projects/telos/crates/telos-llvm/tests/golden/syntax.program.ll differs from the generated IR (TELOS_BLESS=1 to accept):
+; ModuleID = 'tests.syntax'
+source_filename = "tests.syntax"
+
+@telos.empty = private constant [8 x i8] zeroinitializer, align 8
+@telos.msg.index = private unnamed_addr constant [18 x i8] c"index out of range", align 1
+@telos.msg.slice = private unnamed_addr constant [18 x i8] c"slice out of range", align 1
+@telos.msg.divide = private unnamed_addr constant [25 x i8] c"attempt to divide by zero", align 1
+@telos.msg.match = private unnamed_addr constant [12 x i8] c"no match arm", align 1
+@.str.11 = private unnamed_addr constant [1 x i8] c" ", align 1
+@.str.1 = private unnamed_addr constant [1 x i8] c"!", align 1
+@.str.19 = private unnamed_addr constant [1 x i8] c"+", align 1
+@.str.20 = private unnamed_addr constant [1 x i8] c"-", align 1
+@.str.13 = private unnamed_addr constant [1 x i8] c"a", align 1
+@.str.28 = private unnamed_addr constant [6 x i8] c"a b c ", align 1
+@.str.24 = private unnamed_addr constant [1 x i8] c"b", align 1
+@.str.3 = private unnamed_addr constant [4 x i8] c"base", align 1
+@.str.25 = private unnamed_addr constant [1 x i8] c"c", align 1
+@.str.34 = private unnamed_addr constant [5 x i8] c"close", align 1
+@.str.32 = private unnamed_addr constant [5 x i8] c"code ", align 1
+@.str.33 = private unnamed_addr constant [8 x i8] c"continue", align 1
+@.str.14 = private unnamed_addr constant [1 x i8] c"e", align 1
+@.str.27 = private unnamed_addr constant [5 x i8] c"false", align 1
+@.str.30 = private unnamed_addr constant [1 x i8] c"h", align 1
+@.str.29 = private unnamed_addr constant [3 x i8] c"hey", align 1
+@.str.15 = private unnamed_addr constant [1 x i8] c"i", align 1
+@.str.31 = private unnamed_addr constant [1 x i8] c"l", align 1
+@.str.36 = private unnamed_addr constant [9 x i8] c"light off", align 1
+@.str.37 = private unnamed_addr constant [8 x i8] c"light on", align 1
+@.str.9 = private unnamed_addr constant [4 x i8] c"many", align 1
+@.str.5 = private unnamed_addr constant [4 x i8] c"none", align 1
+@.str.23 = private unnamed_addr constant [3 x i8] c"now", align 1
+@.str.16 = private unnamed_addr constant [1 x i8] c"o", align 1
+@.str.12 = private unnamed_addr constant [11 x i8] c"off or none", align 1
+@.str.6 = private unnamed_addr constant [4 x i8] c"one ", align 1
+@.str.4 = private unnamed_addr constant [5 x i8] c"other", align 1
+@.str.10 = private unnamed_addr constant [5 x i8] c"pair ", align 1
+@.str.0 = private unnamed_addr constant [4 x i8] c"quit", align 1
+@.str.7 = private unnamed_addr constant [18 x i8] c"quit with argument", align 1
+@.str.21 = private unnamed_addr constant [5 x i8] c"seven", align 1
+@.str.2 = private unnamed_addr constant [5 x i8] c"small", align 1
+@.str.35 = private unnamed_addr constant [1 x i8] c"t", align 1
+@.str.26 = private unnamed_addr constant [4 x i8] c"true", align 1
+@.str.8 = private unnamed_addr constant [4 x i8] c"two ", align 1
+@.str.17 = private unnamed_addr constant [1 x i8] c"u", align 1
+@.str.22 = private unnamed_addr constant [1 x i8] c"x", align 1
+@.str.18 = private unnamed_addr constant [4 x i8] c"zero", align 1
+
+declare void @telos_rt_init(i32, ptr)
+declare ptr @telos_rt_alloc(i64, i64)
+declare void @telos_rt_spawn(ptr, ptr)
+declare void @telos_rt_spawn_ready()
+declare void @telos_rt_task_end()
+declare i64 @telos_rt_arena_mark()
+declare void @telos_rt_arena_release(i64)
+declare i8 @telos_rt_arena_due(i64, i64)
+declare void @telos_rt_arena_scratch(i8)
+declare void @telos_rt_arena_scratch_clear()
+declare ptr @telos_rt_arena_state() nounwind willreturn speculatable memory(none)
+declare void @telos_rt_spawn_copy(ptr, ptr, i64)
+declare i32 @telos_rt_args_port(ptr, ptr, ptr)
+declare void @telos_rt_exit(i32) noreturn
+declare void @telos_rt_fail(ptr) noreturn
+declare void @telos_rt_panic(ptr) noreturn
+declare void @telos_rt_log(ptr)
+declare i32 @telos_rt_tcp_bind(ptr, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_accept(i64, ptr, ptr)
+declare i64 @telos_rt_tcp_local_port(i64)
+declare i32 @telos_rt_tcp_connect(ptr, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_read(i64, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_write_all(i64, ptr, ptr)
+declare i32 @telos_rt_tcp_close(i64, ptr)
+declare void @telos_rt_tcp_release(i64)
+declare i32 @telos_rt_stdin_read(i64, ptr, ptr)
+declare i32 @telos_rt_stdin_is_terminal(ptr, ptr)
+declare i32 @telos_rt_stdin_set_raw(i8, ptr)
+declare i32 @telos_rt_stdout_write_all(ptr, ptr)
+declare void @telos_rt_io_error_new(ptr, ptr)
+declare void @telos_rt_text_from_bytes_lossy(ptr, ptr)
+declare void @telos_rt_text_trim(ptr, ptr)
+declare void @telos_rt_text_concat(ptr, ptr, ptr)
+declare i8 @telos_rt_text_eq(ptr, ptr)
+declare i8 @telos_rt_text_starts_with(ptr, ptr)
+declare void @telos_rt_text_join(ptr, ptr, ptr)
+declare void @telos_rt_int_to_text(ptr, i64)
+declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)
+
+define internal void @telos.panic(ptr %bytes, i64 %len) cold noreturn {
+entry:
+  %text = alloca [24 x i8], align 8
+  store ptr %bytes, ptr %text, align 8
+  %lenp = getelementptr inbounds i8, ptr %text, i64 8
+  store i64 %len, ptr %lenp, align 8
+  %capp = getelementptr inbounds i8, ptr %text, i64 16
+  store i64 %len, ptr %capp, align 8
+  call void @telos_rt_panic(ptr %text)
+  unreachable
+}
+
+define internal void @telos.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) {
+entry:
+  %lenp = getelementptr inbounds i8, ptr %list, i64 8
+  %len = load i64, ptr %lenp, align 8
+  %capp = getelementptr inbounds i8, ptr %list, i64 16
+  %cap = load i64, ptr %capp, align 8
+  %need = add i64 %len, %extra
+  %fits = icmp sle i64 %need, %cap
+  br i1 %fits, label %done, label %grow
+grow:
+  %double = mul i64 %cap, 2
+  %big = icmp sgt i64 %double, %need
+  %c1 = select i1 %big, i64 %double, i64 %need
+  %small = icmp slt i64 %c1, 4
+  %newcap = select i1 %small, i64 4, i64 %c1
+  %bytes = mul i64 %newcap, %size
+  %new = call ptr @telos.alloc(i64 %bytes, i64 %align)
+  %old = load ptr, ptr %list, align 8
+  %used = mul i64 %len, %size
+  call void @llvm.memcpy.p0.p0.i64(ptr %new, ptr %old, i64 %used, i1 false)
+  store ptr %new, ptr %list, align 8
+  store i64 %newcap, ptr %capp, align 8
+  br label %done
+done:
+  ret void
+}
+
+define internal void @telos.check_index(i64 %i, i64 %len) {
+entry:
+  %ok = icmp ult i64 %i, %len
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.index, i64 18)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.check_slice(i64 %i, i64 %j, i64 %len) {
+entry:
+  %a = icmp sge i64 %i, 0
+  %b = icmp sle i64 %i, %j
+  %c = icmp sle i64 %j, %len
+  %ab = and i1 %a, %b
+  %ok = and i1 %ab, %c
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.slice, i64 18)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.check_divisor(i64 %d) {
+entry:
+  %ok = icmp ne i64 %d, 0
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.divide, i64 25)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.no_match() cold noreturn {
+entry:
+  call void @telos.panic(ptr @telos.msg.match, i64 12)
+  unreachable
+}
+
+define internal ptr @telos.alloc(i64 %size, i64 %align) alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %limp = getelementptr inbounds i8, ptr %st, i64 8
+  %lim = load ptr, ptr %limp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %li = ptrtoint ptr %lim to i64
+  %am1 = sub i64 %align, 1
+  %up = add i64 %ci, %am1
+  %mask = sub i64 0, %align
+  %start = and i64 %up, %mask
+  %end = add i64 %start, %size
+  %small = icmp ult i64 %size, 65536
+  %fits = icmp ult i64 %end, %li
+  %ok = and i1 %small, %fits
+  br i1 %ok, label %fast, label %slow
+fast:
+  %skip = sub i64 %start, %ci
+  %p = getelementptr i8, ptr %cur, i64 %skip
+  %next = getelementptr i8, ptr %p, i64 %size
+  store ptr %next, ptr %st, align 8
+  ret ptr %p
+slow:
+  %q = call ptr @telos_rt_alloc(i64 %size, i64 %align)
+  ret ptr %q
+}
+
+define internal i64 @telos.arena_mark() alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %offp = getelementptr inbounds i8, ptr %st, i64 16
+  %off = load i64, ptr %offp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %pos = add i64 %ci, %off
+  ret i64 %pos
+}
+
+define internal i1 @telos.arena_due(i64 %mark, i64 %kept) alwaysinline {
+entry:
+  %pos = call i64 @telos.arena_mark()
+  %above = sub i64 %pos, %mark
+  %four = shl i64 %kept, 2
+  %big = icmp sgt i64 %four, 65536
+  %limit = select i1 %big, i64 %four, i64 65536
+  %due = icmp sgt i64 %above, %limit
+  ret i1 %due
+}
+
+define internal void @telos.arena_release(i64 %mark) alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %offp = getelementptr inbounds i8, ptr %st, i64 16
+  %off = load i64, ptr %offp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %pos = add i64 %ci, %off
+  %nothing = icmp sge i64 %mark, %pos
+  br i1 %nothing, label %done, label %down
+down:
+  %basep = getelementptr inbounds i8, ptr %st, i64 24
+  %base = load ptr, ptr %basep, align 8
+  %bi = ptrtoint ptr %base to i64
+  %bpos = add i64 %bi, %off
+  %inside = icmp sge i64 %mark, %bpos
+  br i1 %inside, label %chunk, label %slow
+chunk:
+  %back = sub i64 %mark, %bpos
+  %new = getelementptr i8, ptr %base, i64 %back
+  store ptr %new, ptr %st, align 8
+  br label %done
+slow:
+  call void @telos_rt_arena_release(i64 %mark)
+  br label %done
+done:
+  ret void
+}
+
+define void @"tests.syntax.Reply.action"(ptr %sret) {
+entry:
+  %t1 = alloca [8 x i8], align 8
+  store i32 0, ptr %t1, align 4
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t1, i64 8, i1 false)
+  ret void
+}
+
+define i64 @"tests.syntax.Reply.code"() {
+entry:
+  %t1 = call i64 @"tests.syntax.BASE"()
+  %t2 = add i64 %t1, 1
+  ret i64 %t2
+}
+
+define i64 @"tests.syntax.BASE"() {
+entry:
+  ret i64 41
+}
+
+define void @"tests.syntax.QUIT"(ptr %sret) {
+entry:
+  %t1 = alloca [24 x i8], align 8
+  %t4 = alloca [24 x i8], align 8
+  store ptr @.str.0, ptr %t1, align 8
+  %t2 = getelementptr inbounds i8, ptr %t1, i64 8
+  store i64 4, ptr %t2, align 8
+  %t3 = getelementptr inbounds i8, ptr %t1, i64 16
+  store i64 4, ptr %t3, align 8
+  call void @"copy.Text"(ptr %t4, ptr %t1)
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t4, i64 24, i1 false)
+  ret void
+}
+
+define i8 @"tests.syntax.SPACE"() {
+entry:
+  ret i8 32
+}
+
+define void @"tests.syntax.shout"(ptr %sret, ptr %p0) {
+entry:
+  %t1 = alloca [24 x i8], align 8
+  %t4 = alloca [24 x i8], align 8
+  %t5 = alloca [24 x i8], align 8
+  store ptr @.str.1, ptr %t1, align 8
+  %t2 = getelementptr inbounds i8, ptr %t1, i64 8
+  store i64 1, ptr %t2, align 8
+  %t3 = getelementptr inbounds i8, ptr %t1, i64 16
+  store i64 1, ptr %t3, align 8
+  call void @"copy.Text"(ptr %t4, ptr %t1)
+  call void @telos_rt_text_concat(ptr %t5, ptr %p0, ptr %t4)
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t5, i64 24, i1 false)
+  ret void
+}
+
+define i64 @"tests.syntax.twice"(i64 %p0) {
+entry:
+  %t1 = alloca [8 x i8], align 8
+  store i64 %p0, ptr %t1, align 8
+  %t2 = load i64, ptr %t1, align 8
+  %t3 = mul i64 %t2, 2
+  ret i64 %t3
+}
+
+define void @"tests.syntax.swap"(ptr %sret, ptr %p0) {
+entry:
+  %t1 = alloca [32 x i8], align 8
+  %t5 = alloca [8 x i8], align 8
+  %t7 = alloca [32 x i8], align 8
+  call void @"copy.(Int,Text)"(ptr %t1, ptr %p0)
+  %t4 = load i64, ptr %t1, align 8
+  store i64 %t4, ptr %t5, align 8
+  %t6 = getelementptr inbounds i8, ptr %t1, i64 8
+  br label %L2
+L3:
+  call void @telos.no_match()
+  unreachable
+L2:
+  call void @"copy.Text"(ptr %t7, ptr %t6)
+  %t8 = load i64, ptr %t5, align 8
+  %t9 = getelementptr inbounds i8, ptr %t7, i64 24
+  store i64 %t8, ptr %t9, align 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t7, i64 32, i1 false)
+  ret void
+}
+
+define void @"tests.syntax.describe"(ptr %sret, i64 %p0) {
+entry:
+  %t1 = alloca [8 x i8], align 8
+  %t3 = alloca [24 x i8], align 8
+  %t12 = alloca [24 x i8], align 8
+  %t15 = alloca [24 x i8], align 8
+  %t20 = alloca [24 x i8], align 8
+  %t23 = alloca [24 x i8], align 8
+  %t25 = alloca [24 x i8], align 8
+  %t28 = alloca [24 x i8], align 8
+  store i64 %p0, ptr %t1, align 8
+  %t2 = load i64, ptr %t1, align 8
+  %t8 = icmp eq i64 %t2, 0
+  br i1 %t8, label %L9, label %L7
+L9:
+  br label %L6
+L7:
+  %t10 = icmp eq i64 %t2, 1
+  br i1 %t10, label %L11, label %L5
+L11:
+  br label %L6
+L6:
+  store ptr @.str.2, ptr %t12, align 8
+  %t13 = getelementptr inbounds i8, ptr %t12, i64 8
+  store i64 5, ptr %t13, align 8
+  %t14 = getelementptr inbounds i8, ptr %t12, i64 16
+  store i64 5, ptr %t14, align 8
+  call void @"copy.Text"(ptr %t15, ptr %t12)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t3, ptr %t15, i64 24, i1 false)
+  br label %L4
+L5:
+  %t17 = call i64 @"tests.syntax.BASE"()
+  %t18 = icmp eq i64 %t2, %t17
+  br i1 %t18, label %L19, label %L16
+L19:
+  store ptr @.str.3, ptr %t20, align 8
+  %t21 = getelementptr inbounds i8, ptr %t20, i64 8
+  store i64 4, ptr %t21, align 8
+  %t22 = getelementptr inbounds i8, ptr %t20, i64 16
+  store i64 4, ptr %t22, align 8
+  call void @"copy.Text"(ptr %t23, ptr %t20)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t3, ptr %t23, i64 24, i1 false)
+  br label %L4
+L16:
+  store ptr @.str.4, ptr %t25, align 8
+  %t26 = getelementptr inbounds i8, ptr %t25, i64 8
+  store i64 5, ptr %t26, align 8
+  %t27 = getelementptr inbounds i8, ptr %t25, i64 16
+  store i64 5, ptr %t27, align 8
+  call void @"copy.Text"(ptr %t28, ptr %t25)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t3, ptr %t28, i64 24, i1 false)
+  br label %L4
+L24:
+  call void @telos.no_match()
+  unreachable
+L4:
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t3, i64 24, i1 false)
+  ret void
+}
+
+define void @"tests.syntax.classify"(ptr %sret, ptr %p0) {
+entry:
+  %t1 = alloca [24 x i8], align 8
+  %t8 = alloca [24 x i8], align 8
+  %t11 = alloca [24 x i8], align 8
+  %t18 = alloca [24 x i8], align 8
+  %t21 = alloca [24 x i8], align 8
+  %t22 = alloca [24 x i8], align 8
+  %t29 = alloca [24 x i8], align 8
+  %t34 = alloca [24 x i8], align 8
+  %t37 = alloca [24 x i8], align 8
+  %t45 = alloca [24 x i8], align 8
+  %t48 = alloca [24 x i8], align 8
+  %t49 = alloca [24 x i8], align 8
+  %t50 = alloca [24 x i8], align 8
+  %t52 = alloca [24 x i8], align 8
+  %t55 = alloca [24 x i8], align 8
+  %t4 = getelementptr inbounds i8, ptr %p0, i64 8
+  %t5 = load i64, ptr %t4, align 8
+  %t6 = icmp eq i64 %t5, 0
+  br i1 %t6, label %L7, label %L3
+L7:
+  store ptr @.str.5, ptr %t8, align 8
+  %t9 = getelementptr inbounds i8, ptr %t8, i64 8
+  store i64 4, ptr %t9, align 8
+  %t10 = getelementptr inbounds i8, ptr %t8, i64 16
+  store i64 4, ptr %t10, align 8
+  call void @"copy.Text"(ptr %t11, ptr %t8)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t11, i64 24, i1 false)
+  br label %L2
+L3:
+  %t13 = getelementptr inbounds i8, ptr %p0, i64 8
+  %t14 = load i64, ptr %t13, align 8
+  %t15 = icmp eq i64 %t14, 1
+  br i1 %t15, label %L16, label %L12
+L16:
+  %t17 = load ptr, ptr %p0, align 8
+  store ptr @.str.6, ptr %t18, align 8
+  %t19 = getelementptr inbounds i8, ptr %t18, i64 8
+  store i64 4, ptr %t19, align 8
+  %t20 = getelementptr inbounds i8, ptr %t18, i64 16
+  store i64 4, ptr %t20, align 8
+  call void @"copy.Text"(ptr %t21, ptr %t18)
+  call void @telos_rt_text_concat(ptr %t22, ptr %t21, ptr %t17)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t22, i64 24, i1 false)
+  br label %L2
+L12:
+  %t24 = getelementptr inbounds i8, ptr %p0, i64 8
+  %t25 = load i64, ptr %t24, align 8
+  %t26 = icmp eq i64 %t25, 2
+  br i1 %t26, label %L27, label %L23
+L27:
+  %t28 = load ptr, ptr %p0, align 8
+  call void @"tests.syntax.QUIT"(ptr %t29)
+  %t30 = call i8 @telos_rt_text_eq(ptr %t28, ptr %t29)
+  %t31 = icmp ne i8 %t30, 0
+  br i1 %t31, label %L32, label %L23
+L32:
+  %t33 = getelementptr inbounds i8, ptr %t28, i64 24
+  store ptr @.str.7, ptr %t34, align 8
+  %t35 = getelementptr inbounds i8, ptr %t34, i64 8
+  store i64 18, ptr %t35, align 8
+  %t36 = getelementptr inbounds i8, ptr %t34, i64 16
+  store i64 18, ptr %t36, align 8
+  call void @"copy.Text"(ptr %t37, ptr %t34)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t37, i64 24, i1 false)
+  br label %L2
+L23:
+  %t39 = getelementptr inbounds i8, ptr %p0, i64 8
+  %t40 = load i64, ptr %t39, align 8
+  %t41 = icmp eq i64 %t40, 2
+  br i1 %t41, label %L42, label %L38
+L42:
+  %t43 = load ptr, ptr %p0, align 8
+  %t44 = getelementptr inbounds i8, ptr %t43, i64 24
+  store ptr @.str.8, ptr %t45, align 8
+  %t46 = getelementptr inbounds i8, ptr %t45, i64 8
+  store i64 4, ptr %t46, align 8
+  %t47 = getelementptr inbounds i8, ptr %t45, i64 16
+  store i64 4, ptr %t47, align 8
+  call void @"copy.Text"(ptr %t48, ptr %t45)
+  call void @telos_rt_text_concat(ptr %t49, ptr %t48, ptr %t43)
+  call void @telos_rt_text_concat(ptr %t50, ptr %t49, ptr %t44)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t50, i64 24, i1 false)
+  br label %L2
+L38:
+  store ptr @.str.9, ptr %t52, align 8
+  %t53 = getelementptr inbounds i8, ptr %t52, i64 8
+  store i64 4, ptr %t53, align 8
+  %t54 = getelementptr inbounds i8, ptr %t52, i64 16
+  store i64 4, ptr %t54, align 8
+  call void @"copy.Text"(ptr %t55, ptr %t52)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t55, i64 24, i1 false)
+  br label %L2
+L51:
+  call void @telos.no_match()
+  unreachable
+L2:
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t1, i64 24, i1 false)
+  ret void
+}
+
+define void @"tests.syntax.nested"(ptr %sret, ptr %p0) {
+entry:
+  %t1 = alloca [24 x i8], align 8
+  %t19 = alloca [8 x i8], align 8
+  %t22 = alloca [8 x i8], align 8
+  %t23 = alloca [24 x i8], align 8
+  %t26 = alloca [24 x i8], align 8
+  %t28 = alloca [24 x i8], align 8
+  %t29 = alloca [24 x i8], align 8
+  %t30 = alloca [24 x i8], align 8
+  %t33 = alloca [24 x i8], align 8
+  %t34 = alloca [24 x i8], align 8
+  %t36 = alloca [24 x i8], align 8
+  %t37 = alloca [24 x i8], align 8
+  %t53 = alloca [24 x i8], align 8
+  %t56 = alloca [24 x i8], align 8
+  %t67 = alloca [24 x i8], align 8
+  %t70 = alloca [24 x i8], align 8
+  %t4 = load i32, ptr %p0, align 4
+  %t5 = icmp eq i32 %t4, 0
+  br i1 %t5, label %L6, label %L3
+L6:
+  %t7 = getelementptr inbounds i8, ptr %p0, i64 8
+  %t8 = load i8, ptr %t7, align 1
+  %t9 = trunc i8 %t8 to i1
+  %t10 = icmp eq i1 %t9, true
+  br i1 %t10, label %L11, label %L3
+L11:
+  %t12 = getelementptr inbounds i8, ptr %t7, i64 8
+  %t13 = getelementptr inbounds i8, ptr %t12, i64 8
+  %t14 = load i64, ptr %t13, align 8
+  %t15 = icmp eq i64 %t14, 2
+  br i1 %t15, label %L16, label %L3
+L16:
+  %t17 = load ptr, ptr %t12, align 8
+  %t18 = load i64, ptr %t17, align 8
+  store i64 %t18, ptr %t19, align 8
+  %t20 = getelementptr inbounds i8, ptr %t17, i64 8
+  %t21 = load i64, ptr %t20, align 8
+  store i64 %t21, ptr %t22, align 8
+  store ptr @.str.10, ptr %t23, align 8
+  %t24 = getelementptr inbounds i8, ptr %t23, i64 8
+  store i64 5, ptr %t24, align 8
+  %t25 = getelementptr inbounds i8, ptr %t23, i64 16
+  store i64 5, ptr %t25, align 8
+  call void @"copy.Text"(ptr %t26, ptr %t23)
+  %t27 = load i64, ptr %t19, align 8
+  call void @telos_rt_int_to_text(ptr %t28, i64 %t27)
+  call void @telos_rt_text_concat(ptr %t29, ptr %t26, ptr %t28)
+  store ptr @.str.11, ptr %t30, align 8
+  %t31 = getelementptr inbounds i8, ptr %t30, i64 8
+  store i64 1, ptr %t31, align 8
+  %t32 = getelementptr inbounds i8, ptr %t30, i64 16
+  store i64 1, ptr %t32, align 8
+  call void @"copy.Text"(ptr %t33, ptr %t30)
+  call void @telos_rt_text_concat(ptr %t34, ptr %t29, ptr %t33)
+  %t35 = load i64, ptr %t22, align 8
+  call void @telos_rt_int_to_text(ptr %t36, i64 %t35)
+  call void @telos_rt_text_concat(ptr %t37, ptr %t34, ptr %t36)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t37, i64 24, i1 false)
+  br label %L2
+L3:
+  %t41 = load i32, ptr %p0, align 4
+  %t42 = icmp eq i32 %t41, 0
+  br i1 %t42, label %L43, label %L40
+L43:
+  %t44 = getelementptr inbounds i8, ptr %p0, i64 8
+  %t45 = load i8, ptr %t44, align 1
+  %t46 = trunc i8 %t45 to i1
+  %t47 = icmp eq i1 %t46, false
+  br i1 %t47, label %L48, label %L40
+L48:
+  %t49 = getelementptr inbounds i8, ptr %t44, i64 8
+  br label %L39
+L40:
+  %t50 = load i32, ptr %p0, align 4
+  %t51 = icmp eq i32 %t50, 1
+  br i1 %t51, label %L52, label %L38
+L52:
+  br label %L39
+L39:
+  store ptr @.str.12, ptr %t53, align 8
+  %t54 = getelementptr inbounds i8, ptr %t53, i64 8
+  store i64 11, ptr %t54, align 8
+  %t55 = getelementptr inbounds i8, ptr %t53, i64 16
+  store i64 11, ptr %t55, align 8
+  call void @"copy.Text"(ptr %t56, ptr %t53)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t56, i64 24, i1 false)
+  br label %L2
+L38:
+  %t58 = load i32, ptr %p0, align 4
+  %t59 = icmp eq i32 %t58, 0
+  br i1 %t59, label %L60, label %L57
+L60:
+  %t61 = getelementptr inbounds i8, ptr %p0, i64 8
+  %t62 = load i8, ptr %t61, align 1
+  %t63 = trunc i8 %t62 to i1
+  %t64 = icmp eq i1 %t63, true
+  br i1 %t64, label %L65, label %L57
+L65:
+  %t66 = getelementptr inbounds i8, ptr %t61, i64 8
+  store ptr @.str.4, ptr %t67, align 8
+  %t68 = getelementptr inbounds i8, ptr %t67, i64 8
+  store i64 5, ptr %t68, align 8
+  %t69 = getelementptr inbounds i8, ptr %t67, i64 16
+  store i64 5, ptr %t69, align 8
+  call void @"copy.Text"(ptr %t70, ptr %t67)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t70, i64 24, i1 false)
+  br label %L2
+L57:
+  call void @telos.no_match()
+  unreachable
+L2:
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t1, i64 24, i1 false)
+  ret void
+}
+
+define i1 @"tests.syntax.vowel"(ptr %p0) {
+entry:
+  %t1 = alloca [1 x i8], align 1
+  %t6 = alloca [24 x i8], align 8
+  %t13 = alloca [24 x i8], align 8
+  %t20 = alloca [24 x i8], align 8
+  %t27 = alloca [24 x i8], align 8
+  %t33 = alloca [24 x i8], align 8
+  store ptr @.str.13, ptr %t6, align 8
+  %t7 = getelementptr inbounds i8, ptr %t6, i64 8
+  store i64 1, ptr %t7, align 8
+  %t8 = getelementptr inbounds i8, ptr %t6, i64 16
+  store i64 1, ptr %t8, align 8
+  %t9 = call i8 @telos_rt_text_eq(ptr %p0, ptr %t6)
+  %t10 = icmp ne i8 %t9, 0
+  br i1 %t10, label %L11, label %L5
+L11:
+  br label %L4
+L5:
+  store ptr @.str.14, ptr %t13, align 8
+  %t14 = getelementptr inbounds i8, ptr %t13, i64 8
+  store i64 1, ptr %t14, align 8
+  %t15 = getelementptr inbounds i8, ptr %t13, i64 16
+  store i64 1, ptr %t15, align 8
+  %t16 = call i8 @telos_rt_text_eq(ptr %p0, ptr %t13)
+  %t17 = icmp ne i8 %t16, 0
+  br i1 %t17, label %L18, label %L12
+L18:
+  br label %L4
+L12:
+  store ptr @.str.15, ptr %t20, align 8
+  %t21 = getelementptr inbounds i8, ptr %t20, i64 8
+  store i64 1, ptr %t21, align 8
+  %t22 = getelementptr inbounds i8, ptr %t20, i64 16
+  store i64 1, ptr %t22, align 8
+  %t23 = call i8 @telos_rt_text_eq(ptr %p0, ptr %t20)
+  %t24 = icmp ne i8 %t23, 0
+  br i1 %t24, label %L25, label %L19
+L25:
+  br label %L4
+L19:
+  store ptr @.str.16, ptr %t27, align 8
+  %t28 = getelementptr inbounds i8, ptr %t27, i64 8
+  store i64 1, ptr %t28, align 8
+  %t29 = getelementptr inbounds i8, ptr %t27, i64 16
+  store i64 1, ptr %t29, align 8
+  %t30 = call i8 @telos_rt_text_eq(ptr %p0, ptr %t27)
+  %t31 = icmp ne i8 %t30, 0
+  br i1 %t31, label %L32, label %L26
+L32:
+  br label %L4
+L26:
+  store ptr @.str.17, ptr %t33, align 8
+  %t34 = getelementptr inbounds i8, ptr %t33, i64 8
+  store i64 1, ptr %t34, align 8
+  %t35 = getelementptr inbounds i8, ptr %t33, i64 16
+  store i64 1, ptr %t35, align 8
+  %t36 = call i8 @telos_rt_text_eq(ptr %p0, ptr %t33)
+  %t37 = icmp ne i8 %t36, 0
+  br i1 %t37, label %L38, label %L3
+L38:
+  br label %L4
+L4:
+  %t39 = zext i1 true to i8
+  store i8 %t39, ptr %t1, align 1
+  br label %L2
+L3:
+  %t41 = zext i1 false to i8
+  store i8 %t41, ptr %t1, align 1
+  br label %L2
+L40:
+  call void @telos.no_match()
+  unreachable
+L2:
+  %t42 = load i8, ptr %t1, align 1
+  %t43 = trunc i8 %t42 to i1
+  ret i1 %t43
+}
+
+define i64 @"tests.syntax.first_positive"(ptr %p0) {
+entry:
+  %t1 = alloca [8 x i8], align 8
+  %t15 = alloca [8 x i8], align 8
+  store i64 0, ptr %t1, align 8
+  %t2 = call i64 @telos.arena_mark()
+  br label %L3
+L3:
+  %t7 = load i64, ptr %t1, align 8
+  %t8 = getelementptr inbounds i8, ptr %p0, i64 8
+  %t9 = load i64, ptr %t8, align 8
+  %t10 = icmp slt i64 %t7, %t9
+  br i1 %t10, label %L4, label %L6
+L4:
+  %t11 = load ptr, ptr %p0, align 8
+  %t12 = mul i64 %t7, 8
+  %t13 = getelementptr inbounds i8, ptr %t11, i64 %t12
+  %t14 = load i64, ptr %t13, align 8
+  store i64 %t14, ptr %t15, align 8
+  %t16 = load i64, ptr %t15, align 8
+  %t17 = icmp sgt i64 %t16, 0
+  br i1 %t17, label %L18, label %L19
+L18:
+  %t21 = load i64, ptr %t15, align 8
+  ret i64 %t21
+L22:
+  br label %L20
+L19:
+  br label %L20
+L20:
+  br label %L5
+L5:
+  %t23 = load i64, ptr %t1, align 8
+  %t24 = add i64 %t23, 1
+  store i64 %t24, ptr %t1, align 8
+  call void @telos.arena_release(i64 %t2)
+  br label %L3
+L6:
+  ret i64 0
+}
+
+define void @"tests.syntax.sign"(ptr %sret, i64 %p0) {
+entry:
+  %t1 = alloca [8 x i8], align 8
+  %t3 = alloca [24 x i8], align 8
+  %t8 = alloca [24 x i8], align 8
+  %t11 = alloca [24 x i8], align 8
+  %t16 = alloca [24 x i8], align 8
+  %t20 = alloca [24 x i8], align 8
+  %t23 = alloca [24 x i8], align 8
+  %t24 = alloca [24 x i8], align 8
+  %t27 = alloca [24 x i8], align 8
+  %t28 = alloca [24 x i8], align 8
+  store i64 %p0, ptr %t1, align 8
+  %t2 = load i64, ptr %t1, align 8
+  %t6 = icmp eq i64 %t2, 0
+  br i1 %t6, label %L7, label %L5
+L7:
+  store ptr @.str.18, ptr %t8, align 8
+  %t9 = getelementptr inbounds i8, ptr %t8, i64 8
+  store i64 4, ptr %t9, align 8
+  %t10 = getelementptr inbounds i8, ptr %t8, i64 16
+  store i64 4, ptr %t10, align 8
+  call void @"copy.Text"(ptr %t11, ptr %t8)
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t11, i64 24, i1 false)
+  ret void
+L12:
+  br label %L4
+L5:
+  %t14 = load i64, ptr %t1, align 8
+  %t15 = icmp sgt i64 %t14, 0
+  br i1 %t15, label %L17, label %L18
+L17:
+  store ptr @.str.19, ptr %t20, align 8
+  %t21 = getelementptr inbounds i8, ptr %t20, i64 8
+  store i64 1, ptr %t21, align 8
+  %t22 = getelementptr inbounds i8, ptr %t20, i64 16
+  store i64 1, ptr %t22, align 8
+  call void @"copy.Text"(ptr %t23, ptr %t20)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t16, ptr %t23, i64 24, i1 false)
+  br label %L19
+L18:
+  store ptr @.str.20, ptr %t24, align 8
+  %t25 = getelementptr inbounds i8, ptr %t24, i64 8
+  store i64 1, ptr %t25, align 8
+  %t26 = getelementptr inbounds i8, ptr %t24, i64 16
+  store i64 1, ptr %t26, align 8
+  call void @"copy.Text"(ptr %t27, ptr %t24)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t16, ptr %t27, i64 24, i1 false)
+  br label %L19
+L19:
+  call void @llvm.memcpy.p0.p0.i64(ptr %t3, ptr %t16, i64 24, i1 false)
+  br label %L4
+L13:
+  call void @telos.no_match()
+  unreachable
+L4:
+  call void @llvm.memcpy.p0.p0.i64(ptr %t28, ptr %t3, i64 24, i1 false)
+  call void @"copy.Text"(ptr %sret, ptr %t28)
+  ret void
+}
+
+define i64 @"tests.syntax.count_spaces"(ptr %p0) {
+entry:
+  %t1 = alloca [8 x i8], align 8
+  %t2 = alloca [8 x i8], align 8
+  %t16 = alloca [1 x i8], align 1
+  store i64 0, ptr %t1, align 8
+  store i64 0, ptr %t2, align 8
+  %t3 = call i64 @telos.arena_mark()
+  br label %L4
+L4:
+  %t8 = load i64, ptr %t2, align 8
+  %t9 = getelementptr inbounds i8, ptr %p0, i64 8
+  %t10 = load i64, ptr %t9, align 8
+  %t11 = icmp slt i64 %t8, %t10
+  br i1 %t11, label %L5, label %L7
+L5:
+  %t12 = load ptr, ptr %p0, align 8
+  %t13 = mul i64 %t8, 1
+  %t14 = getelementptr inbounds i8, ptr %t12, i64 %t13
+  %t15 = load i8, ptr %t14, align 1
+  store i8 %t15, ptr %t16, align 1
+  %t17 = load i8, ptr %t16, align 1
+  %t20 = call i8 @"tests.syntax.SPACE"()
+  %t21 = icmp eq i8 %t17, %t20
+  br i1 %t21, label %L22, label %L19
+L22:
+  %t23 = load i64, ptr %t1, align 8
+  %t24 = add i64 %t23, 1
+  store i64 %t24, ptr %t1, align 8
+  br label %L18
+L19:
+  br label %L18
+L25:
+  call void @telos.no_match()
+  unreachable
+L18:
+  br label %L6
+L6:
+  %t26 = load i64, ptr %t2, align 8
+  %t27 = add i64 %t26, 1
+  store i64 %t27, ptr %t2, align 8
+  call void @telos.arena_release(i64 %t3)
+  br label %L4
+L7:
+  %t28 = load i64, ptr %t1, align 8
+  ret i64 %t28
+}
+
+define void @"tests.syntax.show"(ptr %sret, ptr %p0) {
+entry:
+  %t1 = alloca [24 x i8], align 8
+  %t9 = alloca [40 x i8], align 8
+  %t10 = alloca [32 x i8], align 8
+  call void @"copy.List<Byte>"(ptr %t1, ptr %p0)
+  call void @telos.reserve(ptr %t1, i64 1, i64 1, i64 1)
+  %t2 = getelementptr inbounds i8, ptr %t1, i64 8
+  %t3 = load i64, ptr %t2, align 8
+  %t4 = load ptr, ptr %t1, align 8
+  %t5 = mul i64 %t3, 1
+  %t6 = getelementptr inbounds i8, ptr %t4, i64 %t5
+  store i8 10, ptr %t6, align 1
+  %t7 = add i64 %t3, 1
+  %t8 = getelementptr inbounds i8, ptr %t1, i64 8
+  store i64 %t7, ptr %t8, align 8
+  %t11 = call i32 @telos_rt_stdout_write_all(ptr %t1, ptr %t10)
+  %t12 = icmp ne i32 %t11, 0
+  br i1 %t12, label %L13, label %L14
+L13:
+  store i32 1, ptr %t9, align 4
+  %t16 = getelementptr inbounds i8, ptr %t9, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t16, ptr %t10, i64 32, i1 false)
+  br label %L15
+L14:
+  store i32 0, ptr %t9, align 4
+  br label %L15
+L15:
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t9, i64 40, i1 false)
+  ret void
+}
+
+define void @"tests.syntax.Syntax.connect"(ptr %sret, i64 %p0) {
+entry:
+  %t1 = alloca [8 x i8], align 8
+  %t2 = alloca [32 x i8], align 8
+  %t3 = alloca [24 x i8], align 8
+  %t6 = alloca [24 x i8], align 8
+  %t8 = alloca [32 x i8], align 8
+  %t13 = alloca [8 x i8], align 8
+  %t14 = alloca [24 x i8], align 8
+  %t15 = alloca [24 x i8], align 8
+  %t18 = alloca [24 x i8], align 8
+  %t19 = alloca [24 x i8], align 8
+  %t21 = alloca [24 x i8], align 8
+  %t22 = alloca [24 x i8], align 8
+  %t23 = alloca [40 x i8], align 8
+  %t31 = alloca [24 x i8], align 8
+  %t32 = alloca [24 x i8], align 8
+  %t35 = alloca [24 x i8], align 8
+  %t36 = alloca [24 x i8], align 8
+  %t37 = alloca [24 x i8], align 8
+  %t38 = alloca [24 x i8], align 8
+  %t39 = alloca [24 x i8], align 8
+  %t42 = alloca [24 x i8], align 8
+  %t43 = alloca [24 x i8], align 8
+  %t44 = alloca [24 x i8], align 8
+  %t45 = alloca [24 x i8], align 8
+  %t46 = alloca [40 x i8], align 8
+  %t54 = alloca [24 x i8], align 8
+  %t57 = alloca [24 x i8], align 8
+  %t58 = alloca [40 x i8], align 8
+  %t67 = alloca [24 x i8], align 8
+  %t70 = alloca [24 x i8], align 8
+  %t71 = alloca [24 x i8], align 8
+  %t74 = alloca [24 x i8], align 8
+  %t75 = alloca [40 x i8], align 8
+  %t84 = alloca [24 x i8], align 8
+  %t87 = alloca [24 x i8], align 8
+  %t88 = alloca [24 x i8], align 8
+  %t91 = alloca [24 x i8], align 8
+  %t93 = alloca [24 x i8], align 8
+  %t96 = alloca [24 x i8], align 8
+  %t97 = alloca [40 x i8], align 8
+  %t106 = alloca [24 x i8], align 8
+  %t109 = alloca [24 x i8], align 8
+  %t110 = alloca [24 x i8], align 8
+  %t113 = alloca [24 x i8], align 8
+  %t115 = alloca [24 x i8], align 8
+  %t118 = alloca [24 x i8], align 8
+  %t119 = alloca [40 x i8], align 8
+  %t128 = alloca [24 x i8], align 8
+  %t131 = alloca [24 x i8], align 8
+  %t132 = alloca [24 x i8], align 8
+  %t135 = alloca [24 x i8], align 8
+  %t137 = alloca [24 x i8], align 8
+  %t140 = alloca [24 x i8], align 8
+  %t142 = alloca [24 x i8], align 8
+  %t145 = alloca [24 x i8], align 8
+  %t146 = alloca [40 x i8], align 8
+  %t154 = alloca [32 x i8], align 8
+  %t158 = alloca [24 x i8], align 8
+  %t162 = alloca [40 x i8], align 8
+  %t164 = alloca [24 x i8], align 8
+  %t165 = alloca [40 x i8], align 8
+  %t173 = alloca [32 x i8], align 8
+  %t176 = alloca [24 x i8], align 8
+  %t180 = alloca [40 x i8], align 8
+  %t182 = alloca [24 x i8], align 8
+  %t183 = alloca [40 x i8], align 8
+  %t191 = alloca [40 x i8], align 8
+  %t192 = alloca [24 x i8], align 8
+  %t193 = alloca [40 x i8], align 8
+  %t201 = alloca [32 x i8], align 8
+  %t204 = alloca [24 x i8], align 8
+  %t208 = alloca [40 x i8], align 8
+  %t210 = alloca [24 x i8], align 8
+  %t211 = alloca [40 x i8], align 8
+  %t219 = alloca [24 x i8], align 8
+  %t222 = alloca [24 x i8], align 8
+  %t224 = alloca [1 x i8], align 1
+  %t226 = alloca [24 x i8], align 8
+  %t229 = alloca [24 x i8], align 8
+  %t231 = alloca [1 x i8], align 1
+  %t235 = alloca [24 x i8], align 8
+  %t238 = alloca [24 x i8], align 8
+  %t242 = alloca [24 x i8], align 8
+  %t243 = alloca [24 x i8], align 8
+  %t246 = alloca [24 x i8], align 8
+  %t247 = alloca [24 x i8], align 8
+  %t250 = alloca [24 x i8], align 8
+  %t253 = alloca [24 x i8], align 8
+  %t257 = alloca [24 x i8], align 8
+  %t258 = alloca [24 x i8], align 8
+  %t259 = alloca [40 x i8], align 8
+  %t272 = alloca [24 x i8], align 8
+  %t276 = alloca [24 x i8], align 8
+  %t277 = alloca [40 x i8], align 8
+  %t285 = alloca [24 x i8], align 8
+  %t286 = alloca [24 x i8], align 8
+  %t287 = alloca [24 x i8], align 8
+  %t289 = alloca [24 x i8], align 8
+  %t290 = alloca [24 x i8], align 8
+  %t291 = alloca [40 x i8], align 8
+  %t299 = alloca [24 x i8], align 8
+  %t302 = alloca [24 x i8], align 8
+  %t304 = alloca [24 x i8], align 8
+  %t305 = alloca [40 x i8], align 8
+  %t313 = alloca [8 x i8], align 8
+  %t316 = alloca [24 x i8], align 8
+  %t317 = alloca [40 x i8], align 8
+  %t325 = alloca [24 x i8], align 8
+  %t328 = alloca [24 x i8], align 8
+  %t329 = alloca [24 x i8], align 8
+  %t330 = alloca [40 x i8], align 8
+  %t338 = alloca [32 x i8], align 8
+  %t339 = alloca [24 x i8], align 8
+  %t342 = alloca [24 x i8], align 8
+  %t344 = alloca [32 x i8], align 8
+  %t347 = alloca [24 x i8], align 8
+  %t348 = alloca [24 x i8], align 8
+  %t349 = alloca [40 x i8], align 8
+  %t357 = alloca [40 x i8], align 8
+  %t359 = alloca [24 x i8], align 8
+  %t362 = alloca [24 x i8], align 8
+  %t363 = alloca [24 x i8], align 8
+  %t366 = alloca [8 x i8], align 8
+  %t370 = alloca [40 x i8], align 8
+  %t371 = alloca [24 x i8], align 8
+  %t374 = alloca [24 x i8], align 8
+  %t377 = alloca [24 x i8], align 8
+  %t378 = alloca [24 x i8], align 8
+  %t379 = alloca [40 x i8], align 8
+  %t393 = alloca [24 x i8], align 8
+  %t396 = alloca [24 x i8], align 8
+  %t397 = alloca [40 x i8], align 8
+  %t409 = alloca [24 x i8], align 8
+  %t412 = alloca [24 x i8], align 8
+  %t413 = alloca [40 x i8], align 8
+  %t421 = alloca [1 x i8], align 1
+  %t424 = alloca [1 x i8], align 1
+  %t427 = alloca [24 x i8], align 8
+  %t430 = alloca [24 x i8], align 8
+  %t434 = alloca [24 x i8], align 8
+  %t435 = alloca [24 x i8], align 8
+  %t438 = alloca [24 x i8], align 8
+  %t439 = alloca [24 x i8], align 8
+  %t442 = alloca [24 x i8], align 8
+  %t443 = alloca [24 x i8], align 8
+  %t444 = alloca [24 x i8], align 8
+  %t447 = alloca [24 x i8], align 8
+  %t448 = alloca [24 x i8], align 8
+  %t449 = alloca [24 x i8], align 8
+  %t452 = alloca [24 x i8], align 8
+  %t453 = alloca [24 x i8], align 8
+  %t454 = alloca [40 x i8], align 8
+  %t462 = alloca [32 x i8], align 8
+  %t463 = alloca [24 x i8], align 8
+  %t466 = alloca [24 x i8], align 8
+  %t468 = alloca [32 x i8], align 8
+  %t469 = alloca [8 x i8], align 8
+  %t470 = alloca [32 x i8], align 8
+  %t472 = alloca [8 x i8], align 8
+  %t479 = alloca [32 x i8], align 8
+  %t483 = alloca [8 x i8], align 8
+  %t485 = alloca [32 x i8], align 8
+  %t488 = alloca [24 x i8], align 8
+  %t491 = alloca [24 x i8], align 8
+  %t492 = alloca [24 x i8], align 8
+  %t501 = alloca [32 x i8], align 8
+  %t505 = alloca [8 x i8], align 8
+  %t509 = alloca [8 x i8], align 8
+  %t511 = alloca [24 x i8], align 8
+  %t512 = alloca [24 x i8], align 8
+  %t515 = alloca [24 x i8], align 8
+  %t516 = alloca [24 x i8], align 8
+  %t518 = alloca [24 x i8], align 8
+  %t519 = alloca [24 x i8], align 8
+  %t520 = alloca [40 x i8], align 8
+  %t528 = alloca [32 x i8], align 8
+  %t529 = alloca [24 x i8], align 8
+  %t532 = alloca [24 x i8], align 8
+  %t534 = alloca [32 x i8], align 8
+  %t535 = alloca [32 x i8], align 8
+  %t539 = alloca [8 x i8], align 8
+  %t543 = alloca [24 x i8], align 8
+  %t546 = alloca [24 x i8], align 8
+  %t547 = alloca [24 x i8], align 8
+  %t549 = alloca [24 x i8], align 8
+  %t550 = alloca [24 x i8], align 8
+  %t551 = alloca [24 x i8], align 8
+  %t552 = alloca [40 x i8], align 8
+  %t566 = alloca [8 x i8], align 8
+  %t567 = alloca [8 x i8], align 8
+  %t573 = alloca [24 x i8], align 8
+  %t576 = alloca [24 x i8], align 8
+  %t577 = alloca [40 x i8], align 8
+  %t589 = alloca [24 x i8], align 8
+  %t592 = alloca [24 x i8], align 8
+  %t593 = alloca [40 x i8], align 8
+  %t601 = alloca [40 x i8], align 8
+  store i64 %p0, ptr %t1, align 8
+  store i64 7, ptr %t2, align 8
+  store ptr @.str.21, ptr %t3, align 8
+  %t4 = getelementptr inbounds i8, ptr %t3, i64 8
+  store i64 5, ptr %t4, align 8
+  %t5 = getelementptr inbounds i8, ptr %t3, i64 16
+  store i64 5, ptr %t5, align 8
+  call void @"copy.Text"(ptr %t6, ptr %t3)
+  %t7 = getelementptr inbounds i8, ptr %t2, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t7, ptr %t6, i64 24, i1 false)
+  call void @"tests.syntax.swap"(ptr %t8, ptr %t2)
+  %t11 = getelementptr inbounds i8, ptr %t8, i64 24
+  %t12 = load i64, ptr %t11, align 8
+  store i64 %t12, ptr %t13, align 8
+  br label %L9
+L10:
+  call void @telos.no_match()
+  unreachable
+L9:
+  call void @"copy.Text"(ptr %t14, ptr %t8)
+  store ptr @.str.11, ptr %t15, align 8
+  %t16 = getelementptr inbounds i8, ptr %t15, i64 8
+  store i64 1, ptr %t16, align 8
+  %t17 = getelementptr inbounds i8, ptr %t15, i64 16
+  store i64 1, ptr %t17, align 8
+  call void @"copy.Text"(ptr %t18, ptr %t15)
+  call void @telos_rt_text_concat(ptr %t19, ptr %t14, ptr %t18)
+  %t20 = load i64, ptr %t13, align 8
+  call void @telos_rt_int_to_text(ptr %t21, i64 %t20)
+  call void @telos_rt_text_concat(ptr %t22, ptr %t19, ptr %t21)
+  call void @"tests.syntax.show"(ptr %t23, ptr %t22)
+  %t24 = load i32, ptr %t23, align 4
+  %t25 = icmp eq i32 %t24, 1
+  br i1 %t25, label %L26, label %L27
+L26:
+  store i32 1, ptr %sret, align 4
+  %t28 = getelementptr inbounds i8, ptr %t23, i64 8
+  %t29 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t29, ptr %t28, i64 32, i1 false)
+  ret void
+L27:
+  %t30 = getelementptr inbounds i8, ptr %t23, i64 8
+  call void @"tests.syntax.describe"(ptr %t31, i64 0)
+  store ptr @.str.11, ptr %t32, align 8
+  %t33 = getelementptr inbounds i8, ptr %t32, i64 8
+  store i64 1, ptr %t33, align 8
+  %t34 = getelementptr inbounds i8, ptr %t32, i64 16
+  store i64 1, ptr %t34, align 8
+  call void @"copy.Text"(ptr %t35, ptr %t32)
+  call void @telos_rt_text_concat(ptr %t36, ptr %t31, ptr %t35)
+  call void @"tests.syntax.describe"(ptr %t37, i64 41)
+  call void @telos_rt_text_concat(ptr %t38, ptr %t36, ptr %t37)
+  store ptr @.str.11, ptr %t39, align 8
+  %t40 = getelementptr inbounds i8, ptr %t39, i64 8
+  store i64 1, ptr %t40, align 8
+  %t41 = getelementptr inbounds i8, ptr %t39, i64 16
+  store i64 1, ptr %t41, align 8
+  call void @"copy.Text"(ptr %t42, ptr %t39)
+  call void @telos_rt_text_concat(ptr %t43, ptr %t38, ptr %t42)
+  call void @"tests.syntax.describe"(ptr %t44, i64 9)
+  call void @telos_rt_text_concat(ptr %t45, ptr %t43, ptr %t44)
+  call void @"tests.syntax.show"(ptr %t46, ptr %t45)
+  %t47 = load i32, ptr %t46, align 4
+  %t48 = icmp eq i32 %t47, 1
+  br i1 %t48, label %L49, label %L50
+L49:
+  store i32 1, ptr %sret, align 4
+  %t51 = getelementptr inbounds i8, ptr %t46, i64 8
+  %t52 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t52, ptr %t51, i64 32, i1 false)
+  ret void
+L50:
+  %t53 = getelementptr inbounds i8, ptr %t46, i64 8
+  store ptr @telos.empty, ptr %t54, align 8
+  %t55 = getelementptr inbounds i8, ptr %t54, i64 8
+  store i64 0, ptr %t55, align 8
+  %t56 = getelementptr inbounds i8, ptr %t54, i64 16
+  store i64 0, ptr %t56, align 8
+  call void @"tests.syntax.classify"(ptr %t57, ptr %t54)
+  call void @"tests.syntax.show"(ptr %t58, ptr %t57)
+  %t59 = load i32, ptr %t58, align 4
+  %t60 = icmp eq i32 %t59, 1
+  br i1 %t60, label %L61, label %L62
+L61:
+  store i32 1, ptr %sret, align 4
+  %t63 = getelementptr inbounds i8, ptr %t58, i64 8
+  %t64 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t64, ptr %t63, i64 32, i1 false)
+  ret void
+L62:
+  %t65 = getelementptr inbounds i8, ptr %t58, i64 8
+  %t66 = call ptr @telos.alloc(i64 24, i64 8)
+  store ptr @.str.22, ptr %t67, align 8
+  %t68 = getelementptr inbounds i8, ptr %t67, i64 8
+  store i64 1, ptr %t68, align 8
+  %t69 = getelementptr inbounds i8, ptr %t67, i64 16
+  store i64 1, ptr %t69, align 8
+  call void @"copy.Text"(ptr %t70, ptr %t67)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t66, ptr %t70, i64 24, i1 false)
+  store ptr %t66, ptr %t71, align 8
+  %t72 = getelementptr inbounds i8, ptr %t71, i64 8
+  store i64 1, ptr %t72, align 8
+  %t73 = getelementptr inbounds i8, ptr %t71, i64 16
+  store i64 1, ptr %t73, align 8
+  call void @"tests.syntax.classify"(ptr %t74, ptr %t71)
+  call void @"tests.syntax.show"(ptr %t75, ptr %t74)
+  %t76 = load i32, ptr %t75, align 4
+  %t77 = icmp eq i32 %t76, 1
+  br i1 %t77, label %L78, label %L79
+L78:
+  store i32 1, ptr %sret, align 4
+  %t80 = getelementptr inbounds i8, ptr %t75, i64 8
+  %t81 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t81, ptr %t80, i64 32, i1 false)
+  ret void
+L79:
+  %t82 = getelementptr inbounds i8, ptr %t75, i64 8
+  %t83 = call ptr @telos.alloc(i64 48, i64 8)
+  store ptr @.str.0, ptr %t84, align 8
+  %t85 = getelementptr inbounds i8, ptr %t84, i64 8
+  store i64 4, ptr %t85, align 8
+  %t86 = getelementptr inbounds i8, ptr %t84, i64 16
+  store i64 4, ptr %t86, align 8
+  call void @"copy.Text"(ptr %t87, ptr %t84)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t83, ptr %t87, i64 24, i1 false)
+  store ptr @.str.23, ptr %t88, align 8
+  %t89 = getelementptr inbounds i8, ptr %t88, i64 8
+  store i64 3, ptr %t89, align 8
+  %t90 = getelementptr inbounds i8, ptr %t88, i64 16
+  store i64 3, ptr %t90, align 8
+  call void @"copy.Text"(ptr %t91, ptr %t88)
+  %t92 = getelementptr inbounds i8, ptr %t83, i64 24
+  call void @llvm.memcpy.p0.p0.i64(ptr %t92, ptr %t91, i64 24, i1 false)
+  store ptr %t83, ptr %t93, align 8
+  %t94 = getelementptr inbounds i8, ptr %t93, i64 8
+  store i64 2, ptr %t94, align 8
+  %t95 = getelementptr inbounds i8, ptr %t93, i64 16
+  store i64 2, ptr %t95, align 8
+  call void @"tests.syntax.classify"(ptr %t96, ptr %t93)
+  call void @"tests.syntax.show"(ptr %t97, ptr %t96)
+  %t98 = load i32, ptr %t97, align 4
+  %t99 = icmp eq i32 %t98, 1
+  br i1 %t99, label %L100, label %L101
+L100:
+  store i32 1, ptr %sret, align 4
+  %t102 = getelementptr inbounds i8, ptr %t97, i64 8
+  %t103 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t103, ptr %t102, i64 32, i1 false)
+  ret void
+L101:
+  %t104 = getelementptr inbounds i8, ptr %t97, i64 8
+  %t105 = call ptr @telos.alloc(i64 48, i64 8)
+  store ptr @.str.13, ptr %t106, align 8
+  %t107 = getelementptr inbounds i8, ptr %t106, i64 8
+  store i64 1, ptr %t107, align 8
+  %t108 = getelementptr inbounds i8, ptr %t106, i64 16
+  store i64 1, ptr %t108, align 8
+  call void @"copy.Text"(ptr %t109, ptr %t106)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t105, ptr %t109, i64 24, i1 false)
+  store ptr @.str.24, ptr %t110, align 8
+  %t111 = getelementptr inbounds i8, ptr %t110, i64 8
+  store i64 1, ptr %t111, align 8
+  %t112 = getelementptr inbounds i8, ptr %t110, i64 16
+  store i64 1, ptr %t112, align 8
+  call void @"copy.Text"(ptr %t113, ptr %t110)
+  %t114 = getelementptr inbounds i8, ptr %t105, i64 24
+  call void @llvm.memcpy.p0.p0.i64(ptr %t114, ptr %t113, i64 24, i1 false)
+  store ptr %t105, ptr %t115, align 8
+  %t116 = getelementptr inbounds i8, ptr %t115, i64 8
+  store i64 2, ptr %t116, align 8
+  %t117 = getelementptr inbounds i8, ptr %t115, i64 16
+  store i64 2, ptr %t117, align 8
+  call void @"tests.syntax.classify"(ptr %t118, ptr %t115)
+  call void @"tests.syntax.show"(ptr %t119, ptr %t118)
+  %t120 = load i32, ptr %t119, align 4
+  %t121 = icmp eq i32 %t120, 1
+  br i1 %t121, label %L122, label %L123
+L122:
+  store i32 1, ptr %sret, align 4
+  %t124 = getelementptr inbounds i8, ptr %t119, i64 8
+  %t125 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t125, ptr %t124, i64 32, i1 false)
+  ret void
+L123:
+  %t126 = getelementptr inbounds i8, ptr %t119, i64 8
+  %t127 = call ptr @telos.alloc(i64 72, i64 8)
+  store ptr @.str.13, ptr %t128, align 8
+  %t129 = getelementptr inbounds i8, ptr %t128, i64 8
+  store i64 1, ptr %t129, align 8
+  %t130 = getelementptr inbounds i8, ptr %t128, i64 16
+  store i64 1, ptr %t130, align 8
+  call void @"copy.Text"(ptr %t131, ptr %t128)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t127, ptr %t131, i64 24, i1 false)
+  store ptr @.str.24, ptr %t132, align 8
+  %t133 = getelementptr inbounds i8, ptr %t132, i64 8
+  store i64 1, ptr %t133, align 8
+  %t134 = getelementptr inbounds i8, ptr %t132, i64 16
+  store i64 1, ptr %t134, align 8
+  call void @"copy.Text"(ptr %t135, ptr %t132)
+  %t136 = getelementptr inbounds i8, ptr %t127, i64 24
+  call void @llvm.memcpy.p0.p0.i64(ptr %t136, ptr %t135, i64 24, i1 false)
+  store ptr @.str.25, ptr %t137, align 8
+  %t138 = getelementptr inbounds i8, ptr %t137, i64 8
+  store i64 1, ptr %t138, align 8
+  %t139 = getelementptr inbounds i8, ptr %t137, i64 16
+  store i64 1, ptr %t139, align 8
+  call void @"copy.Text"(ptr %t140, ptr %t137)
+  %t141 = getelementptr inbounds i8, ptr %t127, i64 48
+  call void @llvm.memcpy.p0.p0.i64(ptr %t141, ptr %t140, i64 24, i1 false)
+  store ptr %t127, ptr %t142, align 8
+  %t143 = getelementptr inbounds i8, ptr %t142, i64 8
+  store i64 3, ptr %t143, align 8
+  %t144 = getelementptr inbounds i8, ptr %t142, i64 16
+  store i64 3, ptr %t144, align 8
+  call void @"tests.syntax.classify"(ptr %t145, ptr %t142)
+  call void @"tests.syntax.show"(ptr %t146, ptr %t145)
+  %t147 = load i32, ptr %t146, align 4
+  %t148 = icmp eq i32 %t147, 1
+  br i1 %t148, label %L149, label %L150
+L149:
+  store i32 1, ptr %sret, align 4
+  %t151 = getelementptr inbounds i8, ptr %t146, i64 8
+  %t152 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t152, ptr %t151, i64 32, i1 false)
+  ret void
+L150:
+  %t153 = getelementptr inbounds i8, ptr %t146, i64 8
+  %t155 = zext i1 true to i8
+  store i8 %t155, ptr %t154, align 1
+  %t156 = call ptr @telos.alloc(i64 16, i64 8)
+  store i64 1, ptr %t156, align 8
+  %t157 = getelementptr inbounds i8, ptr %t156, i64 8
+  store i64 2, ptr %t157, align 8
+  store ptr %t156, ptr %t158, align 8
+  %t159 = getelementptr inbounds i8, ptr %t158, i64 8
+  store i64 2, ptr %t159, align 8
+  %t160 = getelementptr inbounds i8, ptr %t158, i64 16
+  store i64 2, ptr %t160, align 8
+  %t161 = getelementptr inbounds i8, ptr %t154, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t161, ptr %t158, i64 24, i1 false)
+  store i32 0, ptr %t162, align 4
+  %t163 = getelementptr inbounds i8, ptr %t162, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t163, ptr %t154, i64 32, i1 false)
+  call void @"tests.syntax.nested"(ptr %t164, ptr %t162)
+  call void @"tests.syntax.show"(ptr %t165, ptr %t164)
+  %t166 = load i32, ptr %t165, align 4
+  %t167 = icmp eq i32 %t166, 1
+  br i1 %t167, label %L168, label %L169
+L168:
+  store i32 1, ptr %sret, align 4
+  %t170 = getelementptr inbounds i8, ptr %t165, i64 8
+  %t171 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t171, ptr %t170, i64 32, i1 false)
+  ret void
+L169:
+  %t172 = getelementptr inbounds i8, ptr %t165, i64 8
+  %t174 = zext i1 false to i8
+  store i8 %t174, ptr %t173, align 1
+  %t175 = call ptr @telos.alloc(i64 8, i64 8)
+  store i64 1, ptr %t175, align 8
+  store ptr %t175, ptr %t176, align 8
+  %t177 = getelementptr inbounds i8, ptr %t176, i64 8
+  store i64 1, ptr %t177, align 8
+  %t178 = getelementptr inbounds i8, ptr %t176, i64 16
+  store i64 1, ptr %t178, align 8
+  %t179 = getelementptr inbounds i8, ptr %t173, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t179, ptr %t176, i64 24, i1 false)
+  store i32 0, ptr %t180, align 4
+  %t181 = getelementptr inbounds i8, ptr %t180, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t181, ptr %t173, i64 32, i1 false)
+  call void @"tests.syntax.nested"(ptr %t182, ptr %t180)
+  call void @"tests.syntax.show"(ptr %t183, ptr %t182)
+  %t184 = load i32, ptr %t183, align 4
+  %t185 = icmp eq i32 %t184, 1
+  br i1 %t185, label %L186, label %L187
+L186:
+  store i32 1, ptr %sret, align 4
+  %t188 = getelementptr inbounds i8, ptr %t183, i64 8
+  %t189 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t189, ptr %t188, i64 32, i1 false)
+  ret void
+L187:
+  %t190 = getelementptr inbounds i8, ptr %t183, i64 8
+  store i32 1, ptr %t191, align 4
+  call void @"tests.syntax.nested"(ptr %t192, ptr %t191)
+  call void @"tests.syntax.show"(ptr %t193, ptr %t192)
+  %t194 = load i32, ptr %t193, align 4
+  %t195 = icmp eq i32 %t194, 1
+  br i1 %t195, label %L196, label %L197
+L196:
+  store i32 1, ptr %sret, align 4
+  %t198 = getelementptr inbounds i8, ptr %t193, i64 8
+  %t199 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t199, ptr %t198, i64 32, i1 false)
+  ret void
+L197:
+  %t200 = getelementptr inbounds i8, ptr %t193, i64 8
+  %t202 = zext i1 true to i8
+  store i8 %t202, ptr %t201, align 1
+  %t203 = call ptr @telos.alloc(i64 8, i64 8)
+  store i64 3, ptr %t203, align 8
+  store ptr %t203, ptr %t204, align 8
+  %t205 = getelementptr inbounds i8, ptr %t204, i64 8
+  store i64 1, ptr %t205, align 8
+  %t206 = getelementptr inbounds i8, ptr %t204, i64 16
+  store i64 1, ptr %t206, align 8
+  %t207 = getelementptr inbounds i8, ptr %t201, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t207, ptr %t204, i64 24, i1 false)
+  store i32 0, ptr %t208, align 4
+  %t209 = getelementptr inbounds i8, ptr %t208, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t209, ptr %t201, i64 32, i1 false)
+  call void @"tests.syntax.nested"(ptr %t210, ptr %t208)
+  call void @"tests.syntax.show"(ptr %t211, ptr %t210)
+  %t212 = load i32, ptr %t211, align 4
+  %t213 = icmp eq i32 %t212, 1
+  br i1 %t213, label %L214, label %L215
+L214:
+  store i32 1, ptr %sret, align 4
+  %t216 = getelementptr inbounds i8, ptr %t211, i64 8
+  %t217 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t217, ptr %t216, i64 32, i1 false)
+  ret void
+L215:
+  %t218 = getelementptr inbounds i8, ptr %t211, i64 8
+  store ptr @.str.14, ptr %t219, align 8
+  %t220 = getelementptr inbounds i8, ptr %t219, i64 8
+  store i64 1, ptr %t220, align 8
+  %t221 = getelementptr inbounds i8, ptr %t219, i64 16
+  store i64 1, ptr %t221, align 8
+  call void @"copy.Text"(ptr %t222, ptr %t219)
+  %t223 = call i1 @"tests.syntax.vowel"(ptr %t222)
+  %t225 = zext i1 %t223 to i8
+  store i8 %t225, ptr %t224, align 1
+  store ptr @.str.22, ptr %t226, align 8
+  %t227 = getelementptr inbounds i8, ptr %t226, i64 8
+  store i64 1, ptr %t227, align 8
+  %t228 = getelementptr inbounds i8, ptr %t226, i64 16
+  store i64 1, ptr %t228, align 8
+  call void @"copy.Text"(ptr %t229, ptr %t226)
+  %t230 = call i1 @"tests.syntax.vowel"(ptr %t229)
+  %t232 = zext i1 %t230 to i8
+  store i8 %t232, ptr %t231, align 1
+  %t233 = load i8, ptr %t224, align 1
+  %t234 = trunc i8 %t233 to i1
+  store ptr @.str.26, ptr %t235, align 8
+  %t236 = getelementptr inbounds i8, ptr %t235, i64 8
+  store i64 4, ptr %t236, align 8
+  %t237 = getelementptr inbounds i8, ptr %t235, i64 16
+  store i64 4, ptr %t237, align 8
+  store ptr @.str.27, ptr %t238, align 8
+  %t239 = getelementptr inbounds i8, ptr %t238, i64 8
+  store i64 5, ptr %t239, align 8
+  %t240 = getelementptr inbounds i8, ptr %t238, i64 16
+  store i64 5, ptr %t240, align 8
+  %t241 = select i1 %t234, ptr %t235, ptr %t238
+  call void @"copy.Text"(ptr %t242, ptr %t241)
+  store ptr @.str.11, ptr %t243, align 8
+  %t244 = getelementptr inbounds i8, ptr %t243, i64 8
+  store i64 1, ptr %t244, align 8
+  %t245 = getelementptr inbounds i8, ptr %t243, i64 16
+  store i64 1, ptr %t245, align 8
+  call void @"copy.Text"(ptr %t246, ptr %t243)
+  call void @telos_rt_text_concat(ptr %t247, ptr %t242, ptr %t246)
+  %t248 = load i8, ptr %t231, align 1
+  %t249 = trunc i8 %t248 to i1
+  store ptr @.str.26, ptr %t250, align 8
+  %t251 = getelementptr inbounds i8, ptr %t250, i64 8
+  store i64 4, ptr %t251, align 8
+  %t252 = getelementptr inbounds i8, ptr %t250, i64 16
+  store i64 4, ptr %t252, align 8
+  store ptr @.str.27, ptr %t253, align 8
+  %t254 = getelementptr inbounds i8, ptr %t253, i64 8
+  store i64 5, ptr %t254, align 8
+  %t255 = getelementptr inbounds i8, ptr %t253, i64 16
+  store i64 5, ptr %t255, align 8
+  %t256 = select i1 %t249, ptr %t250, ptr %t253
+  call void @"copy.Text"(ptr %t257, ptr %t256)
+  call void @telos_rt_text_concat(ptr %t258, ptr %t247, ptr %t257)
+  call void @"tests.syntax.show"(ptr %t259, ptr %t258)
+  %t260 = load i32, ptr %t259, align 4
+  %t261 = icmp eq i32 %t260, 1
+  br i1 %t261, label %L262, label %L263
+L262:
+  store i32 1, ptr %sret, align 4
+  %t264 = getelementptr inbounds i8, ptr %t259, i64 8
+  %t265 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t265, ptr %t264, i64 32, i1 false)
+  ret void
+L263:
+  %t266 = getelementptr inbounds i8, ptr %t259, i64 8
+  %t267 = call ptr @telos.alloc(i64 32, i64 8)
+  %t268 = sub i64 0, 1
+  store i64 %t268, ptr %t267, align 8
+  %t269 = getelementptr inbounds i8, ptr %t267, i64 8
+  store i64 0, ptr %t269, align 8
+  %t270 = getelementptr inbounds i8, ptr %t267, i64 16
+  store i64 5, ptr %t270, align 8
+  %t271 = getelementptr inbounds i8, ptr %t267, i64 24
+  store i64 6, ptr %t271, align 8
+  store ptr %t267, ptr %t272, align 8
+  %t273 = getelementptr inbounds i8, ptr %t272, i64 8
+  store i64 4, ptr %t273, align 8
+  %t274 = getelementptr inbounds i8, ptr %t272, i64 16
+  store i64 4, ptr %t274, align 8
+  %t275 = call i64 @"tests.syntax.first_positive"(ptr %t272)
+  call void @telos_rt_int_to_text(ptr %t276, i64 %t275)
+  call void @"tests.syntax.show"(ptr %t277, ptr %t276)
+  %t278 = load i32, ptr %t277, align 4
+  %t279 = icmp eq i32 %t278, 1
+  br i1 %t279, label %L280, label %L281
+L280:
+  store i32 1, ptr %sret, align 4
+  %t282 = getelementptr inbounds i8, ptr %t277, i64 8
+  %t283 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t283, ptr %t282, i64 32, i1 false)
+  ret void
+L281:
+  %t284 = getelementptr inbounds i8, ptr %t277, i64 8
+  call void @"tests.syntax.sign"(ptr %t285, i64 0)
+  call void @"tests.syntax.sign"(ptr %t286, i64 3)
+  call void @telos_rt_text_concat(ptr %t287, ptr %t285, ptr %t286)
+  %t288 = sub i64 0, 3
+  call void @"tests.syntax.sign"(ptr %t289, i64 %t288)
+  call void @telos_rt_text_concat(ptr %t290, ptr %t287, ptr %t289)
+  call void @"tests.syntax.show"(ptr %t291, ptr %t290)
+  %t292 = load i32, ptr %t291, align 4
+  %t293 = icmp eq i32 %t292, 1
+  br i1 %t293, label %L294, label %L295
+L294:
+  store i32 1, ptr %sret, align 4
+  %t296 = getelementptr inbounds i8, ptr %t291, i64 8
+  %t297 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t297, ptr %t296, i64 32, i1 false)
+  ret void
+L295:
+  %t298 = getelementptr inbounds i8, ptr %t291, i64 8
+  store ptr @.str.28, ptr %t299, align 8
+  %t300 = getelementptr inbounds i8, ptr %t299, i64 8
+  store i64 6, ptr %t300, align 8
+  %t301 = getelementptr inbounds i8, ptr %t299, i64 16
+  store i64 6, ptr %t301, align 8
+  call void @"copy.Text"(ptr %t302, ptr %t299)
+  %t303 = call i64 @"tests.syntax.count_spaces"(ptr %t302)
+  call void @telos_rt_int_to_text(ptr %t304, i64 %t303)
+  call void @"tests.syntax.show"(ptr %t305, ptr %t304)
+  %t306 = load i32, ptr %t305, align 4
+  %t307 = icmp eq i32 %t306, 1
+  br i1 %t307, label %L308, label %L309
+L308:
+  store i32 1, ptr %sret, align 4
+  %t310 = getelementptr inbounds i8, ptr %t305, i64 8
+  %t311 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t311, ptr %t310, i64 32, i1 false)
+  ret void
+L309:
+  %t312 = getelementptr inbounds i8, ptr %t305, i64 8
+  store i64 21, ptr %t313, align 8
+  %t314 = load i64, ptr %t313, align 8
+  %t315 = call i64 @"tests.syntax.twice"(i64 %t314)
+  call void @telos_rt_int_to_text(ptr %t316, i64 %t315)
+  call void @"tests.syntax.show"(ptr %t317, ptr %t316)
+  %t318 = load i32, ptr %t317, align 4
+  %t319 = icmp eq i32 %t318, 1
+  br i1 %t319, label %L320, label %L321
+L320:
+  store i32 1, ptr %sret, align 4
+  %t322 = getelementptr inbounds i8, ptr %t317, i64 8
+  %t323 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t323, ptr %t322, i64 32, i1 false)
+  ret void
+L321:
+  %t324 = getelementptr inbounds i8, ptr %t317, i64 8
+  store ptr @.str.29, ptr %t325, align 8
+  %t326 = getelementptr inbounds i8, ptr %t325, i64 8
+  store i64 3, ptr %t326, align 8
+  %t327 = getelementptr inbounds i8, ptr %t325, i64 16
+  store i64 3, ptr %t327, align 8
+  call void @"copy.Text"(ptr %t328, ptr %t325)
+  call void @"tests.syntax.shout"(ptr %t329, ptr %t328)
+  call void @"tests.syntax.show"(ptr %t330, ptr %t329)
+  %t331 = load i32, ptr %t330, align 4
+  %t332 = icmp eq i32 %t331, 1
+  br i1 %t332, label %L333, label %L334
+L333:
+  store i32 1, ptr %sret, align 4
+  %t335 = getelementptr inbounds i8, ptr %t330, i64 8
+  %t336 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t336, ptr %t335, i64 32, i1 false)
+  ret void
+L334:
+  %t337 = getelementptr inbounds i8, ptr %t330, i64 8
+  store ptr @.str.30, ptr %t339, align 8
+  %t340 = getelementptr inbounds i8, ptr %t339, i64 8
+  store i64 1, ptr %t340, align 8
+  %t341 = getelementptr inbounds i8, ptr %t339, i64 16
+  store i64 1, ptr %t341, align 8
+  call void @"copy.Text"(ptr %t342, ptr %t339)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t338, ptr %t342, i64 24, i1 false)
+  %t343 = getelementptr inbounds i8, ptr %t338, i64 24
+  store ptr @"tests.syntax.shout", ptr %t343, align 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t344, ptr %t338, i64 32, i1 false)
+  %t345 = getelementptr inbounds i8, ptr %t344, i64 24
+  %t346 = load ptr, ptr %t345, align 8
+  call void @"copy.Text"(ptr %t347, ptr %t344)
+  call void %t346(ptr %t348, ptr %t347)
+  call void @"tests.syntax.show"(ptr %t349, ptr %t348)
+  %t350 = load i32, ptr %t349, align 4
+  %t351 = icmp eq i32 %t350, 1
+  br i1 %t351, label %L352, label %L353
+L352:
+  store i32 1, ptr %sret, align 4
+  %t354 = getelementptr inbounds i8, ptr %t349, i64 8
+  %t355 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t355, ptr %t354, i64 32, i1 false)
+  ret void
+L353:
+  %t356 = getelementptr inbounds i8, ptr %t349, i64 8
+  %t358 = call ptr @telos.alloc(i64 24, i64 8)
+  store ptr @.str.31, ptr %t359, align 8
+  %t360 = getelementptr inbounds i8, ptr %t359, i64 8
+  store i64 1, ptr %t360, align 8
+  %t361 = getelementptr inbounds i8, ptr %t359, i64 16
+  store i64 1, ptr %t361, align 8
+  call void @"copy.Text"(ptr %t362, ptr %t359)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t358, ptr %t362, i64 24, i1 false)
+  store ptr %t358, ptr %t363, align 8
+  %t364 = getelementptr inbounds i8, ptr %t363, i64 8
+  store i64 1, ptr %t364, align 8
+  %t365 = getelementptr inbounds i8, ptr %t363, i64 16
+  store i64 1, ptr %t365, align 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t357, ptr %t363, i64 24, i1 false)
+  call void @"tests.syntax.Reply.action"(ptr %t366)
+  %t367 = getelementptr inbounds i8, ptr %t357, i64 24
+  call void @llvm.memcpy.p0.p0.i64(ptr %t367, ptr %t366, i64 8, i1 false)
+  %t368 = call i64 @"tests.syntax.Reply.code"()
+  %t369 = getelementptr inbounds i8, ptr %t357, i64 32
+  store i64 %t368, ptr %t369, align 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t370, ptr %t357, i64 40, i1 false)
+  store ptr @.str.32, ptr %t371, align 8
+  %t372 = getelementptr inbounds i8, ptr %t371, i64 8
+  store i64 5, ptr %t372, align 8
+  %t373 = getelementptr inbounds i8, ptr %t371, i64 16
+  store i64 5, ptr %t373, align 8
+  call void @"copy.Text"(ptr %t374, ptr %t371)
+  %t375 = getelementptr inbounds i8, ptr %t370, i64 32
+  %t376 = load i64, ptr %t375, align 8
+  call void @telos_rt_int_to_text(ptr %t377, i64 %t376)
+  call void @telos_rt_text_concat(ptr %t378, ptr %t374, ptr %t377)
+  call void @"tests.syntax.show"(ptr %t379, ptr %t378)
+  %t380 = load i32, ptr %t379, align 4
+  %t381 = icmp eq i32 %t380, 1
+  br i1 %t381, label %L382, label %L383
+L382:
+  store i32 1, ptr %sret, align 4
+  %t384 = getelementptr inbounds i8, ptr %t379, i64 8
+  %t385 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t385, ptr %t384, i64 32, i1 false)
+  ret void
+L383:
+  %t386 = getelementptr inbounds i8, ptr %t379, i64 8
+  %t387 = getelementptr inbounds i8, ptr %t370, i64 24
+  %t390 = load i32, ptr %t387, align 4
+  %t391 = icmp eq i32 %t390, 0
+  br i1 %t391, label %L392, label %L389
+L392:
+  store ptr @.str.33, ptr %t393, align 8
+  %t394 = getelementptr inbounds i8, ptr %t393, i64 8
+  store i64 8, ptr %t394, align 8
+  %t395 = getelementptr inbounds i8, ptr %t393, i64 16
+  store i64 8, ptr %t395, align 8
+  call void @"copy.Text"(ptr %t396, ptr %t393)
+  call void @"tests.syntax.show"(ptr %t397, ptr %t396)
+  %t398 = load i32, ptr %t397, align 4
+  %t399 = icmp eq i32 %t398, 1
+  br i1 %t399, label %L400, label %L401
+L400:
+  store i32 1, ptr %sret, align 4
+  %t402 = getelementptr inbounds i8, ptr %t397, i64 8
+  %t403 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t403, ptr %t402, i64 32, i1 false)
+  ret void
+L401:
+  %t404 = getelementptr inbounds i8, ptr %t397, i64 8
+  br label %L388
+L389:
+  %t406 = load i32, ptr %t387, align 4
+  %t407 = icmp eq i32 %t406, 1
+  br i1 %t407, label %L408, label %L405
+L408:
+  store ptr @.str.34, ptr %t409, align 8
+  %t410 = getelementptr inbounds i8, ptr %t409, i64 8
+  store i64 5, ptr %t410, align 8
+  %t411 = getelementptr inbounds i8, ptr %t409, i64 16
+  store i64 5, ptr %t411, align 8
+  call void @"copy.Text"(ptr %t412, ptr %t409)
+  call void @"tests.syntax.show"(ptr %t413, ptr %t412)
+  %t414 = load i32, ptr %t413, align 4
+  %t415 = icmp eq i32 %t414, 1
+  br i1 %t415, label %L416, label %L417
+L416:
+  store i32 1, ptr %sret, align 4
+  %t418 = getelementptr inbounds i8, ptr %t413, i64 8
+  %t419 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t419, ptr %t418, i64 32, i1 false)
+  ret void
+L417:
+  %t420 = getelementptr inbounds i8, ptr %t413, i64 8
+  br label %L388
+L405:
+  call void @telos.no_match()
+  unreachable
+L388:
+  %t422 = zext i1 true to i8
+  store i8 %t422, ptr %t421, align 1
+  %t423 = call i8 @"tests.syntax.SPACE"()
+  store i8 %t423, ptr %t424, align 1
+  %t425 = load i8, ptr %t421, align 1
+  %t426 = trunc i8 %t425 to i1
+  store ptr @.str.26, ptr %t427, align 8
+  %t428 = getelementptr inbounds i8, ptr %t427, i64 8
+  store i64 4, ptr %t428, align 8
+  %t429 = getelementptr inbounds i8, ptr %t427, i64 16
+  store i64 4, ptr %t429, align 8
+  store ptr @.str.27, ptr %t430, align 8
+  %t431 = getelementptr inbounds i8, ptr %t430, i64 8
+  store i64 5, ptr %t431, align 8
+  %t432 = getelementptr inbounds i8, ptr %t430, i64 16
+  store i64 5, ptr %t432, align 8
+  %t433 = select i1 %t426, ptr %t427, ptr %t430
+  call void @"copy.Text"(ptr %t434, ptr %t433)
+  store ptr @.str.11, ptr %t435, align 8
+  %t436 = getelementptr inbounds i8, ptr %t435, i64 8
+  store i64 1, ptr %t436, align 8
+  %t437 = getelementptr inbounds i8, ptr %t435, i64 16
+  store i64 1, ptr %t437, align 8
+  call void @"copy.Text"(ptr %t438, ptr %t435)
+  call void @telos_rt_text_concat(ptr %t439, ptr %t434, ptr %t438)
+  %t440 = load i8, ptr %t424, align 1
+  %t441 = zext i8 %t440 to i64
+  call void @telos_rt_int_to_text(ptr %t442, i64 %t441)
+  call void @telos_rt_text_concat(ptr %t443, ptr %t439, ptr %t442)
+  store ptr @.str.11, ptr %t444, align 8
+  %t445 = getelementptr inbounds i8, ptr %t444, i64 8
+  store i64 1, ptr %t445, align 8
+  %t446 = getelementptr inbounds i8, ptr %t444, i64 16
+  store i64 1, ptr %t446, align 8
+  call void @"copy.Text"(ptr %t447, ptr %t444)
+  call void @telos_rt_text_concat(ptr %t448, ptr %t443, ptr %t447)
+  store ptr @.str.35, ptr %t449, align 8
+  %t450 = getelementptr inbounds i8, ptr %t449, i64 8
+  store i64 1, ptr %t450, align 8
+  %t451 = getelementptr inbounds i8, ptr %t449, i64 16
+  store i64 1, ptr %t451, align 8
+  call void @"copy.Text"(ptr %t452, ptr %t449)
+  call void @telos_rt_text_concat(ptr %t453, ptr %t448, ptr %t452)
+  call void @"tests.syntax.show"(ptr %t454, ptr %t453)
+  %t455 = load i32, ptr %t454, align 4
+  %t456 = icmp eq i32 %t455, 1
+  br i1 %t456, label %L457, label %L458
+L457:
+  store i32 1, ptr %sret, align 4
+  %t459 = getelementptr inbounds i8, ptr %t454, i64 8
+  %t460 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t460, ptr %t459, i64 32, i1 false)
+  ret void
+L458:
+  %t461 = getelementptr inbounds i8, ptr %t454, i64 8
+  store i64 0, ptr %t462, align 8
+  store ptr @telos.empty, ptr %t463, align 8
+  %t464 = getelementptr inbounds i8, ptr %t463, i64 8
+  store i64 0, ptr %t464, align 8
+  %t465 = getelementptr inbounds i8, ptr %t463, i64 16
+  store i64 0, ptr %t465, align 8
+  call void @"copy.Text"(ptr %t466, ptr %t463)
+  %t467 = getelementptr inbounds i8, ptr %t462, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t467, ptr %t466, i64 24, i1 false)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t468, ptr %t462, i64 32, i1 false)
+  store i64 0, ptr %t469, align 8
+  %t471 = call i64 @telos.arena_mark()
+  store i64 0, ptr %t472, align 8
+  br label %L473
+L473:
+  %t477 = load i64, ptr %t469, align 8
+  %t478 = icmp slt i64 %t477, 3000
+  br i1 %t478, label %L474, label %L476
+L474:
+  call void @"copy.(Int,Text)"(ptr %t479, ptr %t468)
+  %t482 = load i64, ptr %t479, align 8
+  store i64 %t482, ptr %t483, align 8
+  %t484 = getelementptr inbounds i8, ptr %t479, i64 8
+  br label %L480
+L481:
+  call void @telos.no_match()
+  unreachable
+L480:
+  %t486 = load i64, ptr %t483, align 8
+  %t487 = add i64 %t486, 1
+  store i64 %t487, ptr %t485, align 8
+  store ptr @.str.22, ptr %t488, align 8
+  %t489 = getelementptr inbounds i8, ptr %t488, i64 8
+  store i64 1, ptr %t489, align 8
+  %t490 = getelementptr inbounds i8, ptr %t488, i64 16
+  store i64 1, ptr %t490, align 8
+  call void @"copy.Text"(ptr %t491, ptr %t488)
+  call void @telos_rt_text_concat(ptr %t492, ptr %t484, ptr %t491)
+  %t493 = getelementptr inbounds i8, ptr %t485, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t493, ptr %t492, i64 24, i1 false)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t468, ptr %t485, i64 32, i1 false)
+  %t494 = load i64, ptr %t469, align 8
+  %t495 = add i64 %t494, 1
+  store i64 %t495, ptr %t469, align 8
+  br label %L475
+L475:
+  %t496 = load i64, ptr %t472, align 8
+  %t497 = call i1 @telos.arena_due(i64 %t471, i64 %t496)
+  br i1 %t497, label %L498, label %L473
+L498:
+  call void @telos_rt_arena_scratch(i8 1)
+  call void @"copy.(Int,Text)"(ptr %t470, ptr %t468)
+  call void @telos_rt_arena_scratch(i8 0)
+  call void @telos_rt_arena_release(i64 %t471)
+  call void @"copy.(Int,Text)"(ptr %t468, ptr %t470)
+  call void @telos_rt_arena_scratch_clear()
+  %t499 = call i64 @telos.arena_mark()
+  %t500 = sub i64 %t499, %t471
+  store i64 %t500, ptr %t472, align 8
+  br label %L473
+L476:
+  call void @"copy.(Int,Text)"(ptr %t501, ptr %t468)
+  %t504 = load i64, ptr %t501, align 8
+  store i64 %t504, ptr %t505, align 8
+  %t506 = getelementptr inbounds i8, ptr %t501, i64 8
+  br label %L502
+L503:
+  call void @telos.no_match()
+  unreachable
+L502:
+  %t507 = getelementptr inbounds i8, ptr %t506, i64 8
+  %t508 = load i64, ptr %t507, align 8
+  store i64 %t508, ptr %t509, align 8
+  %t510 = load i64, ptr %t505, align 8
+  call void @telos_rt_int_to_text(ptr %t511, i64 %t510)
+  store ptr @.str.11, ptr %t512, align 8
+  %t513 = getelementptr inbounds i8, ptr %t512, i64 8
+  store i64 1, ptr %t513, align 8
+  %t514 = getelementptr inbounds i8, ptr %t512, i64 16
+  store i64 1, ptr %t514, align 8
+  call void @"copy.Text"(ptr %t515, ptr %t512)
+  call void @telos_rt_text_concat(ptr %t516, ptr %t511, ptr %t515)
+  %t517 = load i64, ptr %t509, align 8
+  call void @telos_rt_int_to_text(ptr %t518, i64 %t517)
+  call void @telos_rt_text_concat(ptr %t519, ptr %t516, ptr %t518)
+  call void @"tests.syntax.show"(ptr %t520, ptr %t519)
+  %t521 = load i32, ptr %t520, align 4
+  %t522 = icmp eq i32 %t521, 1
+  br i1 %t522, label %L523, label %L524
+L523:
+  store i32 1, ptr %sret, align 4
+  %t525 = getelementptr inbounds i8, ptr %t520, i64 8
+  %t526 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t526, ptr %t525, i64 32, i1 false)
+  ret void
+L524:
+  %t527 = getelementptr inbounds i8, ptr %t520, i64 8
+  store i64 1, ptr %t528, align 8
+  store ptr @.str.13, ptr %t529, align 8
+  %t530 = getelementptr inbounds i8, ptr %t529, i64 8
+  store i64 1, ptr %t530, align 8
+  %t531 = getelementptr inbounds i8, ptr %t529, i64 16
+  store i64 1, ptr %t531, align 8
+  call void @"copy.Text"(ptr %t532, ptr %t529)
+  %t533 = getelementptr inbounds i8, ptr %t528, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t533, ptr %t532, i64 24, i1 false)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t534, ptr %t528, i64 32, i1 false)
+  call void @"copy.(Int,Text)"(ptr %t535, ptr %t534)
+  %t538 = load i64, ptr %t535, align 8
+  store i64 %t538, ptr %t539, align 8
+  %t540 = getelementptr inbounds i8, ptr %t535, i64 8
+  br label %L536
+L537:
+  call void @telos.no_match()
+  unreachable
+L536:
+  %t541 = load i64, ptr %t539, align 8
+  %t542 = add i64 %t541, 1
+  store i64 %t542, ptr %t539, align 8
+  store ptr @.str.24, ptr %t543, align 8
+  %t544 = getelementptr inbounds i8, ptr %t543, i64 8
+  store i64 1, ptr %t544, align 8
+  %t545 = getelementptr inbounds i8, ptr %t543, i64 16
+  store i64 1, ptr %t545, align 8
+  call void @"copy.Text"(ptr %t546, ptr %t543)
+  call void @telos_rt_text_concat(ptr %t547, ptr %t540, ptr %t546)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t540, ptr %t547, i64 24, i1 false)
+  %t548 = load i64, ptr %t539, align 8
+  call void @telos_rt_int_to_text(ptr %t549, i64 %t548)
+  call void @"copy.Text"(ptr %t550, ptr %t540)
+  call void @telos_rt_text_concat(ptr %t551, ptr %t549, ptr %t550)
+  call void @"tests.syntax.show"(ptr %t552, ptr %t551)
+  %t553 = load i32, ptr %t552, align 4
+  %t554 = icmp eq i32 %t553, 1
+  br i1 %t554, label %L555, label %L556
+L555:
+  store i32 1, ptr %sret, align 4
+  %t557 = getelementptr inbounds i8, ptr %t552, i64 8
+  %t558 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t558, ptr %t557, i64 32, i1 false)
+  ret void
+L556:
+  %t559 = getelementptr inbounds i8, ptr %t552, i64 8
+  %t560 = call i64 @"tests.syntax.twice"(i64 1)
+  br label %L561
+L562:
+  call void @telos.no_match()
+  unreachable
+L561:
+  %t563 = call i64 @"tests.syntax.twice"(i64 2)
+  br label %L564
+L565:
+  call void @telos.no_match()
+  unreachable
+L564:
+  store i32 0, ptr %t566, align 4
+  call void @llvm.memcpy.p0.p0.i64(ptr %t567, ptr %t566, i64 8, i1 false)
+  %t570 = load i32, ptr %t567, align 4
+  %t571 = icmp eq i32 %t570, 0
+  br i1 %t571, label %L572, label %L569
+L572:
+  store ptr @.str.36, ptr %t573, align 8
+  %t574 = getelementptr inbounds i8, ptr %t573, i64 8
+  store i64 9, ptr %t574, align 8
+  %t575 = getelementptr inbounds i8, ptr %t573, i64 16
+  store i64 9, ptr %t575, align 8
+  call void @"copy.Text"(ptr %t576, ptr %t573)
+  call void @"tests.syntax.show"(ptr %t577, ptr %t576)
+  %t578 = load i32, ptr %t577, align 4
+  %t579 = icmp eq i32 %t578, 1
+  br i1 %t579, label %L580, label %L581
+L580:
+  store i32 1, ptr %sret, align 4
+  %t582 = getelementptr inbounds i8, ptr %t577, i64 8
+  %t583 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t583, ptr %t582, i64 32, i1 false)
+  ret void
+L581:
+  %t584 = getelementptr inbounds i8, ptr %t577, i64 8
+  br label %L568
+L569:
+  %t586 = load i32, ptr %t567, align 4
+  %t587 = icmp eq i32 %t586, 1
+  br i1 %t587, label %L588, label %L585
+L588:
+  store ptr @.str.37, ptr %t589, align 8
+  %t590 = getelementptr inbounds i8, ptr %t589, i64 8
+  store i64 8, ptr %t590, align 8
+  %t591 = getelementptr inbounds i8, ptr %t589, i64 16
+  store i64 8, ptr %t591, align 8
+  call void @"copy.Text"(ptr %t592, ptr %t589)
+  call void @"tests.syntax.show"(ptr %t593, ptr %t592)
+  %t594 = load i32, ptr %t593, align 4
+  %t595 = icmp eq i32 %t594, 1
+  br i1 %t595, label %L596, label %L597
+L596:
+  store i32 1, ptr %sret, align 4
+  %t598 = getelementptr inbounds i8, ptr %t593, i64 8
+  %t599 = getelementptr inbounds i8, ptr %sret, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t599, ptr %t598, i64 32, i1 false)
+  ret void
+L597:
+  %t600 = getelementptr inbounds i8, ptr %t593, i64 8
+  br label %L568
+L585:
+  call void @telos.no_match()
+  unreachable
+L568:
+  store i32 0, ptr %t601, align 4
+  %t602 = getelementptr inbounds i8, ptr %t601, i64 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t601, i64 40, i1 false)
+  ret void
+}
+
+define internal void @"copy.List<Byte>"(ptr %dst, ptr %src) {
+entry:
+  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %src, i64 24, i1 false)
+  %t1 = getelementptr inbounds i8, ptr %src, i64 8
+  %t2 = load i64, ptr %t1, align 8
+  %t3 = load ptr, ptr %src, align 8
+  %t4 = icmp sle i64 %t2, 0
+  br i1 %t4, label %L5, label %L6
+L5:
+  store ptr @telos.empty, ptr %dst, align 8
+  %t8 = getelementptr inbounds i8, ptr %dst, i64 8
+  store i64 0, ptr %t8, align 8
+  %t9 = getelementptr inbounds i8, ptr %dst, i64 16
+  store i64 0, ptr %t9, align 8
+  br label %L7
+L6:
+  %t10 = mul i64 %t2, 1
+  %t11 = call ptr @telos.alloc(i64 %t10, i64 1)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t11, ptr %t3, i64 %t10, i1 false)
+  store ptr %t11, ptr %dst, align 8
+  %t12 = getelementptr inbounds i8, ptr %dst, i64 8
+  store i64 %t2, ptr %t12, align 8
+  %t13 = getelementptr inbounds i8, ptr %dst, i64 16
+  store i64 %t2, ptr %t13, align 8
+  br label %L7
+L7:
+  ret void
+}
+
+define internal void @"copy.(Int,Text)"(ptr %dst, ptr %src) {
+entry:
+  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %src, i64 32, i1 false)
+  %t1 = getelementptr inbounds i8, ptr %dst, i64 8
+  %t2 = getelementptr inbounds i8, ptr %src, i64 8
+  call void @"copy.Text"(ptr %t1, ptr %t2)
+  ret void
+}
+
+define internal void @"copy.Text"(ptr %dst, ptr %src) {
+entry:
+  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %src, i64 24, i1 false)
+  %t1 = getelementptr inbounds i8, ptr %src, i64 8
+  %t2 = load i64, ptr %t1, align 8
+  %t3 = load ptr, ptr %src, align 8
+  %t4 = icmp sle i64 %t2, 0
+  br i1 %t4, label %L5, label %L6
+L5:
+  store ptr @telos.empty, ptr %dst, align 8
+  %t8 = getelementptr inbounds i8, ptr %dst, i64 8
+  store i64 0, ptr %t8, align 8
+  %t9 = getelementptr inbounds i8, ptr %dst, i64 16
+  store i64 0, ptr %t9, align 8
+  br label %L7
+L6:
+  %t10 = mul i64 %t2, 1
+  %t11 = call ptr @telos.alloc(i64 %t10, i64 1)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t11, ptr %t3, i64 %t10, i1 false)
+  store ptr %t11, ptr %dst, align 8
+  %t12 = getelementptr inbounds i8, ptr %dst, i64 8
+  store i64 %t2, ptr %t12, align 8
+  %t13 = getelementptr inbounds i8, ptr %dst, i64 16
+  store i64 %t2, ptr %t13, align 8
+  br label %L7
+L7:
+  ret void
+}
+
+
+/home/timo/projects/telos/crates/telos-llvm/tests/golden/syntax.main_syntax.ll differs from the generated IR (TELOS_BLESS=1 to accept):
+; ModuleID = 'main_syntax'
+source_filename = "main_syntax"
+
+@telos.empty = private constant [8 x i8] zeroinitializer, align 8
+@telos.msg.index = private unnamed_addr constant [18 x i8] c"index out of range", align 1
+@telos.msg.slice = private unnamed_addr constant [18 x i8] c"slice out of range", align 1
+@telos.msg.divide = private unnamed_addr constant [25 x i8] c"attempt to divide by zero", align 1
+@telos.msg.match = private unnamed_addr constant [12 x i8] c"no match arm", align 1
+@.str.0 = private unnamed_addr constant [9 x i8] c"127.0.0.1", align 1
+
+declare void @telos_rt_init(i32, ptr)
+declare ptr @telos_rt_alloc(i64, i64)
+declare void @telos_rt_spawn(ptr, ptr)
+declare void @telos_rt_spawn_ready()
+declare void @telos_rt_task_end()
+declare i64 @telos_rt_arena_mark()
+declare void @telos_rt_arena_release(i64)
+declare i8 @telos_rt_arena_due(i64, i64)
+declare void @telos_rt_arena_scratch(i8)
+declare void @telos_rt_arena_scratch_clear()
+declare ptr @telos_rt_arena_state() nounwind willreturn speculatable memory(none)
+declare void @telos_rt_spawn_copy(ptr, ptr, i64)
+declare i32 @telos_rt_args_port(ptr, ptr, ptr)
+declare void @telos_rt_exit(i32) noreturn
+declare void @telos_rt_fail(ptr) noreturn
+declare void @telos_rt_panic(ptr) noreturn
+declare void @telos_rt_log(ptr)
+declare i32 @telos_rt_tcp_bind(ptr, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_accept(i64, ptr, ptr)
+declare i64 @telos_rt_tcp_local_port(i64)
+declare i32 @telos_rt_tcp_connect(ptr, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_read(i64, i64, ptr, ptr)
+declare i32 @telos_rt_tcp_write_all(i64, ptr, ptr)
+declare i32 @telos_rt_tcp_close(i64, ptr)
+declare void @telos_rt_tcp_release(i64)
+declare i32 @telos_rt_stdin_read(i64, ptr, ptr)
+declare i32 @telos_rt_stdin_is_terminal(ptr, ptr)
+declare i32 @telos_rt_stdin_set_raw(i8, ptr)
+declare i32 @telos_rt_stdout_write_all(ptr, ptr)
+declare void @telos_rt_io_error_new(ptr, ptr)
+declare void @telos_rt_text_from_bytes_lossy(ptr, ptr)
+declare void @telos_rt_text_trim(ptr, ptr)
+declare void @telos_rt_text_concat(ptr, ptr, ptr)
+declare i8 @telos_rt_text_eq(ptr, ptr)
+declare i8 @telos_rt_text_starts_with(ptr, ptr)
+declare void @telos_rt_text_join(ptr, ptr, ptr)
+declare void @telos_rt_int_to_text(ptr, i64)
+declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)
+declare void @"tests.syntax.Syntax.connect"(ptr, i64)
+
+define internal void @telos.panic(ptr %bytes, i64 %len) cold noreturn {
+entry:
+  %text = alloca [24 x i8], align 8
+  store ptr %bytes, ptr %text, align 8
+  %lenp = getelementptr inbounds i8, ptr %text, i64 8
+  store i64 %len, ptr %lenp, align 8
+  %capp = getelementptr inbounds i8, ptr %text, i64 16
+  store i64 %len, ptr %capp, align 8
+  call void @telos_rt_panic(ptr %text)
+  unreachable
+}
+
+define internal void @telos.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) {
+entry:
+  %lenp = getelementptr inbounds i8, ptr %list, i64 8
+  %len = load i64, ptr %lenp, align 8
+  %capp = getelementptr inbounds i8, ptr %list, i64 16
+  %cap = load i64, ptr %capp, align 8
+  %need = add i64 %len, %extra
+  %fits = icmp sle i64 %need, %cap
+  br i1 %fits, label %done, label %grow
+grow:
+  %double = mul i64 %cap, 2
+  %big = icmp sgt i64 %double, %need
+  %c1 = select i1 %big, i64 %double, i64 %need
+  %small = icmp slt i64 %c1, 4
+  %newcap = select i1 %small, i64 4, i64 %c1
+  %bytes = mul i64 %newcap, %size
+  %new = call ptr @telos.alloc(i64 %bytes, i64 %align)
+  %old = load ptr, ptr %list, align 8
+  %used = mul i64 %len, %size
+  call void @llvm.memcpy.p0.p0.i64(ptr %new, ptr %old, i64 %used, i1 false)
+  store ptr %new, ptr %list, align 8
+  store i64 %newcap, ptr %capp, align 8
+  br label %done
+done:
+  ret void
+}
+
+define internal void @telos.check_index(i64 %i, i64 %len) {
+entry:
+  %ok = icmp ult i64 %i, %len
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.index, i64 18)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.check_slice(i64 %i, i64 %j, i64 %len) {
+entry:
+  %a = icmp sge i64 %i, 0
+  %b = icmp sle i64 %i, %j
+  %c = icmp sle i64 %j, %len
+  %ab = and i1 %a, %b
+  %ok = and i1 %ab, %c
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.slice, i64 18)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.check_divisor(i64 %d) {
+entry:
+  %ok = icmp ne i64 %d, 0
+  br i1 %ok, label %fine, label %bad
+bad:
+  call void @telos.panic(ptr @telos.msg.divide, i64 25)
+  unreachable
+fine:
+  ret void
+}
+
+define internal void @telos.no_match() cold noreturn {
+entry:
+  call void @telos.panic(ptr @telos.msg.match, i64 12)
+  unreachable
+}
+
+define internal ptr @telos.alloc(i64 %size, i64 %align) alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %limp = getelementptr inbounds i8, ptr %st, i64 8
+  %lim = load ptr, ptr %limp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %li = ptrtoint ptr %lim to i64
+  %am1 = sub i64 %align, 1
+  %up = add i64 %ci, %am1
+  %mask = sub i64 0, %align
+  %start = and i64 %up, %mask
+  %end = add i64 %start, %size
+  %small = icmp ult i64 %size, 65536
+  %fits = icmp ult i64 %end, %li
+  %ok = and i1 %small, %fits
+  br i1 %ok, label %fast, label %slow
+fast:
+  %skip = sub i64 %start, %ci
+  %p = getelementptr i8, ptr %cur, i64 %skip
+  %next = getelementptr i8, ptr %p, i64 %size
+  store ptr %next, ptr %st, align 8
+  ret ptr %p
+slow:
+  %q = call ptr @telos_rt_alloc(i64 %size, i64 %align)
+  ret ptr %q
+}
+
+define internal i64 @telos.arena_mark() alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %offp = getelementptr inbounds i8, ptr %st, i64 16
+  %off = load i64, ptr %offp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %pos = add i64 %ci, %off
+  ret i64 %pos
+}
+
+define internal i1 @telos.arena_due(i64 %mark, i64 %kept) alwaysinline {
+entry:
+  %pos = call i64 @telos.arena_mark()
+  %above = sub i64 %pos, %mark
+  %four = shl i64 %kept, 2
+  %big = icmp sgt i64 %four, 65536
+  %limit = select i1 %big, i64 %four, i64 65536
+  %due = icmp sgt i64 %above, %limit
+  ret i1 %due
+}
+
+define internal void @telos.arena_release(i64 %mark) alwaysinline {
+entry:
+  %st = call ptr @telos_rt_arena_state()
+  %cur = load ptr, ptr %st, align 8
+  %offp = getelementptr inbounds i8, ptr %st, i64 16
+  %off = load i64, ptr %offp, align 8
+  %ci = ptrtoint ptr %cur to i64
+  %pos = add i64 %ci, %off
+  %nothing = icmp sge i64 %mark, %pos
+  br i1 %nothing, label %done, label %down
+down:
+  %basep = getelementptr inbounds i8, ptr %st, i64 24
+  %base = load ptr, ptr %basep, align 8
+  %bi = ptrtoint ptr %base to i64
+  %bpos = add i64 %bi, %off
+  %inside = icmp sge i64 %mark, %bpos
+  br i1 %inside, label %chunk, label %slow
+chunk:
+  %back = sub i64 %mark, %bpos
+  %new = getelementptr i8, ptr %base, i64 %back
+  store ptr %new, ptr %st, align 8
+  br label %done
+slow:
+  call void @telos_rt_arena_release(i64 %mark)
+  br label %done
+done:
+  ret void
+}
+
+define i32 @main(i32 %argc, ptr %argv) {
+entry:
+  %t1 = alloca [32 x i8], align 8
+  %t2 = alloca [8 x i8], align 8
+  %t3 = alloca [4 x i8], align 4
+  %t13 = alloca [24 x i8], align 8
+  %t16 = alloca [8 x i8], align 8
+  %t23 = alloca [40 x i8], align 8
+  call void @telos_rt_init(i32 %argc, ptr %argv)
+  %t4 = call i32 @telos_rt_args_port(ptr %t2, ptr %t3, ptr %t1)
+  %t5 = icmp ne i32 %t4, 0
+  br i1 %t5, label %L6, label %L7
+L6:
+  %t8 = getelementptr inbounds i8, ptr %t1, i64 24
+  store i32 2, ptr %t8, align 4
+  call void @telos_rt_fail(ptr %t1)
+  unreachable
+L7:
+  %t9 = load i32, ptr %t3, align 4
+  %t10 = icmp ne i32 %t9, 0
+  %t11 = load i64, ptr %t2, align 8
+  %t12 = select i1 %t10, i64 %t11, i64 1
+  store ptr @.str.0, ptr %t13, align 8
+  %t14 = getelementptr inbounds i8, ptr %t13, i64 8
+  store i64 9, ptr %t14, align 8
+  %t15 = getelementptr inbounds i8, ptr %t13, i64 16
+  store i64 9, ptr %t15, align 8
+  %t17 = call i32 @telos_rt_tcp_connect(ptr %t13, i64 %t12, ptr %t16, ptr %t1)
+  %t18 = icmp ne i32 %t17, 0
+  br i1 %t18, label %L19, label %L20
+L19:
+  %t21 = getelementptr inbounds i8, ptr %t1, i64 24
+  store i32 3, ptr %t21, align 4
+  call void @telos_rt_fail(ptr %t1)
+  unreachable
+L20:
+  %t22 = load i64, ptr %t16, align 8
+  call void @"tests.syntax.Syntax.connect"(ptr %t23, i64 %t22)
+  %t24 = load i32, ptr %t23, align 4
+  %t25 = icmp eq i32 %t24, 1
+  br i1 %t25, label %L26, label %L27
+L26:
+  %t28 = getelementptr inbounds i8, ptr %t23, i64 8
+  %t29 = getelementptr inbounds i8, ptr %t28, i64 24
+  store i32 4, ptr %t29, align 4
+  call void @telos_rt_fail(ptr %t28)
+  unreachable
+L27:
+  call void @telos_rt_exit(i32 0)
+  unreachable
+}
+
+
+
+failures:
+    small_program
+    syntax_program
+
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p telos-llvm --test golden`
+EXIT=101

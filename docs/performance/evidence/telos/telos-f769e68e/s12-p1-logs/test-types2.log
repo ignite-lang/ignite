@@ -1,0 +1,84 @@
+   Compiling ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.77s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/debug/deps/ignite_types-75ebb7e5fa68d1f9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/debug/deps/main-1ec713e6db068368)
+
+running 39 tests
+test fixtures::every_type_code_has_a_fixture ... ok
+test inline_tests::a_program_without_package_is_main ... ok
+test inline_tests::assert_message_is_typed ... ok
+test inline_tests::tests_are_listed_in_declaration_order ... ok
+test inline_tests::test_try_covers_only_test_bodies ... ok
+test inline_tests::assert_compare_records_operand_and_show ... ok
+test limits::exhaustiveness_is_polynomial_in_bool_columns ... ok
+test slice9::boxing ... ok
+test slice9::closure_effects_on_captures_and_ambient ... ok
+test generics::component_kind_carries_the_type_arguments ... ok
+test generics::instances_of_generic_uses ... ok
+test generics::effectful_fn_types ... ok
+test slice9::debug_and_associated_fns ... ok
+test slice9::closure_captures_in_order_of_first_use ... ok
+test generics::every_expression_is_typed ... ok
+test generics::store_and_new_builtins ... ok
+test generics::type_parameters_are_exported ... ok
+test slice9::range_bounds_evaluate_constants ... ok
+test slice9::equality_kinds ... ok
+test slice9::every_expression_is_typed ... ok
+test fixtures::valid_system_describes_its_system_and_assembly ... ok
+test surface::aliases_resolve_to_their_targets ... ok
+test surface::inferred_effects_reach_the_signature ... ok
+test surface::interpolation_is_text_concatenation_with_to_text ... ok
+test surface::field_defaults ... ok
+test surface::return_is_never_and_constant_patterns_are_recorded ... ok
+test surface::tuples_and_unit ... ok
+test surface::ufcs_and_field_fn_calls ... ok
+test surface::bare_variants_take_the_expected_enum ... ok
+test surface::every_expression_is_typed ... ok
+test audit::copies_match_the_audit_directory ... ok
+test fixtures::fixtures_match_expected ... FAILED
+test terminal::standard_library_types_in_import_order ... ok
+test terminal::terminal_program_types_against_the_standard_library ... ok
+test terminal::standard_library_expressions_are_typed ... ok
+test terminal::todo_program_types_against_the_standard_library ... ok
+test audit::audit_probes_match_expected ... ok
+test limits::long_plus_chain_does_not_overflow ... ok
+test limits::failure_site_positions_of_the_long_chain_are_cheap ... ok
+
+failures:
+
+---- fixtures::fixtures_match_expected stdout ----
+
+thread 'fixtures::fixtures_match_expected' (3242584) panicked at crates/ignite-types/tests/fixtures.rs:78:5:
+/home/timo/projects/telos/crates/ignite-types/tests/fixtures/e109_hook_signature.ignite
+--- expected
+e109_hook_signature.ignite:26:16: error[E109]: `Worker.machine` is a hook of `ignite run` and must have the signature `fn Worker.machine(self: Worker, id: Text) -> Machine`, found `fn(Worker) -> Int`
+e109_hook_signature.ignite:26:16: error[E109]: `Worker.validate` is a hook of `ignite run` and must have the signature `fn Worker.validate(self: Worker) -> List<Text>`, found `fn(Worker, Bool) -> List<Text>`
+e109_hook_signature.ignite:27:16: error[E109]: `Quiet.validate` is a hook of `ignite run` and must have the signature `fn Quiet.validate(self: Quiet) -> List<Text>`, found `fn(Quiet) -> List<Text>` and it must be pure
+--- actual
+e109_hook_signature.ignite:7:11: error[E109]: `Worker.machine` is a hook of `ignite run` and must have the signature `fn Worker.machine(self: Worker, id: Text) -> Machine`, found `fn(Worker) -> Int`
+e109_hook_signature.ignite:9:11: error[E109]: `Worker.validate` is a hook of `ignite run` and must have the signature `fn Worker.validate(self: Worker) -> List<Text>`, found `fn(Worker, Bool) -> List<Text>`
+e109_hook_signature.ignite:15:10: error[E109]: `Quiet.validate` is a hook of `ignite run` and must have the signature `fn Quiet.validate(self: Quiet) -> List<Text>`, found `fn(Quiet) -> List<Text>` and it must be pure
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    fixtures::fixtures_match_expected
+
+test result: FAILED. 38 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+error: test failed, to rerun pass `-p ignite-types --test main`
+   Doc-tests ignite_types
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 1 target failed:
+    `-p ignite-types --test main`
+EXIT=101

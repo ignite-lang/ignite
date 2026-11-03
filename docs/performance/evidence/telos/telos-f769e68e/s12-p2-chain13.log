@@ -1,0 +1,63 @@
+/dev/nvme0n1p2  848G  767G   73G  92% /
+== fmt
+STEP fmt exit=0
+== run/* unit tests
+T.probe: boom
+T.probe: warn
+T.server: noise
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+STEP run-tests exit=0
+== drain e2e tests (3), full output in s12-p2-chain13-e2e.txt
+test drain::an_open_session_survives_sigterm_and_new_connects_are_refused ... ok
+test drain::rollout_drains_the_old_process_and_starts_the_new_rust ... ok
+test drain::rollout_drains_the_old_process_and_starts_the_new_llvm ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 188 filtered out; finished in 1.75s
+STEP drain-tests exit=0
+drain tests secs=4.9 load=12.67
+== clippy (errors by file)
+STEP clippy exit=0
+== cargo test -p ignite-io -p ignite-rt
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+STEP io-rt-tests exit=0
+== cargo build --workspace --all-targets
+STEP workspace-build exit=0
+== task test-ignite
+test result: ok. 148 passed; 0 failed; 0 filtered out; finished in 0.14s
+test result: ok. 148 passed; 0 failed; 0 filtered out; finished in 0.14s
+STEP test-ignite exit=0
+== runtimes for todod
+== todod pairs after unit 5, cold through sccache
+START 2026-11-02T06:24:41+01:00 load=11.43 10.02 5.72 32/3350 1026913
+STEP base:rust-dev:1 secs=7.118 load_before=11.43 load_after=13.48 exit=0
+STEP base:rust-release:1 secs=9.301 load_before=13.48 load_after=15.99 exit=0
+STEP base:llvm-dev:1 secs=0.889 load_before=15.99 load_after=17.76 exit=0
+STEP base:llvm-release:1 secs=1.915 load_before=17.76 load_after=17.76 exit=0
+STEP new:rust-dev:1 secs=8.815 load_before=17.76 load_after=20.07 exit=0
+STEP new:rust-release:1 secs=11.176 load_before=20.07 load_after=23.77 exit=0
+STEP new:llvm-dev:1 secs=1.184 load_before=23.77 load_after=23.77 exit=0
+STEP new:llvm-release:1 secs=1.738 load_before=23.77 load_after=22.19 exit=0
+STEP base:rust-dev:2 secs=4.343 load_before=22.19 load_after=22.19 exit=0
+STEP base:rust-release:2 secs=4.951 load_before=22.19 load_after=21.05 exit=0
+STEP base:llvm-dev:2 secs=0.373 load_before=21.05 load_after=21.05 exit=0
+STEP base:llvm-release:2 secs=0.933 load_before=21.05 load_after=19.93 exit=0
+STEP new:rust-dev:2 secs=5.733 load_before=19.93 load_after=19.77 exit=0
+STEP new:rust-release:2 secs=11.223 load_before=19.77 load_after=22.39 exit=0
+STEP new:llvm-dev:2 secs=1.453 load_before=22.39 load_after=22.39 exit=0
+STEP new:llvm-release:2 secs=2.506 load_before=22.39 load_after=23.32 exit=0
+STEP base:rust-dev:3 secs=7.553 load_before=23.32 load_after=24.50 exit=0
+STEP base:rust-release:3 secs=10.078 load_before=24.50 load_after=26.29 exit=0
+STEP base:llvm-dev:3 secs=0.849 load_before=26.29 load_after=26.98 exit=0
+STEP base:llvm-release:3 secs=1.982 load_before=26.98 load_after=26.98 exit=0
+STEP new:rust-dev:3 secs=7.915 load_before=26.98 load_after=27.54 exit=0
+STEP new:rust-release:3 secs=5.418 load_before=27.54 load_after=25.89 exit=0
+STEP new:llvm-dev:3 secs=0.509 load_before=25.89 load_after=25.89 exit=0
+STEP new:llvm-release:3 secs=1.237 load_before=25.89 load_after=25.89 exit=0
+EXIT=0
+STEP todod exit=0
+EXIT=0
+EXIT=0

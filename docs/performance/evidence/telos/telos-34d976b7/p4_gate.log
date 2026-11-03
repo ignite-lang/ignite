@@ -1,0 +1,25 @@
+START 01:01:43
+ 01:01:43 up 2 days, 20:11,  1 user,  load average: 21.33, 20.79, 21.03
+/dev/nvme0n1p2  848G  761G   79G  91% /
+cold fmt EXIT=0 0.9 s
+cold clippy EXIT=0 7.4 s
+cold test EXIT=0 55.5 s
+cold test-telos EXIT=0 8.5 s
+cold gate total 72.3 s
+warm fmt EXIT=0 0.4 s
+warm clippy EXIT=0 2.1 s
+warm test EXIT=101 41.7 s
+warm test-telos EXIT=0 1.3 s
+warm gate total 45.5 s
+no-run warm EXIT=0 0.1 s
+no-run after touch EXIT=0 3.5 s
+test executables: 18, 210M
+todod rust dev EXIT=0 1.6 s
+todod llvm dev EXIT=0 0.4 s
+todod llvm dev (verbose, second out) EXIT=2 0.0 s
+todod rust release EXIT=0 5.7 s
+todod llvm release EXIT=0 1.2 s
+todod llvm release (verbose, second out) EXIT=2 0.0 s
+ 01:03:54 up 2 days, 20:13,  1 user,  load average: 23.15, 20.51, 20.83
+END 01:03:54
+EXIT=0

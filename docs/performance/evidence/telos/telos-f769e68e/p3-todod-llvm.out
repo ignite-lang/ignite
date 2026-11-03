@@ -1,0 +1,18 @@
+START 2026-11-02T02:45:08+01:00 load=1.60 1.27 4.04 1/2967 3517368
+STEP base:1 secs=1.109 load_before=1.60 load_after=1.60 exit=0
+STEP new:1 secs=0.805 load_before=1.60 load_after=1.60 exit=0
+STEP base:2 secs=1.114 load_before=1.60 load_after=1.60 exit=0
+STEP new:2 secs=0.799 load_before=1.60 load_after=1.55 exit=0
+STEP base:3 secs=1.101 load_before=1.55 load_after=1.55 exit=0
+STEP new:3 secs=0.814 load_before=1.55 load_after=1.55 exit=0
+STEP base:4 secs=1.111 load_before=1.55 load_after=1.55 exit=0
+STEP new:4 secs=0.795 load_before=1.55 load_after=1.55 exit=0
+LINES base std.ll lines=18120 defines=222
+CLANG base std.ll secs=0.807 load=1.67
+CLANG base std.ll secs=0.806 load=1.67
+CLANG base std.ll secs=0.797 load=1.67
+LINES new std.ll lines=12361 defines=107
+CLANG new std.ll secs=0.478 load=1.67
+CLANG new std.ll secs=0.486 load=1.67
+CLANG new std.ll secs=0.553 load=1.67
+EXIT=0

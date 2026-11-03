@@ -1,0 +1,4 @@
+effects_a18_wildcard_and_names.telos:3:91: error[E016]: missing effect `s.*` for `all`; add it to the `requires` of `specific`
+effects_a18_wildcard_and_names.telos:7:93: error[E016]: missing effect `other.write` for `write_text`; add it to the `requires` of `caller`
+effects_a18_wildcard_and_names.telos:11:43: error[E016]: missing effect `n.read` for `ambient_like`; add it to the `requires` of `needs_foo`
+effects_a18_wildcard_and_names.telos:13:67: error[E016]: missing effect `s.write` for `s.close`; add it to the `requires` of `deep`

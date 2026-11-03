@@ -1,0 +1,2 @@
+effects_a06_map_launder_store.telos:5:10: error[E016]: missing effect `stores.read` for `get`; add it to the `requires` of `launder`
+effects_a06_map_launder_store.telos:11:5: error[E016]: missing effect `stores.write` for `s.put`; add it to the `requires` of `launder_put`

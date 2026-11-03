@@ -1,8 +1,11 @@
 Slice 12b (2026-11-02, completed after recovering the quota-interrupted work). The 11b
 baseline stays unchanged. Functionality passes; the timing exceptions below are measured and
-recorded, not a new speed baseline. Evidence is retained outside build output at
-`/home/timo/.cache/scratch/ignite12b-codex/measure/`: `records.jsonl`, `summary-final.md`,
-`report.md`, source hashes, per-step logs, Cargo timing HTML/JSON, and restart journals.
+recorded, not a new speed baseline. Evidence is in this directory: `records.jsonl`,
+`summary-final.md`, `report.md`, `manifest.json` (hashes of these files) and the restart
+journals; the 11b source manifest is `../baselines/11b-source.json`.
+The runs wrote them to `/home/timo/.cache/scratch/ignite12b-codex/measure/`, which the
+records still name; that directory, with the per-step logs and the Cargo timing HTML/JSON
+that were not copied here, no longer exists (`docs/performance/evidence/README.md`).
 
 Method: one exact-final cold before/final/slice-12 pass with fresh owned targets and
 `SCCACHE_RECACHE=1`, starting at loads 3.71, 4.66 and 0.98; three interleaved warm passes over

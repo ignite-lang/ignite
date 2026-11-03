@@ -1,0 +1,58 @@
+== std/cli.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/console.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/contract.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/control.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/deploy.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/json.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/net.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/option.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/policy.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/probe.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/result.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/sli.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/text.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/time.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/protocol/http.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== std/protocol/telnet.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== examples/terminal/terminal.design.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== examples/terminal/terminal.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+== examples/todo/todo.ignite
+/home/timo/projects/telos/std/contract.ignite:136:15: error[E001]: expected `=`, found `(`
+exit=1
+EXIT=done

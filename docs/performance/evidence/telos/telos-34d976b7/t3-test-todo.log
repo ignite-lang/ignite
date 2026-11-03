@@ -1,0 +1,37 @@
+   Compiling telos-syntax v0.1.0 (/home/timo/projects/telos/crates/telos-syntax)
+   Compiling telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+   Compiling telos-types v0.1.0 (/home/timo/projects/telos/crates/telos-types)
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+   Compiling telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.95s
+     Running tests/todo.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/todo-167d56b148cb3c1b)
+
+running 12 tests
+test todo::llvm::concurrent_posts ... ignored, slice 7: needs T2
+test todo::llvm::crud_flow ... ignored, slice 7: needs T2
+test todo::llvm::error_statuses ... ignored, slice 7: needs T2
+test todo::llvm::keep_alive ... ignored, slice 7: needs T2
+test todo::llvm::limits ... ignored, slice 7: needs T2
+test todo::rust::concurrent_posts ... ignored, slice 7: needs T2
+test todo::rust::crud_flow ... ignored, slice 7: needs T2
+test todo::rust::error_statuses ... ignored, slice 7: needs T2
+test todo::rust::keep_alive ... ignored, slice 7: needs T2
+test todo::rust::limits ... ignored, slice 7: needs T2
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+   Compiling nix v0.31.3
+test probe::llvm::std_modules ... ok
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-std v0.0.0-568e1b2232bf7ec0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/tmp/std-probe/std)
+   Compiling std_probe v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/tmp/std-probe)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.21s
+test probe::rust::std_modules ... ok
+
+test result: ok. 2 passed; 0 failed; 10 ignored; 0 measured; 0 filtered out; finished in 3.30s
+
+EXIT=0

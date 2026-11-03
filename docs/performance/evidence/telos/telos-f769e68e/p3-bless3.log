@@ -1,0 +1,19 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p3/debug/deps/main-6eaf5699a056c807)
+
+running 11 tests
+test plan::terminal_example_model_matches_golden ... ok
+test plan::todo_example_model_matches_golden ... ok
+test plan::design_model_resolves_each_of_the_five_members_once ... ok
+test plan::design_model_has_no_expression_text ... ok
+test plan::design_model_is_canonical_and_every_value_is_encoded_as_15_4_says ... ok
+test plan::exit_statuses ... ok
+test plan::design_model_is_byte_identical_across_processes_and_directories ... ok
+test plan::e114_covers_an_unknown_assembly_name_and_check_passes ... ok
+test plan::explain_unknown_path_is_e119 ... ok
+test plan::explain_matches_the_goldens_of_15_8 ... ok
+test plan::fixtures_match_expected ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 147 filtered out; finished in 0.32s
+
+EXIT=0

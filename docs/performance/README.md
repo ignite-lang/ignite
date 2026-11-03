@@ -7,13 +7,16 @@ Git index. All commands are sequential; coordinate with other build owners on a 
 
 ## Frozen sources
 
-- `origin/bench/11b-recovered` is `df7ccb9bed4440824a2d108fa112eba3fea25f99`, tree
-  `5d0bc8b3edc716e4b7473ed860204d548bab2db8`, with parent `60aef38`.
+- `origin/bench/11b-recovered` is `afa82aa80a2eb31f2001aa4f0727d62ed2c09e05`, tree
+  `5d0bc8b3edc716e4b7473ed860204d548bab2db8`, with parent `60aef38`. It was
+  `df7ccb9bed4440824a2d108fa112eba3fea25f99` before the commit-message rewrite of 2026-11-02;
+  the tree is unchanged, and the 12c records still name `df7ccb9`.
 - This is a recovery-time commit of the retained pre-slice-12 snapshot, not an old historical
   implementation commit. All 741 source files match the earlier measurement manifest.
 - `baselines/11b-source.json` is that original SHA256 manifest, retained byte for byte;
   `baselines/11b.json` records the Git identity and manifest checksum.
-- `9273349` is the published 12b checkpoint. The candidate must be a committed, frozen source
+- `9273349` is the published 12b checkpoint, kept as tag `bench-12b-checkpoint`; after the
+  commit-message rewrite `28dfc75` on `main` has the same tree. The candidate must be a committed, frozen source
   revision; uncommitted edits cannot enter a Git archive. Commit a checkpoint before measuring.
 
 A fresh clone can fetch the benchmark reference with:

@@ -1,0 +1,14 @@
+package probe.ufcs_field
+
+type Handler {
+  respond: fn(Text) -> Text
+}
+
+fn respond(line: Text) -> Text = "module {line}"
+
+fn shout(line: Text) -> Text = "{line}!"
+
+test "a fn-typed field and a module fn of one name" {
+  let h = Handler { respond = shout }
+  assert h.respond("a") == "a!"
+}

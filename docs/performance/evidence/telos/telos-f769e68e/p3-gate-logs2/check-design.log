@@ -1,0 +1,17 @@
+warning: unused import: `Json`
+  --> crates/ignite/tests/decode.rs:10:52
+   |
+10 | use ignite_eval::{CONTROL_MODULE, Evaluator, Fuel, Json, Value, value_json};
+   |                                                    ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ignite` (test "main") generated 1 warning (run `cargo fix --test "main" -p ignite` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p3/debug/deps/main-90b129b53e45974f)
+
+running 1 test
+test cli::check_design_file_is_silent ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 187 filtered out; finished in 0.11s
+

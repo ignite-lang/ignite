@@ -1,0 +1,3 @@
+llvm_let_push.telos:5:3: error[E006]: cannot `push` through the immutable binding `l`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+llvm_let_push.telos:12:5: error[E006]: cannot `push` through the `for` element `w`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+llvm_let_push.telos:19:16: error[E006]: cannot `push` through the pattern binding `b`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first

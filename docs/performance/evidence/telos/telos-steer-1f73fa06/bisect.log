@@ -1,0 +1,10 @@
+TEST 1 [quantity values and operations]: ok
+TEST 2 [quantity debug text uses the largest exact unit]: ok
+TEST 3 [named arguments are reordered to the parameters]: ok
+TEST 4 [brace literal of a record uses the defaults]: ok
+TEST 5 [map literal and lookups]: ok
+TEST 6 [map mutation has value semantics]: PANIC: expected an aggregate, got Unit
+TEST 7 [for over a map visits pairs in key order]: ok
+TEST 8 [maps compare structurally]: ok
+TEST 9 [with_exit_code keeps the error]: ok
+EXIT=0

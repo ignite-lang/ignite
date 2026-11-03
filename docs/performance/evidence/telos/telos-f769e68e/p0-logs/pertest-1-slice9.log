@@ -1,0 +1,18 @@
+START 2026-11-02T02:10:40+01:00 file=slice9 load=6.66 15.50 16.75 2/2950 2690331
+   0.011 +  0.011     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.011 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.012 +  0.001 
+   0.012 +  0.000 running 9 tests
+   3.422 +  3.410 test slice9::audit_io_probes_pass ... ok
+   7.187 +  3.765 test slice9::audit_probes_pass ... ok
+   7.388 +  0.201 test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+   7.388 +  0.000 test slice9::long_chains_100k_run_on_llvm ... ignored
+  10.921 +  3.533 test slice9::long_chains_lower_quickly ... ok
+  11.480 +  0.560 test slice9::long_chains_run_on_llvm ... ok
+  11.636 +  0.155 test slice9::rust_target_features_pass_on_llvm ... ok
+  21.626 +  9.990 test slice9::slice9_values_across_regions ... ok
+  21.843 +  0.217 test slice9::var_aliases_leave_the_source_unchanged ... ok
+  21.843 +  0.000 
+  21.843 +  0.000 test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 137 filtered out; finished in 21.83s
+  21.843 +  0.000 
+END load=6.54 14.76 16.47 6/2928 2701678

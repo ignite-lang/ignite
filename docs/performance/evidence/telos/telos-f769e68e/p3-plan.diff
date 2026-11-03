@@ -1,0 +1,510 @@
+208,209c208,211
+<       "defaults": [],
+<       "executable": null,
+---
+>       "defaults": [
+>         "executable"
+>       ],
+>       "executable": "promptProbe",
+216a219
+>         "executable": "promptProbe",
+278c281,285
+<             "maximum_attempts": 10
+---
+>             "maximum_attempts": 10,
+>             "readiness_timeout": {
+>               "ns": 10000000000,
+>               "type": "Duration"
+>             }
+320c327,329
+<       "defaults": [],
+---
+>       "defaults": [
+>         "minimum_completeness"
+>       ],
+334a344,347
+>         "minimum_completeness": {
+>           "ppm": 900000,
+>           "type": "Ratio"
+>         },
+354c367,369
+<       "defaults": [],
+---
+>       "defaults": [
+>         "minimum_completeness"
+>       ],
+360a376,379
+>         "minimum_completeness": {
+>           "ppm": 900000,
+>           "type": "Ratio"
+>         },
+388c407,409
+<       "defaults": [],
+---
+>       "defaults": [
+>         "minimum_completeness"
+>       ],
+394a416,419
+>         "minimum_completeness": {
+>           "ppm": 900000,
+>           "type": "Ratio"
+>         },
+423a449,458
+>       "from": "Terminal.customerAccess",
+>       "kind": "readiness",
+>       "to": "Terminal.promptProbe"
+>     },
+>     {
+>       "from": "Terminal.ingress",
+>       "kind": "provisioning",
+>       "to": "Terminal.server"
+>     },
+>     {
+428a464,473
+>       "from": "Terminal.promptFast",
+>       "kind": "readiness",
+>       "to": "Terminal.promptProbe"
+>     },
+>     {
+>       "from": "Terminal.promptProbe",
+>       "kind": "readiness",
+>       "to": "Terminal.server"
+>     },
+>     {
+438a484,488
+>       "from": "Terminal.reachable",
+>       "kind": "readiness",
+>       "to": "Terminal.promptProbe"
+>     },
+>     {
+444a495,499
+>       "kind": "recovery",
+>       "to": "Terminal.server.supervisor"
+>     },
+>     {
+>       "from": "Terminal.server",
+454a510,925
+>   "machines": [
+>     {
+>       "id": "Terminal.customerAccess.evaluator",
+>       "machine": {
+>         "fields": [
+>           {
+>             "fields": {
+>               "buckets": [],
+>               "consequence": {
+>                 "fields": [
+>                   "access_commitment_breached"
+>                 ],
+>                 "type": "Option",
+>                 "variant": "Some"
+>               },
+>               "contract": "Terminal.customerAccess",
+>               "current": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "epoch": {
+>                 "ns": 0,
+>                 "type": "Duration"
+>               },
+>               "fired": [],
+>               "good": "prompt_received_before_timeout",
+>               "horizon": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "id": "Terminal.customerAccess.evaluator",
+>               "interval": {
+>                 "ns": 10000000000,
+>                 "type": "Duration"
+>               },
+>               "minimum_completeness": {
+>                 "ppm": 900000,
+>                 "type": "Ratio"
+>               },
+>               "missing_data": {
+>                 "type": "std.sli.MissingData",
+>                 "variant": "InsufficientEvidence"
+>               },
+>               "period_timer": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "signal": "Terminal.promptProbe.attempts",
+>               "sum_executed": 0,
+>               "sum_good": 0,
+>               "target": {
+>                 "ppm": 995000,
+>                 "type": "Ratio"
+>               },
+>               "threshold": {
+>                 "ns": 0,
+>                 "type": "Duration"
+>               },
+>               "window": {
+>                 "fields": [
+>                   "Europe/Berlin"
+>                 ],
+>                 "type": "std.sli.Window",
+>                 "variant": "CalendarMonth"
+>               }
+>             },
+>             "type": "std.control.Evaluator"
+>           }
+>         ],
+>         "type": "std.control.Machine",
+>         "variant": "Evaluate"
+>       },
+>       "member": "Terminal.customerAccess",
+>       "subscribes": [
+>         "Terminal.promptProbe.attempts"
+>       ]
+>     },
+>     {
+>       "id": "Terminal.promptFast.evaluator",
+>       "machine": {
+>         "fields": [
+>           {
+>             "fields": {
+>               "buckets": [],
+>               "consequence": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "contract": "Terminal.promptFast",
+>               "current": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "epoch": {
+>                 "ns": 0,
+>                 "type": "Duration"
+>               },
+>               "fired": [],
+>               "good": "prompt_received_within_threshold",
+>               "horizon": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "id": "Terminal.promptFast.evaluator",
+>               "interval": {
+>                 "ns": 10000000000,
+>                 "type": "Duration"
+>               },
+>               "minimum_completeness": {
+>                 "ppm": 900000,
+>                 "type": "Ratio"
+>               },
+>               "missing_data": {
+>                 "type": "std.sli.MissingData",
+>                 "variant": "InsufficientEvidence"
+>               },
+>               "period_timer": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "signal": "Terminal.promptProbe.attempts",
+>               "sum_executed": 0,
+>               "sum_good": 0,
+>               "target": {
+>                 "ppm": 990000,
+>                 "type": "Ratio"
+>               },
+>               "threshold": {
+>                 "ns": 200000000,
+>                 "type": "Duration"
+>               },
+>               "window": {
+>                 "fields": [
+>                   {
+>                     "ns": 3600000000000,
+>                     "type": "Duration"
+>                   }
+>                 ],
+>                 "type": "std.sli.Window",
+>                 "variant": "Rolling"
+>               }
+>             },
+>             "type": "std.control.Evaluator"
+>           }
+>         ],
+>         "type": "std.control.Machine",
+>         "variant": "Evaluate"
+>       },
+>       "member": "Terminal.promptFast",
+>       "subscribes": [
+>         "Terminal.promptProbe.attempts"
+>       ]
+>     },
+>     {
+>       "id": "Terminal.promptProbe.scheduler",
+>       "machine": {
+>         "fields": [
+>           {
+>             "fields": {
+>               "deadline_timer": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "id": "Terminal.promptProbe.scheduler",
+>               "in_flight": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "interval": {
+>                 "ns": 10000000000,
+>                 "type": "Duration"
+>               },
+>               "member": "Terminal.promptProbe",
+>               "next_id": 1,
+>               "signal": "Terminal.promptProbe.attempts",
+>               "slot": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "slot_timer": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "target": "Terminal.server",
+>               "target_ready": false,
+>               "timeout": {
+>                 "ns": 2000000000,
+>                 "type": "Duration"
+>               }
+>             },
+>             "type": "std.control.ProbeScheduler"
+>           }
+>         ],
+>         "type": "std.control.Machine",
+>         "variant": "Schedule"
+>       },
+>       "member": "Terminal.promptProbe",
+>       "subscribes": []
+>     },
+>     {
+>       "id": "Terminal.reachable.evaluator",
+>       "machine": {
+>         "fields": [
+>           {
+>             "fields": {
+>               "buckets": [],
+>               "consequence": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "contract": "Terminal.reachable",
+>               "current": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "epoch": {
+>                 "ns": 0,
+>                 "type": "Duration"
+>               },
+>               "fired": [],
+>               "good": "prompt_received_before_timeout",
+>               "horizon": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "id": "Terminal.reachable.evaluator",
+>               "interval": {
+>                 "ns": 10000000000,
+>                 "type": "Duration"
+>               },
+>               "minimum_completeness": {
+>                 "ppm": 900000,
+>                 "type": "Ratio"
+>               },
+>               "missing_data": {
+>                 "type": "std.sli.MissingData",
+>                 "variant": "InsufficientEvidence"
+>               },
+>               "period_timer": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "signal": "Terminal.promptProbe.attempts",
+>               "sum_executed": 0,
+>               "sum_good": 0,
+>               "target": {
+>                 "ppm": 999000,
+>                 "type": "Ratio"
+>               },
+>               "threshold": {
+>                 "ns": 0,
+>                 "type": "Duration"
+>               },
+>               "window": {
+>                 "fields": [
+>                   {
+>                     "ns": 2592000000000000,
+>                     "type": "Duration"
+>                   }
+>                 ],
+>                 "type": "std.sli.Window",
+>                 "variant": "Rolling"
+>               }
+>             },
+>             "type": "std.control.Evaluator"
+>           }
+>         ],
+>         "type": "std.control.Machine",
+>         "variant": "Evaluate"
+>       },
+>       "member": "Terminal.reachable",
+>       "subscribes": [
+>         "Terminal.promptProbe.attempts"
+>       ]
+>     },
+>     {
+>       "disruption": "connections refused between listener close and rebind",
+>       "id": "Terminal.server.rollout",
+>       "machine": {
+>         "fields": [
+>           {
+>             "fields": {
+>               "deadline_timer": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "generation": 1,
+>               "id": "Terminal.server.rollout",
+>               "member": "Terminal.server",
+>               "new_pid": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "old_pid": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "policy": {
+>                 "fields": {
+>                   "deadline": {
+>                     "ns": 120000000000,
+>                     "type": "Duration"
+>                   },
+>                   "on_deadline": "disconnect_remaining"
+>                 },
+>                 "type": "std.policy.DrainRollout"
+>               },
+>               "released_at": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "state": {
+>                 "type": "std.control.RolloutState",
+>                 "variant": "Idle"
+>               }
+>             },
+>             "type": "std.control.Rollout"
+>           }
+>         ],
+>         "type": "std.control.Machine",
+>         "variant": "Roll"
+>       },
+>       "member": "Terminal.server",
+>       "subscribes": []
+>     },
+>     {
+>       "id": "Terminal.server.supervisor",
+>       "machine": {
+>         "fields": [
+>           {
+>             "fields": {
+>               "attempt": 0,
+>               "failures": [],
+>               "generation": 1,
+>               "has_listener": true,
+>               "id": "Terminal.server.supervisor",
+>               "kill_requested": false,
+>               "member": "Terminal.server",
+>               "pid": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               },
+>               "restart": {
+>                 "fields": {
+>                   "backoff": {
+>                     "fields": [
+>                       {
+>                         "ns": 100000000,
+>                         "type": "Duration"
+>                       },
+>                       {
+>                         "ns": 10000000000,
+>                         "type": "Duration"
+>                       }
+>                     ],
+>                     "type": "std.policy.Backoff",
+>                     "variant": "Exponential"
+>                   },
+>                   "interval": {
+>                     "ns": 300000000000,
+>                     "type": "Duration"
+>                   },
+>                   "maximum_attempts": 10,
+>                   "readiness_timeout": {
+>                     "ns": 10000000000,
+>                     "type": "Duration"
+>                   }
+>                 },
+>                 "type": "std.policy.Restart"
+>               },
+>               "rollout": {
+>                 "fields": [
+>                   {
+>                     "fields": {
+>                       "deadline": {
+>                         "ns": 120000000000,
+>                         "type": "Duration"
+>                       },
+>                       "on_deadline": "disconnect_remaining"
+>                     },
+>                     "type": "std.policy.DrainRollout"
+>                   }
+>                 ],
+>                 "type": "Option",
+>                 "variant": "Some"
+>               },
+>               "state": {
+>                 "type": "std.control.SupervisorState",
+>                 "variant": "Stopped"
+>               },
+>               "timer": {
+>                 "type": "Option",
+>                 "variant": "None"
+>               }
+>             },
+>             "type": "std.control.Supervisor"
+>           }
+>         ],
+>         "type": "std.control.Machine",
+>         "variant": "Supervise"
+>       },
+>       "member": "Terminal.server",
+>       "subscribes": []
+>     }
+>   ],
+>   "observations": [
+>     {
+>       "element": "std.sli.ProbeAttempt",
+>       "interval": {
+>         "ns": 10000000000,
+>         "type": "Duration"
+>       },
+>       "producer": "Terminal.promptProbe",
+>       "ref": "Terminal.promptProbe.attempts"
+>     }
+>   ],
+488a960
+>     "Terminal.customerAccess.minimum_completeness": "std/contract.ignite:97:33",
+498a971
+>     "Terminal.promptFast.minimum_completeness": "std/contract.ignite:63:33",
+505a979
+>     "Terminal.promptProbe.executable": "terminal.design.ignite:73:3",
+511a986
+>     "Terminal.reachable.minimum_completeness": "std/contract.ignite:37:33",

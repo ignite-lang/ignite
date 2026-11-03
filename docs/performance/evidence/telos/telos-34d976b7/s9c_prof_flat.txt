@@ -1,0 +1,395 @@
+     6.26%  main-9d267f49cdec8647  [.] core::core_arch::x86::sse2::_mm_loadu_si128
+     5.19%  libc.so.6              [.] 0x0000000000176411
+     3.60%  main-9d267f49cdec8647  [.] <telos_check::Checker>::expr
+     3.19%  main-9d267f49cdec8647  [.] <usize as core::cmp::PartialEq>::eq
+     2.89%  main-9d267f49cdec8647  [.] <telos_types::typer::Typer>::expr_kind
+     2.36%  main-9d267f49cdec8647  [.] <usize as core::hash::Hash>::hash::<std::hash::random::DefaultHasher>
+     2.13%  libc.so.6              [.] 0x00000000001764a1
+     1.83%  main-9d267f49cdec8647  [.] <core::hash::sip::Sip13Rounds as core::hash::sip::Sip>::d_rounds
+     1.59%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<telos_types::Ty>
+     1.48%  main-9d267f49cdec8647  [.] telos_check::called_names
+     1.42%  main-9d267f49cdec8647  [.] alloc::fmt::format::format_inner
+     1.42%  main-9d267f49cdec8647  [.] core::intrinsics::rotate_left::<u64>
+     1.36%  main-9d267f49cdec8647  [.] <telos_llvm::lower::Lower>::binary
+     1.30%  main-9d267f49cdec8647  [.] <telos_llvm::lower::Lower>::expr
+     1.24%  main-9d267f49cdec8647  [.] core::ptr::copy_nonoverlapping::precondition_check
+     1.18%  libc.so.6              [.] 0x00000000000a79f9
+     1.18%  main-9d267f49cdec8647  [.] <*const ()>::is_aligned_to
+     1.18%  main-9d267f49cdec8647  [.] core::slice::raw::from_raw_parts::precondition_check
+     1.06%  libc.so.6              [.] cfree
+     1.06%  main-9d267f49cdec8647  [.] core::ptr::copy_nonoverlapping::precondition_check
+     1.06%  main-9d267f49cdec8647  [.] core::ub_checks::maybe_is_nonoverlapping::runtime
+     1.00%  main-9d267f49cdec8647  [.] telos_syntax::lexer::lex_into
+     0.94%  main-9d267f49cdec8647  [.] <core::hash::sip::Sip13Rounds as core::hash::sip::Sip>::c_rounds
+     0.94%  main-9d267f49cdec8647  [.] telos_syntax::ast::take_operands
+     0.89%  libc.so.6              [.] realloc
+     0.89%  libc.so.6              [.] 0x0000000000176446
+     0.89%  main-9d267f49cdec8647  [.] <telos_rustgen::Generator>::expr
+     0.83%  main-9d267f49cdec8647  [.] <std::hash::random::RandomState as core::hash::BuildHasher>::build_hasher
+     0.83%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<telos_syntax::lexer::TokenKind>
+     0.71%  libc.so.6              [.] malloc
+     0.71%  main-9d267f49cdec8647  [.] <alloc::string::String as core::fmt::Write>::write_str
+     0.71%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<u8>>::append_elements
+     0.65%  main-9d267f49cdec8647  [.] telos_rustgen::mutated_in
+     0.59%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::start
+     0.53%  libc.so.6              [.] 0x0000000000176400
+     0.53%  main-9d267f49cdec8647  [.] <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write
+     0.53%  main-9d267f49cdec8647  [.] <core::option::Option<bool>>::unwrap_or
+     0.53%  main-9d267f49cdec8647  [.] <telos_llvm::lower::Lower>::binary_step
+     0.53%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::bump
+     0.47%  libc.so.6              [.] 0x00000000000a79dd
+     0.47%  main-9d267f49cdec8647  [.] <core::option::Option<telos_types::Ty> as core::clone::Clone>::clone
+     0.47%  main-9d267f49cdec8647  [.] telos_llvm::region::expr
+     0.41%  libc.so.6              [.] 0x00000000000a6328
+     0.41%  libc.so.6              [.] 0x0000000000176707
+     0.41%  libc.so.6              [.] 0x0000000000176800
+     0.41%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTable<(usize, telos_types::Ty)>>::find::<hashbrown::map::equivalent_key<usize, usize, telos_types::Ty>::{closure#0}>
+     0.41%  main-9d267f49cdec8647  [.] <telos_types::typer::Typer>::binary_chain
+     0.41%  main-9d267f49cdec8647  [.] core::fmt::write
+     0.35%  libc.so.6              [.] 0x00000000000a633f
+     0.35%  main-9d267f49cdec8647  [.] <alloc::raw_vec::RawVecInner>::deallocate
+     0.35%  main-9d267f49cdec8647  [.] <alloc::string::String as core::clone::Clone>::clone
+     0.35%  main-9d267f49cdec8647  [.] <alloc::string::String>::push_str
+     0.35%  main-9d267f49cdec8647  [.] <alloc::vec::into_iter::IntoIter<(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr, &telos_syntax::ast::Expr)> as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
+     0.35%  main-9d267f49cdec8647  [.] <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds>>::reset
+     0.35%  main-9d267f49cdec8647  [.] <core::option::Option<&bool>>::copied
+     0.35%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTableInner>::find_insert_index_in_group
+     0.35%  main-9d267f49cdec8647  [.] <telos_types::Ty as core::clone::Clone>::clone
+     0.35%  main-9d267f49cdec8647  [.] <telos_types::typer::Typer>::binary_rest
+     0.35%  main-9d267f49cdec8647  [.] <usize as core::fmt::Display>::fmt
+     0.30%  libc.so.6              [.] 0x00000000000a4f3d
+     0.30%  libc.so.6              [.] 0x00000000001764a6
+     0.30%  libc.so.6              [.] 0x00000000001764b5
+     0.30%  libc.so.6              [.] 0x00000000001764d6
+     0.30%  main-9d267f49cdec8647  [.] <[(usize, bool)]>::binary_search_by::<<[(usize, bool)]>::partition_point<<telos_llvm::ir::Module>::line_col::{closure#0}>::{closure#0}>
+     0.30%  main-9d267f49cdec8647  [.] <alloc::raw_vec::RawVecInner>::with_capacity_in
+     0.30%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<telos_syntax::ast::Expr>>::pop
+     0.30%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTable<(usize, telos_types::Ty)>>::insert_tagged_at_index
+     0.30%  main-9d267f49cdec8647  [.] <telos_llvm::lower::Lower>::expr_kind
+     0.30%  main-9d267f49cdec8647  [.] <telos_rustgen::Generator>::chunked_spine
+     0.30%  main-9d267f49cdec8647  [.] <telos_syntax::ast::Expr as core::ops::drop::Drop>::drop
+     0.30%  main-9d267f49cdec8647  [.] <telos_syntax::lexer::TokenKind as core::cmp::PartialEq>::eq
+     0.30%  main-9d267f49cdec8647  [.] core::core_arch::x86::sse2::_mm_movemask_epi8
+     0.30%  main-9d267f49cdec8647  [.] core::hash::sip::u8to64_le
+     0.30%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<alloc::string::String>
+     0.30%  main-9d267f49cdec8647  [.] core::slice::raw::from_raw_parts::precondition_check
+     0.30%  main-9d267f49cdec8647  [.] core::ub_checks::maybe_is_nonoverlapping::runtime
+     0.24%  libc.so.6              [.] 0x0000000000176421
+     0.24%  libc.so.6              [.] 0x000000000017649d
+     0.24%  libc.so.6              [.] 0x00000000001764b2
+     0.24%  libc.so.6              [.] 0x00000000001767e0
+     0.24%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<telos_syntax::ast::Expr>>::push_mut
+     0.24%  main-9d267f49cdec8647  [.] <alloc::vec::drain::Drain<(u64, u64, alloc::string::String)> as core::ops::drop::Drop>::drop
+     0.24%  main-9d267f49cdec8647  [.] <core::ops::control_flow::ControlFlow<()> as core::cmp::PartialEq>::eq
+     0.24%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<alloc::string::String> as core::iter::traits::iterator::Iterator>::next
+     0.24%  main-9d267f49cdec8647  [.] <hashbrown::map::HashMap<usize, telos_types::Ty, std::hash::random::RandomState>>::get::<usize>
+     0.24%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawIterRange<(usize, telos_types::Ty)>>::next_impl::<false>
+     0.24%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTableInner>::find_insert_index
+     0.24%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTableInner>::find_or_find_insert_index_inner
+     0.24%  main-9d267f49cdec8647  [.] <i64 as alloc::string::SpecToString>::spec_to_string
+     0.24%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Func>::ins::<alloc::string::String>
+     0.24%  main-9d267f49cdec8647  [.] <telos_rustgen::Generator>::chunked
+     0.24%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::newlines_insignificant
+     0.24%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::peek_token
+     0.24%  main-9d267f49cdec8647  [.] <telos_types::typer::Typer>::operator
+     0.24%  main-9d267f49cdec8647  [.] __rustc::__rdl_alloc
+     0.24%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<alloc::vec::Vec<u8>>
+     0.18%  libc.so.6              [.] 0x0000000000176005
+     0.18%  libc.so.6              [.] 0x000000000017640d
+     0.18%  libc.so.6              [.] 0x0000000000176425
+     0.18%  libc.so.6              [.] 0x00000000001764c0
+     0.18%  libc.so.6              [.] 0x00000000001767c6
+     0.18%  main-9d267f49cdec8647  [.] <&str as core::fmt::Display>::fmt
+     0.18%  main-9d267f49cdec8647  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, core::option::Option<telos_types::Ty>>>::get::<str>
+     0.18%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, core::option::Option<telos_types::Ty>, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
+     0.18%  main-9d267f49cdec8647  [.] <alloc::raw_vec::RawVecInner>::try_allocate_in
+     0.18%  main-9d267f49cdec8647  [.] <alloc::string::String as core::iter::traits::collect::FromIterator<char>>::from_iter::<core::iter::adapters::filter::Filter<core::str::iter::Chars, telos_syntax::lexer::lex_int::{closure#0}>>
+     0.18%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<(u64, u64, alloc::string::String)> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<(u64, u64, alloc::string::String), alloc::vec::drain::Drain<(u64, u64, alloc::string::String)>>>::from_iter
+     0.18%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<telos_syntax::lexer::Token>>::push_mut
+     0.18%  main-9d267f49cdec8647  [.] <core::core_arch::simd::Simd<i8, 16>>::as_m128i
+     0.18%  main-9d267f49cdec8647  [.] <core::fmt::Formatter>::pad
+     0.18%  main-9d267f49cdec8647  [.] <core::fmt::Formatter>::pad_integral::write_prefix
+     0.18%  main-9d267f49cdec8647  [.] <core::iter::adapters::enumerate::Enumerate<core::str::iter::Bytes> as core::iter::traits::iterator::Iterator>::next
+     0.18%  main-9d267f49cdec8647  [.] <core::option::Option<&str>>::map_or_else::<alloc::string::String, alloc::fmt::format::{closure#0}, <str as alloc::borrow::ToOwned>::to_owned>
+     0.18%  main-9d267f49cdec8647  [.] <core::result::Result<telos_syntax::ast::Expr, telos_syntax::parser::Fail> as core::ops::try_trait::Try>::branch
+     0.18%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<&str> as core::iter::traits::iterator::Iterator>::any::<<&str as core::slice::cmp::SliceContains>::slice_contains::{closure#0}>
+     0.18%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<(u64, u64, alloc::string::String)> as core::iter::traits::iterator::Iterator>::size_hint
+     0.18%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<u8> as core::iter::traits::iterator::Iterator>::next
+     0.18%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTable<(usize, telos_types::Ty)>>::reserve_rehash::<hashbrown::map::make_hasher<usize, telos_types::Ty, std::hash::random::RandomState>::{closure#0}>
+     0.18%  main-9d267f49cdec8647  [.] <std::hash::random::RandomState as core::hash::BuildHasher>::hash_one::<&usize>
+     0.18%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::binary_left
+     0.18%  main-9d267f49cdec8647  [.] <telos_types::Ty as core::cmp::PartialEq>::eq
+     0.18%  main-9d267f49cdec8647  [.] core::char::methods::encode_utf8_raw_unchecked
+     0.18%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<alloc::raw_vec::RawVec<u8>>
+     0.18%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<core::option::Option<telos_types::Ty>>
+     0.18%  main-9d267f49cdec8647  [.] core::slice::index::range::<core::ops::range::RangeFrom<usize>>
+     0.18%  main-9d267f49cdec8647  [.] core::str::validations::next_code_point::<core::slice::iter::Iter<u8>>
+     0.18%  main-9d267f49cdec8647  [.] telos_syntax::lexer::lex_int
+     0.12%  libc.so.6              [.] 0x00000000000a7794
+     0.12%  libc.so.6              [.] 0x00000000000a7a06
+     0.12%  libc.so.6              [.] 0x00000000000a7fe8
+     0.12%  libc.so.6              [.] 0x0000000000175f99
+     0.12%  libc.so.6              [.] 0x0000000000176404
+     0.12%  libc.so.6              [.] 0x0000000000176454
+     0.12%  libc.so.6              [.] 0x00000000001764ac
+     0.12%  libc.so.6              [.] 0x00000000001764db
+     0.12%  libc.so.6              [.] 0x00000000001767e8
+     0.12%  main-9d267f49cdec8647  [.] <*const _>::offset_from_unsigned::precondition_check
+     0.12%  main-9d267f49cdec8647  [.] <[(usize, bool)]>::partition_point::<<telos_llvm::ir::Module>::line_col::{closure#0}>
+     0.12%  main-9d267f49cdec8647  [.] <[bool]>::last
+     0.12%  main-9d267f49cdec8647  [.] <alloc::alloc::Global as core::alloc::Allocator>::deallocate
+     0.12%  main-9d267f49cdec8647  [.] <alloc::alloc::Global>::alloc_impl_runtime
+     0.12%  main-9d267f49cdec8647  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::collections::btree::set_val::SetValZST>>::entry
+     0.12%  main-9d267f49cdec8647  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, telos_check::Local>>::get::<str>
+     0.12%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::kv_mut
+     0.12%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, &telos_syntax::diagnostic::SourceFile, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
+     0.12%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, &telos_syntax::diagnostic::SourceFile, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<str>
+     0.12%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, telos_check::Local, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<str>
+     0.12%  main-9d267f49cdec8647  [.] <alloc::raw_vec::RawVecInner>::finish_grow
+     0.12%  main-9d267f49cdec8647  [.] <alloc::raw_vec::RawVecInner>::finish_grow
+     0.12%  main-9d267f49cdec8647  [.] <alloc::string::String as core::fmt::Display>::fmt
+     0.12%  main-9d267f49cdec8647  [.] <alloc::string::String as core::ops::deref::Deref>::deref
+     0.12%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<&telos_syntax::ast::Expr>>::push_mut
+     0.12%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<bool> as core::ops::deref::Deref>::deref
+     0.12%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<gimli::read::abbrev::AttributeSpecification> as core::ops::drop::Drop>::drop
+     0.12%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<u8>>::reserve
+     0.12%  main-9d267f49cdec8647  [.] <alloc::vec::into_iter::IntoIter<&telos_syntax::ast::Expr> as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
+     0.12%  main-9d267f49cdec8647  [.] <core::core_arch::simd::Simd<i8, 16>>::splat
+     0.12%  main-9d267f49cdec8647  [.] <core::core_arch::x86::__m128i>::as_i8x16
+     0.12%  main-9d267f49cdec8647  [.] <core::fmt::Formatter>::pad_integral
+     0.12%  main-9d267f49cdec8647  [.] <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::finish
+     0.12%  main-9d267f49cdec8647  [.] <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<alloc::string::String>> as core::iter::traits::iterator::Iterator>::next
+     0.12%  main-9d267f49cdec8647  [.] <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<alloc::vec::Vec<u8>>> as core::iter::traits::iterator::Iterator>::next
+     0.12%  main-9d267f49cdec8647  [.] <core::iter::adapters::fuse::Fuse<core::iter::adapters::map::Map<core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<telos_llvm::lower::Local>>>, <telos_llvm::lower::Lower>::lookup::{closure#0}>> as core::iter::adapters::fuse::FuseImpl<core::iter::adapters::map::Map<core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<telos_llvm::lower::Local>>>, <telos_llvm::lower::Lower>::lookup::{closure#0}>>>::try_fold::<(), <core::iter::adapters::flatten::FlattenCompat<_, _>>::iter_try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, <core::iter::adapters::flatten::FlattenCompat<_, _> as core::iter::traits::iterator::Iterator>::try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, core::iter::traits::iterator::Iterator::find::check<&telos_llvm::lower::Local, <telos_llvm::lower::Lower>::lookup::{closure#1}>::{closure#0}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>>
+     0.12%  main-9d267f49cdec8647  [.] <core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<telos_llvm::lower::Local>>> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::adapters::map::map_try_fold<&alloc::vec::Vec<telos_llvm::lower::Local>, core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, <telos_llvm::lower::Lower>::lookup::{closure#0}, <core::iter::adapters::flatten::FlattenCompat<_, _>>::iter_try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, <core::iter::adapters::flatten::FlattenCompat<_, _> as core::iter::traits::iterator::Iterator>::try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, core::iter::traits::iterator::Iterator::find::check<&telos_llvm::lower::Local, <telos_llvm::lower::Lower>::lookup::{closure#1}>::{closure#0}>::{closure#0}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>>
+     0.12%  main-9d267f49cdec8647  [.] <core::range::Range<usize> as core::slice::index::SliceIndex<str>>::get
+     0.12%  main-9d267f49cdec8647  [.] <core::str::iter::Bytes as core::iter::traits::iterator::Iterator>::next
+     0.12%  main-9d267f49cdec8647  [.] <hashbrown::map::HashMap<usize, telos_types::Ty, std::hash::random::RandomState>>::insert
+     0.12%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTable<((usize, alloc::string::String), telos_syntax::ast::Span)>>::find::<hashbrown::map::equivalent_key<(usize, alloc::string::String), (usize, alloc::string::String), telos_syntax::ast::Span>::{closure#0}>
+     0.12%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTable<(usize, telos_types::Ty)>>::find_or_find_insert_index::<hashbrown::map::equivalent_key<usize, usize, telos_types::Ty>::{closure#0}, hashbrown::map::make_hasher<usize, telos_types::Ty, std::hash::random::RandomState>::{closure#0}>
+     0.12%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTableInner>::drop_elements::<(usize, telos_types::Ty)>
+     0.12%  main-9d267f49cdec8647  [.] <std::hash::random::DefaultHasher as core::hash::Hasher>::finish
+     0.12%  main-9d267f49cdec8647  [.] <str as core::cmp::Ord>::cmp
+     0.12%  main-9d267f49cdec8647  [.] <str as core::cmp::PartialEq>::eq
+     0.12%  main-9d267f49cdec8647  [.] <str as core::fmt::Display>::fmt
+     0.12%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Func>::restore_location
+     0.12%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Func>::val::<alloc::string::String>
+     0.12%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Module>::line_col
+     0.12%  main-9d267f49cdec8647  [.] <telos_syntax::lexer::Token as core::clone::Clone>::clone
+     0.12%  main-9d267f49cdec8647  [.] <telos_syntax::lexer::TokenKind>::keyword
+     0.12%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::at_line_break
+     0.12%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::multiplicative::{closure#0}
+     0.12%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::peek
+     0.12%  main-9d267f49cdec8647  [.] <usize as core::cmp::Ord>::max
+     0.12%  main-9d267f49cdec8647  [.] <usize as core::slice::index::SliceIndex<[_]>>::get_unchecked::precondition_check
+     0.12%  main-9d267f49cdec8647  [.] core::core_arch::x86::sse2::_mm_cmpeq_epi8
+     0.12%  main-9d267f49cdec8647  [.] core::core_arch::x86::sse2::_mm_set1_epi8
+     0.12%  main-9d267f49cdec8647  [.] core::iter::adapters::map::map_fold::<&(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr), (core::option::Option<telos_syntax::ast::BinaryOp>, &telos_syntax::ast::Expr), (), <telos_rustgen::Generator>::chunked::{closure#0}, core::iter::traits::iterator::Iterator::for_each::call<(core::option::Option<telos_syntax::ast::BinaryOp>, &telos_syntax::ast::Expr), <alloc::vec::Vec<(core::option::Option<telos_syntax::ast::BinaryOp>, &telos_syntax::ast::Expr)>>::extend_trusted<core::iter::adapters::chain::Chain<core::iter::sources::once::Once<(core::option::Option<telos_syntax::ast::BinaryOp>, &telos_syntax::ast::Expr)>, core::iter::adapters::map::Map<core::slice::iter::Iter<(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr)>, <telos_rustgen::Generator>::chunked::{closure#0}>>>::{closure#0}>::{closure#0}>::{closure#0}
+     0.12%  main-9d267f49cdec8647  [.] core::iter::traits::iterator::Iterator::all::check::<char, telos_syntax::lexer::lex_int::{closure#1}>::{closure#0}
+     0.12%  main-9d267f49cdec8647  [.] core::iter::traits::iterator::Iterator::find_map::check::<&alloc::collections::btree::map::BTreeMap<alloc::string::String, telos_check::Local>, &telos_check::Local, <telos_check::Checker>::local::{closure#0}>::{closure#0}
+     0.12%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<telos_llvm::lower::Val>
+     0.12%  main-9d267f49cdec8647  [.] telos_llvm::layout::scalar_type
+     0.12%  main-9d267f49cdec8647  [.] telos_syntax::lexer::lex_string
+     0.12%  main-9d267f49cdec8647  [.] telos_syntax::lexer::lex_string::{closure#0}
+     0.12%  main-9d267f49cdec8647  [.] telos_syntax::parser::binary
+     0.06%  libc.so.6              [.] __mprotect
+     0.06%  libc.so.6              [.] 0x00000000000a4f29
+     0.06%  libc.so.6              [.] 0x00000000000a4f33
+     0.06%  libc.so.6              [.] 0x00000000000a4f45
+     0.06%  libc.so.6              [.] 0x00000000000a5000
+     0.06%  libc.so.6              [.] 0x00000000000a502e
+     0.06%  libc.so.6              [.] 0x00000000000a503e
+     0.06%  libc.so.6              [.] 0x00000000000a5050
+     0.06%  libc.so.6              [.] 0x00000000000a5091
+     0.06%  libc.so.6              [.] 0x00000000000a509a
+     0.06%  libc.so.6              [.] 0x00000000000a50a3
+     0.06%  libc.so.6              [.] 0x00000000000a50aa
+     0.06%  libc.so.6              [.] 0x00000000000a5d12
+     0.06%  libc.so.6              [.] 0x00000000000a5d50
+     0.06%  libc.so.6              [.] 0x00000000000a6199
+     0.06%  libc.so.6              [.] 0x00000000000a61aa
+     0.06%  libc.so.6              [.] 0x00000000000a61cf
+     0.06%  libc.so.6              [.] 0x00000000000a61f0
+     0.06%  libc.so.6              [.] 0x00000000000a6267
+     0.06%  libc.so.6              [.] 0x00000000000a6269
+     0.06%  libc.so.6              [.] 0x00000000000a6332
+     0.06%  libc.so.6              [.] 0x00000000000a6345
+     0.06%  libc.so.6              [.] 0x00000000000a6e51
+     0.06%  libc.so.6              [.] 0x00000000000a6ea1
+     0.06%  libc.so.6              [.] 0x00000000000a6ea5
+     0.06%  libc.so.6              [.] 0x00000000000a7004
+     0.06%  libc.so.6              [.] 0x00000000000a7166
+     0.06%  libc.so.6              [.] 0x00000000000a729a
+     0.06%  libc.so.6              [.] 0x00000000000a73e0
+     0.06%  libc.so.6              [.] 0x00000000000a73ee
+     0.06%  libc.so.6              [.] 0x00000000000a7407
+     0.06%  libc.so.6              [.] 0x00000000000a7594
+     0.06%  libc.so.6              [.] 0x00000000000a75d4
+     0.06%  libc.so.6              [.] 0x00000000000a7640
+     0.06%  libc.so.6              [.] 0x00000000000a768c
+     0.06%  libc.so.6              [.] 0x00000000000a78e8
+     0.06%  libc.so.6              [.] 0x00000000000a79cb
+     0.06%  libc.so.6              [.] 0x00000000000a79d0
+     0.06%  libc.so.6              [.] 0x00000000000a7a1b
+     0.06%  libc.so.6              [.] 0x00000000000a7ae0
+     0.06%  libc.so.6              [.] 0x00000000000a7fbf
+     0.06%  libc.so.6              [.] 0x0000000000175ca4
+     0.06%  libc.so.6              [.] 0x0000000000175fc5
+     0.06%  libc.so.6              [.] 0x0000000000176008
+     0.06%  libc.so.6              [.] 0x000000000017640b
+     0.06%  libc.so.6              [.] 0x000000000017642b
+     0.06%  libc.so.6              [.] 0x0000000000176459
+     0.06%  libc.so.6              [.] 0x000000000017645b
+     0.06%  libc.so.6              [.] 0x0000000000176485
+     0.06%  libc.so.6              [.] 0x000000000017648b
+     0.06%  libc.so.6              [.] 0x0000000000176497
+     0.06%  libc.so.6              [.] 0x00000000001765a4
+     0.06%  libc.so.6              [.] 0x00000000001767aa
+     0.06%  libc.so.6              [.] 0x00000000001767b1
+     0.06%  libc.so.6              [.] 0x00000000001767cd
+     0.06%  libc.so.6              [.] 0x00000000001767db
+     0.06%  libc.so.6              [.] 0x00000000001767f8
+     0.06%  libc.so.6              [.] 0x000000000017682f
+     0.06%  libc.so.6              [.] 0x000000000017693d
+     0.06%  libc.so.6              [.] 0x00000000001769a8
+     0.06%  main-9d267f49cdec8647  [.] <&str as core::slice::cmp::SliceContains>::slice_contains::{closure#0}
+     0.06%  main-9d267f49cdec8647  [.] <&usize as core::hash::Hash>::hash::<std::hash::random::DefaultHasher>
+     0.06%  main-9d267f49cdec8647  [.] <(&telos_syntax::ast::Expr, telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr, &telos_syntax::ast::Expr, core::option::Option<telos_types::Ty>) as core::clone::Clone>::clone
+     0.06%  main-9d267f49cdec8647  [.] <(usize, alloc::string::String) as hashbrown::Equivalent<(usize, alloc::string::String)>>::equivalent
+     0.06%  main-9d267f49cdec8647  [.] <*const _>::offset_from_unsigned::precondition_check
+     0.06%  main-9d267f49cdec8647  [.] <[(usize, bool)]>::partition_point::<<telos_llvm::ir::Module>::line_col::{closure#0}>::{closure#0}
+     0.06%  main-9d267f49cdec8647  [.] <[alloc::collections::btree::map::BTreeMap<alloc::string::String, core::option::Option<telos_types::Ty>>]>::iter
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, &telos_syntax::diagnostic::SourceFile>>::get::<str>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<(usize, bool)>> as core::ops::index::Index<&str>>::index
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::map::BTreeMap<alloc::string::String, usize>>::get::<str>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::map::BTreeMap<usize, alloc::collections::btree::set::BTreeSet<alloc::string::String>>>::entry
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::map::IntoIter<alloc::string::String, telos_types::FnSig>>::dying_next
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::map::entry::Entry<alloc::vec::Vec<u8>, alloc::string::String>>::or_try_insert_with::<<alloc::collections::btree::map::entry::Entry<alloc::vec::Vec<u8>, alloc::string::String>>::or_insert_with<<telos_llvm::ir::Module>::string::{closure#0}>::{closure#0}, !>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Dying, alloc::string::String, usize, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::deallocating_next::<alloc::alloc::Global>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, &telos_syntax::diagnostic::SourceFile, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::into_kv
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, telos_check::Local, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::into_kv
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, usize, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::into_kv
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, telos_check::Local, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<alloc::string::String>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, core::option::Option<telos_types::Ty>, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, telos_check::FnInfo, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::vec::Vec<u8>, alloc::string::String, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::vec::Vec<u8>>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::vec::Vec<u8>, alloc::string::String, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<alloc::vec::Vec<u8>>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::raw_vec::RawVec<&str> as core::ops::drop::Drop>::drop
+     0.06%  main-9d267f49cdec8647  [.] <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::raw_vec::RawVecInner>::grow_amortized
+     0.06%  main-9d267f49cdec8647  [.] <alloc::string::String>::push_str
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr, &telos_syntax::ast::Expr)> as core::iter::traits::collect::IntoIterator>::into_iter
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr, &telos_syntax::ast::Expr)>>::push_mut
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<(u64, u64, alloc::string::String)> as core::iter::traits::collect::IntoIterator>::into_iter
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<(u64, u64, alloc::string::String)>>::drain::<core::ops::range::RangeFrom<usize>>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<(u64, u64, alloc::string::String)>>::reserve
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<alloc::vec::Vec<telos_llvm::lower::Local>> as core::ops::deref::Deref>::deref
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<telos_check::called_names::Node>>::pop
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<telos_check::called_names::Node>>::push
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::Vec<telos_syntax::ast::Type>>::is_empty
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::into_iter::IntoIter<&telos_syntax::ast::Expr> as core::ops::drop::Drop>::drop
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::into_iter::IntoIter<(alloc::string::String, alloc::vec::Vec<telos_types::Ty>)> as core::iter::traits::iterator::Iterator>::zip::<alloc::vec::Vec<(alloc::vec::Vec<u64>, telos_llvm::layout::Layout)>>
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::into_iter::IntoIter<(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr, &telos_syntax::ast::Expr)>>::as_raw_mut_slice
+     0.06%  main-9d267f49cdec8647  [.] <alloc::vec::into_iter::IntoIter<(u64, u64, alloc::string::String)> as core::ops::drop::Drop>::drop
+     0.06%  main-9d267f49cdec8647  [.] <char>::to_digit
+     0.06%  main-9d267f49cdec8647  [.] <core::fmt::Arguments>::new::<33, 4>
+     0.06%  main-9d267f49cdec8647  [.] <core::fmt::Arguments>::new::<4, 1>
+     0.06%  main-9d267f49cdec8647  [.] <core::fmt::rt::Argument>::new_display::<&str>
+     0.06%  main-9d267f49cdec8647  [.] <core::fmt::rt::Argument>::new_display::<alloc::string::String>
+     0.06%  main-9d267f49cdec8647  [.] <core::iter::adapters::flatten::FlatMap<core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<telos_llvm::lower::Local>>>, core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, <telos_llvm::lower::Lower>::lookup::{closure#0}> as core::iter::traits::iterator::Iterator>::find::<<telos_llvm::lower::Lower>::lookup::{closure#1}>
+     0.06%  main-9d267f49cdec8647  [.] <core::iter::adapters::flatten::FlattenCompat<_, _>>::iter_try_fold::flatten::<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, <core::iter::adapters::flatten::FlattenCompat<_, _> as core::iter::traits::iterator::Iterator>::try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, core::iter::traits::iterator::Iterator::find::check<&telos_llvm::lower::Local, <telos_llvm::lower::Lower>::lookup::{closure#1}>::{closure#0}>::{closure#0}>::{closure#0}
+     0.06%  main-9d267f49cdec8647  [.] <core::iter::adapters::flatten::FlattenCompat<core::iter::adapters::map::Map<core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<telos_llvm::lower::Local>>>, <telos_llvm::lower::Lower>::lookup::{closure#0}>, core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>>>::iter_try_fold::<(), <core::iter::adapters::flatten::FlattenCompat<_, _> as core::iter::traits::iterator::Iterator>::try_fold::flatten<core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>>, (), core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>, core::iter::traits::iterator::Iterator::find::check<&telos_llvm::lower::Local, <telos_llvm::lower::Lower>::lookup::{closure#1}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>>
+     0.06%  main-9d267f49cdec8647  [.] <core::iter::adapters::peekable::Peekable<core::iter::adapters::map::Map<core::str::iter::CharIndices, telos_syntax::lexer::lex_string::{closure#0}>> as core::iter::traits::iterator::Iterator>::next
+     0.06%  main-9d267f49cdec8647  [.] <core::iter::adapters::rev::Rev<core::slice::iter::Iter<alloc::vec::Vec<alloc::string::String>>> as core::iter::traits::iterator::Iterator>::any::<<telos_rustgen::Generator>::is_local::{closure#0}>
+     0.06%  main-9d267f49cdec8647  [.] <core::iter::adapters::rev::Rev<core::slice::iter::Iter<telos_llvm::lower::Local>> as core::iter::traits::collect::IntoIterator>::into_iter
+     0.06%  main-9d267f49cdec8647  [.] <core::ops::range::Range<usize> as core::slice::index::SliceIndex<[_]>>::get_unchecked::precondition_check
+     0.06%  main-9d267f49cdec8647  [.] <core::ops::range::RangeFrom<usize> as core::ops::range::RangeBounds<usize>>::end_bound
+     0.06%  main-9d267f49cdec8647  [.] <core::ops::range::RangeFrom<usize> as core::ops::range::RangeBounds<usize>>::start_bound
+     0.06%  main-9d267f49cdec8647  [.] <core::option::Option<&&telos_syntax::diagnostic::SourceFile>>::copied
+     0.06%  main-9d267f49cdec8647  [.] <core::option::Option<&core::option::Option<telos_types::Ty>>>::cloned
+     0.06%  main-9d267f49cdec8647  [.] <core::option::Option<&telos_check::Local>>::map::<telos_check::Binding, <telos_check::Checker>::lookup::{closure#0}>
+     0.06%  main-9d267f49cdec8647  [.] <core::option::Option<&telos_types::Ty> as core::cmp::PartialEq>::eq
+     0.06%  main-9d267f49cdec8647  [.] <core::option::Option<alloc::string::String> as core::ops::try_trait::Try>::branch
+     0.06%  main-9d267f49cdec8647  [.] <core::option::Option<alloc::vec::Vec<alloc::string::String>>>::unwrap_or_default
+     0.06%  main-9d267f49cdec8647  [.] <core::option::Option<telos_check::Binding>>::is_some
+     0.06%  main-9d267f49cdec8647  [.] <core::option::Option<telos_syntax::lexer::TokenKind>>::unwrap_or_else::<telos_syntax::lexer::lex_into::{closure#0}>
+     0.06%  main-9d267f49cdec8647  [.] <core::option::Option<usize>>::is_some
+     0.06%  main-9d267f49cdec8647  [.] <core::result::Result<u8, core::num::error::TryFromIntError>>::expect
+     0.06%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<(core::option::Option<telos_syntax::ast::BinaryOp>, &telos_syntax::ast::Expr)> as core::iter::traits::iterator::Iterator>::find_map::<telos_syntax::ast::BinaryOp, <telos_rustgen::Generator>::chunked::{closure#3}::{closure#0}>
+     0.06%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<alloc::collections::btree::map::BTreeMap<alloc::string::String, core::option::Option<telos_types::Ty>>>>::new
+     0.06%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<alloc::collections::btree::map::BTreeMap<alloc::string::String, telos_check::Local>> as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
+     0.06%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<alloc::vec::Vec<alloc::string::String>> as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
+     0.06%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<alloc::vec::Vec<alloc::string::String>>>::new
+     0.06%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<alloc::vec::Vec<telos_llvm::lower::Local>> as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
+     0.06%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<telos_llvm::lower::Local> as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
+     0.06%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<telos_llvm::lower::Local> as core::iter::traits::double_ended::DoubleEndedIterator>::try_rfold::<(), &mut core::iter::traits::iterator::Iterator::find::check<&telos_llvm::lower::Local, <telos_llvm::lower::Lower>::lookup::{closure#1}>::{closure#0}, core::ops::control_flow::ControlFlow<&telos_llvm::lower::Local>>
+     0.06%  main-9d267f49cdec8647  [.] <core::slice::iter::Iter<telos_syntax::ast::Expr> as core::iter::traits::iterator::Iterator>::__iterator_get_unchecked
+     0.06%  main-9d267f49cdec8647  [.] <core::str::iter::Bytes as core::iter::traits::iterator::Iterator>::next
+     0.06%  main-9d267f49cdec8647  [.] <core::str::iter::Chars as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::traits::iterator::Iterator::all::check<char, telos_syntax::lexer::lex_int::{closure#1}>::{closure#0}, core::ops::control_flow::ControlFlow<()>>
+     0.06%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTable<(usize, telos_types::Ty)>>::reserve::<hashbrown::map::make_hasher<usize, telos_types::Ty, std::hash::random::RandomState>::{closure#0}>
+     0.06%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTable<(usize, telos_types::Ty)>>::reserve_rehash::<hashbrown::map::make_hasher<usize, telos_types::Ty, std::hash::random::RandomState>::{closure#0}>::{closure#0}
+     0.06%  main-9d267f49cdec8647  [.] <hashbrown::raw::RawTableInner>::fix_insert_index
+     0.06%  main-9d267f49cdec8647  [.] <std::hash::random::DefaultHasher as core::hash::Hasher>::write
+     0.06%  main-9d267f49cdec8647  [.] <str as core::cmp::Ord>::cmp
+     0.06%  main-9d267f49cdec8647  [.] <str>::is_char_boundary
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Func>::current
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Func>::fail_if
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Func>::label
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Func>::reuse_allocas
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Func>::set_location
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Func>::term::<alloc::string::String>
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Module>::di_file
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::ir::Module>::line_col::{closure#0}
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::lower::Local as core::clone::Clone>::clone
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::lower::Lower>::coerce
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::lower::Lower>::locate
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::lower::Lower>::lookup::{closure#0}
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::lower::Lower>::overflowing
+     0.06%  main-9d267f49cdec8647  [.] <telos_llvm::lower::Lower>::ty
+     0.06%  main-9d267f49cdec8647  [.] <telos_rustgen::Generator>::deref_if_borrowed
+     0.06%  main-9d267f49cdec8647  [.] <telos_syntax::ast::Span as core::clone::Clone>::clone
+     0.06%  main-9d267f49cdec8647  [.] <telos_syntax::lexer::TokenKind as core::clone::Clone>::clone
+     0.06%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::additive::{closure#0}
+     0.06%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::and
+     0.06%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::compare_op
+     0.06%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::postfix
+     0.06%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::primary
+     0.06%  main-9d267f49cdec8647  [.] <telos_syntax::parser::Parser>::skip_newlines
+     0.06%  main-9d267f49cdec8647  [.] <telos_types::Ty as core::clone::Clone>::clone
+     0.06%  main-9d267f49cdec8647  [.] <telos_types::Ty as core::cmp::PartialEq>::eq
+     0.06%  main-9d267f49cdec8647  [.] <telos_types::typer::Typer>::check
+     0.06%  main-9d267f49cdec8647  [.] <telos_types::typer::Typer>::name
+     0.06%  main-9d267f49cdec8647  [.] <telos_types::typer::Typer>::path_head
+     0.06%  main-9d267f49cdec8647  [.] <telos_types::typer::Typer>::stmt
+     0.06%  main-9d267f49cdec8647  [.] <u64>::from_ascii_bytes_radix_impl
+     0.06%  main-9d267f49cdec8647  [.] <u8 as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
+     0.06%  main-9d267f49cdec8647  [.] <u8 as core::slice::cmp::SliceOrd>::compare
+     0.06%  main-9d267f49cdec8647  [.] <u8>::is_ascii_alphanumeric
+     0.06%  main-9d267f49cdec8647  [.] __rustc::__rdl_realloc
+     0.06%  main-9d267f49cdec8647  [.] __rustc::__rust_dealloc
+     0.06%  main-9d267f49cdec8647  [.] alloc::collections::btree::mem::replace::<alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Dying, alloc::string::String, telos_check::Local, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>, alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Dying, alloc::string::String, telos_check::Local, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>, <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Dying, alloc::string::String, telos_check::Local, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::deallocating_next_unchecked<alloc::alloc::Global>::{closure#0}>
+     0.06%  main-9d267f49cdec8647  [.] alloc::fmt::format
+     0.06%  main-9d267f49cdec8647  [.] alloc::fmt::format::{closure#0}
+     0.06%  main-9d267f49cdec8647  [.] core::core_arch::x86::sse2::_mm_load_si128
+     0.06%  main-9d267f49cdec8647  [.] core::hint::assert_unchecked::precondition_check
+     0.06%  main-9d267f49cdec8647  [.] core::iter::adapters::filter_map::filter_map_try_fold::<&(core::option::Option<telos_syntax::ast::BinaryOp>, &telos_syntax::ast::Expr), telos_syntax::ast::BinaryOp, (), core::ops::control_flow::ControlFlow<()>, <telos_rustgen::Generator>::chunked::{closure#2}, core::iter::traits::iterator::Iterator::all::check<telos_syntax::ast::BinaryOp, <telos_rustgen::Generator>::chunked::{closure#3}>::{closure#0}>::{closure#0}
+     0.06%  main-9d267f49cdec8647  [.] core::iter::traits::iterator::Iterator::all::check::<telos_syntax::ast::BinaryOp, <telos_rustgen::Generator>::chunked::{closure#3}>::{closure#0}
+     0.06%  main-9d267f49cdec8647  [.] core::iter::traits::iterator::Iterator::any::check::<&alloc::vec::Vec<alloc::string::String>, <telos_rustgen::Generator>::is_local::{closure#0}>::{closure#0}
+     0.06%  main-9d267f49cdec8647  [.] core::mem::replace::<alloc::string::String>
+     0.06%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<<alloc::vec::Vec<(u64, u64, alloc::string::String)>>::extend_trusted<alloc::vec::drain::Drain<(u64, u64, alloc::string::String)>>::{closure#0}>
+     0.06%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<<alloc::vec::into_iter::IntoIter<_, _> as core::ops::drop::Drop>::drop::DropGuard<(telos_syntax::ast::BinaryOp, &telos_syntax::ast::Expr, &telos_syntax::ast::Expr), alloc::alloc::Global>>
+     0.06%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<[(u64, u64, alloc::string::String)]>
+     0.06%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<[alloc::string::String]>
+     0.06%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<[telos_syntax::lexer::Token]>
+     0.06%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<alloc::raw_vec::RawVec<(u64, u64, alloc::string::String)>>
+     0.06%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<alloc::vec::Vec<&str>>
+     0.06%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<alloc::vec::into_iter::IntoIter<(u64, u64, alloc::string::String)>>
+     0.06%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<core::option::Option<alloc::string::String>>
+     0.06%  main-9d267f49cdec8647  [.] core::ptr::drop_glue::<telos_syntax::ast::Expr>
+     0.06%  main-9d267f49cdec8647  [.] core::str::converts::from_utf8
+     0.06%  main-9d267f49cdec8647  [.] memcpy@plt
+     0.06%  main-9d267f49cdec8647  [.] telos_rustgen::escape_str
+     0.06%  main-9d267f49cdec8647  [.] telos_syntax::parser::split_greater_equal
+     0.06%  main-9d267f49cdec8647  [.] telos_types::typer::compatible

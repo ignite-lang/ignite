@@ -1,0 +1,3 @@
+e041_ufcs.telos:15:13: error[E041]: `Counter` has no method `bump`: ambiguous between the field `bump` of fn type and the function `bump`; call `bump(x, ..)` or bind the field first, `let f = x.bump`
+e041_ufcs.telos:17:13: error[E041]: `Text` has no method `half`; function `half` takes `Int` as its first parameter
+e041_ufcs.telos:18:13: error[E041]: `Counter` has no method `missing`

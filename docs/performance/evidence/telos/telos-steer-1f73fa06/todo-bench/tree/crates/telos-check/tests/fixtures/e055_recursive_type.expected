@@ -1,0 +1,4 @@
+e055_recursive_type.telos:3:6: error[E055]: record `Node` contains itself through fields and tuples alone, so a value would be infinite; put the nested `Node` in an `Option`, an enum payload or a `List`
+e055_recursive_type.telos:17:6: error[E055]: record `Ping` contains itself through fields and tuples alone, so a value would be infinite; put the nested `Ping` in an `Option`, an enum payload or a `List`
+e055_recursive_type.telos:21:6: error[E055]: record `Pong` contains itself through fields and tuples alone, so a value would be infinite; put the nested `Pong` in an `Option`, an enum payload or a `List`
+e055_recursive_type.telos:30:6: error[E055]: record `Wrapped` contains itself through fields and tuples alone, so a value would be infinite; put the nested `Wrapped` in an `Option`, an enum payload or a `List`

@@ -1,0 +1,100 @@
+START 2026-11-02T07:16:11+01:00 load=24.83 19.92 20.59 6/3099 2872460
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.87s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-12b-r2/debug/deps/main-5e4ab9ed9c9b052f)
+
+running 17 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test golden::constants_qualified_patterns_and_io_error ... ok
+test golden::process_exit_diverges ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test golden::pure_functions ... ok
+test golden::record_and_enum_with_match ... ok
+test golden::generics_stores_and_builtins ... ok
+test golden::surface_syntax ... ok
+test golden::target_bugs_of_slice_11b ... ok
+test golden::variants_of_enums_not_imported ... ok
+test golden::system_with_server_and_client ... ok
+test golden::executable_components ... ok
+test golden::terminal ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 66 filtered out; finished in 0.18s
+
+BLESS rc=0 2026-11-02T07:16:13+01:00
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-12b-r2/debug/deps/main-5e4ab9ed9c9b052f)
+
+running 65 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test units::aliases_and_field_defaults ... ok
+test units::bindings_are_scoped ... ok
+test units::bool_or_and_tuple_patterns_are_native ... ok
+test units::block_values ... ok
+test units::constants_are_zero_argument_functions ... ok
+test units::e020_bad_properties ... ok
+test units::e020_components_without_types ... ok
+test units::e020_resource_kind ... ok
+test reachable::naming_everything_gives_the_whole_library ... ok
+test units::effectful_function_is_a_plain_fn ... ok
+test units::else_if_chain_keeps_statement_position ... ok
+test reachable::methods_fields_and_ranges_do_not_name_items ... ok
+test units::function_body_value_depends_on_return_type ... ok
+test units::functions_and_variants_are_not_places ... ok
+test reachable::follows_roles_into_their_module_and_its_imports ... ok
+test units::function_types_and_values ... ok
+test units::generate_std_rejects_a_system ... ok
+test units::generate_std_nests_modules ... ok
+test reachable::keeps_what_the_roots_name_and_what_that_names ... ok
+test units::imports_become_use_lines ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test units::header_and_declarations ... ok
+test units::int_literals_are_plain_digits ... ok
+test units::builtin_methods ... ok
+test golden::record_and_enum_with_match ... ok
+test units::imported_constant_and_local_shadowing ... ok
+test golden::target_bugs_of_slice_11b ... ok
+test units::no_system_is_a_library_without_executables ... ok
+test units::list_and_text_patterns_are_guarded_arms ... ok
+test units::own_protocol_is_known_without_symbols ... ok
+test golden::system_with_server_and_client ... ok
+test units::qualified_variant_patterns ... ok
+test units::ownership_non_value_positions_do_not_clone ... ok
+test units::return_expressions ... ok
+test golden::process_exit_diverges ... ok
+test units::package_name_defaults_to_program ... ok
+test units::protocol_lowering ... ok
+test units::receiver_that_is_not_atomic_is_parenthesized ... ok
+test units::rust_keywords_are_escaped ... ok
+test units::unit_value_and_type ... ok
+test units::typed_let ... ok
+test units::tuples_and_pattern_lets ... ok
+test units::tuple_type ... ok
+test units::spawn_lowering ... ok
+test units::ownership_value_positions_clone_places ... ok
+test units::write_project_creates_layout ... ok
+test units::variant_patterns ... ok
+test golden::constants_qualified_patterns_and_io_error ... ok
+test golden::generics_stores_and_builtins ... ok
+test units::substrate_imports_need_no_std_crate ... ok
+test units::string_escaping ... ok
+test units::std_version_follows_the_library_text ... ok
+test units::type_table ... ok
+test golden::pure_functions ... ok
+test units::variant_expressions ... ok
+test golden::surface_syntax ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test golden::variants_of_enums_not_imported ... ok
+test golden::terminal ... ok
+test reachable::a_test_build_keeps_the_selected_tests_and_what_they_reach ... ok
+test golden::executable_components ... ok
+
+test result: ok. 65 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.18s
+
+EXIT=0 2026-11-02T07:16:14+01:00

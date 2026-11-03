@@ -1,0 +1,23 @@
+Diff in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-before-tree/crates/telos-llvm/src/glue.rs:22:
+         "@telos.msg.rem_zero",
+         "attempt to calculate the remainder with a divisor of zero",
+     ),
+[31m-    ("@telos.msg.rem", "attempt to calculate the remainder with overflow"),
+(B[m[32m+    (
+(B[m[32m+        "@telos.msg.rem",
+(B[m[32m+        "attempt to calculate the remainder with overflow",
+(B[m[32m+    ),
+(B[m ];
+ 
+ /// The length of the panic message `global` of [`MESSAGES`].
+Diff in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-before-tree/crates/telos-llvm/src/lower.rs:2200:
+                 self.fail_if(&zero, message);
+                 if signed {
+                     let minus_one = self.f.val(format!("icmp eq i64 {b}, -1"));
+[31m-                    let min = self
+(B[m[31m-                        .f
+(B[m[31m-                        .val(format!("icmp eq i64 {a}, {}", i64::MIN));
+(B[m[32m+                    let min = self.f.val(format!("icmp eq i64 {a}, {}", i64::MIN));
+(B[m                     let over = self.f.val(format!("and i1 {minus_one}, {min}"));
+                     let message = if rem {
+                         "@telos.msg.rem"

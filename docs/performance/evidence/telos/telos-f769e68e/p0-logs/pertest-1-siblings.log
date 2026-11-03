@@ -1,0 +1,11 @@
+START 2026-11-02T02:11:15+01:00 file=siblings load=6.23 14.42 16.34 8/2967 2704689
+   0.012 +  0.012     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.013 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.013 +  0.001 
+   0.013 +  0.000 running 2 tests
+   0.109 +  0.096 test siblings::llvm_build_links_a_module_sibling ... ok
+   0.223 +  0.113 test siblings::llvm_test_runs_a_module_sibling ... ok
+   0.223 +  0.000 
+   0.223 +  0.000 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 144 filtered out; finished in 0.21s
+   0.223 +  0.000 
+END load=6.23 14.42 16.34 5/2964 2704730

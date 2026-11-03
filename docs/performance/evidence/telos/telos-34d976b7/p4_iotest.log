@@ -1,0 +1,39 @@
+START 23:46:27
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling iotest v0.0.0 (/home/timo/projects/telos/docs/audit/2026-11-01/io/iotest)
+warning: unused `Result` that must be used
+   --> src/main.rs:101:9
+    |
+101 |         tx.send(format!("{:?}", r.map(|_| ())));
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+101 |         let _ = tx.send(format!("{:?}", r.map(|_| ())));
+    |         +++++++
+
+warning: `iotest` (bin "iotest") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.28s
+build EXIT=0
+--- drop
+drop_without_flush: after drop, before flush: Ok("dropped") (4.299µs)
+drop_without_flush: after flush: Ok("")
+drop_without_flush: then: Ok(0)
+drop EXIT=0
+--- cross
+cross_task_failure: A wrote (buffered)
+cross_task_failure: B close -> Ok(())
+cross_task_failure: B write after close -> Err(IoError { message: "write to a closed stream", exit_code: 1 })
+cross_task_failure: peer read -> Ok("from-A")
+cross_task_failure: peer read -> Ok(0)
+cross_task_failure: A read timed out
+cross EXIT=0
+END 23:46:37
+EXIT=0

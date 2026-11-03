@@ -1,0 +1,350 @@
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+   Compiling ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.92s
+BUILD_EXIT=0
+RT_EXIT=0
+===== bug_a rust
+warning: ignoring -C extra-filename flag due to -o flag
+
+error[E0425]: cannot find type `Result_` in this scope
+   --> std/src/lib.rs:42:69
+    |
+ 42 |         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result_<(), ignite_io::IoError> + Send + Sync>,
+    |                                                                     ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:558:1
+    |
+558 | pub enum Result<T, E> {
+    | --------------------- similarly named enum `Result` defined here
+    |
+help: an enum with a similar name exists
+    |
+ 42 -         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result_<(), ignite_io::IoError> + Send + Sync>,
+ 42 +         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result<(), ignite_io::IoError> + Send + Sync>,
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:127:29
+    |
+127 |         pub command_schema: Option_<CommandSchema>,
+    |                             ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+    |
+598 | pub enum Option<T> {
+    | ------------------ similarly named enum `Option` defined here
+    |
+help: an enum with a similar name exists
+    |
+127 -         pub command_schema: Option_<CommandSchema>,
+127 +         pub command_schema: Option<CommandSchema>,
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:136:44
+    |
+136 |         pub fn default_command_schema() -> Option_<CommandSchema> {
+    |                                            ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+    |
+598 | pub enum Option<T> {
+    | ------------------ similarly named enum `Option` defined here
+    |
+help: an enum with a similar name exists
+    |
+136 -         pub fn default_command_schema() -> Option_<CommandSchema> {
+136 +         pub fn default_command_schema() -> Option<CommandSchema> {
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:220:43
+    |
+220 |     pub fn missing_data(text: &String) -> Option_<MissingData> {
+    |                                           ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+exit=101
+===== bug_a llvm
+running 3 tests
+test repro_a/indexed push writes through ... ok
+test repro_a/field of index push writes through ... ok
+test repro_a/nested index push writes through ... ok
+
+test result: ok. 3 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== bug_b rust
+warning: ignoring -C extra-filename flag due to -o flag
+
+error[E0425]: cannot find type `Result_` in this scope
+   --> std/src/lib.rs:42:69
+    |
+ 42 |         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result_<(), ignite_io::IoError> + Send + Sync>,
+    |                                                                     ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:558:1
+    |
+558 | pub enum Result<T, E> {
+    | --------------------- similarly named enum `Result` defined here
+    |
+help: an enum with a similar name exists
+    |
+ 42 -         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result_<(), ignite_io::IoError> + Send + Sync>,
+ 42 +         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result<(), ignite_io::IoError> + Send + Sync>,
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:127:29
+    |
+127 |         pub command_schema: Option_<CommandSchema>,
+    |                             ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+    |
+598 | pub enum Option<T> {
+    | ------------------ similarly named enum `Option` defined here
+    |
+help: an enum with a similar name exists
+    |
+127 -         pub command_schema: Option_<CommandSchema>,
+127 +         pub command_schema: Option<CommandSchema>,
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:136:44
+    |
+136 |         pub fn default_command_schema() -> Option_<CommandSchema> {
+    |                                            ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+    |
+598 | pub enum Option<T> {
+    | ------------------ similarly named enum `Option` defined here
+    |
+help: an enum with a similar name exists
+    |
+136 -         pub fn default_command_schema() -> Option_<CommandSchema> {
+136 +         pub fn default_command_schema() -> Option<CommandSchema> {
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:220:43
+    |
+220 |     pub fn missing_data(text: &String) -> Option_<MissingData> {
+    |                                           ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+exit=101
+===== bug_b llvm
+running 1 test
+test repro_b/map with enum key ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== bug_c rust
+warning: ignoring -C extra-filename flag due to -o flag
+
+error[E0425]: cannot find type `Result_` in this scope
+   --> std/src/lib.rs:42:69
+    |
+ 42 |         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result_<(), ignite_io::IoError> + Send + Sync>,
+    |                                                                     ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:558:1
+    |
+558 | pub enum Result<T, E> {
+    | --------------------- similarly named enum `Result` defined here
+    |
+help: an enum with a similar name exists
+    |
+ 42 -         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result_<(), ignite_io::IoError> + Send + Sync>,
+ 42 +         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result<(), ignite_io::IoError> + Send + Sync>,
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:127:29
+    |
+127 |         pub command_schema: Option_<CommandSchema>,
+    |                             ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+    |
+598 | pub enum Option<T> {
+    | ------------------ similarly named enum `Option` defined here
+    |
+help: an enum with a similar name exists
+    |
+127 -         pub command_schema: Option_<CommandSchema>,
+127 +         pub command_schema: Option<CommandSchema>,
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:136:44
+    |
+136 |         pub fn default_command_schema() -> Option_<CommandSchema> {
+    |                                            ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+    |
+598 | pub enum Option<T> {
+    | ------------------ similarly named enum `Option` defined here
+    |
+help: an enum with a similar name exists
+    |
+136 -         pub fn default_command_schema() -> Option_<CommandSchema> {
+136 +         pub fn default_command_schema() -> Option<CommandSchema> {
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:220:43
+    |
+220 |     pub fn missing_data(text: &String) -> Option_<MissingData> {
+    |                                           ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+exit=101
+===== bug_c llvm
+running 1 test
+test repro_c/exposure as a value ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== bug_d rust
+warning: ignoring -C extra-filename flag due to -o flag
+
+error[E0425]: cannot find type `Result_` in this scope
+   --> std/src/lib.rs:42:69
+    |
+ 42 |         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result_<(), ignite_io::IoError> + Send + Sync>,
+    |                                                                     ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:558:1
+    |
+558 | pub enum Result<T, E> {
+    | --------------------- similarly named enum `Result` defined here
+    |
+help: an enum with a similar name exists
+    |
+ 42 -         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result_<(), ignite_io::IoError> + Send + Sync>,
+ 42 +         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result<(), ignite_io::IoError> + Send + Sync>,
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:127:29
+    |
+127 |         pub command_schema: Option_<CommandSchema>,
+    |                             ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+    |
+598 | pub enum Option<T> {
+    | ------------------ similarly named enum `Option` defined here
+    |
+help: an enum with a similar name exists
+    |
+127 -         pub command_schema: Option_<CommandSchema>,
+127 +         pub command_schema: Option<CommandSchema>,
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:136:44
+    |
+136 |         pub fn default_command_schema() -> Option_<CommandSchema> {
+    |                                            ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+    |
+598 | pub enum Option<T> {
+    | ------------------ similarly named enum `Option` defined here
+    |
+help: an enum with a similar name exists
+    |
+136 -         pub fn default_command_schema() -> Option_<CommandSchema> {
+136 +         pub fn default_command_schema() -> Option<CommandSchema> {
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:220:43
+    |
+220 |     pub fn missing_data(text: &String) -> Option_<MissingData> {
+    |                                           ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+exit=101
+===== bug_d llvm
+running 1 test
+test repro_d/a record named Box ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+===== names rust
+warning: ignoring -C extra-filename flag due to -o flag
+
+error[E0425]: cannot find type `Result_` in this scope
+   --> std/src/lib.rs:42:69
+    |
+ 42 |         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result_<(), ignite_io::IoError> + Send + Sync>,
+    |                                                                     ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:558:1
+    |
+558 | pub enum Result<T, E> {
+    | --------------------- similarly named enum `Result` defined here
+    |
+help: an enum with a similar name exists
+    |
+ 42 -         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result_<(), ignite_io::IoError> + Send + Sync>,
+ 42 +         pub connect: std::sync::Arc<dyn Fn(ignite_io::TcpStream) -> Result<(), ignite_io::IoError> + Send + Sync>,
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:127:29
+    |
+127 |         pub command_schema: Option_<CommandSchema>,
+    |                             ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+    |
+598 | pub enum Option<T> {
+    | ------------------ similarly named enum `Option` defined here
+    |
+help: an enum with a similar name exists
+    |
+127 -         pub command_schema: Option_<CommandSchema>,
+127 +         pub command_schema: Option<CommandSchema>,
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:136:44
+    |
+136 |         pub fn default_command_schema() -> Option_<CommandSchema> {
+    |                                            ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+    |
+598 | pub enum Option<T> {
+    | ------------------ similarly named enum `Option` defined here
+    |
+help: an enum with a similar name exists
+    |
+136 -         pub fn default_command_schema() -> Option_<CommandSchema> {
+136 +         pub fn default_command_schema() -> Option<CommandSchema> {
+    |
+
+error[E0425]: cannot find type `Option_` in this scope
+   --> std/src/lib.rs:220:43
+    |
+220 |     pub fn missing_data(text: &String) -> Option_<MissingData> {
+    |                                           ^^^^^^^
+    |
+   ::: /home/timo/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+exit=101
+===== names llvm
+running 1 test
+test repro_names/prelude names ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+exit=0
+EXIT=0
+EXIT=0

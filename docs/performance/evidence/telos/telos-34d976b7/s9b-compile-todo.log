@@ -1,0 +1,6 @@
+task: [compile-todo] cargo run -q -p telos -- build examples/todo/todo.telos --out target/telos/todo --target-dir target
+note: building the generated Rust project in target/telos/todo; compiler messages refer to generated code
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+built target/debug/todod
+WALL=0.2
+EXIT=0

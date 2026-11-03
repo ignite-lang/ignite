@@ -1,0 +1,190 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/telos-7860a65bd5659434)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/telos-300d7881df956401)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cli.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/cli-2bd990c5ce0aa5a0)
+
+running 18 tests
+test default_std_is_the_repository_std ... ok
+test default_substrate_is_the_sibling_crate ... ok
+test missing_std_root_is_exit_3 ... ok
+test no_arguments_is_exit_2 ... ok
+test std_file_without_package_is_e031 ... ok
+test std_package_mismatch_is_e031_in_the_std_file ... ok
+test std_modules_are_checked_in_import_order ... ok
+test std_diagnostic_is_rendered_with_its_file ... ok
+test emit_with_std_fixture ... ok
+test std_import_cycle_is_e032 ... ok
+test check_unknown_name_is_e003 ... ok
+test missing_file_is_exit_3 ... ok
+test emit_uses_given_substrate ... ok
+test emit_prints_the_program_and_the_std_crate ... ok
+test check_reports_unsupported_component_kind ... ok
+test check_acceptance_program_is_silent ... ok
+test build_std_and_program_then_run_both_executables ... ok
+test client_exit_statuses ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+
+     Running tests/llvm.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/llvm-947012e813c17fee)
+
+running 5 tests
+test clang_failure_is_exit_2 ... ok
+test client_exits_3_when_nothing_listens ... ok
+test index_out_of_range_panics_with_101 ... ok
+test probe_runs_every_check ... ok
+test llvm_build_runs_neither_cargo_nor_rustc ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/llvm_build.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/llvm_build-66ee3c8fb85613c2)
+
+running 4 tests
+test bench ... ignored, benchmark; run with task bench
+test default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test failed_compile_is_retried ... ok
+test rebuild_compiles_only_what_changed ... ok
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.20s
+
+     Running tests/llvm_memory.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/llvm_memory-27e574d1f0885364)
+
+running 4 tests
+test pushing_in_a_loop_is_linear ... ok
+test loop_regions_keep_carried_values ... ok
+test tn_memory_is_flat_over_a_long_session ... ok
+test terminald_memory_is_flat_over_a_long_session ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/syntax.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/syntax-a163620bc153578a)
+
+running 2 tests
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/tmp/syntax-rust)
+test llvm_target_runs_every_feature ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+test rust_target_runs_every_feature ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/terminal-faabe13ece9cfe8a)
+
+running 62 tests
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-std v0.0.0-9535bc51a48aa4d7 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/tmp/terminal/std)
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/tmp/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.55s
+test llvm::do_echo_is_refused_with_wont ... ok
+test llvm::interrupt_process_closes ... ok
+test llvm::are_you_there_is_answered ... ok
+test llvm::overlong_line_is_refused_and_closed ... ok
+test llvm::subnegotiation_is_skipped ... ok
+test llvm::iac_iac_is_a_literal_byte ... ok
+test llvm::subnegotiation_over_1024_bytes_closes ... ok
+test llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+test llvm::line_of_4096_bytes_is_accepted ... ok
+test llvm::tn_exits_3_when_nothing_listens ... ok
+test llvm::tn_exits_2_for_a_malformed_port ... ok
+error: subnegotiation longer than 1024 bytes
+test llvm::will_naws_is_refused_with_dont ... ok
+test llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+test llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test llvm::tn_on_a_terminal_erases_with_backspace ... ok
+test llvm::accept_survives_running_out_of_descriptors ... ok
+test rust::are_you_there_is_answered ... ok
+test rust::do_echo_is_refused_with_wont ... ok
+test llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test llvm::tn_with_piped_input_prints_the_transcript ... ok
+test rust::iac_iac_is_a_literal_byte ... ok
+test rust::interrupt_process_closes ... ok
+test rust::line_of_4096_bytes_is_accepted ... ok
+test rust::overlong_line_is_refused_and_closed ... ok
+test rust::subnegotiation_is_skipped ... ok
+test rust::subnegotiation_of_1024_bytes_is_skipped ... ok
+test rust::subnegotiation_over_1024_bytes_closes ... ok
+test llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test rust::accept_survives_running_out_of_descriptors ... ok
+test llvm::cr_nul_ends_a_line ... ok
+test llvm::tn_refuses_options_and_strips_commands ... ok
+test rust::tn_exits_2_for_a_malformed_port ... ok
+error: subnegotiation longer than 1024 bytes
+test rust::tn_exits_3_when_nothing_listens ... ok
+test rust::tn_exits_when_input_ends_and_terminald_closes ... ok
+test rust::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test rust::cr_nul_ends_a_line ... ok
+test rust::tn_on_a_terminal_erases_with_backspace ... ok
+test rust::will_naws_is_refused_with_dont ... ok
+test llvm::a_task_that_cannot_start_closes_only_its_connection ... ok
+test rust::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test rust::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test no_target_links_tokio ... ok
+test rust::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test rust::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test rust::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test rust::tn_with_piped_input_prints_the_transcript ... ok
+test rust::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test rust::a_task_that_cannot_start_closes_only_its_connection ... ok
+test rust::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test rust::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test rust::tn_refuses_options_and_strips_commands ... ok
+test llvm::fragmented_input_is_reassembled ... ok
+test rust::fragmented_input_is_reassembled ... ok
+test llvm::transcript_on_raw_socket ... ok
+test rust::transcript_on_raw_socket ... ok
+test idle_terminald_runs_one_thread ... ok
+
+test result: ok. 62 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.62s
+
+     Running tests/todo.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/todo-167d56b148cb3c1b)
+
+running 18 tests
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-std v0.0.0-9535bc51a48aa4d7 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/tmp/std-probe/std)
+   Compiling telos-std v0.0.0-9535bc51a48aa4d7 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/tmp/todo/std)
+   Compiling std_probe v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/tmp/std-probe)
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/tmp/todo)
+test todo::llvm::crud_flow ... ok
+test todo::llvm::limits ... ok
+test todo::llvm::keep_alive ... ok
+test todo::llvm::error_statuses ... ok
+test todo::llvm::content_length ... ok
+test todo::llvm::header_framing ... ok
+test todo::llvm::rejection_is_read ... ok
+test todo::llvm::concurrent_posts ... ok
+test probe::llvm::std_modules ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.94s
+test probe::rust::std_modules ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.03s
+test todo::rust::keep_alive ... ok
+test todo::rust::crud_flow ... ok
+test todo::rust::header_framing ... ok
+test todo::rust::error_statuses ... ok
+test todo::rust::content_length ... ok
+test todo::rust::rejection_is_read ... ok
+test todo::rust::limits ... ok
+test todo::rust::concurrent_posts ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+   Doc-tests telos
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

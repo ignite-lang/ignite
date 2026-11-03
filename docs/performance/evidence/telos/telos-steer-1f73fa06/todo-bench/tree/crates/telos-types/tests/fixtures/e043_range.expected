@@ -1,0 +1,4 @@
+e043_range.telos:6:5: error[E043]: empty range `9..=5`: the start is above the end
+e043_range.telos:10:5: error[E045]: a range bound must be an integer or byte literal or an `Int` or `Byte` constant with a literal value
+e043_range.telos:14:5: error[E040]: type mismatch: expected `Text`, found a range pattern; ranges match `Int` and `Byte`
+e043_range.telos:18:9: error[E044]: integer literal 300 is out of range for `Byte` (0 to 255)

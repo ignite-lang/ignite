@@ -1,0 +1,23 @@
+Diff in /home/timo/projects/telos/crates/telos-llvm/tests/golden.rs:112:
+     }
+     assert_eq!(repeat.matches("call i64 @telos_rt_arena_mark()").count(), 3);
+     assert_eq!(
+[31m-        repeat.matches("call void @telos_rt_arena_release(i64 ").count(),
+(B[m[32m+        repeat
+(B[m[32m+            .matches("call void @telos_rt_arena_release(i64 ")
+(B[m[32m+            .count(),
+(B[m         2
+     );
+     let main = &generated.mains[0].ir;
+Diff in /home/timo/projects/telos/crates/telos-rt/src/lib.rs:25:
+ mod text;
+ 
+ pub use arena::{
+[31m-    arena_reserved, telos_rt_alloc, telos_rt_arena_due, telos_rt_arena_mark, telos_rt_arena_release,
+(B[m[31m-    telos_rt_arena_scratch, telos_rt_arena_scratch_clear, telos_rt_task_end,
+(B[m[32m+    arena_reserved, telos_rt_alloc, telos_rt_arena_due, telos_rt_arena_mark,
+(B[m[32m+    telos_rt_arena_release, telos_rt_arena_scratch, telos_rt_arena_scratch_clear,
+(B[m[32m+    telos_rt_task_end,
+(B[m };
+ pub use net::{
+     telos_rt_tcp_accept, telos_rt_tcp_bind, telos_rt_tcp_close, telos_rt_tcp_connect,

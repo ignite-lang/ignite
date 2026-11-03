@@ -1,0 +1,31 @@
+   Compiling ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+   Compiling ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+   Compiling ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+warning: unused import: `Decl`
+  --> crates/ignite-eval/src/model.rs:14:26
+   |
+14 | use ignite_syntax::ast::{Decl, Expr, ExprKind, Span, SystemDecl};
+   |                          ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Modules`
+  --> crates/ignite-eval/src/model.rs:24:43
+   |
+24 | use crate::{EvalError, Evaluator, Module, Modules, ResolutionEntry, Value, resolve};
+   |                                           ^^^^^^^
+
+error[E0063]: missing fields `machines` and `observations` in initializer of `Model`
+    --> crates/ignite-eval/src/model.rs:1136:8
+     |
+1136 |     Ok(Model {
+     |        ^^^^^ missing `machines` and `observations`
+
+For more information about this error, try `rustc --explain E0063`.
+warning: `ignite-eval` (lib test) generated 2 warnings
+error: could not compile `ignite-eval` (lib test) due to 1 previous error; 2 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+warning: `ignite-eval` (lib) generated 2 warnings (2 duplicates)
+error: could not compile `ignite-eval` (lib) due to 1 previous error; 2 warnings emitted
+EXIT=101

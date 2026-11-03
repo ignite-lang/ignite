@@ -1,0 +1,32 @@
+    Checking telos-syntax v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-before-tree/crates/telos-syntax)
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+    Checking cfg-if v1.0.5
+    Checking bitflags v2.13.2
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+    Checking utf8parse v0.2.2
+    Checking is_terminal_polyfill v1.70.2
+    Checking colorchoice v1.0.5
+    Checking anstyle-query v1.1.5
+    Checking anstyle v1.0.14
+   Compiling heck v0.5.0
+    Checking clap_lex v1.1.1
+    Checking strsim v0.11.1
+    Checking telos-load v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-before-tree/crates/telos-load)
+    Checking telos-check v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-before-tree/crates/telos-check)
+   Compiling nix v0.31.3
+    Checking anstyle-parse v1.0.0
+    Checking anstream v1.0.0
+    Checking telos-types v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-before-tree/crates/telos-types)
+    Checking clap_builder v4.6.7
+    Checking telos-rustgen v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-before-tree/crates/telos-rustgen)
+    Checking telos-llvm v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-before-tree/crates/telos-llvm)
+   Compiling syn v3.0.9
+    Checking telos-io v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-before-tree/crates/telos-io)
+    Checking telos-rt v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-before-tree/crates/telos-rt)
+   Compiling clap_derive v4.6.7
+    Checking clap v4.6.7
+    Checking telos v0.1.0 (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/s9b-before-tree/crates/telos)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.99s

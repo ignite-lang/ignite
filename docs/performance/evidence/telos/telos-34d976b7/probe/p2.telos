@@ -1,0 +1,98 @@
+package probe.two
+
+import std.console.{Console, Reply}
+import std.net.Endpoint
+
+type Box<S> {
+  item: S
+  listener: TcpListener
+}
+
+fn Box.main<S>(self: Box<S>) -> Result<Unit, IoError> {
+  let stream = self.listener.accept()?
+  return stream.close()
+}
+
+type Limits {
+  maximum: Int = 1000
+  idle_timeout: Duration = 10 minutes
+}
+
+type Commands {
+  respond: fn(Text) -> Reply
+}
+
+type Declared {
+  implementation: Module<Commands>
+  prompt: Text
+  maximum_line: ByteSize
+  schema: Option<Module<Commands>> = None
+}
+
+type Server {
+  listener: TcpListener
+  application: Declared
+  executable: Text
+  limits: Limits = Limits {}
+}
+
+fn console_of(declared: Declared) -> Console = Console {
+  prompt = declared.prompt
+  respond = declared.implementation.respond
+  maximum_line = declared.maximum_line.to_int()
+}
+
+fn respond(line: Text) -> Reply = Reply { lines = [line] }
+
+fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, stream.write, stdin.read, stdout.write, process.exit] {
+  return stream.close()
+}
+
+type Handler {
+  connect: fn(stream: TcpStream) -> Result<Unit, IoError> requires [stream.*, stdin.*, stdout.*, process.*]
+}
+
+type Dialer {
+  target: Endpoint
+  executable: Text
+}
+
+fn Dialer.main(self: Dialer) -> Result<Unit, IoError> {
+  let stream = match TcpStream.connect(self.target.address, self.target.port) {
+    Ok(stream) => stream
+    Err(error) => return Err(error.with_exit_code(3))
+  }
+  match connect(stream) {
+    Ok(_) => Ok(())
+    Err(error) => Err(error.with_exit_code(4))
+  }
+}
+
+fn Server.main(self: Server) -> Result<Unit, IoError> {
+  let console = console_of(self.application)
+  loop {
+    let stream = self.listener.accept()?
+    spawn connect(stream)
+  }
+}
+
+test "a declared console gives a runtime console" {
+  let declared = Declared { implementation = Commands { respond = respond }, prompt = "> ", maximum_line = 8 bytes }
+  let console = console_of(declared)
+  assert console.prompt == "> "
+  assert console.maximum_line == 8
+  assert Limits {}.maximum == 1000
+}
+
+system Probe {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 2399 }
+  resource other: TcpListener { address = "127.0.0.1", port = 2400 }
+  component console: Declared {
+    implementation = module("probe.two")
+    prompt = "> "
+    maximum_line = 4096 bytes
+  }
+  component boxed: Box { item = 1, listener = other }
+  component server: Server { listener = ingress, application = console, executable = "probed" }
+  component client: Dialer { target = ingress }
+}

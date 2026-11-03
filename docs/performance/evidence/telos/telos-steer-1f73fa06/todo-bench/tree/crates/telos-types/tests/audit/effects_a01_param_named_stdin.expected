@@ -1,0 +1,1 @@
+effects_a01_param_named_stdin.telos:1:11: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it

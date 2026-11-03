@@ -1,0 +1,263 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/debug/deps/ignite_check-8e7359fd2edf000b)
+
+running 10 tests
+test tests::ambiguous_variants_are_left_to_the_type_checker ... ok
+test tests::duplicate_top_level_names ... ok
+test tests::assignment_needs_a_var ... ok
+test tests::arm_bindings_are_scoped_to_their_arm ... ok
+test tests::for_variable_is_scoped_to_its_body ... ok
+test tests::effect_rules ... ok
+test tests::let_value_is_checked_before_binding ... ok
+test tests::inner_let_shadows_outer_var_for_assignment ... ok
+test tests::path_calls_resolve_variants_and_statics ... ok
+test tests::let_shadows_and_inner_block_does_not_leak ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/debug/deps/main-625bf336fa859c75)
+
+running 10 tests
+test fixtures::every_checker_code_has_a_fixture ... ok
+test limits::mutual_recursion_reaches_a_fixed_point ... ok
+test modules::check_is_check_module_without_modules ... ok
+test modules::constants_are_exported_imported_and_listed ... ok
+test modules::imported_definitions_enter_symbols ... ok
+test modules::only_named_imports_enter_scope ... ok
+test fixtures::fixtures_match_expected ... ok
+test terminal::terminal_checks_clean_against_the_standard_library ... ok
+test terminal::standard_library_checks_in_import_order ... ok
+test limits::effect_inference_is_linear_in_either_order ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/debug/deps/ignite_syntax-d8cc51728136adfa)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/debug/deps/main-807151e0292813cb)
+
+running 148 tests
+test grammar::additive_is_left_associative ... ok
+test grammar::associated_fn ... ok
+test grammar::assert_statements ... ok
+test grammar::break_and_continue_are_expressions ... ok
+test grammar::call_on_a_call ... ok
+test grammar::chained_comparison_is_e001 ... ok
+test grammar::chained_equality_is_e001 ... ok
+test grammar::brace_literal_keys_are_names_or_references ... ok
+test grammar::bool_tuple_list_and_or_patterns ... ok
+test grammar::comments_everywhere ... ok
+test grammar::const_declarations ... ok
+test grammar::const_is_a_keyword_and_a_recovery_point ... ok
+test grammar::closures ... ok
+test grammar::byte_literals ... ok
+test grammar::const_needs_type_and_value ... ok
+test grammar::const_span_covers_keyword_to_value ... ok
+test grammar::declarations_need_a_newline_between_them ... ok
+test grammar::contracts_policies_and_assemblies ... ok
+test grammar::else_if_chain_across_lines ... ok
+test grammar::eof_inside_block_is_e002 ... ok
+test grammar::else_on_next_line_is_e001 ... ok
+test grammar::effectful_fn_types ... ok
+test grammar::expression_body ... ok
+test grammar::field_defaults_and_aliases ... ok
+test grammar::field_punning_and_commas ... ok
+test grammar::fn_type_lists_params_then_return ... ok
+test grammar::fn_type_in_param_and_return_position ... ok
+test grammar::fn_type_missing_paren_is_e001 ... ok
+test grammar::fn_type_without_return_is_unit ... ok
+test grammar::fn_type_nests ... ok
+test grammar::for_over_bytes ... ok
+test grammar::for_with_a_tuple_pattern ... ok
+test grammar::glob_import ... ok
+test grammar::hex_escape_produces_character ... ok
+test grammar::hex_integer ... ok
+test grammar::if_as_let_initializer ... ok
+test grammar::generic_declarations ... ok
+test grammar::import_forms ... ok
+test grammar::if_else_if_else_nests ... ok
+test grammar::integer_beyond_i64_is_e001 ... ok
+test grammar::integer_with_separators ... ok
+test grammar::interpolated_expression_spans_point_into_the_string ... ok
+test grammar::interpolation_errors ... ok
+test grammar::keywords_are_path_segments ... ok
+test grammar::interpolation_desugars_to_concatenation ... ok
+test grammar::keywords_are_property_names ... ok
+test grammar::keywords_still_name_paths_and_fields ... ok
+test grammar::largest_integer_is_accepted ... ok
+test grammar::keywords_as_field_names ... ok
+test grammar::interpolation_holds_string_literals ... ok
+test grammar::let_patterns ... ok
+test grammar::lowercase_name_with_payload_or_path_is_a_variant_pattern ... ok
+test grammar::lowercase_name_before_brace_is_not_a_record ... ok
+test grammar::match_arms_separated_by_commas ... ok
+test grammar::match_arms_separated_by_newlines ... ok
+test grammar::match_binding_pattern ... ok
+test grammar::match_block_and_expression_bodies ... ok
+test grammar::match_nested_patterns ... ok
+test grammar::match_qualified_pattern ... ok
+test grammar::match_literal_and_wildcard_patterns ... ok
+test grammar::named_arguments ... ok
+test grammar::newline_after_assign_continues ... ok
+test grammar::newline_after_binary_operator_continues ... ok
+test grammar::newline_after_comma_continues ... ok
+test grammar::newline_before_binary_operator_ends_the_statement ... ok
+test grammar::newlines_inside_brackets_are_skipped ... ok
+test grammar::newlines_inside_parentheses_are_skipped ... ok
+test grammar::parentheses_produce_no_node ... ok
+test grammar::path_calls ... ok
+test grammar::postfix_paren_on_next_line_starts_a_statement ... ok
+test grammar::postfix_chain ... ok
+test grammar::no_record_literal_in_conditions ... ok
+test grammar::precedence_full_ladder ... ok
+test grammar::precedence_unary_operators ... ok
+test grammar::protocol_and_spawn_are_keywords ... ok
+test grammar::protocol_may_be_empty_and_on_one_line ... ok
+test grammar::protocol_declares_roles ... ok
+test grammar::protocol_member_must_be_fn ... ok
+test grammar::quantity_literals ... ok
+test grammar::qualified_patterns_with_payload ... ok
+test grammar::range_patterns ... ok
+test grammar::record_literal_directly_in_a_condition_is_not_parsed ... ok
+test grammar::record_literal_allowed_in_bodies_and_after_conditions ... ok
+test grammar::record_literal_with_commas ... ok
+test grammar::raw_strings_and_unicode_escapes ... ok
+test grammar::record_literal_with_newlines ... ok
+test grammar::record_update ... ok
+test grammar::recovery_keeps_good_declarations_parseable ... ok
+test grammar::recovery_reports_each_bad_declaration_once ... ok
+test grammar::record_literal_in_brackets_inside_a_condition ... ok
+test grammar::recovery_resumes_at_protocol ... ok
+test grammar::recovery_skips_the_rest_of_a_broken_protocol ... ok
+test grammar::spans_cover_first_to_last_token ... ok
+test grammar::return_expression ... ok
+test grammar::role_requires_breaks_across_lines ... ok
+test grammar::semicolon_separates_statements ... ok
+test grammar::spawn_span_covers_operand ... ok
+test grammar::spawn_is_a_prefix_operator ... ok
+test grammar::spawn_without_operand_is_an_error ... ok
+test grammar::statement_cannot_start_with_dot ... ok
+test grammar::stmt_assign_to_call_is_e001 ... ok
+test grammar::stmt_assign_to_field_path ... ok
+test grammar::stmt_break_and_continue ... ok
+test grammar::stmt_expression ... ok
+test grammar::stmt_for ... ok
+test grammar::stmt_let ... ok
+test grammar::stmt_loop ... ok
+test grammar::stmt_let_with_type_annotation ... ok
+test grammar::two_statements_on_one_line_need_a_separator ... ok
+test grammar::unary_neg_on_literal ... ok
+test grammar::unknown_escape_is_e001 ... ok
+test grammar::tuple_values_and_unit ... ok
+test grammar::stmt_var ... ok
+test grammar::unterminated_string_is_e001 ... ok
+test grammar::stmt_while ... ok
+test grammar::vertical_tab_and_form_feed_escapes ... ok
+test parse_terminal::every_fn_span_ends_at_its_closing_brace ... ok
+test grammar::trailing_semicolon ... ok
+test grammar::try_span_ends_at_the_question_mark ... ok
+test grammar::tuple_fields ... ok
+test parse_terminal::example_system_has_server_and_client ... ok
+test parse_terminal::example_imports_the_standard_library ... ok
+test grammar::string_escapes ... ok
+test grammar::stmt_return ... ok
+test grammar::tuple_types ... ok
+test robustness::greater_equal_after_type_arguments ... ok
+test grammar::store_resource_without_properties ... ok
+test grammar::test_declaration ... ok
+test robustness::backslash_at_end_of_line_is_an_unterminated_string ... ok
+test robustness::byte_literals_with_brace_or_quote_inside_interpolation ... ok
+test grammar::test_and_assert_errors ... ok
+test grammar::test_only_items ... ok
+test fixtures::fixtures_match_expected_diagnostics ... ok
+test robustness::byte_strings_take_an_escaped_single_quote ... ok
+test robustness::lexer_error_does_not_hide_earlier_parser_errors ... ok
+test robustness::one_element_tuple_type_is_e001 ... ok
+test robustness::nested_fn_gives_one_error ... ok
+test robustness::unclosed_brace_in_interpolation ... ok
+test robustness::smallest_integer_is_a_literal ... ok
+test robustness::unknown_escape_shows_one_backslash ... ok
+test robustness::postfix_and_else_do_not_cross_a_line_inside_brackets ... ok
+test parse_terminal::console_has_a_function_typed_field ... ok
+test parse_terminal::telnet_is_a_protocol_with_both_roles ... ok
+test parse_terminal::std_files_parse_and_name_their_module ... ok
+test robustness::nesting_is_limited_to_256_levels ... ok
+test robustness::long_chains_parse ... ok
+test robustness::line_col_computes_the_line_table_once ... ok
+test robustness::rendering_many_diagnostics_is_linear ... ok
+
+test result: ok. 148 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/debug/deps/ignite_types-75ebb7e5fa68d1f9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/debug/deps/main-1ec713e6db068368)
+
+running 39 tests
+test fixtures::every_type_code_has_a_fixture ... ok
+test inline_tests::a_program_without_package_is_main ... ok
+test inline_tests::assert_message_is_typed ... ok
+test audit::copies_match_the_audit_directory ... ok
+test inline_tests::assert_compare_records_operand_and_show ... ok
+test inline_tests::test_try_covers_only_test_bodies ... ok
+test inline_tests::tests_are_listed_in_declaration_order ... ok
+test slice9::boxing ... ok
+test slice9::closure_captures_in_order_of_first_use ... ok
+test generics::effectful_fn_types ... ok
+test generics::component_kind_carries_the_type_arguments ... ok
+test generics::type_parameters_are_exported ... ok
+test limits::exhaustiveness_is_polynomial_in_bool_columns ... ok
+test generics::instances_of_generic_uses ... ok
+test generics::every_expression_is_typed ... ok
+test slice9::closure_effects_on_captures_and_ambient ... ok
+test generics::store_and_new_builtins ... ok
+test fixtures::valid_system_describes_its_system_and_assembly ... ok
+test slice9::equality_kinds ... ok
+test slice9::debug_and_associated_fns ... ok
+test slice9::every_expression_is_typed ... ok
+test slice9::range_bounds_evaluate_constants ... ok
+test surface::field_defaults ... ok
+test surface::every_expression_is_typed ... ok
+test surface::aliases_resolve_to_their_targets ... ok
+test surface::interpolation_is_text_concatenation_with_to_text ... ok
+test surface::bare_variants_take_the_expected_enum ... ok
+test surface::inferred_effects_reach_the_signature ... ok
+test surface::return_is_never_and_constant_patterns_are_recorded ... ok
+test surface::tuples_and_unit ... ok
+test surface::ufcs_and_field_fn_calls ... ok
+test fixtures::fixtures_match_expected ... ok
+test terminal::standard_library_types_in_import_order ... ok
+test terminal::todo_program_types_against_the_standard_library ... ok
+test terminal::terminal_program_types_against_the_standard_library ... ok
+test terminal::standard_library_expressions_are_typed ... ok
+test audit::audit_probes_match_expected ... ok
+test limits::long_plus_chain_does_not_overflow ... ok
+test limits::failure_site_positions_of_the_long_chain_are_cheap ... ok
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+   Doc-tests ignite_check
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_syntax
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ignite_types
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT=0

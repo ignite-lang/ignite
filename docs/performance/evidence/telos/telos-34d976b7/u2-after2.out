@@ -1,0 +1,8 @@
+rust=0
+llvm=0
+emit=2
+5497192 /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/u2-after2/rust-target/debug/terminald
+5556544 /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/u2-after2/rust-target/debug/tn
+6002992 /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/u2-after2/llvm/bin/terminald
+6128768 /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/u2-after2/llvm/bin/tn
+EXIT=0

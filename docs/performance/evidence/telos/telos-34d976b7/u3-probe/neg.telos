@@ -1,0 +1,23 @@
+package probe.neg
+
+import std.json.{Json, JsonError, parse}
+
+test "nested json differs" {
+  assert parse("[1]")? == Array([Number(2)])
+}
+
+test "object key differs" {
+  assert parse("{{\"a\":1}}")? == Object([("b", Number(1))])
+}
+
+test "error offset differs" {
+  assert parse("[1,]") == Err(JsonError { message = "unexpected character", offset = 2 })
+}
+
+test "bytes differ" {
+  assert b"\xc2\x80" == b"\xc2\x81"
+}
+
+test "error offset equal" {
+  assert parse("[1,]") == Err(JsonError { message = "unexpected character", offset = 3 })
+}

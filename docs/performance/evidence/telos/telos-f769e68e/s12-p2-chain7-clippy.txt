@@ -1,0 +1,26 @@
+error: using `contains()` instead of `iter().any()` is more efficient
+   --> crates/ignite/src/run/engine.rs:503:39
+    |
+503 |                     if state.alive && state.subscribes.iter().any(|s| *s == reference) {
+    |                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `state.subscribes.contains(&reference)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_contains
+    = note: `-D clippy::manual-contains` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::manual_contains)]`
+error: this loop could be written as a `while let` loop
+   --> crates/ignite/src/run/live.rs:686:13
+    |
+686 | /             loop {
+687 | |                 match self.rx.try_recv() {
+688 | |                     Ok(observation) => {
+689 | |                         any = true;
+...   |
+694 | |             }
+    | |_____________^ help: try: `while let Ok(observation) = self.rx.try_recv() { .. }`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#while_let_loop
+    = note: `-D clippy::while-let-loop` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::while_let_loop)]`
+error: could not compile `ignite` (lib) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `ignite` (lib test) due to 2 previous errors

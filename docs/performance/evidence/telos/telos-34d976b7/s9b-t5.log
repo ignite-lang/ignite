@@ -1,0 +1,22 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-9d267f49cdec8647)
+
+running 1 test
+test slice9::long_chains_lower_quickly ... FAILED
+
+failures:
+
+---- slice9::long_chains_lower_quickly stdout ----
+
+thread 'slice9::long_chains_lower_quickly' (2953920) panicked at crates/telos/tests/slice9.rs:203:5:
+lowering took 10.542553506s
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    slice9::long_chains_lower_quickly
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 135 filtered out; finished in 10.56s
+
+error: test failed, to rerun pass `-p telos --test main`
+EXIT=101

@@ -1,0 +1,17 @@
+START 2026-11-02T02:07:56+01:00 run=2 load=11.75 23.37 19.11 3/2953 2616443
+STEP no-run secs=1.09 load_before=11.75 load_after=11.05 exit=0
+STEP file:cli secs=1.28 load_before=11.05 load_after=11.05 exit=0
+STEP file:failover secs=0.59 load_before=11.05 load_after=11.05 exit=0
+STEP file:generics secs=0.05 load_before=11.05 load_after=11.05 exit=0
+STEP file:ignite_test secs=9.17 load_before=11.05 load_after=9.89 exit=0
+STEP file:llvm secs=0.97 load_before=9.89 load_after=9.89 exit=0
+STEP file:llvm_build secs=2.10 load_before=9.89 load_after=9.34 exit=0
+STEP file:llvm_memory secs=0.35 load_before=9.34 load_after=9.34 exit=0
+STEP file:siblings secs=0.14 load_before=9.34 load_after=9.34 exit=0
+STEP file:slice10_llvm secs=0.93 load_before=9.34 load_after=9.34 exit=0
+STEP file:slice9 secs=17.22 load_before=9.34 load_after=7.85 exit=0
+STEP file:syntax secs=0.25 load_before=7.85 load_after=7.85 exit=0
+STEP file:terminal secs=2.11 load_before=7.85 load_after=7.31 exit=0
+STEP file:todo secs=0.19 load_before=7.31 load_after=7.31 exit=0
+STEP whole-ignite-main secs=18.36 load_before=7.31 load_after=6.48 exit=0
+EXIT=0

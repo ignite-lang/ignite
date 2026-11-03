@@ -1,0 +1,158 @@
+/dev/nvme0n1p2  848G  761G   79G  91% /
+== build ignite and the runner runtime
+warning: field `0` is never read
+  --> crates/ignite/src/run/process.rs:78:13
+   |
+78 |     Awaited(InFlight),
+   |     ------- ^^^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Release` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+78 -     Awaited(InFlight),
+78 +     Awaited(()),
+   |
+warning: `ignite` (lib) generated 1 warning
+STEP build exit=0
+STEP runner exit=0
+STEP runtime exit=0
+== inline fixture, rust
+running 1 test
+test tests.builtins/Clock.monotonic: two reads are ordered ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+STEP fixture-rust exit=0
+== inline fixture, llvm
+running 1 test
+test tests.builtins/Clock.monotonic: two reads are ordered ... ok
+
+test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
+STEP fixture-llvm exit=0
+== ignite build, rust
+note: building the generated Rust project in /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p2-prober-rust/project; compiler messages refer to generated code
+    Updating crates.io index
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p2-prober-rust/target/debug/server
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p2-prober-rust/target/debug/prober
+STEP build-rust exit=0
+-- rust: without binding
+exit=1 stdout=[] stderr=[error: no binding for Probes.server]
+STEP rust-unbound exit=0
+-- rust: with binding
+exit=0 stdout=[127.0.0.1:4242] stderr=[]
+STEP rust-bound exit=0
+-- rust: malformed binding
+exit=2 stderr=[error: --ref Probes.server: expected path=address:port]
+STEP rust-malformed exit=0
+== ignite build, llvm
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p2-prober-llvm/bin/server
+built /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s12-p2-prober-llvm/bin/prober
+STEP build-llvm exit=0
+-- llvm: without binding
+exit=1 stdout=[] stderr=[error: no binding for Probes.server]
+STEP llvm-unbound exit=0
+-- llvm: with binding
+exit=0 stdout=[127.0.0.1:4242] stderr=[]
+STEP llvm-bound exit=0
+-- llvm: malformed binding
+exit=2 stderr=[error: --ref Probes.server: expected path=address:port]
+STEP llvm-malformed exit=0
+== unit tests of crates/ignite/src/run
+warning: field `0` is never read
+  --> crates/ignite/src/run/process.rs:78:13
+   |
+78 |     Awaited(InFlight),
+   |     ------- ^^^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Release` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+78 -     Awaited(InFlight),
+78 +     Awaited(()),
+   |
+warning: `ignite` (lib test) generated 1 warning
+T.probe: warn
+T.probe: boom
+T.server: noise
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+STEP run-tests exit=0
+== clippy
+error: field `0` is never read
+  --> crates/ignite/src/run/process.rs:78:13
+   |
+78 |     Awaited(InFlight),
+   |     ------- ^^^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `Release` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+   = note: `-D dead-code` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[expect(dead_code)]` or `#[allow(dead_code)]`
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+78 -     Awaited(InFlight),
+78 +     Awaited(()),
+   |
+error: using `contains()` instead of `iter().any()` is more efficient
+   --> crates/ignite/src/run/engine.rs:503:39
+    |
+503 |                     if state.alive && state.subscribes.iter().any(|s| *s == reference) {
+    |                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `state.subscribes.contains(&reference)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_contains
+    = note: `-D clippy::manual-contains` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::manual_contains)]`
+error: this loop could be written as a `while let` loop
+   --> crates/ignite/src/run/live.rs:686:13
+    |
+686 | /             loop {
+687 | |                 match self.rx.try_recv() {
+688 | |                     Ok(observation) => {
+689 | |                         any = true;
+...   |
+694 | |             }
+    | |_____________^ help: try: `while let Ok(observation) = self.rx.try_recv() { .. }`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#while_let_loop
+    = note: `-D clippy::while-let-loop` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::while_let_loop)]`
+error: could not compile `ignite` (lib) due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `ignite` (lib test) due to 3 previous errors
+STEP clippy exit=101
+== release runtime for todod
+== todod pairs after unit 1
+START 2026-11-02T05:40:42+01:00 load=1.18 3.43 8.89 1/2998 3971276
+STEP base:rust-dev:1 secs=1.083 load_before=1.18 load_after=1.18 exit=0
+STEP base:rust-release:1 secs=1.193 load_before=1.18 load_after=1.09 exit=0
+STEP base:llvm-dev:1 secs=0.343 load_before=1.09 load_after=1.09 exit=0
+STEP base:llvm-release:1 secs=0.824 load_before=1.09 load_after=1.09 exit=0
+STEP new:rust-dev:1 secs=1.664 load_before=1.09 load_after=1.09 exit=0
+STEP new:rust-release:1 secs=2.706 load_before=1.09 load_after=1.40 exit=0
+STEP new:llvm-dev:1 secs=0.489 load_before=1.40 load_after=1.40 exit=0
+STEP new:llvm-release:1 secs=0.958 load_before=1.40 load_after=1.40 exit=0
+STEP base:rust-dev:2 secs=1.100 load_before=1.40 load_after=1.40 exit=0
+STEP base:rust-release:2 secs=1.194 load_before=1.40 load_after=1.37 exit=0
+STEP base:llvm-dev:2 secs=0.321 load_before=1.37 load_after=1.37 exit=0
+STEP base:llvm-release:2 secs=0.797 load_before=1.37 load_after=1.37 exit=0
+STEP new:rust-dev:2 secs=1.707 load_before=1.37 load_after=1.37 exit=0
+STEP new:rust-release:2 secs=2.366 load_before=1.37 load_after=1.34 exit=0
+STEP new:llvm-dev:2 secs=0.485 load_before=1.34 load_after=1.34 exit=0
+STEP new:llvm-release:2 secs=0.972 load_before=1.34 load_after=1.34 exit=0
+STEP base:rust-dev:3 secs=1.725 load_before=1.34 load_after=1.34 exit=0
+STEP base:rust-release:3 secs=1.203 load_before=1.34 load_after=1.34 exit=0
+STEP base:llvm-dev:3 secs=0.323 load_before=1.34 load_after=1.39 exit=0
+STEP base:llvm-release:3 secs=0.808 load_before=1.39 load_after=1.39 exit=0
+STEP new:rust-dev:3 secs=1.649 load_before=1.39 load_after=1.39 exit=0
+STEP new:rust-release:3 secs=2.364 load_before=1.39 load_after=1.60 exit=0
+STEP new:llvm-dev:3 secs=0.484 load_before=1.60 load_after=1.60 exit=0
+STEP new:llvm-release:3 secs=0.971 load_before=1.60 load_after=1.60 exit=0
+EXIT=0
+STEP todod exit=0
+EXIT=0
+EXIT=0

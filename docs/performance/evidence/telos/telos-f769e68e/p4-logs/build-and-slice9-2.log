@@ -1,0 +1,26 @@
+/dev/nvme0n1p2  848G  766G   74G  92% /
+   Compiling ignite-eval v0.1.0 (/home/timo/projects/telos/crates/ignite-eval)
+   Compiling ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.90s
+BUILD exit=0
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.88s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 10 tests
+test slice9::long_chains_100k_lower_quickly ... ignored
+test slice9::long_chains_100k_run_on_llvm ... ignored
+test slice9::long_chains_lower_quickly ... ok
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test slice9::rust_target_features_pass_on_llvm ... ok
+test slice9::var_aliases_leave_the_source_unchanged ... ok
+test slice9::audit_io_probes_pass ... ok
+test slice9::audit_probes_pass ... ok
+test slice9::long_chains_run_on_llvm ... ok
+test slice9::slice9_values_across_regions ... ok
+
+test result: ok. 8 passed; 0 failed; 2 ignored; 0 measured; 148 filtered out; finished in 16.17s
+
+SLICE9 exit=0 wall=17.071795952 load=1.19
+EXIT=0

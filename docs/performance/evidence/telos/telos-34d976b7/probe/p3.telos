@@ -1,0 +1,55 @@
+package probe.three
+
+import std.console.Reply
+import std.net.Endpoint
+
+type Holder {
+  reply: Reply
+  n: Text
+}
+
+type Probe {
+  attempts: Signal<Reply>
+  target: Ref<Holder>
+}
+
+type Contract {
+  signal: Signal<Reply>
+  exclusions: List<Text>
+}
+
+enum Binding { Local, Native(List<Ref>) }
+
+fn native(includes: List<Ref>) -> Binding = Native(includes)
+
+fn local() -> Binding = Local
+
+type Deployment {
+  system: SystemRef
+  bindings: Map<Ref, Binding>
+}
+
+type Dialer {
+  target: Endpoint
+}
+
+fn Dialer.main(self: Dialer) -> Result<Unit, IoError> {
+  let stream = TcpStream.connect(self.target.address, self.target.port)?
+  stream.close()
+}
+
+system S {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 2323 }
+  component c: Holder { reply = Reply { lines = [] }, n = "x" }
+  component p: Probe { target = c }
+  component d: Dialer { target = ingress }
+  contract k: Contract { signal = p.attempts, exclusions = [] }
+}
+
+assembly a: Deployment {
+  system = S
+  bindings = {
+    S.ingress = local()
+    S.c = native(includes = [S.p, S.ingress])
+  }
+}

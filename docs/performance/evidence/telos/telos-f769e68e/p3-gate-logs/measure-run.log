@@ -1,0 +1,13 @@
+run 0: ready after 262 ms load=4.01
+  exit=0 records=28
+run 1: ready after 127 ms load=4.01
+  exit=0 records=28
+run 2: ready after 127 ms load=4.01
+  exit=0 records=28
+run 3: ready after 127 ms load=4.01
+  exit=0 records=28
+run 4: ready after 126 ms load=4.01
+  exit=0 records=28
+run 5: ready after 127 ms load=4.01
+  exit=0 records=28
+EXIT=0

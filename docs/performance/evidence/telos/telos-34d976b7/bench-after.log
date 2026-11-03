@@ -1,0 +1,15 @@
+task: [bench] cargo test -q -p telos --test llvm_build -- --ignored --exact bench --nocapture
+
+running 1 test
+
+                          llvm debug  llvm release    rust debug  rust release
+terminald size               5.48 MB       0.59 MB       5.11 MB       0.54 MB
+terminald stripped           0.63 MB       0.45 MB       0.50 MB       0.41 MB
+runtime archive cold          3.47 s        3.97 s             -             -
+program build cold            0.73 s        0.44 s        2.21 s        2.80 s
+rebuild unchanged             0.02 s        0.01 s        0.30 s        0.55 s
+200 runs --port nope          0.09 s        0.09 s        0.10 s        0.10 s
+.
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 14.92s
+
+EXIT=0

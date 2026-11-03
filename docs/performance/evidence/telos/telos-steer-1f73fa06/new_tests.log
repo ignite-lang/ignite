@@ -1,0 +1,36 @@
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.88s
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/main-9d267f49cdec8647)
+
+running 6 tests
+test siblings::llvm_build_links_a_module_sibling ... ok
+test siblings::llvm_test_runs_a_module_sibling ... ok
+test failover::a_failing_session_does_not_end_the_service ... ok
+test failover::ten_thousand_failing_sessions_leak_nothing ... ok
+test slice10_llvm::failures_fail_on_both_targets_with_the_same_report ... ok
+test slice10_llvm::features_pass_on_both_targets_with_the_same_report ... FAILED
+
+failures:
+
+---- slice10_llvm::features_pass_on_both_targets_with_the_same_report stdout ----
+
+thread 'slice10_llvm::features_pass_on_both_targets_with_the_same_report' (2548328) panicked at crates/telos/tests/slice10_llvm.rs:74:9:
+assertion `left == right` failed: llvm:
+
+
+thread 'telos' (2549010) panicked at crates/telos-llvm/src/lower.rs:569:22:
+expected an aggregate, got Unit
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  left: 101
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    slice10_llvm::features_pass_on_both_targets_with_the_same_report
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 139 filtered out; finished in 2.78s
+
+error: test failed, to rerun pass `-p telos --test main`
+EXIT=101

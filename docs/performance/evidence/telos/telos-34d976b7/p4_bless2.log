@@ -1,0 +1,42 @@
+START 00:47:28
+   Compiling telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+   Compiling telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.63s
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-1d78e366ec046e08)
+
+running 6 tests
+test golden::loops_release_their_region ... ok
+test golden::read_only_parameters_are_borrowed ... ok
+test golden::symbols_are_module_qualified ... ok
+test golden::modules_name_target_and_source ... ok
+test golden::small_program ... ok
+test golden::syntax_program ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.24s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/main-7833c6a20e9dcc9e)
+
+running 16 tests
+test golden::acceptance_copy_is_current ... ok
+test golden::parameters_are_borrowed_unless_changed ... ok
+test golden::element_reads_copy_only_non_copy_elements ... ok
+test golden::syntax_copy_is_current ... ok
+test golden::listeners_are_bound_before_the_component_value ... ok
+test golden::system_with_server_and_client ... ok
+test golden::surface_syntax ... ok
+test golden::generics_stores_and_builtins ... ok
+test golden::constants_qualified_patterns_and_io_error ... ok
+test golden::pure_functions ... ok
+test golden::variants_of_enums_not_imported ... ok
+test golden::protocol_import_spawn_and_function_values ... ok
+test golden::process_exit_diverges ... ok
+test golden::record_and_enum_with_match ... ok
+test golden::terminal ... ok
+test golden::executable_components ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.15s
+
+cargo EXIT=0
+END 00:47:33
+EXIT=0

@@ -1,0 +1,425 @@
+   Compiling ignite-check v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s11-p0-tree/crates/ignite-check)
+   Compiling ignite-types v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s11-p0-tree/crates/ignite-types)
+   Compiling ignite-llvm v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s11-p0-tree/crates/ignite-llvm)
+   Compiling ignite-rustgen v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s11-p0-tree/crates/ignite-rustgen)
+   Compiling ignite v0.1.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/s11-p0-tree/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.10s
+  Executable tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+=== FILE cli
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 19 tests
+test cli::default_substrate_is_the_sibling_crate ... ok
+test cli::default_std_is_the_repository_std ... ok
+test cli::missing_std_root_is_exit_3 ... ok
+test cli::no_arguments_is_exit_2 ... ok
+test cli::std_file_without_package_is_e031 ... ok
+test cli::std_package_mismatch_is_e031_in_the_std_file ... ok
+test cli::std_import_cycle_is_e032 ... ok
+test cli::std_modules_are_checked_in_import_order ... ok
+test cli::emit_with_std_fixture ... ok
+test cli::std_diagnostic_is_rendered_with_its_file ... ok
+test cli::missing_file_is_exit_3 ... ok
+test cli::check_unknown_name_is_e003 ... ok
+test cli::check_acceptance_program_is_silent ... ok
+test cli::emit_uses_given_substrate ... ok
+test cli::emit_prints_the_program_and_the_std_crate ... ok
+test cli::check_reports_unsupported_component_kind ... ok
+test cli::check_design_file_is_silent ... ok
+test cli::build_std_and_program_then_run_both_executables ... ok
+test cli::client_exit_statuses ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 127 filtered out; finished in 0.55s
+
+=== FILE failover
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 2 tests
+test failover::a_failing_session_does_not_end_the_service ... ok
+test failover::ten_thousand_failing_sessions_leak_nothing ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 144 filtered out; finished in 0.59s
+
+=== FILE generics
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 2 tests
+test generics::llvm_generics_and_store_serve ... ok
+test generics::llvm_store_ids_and_updates_are_atomic_across_connections ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 144 filtered out; finished in 0.02s
+
+=== FILE ignite_test
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 11 tests
+test ignite_test::compile_error_exits_2 ... ok
+test ignite_test::files_share_one_executable ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+test ignite_test::std_module_as_the_file ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 135 filtered out; finished in 9.05s
+
+=== FILE llvm_build
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 6 tests
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test llvm_build::failed_compile_is_retried ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 140 filtered out; finished in 2.08s
+
+=== FILE llvm_memory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 4 tests
+test llvm_memory::pushing_in_a_loop_is_linear ... ok
+test llvm_memory::loop_regions_keep_carried_values ... ok
+test llvm_memory::terminald_memory_is_flat_over_a_long_session ... ok
+test llvm_memory::tn_memory_is_flat_over_a_long_session ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 142 filtered out; finished in 0.31s
+
+=== FILE siblings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 2 tests
+test siblings::llvm_build_links_a_module_sibling ... ok
+test siblings::llvm_test_runs_a_module_sibling ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 144 filtered out; finished in 0.11s
+
+=== FILE slice10_llvm
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 2 tests
+test slice10_llvm::failures_fail_on_both_targets_with_the_same_report ... ok
+test slice10_llvm::features_pass_on_both_targets_with_the_same_report ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 144 filtered out; finished in 0.94s
+
+=== FILE slice9
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 9 tests
+test slice9::long_chains_100k_run_on_llvm ... ignored
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test slice9::long_chains_lower_quickly ... ok
+test slice9::slice9_values_across_regions ... ok
+test slice9::long_chains_run_on_llvm ... ok
+test slice9::rust_target_features_pass_on_llvm ... ok
+test slice9::var_aliases_leave_the_source_unchanged ... ok
+test slice9::audit_io_probes_pass ... ok
+test slice9::audit_probes_pass ... ok
+
+test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 137 filtered out; finished in 17.53s
+
+=== FILE syntax
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 2 tests
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/tmp/syntax-rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.06s
+test syntax::rust_target_runs_every_feature ... ok
+test syntax::llvm_target_runs_every_feature ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 144 filtered out; finished in 0.25s
+
+=== FILE terminal
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 64 tests
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test terminal::llvm::interrupt_process_closes ... ok
+test terminal::llvm::iac_iac_is_a_literal_byte ... ok
+test terminal::llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::llvm::are_you_there_is_answered ... ok
+test terminal::llvm::do_echo_is_refused_with_wont ... ok
+test terminal::llvm::line_of_4096_bytes_is_accepted ... ok
+test terminal::llvm::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::llvm::subnegotiation_is_skipped ... ok
+test terminal::llvm::overlong_line_is_refused_and_closed ... ok
+test terminal::llvm::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::llvm::accept_survives_running_out_of_descriptors ... ok
+test terminal::llvm::tn_exits_3_when_nothing_listens ... ok
+test terminal::llvm::will_naws_is_refused_with_dont ... ok
+test terminal::llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::llvm::tn_with_piped_input_prints_the_transcript ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::llvm::tn_exits_2_for_a_malformed_port ... ok
+test terminal::llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::rust::are_you_there_is_answered ... ok
+test terminal::rust::do_echo_is_refused_with_wont ... ok
+test terminal::llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::rust::iac_iac_is_a_literal_byte ... ok
+test terminal::llvm::cr_nul_ends_a_line ... ok
+test terminal::llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::rust::interrupt_process_closes ... ok
+test terminal::llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::rust::line_of_4096_bytes_is_accepted ... ok
+test terminal::rust::overlong_line_is_refused_and_closed ... ok
+test terminal::rust::subnegotiation_is_skipped ... ok
+test terminal::rust::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::rust::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::llvm::tn_refuses_options_and_strips_commands ... ok
+test terminal::llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::llvm::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::rust::tn_exits_2_for_a_malformed_port ... ok
+test terminal::rust::tn_exits_3_when_nothing_listens ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::rust::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::rust::accept_survives_running_out_of_descriptors ... ok
+test terminal::rust::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::rust::cr_nul_ends_a_line ... ok
+test terminal::rust::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::rust::will_naws_is_refused_with_dont ... ok
+test terminal::rust::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::rust::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::rust::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::rust::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::rust::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::rust::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::rust::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::rust::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::no_target_links_tokio ... ok
+test terminal::rust::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::rust::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test terminal::rust::tn_refuses_options_and_strips_commands ... ok
+test terminal::llvm::fragmented_input_is_reassembled ... ok
+test terminal::rust::fragmented_input_is_reassembled ... ok
+test terminal::llvm::transcript_on_raw_socket ... ok
+test terminal::llvm::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test terminal::rust::transcript_on_raw_socket ... ok
+test terminal::rust::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test terminal::idle_terminald_runs_one_thread ... ok
+
+test result: ok. 64 passed; 0 failed; 0 ignored; 0 measured; 82 filtered out; finished in 2.08s
+
+=== FILE todo
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 18 tests
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test todo::todo::rust::keep_alive ... ok
+test todo::todo::rust::crud_flow ... ok
+test todo::todo::rust::header_framing ... ok
+test todo::todo::rust::limits ... ok
+test todo::todo::rust::content_length ... ok
+test todo::todo::rust::error_statuses ... ok
+test todo::todo::rust::rejection_is_read ... ok
+test todo::todo::rust::concurrent_posts ... ok
+test todo::todo::llvm::keep_alive ... ok
+test todo::todo::llvm::crud_flow ... ok
+test todo::todo::llvm::limits ... ok
+test todo::todo::llvm::error_statuses ... ok
+test todo::todo::llvm::header_framing ... ok
+test todo::todo::llvm::content_length ... ok
+test todo::todo::llvm::rejection_is_read ... ok
+test todo::todo::llvm::concurrent_posts ... ok
+test todo::todo::rust::concurrent_patches ... ok
+test todo::todo::llvm::concurrent_patches ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 128 filtered out; finished in 0.15s
+
+=== FILE llvm (skipping terminal:: todo:: slice10_llvm::, whose llvm submodules the substring filter matches)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 5 tests
+test llvm::clang_failure_is_exit_2 ... ok
+test llvm::client_exits_3_when_nothing_listens ... ok
+test llvm::index_out_of_range_panics_with_101 ... ok
+test llvm::probe_runs_every_check ... ok
+test llvm::llvm_build_runs_neither_cargo_nor_rustc ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.14s
+
+=== WHOLE
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+
+running 146 tests
+test cli::default_std_is_the_repository_std ... ok
+test cli::default_substrate_is_the_sibling_crate ... ok
+test cli::missing_std_root_is_exit_3 ... ok
+test cli::std_file_without_package_is_e031 ... ok
+test cli::std_diagnostic_is_rendered_with_its_file ... ok
+test cli::no_arguments_is_exit_2 ... ok
+test cli::std_package_mismatch_is_e031_in_the_std_file ... ok
+test cli::std_import_cycle_is_e032 ... ok
+test cli::emit_with_std_fixture ... ok
+test cli::std_modules_are_checked_in_import_order ... ok
+test generics::llvm_generics_and_store_serve ... ok
+test generics::llvm_store_ids_and_updates_are_atomic_across_connections ... ok
+test cli::missing_file_is_exit_3 ... ok
+test cli::check_acceptance_program_is_silent ... ok
+test cli::check_unknown_name_is_e003 ... ok
+test cli::emit_uses_given_substrate ... ok
+test cli::emit_prints_the_program_and_the_std_crate ... ok
+test cli::check_reports_unsupported_component_kind ... ok
+test cli::check_design_file_is_silent ... ok
+test llvm::clang_failure_is_exit_2 ... ok
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test failover::a_failing_session_does_not_end_the_service ... ok
+test llvm::client_exits_3_when_nothing_listens ... ok
+test llvm::index_out_of_range_panics_with_101 ... ok
+test llvm::probe_runs_every_check ... ok
+test llvm::llvm_build_runs_neither_cargo_nor_rustc ... ok
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test llvm_memory::loop_regions_keep_carried_values ... ok
+test llvm_memory::pushing_in_a_loop_is_linear ... ok
+test cli::client_exit_statuses ... ok
+test siblings::llvm_build_links_a_module_sibling ... ok
+test cli::build_std_and_program_then_run_both_executables ... ok
+test siblings::llvm_test_runs_a_module_sibling ... ok
+test llvm_memory::terminald_memory_is_flat_over_a_long_session ... ok
+test llvm_memory::tn_memory_is_flat_over_a_long_session ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+test failover::ten_thousand_failing_sessions_leak_nothing ... ok
+test slice9::long_chains_100k_run_on_llvm ... ignored
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test llvm_build::failed_compile_is_retried ... ok
+test slice10_llvm::failures_fail_on_both_targets_with_the_same_report ... ok
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test slice10_llvm::features_pass_on_both_targets_with_the_same_report ... ok
+test ignite_test::files_share_one_executable ... ok
+test syntax::llvm_target_runs_every_feature ... ok
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/tmp/syntax-rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.06s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test syntax::rust_target_runs_every_feature ... ok
+test terminal::llvm::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+test terminal::llvm::accept_survives_running_out_of_descriptors ... ok
+test terminal::llvm::are_you_there_is_answered ... ok
+test terminal::llvm::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::llvm::do_echo_is_refused_with_wont ... ok
+test terminal::llvm::cr_nul_ends_a_line ... ok
+test terminal::llvm::iac_iac_is_a_literal_byte ... ok
+test terminal::llvm::interrupt_process_closes ... ok
+test terminal::llvm::line_of_4096_bytes_is_accepted ... ok
+test terminal::llvm::overlong_line_is_refused_and_closed ... ok
+test terminal::llvm::subnegotiation_is_skipped ... ok
+test terminal::llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::llvm::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::llvm::tn_exits_2_for_a_malformed_port ... ok
+test terminal::llvm::tn_exits_3_when_nothing_listens ... ok
+test terminal::llvm::fragmented_input_is_reassembled ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::llvm::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::llvm::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::llvm::tn_refuses_options_and_strips_commands ... ok
+test terminal::llvm::will_naws_is_refused_with_dont ... ok
+test terminal::no_target_links_tokio ... ok
+test slice9::rust_target_features_pass_on_llvm ... ok
+test terminal::rust::a_task_that_cannot_start_closes_only_its_connection ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test terminal::rust::accept_survives_running_out_of_descriptors ... ok
+test terminal::rust::are_you_there_is_answered ... ok
+test terminal::rust::cr_nul_ends_a_line ... ok
+test terminal::rust::do_echo_is_refused_with_wont ... ok
+test terminal::llvm::transcript_on_raw_socket ... ok
+test terminal::rust::iac_iac_is_a_literal_byte ... ok
+test terminal::rust::interrupt_process_closes ... ok
+test terminal::rust::line_of_4096_bytes_is_accepted ... ok
+test terminal::rust::overlong_line_is_refused_and_closed ... ok
+test terminal::rust::subnegotiation_is_skipped ... ok
+test terminal::rust::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::rust::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::rust::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::rust::tn_exits_2_for_a_malformed_port ... ok
+test terminal::rust::tn_exits_3_when_nothing_listens ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::rust::fragmented_input_is_reassembled ... ok
+test terminal::rust::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::rust::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::rust::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::rust::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::rust::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::rust::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::rust::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::rust::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test terminal::rust::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::rust::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::rust::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::rust::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::rust::will_naws_is_refused_with_dont ... ok
+test terminal::rust::tn_refuses_options_and_strips_commands ... ok
+test todo::todo::llvm::concurrent_posts ... ok
+test todo::todo::llvm::content_length ... ok
+test todo::todo::llvm::crud_flow ... ok
+test todo::todo::llvm::error_statuses ... ok
+test todo::todo::llvm::header_framing ... ok
+test todo::todo::llvm::keep_alive ... ok
+test todo::todo::llvm::limits ... ok
+test todo::todo::llvm::rejection_is_read ... ok
+test todo::todo::llvm::concurrent_patches ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+test terminal::rust::transcript_on_raw_socket ... ok
+test todo::todo::rust::content_length ... ok
+test todo::todo::rust::crud_flow ... ok
+test todo::todo::rust::error_statuses ... ok
+test todo::todo::rust::header_framing ... ok
+test todo::todo::rust::keep_alive ... ok
+test todo::todo::rust::concurrent_posts ... ok
+test todo::todo::rust::limits ... ok
+test todo::todo::rust::rejection_is_read ... ok
+test todo::todo::rust::concurrent_patches ... ok
+test terminal::idle_terminald_runs_one_thread ... ok
+test slice9::long_chains_lower_quickly ... ok
+test ignite_test::timeout_kills_a_test ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::compile_error_exits_2 ... ok
+test ignite_test::counts_results_and_failures ... ok
+test slice9::audit_probes_pass ... ok
+test ignite_test::std_module_as_the_file ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+test slice9::slice9_values_across_regions ... ok
+test slice9::var_aliases_leave_the_source_unchanged ... ok
+test slice9::long_chains_run_on_llvm ... ok
+test slice9::audit_io_probes_pass ... ok
+
+test result: ok. 144 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 18.80s
+

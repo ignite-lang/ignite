@@ -1,0 +1,11 @@
+after examples/todo/todo.ignite run=1 wall=0.058 exit=0 load=6.54/6.54
+after examples/todo/todo.ignite run=2 wall=0.057 exit=0 load=6.54/6.54
+after examples/todo/todo.ignite run=3 wall=0.059 exit=0 load=6.54/6.54
+after examples/todo/todo.ignite run=4 wall=0.056 exit=0 load=6.54/6.54
+after examples/todo/todo.ignite run=5 wall=0.058 exit=0 load=6.54/6.54
+after examples/terminal/terminal.design.ignite run=1 wall=0.055 exit=0 load=6.54/6.54
+after examples/terminal/terminal.design.ignite run=2 wall=0.056 exit=0 load=6.54/6.54
+after examples/terminal/terminal.design.ignite run=3 wall=0.057 exit=0 load=6.54/6.54
+after examples/terminal/terminal.design.ignite run=4 wall=0.056 exit=0 load=6.54/6.54
+after examples/terminal/terminal.design.ignite run=5 wall=0.056 exit=0 load=6.54/6.54
+EXIT=0

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UpdateTodo input",
+  "x-ess-name": "todo.list.UpdateTodo",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/todo.list.TodoId"
+    },
+    "title": {
+      "$ref": "#/$defs/todo.list.Title"
+    },
+    "done": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "todo",
+    "specification_version": "v1",
+    "source_digest": "4fab963621d47043d38543f5141de315c8b798f376db1be3379011617c426950",
+    "contract_digest": "slice-sha256/2:163d8ba1f5c3e52d048acde710881c3ca926b1251bc53c9c6d86de6332a22de7",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "todo.list.Title": {
+      "title": "Title",
+      "x-ess-name": "todo.list.Title",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "todo.list.TodoId": {
+      "title": "TodoId",
+      "x-ess-name": "todo.list.TodoId",
+      "x-ess-kind": "newtype",
+      "type": "integer"
+    }
+  }
+}

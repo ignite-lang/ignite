@@ -1,0 +1,9 @@
+journal written in 38885 ms
+  exit=0
+records: 10071 bytes: 3926719
+replay 1: 2628 ms rc=0 load=3.10
+replay 2: 2552 ms rc=0 load=3.10
+replay 3: 2543 ms rc=0 load=2.93
+replay 4: 2536 ms rc=0 load=2.94
+replay 5: 2574 ms rc=0 load=2.94
+EXIT=0

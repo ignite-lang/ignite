@@ -1,0 +1,33 @@
+START 2026-11-02T02:07:25+01:00 run=1 load=15.79 25.23 19.55 15/3060 2608994
+triple=x86_64-pc-linux-gnu
+LINES dev main_todod 976
+LINES dev program 1715
+LINES dev std 18120
+STEP devlang-c:main_todod:1 secs=0.02 load_before=15.79 load_after=15.79 exit=0
+STEP devlang-c:program:1 secs=0.03 load_before=15.79 load_after=15.16 exit=0
+STEP devlang-c:std:1 secs=0.09 load_before=15.16 load_after=15.16 exit=0
+STEP devink:todod:1 secs=0.11 load_before=15.16 load_after=15.16 exit=0
+STEP devlang-c:main_todod:2 secs=0.02 load_before=15.16 load_after=15.16 exit=0
+STEP devlang-c:program:2 secs=0.02 load_before=15.16 load_after=15.16 exit=0
+STEP devlang-c:std:2 secs=0.09 load_before=15.16 load_after=15.16 exit=0
+STEP devink:todod:2 secs=0.12 load_before=15.16 load_after=15.16 exit=0
+STEP devlang-c:main_todod:3 secs=0.02 load_before=15.16 load_after=15.16 exit=0
+STEP devlang-c:program:3 secs=0.02 load_before=15.16 load_after=15.16 exit=0
+STEP devlang-c:std:3 secs=0.10 load_before=15.16 load_after=15.16 exit=0
+STEP devink:todod:3 secs=0.11 load_before=15.16 load_after=15.16 exit=0
+LINES release main_todod 976
+LINES release program 1715
+LINES release std 18120
+STEP releaselang-c:main_todod:1 secs=0.07 load_before=15.16 load_after=15.16 exit=0
+STEP releaselang-c:program:1 secs=0.08 load_before=15.16 load_after=15.16 exit=0
+STEP releaselang-c:std:1 secs=0.79 load_before=15.16 load_after=15.16 exit=0
+STEP releaseink:todod:1 secs=0.05 load_before=15.16 load_after=15.16 exit=0
+STEP releaselang-c:main_todod:2 secs=0.06 load_before=15.16 load_after=15.16 exit=0
+STEP releaselang-c:program:2 secs=0.08 load_before=15.16 load_after=15.16 exit=0
+STEP releaselang-c:std:2 secs=0.79 load_before=15.16 load_after=15.16 exit=0
+STEP releaseink:todod:2 secs=0.05 load_before=15.16 load_after=15.16 exit=0
+STEP releaselang-c:main_todod:3 secs=0.07 load_before=15.16 load_after=15.16 exit=0
+STEP releaselang-c:program:3 secs=0.08 load_before=15.16 load_after=15.16 exit=0
+STEP releaselang-c:std:3 secs=0.80 load_before=15.16 load_after=15.16 exit=0
+STEP releaseink:todod:3 secs=0.06 load_before=15.16 load_after=15.16 exit=0
+EXIT=0

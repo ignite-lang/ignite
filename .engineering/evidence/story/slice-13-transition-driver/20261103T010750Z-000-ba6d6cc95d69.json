@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T01:07:50Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-13-transition-driver",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p ignite --test main apply_transition:: (8 passed at 6b502a5)",
+    "reference": "https://github.com/ignite-lang/ignite/commit/6b502a5"
+  }
+}

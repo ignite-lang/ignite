@@ -1,0 +1,11 @@
+error: unused import: `TryRecvError`
+  --> crates/ignite/src/run/live.rs:36:59
+   |
+36 | use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, TryRecvError};
+   |                                                           ^^^^^^^^^^^^
+   |
+   = note: `-D unused-imports` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(unused_imports)]`
+error: could not compile `ignite` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `ignite` (lib test) due to 1 previous error

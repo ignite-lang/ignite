@@ -383,7 +383,7 @@ Not applied by this document. Each is one commit.
 ## 10 Soundness audit
 
 Three read-only audits ran on 2026-11-01 against the code, with reproductions in the session's
-scratch directory. Their results are in section 10.1 to 10.3 once complete; findings that
+scratch directory (logs and scripts copied to `docs/performance/evidence/telos/telos-steer-1f73fa06/`). Their results are in section 10.1 to 10.3 once complete; findings that
 change a contract are added to section 6.
 
 The probe programs are kept under `docs/audit/2026-11-01/` (one directory per audit); every

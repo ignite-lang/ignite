@@ -1,0 +1,16 @@
+task: [check] cargo fmt --all -- --check
+Diff in /home/timo/projects/telos/crates/telos-llvm/tests/golden.rs:234:
+     assert!(program.contains("!DIFile(filename: \"small.telos\", directory: \"./tests/golden\")"));
+     assert!(program.contains("distinct !DISubprogram(name: \"tests.small.area\""));
+     assert!(program.contains(" = !DILocation(line: "));
+[31m-    assert!(program.lines().any(|l| l.starts_with("  %") && l.contains(", !dbg !")));
+(B[m[32m+    assert!(
+(B[m[32m+        program
+(B[m[32m+            .lines()
+(B[m[32m+            .any(|l| l.starts_with("  %") && l.contains(", !dbg !"))
+(B[m[32m+    );
+(B[m     assert!(program.contains("!llvm.dbg.cu = !{!"));
+ }
+ 
+task: Failed to run task "gate": task: Failed to run task "check": exit status 1
+EXIT=201

@@ -1,0 +1,56 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling utf8parse v0.2.2
+   Compiling telos-syntax v0.1.0 (/home/timo/projects/telos/crates/telos-syntax)
+   Compiling anstyle v1.0.14
+   Compiling cfg_aliases v0.2.2
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+   Compiling libc v0.2.191
+   Compiling strsim v0.11.1
+   Compiling clap_lex v1.1.1
+   Compiling heck v0.5.0
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+   Compiling anstyle-parse v1.0.0
+   Compiling telos-types v0.1.0 (/home/timo/projects/telos/crates/telos-types)
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+   Compiling anstream v1.0.0
+   Compiling clap_builder v4.6.7
+   Compiling telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+   Compiling syn v3.0.9
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+   Compiling clap_derive v4.6.7
+   Compiling clap v4.6.7
+   Compiling telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.15s
+     Running tests/llvm_memory.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-h/debug/deps/llvm_memory-af4e72fe22bbf5c3)
+
+running 2 tests
+terminald: VmRSS 8344 kB at line 10000, 51040 kB at line 100000, growth 42696 kB
+
+thread 'terminald_memory_is_flat_over_a_long_session' (1784899) panicked at crates/telos/tests/llvm_memory.rs:197:5:
+terminald grew from 8344 kB to 51040 kB between line 10000 and line 100000
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test terminald_memory_is_flat_over_a_long_session ... FAILED
+tn: VmRSS 5568 kB at line 10000, 24284 kB at line 100000, growth 18716 kB
+
+thread 'tn_memory_is_flat_over_a_long_session' (1784900) panicked at crates/telos/tests/llvm_memory.rs:228:5:
+tn grew from 5568 kB to 24284 kB between line 10000 and line 100000
+test tn_memory_is_flat_over_a_long_session ... FAILED
+
+failures:
+
+failures:
+    terminald_memory_is_flat_over_a_long_session
+    tn_memory_is_flat_over_a_long_session
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.64s
+
+error: test failed, to rerun pass `-p telos --test llvm_memory`
+EXIT=101

@@ -1,0 +1,15 @@
+rust-debug-cold	4.896669959	exit=0
+rust-release-cold	6.961226654	exit=0
+rt-debug-cold	4.581342418	exit=0
+rt-release-cold	5.878290880	exit=0
+llvm-debug	.803789756	exit=0
+llvm-release	.466901602	exit=0
+20
+19
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/bench-nc/llvm-debug.log:0
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/bench-nc/llvm-release.log:0
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/bench-nc/rt-debug-cold.log:0
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/bench-nc/rt-release-cold.log:0
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/bench-nc/rust-debug-cold.log:0
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/bench-nc/rust-release-cold.log:0
+EXIT=0

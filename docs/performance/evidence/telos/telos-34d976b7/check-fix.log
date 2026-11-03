@@ -1,0 +1,54 @@
+   Compiling telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.02s
+     Running tests/fixtures.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-g/debug/deps/fixtures-d24daeb1dae3e3ed)
+
+running 2 tests
+test every_checker_code_has_a_fixture ... ok
+test fixtures_match_expected ... FAILED
+
+failures:
+
+---- fixtures_match_expected stdout ----
+
+thread 'fixtures_match_expected' (1812554) panicked at crates/telos-check/tests/fixtures.rs:65:5:
+/home/timo/projects/telos/crates/telos-check/tests/fixtures/e016_effects.telos
+--- expected
+--- actual
+e016_effects.telos:4:12: error[E016]: missing effect `stdout.write` for `Stdout.write_all`; add it to the `requires` of `Pipe.connect`
+e016_effects.telos:5:18: error[E016]: missing effect `stream.write` for `relay`; add it to the `requires` of `Pipe.connect`
+e016_effects.telos:5:18: error[E016]: missing effect `stdin.read` for `relay`; add it to the `requires` of `Pipe.connect`
+e016_effects.telos:16:10: error[E016]: missing effect `stream.write` for `s.close`; add it to the `requires` of `alias`
+e016_effects.telos:17:9: error[E016]: missing effect `stream.write` for `relay`; add it to the `requires` of `alias`
+e016_effects.telos:24:10: error[E016]: missing effect `stdin.mode` for `Stdin.set_raw`; add it to the `requires` of `owned`
+e016_effects.telos:25:16: error[E016]: missing effect `stdin.read` for `relay`; add it to the `requires` of `owned`
+e016_effects.telos:29:23: error[E016]: missing effect `listener.accept` for `listener.accept`; add it to the `requires` of `serve_one`
+e016_effects.telos:38:16: error[E016]: missing effect `b.write` for `target.write_all`; add it to the `requires` of `reassigned`
+
+
+/home/timo/projects/telos/crates/telos-check/tests/fixtures/e047_record_literal.telos
+--- expected
+--- actual
+e047_record_literal.telos:7:32: error[E047]: record `Point` has no field `z`
+e047_record_literal.telos:11:25: error[E047]: field `x` is given twice in `Point` literal
+e047_record_literal.telos:15:10: error[E047]: missing field `y` in `Point` literal
+
+
+/home/timo/projects/telos/crates/telos-check/tests/fixtures/e048_types.telos
+--- expected
+--- actual
+e048_types.telos:2:10: error[E048]: `List` takes 1 type argument, found 2
+e048_types.telos:3:10: error[E048]: unknown type `Shape`
+e048_types.telos:6:18: error[E048]: `Option` takes 1 type argument, found 0
+e048_types.telos:6:29: error[E048]: `Result` takes 2 type arguments, found 1
+e048_types.telos:7:10: error[E048]: `Int` takes no type arguments, found 1
+e048_types.telos:12:11: error[E048]: unknown record type `Widget`
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    fixtures_match_expected
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p telos-check --test fixtures`

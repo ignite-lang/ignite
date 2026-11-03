@@ -1,0 +1,42 @@
+Ignite: slices 9 to 10, rename from Telos, README
+
+- Slice 9: closures, structural equality, debug text, boxing of
+  recursive enums, range patterns, tuple fields, associated fns, glob
+  imports, linkonce_odr, and the A0 soundness checks E006, E056, E057.
+- Slice 9b: one test executable per target and one integration-test
+  binary per crate; cold gate 129.9 s to 86.5 s, warm 35.4 s to 25.9 s.
+- Slice 9c: integer overflow is a failure on both targets, DWARF debug
+  metadata, a pinned target triple, -O0 dev builds on LLVM.
+- Slice 10, the F1 system declaration (docs/slice.md section 14):
+  quantity literals and types (Duration, ByteSize, Ratio), named
+  arguments, brace literals typed by the expected type, Map<K, V>, Ref
+  and Signal values, module("...") loading sibling modules, executable
+  component kinds through K.main, contract, policy and assembly
+  declarations, diagnostics E100 to E109.
+- Slice 10, T1: a failure ends its task. Reports read
+  "<operation> failed at <file>:<line>:<column>: <detail>" on both
+  targets; a spawned task logs "task ended with error: ..." and the
+  process keeps serving. setjmp lives only in the emitted IR's task
+  wrapper; Rust panics are caught with catch_unwind at the task thread.
+- Slice 10, substrate items R2 to R5 in ignite-io: a dropped stream sends
+  and closes at once, write after close fails at the write, accept
+  retries the pending network errors, exit no longer flushes stdout.
+- Slice 10, std: console, telnet, http, contract, policy, probe, deploy
+  and cli kinds written in the language; both examples in the component
+  form; the compiler-known Service and Client lowering is removed; the
+  full design file examples/terminal/terminal.design.ignite checks
+  clean and is covered by a test.
+- Rename: the language and every crate, file, symbol and extension are
+  now Ignite (telos -> ignite, *.telos -> *.ignite), on Timo's order. The
+  design document moved to docs/design.md; PLAN.md holds the roadmap.
+- Absolute home-directory paths replaced by relative paths or public
+  URLs before publication.
+- README.md rewritten for humans, with a logo built from the Noto Emoji
+  robot and fire (Apache 2.0) in docs/assets/logo.svg.
+- Test fix: ignite-rt abi::release_closes_the_socket_and_invalidates_the_handle
+  re-bound the released port and failed when a parallel test took it;
+  it now checks that the listener's socket leaves /proc/net/tcp (30 of
+  30 runs green).
+- Gate: 552 cargo tests passed, 0 failed, 3 ignored; 97 inline tests
+  per target on both targets; task gate green. Gate time and program
+  build times are recorded in AGENTS.md.

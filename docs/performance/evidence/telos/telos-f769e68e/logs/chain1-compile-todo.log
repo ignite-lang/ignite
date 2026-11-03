@@ -1,0 +1,7 @@
+task: [compile-todo] cargo run -q -p ignite -- build examples/todo/todo.ignite --out target/ignite/todo --target-dir target
+note: building the generated Rust project in target/ignite/todo; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling todo v0.0.0 (/home/timo/projects/telos/target/ignite/todo)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.60s
+built target/debug/todod

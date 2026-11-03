@@ -1,0 +1,158 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/recheck; compiler messages refer to generated code
+    Updating crates.io index
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+   Compiling nix v0.31.3
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+   Compiling unused v0.0.0 (/home/timo/.cache/scratch/1f73fa06-e945-4828-ae60-02b7cdacb054/io-audit/recheck)
+error[E0392]: type parameter `T` is never used
+ --> src/lib.rs:4:19
+  |
+4 | pub struct Marker<T: Clone + Send + Sync + 'static> {
+  |                   ^ unused type parameter
+  |
+  = help: consider removing `T`, referring to it in a field, or using a marker such as `PhantomData`
+
+error[E0392]: type parameter `T` is never used
+ --> src/lib.rs:9:14
+  |
+9 | pub enum Tag<T: Clone + Send + Sync + 'static> {
+  |              ^ unused type parameter
+  |
+  = help: consider removing `T`, referring to it in a field, or using a marker such as `PhantomData`
+
+error[E0091]: type parameter `T` is never used
+  --> src/lib.rs:14:16
+   |
+14 | pub type Alias<T> = i64;
+   |                ^ unused type parameter
+   |
+   = help: consider removing `T` or referring to it in the body of the type alias
+   = help: if you intended `T` to be a const parameter, use `const T: /* Type */` instead
+
+error[E0283]: type annotations needed
+ --> src/lib.rs:3:10
+  |
+3 | #[derive(Clone, Debug)]
+  |          ^ cannot infer type
+  |
+  = note: the type must implement `Clone`
+  = note: cannot satisfy `T: Send`
+  = note: cannot satisfy `T: Sync`
+note: required by a bound in `Marker`
+ --> src/lib.rs:4:22
+  |
+4 | pub struct Marker<T: Clone + Send + Sync + 'static> {
+  |                      ^^^^^ required by this bound in `Marker`
+note: required by a bound in `Marker`
+ --> src/lib.rs:4:30
+  |
+4 | pub struct Marker<T: Clone + Send + Sync + 'static> {
+  |                              ^^^^ required by this bound in `Marker`
+note: required by a bound in `Marker`
+ --> src/lib.rs:4:37
+  |
+4 | pub struct Marker<T: Clone + Send + Sync + 'static> {
+  |                                     ^^^^ required by this bound in `Marker`
+
+error[E0283]: type annotations needed
+  --> src/lib.rs:8:10
+   |
+ 8 | #[derive(Clone, Debug)]
+   |          ^^^^^ cannot infer type
+   |
+   = note: the type must implement `Clone`
+   = note: cannot satisfy `T: Send`
+   = note: cannot satisfy `T: Sync`
+note: required by a bound in `Tag::A`
+  --> src/lib.rs:9:17
+   |
+ 9 | pub enum Tag<T: Clone + Send + Sync + 'static> {
+   |                 ^^^^^ required by this bound in `Tag::A`
+10 |     A,
+   |     - required by a bound in this unit variant
+note: required by a bound in `Tag::A`
+  --> src/lib.rs:9:25
+   |
+ 9 | pub enum Tag<T: Clone + Send + Sync + 'static> {
+   |                         ^^^^ required by this bound in `Tag::A`
+10 |     A,
+   |     - required by a bound in this unit variant
+note: required by a bound in `Tag::A`
+  --> src/lib.rs:9:32
+   |
+ 9 | pub enum Tag<T: Clone + Send + Sync + 'static> {
+   |                                ^^^^ required by this bound in `Tag::A`
+10 |     A,
+   |     - required by a bound in this unit variant
+
+error[E0283]: type annotations needed
+  --> src/lib.rs:8:17
+   |
+ 8 | #[derive(Clone, Debug)]
+   |                 ^^^^^ cannot infer type
+   |
+   = note: the type must implement `Clone`
+   = note: cannot satisfy `T: Send`
+   = note: cannot satisfy `T: Sync`
+note: required by a bound in `Tag::A`
+  --> src/lib.rs:9:17
+   |
+ 9 | pub enum Tag<T: Clone + Send + Sync + 'static> {
+   |                 ^^^^^ required by this bound in `Tag::A`
+10 |     A,
+   |     - required by a bound in this unit variant
+note: required by a bound in `Tag::A`
+  --> src/lib.rs:9:25
+   |
+ 9 | pub enum Tag<T: Clone + Send + Sync + 'static> {
+   |                         ^^^^ required by this bound in `Tag::A`
+10 |     A,
+   |     - required by a bound in this unit variant
+note: required by a bound in `Tag::A`
+  --> src/lib.rs:9:32
+   |
+ 9 | pub enum Tag<T: Clone + Send + Sync + 'static> {
+   |                                ^^^^ required by this bound in `Tag::A`
+10 |     A,
+   |     - required by a bound in this unit variant
+
+error[E0283]: type annotations needed
+  --> src/lib.rs:22:9
+   |
+22 |         Tag::A => true,
+   |         ^^^^^^ cannot infer type for type parameter `T` declared on the enum `Tag`
+   |
+   = note: the type must implement `Clone`
+   = note: cannot satisfy `T: Send`
+   = note: cannot satisfy `T: Sync`
+note: required by a bound in `Tag::A`
+  --> src/lib.rs:9:17
+   |
+ 9 | pub enum Tag<T: Clone + Send + Sync + 'static> {
+   |                 ^^^^^ required by this bound in `Tag::A`
+10 |     A,
+   |     - required by a bound in this unit variant
+note: required by a bound in `Tag::A`
+  --> src/lib.rs:9:25
+   |
+ 9 | pub enum Tag<T: Clone + Send + Sync + 'static> {
+   |                         ^^^^ required by this bound in `Tag::A`
+10 |     A,
+   |     - required by a bound in this unit variant
+note: required by a bound in `Tag::A`
+  --> src/lib.rs:9:32
+   |
+ 9 | pub enum Tag<T: Clone + Send + Sync + 'static> {
+   |                                ^^^^ required by this bound in `Tag::A`
+10 |     A,
+   |     - required by a bound in this unit variant
+
+Some errors have detailed explanations: E0091, E0283, E0392.
+For more information about an error, try `rustc --explain E0091`.
+error: could not compile `unused` (lib) due to 7 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: cargo build failed with status 101

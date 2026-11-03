@@ -1,0 +1,72 @@
+== std/sli.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`
+== std/time.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`
+== std/policy.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`
+== std/control.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`
+== std/contract.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`
+== std/probe.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`
+== std/protocol/telnet.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`
+== std/deploy.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`
+== std/net.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`
+== examples/terminal/terminal.design.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`
+== examples/terminal/terminal.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`
+== examples/todo/todo.ignite
+/home/timo/projects/telos/std/control.ignite:287:10: error[E001]: expected pattern, found `policy`
+/home/timo/projects/telos/std/control.ignite:466:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:649:26: error[E001]: expected `,`, newline or `}`, found `=`
+/home/timo/projects/telos/std/control.ignite:822:13: error[E001]: expected identifier, found `contract`
+/home/timo/projects/telos/std/control.ignite:887:31: error[E001]: expected `,`, newline or `}`, found `=`

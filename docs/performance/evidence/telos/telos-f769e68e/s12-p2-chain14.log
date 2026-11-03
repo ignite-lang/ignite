@@ -1,0 +1,39 @@
+== todod pairs after unit 5, second set
+START 2026-11-02T06:27:09+01:00 load=24.42 16.59 8.89 34/3174 1136052
+STEP base:rust-dev:1 secs=7.660 load_before=24.42 load_after=24.87 exit=0
+STEP base:rust-release:1 secs=9.164 load_before=24.87 load_after=26.40 exit=0
+STEP base:llvm-dev:1 secs=0.875 load_before=26.40 load_after=26.40 exit=0
+STEP base:llvm-release:1 secs=1.971 load_before=26.40 load_after=26.40 exit=0
+STEP new:rust-dev:1 secs=4.607 load_before=26.40 load_after=26.53 exit=0
+STEP new:rust-release:1 secs=5.514 load_before=26.53 load_after=25.21 exit=0
+STEP new:llvm-dev:1 secs=0.511 load_before=25.21 load_after=23.35 exit=0
+STEP new:llvm-release:1 secs=1.018 load_before=23.35 load_after=23.35 exit=0
+STEP base:rust-dev:2 secs=3.517 load_before=23.35 load_after=23.35 exit=0
+STEP base:rust-release:2 secs=4.534 load_before=23.35 load_after=21.64 exit=0
+STEP base:llvm-dev:2 secs=0.337 load_before=21.64 load_after=21.64 exit=0
+STEP base:llvm-release:2 secs=0.843 load_before=21.64 load_after=20.07 exit=0
+STEP new:rust-dev:2 secs=3.877 load_before=20.07 load_after=20.07 exit=0
+STEP new:rust-release:2 secs=5.201 load_before=20.07 load_after=18.78 exit=0
+STEP new:llvm-dev:2 secs=0.526 load_before=18.78 load_after=17.44 exit=0
+STEP new:llvm-release:2 secs=1.012 load_before=17.44 load_after=17.44 exit=0
+STEP base:rust-dev:3 secs=3.358 load_before=17.44 load_after=17.44 exit=0
+STEP base:rust-release:3 secs=4.494 load_before=17.44 load_after=16.52 exit=0
+STEP base:llvm-dev:3 secs=0.337 load_before=16.52 load_after=16.52 exit=0
+STEP base:llvm-release:3 secs=0.850 load_before=16.52 load_after=15.52 exit=0
+STEP new:rust-dev:3 secs=3.814 load_before=15.52 load_after=15.52 exit=0
+STEP new:rust-release:3 secs=5.192 load_before=15.52 load_after=14.59 exit=0
+STEP new:llvm-dev:3 secs=0.505 load_before=14.59 load_after=14.59 exit=0
+STEP new:llvm-release:3 secs=1.036 load_before=14.59 load_after=13.67 exit=0
+EXIT=0
+STEP todod exit=0
+== split, rust, cold (SCCACHE_RECACHE=1): base vs new
+SPLIT rust base dev run=1 io=3.077 std=0.441 program=0.302 load=13.67
+SPLIT rust base release run=1 io=5.443 std=1.366 program=1.059 load=15.68
+SPLIT rust new dev run=1 io=5.852 std=1.118 program=0.667 load=19.00
+SPLIT rust new release run=1 io=6.836 std=1.855 program=1.143 load=20.95
+SPLIT rust base dev run=2 io=5.499 std=0.866 program=0.670 load=22.24
+SPLIT rust base release run=2 io=6.178 std=1.516 program=1.286 load=24.28
+SPLIT rust new dev run=2 io=3.153 std=0.522 program=0.267 load=22.74
+SPLIT rust new release run=2 io=4.807 std=0.981 program=0.539 load=21.32
+EXIT=0
+EXIT=0

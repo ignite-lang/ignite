@@ -1,0 +1,48 @@
+FMT exit=0
+   Compiling ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.96s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 6 tests
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test llvm_build::failed_compile_is_retried ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 159 filtered out; finished in 1.43s
+
+LLVM_BUILD run=1 exit=0
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 6 tests
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test llvm_build::failed_compile_is_retried ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 159 filtered out; finished in 1.43s
+
+LLVM_BUILD run=2 exit=0
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 6 tests
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test llvm_build::failed_compile_is_retried ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 159 filtered out; finished in 1.43s
+
+LLVM_BUILD run=3 exit=0
+    Checking ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.55s
+CLIPPY exit=0
+EXIT=0

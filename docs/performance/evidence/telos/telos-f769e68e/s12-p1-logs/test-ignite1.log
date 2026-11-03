@@ -1,0 +1,806 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/debug/deps/ignite-e2bd19ba788f823b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/debug/deps/ignite-371d03ed7f6fd3b3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/debug/deps/main-90b129b53e45974f)
+
+running 166 tests
+test cli::default_std_is_the_repository_std ... ok
+test cli::default_substrate_is_the_sibling_crate ... ok
+test cli::missing_std_root_is_exit_3 ... ok
+test cli::std_import_cycle_is_e032 ... ok
+test cli::std_file_without_package_is_e031 ... ok
+test cli::no_arguments_is_exit_2 ... ok
+test cli::std_diagnostic_is_rendered_with_its_file ... ok
+test cli::std_modules_are_checked_in_import_order ... ok
+test cli::emit_with_std_fixture ... ok
+test cli::std_package_mismatch_is_e031_in_the_std_file ... ok
+test cli::emit_uses_given_substrate ... ok
+test cli::check_unknown_name_is_e003 ... ok
+test cli::missing_file_is_exit_3 ... ok
+test cli::check_design_file_is_silent ... ok
+test cli::check_reports_unsupported_component_kind ... ok
+test cli::check_acceptance_program_is_silent ... ok
+test eval::e118_closures_are_unencodable ... ok
+test eval::e117_failures_carry_the_target_report ... ok
+test eval::fixture_covers_every_family ... ok
+test cli::emit_prints_the_program_and_the_std_crate ... ok
+test eval::design_file_properties_evaluate_within_default_fuel ... ok
+    Blocking waiting for file lock on package cache
+test generics::llvm_generics_and_store_serve ... ok
+test generics::llvm_store_ids_and_updates_are_atomic_across_connections ... ok
+test failover::a_failing_session_does_not_end_the_service ... ok
+test eval::e115_limits ... ok
+test llvm::clang_failure_is_exit_2 ... ok
+test eval::evaluator_agrees_with_the_llvm_target ... ok
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+test llvm::client_exits_3_when_nothing_listens ... ok
+test llvm_build::bench ... ignored, benchmark; run with task bench
+test llvm::index_out_of_range_panics_with_101 ... ok
+test llvm::probe_runs_every_check ... ok
+test llvm::llvm_build_runs_neither_cargo_nor_rustc ... ok
+   Compiling nix v0.31.3
+test failover::ten_thousand_failing_sessions_leak_nothing ... ok
+test llvm_build::runtime_for_another_target_is_refused ... ok
+test llvm_build::ir_is_pinned_to_the_target ... ok
+test llvm_memory::loop_regions_keep_carried_values ... ok
+test llvm_build::default_runtime_is_next_to_the_driver_or_in_its_parent ... ok
+test llvm_build::failed_compile_is_retried ... ok
+test llvm_memory::pushing_in_a_loop_is_linear ... ok
+test plan::design_model_has_no_expression_text ... ok
+test plan::design_model_is_byte_identical_across_processes_and_directories ... FAILED
+test plan::design_model_is_canonical_and_every_value_is_encoded_as_15_4_says ... ok
+test plan::design_model_resolves_each_of_the_five_members_once ... ok
+test plan::exit_statuses ... ok
+test plan::e114_covers_an_unknown_assembly_name_and_check_passes ... ok
+test llvm_memory::terminald_memory_is_flat_over_a_long_session ... ok
+test llvm_memory::tn_memory_is_flat_over_a_long_session ... ok
+test plan::terminal_example_model_matches_golden ... ok
+test plan::explain_unknown_path_is_e119 ... ok
+test plan::todo_example_model_matches_golden ... ok
+test plan::explain_matches_the_goldens_of_15_8 ... ok
+test llvm_build::rebuild_compiles_only_what_changed ... ok
+test siblings::llvm_build_links_a_module_sibling ... ok
+test siblings::llvm_test_runs_a_module_sibling ... ok
+test cli::build_std_and_program_then_run_both_executables ... ok
+test plan::fixtures_match_expected ... ok
+test slice9::long_chains_100k_lower_quickly ... ignored
+test slice9::long_chains_100k_run_on_llvm ... ignored
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-std v0.0.0-4b56aa773bbb6aa7 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/tmp/eval-equivalence/std)
+test slice9::long_chains_lower_quickly ... ok
+test cli::client_exit_statuses ... ok
+   Compiling eval_equivalence v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/tmp/eval-equivalence)
+test ignite_test::captured_output_only_for_failures ... ok
+test ignite_test::both_targets_print_the_same_report ... ok
+test ignite_test::counts_results_and_failures ... ok
+test ignite_test::assert_and_try_reports ... ok
+test ignite_test::compile_error_exits_2 ... ok
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.39s
+test eval::evaluator_agrees_with_the_rust_target ... ok
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+test syntax::llvm_target_runs_every_feature ... ok
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling libc v0.2.191
+   Compiling cfg_aliases v0.2.2
+   Compiling cfg-if v1.0.5
+   Compiling bitflags v2.13.2
+   Compiling nix v0.31.3
+   Compiling nix v0.31.3
+test terminal::llvm::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::llvm::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test terminal::llvm::are_you_there_is_answered ... ok
+test terminal::llvm::accept_survives_running_out_of_descriptors ... ok
+test terminal::llvm::do_echo_is_refused_with_wont ... ok
+test terminal::llvm::cr_nul_ends_a_line ... ok
+test terminal::llvm::iac_iac_is_a_literal_byte ... ok
+test terminal::llvm::interrupt_process_closes ... ok
+test terminal::llvm::line_of_4096_bytes_is_accepted ... ok
+test terminal::llvm::overlong_line_is_refused_and_closed ... ok
+test terminal::llvm::subnegotiation_is_skipped ... ok
+test terminal::llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::llvm::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::llvm::tn_exits_2_for_a_malformed_port ... ok
+test terminal::llvm::fragmented_input_is_reassembled ... ok
+test terminal::llvm::tn_exits_3_when_nothing_listens ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::llvm::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test terminal::llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::llvm::tn_refuses_options_and_strips_commands ... ok
+test terminal::llvm::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::llvm::will_naws_is_refused_with_dont ... ok
+test terminal::llvm::transcript_on_raw_socket ... ok
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+test slice10_llvm::failures_fail_on_both_targets_with_the_same_report ... ok
+    Updating crates.io index
+   Compiling ignite-std v0.0.0-4b56aa773bbb6aa7 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/tmp/syntax-rust/std)
+   Compiling ignite-std v0.0.0-4b56aa773bbb6aa7 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/tmp/terminal/std)
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+test slice10_llvm::features_pass_on_both_targets_with_the_same_report ... ok
+   Compiling nix v0.31.3
+   Compiling syntax v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/tmp/syntax-rust)
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/tmp/terminal)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.99s
+test syntax::rust_target_runs_every_feature ... ok
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.09s
+test terminal::rust::are_you_there_is_answered ... ok
+test terminal::rust::accept_survives_running_out_of_descriptors ... ok
+test terminal::rust::do_echo_is_refused_with_wont ... ok
+test terminal::rust::cr_nul_ends_a_line ... ok
+test terminal::rust::iac_iac_is_a_literal_byte ... ok
+   Compiling ignite-std v0.0.0-49000d08e25e92e7 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/tmp/short-idle-Rust/out/std)
+test terminal::rust::interrupt_process_closes ... ok
+test terminal::rust::line_of_4096_bytes_is_accepted ... ok
+test terminal::rust::overlong_line_is_refused_and_closed ... ok
+test terminal::rust::subnegotiation_is_skipped ... ok
+test terminal::rust::subnegotiation_of_1024_bytes_is_skipped ... ok
+test terminal::rust::subnegotiation_over_1024_bytes_closes ... ok
+test terminal::rust::a_task_that_cannot_start_closes_only_its_connection ... ok
+test terminal::rust::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+test terminal::rust::tn_exits_2_for_a_malformed_port ... ok
+error: subnegotiation longer than 1024 bytes
+test terminal::rust::tn_exits_3_when_nothing_listens ... ok
+test terminal::rust::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... ok
+test terminal::no_target_links_tokio ... ok
+test terminal::rust::tn_exits_when_input_ends_and_terminald_closes ... ok
+test terminal::rust::fragmented_input_is_reassembled ... ok
+test terminal::rust::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+test terminal::rust::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+test terminal::rust::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+test terminal::rust::tn_on_a_terminal_erases_with_backspace ... ok
+test terminal::rust::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+test terminal::rust::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+test terminal::rust::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+test terminal::rust::will_naws_is_refused_with_dont ... ok
+test terminal::rust::tn_with_piped_input_prints_the_transcript ... ok
+test terminal::rust::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+test terminal::rust::tn_refuses_options_and_strips_commands ... ok
+test terminal::rust::transcript_on_raw_socket ... ok
+test todo::todo::llvm::crud_flow ... ok
+test todo::todo::llvm::error_statuses ... ok
+test todo::todo::llvm::content_length ... ok
+test todo::todo::llvm::keep_alive ... ok
+test todo::todo::llvm::header_framing ... ok
+test todo::todo::llvm::limits ... ok
+test todo::todo::llvm::rejection_is_read ... ok
+test todo::todo::llvm::concurrent_posts ... ok
+   Compiling terminal v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/tmp/short-idle-Rust/out)
+test todo::todo::llvm::concurrent_patches ... ok
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+     Locking 6 packages to highest Rust 1.99.1 compatible versions
+    Blocking waiting for file lock on package cache
+   Compiling cfg_aliases v0.2.2
+   Compiling libc v0.2.191
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.21s
+   Compiling nix v0.31.3
+test terminal::rust::a_silent_session_is_closed_after_the_idle_timeout ... ok
+test terminal::idle_terminald_runs_one_thread ... ok
+test ignite_test::target_bugs_of_slice_11b_are_fixed ... ok
+   Compiling ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+   Compiling ignite-std v0.0.0-4b56aa773bbb6aa7 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/tmp/todo/std)
+test ignite_test::timeout_kills_a_test ... ok
+   Compiling todo v0.0.0 (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-s12-p1/tmp/todo)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.28s
+test todo::todo::rust::keep_alive ... ok
+test todo::todo::rust::header_framing ... ok
+test todo::todo::rust::error_statuses ... ok
+test todo::todo::rust::crud_flow ... ok
+test todo::todo::rust::rejection_is_read ... ok
+test todo::todo::rust::limits ... ok
+test todo::todo::rust::content_length ... ok
+test todo::todo::rust::concurrent_posts ... ok
+test ignite_test::files_share_one_executable ... ok
+test todo::todo::rust::concurrent_patches ... ok
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test slice9::rust_target_features_pass_on_llvm ... ok
+test slice9::slice9_values_across_regions ... ok
+test slice9::audit_io_probes_pass ... ok
+test ignite_test::overflow_fails_the_same_everywhere ... ok
+test ignite_test::filter_exact_and_list ... ok
+test ignite_test::std_module_as_the_file ... ok
+test slice9::audit_probes_pass ... ok
+test slice9::long_chains_run_on_llvm ... ok
+test slice9::var_aliases_leave_the_source_unchanged ... ok
+
+failures:
+
+---- plan::design_model_is_byte_identical_across_processes_and_directories stdout ----
+
+thread 'plan::design_model_is_byte_identical_across_processes_and_directories' (2599247) panicked at crates/ignite/tests/plan.rs:62:5:
+/home/timo/projects/telos/crates/ignite/tests/golden/terminal.design.model.json differs from the output (IGNITE_BLESS=1 to accept):
+{
+  "assembly": {
+    "defaults": [],
+    "id": "local",
+    "kind": "std.deploy.Deployment",
+    "properties": {
+      "bindings": {
+        "entries": [
+          [
+            {
+              "ref": "Terminal.client",
+              "type": "Ref"
+            },
+            {
+              "type": "std.deploy.Binding",
+              "variant": "WorkstationExecutable"
+            }
+          ],
+          [
+            {
+              "ref": "Terminal.ingress",
+              "type": "Ref"
+            },
+            {
+              "type": "std.deploy.Binding",
+              "variant": "LocalSocket"
+            }
+          ],
+          [
+            {
+              "ref": "Terminal.promptProbe",
+              "type": "Ref"
+            },
+            {
+              "type": "std.deploy.Binding",
+              "variant": "ScheduledProbeHost"
+            }
+          ],
+          [
+            {
+              "ref": "Terminal.server",
+              "type": "Ref"
+            },
+            {
+              "fields": [
+                [
+                  {
+                    "ref": "Terminal.console",
+                    "type": "Ref"
+                  }
+                ]
+              ],
+              "type": "std.deploy.Binding",
+              "variant": "NativeProcess"
+            }
+          ]
+        ],
+        "type": "Map"
+      },
+      "system": {
+        "ref": "Terminal",
+        "type": "SystemRef"
+      }
+    },
+    "resolution": [
+      {
+        "binding": {
+          "type": "std.deploy.Binding",
+          "variant": "WorkstationExecutable"
+        },
+        "member": "Terminal.client",
+        "via": "Terminal.client"
+      },
+      {
+        "binding": {
+          "fields": [
+            [
+              {
+                "ref": "Terminal.console",
+                "type": "Ref"
+              }
+            ]
+          ],
+          "type": "std.deploy.Binding",
+          "variant": "NativeProcess"
+        },
+        "member": "Terminal.console",
+        "via": "Terminal.server"
+      },
+      {
+        "binding": {
+          "type": "std.deploy.Binding",
+          "variant": "LocalSocket"
+        },
+        "member": "Terminal.ingress",
+        "via": "Terminal.ingress"
+      },
+      {
+        "binding": {
+          "type": "std.deploy.Binding",
+          "variant": "ScheduledProbeHost"
+        },
+        "member": "Terminal.promptProbe",
+        "via": "Terminal.promptProbe"
+      },
+      {
+        "binding": {
+          "fields": [
+            [
+              {
+                "ref": "Terminal.console",
+                "type": "Ref"
+              }
+            ]
+          ],
+          "type": "std.deploy.Binding",
+          "variant": "NativeProcess"
+        },
+        "member": "Terminal.server",
+        "via": "Terminal.server"
+      }
+    ],
+    "system": "Terminal"
+  },
+  "components": [
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "Terminal.client",
+      "kind": "std.cli.Application",
+      "outputs": {},
+      "properties": {
+        "commands": {
+          "entries": [
+            [
+              "connect",
+              {
+                "fields": {
+                  "arguments": [
+                    {
+                      "fields": {
+                        "kind": {
+                          "fields": [
+                            {
+                              "ref": "std.protocol.telnet.Telnet",
+                              "type": "Protocol"
+                            }
+                          ],
+                          "type": "std.cli.ArgKind",
+                          "variant": "Endpoint"
+                        },
+                        "name": "endpoint"
+                      },
+                      "type": "std.cli.Argument"
+                    }
+                  ],
+                  "escape": "Ctrl+]",
+                  "handler": {
+                    "fns": {
+                      "connect": "std.protocol.telnet.connect"
+                    },
+                    "module": "std.protocol.telnet",
+                    "type": "Module"
+                  },
+                  "terminal": "interactive"
+                },
+                "type": "std.cli.Command"
+              }
+            ]
+          ],
+          "type": "Map"
+        },
+        "executable": "tn"
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "Terminal.console",
+      "kind": "std.console.CommandConsole",
+      "outputs": {},
+      "properties": {
+        "command_schema": {
+          "fns": {
+            "commands": "examples.terminal.command_schema.commands"
+          },
+          "module": "examples.terminal.command_schema",
+          "type": "Module"
+        },
+        "implementation": {
+          "fns": {
+            "respond": "examples.terminal.commands.respond"
+          },
+          "module": "examples.terminal.commands",
+          "type": "Module"
+        },
+        "maximum_line": {
+          "bytes": 4096,
+          "type": "ByteSize"
+        },
+        "prompt": "terminal> "
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "Terminal.promptProbe",
+      "kind": "std.probe.TelnetPrompt",
+      "outputs": {
+        "attempts": "std.sli.ProbeAttempt"
+      },
+      "properties": {
+        "close_after_probe": true,
+        "expected_prompt": "terminal> ",
+        "interval": {
+          "ns": 10000000000,
+          "type": "Duration"
+        },
+        "target": {
+          "ref": "Terminal.server",
+          "type": "Ref"
+        },
+        "timeout": {
+          "ns": 2000000000,
+          "type": "Duration"
+        }
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": "terminald",
+      "id": "Terminal.server",
+      "kind": "std.protocol.telnet.TelnetServer",
+      "outputs": {},
+      "properties": {
+        "application": {
+          "ref": "Terminal.console",
+          "type": "Ref"
+        },
+        "executable": "terminald",
+        "listener": {
+          "ref": "Terminal.ingress",
+          "type": "Ref"
+        },
+        "protocol": {
+          "fields": {
+            "baseline": "nvt",
+            "character_encoding": "nvt_ascii",
+            "negotiation": "q_method",
+            "unsupported_options": "refuse"
+          },
+          "type": "std.protocol.telnet.TelnetProfile"
+        },
+        "recovery": {
+          "fields": {
+            "backoff": {
+              "fields": [
+                {
+                  "ns": 100000000,
+                  "type": "Duration"
+                },
+                {
+                  "ns": 10000000000,
+                  "type": "Duration"
+                }
+              ],
+              "type": "std.policy.Backoff",
+              "variant": "Exponential"
+            },
+            "interval": {
+              "ns": 300000000000,
+              "type": "Duration"
+            },
+            "maximum_attempts": 10
+          },
+          "type": "std.policy.Restart"
+        },
+        "rollout": {
+          "fields": {
+            "deadline": {
+              "ns": 120000000000,
+              "type": "Duration"
+            },
+            "on_deadline": "disconnect_remaining"
+          },
+          "type": "std.policy.DrainRollout"
+        },
+        "sessions": {
+          "fields": {
+            "idle_timeout": {
+              "ns": 900000000000,
+              "type": "Duration"
+            },
+            "input_buffer": {
+              "bytes": 16384,
+              "type": "ByteSize"
+            },
+            "maximum": 1000,
+            "output_buffer": {
+              "bytes": 65536,
+              "type": "ByteSize"
+            },
+            "slow_reader_deadline": {
+              "ns": 30000000000,
+              "type": "Duration"
+            }
+          },
+          "type": "std.protocol.telnet.SessionLimits"
+        }
+      }
+    }
+  ],
+  "contracts": [
+    {
+      "declaration": "contract",
+      "defaults": [],
+      "executable": null,
+      "id": "Terminal.customerAccess",
+      "kind": "std.contract.SLA",
+      "outputs": {},
+      "properties": {
+        "consequence": {
+          "fields": [
+            "access_commitment_breached"
+          ],
+          "type": "std.contract.Consequence",
+          "variant": "Event"
+        },
+        "exclusions": [],
+        "good": "prompt_received_before_timeout",
+        "period": {
+          "fields": [
+            "Europe/Berlin"
+          ],
+          "type": "std.sli.Window",
+          "variant": "CalendarMonth"
+        },
+        "signal": {
+          "ref": "Terminal.promptProbe.attempts",
+          "type": "Signal"
+        },
+        "target": {
+          "ppm": 995000,
+          "type": "Ratio"
+        }
+      }
+    },
+    {
+      "declaration": "contract",
+      "defaults": [],
+      "executable": null,
+      "id": "Terminal.promptFast",
+      "kind": "std.contract.ThresholdCompliance",
+      "outputs": {},
+      "properties": {
+        "good": "prompt_received_within_threshold",
+        "missing_data": "insufficient_evidence",
+        "signal": {
+          "ref": "Terminal.promptProbe.attempts",
+          "type": "Signal"
+        },
+        "target": {
+          "ppm": 990000,
+          "type": "Ratio"
+        },
+        "threshold": {
+          "ns": 200000000,
+          "type": "Duration"
+        },
+        "window": {
+          "fields": [
+            {
+              "ns": 3600000000000,
+              "type": "Duration"
+            }
+          ],
+          "type": "std.sli.Window",
+          "variant": "Rolling"
+        }
+      }
+    },
+    {
+      "declaration": "contract",
+      "defaults": [],
+      "executable": null,
+      "id": "Terminal.reachable",
+      "kind": "std.contract.Availability",
+      "outputs": {},
+      "properties": {
+        "good": "prompt_received_before_timeout",
+        "missing_data": "insufficient_evidence",
+        "signal": {
+          "ref": "Terminal.promptProbe.attempts",
+          "type": "Signal"
+        },
+        "target": {
+          "ppm": 999000,
+          "type": "Ratio"
+        },
+        "window": {
+          "fields": [
+            {
+              "ns": 2592000000000000,
+              "type": "Duration"
+            }
+          ],
+          "type": "std.sli.Window",
+          "variant": "Rolling"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "Terminal.customerAccess",
+      "kind": "observes",
+      "to": "Terminal.promptProbe.attempts"
+    },
+    {
+      "from": "Terminal.promptFast",
+      "kind": "observes",
+      "to": "Terminal.promptProbe.attempts"
+    },
+    {
+      "from": "Terminal.promptProbe",
+      "kind": "references",
+      "to": "Terminal.server"
+    },
+    {
+      "from": "Terminal.reachable",
+      "kind": "observes",
+      "to": "Terminal.promptProbe.attempts"
+    },
+    {
+      "from": "Terminal.server",
+      "kind": "hosts",
+      "to": "Terminal.console"
+    },
+    {
+      "from": "Terminal.server",
+      "kind": "uses",
+      "to": "Terminal.console"
+    },
+    {
+      "from": "Terminal.server",
+      "kind": "uses",
+      "to": "Terminal.ingress"
+    }
+  ],
+  "formatVersion": "ignite-model/0.1",
+  "policies": [],
+  "resources": [
+    {
+      "declaration": "resource",
+      "defaults": [],
+      "executable": null,
+      "id": "Terminal.ingress",
+      "kind": "TcpListener",
+      "outputs": {},
+      "properties": {
+        "address": "127.0.0.1",
+        "backlog": 128,
+        "exposure": {
+          "type": "Exposure",
+          "variant": "Loopback"
+        },
+        "port": 2323
+      }
+    }
+  ],
+  "sourceMap": {
+    "Terminal": "terminal.design.ignite:12:1",
+    "Terminal.client": "terminal.design.ignite:58:3",
+    "Terminal.client.commands": "terminal.design.ignite:60:16",
+    "Terminal.client.executable": "terminal.design.ignite:59:18",
+    "Terminal.console": "terminal.design.ignite:20:3",
+    "Terminal.console.command_schema": "terminal.design.ignite:24:22",
+    "Terminal.console.implementation": "terminal.design.ignite:21:22",
+    "Terminal.console.maximum_line": "terminal.design.ignite:23:20",
+    "Terminal.console.prompt": "terminal.design.ignite:22:14",
+    "Terminal.customerAccess": "terminal.design.ignite:98:3",
+    "Terminal.customerAccess.consequence": "terminal.design.ignite:104:19",
+    "Terminal.customerAccess.exclusions": "terminal.design.ignite:103:18",
+    "Terminal.customerAccess.good": "terminal.design.ignite:100:12",
+    "Terminal.customerAccess.period": "terminal.design.ignite:102:14",
+    "Terminal.customerAccess.signal": "terminal.design.ignite:99:14",
+    "Terminal.customerAccess.target": "terminal.design.ignite:101:14",
+    "Terminal.ingress": "terminal.design.ignite:13:3",
+    "Terminal.ingress.address": "terminal.design.ignite:14:15",
+    "Terminal.ingress.backlog": "terminal.design.ignite:17:15",
+    "Terminal.ingress.exposure": "terminal.design.ignite:16:16",
+    "Terminal.ingress.port": "terminal.design.ignite:15:12",
+    "Terminal.promptFast": "terminal.design.ignite:89:3",
+    "Terminal.promptFast.good": "terminal.design.ignite:91:12",
+    "Terminal.promptFast.missing_data": "terminal.design.ignite:95:20",
+    "Terminal.promptFast.signal": "terminal.design.ignite:90:14",
+    "Terminal.promptFast.target": "terminal.design.ignite:93:14",
+    "Terminal.promptFast.threshold": "terminal.design.ignite:92:17",
+    "Terminal.promptFast.window": "terminal.design.ignite:94:14",
+    "Terminal.promptProbe": "terminal.design.ignite:73:3",
+    "Terminal.promptProbe.close_after_probe": "terminal.design.ignite:78:25",
+    "Terminal.promptProbe.expected_prompt": "terminal.design.ignite:77:23",
+    "Terminal.promptProbe.interval": "terminal.design.ignite:75:16",
+    "Terminal.promptProbe.target": "terminal.design.ignite:74:14",
+    "Terminal.promptProbe.timeout": "terminal.design.ignite:76:15",
+    "Terminal.reachable": "terminal.design.ignite:81:3",
+    "Terminal.reachable.good": "terminal.design.ignite:83:12",
+    "Terminal.reachable.missing_data": "terminal.design.ignite:86:20",
+    "Terminal.reachable.signal": "terminal.design.ignite:82:14",
+    "Terminal.reachable.target": "terminal.design.ignite:84:14",
+    "Terminal.reachable.window": "terminal.design.ignite:85:14",
+    "Terminal.server": "terminal.design.ignite:27:3",
+    "Terminal.server.application": "terminal.design.ignite:29:19",
+    "Terminal.server.executable": "terminal.design.ignite:30:18",
+    "Terminal.server.listener": "terminal.design.ignite:28:16",
+    "Terminal.server.protocol": "terminal.design.ignite:31:16",
+    "Terminal.server.recovery": "terminal.design.ignite:46:16",
+    "Terminal.server.rollout": "terminal.design.ignite:52:15",
+    "Terminal.server.sessions": "terminal.design.ignite:38:16",
+    "local": "terminal.design.ignite:108:1",
+    "local.bindings": "terminal.design.ignite:110:14",
+    "local.system": "terminal.design.ignite:109:12"
+  },
+  "systemId": "Terminal"
+}
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    plan::design_model_is_byte_identical_across_processes_and_directories
+
+test result: FAILED. 162 passed; 1 failed; 3 ignored; 0 measured; 0 filtered out; finished in 32.48s
+
+error: test failed, to rerun pass `-p ignite --test main`
+   Doc-tests ignite
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 1 target failed:
+    `-p ignite --test main`
+EXIT=101

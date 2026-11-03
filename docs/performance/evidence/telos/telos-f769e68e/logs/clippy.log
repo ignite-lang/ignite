@@ -1,0 +1,26 @@
+    Checking ignite-syntax v0.1.0 (/home/timo/projects/telos/crates/ignite-syntax)
+    Checking cfg-if v1.0.5
+    Checking bitflags v2.13.2
+    Checking utf8parse v0.2.2
+    Checking is_terminal_polyfill v1.70.2
+    Checking colorchoice v1.0.5
+    Checking anstyle-query v1.1.5
+    Checking anstyle v1.0.14
+    Checking clap_lex v1.1.1
+    Checking strsim v0.11.1
+    Checking ignite-load v0.1.0 (/home/timo/projects/telos/crates/ignite-load)
+    Checking libc v0.2.191
+    Checking anstyle-parse v1.0.0
+    Checking ignite-check v0.1.0 (/home/timo/projects/telos/crates/ignite-check)
+    Checking anstream v1.0.0
+    Checking clap_builder v4.6.7
+    Checking ignite-types v0.1.0 (/home/timo/projects/telos/crates/ignite-types)
+    Checking nix v0.31.3
+    Checking ignite-llvm v0.1.0 (/home/timo/projects/telos/crates/ignite-llvm)
+    Checking ignite-rustgen v0.1.0 (/home/timo/projects/telos/crates/ignite-rustgen)
+    Checking clap v4.6.7
+    Checking ignite v0.1.0 (/home/timo/projects/telos/crates/ignite)
+    Checking ignite-io v0.1.0 (/home/timo/projects/telos/crates/ignite-io)
+    Checking ignite-rt v0.1.0 (/home/timo/projects/telos/crates/ignite-rt)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.99s
+EXIT=0

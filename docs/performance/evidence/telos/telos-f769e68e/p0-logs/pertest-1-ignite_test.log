@@ -1,0 +1,20 @@
+START 2026-11-02T02:11:03+01:00 file=ignite_test load=6.54 14.76 16.47 5/2963 2702331
+   0.012 +  0.012     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.013 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.014 +  0.001 
+   0.014 +  0.000 running 11 tests
+   0.456 +  0.442 test ignite_test::assert_and_try_reports ... ok
+   0.661 +  0.205 test ignite_test::both_targets_print_the_same_report ... ok
+   0.866 +  0.205 test ignite_test::captured_output_only_for_failures ... ok
+   0.980 +  0.114 test ignite_test::compile_error_exits_2 ... ok
+   1.188 +  0.209 test ignite_test::counts_results_and_failures ... ok
+   2.476 +  1.287 test ignite_test::each_unnamed_file_runs_its_own_tests ... ok
+   2.976 +  0.501 test ignite_test::files_share_one_executable ... ok
+   3.998 +  1.022 test ignite_test::filter_exact_and_list ... ok
+   5.745 +  1.747 test ignite_test::overflow_fails_the_same_everywhere ... ok
+   6.083 +  0.337 test ignite_test::std_module_as_the_file ... ok
+   8.654 +  2.571 test ignite_test::timeout_kills_a_test ... ok
+   8.654 +  0.000 
+   8.654 +  0.000 test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 135 filtered out; finished in 8.64s
+   8.654 +  0.000 
+END load=6.23 14.42 16.34 3/2958 2704115

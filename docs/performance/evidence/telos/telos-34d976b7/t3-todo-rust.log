@@ -1,0 +1,28 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.03s
+     Running tests/todo.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-i/debug/deps/todo-167d56b148cb3c1b)
+
+running 18 tests
+test todo::llvm::concurrent_posts ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::content_length ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::crud_flow ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::error_statuses ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::header_framing ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::keep_alive ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::limits ... ignored, slice 7: needs T2 (LLVM target)
+test todo::llvm::rejection_is_read ... ignored, slice 7: needs T2 (LLVM target)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.85s
+test probe::rust::std_modules ... ok
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.94s
+test todo::rust::crud_flow ... ok
+test todo::rust::keep_alive ... ok
+test todo::rust::error_statuses ... ok
+test todo::rust::limits ... ok
+test todo::rust::content_length ... ok
+test todo::rust::header_framing ... ok
+test todo::rust::rejection_is_read ... ok
+test todo::rust::concurrent_posts ... ok
+test probe::llvm::std_modules ... ok
+
+test result: ok. 10 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+EXIT=0

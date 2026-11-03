@@ -1,0 +1,1 @@
+io_p3b_spawn_value.telos:4:3: error[E013]: `spawn` needs a call to an effectful function or protocol role

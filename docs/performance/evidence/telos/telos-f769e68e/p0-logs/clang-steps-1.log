@@ -1,0 +1,8 @@
+-rw-r--r-- 1 timo timo   21328 Nov  2 02:07 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-1/clang-steps-dev/main_todod.o
+-rw-r--r-- 1 timo timo   32488 Nov  2 02:07 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-1/clang-steps-dev/program.o
+-rw-r--r-- 1 timo timo  278792 Nov  2 02:07 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-1/clang-steps-dev/std.o
+-rwxr-xr-x 1 timo timo 6468688 Nov  2 02:07 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-1/clang-steps-dev/todod
+-rw-r--r-- 1 timo timo  16584 Nov  2 02:07 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-1/clang-steps-release/main_todod.o
+-rw-r--r-- 1 timo timo  22872 Nov  2 02:07 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-1/clang-steps-release/program.o
+-rw-r--r-- 1 timo timo 246800 Nov  2 02:07 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-1/clang-steps-release/std.o
+-rwxr-xr-x 1 timo timo 723568 Nov  2 02:07 /home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/p0-build/run-1/clang-steps-release/todod

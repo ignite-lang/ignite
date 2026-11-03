@@ -1,0 +1,674 @@
+# generated from todo v1
+# model digest 89517bf2822d8c68add0d9581ada1e9d9008524b07241a9563c2935f82f1c1e2
+# contract digest slice-sha256/2:a4c00ed6093bf6c7e7fd001de059b89430b40a0ac24ce5d8bfa90c55d5da5712
+# do not edit: regenerate with `ess generate`
+openapi: 3.1.0
+info:
+  title: todo-service
+  description: |-
+    The HTTP surface of `todo-service`, one of the components of `todo` v1.
+
+    Every path here is one semantic command, so the method is always POST and the path is the command's wire name under its domain's: a command is not a resource, and this document does not invent one. A status code is the outcome the specification declares — 202 for a branch that was taken, 422 for a refusal the input decides, 502 for a refusal decided outside the request — and the `outcome` property of every response body names the branch. Events emitted by a branch are published to consumers through the event transport, and the `published` property of every response body lists them too, in publication order.
+
+    This component declares `reached_by: network`, so its callers are not deployed with it and this contract is the surface they reach it through. That declaration is also why the views its domains declare have paths here: a GET under `views` per projection, answering every row it holds. There is no page size, no cursor, no ordering and no filter parameter, because the specification states none — a view's filter is part of the projection, not of the request.
+
+    An `ess-http/1` binding declares the method and path of every operation marked `x-ess-route-source: binding`, so those are the protocol's and not derived from wire names. Each variable of such a path is a required path parameter carrying the input field or view parameter the binding maps to it, and a field carried in the path is not in the request body. Every other operation keeps the method and path described above.
+
+    The binding also declares how some of those operations are encoded and answered: a request body that is form-encoded, or input carried in the query string; the status, body and headers of an outcome; a redirect; a view that answers its one row; or a standard refusal's answer. Such an operation is described as the binding declares it, and each response of such a command lists the outcomes it answers under `x-ess-outcomes`, because a bare body carries no `outcome` naming the branch and no `published` list. A `WWW-Authenticate` challenge is a response header: the specification states what a refusal answers, not how a caller proves who it is, so no security scheme is declared.
+  version: v1
+  x-ess-provenance:
+    system: todo
+    specification_version: v1
+    source_digest: 89517bf2822d8c68add0d9581ada1e9d9008524b07241a9563c2935f82f1c1e2
+    contract_digest: slice-sha256/2:a4c00ed6093bf6c7e7fd001de059b89430b40a0ac24ce5d8bfa90c55d5da5712
+  x-ess-reached-by: network
+tags:
+- name: list
+  description: A todo list kept in memory by one HTTP service.
+paths:
+  /todos:
+    get:
+      operationId: todo.list.Todos
+      x-ess-route-source: binding
+      summary: Todos
+      tags:
+      - list
+      x-ess-consistency: read_your_writes
+      responses:
+        '200':
+          description: 'Every row of `todo.list.Todos`, a projection of `todo.list.Todo`. Contains every instance. Read-your-writes: a caller that has just issued a command sees its effect here.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/todo.list.Todos.Response'
+    post:
+      operationId: todo.list.CreateTodo
+      x-ess-route-source: binding
+      summary: CreateTodo
+      tags:
+      - list
+      requestBody:
+        description: The input `todo.list.CreateTodo` declares.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/todo.list.CreateTodo.Input'
+      responses:
+        '202':
+          description: 'Outcomes `created-with-done` and `created`: the branch the specification declares for this input. Events this branch emits are published to consumers and listed under `published`.'
+          content:
+            application/json:
+              schema:
+                discriminator:
+                  mapping:
+                    created: '#/components/schemas/todo.list.CreateTodo.created.Response'
+                    created-with-done: '#/components/schemas/todo.list.CreateTodo.created-with-done.Response'
+                  propertyName: outcome
+                oneOf:
+                - $ref: '#/components/schemas/todo.list.CreateTodo.created-with-done.Response'
+                - $ref: '#/components/schemas/todo.list.CreateTodo.created.Response'
+        '501':
+          description: 'No declared outcome: the realization is unfinished. Either a port this command runs reported an unmet obligation, and nothing was written: `committed` is `false`. Or the command''s effect was committed and delivering what this command published to a binding failed: `committed` is `true`, the effect and its events stand, and each binding whose delivery failed keeps its event and is attempted again on a later delivery, while no other binding receives it twice. Do not retry: after a failed delivery a retry performs the command a second time.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  committed:
+                    description: '`true` when the command''s effect and events were committed and delivering what it published failed; `false` when an unmet obligation stopped the command before anything was written.'
+                    type: boolean
+                  refused:
+                    description: What was left unfinished, in words.
+                    type: string
+                required:
+                - refused
+                - committed
+                type: object
+  /todos/{id}:
+    get:
+      operationId: todo.list.GetTodo
+      x-ess-route-source: binding
+      summary: GetTodo
+      tags:
+      - list
+      parameters:
+      - name: id
+        in: path
+        description: The input field `id`, carried in the path rather than the request body.
+        required: true
+        schema:
+          $ref: '#/components/schemas/todo.list.TodoId'
+      responses:
+        '202':
+          description: 'Outcome `found`: the branch the specification declares for this input. Events this branch emits are published to consumers and listed under `published`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/todo.list.GetTodo.found.Response'
+          x-ess-outcomes:
+          - found
+        '404':
+          description: 'Outcome `not-found`: the branch the specification declares for this input. Events this branch emits are published to consumers and listed under `published`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/todo.list.GetTodo.not-found.Response'
+          x-ess-outcomes:
+          - not-found
+        '501':
+          description: 'No declared outcome: the realization is unfinished. Either a port this command runs reported an unmet obligation, and nothing was written: `committed` is `false`. Or the command''s effect was committed and delivering what this command published to a binding failed: `committed` is `true`, the effect and its events stand, and each binding whose delivery failed keeps its event and is attempted again on a later delivery, while no other binding receives it twice. Do not retry: after a failed delivery a retry performs the command a second time.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  committed:
+                    description: '`true` when the command''s effect and events were committed and delivering what it published failed; `false` when an unmet obligation stopped the command before anything was written.'
+                    type: boolean
+                  refused:
+                    description: What was left unfinished, in words.
+                    type: string
+                required:
+                - refused
+                - committed
+                type: object
+          x-ess-outcomes: []
+    delete:
+      operationId: todo.list.DeleteTodo
+      x-ess-route-source: binding
+      summary: DeleteTodo
+      tags:
+      - list
+      parameters:
+      - name: id
+        in: path
+        description: The input field `id`, carried in the path rather than the request body.
+        required: true
+        schema:
+          $ref: '#/components/schemas/todo.list.TodoId'
+      responses:
+        '202':
+          description: 'Outcome `deleted`: the branch the specification declares for this input. Events this branch emits are published to consumers and listed under `published`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/todo.list.DeleteTodo.deleted.Response'
+        '404':
+          description: 'Outcome `not-found`: the branch the specification declares for this input. Events this branch emits are published to consumers and listed under `published`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/todo.list.DeleteTodo.not-found.Response'
+        '501':
+          description: 'No declared outcome: the realization is unfinished. Either a port this command runs reported an unmet obligation, and nothing was written: `committed` is `false`. Or the command''s effect was committed and delivering what this command published to a binding failed: `committed` is `true`, the effect and its events stand, and each binding whose delivery failed keeps its event and is attempted again on a later delivery, while no other binding receives it twice. Do not retry: after a failed delivery a retry performs the command a second time.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  committed:
+                    description: '`true` when the command''s effect and events were committed and delivering what it published failed; `false` when an unmet obligation stopped the command before anything was written.'
+                    type: boolean
+                  refused:
+                    description: What was left unfinished, in words.
+                    type: string
+                required:
+                - refused
+                - committed
+                type: object
+    patch:
+      operationId: todo.list.UpdateTodo
+      x-ess-route-source: binding
+      summary: UpdateTodo
+      tags:
+      - list
+      parameters:
+      - name: id
+        in: path
+        description: The input field `id`, carried in the path rather than the request body.
+        required: true
+        schema:
+          $ref: '#/components/schemas/todo.list.TodoId'
+      requestBody:
+        description: The input `todo.list.UpdateTodo` declares.
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/todo.list.UpdateTodo.Input'
+      responses:
+        '202':
+          description: 'Outcomes `updated-both`, `updated-title`, `updated-done` and `unchanged`: the branch the specification declares for this input. Events this branch emits are published to consumers and listed under `published`.'
+          content:
+            application/json:
+              schema:
+                discriminator:
+                  mapping:
+                    unchanged: '#/components/schemas/todo.list.UpdateTodo.unchanged.Response'
+                    updated-both: '#/components/schemas/todo.list.UpdateTodo.updated-both.Response'
+                    updated-done: '#/components/schemas/todo.list.UpdateTodo.updated-done.Response'
+                    updated-title: '#/components/schemas/todo.list.UpdateTodo.updated-title.Response'
+                  propertyName: outcome
+                oneOf:
+                - $ref: '#/components/schemas/todo.list.UpdateTodo.updated-both.Response'
+                - $ref: '#/components/schemas/todo.list.UpdateTodo.updated-title.Response'
+                - $ref: '#/components/schemas/todo.list.UpdateTodo.updated-done.Response'
+                - $ref: '#/components/schemas/todo.list.UpdateTodo.unchanged.Response'
+        '404':
+          description: 'Outcome `not-found`: the branch the specification declares for this input. Events this branch emits are published to consumers and listed under `published`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/todo.list.UpdateTodo.not-found.Response'
+        '501':
+          description: 'No declared outcome: the realization is unfinished. Either a port this command runs reported an unmet obligation, and nothing was written: `committed` is `false`. Or the command''s effect was committed and delivering what this command published to a binding failed: `committed` is `true`, the effect and its events stand, and each binding whose delivery failed keeps its event and is attempted again on a later delivery, while no other binding receives it twice. Do not retry: after a failed delivery a retry performs the command a second time.'
+          content:
+            application/json:
+              schema:
+                additionalProperties: false
+                properties:
+                  committed:
+                    description: '`true` when the command''s effect and events were committed and delivering what it published failed; `false` when an unmet obligation stopped the command before anything was written.'
+                    type: boolean
+                  refused:
+                    description: What was left unfinished, in words.
+                    type: string
+                required:
+                - refused
+                - committed
+                type: object
+components:
+  schemas:
+    todo.list.CreateTodo.Input:
+      title: CreateTodo input
+      x-ess-name: todo.list.CreateTodo
+      x-ess-kind: command-input
+      type: object
+      properties:
+        title:
+          $ref: '#/components/schemas/todo.list.Title'
+        done:
+          type: boolean
+      required:
+      - title
+      additionalProperties: false
+    todo.list.CreateTodo.created-with-done.Response:
+      additionalProperties: false
+      description: Taken when `defined(done)` holds of the input. A `todo.list.Todo` now exists, in `Kept`. Its identity is published as `id` on `todo.list.TodoCreated`. Emits `TodoCreated`, published to consumers and listed under `published`.
+      properties:
+        outcome:
+          const: created-with-done
+          description: Which declared outcome the command took.
+        published:
+          description: 'Every event this branch published, in publication order: its qualified name and its payload.'
+          items: false
+          maxItems: 1
+          minItems: 1
+          prefixItems:
+          - additionalProperties: false
+            properties:
+              event:
+                const: todo.list.TodoCreated
+                type: string
+              payload:
+                $ref: '#/components/schemas/todo.list.TodoCreated.Event'
+            required:
+            - event
+            - payload
+            type: object
+          type: array
+      required:
+      - outcome
+      - published
+      type: object
+    todo.list.CreateTodo.created.Response:
+      additionalProperties: false
+      description: Taken when no other outcome's condition matched. A `todo.list.Todo` now exists, in `Kept`. Its identity is published as `id` on `todo.list.TodoCreated`. Emits `TodoCreated`, published to consumers and listed under `published`.
+      properties:
+        outcome:
+          const: created
+          description: Which declared outcome the command took.
+        published:
+          description: 'Every event this branch published, in publication order: its qualified name and its payload.'
+          items: false
+          maxItems: 1
+          minItems: 1
+          prefixItems:
+          - additionalProperties: false
+            properties:
+              event:
+                const: todo.list.TodoCreated
+                type: string
+              payload:
+                $ref: '#/components/schemas/todo.list.TodoCreated.Event'
+            required:
+            - event
+            - payload
+            type: object
+          type: array
+      required:
+      - outcome
+      - published
+      type: object
+    todo.list.DeleteTodo.deleted.Response:
+      additionalProperties: false
+      description: Taken when no other outcome's condition matched. A `todo.list.Todo` no longer exists. The instance is the one `id` names. Emits `TodoDeleted`, published to consumers and listed under `published`.
+      properties:
+        outcome:
+          const: deleted
+          description: Which declared outcome the command took.
+        published:
+          description: 'Every event this branch published, in publication order: its qualified name and its payload.'
+          items: false
+          maxItems: 1
+          minItems: 1
+          prefixItems:
+          - additionalProperties: false
+            properties:
+              event:
+                const: todo.list.TodoDeleted
+                type: string
+              payload:
+                $ref: '#/components/schemas/todo.list.TodoDeleted.Event'
+            required:
+            - event
+            - payload
+            type: object
+          type: array
+      required:
+      - outcome
+      - published
+      type: object
+    todo.list.DeleteTodo.not-found.Response:
+      additionalProperties: false
+      description: Taken when the request names an identity no record carries.
+      properties:
+        error:
+          const: todo.list.TodoNotFound
+          description: No todo has this id.
+          type: string
+        outcome:
+          const: not-found
+          description: Which declared outcome the command took.
+        payload:
+          $ref: '#/components/schemas/todo.list.TodoNotFound.Error'
+        published:
+          description: 'Every event this branch published, in publication order: its qualified name and its payload.'
+          maxItems: 0
+          type: array
+      required:
+      - outcome
+      - published
+      - error
+      - payload
+      type: object
+    todo.list.GetTodo.found.Response:
+      additionalProperties: false
+      description: Taken when no other outcome's condition matched. The existing `todo.list.Todo` is preserved without an error or event. The instance is the one `id` names.
+      properties:
+        outcome:
+          const: found
+          description: Which declared outcome the command took.
+        published:
+          description: 'Every event this branch published, in publication order: its qualified name and its payload.'
+          maxItems: 0
+          type: array
+      required:
+      - outcome
+      - published
+      type: object
+    todo.list.GetTodo.not-found.Response:
+      additionalProperties: false
+      description: Taken when the request names an identity no record carries.
+      properties:
+        error:
+          const: todo.list.TodoNotFound
+          description: No todo has this id.
+          type: string
+        outcome:
+          const: not-found
+          description: Which declared outcome the command took.
+        payload:
+          $ref: '#/components/schemas/todo.list.TodoNotFound.Error'
+        published:
+          description: 'Every event this branch published, in publication order: its qualified name and its payload.'
+          maxItems: 0
+          type: array
+      required:
+      - outcome
+      - published
+      - error
+      - payload
+      type: object
+    todo.list.Title:
+      title: Title
+      x-ess-name: todo.list.Title
+      x-ess-kind: newtype
+      type: string
+    todo.list.Todo.State:
+      title: State
+      x-ess-name: todo.list.Todo.State
+      x-ess-kind: enum
+      type: string
+      enum:
+      - Kept
+    todo.list.TodoChanged.Event:
+      title: TodoChanged payload
+      x-ess-name: todo.list.TodoChanged
+      x-ess-kind: event-payload
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/todo.list.TodoId'
+      required:
+      - id
+      additionalProperties: false
+    todo.list.TodoCreated.Event:
+      title: TodoCreated payload
+      x-ess-name: todo.list.TodoCreated
+      x-ess-kind: event-payload
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/todo.list.TodoId'
+        title:
+          $ref: '#/components/schemas/todo.list.Title'
+      required:
+      - id
+      - title
+      additionalProperties: false
+    todo.list.TodoDeleted.Event:
+      title: TodoDeleted payload
+      x-ess-name: todo.list.TodoDeleted
+      x-ess-kind: event-payload
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/todo.list.TodoId'
+      required:
+      - id
+      additionalProperties: false
+    todo.list.TodoId:
+      title: TodoId
+      x-ess-name: todo.list.TodoId
+      x-ess-kind: newtype
+      type: integer
+    todo.list.TodoNotFound.Error:
+      title: TodoNotFound payload
+      description: No todo has this id.
+      x-ess-name: todo.list.TodoNotFound
+      x-ess-kind: error-payload
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/todo.list.TodoId'
+      required:
+      - id
+      additionalProperties: false
+    todo.list.Todos.Response:
+      additionalProperties: false
+      description: The rows of `todo.list.Todos`.
+      properties:
+        rows:
+          description: Every row the projection holds, in the order it holds them.
+          items:
+            $ref: '#/components/schemas/todo.list.Todos.Row'
+          type: array
+      required:
+      - rows
+      type: object
+    todo.list.Todos.Row:
+      title: Todos row
+      x-ess-name: todo.list.Todos
+      x-ess-kind: view-row
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/todo.list.TodoId'
+        title:
+          $ref: '#/components/schemas/todo.list.Title'
+        done:
+          type: boolean
+        state:
+          $ref: '#/components/schemas/todo.list.Todo.State'
+      required:
+      - id
+      - title
+      - done
+      - state
+      additionalProperties: false
+    todo.list.UpdateTodo.Input:
+      title: UpdateTodo input
+      x-ess-name: todo.list.UpdateTodo
+      x-ess-kind: command-input
+      type: object
+      properties:
+        title:
+          $ref: '#/components/schemas/todo.list.Title'
+        done:
+          type: boolean
+      additionalProperties: false
+    todo.list.UpdateTodo.not-found.Response:
+      additionalProperties: false
+      description: Taken when the request names an identity no record carries.
+      properties:
+        error:
+          const: todo.list.TodoNotFound
+          description: No todo has this id.
+          type: string
+        outcome:
+          const: not-found
+          description: Which declared outcome the command took.
+        payload:
+          $ref: '#/components/schemas/todo.list.TodoNotFound.Error'
+        published:
+          description: 'Every event this branch published, in publication order: its qualified name and its payload.'
+          maxItems: 0
+          type: array
+      required:
+      - outcome
+      - published
+      - error
+      - payload
+      type: object
+    todo.list.UpdateTodo.unchanged.Response:
+      additionalProperties: false
+      description: Taken when `(not (defined(title)) and not (defined(done)))` holds of the input. The existing `todo.list.Todo` is preserved without an error or event. The instance is the one `id` names.
+      properties:
+        outcome:
+          const: unchanged
+          description: Which declared outcome the command took.
+        published:
+          description: 'Every event this branch published, in publication order: its qualified name and its payload.'
+          maxItems: 0
+          type: array
+      required:
+      - outcome
+      - published
+      type: object
+    todo.list.UpdateTodo.updated-both.Response:
+      additionalProperties: false
+      description: Taken when `(defined(title) and defined(done))` holds of the input. A `todo.list.Todo` has changed, and its state is unchanged. The instance is the one `id` names. Emits `TodoChanged`, published to consumers and listed under `published`.
+      properties:
+        outcome:
+          const: updated-both
+          description: Which declared outcome the command took.
+        published:
+          description: 'Every event this branch published, in publication order: its qualified name and its payload.'
+          items: false
+          maxItems: 1
+          minItems: 1
+          prefixItems:
+          - additionalProperties: false
+            properties:
+              event:
+                const: todo.list.TodoChanged
+                type: string
+              payload:
+                $ref: '#/components/schemas/todo.list.TodoChanged.Event'
+            required:
+            - event
+            - payload
+            type: object
+          type: array
+      required:
+      - outcome
+      - published
+      type: object
+    todo.list.UpdateTodo.updated-done.Response:
+      additionalProperties: false
+      description: Taken when `(not (defined(title)) and defined(done))` holds of the input. A `todo.list.Todo` has changed, and its state is unchanged. The instance is the one `id` names. Emits `TodoChanged`, published to consumers and listed under `published`.
+      properties:
+        outcome:
+          const: updated-done
+          description: Which declared outcome the command took.
+        published:
+          description: 'Every event this branch published, in publication order: its qualified name and its payload.'
+          items: false
+          maxItems: 1
+          minItems: 1
+          prefixItems:
+          - additionalProperties: false
+            properties:
+              event:
+                const: todo.list.TodoChanged
+                type: string
+              payload:
+                $ref: '#/components/schemas/todo.list.TodoChanged.Event'
+            required:
+            - event
+            - payload
+            type: object
+          type: array
+      required:
+      - outcome
+      - published
+      type: object
+    todo.list.UpdateTodo.updated-title.Response:
+      additionalProperties: false
+      description: Taken when `(defined(title) and not (defined(done)))` holds of the input. A `todo.list.Todo` has changed, and its state is unchanged. The instance is the one `id` names. Emits `TodoChanged`, published to consumers and listed under `published`.
+      properties:
+        outcome:
+          const: updated-title
+          description: Which declared outcome the command took.
+        published:
+          description: 'Every event this branch published, in publication order: its qualified name and its payload.'
+          items: false
+          maxItems: 1
+          minItems: 1
+          prefixItems:
+          - additionalProperties: false
+            properties:
+              event:
+                const: todo.list.TodoChanged
+                type: string
+              payload:
+                $ref: '#/components/schemas/todo.list.TodoChanged.Event'
+            required:
+            - event
+            - payload
+            type: object
+          type: array
+      required:
+      - outcome
+      - published
+      type: object
+x-ess-entities:
+  todo.list.Title:
+    title: Title
+    x-ess-name: todo.list.Title
+    x-ess-kind: newtype
+    type: string
+  todo.list.Todo:
+    title: Todo
+    x-ess-name: todo.list.Todo
+    x-ess-kind: entity
+    type: object
+    properties:
+      id:
+        $ref: '#/x-ess-entities/todo.list.TodoId'
+      title:
+        $ref: '#/x-ess-entities/todo.list.Title'
+      done:
+        type: boolean
+      state:
+        $ref: '#/x-ess-entities/todo.list.Todo.State'
+    required:
+    - id
+    - title
+    - done
+    - state
+    additionalProperties: false
+  todo.list.Todo.State:
+    title: State
+    x-ess-name: todo.list.Todo.State
+    x-ess-kind: enum
+    type: string
+    enum:
+    - Kept
+  todo.list.TodoId:
+    title: TodoId
+    x-ess-name: todo.list.TodoId
+    x-ess-kind: newtype
+    type: integer

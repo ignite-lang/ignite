@@ -1,0 +1,46 @@
+/dev/nvme0n1p2  848G  767G   73G  92% /
+== fmt
+STEP fmt exit=0
+== cargo test -p ignite-io -p ignite-rt
+error: + failed at f.ignite:1:2: 9223372036854775807 + 1
+error: panic at crates/ignite-io/src/lib.rs:560:27: boom
+error: plain
+error: no peer
+error: --port abc
+task ended with error: index failed at t.ignite:1:1: index 3 out of range for length 0
+task ended with error: assert failed at t.ignite:2:1: a failed task also ends
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+error: failed
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+STEP io-rt-tests exit=0
+== build ignite + runtimes
+STEP build exit=0
+== clippy (errors by file)
+STEP clippy exit=101
+      3 crates/ignite/tests/drain.rs
+== drain e2e tests
+error[E0308]: mismatched types
+   --> crates/ignite/tests/drain.rs:199:19
+    |
+199 |     let out = tmp(format!("drain-build-{target}"));
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `&str`, found `String`
+error[E0308]: mismatched types
+   --> crates/ignite/tests/drain.rs:347:25
+    |
+347 |         let state = tmp(format!("run-state-{name}"));
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `&str`, found `String`
+error[E0308]: mismatched types
+   --> crates/ignite/tests/drain.rs:356:22
+    |
+356 |             .arg(tmp(format!("run-build-design-{target}")))
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `&str`, found `String`
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `ignite` (test "main") due to 3 previous errors
+STEP drain-tests exit=101
+drain tests secs=3.1 load=17.64
+EXIT=0
+EXIT=0

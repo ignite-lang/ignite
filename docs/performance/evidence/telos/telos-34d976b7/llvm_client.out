@@ -1,0 +1,8 @@
+terminal> help
+echo <text>
+status
+quit
+terminal> hello llvm
+terminal> ready
+terminal> unknown command: bogus
+terminal> bye

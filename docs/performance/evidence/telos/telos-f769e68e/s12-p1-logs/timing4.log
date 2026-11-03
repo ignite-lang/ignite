@@ -1,0 +1,17 @@
+pair1 before check load=1.66 time=0.063 rc=0
+pair1 after check load=1.66 time=0.063 rc=0
+pair1 before plan load=1.66 time=0.061 rc=0
+pair1 after plan load=1.66 time=0.063 rc=0
+pair2 before check load=1.66 time=0.059 rc=0
+pair2 after check load=1.66 time=0.061 rc=0
+pair2 before plan load=1.66 time=0.059 rc=0
+pair2 after plan load=1.66 time=0.062 rc=0
+pair3 before check load=1.66 time=0.059 rc=0
+pair3 after check load=1.66 time=0.061 rc=0
+pair3 before plan load=1.66 time=0.060 rc=0
+pair3 after plan load=1.66 time=0.063 rc=0
+pair4 before check load=1.66 time=0.060 rc=0
+pair4 after check load=1.66 time=0.061 rc=0
+pair4 before plan load=1.66 time=0.061 rc=0
+pair4 after plan load=1.66 time=0.063 rc=0
+EXIT=0

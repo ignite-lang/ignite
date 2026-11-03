@@ -1,0 +1,1 @@
+effects_a10_fn_field_position.telos:8:10: error[E016]: missing effect `q.read` for `run`; add it to the `requires` of `swapped`

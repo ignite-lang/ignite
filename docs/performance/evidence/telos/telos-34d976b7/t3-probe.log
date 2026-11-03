@@ -1,0 +1,63 @@
+note: building the generated Rust project in /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/t3-out-rust; compiler messages refer to generated code
+   Compiling telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+warning: ignoring -C extra-filename flag due to -o flag
+
+error[E0532]: expected a pattern, found a function call
+  --> /home/timo/projects/telos/crates/telos-io/src/net.rs:81:17
+   |
+81 |     let         drop(out);
+   |                 ^^^^ not a tuple struct or tuple variant
+   |
+   = note: function calls are not allowed in patterns: <https://doc.rust-lang.org/book/ch19-00-patterns.html>
+
+error[E0425]: cannot find value `stream` in this scope
+  --> /home/timo/projects/telos/crates/telos-io/src/net.rs:84:63
+   |
+84 |             if !pending.iter().any(|known| Arc::ptr_eq(known, stream)) {
+   |                                                               ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `stream` in this scope
+  --> /home/timo/projects/telos/crates/telos-io/src/net.rs:85:41
+   |
+85 |                 pending.push(Arc::clone(stream));
+   |                                         ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `stream` in this scope
+  --> /home/timo/projects/telos/crates/telos-io/src/net.rs:89:27
+   |
+89 |             let mut out = stream.out();
+   |                           ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `stream` in this scope
+  --> /home/timo/projects/telos/crates/telos-io/src/net.rs:90:20
+   |
+90 |             return stream.send(&mut out);
+   |                    ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `pending` in this scope
+  --> /home/timo/projects/telos/crates/telos-io/src/net.rs:95:19
+   |
+72 | / thread_local! {
+73 | |     /// Streams the current task wrote to since it last flushed.
+74 | |     static PENDING: RefCell<Pending> = const { RefCell::new(Pending(Vec::new())) };
+75 | | }
+   | |_- similarly named constant `PENDING` defined here
+...
+95 |       for stream in pending {
+   |                     ^^^^^^^
+   |
+help: a constant with a similar name exists
+   |
+95 -     for stream in pending {
+95 +     for stream in PENDING {
+   |
+help: consider importing this function
+   |
+21 + use std::future::pending;
+   |
+
+Some errors have detailed explanations: E0425, E0532.
+For more information about an error, try `rustc --explain E0425`.
+warning: `telos-io` (lib) generated 1 warning
+error: could not compile `telos-io` (lib) due to 6 previous errors; 1 warning emitted
+error: cargo build failed with status 101

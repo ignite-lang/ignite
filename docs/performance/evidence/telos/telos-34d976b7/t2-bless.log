@@ -1,0 +1,39 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/golden.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/golden-eb5b01fcb24cddfc)
+
+running 5 tests
+test read_only_parameters_are_borrowed ... ok
+test loops_release_their_region ... ok
+test symbols_are_module_qualified ... ok
+test small_program ... ok
+test syntax_program ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+llvm EXIT=0
+   Compiling telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.45s
+     Running tests/golden.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-j/debug/deps/golden-6ee125d81c6cfa55)
+
+running 17 tests
+test a_listener_the_component_does_not_bind_is_not_a_value ... ok
+test acceptance_copy_is_current ... ok
+test store_resources_take_one_type_argument_and_no_properties ... ok
+test record_and_enum_with_match ... ok
+test parameters_are_borrowed_unless_changed ... ok
+test protocol_import_spawn_and_function_values ... ok
+test syntax_copy_is_current ... ok
+test element_reads_copy_only_non_copy_elements ... ok
+test the_own_listener_as_a_value_is_bound_first ... ok
+test constants_qualified_patterns_and_io_error ... ok
+test process_exit_diverges ... ok
+test variants_of_enums_not_imported ... ok
+test system_with_service_and_client ... ok
+test pure_functions ... ok
+test surface_syntax ... ok
+test generics_stores_and_builtins ... ok
+test terminal ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+rustgen EXIT=0

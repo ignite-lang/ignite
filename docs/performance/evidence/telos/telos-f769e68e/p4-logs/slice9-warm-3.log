@@ -1,0 +1,55 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 10 tests
+test slice9::long_chains_100k_lower_quickly ... ignored
+test slice9::long_chains_100k_run_on_llvm ... ignored
+test slice9::long_chains_lower_quickly ... ok
+test slice9::audit_io_probes_pass ... ok
+test slice9::rust_target_features_pass_on_llvm ... ok
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test slice9::long_chains_run_on_llvm ... ok
+test slice9::audit_probes_pass ... ok
+test slice9::var_aliases_leave_the_source_unchanged ... ok
+test slice9::slice9_values_across_regions ... ok
+
+test result: ok. 8 passed; 0 failed; 2 ignored; 0 measured; 148 filtered out; finished in 3.65s
+
+WARM rep=1 exit=0 wall=3.685345804 load=0.77
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+
+running 10 tests
+test slice9::long_chains_100k_lower_quickly ... ignored
+test slice9::long_chains_100k_run_on_llvm ... ignored
+test slice9::long_chains_lower_quickly ... ok
+test slice9::audit_io_probes_pass ... ok
+test slice9::audit_probes_pass ... ok
+test slice9::slice9_values_across_regions ... ok
+test slice9::long_chains_run_on_llvm ... ok
+test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+test slice9::rust_target_features_pass_on_llvm ... ok
+test slice9::var_aliases_leave_the_source_unchanged ... ok
+
+test result: ok. 8 passed; 0 failed; 2 ignored; 0 measured; 148 filtered out; finished in 3.62s
+
+WARM rep=2 exit=0 wall=3.657547263 load=0.77
+=== SERIAL
+   0.011 +  0.011     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.011 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p4/debug/deps/main-6eaf5699a056c807)
+   0.012 +  0.001 
+   0.012 +  0.000 running 10 tests
+   0.691 +  0.678 test slice9::audit_io_probes_pass ... ok
+   1.947 +  1.256 test slice9::audit_probes_pass ... ok
+   2.156 +  0.210 test slice9::failed_asserts_print_the_same_debug_text_on_both_targets ... ok
+   2.156 +  0.000 test slice9::long_chains_100k_lower_quickly ... ignored
+   2.156 +  0.000 test slice9::long_chains_100k_run_on_llvm ... ignored
+   2.563 +  0.407 test slice9::long_chains_lower_quickly ... ok
+   3.079 +  0.516 test slice9::long_chains_run_on_llvm ... ok
+   3.213 +  0.135 test slice9::rust_target_features_pass_on_llvm ... ok
+   3.819 +  0.606 test slice9::slice9_values_across_regions ... ok
+   4.036 +  0.217 test slice9::var_aliases_leave_the_source_unchanged ... ok
+   4.036 +  0.000 
+   4.036 +  0.000 test result: ok. 8 passed; 0 failed; 2 ignored; 0 measured; 148 filtered out; finished in 4.02s
+   4.036 +  0.000 
+EXIT=0

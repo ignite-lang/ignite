@@ -1,0 +1,34 @@
+/dev/nvme0n1p2  848G  746G   94G  89% /
+norun_cached	18.9	exit=0
+norun_cached	executables=49	size=666M
+norun_warm	0.4	exit=0
+norun_touch	2.2	exit=0
+cold_fmt	0.6	exit=1
+cold_clippy	4.0	exit=0
+cold_test	112.9	exit=101
+cold_telos	12.3	exit=0
+gate_cold	129.9
+warm_fmt	0.6	exit=1
+warm_clippy	2.3	exit=0
+warm_test	31.3	exit=101
+warm_telos	1.3	exit=0
+gate_warm	35.4
+telos_again	1.3	exit=0
+cargo_tests	passed=518 failed=2 ignored=3
+integration_binaries	39
+      1 abi       1 audit       1 c_abi       1 cli       1 compiles       3 fixtures       2 generics       2 golden       1 grammar       1 inline_tests       1 layout       2 limits       1 llvm       1 llvm_build       1 llvm_memory       1 modules       1 parse_terminal       1 robustness       3 slice9       1 stdio       1 surface       1 syntax       1 tcp       1 telos_test       5 terminal       1 tests_build       1 todo       1 units 
+test result: ok. 3 passed; 0 failed; 0 filtered out; finished in 0.01s
+test result: ok. 3 passed; 0 failed; 0 filtered out; finished in 0.01s
+test result: ok. 72 passed; 0 failed; 0 filtered out; finished in 0.02s
+test result: ok. 3 passed; 0 failed; 0 filtered out; finished in 0.01s
+test result: ok. 3 passed; 0 failed; 0 filtered out; finished in 0.01s
+test result: ok. 72 passed; 0 failed; 0 filtered out; finished in 0.03s
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-before/telos-test/terminal/llvm/bin/telos-test
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-before/telos-test/terminal/rust/telos-test
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-before/telos-test/std/llvm/bin/telos-test
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-before/telos-test/std/rust/telos-test
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-before/telos-test/todo/llvm/bin/telos-test
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-before/telos-test/todo/rust/telos-test
+/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k-before/telos-test/cargo/debug/telos-test
+/dev/nvme0n1p2  848G  751G   89G  90% /
+EXIT=0

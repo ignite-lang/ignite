@@ -1,0 +1,26 @@
+    Checking telos-syntax v0.1.0 (/home/timo/projects/telos/crates/telos-syntax)
+    Checking cfg-if v1.0.5
+    Checking bitflags v2.13.2
+    Checking utf8parse v0.2.2
+    Checking colorchoice v1.0.5
+    Checking anstyle-query v1.1.5
+    Checking anstyle v1.0.14
+    Checking is_terminal_polyfill v1.70.2
+    Checking strsim v0.11.1
+    Checking clap_lex v1.1.1
+    Checking telos-load v0.1.0 (/home/timo/projects/telos/crates/telos-load)
+    Checking libc v0.2.191
+    Checking telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+    Checking anstyle-parse v1.0.0
+    Checking anstream v1.0.0
+    Checking telos-types v0.1.0 (/home/timo/projects/telos/crates/telos-types)
+    Checking clap_builder v4.6.7
+    Checking nix v0.31.3
+    Checking telos-rustgen v0.1.0 (/home/timo/projects/telos/crates/telos-rustgen)
+    Checking telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+    Checking clap v4.6.7
+    Checking telos v0.1.0 (/home/timo/projects/telos/crates/telos)
+    Checking telos-io v0.1.0 (/home/timo/projects/telos/crates/telos-io)
+    Checking telos-rt v0.1.0 (/home/timo/projects/telos/crates/telos-rt)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.46s
+EXIT=0

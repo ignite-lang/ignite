@@ -1,0 +1,310 @@
+| file | lines | blank | comment | code | tokens | test lines | test tokens |
+|---|---|---|---|---|---|---|---|
+| `std/text.telos` | 334 | 36 | 28 | 270 | 2258 | 157 | 1217 |
+| `std/json.telos` | 608 | 51 | 37 | 520 | 4469 | 179 | 1718 |
+| `std/console.telos` | 109 | 14 | 12 | 83 | 557 | 40 | 283 |
+| `std/protocol/telnet.telos` | 602 | 47 | 60 | 495 | 3992 | 189 | 2065 |
+| `std/protocol/http.telos` | 678 | 65 | 61 | 552 | 4126 | 251 | 2037 |
+| `examples/terminal/terminal.telos` | 96 | 13 | 2 | 81 | 608 | 29 | 311 |
+| `examples/todo/todo.telos` | 151 | 20 | 9 | 122 | 1332 | 48 | 654 |
+| `examples/terminal/terminal.design.telos` | 118 | 14 | 0 | 104 | 434 | 0 | 0 |
+| total | 2696 | 260 | 209 | 2227 | 17776 | 893 | 8285 |
+
+| pattern | count | lines saved | tokens saved | first example |
+|---|---|---|---|---|
+| assert_call | 444 | 0 | 0 | `std/text.telos:34` digit_value |
+| escapes_s9 | 75 | 0 | 336 | `std/text.telos:280` assert to_lower("@[`{{AZ") == "@[`{{az" |
+| conversion | 64 | 0 | 0 | `std/text.telos:55` fn substring(text: Text, start: Int, end: Int) ->  |
+| pair_literal | 44 | 0 | 88 | `std/json.telos:97` assert encode(Array([Number(1), Array([Null]), Obj |
+| at_call | 42 | 0 | 42 | `std/text.telos:73` if bytes.at(at + i) != needle.at(i) { |
+| guard_three_lines | 39 | 78 | 0 | `std/text.telos:68` if at < 0 || at + needle.len() > bytes.len() { ret |
+| compound_assign | 25 | 0 | 50 | `std/text.telos:76` i = i + 1 |
+| two_arm_match | 21 | 63 | 42 | `std/text.telos:175` fn split_once(text: Text, separator: Text) -> Opti |
+| test_fn | 20 | 0 | 0 | `std/json.telos:385` test fn failure(input: Text) -> Option<JsonError>  |
+| none_to_none | 16 | 16 | 64 | `std/text.telos:30` _ => None |
+| slice_any | 16 | 0 | 0 | `std/text.telos:55` fn substring(text: Text, start: Int, end: Int) ->  |
+| const_literal_type | 15 | 0 | 30 | `std/json.telos:30` const MAXIMUM_DIGITS: Int = 18 |
+| json_object | 13 | 0 | 0 | `std/json.telos:96` assert encode(Object([])) == "{{}}" |
+| counter_while | 10 | 20 | 80 | `std/text.telos:76` i = i + 1 |
+| ok_unit | 10 | 0 | 0 | `std/protocol/telnet.telos:47` return Ok(()) |
+| empty_arm | 9 | 9 | 36 | `std/json.telos:202` _ => {} |
+| read_match | 9 | 0 | 0 | `std/protocol/telnet.telos:44` match stream.read(4096)? { |
+| append_run | 9 | 15 | 30 | `std/protocol/telnet.telos:251` var longest = [IAC, SB] |
+| for_destructure | 7 | 7 | 28 | `std/json.telos:79` for member in members { / let (name, item) = membe |
+| accumulator_loop | 5 | 29 | 0 | `std/text.telos:255` var out = Bytes.empty() |
+| state_thread | 5 | 5 | 20 | `std/protocol/telnet.telos:52` let (next, event) = decode(state, b) / state = nex |
+| slice_to_len | 4 | 0 | 16 | `std/text.telos:166` pieces.push(bytes.slice(start, bytes.len()).to_tex |
+| requires | 4 | 0 | 0 | `std/protocol/telnet.telos:19` fn serve(stream: TcpStream, application: Console)  |
+| bool_match | 3 | 9 | 21 | `std/text.telos:11` fn is_whitespace(b: Byte) -> Bool = match b { |
+| option_question | 3 | 6 | 18 | `std/text.telos:177` None => None |
+| option_default_s9 | 3 | 9 | 18 | `std/text.telos:294` Some(stripped) => stripped / None => line |
+| if_is_statement | 3 | 9 | 18 | `std/json.telos:200` match bytes.at(i) { |
+| raw_restore | 3 | 0 | 0 | `std/protocol/telnet.telos:46` Stdin.set_raw(false)? |
+| close_then_result | 2 | 4 | 12 | `std/protocol/telnet.telos:24` _ = stream.close() |
+| let_else | 1 | 3 | 4 | `std/protocol/http.telos:444` let request = match parse_head(data.slice(0, head_ |
+
+assert runs (>=3 consecutive asserts on one callee): 52 covering 345 asserts
+   ('std/text.telos', 34, 7, 'digit_value')
+   ('std/text.telos', 48, 3, 'is_whitespace')
+   ('std/text.telos', 60, 4, 'substring')
+   ('std/text.telos', 122, 7, 'find')
+   ('std/text.telos', 135, 6, 'ends_with')
+   ('std/text.telos', 141, 4, 'strip_suffix')
+   ('std/text.telos', 183, 9, 'split')
+   ('std/text.telos', 198, 4, 'split_once')
+   ('std/text.telos', 210, 6, 'replace')
+   ('std/text.telos', 283, 3, 'equals_ignore_case')
+   ('std/text.telos', 306, 7, 'lines')
+   ('std/text.telos', 329, 5, 'repeat')
+   ('std/json.telos', 88, 10, 'encode')
+   ('std/json.telos', 103, 5, 'quote')
+   ('std/json.telos', 410, 11, 'parse')
+   ('std/json.telos', 436, 9, 'string_bytes')
+   ('std/json.telos', 450, 11, 'failure')
+   ('std/json.telos', 464, 3, 'parse')
+   ('std/json.telos', 471, 9, 'failure')
+   ('std/json.telos', 499, 16, 'failure')
+   ('std/console.telos', 67, 6, 'first_word')
+   ('std/console.telos', 76, 8, 'rest_after_word')
+   ('std/protocol/telnet.telos', 178, 3, 'events')
+   ('std/protocol/telnet.telos', 185, 8, 'events')
+   ('std/protocol/telnet.telos', 204, 3, 'events')
+   ('std/protocol/telnet.telos', 214, 6, 'events')
+   ('std/protocol/telnet.telos', 232, 4, 'events')
+   ('std/protocol/telnet.telos', 257, 3, 'feed')
+   ('std/protocol/telnet.telos', 304, 9, 'encode_input')
+   ('std/protocol/telnet.telos', 390, 6, 'erase_last')
+   ('std/protocol/telnet.telos', 399, 14, 'apply_key')
+   ('std/protocol/http.telos', 139, 3, 'reason')
+   ('std/protocol/http.telos', 153, 5, 'checked')
+   ('std/protocol/http.telos', 230, 3, 'header')
+   ('std/protocol/http.telos', 246, 5, 'keep_alive')
+   ('std/protocol/http.telos', 254, 4, 'keep_alive')
+   ('std/protocol/http.telos', 261, 5, 'keep_alive')
+   ('std/protocol/http.telos', 336, 6, 'is_token')
+   ('std/protocol/http.telos', 342, 6, 'is_field_value')
+   ('std/protocol/http.telos', 348, 4, 'is_target')
+   ('std/protocol/http.telos', 364, 4, 'parse_head')
+   ('std/protocol/http.telos', 371, 11, 'parse_head')
+   ('std/protocol/http.telos', 385, 9, 'parse_head')
+   ('std/protocol/http.telos', 494, 12, 'parse_length')
+   ('std/protocol/http.telos', 598, 4, 'next_of')
+   ('std/protocol/http.telos', 623, 7, 'next_of')
+   ('std/protocol/http.telos', 633, 4, 'next_of')
+   ('examples/terminal/terminal.telos', 47, 11, 'parse')
+   ('examples/terminal/terminal.telos', 61, 5, 'respond')
+   ('examples/terminal/terminal.telos', 69, 7, 'execute')
+   ('examples/todo/todo.telos', 119, 11, 'answer')
+   ('examples/todo/todo.telos', 134, 10, 'status')
+
+accumulator_loop
+   std/text.telos:255 saves 4: var out = Bytes.empty()
+   std/text.telos:264 saves 4: var out = Bytes.empty()
+   std/text.telos:291 saves 10: var out: List<Text> = List.empty()
+   std/protocol/telnet.telos:270 saves 5: var out = Bytes.empty()
+   std/protocol/http.telos:189 saves 6: var out: List<Text> = List.empty()
+let_else
+   std/protocol/http.telos:444 saves 3: let request = match parse_head(data.slice(0, head_end - 4).to_text()) {
+if_is_statement
+   std/json.telos:200 saves 3: match bytes.at(i) {
+   std/protocol/http.telos:405 saves 3: match bytes_find_from(data, b"\r\n\r\n", from) {
+   std/protocol/http.telos:448 saves 3: match header(request, "transfer-encoding") {
+bool_match
+   std/text.telos:11 saves 3: fn is_whitespace(b: Byte) -> Bool = match b {
+   std/json.telos:117 saves 3: fn is_space(b: Byte) -> Bool = match b {
+   std/console.telos:22 saves 3: fn is_space(b: Byte) -> Bool = match b {
+guard_three_lines
+   std/text.telos:68 saves 2: if at < 0 || at + needle.len() > bytes.len() { return false
+   std/text.telos:73 saves 2: if bytes.at(at + i) != needle.at(i) { return false
+   std/text.telos:85 saves 2: if bytes_match_at(bytes, needle, at) { return Some(at)
+   std/text.telos:298 saves 2: if !out.is_empty() && out.at(out.len() - 1).is_empty() { return out.slice(0, out
+   std/json.telos:135 saves 2: if rest < bytes.len() { return Err(error("unexpected character after the value",
+   std/json.telos:144 saves 2: if at >= bytes.len() { return Err(error("unexpected end of input", at))
+   std/json.telos:168 saves 2: if end > bytes.len() || bytes.slice(at, end).to_text() != word { return Err(erro
+   std/json.telos:182 saves 2: if i - start == MAXIMUM_DIGITS { return Err(error("number longer than {MAXIMUM_D
+   std/json.telos:193 saves 2: if i == start { return Err(error("expected a digit", i))
+   std/json.telos:196 saves 2: if i - start > 1 && bytes.at(start) == b'0' { return Err(error("leading zero in 
+   std/json.telos:214 saves 2: if i >= bytes.len() { return Err(error("unterminated string", at))
+   std/json.telos:240 saves 2: if w.len() < 2 { return None
+   std/json.telos:269 saves 2: if at + 4 > w.len() { return None
+   std/json.telos:286 saves 2: if w.len() < 12 || w.at(6) != b'\\' || w.at(7) != b'u' { return None
+   std/json.telos:325 saves 2: if depth > MAXIMUM_DEPTH { return Err(error("nested deeper than {MAXIMUM_DEPTH}"
+   std/json.telos:330 saves 2: if i < bytes.len() && bytes.at(i) == b']' { return Ok((Array(items), i + 1))
+   std/json.telos:337 saves 2: if i >= bytes.len() { return Err(error("unexpected end of input", i))
+   std/json.telos:351 saves 2: if depth > MAXIMUM_DEPTH { return Err(error("nested deeper than {MAXIMUM_DEPTH}"
+   std/json.telos:356 saves 2: if i < bytes.len() && bytes.at(i) == b'}' { return Ok((Object(members), i + 1))
+   std/json.telos:360 saves 2: if i >= bytes.len() || bytes.at(i) != b'"' { return Err(error("expected a member
+   std/json.telos:365 saves 2: if i >= bytes.len() || bytes.at(i) != b':' { return Err(error("expected `:`", i)
+   std/json.telos:371 saves 2: if i >= bytes.len() { return Err(error("unexpected end of input", i))
+   std/json.telos:525 saves 2: if key == name { return Some(item)
+   std/protocol/telnet.telos:538 saves 2: if !answer_line(stream, application, line)? { return Ok(())
+   std/protocol/http.telos:112 saves 2: if has_line_break(name) || has_line_break(value) { return status_response(500)
+   std/protocol/http.telos:180 saves 2: if key == name { return Some(value)
+   std/protocol/http.telos:206 saves 2: if item.trim().to_lower() == option { return true
+   std/protocol/http.telos:218 saves 2: if has_connection_option(request, "close") { return false
+   std/protocol/http.telos:277 saves 2: if !is_token_byte(b) { return false
+   std/protocol/http.telos:287 saves 2: if b < b' ' && b != b'\t' || b == 127 { return false
+   std/protocol/http.telos:297 saves 2: if b <= b' ' || b == 127 { return false
+   std/protocol/http.telos:308 saves 2: if parts.len() != 3 || !is_token(parts.at(0)) || !is_target(parts.at(1)) { retur
+   std/protocol/http.telos:311 saves 2: if parts.at(2) != "HTTP/1.1" && parts.at(2) != "HTTP/1.0" { return None
+   std/protocol/http.telos:318 saves 2: if !path.starts_with("/") { return None
+   std/protocol/http.telos:409 saves 2: if data.len() > MAXIMUM_HEAD { return Ok((TooLarge, data))
+   std/protocol/http.telos:467 saves 2: if length > MAXIMUM_BODY { return Ok(Reject(413))
+   std/protocol/http.telos:482 saves 2: if text.is_empty() || text.len() > MAXIMUM_LENGTH_DIGITS { return None
+   std/protocol/http.telos:486 saves 2: if !is_digit(b) { return None
+   std/protocol/http.telos:538 saves 2: if !keep { return Ok(())
+append_run
+   std/protocol/telnet.telos:251 saves 2: var longest = [IAC, SB]
+   std/protocol/telnet.telos:255 saves 1: var full = [IAC, SB]
+   std/protocol/telnet.telos:260 saves 2: var over = [IAC, SB]
+   std/protocol/telnet.telos:383 saves 1: var longer = line
+   std/protocol/telnet.telos:480 saves 1: var sent = encode_input(entered)
+   std/protocol/telnet.telos:585 saves 1: var input = [b'a', IAC, DO, 1, b'b', IAC, AYT, b'\r', 0, IAC, WILL, 3]
+   std/protocol/telnet.telos:587 saves 4: var expected = b"> "
+   std/protocol/telnet.telos:598 saves 2: var long = [IAC, SB]
+   std/protocol/http.telos:133 saves 1: var out = head.to_bytes()
+counter_while
+   std/text.telos:76 saves 2: i = i + 1
+   std/text.telos:222 saves 2: start = start + 1
+   std/text.telos:322 saves 2: i = i + 1
+   std/json.telos:125 saves 2: i = i + 1
+   std/json.telos:186 saves 2: i = i + 1
+   std/json.telos:404 saves 2: i = i + 1
+   std/json.telos:491 saves 2: i = i + 1
+   std/console.telos:31 saves 2: at = at + 1
+   std/console.telos:40 saves 2: at = at + 1
+   std/protocol/telnet.telos:285 saves 2: i = i + 1
+for_destructure
+   std/json.telos:79 saves 1: for member in members { / let (name, item) = member
+   std/json.telos:523 saves 1: for pair in members { / let (key, item) = pair
+   std/protocol/http.telos:110 saves 1: for pair in response.headers { / let (name, value) = pair
+   std/protocol/http.telos:123 saves 1: for header in response.headers { / let (name, value) = header
+   std/protocol/http.telos:178 saves 1: for pair in request.headers { / let (key, value) = pair
+   std/protocol/http.telos:202 saves 1: for pair in request.headers { / let (name, value) = pair
+   std/protocol/http.telos:453 saves 1: for pair in request.headers { / let (name, value) = pair
+state_thread
+   std/protocol/telnet.telos:52 saves 1: let (next, event) = decode(state, b) / state = next
+   std/protocol/telnet.telos:152 saves 1: let (next, event) = decode(at, b) / at = next
+   std/protocol/telnet.telos:454 saves 1: let (next, edit) = apply_key(command, b) / command = next
+   std/protocol/telnet.telos:473 saves 1: let (next, edit) = apply_key(line, b) / line = next
+   std/protocol/telnet.telos:526 saves 1: let (next, event) = decode(state, b) / state = next
+option_default_s9
+   std/text.telos:294 saves 3: Some(stripped) => stripped / None => line
+   std/protocol/http.telos:315 saves 3: Some(pair) => pair / None => (parts.at(1), "")
+   examples/todo/todo.telos:22 saves 3: Some(present) => present / None => fallback
+none_to_none
+   std/text.telos:30 saves 1: _ => None
+   std/text.telos:177 saves 1: None => None
+   std/json.telos:253 saves 1: _ => None
+   std/json.telos:274 saves 1: _ => None
+   std/json.telos:282 saves 1: None => None
+   std/json.telos:295 saves 1: _ => None
+   std/json.telos:393 saves 1: _ => None
+   std/json.telos:531 saves 1: _ => None
+   std/json.telos:536 saves 1: _ => None
+   std/json.telos:541 saves 1: _ => None
+   std/json.telos:546 saves 1: _ => None
+   std/json.telos:551 saves 1: _ => None
+   std/json.telos:557 saves 1: _ => None
+   std/json.telos:563 saves 1: _ => None
+   std/json.telos:569 saves 1: _ => None
+   examples/terminal/terminal.telos:31 saves 1: _ => None
+close_then_result
+   std/protocol/telnet.telos:24 saves 2: _ = stream.close()
+   std/protocol/http.telos:65 saves 2: _ = stream.close()
+slice_to_len
+   std/text.telos:166 saves 0: pieces.push(bytes.slice(start, bytes.len()).to_text())
+   std/text.telos:224 saves 0: bytes.slice(start, bytes.len()).to_text()
+   std/protocol/http.telos:322 saves 0: for line in lines.slice(1, lines.len()) {
+   std/protocol/http.telos:475 saves 0: Ok(Got(full, all.slice(head_end + length, all.len())))
+read_match
+   std/protocol/telnet.telos:44 saves 0: match stream.read(4096)? {
+   std/protocol/telnet.telos:325 saves 0: match Stdin.read(4096)? {
+   std/protocol/telnet.telos:449 saves 0: match Stdin.read(4096)? {
+   std/protocol/telnet.telos:522 saves 0: match stream.read(4096)? {
+   std/protocol/telnet.telos:573 saves 0: match client.read(4096)? {
+   std/protocol/http.telos:413 saves 0: match stream.read(READ_SIZE)? {
+   std/protocol/http.telos:425 saves 0: match stream.read(READ_SIZE)? {
+   std/protocol/http.telos:518 saves 0: match stream.read(READ_SIZE) {
+   std/protocol/http.telos:654 saves 0: match client.read(4096)? {
+empty_arm
+   std/json.telos:202 saves 1: _ => {}
+   std/protocol/telnet.telos:64 saves 1: _ => {}
+   std/protocol/telnet.telos:155 saves 1: Nothing => {}
+   std/protocol/telnet.telos:432 saves 1: "" => {}
+   std/protocol/telnet.telos:457 saves 1: Unchanged => {}
+   std/protocol/telnet.telos:476 saves 1: Unchanged => {}
+   std/protocol/telnet.telos:529 saves 1: Nothing => {}
+   std/protocol/http.telos:407 saves 1: None => {}
+   std/protocol/http.telos:450 saves 1: None => {}
+two_arm_match
+   std/text.telos:175 saves 3: fn split_once(text: Text, separator: Text) -> Option<(Text, Text)> = match find(
+   std/json.telos:200 saves 3: match bytes.at(i) { / b'.' | b'e' | b'E' => return Err(error("only integer numbe
+   std/json.telos:272 saves 3: match (hex_value(w.at(at)), hex_value(w.at(at + 1)), hex_value(w.at(at + 2)), he
+   std/json.telos:391 saves 3: test fn string_bytes(input: Text) -> Option<Bytes> = match parse(input) { / Ok(S
+   std/json.telos:534 saves 3: fn as_text(value: Json) -> Option<Text> = match value { / Str(text) => Some(text
+   std/json.telos:539 saves 3: fn as_int(value: Json) -> Option<Int> = match value { / Number(n) => Some(n) / _
+   std/json.telos:544 saves 3: fn as_bool(value: Json) -> Option<Bool> = match value { / Bool(b) => Some(b) / _
+   std/json.telos:549 saves 3: fn as_list(value: Json) -> Option<List<Json>> = match value { / Array(items) => 
+   std/json.telos:555 saves 3: fn text(value: Json, name: Text) -> Option<Text> = match member(value, name) { /
+   std/json.telos:561 saves 3: fn int(value: Json, name: Text) -> Option<Int> = match member(value, name) { / S
+   std/json.telos:567 saves 3: fn bool(value: Json, name: Text) -> Option<Bool> = match member(value, name) { /
+   std/protocol/telnet.telos:154 saves 3: match event { / Nothing => {} / _ => events.push(event)
+   std/protocol/http.telos:314 saves 3: let (path, query) = match parts.at(1).split_once("?") { / Some(pair) => pair / N
+   std/protocol/http.telos:405 saves 3: match bytes_find_from(data, b"\r\n\r\n", from) { / Some(at) => return Ok((if at 
+   std/protocol/http.telos:444 saves 3: let request = match parse_head(data.slice(0, head_end - 4).to_text()) { / Some(p
+   std/protocol/http.telos:448 saves 3: match header(request, "transfer-encoding") { / Some(_) => return Ok(Reject(501))
+   std/protocol/http.telos:461 saves 3: [text] => match parse_length(text) { / Some(n) => n / None => return Ok(Reject(4
+   examples/terminal/terminal.telos:39 saves 3: match parse(trimmed) { / Some(command) => respond(command) / None => Reply { lin
+   examples/todo/todo.telos:21 saves 3: fn or<T>(value: Option<T>, fallback: T) -> T = match value { / Some(present) => 
+   examples/todo/todo.telos:43 saves 3: fn show(todos: Store<Todo>, id: Int) -> Response = match todos.get(id) { / Some(
+   examples/todo/todo.telos:62 saves 3: fn delete(todos: Store<Todo>, id: Int) -> Response = match todos.remove(id) { / 
+option_question
+   std/text.telos:177 saves 2: None => None
+   std/json.telos:282 saves 2: None => None
+   std/protocol/http.telos:329 saves 2: None => return None
+pair_literal
+   std/json.telos:97 saves 0: assert encode(Array([Number(1), Array([Null]), Object([("a",
+   std/json.telos:98 saves 0: let todo = Object([("id", Number(1)), ("title", Str("say \"h
+   std/json.telos:98 saves 0: let todo = Object([("id", Number(1)), ("title", Str("say \"h
+   std/json.telos:98 saves 0: let todo = Object([("id", Number(1)), ("title", Str("say \"h
+   std/json.telos:597 saves 0: ("list", Array([Null, Bool(true), Array([]), Object([("", St
+   std/protocol/http.telos:88 saves 0: Response { status, headers = [("Content-Type", "application/
+   std/protocol/http.telos:92 saves 0: Response { status, headers = [("Content-Type", "text/plain;
+   std/protocol/http.telos:142 saves 0: assert json(201, Null) == Response { status = 201, headers =
+   std/protocol/http.telos:143 saves 0: assert plain(200, "hi") == Response { status = 200, headers
+   std/protocol/http.telos:148 saves 0: assert allowed.headers == [("Content-Type", "text/plain; cha
+   std/protocol/http.telos:148 saves 0: assert allowed.headers == [("Content-Type", "text/plain; cha
+   std/protocol/http.telos:154 saves 0: assert checked(Response { status = 200, headers = [("X", "a\
+   std/protocol/http.telos:155 saves 0: assert checked(Response { status = 200, headers = [("X", "a\
+   std/protocol/http.telos:156 saves 0: assert checked(Response { status = 200, headers = [("X\r", "
+   std/protocol/http.telos:157 saves 0: assert checked(Response { status = 200, headers = [("X", "a\
+   std/protocol/http.telos:229 saves 0: let request = get("HTTP/1.1", [("host", "a"), ("x", "1"), ("
+   std/protocol/http.telos:229 saves 0: let request = get("HTTP/1.1", [("host", "a"), ("x", "1"), ("
+   std/protocol/http.telos:229 saves 0: let request = get("HTTP/1.1", [("host", "a"), ("x", "1"), ("
+   std/protocol/http.telos:247 saves 0: assert keep_alive(get("HTTP/1.1", [("connection", "keep-aliv
+   std/protocol/http.telos:248 saves 0: assert !keep_alive(get("HTTP/1.1", [("connection", "close")]
+   std/protocol/http.telos:249 saves 0: assert !keep_alive(get("HTTP/1.1", [("connection", "Close")]
+   std/protocol/http.telos:250 saves 0: assert keep_alive(get("HTTP/1.1", [("connection", "upgrade")
+   std/protocol/http.telos:255 saves 0: assert keep_alive(get("HTTP/1.0", [("connection", "keep-aliv
+   std/protocol/http.telos:256 saves 0: assert keep_alive(get("HTTP/1.0", [("connection", "Keep-Aliv
+   std/protocol/http.telos:257 saves 0: assert !keep_alive(get("HTTP/1.0", [("connection", "close")]
+   std/protocol/http.telos:261 saves 0: assert !keep_alive(get("HTTP/1.1", [("connection", "upgrade,
+   std/protocol/http.telos:262 saves 0: assert !keep_alive(get("HTTP/1.1", [("connection", "keep-ali
+   std/protocol/http.telos:262 saves 0: assert !keep_alive(get("HTTP/1.1", [("connection", "keep-ali
+   std/protocol/http.telos:263 saves 0: assert keep_alive(get("HTTP/1.0", [("connection", "TE,keep-a
+   std/protocol/http.telos:264 saves 0: assert !keep_alive(get("HTTP/1.0", [("connection", "keep-ali
+   std/protocol/http.telos:265 saves 0: assert keep_alive(get("HTTP/1.1", [("connection", "closed")]
+   std/protocol/http.telos:361 saves 0: headers = [("host", "example:80"), ("x-padded", "a\tb"), ("e
+   std/protocol/http.telos:361 saves 0: headers = [("host", "example:80"), ("x-padded", "a\tb"), ("e
+   std/protocol/http.telos:361 saves 0: headers = [("host", "example:80"), ("x-padded", "a\tb"), ("e
+   std/protocol/http.telos:583 saves 0: headers = [("content-length", "5")]
+   std/protocol/http.telos:642 saves 0: Response { status = 200, headers = [("X", "a\r\nb")] }
+   examples/todo/todo.telos:27 saves 0: Object([("id", Number(todo.id)), ("title", Str(todo.title)),
+   examples/todo/todo.telos:27 saves 0: Object([("id", Number(todo.id)), ("title", Str(todo.title)),
+   examples/todo/todo.telos:27 saves 0: Object([("id", Number(todo.id)), ("title", Str(todo.title)),
+   examples/todo/todo.telos:111 saves 0: let milk = Object([("id", Number(1)), ("title", Str("milk"))
+   examples/todo/todo.telos:111 saves 0: let milk = Object([("id", Number(1)), ("title", Str("milk"))
+   examples/todo/todo.telos:111 saves 0: let milk = Object([("id", Number(1)), ("title", Str("milk"))
+   examples/todo/todo.telos:147 saves 0: assert put.headers.at(1) == ("Allow", "GET, POST")
+   examples/todo/todo.telos:150 saves 0: assert post.headers.at(1) == ("Allow", "GET, PATCH, DELETE")

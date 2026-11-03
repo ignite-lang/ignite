@@ -1,0 +1,15 @@
+    Checking telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+    Checking telos-types v0.1.0 (/home/timo/projects/telos/crates/telos-types)
+    Checking telos-llvm v0.1.0 (/home/timo/projects/telos/crates/telos-llvm)
+warning: ignoring -C extra-filename flag due to -o flag
+
+error[E0425]: cannot find value `MESSAGES` in module `crate::glue`
+   --> crates/telos-llvm/src/ir.rs:493:42
+    |
+493 |         for (name, text) in crate::glue::MESSAGES {
+    |                                          ^^^^^^^^ not found in `crate::glue`
+
+For more information about this error, try `rustc --explain E0425`.
+warning: `telos-llvm` (lib) generated 1 warning
+error: could not compile `telos-llvm` (lib) due to 1 previous error; 1 warning emitted
+EXIT=101

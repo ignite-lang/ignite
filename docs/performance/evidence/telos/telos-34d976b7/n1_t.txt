@@ -1,0 +1,487 @@
+   Compiling telos-check v0.1.0 (/home/timo/projects/telos/crates/telos-check)
+   Compiling telos-types v0.1.0 (/home/timo/projects/telos/crates/telos-types)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.48s
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_check-fe8934d655f8a278)
+
+running 10 tests
+test tests::assignment_needs_a_var ... ok
+test tests::arm_bindings_are_scoped_to_their_arm ... ok
+test tests::ambiguous_variants_are_left_to_the_type_checker ... ok
+test tests::duplicate_top_level_names ... ok
+test tests::let_shadows_and_inner_block_does_not_leak ... ok
+test tests::inner_let_shadows_outer_var_for_assignment ... ok
+test tests::effect_rules ... ok
+test tests::for_variable_is_scoped_to_its_body ... ok
+test tests::let_value_is_checked_before_binding ... ok
+test tests::path_calls_resolve_variants_and_statics ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fixtures.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/fixtures-d24daeb1dae3e3ed)
+
+running 2 tests
+test every_checker_code_has_a_fixture ... ok
+test fixtures_match_expected ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/limits.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/limits-35df5b23683925b1)
+
+running 2 tests
+test mutual_recursion_reaches_a_fixed_point ... ok
+test effect_inference_is_linear_in_either_order ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/modules.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/modules-d82696e6cd64a417)
+
+running 4 tests
+test check_is_check_module_without_modules ... ok
+test only_named_imports_enter_scope ... ok
+test constants_are_exported_imported_and_listed ... ok
+test imported_definitions_enter_symbols ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/terminal-19f7f24536edf12e)
+
+running 2 tests
+test terminal_checks_clean_against_the_standard_library ... ok
+test standard_library_checks_in_import_order ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/telos_types-7d8de7c732367ba9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/audit.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/audit-a5fdd2d3d1238f91)
+
+running 1 test
+test audit_probes_match_expected ... FAILED
+
+failures:
+
+---- audit_probes_match_expected stdout ----
+
+thread 'audit_probes_match_expected' (1015112) panicked at crates/telos-types/tests/audit.rs:59:5:
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a01_param_named_stdin.telos
+--- expected
+--- actual
+effects_a01_param_named_stdin.telos:1:11: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a02_param_named_stdin_inferred.telos
+--- expected
+--- actual
+effects_a02_param_named_stdin_inferred.telos:1:11: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a03_param_named_process_net.telos
+--- expected
+--- actual
+effects_a03_param_named_process_net.telos:1:9: error[E056]: parameter `process` is named like the ambient capability `process`; rename it
+effects_a03_param_named_process_net.telos:3:9: error[E056]: parameter `net` is named like the ambient capability `net`; rename it
+effects_a03_param_named_process_net.telos:5:8: error[E056]: parameter `stdout` is named like the ambient capability `stdout`; rename it
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a04_fn_type_param_named_stdin.telos
+--- expected
+--- actual
+effects_a04_fn_type_param_named_stdin.telos:3:15: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a05_map_launder.telos
+--- expected
+--- actual
+effects_a05_map_launder.telos:5:10: error[E016]: missing effect `ls.read` for `read`; add it to the `requires` of `launder`
+effects_a05_map_launder.telos:9:10: error[E016]: missing effect `ls.write` for `write_all`; add it to the `requires` of `launder_at`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a06_map_launder_store.telos
+--- expected
+--- actual
+effects_a06_map_launder_store.telos:5:10: error[E016]: missing effect `stores.read` for `get`; add it to the `requires` of `launder`
+effects_a06_map_launder_store.telos:11:5: error[E016]: missing effect `stores.write` for `s.put`; add it to the `requires` of `launder_put`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a07_push_field.telos
+--- expected
+--- actual
+effects_a07_push_field.telos:8:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `launder`
+effects_a07_push_field.telos:14:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `launder_index`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a08_generic_identity.telos
+--- expected
+--- actual
+effects_a08_generic_identity.telos:17:65: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_id`
+effects_a08_generic_identity.telos:21:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_box`
+effects_a08_generic_identity.telos:27:10: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_enum`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a09_shadow_var_branches.telos
+--- expected
+--- actual
+effects_a09_shadow_var_branches.telos:3:10: error[E016]: missing effect `b.read` for `a.read`; add it to the `requires` of `shadow`
+effects_a09_shadow_var_branches.telos:11:10: error[E016]: missing effect `b.read` for `s.read`; add it to the `requires` of `branches`
+effects_a09_shadow_var_branches.telos:20:10: error[E016]: missing effect `b.read` for `s.read`; add it to the `requires` of `loop_assign`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a10_fn_field_position.telos
+--- expected
+--- actual
+effects_a10_fn_field_position.telos:8:10: error[E016]: missing effect `q.read` for `run`; add it to the `requires` of `swapped`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a11_ufcs_receiver.telos
+--- expected
+--- actual
+effects_a11_ufcs_receiver.telos:3:84: error[E016]: missing effect `b.write` for `send`; add it to the `requires` of `wrong`
+effects_a11_ufcs_receiver.telos:13:62: error[E016]: missing effect `c.write` for `ping`; add it to the `requires` of `via_field`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a12_store_receivers.telos
+--- expected
+--- actual
+effects_a12_store_receivers.telos:9:65: error[E016]: missing effect `b.read` for `get`; add it to the `requires` of `via_generic`
+effects_a12_store_receivers.telos:11:73: error[E016]: missing effect `b.read` for `get`; add it to the `requires` of `via_alias_generic`
+effects_a12_store_receivers.telos:13:49: error[E016]: missing effect `s.read` for `s.get`; add it to the `requires` of `via_alias`
+effects_a12_store_receivers.telos:27:5: error[E016]: missing effect `stores.write` for `s.put`; add it to the `requires` of `via_for`
+effects_a12_store_receivers.telos:34:5: error[E016]: missing effect `outer.write` for `s.put`; add it to the `requires` of `via_values`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a13_spawn_pure_contexts.telos
+--- expected
+--- actual
+effects_a13_spawn_pure_contexts.telos:4:9: error[E016]: missing effect `s.write` for `worker`; add it to the `requires` of `spawner`
+effects_a13_spawn_pure_contexts.telos:9:9: error[E016]: missing effect `s.write` for `worker`; add it to the `requires` of `spawner_ufcs`
+effects_a13_spawn_pure_contexts.telos:14:38: error[E010]: effectful call `TcpStream.connect` outside an effectful function: the default of field `Cfg.conn` is pure
+effects_a13_spawn_pure_contexts.telos:17:29: error[E051]: `Store.new()` is test-only; a program's stores are `resource`s
+effects_a13_spawn_pure_contexts.telos:19:35: error[E010]: effectful call `Stdin.read` outside an effectful function: the value of constant `R` is pure
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a14_effectful_into_pure_fn_types.telos
+--- expected
+--- actual
+effects_a14_effectful_into_pure_fn_types.telos:6:4: error[E041]: fn `update` takes a `Store<Int>` first, and `Store<Int>` has the builtin method `update`, so `x.update(..)` could never call it; rename it
+effects_a14_effectful_into_pure_fn_types.telos:6:74: error[E017]: effectful function `shout` is not a value here; only an effectful fn type (`fn(..) -> R requires [..]`) accepts it
+effects_a14_effectful_into_pure_fn_types.telos:8:58: error[E017]: effectful function `shout` is not a value here; only an effectful fn type (`fn(..) -> R requires [..]`) accepts it
+effects_a14_effectful_into_pure_fn_types.telos:12:38: error[E017]: effectful function `shout` is not a value here; only an effectful fn type (`fn(..) -> R requires [..]`) accepts it
+effects_a14_effectful_into_pure_fn_types.telos:14:88: error[E040]: type mismatch: expected `fn(Int) -> Int`, found `fn(n: Int) -> Int requires [stdout.write]`
+effects_a14_effectful_into_pure_fn_types.telos:17:42: error[E040]: type mismatch: expected `fn(n: Int) -> Int requires []`, found `fn(n: Int) -> Int requires [stdout.write]`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a15_fn_value_unknown_type.telos
+--- expected
+--- actual
+effects_a15_fn_value_unknown_type.telos:34:10: error[E016]: missing effect `stream.read` for `g`; add it to the `requires` of `via_list`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a16_roles.telos
+--- expected
+--- actual
+effects_a16_roles.telos:4:6: error[E030]: role `Echo.serve` takes 2 parameters (stream, application), found 1
+effects_a16_roles.telos:13:12: error[E016]: missing effect `stream.write` for `chat`; add it to the `requires` of `Echo.connect`
+effects_a16_roles.telos:18:3: error[E016]: missing effect `l.accept` for `Echo.serve`; add it to the `requires` of `caller`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a17_test_only.telos
+--- expected
+--- actual
+effects_a17_test_only.telos:5:45: error[E051]: `fresh` is test-only; only tests and other test-only items can use it
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a18_wildcard_and_names.telos
+--- expected
+--- actual
+effects_a18_wildcard_and_names.telos:3:91: error[E016]: missing effect `s.*` for `all`; add it to the `requires` of `specific`
+effects_a18_wildcard_and_names.telos:7:93: error[E016]: missing effect `other.write` for `write_text`; add it to the `requires` of `caller`
+effects_a18_wildcard_and_names.telos:11:43: error[E016]: missing effect `n.read` for `ambient_like`; add it to the `requires` of `needs_foo`
+effects_a18_wildcard_and_names.telos:13:67: error[E016]: missing effect `s.write` for `s.close`; add it to the `requires` of `deep`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a20_fn_field_builtin_names.telos
+--- expected
+--- actual
+effects_a20_fn_field_builtin_names.telos:16:10: error[E016]: missing effect `stream.read` for `f`; add it to the `requires` of `bound`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_a22_append_concat_assign.telos
+--- expected
+--- actual
+effects_a22_append_concat_assign.telos:28:3: error[E001]: the left side of `=` must be a name or a field path such as `a.b`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_b01_fn_value_unknown_type.telos
+--- expected
+--- actual
+effects_b01_fn_value_unknown_type.telos:7:10: error[E042]: cannot check the effects of `g`: the type of its receiver is not declared; annotate the binding
+effects_b01_fn_value_unknown_type.telos:12:10: error[E042]: cannot check the effects of `g`: the type of its receiver is not declared; annotate the binding
+effects_b01_fn_value_unknown_type.telos:19:10: error[E042]: cannot check the effects of `g`: the type of its receiver is not declared; annotate the binding
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_b02_fn_field_default.telos
+--- expected
+--- actual
+effects_b02_fn_field_default.telos:9:10: error[E042]: cannot check the effects of `run`: the type of its receiver is not declared; annotate the binding
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_b03_fn_field_builtin_names.telos
+--- expected
+--- actual
+effects_b03_fn_field_builtin_names.telos:10:80: error[E041]: `H` has no method `map`
+effects_b03_fn_field_builtin_names.telos:12:79: error[E041]: `H` has no method `at`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_b04_store_unknown_receivers.telos
+--- expected
+--- actual
+effects_b04_store_unknown_receivers.telos:2:15: error[E042]: cannot check the effects of `get`: the type of its receiver is not declared; annotate the binding
+effects_b04_store_unknown_receivers.telos:8:10: error[E042]: cannot check the effects of `get`: the type of its receiver is not declared; annotate the binding
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_b05_test_only_ufcs.telos
+--- expected
+--- actual
+effects_b05_test_only_ufcs.telos:3:69: error[E051]: `poke` is test-only; only tests and other test-only items can use it
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_b06_append_concat_copy.telos
+--- expected
+--- actual
+effects_b06_append_concat_copy.telos:9:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_append`
+effects_b06_append_concat_copy.telos:14:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_concat`
+effects_b06_append_concat_copy.telos:21:16: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_field_assign`
+effects_b06_append_concat_copy.telos:28:10: error[E016]: missing effect `h.read` for `read`; add it to the `requires` of `via_copy`
+effects_b06_append_concat_copy.telos:31:75: error[E016]: missing effect `ls.read` for `read`; add it to the `requires` of `via_slice`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_b07_role_helper.telos
+--- expected
+--- actual
+effects_b07_role_helper.telos:5:12: error[E016]: missing effect `stream.write` for `chat`; add it to the `requires` of `Echo.serve`
+effects_b07_role_helper.telos:17:10: error[E016]: missing effect `s.write` for `Echo.connect`; add it to the `requires` of `caller`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_b08_ambient_param_variants.telos
+--- expected
+--- actual
+effects_b08_ambient_param_variants.telos:1:11: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it
+effects_b08_ambient_param_variants.telos:14:31: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_b09_map_launder_more.telos
+--- expected
+--- actual
+effects_b09_map_launder_more.telos:9:10: error[E016]: missing effect `ls.read` for `read`; add it to the `requires` of `via_map_record`
+effects_b09_map_launder_more.telos:14:5: error[E016]: missing effect `ls.write` for `write_all`; add it to the `requires` of `via_map_for`
+effects_b09_map_launder_more.telos:21:78: error[E016]: missing effect `ls.read` for `inner_read`; add it to the `requires` of `via_inferred`
+effects_b09_map_launder_more.telos:27:77: error[E016]: missing effect `ls.read` for `read`; add it to the `requires` of `via_generic`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_b10_push_field_more.telos
+--- expected
+--- actual
+effects_b10_push_field_more.telos:12:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_nested`
+effects_b10_push_field_more.telos:18:10: error[E016]: missing effect `ls.read` for `read`; add it to the `requires` of `via_append_field`
+effects_b10_push_field_more.telos:24:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_param_holder`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_b11_map_launder_record_inferred.telos
+--- expected
+--- actual
+effects_b11_map_launder_record_inferred.telos:9:10: error[E016]: missing effect `ls.read` for `read`; add it to the `requires` of `via_map_record`
+effects_b11_map_launder_record_inferred.telos:14:5: error[E016]: missing effect `ls.write` for `write_all`; add it to the `requires` of `via_map_for`
+effects_b11_map_launder_record_inferred.telos:21:78: error[E016]: missing effect `ls.read` for `inner_read`; add it to the `requires` of `via_inferred`
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_c01_fn_field_ambient_name.telos
+--- expected
+--- actual
+effects_c01_fn_field_ambient_name.telos:2:11: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it
+effects_c01_fn_field_ambient_name.telos:5:6: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it
+effects_c01_fn_field_ambient_name.telos:11:22: error[E056]: parameter `stdin` is named like the ambient capability `stdin`; rename it
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/effects_c03_record_literal_static_type.telos
+--- expected
+--- actual
+effects_c03_record_literal_static_type.telos:13:10: error[E042]: cannot check the effects of `get`: the type of its receiver is not declared; annotate the binding
+effects_c03_record_literal_static_type.telos:18:10: error[E042]: cannot check the effects of `run`: the type of its receiver is not declared; annotate the binding
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/io_p2_unused.telos
+--- expected
+--- actual
+io_p2_unused.telos:3:13: error[E057]: type parameter `T` of `Marker` is never used; remove it or use it in a field
+io_p2_unused.telos:7:10: error[E057]: type parameter `T` of `Tag` is never used; remove it or use it in a field
+io_p2_unused.telos:12:12: error[E057]: type parameter `T` of `Alias` is never used; remove it or use it in a field
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/io_p3a_spawn_field.telos
+--- expected
+--- actual
+io_p3a_spawn_field.telos:8:3: error[E013]: `spawn` needs a call to an effectful function or protocol role
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/io_p3b_spawn_value.telos
+--- expected
+--- actual
+io_p3b_spawn_value.telos:4:3: error[E013]: `spawn` needs a call to an effectful function or protocol role
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/io_p7_store.telos
+--- expected
+--- actual
+io_p7_store.telos:21:23: error[E017]: effectful function `bump` is not a value here; only an effectful fn type (`fn(..) -> R requires [..]`) accepts it
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/io_p8_assign_param.telos
+--- expected
+--- actual
+io_p8_assign_param.telos:4:3: error[E006]: cannot assign to parameter `n`; parameters are immutable
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/llvm_for_push.telos
+--- expected
+--- actual
+llvm_for_push.telos:11:5: error[E006]: cannot `push` through the `for` element `w`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+llvm_for_push.telos:12:5: error[E006]: cannot `push` through the `for` element `w`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/llvm_for_push2.telos
+--- expected
+--- actual
+llvm_for_push2.telos:11:5: error[E006]: cannot `push` through the `for` element `w`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+llvm_for_push2.telos:12:5: error[E006]: cannot `push` through the `for` element `w`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/llvm_let_push.telos
+--- expected
+--- actual
+llvm_let_push.telos:5:3: error[E006]: cannot `push` through the immutable binding `l`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+llvm_let_push.telos:12:5: error[E006]: cannot `push` through the `for` element `w`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+llvm_let_push.telos:19:16: error[E006]: cannot `push` through the pattern binding `b`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/llvm_match_push.telos
+--- expected
+--- actual
+llvm_match_push.telos:12:20: error[E006]: cannot `push` through the pattern binding `b`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/llvm_match_push2.telos
+--- expected
+--- actual
+llvm_match_push2.telos:12:20: error[E006]: cannot `push` through the pattern binding `b`: only a place rooted in a `var` or a parameter changes in place; copy it into a `var` first
+
+
+/home/timo/projects/telos/crates/telos-types/tests/audit/llvm_to_bytes_push.telos
+--- expected
+--- actual
+llvm_to_bytes_push.telos:4:3: error[E006]: cannot `push` on the result of `to_bytes()`, which shares the text's buffer; bind it first: `var b = t.to_bytes()`
+llvm_to_bytes_push.telos:22:5: error[E006]: cannot `push` on the result of `to_bytes()`, which shares the text's buffer; bind it first: `var b = t.to_bytes()`
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    audit_probes_match_expected
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `-p telos-types --test audit`
+     Running tests/fixtures.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/fixtures-ab6817c3eb0d62f0)
+
+running 2 tests
+test every_type_code_has_a_fixture ... ok
+test fixtures_match_expected ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/generics.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/generics-7b23876583649ff3)
+
+running 6 tests
+test component_protocol_carries_the_role_instance ... ok
+test effectful_fn_types ... ok
+test store_and_new_builtins ... ok
+test every_expression_is_typed ... ok
+test type_parameters_are_exported ... ok
+test instances_of_generic_uses ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/inline_tests.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/inline_tests-01482fefe3c43ff3)
+
+running 5 tests
+test a_program_without_package_is_main ... ok
+test assert_message_is_typed ... ok
+test test_try_covers_only_test_bodies ... ok
+test tests_are_listed_in_declaration_order ... ok
+test assert_compare_records_operand_and_show ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/limits.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/limits-d3c06f8fad3073b9)
+
+running 2 tests
+test exhaustiveness_is_polynomial_in_bool_columns ... ok
+test long_plus_chain_does_not_overflow ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/slice9.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/slice9-5da7c4888bf1f81a)
+
+running 7 tests
+test closure_effects_on_captures_and_ambient ... ok
+test closure_captures_in_order_of_first_use ... ok
+test boxing ... ok
+test equality_kinds ... ok
+test every_expression_is_typed ... ok
+test debug_and_associated_fns ... ok
+test range_bounds_evaluate_constants ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/surface.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/surface-9681d7514b648277)
+
+running 9 tests
+test inferred_effects_reach_the_signature ... ok
+test field_defaults ... ok
+test every_expression_is_typed ... ok
+test aliases_resolve_to_their_targets ... ok
+test bare_variants_take_the_expected_enum ... ok
+test interpolation_is_text_concatenation_with_to_text ... ok
+test return_is_never_and_constant_patterns_are_recorded ... ok
+test ufcs_and_field_fn_calls ... ok
+test tuples_and_unit ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/terminal.rs (/home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/debug/deps/terminal-ff1bb3a71f6a33ac)
+
+running 4 tests
+test standard_library_types_in_import_order ... ok
+test terminal_program_types_against_the_standard_library ... ok
+test todo_program_types_against_the_standard_library ... ok
+test standard_library_expressions_are_typed ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+   Doc-tests telos_check
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests telos_types
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 1 target failed:
+    `-p telos-types --test audit`

@@ -1,0 +1,8 @@
+task: [compile-llvm] cargo run -q -p telos -- build examples/terminal/terminal.telos --target llvm --out target/telos-llvm/terminal --runtime /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-test/rt/debug/libtelos_rt.a
+built target/telos-llvm/terminal/bin/terminald
+built target/telos-llvm/terminal/bin/tn
+compile-llvm EXIT=0
+task: [compile-todo-llvm] cargo build -q -p telos-rt --features runner --target-dir /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-test/rt
+task: [compile-todo-llvm] cargo run -q -p telos -- build examples/todo/todo.telos --target llvm --out target/telos-llvm/todo --runtime /home/timo/.cache/scratch/34d976b7-453b-445c-bc5b-857b9e81d67a/target-k/telos-test/rt/debug/libtelos_rt.a
+built target/telos-llvm/todo/bin/todod
+compile-todo-llvm EXIT=0

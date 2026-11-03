@@ -1,0 +1,57 @@
+START 2026-11-02T02:11:12+01:00 file=llvm load=6.23 14.42 16.34 3/2958 2704117
+   0.011 +  0.011     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+   0.011 +  0.001      Running tests/main.rs (/home/timo/.cache/scratch/f769e68e-6990-4c7f-be9b-561eb71b2bb6/target-p0/debug/deps/main-505049c8fe7803b4)
+   0.012 +  0.001 
+   0.012 +  0.000 running 47 tests
+   0.065 +  0.052 test llvm::clang_failure_is_exit_2 ... ok
+   0.182 +  0.117 test llvm::client_exits_3_when_nothing_listens ... ok
+   0.202 +  0.021 test llvm::index_out_of_range_panics_with_101 ... ok
+   0.341 +  0.138 test llvm::llvm_build_runs_neither_cargo_nor_rustc ... ok
+   0.362 +  0.021 test llvm::probe_runs_every_check ... ok
+   0.801 +  0.439 test slice10_llvm::failures_fail_on_both_targets_with_the_same_report ... ok
+   1.261 +  0.460 test slice10_llvm::features_pass_on_both_targets_with_the_same_report ... ok
+   1.660 +  0.399 test terminal::llvm::a_silent_session_is_closed_after_the_idle_timeout ... ok
+   1.857 +  0.198 test terminal::llvm::a_task_that_cannot_start_closes_only_its_connection ... ok
+   1.870 +  0.012 test terminal::llvm::accept_survives_running_out_of_descriptors ... ok
+   1.871 +  0.001 test terminal::llvm::are_you_there_is_answered ... ok
+   1.912 +  0.042 test terminal::llvm::cr_nul_ends_a_line ... ok
+   1.914 +  0.001 test terminal::llvm::do_echo_is_refused_with_wont ... ok
+   2.035 +  0.122 test terminal::llvm::fragmented_input_is_reassembled ... ok
+   2.036 +  0.001 test terminal::llvm::iac_iac_is_a_literal_byte ... ok
+   2.037 +  0.001 test terminal::llvm::interrupt_process_closes ... ok
+   2.038 +  0.001 test terminal::llvm::line_of_4096_bytes_is_accepted ... ok
+   2.039 +  0.001 test terminal::llvm::overlong_line_is_refused_and_closed ... ok
+   2.040 +  0.001 test terminal::llvm::subnegotiation_is_skipped ... ok
+   2.041 +  0.001 test terminal::llvm::subnegotiation_of_1024_bytes_is_skipped ... ok
+   2.042 +  0.001 test terminal::llvm::subnegotiation_over_1024_bytes_closes ... ok
+   2.082 +  0.041 test terminal::llvm::tn_closes_its_side_when_input_ends_and_exits_when_the_server_closes ... ok
+   2.103 +  0.020 test terminal::llvm::tn_exits_2_for_a_malformed_port ... ok
+   2.123 +  0.020 test terminal::llvm::tn_exits_3_when_nothing_listens ... ok
+   2.143 +  0.021 test terminal::llvm::tn_exits_4_on_a_subnegotiation_over_1024_bytes ... error: subnegotiation longer than 1024 bytes
+   2.164 +  0.020 ok
+   2.185 +  0.021 test terminal::llvm::tn_exits_when_input_ends_and_terminald_closes ... ok
+   2.227 +  0.042 test terminal::llvm::tn_on_a_terminal_answers_help_unknown_and_empty_commands ... ok
+   2.268 +  0.041 test terminal::llvm::tn_on_a_terminal_closes_its_side_on_ctrl_d ... ok
+   2.290 +  0.022 test terminal::llvm::tn_on_a_terminal_echoes_and_sends_a_line ... ok
+   2.331 +  0.041 test terminal::llvm::tn_on_a_terminal_ends_the_session_on_ctrl_c ... ok
+   2.353 +  0.022 test terminal::llvm::tn_on_a_terminal_erases_with_backspace ... ok
+   2.393 +  0.041 test terminal::llvm::tn_on_a_terminal_quits_at_once_when_the_server_keeps_the_connection ... ok
+   2.435 +  0.041 test terminal::llvm::tn_on_a_terminal_quits_from_the_command_prompt ... ok
+   2.456 +  0.021 test terminal::llvm::tn_on_a_terminal_sends_ctrl_c_as_iac_ip ... ok
+   2.497 +  0.041 test terminal::llvm::tn_refuses_options_and_strips_commands ... ok
+   2.518 +  0.021 test terminal::llvm::tn_with_piped_input_prints_the_transcript ... ok
+   2.768 +  0.251 test terminal::llvm::transcript_on_raw_socket ... ok
+   2.770 +  0.001 test terminal::llvm::will_naws_is_refused_with_dont ... ok
+   2.901 +  0.132 test todo::todo::llvm::concurrent_patches ... ok
+   2.920 +  0.019 test todo::todo::llvm::concurrent_posts ... ok
+   2.922 +  0.002 test todo::todo::llvm::content_length ... ok
+   2.923 +  0.001 test todo::todo::llvm::crud_flow ... ok
+   2.925 +  0.002 test todo::todo::llvm::error_statuses ... ok
+   2.926 +  0.001 test todo::todo::llvm::header_framing ... ok
+   2.927 +  0.001 test todo::todo::llvm::keep_alive ... ok
+   2.929 +  0.001 test todo::todo::llvm::limits ... ok
+   2.931 +  0.003 test todo::todo::llvm::rejection_is_read ... ok
+   2.931 +  0.000 
+   2.931 +  0.000 test result: ok. 47 passed; 0 failed; 0 ignored; 0 measured; 99 filtered out; finished in 2.92s
+   2.931 +  0.000 
+END load=6.23 14.42 16.34 9/2967 2704687

@@ -1,0 +1,14 @@
+START 2026-11-02T03:55:03+01:00 load=29.70 19.71 10.74 11/3952 1008394
+/dev/nvme0n1p2  848G  763G   77G  91% /
+STEP tree=work label=fmt pair=0 secs=0.63 load_before=29.70 load_after=29.70 exit=0
+STEP tree=work label=clippy pair=0 secs=5.26 load_before=29.70 load_after=31.72 exit=0
+STEP tree=work label=test-workspace pair=0 secs=9.98 load_before=31.72 load_after=27.82 exit=0
+COUNTS cargo test --workspace: passed=582 failed=0 ignored=4
+STEP tree=work label=test-ignite pair=0 secs=3.55 load_before=27.82 load_after=25.99 exit=0
+INLINE running 102 tests running 102 tests 
+STEP tree=work label=task-gate pair=0 secs=10.61 load_before=25.99 load_after=23.55 exit=0
+STEP tree=work label=compile pair=0 secs=0.80 load_before=23.55 load_after=23.55 exit=0
+STEP tree=work label=compile-llvm pair=0 secs=0.47 load_before=23.55 load_after=23.55 exit=0
+STEP tree=work label=compile-todo pair=0 secs=0.43 load_before=23.55 load_after=23.55 exit=0
+STEP tree=work label=compile-todo-llvm pair=0 secs=0.35 load_before=23.55 load_after=23.55 exit=0
+EXIT=0
