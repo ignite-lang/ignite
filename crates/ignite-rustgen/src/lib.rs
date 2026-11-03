@@ -1362,10 +1362,17 @@ fn indentation(level: usize) -> String {
     "    ".repeat(level)
 }
 
-const RUST_ONLY_KEYWORDS: &[&str] = &[
-    "as", "async", "const", "dyn", "extern", "impl", "mod", "move", "mut", "pub", "ref", "static",
-    "struct", "trait", "unsafe", "use", "where", "abstract", "become", "box", "do", "final",
-    "macro", "override", "priv", "typeof", "unsized", "virtual", "yield", "try", "gen",
+/// Every Rust keyword (strict, reserved and edition 2024) that a raw
+/// identifier can spell: [`ident`] writes it as `r#type`. The Ignite
+/// keywords among them reach `ident` too, because a field name may be a
+/// keyword (`type Token { type: Int }`, `t.type`, `Token { type = 1 }`).
+/// `self`, `Self`, `crate` and `super` cannot be raw; `ident` mangles them.
+const RUST_KEYWORDS: &[&str] = &[
+    "as", "async", "await", "break", "const", "continue", "dyn", "else", "enum", "extern", "false",
+    "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref",
+    "return", "static", "struct", "trait", "true", "type", "unsafe", "use", "where", "while",
+    "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof", "unsized",
+    "virtual", "yield", "try", "gen",
 ];
 
 /// Names of the Rust prelude the generated code uses bare (`Box::new`,
@@ -1420,7 +1427,7 @@ const RUST_PRELUDE_NAMES: &[&str] = &[
 fn ident(name: &str) -> String {
     if matches!(name, "self" | "Self" | "crate" | "super") || RUST_PRELUDE_NAMES.contains(&name) {
         format!("{name}_")
-    } else if RUST_ONLY_KEYWORDS.contains(&name) {
+    } else if RUST_KEYWORDS.contains(&name) {
         format!("r#{name}")
     } else {
         name.to_string()

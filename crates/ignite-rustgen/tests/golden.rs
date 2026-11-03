@@ -821,3 +821,42 @@ fn a_clause_only_catalogue_emits_none_of_its_constants() {
     }
     cargo_build(&program, &std, "clause-read");
 }
+
+/// Names that are Rust keywords but not Ignite keywords pass `ignite check`
+/// and build on LLVM: record fields `type`, `match`, `loop` and `fn` (field
+/// names may be keywords), fns `dyn` and `super`, params `impl`, `ref` and
+/// `self`, a local `move` and a variant `Self`. Rust spells a keyword as a
+/// raw identifier (`r#type`); `self`, `Self`, `crate` and `super` cannot be
+/// raw and are mangled.
+#[test]
+fn names_that_are_rust_keywords_build() {
+    let source = "package examples.rustkeywords\n\
+\n\
+type Token { type: Int, match: Text = \"m\", loop: Int, fn: Int = 4 }\n\
+\n\
+enum Kind { Self, Other(Int) }\n\
+\n\
+fn dyn(impl: Int, ref: Int) -> Int = impl + ref\n\
+\n\
+fn super(self: Token) -> Int {\n\
+  let move = self.type\n\
+  move + self.loop + self.fn\n\
+}\n\
+\n\
+fn kind(k: Kind) -> Int = match k {\n\
+  Self => 1\n\
+  Other(n) => n\n\
+}\n\
+\n\
+fn total() -> Int {\n\
+  let t = Token { type = 1, loop = 2 }\n\
+  dyn(t.type, super(t)) + t.match.len() + kind(Kind.Self)\n\
+}\n";
+    let dir = adversary_sources("rust-keywords-src", &[("rustkeywords.ignite", source)]);
+    let (program, std) = common::lower_typed(
+        &dir.join("rustkeywords.ignite"),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "rust-keywords");
+}
