@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ignite_syntax::ast::{BinaryOp, Decl, Expr, ExprKind, Ident, Path, Program, Span, UnaryOp};
 
-use crate::{Checker, Modules};
+use crate::{Checker, Modules, Symbols};
 
 /// The module that declares the clause vocabulary.
 const RFC_MODULE: &str = "std.rfc";
@@ -113,7 +113,7 @@ impl Checker {
     /// E091 (first trigger, `docs/slice.md` 19.4) at the first part of the
     /// value of each `std.rfc.Requirement` or `std.rfc.Spec` constant that
     /// is not literal data.
-    pub(super) fn catalogue_literals(&mut self, program: &Program) {
+    pub(super) fn catalogue_literals(&mut self, program: &Program, modules: &Modules) {
         let own_module = program.package.as_ref().is_some_and(|p| {
             p.segments
                 .iter()
@@ -126,15 +126,8 @@ impl Checker {
             Some(module) => module == RFC_MODULE,
             None => own_module,
         };
-        let kind_of = |ty: &ignite_syntax::ast::Type| -> Option<&'static str> {
-            let name = match ty.name.name.as_str() {
-                "Requirement" => "Requirement",
-                "Spec" => "Spec",
-                _ => return None,
-            };
-            (ty.args.is_empty() && symbols.records.contains(name) && vocabulary(name))
-                .then_some(name)
-        };
+        let kind_of =
+            |ty: &ignite_syntax::ast::Type| catalogue_kind(ty, symbols, own_module, modules);
         let variants: BTreeMap<&str, &Vec<String>> = LITERAL_ENUMS
             .iter()
             .filter(|e| vocabulary(e))
@@ -174,6 +167,49 @@ impl Checker {
             self.error("E091", span, message);
         }
     }
+}
+
+/// The most aliases [`catalogue_kind`] follows; a longer chain is a cycle,
+/// which E048 reports.
+const ALIAS_DEPTH: usize = 64;
+
+/// `"Requirement"` or `"Spec"` when the declared type `ty` is that record
+/// of `std.rfc`, written directly or through type aliases, own or
+/// imported; an imported alias's target is read in its own module.
+/// `symbols` and `own_module` (whether they are `std.rfc`'s) are the scope
+/// `ty` is written in.
+fn catalogue_kind(
+    ty: &ignite_syntax::ast::Type,
+    symbols: &Symbols,
+    own_module: bool,
+    modules: &Modules,
+) -> Option<&'static str> {
+    let (mut ty, mut symbols, mut own_module) = (ty, symbols, own_module);
+    for _ in 0..ALIAS_DEPTH {
+        if !ty.args.is_empty() {
+            return None;
+        }
+        let name = ty.name.name.as_str();
+        let vocabulary = match symbols.imported.get(name) {
+            Some(module) => module == RFC_MODULE,
+            None => own_module,
+        };
+        if (name == "Requirement" || name == "Spec") && vocabulary && symbols.records.contains(name)
+        {
+            return Some(if name == "Spec" {
+                "Spec"
+            } else {
+                "Requirement"
+            });
+        }
+        let target = symbols.alias_targets.get(name)?;
+        if let Some(module) = symbols.imported.get(name) {
+            symbols = modules.get(module)?;
+            own_module = module == RFC_MODULE;
+        }
+        ty = target;
+    }
+    None
 }
 
 /// What is not literal data in a constant's value, at its span.

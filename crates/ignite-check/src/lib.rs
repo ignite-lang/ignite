@@ -484,7 +484,7 @@ pub fn check_module(program: &Program, modules: &Modules) -> Result<Symbols, Vec
         checker.diagnostics.truncate(collected);
     }
     checker.clauses(program, modules);
-    checker.catalogue_literals(program);
+    checker.catalogue_literals(program, modules);
     if checker.diagnostics.is_empty() {
         Ok(checker.symbols)
     } else {
