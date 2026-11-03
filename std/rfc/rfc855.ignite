@@ -1,0 +1,151 @@
+// RFC 855: Telnet Option Specifications
+// Quoted by hand from https://www.rfc-editor.org/rfc/rfc855.txt (6,049 bytes, read 2026-11-03),
+// which is not vendored (docs/slice.md 19.9): `ignite rfc check` reports this catalogue
+// unchecked. One requirement per sentence that says what an implementation, an option
+// designer or the option registrar must, should or may do; `section` is the page on which
+// the sentence starts, the level that of its strongest word (19.4).
+
+package std.rfc.rfc855
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC855: Spec = Spec {
+  rfc = 855
+  title = "Telnet Option Specifications"
+  url = "https://www.rfc-editor.org/rfc/rfc855"
+  digest = "sha256:c8c4744c9fa7650c0ae78d140f560b26e26b2935391e1ff624476c5fdbf4e03a"
+  requirements = [
+    RP1_1,
+    RP1_2,
+    RP1_3,
+    RP1_4,
+    RP1_5,
+    RP1_6,
+    RP2_1,
+    RP2_2,
+    RP2_3,
+    RP2_4,
+    RP3_1,
+    RP3_2
+  ]
+}
+
+const RP1_1: Requirement = Requirement {
+  rfc = 855
+  section = "p1"
+  ordinal = 1
+  level = Should
+  party = Any
+  source = Prose
+  text = "Nevertheless, it is envisioned that options which prove to be generally useful will eventually be supported by many hosts; therefore it is desirable that options should be carefully documented and well publicized."
+}
+
+const RP1_2: Requirement = Requirement {
+  rfc = 855
+  section = "p1"
+  ordinal = 2
+  level = Must
+  party = Any
+  source = Prose
+  text = "In addition, it is necessary to insure that a single option code is not used for several different options."
+}
+
+const RP1_3: Requirement = Requirement {
+  rfc = 855
+  section = "p1"
+  ordinal = 3
+  level = Required
+  party = Any
+  source = Prose
+  text = "The individual responsible for assignment of option codes may waive the requirement for complete documentation for some cases of experimentation, but in general documentation will be required prior to code assignment."
+}
+
+const RP1_4: Requirement = Requirement {
+  rfc = 855
+  section = "p1"
+  ordinal = 4
+  level = May
+  party = Any
+  source = Prose
+  text = "Options will be publicized by publishing their documentation as RFCs; inventors of options may, of course, publicize them in other ways as well."
+}
+
+const RP1_5: Requirement = Requirement {
+  rfc = 855
+  section = "p1"
+  ordinal = 5
+  level = Should
+  party = Any
+  source = Prose
+  text = "Documentation of options should contain at least the following sections:"
+}
+
+const RP1_6: Requirement = Requirement {
+  rfc = 855
+  section = "p1"
+  ordinal = 6
+  level = Should
+  party = Any
+  source = Prose
+  text = "The meaning of each possible TELNET command relevant to this option should be described."
+}
+
+const RP2_1: Requirement = Requirement {
+  rfc = 855
+  section = "p2"
+  ordinal = 1
+  level = Must
+  party = Any
+  source = Prose
+  text = "The default assumptions for hosts which do not implement, or use, the option must be described."
+}
+
+const RP2_2: Requirement = Requirement {
+  rfc = 855
+  section = "p2"
+  ordinal = 2
+  level = Should
+  party = Any
+  source = Prose
+  text = "Therefore, a more complete description should be furnished in most cases."
+}
+
+const RP2_3: Requirement = Requirement {
+  rfc = 855
+  section = "p2"
+  ordinal = 3
+  level = May
+  party = Recipient
+  source = Prose
+  text = "On the other hand, the receiver may locate the end of a parameter string by searching for the SE command (i.e., the string IAC SE), even if the receiver is unable to parse the parameters."
+}
+
+const RP2_4: Requirement = Requirement {
+  rfc = 855
+  section = "p2"
+  ordinal = 4
+  level = May
+  party = Any
+  source = Prose
+  text = "Of course, either party may refuse to pursue further subnegotiation at any time by sending a WON'T or DON'T to the other party."
+}
+
+const RP3_1: Requirement = Requirement {
+  rfc = 855
+  section = "p3"
+  ordinal = 1
+  level = Must
+  party = Any
+  source = Prose
+  text = "Designers of options requiring \"subnegotiation\" must take great care to avoid unending loops in the subnegotiation process."
+}
+
+const RP3_2: Requirement = Requirement {
+  rfc = 855
+  section = "p3"
+  ordinal = 2
+  level = Must
+  party = Sender
+  source = Prose
+  text = "Finally, if parameters in an option \"subnegotiation\" include a byte with a value of 255, it is necessary to double this byte in accordance the general TELNET rules."
+}

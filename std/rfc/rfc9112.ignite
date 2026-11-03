@@ -1,0 +1,1326 @@
+// RFC 9112: HTTP/1.1
+// ignite rfc import docs/rfc/rfc9112.xml --sections 2,3,4,5,6,7,8,9
+// Every party is guessed from its sentence; review each `party` line.
+
+package std.rfc.rfc9112
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC9112: Spec = Spec {
+  rfc = 9112
+  title = "HTTP/1.1"
+  url = "https://dx.doi.org/10.17487/rfc9112"
+  digest = "sha256:ce82219c272374005115c909244a79e587687df3858edca4112b8563c02ccf19"
+  requirements = [
+    R2_2_1,
+    R2_2_2,
+    R2_2_3,
+    R2_2_4,
+    R2_2_5,
+    R2_2_6,
+    R2_2_7,
+    R2_2_8,
+    R2_2_9,
+    R2_2_10,
+    R2_3_1,
+    R2_3_2,
+    R2_3_3,
+    R3_1,
+    R3_2,
+    R3_3,
+    R3_4,
+    R3_2_1,
+    R3_2_2,
+    R3_2_3,
+    R3_2_4,
+    R3_2_5,
+    R3_2_6,
+    R3_2_1_1,
+    R3_2_1_2,
+    R3_2_2_1,
+    R3_2_2_2,
+    R3_2_2_3,
+    R3_2_2_4,
+    R3_2_2_5,
+    R3_2_2_6,
+    R3_2_3_1,
+    R3_2_4_1,
+    R3_2_4_2,
+    R3_3_1,
+    R4_1,
+    R4_2,
+    R4_3,
+    R4_4,
+    R5_1_1,
+    R5_1_2,
+    R5_2_1,
+    R5_2_2,
+    R5_2_3,
+    R5_2_4,
+    R6_1_1,
+    R6_1_2,
+    R6_1_3,
+    R6_1_4,
+    R6_1_5,
+    R6_1_6,
+    R6_1_7,
+    R6_1_8,
+    R6_1_9,
+    R6_1_10,
+    R6_1_11,
+    R6_1_12,
+    R6_1_13,
+    R6_1_14,
+    R6_2_1,
+    R6_3_1,
+    R6_3_2,
+    R6_3_3,
+    R6_3_4,
+    R6_3_5,
+    R6_3_6,
+    R6_3_7,
+    R6_3_8,
+    R6_3_9,
+    R6_3_10,
+    R6_3_11,
+    R6_3_12,
+    R6_3_13,
+    R6_3_14,
+    R6_3_15,
+    R7_1_1,
+    R7_1_2,
+    R7_1_3,
+    R7_1_4,
+    R7_1_1_1,
+    R7_1_2_1,
+    R7_1_2_2,
+    R7_1_2_3,
+    R7_2_1,
+    R7_3_1,
+    R7_3_2,
+    R7_3_3,
+    R7_3_4,
+    R7_4_1,
+    R7_4_2,
+    R7_4_3,
+    R8_1,
+    R8_2,
+    R9_2_1,
+    R9_2_2,
+    R9_3_1,
+    R9_3_2,
+    R9_3_3,
+    R9_3_4,
+    R9_3_5,
+    R9_3_6,
+    R9_3_7,
+    R9_3_2_1,
+    R9_3_2_2,
+    R9_3_2_3,
+    R9_3_2_4,
+    R9_3_2_5,
+    R9_3_2_6,
+    R9_3_2_7,
+    R9_5_1,
+    R9_5_2,
+    R9_5_3,
+    R9_5_4,
+    R9_5_5,
+    R9_5_6,
+    R9_6_1,
+    R9_6_2,
+    R9_6_3,
+    R9_6_4,
+    R9_6_5,
+    R9_6_6,
+    R9_6_7,
+    R9_6_8,
+    R9_7_1,
+    R9_8_1,
+    R9_8_2,
+    R9_8_3,
+    R9_8_4,
+    R9_8_5,
+    R9_8_6,
+    R9_8_7
+  ]
+}
+
+const R2_2_1: Requirement = Requirement {
+  rfc = 9112
+  section = "2.2"
+  ordinal = 1
+  level = Must
+  party = Recipient
+  text = "A recipient MUST parse an HTTP message as a sequence of octets in an encoding that is a superset of US-ASCII [USASCII]."
+}
+
+const R2_2_2: Requirement = Requirement {
+  rfc = 9112
+  section = "2.2"
+  ordinal = 2
+  level = May
+  party = Recipient
+  text = "Although the line terminator for the start-line and fields is the sequence CRLF, a recipient MAY recognize a single LF as a line terminator and ignore any preceding CR."
+}
+
+const R2_2_3: Requirement = Requirement {
+  rfc = 9112
+  section = "2.2"
+  ordinal = 3
+  level = MustNot
+  party = Sender
+  text = "A sender MUST NOT generate a bare CR (a CR character not immediately followed by LF) within any protocol elements other than the content."
+}
+
+const R2_2_4: Requirement = Requirement {
+  rfc = 9112
+  section = "2.2"
+  ordinal = 4
+  level = Must
+  party = Recipient
+  text = "A recipient of such a bare CR MUST consider that element to be invalid or replace each bare CR with SP before processing the element or forwarding the message."
+}
+
+const R2_2_5: Requirement = Requirement {
+  rfc = 9112
+  section = "2.2"
+  ordinal = 5
+  level = MustNot
+  party = Client
+  text = "An HTTP/1.1 user agent MUST NOT preface or follow a request with an extra CRLF."
+}
+
+const R2_2_6: Requirement = Requirement {
+  rfc = 9112
+  section = "2.2"
+  ordinal = 6
+  level = Must
+  party = Client
+  text = "If terminating the request message body with a line-ending is desired, then the user agent MUST count the terminating CRLF octets as part of the message body length."
+}
+
+const R2_2_7: Requirement = Requirement {
+  rfc = 9112
+  section = "2.2"
+  ordinal = 7
+  level = Should
+  party = Server
+  text = "In the interest of robustness, a server that is expecting to receive and parse a request-line SHOULD ignore at least one empty line (CRLF) received prior to the request-line."
+}
+
+const R2_2_8: Requirement = Requirement {
+  rfc = 9112
+  section = "2.2"
+  ordinal = 8
+  level = MustNot
+  party = Sender
+  text = "A sender MUST NOT send whitespace between the start-line and the first header field."
+}
+
+const R2_2_9: Requirement = Requirement {
+  rfc = 9112
+  section = "2.2"
+  ordinal = 9
+  level = Must
+  party = Recipient
+  text = "A recipient that receives whitespace between the start-line and the first header field MUST either reject the message as invalid or consume each whitespace-preceded line without further processing of it (i.e., ignore the entire line, along with any subsequent lines preceded by whitespace, until a properly formed header field is received or the header section is terminated)."
+}
+
+const R2_2_10: Requirement = Requirement {
+  rfc = 9112
+  section = "2.2"
+  ordinal = 10
+  level = Should
+  party = Server
+  text = "When a server listening only for HTTP request messages, or processing what appears from the start-line to be an HTTP request message, receives a sequence of octets that does not match the HTTP-message grammar aside from the robustness exceptions listed above, the server SHOULD respond with a 400 (Bad Request) response and close the connection."
+}
+
+const R2_3_1: Requirement = Requirement {
+  rfc = 9112
+  section = "2.3"
+  ordinal = 1
+  level = Must
+  party = Proxy
+  text = "Intermediaries that process HTTP messages (i.e., all intermediaries other than those acting as tunnels) MUST send their own HTTP-version in forwarded messages, unless it is purposefully downgraded as a workaround for an upstream issue."
+}
+
+const R2_3_2: Requirement = Requirement {
+  rfc = 9112
+  section = "2.3"
+  ordinal = 2
+  level = May
+  party = Server
+  text = "A server MAY send an HTTP/1.0 response to an HTTP/1.1 request if it is known or suspected that the client incorrectly implements the HTTP specification and is incapable of correctly processing later version responses, such as when a client fails to parse the version number correctly or when an intermediary is known to blindly forward the HTTP-version even when it doesn't conform to the given minor version of the protocol."
+}
+
+const R2_3_3: Requirement = Requirement {
+  rfc = 9112
+  section = "2.3"
+  ordinal = 3
+  level = ShouldNot
+  party = Server
+  text = "Such protocol downgrades SHOULD NOT be performed unless triggered by specific client attributes, such as when one or more of the request header fields (e.g., User-Agent) uniquely match the values sent by a client known to be in error."
+}
+
+const R3_1: Requirement = Requirement {
+  rfc = 9112
+  section = "3"
+  ordinal = 1
+  level = May
+  party = Recipient
+  text = "Although the request-line grammar rule requires that each of the component elements be separated by a single SP octet, recipients MAY instead parse on whitespace-delimited word boundaries and, aside from the CRLF terminator, treat any form of whitespace as the SP separator while ignoring preceding or trailing whitespace; such whitespace includes one or more of the following octets: SP, HTAB, VT (%x0B), FF (%x0C), or bare CR."
+}
+
+const R3_2: Requirement = Requirement {
+  rfc = 9112
+  section = "3"
+  ordinal = 2
+  level = Should
+  party = Server
+  text = "A server that receives a method longer than any that it implements SHOULD respond with a 501 (Not Implemented) status code."
+}
+
+const R3_3: Requirement = Requirement {
+  rfc = 9112
+  section = "3"
+  ordinal = 3
+  level = Must
+  party = Server
+  text = "A server that receives a request-target longer than any URI it wishes to parse MUST respond with a 414 (URI Too Long) status code (see Section 15.5.15 of [HTTP])."
+}
+
+const R3_4: Requirement = Requirement {
+  rfc = 9112
+  section = "3"
+  ordinal = 4
+  level = Recommended
+  party = Any
+  text = "It is RECOMMENDED that all HTTP senders and recipients support, at a minimum, request-line lengths of 8000 octets."
+}
+
+const R3_2_1: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2"
+  ordinal = 1
+  level = Should
+  party = Recipient
+  text = "Recipients of an invalid request-line SHOULD respond with either a 400 (Bad Request) error or a 301 (Moved Permanently) redirect with the request-target properly encoded."
+}
+
+const R3_2_2: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2"
+  ordinal = 2
+  level = ShouldNot
+  party = Recipient
+  text = "A recipient SHOULD NOT attempt to autocorrect and then process the request without a redirect, since the invalid request-line might be deliberately crafted to bypass security filters along the request chain."
+}
+
+const R3_2_3: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2"
+  ordinal = 3
+  level = Must
+  party = Client
+  text = "A client MUST send a Host header field (Section 7.2 of [HTTP]) in all HTTP/1.1 request messages."
+}
+
+const R3_2_4: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2"
+  ordinal = 4
+  level = Must
+  party = Client
+  text = "If the target URI includes an authority component, then a client MUST send a field value for Host that is identical to that authority component, excluding any userinfo subcomponent and its \"@\" delimiter (Section 4.2 of [HTTP])."
+}
+
+const R3_2_5: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2"
+  ordinal = 5
+  level = Must
+  party = Client
+  text = "If the authority component is missing or undefined for the target URI, then a client MUST send a Host header field with an empty field value."
+}
+
+const R3_2_6: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2"
+  ordinal = 6
+  level = Must
+  party = Server
+  text = "A server MUST respond with a 400 (Bad Request) status code to any HTTP/1.1 request message that lacks a Host header field and to any request message that contains more than one Host header field line or a Host header field with an invalid field value."
+}
+
+const R3_2_1_1: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2.1"
+  ordinal = 1
+  level = Must
+  party = Client
+  text = "When making a request directly to an origin server, other than a CONNECT or server-wide OPTIONS request (as detailed below), a client MUST send only the absolute path and query components of the target URI as the request-target."
+}
+
+const R3_2_1_2: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2.1"
+  ordinal = 2
+  level = Must
+  party = Client
+  text = "If the target URI's path component is empty, the client MUST send \"/\" as the path within the origin-form of request-target."
+}
+
+const R3_2_2_1: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2.2"
+  ordinal = 1
+  level = Must
+  party = Client
+  text = "When making a request to a proxy, other than a CONNECT or server-wide OPTIONS request (as detailed below), a client MUST send the target URI in \"absolute-form\" as the request-target."
+}
+
+const R3_2_2_2: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2.2"
+  ordinal = 2
+  level = Must
+  party = Client
+  text = "A client MUST send a Host header field in an HTTP/1.1 request even if the request-target is in the absolute-form, since this allows the Host information to be forwarded through ancient HTTP/1.0 proxies that might not have implemented Host."
+}
+
+const R3_2_2_3: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2.2"
+  ordinal = 3
+  level = Must
+  party = Proxy
+  text = "When a proxy receives a request with an absolute-form of request-target, the proxy MUST ignore the received Host header field (if any) and instead replace it with the host information of the request-target."
+}
+
+const R3_2_2_4: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2.2"
+  ordinal = 4
+  level = Must
+  party = Proxy
+  text = "A proxy that forwards such a request MUST generate a new Host field value based on the received request-target rather than forward the received Host field value."
+}
+
+const R3_2_2_5: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2.2"
+  ordinal = 5
+  level = Must
+  party = Server
+  text = "When an origin server receives a request with an absolute-form of request-target, the origin server MUST ignore the received Host header field (if any) and instead use the host information of the request-target."
+}
+
+const R3_2_2_6: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2.2"
+  ordinal = 6
+  level = Must
+  party = Server
+  text = "A server MUST accept the absolute-form in requests even though most HTTP/1.1 clients will only send the absolute-form to a proxy."
+}
+
+const R3_2_3_1: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2.3"
+  ordinal = 1
+  level = Must
+  party = Client
+  text = "When making a CONNECT request to establish a tunnel through one or more proxies, a client MUST send only the host and port of the tunnel destination as the request-target."
+}
+
+const R3_2_4_1: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2.4"
+  ordinal = 1
+  level = Must
+  party = Client
+  text = "When a client wishes to request OPTIONS for the server as a whole, as opposed to a specific named resource of that server, the client MUST send only \"*\" (%x2A) as the request-target."
+}
+
+const R3_2_4_2: Requirement = Requirement {
+  rfc = 9112
+  section = "3.2.4"
+  ordinal = 2
+  level = Must
+  party = Proxy
+  text = "If a proxy receives an OPTIONS request with an absolute-form of request-target in which the URI has an empty path and no query component, then the last proxy on the request chain MUST send a request-target of \"*\" when it forwards the request to the indicated origin server."
+}
+
+const R3_3_1: Requirement = Requirement {
+  rfc = 9112
+  section = "3.3"
+  ordinal = 1
+  level = May
+  party = Server
+  text = "A server that can uniquely identify an authority from the request context MAY use that identity as a default without this risk."
+}
+
+const R4_1: Requirement = Requirement {
+  rfc = 9112
+  section = "4"
+  ordinal = 1
+  level = Optional
+  party = Server
+  text = "The first line of a response message is the status-line, consisting of the protocol version, a space (SP), the status code, and another space and ending with an OPTIONAL textual phrase describing the status code."
+}
+
+const R4_2: Requirement = Requirement {
+  rfc = 9112
+  section = "4"
+  ordinal = 2
+  level = May
+  party = Client
+  text = "Although the status-line grammar rule requires that each of the component elements be separated by a single SP octet, recipients MAY instead parse on whitespace-delimited word boundaries and, aside from the line terminator, treat any form of whitespace as the SP separator while ignoring preceding or trailing whitespace; such whitespace includes one or more of the following octets: SP, HTAB, VT (%x0B), FF (%x0C), or bare CR."
+}
+
+const R4_3: Requirement = Requirement {
+  rfc = 9112
+  section = "4"
+  ordinal = 3
+  level = Should
+  party = Client
+  text = "A client SHOULD ignore the reason-phrase content because it is not a reliable channel for information (it might be translated for a given locale, overwritten by intermediaries, or discarded when the message is forwarded via other versions of HTTP)."
+}
+
+const R4_4: Requirement = Requirement {
+  rfc = 9112
+  section = "4"
+  ordinal = 4
+  level = Must
+  party = Server
+  text = "A server MUST send the space that separates the status-code from the reason-phrase even when the reason-phrase is absent (i.e., the status-line would end with the space)."
+}
+
+const R5_1_1: Requirement = Requirement {
+  rfc = 9112
+  section = "5.1"
+  ordinal = 1
+  level = Must
+  party = Server
+  text = "A server MUST reject, with a response status code of 400 (Bad Request), any received request message that contains whitespace between a header field name and colon."
+}
+
+const R5_1_2: Requirement = Requirement {
+  rfc = 9112
+  section = "5.1"
+  ordinal = 2
+  level = Must
+  party = Proxy
+  text = "A proxy MUST remove any such whitespace from a response message before forwarding the message downstream."
+}
+
+const R5_2_1: Requirement = Requirement {
+  rfc = 9112
+  section = "5.2"
+  ordinal = 1
+  level = MustNot
+  party = Sender
+  text = "A sender MUST NOT generate a message that includes line folding (i.e., that has any field line value that contains a match to the obs-fold rule) unless the message is intended for packaging within the \"message/http\" media type."
+}
+
+const R5_2_2: Requirement = Requirement {
+  rfc = 9112
+  section = "5.2"
+  ordinal = 2
+  level = Must
+  party = Server
+  text = "A server that receives an obs-fold in a request message that is not within a \"message/http\" container MUST either reject the message by sending a 400 (Bad Request), preferably with a representation explaining that obsolete line folding is unacceptable, or replace each received obs-fold with one or more SP octets prior to interpreting the field value or forwarding the message downstream."
+}
+
+const R5_2_3: Requirement = Requirement {
+  rfc = 9112
+  section = "5.2"
+  ordinal = 3
+  level = Must
+  party = Proxy
+  text = "A proxy or gateway that receives an obs-fold in a response message that is not within a \"message/http\" container MUST either discard the message and replace it with a 502 (Bad Gateway) response, preferably with a representation explaining that unacceptable line folding was received, or replace each received obs-fold with one or more SP octets prior to interpreting the field value or forwarding the message downstream."
+}
+
+const R5_2_4: Requirement = Requirement {
+  rfc = 9112
+  section = "5.2"
+  ordinal = 4
+  level = Must
+  party = Client
+  text = "A user agent that receives an obs-fold in a response message that is not within a \"message/http\" container MUST replace each received obs-fold with one or more SP octets prior to interpreting the field value."
+}
+
+const R6_1_1: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 1
+  level = Must
+  party = Recipient
+  text = "A recipient MUST be able to parse the chunked transfer coding (Section 7.1) because it plays a crucial role in framing messages when the content size is not known in advance."
+}
+
+const R6_1_2: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 2
+  level = MustNot
+  party = Sender
+  text = "A sender MUST NOT apply the chunked transfer coding more than once to a message body (i.e., chunking an already chunked message is not allowed)."
+}
+
+const R6_1_3: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 3
+  level = Must
+  party = Client
+  text = "If any transfer coding other than chunked is applied to a request's content, the sender MUST apply chunked as the final transfer coding to ensure that the message is properly framed."
+}
+
+const R6_1_4: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 4
+  level = Must
+  party = Server
+  text = "If any transfer coding other than chunked is applied to a response's content, the sender MUST either apply chunked as the final transfer coding or terminate the message by closing the connection."
+}
+
+const R6_1_5: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 5
+  level = May
+  party = Recipient
+  text = "Any recipient along the request/response chain MAY decode the received transfer coding(s) or apply additional transfer coding(s) to the message body, assuming that corresponding changes are made to the Transfer-Encoding field value."
+}
+
+const R6_1_6: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 6
+  level = May
+  party = Server
+  text = "Transfer-Encoding MAY be sent in a response to a HEAD request or in a 304 (Not Modified) response (Section 15.4.5 of [HTTP]) to a GET request, neither of which includes a message body, to indicate that the origin server would have applied a transfer coding to the message body if the request had been an unconditional GET."
+}
+
+const R6_1_7: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 7
+  level = MustNot
+  party = Server
+  text = "A server MUST NOT send a Transfer-Encoding header field in any response with a status code of 1xx (Informational) or 204 (No Content)."
+}
+
+const R6_1_8: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 8
+  level = MustNot
+  party = Server
+  text = "A server MUST NOT send a Transfer-Encoding header field in any 2xx (Successful) response to a CONNECT request (Section 9.3.6 of [HTTP])."
+}
+
+const R6_1_9: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 9
+  level = Should
+  party = Server
+  text = "A server that receives a request message with a transfer coding it does not understand SHOULD respond with 501 (Not Implemented)."
+}
+
+const R6_1_10: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 10
+  level = MustNot
+  party = Client
+  text = "A client MUST NOT send a request containing Transfer-Encoding unless it knows the server will handle HTTP/1.1 requests (or later minor revisions); such knowledge might be in the form of specific user configuration or by remembering the version of a prior received response."
+}
+
+const R6_1_11: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 11
+  level = MustNot
+  party = Server
+  text = "A server MUST NOT send a response containing Transfer-Encoding unless the corresponding request indicates HTTP/1.1 (or later minor revisions)."
+}
+
+const R6_1_12: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 12
+  level = May
+  party = Server
+  text = "A server MAY reject a request that contains both Content-Length and Transfer-Encoding or process such a request in accordance with the Transfer-Encoding alone."
+}
+
+const R6_1_13: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 13
+  level = Must
+  party = Server
+  text = "Regardless, the server MUST close the connection after responding to such a request to avoid the potential attacks."
+}
+
+const R6_1_14: Requirement = Requirement {
+  rfc = 9112
+  section = "6.1"
+  ordinal = 14
+  level = Must
+  party = Recipient
+  text = "A server or client that receives an HTTP/1.0 message containing a Transfer-Encoding header field MUST treat the message as if the framing is faulty, even if a Content-Length is present, and close the connection after processing the message."
+}
+
+const R6_2_1: Requirement = Requirement {
+  rfc = 9112
+  section = "6.2"
+  ordinal = 1
+  level = MustNot
+  party = Sender
+  text = "A sender MUST NOT send a Content-Length header field in any message that contains a Transfer-Encoding header field."
+}
+
+const R6_3_1: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 1
+  level = Must
+  party = Client
+  text = "A client MUST ignore any Content-Length or Transfer-Encoding header fields received in such a message."
+}
+
+const R6_3_2: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 2
+  level = Must
+  party = Proxy
+  text = "An intermediary that chooses to forward the message MUST first remove the received Content-Length field and process the Transfer-Encoding (as described below) prior to forwarding the message downstream."
+}
+
+const R6_3_3: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 3
+  level = Must
+  party = Server
+  text = "If a Transfer-Encoding header field is present in a request and the chunked transfer coding is not the final encoding, the message body length cannot be determined reliably; the server MUST respond with the 400 (Bad Request) status code and then close the connection."
+}
+
+const R6_3_4: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 4
+  level = Must
+  party = Recipient
+  text = "If a message is received without Transfer-Encoding and with an invalid Content-Length header field, then the message framing is invalid and the recipient MUST treat it as an unrecoverable error, unless the field value can be successfully parsed as a comma-separated list (Section 5.6.1 of [HTTP]), all values in the list are valid, and all values in the list are the same (in which case, the message is processed with that single value used as the Content-Length field value)."
+}
+
+const R6_3_5: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 5
+  level = Must
+  party = Server
+  text = "If the unrecoverable error is in a request message, the server MUST respond with a 400 (Bad Request) status code and then close the connection."
+}
+
+const R6_3_6: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 6
+  level = Must
+  party = Proxy
+  text = "If it is in a response message received by a proxy, the proxy MUST close the connection to the server, discard the received response, and send a 502 (Bad Gateway) response to the client."
+}
+
+const R6_3_7: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 7
+  level = Must
+  party = Client
+  text = "If it is in a response message received by a user agent, the user agent MUST close the connection to the server and discard the received response."
+}
+
+const R6_3_8: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 8
+  level = Must
+  party = Recipient
+  text = "If the sender closes the connection or the recipient times out before the indicated number of octets are received, the recipient MUST consider the message to be incomplete and close the connection."
+}
+
+const R6_3_9: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 9
+  level = Should
+  party = Server
+  text = "Since there is no way to distinguish a successfully completed, close-delimited response message from a partially received message interrupted by network failure, a server SHOULD generate encoding or length-delimited messages whenever possible."
+}
+
+const R6_3_10: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 10
+  level = May
+  party = Server
+  text = "A server MAY reject a request that contains a message body but not a Content-Length by responding with 411 (Length Required)."
+}
+
+const R6_3_11: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 11
+  level = Should
+  party = Client
+  text = "Unless a transfer coding other than chunked has been applied, a client that sends a request containing a message body SHOULD use a valid Content-Length header field if the message body length is known in advance, rather than the chunked transfer coding, since some existing services respond to chunked with a 411 (Length Required) status code even though they understand the chunked transfer coding."
+}
+
+const R6_3_12: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 12
+  level = Must
+  party = Client
+  text = "A user agent that sends a request that contains a message body MUST send either a valid Content-Length header field or use the chunked transfer coding."
+}
+
+const R6_3_13: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 13
+  level = MustNot
+  party = Client
+  text = "A client MUST NOT use the chunked transfer coding unless it knows the server will handle HTTP/1.1 (or later) requests; such knowledge can be in the form of specific user configuration or by remembering the version of a prior received response."
+}
+
+const R6_3_14: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 14
+  level = May
+  party = Client
+  text = "If the final response to the last request on a connection has been completely received and there remains additional data to read, a user agent MAY discard the remaining data or attempt to determine if that data belongs as part of the prior message body, which might be the case if the prior message's Content-Length value is incorrect."
+}
+
+const R6_3_15: Requirement = Requirement {
+  rfc = 9112
+  section = "6.3"
+  ordinal = 15
+  level = MustNot
+  party = Client
+  text = "A client MUST NOT process, cache, or forward such extra data as a separate response, since such behavior would be vulnerable to cache poisoning."
+}
+
+const R7_1_1: Requirement = Requirement {
+  rfc = 9112
+  section = "7.1"
+  ordinal = 1
+  level = Optional
+  party = Any
+  text = "The chunked transfer coding wraps content in order to transfer it as a series of chunks, each with its own size indicator, followed by an OPTIONAL trailer section containing trailer fields."
+}
+
+const R7_1_2: Requirement = Requirement {
+  rfc = 9112
+  section = "7.1"
+  ordinal = 2
+  level = Must
+  party = Recipient
+  text = "A recipient MUST be able to parse and decode the chunked transfer coding."
+}
+
+const R7_1_3: Requirement = Requirement {
+  rfc = 9112
+  section = "7.1"
+  ordinal = 3
+  level = Must
+  party = Recipient
+  text = "Therefore, recipients MUST anticipate potentially large hexadecimal numerals and prevent parsing errors due to integer conversion overflows or precision loss due to integer representation."
+}
+
+const R7_1_4: Requirement = Requirement {
+  rfc = 9112
+  section = "7.1"
+  ordinal = 4
+  level = Should
+  party = Recipient
+  text = "Their presence SHOULD be treated as an error."
+}
+
+const R7_1_1_1: Requirement = Requirement {
+  rfc = 9112
+  section = "7.1.1"
+  ordinal = 1
+  level = Must
+  party = Recipient
+  text = "A recipient MUST ignore unrecognized chunk extensions."
+}
+
+const R7_1_2_1: Requirement = Requirement {
+  rfc = 9112
+  section = "7.1.2"
+  ordinal = 1
+  level = May
+  party = Recipient
+  text = "A recipient that removes the chunked coding from a message MAY selectively retain or discard the received trailer fields."
+}
+
+const R7_1_2_2: Requirement = Requirement {
+  rfc = 9112
+  section = "7.1.2"
+  ordinal = 2
+  level = Must
+  party = Recipient
+  text = "A recipient that retains a received trailer field MUST either store/forward the trailer field separately from the received header fields or merge the received trailer field into the header section."
+}
+
+const R7_1_2_3: Requirement = Requirement {
+  rfc = 9112
+  section = "7.1.2"
+  ordinal = 3
+  level = MustNot
+  party = Recipient
+  text = "A recipient MUST NOT merge a received trailer field into the header section unless its corresponding header field definition explicitly permits and instructs how the trailer field value can be safely merged."
+}
+
+const R7_2_1: Requirement = Requirement {
+  rfc = 9112
+  section = "7.2"
+  ordinal = 1
+  level = Should
+  party = Recipient
+  text = "The presence of parameters with any of these compression codings SHOULD be treated as an error."
+}
+
+const R7_3_1: Requirement = Requirement {
+  rfc = 9112
+  section = "7.3"
+  ordinal = 1
+  level = Must
+  party = Any
+  text = "Registrations MUST include the following fields:"
+}
+
+const R7_3_2: Requirement = Requirement {
+  rfc = 9112
+  section = "7.3"
+  ordinal = 2
+  level = MustNot
+  party = Any
+  text = "Names of transfer codings MUST NOT overlap with names of content codings (Section 8.4.1 of [HTTP]) unless the encoding transformation is identical, as is the case for the compression codings defined in Section 7.2."
+}
+
+const R7_3_3: Requirement = Requirement {
+  rfc = 9112
+  section = "7.3"
+  ordinal = 3
+  level = ShouldNot
+  party = Any
+  text = "Future registrations of transfer codings SHOULD NOT define parameters called \"q\" (case-insensitively) in order to avoid ambiguities."
+}
+
+const R7_3_4: Requirement = Requirement {
+  rfc = 9112
+  section = "7.3"
+  ordinal = 4
+  level = Must
+  party = Any
+  text = "Values to be added to this namespace require IETF Review (see Section 4.8 of [RFC8126]) and MUST conform to the purpose of transfer coding defined in this specification."
+}
+
+const R7_4_1: Requirement = Requirement {
+  rfc = 9112
+  section = "7.4"
+  ordinal = 1
+  level = MustNot
+  party = Client
+  text = "A client MUST NOT send the chunked transfer coding name in TE; chunked is always acceptable for HTTP/1.1 recipients."
+}
+
+const R7_4_2: Requirement = Requirement {
+  rfc = 9112
+  section = "7.4"
+  ordinal = 2
+  level = May
+  party = Client
+  text = "When multiple transfer codings are acceptable, the client MAY rank the codings by preference using a case-insensitive \"q\" parameter (similar to the qvalues used in content negotiation fields; see Section 12.4.2 of [HTTP])."
+}
+
+const R7_4_3: Requirement = Requirement {
+  rfc = 9112
+  section = "7.4"
+  ordinal = 3
+  level = Must
+  party = Client
+  text = "Since the TE header field only applies to the immediate connection, a sender of TE MUST also send a \"TE\" connection option within the Connection header field (Section 7.6.1 of [HTTP]) in order to prevent the TE header field from being forwarded by intermediaries that do not support its semantics."
+}
+
+const R8_1: Requirement = Requirement {
+  rfc = 9112
+  section = "8"
+  ordinal = 1
+  level = May
+  party = Server
+  text = "A server that receives an incomplete request message, usually due to a canceled request or a triggered timeout exception, MAY send an error response prior to closing the connection."
+}
+
+const R8_2: Requirement = Requirement {
+  rfc = 9112
+  section = "8"
+  ordinal = 2
+  level = Must
+  party = Client
+  text = "A client that receives an incomplete response message, which can occur when a connection is closed prematurely or when decoding a supposedly chunked transfer coding fails, MUST record the message as incomplete."
+}
+
+const R9_2_1: Requirement = Requirement {
+  rfc = 9112
+  section = "9.2"
+  ordinal = 1
+  level = Must
+  party = Client
+  text = "A client that has more than one outstanding request on a connection MUST maintain a list of outstanding requests in the order sent and MUST associate each received response message on that connection to the first outstanding request that has not yet received a final (non-1xx) response."
+}
+
+const R9_2_2: Requirement = Requirement {
+  rfc = 9112
+  section = "9.2"
+  ordinal = 2
+  level = MustNot
+  party = Client
+  text = "If a client receives data on a connection that doesn't have outstanding requests, the client MUST NOT consider that data to be a valid response; the client SHOULD close the connection, since message delimitation is now ambiguous, unless the data consists only of one or more CRLF (which can be discarded per Section 2.2)."
+}
+
+const R9_3_1: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3"
+  ordinal = 1
+  level = Should
+  party = Any
+  text = "HTTP implementations SHOULD support persistent connections."
+}
+
+const R9_3_2: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3"
+  ordinal = 2
+  level = Must
+  party = Client
+  text = "A client that does not support persistent connections MUST send the \"close\" connection option in every request message."
+}
+
+const R9_3_3: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3"
+  ordinal = 3
+  level = Must
+  party = Server
+  text = "A server that does not support persistent connections MUST send the \"close\" connection option in every response message that does not have a 1xx (Informational) status code."
+}
+
+const R9_3_4: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3"
+  ordinal = 4
+  level = May
+  party = Client
+  text = "A client MAY send additional requests on a persistent connection until it sends or receives a \"close\" connection option or receives an HTTP/1.0 response without a \"keep-alive\" connection option."
+}
+
+const R9_3_5: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3"
+  ordinal = 5
+  level = Must
+  party = Server
+  text = "A server MUST read the entire request message body or close the connection after sending its response; otherwise, the remaining data on a persistent connection would be misinterpreted as the next request."
+}
+
+const R9_3_6: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3"
+  ordinal = 6
+  level = Must
+  party = Client
+  text = "Likewise, a client MUST read the entire response message body if it intends to reuse the same connection for a subsequent request."
+}
+
+const R9_3_7: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3"
+  ordinal = 7
+  level = MustNot
+  party = Proxy
+  text = "A proxy server MUST NOT maintain a persistent connection with an HTTP/1.0 client (see Appendix C.2.2 for information and discussion of the problems with the Keep-Alive header field implemented by many HTTP/1.0 clients)."
+}
+
+const R9_3_2_1: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3.2"
+  ordinal = 1
+  level = May
+  party = Client
+  text = "A client that supports persistent connections MAY \"pipeline\" its requests (i.e., send multiple requests without waiting for each response)."
+}
+
+const R9_3_2_2: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3.2"
+  ordinal = 2
+  level = May
+  party = Server
+  text = "A server MAY process a sequence of pipelined requests in parallel if they all have safe methods (Section 9.2.1 of [HTTP]), but it MUST send the corresponding responses in the same order that the requests were received."
+}
+
+const R9_3_2_3: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3.2"
+  ordinal = 3
+  level = Should
+  party = Client
+  text = "A client that pipelines requests SHOULD retry unanswered requests if the connection closes before it receives all of the corresponding responses."
+}
+
+const R9_3_2_4: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3.2"
+  ordinal = 4
+  level = MustNot
+  party = Client
+  text = "When retrying pipelined requests after a failed connection (a connection not explicitly closed by the server in its last complete response), a client MUST NOT pipeline immediately after connection establishment, since the first remaining request in the prior pipeline might have caused an error response that can be lost again if multiple requests are sent on a prematurely closed connection (see the TCP reset problem described in Section 9.6)."
+}
+
+const R9_3_2_5: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3.2"
+  ordinal = 5
+  level = ShouldNot
+  party = Client
+  text = "A user agent SHOULD NOT pipeline requests after a non-idempotent method, until the final response status code for that method has been received, unless the user agent has a means to detect and recover from partial failure conditions involving the pipelined sequence."
+}
+
+const R9_3_2_6: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3.2"
+  ordinal = 6
+  level = May
+  party = Proxy
+  text = "An intermediary that receives pipelined requests MAY pipeline those requests when forwarding them inbound, since it can rely on the outbound user agent(s) to determine what requests can be safely pipelined."
+}
+
+const R9_3_2_7: Requirement = Requirement {
+  rfc = 9112
+  section = "9.3.2"
+  ordinal = 7
+  level = May
+  party = Proxy
+  text = "If the inbound connection fails before receiving a response, the pipelining intermediary MAY attempt to retry a sequence of requests that have yet to receive a response if the requests all have idempotent methods; otherwise, the pipelining intermediary SHOULD forward any received responses and then close the corresponding outbound connection(s) so that the outbound user agent(s) can recover accordingly."
+}
+
+const R9_5_1: Requirement = Requirement {
+  rfc = 9112
+  section = "9.5"
+  ordinal = 1
+  level = Should
+  party = Any
+  text = "A client or server that wishes to time out SHOULD issue a graceful close on the connection."
+}
+
+const R9_5_2: Requirement = Requirement {
+  rfc = 9112
+  section = "9.5"
+  ordinal = 2
+  level = Should
+  party = Any
+  text = "Implementations SHOULD constantly monitor open connections for a received closure signal and respond to it as appropriate, since prompt closure of both sides of a connection enables allocated system resources to be reclaimed."
+}
+
+const R9_5_3: Requirement = Requirement {
+  rfc = 9112
+  section = "9.5"
+  ordinal = 3
+  level = May
+  party = Any
+  text = "A client, server, or proxy MAY close the transport connection at any time."
+}
+
+const R9_5_4: Requirement = Requirement {
+  rfc = 9112
+  section = "9.5"
+  ordinal = 4
+  level = Should
+  party = Server
+  text = "A server SHOULD sustain persistent connections, when possible, and allow the underlying transport's flow-control mechanisms to resolve temporary overloads rather than terminate connections with the expectation that clients will retry."
+}
+
+const R9_5_5: Requirement = Requirement {
+  rfc = 9112
+  section = "9.5"
+  ordinal = 5
+  level = Should
+  party = Client
+  text = "A client sending a message body SHOULD monitor the network connection for an error response while it is transmitting the request."
+}
+
+const R9_5_6: Requirement = Requirement {
+  rfc = 9112
+  section = "9.5"
+  ordinal = 6
+  level = Should
+  party = Client
+  text = "If the client sees a response that indicates the server does not wish to receive the message body and is closing the connection, the client SHOULD immediately cease transmitting the body and close its side of the connection."
+}
+
+const R9_6_1: Requirement = Requirement {
+  rfc = 9112
+  section = "9.6"
+  ordinal = 1
+  level = Should
+  party = Sender
+  text = "A sender SHOULD send a Connection header field (Section 7.6.1 of [HTTP]) containing the \"close\" connection option when it intends to close a connection."
+}
+
+const R9_6_2: Requirement = Requirement {
+  rfc = 9112
+  section = "9.6"
+  ordinal = 2
+  level = MustNot
+  party = Client
+  text = "A client that sends a \"close\" connection option MUST NOT send further requests on that connection (after the one containing the \"close\") and MUST close the connection after reading the final response message corresponding to this request."
+}
+
+const R9_6_3: Requirement = Requirement {
+  rfc = 9112
+  section = "9.6"
+  ordinal = 3
+  level = Must
+  party = Server
+  text = "A server that receives a \"close\" connection option MUST initiate closure of the connection (see below) after it sends the final response to the request that contained the \"close\" connection option."
+}
+
+const R9_6_4: Requirement = Requirement {
+  rfc = 9112
+  section = "9.6"
+  ordinal = 4
+  level = Should
+  party = Server
+  text = "The server SHOULD send a \"close\" connection option in its final response on that connection."
+}
+
+const R9_6_5: Requirement = Requirement {
+  rfc = 9112
+  section = "9.6"
+  ordinal = 5
+  level = MustNot
+  party = Server
+  text = "The server MUST NOT process any further requests received on that connection."
+}
+
+const R9_6_6: Requirement = Requirement {
+  rfc = 9112
+  section = "9.6"
+  ordinal = 6
+  level = Must
+  party = Server
+  text = "A server that sends a \"close\" connection option MUST initiate closure of the connection (see below) after it sends the response containing the \"close\" connection option."
+}
+
+const R9_6_7: Requirement = Requirement {
+  rfc = 9112
+  section = "9.6"
+  ordinal = 7
+  level = MustNot
+  party = Server
+  text = "The server MUST NOT process any further requests received on that connection."
+}
+
+const R9_6_8: Requirement = Requirement {
+  rfc = 9112
+  section = "9.6"
+  ordinal = 8
+  level = Must
+  party = Client
+  text = "A client that receives a \"close\" connection option MUST cease sending requests on that connection and close the connection after reading the response message containing the \"close\" connection option; if additional pipelined requests had been sent on the connection, the client SHOULD NOT assume that they will be processed by the server."
+}
+
+const R9_7_1: Requirement = Requirement {
+  rfc = 9112
+  section = "9.7"
+  ordinal = 1
+  level = Must
+  party = Any
+  text = "All HTTP data MUST be sent as TLS \"application data\" but is otherwise treated like a normal connection for HTTP (including potential reuse as a persistent connection)."
+}
+
+const R9_8_1: Requirement = Requirement {
+  rfc = 9112
+  section = "9.8"
+  ordinal = 1
+  level = Should
+  party = Client
+  text = "When encountering an incomplete close, a client SHOULD treat as completed all requests for which it has received either"
+}
+
+const R9_8_2: Requirement = Requirement {
+  rfc = 9112
+  section = "9.8"
+  ordinal = 2
+  level = Should
+  party = Client
+  text = "A client detecting an incomplete close SHOULD recover gracefully."
+}
+
+const R9_8_3: Requirement = Requirement {
+  rfc = 9112
+  section = "9.8"
+  ordinal = 3
+  level = Must
+  party = Client
+  text = "Clients MUST send a closure alert before closing the connection."
+}
+
+const R9_8_4: Requirement = Requirement {
+  rfc = 9112
+  section = "9.8"
+  ordinal = 4
+  level = May
+  party = Client
+  text = "Clients that do not expect to receive any more data MAY choose not to wait for the server's closure alert and simply close the connection, thus generating an incomplete close on the server side."
+}
+
+const R9_8_5: Requirement = Requirement {
+  rfc = 9112
+  section = "9.8"
+  ordinal = 5
+  level = Should
+  party = Server
+  text = "Servers SHOULD be prepared to receive an incomplete close from the client, since the client can often locate the end of server data."
+}
+
+const R9_8_6: Requirement = Requirement {
+  rfc = 9112
+  section = "9.8"
+  ordinal = 6
+  level = Must
+  party = Server
+  text = "Servers MUST attempt to initiate an exchange of closure alerts with the client before closing the connection."
+}
+
+const R9_8_7: Requirement = Requirement {
+  rfc = 9112
+  section = "9.8"
+  ordinal = 7
+  level = May
+  party = Server
+  text = "Servers MAY close the connection after sending the closure alert, thus generating an incomplete close on the client side."
+}

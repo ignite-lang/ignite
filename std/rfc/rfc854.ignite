@@ -1,0 +1,460 @@
+// RFC 854: Telnet Protocol Specification
+// Quoted by hand from https://www.rfc-editor.org/rfc/rfc854.txt (38,517 bytes, read 2026-11-03),
+// which is not vendored (docs/slice.md 19.9): `ignite rfc check` reports this catalogue
+// unchecked. One requirement per sentence that says what an implementation, an option
+// designer or the option registrar must, should or may do; `section` is the page on which
+// the sentence starts, the level that of its strongest word (19.4). List labels such as
+// "a." and "2)" are left out of the texts.
+
+package std.rfc.rfc854
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC854: Spec = Spec {
+  rfc = 854
+  title = "Telnet Protocol Specification"
+  url = "https://www.rfc-editor.org/rfc/rfc854"
+  digest = "sha256:f9cb6d4a7d7a67e5a1ac5ae3c2962b1183fb26119632a1617f3c8379820dfb10"
+  requirements = [
+    RP2_1,
+    RP2_2,
+    RP2_3,
+    RP2_4,
+    RP2_5,
+    RP2_6,
+    RP3_1,
+    RP3_2,
+    RP3_3,
+    RP3_4,
+    RP4_1,
+    RP4_2,
+    RP5_1,
+    RP5_2,
+    RP5_3,
+    RP5_4,
+    RP6_1,
+    RP6_2,
+    RP7_1,
+    RP7_2,
+    RP7_3,
+    RP9_1,
+    RP9_2,
+    RP9_3,
+    RP10_1,
+    RP10_2,
+    RP10_3,
+    RP11_1,
+    RP11_2,
+    RP11_3,
+    RP12_1,
+    RP12_2,
+    RP12_3,
+    RP13_1,
+    RP13_2,
+    RP13_3,
+    RP13_4,
+    RP13_5,
+    RP14_1,
+    RP14_2
+  ]
+}
+
+const RP2_1: Requirement = Requirement {
+  rfc = 854
+  section = "p2"
+  ordinal = 1
+  level = May
+  party = Recipient
+  source = Prose
+  text = "The other party may then either accept or reject the request."
+}
+
+const RP2_2: Requirement = Requirement {
+  rfc = 854
+  section = "p2"
+  ordinal = 2
+  level = MustNot
+  party = Recipient
+  source = Prose
+  text = "Clearly, a party may always refuse a request to enable, and must never refuse a request to disable some option since all parties must be prepared to support the NVT."
+}
+
+const RP2_3: Requirement = Requirement {
+  rfc = 854
+  section = "p2"
+  ordinal = 3
+  level = May
+  party = Sender
+  source = Prose
+  text = "Parties may only request a change in option status; i.e., a party may not send out a \"request\" merely to announce what mode it is in."
+}
+
+const RP2_4: Requirement = Requirement {
+  rfc = 854
+  section = "p2"
+  ordinal = 4
+  level = ShouldNot
+  party = Recipient
+  source = Prose
+  text = "If a party receives what appears to be a request to enter some mode it is already in, the request should not be acknowledged."
+}
+
+const RP2_5: Requirement = Requirement {
+  rfc = 854
+  section = "p2"
+  ordinal = 5
+  level = Required
+  party = Recipient
+  source = Prose
+  text = "It is required that a response be sent to requests for a change of mode -- even if the mode is not changed."
+}
+
+const RP2_6: Requirement = Requirement {
+  rfc = 854
+  section = "p2"
+  ordinal = 6
+  level = Must
+  party = Sender
+  source = Prose
+  text = "Whenever one party sends an option command to a second party, whether as a request or an acknowledgment, and use of the option will have any effect on the processing of the data being sent from the first party to the second, then the command must be inserted in the data stream at the point where it is desired that it take effect."
+}
+
+const RP3_1: Requirement = Requirement {
+  rfc = 854
+  section = "p3"
+  ordinal = 1
+  level = May
+  party = Sender
+  source = Prose
+  text = "Thus, a host may wish to buffer data, after requesting an option, until it learns whether the request is accepted or rejected, in order to hide the \"uncertainty period\" from the user."
+}
+
+const RP3_2: Requirement = Requirement {
+  rfc = 854
+  section = "p3"
+  ordinal = 2
+  level = ShouldNot
+  party = Sender
+  source = Prose
+  text = "To prevent such loops from occurring, rejected requests should not be repeated until something changes."
+}
+
+const RP3_3: Requirement = Requirement {
+  rfc = 854
+  section = "p3"
+  ordinal = 3
+  level = Should
+  party = Sender
+  source = Prose
+  text = "A good rule of thumb is that a re-request should only occur as a result of subsequent information from the other end of the connection or when demanded by local human intervention."
+}
+
+const RP3_4: Requirement = Requirement {
+  rfc = 854
+  section = "p3"
+  ordinal = 4
+  level = Should
+  party = Any
+  source = Prose
+  text = "The important concept is that such expanded negotiations should never begin until some prior (standard) negotiation has established that both parties are capable of parsing the expanded syntax."
+}
+
+const RP4_1: Requirement = Requirement {
+  rfc = 854
+  section = "p4"
+  ordinal = 1
+  level = May
+  party = Any
+  source = Prose
+  text = "Thus, all hosts may implement their TELNET processes to be totally unaware of options that are not supported, simply returning a rejection to (i.e., refusing) any option request that cannot be understood."
+}
+
+const RP4_2: Requirement = Requirement {
+  rfc = 854
+  section = "p4"
+  ordinal = 2
+  level = Should
+  party = Any
+  source = Prose
+  text = "A companion document, \"TELNET Option Specifications,\" should be consulted for information about the procedure for establishing new options."
+}
+
+const RP5_1: Requirement = Requirement {
+  rfc = 854
+  section = "p5"
+  ordinal = 1
+  level = Should
+  party = Sender
+  source = Prose
+  text = "Insofar as the availability of local buffer space permits, data should be accumulated in the host where it is generated until a complete line of data is ready for transmission, or until some locally-defined explicit signal to transmit occurs."
+}
+
+const RP5_2: Requirement = Requirement {
+  rfc = 854
+  section = "p5"
+  ordinal = 2
+  level = Should
+  party = Sender
+  source = Prose
+  text = "Many systems take some processing action at the end of each input line (even line printers or card punches frequently tend to work this way), so the transmission should be triggered at the end of a line."
+}
+
+const RP5_3: Requirement = Requirement {
+  rfc = 854
+  section = "p5"
+  ordinal = 3
+  level = Must
+  party = Any
+  source = Prose
+  text = "On the other hand, a user or process may sometimes find it necessary or desirable to provide data which does not terminate at the end of a line; therefore implementers are cautioned to provide methods of locally signaling that all buffered data should be transmitted immediately."
+}
+
+const RP5_4: Requirement = Requirement {
+  rfc = 854
+  section = "p5"
+  ordinal = 4
+  level = Must
+  party = Sender
+  source = Prose
+  text = "When a process has completed sending data to an NVT printer and has no queued input from the NVT keyboard for further processing (i.e., when a process at one end of a TELNET connection cannot proceed without input from the other end), the process must transmit the TELNET Go Ahead (GA) command."
+}
+
+const RP6_1: Requirement = Requirement {
+  rfc = 854
+  section = "p6"
+  ordinal = 1
+  level = Should
+  party = Server
+  source = Prose
+  text = "It should be transmitted at those times, and only at those times, when the user should be given control of the terminal."
+}
+
+const RP6_2: Requirement = Requirement {
+  rfc = 854
+  section = "p6"
+  ordinal = 2
+  level = May
+  party = Client
+  source = Prose
+  text = "In this direction, GAs may be sent at any time, but need not ever be sent."
+}
+
+const RP7_1: Requirement = Requirement {
+  rfc = 854
+  section = "p7"
+  ordinal = 1
+  level = Required
+  party = Recipient
+  source = Prose
+  text = "These standard representations have standard, but not required, meanings (with the exception that the Interrupt Process (IP) function may be required by other protocols which use TELNET); that is, a system which does not provide the function to local users need not provide it to network users and may treat the standard representation for the function as a No-operation."
+}
+
+const RP7_2: Requirement = Requirement {
+  rfc = 854
+  section = "p7"
+  ordinal = 2
+  level = Required
+  party = Any
+  source = Prose
+  text = "It should be noted by implementers that IP may be required by other protocols which use TELNET, and therefore should be implemented if these other protocols are to be supported."
+}
+
+const RP7_3: Requirement = Requirement {
+  rfc = 854
+  section = "p7"
+  ordinal = 3
+  level = Should
+  party = Server
+  source = Prose
+  text = "It should be noted, by server systems which provide this function, that there may be buffers external to the system (in the network and the user's local host) which should be cleared; the appropriate way to do this is to transmit the \"Synch\" signal (described below) to the user system."
+}
+
+const RP9_1: Requirement = Requirement {
+  rfc = 854
+  section = "p9"
+  ordinal = 1
+  level = Should
+  party = Recipient
+  source = Prose
+  text = "If TCP indicates the end of Urgent data before the DM is found, TELNET should continue the special handling of the data stream until the DM is found."
+}
+
+const RP9_2: Requirement = Requirement {
+  rfc = 854
+  section = "p9"
+  ordinal = 2
+  level = Should
+  party = Recipient
+  source = Prose
+  text = "TELNET should continue the special handling of the data stream until another DM is found."
+}
+
+const RP9_3: Requirement = Requirement {
+  rfc = 854
+  section = "p9"
+  ordinal = 3
+  level = Should
+  party = Server
+  source = Prose
+  text = "For example, if a user at a terminal causes an AO to be transmitted, the server which receives the AO (if it provides that function at all) should return a Synch to the user."
+}
+
+const RP10_1: Requirement = Requirement {
+  rfc = 854
+  section = "p10"
+  ordinal = 1
+  level = Should
+  party = Client
+  source = Prose
+  text = "The user should instruct his system to:"
+}
+
+const RP10_2: Requirement = Requirement {
+  rfc = 854
+  section = "p10"
+  ordinal = 2
+  level = Must
+  party = Client
+  source = Prose
+  text = "The user (or process acting on his behalf) must transmit the TELNET SYNCH sequence of step 2 above to ensure that the TELNET IP gets through to the server's TELNET interpreter."
+}
+
+const RP10_3: Requirement = Requirement {
+  rfc = 854
+  section = "p10"
+  ordinal = 3
+  level = Should
+  party = Recipient
+  source = Prose
+  text = "The Urgent should wake up the TELNET process; the IP should wake up the next higher level process."
+}
+
+const RP11_1: Requirement = Requirement {
+  rfc = 854
+  section = "p11"
+  ordinal = 1
+  level = May
+  party = Any
+  source = Prose
+  text = "Neither end of a TELNET connection may assume that the other party will take, or will have taken, any particular action upon receipt or transmission of these:"
+}
+
+const RP11_2: Requirement = Requirement {
+  rfc = 854
+  section = "p11"
+  ordinal = 2
+  level = Must
+  party = Any
+  source = Prose
+  text = "Therefore, the sequence \"CR LF\" must be treated as a single \"new line\" character and used whenever their combined action is intended; the sequence \"CR NUL\" must be used where a carriage return alone is actually desired; and the CR character must be avoided in other contexts."
+}
+
+const RP11_3: Requirement = Requirement {
+  rfc = 854
+  section = "p11"
+  ordinal = 3
+  level = Required
+  party = Any
+  source = Prose
+  text = "Note that \"CR LF\" or \"CR NUL\" is required in both directions (in the default ASCII mode), to preserve the symmetry of the NVT model."
+}
+
+const RP12_1: Requirement = Requirement {
+  rfc = 854
+  section = "p12"
+  ordinal = 1
+  level = May
+  party = Sender
+  source = Prose
+  text = "Even though it may be known in some situations (e.g., with remote echo and suppress go ahead options in effect) that characters are not being sent to an actual printer, nonetheless, for the sake of consistency, the protocol requires that a NUL be inserted following a CR not followed by a LF in the data stream."
+}
+
+const RP12_2: Requirement = Requirement {
+  rfc = 854
+  section = "p12"
+  ordinal = 2
+  level = Should
+  party = Recipient
+  source = Prose
+  text = "The converse of this is that a NUL received in the data stream after a CR (in the absence of options negotiations which explicitly specify otherwise) should be stripped out prior to applying the NVT to local character set mapping."
+}
+
+const RP12_3: Requirement = Requirement {
+  rfc = 854
+  section = "p12"
+  ordinal = 3
+  level = Should
+  party = Any
+  source = Prose
+  text = "The actual code assignments for these \"characters\" are in the TELNET Command section, because they are viewed as being, in some sense, generic and should be available even when the data stream is interpreted as being some other character set."
+}
+
+const RP13_1: Requirement = Requirement {
+  rfc = 854
+  section = "p13"
+  ordinal = 1
+  level = Should
+  party = Recipient
+  source = Prose
+  text = "The recipient should delete the last preceding undeleted character or \"print position\" from the data stream."
+}
+
+const RP13_2: Requirement = Requirement {
+  rfc = 854
+  section = "p13"
+  ordinal = 2
+  level = Should
+  party = Recipient
+  source = Prose
+  text = "The recipient should delete characters from the data stream back to, but not including, the last \"CR LF\" sequence sent over the TELNET connection."
+}
+
+const RP13_3: Requirement = Requirement {
+  rfc = 854
+  section = "p13"
+  ordinal = 3
+  level = Should
+  party = Recipient
+  source = Prose
+  text = "Just as the NVT data byte 68 (104 octal) should be mapped into whatever the local code for \"uppercase D\" is, so the EC character should be mapped into whatever the local \"Erase Character\" function is."
+}
+
+const RP13_4: Requirement = Requirement {
+  rfc = 854
+  section = "p13"
+  ordinal = 4
+  level = May
+  party = Recipient
+  source = Prose
+  text = "Further, just as the mapping for 124 (174 octal) is somewhat arbitrary in an environment that has no \"vertical bar\" character, the EL character may have a somewhat arbitrary mapping (or none at all) if there is no local \"Erase Line\" facility."
+}
+
+const RP13_5: Requirement = Requirement {
+  rfc = 854
+  section = "p13"
+  ordinal = 5
+  level = Should
+  party = Recipient
+  source = Prose
+  text = "Similarly for format effectors: if the terminal actually does have a \"Vertical Tab\", then the mapping for VT is obvious, and only when the terminal does not have a vertical tab should the effect of VT be unpredictable."
+}
+
+const RP14_1: Requirement = Requirement {
+  rfc = 854
+  section = "p14"
+  ordinal = 1
+  level = Must
+  party = Any
+  source = Prose
+  text = "With the current set-up, only the IAC need be doubled to be sent as data, and the other 255 codes may be passed transparently."
+}
+
+const RP14_2: Requirement = Requirement {
+  rfc = 854
+  section = "p14"
+  ordinal = 2
+  level = Should
+  party = Sender
+  source = Prose
+  text = "This should always be accompanied by a TCP Urgent notification."
+}
