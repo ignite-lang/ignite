@@ -117,8 +117,18 @@ pub fn report(file: &Path, options: &TestOptions) -> Result<Option<Report>, Erro
             build: options.build.clone(),
             runner: Vec::new(),
         };
+        // The executable runs FILE's tests in declaration order on both
+        // targets (12.7), and the runner prints them in that order.
+        let names: Vec<&str> = loaded
+            .types()
+            .tests()
+            .iter()
+            .map(|test| test.full_name.as_str())
+            .collect();
         for executable in build_tests(&[file.to_path_buf()], &test_options)? {
-            results.extend(run_tests(&executable)?);
+            for (name, result) in run_tests(&executable, &names)? {
+                record(&mut results, name, result);
+            }
         }
     }
     let mut text = String::new();
@@ -132,10 +142,21 @@ pub fn report(file: &Path, options: &TestOptions) -> Result<Option<Report>, Erro
     Ok(Some(Report { text, holds }))
 }
 
-/// Run `executable` once without arguments and read its result lines.
-/// A spawn failure, an end by a signal, an exit status other than 0 or 1,
-/// or a run without a `test result:` line is a run failure.
-fn run_tests(executable: &Path) -> Result<BTreeMap<String, TestResult>, Error> {
+/// Keep the worse of two results of one test: a forged result line can
+/// lower a verdict, never raise it. Not run (no entry) is between failed
+/// and passed, and only a result line adds an entry.
+fn record(results: &mut BTreeMap<String, TestResult>, name: String, result: TestResult) {
+    let kept = results.entry(name).or_insert(result);
+    if result == TestResult::Failed {
+        *kept = TestResult::Failed;
+    }
+}
+
+/// Run `executable` once without arguments and read the result lines of
+/// the tests `names`, in the order it runs them. A spawn failure, an end
+/// by a signal, an exit status other than 0 or 1, or a run without a
+/// `test result:` line is a run failure.
+fn run_tests(executable: &Path, names: &[&str]) -> Result<Vec<(String, TestResult)>, Error> {
     let output = Command::new(executable)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -166,28 +187,48 @@ fn run_tests(executable: &Path) -> Result<BTreeMap<String, TestResult>, Error> {
             "the test executable printed no `test result:` line".to_string(),
         ));
     }
-    Ok(results(&stdout))
+    Ok(results(&stdout, names))
 }
 
-/// The result lines of a runner's report: those between the `running N
-/// tests` line and the first blank line after it, so the `failures:`
-/// section, which echoes test output, is never read.
-fn results(stdout: &str) -> BTreeMap<String, TestResult> {
-    let mut lines = stdout
-        .lines()
-        .skip_while(|line| !line.starts_with("running "));
-    lines.next();
-    lines
-        .take_while(|line| !line.is_empty())
-        .filter_map(|line| {
-            let rest = line.strip_prefix("test ")?;
-            if let Some(name) = rest.strip_suffix(" ... ok") {
-                return Some((name.to_string(), TestResult::Passed));
-            }
-            let at = rest.rfind(" ... FAILED")?;
-            Some((rest[..at].to_string(), TestResult::Failed))
-        })
-        .collect()
+/// The result lines of a runner's report, read after the `running N
+/// tests` line as one entry per test of `names`, in that order: `test
+/// <name> ... ok` or `test <name> ... FAILED…`, each matched against the
+/// exact full name, which may hold newlines. A name therefore cannot end
+/// the section early or forge another test's line. The first entry that
+/// does not match ends the section (the blank line before `failures:`
+/// once every test is read), so the `failures:` section, which echoes test
+/// output, is never read; the tests after a mismatch are not run.
+fn results(stdout: &str, names: &[&str]) -> Vec<(String, TestResult)> {
+    let mut rest = if stdout.starts_with("running ") {
+        stdout
+    } else {
+        match stdout.find("\nrunning ") {
+            Some(at) => &stdout[at + 1..],
+            None => return Vec::new(),
+        }
+    };
+    rest = rest.split_once('\n').map_or("", |(_, after)| after);
+    let mut found = Vec::new();
+    for name in names {
+        let Some(after) = rest
+            .strip_prefix("test ")
+            .and_then(|r| r.strip_prefix(*name))
+            .and_then(|r| r.strip_prefix(" ... "))
+        else {
+            break;
+        };
+        let (word, tail) = after.split_once('\n').unwrap_or((after, ""));
+        let result = if word == "ok" {
+            TestResult::Passed
+        } else if word == "FAILED" || word.starts_with("FAILED (") {
+            TestResult::Failed
+        } else {
+            break;
+        };
+        found.push((name.to_string(), result));
+        rest = tail;
+    }
+    found
 }
 
 /// The status column of a row.
@@ -288,6 +329,16 @@ pub fn verdict(row: &Row, results: &BTreeMap<String, TestResult>) -> (String, Ve
     (evidence, verdict)
 }
 
+/// A `scope` item of the header: `all` when it is absent, `none` when its
+/// list is empty, else its entries joined by one space.
+fn scope_list(entries: Option<Vec<&str>>) -> String {
+    match entries {
+        None => "all".to_string(),
+        Some(entries) if entries.is_empty() => "none".to_string(),
+        Some(entries) => entries.join(" "),
+    }
+}
+
 /// Append the block of `protocol`'s claim of `spec` to `out`; whether the
 /// claim holds: no MUST-class row in scope is `fail`, `gap` or
 /// `inconclusive`.
@@ -297,20 +348,16 @@ fn block(
     results: &BTreeMap<String, TestResult>,
     out: &mut String,
 ) -> bool {
-    let parties = spec.parties.as_ref().map_or_else(
-        || "all".to_string(),
-        |parties| {
-            parties
-                .iter()
-                .map(|party| party.name())
-                .collect::<Vec<_>>()
-                .join(" ")
-        },
+    let parties = scope_list(
+        spec.parties
+            .as_ref()
+            .map(|parties| parties.iter().map(|party| party.name()).collect()),
     );
-    let sections = spec
-        .sections
-        .as_ref()
-        .map_or_else(|| "all".to_string(), |sections| sections.join(" "));
+    let sections = scope_list(
+        spec.sections
+            .as_ref()
+            .map(|sections| sections.iter().map(String::as_str).collect()),
+    );
     out.push_str(&format!(
         "rfc{} {}, protocol {protocol}, parties {parties}, sections {sections}\n",
         spec.rfc, spec.title
@@ -476,12 +523,57 @@ mod tests {
             \n\
             test result: FAILED. 1 passed; 2 failed; 0 filtered out; finished in 0.01s\n";
         assert_eq!(
-            results(report),
-            BTreeMap::from([
+            results(report, &["m/a", "m/b", "m/c", "m/d"]),
+            vec![
                 ("m/a".to_string(), TestResult::Passed),
                 ("m/b".to_string(), TestResult::Failed),
                 ("m/c".to_string(), TestResult::Failed),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_name_with_newlines_is_one_entry() {
+        let forged = "m/z ... ok\ntest m/a";
+        let blank = "m/x\n\ny";
+        let report = "running 4 tests\n\
+            test m/x\n\ny ... ok\n\
+            test m/a ... FAILED\n\
+            test m/z ... ok\ntest m/a ... ok\n\
+            test m/b ... ok\n\
+            \n\
+            test result: FAILED. 3 passed; 1 failed; 0 filtered out; finished in 0.01s\n";
+        assert_eq!(
+            results(report, &[blank, "m/a", forged, "m/b"]),
+            vec![
+                (blank.to_string(), TestResult::Passed),
+                ("m/a".to_string(), TestResult::Failed),
+                (forged.to_string(), TestResult::Passed),
+                ("m/b".to_string(), TestResult::Passed),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_worst_result_of_a_test_wins() {
+        let mut found = BTreeMap::new();
+        record(&mut found, "m/a".to_string(), TestResult::Failed);
+        record(&mut found, "m/a".to_string(), TestResult::Passed);
+        record(&mut found, "m/b".to_string(), TestResult::Passed);
+        record(&mut found, "m/b".to_string(), TestResult::Failed);
+        assert_eq!(
+            found,
+            BTreeMap::from([
+                ("m/a".to_string(), TestResult::Failed),
+                ("m/b".to_string(), TestResult::Failed),
             ])
         );
+    }
+
+    #[test]
+    fn an_empty_scope_list_is_none() {
+        assert_eq!(scope_list(None), "all");
+        assert_eq!(scope_list(Some(Vec::new())), "none");
+        assert_eq!(scope_list(Some(vec!["Server", "Any"])), "Server Any");
     }
 }

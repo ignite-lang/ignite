@@ -615,10 +615,13 @@ fn adversary_unicode_names_and_paths_do_not_change_the_matrix() {
 /// 19.5's grammar admits `parties = []` and `sections = []`; 19.10: "no line
 /// ends in a space". The header of such a block must not end in one.
 #[test]
-#[ignore = "adversary: an empty sections list prints a header line that ends in a space"]
 fn adversary_an_empty_scope_list_leaves_no_trailing_space() {
     let output = conformance("adversary_empty_scope", "rust");
     let stdout = text(&output.stdout);
+    assert!(
+        stdout.starts_with("rfc7304 Line Echo, protocol Echo, parties none, sections none\n"),
+        "{stdout}"
+    );
     assert!(
         stdout.contains("R2_1  2  MUST  none  -  out of scope\n"),
         "{stdout}{}",
@@ -687,13 +690,29 @@ fn adversary_limits_print_their_values_and_are_counted() {
     assert_eq!(output.status.code(), Some(1), "{}", text(&output.stderr));
 }
 
+/// 19.10 step 3: a test name holding a blank line (`\n\n`, a legal escape)
+/// does not end the result lines, so the verifying test declared after it
+/// still reads `passed` and the row `pass`, not `not run` and `inconclusive`.
+#[test]
+fn a_blank_line_in_a_test_name_does_not_end_the_results() {
+    for target in ["rust", "llvm"] {
+        let output = conformance("blank_line_name", target);
+        assert_eq!(
+            text(&output.stdout),
+            expected("blank_line_name"),
+            "{target}: {}",
+            text(&output.stderr)
+        );
+        assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    }
+}
+
 /// 19.10 verdict rule 5: "`fail` when any verifying test failed". The only
 /// verifying test fails; another test's name (`\n` is a legal escape, 12.1)
 /// makes the runner print a second `test <module>/a line is echoed ... ok`
 /// line after the real `FAILED` one. The row must stay `fail` and the claim
 /// `no`.
 #[test]
-#[ignore = "adversary: a test name holding a newline forges another test's result line, a failed MUST reads pass"]
 fn adversary_a_test_name_cannot_forge_another_tests_result() {
     let output = conformance("adversary_forged_result", "rust");
     let want = adversary_block(
