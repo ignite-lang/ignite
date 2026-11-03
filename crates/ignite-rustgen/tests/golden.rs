@@ -584,3 +584,198 @@ fn pick<E>(item: E) -> Int {\n\
     let (program, std) = common::lower_typed(&file, &common::golden_std(), &substrate);
     cargo_build(&program, &std, "shadow-literal");
 }
+
+/// A fresh directory `<target>/ignite-rustgen-test/<name>` holding `files`
+/// (path relative to it, text), for the adversary cases below.
+fn adversary_sources(name: &str, files: &[(&str, &str)]) -> PathBuf {
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| common::workspace().join("target"));
+    let dir = target.join("ignite-rustgen-test").join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    for (path, text) in files {
+        let path = dir.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, text).unwrap();
+    }
+    dir
+}
+
+fn adversary_substrate() -> PathBuf {
+    let substrate = common::workspace().join("crates/ignite-io");
+    substrate.canonicalize().unwrap_or(substrate)
+}
+
+/// Adversary (story:rustgen-type-parameter-shadowing): the clash inside
+/// the standard library, which `Generator::item_module_path` spells from
+/// the `ignite-std` root. `std.clash` declares a record `S` and an enum
+/// `E` and fns whose type parameters are named `S` and `E`; the program
+/// calls them, so they are emitted. The record literal, the closure's
+/// return type and the enum variants must name the std items.
+#[test]
+fn std_record_and_enum_named_like_a_type_parameter() {
+    let clash = "package std.clash\n\
+\n\
+type S { value: Int, extra: Int = 1 }\n\
+\n\
+enum E { A, B(Int) }\n\
+\n\
+fn make() -> S = S { value = 4 }\n\
+\n\
+fn literal<S>(item: S) -> Int = S { value = 2 }.value + make().extra\n\
+\n\
+fn closure<S>(item: S) -> Int {\n\
+  let f = |n: Int| S { value = n }\n\
+  f(5).value\n\
+}\n\
+\n\
+fn variant<E>(item: E) -> Int = match E.B(3) {\n\
+  E.A => 0\n\
+  E.B(n) => n\n\
+}\n";
+    let program = "package examples.stdclash\n\
+\n\
+import std.clash.{literal, closure, variant}\n\
+\n\
+fn total() -> Int = literal(1) + closure(1) + variant(1)\n";
+    let dir = adversary_sources(
+        "adv-std-clash-src",
+        &[("std/clash.ignite", clash), ("stdclash.ignite", program)],
+    );
+    let (program, std) = common::lower_typed(
+        &dir.join("stdclash.ignite"),
+        &dir.join("std"),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-std-clash");
+}
+
+/// Adversary (story:rustgen-type-parameter-shadowing): a record and an
+/// enum imported from a sibling module of the package, shadowed by type
+/// parameters in the program crate (`ignite build`'s layout, not the test
+/// executable's).
+#[test]
+fn sibling_record_and_enum_named_like_a_type_parameter() {
+    let other = "package examples.sib.other\n\
+\n\
+type R { v: Int }\n\
+\n\
+enum F { H, G(Int) }\n\
+\n\
+fn make_r() -> R = R { v = 1 }\n";
+    let main = "package examples.sib\n\
+\n\
+import examples.sib.other.{R, F, make_r}\n\
+\n\
+fn lit<R>(item: R) -> Int = R { v = 2 }.v\n\
+\n\
+fn inferred<R>(item: R) -> Int {\n\
+  let xs = [make_r()]\n\
+  let f = |n: Int| R { v = n }\n\
+  xs.len() + f(3).v\n\
+}\n\
+\n\
+fn variants<F>(item: F) -> Int = match F.G(5) {\n\
+  F.H => 0\n\
+  F.G(n) => n\n\
+}\n\
+\n\
+fn make_f() -> F = F.G(7)\n\
+\n\
+fn bare<F>(item: F) -> Int = match make_f() {\n\
+  H => 0\n\
+  G(n) => n\n\
+}\n";
+    let dir = adversary_sources(
+        "adv-sibling-shadow-src",
+        &[("sib.ignite", main), ("other.ignite", other)],
+    );
+    let (program, std) = common::lower_typed(
+        &dir.join("sib.ignite"),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-sibling-shadow");
+}
+
+/// Adversary, outside the story's claim (it covers records and enums the
+/// program declares or imports; `Generator::unshadowed` leaves
+/// `BUILTIN_ENUMS` out): a type parameter named `Option`. The closure's
+/// return type is `Option<i64>`, which rustc reads as the parameter
+/// (E0109). The LLVM target builds and passes the same program.
+#[test]
+#[ignore = "a type parameter named like the builtin enum Option, outside story:rustgen-type-parameter-shadowing"]
+fn type_parameter_named_like_a_builtin_enum() {
+    let source = "package examples.builtinenum\n\
+\n\
+fn opt<Option>(item: Option) -> Int {\n\
+  let parse = |s: Text| Int.parse(s)\n\
+  match parse(\"3\") {\n\
+    Some(n) => n\n\
+    None => 0\n\
+  }\n\
+}\n\
+\n\
+fn total() -> Int = opt(1)\n";
+    let dir = adversary_sources("adv-builtin-enum-src", &[("builtinenum.ignite", source)]);
+    let (program, std) = common::lower_typed(
+        &dir.join("builtinenum.ignite"),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-builtin-enum");
+}
+
+/// Adversary, outside the story's claim (a builtin type, not a record or
+/// enum): inside `fn keep<Text>` the parameter's annotations are spelled
+/// by `rust_type`, which maps the name `Text` to `String` before looking
+/// at the fn's type parameters, so `keep(5)` passes an `i64` where the
+/// Rust fn takes `&String` (E0308). The LLVM target builds and passes the
+/// same program.
+#[test]
+#[ignore = "a type parameter named like the builtin type Text, outside story:rustgen-type-parameter-shadowing"]
+fn type_parameter_named_like_a_builtin_type() {
+    let source = "package examples.builtintype\n\
+\n\
+fn keep<Text>(value: Text) -> Text = value\n\
+\n\
+fn total() -> Int = keep(5)\n";
+    let dir = adversary_sources("adv-builtin-type-src", &[("builtintype.ignite", source)]);
+    let (program, std) = common::lower_typed(
+        &dir.join("builtintype.ignite"),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-builtin-type");
+}
+
+/// Adversary, outside the story's claim (a protocol, not a record or
+/// enum): inside `fn call<P>` the role call `P.serve(end, 3)` is the
+/// protocol `P`'s, and the Rust `P::serve::<..>(..)` names the type
+/// parameter (E0599). The LLVM target builds and passes the same program.
+#[test]
+#[ignore = "a type parameter named like a protocol, outside story:rustgen-type-parameter-shadowing"]
+fn type_parameter_named_like_a_protocol() {
+    let source = "package examples.protoshadow\n\
+\n\
+import std.net.{ByteStream, PipeStream}\n\
+import std.io.IoError\n\
+\n\
+type IoResult<T> = Result<T, IoError>\n\
+\n\
+protocol P {\n\
+  fn serve<S: ByteStream>(stream: S, application: Int) -> IoResult<Int> requires [stream.write] {\n\
+    stream.write_all(\"x\".to_bytes())?\n\
+    Ok(application)\n\
+  }\n\
+}\n\
+\n\
+fn call<P>(item: P, end: PipeStream) -> IoResult<Int> requires [end.write] = P.serve(end, 3)\n";
+    let dir = adversary_sources("adv-protocol-shadow-src", &[("protoshadow.ignite", source)]);
+    let (program, std) = common::lower_typed(
+        &dir.join("protoshadow.ignite"),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-protocol-shadow");
+}
