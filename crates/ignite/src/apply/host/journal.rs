@@ -366,9 +366,10 @@ impl Host {
     }
 
     /// Take the fields of a journaled snapshot; the inverse of `snapshot`.
-    /// A recovery reason that only reported a startup recovery without
-    /// blocking (`reducer_revision_changed`) is not taken: the next start
-    /// recomputes it.
+    /// A recovery reason that only reported a startup recovery
+    /// (`reducer_revision_changed`, with or without a block kept beside it)
+    /// is not taken: the next start recomputes it, or keeps it from the
+    /// block's `recovery` ([`Host::recover`]).
     pub(super) fn restore(&mut self, previous: &Json) -> Result<(), Failure> {
         if required(previous, "formatVersion")? != FORMAT
             || required(previous, "stateIdentity")? != self.identity
@@ -387,15 +388,10 @@ impl Host {
             .get("activeOperation")
             .and_then(Json::as_str)
             .map(str::to_string);
-        let reported = previous
-            .get("recovery")
-            .filter(|recovery| recovery.get("blocking").and_then(Json::as_bool) == Some(false))
-            .and_then(|recovery| recovery.get("reason"))
-            .and_then(Json::as_str);
         self.recovery_reason = previous
             .get("recoveryReason")
             .and_then(Json::as_str)
-            .filter(|reason| Some(*reason) != reported)
+            .filter(|reason| *reason != super::recovery::REDUCER_CHANGED)
             .map(str::to_string);
         self.recovery = previous
             .get("recovery")
