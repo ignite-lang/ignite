@@ -1,0 +1,6 @@
+rfc7110 Line Echo, protocol Echo, parties Server, sections all
+R2_1  2  MUST      satisfied    echo, Echo.serve; test "a line is echoed" passed, test "an empty line is echoed" passed  pass
+R2_2  2  MUST NOT  satisfied    echo; test "a line is echoed" passed                                                     pass
+R2_3  2  MUST      limit        EchoLimits.line_bytes = 64, minimum 64                                                   pass
+R3_1  3  SHOULD    unsupported  "no answer is timed"                                                                     deviation
+claim conformance of Echo to rfc7110: yes (0 gaps, 0 failures, 0 inconclusive)

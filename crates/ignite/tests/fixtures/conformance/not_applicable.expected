@@ -1,0 +1,3 @@
+rfc7106 Line Echo, protocol Echo, parties all, sections all
+R2_1  2  REQUIRED  not_applicable  "the server never greets"  n/a
+claim conformance of Echo to rfc7106: yes (0 gaps, 0 failures, 0 inconclusive)

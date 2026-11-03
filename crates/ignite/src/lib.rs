@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub mod apply;
+pub mod conformance;
 mod llvm_build;
 pub mod rfc;
 pub mod run;

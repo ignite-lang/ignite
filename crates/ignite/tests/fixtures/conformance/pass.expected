@@ -1,0 +1,3 @@
+rfc7101 Line Echo, protocol Echo, parties all, sections all
+R2_1  2  MUST  satisfied  echo; test "a line is echoed" passed  pass
+claim conformance of Echo to rfc7101: yes (0 gaps, 0 failures, 0 inconclusive)
