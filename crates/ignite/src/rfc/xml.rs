@@ -298,7 +298,12 @@ fn is_space(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\n' | '\r')
 }
 
+/// The longest reference name the reader quotes in a message; a longer run after `&` is
+/// no reference, so a message never quotes more than this or across a line.
+const REFERENCE_NAME: usize = 32;
+
 /// The text of `text[start..end]` with its entity and character references decoded.
+/// A character reference is `&#` decimal digits `;` or `&#x` hexadecimal digits `;`.
 fn decode(text: &str, start: usize, end: usize) -> Result<String, Error> {
     let raw = &text[start..end];
     let mut out = String::with_capacity(raw.len());
@@ -307,9 +312,16 @@ fn decode(text: &str, start: usize, end: usize) -> Result<String, Error> {
         out.push_str(&rest[..amp]);
         let offset = end - rest.len() + amp;
         let after = &rest[amp + 1..];
-        let Some(semi) = after.find(';') else {
-            return error(offset, "an entity reference without `;`");
-        };
+        let len = after
+            .find(|c: char| is_space(c) || matches!(c, '<' | '&' | ';'))
+            .unwrap_or(after.len());
+        if len == 0 || len > REFERENCE_NAME || !after[len..].starts_with(';') {
+            return error(
+                offset,
+                "`&` starts no entity or character reference; write `&amp;` for a literal `&`",
+            );
+        }
+        let semi = len;
         let name = &after[..semi];
         let decoded = match name {
             "amp" => Some('&'),
@@ -320,8 +332,18 @@ fn decode(text: &str, start: usize, end: usize) -> Result<String, Error> {
             _ => match name.strip_prefix('#') {
                 Some(number) => {
                     let code = match number.strip_prefix('x') {
-                        Some(hex) => u32::from_str_radix(hex, 16).ok(),
-                        None => number.parse::<u32>().ok(),
+                        Some(hex)
+                            if !hex.is_empty() && hex.bytes().all(|b| b.is_ascii_hexdigit()) =>
+                        {
+                            u32::from_str_radix(hex, 16).ok()
+                        }
+                        Some(_) => None,
+                        None if !number.is_empty()
+                            && number.bytes().all(|b| b.is_ascii_digit()) =>
+                        {
+                            number.parse::<u32>().ok()
+                        }
+                        None => None,
                     };
                     match code.and_then(char::from_u32) {
                         Some(c) => Some(c),

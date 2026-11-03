@@ -426,7 +426,6 @@ fn adversary_reader_decodes_entities_once_and_skips_markup() {
 /// other entity ... is an error", exit 2, one line. XML's CharRef is `&#` digits `;` or
 /// `&#x` hex digits `;`: a sign is no part of it.
 #[test]
-#[ignore = "adversary: `&#+66;` and `&#x+42;` are decoded as `B` instead of exit 2 (u32 parsing accepts a leading +)"]
 fn adversary_signed_character_reference_is_malformed() {
     let dir = scratch("adversary-signed");
     for (name, source) in [
@@ -449,7 +448,6 @@ fn adversary_signed_character_reference_is_malformed() {
 /// "one line `<file>:<line>:<col>: <message>`". An unescaped `&` in prose whose next `;` is
 /// on a later line must still give one line.
 #[test]
-#[ignore = "adversary: the unknown-entity message quotes the text up to the next `;`, line breaks included, so stderr has two lines"]
 fn adversary_entity_error_is_one_line() {
     let dir = scratch("adversary-entity-line");
     let source = "<rfc number=\"1\">Tom & Jerry\nsay; hi</rfc>\n";
@@ -466,7 +464,6 @@ fn adversary_entity_error_is_one_line() {
 /// become one space". Whitespace at the edge of an element's content is still whitespace of
 /// the block, so words on either side stay apart.
 #[test]
-#[ignore = "adversary: xref/eref content is trimmed on its own, so `read<xref> Section 3 </xref>and` renders `readSection 3and`"]
 fn adversary_inline_element_content_keeps_its_spaces() {
     let dir = scratch("adversary-inline-space");
     let source = "<rfc number=\"7006\">\n  <link rel=\"alternate\" href=\"u\"/>\n  <middle>\n    <section pn=\"section-1\">\n      <t pn=\"section-1-1\">A server <bcp14>MUST</bcp14> read<xref target=\"s\"> Section 3 </xref>and<eref target=\"u\"> the notes </eref>now.</t>\n    </section>\n  </middle>\n</rfc>\n";
@@ -809,7 +806,6 @@ fn adversary_size_limit_is_sixteen_mib() {
 /// package name writes a module whose first declaration does not parse; it should be a
 /// usage error instead. Outside the letter of 19.8, which does not list `--package` values.
 #[test]
-#[ignore = "adversary: `--package 'not a package'` exits 0 and writes `package not a package`, which does not parse"]
 fn adversary_invalid_package_is_a_usage_error() {
     let output = ignite(
         &repository(),
@@ -824,7 +820,6 @@ fn adversary_invalid_package_is_a_usage_error() {
 /// sentences without one imports in well under 20 s. Extraction matches every mark of a
 /// block against every sentence, which is quadratic in the block.
 #[test]
-#[ignore = "adversary: extraction scans every mark of a block per sentence, quadratic; a 2.4 MB block takes far over 20 s"]
 fn adversary_import_time_is_linear_in_the_block() {
     let dir = scratch("adversary-quadratic");
     let mut source = String::from(

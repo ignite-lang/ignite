@@ -140,6 +140,13 @@ pub fn import(file: &Path, options: &ImportOptions) -> Result<String, Error> {
         }
         None => None,
     };
+    if let Some(package) = &options.package
+        && !is_module_path(package)
+    {
+        return Err(Error::Usage(format!(
+            "--package `{package}` is no module path (dotted identifiers, `std.rfc.rfc9112`)"
+        )));
+    }
     let bytes = read(file)?;
     let at = |offset: usize, message: String| {
         let text = String::from_utf8_lossy(&bytes[..offset.min(bytes.len())]);
@@ -209,6 +216,18 @@ pub fn import(file: &Path, options: &ImportOptions) -> Result<String, Error> {
         digest: &digest(&bytes),
         requirements: &requirements,
     }))
+}
+
+/// Whether `path` is a dotted module path: identifiers (an ASCII letter or `_`, then ASCII
+/// letters, digits or `_`) joined by `.`.
+fn is_module_path(path: &str) -> bool {
+    path.split('.').all(|segment| {
+        let mut chars = segment.chars();
+        chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    })
 }
 
 /// Compares the `digest` of `catalogue`'s single `Spec` constant with the digest of

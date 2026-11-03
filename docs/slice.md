@@ -5557,7 +5557,8 @@ There is no validation and no namespace processing. Prefixed names are kept as w
 - `--sections` is a comma-separated list of section numbers. A requirement is kept when its
   section equals one or starts with one followed by `.`. Without the flag, every section is
   kept.
-- `--package` defaults to `std.rfc.rfc<number>`, from the root's `number` attribute.
+- `--package` defaults to `std.rfc.rfc<number>`, from the root's `number` attribute. A given
+  `--package` must be a module path (dotted identifiers); anything else is a usage error.
 - `--url` defaults to the `href` of the root's first `<link rel="alternate">`.
 - Without `--out`, the module goes to stdout.
 

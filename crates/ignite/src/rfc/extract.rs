@@ -107,9 +107,15 @@ impl Walk {
         let mut text = Text::default();
         let mut marks = Vec::new();
         render_children(element, &self.anchors, &mut text, &mut marks)?;
+        marks.sort_by_key(|mark| mark.at);
+        // One pass over the marks: the sentences are in order, so a cursor finds the first
+        // mark of each and skips the rest of its marks.
+        let mut cursor = 0;
         for (start, end) in sentences(&text.text) {
-            let mut inside = marks.iter().filter(|mark| (start..end).contains(&mark.at));
-            let Some(first) = inside.next() else {
+            while cursor < marks.len() && marks[cursor].at < start {
+                cursor += 1;
+            }
+            let Some(first) = marks.get(cursor).filter(|mark| mark.at < end) else {
                 continue;
             };
             let sentence = &text.text[start..end];
@@ -158,11 +164,6 @@ impl Text {
             }
         }
     }
-
-    /// The offset the next non-space character will have.
-    fn next_offset(&self) -> usize {
-        self.text.len() + usize::from(self.space && !self.text.is_empty())
-    }
 }
 
 /// A `<bcp14>` mark: the offset of its keyword in the block's text, and its level.
@@ -192,38 +193,27 @@ fn render(
     out: &mut Text,
     marks: &mut Vec<Mark>,
 ) -> Result<(), UnknownKeyword> {
-    let content = |marks: &mut Vec<Mark>| -> Result<String, UnknownKeyword> {
-        let mut inner = Text::default();
-        render_children(element, anchors, &mut inner, marks)?;
-        Ok(inner.text)
-    };
     match element.name.as_str() {
         "iref" => Ok(()),
         "bcp14" => {
-            let keyword = content(&mut Vec::new())?;
+            // The content goes into the block's text as it is, so whitespace at its edges
+            // stays whitespace of the block; a mark nested in a mark does not count.
+            let before = out.text.len();
+            render_children(element, anchors, out, &mut Vec::new())?;
+            let at = before + usize::from(out.text[before..].starts_with(' '));
+            let keyword = out.text[at..].to_string();
             let Some(level) = level(&keyword) else {
                 return Err(UnknownKeyword {
                     offset: element.offset,
                     keyword,
                 });
             };
-            marks.push(Mark {
-                at: out.next_offset(),
-                level,
-            });
-            out.push(&keyword);
+            marks.push(Mark { at, level });
             Ok(())
         }
         "xref" | "eref" => {
-            let mut inner_marks = Vec::new();
-            let inner = content(&mut inner_marks)?;
-            if !inner.is_empty() {
-                let base = out.next_offset();
-                marks.extend(inner_marks.into_iter().map(|mark| Mark {
-                    at: base + mark.at,
-                    level: mark.level,
-                }));
-                out.push(&inner);
+            if has_content(element) {
+                render_children(element, anchors, out, marks)?;
             } else if element.name == "eref" {
                 out.push(element.attribute("target").unwrap_or(""));
             } else {
@@ -233,6 +223,19 @@ fn render(
         }
         _ => render_children(element, anchors, out, marks),
     }
+}
+
+/// Whether an `<xref>` or `<eref>` has content: character data other than whitespace, or
+/// an element that renders text. An `<iref>` renders nothing.
+fn has_content(element: &Element) -> bool {
+    element.children.iter().any(|node| match node {
+        Node::Text(data) => !data.chars().all(char::is_whitespace),
+        Node::Element(child) => match child.name.as_str() {
+            "iref" => false,
+            "xref" | "eref" => true,
+            _ => has_content(child),
+        },
+    })
 }
 
 /// The rendering of an empty `<xref>`.
