@@ -1,0 +1,5 @@
+e040_conforms_not_a_spec.ignite:8:31: error[E040]: a `conforms` entry names a `Spec` constant; `LIMIT` is of type `Int`
+e040_conforms_not_a_spec.ignite:8:38: error[E040]: a `conforms` entry names a `Spec` constant; `answer` is no constant
+e040_conforms_not_a_spec.ignite:8:73: error[E040]: `Robot` is no variant of `std.rfc.Party`
+e040_conforms_not_a_spec.ignite:9:122: error[E040]: a requirement reference names a `Spec` constant; `LIMIT` is of type `Int`
+e040_conforms_not_a_spec.ignite:13:20: error[E040]: `RFC1.RFC1` is no `Requirement` constant: its type is `Spec`

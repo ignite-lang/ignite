@@ -57,7 +57,13 @@ fn fixtures_match_expected() {
         .unwrap_or_else(|e| panic!("fixture standard library:\n{e}"));
     assert_eq!(
         std.typed.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["std.net", "std.shapes", "std.shapes.protocol"]
+        [
+            "std.net",
+            "std.rfc",
+            "std.rfc.rfc1",
+            "std.shapes",
+            "std.shapes.protocol"
+        ]
     );
     let paths = fixtures();
     assert!(!paths.is_empty(), "no fixtures found");
@@ -76,6 +82,83 @@ fn fixtures_match_expected() {
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+/// `valid_clauses.ignite` through `clause_constant` (`docs/slice.md` 19.6,
+/// 19.13): every `conforms` entry and every requirement reference resolves
+/// to the constant it names, imported or local.
+#[test]
+fn valid_clauses_record_their_constants() {
+    use ignite_syntax::ast::Decl;
+    use ignite_types::QualName;
+
+    let std = common::load_std(&fixture_dir().join("std"))
+        .unwrap_or_else(|e| panic!("fixture standard library:\n{e}"));
+    let path = fixture_dir().join("valid_clauses.ignite");
+    let source = SourceFile::new(
+        "valid_clauses.ignite",
+        std::fs::read_to_string(&path).unwrap(),
+    );
+    let program = ignite_syntax::parse(&source).unwrap();
+    let symbols = ignite_check::check_module(&program, &std.modules).unwrap();
+    let typed = ignite_types::type_module(&program, &symbols, &std.typed)
+        .unwrap_or_else(|d| panic!("type failed:\n{}", source.render_all(&d)));
+    let resolved = |span| {
+        typed
+            .clause_constant(span)
+            .map(|q: &QualName| format!("{}.{}", q.module, q.name))
+    };
+    let mut names = Vec::new();
+    for decl in &program.decls {
+        match decl {
+            Decl::Protocol(p) => {
+                names.extend(p.conforms.iter().map(|c| resolved(c.span)));
+                names.extend(
+                    p.fns
+                        .iter()
+                        .flat_map(|f| &f.satisfies)
+                        .map(|r| resolved(r.span)),
+                );
+                names.extend(p.statuses.iter().map(|s| resolved(s.requirement.span)));
+                names.extend(
+                    p.statuses
+                        .iter()
+                        .map(|s| resolved(s.requirement.segments[0].span)),
+                );
+            }
+            Decl::Record(r) => {
+                names.extend(r.satisfies.iter().map(|s| resolved(s.span)));
+                names.extend(
+                    r.fields
+                        .iter()
+                        .flat_map(|f| &f.satisfies)
+                        .map(|s| resolved(s.span)),
+                );
+            }
+            Decl::Test(t) => names.extend(t.verifies.iter().map(|v| resolved(v.span))),
+            _ => {}
+        }
+    }
+    let names: Vec<String> = names
+        .into_iter()
+        .map(|n| n.unwrap_or_else(|| "unresolved".to_string()))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "std.rfc.rfc1.RFC1",
+            "fixtures.clauses.RFC7",
+            "std.rfc.rfc1.R2_1",
+            "std.rfc.rfc1.R2_2",
+            "fixtures.clauses.R1_1",
+            "std.rfc.rfc1.RFC1",
+            "fixtures.clauses.RFC7",
+            "fixtures.clauses.R1_2",
+            "std.rfc.rfc1.R2_2",
+            "std.rfc.rfc1.R2_1",
+            "fixtures.clauses.R1_2",
+        ]
+    );
 }
 
 /// `valid_system.ignite` through the slice-11 API (`docs/slice.md` 15.9):

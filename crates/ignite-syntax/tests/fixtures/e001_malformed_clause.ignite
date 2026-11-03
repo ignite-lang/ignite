@@ -1,0 +1,29 @@
+fn answer(x: Int) -> Int satisfies RFC1.R2_1 {
+  return x
+}
+
+protocol Missing conforms [RFC1] {
+  unsupported RFC1.R2_1
+}
+
+protocol Early scope { parties = [Server] } conforms [RFC1] {
+  fn serve(stream: TcpStream) -> Result<Unit, IoError> requires [net] {
+    return Ok(Unit)
+  }
+}
+
+test "late" {
+  assert true
+} verifies [RFC1.R2_1]
+
+test "one segment" verifies [R2_1] {
+  assert true
+}
+
+protocol Qualified conforms [std.RFC1] {
+  fn serve(stream: TcpStream) -> Result<Unit, IoError> requires [net] {
+    return Ok(Unit)
+  }
+}
+
+fn last() -> Int = 1

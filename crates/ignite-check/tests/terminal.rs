@@ -64,6 +64,12 @@ fn standard_library_checks_in_import_order() {
         Some("std.console")
     );
     assert!(!telnet.exports("Console"), "imports are not re-exported");
+
+    let rfc = &modules["std.rfc"];
+    for name in ["Level", "Party", "Source", "Requirement", "Spec"] {
+        assert!(rfc.exports(name), "std.rfc exports {name}");
+    }
+    assert!(rfc.imported.is_empty(), "std.rfc is a leaf");
 }
 
 #[test]

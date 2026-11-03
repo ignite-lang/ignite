@@ -1,0 +1,69 @@
+package fixtures.valid_clauses
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+import std.rfc.rfc9112.{RFC9112}
+
+const RFC1: Spec = Spec {
+  rfc = 1
+  title = "A Sample"
+  url = "https://example.invalid/rfc1"
+  digest = "sha256:" + "00"
+  requirements = [R2_1, R2_2]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 1
+  section = "2"
+  ordinal = 1
+  level = Must
+  party = Server
+  text = "A server MUST answer."
+}
+
+const R2_2: Requirement = Requirement { rfc = 1, section = "2", ordinal = 2, level = Level.May, text = "may" }
+
+protocol Echo conforms [RFC1, RFC9112,] scope { parties = [Server, Any], sections = ["2", "3.1"] } {
+  fn serve(stream: TcpStream, limits: Limits) -> Result<Unit, IoError> requires [net] satisfies [RFC1.R2_1] {
+    return Ok(Unit)
+  }
+
+  unsupported RFC9112.R7_1_2 "only Content-Length framing"
+  not_applicable RFC1.R2_2 "no proxy"
+
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [net] {
+    return Ok(Unit)
+  }
+}
+
+protocol Plain conforms [RFC1] {
+}
+
+protocol Scoped conforms [RFC1] scope {
+  sections = []
+} {
+  fn serve(stream: TcpStream) = Ok(Unit)
+}
+
+type Limits satisfies [RFC1.R2_1, RFC9112.R2_3,] {
+  head: Int = 8 satisfies [RFC1.R2_1]
+  body: Int satisfies [RFC1.R2_2]
+  idle: Duration = 30 seconds satisfies [RFC1.R2_1], depth: Int = 4
+}
+
+fn answer(x: Int) -> Int satisfies [RFC1.R2_1] = x
+
+fn satisfies(x: Int) -> Bool = x > 0
+
+fn conforms() -> Int {
+  let scope = 1
+  let verifies = satisfies(scope)
+  return scope
+}
+
+test "the server answers" verifies [RFC1.R2_1, RFC9112.R7_1_2] {
+  assert answer(1) == 1
+}
+
+test "without verifies" {
+  assert satisfies(1)
+}

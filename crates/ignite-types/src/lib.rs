@@ -1198,6 +1198,9 @@ pub struct TypedProgram {
     bindings: HashMap<Span, Ty>,
     /// Constant patterns, keyed by pattern address.
     pattern_consts: AddressMap<QualName>,
+    /// The constant each `conforms` entry and requirement reference names,
+    /// by the span of the reference (`docs/slice.md` 19.6).
+    clause_consts: HashMap<Span, QualName>,
     /// Resolved type expressions, keyed by `Type` address.
     type_exprs: AddressMap<Ty>,
     exports: ModuleTypes,
@@ -1264,6 +1267,15 @@ impl TypedProgram {
     pub fn pattern_const(&self, pattern: &Pattern) -> Option<&QualName> {
         self.pattern_consts
             .get(&(pattern as *const Pattern as usize))
+    }
+
+    /// The constant a clause name resolves to (`docs/slice.md` 19.6), by
+    /// the span of the reference: a `conforms` entry and the first segment
+    /// of a requirement reference give the `Spec` constant
+    /// (`std.rfc.rfc9112.RFC9112`), the whole reference `Spec.Id` gives the
+    /// `Requirement` constant (`std.rfc.rfc9112.R7_1_2`).
+    pub fn clause_constant(&self, span: Span) -> Option<&QualName> {
+        self.clause_consts.get(&span)
     }
 
     /// The type of a `let`/`var`/`for`/pattern binding, by the span of its name.
@@ -1737,6 +1749,7 @@ pub fn type_module(
         callees: typed.callees,
         bindings: typed.bindings,
         pattern_consts: typed.pattern_consts,
+        clause_consts: typed.clause_consts,
         type_exprs: typed.type_exprs,
         exports: typed.exports,
         modules: all,

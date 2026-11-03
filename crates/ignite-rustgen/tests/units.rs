@@ -216,6 +216,7 @@ fn func(
     stmts: Vec<Stmt>,
 ) -> Decl {
     Decl::Fn(FnDecl {
+        satisfies: Vec::new(),
         test_only: false,
         owner: None,
         name: id(n),
@@ -275,6 +276,7 @@ fn user_decls() -> Vec<Decl> {
             type_params: Vec::new(),
         }),
         Decl::Record(RecordDecl {
+            satisfies: Vec::new(),
             test_only: false,
             name: id("Reply"),
             fields: vec![
@@ -282,12 +284,14 @@ fn user_decls() -> Vec<Decl> {
                     name: id("lines"),
                     ty: ty_of("List", vec![ty("Text")]),
                     default: None,
+                    satisfies: Vec::new(),
                     span: sp(),
                 },
                 Field {
                     name: id("action"),
                     ty: ty("Action"),
                     default: None,
+                    satisfies: Vec::new(),
                     span: sp(),
                 },
             ],
@@ -1146,6 +1150,9 @@ fn role(n: &str, params: &[(&str, Type)], effectful: bool) -> FnDecl {
 /// `protocol <n>` with the named roles, each with the section 4.2 shape.
 fn protocol(n: &str, roles: &[&str]) -> Decl {
     Decl::Protocol(ProtocolDecl {
+        conforms: Vec::new(),
+        scope: None,
+        statuses: Vec::new(),
         name: id(n),
         fns: roles
             .iter()
@@ -1401,12 +1408,14 @@ fn fn_type(params: Vec<Type>, ret: Type) -> Type {
 fn function_types_and_values() {
     let out = lib(vec![
         Decl::Record(RecordDecl {
+            satisfies: Vec::new(),
             test_only: false,
             name: id("Console"),
             fields: vec![Field {
                 name: id("respond"),
                 ty: fn_type(vec![ty("Text")], ty("Reply")),
                 default: None,
+                satisfies: Vec::new(),
                 span: sp(),
             }],
             span: sp(),
@@ -1772,6 +1781,7 @@ fn aliases_and_field_defaults() {
             span: sp(),
         }),
         Decl::Record(RecordDecl {
+            satisfies: Vec::new(),
             test_only: false,
             name: id("Config"),
             fields: vec![
@@ -1779,12 +1789,14 @@ fn aliases_and_field_defaults() {
                     name: id("name"),
                     ty: ty("Text"),
                     default: None,
+                    satisfies: Vec::new(),
                     span: sp(),
                 },
                 Field {
                     name: id("size"),
                     ty: ty("Int"),
                     default: Some(int(80)),
+                    satisfies: Vec::new(),
                     span: sp(),
                 },
             ],

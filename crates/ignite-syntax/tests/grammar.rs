@@ -1722,3 +1722,63 @@ fn contracts_policies_and_assemblies() {
         "(brace (S.c (call f)))"
     );
 }
+
+/// `docs/slice.md` 19.5: every clause lands in the AST field 19.13 names,
+/// and the clause words stay names elsewhere.
+#[test]
+fn clauses_fill_the_ast() {
+    let program = program(
+        "protocol P conforms [A, B] scope { parties = [Server], sections = [\"2\"] } {\n\
+           fn serve(s: TcpStream) -> Int satisfies [A.R1] = 1\n\
+           unsupported B.R2 \"no\"\n\
+           not_applicable A.R3 \"none\"\n\
+         }\n\
+         type L satisfies [A.R4] { head: Int = 8 satisfies [A.R5, B.R6], tail: Int }\n\
+         test \"t\" verifies [A.R7] { assert true }\n\
+         fn scope(satisfies: Int) -> Int = satisfies\n",
+    );
+    let path = |p: &ignite_syntax::ast::Path| p.dotted();
+    let Decl::Protocol(p) = &program.decls[0] else {
+        panic!("protocol")
+    };
+    let names: Vec<&str> = p.conforms.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, ["A", "B"]);
+    let scope = p.scope.as_ref().expect("scope");
+    assert_eq!(scope.parties.as_ref().map(Vec::len), Some(1));
+    assert_eq!(scope.sections.as_ref().map(|s| s[0].0.as_str()), Some("2"));
+    assert_eq!(
+        p.fns[0].satisfies.iter().map(path).collect::<Vec<_>>(),
+        ["A.R1"]
+    );
+    let statuses: Vec<(String, &str)> = p
+        .statuses
+        .iter()
+        .map(|s| (path(&s.requirement), s.kind.word()))
+        .collect();
+    assert_eq!(
+        statuses,
+        [
+            ("B.R2".to_string(), "unsupported"),
+            ("A.R3".to_string(), "not_applicable")
+        ]
+    );
+    assert_eq!(p.statuses[0].reason, "no");
+    let Decl::Record(r) = &program.decls[1] else {
+        panic!("record")
+    };
+    assert_eq!(r.satisfies.iter().map(path).collect::<Vec<_>>(), ["A.R4"]);
+    assert_eq!(
+        r.fields[0].satisfies.iter().map(path).collect::<Vec<_>>(),
+        ["A.R5", "B.R6"]
+    );
+    assert!(r.fields[1].satisfies.is_empty());
+    let Decl::Test(t) = &program.decls[2] else {
+        panic!("test")
+    };
+    assert_eq!(t.verifies.iter().map(path).collect::<Vec<_>>(), ["A.R7"]);
+    let Decl::Fn(f) = &program.decls[3] else {
+        panic!("fn")
+    };
+    assert_eq!(f.name.name, "scope");
+    assert!(f.satisfies.is_empty());
+}

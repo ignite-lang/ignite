@@ -10,6 +10,7 @@ use ignite_syntax::ast::{
 };
 use ignite_syntax::diagnostic::Diagnostic;
 
+mod clauses;
 mod effects;
 mod system;
 
@@ -30,6 +31,7 @@ pub(crate) struct Typed {
     pub callees: AddressMap<Callee>,
     pub bindings: HashMap<Span, Ty>,
     pub pattern_consts: AddressMap<QualName>,
+    pub clause_consts: HashMap<Span, QualName>,
     pub type_exprs: AddressMap<Ty>,
     pub exports: ModuleTypes,
     pub instances: AddressMap<Vec<Ty>>,
@@ -305,6 +307,9 @@ pub(crate) struct Typer<'a> {
     callees: AddressMap<Callee>,
     bindings: HashMap<Span, Ty>,
     pattern_consts: AddressMap<QualName>,
+    /// The constant each clause name resolves to, by the span of the
+    /// reference (`docs/slice.md` 19.6).
+    clause_consts: HashMap<Span, QualName>,
     type_exprs: AddressMap<Ty>,
     diagnostics: Vec<Diagnostic>,
     /// Whether the walk is inside a test body or a test-only declaration,
@@ -405,6 +410,7 @@ impl<'a> Typer<'a> {
             callees: AddressMap::default(),
             bindings: HashMap::new(),
             pattern_consts: AddressMap::default(),
+            clause_consts: HashMap::new(),
             type_exprs: AddressMap::default(),
             diagnostics: Vec::new(),
             in_test: false,
@@ -478,6 +484,7 @@ impl<'a> Typer<'a> {
         self.names(program);
         self.signatures(program);
         self.bodies(program);
+        self.clauses(program);
         if self.diagnostics.is_empty() {
             Ok(Typed {
                 module: self.module,
@@ -485,6 +492,7 @@ impl<'a> Typer<'a> {
                 callees: self.callees,
                 bindings: self.bindings,
                 pattern_consts: self.pattern_consts,
+                clause_consts: self.clause_consts,
                 type_exprs: self.type_exprs,
                 exports: self.own,
                 instances: self.instances,

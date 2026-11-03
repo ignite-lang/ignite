@@ -44,7 +44,13 @@ fn fixtures_match_expected() {
         .unwrap_or_else(|e| panic!("fixture standard library:\n{e}"));
     assert_eq!(
         modules.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["std.greeting", "std.protocol.hello", "std.salute"]
+        [
+            "std.greeting",
+            "std.protocol.hello",
+            "std.rfc",
+            "std.rfc.rfc1",
+            "std.salute"
+        ]
     );
     let paths = fixtures();
     assert!(!paths.is_empty(), "no fixtures found");
@@ -73,7 +79,7 @@ fn every_checker_code_has_a_fixture() {
         .collect();
     for code in [
         "e003", "e004", "e006", "e010", "e013", "e015", "e016", "e030", "e031", "e047", "e048",
-        "e049", "e050", "e051", "e055", "e056", "e057", "e099",
+        "e049", "e050", "e051", "e055", "e056", "e057", "e091", "e099",
     ] {
         assert!(
             names.iter().any(|n| n.starts_with(code)),

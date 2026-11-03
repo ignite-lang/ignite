@@ -11,7 +11,7 @@ holds the same table; change both together.
 | layer | modules | may import |
 |---|---|---|
 | base | `std.io`, `std.net` (substrate), `std.option`, `std.result`, `std.text`, `std.json` | base |
-| leaf | `std.sli`, `std.time`, `std.policy` (O45) | base, leaf |
+| leaf | `std.sli`, `std.time`, `std.policy` (O45), `std.rfc` and every `std.rfc.*` | base, leaf |
 | general | `std.control`, `std.contract`, `std.deploy`, `std.console`, `std.cli` | base, leaf, general |
 | protocol | every `std.protocol.*` | every layer |
 
@@ -22,7 +22,8 @@ Rules, each a failure of the test that names the file, line and identifier or im
 3. No module outside `std.protocol.*` declares an item, owner, field, variant or role whose
    name contains a protocol name. Protocol names are read from std: each `protocol`
    declaration and each file name under `std/protocol/` (today `telnet`, `http`).
-4. Every std module outside `std.protocol.*` has a row in the table above.
+4. Every std module outside the prefixes `std.protocol.` and `std.rfc` (`std.rfc` itself and
+   every `std.rfc.*`) has a row in the table above.
 5. No file under `crates/*/src` contains a protocol name, in code or in comments, except
    `crates/ignite-load` (below).
 
@@ -65,7 +66,8 @@ Still open, with the proposed fix:
 | `crates/ignite-eval/src/validate.rs:350` | domain noun in the evaluator | E123 recognises `std.sli.Window.Rolling` by name to compare a window with a probe interval | acceptable: `std.sli` is a leaf the compiler already reads; revisit if the window moves |
 | `crates/ignite-load/src/main.rs` | protocol client under `crates/` | 21 Telnet mentions, a Telnet filter of its own | exempt (above); move to `tools/ignite-load/` if the layout rule should hold by its letter |
 
-No leaf imports a non-leaf: `std.sli`, `std.time` and `std.policy` import nothing.
+No leaf imports a non-leaf: `std.sli`, `std.time`, `std.policy` and `std.rfc` import nothing,
+and a catalogue `std.rfc.*` imports only `std.rfc`.
 
 ## Later milestone, not built
 

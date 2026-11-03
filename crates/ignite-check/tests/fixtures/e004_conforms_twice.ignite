@@ -1,0 +1,7 @@
+import std.rfc.rfc1.{RFC1}
+
+protocol Echo conforms [RFC1, RFC1] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] satisfies [RFC1.R2_1] {
+    return stream.write_all(b"ok")
+  }
+}

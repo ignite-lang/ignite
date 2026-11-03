@@ -1,0 +1,14 @@
+import std.rfc.{Party, Requirement, Spec}
+import std.rfc.rfc1.{RFC1}
+
+const LIMIT: Int = 8000
+
+fn answer(x: Int) -> Int = x
+
+protocol Echo conforms [RFC1, LIMIT, answer] scope { parties = [Server, Robot, Any] } {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] satisfies [LIMIT.LIMIT] {
+    return stream.write_all(b"ok")
+  }
+
+  unsupported RFC1.RFC1 "a spec is no requirement"
+}
