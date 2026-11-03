@@ -1,0 +1,20 @@
+== cold.log, after tree (lines up to '=== before gate-cold-fmt')
+E2E test result: ok. 197 passed; 0 failed; 4 ignored; 0 measured; 46 filtered out; finished in 45.09s
+INLINE target 1 (rust, then llvm per run): test result: ok. 191 passed; 0 failed; 0 filtered out; finished in 0.34s
+INLINE target 2 (rust, then llvm per run): test result: ok. 191 passed; 0 failed; 0 filtered out; finished in 0.34s
+CARGO passed=737 failed=0 ignored=6 filtered_out=82
+== cold.log, before tree (from '=== before gate-cold-fmt')
+E2E test result: ok. 197 passed; 0 failed; 4 ignored; 0 measured; 46 filtered out; finished in 42.49s
+INLINE target 1 (rust, then llvm per run): test result: ok. 160 passed; 0 failed; 0 filtered out; finished in 0.13s
+INLINE target 2 (rust, then llvm per run): test result: ok. 160 passed; 0 failed; 0 filtered out; finished in 0.13s
+CARGO passed=695 failed=0 ignored=5 filtered_out=82
+== fullgate-before.log
+E2E test result: ok. 243 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 360.32s
+INLINE target 1 (rust, then llvm per run): test result: ok. 160 passed; 0 failed; 0 filtered out; finished in 0.15s
+INLINE target 2 (rust, then llvm per run): test result: ok. 160 passed; 0 failed; 0 filtered out; finished in 0.13s
+CARGO passed=777 failed=0 ignored=5 filtered_out=0
+== merge-gate-after.log
+E2E test result: ok. 243 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 359.82s
+INLINE target 1 (rust, then llvm per run): test result: ok. 191 passed; 0 failed; 0 filtered out; finished in 0.36s
+INLINE target 2 (rust, then llvm per run): test result: ok. 191 passed; 0 failed; 0 filtered out; finished in 0.33s
+CARGO passed=819 failed=0 ignored=6 filtered_out=0

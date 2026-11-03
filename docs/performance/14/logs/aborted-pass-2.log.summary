@@ -1,0 +1,8 @@
+START 2026-11-03T08:39:37+01:00 pair=2 load=4.65 5.37 5.21 3/2399 3960171 free=134G
+STEP tree=before label=gate-warm-fmt pair=2 secs=0.698 load_before=4.65 load_after=4.65 exit=0
+STEP tree=before label=gate-warm-clippy pair=2 secs=3.838 load_before=4.65 load_after=4.43 exit=0
+STEP tree=before label=gate-warm-test pair=2 secs=17.115 load_before=4.43 load_after=4.90 exit=0
+STEP tree=before label=gate-warm-test-ignite pair=2 secs=0.793 load_before=4.90 load_after=4.90 exit=0
+STEP tree=before label=gate-warm pair=2 secs=22.459 load_before=4.65 load_after=4.90 exit=0
+STEP tree=after label=gate-warm-fmt pair=2 secs=0.712 load_before=4.90 load_after=4.90 exit=0
+STEP tree=after label=gate-warm-clippy pair=2 secs=3.379 load_before=4.90 load_after=4.91 exit=0

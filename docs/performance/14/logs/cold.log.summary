@@ -1,0 +1,15 @@
+START 2026-11-03T08:29:12+01:00 load=4.49 4.94 4.97 8/2383 3657873 free=140G
+STEP tree=after label=gate-cold-fmt pair=0 secs=0.791 load_before=4.49 load_after=4.49 exit=0
+STEP tree=after label=gate-cold-clippy pair=0 secs=6.111 load_before=4.49 load_after=4.53 exit=0
+STEP tree=after label=gate-cold-test pair=0 secs=70.424 load_before=4.53 load_after=6.44 exit=0
+STEP tree=after label=gate-cold-test-ignite pair=0 secs=9.498 load_before=6.44 load_after=6.07 exit=0
+STEP tree=after label=gate-cold pair=0 secs=86.838 load_before=4.49 load_after=6.07 exit=0
+SIZE target-after 2.7G
+STEP tree=before label=gate-cold-fmt pair=0 secs=0.723 load_before=6.07 load_after=6.07 exit=0
+STEP tree=before label=gate-cold-clippy pair=0 secs=4.942 load_before=6.07 load_after=5.75 exit=0
+STEP tree=before label=gate-cold-test pair=0 secs=63.557 load_before=5.75 load_after=3.36 exit=0
+STEP tree=before label=gate-cold-test-ignite pair=0 secs=8.550 load_before=3.36 load_after=3.17 exit=0
+STEP tree=before label=gate-cold pair=0 secs=77.787 load_before=6.07 load_after=3.17 exit=0
+STEP tree=before label=prep-rt-release pair=0 secs=4.611 load_before=3.17 load_after=3.31 exit=0
+STEP tree=after label=prep-rt-release pair=0 secs=4.719 load_before=3.31 load_after=3.29 exit=0
+EXIT=0 failed_steps=[] free=137G
