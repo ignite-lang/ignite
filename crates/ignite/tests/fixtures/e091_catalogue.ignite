@@ -1,0 +1,75 @@
+package tests.e091
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7003: Spec = Spec {
+  rfc = 7003
+  title = "An inconsistent catalogue"
+  url = "https://example.invalid/rfc7003"
+  digest = "sha256:7003"
+  requirements = [R2_1, R2_9, R3_2, R3_2, R3_3, R4_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7003
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "Consistent: listed once, named by its id, of the spec's rfc."
+}
+
+const R2_0: Requirement = Requirement {
+  rfc = 9
+  section = "2"
+  ordinal = 0
+  level = Must
+  text = "Ordinal 0; also unlisted and of another rfc, which the ordinal rule precedes."
+}
+
+const R2_9: Requirement = Requirement {
+  rfc = 9
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "Section 2, ordinal 1 again: its name is not its id; also of another rfc."
+}
+
+const R3_1: Requirement = Requirement {
+  rfc = 9
+  section = "3"
+  ordinal = 1
+  level = Must
+  text = "Not listed in the spec; also of another rfc."
+}
+
+const R3_2: Requirement = Requirement {
+  rfc = 7003
+  section = "3"
+  ordinal = 2
+  level = Must
+  text = "Listed twice."
+}
+
+const R3_3: Requirement = Requirement {
+  rfc = 9
+  section = "3"
+  ordinal = 3
+  level = Must
+  text = "Of another rfc."
+}
+
+const R4_1: Requirement = Requirement {
+  rfc = 7003
+  section = "4"
+  ordinal = 1
+  level = Must
+  text = "Consistent."
+}
+
+const RFC7004: Spec = Spec {
+  rfc = 7004
+  title = "A second spec in one module"
+  url = "https://example.invalid/rfc7004"
+  digest = "sha256:7004"
+  requirements = [R4_1]
+}

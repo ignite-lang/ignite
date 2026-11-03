@@ -1,0 +1,5 @@
+e090_missing_status.ignite:69:25: error[E090]: requirement `RFC7001.R2_1` (MUST, section 2) is in scope of `Echo` and has no status; add `satisfies`, `unsupported` or `not_applicable`
+e090_missing_status.ignite:69:25: error[E090]: requirement `RFC7001.R2_2` (MUST NOT, section 2) is in scope of `Echo` and has no status; add `satisfies`, `unsupported` or `not_applicable`
+e090_missing_status.ignite:69:25: error[E090]: requirement `RFC7001.R2_3` (REQUIRED, section 2) is in scope of `Echo` and has no status; add `satisfies`, `unsupported` or `not_applicable`
+e090_missing_status.ignite:69:25: error[E090]: requirement `RFC7001.R2_4` (SHALL, section 2) is in scope of `Echo` and has no status; add `satisfies`, `unsupported` or `not_applicable`
+e090_missing_status.ignite:69:25: error[E090]: requirement `RFC7001.R2_5` (SHALL NOT, section 2) is in scope of `Echo` and has no status; add `satisfies`, `unsupported` or `not_applicable`

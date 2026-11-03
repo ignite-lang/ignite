@@ -1,0 +1,19 @@
+package std.rfc.rfc2
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC2: Spec = Spec {
+  rfc = 2
+  title = "The fixture specification nothing conforms to"
+  url = "https://example.invalid/rfc2"
+  digest = "sha256:0002"
+  requirements = [R1_1]
+}
+
+const R1_1: Requirement = Requirement {
+  rfc = 2
+  section = "1"
+  ordinal = 1
+  level = Must
+  text = "A client MUST ask."
+}

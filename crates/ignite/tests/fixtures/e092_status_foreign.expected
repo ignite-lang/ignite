@@ -1,0 +1,1 @@
+e092_status_foreign.ignite:14:15: error[E092]: `RFC2.R1_1` belongs to RFC 2, which `Echo` does not conform to

@@ -329,7 +329,8 @@ fn explain_unknown_path_is_e119() {
     }
 }
 
-/// Every `tests/fixtures/e11*.ignite` run through `ignite check` (or the
+/// Every `tests/fixtures/e11*.ignite`, `e12*` and `e090` to `e092` (the
+/// claim model, `docs/slice.md` 19.12) run through `ignite check` (or the
 /// subcommand its first line names, `// ignite plan` or `// ignite explain
 /// <path>`, the file name inserted after the subcommand) from the fixtures
 /// directory; stderr must equal the `.expected` file beside it.
@@ -340,7 +341,9 @@ fn fixtures_match_expected() {
         .map(|entry| entry.unwrap().path())
         .filter(|path| {
             let name = path.file_name().unwrap().to_string_lossy();
-            (name.starts_with("e11") || name.starts_with("e12"))
+            (name.starts_with("e11")
+                || name.starts_with("e12")
+                || ["e090", "e091", "e092"].contains(&name.get(..4).unwrap_or("")))
                 && name.ends_with(".ignite")
                 && !["e125", "e126", "e127", "e128"].contains(&&name[..4])
         })
@@ -375,6 +378,28 @@ fn fixtures_match_expected() {
         );
         compare(&fixture.with_extension("expected"), &stderr);
     }
+}
+
+/// The E092 fixtures run against `fixtures/claims_std/`, whose vocabulary
+/// must stay the real one (`docs/slice.md` 19.12, row 40 of 19.0).
+#[test]
+fn claims_std_vocabulary_is_std_rfc() {
+    let copy = std::fs::read(fixtures_dir().join("claims_std/rfc.ignite")).unwrap();
+    let real = std::fs::read(workspace().join("std/rfc.ignite")).unwrap();
+    assert!(
+        copy == real,
+        "crates/ignite/tests/fixtures/claims_std/rfc.ignite differs from std/rfc.ignite"
+    );
+}
+
+/// The protocol of `e090_missing_status` with a status on every
+/// requirement checks silently (row 41 of 19.0).
+#[test]
+fn complete_claim_fixture_is_silent() {
+    let output = ignite_in(&fixtures_dir(), &["check", "claim_ok_complete.ignite"]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert!(output.stdout.is_empty(), "{}", text(&output.stdout));
+    assert!(output.stderr.is_empty(), "{}", text(&output.stderr));
 }
 
 #[test]

@@ -1,0 +1,47 @@
+package tests.e090
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7002: Spec = Spec {
+  rfc = 7002
+  title = "A line echo whose rules get two statuses"
+  url = "https://example.invalid/rfc7002"
+  digest = "sha256:7002"
+  requirements = [R2_1, R2_2, R2_3]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7002
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+const R2_2: Requirement = Requirement {
+  rfc = 7002
+  section = "2"
+  ordinal = 2
+  level = Should
+  text = "A server SHOULD answer within a second."
+}
+
+const R2_3: Requirement = Requirement {
+  rfc = 7002
+  section = "2"
+  ordinal = 3
+  level = Must
+  text = "A server MUST close on QUIT."
+}
+
+fn echo(line: Text) -> Text satisfies [RFC7002.R2_1] = line
+
+protocol Echo conforms [RFC7002] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] satisfies [RFC7002.R2_1, RFC7002.R2_3] {
+    return stream.write_all(b"ok")
+  }
+
+  unsupported RFC7002.R2_1 "lines are echoed only in tests"
+  unsupported RFC7002.R2_2 "no answer is timed"
+  not_applicable RFC7002.R2_2 "the fixture has no clock"
+}

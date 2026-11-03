@@ -197,6 +197,7 @@ dependencies = [
 name = "ignite-eval"
 version = "0.3.0"
 dependencies = [
+ "ignite-check",
  "ignite-syntax",
  "ignite-types",
 ]

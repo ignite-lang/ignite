@@ -36,6 +36,11 @@ server, linked into neither the compiler nor a compiled program, and it has to s
 to measure the server. The layout rule names `crates/` in its wording; its purpose is that the
 compiler and the substrate know no protocol, which `ignite-load` does not touch.
 
+`crates/ignite-eval/src` mirrors the std vocabulary `std.rfc` (`Level`, `Party`, `Source`,
+and the fields of `Requirement` and `Spec`) in its claim model (`claims.rs`, `docs/slice.md`
+19.7), as it already names `std.sli.Window.Rolling` (the audit row of
+`crates/ignite-eval/src/validate.rs` below). No protocol name is involved, so rule 5 holds.
+
 ## Audit of 2026-11-02
 
 The defect that started it: `std/probe.ignite` (slice 10, `60aef38`), the general probe
