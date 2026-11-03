@@ -1,4 +1,5 @@
-//! Local apply through the real CLI, host socket, compiler and native program.
+//! Local apply through the real CLI, host socket, compiler and native program
+//! (`docs/slice.md` 17.7 rows 1, 2, 4, 5, 9 and 10), each on both targets.
 
 use std::cell::Cell;
 use std::fs::{self, File};
@@ -6,14 +7,11 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ignite_eval::Json;
 
-const LIVE_TIMEOUT: Duration = Duration::from_secs(15);
-const BUILD_TIMEOUT: Duration = Duration::from_secs(120);
-static APPLY_BUILDS: Mutex<()> = Mutex::new(());
+use crate::common::apply::{BUILD as BUILD_TIMEOUT, LIVE as LIVE_TIMEOUT};
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -85,7 +83,7 @@ impl Host {
         let stdin = child.stdin.as_mut().expect("host control stdin");
         writeln!(stdin, "stop").unwrap();
         stdin.flush().unwrap();
-        let status = wait(child, Duration::from_secs(20));
+        let status = wait(child, LIVE_TIMEOUT);
         assert!(
             status.is_some_and(|status| status.success()),
             "host stop failed: {status:?}\n{}",
@@ -104,7 +102,7 @@ impl Drop for Host {
                 let _ = writeln!(stdin, "stop");
                 let _ = stdin.flush();
             }
-            if wait(&mut child, Duration::from_secs(5)).is_none() {
+            if wait(&mut child, Duration::from_secs(10)).is_none() {
                 let _ = child.kill();
                 let _ = child.wait();
             }
@@ -116,22 +114,26 @@ struct Flow {
     root: PathBuf,
     state: PathBuf,
     source: PathBuf,
+    target: &'static str,
     counter: Cell<u64>,
 }
 
 impl Flow {
-    /// A fresh copy of the terminal design on `port` and a fresh state whose
-    /// `build` is one directory shared by every test of this binary (O41), so
-    /// the host's per-target cargo target directory keeps the substrate
-    /// compiled across tests; plans pin artifacts by digest under their own
-    /// `preparations`, never under `build`.
-    fn new(target: &str, port: u16) -> Flow {
+    /// A fresh copy of the terminal design on `port`, built for `target`, and
+    /// a fresh state whose `build` is one directory shared by every apply
+    /// test of this binary (O41), so the host's per-target cargo target
+    /// directory keeps the substrate compiled across tests; plans pin
+    /// artifacts by digest under their own `preparations`, never under
+    /// `build`.
+    fn new(label: &str, target: &'static str, port: u16) -> Flow {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = Path::new(env!("CARGO_TARGET_TMPDIR"))
-            .join(format!("apply-{target}-{}-{stamp}", std::process::id()));
+        let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+            "apply-{label}-{target}-{}-{stamp}",
+            std::process::id()
+        ));
         let fixture = root.join("terminal");
         fs::create_dir_all(&fixture).unwrap();
         for entry in fs::read_dir(repo().join("examples/terminal")).unwrap() {
@@ -156,13 +158,12 @@ impl Flow {
         .unwrap();
         let state = root.join("state");
         fs::create_dir_all(&state).unwrap();
-        let shared = Path::new(env!("CARGO_TARGET_TMPDIR")).join("apply-build");
-        fs::create_dir_all(&shared).unwrap();
-        std::os::unix::fs::symlink(&shared, state.join("build")).unwrap();
+        crate::common::apply::shared_build(&state);
         Flow {
             state,
             root,
             source,
+            target,
             counter: Cell::new(0),
         }
     }
@@ -214,9 +215,9 @@ impl Flow {
         Json::parse(&output).unwrap_or_else(|reason| panic!("{label}: {reason}\n{output}"))
     }
 
-    fn prepare(&self, label: &str, target: &str) -> PathBuf {
+    fn prepare(&self, label: &str) -> PathBuf {
         let output = self.root.join(format!("{label}.json"));
-        let runtime = (target == "llvm").then(crate::common::runtime_archive);
+        let selected = crate::common::apply::target_args(self.target);
         let mut args = vec![
             "plan",
             self.source.to_str().unwrap(),
@@ -227,16 +228,107 @@ impl Flow {
             self.state.to_str().unwrap(),
             "--out",
             output.to_str().unwrap(),
-            "--target",
-            target,
         ];
-        if let Some(runtime) = &runtime {
-            args.extend(["--runtime", runtime.to_str().unwrap()]);
+        args.extend(selected.iter().map(String::as_str));
+        {
+            let _build = crate::common::apply::build_lock(self.target);
+            self.cli(label, &args, 0);
         }
-        self.cli(label, &args, 0);
         ignite::apply::plan::Plan::parse(&Json::parse(&read(&output)).unwrap())
             .expect("saved versioned apply envelope");
         output
+    }
+
+    /// `ignite apply PLAN` started and not awaited.
+    fn spawn_apply(&self, label: &str, plan: &Path) -> Client {
+        let stdout = self.root.join(format!("{label}.stdout"));
+        let stderr = self.root.join(format!("{label}.stderr"));
+        let child = Command::new(env!("CARGO_BIN_EXE_ignite"))
+            .arg("apply")
+            .arg(plan)
+            .arg("--state")
+            .arg(&self.state)
+            .current_dir(repo())
+            .stdin(Stdio::null())
+            .stdout(File::create(&stdout).unwrap())
+            .stderr(File::create(&stderr).unwrap())
+            .spawn()
+            .unwrap();
+        Client {
+            child,
+            stdout,
+            stderr,
+        }
+    }
+
+    /// The run records the host journaled for `operation`, in order.
+    fn revision_records(&self, operation: &str) -> Vec<Json> {
+        read(&self.state.join("host-journal.jsonl"))
+            .lines()
+            .filter_map(|line| Json::parse(line).ok())
+            .filter(|record| record.get("kind").and_then(Json::as_str) == Some("revisionRecord"))
+            .filter_map(|record| record.get("value").cloned())
+            .filter(|value| value.get("operationId").and_then(Json::as_str) == Some(operation))
+            .filter_map(|value| value.get("record").cloned())
+            .collect()
+    }
+
+    /// The effects of `operation`'s transition steps, as `Variant field`.
+    fn transition_effects(&self, operation: &str) -> Vec<String> {
+        read(&self.state.join("host-journal.jsonl"))
+            .lines()
+            .filter_map(|line| Json::parse(line).ok())
+            .filter(|record| record.get("kind").and_then(Json::as_str) == Some("transition"))
+            .filter_map(|record| record.get("value").cloned())
+            .filter(|step| step.get("operationId").and_then(Json::as_str) == Some(operation))
+            .flat_map(|step| {
+                step.get("effects")
+                    .and_then(Json::as_array)
+                    .map(<[Json]>::to_vec)
+                    .unwrap_or_default()
+            })
+            .map(|effect| {
+                let mut text = effect
+                    .get("variant")
+                    .and_then(Json::as_str)
+                    .unwrap_or("?")
+                    .to_string();
+                for field in effect
+                    .get("fields")
+                    .and_then(Json::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    text.push(' ');
+                    text.push_str(field.as_str().unwrap_or(&field.compact()));
+                }
+                text
+            })
+            .collect()
+    }
+
+    /// Every live process whose executable is `name` in this state's
+    /// generations.
+    fn servers(&self, name: &str) -> Vec<i64> {
+        let generations = self.state.join("revisions");
+        let mut found: Vec<i64> = fs::read_dir("/proc")
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                let pid = entry.file_name().to_string_lossy().parse().ok()?;
+                let stat = fs::read_to_string(entry.path().join("stat")).ok()?;
+                let state = stat.rsplit_once(") ")?.1.split_whitespace().next()?;
+                if matches!(state, "Z" | "X") {
+                    return None;
+                }
+                let executable = fs::read_link(entry.path().join("exe")).ok()?;
+                (executable.starts_with(&generations)
+                    && executable.file_name().is_some_and(|file| file == name))
+                .then_some(pid)
+            })
+            .collect();
+        found.sort();
+        found
     }
 
     fn apply(&self, label: &str, plan: &Path) -> Json {
@@ -279,9 +371,7 @@ fn owned_pid(status: &Json) -> i64 {
 fn terminal_prompt(port: u16) {
     let mut stream = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), LIVE_TIMEOUT)
         .expect("connect to applied server");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .unwrap();
+    stream.set_read_timeout(Some(LIVE_TIMEOUT)).unwrap();
     let deadline = Instant::now() + LIVE_TIMEOUT;
     let mut received = Vec::new();
     while !received.ends_with(b"terminal> ") {
@@ -298,15 +388,17 @@ fn terminal_prompt(port: u16) {
     }
 }
 
-fn workflow(target: &str) {
-    let _build_guard = APPLY_BUILDS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+/// Rows 1, 2 (sequential retry), 3 (a comment is a no-op) and 5 (a changed
+/// source is refused) on the terminal design, then a host restart that
+/// resumes the committed revision from its retained inputs.
+fn workflow(target: &'static str) {
     let reserved = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = reserved.local_addr().unwrap().port();
-    let flow = Flow::new(target, port);
+    let flow = Flow::new("workflow", target, port);
     let mut host = Host::start(&flow, "host");
-    let first = flow.prepare("first", target);
+    let first = flow.prepare("first");
+    let first_plan =
+        ignite::apply::plan::Plan::parse(&Json::parse(&read(&first)).unwrap()).unwrap();
     drop(reserved);
     let receipt = flow.apply("first-apply", &first);
     assert_eq!(
@@ -321,13 +413,42 @@ fn workflow(target: &str) {
     );
     let pid = owned_pid(&status);
     terminal_prompt(port);
+    // Row 1: the probe's emission and the contract's standing of revision 1
+    // are journaled, inspect reports the standing, and the console's
+    // `status` command answers.
+    let records = flow.revision_records(&first_plan.id);
+    let journaled = |kind: &str, machine: &str| {
+        records.iter().any(|record| {
+            record.get("kind").and_then(Json::as_str) == Some(kind)
+                && record.get("machine").and_then(Json::as_str) == Some(machine)
+        })
+    };
+    assert!(
+        journaled("signal", "Terminal.promptProbe.scheduler"),
+        "no probe emission of revision 1"
+    );
+    assert!(
+        journaled("standing", "Terminal.reachable.evaluator"),
+        "no standing of revision 1"
+    );
+    assert!(
+        status
+            .get("lastStandings")
+            .and_then(|standings| standings.get("Terminal.reachable.evaluator"))
+            .is_some(),
+        "{}",
+        status.compact()
+    );
+    let mut session = TerminalSession::connect(port);
+    session.status("ready");
+    session.quit();
 
     let retried = flow.apply("retry", &first);
     assert_eq!(retried.get("operationId"), receipt.get("operationId"));
     assert_eq!(retried.get("revision").and_then(Json::as_i64), Some(1));
     assert_eq!(owned_pid(&flow.inspect()), pid);
 
-    let stale = flow.prepare("stale", target);
+    let stale = flow.prepare("stale");
     let original = fs::read_to_string(&flow.source).unwrap();
     fs::write(
         &flow.source,
@@ -347,7 +468,7 @@ fn workflow(target: &str) {
     assert_eq!(owned_pid(&flow.inspect()), pid);
     terminal_prompt(port);
 
-    let noop = flow.prepare("comment-noop", target);
+    let noop = flow.prepare("comment-noop");
     let unchanged = flow.apply("apply-comment-noop", &noop);
     assert_eq!(unchanged.get("noop").and_then(Json::as_bool), Some(true));
     assert_eq!(unchanged.get("revision").and_then(Json::as_i64), Some(1));
@@ -400,64 +521,49 @@ fn llvm_saved_apply_retry_source_admission_and_retained_restart() {
     workflow("llvm");
 }
 
-struct Client(Child);
+/// A CLI client started and not awaited; killed if it still runs when the
+/// test ends.
+struct Client {
+    child: Child,
+    stdout: PathBuf,
+    stderr: PathBuf,
+}
+
+impl Client {
+    fn output(&self) -> String {
+        format!(
+            "stdout: {}\nstderr: {}",
+            read(&self.stdout),
+            read(&self.stderr)
+        )
+    }
+
+    /// The receipt of a client that exits 0.
+    fn receipt(&mut self, label: &str) -> Json {
+        let status = wait(&mut self.child, LIVE_TIMEOUT)
+            .unwrap_or_else(|| panic!("{label} did not end\n{}", self.output()));
+        assert!(status.success(), "{label}: {status:?}\n{}", self.output());
+        Json::parse(&read(&self.stdout))
+            .unwrap_or_else(|reason| panic!("{label}: {reason}\n{}", self.output()))
+    }
+}
 
 impl Drop for Client {
     fn drop(&mut self) {
-        if self.0.try_wait().ok().flatten().is_none() {
-            let _ = self.0.kill();
-            let _ = self.0.wait();
+        if self.child.try_wait().ok().flatten().is_none() {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
         }
     }
 }
 
-#[test]
-fn accepted_apply_recovers_after_host_crash_during_failed_dispatch() {
-    let _build_guard = APPLY_BUILDS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let reserved = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-    let port = reserved.local_addr().unwrap().port();
-    let flow = Flow::new("pending-recovery", port);
-    let mut host = Host::start(&flow, "host");
-    let saved = flow.prepare("pending", "rust");
-    let plan = ignite::apply::plan::Plan::parse(&Json::parse(&read(&saved)).unwrap()).unwrap();
-    let client_stdout = flow.root.join("pending-apply.stdout");
-    let client_stderr = flow.root.join("pending-apply.stderr");
-    let mut client = Client(
-        Command::new(env!("CARGO_BIN_EXE_ignite"))
-            .arg("apply")
-            .arg(&saved)
-            .arg("--state")
-            .arg(&flow.state)
-            .current_dir(repo())
-            .stdin(Stdio::null())
-            .stdout(File::create(&client_stdout).unwrap())
-            .stderr(File::create(&client_stderr).unwrap())
-            .spawn()
-            .unwrap(),
-    );
-    let journal = flow.state.join("host-journal.jsonl");
+/// Wait until the host journaled a failed dispatch of `operation` (its
+/// server started, ended on the held port, and the supervisor scheduled a
+/// restart) while every one of `clients` still waits for the operation.
+fn await_failed_dispatch(flow: &Flow, host: &Host, operation: &str, clients: &mut [&mut Client]) {
     let deadline = Instant::now() + LIVE_TIMEOUT;
     loop {
-        let records: Vec<Json> = read(&journal)
-            .lines()
-            .filter_map(|line| Json::parse(line).ok())
-            .filter(|record| record.get("kind").and_then(Json::as_str) == Some("revisionRecord"))
-            .filter(|record| {
-                record
-                    .get("value")
-                    .and_then(|value| value.get("operationId"))
-                    .and_then(Json::as_str)
-                    == Some(plan.id.as_str())
-            })
-            .filter_map(|record| {
-                record
-                    .get("value")
-                    .and_then(|value| value.get("record"))
-                    .cloned()
-            })
-            .collect();
+        let records = flow.revision_records(operation);
         let saw = |wanted: &str| {
             records.iter().any(|record| {
                 record.get("kind").and_then(Json::as_str) == Some("event")
@@ -471,21 +577,111 @@ fn accepted_apply_recovers_after_host_crash_during_failed_dispatch() {
             })
         };
         if saw("Started") && saw("Exited") && read(&host.stderr).contains("restart attempt") {
-            break;
+            return;
+        }
+        for client in clients.iter_mut() {
+            assert!(
+                client.child.try_wait().unwrap().is_none(),
+                "apply ended before the failed dispatch\n{}",
+                client.output()
+            );
         }
         assert!(
-            client.0.try_wait().unwrap().is_none(),
-            "apply ended before pending crash boundary\n{}\n{}",
-            read(&client_stdout),
-            read(&client_stderr)
-        );
-        assert!(
             Instant::now() < deadline,
-            "no observed failed owned dispatch before deadline\n{}",
+            "no failed owned dispatch before the deadline\n{}",
             read(&host.stderr)
         );
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+
+/// Row 2: two applies of one plan started together while the server's port
+/// is held attach to the one operation the host accepted. Once the port is
+/// free the operation completes and both clients get its receipt; its
+/// transition starts the server once and commits once, and one server
+/// process runs.
+fn concurrent_retry(target: &'static str) {
+    let reserved = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = reserved.local_addr().unwrap().port();
+    let flow = Flow::new("concurrent", target, port);
+    let mut host = Host::start(&flow, "host");
+    let saved = flow.prepare("plan");
+    let plan = ignite::apply::plan::Plan::parse(&Json::parse(&read(&saved)).unwrap()).unwrap();
+    let mut first = flow.spawn_apply("first-apply", &saved);
+    let mut second = flow.spawn_apply("second-apply", &saved);
+    await_failed_dispatch(&flow, &host, &plan.id, &mut [&mut first, &mut second]);
+    let status = flow.inspect();
+    let current = status.get("currentOperation").expect("current operation");
+    assert_eq!(
+        current.get("operationId").and_then(Json::as_str),
+        Some(plan.id.as_str()),
+        "{}",
+        status.compact()
+    );
+    assert!(
+        matches!(
+            current.get("state").and_then(Json::as_str),
+            Some("accepted" | "applying")
+        ),
+        "{}",
+        status.compact()
+    );
+    drop(reserved);
+    let receipts = [first.receipt("first-apply"), second.receipt("second-apply")];
+    for receipt in &receipts {
+        assert_eq!(
+            receipt.get("operationId").and_then(Json::as_str),
+            Some(plan.id.as_str())
+        );
+        assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(1));
+        assert_eq!(
+            receipt.get("state").and_then(Json::as_str),
+            Some("completed")
+        );
+        assert_eq!(receipt.get("noop").and_then(Json::as_bool), Some(false));
+    }
+    let effects = flow.transition_effects(&plan.id);
+    let count = |wanted: &str| effects.iter().filter(|effect| *effect == wanted).count();
+    assert_eq!(count("StartMember Terminal.server"), 1, "{effects:?}");
+    assert_eq!(count("Commit"), 1, "{effects:?}");
+    let status = flow.inspect();
+    assert_eq!(
+        status.get("committedRevision").and_then(Json::as_i64),
+        Some(1)
+    );
+    let pid = owned_pid(&status);
+    assert_eq!(
+        flow.servers(&plan.artifacts["Terminal.server"].name),
+        vec![pid],
+        "one OS server process"
+    );
+    terminal_prompt(port);
+    host.stop();
+}
+
+#[test]
+fn concurrent_retry_attaches_to_one_operation_rust() {
+    concurrent_retry("rust");
+}
+
+#[test]
+fn concurrent_retry_attaches_to_one_operation_llvm() {
+    concurrent_retry("llvm");
+}
+
+/// Rows 10 and 11: the client of an accepted apply disconnects while the
+/// server fails on its held port; the host goes on with the operation, is
+/// killed during that dispatch, and the next host resumes the operation to
+/// one server, whose receipt every retry gets.
+fn accepted_apply_recovers(target: &'static str) {
+    let reserved = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = reserved.local_addr().unwrap().port();
+    let flow = Flow::new("pending-recovery", target, port);
+    let mut host = Host::start(&flow, "host");
+    let saved = flow.prepare("pending");
+    let plan = ignite::apply::plan::Plan::parse(&Json::parse(&read(&saved)).unwrap()).unwrap();
+    let mut client = flow.spawn_apply("pending-apply", &saved);
+    await_failed_dispatch(&flow, &host, &plan.id, &mut [&mut client]);
     assert_eq!(
         flow.inspect()
             .get("committedRevision")
@@ -493,10 +689,10 @@ fn accepted_apply_recovers_after_host_crash_during_failed_dispatch() {
         Some(0)
     );
     client
-        .0
+        .child
         .kill()
         .expect("disconnect the accepted apply client");
-    assert!(!client.0.wait().unwrap().success());
+    assert!(!client.child.wait().unwrap().success());
     let deadline = Instant::now() + LIVE_TIMEOUT;
     let restarts_after_disconnect = read(&host.stderr).matches("restart attempt ").count();
     while read(&host.stderr).matches("restart attempt ").count() <= restarts_after_disconnect {
@@ -515,11 +711,6 @@ fn accepted_apply_recovers_after_host_crash_during_failed_dispatch() {
     let mut killed = host.child.take().unwrap();
     killed.kill().expect("SIGKILL the foreground host");
     assert!(!killed.wait().unwrap().success());
-    let disconnected = wait(&mut client.0, LIVE_TIMEOUT).expect("apply client observes host crash");
-    assert!(
-        !disconnected.success(),
-        "uncommitted apply cannot report completion"
-    );
     drop(reserved);
 
     let mut resumed = Host::start(&flow, "resumed-host");
@@ -539,27 +730,8 @@ fn accepted_apply_recovers_after_host_crash_during_failed_dispatch() {
         Some(1)
     );
     let pid = owned_pid(&status);
-    let server_name = &plan
-        .artifacts
-        .get("Terminal.server")
-        .expect("server artifact")
-        .name;
-    let generation_root = flow.state.join("revisions");
-    let running_servers: Vec<i64> = fs::read_dir("/proc")
-        .unwrap()
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let pid = entry.file_name().to_string_lossy().parse().ok()?;
-            let executable = fs::read_link(entry.path().join("exe")).ok()?;
-            (executable.starts_with(&generation_root)
-                && executable
-                    .file_name()
-                    .is_some_and(|name| name == server_name.as_str()))
-            .then_some(pid)
-        })
-        .collect();
     assert_eq!(
-        running_servers,
+        flow.servers(&plan.artifacts["Terminal.server"].name),
         vec![pid],
         "one OS server process in the retained generations"
     );
@@ -571,8 +743,18 @@ fn accepted_apply_recovers_after_host_crash_during_failed_dispatch() {
 }
 
 #[test]
+fn accepted_apply_recovers_after_host_crash_during_failed_dispatch() {
+    accepted_apply_recovers("rust");
+}
+
+#[test]
+fn accepted_apply_recovers_after_host_crash_during_failed_dispatch_llvm() {
+    accepted_apply_recovers("llvm");
+}
+
+#[test]
 fn tampered_host_history_is_rejected_before_startup() {
-    let flow = Flow::new("tampered-history", 0);
+    let flow = Flow::new("tampered-history", "rust", 0);
     let mut host = Host::start(&flow, "host");
     host.stop();
     let journal = flow.state.join("host-journal.jsonl");
@@ -624,12 +806,8 @@ impl TerminalSession {
     fn connect(port: u16) -> TerminalSession {
         let stream =
             TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), LIVE_TIMEOUT).unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .unwrap();
-        stream
-            .set_write_timeout(Some(Duration::from_secs(5)))
-            .unwrap();
+        stream.set_read_timeout(Some(LIVE_TIMEOUT)).unwrap();
+        stream.set_write_timeout(Some(LIVE_TIMEOUT)).unwrap();
         let mut session = TerminalSession(stream);
         session.prompt();
         session
@@ -670,14 +848,24 @@ impl TerminalSession {
 
 #[test]
 fn changed_command_body_replaces_ready_server_while_old_sessions_drain() {
-    let _build_guard = APPLY_BUILDS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    replacement_drains("rust");
+}
+
+#[test]
+fn changed_command_body_replaces_ready_server_while_old_sessions_drain_llvm() {
+    replacement_drains("llvm");
+}
+
+/// Rows 4 and 9: a changed command body with an unchanged model replaces the
+/// server on its occupied port; the replacement becomes ready and answers
+/// with the new body while the old session is served until it closes, and
+/// the operation completes only then.
+fn replacement_drains(target: &'static str) {
     let reserved = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = reserved.local_addr().unwrap().port();
-    let flow = Flow::new("replacement", port);
+    let flow = Flow::new("replacement", target, port);
     let mut host = Host::start(&flow, "host");
-    let first = flow.prepare("first", "rust");
+    let first = flow.prepare("first");
     let first_plan =
         ignite::apply::plan::Plan::parse(&Json::parse(&read(&first)).unwrap()).unwrap();
     drop(reserved);
@@ -698,7 +886,7 @@ fn changed_command_body_replaces_ready_server_while_old_sessions_drain() {
         ),
     )
     .unwrap();
-    let replacement = flow.prepare("replacement", "rust");
+    let replacement = flow.prepare("replacement");
     let replacement_plan =
         ignite::apply::plan::Plan::parse(&Json::parse(&read(&replacement)).unwrap()).unwrap();
     assert_eq!(
@@ -710,21 +898,7 @@ fn changed_command_body_replaces_ready_server_while_old_sessions_drain() {
         first_plan.operational_identity,
         replacement_plan.operational_identity
     );
-    let stdout = flow.root.join("replacement-apply.stdout");
-    let stderr = flow.root.join("replacement-apply.stderr");
-    let mut client = Client(
-        Command::new(env!("CARGO_BIN_EXE_ignite"))
-            .arg("apply")
-            .arg(&replacement)
-            .arg("--state")
-            .arg(&flow.state)
-            .current_dir(repo())
-            .stdin(Stdio::null())
-            .stdout(File::create(&stdout).unwrap())
-            .stderr(File::create(&stderr).unwrap())
-            .spawn()
-            .unwrap(),
-    );
+    let mut client = flow.spawn_apply("replacement-apply", &replacement);
     let deadline = Instant::now() + LIVE_TIMEOUT;
     let new_pid = loop {
         let status = flow.inspect();
@@ -740,10 +914,9 @@ fn changed_command_body_replaces_ready_server_while_old_sessions_drain() {
             break pid;
         }
         assert!(
-            client.0.try_wait().unwrap().is_none(),
-            "replacement finished before new server readiness\n{}\n{}",
-            read(&stdout),
-            read(&stderr)
+            client.child.try_wait().unwrap().is_none(),
+            "replacement finished before new server readiness\n{}",
+            client.output()
         );
         assert!(
             Instant::now() < deadline,
@@ -756,46 +929,19 @@ fn changed_command_body_replaces_ready_server_while_old_sessions_drain() {
     new_session.status("replacement-ready");
     old_session.status("ready");
     assert!(
-        client.0.try_wait().unwrap().is_none(),
+        client.child.try_wait().unwrap().is_none(),
         "apply must wait for the old session to drain"
     );
     old_session.quit();
-    let result =
-        wait(&mut client.0, LIVE_TIMEOUT).expect("replacement completes after old session closes");
-    assert!(
-        result.success(),
-        "replacement apply: {}\n{}",
-        read(&stdout),
-        read(&stderr)
-    );
-    let completed = Json::parse(&read(&stdout)).unwrap();
+    let completed = client.receipt("replacement-apply");
     assert_eq!(completed.get("revision").and_then(Json::as_i64), Some(2));
     assert_eq!(
         completed.get("state").and_then(Json::as_str),
         Some("completed")
     );
     assert_eq!(owned_pid(&flow.inspect()), new_pid);
-    let generation_root = flow.state.join("revisions");
-    let server_name = &replacement_plan
-        .artifacts
-        .get("Terminal.server")
-        .unwrap()
-        .name;
-    let servers: Vec<i64> = fs::read_dir("/proc")
-        .unwrap()
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let pid = entry.file_name().to_string_lossy().parse().ok()?;
-            let executable = fs::read_link(entry.path().join("exe")).ok()?;
-            (executable.starts_with(&generation_root)
-                && executable
-                    .file_name()
-                    .is_some_and(|name| name == server_name.as_str()))
-            .then_some(pid)
-        })
-        .collect();
     assert_eq!(
-        servers,
+        flow.servers(&replacement_plan.artifacts["Terminal.server"].name),
         vec![new_pid],
         "old OS process retires after draining"
     );

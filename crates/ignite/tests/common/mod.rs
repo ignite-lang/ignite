@@ -1,5 +1,7 @@
 //! Helpers shared by the driver's integration tests.
 
+pub mod apply;
+
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;

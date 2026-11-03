@@ -10,14 +10,11 @@ use std::io::Write;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ignite_eval::Json;
 
-const LIVE_TIMEOUT: Duration = Duration::from_secs(20);
-const BUILD_TIMEOUT: Duration = Duration::from_secs(180);
-static BUILDS: Mutex<()> = Mutex::new(());
+use crate::common::apply::{BUILD as BUILD_TIMEOUT, LIVE as LIVE_TIMEOUT};
 
 const IMPORTS: &str = r#"package examples.terminal
 
@@ -178,19 +175,28 @@ struct Flow {
     root: PathBuf,
     state: PathBuf,
     source: PathBuf,
+    target: &'static str,
     counter: std::cell::Cell<u64>,
 }
 
 impl Flow {
-    /// A fixture directory with the terminal's sibling modules and a state
-    /// whose `build` is shared with every apply test of this binary (O41).
+    /// [`Flow::for_target`] on the Rust target.
     fn new(label: &str) -> Flow {
+        Flow::for_target(label, "rust")
+    }
+
+    /// A fixture directory with the terminal's sibling modules, built for
+    /// `target`, and a state whose `build` is shared with every apply test
+    /// of this binary (O41).
+    fn for_target(label: &str, target: &'static str) -> Flow {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = Path::new(env!("CARGO_TARGET_TMPDIR"))
-            .join(format!("transition-{label}-{}-{stamp}", std::process::id()));
+        let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+            "transition-{label}-{target}-{}-{stamp}",
+            std::process::id()
+        ));
         let fixture = root.join("terminal");
         fs::create_dir_all(&fixture).unwrap();
         for name in ["commands.ignite", "command_schema.ignite"] {
@@ -202,13 +208,12 @@ impl Flow {
         }
         let state = root.join("state");
         fs::create_dir_all(&state).unwrap();
-        let shared = Path::new(env!("CARGO_TARGET_TMPDIR")).join("apply-build");
-        fs::create_dir_all(&shared).unwrap();
-        std::os::unix::fs::symlink(&shared, state.join("build")).unwrap();
+        crate::common::apply::shared_build(&state);
         Flow {
             source: fixture.join("terminal.design.ignite"),
             state,
             root,
+            target,
             counter: std::cell::Cell::new(0),
         }
     }
@@ -258,25 +263,28 @@ impl Flow {
         self.prepare_source(label, revision.source())
     }
 
-    /// Write `source` and prepare it against the host.
+    /// Write `source` and prepare it against the host. The shared build is
+    /// the only thing the tests of this file serialize on.
     fn prepare_source(&self, label: &str, source: String) -> (PathBuf, Json) {
         fs::write(&self.source, source).unwrap();
         let output = self.root.join(format!("{label}.json"));
-        self.cli(
-            label,
-            &[
-                "plan",
-                self.source.to_str().unwrap(),
-                "--assembly",
-                "local",
-                "--for-apply",
-                "--state",
-                self.state.to_str().unwrap(),
-                "--out",
-                output.to_str().unwrap(),
-            ],
-            0,
-        );
+        let selected = crate::common::apply::target_args(self.target);
+        let mut args = vec![
+            "plan",
+            self.source.to_str().unwrap(),
+            "--assembly",
+            "local",
+            "--for-apply",
+            "--state",
+            self.state.to_str().unwrap(),
+            "--out",
+            output.to_str().unwrap(),
+        ];
+        args.extend(selected.iter().map(String::as_str));
+        {
+            let _build = crate::common::apply::build_lock(self.target);
+            self.cli(label, &args, 0);
+        }
         let plan = Json::parse(&read(&output)).unwrap();
         (output, plan)
     }
@@ -470,7 +478,7 @@ impl Host {
         let stdin = child.stdin.as_mut().expect("host control stdin");
         writeln!(stdin, "stop").unwrap();
         stdin.flush().unwrap();
-        let status = wait(&mut child, Duration::from_secs(30));
+        let status = wait(&mut child, LIVE_TIMEOUT);
         assert!(
             status.is_some_and(|status| status.success()),
             "host stop failed: {status:?}\n{}",
@@ -500,10 +508,16 @@ impl Drop for Host {
 /// provider and its dependent together.
 #[test]
 fn add_remove_dependent_orders_provider_first_external_untouched() {
-    let _builds = BUILDS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let flow = Flow::new("dependent");
+    dependent("rust");
+}
+
+#[test]
+fn add_remove_dependent_orders_provider_first_external_untouched_llvm() {
+    dependent("llvm");
+}
+
+fn dependent(target: &'static str) {
+    let flow = Flow::for_target("dependent", target);
     let port = free_port();
     let provider = Revision {
         port,
@@ -710,9 +724,6 @@ fn add_remove_dependent_orders_provider_first_external_untouched() {
 /// it.
 #[test]
 fn a_machine_that_gives_up_fails_the_operation_until_a_corrective_apply() {
-    let _builds = BUILDS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let flow = Flow::new("gave-up");
     let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let broken = Revision {
@@ -803,9 +814,6 @@ fn terminated(record: &Json) -> Option<i64> {
 /// stopped while its server runs on it.
 #[test]
 fn a_port_change_starts_the_replacement_before_the_old_one_drains() {
-    let _builds = BUILDS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let flow = Flow::new("start-first");
     let (old_port, new_port) = {
         let a = TcpListener::bind(("127.0.0.1", 0)).unwrap();
@@ -933,9 +941,6 @@ fn current_operation(status: &Json) -> (Option<String>, Option<String>) {
 /// once.
 #[test]
 fn a_second_corrective_apply_is_refused_while_the_first_is_in_flight() {
-    let _builds = BUILDS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let flow = Flow::new("two-correctives");
     let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let broken = Revision {
@@ -954,16 +959,26 @@ fn a_second_corrective_apply_is_refused_while_the_first_is_in_flight() {
     );
     // The first corrective restarts against the occupied port for tens of
     // seconds; the second would succeed. Both are based on the committed
-    // revision 0; the second is prepared while the first is in flight
-    // (preparation pins the source file's bytes).
-    let (slow, slow_plan) = flow.prepare(
-        "slow-corrective",
+    // revision 0 and prepared before the first is applied, so the second's
+    // preparation (which can wait on the shared build) does not eat into the
+    // first's window. Preparation pins the source file's bytes, so the
+    // first's source is written back before it is applied; the second's
+    // apply is refused as busy before its inputs are checked.
+    let slow_revision = Revision {
+        attempts: 30,
+        ..broken
+    };
+    let (slow, slow_plan) = flow.prepare("slow-corrective", slow_revision);
+    let slow_id = plan_id(&slow_plan);
+    let (fast, fast_plan) = flow.prepare(
+        "fast-corrective",
         Revision {
-            attempts: 30,
+            port: free_port(),
+            attempts: 10,
             ..broken
         },
     );
-    let slow_id = plan_id(&slow_plan);
+    fs::write(&flow.source, slow_revision.source()).unwrap();
     let (mut first, _, _) = spawn_apply(&flow, "apply-slow", &slow);
     let deadline = Instant::now() + LIVE_TIMEOUT;
     loop {
@@ -979,14 +994,6 @@ fn a_second_corrective_apply_is_refused_while_the_first_is_in_flight() {
         );
         std::thread::sleep(Duration::from_millis(20));
     }
-    let (fast, fast_plan) = flow.prepare(
-        "fast-corrective",
-        Revision {
-            port: free_port(),
-            attempts: 10,
-            ..broken
-        },
-    );
     let (code, stdout, stderr) = try_apply(&flow, "apply-fast", &fast, LIVE_TIMEOUT);
     let status = flow.inspect();
     let _ = first.kill();
@@ -1010,9 +1017,6 @@ fn a_second_corrective_apply_is_refused_while_the_first_is_in_flight() {
 /// recovery with the failed operation current.
 #[test]
 fn a_corrective_apply_back_to_the_committed_revision_clears_gave_up() {
-    let _builds = BUILDS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let flow = Flow::new("revert");
     let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let idle = Revision {
@@ -1056,9 +1060,6 @@ fn a_corrective_apply_back_to_the_committed_revision_clears_gave_up() {
 /// as failed instead of waiting forever.
 #[test]
 fn a_replacement_that_never_becomes_ready_keeps_the_old_serving_and_fails() {
-    let _builds = BUILDS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let flow = Flow::new("never-ready");
     let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = free_port();
@@ -1209,9 +1210,6 @@ fn run_journals(flow: &Flow) -> Vec<Vec<Json>> {
 /// its generation, on its port.
 #[test]
 fn a_failed_start_first_replacement_leaves_the_old_instance_supervised() {
-    let _builds = BUILDS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let flow = Flow::new("restored");
     let (old_port, new_port) = {
         let a = TcpListener::bind(("127.0.0.1", 0)).unwrap();
@@ -1341,9 +1339,6 @@ fn a_failed_start_first_replacement_leaves_the_old_instance_supervised() {
 /// the committed revision's instances remain.
 #[test]
 fn a_revert_after_gave_up_stops_what_the_failed_operation_started() {
-    let _builds = BUILDS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let flow = Flow::new("revert-stops");
     let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let idle = Revision {
@@ -1404,6 +1399,105 @@ fn a_revert_after_gave_up_stops_what_the_failed_operation_started() {
         position(&effects, "StopMember Terminal.auxiliary") < position(&effects, "Commit"),
         "{effects:?}"
     );
+    drop(occupied);
+    host.stop();
+}
+
+/// D3 after a committed revision: revision 1 runs, its replacement onto a
+/// held port is refused as `listener_unavailable` before any destructive
+/// step and leaves the old instance serving, and a corrective onto a free
+/// port is admitted, completes as revision 2 and keeps its receipt for a
+/// retry, with no recovery reason left and its own server serving.
+#[test]
+fn a_corrective_after_a_failed_replacement_completes_with_its_receipt() {
+    let flow = Flow::new("corrective-after-commit");
+    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let good = Revision {
+        port: free_port(),
+        server: true,
+        probe: false,
+        escape: "Ctrl+]",
+        attempts: 1,
+    };
+    let mut host = Host::start(&flow, "host");
+    let (first, first_plan) = flow.prepare("good", good);
+    flow.applied("apply-good", &first);
+    let old = owned_pid(&flow.inspect(), "Terminal.server").expect("owned server");
+    let (failing, failing_plan) = flow.prepare(
+        "occupied",
+        Revision {
+            port: occupied.local_addr().unwrap().port(),
+            ..good
+        },
+    );
+    flow.apply("apply-occupied", &failing, 1);
+    let failed = flow.inspect();
+    let (operation, state) = current_operation(&failed);
+    assert_eq!(operation, Some(plan_id(&failing_plan)));
+    assert_eq!(state.as_deref(), Some("recovery_required"));
+    assert_eq!(
+        failed.get("recoveryReason").and_then(Json::as_str),
+        Some("listener_unavailable"),
+        "{}",
+        failed.compact()
+    );
+    assert_eq!(
+        failed.get("committedRevision").and_then(Json::as_i64),
+        Some(1)
+    );
+    assert_eq!(owned_pid(&failed, "Terminal.server"), Some(old));
+    assert!(alive(old));
+    assert_eq!(
+        failed
+            .get("ownership")
+            .and_then(|owned| owned.get("Terminal.server"))
+            .and_then(|owner| owner.get("operationId"))
+            .and_then(Json::as_str),
+        Some(plan_id(&first_plan).as_str()),
+        "the old server stays owned by the committed operation: {}",
+        failed.compact()
+    );
+
+    let corrected_port = free_port();
+    let (corrective, corrective_plan) = flow.prepare(
+        "corrective",
+        Revision {
+            port: corrected_port,
+            attempts: 10,
+            ..good
+        },
+    );
+    let receipt = flow.applied("apply-corrective", &corrective);
+    let id = plan_id(&corrective_plan);
+    assert_eq!(
+        receipt.get("operationId").and_then(Json::as_str),
+        Some(id.as_str()),
+        "{}",
+        receipt.compact()
+    );
+    assert_eq!(
+        receipt.get("state").and_then(Json::as_str),
+        Some("completed")
+    );
+    assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(2));
+    let status = flow.inspect();
+    assert_eq!(
+        status.get("recoveryReason"),
+        Some(&Json::Null),
+        "failed operation {}: {}",
+        plan_id(&failing_plan),
+        status.compact()
+    );
+    assert_eq!(
+        status.get("committedRevision").and_then(Json::as_i64),
+        Some(2)
+    );
+    let server = owned_pid(&status, "Terminal.server").expect("the corrective's server");
+    assert!(alive(server) && !alive(old), "{}", status.compact());
+    assert!(std::net::TcpStream::connect(("127.0.0.1", corrected_port)).is_ok());
+    let retried = flow.applied("retry-corrective", &corrective);
+    assert_eq!(retried.get("operationId"), receipt.get("operationId"));
+    assert_eq!(retried.get("revision").and_then(Json::as_i64), Some(2));
     drop(occupied);
     host.stop();
 }

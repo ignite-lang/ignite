@@ -1,7 +1,8 @@
 //! Saved-plan identity and admission (`docs/slice.md` 17.3 to 17.5, 17.7 rows
 //! 3, 5, 6 and the plan side of 13) through the real CLI and host socket.
 //! Most cases use a system with no executables, so planning builds nothing
-//! and applying starts no workload; row 6 builds the terminal design once.
+//! and applying starts no workload; row 6 builds the terminal design once per
+//! target.
 
 use std::cell::Cell;
 use std::fs::{self, File};
@@ -14,8 +15,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use ignite::apply::plan::{CODEGEN_OVERRIDE, InputKind, Plan};
 use ignite_eval::Json;
 
-const LIVE_TIMEOUT: Duration = Duration::from_secs(15);
-const BUILD_TIMEOUT: Duration = Duration::from_secs(180);
+use crate::common::apply::{BUILD as BUILD_TIMEOUT, LIVE as LIVE_TIMEOUT};
 
 /// Two loopback listeners and a helper function; nothing to build or run.
 const EDGE: &str = "package admission
@@ -132,9 +132,7 @@ impl Case {
     fn state(&self, name: &str) -> PathBuf {
         let state = self.root.join(name);
         fs::create_dir_all(&state).unwrap();
-        let shared = Path::new(env!("CARGO_TARGET_TMPDIR")).join("apply-build");
-        fs::create_dir_all(&shared).unwrap();
-        std::os::unix::fs::symlink(&shared, state.join("build")).unwrap();
+        crate::common::apply::shared_build(&state);
         state
     }
 
@@ -278,7 +276,7 @@ impl Host {
         let stdin = child.stdin.as_mut().expect("host control stdin");
         writeln!(stdin, "stop").unwrap();
         stdin.flush().unwrap();
-        let status = wait(&mut child, Duration::from_secs(20));
+        let status = wait(&mut child, LIVE_TIMEOUT);
         assert!(
             status.is_some_and(|status| status.success()),
             "host stop failed: {status:?}\n{}",
@@ -493,7 +491,45 @@ fn codegen_revision_and_runtime_bytes_are_separate_identity_and_admission_inputs
 
 #[test]
 fn changed_codegen_revision_with_an_unchanged_model_replaces_the_hosted_server() {
-    let case = Case::new("terminal-codegen");
+    codegen_replacement("rust");
+}
+
+#[test]
+fn changed_codegen_revision_with_an_unchanged_model_replaces_the_hosted_server_llvm() {
+    codegen_replacement("llvm");
+}
+
+/// The owned server's PID once inspect reports exactly one ready owner.
+fn ready_server(case: &Case, state: &Path) -> i64 {
+    let deadline = Instant::now() + LIVE_TIMEOUT;
+    loop {
+        let status = case.inspect(state);
+        let owners: Vec<&Json> = status
+            .get("ownership")
+            .and_then(Json::as_object)
+            .map(|owned| owned.values().collect())
+            .unwrap_or_default();
+        if let [owner] = owners.as_slice()
+            && owner.get("ready").and_then(Json::as_bool) == Some(true)
+            && let Some(pid) = owner.get("pid").and_then(Json::as_i64)
+        {
+            return pid;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no ready owned server: {}",
+            status.compact()
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// Row 6: a host whose code-generation revision changed replans the
+/// terminal with an unchanged model to a replacement of the server; an
+/// artifact whose bytes differ from its pin is refused, and the plan with
+/// its pinned bytes replaces the running server.
+fn codegen_replacement(target: &str) {
+    let case = Case::new(&format!("terminal-codegen-{target}"));
     let reserved = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = reserved.local_addr().unwrap().port();
     let fixture = case.root.join("terminal");
@@ -519,15 +555,22 @@ fn changed_codegen_revision_with_an_unchanged_model_replaces_the_hosted_server()
     )
     .unwrap();
     let state = case.state("state");
+    let selected = crate::common::apply::target_args(target);
+    let selected: Vec<&str> = selected.iter().map(String::as_str).collect();
+    let plan = |label: &str| {
+        let _build = crate::common::apply::build_lock(target);
+        case.plan(label, &source, &state, &selected)
+    };
 
     let mut host = Host::start(&case, &state, "host", None);
-    let (first_path, first) = case.plan("first", &source, &state, &[]);
+    let (first_path, first) = plan("first");
     drop(reserved);
     case.apply("first-apply", &first_path, &state, 0);
     host.stop();
 
     let _next = Host::start(&case, &state, "next-host", Some("ignite-codegen/next"));
-    let (next_path, next) = case.plan("next", &source, &state, &[]);
+    let resumed = ready_server(&case, &state);
+    let (next_path, next) = plan("next");
     assert_eq!(
         ignite::apply::plan::semantic_model(&first.model),
         ignite::apply::plan::semantic_model(&next.model)
@@ -547,14 +590,33 @@ fn changed_codegen_revision_with_an_unchanged_model_replaces_the_hosted_server()
     );
 
     let artifact = &next.artifacts["Terminal.server"].path;
+    let pinned = fs::read(artifact).unwrap();
     let mut permissions = fs::metadata(artifact).unwrap().permissions();
+    let readonly = permissions.readonly();
     #[allow(clippy::permissions_set_readonly_false)]
     permissions.set_readonly(false);
-    fs::set_permissions(artifact, permissions).unwrap();
-    let mut bytes = fs::read(artifact).unwrap();
+    fs::set_permissions(artifact, permissions.clone()).unwrap();
+    let mut bytes = pinned.clone();
     bytes.push(0);
     fs::write(artifact, bytes).unwrap();
     let (_, tampered) = case.apply("tampered-artifact", &next_path, &state, 2);
     assert!(tampered.contains("input content changed"), "{tampered}");
     assert_eq!(revision(&case.inspect(&state)), Some(1));
+    assert_eq!(
+        ready_server(&case, &state),
+        resumed,
+        "the refusal changed nothing"
+    );
+
+    fs::write(artifact, &pinned).unwrap();
+    permissions.set_readonly(readonly);
+    fs::set_permissions(artifact, permissions).unwrap();
+    let (receipt, _) = case.apply("replace", &next_path, &state, 0);
+    assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(2));
+    assert_eq!(receipt.get("noop").and_then(Json::as_bool), Some(false));
+    assert_ne!(
+        ready_server(&case, &state),
+        resumed,
+        "the server was replaced"
+    );
 }

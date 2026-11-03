@@ -18,7 +18,7 @@ use ignite_eval::Json;
 
 const PROTOCOL: &str = "ignite-host-control/0.1";
 const MAX_FRAME: u32 = 16 * 1024 * 1024;
-const LIVE_TIMEOUT: Duration = Duration::from_secs(15);
+use crate::common::apply::LIVE as LIVE_TIMEOUT;
 
 /// A program whose assembly hosts no process: preparing it builds nothing,
 /// applying it commits a revision with zero hosted machines.
@@ -501,6 +501,36 @@ fn run_on_a_stopped_host_state_is_refused_before_any_build() {
     }
 }
 
+/// 17.2, 17.7 row 15: a state that holds an `ignite run` journal is refused
+/// by a host (exit 2) and keeps that journal as it was; the host writes no
+/// identity, journal or socket of its own there.
+#[test]
+fn a_host_refuses_a_state_that_holds_a_run_journal() {
+    let case = Case::new("run-journal");
+    fs::create_dir_all(&case.state).unwrap();
+    let journal = case.state.join("journal.jsonl");
+    let record = r#"{"kind":"header","value":{"formatVersion":"ignite-journal/0.1"}}"#;
+    fs::write(&journal, format!("{record}\n")).unwrap();
+    let (_, stderr) = case.cli(
+        "host-on-run-state",
+        &["host", "--state", case.state_arg()],
+        2,
+    );
+    assert!(stderr.contains("`ignite run` journal"), "{stderr}");
+    assert_eq!(read(&journal), format!("{record}\n"));
+    for name in [
+        "identity",
+        "host-journal.jsonl",
+        "control.sock",
+        "status.json",
+    ] {
+        assert!(
+            !case.state.join(name).exists(),
+            "refused host created {name}"
+        );
+    }
+}
+
 #[test]
 fn control_socket_and_state_are_owner_only_and_a_stale_socket_is_replaced() {
     let case = Case::new("socket");
@@ -758,7 +788,7 @@ fn adversary_a_second_host_is_refused_after_the_lock_file_is_deleted() {
     let socket = fs::metadata(case.state.join("control.sock")).unwrap().ino();
     fs::remove_file(case.state.join("lock")).unwrap();
     let (mut second, stderr) = spawn_host(&case, "second");
-    let status = wait(&mut second, Duration::from_secs(5));
+    let status = wait(&mut second, LIVE_TIMEOUT);
     let socket_now = fs::metadata(case.state.join("control.sock"))
         .map(|metadata| metadata.ino())
         .ok();
@@ -770,7 +800,7 @@ fn adversary_a_second_host_is_refused_after_the_lock_file_is_deleted() {
         status.and_then(|status| status.code()),
         Some(2),
         "second host on a live host's state after `rm lock`: exit {status:?} \
-         (None = still running after 5 s), control.sock replaced: {}\nstderr: {}",
+         (None = still running after {LIVE_TIMEOUT:?}), control.sock replaced: {}\nstderr: {}",
         socket_now != Some(socket),
         read(&stderr)
     );
@@ -909,7 +939,10 @@ fn adversary_frame_boundaries_and_a_stalled_peer() {
         &frame(envelope(PROTOCOL, "r-beside").as_bytes()),
     );
     assert_eq!(status_of(&beside), (0, "r-beside", PROTOCOL), "{beside:?}");
-    assert!(started.elapsed() < Duration::from_secs(5));
+    // A host that served connections one at a time would answer `beside`
+    // only when the stalled peer's 15 s read timeout ends; under that, with
+    // room for a loaded machine.
+    assert!(started.elapsed() < Duration::from_secs(10));
 
     let id_128 = "a".repeat(128);
     let at = raw(&case.state, &frame(envelope(PROTOCOL, &id_128).as_bytes()));

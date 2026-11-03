@@ -12,17 +12,13 @@ use std::net::{TcpListener, TcpStream};
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ignite_eval::Json;
 
+use crate::common::apply::{BUILD as BUILD_TIMEOUT, LIVE as LIVE_TIMEOUT};
+
 const FAULT: &str = "IGNITE_DEBUG_HOST_FAULT";
-const LIVE_TIMEOUT: Duration = Duration::from_secs(20);
-const BUILD_TIMEOUT: Duration = Duration::from_secs(180);
-/// The tests of this file share one build directory; `ignite build` owns
-/// the generated project it writes, so one preparation runs at a time.
-static BUILDS: Mutex<()> = Mutex::new(());
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -165,7 +161,7 @@ impl Drop for Host {
                 let _ = writeln!(stdin, "stop");
                 let _ = stdin.flush();
             }
-            if wait(&mut child, Duration::from_secs(5)).is_none() {
+            if wait(&mut child, Duration::from_secs(10)).is_none() {
                 let _ = child.kill();
                 let _ = child.wait();
             }
@@ -190,20 +186,29 @@ struct Flow {
     state: PathBuf,
     source: PathBuf,
     port: u16,
+    target: &'static str,
     counter: Cell<u64>,
 }
 
 impl Flow {
-    /// A fresh copy of the terminal design on a free port and a fresh state
-    /// whose `build` is one directory shared by the tests of this file (O41).
+    /// [`Flow::for_target`] on the Rust target.
     fn new(label: &str) -> Flow {
+        Flow::for_target(label, "rust")
+    }
+
+    /// A fresh copy of the terminal design on a free port, built for
+    /// `target`, and a fresh state whose `build` is the one directory every
+    /// apply test shares (O41).
+    fn for_target(label: &str, target: &'static str) -> Flow {
         let port = free_port();
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = Path::new(env!("CARGO_TARGET_TMPDIR"))
-            .join(format!("recovery-{label}-{}-{stamp}", std::process::id()));
+        let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+            "recovery-{label}-{target}-{}-{stamp}",
+            std::process::id()
+        ));
         let fixture = root.join("terminal");
         fs::create_dir_all(&fixture).unwrap();
         for entry in fs::read_dir(repo().join("examples/terminal")).unwrap() {
@@ -225,14 +230,13 @@ impl Flow {
         .unwrap();
         let state = root.join("state");
         fs::create_dir_all(&state).unwrap();
-        let shared = Path::new(env!("CARGO_TARGET_TMPDIR")).join("apply-recovery-build");
-        fs::create_dir_all(&shared).unwrap();
-        std::os::unix::fs::symlink(&shared, state.join("build")).unwrap();
+        crate::common::apply::shared_build(&state);
         Flow {
             root,
             state,
             source,
             port,
+            target,
             counter: Cell::new(0),
         }
     }
@@ -277,27 +281,22 @@ impl Flow {
     }
 
     fn prepare(&self, label: &str) -> PathBuf {
-        let _guard = BUILDS
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let output = self.root.join(format!("{label}.json"));
-        self.cli(
-            label,
-            &[
-                "plan",
-                self.source.to_str().unwrap(),
-                "--assembly",
-                "local",
-                "--for-apply",
-                "--state",
-                self.state.to_str().unwrap(),
-                "--out",
-                output.to_str().unwrap(),
-                "--target",
-                "rust",
-            ],
-            0,
-        );
+        let selected = crate::common::apply::target_args(self.target);
+        let mut args = vec![
+            "plan",
+            self.source.to_str().unwrap(),
+            "--assembly",
+            "local",
+            "--for-apply",
+            "--state",
+            self.state.to_str().unwrap(),
+            "--out",
+            output.to_str().unwrap(),
+        ];
+        args.extend(selected.iter().map(String::as_str));
+        let _build = crate::common::apply::build_lock(self.target);
+        self.cli(label, &args, 0);
         output
     }
 
@@ -428,9 +427,7 @@ fn await_converged(flow: &Flow, host: &Host, revision: i64) -> i64 {
 fn terminal_status(port: u16) -> String {
     let mut stream = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), LIVE_TIMEOUT)
         .expect("connect to the applied server");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .unwrap();
+    stream.set_read_timeout(Some(LIVE_TIMEOUT)).unwrap();
     let prompt = |stream: &mut TcpStream| {
         let deadline = Instant::now() + LIVE_TIMEOUT;
         let mut received = Vec::new();
@@ -458,7 +455,16 @@ fn terminal_status(port: u16) -> String {
 /// retry attaches to the one operation.
 #[test]
 fn crash_after_intent_before_dispatch_yields_one_server_or_outcome_unknown() {
-    let flow = Flow::new("intent");
+    crash_after_intent("rust");
+}
+
+#[test]
+fn crash_after_intent_before_dispatch_yields_one_server_or_outcome_unknown_llvm() {
+    crash_after_intent("llvm");
+}
+
+fn crash_after_intent(target: &'static str) {
+    let flow = Flow::for_target("intent", target);
     let mut host = Host::start(&flow, "after-intent", &[(FAULT, "after_intent")]);
     let saved = flow.prepare("first");
     let plan = plan_of(&saved);
@@ -605,7 +611,16 @@ fn change_command_body(flow: &Flow) {
 /// until a `status` finds the port free.
 #[test]
 fn crash_mid_transition_resumes_once_and_a_foreign_listener_is_never_adopted() {
-    let flow = Flow::new("transition");
+    crash_mid_transition("rust");
+}
+
+#[test]
+fn crash_mid_transition_resumes_once_and_a_foreign_listener_is_never_adopted_llvm() {
+    crash_mid_transition("llvm");
+}
+
+fn crash_mid_transition(target: &'static str) {
+    let flow = Flow::for_target("transition", target);
     let mut host = Host::start(&flow, "first", &[]);
     let first = flow.prepare("first");
     let name = server_name(&plan_of(&first));
