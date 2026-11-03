@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T01:48:43Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-13-durability-recovery",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p ignite --test main apply_recovery:: (5 passed at d3cde09); --lib apply:: run::process:: (45 passed at 519882d)",
+    "reference": "https://github.com/ignite-lang/ignite/commit/519882d"
+  }
+}
