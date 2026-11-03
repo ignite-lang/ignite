@@ -354,8 +354,9 @@ position, even with no buffer.
   deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before the parent
   continues (`ignite_rt_spawn` blocks until then and returns 1).
 
-  A `TcpStream` argument moves to the task when it is a plain name that a `let` earlier in
-  the same block bound to a fresh value (a call, a method call, `?` or `match`) and no later
+  A `TcpStream` or `PipeStream` argument moves to the task when it is a plain name that a
+  `let` earlier in the same block bound to a fresh value (a call, a method call other than
+  `copy()`, which shares its receiver's handle, `?` or `match`) and no later
   statement of the block mentions (`region::moved_to_task`): the accept loop's `let stream
   = self.listener.accept()?` followed by `spawn serve_with(stream, ..)`. The thunk registers
   a moved stream with `tcp_own`, so a failure closes it, and releases it with `tcp_release`
@@ -457,7 +458,7 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `i32 tcp_read(i64 stream, i64 maximum, Input* out, IoError* err)` | one read, straight into a `maximum`-byte arena block whose unused tail is given back; a concurrent `tcp_write_all` on the same stream from another task does not wait for it |
 | `i32 tcp_write_all(i64 stream, List* bytes, IoError* err)` | appends to the stream's send buffer (`docs/slice.md` section 7) |
 | `i32 tcp_close(i64 stream, IoError* err)` | shut down the write half |
-| `void tcp_release(i64 handle)` | drop a listener or stream handle, and forget it as owned by the task (`tcp_own`); later use of it is an error |
+| `void tcp_release(i64 handle)` | drop a listener, stream or pipe-end handle, and forget it as owned by the task (`tcp_own`); later use of it is an error |
 | `i32 stdin_read(i64 maximum, Input* out, IoError* err)` | |
 | `i32 stdin_is_terminal(i8* out, IoError* err)` | |
 | `i32 stdin_set_raw(i8 on, IoError* err)` | same termios rules as `docs/slice.md` section 7 |
@@ -489,11 +490,17 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `void fail_match(Text* file, i64 line, i64 col)` | ends the task: `match failed at <file>:<line>:<col>: no arm matched` |
 | `void guard_push(ptr jb)` | register the `jmp_buf` a task-entry wrapper just passed to `_setjmp` (section 4); a thread-local stack, innermost last |
 | `void guard_pop()` | drop the innermost `jmp_buf` after the task body returned without failing |
-| `void tcp_own(i64 stream)` | mark `stream` as owned by the current task: a failure of the task releases it (section 4) |
+| `void tcp_own(i64 stream)` | mark `stream` (a TCP stream or a pipe end) as owned by the current task: a failure of the task releases it (section 4) |
 | `i32 text_cmp(Text* a, Text* b)` | -1, 0 or 1: bytewise order of the UTF-8, the key order of `Map<Text, V>` (section 3) |
 | `void quantity_debug(Text* out, i32 kind, i64 value)` | the debug text of a quantity, `kind` 0 `Duration`, 1 `ByteSize`, 2 `Ratio` (`ignite_io::quantity_debug`) |
 | `i64 clock_monotonic()` | `Clock.monotonic()` (`docs/slice.md` 16.13): nanoseconds since an arbitrary start of the process, never decreasing (`ignite_io::clock::monotonic`); declared only in a module that calls it, so other modules' IR is unchanged |
 | `i32 endpoint_of(Text* reference, Endpoint* out, IoError* err)` | `Endpoint.of(ref)` (`docs/slice.md` 16.9, 16.13): the `--ref <path>=<address>:<port>` argument `init` stored whose path is `reference`, as `std.net.Endpoint` (`{ Text address, i64 port }`, the address in the task's arena); no binding is the error `no binding for <path>`, a malformed `--ref` an error with exit code 2 (`ignite_io::args::endpoint_from_args`); declared only in a module that calls it |
+| `void pipe_pair(i64* first, i64* second)` | `Pipe.pair()` (`docs/slice.md` 18.4, 18.9): two new pipe-end handles; the generator stores them as the `(PipeStream, PipeStream)` tuple. Like every `pipe_*` entry, declared only in a module that calls it, so other modules' IR is unchanged |
+| `i32 pipe_read(i64 pipe, i64 maximum, Input* out, IoError* err)` | as `tcp_read`, on a pipe end; a TCP handle is the error "`<h>` is not a pipe" |
+| `i32 pipe_write_all(i64 pipe, List* bytes, IoError* err)` | appends to the end's send buffer (`docs/slice.md` 18.4) |
+| `i32 pipe_close(i64 pipe, IoError* err)` | delivers the buffer, then closes the end's write half |
+| `i32 pipe_set_idle_timeout(i64 pipe, i64 ms, IoError* err)` | as `tcp_set_idle_timeout`, on a pipe end |
+| `i64 pipe_received_batches(i64 pipe)` | the deliveries into the end's queue since `pipe_pair`; 0 for a handle that is not a pipe |
 | `void test_main(IgniteTest* table, i64 count)` | `ignite_io::test_main_with` over the `count` entries at `table` and the arguments `init` stored: the runner of `docs/slice.md` section 12.7. Only with the feature `runner` (below) |
 
 `ignite-rt` is an adapter: every `tcp_*`, `stdin_*` and `stdout_*` function, `exit`, `log`
@@ -503,7 +510,7 @@ codes are `ignite-io`'s as well. The adapter converts section-3 values to and fr
 values (a `Text` or `List` argument is copied into a Rust value, a result into the task's
 arena) and owns only what the LLVM target needs: the arenas and loop regions (section 4), the
 `spawn`/`spawn_ready` handshake, and the handle table. A handle is an index into a
-process-wide table of `ignite_io::TcpListener` and `ignite_io::TcpStream` values. The table
+process-wide table of `ignite_io::TcpListener`, `ignite_io::TcpStream` and `ignite_io::PipeStream` values. The table
 has no global lock on the IO path. It is a list of segments that never move; segment k
 holds 64 × 2^k slots, each slot behind its own mutex. A handle is the slot index plus one
 in its low 32 bits, with the slot's generation in the high bits. A release bumps the

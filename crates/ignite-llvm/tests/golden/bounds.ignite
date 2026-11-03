@@ -1,0 +1,77 @@
+package tests.bounds
+
+fn relay<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  stream.set_idle_timeout(1000)?
+  match stream.read(4096)? {
+    Eof => return stream.close()
+    Data(bytes) => stream.write_all(bytes)?
+  }
+  return stream.close()
+}
+
+protocol Echo {
+  fn serve<S: ByteStream>(stream: S, greeting: Text) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+    stream.write_all(greeting.to_bytes())?
+    return relay(stream)
+  }
+}
+
+fn over_tcp(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, stream.write] = relay(stream)
+
+fn same(end: PipeStream) -> PipeStream = end
+
+fn over_pipe(end: PipeStream) -> Result<Int, IoError> requires [end.read, end.write] {
+  relay(end)?
+  Echo.serve(end, "pipe\n")?
+  let moved = same(end)
+  spawn relay(moved)
+  return Ok(end.received_batches())
+}
+
+type Hub {
+  listener: TcpListener
+  greeting: Text
+  executable: Text
+}
+
+fn Hub.main(self: Hub) -> Result<Unit, IoError> {
+  loop {
+    let stream = self.listener.accept()?
+    spawn Echo.serve(stream, self.greeting)
+  }
+}
+
+system Bounds {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 7401 }
+  component hub: Hub { listener = ingress, greeting = "hello\n", executable = "hub" }
+}
+
+test "a bounded instance relays over a pipe, in this task and in a spawned one" {
+  let (client, server) = Pipe.pair()
+  client.write_all("ping".to_bytes())?
+  client.write_all("!".to_bytes())?
+  client.close()?
+  relay(server)?
+  assert server.received_batches() == 1
+  let reply = match client.read(16)? {
+    Eof => "eof"
+    Data(bytes) => bytes.to_text()
+  }
+  assert reply == "ping!"
+  assert client.received_batches() == 1
+  let (near, far) = Pipe.pair()
+  near.set_idle_timeout(5000)?
+  let moved = same(far)
+  spawn relay(moved)
+  near.write_all("x".to_bytes())?
+  let echoed = match near.read(16)? {
+    Eof => "eof"
+    Data(bytes) => bytes.to_text()
+  }
+  assert echoed == "x"
+  let last = match near.read(16)? {
+    Eof => "eof"
+    Data(bytes) => bytes.to_text()
+  }
+  assert last == "eof"
+}
