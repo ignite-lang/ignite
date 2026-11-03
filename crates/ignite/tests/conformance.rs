@@ -337,3 +337,411 @@ fn conformance_exit_statuses() {
         text(&killed.stderr)
     );
 }
+
+// Adversary cases (slice 15, U5). Each expected matrix below is written from
+// 19.10 alone: `adversary_block` pads the rows by the contract's rule, not by
+// the implementation's.
+
+/// One block of 19.10: the header, the rows with their six columns joined by
+/// two spaces and padded (in characters) to the widest entry of their column,
+/// the last column unpadded, and the claim line.
+fn adversary_block(header: &str, rows: &[[&str; 6]], claim: &str) -> String {
+    let mut widths = [0usize; 6];
+    for row in rows {
+        for (width, cell) in widths.iter_mut().zip(row) {
+            *width = (*width).max(cell.chars().count());
+        }
+    }
+    let mut out = format!("{header}\n");
+    for row in rows {
+        for (column, cell) in row.iter().enumerate() {
+            out.push_str(cell);
+            if column < 5 {
+                out.push_str(&" ".repeat(widths[column] - cell.chars().count() + 2));
+            }
+        }
+        out.push('\n');
+    }
+    out.push_str(claim);
+    out.push('\n');
+    out
+}
+
+/// `ignite conformance FILE --target TARGET` on any path, builds under
+/// `tmp(out)`, run in `dir` when given.
+fn adversary_command(file: &Path, target: &str, out: &str, dir: Option<&Path>) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
+    command
+        .arg("conformance")
+        .arg(file)
+        .args(["--target", target, "--out"])
+        .arg(tmp(out));
+    if target == "rust" {
+        command.arg("--target-dir").arg(tmp("cargo"));
+    } else {
+        command.arg("--runtime").arg(common::runner_archive());
+    }
+    if let Some(dir) = dir {
+        command.current_dir(dir);
+    }
+    command
+}
+
+/// 19.10: "The claim holds (`yes`) when no MUST-class row in scope is `fail`,
+/// `gap` or `inconclusive`. The counts are over all rows in scope, at any
+/// level". A SHOULD that fails and a SHOULD without a test are counted and
+/// keep the claim; an out-of-scope MUST whose test exits 7 is counted nowhere;
+/// a test that panics and one that exits with 7 are both `failed`.
+#[test]
+fn adversary_should_failures_are_counted_and_keep_the_claim() {
+    let output = conformance("adversary_should_failure", "rust");
+    let want = adversary_block(
+        "rfc7301 Line Echo, protocol Echo, parties Server, sections all",
+        &[
+            [
+                "R2_1",
+                "2",
+                "MUST",
+                "satisfied",
+                "echo; test \"a line is echoed\" passed",
+                "pass",
+            ],
+            [
+                "R2_2",
+                "2",
+                "SHOULD",
+                "satisfied",
+                "echo; test \"a line is echoed\" passed, test \"an index out of range fails\" failed",
+                "fail",
+            ],
+            [
+                "R2_3",
+                "2",
+                "SHOULD",
+                "satisfied",
+                "keep; no test",
+                "inconclusive",
+            ],
+            [
+                "R2_4",
+                "2",
+                "MAY",
+                "unsupported",
+                "\"nothing is logged\"",
+                "n/a",
+            ],
+            [
+                "R2_5",
+                "2",
+                "SHOULD",
+                "unsupported",
+                "\"no answer is timed\"",
+                "deviation",
+            ],
+            [
+                "R4_1",
+                "4",
+                "MUST",
+                "satisfied",
+                "forward; test \"a forwarded line exits with seven\" failed",
+                "out of scope",
+            ],
+        ],
+        "claim conformance of Echo to rfc7301: yes (0 gaps, 1 failures, 1 inconclusive)",
+    );
+    assert_eq!(text(&output.stdout), want, "{}", text(&output.stderr));
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+}
+
+/// The three blocks of `adversary_two_specs/main.ignite`, in protocol then
+/// `conforms` order (19.10 step 4), one blank line between blocks.
+fn adversary_two_specs_matrix() -> String {
+    let echoed = "echo; test \"a line is echoed\" passed";
+    let padded =
+        "pad; test \"a short line is padded\" passed, test \"padding exits with seven\" failed";
+    [
+        adversary_block(
+            "rfc7202 Line Echo Two, protocol Zeta, parties all, sections 1",
+            &[
+                ["R1_1", "1", "MUST", "satisfied", echoed, "pass"],
+                ["R1_2", "1", "SHOULD", "none", "-", "unclassified"],
+            ],
+            "claim conformance of Zeta to rfc7202: yes (0 gaps, 0 failures, 0 inconclusive)",
+        ),
+        adversary_block(
+            "rfc7201 Line Echo, protocol Zeta, parties all, sections 1",
+            &[
+                ["R1_1", "1", "MUST", "satisfied", echoed, "pass"],
+                ["R2_1", "2", "MUST", "none", "-", "out of scope"],
+                ["R3_1", "3", "MUST", "satisfied", padded, "out of scope"],
+            ],
+            "claim conformance of Zeta to rfc7201: yes (0 gaps, 0 failures, 0 inconclusive)",
+        ),
+        adversary_block(
+            "rfc7201 Line Echo, protocol Alpha, parties all, sections all",
+            &[
+                ["R1_1", "1", "MUST", "satisfied", echoed, "pass"],
+                [
+                    "R2_1",
+                    "2",
+                    "MUST",
+                    "unsupported",
+                    "\"sessions never idle out\"",
+                    "gap",
+                ],
+                ["R3_1", "3", "MUST", "satisfied", padded, "fail"],
+            ],
+            "claim conformance of Alpha to rfc7201: no (1 gaps, 1 failures, 0 inconclusive)",
+        ),
+    ]
+    .join("\n")
+}
+
+/// Two protocols, one of them conforming to a catalogue of a sibling module
+/// and to the file's own: one block and one claim line per (protocol, spec),
+/// declaration then `conforms` order, exit 1 because one claim fails, and
+/// byte-identical stdout on both targets (19.10 steps 3 and 4, row 36).
+#[test]
+fn adversary_two_protocols_and_two_specs_print_in_order_on_both_targets() {
+    let want = adversary_two_specs_matrix();
+    for target in ["rust", "llvm"] {
+        let output = conformance("adversary_two_specs/main", target);
+        assert_eq!(
+            text(&output.stdout),
+            want,
+            "{target}: {}",
+            text(&output.stderr)
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{target}: {}",
+            text(&output.stderr)
+        );
+    }
+}
+
+/// 19.10: a test build failure is exit 3 and nothing on stdout, also when a
+/// claim of the file fails; a file whose rows name no test builds nothing, so
+/// a broken clang does not matter to it.
+#[test]
+fn adversary_a_build_failure_outranks_a_failing_claim() {
+    let build = command(
+        "adversary_two_specs/main",
+        "llvm",
+        "adversary-build-fails",
+        &["--clang", "/bin/false"],
+    )
+    .output()
+    .expect("run ignite conformance");
+    assert_eq!(build.status.code(), Some(3), "{}", text(&build.stderr));
+    assert_eq!(text(&build.stdout), "");
+
+    let unbuilt = command(
+        "gap",
+        "llvm",
+        "adversary-no-build",
+        &["--clang", "/bin/false"],
+    )
+    .output()
+    .expect("run ignite conformance");
+    assert_eq!(
+        text(&unbuilt.stdout),
+        expected("gap"),
+        "{}",
+        text(&unbuilt.stderr)
+    );
+    assert_eq!(unbuilt.status.code(), Some(1), "{}", text(&unbuilt.stderr));
+}
+
+/// Unicode and quotes in a title, a test name and a reason, and the file
+/// given by two different paths (absolute, and relative from a directory
+/// whose name holds a space and an umlaut): the same matrix on stdout, no path
+/// in it, and the same on LLVM (rows 36, 19.10).
+#[test]
+fn adversary_unicode_names_and_paths_do_not_change_the_matrix() {
+    let want = adversary_block(
+        "rfc7303 Zeilen-Echo – „Größe“, protocol Echo, parties all, sections all",
+        &[
+            [
+                "R2_1",
+                "2",
+                "MUST",
+                "satisfied",
+                "echo; test \"Größe \"ü\" ✓ wird geechot\" passed",
+                "pass",
+            ],
+            [
+                "R2_2",
+                "2",
+                "SHOULD",
+                "unsupported",
+                "\"kein \"Timeout\" – nie ✓\"",
+                "deviation",
+            ],
+        ],
+        "claim conformance of Echo to rfc7303: yes (0 gaps, 0 failures, 0 inconclusive)",
+    );
+    let source = fixture("adversary_unicode");
+    let plain = tmp("adversary-paths/plain");
+    let spaced = tmp("adversary-paths/mit Leerzeichen ü");
+    for dir in [&plain, &spaced] {
+        std::fs::create_dir_all(dir).expect("create the copy's directory");
+        std::fs::copy(&source, dir.join("copy.ignite")).expect("copy the fixture");
+    }
+    let _guard = BUILDS.lock().unwrap_or_else(|e| e.into_inner());
+    let runs = [
+        adversary_command(&plain.join("copy.ignite"), "rust", "adversary-plain", None),
+        adversary_command(
+            Path::new("copy.ignite"),
+            "rust",
+            "adversary-spaced",
+            Some(&spaced),
+        ),
+        adversary_command(&source, "llvm", "adversary-unicode-llvm", None),
+    ];
+    for mut run in runs {
+        let output = run.output().expect("run ignite conformance");
+        let stdout = text(&output.stdout);
+        assert_eq!(stdout, want, "{}", text(&output.stderr));
+        assert!(
+            !stdout.contains("copy.ignite") && !stdout.contains(env!("CARGO_TARGET_TMPDIR")),
+            "{stdout}"
+        );
+        assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    }
+}
+
+/// 19.5's grammar admits `parties = []` and `sections = []`; 19.10: "no line
+/// ends in a space". The header of such a block must not end in one.
+#[test]
+#[ignore = "adversary: an empty sections list prints a header line that ends in a space"]
+fn adversary_an_empty_scope_list_leaves_no_trailing_space() {
+    let output = conformance("adversary_empty_scope", "rust");
+    let stdout = text(&output.stdout);
+    assert!(
+        stdout.contains("R2_1  2  MUST  none  -  out of scope\n"),
+        "{stdout}{}",
+        text(&output.stderr)
+    );
+    for line in stdout.lines() {
+        assert!(!line.ends_with(' '), "line ends in a space: {line:?}");
+    }
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+}
+
+/// 19.7 and 19.10 limits: a `ByteSize` default in bytes, an Int below its
+/// minimum (`fail`, at MUST and at SHOULD), a Text field and a field without
+/// a default (no value, `inconclusive`); no test is named, so nothing is
+/// built.
+#[test]
+fn adversary_limits_print_their_values_and_are_counted() {
+    let output = conformance("adversary_limits", "rust");
+    let want = adversary_block(
+        "rfc7306 Line Echo, protocol Echo, parties all, sections all",
+        &[
+            [
+                "R2_1",
+                "2",
+                "MUST",
+                "limit",
+                "EchoLimits.head = 8192, minimum 8000",
+                "pass",
+            ],
+            [
+                "R2_2",
+                "2",
+                "MUST",
+                "limit",
+                "EchoLimits.lines = 63, minimum 64",
+                "fail",
+            ],
+            [
+                "R2_3",
+                "2",
+                "MUST",
+                "limit",
+                "EchoLimits.name has no value, minimum 1",
+                "inconclusive",
+            ],
+            [
+                "R2_4",
+                "2",
+                "MUST",
+                "limit",
+                "EchoLimits.sessions has no value, minimum 1",
+                "inconclusive",
+            ],
+            [
+                "R2_5",
+                "2",
+                "SHOULD",
+                "limit",
+                "EchoLimits.history = 5, minimum 100",
+                "fail",
+            ],
+        ],
+        "claim conformance of Echo to rfc7306: no (0 gaps, 2 failures, 2 inconclusive)",
+    );
+    assert_eq!(text(&output.stdout), want, "{}", text(&output.stderr));
+    assert_eq!(output.status.code(), Some(1), "{}", text(&output.stderr));
+}
+
+/// 19.10 verdict rule 5: "`fail` when any verifying test failed". The only
+/// verifying test fails; another test's name (`\n` is a legal escape, 12.1)
+/// makes the runner print a second `test <module>/a line is echoed ... ok`
+/// line after the real `FAILED` one. The row must stay `fail` and the claim
+/// `no`.
+#[test]
+#[ignore = "adversary: a test name holding a newline forges another test's result line, a failed MUST reads pass"]
+fn adversary_a_test_name_cannot_forge_another_tests_result() {
+    let output = conformance("adversary_forged_result", "rust");
+    let want = adversary_block(
+        "rfc7305 Line Echo, protocol Echo, parties all, sections all",
+        &[[
+            "R2_1",
+            "2",
+            "MUST",
+            "satisfied",
+            "echo; test \"a line is echoed\" failed",
+            "fail",
+        ]],
+        "claim conformance of Echo to rfc7305: no (0 gaps, 1 failures, 0 inconclusive)",
+    );
+    assert_eq!(text(&output.stdout), want, "{}", text(&output.stderr));
+    assert_eq!(output.status.code(), Some(1), "{}", text(&output.stderr));
+}
+
+/// 19.10 step 1: a diagnostic is printed "as `ignite check` does" (the same
+/// stderr), exit 2, no stdout; a missing file is an IO error, exit 3; a usage
+/// error is exit 2. None prints on stdout.
+#[test]
+fn adversary_exit_statuses_follow_d8() {
+    let check = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("check")
+        .arg(fixture("diagnostic"))
+        .output()
+        .expect("run ignite check");
+    assert_eq!(check.status.code(), Some(1));
+    let diagnostic = conformance("diagnostic", "rust");
+    assert_eq!(diagnostic.status.code(), Some(2));
+    assert_eq!(text(&diagnostic.stdout), "");
+    assert_eq!(text(&diagnostic.stderr), text(&check.stderr));
+
+    let missing = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("conformance")
+        .arg(tmp("adversary-missing/none.ignite"))
+        .output()
+        .expect("run ignite conformance");
+    assert_eq!(missing.status.code(), Some(3), "{}", text(&missing.stderr));
+    assert_eq!(text(&missing.stdout), "");
+
+    let usage = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("conformance")
+        .arg(fixture("pass"))
+        .args(["--target", "wasm"])
+        .output()
+        .expect("run ignite conformance");
+    assert_eq!(usage.status.code(), Some(2), "{}", text(&usage.stderr));
+    assert_eq!(text(&usage.stdout), "");
+}
