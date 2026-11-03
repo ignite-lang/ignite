@@ -4749,6 +4749,14 @@ not a TCP listener". `tcp_read` and `pipe_read` share one arena-read helper.
   - calls with `TcpStream` and with a `PipeStream` parameter of a non-test fn;
   - a `spawn` of a bounded instance.
 
+As landed (U3): the golden also holds an unbounded `identity<T>` (its call has no turbofish),
+UFCS calls of a bounded fn (`once::<T>(inner)`), a system whose `relayd` main spawns the role,
+and a test with `Pipe.pair()`, so `bounds.main.rs` exists too. `golden::bounded_streams` builds
+both the program and its test build (`ignite_io::Pipe::pair()`) with cargo, through a helper of
+its own in `golden.rs`, since `compiles.rs` is not U3's. `PipeStream`'s five methods stay
+inherent calls, as `TcpStream`'s do. The Rust copy of `bounds.ignite` is
+`crates/ignite-rustgen/tests/golden/bounds.ignite`; no test checks it against the LLVM copy.
+
 ### 18.11 LLVM target
 
 - `Ty::PipeStream` has the `i64` layout and mangles as `PipeStream`. Instances are named by
