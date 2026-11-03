@@ -56,8 +56,9 @@ protocol Telnet conforms [RFC854, RFC855] {
     result
   }
 
-  // Client role: the server's text, with Telnet commands removed and line
-  // ends as LF, goes to standard output. Standard input goes to the server:
+  // Client role: the server's text, with Telnet commands removed, CR NUL
+  // as a carriage return and every other line end as LF (`print_byte`),
+  // goes to standard output. Standard input goes to the server:
   // from a terminal through the local line editor (`edit_input`), otherwise
   // as NVT lines (`forward_input`). Ends with Ok when the server closes the
   // connection, with Err on an overlong subnegotiation.
@@ -74,17 +75,19 @@ protocol Telnet conforms [RFC854, RFC855] {
     loop {
       match stream.read(4096)? {
         Eof => {
+          if state == CarriageReturn {
+            Stdout.write_all(b"\n")?
+          }
           Stdin.set_raw(false)?
           return Ok(())
         }
         Data(bytes) => {
           var out = Bytes.empty()
           for b in bytes {
-            let (next, event) = decode(state, b)
+            let (next, event, printed) = print_byte(state, b)
             state = next
+            out.append(printed)
             match event {
-              Literal(c) => out.push(c)
-              EndOfLine => out.push(b'\n')
               Answer(answer) => stream.write_all(answer)?
               SubnegotiationTooLong => {
                 Stdout.write_all(out)?
@@ -494,6 +497,62 @@ test "a CR LF split across reads ends one line" {
   assert first == [Literal(b'a'), EndOfLine]
   assert feed(state, b"\nb") == (Ground, [Literal(b'b')])
   assert feed(state, b"\0") == (Ground, [])
+}
+
+// One byte of the server's stream as the client role prints it: the
+// decoder's next state, the byte's event and the bytes to print. A CR is
+// printed once the next byte shows which line end it starts: CR NUL is a
+// carriage return alone (RFC 854 p11), CR LF and a lone CR are LF; a CR
+// that ends the stream is printed as LF by `connect`.
+fn print_byte(state: Decoder, b: Byte) -> (Decoder, Event, Bytes) satisfies [RFC854.RP11_3, RFC854.RP13_3] {
+  var out = Bytes.empty()
+  if state == CarriageReturn {
+    out.push(if b == b'\0' { b'\r' } else { b'\n' })
+  }
+  let (next, event) = decode(state, b)
+  match event {
+    Literal(c) => out.push(c)
+    EndOfLine => {
+      if next != CarriageReturn {
+        out.push(b'\n')
+      }
+    }
+    _ => {}
+  }
+  (next, event, out)
+}
+
+// What the client prints for `parts`, read one after another.
+test fn printed(parts: List<Bytes>) -> Bytes {
+  var state = Ground
+  var out = Bytes.empty()
+  for part in parts {
+    for b in part {
+      let (next, _, bytes) = print_byte(state, b)
+      state = next
+      out.append(bytes)
+    }
+  }
+  if state == CarriageReturn {
+    out.push(b'\n')
+  }
+  out
+}
+
+test "the client prints CR NUL as a carriage return and every other line end as LF" verifies [RFC854.RP11_3, RFC854.RP13_3] {
+  assert printed([b"a\r\0b"]) == b"a\rb"
+  assert printed([b"a\r\nb"]) == b"a\nb"
+  assert printed([b"a\rb"]) == b"a\nb"
+  assert printed([b"a\nb"]) == b"a\nb"
+  assert printed([b"\r\r\n\r\0"]) == b"\n\n\r"
+  assert printed([b"a\r"]) == b"a\n"
+  assert printed([b"a\r", b"\0b"]) == b"a\rb"
+  assert printed([b"a\r", b"\nb"]) == b"a\nb"
+  let doubled: Bytes = [b'\r', IAC, IAC, b'x']
+  let literal: Bytes = [b'\n', IAC, b'x']
+  assert printed([doubled]) == literal
+  let negotiation: Bytes = [b'\r', IAC, DO, 1, b'x']
+  assert printed([negotiation]) == b"\nx"
 }
 
 test "IAC IAC is the data byte 255" verifies [RFC854.RP14_1] {

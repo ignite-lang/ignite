@@ -919,18 +919,30 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
         let output = std_conformance("http", target);
         let stdout = text(&output.stdout);
         let rfc9112 = block(&stdout, "rfc9112");
-        for (id, section) in [("R7_1_2", "7.1"), ("R3_2_6", "3.2")] {
+        for (id, section, level) in [
+            ("R7_1_2", "7.1", "MUST"),
+            ("R3_2_6", "3.2", "MUST"),
+            ("R2_2_1", "2.2", "MUST"),
+            ("R6_1_2", "6.1", "MUST NOT"),
+            ("R6_1_4", "6.1", "MUST"),
+        ] {
             let row = columns(rfc9112, id);
             assert_eq!(row.len(), 6, "{target}: {row:?}");
             assert_eq!(row[1], section, "{target}: {row:?}");
-            assert_eq!(row[2], "MUST", "{target}: {row:?}");
+            assert_eq!(row[2], level, "{target}: {row:?}");
             assert_eq!(row[3], "unsupported", "{target}: {row:?}");
             assert_eq!(row[5], "gap", "{target}: {row:?}");
         }
         let last = rfc9112.trim_end().lines().last().unwrap_or_default();
+        assert_eq!(
+            last, "claim conformance of Http to rfc9112: no (15 gaps, 0 failures, 0 inconclusive)",
+            "{target}"
+        );
         assert!(
-            last.starts_with("claim conformance of Http to rfc9112: no ("),
-            "{target}: {last}"
+            stdout.contains(
+                "claim conformance of Http to rfc9110: no (9 gaps, 0 failures, 0 inconclusive)\n"
+            ),
+            "{target}: {stdout}"
         );
         assert_eq!(
             output.status.code(),
@@ -1287,7 +1299,7 @@ fn adversary_row5_a_program_importing_std_rfc_carries_no_catalogue() {
 /// `ignite emit` holds all of `std.rfc.rfc855`, because D2 also makes "a
 /// program's `use` lines" roots on Rust.
 #[test]
-#[ignore = "adversary: a clause-only import of RFC855 puts the whole catalogue into ignite emit's ignite-std, D2"]
+#[ignore = "fixed on branch fix/rustgen-builtin-shadowing (9bbd4b2, a clause-only catalogue import emits none of its constants), not merged into s15/claims"]
 fn adversary_row5_a_program_conforming_to_a_std_catalogue_carries_none() {
     assert_carries_no_catalogue("adversary_conforms_rfc855", "rfc855-claim");
 }
@@ -1357,12 +1369,11 @@ fn assert_carries_no_catalogue(name: &str, out: &str) {
 }
 
 /// RFC 9112 6.3, `RFC9112.R6_3_4` and `R6_3_5`, claimed satisfied by
-/// `next_request` and `parse_length`. `parse_head` trims field values with
-/// `trim`, Rust's Unicode `str::trim` on both targets, so
-/// `Content-Length: 3<U+00A0>` (also U+0085, U+3000) is read as 3 and the
-/// request is served instead of answered 400.
+/// `next_request` and `parse_length`: `Content-Length: 3<U+00A0>` (also
+/// U+0085, U+3000) is answered 400. Found red while `parse_head` trimmed
+/// field values with the Unicode `trim`; it now trims SP and HTAB only
+/// (`trim_ows`, RFC 9110 OWS).
 #[test]
-#[ignore = "adversary: Content-Length 3 followed by U+00A0 is served as 3, RFC 9112 6.3 requires 400"]
 fn adversary_http_content_length_beside_a_unicode_space_is_400() {
     assert_inline_passes(
         "adversary_std_http",
@@ -1371,11 +1382,11 @@ fn adversary_http_content_length_beside_a_unicode_space_is_400() {
 }
 
 /// RFC 9112 9.6, `RFC9112.R9_6_6` and `R9_6_7`, claimed satisfied by
-/// `reject` and `session`: a response whose application headers carry
-/// `Connection: close` is sent with it, and the server answers the next
-/// pipelined request on the same connection.
+/// `reject` and `session`: after a response whose application headers
+/// carry `Connection: close`, the server closes the connection and answers
+/// no further pipelined request. Found red while `session` looked only at
+/// the request; it now also asks `response_closes`.
 #[test]
-#[ignore = "adversary: a response carrying the close option keeps the connection and serves the next request, RFC 9112 9.6"]
 fn adversary_http_a_response_with_the_close_option_ends_the_connection() {
     assert_inline_passes(
         "adversary_std_http",
@@ -1383,13 +1394,13 @@ fn adversary_http_a_response_with_the_close_option_ends_the_connection() {
     );
 }
 
-/// RFC 9112 6.1, `RFC9112.R6_1_4`, marked `not_applicable` "Http applies
-/// no transfer coding: every response is framed by Content-Length": an
-/// application's `Transfer-Encoding: gzip` is sent beside Http's
-/// Content-Length on a kept connection, the case `http.ignite`'s sibling
-/// statuses R6_1_7, R6_1_8, R6_1_11 and R6_2_1 call `unsupported`.
+/// RFC 9112 6.1, `RFC9112.R6_1_4`: an application's `Transfer-Encoding:
+/// gzip` is sent beside Http's Content-Length on a kept connection. Found
+/// while R6_1_4 was `not_applicable`; it is now `unsupported`, a gap of the
+/// matrix like its siblings R6_1_7, R6_1_8, R6_1_11 and R6_2_1, and this
+/// test stays ignored until the gap is closed.
 #[test]
-#[ignore = "adversary: Transfer-Encoding gzip from the application is sent on a kept connection, RFC 9112 6.1 R6_1_4 is not n/a"]
+#[ignore = "gap RFC9112.R6_1_4 (unsupported in http.ignite): an application Transfer-Encoding is sent on a kept connection; story http-rfc9112-9110-gaps"]
 fn adversary_http_a_response_with_a_transfer_coding_ends_the_connection() {
     assert_inline_passes(
         "adversary_std_http",
@@ -1397,11 +1408,13 @@ fn adversary_http_a_response_with_a_transfer_coding_ends_the_connection() {
     );
 }
 
-/// RFC 9112 2.2, `RFC9112.R2_2_1`, claimed satisfied by `parse_head` and
-/// `read_head`: the head is decoded to text before it is parsed, so the
-/// obs-text octet 0xE9 reaches the application as U+FFFD, three octets.
+/// RFC 9112 2.2, `RFC9112.R2_2_1`: the head is decoded to text before it
+/// is parsed, so the obs-text octet 0xE9 reaches the application as
+/// U+FFFD, three octets. Found while `parse_head` and `read_head` claimed
+/// it; it is now `unsupported`, a gap, and this test stays ignored until
+/// the gap is closed.
 #[test]
-#[ignore = "adversary: the head is parsed as lossy UTF-8 text, octet 0xE9 reaches the application as U+FFFD, RFC 9112 2.2"]
+#[ignore = "gap RFC9112.R2_2_1 (unsupported in http.ignite): the head is parsed as lossy UTF-8 text, octet 0xE9 reaches the application as U+FFFD; story http-rfc9112-9110-gaps"]
 fn adversary_http_an_obs_text_octet_reaches_the_application_as_one_octet() {
     assert_inline_passes(
         "adversary_std_http",

@@ -29,7 +29,8 @@ import std.rfc.rfc9110.{RFC9110}
 type IoResult<T> = Result<T, IoError>
 
 // One request. `path` is the target without its query, `query` the text
-// after `?`; header names are in lower case, values trimmed.
+// after `?`; header names are in lower case, values without the SP and
+// HTAB around them (OWS, RFC 9110 section 5.6.3).
 type Request {
   method: Text
   path: Text
@@ -75,14 +76,15 @@ const MAXIMUM_LENGTH_DIGITS: Int = 18
 // requirements no declaration satisfies; the `satisfies` clauses are on the
 // parsing and framing fns, the `verifies` clauses on the tests.
 protocol Http conforms [RFC9112, RFC9110] scope { parties = [Server, Sender, Recipient, Any] } {
-  unsupported RFC9112.R2_2_8 "header names of the application's response are not checked as tokens, so one may start with whitespace"
+  unsupported RFC9112.R2_2_1 "the head is decoded to text before it is parsed: an obs-text octet that is not UTF-8 reaches the application as U+FFFD"
+  unsupported RFC9112.R2_2_8"header names of the application's response are not checked as tokens, so one may start with whitespace"
   unsupported RFC9112.R3_3 "a request-target is bounded only by HttpLimits.head; a longer head is 431, not 414"
   unsupported RFC9112.R3_2_6 "Host is not checked"
   unsupported RFC9112.R3_2_2_5 "only the origin-form is accepted; an absolute-form request-target is 400"
   unsupported RFC9112.R3_2_2_6 "only the origin-form is accepted; an absolute-form request-target is 400"
   unsupported RFC9112.R6_1_1 "only Content-Length framing; any Transfer-Encoding is 501"
-  not_applicable RFC9112.R6_1_2 "Http applies no transfer coding: every response is framed by Content-Length"
-  not_applicable RFC9112.R6_1_4 "Http applies no transfer coding: every response is framed by Content-Length"
+  unsupported RFC9112.R6_1_2 "a Transfer-Encoding header in the application's response is sent as given on a kept connection, also one that applies chunked twice"
+  unsupported RFC9112.R6_1_4 "a Transfer-Encoding header in the application's response is sent as given on a kept connection: a coding other than chunked neither ends in chunked nor closes the connection"
   unsupported RFC9112.R6_1_7 "a Transfer-Encoding header in the application's response is sent as given"
   unsupported RFC9112.R6_1_8 "a Transfer-Encoding header in the application's response is sent as given"
   unsupported RFC9112.R6_1_11 "a Transfer-Encoding header in the application's response is sent as given"
@@ -271,14 +273,14 @@ fn segments(request: Request) -> List<Text> {
   out
 }
 
-// Whether a `Connection` header lists `option` (lower case). Its value is
-// a comma-separated list, and the header may be repeated (RFC 9110
-// section 7.6.1).
-fn has_connection_option(request: Request, option: Text) -> Bool satisfies [RFC9110.R5_6_1_2_1, RFC9110.R5_6_1_2_2] {
-  for header in request.headers {
-    if header.0 == "connection" {
+// Whether a `Connection` header of `headers`, its name in any case, lists
+// `option` (lower case). Its value is a comma-separated list, and the
+// header may be repeated (RFC 9110 section 7.6.1).
+fn lists_connection_option(headers: List<(Text, Text)>, option: Text) -> Bool satisfies [RFC9110.R5_6_1_2_1, RFC9110.R5_6_1_2_2] {
+  for header in headers {
+    if header.0.to_lower() == "connection" {
       for item in header.1.split(",") {
-        if item.trim().to_lower() == option {
+        if trim_ows(item).to_lower() == option {
           return true
         }
       }
@@ -286,6 +288,13 @@ fn has_connection_option(request: Request, option: Text) -> Bool satisfies [RFC9
   }
   false
 }
+
+// Whether the request's `Connection` header lists `option`.
+fn has_connection_option(request: Request, option: Text) -> Bool = lists_connection_option(request.headers, option)
+
+// Whether the application's response sends the `close` option, after
+// which the server closes the connection (RFC 9112 section 9.6).
+fn response_closes(response: Response) -> Bool satisfies [RFC9112.R9_6_6] = lists_connection_option(response.headers, "close")
 
 // HTTP/1.1 keeps the connection unless asked to close, HTTP/1.0 closes it
 // unless asked to keep it; `close` wins over `keep-alive`.
@@ -363,6 +372,38 @@ fn is_token(text: Text) -> Bool {
   !text.is_empty()
 }
 
+fn is_ows(b: Byte) -> Bool = b == b' ' || b == b'\t'
+
+// `text` without the SP and HTAB at either end (OWS, RFC 9110 section
+// 5.6.3); every other byte stays, a Unicode space too.
+fn trim_ows(text: Text) -> Text {
+  let bytes = text.to_bytes()
+  var start = 0
+  var end = bytes.len()
+  while start < end && is_ows(bytes.at(start)) {
+    start = start + 1
+  }
+  while end > start && is_ows(bytes.at(end - 1)) {
+    end = end - 1
+  }
+  bytes.slice(start, end).to_text()
+}
+
+test "OWS is SP and HTAB only" verifies [RFC9112.R6_3_4, RFC9112.R6_3_5] {
+  assert trim_ows(" \t a b \t ") == "a b"
+  assert trim_ows("") == ""
+  assert trim_ows(" \t") == ""
+  assert trim_ows("x") == "x"
+  for space in ["\u{a0}", "\u{85}", "\u{3000}", "\r", "\n"] {
+    assert trim_ows("3{space}") == "3{space}"
+  }
+  assert parse_head("POST / HTTP/1.1\r\nContent-Length: 3\u{a0}")?.headers == [("content-length", "3\u{a0}")]
+  for space in ["\u{a0}", "\u{85}", "\u{3000}"] {
+    assert next_of("POST / HTTP/1.1\r\nContent-Length: 3{space}\r\n\r\nabc".to_bytes())? == Reject(400)
+  }
+  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: \t3 \r\n\r\nabc")? != Reject(400)
+}
+
 // A field value: no control byte except tab, so no bare CR or LF.
 fn is_field_value(text: Text) -> Bool satisfies [RFC9110.R5_5_4] {
   for b in text.to_bytes() {
@@ -384,7 +425,7 @@ fn is_target(text: Text) -> Bool {
 }
 
 // The request line and header lines of a head, without the blank line.
-fn parse_head(head: Text) -> Option<Request> satisfies [RFC9112.R2_2_1, RFC9112.R2_2_4, RFC9112.R2_2_9, RFC9112.R5_1_1, RFC9112.R5_2_2, RFC9110.R5_5_1, RFC9110.R5_5_4] {
+fn parse_head(head: Text) -> Option<Request> satisfies [RFC9112.R2_2_4, RFC9112.R2_2_9, RFC9112.R5_1_1, RFC9112.R5_2_2, RFC9110.R5_5_1, RFC9110.R5_5_4] {
   let lines = head.split("\r\n")
   let parts = lines.at(0).split(" ")
   if parts.len() != 3 || !is_token(parts.at(0)) || !is_target(parts.at(1)) {
@@ -401,7 +442,7 @@ fn parse_head(head: Text) -> Option<Request> satisfies [RFC9112.R2_2_1, RFC9112.
   for line in lines.slice(1, lines.len()) {
     match line.split_once(":") {
       Some((name, value)) => if is_token(name) && is_field_value(value) {
-        headers.push((name.to_lower(), value.trim()))
+        headers.push((name.to_lower(), trim_ows(value)))
       } else {
         return None
       }
@@ -411,7 +452,7 @@ fn parse_head(head: Text) -> Option<Request> satisfies [RFC9112.R2_2_1, RFC9112.
   Some(Request { method = parts.at(0), path, query, version = parts.at(2), headers, body = "" })
 }
 
-test "tokens, field values and targets" verifies [RFC9112.R2_2_1, RFC9110.R5_5_4] {
+test "tokens, field values and targets" verifies [RFC9110.R5_5_4] {
   assert is_token("Content-Length")
   assert is_token("!#$%&'*+-.^_`|~09azAZ")
   assert !is_token("")
@@ -430,7 +471,7 @@ test "tokens, field values and targets" verifies [RFC9112.R2_2_1, RFC9110.R5_5_4
   assert !is_target("/a\x7f")
 }
 
-test "parse_head reads the request line and headers" verifies [RFC9112.R2_2_1, RFC9110.R5_5_1] {
+test "parse_head reads the request line and headers" verifies [RFC9110.R5_5_1] {
   let head = "POST /todos?x=1&y HTTP/1.1\r\nHost: example:80\r\nX-Padded:  a\tb \t\r\nEmpty:"
   let expected = Request {
     method = "POST"
@@ -477,7 +518,7 @@ enum HeadRead { Complete(Int), Closed, TooLarge }
 
 // Reads until `buffer` holds a whole head: how it ended and the bytes
 // read. `Complete` carries the head's length including the blank line.
-fn read_head<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> IoResult<(HeadRead, Bytes)> satisfies [RFC9112.R2_2_1, RFC9110.R5_3_4, RFC9110.R5_4_1] {
+fn read_head<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> IoResult<(HeadRead, Bytes)> satisfies [RFC9110.R5_3_4, RFC9110.R5_4_1] {
   let maximum = limits.head.to_int()
   var data = buffer
   var from = 0
@@ -612,7 +653,7 @@ fn session<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp
       Reject(status) => return reject(stream, limits, status)
       Got(request, rest) => {
         let response = checked(application.handle(application.state, request))
-        let keep = keep_alive(request)
+        let keep = keep_alive(request) && !response_closes(response)
         stream.write_all(render(response, keep))?
         if !keep {
           return Ok(())
@@ -719,9 +760,11 @@ test "any Transfer-Encoding is 501, also with a Content-Length" verifies [RFC911
 }
 
 // Answers `<method> <path>?<query> <body>`; `/bad` gets a header with a
-// line break.
+// line break, `/close` the header `Connection: Upgrade, Close`.
 test fn answer(state: Unit, request: Request) -> Response = if request.path == "/bad" {
   Response { status = 200, headers = [("X", "a\r\nb")] }
+} else if request.path == "/close" {
+  Response { status = 200, headers = [("connection", "Upgrade,\tClose ")], body = "closing" }
 } else {
   Response.plain(200, "{request.method} {request.path}?{request.query} {request.body}")
 }
@@ -900,6 +943,14 @@ test "a Content-Length longer than the body, then close, gets no answer" verifie
 test "a Content-Length shorter than the body leaves the rest as the next head" verifies [RFC9112.R9_3_5] {
   let input = b"POST / HTTP/1.1\r\nContent-Length: 2\r\n\r\nabGET /n HTTP/1.0\r\n\r\n"
   assert served(input)? == reply("POST /? ab", "keep-alive") + reply("GET /n? ", "close")
+}
+
+test "a response with the close option ends the connection" verifies [RFC9112.R9_6_6, RFC9112.R9_6_7] {
+  assert response_closes(Response { status = 200, headers = [("CONNECTION", " Upgrade,\tClose ")] })
+  assert !response_closes(Response { status = 200, headers = [("Connection", "keep-alive")] })
+  assert !response_closes(Response { status = 200, headers = [("X", "close")] })
+  let closing = "HTTP/1.1 200 OK\r\nconnection: Upgrade,\tClose \r\nContent-Length: 7\r\nConnection: close\r\n\r\nclosing"
+  assert served(b"GET /a HTTP/1.1\r\n\r\nGET /close HTTP/1.1\r\n\r\nGET /b HTTP/1.1\r\n\r\n")? == reply("GET /a? ", "keep-alive") + closing
 }
 
 test "a request after Connection: close is not answered" verifies [RFC9112.R9_6_3, RFC9112.R9_6_5] {
