@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T05:03:07Z",
+  "actor": "human:timo",
+  "artifact": "story:rust-tooling",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 1f87ef6 exit 0, 1097 tests passed; cargo test -p ignite-perf 31 passed",
+    "reference": "https://github.com/ignite-lang/ignite/pull/3"
+  }
+}

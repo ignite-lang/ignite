@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:rust-tooling
 kind: story
-status: active
+status: implemented
 title: Port the repository's Python scripts to Rust
 scope:
 - confidence: cited
@@ -11,10 +11,11 @@ scope:
   path: docs/performance/README.md
 - confidence: cited
   path: scripts
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-02T22:38:16Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-02T22:38:24Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-03T05:03:07Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
