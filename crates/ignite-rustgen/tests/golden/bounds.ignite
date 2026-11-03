@@ -1,0 +1,102 @@
+package examples.bounds
+
+import std.net.{ByteStream, Pipe, PipeStream, TcpStream}
+import std.io.IoError
+
+// Slice 14 on the Rust target (docs/slice.md 18.10): a fn and a role
+// bounded by `ByteStream`, instantiated with `TcpStream`, with
+// `PipeStream` and with an outer bounded parameter; UFCS on a bounded
+// value; `spawn` of bounded instances; an unbounded generic fn, whose
+// calls carry no turbofish.
+
+type IoResult<T> = Result<T, IoError>
+
+protocol Relay {
+  fn serve<S: ByteStream>(stream: S, limit: Int) -> IoResult<Unit> requires [stream.read, stream.write] {
+    stream.set_idle_timeout(limit)?
+    loop {
+      match stream.read(4096)? {
+        Eof => return stream.close()
+        Data(bytes) => {
+          stream.write_all(bytes)?
+        }
+      }
+    }
+  }
+}
+
+fn identity<T>(value: T) -> T = value
+
+fn relay<S: ByteStream>(stream: S) -> IoResult<Unit> requires [stream.read, stream.write] {
+  match stream.read(16)? {
+    Eof => {}
+    Data(bytes) => {
+      stream.write_all(identity(bytes))?
+    }
+  }
+  let copy = stream.copy()
+  copy.write_all("x".to_bytes())?
+  stream.close()
+}
+
+fn once<S: ByteStream>(stream: S) -> IoResult<Unit> requires [stream.write] = stream.write_all("y".to_bytes())
+
+fn forward<T: ByteStream>(inner: T) -> IoResult<Unit> requires [inner.read, inner.write] {
+  inner.once()?
+  spawn relay(inner)
+  relay(inner)
+}
+
+fn over_tcp(stream: TcpStream) -> IoResult<Unit> requires [stream.read, stream.write] {
+  stream.set_idle_timeout(100)?
+  relay(stream)?
+  forward(stream)?
+  spawn relay(stream)
+  Relay.serve(stream, 5000)
+}
+
+fn over_pipe(end: PipeStream) -> IoResult<Int> requires [end.read, end.write] {
+  end.set_idle_timeout(100)?
+  end.write_all("z".to_bytes())?
+  relay(end)?
+  end.once()?
+  forward(end)?
+  spawn Relay.serve(end, 5000)
+  Ok(end.received_batches())
+}
+
+type Server {
+  listener: TcpListener
+  limit: Int
+  executable: Text
+}
+
+fn Server.main(self: Server) -> IoResult<Unit> {
+  loop {
+    let stream = self.listener.accept()?
+    spawn Relay.serve(stream, self.limit)
+  }
+}
+
+system Bounds {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 7600 }
+
+  component server: Server {
+    listener = ingress
+    limit = 5000
+    executable = "relayd"
+  }
+}
+
+test "a pipe pair relays" {
+  let (client, server) = Pipe.pair()
+  client.write_all("hi".to_bytes())?
+  client.close()?
+  relay(server)?
+  assert server.received_batches() == 1
+  let text = match client.read(16)? {
+    Data(bytes) => bytes.to_text()
+    Eof => ""
+  }
+  assert text == "hix"
+}
