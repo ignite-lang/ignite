@@ -375,7 +375,7 @@ impl<'t> Parser<'t> {
 
     /// A segment of a `package`, `import` or effect path, or the name in a
     /// property or record-literal field `name = value`: an identifier or a
-    /// keyword, so `std.protocol.telnet` is a path and `protocol = Telnet` a
+    /// keyword, so `std.protocol.echo` is a path and `protocol = Echo` a
     /// property although `protocol` is a keyword.
     fn name_or_keyword(&mut self) -> PResult<Ident> {
         let token = self.peek_token();

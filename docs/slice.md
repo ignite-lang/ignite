@@ -1945,7 +1945,7 @@ work.
 | `std/protocol/http.ignite` | `HttpServer { listener, application: HttpApp<S>, executable }` |
 | `std/contract.ignite` | `Availability`, `ThresholdCompliance`, `SLA`, `Window` (`rolling(Duration)`, `calendar_month(Text)`), `Consequence` (`event(Text)`), `MissingData` |
 | `std/policy.ignite` | `Restart { backoff: Backoff, maximum_attempts, interval: Duration }`, `Backoff` (`exponential(Duration, Duration)`, `fixed(Duration)`), `DrainRollout { deadline: Duration, on_deadline: Text }` |
-| `std/probe.ignite` | `TelnetPrompt { target: Ref<TelnetServer>, interval, timeout, expected_prompt, close_after_probe, attempts: Signal<ProbeAttempt> }`, `ProbeAttempt` |
+| `std/probe.ignite` (since moved: `TelnetPrompt` is in `std/protocol/telnet.ignite`, `ProbeAttempt` in `std/sli.ignite`; `docs/layering.md`) | `TelnetPrompt { target: Ref<TelnetServer>, interval, timeout, expected_prompt, close_after_probe, attempts: Signal<ProbeAttempt> }`, `ProbeAttempt` |
 | `std/deploy.ignite` | `Deployment { system: SystemRef, bindings: Map<Ref, Binding> }`, `Binding` (`localSocket()`, `nativeProcess(includes: List<Ref>)`, `workstationExecutable()`, `scheduledProbeHost()`) |
 | `std/cli.ignite` | `Application { executable, commands: Map<Text, Command> }`, `Command`, `Argument { name, kind: ArgKind }`, `ArgKind` (`endpoint(Protocol)`, `text()`, …) (O6, O9) |
 
@@ -2425,8 +2425,8 @@ Excerpt for `Terminal.promptProbe` (the emitted form puts every key on its own l
 ```json
 {
   "declaration": "component", "defaults": [], "executable": null,
-  "id": "Terminal.promptProbe", "kind": "std.probe.TelnetPrompt",
-  "outputs": {"attempts": "std.probe.ProbeAttempt"},
+  "id": "Terminal.promptProbe", "kind": "std.protocol.telnet.TelnetPrompt",
+  "outputs": {"attempts": "std.sli.ProbeAttempt"},
   "properties": {
     "close_after_probe": true,
     "expected_prompt": "terminal> ",
@@ -2922,7 +2922,7 @@ Records:
 |---|---|---|---|
 | reducers | `std/control.ignite` (as landed, P4: the reducers share the module of `Event`, `Effect` and `Step`, because a module below `std.control` could not import them and one above would be an E032 cycle, O45; the contract's `std/control/*.ignite` is void) | Ignite | supervisor, probe scheduler, contract evaluator, rollout: pure fns `step(machine, event) -> Step` (16.6) |
 | shared vocabulary | `std/sli.ignite`, `std/time.ignite` | Ignite | `ProbeAttempt`, `satisfies`, `Window`, `MissingData`, `meets`; calendar arithmetic and the two time zones (O36): the leaves both the reducers and the kinds import (O45) |
-| domain kinds and hooks | `std/contract.ignite`, `std/policy.ignite`, `std/probe.ignite`, `std/protocol/telnet.ignite`, `std/time.ignite` | Ignite | `K.machine`, `K.validate`, the probe's `K.main`, calendar arithmetic |
+| domain kinds and hooks | `std/contract.ignite`, `std/policy.ignite`, `std/protocol/telnet.ignite` (the probe since the layering fix, `docs/layering.md`), `std/time.ignite` | Ignite | `K.machine`, `K.validate`, the probe's `K.main`, calendar arithmetic |
 | driver (the supervisor process) | `crates/ignite/src/run/` | Rust | event loop, adapters (process, probe, timer, build, journal, clock, control input), routing; it knows only the `std.control` types |
 | evaluator at run time | `crates/ignite-eval` | Rust | steps the reducers (O27); decodes adapter results into values |
 | substrate | `crates/ignite-io` (and the `ignite-rt` adapter) | Rust | monotonic clock, reference endpoints, drain on SIGTERM (16.13); nothing about supervision |
@@ -2976,11 +2976,12 @@ Library boundaries:
 - Nothing named after telnet lives under `crates/`. The probe's protocol work is Ignite
   code: `TelnetPrompt.main` over a new telnet client-role fn (16.8).
 - Layering of std (O45): `K.machine` returns `std.control.Machine` and must be declared in
-  `K`'s module (E003, 13.8), so `std.probe`, `std.contract` and `std.protocol.telnet` import
+  `K`'s module (E003, 13.8), so `std.contract` and `std.protocol.telnet` import
   `std.control`. `std.control` and every reducer module therefore import no kind's module
   (E032 otherwise): only the leaves `std.sli`, `std.policy` and `std.time`. The vocabulary
   the reducers consume (`ProbeAttempt`, `satisfies`, `Window`, `MissingData`, `meets`) moved
-  from `std.probe` and `std.contract` to `std.sli`; `std.contract` and `std.probe` import it
+  from `std.probe` and `std.contract` to `std.sli`; `std.contract` and `std.protocol.telnet`
+  (which holds the probe since `std/probe.ignite` was removed, `docs/layering.md`) import it
   from there, and the model prints `std.sli.ProbeAttempt` and `std.sli.Window`.
 
 ### 16.3 `ignite run` and `ignite replay`
@@ -3303,7 +3304,7 @@ References:
 
 - `Availability.machine`, `ThresholdCompliance.machine` and `SLA.machine` return `Evaluate`.
   Each subscribes to its `signal`.
-- A good event satisfies `satisfies(attempt, good, threshold)` (std/probe). `threshold` is 0
+- A good event satisfies `satisfies(attempt, good, threshold)` (std/sli). `threshold` is 0
   for `Availability` and `SLA`.
 - Population: the executed attempts in the window (11.7).
 - Missing: the expected slots in the window that are not executed.
@@ -3936,11 +3937,12 @@ dependency is added. Test-only work also shares the checked AST/type pair for im
 fixtures, and the giant-chain assertion avoids a pattern search only when its required marker
 is absent; every assertion, case, ignore and failure condition is preserved.
 
-## 17 Slice 13: local apply (proposed contract)
+## 17 Slice 13: local apply
 
-**Status: proposed, awaiting user review; not implemented.** This section fixes the
-contract and acceptance design only. It adds no running host, schema implementation or
-passing tests. Slice 12c's remaining performance work stays deferred.
+**Status: approved for implementation; implementation and acceptance checks in progress.**
+The user's instruction to implement the plan authorizes this work without another
+contract approval. The checks below remain obligations until verified. Slice 12c's
+remaining performance work stays deferred.
 
 ### 17.1 Scope and command surface
 
@@ -3998,6 +4000,29 @@ state lock; neither socket presence nor a PID file proves ownership. Requests en
 same serialized controller queue as adapter observations. There is one active apply per
 state; another distinct apply is rejected as busy. Inspection and retries remain available.
 No remote listener or multi-user authorization model is added.
+
+As landed (U2): a frame is a 4-byte big-endian length and that many bytes of UTF-8 JSON, at
+most 16 MiB. A request is an object with `version` (`ignite-host-control/0.1`), `requestId`
+(1 to 128 bytes), `stateIdentity`, `operation` and `payload`; a reply carries `version`,
+the `requestId`, `status` (the 17.1 categories), `reason` and `payload`. An oversized,
+non-UTF-8, non-JSON or incomplete envelope, or another version, is answered with status 2
+before the host queue; the reply carries the request id when it could be read and the empty
+id otherwise, and the client reports such a reply as the host's rejection (exit 2); a frame
+cut short by the client's end of file is answered the same way, with the empty id. The host
+takes the lock before it changes anything, then restricts the state directory to mode 0700;
+a held lock or a state with a `run` journal is exit 2. After locking, the host checks that
+the locked file is still the one at `<state>/lock` and that no host answers on
+`control.sock`, so deleting the lock file of a live host does not admit a second one (exit 2).
+The socket is bound in a fresh 0700
+directory, set to 0600 and renamed over `control.sock`. The identity is 32 random bytes in
+hex, written to a temporary file, synced, renamed and the directory synced; an identity file
+that is not one is exit 3 and is never replaced, and a missing identity on a state that holds
+`host-journal.jsonl` or `status.json` is exit 3 with nothing written. An apply of a plan with neither a receipt
+nor `plans/<id>.json` is exit 2. `inspect` adds `host` (PID and start time), `currentOperation`,
+`actionProgress` (per member action of the desired plan: `done`, `pending` or `blocked`),
+`readiness` (expected and ready machines, `converged`) and `nextAction`; offline it sets
+`online` false, `host` null, `health` and `readiness` to `unknown: host offline`, and renames
+every `ready` flag at any depth, `retiringInstances` included, to `lastRecordedReady`.
 
 ### 17.3 Saved plan and identity
 
@@ -4063,6 +4088,28 @@ deleted; a reference, matching address or historical PID does not grant authorit
 is unsupported. Listener adoption requires matching durable ownership and OS process identity;
 port availability alone is insufficient. Resource adoption that cannot be proved is blocked.
 
+As landed (U4): the order is the pure reducer `Transition` in `std.control`, stepped by the
+host over the plan's member actions (`ignite-apply-actions/0.1`); each step is journaled as a
+`transition` record before the host acts on it. Owned members to remove, and owned members
+replaced stop-first, stop one at a time in `stopOrder`; a provider still serving a dependent
+that cuts over is stopped only after that dependent has cut over or stopped. `SwitchRevision`
+hands the staying instances to the desired revision; members to add or replace then start in
+`startOrder`, each once the providers it depends on are ready. A replacement on the port its
+old instance holds (an occupied listener) drains and releases the old listener first, then
+starts the new one and requires `Ready`; a failure after that step reports actual state with
+`recovery_required`. A replacement with no listener conflict starts first: the old instance
+keeps serving until the new one is `Ready`, and a replacement that never becomes ready fails
+the operation: everything the failed operation started stops, and the old instance and the
+other committed instances are handed to a new run of the committed plan (`restoreCommitted`),
+whose supervisor takes them back with their policy, generation, port and readiness. Before any destructive step
+the host checks that each new listener's port can be bound, and refuses with
+`listener_unavailable` otherwise. An effect the host cannot carry out (spawn failure, artifact
+mismatch, an ended controller) is reported to the reducer as `EffectFailed` and journaled as an
+`Abandon` step before the operation fails; a desired member that gives up gives
+`Abandon("gave_up", member)`. A corrective apply (D3) is admitted only while no operation other
+than the gave-up one is active; a no-op corrective back to the committed revision clears
+`gave_up`, journals `recoveryResolved` and retires the failed revision's instances.
+
 ### 17.5 Durability, revision and recovery
 
 This needs a distinct versioned host journal, not an altered interpretation of
@@ -4101,6 +4148,49 @@ retrying `apply` attaches to that work. Client disconnection needs no operator r
 Stopping/restarting a host is not a new apply. The current replay implementation only verifies
 recorded transitions and tolerates an incomplete final step; it does not already implement
 this intent reconciliation. Recovery completeness is an acceptance obligation below.
+
+As landed (U5): every host journal record is written and `sync_data`ed before the host acts on
+it: the acceptance before the reply, a run record (an effect intent among them) before its
+acknowledgement lets the run driver dispatch, a `transition` step before its effects. When a run
+record changes the owned or retiring instances, an `ownership` record (pid, OS start time,
+generation, operation) is synced before that acknowledgement too. A failed write or sync
+truncates the journal to its last synced record, fails the request with exit 3 and stops the
+host before anything else is handled; its children end by the parent-death rule. At the next
+start the retained context of a plan without a receipt (an admission that never became durable)
+is removed and journaled as `discarded`, so the plan can be admitted again. Recovery takes
+the last `state` snapshot and the `ownership` records after it, and the pending intents: `Spawn`
+effects with no later `Started` or `SpawnFailed` of that member and no later `reconciled`
+record. A recorded instance whose pid is absent or held by a process with another start time
+ended and is never signalled; one whose pid and start time match is killed through a pidfd that
+re-checks the start time, and recovery waits until it ended. Any other live process whose
+executable lies under `<state>/revisions/` is unaccounted for: it is neither signalled nor
+adopted, and the active (else committed) operation becomes `recovery_required` with the reason
+`outcome_unknown` and the processes and pending intents as `recovery.evidence`; the other
+applies are refused and no effect runs. Otherwise a `reconciled` record settles the intents and
+the active, else committed, revision starts afresh (after `gave_up` or `listener_unavailable`
+the committed one). A fixed listener port of that revision that another process holds blocks it
+as `foreign_listener`, without a signal. `status` on the host's stdin, or the next start, lifts
+either block and examines the evidence again. A block never overwrites an unresolved recovery:
+while one holds (the active operation is `recovery_required`, such as `gave_up`, or the committed
+revision's controller ended), the block lives in `recovery` alone, naming that operation as
+`recovery.unresolved`; the operation keeps its receipt and reason, every apply but a retry is
+refused, and lifting the block leaves that recovery as it was. Admitting a corrective apply
+resolves the failed operation (`recoveryResolved`) and clears its reason at once, so a host that
+crashes after the acceptance resumes the corrective. Each revision state directory gets
+a name no earlier host of the state used, and `revisions/` and the state root are synced once it
+is created; a temporary that a crash left behind never blocks the next write. Decision D2: a revision whose reducer revision
+differs from the host's is neither re-stepped nor driven; the snapshot's `history` lists each
+revision state with `restepped`, and `recovery` is `recovery_required`, `reducer_revision_changed`,
+next action "replan and apply", without blocking an apply; the next commit clears it. Debug
+builds read `IGNITE_DEBUG_HOST_FAULT` (`after_intent`, `before_dispatch`, `after_dispatch`,
+`mid_transition` crash the host with SIGKILL there; `sync_intent`, `sync_effect` fail that
+sync) and `IGNITE_DEBUG_HOST_REDUCER_REVISION` (the reducer revision the host claims); release
+builds read neither. Known gaps:
+
+- A `foreign_listener` block of the committed revision replaces a `reducer_revision_changed`
+  report in `recovery`; the not-driven operation's receipt keeps the reason.
+- A reducer failure of the committed revision's run while a `gave_up` is unresolved makes the
+  committed revision the active operation, replacing that recovery reason.
 
 ### 17.6 Terminal walkthrough
 
@@ -4150,12 +4240,35 @@ and LLVM artifacts; compare semantic actions/results while masking only physical
 | Multiple committed/pending host revisions | replay/recover history | Every action/result uses its original model/input/reducer provenance; divergence is rejected |
 | Old run journal and existing commands | run/replay/ordinary plan | Existing contracts and goldens unchanged |
 
-The following are future implementation tasks, not dispatch authorization:
+Coverage (U6): the tests that exercise each row, by harness name of `crates/ignite/tests/main.rs`
+unless the name says otherwise; `{,_llvm}` is the Rust test and its LLVM twin. Each target builds
+its workload in the one shared build directory of the apply suites (`tests/common/apply.rs`). The
+pass/fail record is `STATUS.md`.
+
+| Row | Covered by | Targets |
+|---|---|---|
+| 1 Empty state, terminal design | `apply::{rust,llvm}_saved_apply_retry_source_admission_and_retained_restart` (revision 1, one owned ready server, the probe's `signal` and the contract's `standing` journaled, `lastStandings` in inspect, the console's `status`); `apply_transition::add_remove_dependent_orders_provider_first_external_untouched{,_llvm}` (emission and standing before `Commit`) | Rust, LLVM |
+| 2 Same accepted plan, concurrent retry | `apply::concurrent_retry_attaches_to_one_operation_{rust,llvm}` (two clients started together while the port is held, one operation, one `StartMember Terminal.server` and one `Commit`, both receipts); sequential retries in `apply::{rust,llvm}_saved_apply_…` | Rust, LLVM |
+| 3 Reformatted/reordered members | `apply_admission::reordered_members_are_operational_noop_with_fresh_pins`; the comment-only replan of `apply::{rust,llvm}_saved_apply_…` | Rust, LLVM (the reorder case has no executable, so its target builds nothing) |
+| 4 Same model, changed command body | `apply::changed_command_body_replaces_ready_server_while_old_sessions_drain{,_llvm}` | Rust, LLVM |
+| 5 Stale base, changed source/artifact, wrong state/version | `apply_admission::stale_base_changed_source_wrong_state_and_version_reject_before_mutation`; the changed-source refusal of `apply::{rust,llvm}_saved_apply_…`; the tampered artifact of `apply_admission::changed_codegen_revision_…{,_llvm}` | Rust, LLVM (the stale-base, state and version refusals are admission checks before any artifact is read, on a system without executables) |
+| 6 Changed codegen, unchanged model | `apply_admission::changed_codegen_revision_with_an_unchanged_model_replaces_the_hosted_server{,_llvm}` (replace action, tampered artifact refused, pinned bytes replace the server); `apply_admission::codegen_revision_and_runtime_bytes_are_separate_identity_and_admission_inputs` | Rust, LLVM |
+| 7 Add/remove dependent, external reference | `apply_transition::add_remove_dependent_orders_provider_first_external_untouched{,_llvm}` | Rust, LLVM |
+| 8 Remove the final hosted workload | `apply_transition::add_remove_dependent_orders_provider_first_external_untouched{,_llvm}` (revision 3 owns nothing, host online, the same desired state replanned is a no-op); `apply_host::inspect_reports_identity_revisions_operation_progress_readiness_and_next_action` (zero hosted machines); `apply_transition::a_revert_after_gave_up_stops_what_the_failed_operation_started` | Rust, LLVM |
+| 9 Connection active during replacement | `apply::changed_command_body_replaces_ready_server_while_old_sessions_drain{,_llvm}` (occupied listener: the old session is served until it quits, the apply waits for it); `apply_transition::a_port_change_starts_the_replacement_before_the_old_one_drains`, `a_replacement_that_never_becomes_ready_keeps_the_old_serving_and_fails`, `a_failed_start_first_replacement_leaves_the_old_instance_supervised`, `a_corrective_after_a_failed_replacement_completes_with_its_receipt` | Rust, LLVM (the start-first cases on Rust: the ordering is the host's reducer, not the target's) |
+| 10 Client disconnect before/after durable acceptance | after: `apply::accepted_apply_recovers_after_host_crash_during_failed_dispatch{,_llvm}`, `apply::concurrent_retry_attaches_to_one_operation_{rust,llvm}`; before: `apply_recovery::a_failed_journal_sync_stops_the_host_before_any_dependent_effect` (an acceptance that is not durable is not in the journal and is admitted afresh), `apply_host::adversary_a_frame_cut_short_by_a_half_close_is_answered_with_status_2` | Rust, LLVM (the before half on Rust: the journal and the frame are the host's, not the target's) |
+| 11 Crash after intent, after dispatch, before commit | `apply_recovery::crash_after_intent_before_dispatch_yields_one_server_or_outcome_unknown{,_llvm}`, `apply_recovery::crash_mid_transition_resumes_once_and_a_foreign_listener_is_never_adopted{,_llvm}`, `apply::accepted_apply_recovers_after_host_crash_during_failed_dispatch{,_llvm}`, `apply_recovery::a_crash_after_accepting_a_corrective_resumes_the_corrective` | Rust, LLVM |
+| 12 Reused PID, foreign listener, second host | foreign listener and an unaccounted generation process: `apply_recovery::crash_mid_transition_…{,_llvm}`, `apply_recovery::crash_after_intent_…{,_llvm}`; second host: `apply_host::second_host_and_run_on_a_host_state_are_refused_before_any_change`, `adversary_a_second_host_is_refused_after_the_lock_file_is_deleted`, `adversary_two_hosts_started_at_once_leave_exactly_one`; reused PID: the unit test `apply::host::recovery::tests::a_reused_or_absent_pid_is_ended_and_a_matching_one_runs` (`cargo test -p ignite --lib`), because an end-to-end test cannot make the kernel give a recorded PID to another process | Rust, LLVM (second host and reused PID target-free) |
+| 13 Storage sync failure, migration, action cycle | `apply_recovery::a_failed_journal_sync_stops_the_host_before_any_dependent_effect`; unit tests `apply::plan::tests::replacing_a_stateful_member_is_an_unsupported_migration`, `readiness_cycles_reject_but_signal_cycles_do_not_impose_start_order`, `adversary_self_and_indirect_readiness_cycles_are_rejected`; inline `std/control.ignite` test "members whose providers never become ready are an ordering cycle" | Rust (the journal, the action diff and the reducer are the host's; no artifact is involved) |
+| 14 Multiple host revisions, history | `apply_recovery::a_changed_reducer_revision_starts_the_host_without_driving_and_asks_to_replan` (revisions 1 and 2, `restepped` per revision, D2); `apply::tampered_host_history_is_rejected_before_startup` (divergence); `apply_recovery::crash_mid_transition_…{,_llvm}` (a committed and a pending revision across a crash) | Rust (D2 and history are the host's; the LLVM twin of the crash case covers two revisions) |
+| 15 Old run journal, existing commands | `apply_host::second_host_and_run_on_a_host_state_are_refused_before_any_change` and `run_on_a_stopped_host_state_is_refused_before_any_build` (`run` on a host state, E126), `apply_host::a_host_refuses_a_state_that_holds_a_run_journal`; unchanged: `run::*` (`run::terminal_runs_under_ignite_run{,_on_the_llvm_target}`, `run::e126_journal_mismatch`, `run::e127_replay_diverged`), `plan::terminal_example_model_matches_golden`, `plan::todo_example_model_matches_golden`, `plan::design_model_is_byte_identical_across_processes_and_directories` | Rust, LLVM (`run`) |
+
+The following are implementation tasks authorized by the approved plan:
 
 | Owner | Deliverable | Dependencies | Acceptance |
 |---|---|---|---|
 | Evaluator/frontend and existing build driver | Canonical operational projection, saved-plan admission and pinned artifact manifest | Reviewed contract | Source-only no-op; changed code/codegen replacement; exact input validation |
-| Ignite control/kind modules | Pure diff, ordering, replacement and reconciliation transitions | Plan/action contracts | Reducer traces agree in evaluator and both backends; preserve std layering (O45) |
+| Ignite control/kind modules | Pure ordering, replacement and reconciliation transitions (`std.control` `Transition`, stepped by the host); the diff is computed by the driver as the plan's `actions` (decision D1) | Plan/action contracts | Reducer traces agree in evaluator and both backends; preserve std layering (O45) |
 | Driver host/control/journal | Socket client/host, owned revision context, durable receipts and revision replay | Projection and reducer interfaces | Single owner; retry precedence; multi-revision crash recovery |
 | Existing process/probe/build adapters | Instance identity, immutable generations and existing drain/release dispatch | Durable action interface | No foreign mutation/duplicate spawn; occupied-port cutover |
 | Existing integration/inline test owners | Walkthrough and fault-injection matrix above | Host and adapter implementation | Both targets; unchanged run/replay/ordinary-plan coverage |
@@ -4163,5 +4276,5 @@ The following are future implementation tasks, not dispatch authorization:
 `Live` currently borrows one `Loaded` model/evaluator context, and `Core` owns a fixed machine
 set. The host task must introduce an owned revision context and explicit transition boundary;
 it cannot hot-swap borrowed AST/type tables or treat a new segment as plan replacement.
-Runtime implementation requires explicit user approval of this contract; completing independent
-review of this documentation batch does not grant that authorization.
+The user approved implementation of the plan. Independent review and the acceptance
+checks above remain required verification, without reopening that approval.

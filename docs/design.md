@@ -537,11 +537,11 @@ Note (slice 11, 2026-11-02). `check`, `build` and `test` exist as `docs/slice.md
 
 Note (slice 12, 2026-11-02). `run` exists as `docs/slice.md` 16.3 defines it: `ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target rust|llvm] [--clock real|manual] [--epoch RFC3339] [--port RESOURCE=PORT] [--json]` plans the assembly, builds its members, starts and supervises them, runs the probes and evaluates the contracts in the foreground, and journals every event, effect, standing and consequence under `<state>`; stdin takes `status`, `rollout <member>`, `stop` and, with the manual clock, `advance <quantity>`. `ignite replay <file.ignite> [--assembly NAME] [--state DIR]` re-derives every effect and standing from that journal and prints the final standings. The machines are the pure reducers of `std/control.ignite`, stepped in the evaluator (O27). `fmt`, `apply` and `inspect` are still proposals.
 
-Note (slice 13 contract, 2026-11-02). `docs/slice.md` section 17 proposes the first
+Note (slice 13 contract, 2026-11-02). `docs/slice.md` section 17 defines the first
 local apply workflow: an explicitly started foreground host, source-bound saved
 apply plans and replacement-first changes. It defines a separate versioned apply
 plan and revision-aware host history; the existing model and run/replay contracts
-remain in force. This is a contract for review, not an implemented command surface.
+remain in force. The user approved implementation; runtime acceptance checks remain in progress.
 Cloud hosts, daemon management, portable bundles and in-place updates are deferred.
 
 ### 10.2 Application CLI declarations
@@ -577,7 +577,7 @@ import std.console.CommandConsole
 import std.cli.{Application, Command, Argument}
 import std.contract.{Availability, ThresholdCompliance, SLA}
 import std.policy.{Restart, DrainRollout}
-import std.probe.TelnetPrompt
+import std.protocol.telnet.TelnetPrompt
 import std.deploy.{Deployment, localSocket, nativeProcess, workstationExecutable, scheduledProbeHost}
 
 system Terminal {

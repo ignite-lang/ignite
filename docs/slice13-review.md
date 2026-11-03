@@ -1,8 +1,8 @@
 # Slice 13 contract review
 
-Status: independently reviewed proposal; awaiting user approval before runtime implementation.
-This batch changes documentation only. Acceptance scenarios are future obligations,
-not executed tests or claims of conformance.
+Status: independently reviewed contract, approved for implementation by the user.
+The initial review batch changed documentation only; runtime implementation is now in
+progress. Acceptance scenarios remain obligations until their execution is recorded.
 
 ## Agreed scope
 
@@ -46,4 +46,4 @@ roadmap alignment. Scope is documentation, not command/schema/runtime implementa
 - Documentation diff and whitespace checks.
 - New-section structure, command examples, matrix and local document references checked.
 - No runtime source/manifests changed; no builds or runtime tests run for this documentation batch.
-- User approval remains required before assigning runtime implementation work.
+- The user's approval authorizes runtime implementation; no further contract approval is pending.

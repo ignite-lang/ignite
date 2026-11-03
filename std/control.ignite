@@ -13,10 +13,10 @@ import std.time.{month_start, next_month_start}
 // Duration since the journal's epoch.
 //
 // Layering (16.6, O45): this module is below every kind whose `machine`
-// hook returns `Machine` (`std.probe`, `std.contract`,
-// `std.protocol.telnet`). It imports only leaf modules: `std.sli` for the
-// vocabulary the reducers consume, `std.policy` for the policies they
-// apply, `std.time` for calendar boundaries. Importing a kind's module
+// hook returns `Machine` (`std.contract`, `std.protocol.telnet`). It
+// imports only leaf modules: `std.sli` for the vocabulary the reducers
+// consume, `std.policy` for the policies they apply, `std.time` for
+// calendar boundaries (`docs/layering.md`). Importing a kind's module
 // here is an import cycle (E032), which is also why the four reducers
 // live in this file: a module that declared one would have to import
 // `Event` and `Effect` from here while being imported by `step`.
@@ -228,7 +228,11 @@ enum RolloutState {
 // The rollout of one member under its `DrainRollout` policy (16.12):
 // build the next generation, drain the old process, start the new one,
 // retire the old one at the deadline. `old_pid` is the process serving
-// when the rollout starts, `new_pid` the one it starts.
+// when the rollout starts, `new_pid` the one it starts. A rollout started
+// by `Control("rollout start_first")` (the new instance listens elsewhere,
+// or not at all) starts the new process while the old one keeps serving
+// and drains the old one only once the new one is ready; a new process
+// that never becomes ready leaves the old one serving.
 type Rollout {
   id: Text
   member: Text
@@ -239,6 +243,7 @@ type Rollout {
   new_pid: Option<Int> = None
   released_at: Option<Duration> = None
   deadline_timer: Option<Int> = None
+  start_first: Bool = false
 }
 
 // One record of the journal's `segment` kind (16.5): a run's start,
@@ -884,7 +889,14 @@ fn roll(r: Rollout, event: Event) -> Step {
         None => {}
       }
       match r.old_pid {
-        Some(_) => { next.state = Retiring }
+        Some(old) => {
+          next.state = Retiring
+          if r.start_first {
+            next.deadline_timer = Some(DEADLINE_TIMER)
+            effects.push(Kill(r.member, old, SIGTERM))
+            effects.push(SetTimer(DEADLINE_TIMER, at + r.policy.deadline))
+          }
+        }
         None => {
           next.state = Done
           next.old_pid = Some(pid)
@@ -904,13 +916,14 @@ fn roll(r: Rollout, event: Event) -> Step {
     }
     Exited(pid, _) => retired(r, pid)
     Signalled(pid, _) => retired(r, pid)
-    Control(line) => if line == "rollout" {
+    Control(line) => if line == "rollout" || line == "rollout start_first" {
       match r.state {
         Idle | Done | Aborted => {
           var next = r
           next.state = Building
           next.released_at = None
           next.new_pid = None
+          next.start_first = line == "rollout start_first"
           rolled(next, [Build(r.member)])
         }
         _ => rolled(r, [Note("rollout already in progress")])
@@ -930,6 +943,10 @@ fn roll(r: Rollout, event: Event) -> Step {
     Built(generation) => if r.state == Building {
       var next = r
       next.generation = generation
+      if r.start_first {
+        next.state = Starting
+        return rolled(next, [Spawn(r.member, generation)])
+      }
       match r.old_pid {
         Some(pid) => {
           next.state = Draining
@@ -1022,6 +1039,301 @@ fn retired(r: Rollout, pid: Int) -> Step = match r.state {
   } else {
     unchanged(Roll(r))
   }
+}
+
+// Transition (17.4, decision D1 of slice 13): the order in which one apply
+// changes a running revision. The driver computes the diff (the plan's
+// member actions, `ignite-apply-actions/0.1`) and steps this reducer; the
+// reducer decides what happens next and the driver only executes it and
+// reports back. It is pure and reads no clock: its events say what the
+// driver observed, its effects what to do.
+//
+// The sequence: every owned member to remove, and every owned member to
+// replace without a draining cutover, is stopped in `stop_order`
+// (dependents before their providers), one at a time, each awaiting its
+// `MemberStopped`; a provider whose dependent cuts over is not stopped
+// first, it still serves that dependent. Then `SwitchRevision` hands the running instances that
+// stay to the desired revision. Then every owned member to add or replace
+// starts in `start_order`, one at a time, each only once every provider it
+// depends on that this transition starts is ready: `StartMember` for an
+// addition, `CutOver` for a replacement through its `DrainRollout` (the new
+// instance is ready before the old stops accepting; old sessions drain).
+// When the last one is ready the transition converges, and the driver's
+// `Converged` (every desired machine reports ready) gives `Commit`. A
+// desired member that gives up abandons the transition with
+// `Abandon("gave_up", member)`, and an effect the driver could not carry
+// out (`EffectFailed`) with its reason. A member that is not owned (external,
+// included, declared) and a member to detach or keep is never stopped or
+// started.
+
+// What the plan does to one member (`ignite-apply-actions/0.1` kinds:
+// `add`, `replace`, `remove`, `detach`, `unchanged`).
+enum ActionKind {
+  Add,
+  Replace,
+  Remove,
+  Detach,
+  Keep
+}
+
+// One member action: the member, what the plan does to it, whether the
+// host owns its instance, whether a replacement is a draining cutover (the
+// member has a rollout machine in both revisions) and the members it
+// requires (readiness, references, uses).
+type MemberAction {
+  member: Text
+  kind: ActionKind
+  owned: Bool
+  cutover: Bool = false
+  depends_on: List<Text> = []
+}
+
+// The phases of a transition.
+enum TransitionPhase {
+  Planned,
+  Stopping,
+  Switching,
+  Launching,
+  Converging,
+  Committed,
+  Abandoned
+}
+
+// The transition of operation `id`: its member actions and the plan's
+// orders, the member whose stop or start is in flight, the members
+// stopped and the members ready so far, and why it was abandoned.
+type Transition {
+  id: Text
+  actions: List<MemberAction>
+  start_order: List<Text>
+  stop_order: List<Text>
+  phase: TransitionPhase = Planned
+  current: Option<Text> = None
+  stopped: List<Text> = []
+  ready: List<Text> = []
+  failure: Option<Text> = None
+}
+
+// What the driver observed: the operation began, a member's instances
+// ended, the running instances that stay now belong to the desired
+// revision, a member is ready (its process printed `listening on`, or it
+// has no process and its machines started), a desired member's supervisor
+// gave up, every desired machine reports ready, or the driver could not
+// carry out an effect (the reason and the member it concerns: a listener
+// the replacement cannot bind, a process that failed to spawn, an artifact
+// that is not the admitted one, a run that ended).
+enum TransitionEvent {
+  Begin,
+  MemberStopped(Text),
+  Switched,
+  MemberReady(Text),
+  MemberGaveUp(Text),
+  Converged,
+  EffectFailed(Text, Text)
+}
+
+// What the driver does: drain and stop a member's instances, hand the
+// staying instances to the desired revision, start a member's machines,
+// replace a member through its rollout, commit the desired revision, or
+// end the operation as failed with a reason and the member it concerns.
+enum TransitionEffect {
+  StopMember(Text),
+  SwitchRevision,
+  StartMember(Text),
+  CutOver(Text),
+  Commit,
+  Abandon(Text, Text)
+}
+
+type TransitionStep {
+  transition: Transition
+  effects: List<TransitionEffect>
+}
+
+// The kind of an action from its schema text; an unknown kind touches
+// nothing.
+fn action_kind(text: Text) -> ActionKind =
+  if text == "add" { Add } else if text == "replace" { Replace } else if text == "remove" { Remove } else if text == "detach" { Detach } else { Keep }
+
+// The constructors the driver calls with the plan's texts.
+fn member_action(member: Text, kind: Text, ownership: Text, cutover: Bool, depends_on: List<Text>) -> MemberAction =
+  MemberAction { member, kind = action_kind(kind), owned = ownership == "owned", cutover, depends_on }
+
+fn transition(id: Text, actions: List<MemberAction>, start_order: List<Text>, stop_order: List<Text>) -> Transition =
+  Transition { id, actions, start_order, stop_order }
+
+fn transited(t: Transition, effects: List<TransitionEffect>) -> TransitionStep =
+  TransitionStep { transition = t, effects }
+
+fn listed(items: List<Text>, item: Text) -> Bool {
+  for candidate in items {
+    if candidate == item {
+      return true
+    }
+  }
+  false
+}
+
+fn action_of(t: Transition, member: Text) -> Option<MemberAction> {
+  for a in t.actions {
+    if a.member == member {
+      return Some(a)
+    }
+  }
+  None
+}
+
+// An owned member this transition stops before the switch: a removal, and
+// a replacement without a cutover unless a dependent that cuts over still
+// runs on it (`held`).
+fn stops(t: Transition, a: MemberAction) -> Bool =
+  a.owned && (a.kind == Remove || (a.kind == Replace && !a.cutover && !held(t, a.member)))
+
+// Whether an owned dependent of `member` replaced through a cutover keeps
+// running on it until its new instance is ready: dependents stop before
+// their providers (17.4), so `member` is not stopped before the switch; its
+// new instance starts after the switch, before the dependent cuts over.
+fn held(t: Transition, member: Text) -> Bool {
+  for a in t.actions {
+    if a.owned && a.kind == Replace && a.cutover && listed(a.depends_on, member) {
+      return true
+    }
+  }
+  false
+}
+
+// An owned member this transition starts after the switch.
+fn starts(a: MemberAction) -> Bool = a.owned && (a.kind == Add || a.kind == Replace)
+
+fn started_here(t: Transition, member: Text) -> Bool = match action_of(t, member) {
+  Some(a) => starts(a) && listed(t.start_order, member)
+  None => false
+}
+
+// Every provider of `a` that this transition starts is ready; a provider
+// it does not start (kept, external) is already there or not the host's.
+fn providers_ready(t: Transition, a: MemberAction) -> Bool {
+  for provider in a.depends_on {
+    if started_here(t, provider) && !listed(t.ready, provider) {
+      return false
+    }
+  }
+  true
+}
+
+// Step `t` over `event`: the transition after it and the effects to
+// execute, in order.
+fn transit(t: Transition, event: TransitionEvent) -> TransitionStep = match event {
+  Begin => if t.phase == Planned { next_stop(t) } else { transited(t, []) }
+  MemberStopped(member) => if t.phase == Stopping && t.current == Some(member) {
+    var next = t
+    var stopped = t.stopped
+    stopped.push(member)
+    next.stopped = stopped
+    next.current = None
+    next_stop(next)
+  } else {
+    transited(t, [])
+  }
+  Switched => if t.phase == Switching {
+    var next = t
+    next.phase = Launching
+    next_start(next)
+  } else {
+    transited(t, [])
+  }
+  MemberReady(member) => if t.phase == Launching && t.current == Some(member) {
+    var next = t
+    var ready = t.ready
+    ready.push(member)
+    next.ready = ready
+    next.current = None
+    next_start(next)
+  } else {
+    transited(t, [])
+  }
+  MemberGaveUp(member) => match t.phase {
+    Committed | Abandoned => transited(t, [])
+    _ => match action_of(t, member) {
+      Some(a) => if a.kind == Remove || a.kind == Detach {
+        transited(t, [])
+      } else {
+        abandon(t, "gave_up", member)
+      }
+      None => transited(t, [])
+    }
+  }
+  Converged => if t.phase == Converging {
+    var next = t
+    next.phase = Committed
+    transited(next, [Commit])
+  } else {
+    transited(t, [])
+  }
+  EffectFailed(reason, member) => match t.phase {
+    Committed | Abandoned => transited(t, [])
+    _ => abandon(t, reason, member)
+  }
+}
+
+fn abandon(t: Transition, reason: Text, member: Text) -> TransitionStep {
+  var next = t
+  next.phase = Abandoned
+  next.current = None
+  next.failure = Some(reason)
+  transited(next, [Abandon(reason, member)])
+}
+
+// The next member to stop in `stop_order`, or the switch when none is
+// left.
+fn next_stop(t: Transition) -> TransitionStep {
+  for member in t.stop_order {
+    match action_of(t, member) {
+      Some(a) => if stops(t, a) && !listed(t.stopped, member) {
+        var next = t
+        next.phase = Stopping
+        next.current = Some(member)
+        return transited(next, [StopMember(member)])
+      }
+      None => {}
+    }
+  }
+  var next = t
+  next.phase = Switching
+  next.current = None
+  transited(next, [SwitchRevision])
+}
+
+// The first member of `start_order` that is not ready and whose providers
+// are; convergence when every one is ready. A member left whose providers
+// can never be ready is an ordering cycle and abandons the transition.
+fn next_start(t: Transition) -> TransitionStep {
+  var waiting = ""
+  for member in t.start_order {
+    match action_of(t, member) {
+      Some(a) => if starts(a) && !listed(t.ready, member) {
+        if providers_ready(t, a) {
+          var next = t
+          next.current = Some(member)
+          if a.kind == Replace && a.cutover {
+            return transited(next, [CutOver(member)])
+          }
+          return transited(next, [StartMember(member)])
+        }
+        if waiting == "" {
+          waiting = member
+        }
+      }
+      None => {}
+    }
+  }
+  if waiting != "" {
+    return abandon(t, "ordering_cycle", waiting)
+  }
+  var next = t
+  next.phase = Converging
+  next.current = None
+  transited(next, [])
 }
 
 // Tests: synthetic event lists with chosen `at` values, no clock (16.4).
@@ -1565,4 +1877,186 @@ test "stop cancels a rollout's deadline and a rollout without a known process on
   let (done, e3) = run(fresh, [at(150, Started(7, 1)), at(200, Ready(7))])
   assert e3 == []
   assert rollout_of(done).state == Done && rollout_of(done).old_pid == Some(7)
+}
+
+test "a start-first rollout keeps the old process serving until the new one is ready" {
+  let (building, _) = run(rollout(), [at(0, Started(42, 1)), at(1000, Control("rollout start_first"))])
+  let (starting, e1) = run(building, [at(1500, Built(2))])
+  assert e1 == [Spawn("T.server", 2)]
+  assert rollout_of(starting).state == Starting && rollout_of(starting).old_pid == Some(42)
+  let (failed, e2) = run(starting, [at(1600, Started(50, 2)), at(1700, Exited(50, 1))])
+  assert e2 == []
+  assert rollout_of(failed).state == Starting && rollout_of(failed).old_pid == Some(42) && rollout_of(failed).new_pid == None
+  let (retiring, e3) = run(failed, [at(2000, Started(51, 2)), at(2100, Ready(51))])
+  assert e3 == [Kill("T.server", 42, SIGTERM), SetTimer(DEADLINE_TIMER, 32100 ms)]
+  assert rollout_of(retiring).state == Retiring
+  let (done, e4) = run(retiring, [at(3000, Exited(42, 0))])
+  assert e4 == [Note("retired"), CancelTimer(DEADLINE_TIMER)]
+  assert rollout_of(done).state == Done && rollout_of(done).old_pid == Some(51)
+  assert run(done, [at(4000, Control("rollout")), at(4100, Built(3))]).1 == [Build("T.server"), Kill("T.server", 51, SIGTERM), AwaitRelease("T.server"), SetTimer(DEADLINE_TIMER, 34100 ms)]
+}
+
+// Transition (17.4, D1): member action lists as `ignite-apply-actions/0.1`
+// gives them, stepped with the events a driver reports.
+
+test fn act(member: Text, kind: Text, ownership: Text, depends_on: List<Text>) -> MemberAction =
+  member_action(member, kind, ownership, false, depends_on)
+
+// Step `t` through `events`, collecting every effect.
+test fn transit_all(t: Transition, events: List<TransitionEvent>) -> (Transition, List<TransitionEffect>) {
+  var current = t
+  var effects = []
+  for event in events {
+    let result = transit(current, event)
+    current = result.transition
+    effects.append(result.effects)
+  }
+  (current, effects)
+}
+
+test "a provider starts and is ready before its dependent, an external member is never touched" {
+  let t = transition("p", [
+    act("T.client", "add", "external", []),
+    act("T.ingress", "add", "owned", []),
+    act("T.probe", "add", "owned", ["T.server"]),
+    act("T.server", "add", "owned", ["T.ingress"])
+  ], ["T.ingress", "T.server", "T.probe"], [])
+  let (t1, e1) = transit_all(t, [Begin])
+  assert e1 == [SwitchRevision]
+  assert t1.phase == Switching
+  let (t2, e2) = transit_all(t1, [Switched, MemberReady("T.ingress")])
+  assert e2 == [StartMember("T.ingress"), StartMember("T.server")]
+  let (t3, e3) = transit_all(t2, [MemberReady("T.probe"), MemberReady("T.server")])
+  assert e3 == [StartMember("T.probe")]
+  let (t4, e4) = transit_all(t3, [MemberReady("T.probe"), Converged])
+  assert e4 == [Commit]
+  assert t4.phase == Committed
+  assert t4.ready == ["T.ingress", "T.server", "T.probe"]
+}
+
+test "a removal stops dependents before providers and ignores external and kept members" {
+  let t = transition("r", [
+    act("T.client", "remove", "external", []),
+    act("T.ingress", "remove", "owned", []),
+    act("T.other", "unchanged", "owned", []),
+    act("T.probe", "remove", "owned", ["T.server"]),
+    act("T.server", "remove", "owned", ["T.ingress"])
+  ], [], ["T.probe", "T.server", "T.client", "T.other", "T.ingress"])
+  let (t1, e1) = transit_all(t, [Begin, MemberStopped("T.server")])
+  assert e1 == [StopMember("T.probe")]
+  assert t1.current == Some("T.probe")
+  let (t2, e2) = transit_all(t1, [MemberStopped("T.probe"), MemberStopped("T.server"), MemberStopped("T.ingress")])
+  assert e2 == [StopMember("T.server"), StopMember("T.ingress"), SwitchRevision]
+  let (t3, e3) = transit_all(t2, [Switched, Converged])
+  assert e3 == [Commit]
+  assert t3.stopped == ["T.probe", "T.server", "T.ingress"]
+}
+
+test "a replacement with a rollout cuts over, one without stops first and starts after the switch" {
+  let t = transition("c", [
+    act("T.probe", "replace", "owned", ["T.server"]),
+    member_action("T.server", "replace", "owned", true, [])
+  ], ["T.server", "T.probe"], ["T.probe", "T.server"])
+  let (t1, e1) = transit_all(t, [Begin, MemberStopped("T.probe"), Switched, MemberReady("T.server"), MemberReady("T.probe"), Converged])
+  assert e1 == [StopMember("T.probe"), SwitchRevision, CutOver("T.server"), StartMember("T.probe"), Commit]
+  assert t1.phase == Committed
+}
+
+test "a desired member that gives up abandons the transition, a removed one does not" {
+  let t = transition("g", [
+    act("T.old", "remove", "owned", []),
+    act("T.server", "add", "owned", [])
+  ], ["T.server"], ["T.old"])
+  let (t1, e1) = transit_all(t, [Begin, MemberGaveUp("T.old")])
+  assert e1 == [StopMember("T.old")]
+  let (t2, e2) = transit_all(t1, [MemberStopped("T.old"), Switched, MemberGaveUp("T.server")])
+  assert e2 == [SwitchRevision, StartMember("T.server"), Abandon("gave_up", "T.server")]
+  assert t2.phase == Abandoned
+  assert t2.failure == Some("gave_up")
+  assert transit_all(t2, [MemberReady("T.server"), Converged, MemberGaveUp("T.server")]) == (t2, [])
+}
+
+test "members whose providers never become ready are an ordering cycle" {
+  let t = transition("o", [
+    act("T.a", "add", "owned", ["T.b"]),
+    act("T.b", "add", "owned", ["T.a"])
+  ], ["T.a", "T.b"], [])
+  let (t1, e1) = transit_all(t, [Begin, Switched])
+  assert e1 == [SwitchRevision, Abandon("ordering_cycle", "T.a")]
+  assert t1.phase == Abandoned
+}
+
+test "events out of phase change nothing" {
+  let t = transition("n", [act("T.server", "add", "owned", [])], ["T.server"], [])
+  assert transit_all(t, [Switched, MemberReady("T.server"), MemberStopped("T.server"), Converged]) == (t, [])
+  let (t1, _) = transit_all(t, [Begin])
+  assert transit_all(t1, [Begin]) == (t1, [])
+}
+
+// Adversary (slice13/U4): boundaries and ordering of the Transition reducer.
+
+test fn emits(effects: List<TransitionEffect>, wanted: TransitionEffect) -> Bool {
+  for effect in effects {
+    if effect == wanted {
+      return true
+    }
+  }
+  false
+}
+
+// 17.4: "Stop/remove dependents before their providers." A port change of
+// the terminal's ingress replaces the owned listener (no rollout) and its
+// dependent server (a rollout, live: a cutover). The provider must not be
+// stopped while its dependent still runs on it.
+test "a provider replaced stop-first is not stopped while its cutover dependent still runs" {
+  let t = transition("i", [
+    act("T.ingress", "replace", "owned", []),
+    member_action("T.server", "replace", "owned", true, ["T.ingress"])
+  ], ["T.ingress", "T.server"], ["T.server", "T.ingress"])
+  let (_, e1) = transit_all(t, [Begin])
+  assert !emits(e1, StopMember("T.ingress"))
+}
+
+test "a held provider starts after the switch before its dependent cuts over" {
+  let t = transition("h", [
+    act("T.ingress", "replace", "owned", []),
+    member_action("T.server", "replace", "owned", true, ["T.ingress"])
+  ], ["T.ingress", "T.server"], ["T.server", "T.ingress"])
+  let (t1, e1) = transit_all(t, [Begin, Switched, MemberReady("T.ingress"), MemberReady("T.server"), Converged])
+  assert e1 == [SwitchRevision, StartMember("T.ingress"), CutOver("T.server"), Commit]
+  assert t1.stopped == []
+}
+
+test "an effect the driver could not carry out abandons the transition in any open phase" {
+  let t = transition("f", [act("T.server", "add", "owned", [])], ["T.server"], [])
+  let (t1, e1) = transit_all(t, [EffectFailed("listener_unavailable", "T.server")])
+  assert e1 == [Abandon("listener_unavailable", "T.server")]
+  assert t1.phase == Abandoned && t1.failure == Some("listener_unavailable")
+  let (t2, e2) = transit_all(t, [Begin, Switched, EffectFailed("spawn_failed", "T.server"), EffectFailed("again", "T.server")])
+  assert e2 == [SwitchRevision, StartMember("T.server"), Abandon("spawn_failed", "T.server")]
+  assert t2.phase == Abandoned
+  let (t3, _) = transit_all(t, [Begin, Switched, MemberReady("T.server"), Converged])
+  assert transit_all(t3, [EffectFailed("late", "")]) == (t3, [])
+}
+
+test "an empty plan switches and commits at convergence only" {
+  let t = transition("e", [], [], [])
+  let (t1, e1) = transit_all(t, [Begin, Switched])
+  assert e1 == [SwitchRevision]
+  assert t1.phase == Converging
+  let (t2, e2) = transit_all(t1, [Converged])
+  assert e2 == [Commit]
+  assert t2.phase == Committed
+}
+
+test "kept, detached, external and included members are never stopped or started" {
+  let t = transition("k", [
+    act("T.client", "detach", "external", []),
+    act("T.console", "replace", "included", []),
+    act("T.ext", "remove", "external", []),
+    act("T.server", "unchanged", "owned", [])
+  ], ["T.console"], ["T.ext", "T.console"])
+  let (t1, e1) = transit_all(t, [Begin, Switched, Converged])
+  assert e1 == [SwitchRevision, Commit]
+  assert t1.phase == Committed
 }

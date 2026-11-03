@@ -3,6 +3,11 @@
 //! invariant 9). Each file is a module; harness names are
 //! `<file>::<test>`.
 
+mod apply;
+mod apply_admission;
+mod apply_host;
+mod apply_recovery;
+mod apply_transition;
 mod build_cache;
 mod cli;
 mod common;

@@ -253,7 +253,7 @@ pub fn mentioned(stmts: &[Stmt], name: &str) -> bool {
 /// call, `?` or `match`, so not a parameter, a field or another variable)
 /// and that no later statement of the block mentions. The accept loop's
 /// `let stream = listener.accept()?` followed by `spawn serve(stream, ..)`
-/// moves; `Telnet.connect`'s `spawn forward_input(stream)` on its parameter,
+/// moves; a client role's `spawn forward_input(stream)` on its parameter,
 /// which the role keeps reading, does not.
 pub fn moved_to_task(stmts: &[Stmt], index: usize, call: &Expr) -> Vec<String> {
     let args: Vec<&Expr> = match &call.kind {

@@ -164,6 +164,53 @@ fn a7_machine() -> Machine {
 
 fn a7_event(i: Int) -> Event = at(i * 5000, Emitted("T.probe.attempts", good(1 ms)))
 
+// Slice 13 (docs/slice.md 17.4, D1): the transition reducer over one plan's
+// member actions: an external member, an addition, a stop-first and a
+// draining replacement, a removal.
+fn transit_over(t: Transition, events: List<TransitionEvent>) -> (Transition, List<TransitionEffect>) {
+  var current = t
+  var effects = []
+  for event in events {
+    let result = transit(current, event)
+    current = result.transition
+    effects.append(result.effects)
+  }
+  (current, effects)
+}
+
+fn transition_plan() -> Transition = transition("op", [
+  member_action("T.client", "detach", "external", false, []),
+  member_action("T.ingress", "add", "owned", false, []),
+  member_action("T.old", "remove", "owned", false, []),
+  member_action("T.probe", "replace", "owned", false, ["T.server"]),
+  member_action("T.server", "replace", "owned", true, ["T.ingress"])
+], ["T.ingress", "T.server", "T.probe"], ["T.probe", "T.old"])
+
+fn transition_events() -> List<TransitionEvent> = [
+  Begin,
+  MemberStopped("T.probe"),
+  MemberStopped("T.old"),
+  Switched,
+  MemberReady("T.ingress"),
+  MemberReady("T.server"),
+  MemberReady("T.probe"),
+  Converged
+]
+
+fn transition_effects() -> List<TransitionEffect> = transit_over(transition_plan(), transition_events()).1
+
+fn transition_final() -> Transition = transit_over(transition_plan(), transition_events()).0
+
+fn transition_gave_up() -> List<TransitionEffect> = transit_over(transition_plan(), [
+  Begin,
+  MemberStopped("T.probe"),
+  MemberStopped("T.old"),
+  Switched,
+  MemberGaveUp("T.old"),
+  MemberGaveUp("T.ingress"),
+  MemberReady("T.ingress")
+]).1
+
 // The printer of tests/control_trace.rs: every fn above without parameters,
 // in declaration order, one debug text per line, on both targets.
 fn show(text: Text) -> Result<Unit, IoError> requires [stdout.write] {
@@ -197,6 +244,11 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(calendar_machine().debug())?
   show(companions_of_server().debug())?
   show(a7_machine().debug())?
+  show(transition_plan().debug())?
+  show(transition_events().debug())?
+  show(transition_effects().debug())?
+  show(transition_final().debug())?
+  show(transition_gave_up().debug())?
   Ok(Unit)
 }
 

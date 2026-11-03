@@ -21,6 +21,7 @@ ignite-types.workspace = true
 ignite-llvm.workspace = true
 ignite-eval.workspace = true
 clap.workspace = true
+sha2 = "0.10"
 nix = { workspace = true, features = ["poll", "process", "signal"] }
 
 [dev-dependencies]

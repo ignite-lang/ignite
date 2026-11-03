@@ -4011,10 +4011,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// own arena. A `TcpStream` flagged as moved belongs to the task from
     /// then on: the thunk registers it with `tcp_own`, so a failure closes
     /// it, and releases it when `symbol` returns, which closes the connection
-    /// once the session is over (the accept loop of `TelnetServer.main` and
-    /// the like hands each accepted stream to its task this way). When no
+    /// once the session is over (the accept loop of a server kind's `main`
+    /// hands each accepted stream to its task this way). When no
     /// thread can start, the moved streams are released at once instead. A
-    /// stream not moved stays the parent's (`Telnet.connect` keeps reading
+    /// stream not moved stays the parent's (a client role keeps reading
     /// the stream `forward_input` writes to).
     pub fn spawn_with(
         &mut self,

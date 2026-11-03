@@ -12,6 +12,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub mod apply;
 mod llvm_build;
 pub mod run;
 mod test_build;
@@ -230,7 +231,7 @@ pub struct BuildOutput {
 /// One checked standard-library module.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StdModule {
-    /// Module path, e.g. `std.protocol.telnet`.
+    /// Module path, e.g. `std.control`.
     pub path: String,
     pub source: SourceFile,
     pub program: Program,
@@ -1499,12 +1500,25 @@ pub fn run(file: &Path, options: &RunOptions) -> Result<i32, Error> {
         None => DEFAULT_SETTLE,
     };
     let (executables, declared) = run_members(&model);
+    if state.join("host-journal.jsonl").exists() || state.join("identity").exists() {
+        return Err(run_diagnostic(
+            &loaded,
+            "E126",
+            format!(
+                "{} is the state of an `ignite host`; apply a plan to it with `ignite apply`, or run with another --state",
+                state.display()
+            ),
+        ));
+    }
     let mut journal =
         run::journal::Journal::open(&state, options.fresh).map_err(|error| match error {
             run::journal::JournalError::Locked(path) => run_diagnostic(
                 &loaded,
                 "E126",
-                format!("another `ignite run` holds {}", path.display()),
+                format!(
+                    "another `ignite run` or `ignite host` holds {}",
+                    path.display()
+                ),
             ),
             run::journal::JournalError::Io(error) => Error::Io {
                 path: state.clone(),

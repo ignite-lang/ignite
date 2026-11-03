@@ -267,6 +267,15 @@ crate's release profile; the LLVM target emits the `with.overflow` intrinsics. R
 program must not change meaning between targets or between dev and release; wrapping silently
 is the silent loss invariant 5 forbids.
 
+T7. **A general layer knows no application protocol** (Timo, 2026-11-02). std has four
+layers, base, leaf (O45), general and `std.protocol.*`; a module imports only its own layer
+or a lower one, and a kind that speaks one protocol lives in that protocol's module.
+`crates/*/src` names no protocol (`crates/ignite-load` exempt). Table, audit and open items:
+`docs/layering.md`; the test `layering::` in `crates/ignite-check` enforces it. Reason: slice
+10 put the Telnet probe `TelnetPrompt` in the general module `std.probe`, which imported
+`std.protocol.telnet`; it now lives in `std.protocol.telnet` and `std/probe.ignite` is gone.
+The slice-10 row above and the slice records keep the old path as history.
+
 ## 8 Open decisions
 
 Each needs Timo's answer; each changes what the next wave builds. The default is the
