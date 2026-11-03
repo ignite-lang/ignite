@@ -1,6 +1,7 @@
 package examples.terminal.commands
 
-import std.console.{Reply, Action, first_word, rest_after_word}
+import std.console.{Console, Reply, Action, first_word, rest_after_word}
+import std.protocol.telnet.{Telnet, SessionLimits}
 
 // The terminal's commands, design section 3.5: the module the console of
 // `terminal.ignite` names with `module("examples.terminal.commands")`. Its
@@ -73,4 +74,32 @@ test "respond trims the line and names unknown commands" {
   assert respond(" \t ") == Reply { lines = [] }
   assert respond("frobnicate now") == Reply { lines = ["unknown command: frobnicate"] }
   assert respond(" Status") == Reply { lines = ["unknown command: Status"] }
+}
+
+// One read of `stream`: its text, the empty text at the end of the stream
+// (a `Data` read is never empty).
+test fn read_once(stream: PipeStream) -> Result<Text, IoError> = match stream.read(4096)? {
+  Eof => Ok("")
+  Data(bytes) => Ok(bytes.to_text())
+}
+
+// Slice 9 item 4's transcript (`docs/slice.md` 18.0 row 3) over a pipe:
+// the console of `terminal.ignite` served by `Telnet.serve`, one line at a
+// time, each answer and the next prompt read as one batch.
+test "the terminal transcript over a pipe" {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  spawn Telnet.serve(server, SessionLimits {}, Console { prompt = "terminal> ", respond = respond, maximum_line = 4096 })
+  assert read_once(client)? == "terminal> "
+  client.write_all(b"help\r\n")?
+  assert read_once(client)? == "help\r\necho <text>\r\nstatus\r\nquit\r\nterminal> "
+  client.write_all(b"echo hello\r\n")?
+  assert read_once(client)? == "hello\r\nterminal> "
+  client.write_all(b"status\r\n")?
+  assert read_once(client)? == "ready\r\nterminal> "
+  client.write_all(b"frobnicate x\r\n")?
+  assert read_once(client)? == "unknown command: frobnicate\r\nterminal> "
+  client.write_all(b"quit\r\n")?
+  assert read_once(client)? == "bye\r\n"
+  assert read_once(client)? == ""
 }

@@ -60,6 +60,11 @@ either without change.
 Proposed syntax. `Self` is the implementing type. Methods name their effects on parameters, as
 declared fns do (slice §5.1), so roots and E016 work as they do today.
 
+As built in P1 (slice 14, slice §18.3, D2): `ByteStream` is compiler-known, a builtin name of
+`std.net` with the four methods `read`, `write_all`, `close` and `set_idle_timeout`; nothing is
+declared in Ignite, `info` is P4's, and P1 has no `std/transport/`. P4 declares the interface and
+moves it, which costs one import line (section 7).
+
 ```ignite
 package std.transport.stream
 
@@ -319,7 +324,7 @@ and avoid slice §8, wasm's E080–E083 and actors' E060–E064.
 | E094 | `matches` record: field bound to a rule that does not occur exactly once, or a repetition bound to a non-`List` |
 | E095 | local grammar rule with a terminal that no RFC grammar defines |
 | E096 | bound not met: missing impl, an impl method needing more effects than its interface, or a stream-kind mismatch |
-| E097 | test-only constructor (`Store.new()`) outside a `test` block |
+| E097 | unused: a test-only constructor outside a test is E051 since slice 8 (slice §12.3), and `Pipe.pair()` joins it (slice §18.4, D3) |
 | E098 | overlapping impls |
 
 ### 3.4 Wire formats
@@ -399,16 +404,23 @@ type HttpLimits {
 type TelnetLimits { maximum_line: Int = 4096, maximum_subnegotiation: Int = 1024, idle_timeout_ms: Int = 600000 }
 ```
 
+As built in P1 (slice §18.5, D4, D5): Telnet's record is the existing `SessionLimits` with quantity
+fields, gaining `maximum_subnegotiation: ByteSize = 1 KiB`; `maximum_line` stays on `Console`.
+`HttpLimits` has quantity fields with the former constants as defaults: `head = 8 KiB`, `body =
+1 MiB`, `idle_timeout = 30 seconds`, `drain = 64 KiB`, `drain_timeout = 1 second`.
+
 `ignite conformance` checks each `minimum` against the default and against every system's override.
-Today there is one head limit, `MAXIMUM_HEAD = 8192` (`std/protocol/http.ignite`), covering request line and
+Since P1 there is one head limit, `HttpLimits.head` (8 KiB, `std/protocol/http.ignite`), covering request line and
 fields together. The split turns RFC 9112's RECOMMENDED 8000-octet request line [P5] into a checked
 value. RFC 9110 sets no field limit and requires a 4xx when a server refuses [P4]; 431 is
 RFC 6585's [P35]. hyper exposes the same knobs (`max_buf_size`, `max_headers`,
 `header_read_timeout`) [P27].
 
-**Rejected:** module constants, as today (`MAXIMUM_SUBNEGOTIATION` and `IDLE_TIMEOUT_MS` in
-`std/protocol/telnet.ignite`). A system cannot override them, and
-they link to no requirement.
+**Rejected:** module constants, as before P1 (`MAXIMUM_SUBNEGOTIATION` in
+`std/protocol/telnet.ignite`, `IDLE_TIMEOUT_MS` in `std/protocol/http.ignite`). A system cannot override them, and
+they link to no requirement. P1 keeps three (slice §18.14 item 13): `MAXIMUM_SUBNEGOTIATION` for
+the client role, whose arity 1 leaves no limits parameter (D17), and HTTP's `READ_SIZE` and
+`MAXIMUM_LENGTH_DIGITS`, which are framing facts, not limits.
 
 ### 3.7 Conformance tests
 
@@ -482,9 +494,9 @@ requirement.
 
 ```ignite
 protocol Telnet conforms [RFC854, RFC855, RFC1143] {
-  fn serve<S: ByteStream>(stream: S, limits: TelnetLimits, application: Console)
+  fn serve<S: ByteStream>(stream: S, limits: SessionLimits, application: Console)
     -> IoResult<Unit> requires [stream.read, stream.write] {
-    stream.set_idle_timeout(limits.idle_timeout_ms)?
+    stream.set_idle_timeout(limits.idle_timeout.to_ms())?
     let result = session(stream, limits, application)
     _ = stream.close()
     result
@@ -527,15 +539,19 @@ DONT. Today's `decode` is the special case `wanted = false` with every option in
 ```ignite
 test "DO ECHO is refused and IAC IAC is data" verifies [NO_ACK_CURRENT_MODE, IAC_DOUBLED] {
   let (client, server) = Pipe.pair()
-  spawn Telnet.serve(server, TelnetLimits {}, Console { prompt = "> ", respond = echo, maximum_line = 80 })
-  assert(read_text(client, 2)? == "> ")
+  spawn Telnet.serve(server, SessionLimits {}, Console { prompt = "> ", respond = echo, maximum_line = 80 })
+  assert read_text(client, 2)? == "> "
   client.write_all([IAC, DO, ECHO, b'a', IAC, IAC, b'\r', b'\n'])?
-  assert(read_bytes(client, 3)? == [IAC, WONT, ECHO])
-  assert(read_bytes(client, 5)? == [b'a', IAC, b'\r', b'\n', b'>'])
+  assert read_bytes(client, 3)? == [IAC, WONT, ECHO]
+  assert read_bytes(client, 7)? == [b'a', 0xEF, 0xBF, 0xBD, b'\r', b'\n', b'>']
 }
 ```
 
-`read_text` and `read_bytes` read exactly n bytes or fail (`std/transport/pipe.ignite`). A second
+The data byte 255 comes back as EF BF BD: the server decodes the line with `to_text`, which
+turns the invalid byte into U+FFFD, and the echo console sends that (slice §18.0 row 5).
+`assert` is a statement (slice §12.3). `read_text` and `read_bytes` read exactly n bytes or fail;
+they are test fns of the module, since P1 has no `std/transport/` (slice §18.14 item 5; P1's
+tests read whole batches instead, slice §18.12). A second
 test, "Q method converges", runs `explore` over two peers built from `on_enable` and `on_disable`
 and asserts no loops, no violations and unexhausted bounds (phase 5).
 
@@ -602,8 +618,9 @@ no `OWS` precedes `":"`; the generated mutation `"Host : x"` is expected `Invali
 
 ### 5.3 The todo service with a transport swap
 
-`examples/todo/todo.ignite` from `Todo` to `handle` (types, `handle`, CRUD) stays as it is. Only its imports of
-`HttpApp`, `Request` and `Response` move to `std.http`. The application runs in three bindings: the
+`examples/todo/todo.ignite` from `Todo` to `handle` (types, `handle`, CRUD) stays as it is, and so do
+its imports of `HttpApp`, `Request` and `Response` from `std.protocol.http`, which stays that
+module's path (slice §18.14 item 9). The application runs in three bindings: the
 present system (`system TodoService`, `TcpListener` on port 8080); TLS, by replacing the resource line
 with section 2.3's `Listener { transport = Tls { .. } }`; and a test with no listener at all:
 
@@ -616,12 +633,12 @@ test "create and read back over a pipe" verifies [R9_3_2] {
   client.write_all(b"GET /todos/1 HTTP/1.1\r\nHost: t\r\n\r\n")?
   let first = read_response(client)?
   let second = read_response(client)?
-  assert(first.status == 201 && second.status == 200 && second.body.contains("milk"))
-  assert(client.received_batches() == 1)
+  assert first.status == 201 && second.status == 200 && second.body.contains("milk")
+  assert client.received_batches() == 1
 }
 ```
 
-`R9_3_2` is §9.3's persistence rule [P5]. `Store.new()` is allowed only in tests (E097), because
+`R9_3_2` is §9.3's persistence rule [P5]. `Store.new()` is allowed only in tests (E051), because
 stores are otherwise system resources (slice §11.3 `Store<T>`). `received_batches()` is a test method of
 the pipe that counts the deliveries caused by the peer's flushes. It is 1 because the server wrote
 both answers before its next wait (section 6.3). `handle`, `Todo` and the application's wasm
@@ -636,7 +653,10 @@ becomes `<S: ByteStream + Clone + Send + Sync + 'static>` (slice §6's bounds pl
 Builtin impls are `impl ByteStream for ignite_io::TcpStream` (and `PipeStream`) in `ignite-io`,
 delegating to the inherent methods. Associated types and generic impls map one to one. A call on a
 bounded `S` is `ByteStream::read(&stream, n)`, statically dispatched; rustc monomorphizes
-`serve::<TcpStream>`, and the program crate contains no `dyn`. `grammar` and `matches` are
+`serve::<TcpStream>`, and neither the program crate nor `ignite-std` contains `dyn ByteStream`;
+the only `dyn` is a fn value's `Arc<dyn Fn>` (slice §13.3, §18.14 item 2, D9). As built in P1
+(slice §18.10) the call is qualified with the type, `<S as ignite_io::ByteStream>::read(&stream,
+n)`, because the unqualified form infers `Self = &S`. `grammar` and `matches` are
 elaborated before generation. `conforms`, `satisfies`, `verifies` and catalogues emit nothing; only
 `ignite conformance` reads them. Tests compile into a separate crate (slice 8), so `PipeStream`
 instances never reach `todod`.
@@ -676,11 +696,12 @@ stay behind the application edge, where the protocol is "the byte-level edge" (a
 
 ## 7 Phased roadmap
 
-Sizes as in actors §11. wasm §10 reserves slices 9 to 11, so phase 1 is proposed as slice 8.1.
+Sizes as in actors §11. Phase 1 is slice 14 (vision §4), whose contract is slice §18; where this
+row and the code disagree, slice §18.14 records the point.
 
 | Phase | Deliverable | Acceptance test | Size | Needs |
 |---|---|---|---|---|
-| **P1** Pipe and the stream bound | `Pipe.pair()` and `PipeStream` in `ignite-io` and `ignite-rt`, coalescing as TCP, with `received_batches`; bound syntax with one builtin interface, `ByteStream` (from `std.net`); `Telnet` and `Http` roles generic over `S: ByteStream`, taking a `limits` record; `Store.new()` in tests (E097); E096. Moving HTTP to `std/protocol/http.ignite` is already done. | `ignite test std/protocol/telnet.ignite` and `ignite test std/protocol/http.ignite` pass on both targets. Telnet over a pipe: slice §9 item 4's transcript, `IAC DO ECHO` answered `IAC WONT ECHO`, `IAC IAC` as one literal byte, and an oversized subnegotiation closing the session. HTTP over a pipe: 3 pipelined requests answered in 1 batch, plus the 400, 413 and 431 cases. `crates/ignite/tests/terminal.rs` and `todo.rs` pass unchanged over TCP. The Rust golden shows `Telnet::serve::<ignite_io::TcpStream>` and no `dyn`. | S | slice 8 (`test`, `assert`, `ignite test`) |
+| **P1** Pipe and the stream bound | `Pipe.pair()` and `PipeStream` in `ignite-io` and `ignite-rt`, coalescing as TCP, with `received_batches`; bound syntax with one builtin interface, `ByteStream` (from `std.net`); `Telnet` and `Http` roles generic over `S: ByteStream`, taking a `limits` record; `Pipe.pair()` in tests only (E051, as `Store.new()`); E096 and E099. Moving HTTP to `std/protocol/http.ignite` is already done. | `ignite test std/protocol/telnet.ignite` and `ignite test std/protocol/http.ignite` pass on both targets. Telnet over a pipe: slice §9 item 4's transcript, `IAC DO ECHO` answered `IAC WONT ECHO`, `IAC IAC` as one literal byte, and an oversized subnegotiation closing the session. HTTP over a pipe: 3 pipelined requests answered in 1 batch, plus the 400, 413 and 431 cases. `crates/ignite/tests/terminal.rs` and `todo.rs` pass unchanged over TCP. The generated `ignite-std` of the terminal calls `Telnet::serve::<ignite_io::TcpStream>` and holds no `dyn ByteStream` (slice §18.0 row 10). | S | slice 8 (`test`, `assert`, `ignite test`) |
 | P2 Catalogues and matrix | `std/rfc/rfc.ignite`; `ignite rfc import` and `check`; catalogues for RFC 854, 855 and 1143 (prose), 9112 §2–§9 and the 9110 server subset; `conforms`, `scope`, `satisfies`, `verifies`, the statuses; literal-constant evaluation; `ignite conformance`; E090–E092 | Removing one `satisfies` from a MUST makes `ignite check` fail with E090. The HTTP matrix lists the §7.1 and §3.2 gaps and claims nothing. The Telnet matrix claims RFC 854 for an NVT that refuses every option. | M | P1 |
 | P3 ABNF grammars | `grammar`, `matches`, `from`, `as hex`, `length`; generated parsers, printers and tests; HTTP head and chunked body; Host check; split `HttpLimits`; E093–E095 | The hand-written head functions are gone from `http.ignite`; `todo.rs` passes on both targets with chunked bodies; the RFC 9112 matrix has no MUST gap in §2–§7; pipelined `todod` throughput is within 10 % of P1's. | L | P2 |
 | P4 Interfaces and transports | user `interface` and `impl`, associated types, generic impls, `Eq`; `std/transport/*`; `Listener { transport = .. }`; `TlsEngine` and Unix sockets in `ignite-io`; E098 | `todo.rs` passes over TCP, TLS and a Unix socket, with `todo.ignite` differing only in the `ingress` line. A stream-kind mismatch is E096. The application's wasm imports do not change. | L | P1; decision on Q1 |
