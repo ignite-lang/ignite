@@ -24,6 +24,7 @@ mod llvm_build;
 mod llvm_memory;
 mod plan;
 mod reachability;
+mod rfc;
 mod run;
 mod siblings;
 mod slice10_llvm;

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adversary fixture (docs/slice.md 19.8, "Extraction" rules 2, 5 and 7): every keyword's
+     level, two marks in one sentence, lowercase keywords, party words before and after the
+     first mark, a <th> block and a mark in a <dt>, which is no text block. -->
+<rfc number="7003" version="3">
+  <link rel="alternate" href="https://example.invalid/rfc7003"/>
+  <front>
+    <title>Levels</title>
+  </front>
+  <middle>
+    <section pn="section-1">
+      <t pn="section-1-1">The sender <bcp14>SHALL NOT</bcp14> wait. Clients and servers <bcp14>SHOULD NOT</bcp14> retry. Echoing is <bcp14>NOT RECOMMENDED</bcp14> for caches. Caching is <bcp14>RECOMMENDED</bcp14>. A user agent is <bcp14>REQUIRED</bcp14> to stop. A reply is <bcp14>OPTIONAL</bcp14>. It <bcp14>MAY</bcp14> be sent by a server. A gateway <bcp14>SHOULD</bcp14> log it and <bcp14>MUST</bcp14> drop it. An implementation must not, shall not and should not count lowercase words, which are not required.</t>
+    </section>
+    <section pn="section-2">
+      <table pn="table-1">
+        <thead>
+          <tr>
+            <th>A recipient <bcp14>MUST</bcp14> read the head.</th>
+          </tr>
+        </thead>
+      </table>
+      <dl pn="section-2-2">
+        <dt pn="section-2-2.1">A client <bcp14>MUST</bcp14> never see this term.</dt>
+        <dd pn="section-2-2.2">Plain prose.</dd>
+      </dl>
+    </section>
+  </middle>
+</rfc>

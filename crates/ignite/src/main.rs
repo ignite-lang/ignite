@@ -13,6 +13,8 @@
 //! ignite explain <file.ignite> <path> [--assembly NAME] [--fuel N] [--std PATH]
 //! ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target rust|llvm] [--release] [--clock real|manual] [--epoch RFC3339] [--settle DURATION] [--port RESOURCE=PORT]... [--json] [--fresh] [--std PATH] [--fuel N] [--runtime PATH] [--target-dir DIR]
 //! ignite replay <file.ignite> [--assembly NAME] [--state DIR] [--std PATH] [--fuel N]
+//! ignite rfc import FILE [--sections LIST] [--package NAME] [--url URL] [--out FILE]
+//! ignite rfc check CATALOGUE [SOURCE]
 //! ```
 //!
 //! `--std` is the standard-library root (default: the repository's `std/`
@@ -26,7 +28,8 @@
 //! `ignite explain` prints the explanation of one path (section 15.8).
 //! `ignite run` exits with the run's status (section 16.3: 0 a requested
 //! stop, 1 a machine gave up or failed), 2 for a diagnostic before the
-//! start; `ignite replay` prints the final standings.
+//! start; `ignite replay` prints the final standings. `ignite rfc import` and
+//! `ignite rfc check` have their own statuses (section 19.8).
 
 use std::path::PathBuf;
 
@@ -276,6 +279,79 @@ enum Commands {
         #[arg(long)]
         fuel: Option<u64>,
     },
+    /// Import a local RFCXML file as a catalogue module, or check a catalogue's digest
+    /// against its source (`docs/slice.md` section 19.8).
+    Rfc {
+        #[command(subcommand)]
+        command: RfcCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum RfcCommand {
+    /// Write the catalogue module of an RFCXML v3 file. Exit 0 written, 2 usage error or
+    /// malformed XML, 3 a file could not be read or written.
+    Import {
+        file: PathBuf,
+        /// Comma-separated section numbers to keep (default: every section).
+        #[arg(long)]
+        sections: Option<String>,
+        /// Package of the module (default `std.rfc.rfc<number>`).
+        #[arg(long)]
+        package: Option<String>,
+        /// URL of the `Spec` (default the root's first `<link rel="alternate">`).
+        #[arg(long)]
+        url: Option<String>,
+        /// Write the module to this file instead of stdout (overwriting it).
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Compare a catalogue's digest with its source's. Exit 0 equal or no SOURCE
+    /// (`unchecked`), 1 different, 2 no single `Spec` with a literal digest, 3 unreadable.
+    Check {
+        catalogue: PathBuf,
+        source: Option<PathBuf>,
+    },
+}
+
+fn rfc(command: RfcCommand) -> i32 {
+    let result = match command {
+        RfcCommand::Import {
+            file,
+            sections,
+            package,
+            url,
+            out,
+        } => {
+            let options = ignite::rfc::ImportOptions {
+                sections,
+                package,
+                url,
+            };
+            ignite::rfc::import(&file, &options).and_then(|module| match out {
+                Some(out) => std::fs::write(&out, module)
+                    .map_err(|error| ignite::rfc::Error::Io { path: out, error }),
+                None => {
+                    print!("{module}");
+                    Ok(())
+                }
+            })
+        }
+        RfcCommand::Check { catalogue, source } => {
+            ignite::rfc::check(&catalogue, source.as_deref()).map(|checked| {
+                if checked == ignite::rfc::Checked::Unchecked {
+                    println!("{}: unchecked", catalogue.display());
+                }
+            })
+        }
+    };
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("{error}");
+            error.exit_status()
+        }
+    }
 }
 
 /// Exit status of `ignite test` for diagnostics and invalid arguments.
@@ -356,6 +432,9 @@ impl TestTargetArg {
 
 fn run() {
     let cli = Cli::parse();
+    if let Commands::Rfc { command } = cli.command {
+        std::process::exit(rfc(command));
+    }
     if let Commands::Test {
         args,
         target,
@@ -494,7 +573,9 @@ fn run() {
         }
     }
     let result = match cli.command {
-        Commands::Test { .. } | Commands::Run { .. } => unreachable!("handled above"),
+        Commands::Test { .. } | Commands::Run { .. } | Commands::Rfc { .. } => {
+            unreachable!("handled above")
+        }
         Commands::Check { file, std } => ignite::check_with_std(&file, std.as_deref()),
         Commands::Emit {
             file,
