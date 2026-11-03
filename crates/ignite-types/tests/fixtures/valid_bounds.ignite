@@ -1,0 +1,56 @@
+package fixtures.bounds
+
+import std.net.{ByteStream, Pipe, PipeStream}
+
+protocol Relay {
+  fn serve<S: ByteStream>(stream: S, application: Int) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+    let input = (stream.read(16))?
+    (stream.set_idle_timeout(application))?
+    (stream.write_all("ok".to_bytes()))?
+    return stream.close()
+  }
+
+  fn connect<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+    return relay(stream)
+  }
+}
+
+fn close(count: Int) -> Int = count
+
+fn relay<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  let input = (stream.read(16))?
+  let copy = stream.copy()
+  (copy.write_all("x".to_bytes()))?
+  return stream.close()
+}
+
+fn once<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.write] = stream.write_all("y".to_bytes())
+
+fn forward<T: ByteStream>(inner: T) -> Result<Unit, IoError> requires [inner.read, inner.write] {
+  (inner.once())?
+  spawn relay(inner)
+  return relay(inner)
+}
+
+fn over_tcp(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  (relay(stream))?
+  spawn relay(stream)
+  (Relay.connect(stream))?
+  return Relay.serve(stream, 5)
+}
+
+fn over_pipe(end: PipeStream) -> Result<Int, IoError> requires [end.read, end.write] {
+  (relay(end))?
+  (forward(end))?
+  spawn Relay.serve(end, 5)
+  return Ok(end.received_batches())
+}
+
+test "a test pairs pipes" {
+  let (client, server) = Pipe.pair()
+  (client.write_all("z".to_bytes()))?
+  (client.close())?
+  (relay(server))?
+  assert server.received_batches() == 1
+  assert close(3) == 3
+}

@@ -1,0 +1,7 @@
+fn same<S: ByteStream>(stream: S) -> S = stream
+
+fn apply<T>(f: fn(T) -> T, value: T) -> T = f(value)
+
+fn valid(tcp: TcpStream) -> TcpStream = apply(same, tcp)
+
+fn invalid() -> Int = apply(same, 1)

@@ -286,6 +286,9 @@ pub(crate) struct Typer<'a> {
     alias_params: Vec<String>,
     /// Type parameters of the generic declaration being resolved or walked.
     type_params: Vec<String>,
+    /// The type parameters of the fn or role being walked that are bounded
+    /// by `ByteStream` (`docs/slice.md` 18.3).
+    bounded: Vec<String>,
     /// Type arguments of generic uses, by expression address.
     instances: AddressMap<Vec<Ty>>,
     /// Local bindings; `None` when the binding's type is unknown after an
@@ -392,6 +395,7 @@ impl<'a> Typer<'a> {
             resolving: Vec::new(),
             alias_params: Vec::new(),
             type_params: Vec::new(),
+            bounded: Vec::new(),
             instances: AddressMap::default(),
             scopes: Vec::new(),
             ret: None,
@@ -646,9 +650,71 @@ impl<'a> Typer<'a> {
             self.synth(arg);
         }
         let instance = self.infer(expr.span, what, tparams, &pairs, pre, ret, expected)?;
+        self.bounds_met(expr, what, tparams, &instance);
         let ty = ret.substitute(tparams, &instance);
         self.instances.insert(key(expr), instance);
         Some(ty)
+    }
+
+    /// Record the bounds of the fn or role `key` of this module
+    /// ([`ModuleTypes::bounds`]).
+    fn own_bounds(&mut self, key: String, decl: &FnDecl) {
+        let bounds: BTreeMap<String, String> = decl
+            .bounds
+            .iter()
+            .filter_map(|b| {
+                let interface = b.interfaces.first()?;
+                Some((b.param.name.clone(), interface.name.clone()))
+            })
+            .collect();
+        if !bounds.is_empty() {
+            self.own.bounds.entry(key).or_insert(bounds);
+        }
+    }
+
+    /// The bounds of the fn or role `expr` calls or names, from its callee.
+    fn callee_bounds(&self, expr: &Expr) -> Option<BTreeMap<String, String>> {
+        let (module, name) = match self.callees.get(&key(expr))? {
+            Callee::Fn(q) => (&q.module, q.name.clone()),
+            Callee::Role { protocol, role } => {
+                (&protocol.module, format!("{}.{role}", protocol.name))
+            }
+            _ => return None,
+        };
+        self.module_types(module)?.bounds.get(&name).cloned()
+    }
+
+    /// Whether a value of `ty` has the methods of `ByteStream`: a
+    /// `TcpStream`, a `PipeStream` or a type parameter of the fn being
+    /// walked that is bounded by it (`docs/slice.md` 18.3).
+    fn implements_stream(&self, ty: &Ty) -> bool {
+        match ty {
+            Ty::TcpStream | Ty::PipeStream => true,
+            Ty::Param(name) => self.bounded.contains(name),
+            _ => false,
+        }
+    }
+
+    /// E096 for each bounded type parameter of the callee of `expr` (a
+    /// call, role call, UFCS call, `spawn` or fn value of `what`) that
+    /// `instance` binds to a type not implementing its interface.
+    fn bounds_met(&mut self, expr: &Expr, what: &str, tparams: &[String], instance: &[Ty]) {
+        let Some(bounds) = self.callee_bounds(expr) else {
+            return;
+        };
+        for (param, ty) in tparams.iter().zip(instance) {
+            if let Some(interface) = bounds.get(param)
+                && !self.implements_stream(ty)
+            {
+                self.error(
+                    "E096",
+                    expr.span,
+                    format!(
+                        "`{ty}` does not implement `{interface}`, which `{param}` of `{what}` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `{interface}`"
+                    ),
+                );
+            }
+        }
     }
 
     /// E042 for an effectful operation (a `Store` method, a call of a value
@@ -737,9 +803,13 @@ impl<'a> Typer<'a> {
             if !generic.is_empty() {
                 self.own.generics.entry(name.clone()).or_insert(generic);
             }
+            if let Decl::Fn(f) = decl {
+                self.own_bounds(name.clone(), f);
+            }
             if let Decl::Protocol(protocol) = decl {
                 for role in protocol.fns.iter().filter(|r| !r.type_params.is_empty()) {
                     let key = format!("{name}.{}", role.name.name);
+                    self.own_bounds(key.clone(), role);
                     self.own
                         .generics
                         .entry(key)
@@ -896,7 +966,10 @@ impl<'a> Typer<'a> {
                     let sig = self.fn_sig(decl, false);
                     if decl.owner.is_none()
                         && let Some(first) = sig.params.first()
-                        && builtins::method(first, &decl.name.name).is_some()
+                        && (builtins::method(first, &decl.name.name).is_some()
+                            || matches!(first, Ty::Param(param)
+                                if decl.bounds.iter().any(|b| b.param.name == *param)
+                                    && builtins::stream_method(&decl.name.name).is_some()))
                     {
                         self.error(
                             "E041",
@@ -1084,6 +1157,7 @@ impl<'a> Typer<'a> {
             "Bytes" => bytes(),
             "TcpListener" => Ty::TcpListener,
             "TcpStream" => Ty::TcpStream,
+            "PipeStream" => Ty::PipeStream,
             "IoError" => Ty::IoError,
             "Input" => Ty::Input,
             "List" => Ty::List(arg(0)),
@@ -1545,6 +1619,7 @@ impl<'a> Typer<'a> {
             | Ty::EffectFn(..)
             | Ty::TcpListener
             | Ty::TcpStream
+            | Ty::PipeStream
             | Ty::IoError
             | Ty::Store(_)
             | Ty::Param(_) => false,
@@ -1596,6 +1671,7 @@ impl<'a> Typer<'a> {
         self.scopes = vec![BTreeMap::new()];
         self.loops.clear();
         self.type_params = idents(&f.type_params);
+        self.bounded = f.bounds.iter().map(|b| b.param.name.clone()).collect();
         for (param, ty) in f.params.iter().zip(&sig.params) {
             self.bind(&param.name, Some(ty.clone()));
         }
@@ -1607,6 +1683,7 @@ impl<'a> Typer<'a> {
         self.scopes.clear();
         self.ret = None;
         self.type_params.clear();
+        self.bounded.clear();
     }
 
     // ---- statements -------------------------------------------------------
@@ -2266,6 +2343,7 @@ impl<'a> Typer<'a> {
             if !tparams.is_empty() {
                 let instance =
                     self.infer(expr.span, &name.name, &tparams, &[], &[], &ty, expected)?;
+                self.bounds_met(expr, &name.name, &tparams, &instance);
                 ty = ty.substitute(&tparams, &instance);
                 self.instances.insert(key(expr), instance);
             }
@@ -3083,7 +3161,11 @@ impl<'a> Typer<'a> {
         {
             return self.list_map(expr, element, args, expected);
         }
-        if let Some(sig) = builtins::method(&receiver_ty, &name.name) {
+        let bounded = match &receiver_ty {
+            Ty::Param(param) if self.bounded.contains(param) => builtins::stream_method(&name.name),
+            _ => None,
+        };
+        if let Some(sig) = bounded.or_else(|| builtins::method(&receiver_ty, &name.name)) {
             if matches!(receiver_ty, Ty::Store(_)) {
                 self.effect_site(expr, &name.name);
             }

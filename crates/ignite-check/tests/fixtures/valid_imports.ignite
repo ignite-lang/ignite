@@ -1,6 +1,6 @@
 package fixtures.imports
 
-import std.net.{TcpStream}
+import std.net.{TcpStream, ByteStream, Pipe, PipeStream}
 import std.greeting.{Greeting, Mood, greet}
 import std.protocol.hello.Hello
 

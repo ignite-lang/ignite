@@ -1,4 +1,4 @@
-protocol Pipe {
+protocol Relay {
   fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read] {
     let input = (stream.read(16))?
     (Stdout.write_all("x".to_bytes()))?
@@ -27,7 +27,7 @@ fn owned(port: Int) -> Result<Unit, IoError> requires [net.connect] {
 
 fn serve_one(listener: TcpListener) -> Result<Unit, IoError> requires [net.connect] {
   let stream = (listener.accept())?
-  return Pipe.connect(stream)
+  return Relay.connect(stream)
 }
 
 fn reassigned(a: TcpStream, b: TcpStream, flag: Bool) -> Result<Unit, IoError> requires [a.write] {
@@ -36,4 +36,9 @@ fn reassigned(a: TcpStream, b: TcpStream, flag: Bool) -> Result<Unit, IoError> r
     target = b
   }
   return target.write_all("w".to_bytes())
+}
+
+fn bounded<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read] {
+  let input = (stream.read(16))?
+  return stream.write_all("v".to_bytes())
 }

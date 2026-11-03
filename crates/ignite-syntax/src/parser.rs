@@ -35,7 +35,7 @@
 //! to the next top-level keyword at the start of a line.
 
 use crate::ast::{
-    AliasDecl, Arm, AssemblyDecl, BinaryOp, Block, BraceEntry, Closure, ClosureParam,
+    AliasDecl, Arm, AssemblyDecl, BinaryOp, Block, Bound, BraceEntry, Closure, ClosureParam,
     ComponentDecl, ConstDecl, Decl, EnumDecl, Expr, ExprKind, Field, FieldInit, FnDecl, Ident,
     Import, Param, Path, Pattern, PatternKind, Place, Program, ProtocolDecl, RecordDecl,
     ResourceDecl, Span, Stmt, StmtKind, SystemDecl, TestDecl, Type, UnaryOp, Variant,
@@ -795,18 +795,52 @@ impl<'t> Parser<'t> {
         }))
     }
 
-    /// `('<' ident (',' ident)* '>')?` after the name of a record, enum,
-    /// alias or fn: its type parameters.
+    /// `('<' ident (',' ident)* '>')?` after the name of a record, enum or
+    /// alias: its type parameters. A bound `T: B` is E001 here
+    /// (`docs/slice.md` 18.3).
     fn type_params(&mut self) -> PResult<Vec<Ident>> {
+        let (params, bounds) = self.fn_type_params()?;
+        if let Some(bound) = bounds.first() {
+            self.report(
+                "E001",
+                bound.span,
+                "a bound is allowed on the type parameters of a fn or role only".to_string(),
+            );
+            return Err(Fail);
+        }
+        Ok(params)
+    }
+
+    // fn_type_params := '<' fn_type_param (',' fn_type_param)* '>'
+    // fn_type_param  := ident (':' ident ('+' ident)*)?
+
+    /// The type parameters of a fn, associated fn or role, with their
+    /// bounds (`docs/slice.md` 18.3).
+    fn fn_type_params(&mut self) -> PResult<(Vec<Ident>, Vec<Bound>)> {
         let mut params = Vec::new();
+        let mut bounds = Vec::new();
         if self.eat(&TokenKind::Lt) {
-            params.push(self.ident()?);
-            while self.eat(&TokenKind::Comma) {
-                params.push(self.ident()?);
+            loop {
+                let param = self.ident()?;
+                if self.eat(&TokenKind::Colon) {
+                    let mut interfaces = vec![self.ident()?];
+                    while self.eat(&TokenKind::Plus) {
+                        interfaces.push(self.ident()?);
+                    }
+                    bounds.push(Bound {
+                        span: self.span_from(param.span.start),
+                        param: param.clone(),
+                        interfaces,
+                    });
+                }
+                params.push(param);
+                if !self.eat(&TokenKind::Comma) {
+                    break;
+                }
             }
             self.expect(&TokenKind::Gt)?;
         }
-        Ok(params)
+        Ok((params, bounds))
     }
 
     /// `'requires' '[' (effect (',' effect)*)? ']'` after the keyword has
@@ -1054,7 +1088,7 @@ impl<'t> Parser<'t> {
             self.bump();
             owner = Some(std::mem::replace(&mut name, self.ident()?));
         }
-        let type_params = self.type_params()?;
+        let (type_params, bounds) = self.fn_type_params()?;
         self.open(&TokenKind::LParen, true)?;
         let mut params = Vec::new();
         if !self.at(&TokenKind::RParen) {
@@ -1108,6 +1142,7 @@ impl<'t> Parser<'t> {
             type_params,
             test_only: false,
             owner,
+            bounds,
         })
     }
 

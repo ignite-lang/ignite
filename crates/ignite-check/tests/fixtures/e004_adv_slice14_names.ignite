@@ -1,0 +1,9 @@
+type Pipe { x: Int }
+
+enum ByteStream { Raw }
+
+protocol PipeStream {
+  fn serve(stream: TcpStream, application: Int) -> Result<Unit, IoError> requires [stream.read] {
+    return Ok(Unit)
+  }
+}

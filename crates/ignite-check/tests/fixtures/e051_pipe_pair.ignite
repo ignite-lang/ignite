@@ -1,0 +1,10 @@
+fn streams() -> (PipeStream, PipeStream) = Pipe.pair()
+
+test fn fresh() -> (PipeStream, PipeStream) = Pipe.pair()
+
+test "a test may create a pipe" {
+  let (client, server) = Pipe.pair()
+  let other = fresh()
+  (client.write_all("x".to_bytes()))?
+  assert server.received_batches() == 0
+}

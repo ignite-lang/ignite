@@ -1,0 +1,5 @@
+e096_bound_not_met.ignite:10:24: error[E096]: `Int` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
+e096_bound_not_met.ignite:12:44: error[E096]: `Config` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
+e096_bound_not_met.ignite:14:34: error[E096]: `T` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
+e096_bound_not_met.ignite:17:27: error[E096]: `Int` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
+e096_bound_not_met.ignite:22:9: error[E096]: `Int` does not implement `ByteStream`, which `S` of `relay` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`

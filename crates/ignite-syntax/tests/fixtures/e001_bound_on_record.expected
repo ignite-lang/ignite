@@ -1,0 +1,3 @@
+e001_bound_on_record.ignite:1:13: error[E001]: a bound is allowed on the type parameters of a fn or role only
+e001_bound_on_record.ignite:3:16: error[E001]: a bound is allowed on the type parameters of a fn or role only
+e001_bound_on_record.ignite:8:12: error[E001]: a bound is allowed on the type parameters of a fn or role only

@@ -1,0 +1,21 @@
+type Streams = ByteStream
+
+enum Carrier {
+  One(ByteStream)
+}
+
+const NOTHING: Option<ByteStream> = None
+
+fn returned(port: Int) -> ByteStream = port
+
+fn annotated(port: Int) -> Int {
+  let s: ByteStream = port
+  return 0
+}
+
+fn closure_param(port: Int) -> Int {
+  let f = |s: ByteStream| 0
+  return 0
+}
+
+fn fn_type(f: fn(ByteStream) -> Int) -> Int = 0

@@ -1,0 +1,7 @@
+fn batches<S: ByteStream>(stream: S) -> Int = stream.received_batches()
+
+fn port<S: ByteStream>(stream: S) -> Int = stream.local_port()
+
+fn field<S: ByteStream>(stream: S) -> Int = stream.port
+
+fn equal<S: ByteStream>(a: S, b: S) -> Bool = a == b

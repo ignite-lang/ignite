@@ -1,0 +1,4 @@
+e016_adv_bounded_effects.ignite:3:76: error[E016]: missing effect `tcp.read` for `peek`; add it to the `requires` of `caller`
+e016_adv_bounded_effects.ignite:5:59: error[E016]: missing effect `end.read` for `end.received_batches`; add it to the `requires` of `batches`
+e016_adv_bounded_effects.ignite:7:97: error[E016]: missing effect `stream.read` for `peek`; add it to the `requires` of `generic_caller`
+e016_adv_bounded_effects.ignite:9:88: error[E016]: missing effect `stream.write` for `stream.set_idle_timeout`; add it to the `requires` of `timeout`

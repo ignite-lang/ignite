@@ -1,0 +1,22 @@
+type Ends {
+  ends: (PipeStream, PipeStream) = Pipe.pair()
+}
+
+const ENDS: (PipeStream, PipeStream) = Pipe.pair()
+
+fn helper() -> (PipeStream, PipeStream) = Pipe.pair()
+
+fn later() -> Int {
+  let make = || Pipe.pair()
+  return 0
+}
+
+fn main() -> Int {
+  let (a, b) = Pipe.pair()
+  return 0
+}
+
+test "only a test calls helper" {
+  let (a, b) = helper()
+  assert 1 == 1
+}

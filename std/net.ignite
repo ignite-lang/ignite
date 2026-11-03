@@ -10,7 +10,9 @@ package std.net
 // the process arguments `--ref <path>=<address>:<port>` that `ignite run`
 // passes to a probe, and fails with "no binding for <path>" outside a
 // run. The module is also the substrate's `TcpListener`, `TcpStream` and
-// `Exposure`.
+// `Exposure`, and since slice 14 (18.3, 18.4) the interface `ByteStream`
+// (implemented by `TcpStream`, `PipeStream` and a type parameter bounded
+// by it), the test-only `Pipe.pair()` and its ends, `PipeStream`.
 type Endpoint {
   address: Text
   port: Int

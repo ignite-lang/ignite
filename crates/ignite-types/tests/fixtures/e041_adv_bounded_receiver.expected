@@ -1,0 +1,4 @@
+e041_adv_bounded_receiver.ignite:1:54: error[E041]: `S` has no method `received_batches`
+e041_adv_bounded_receiver.ignite:3:51: error[E041]: `S` has no method `local_port`
+e041_adv_bounded_receiver.ignite:5:52: error[E041]: `S` has no field `port`
+e041_adv_bounded_receiver.ignite:7:47: error[E045]: operator `==` is not defined for `S`: it holds a function, handle, store, `IoError` or type parameter

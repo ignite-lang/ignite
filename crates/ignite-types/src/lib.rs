@@ -158,6 +158,9 @@ pub enum Ty {
     Tuple(Vec<Ty>),
     TcpListener,
     TcpStream,
+    /// One end of an in-memory stream pair, `Pipe.pair()` (`docs/slice.md`
+    /// 18.4): a handle like `TcpStream`.
+    PipeStream,
     IoError,
     Input,
     /// The type of `return`, `break`, `continue` and `Process.exit`.
@@ -429,6 +432,7 @@ impl fmt::Display for Ty {
             }
             Ty::TcpListener => write!(f, "TcpListener"),
             Ty::TcpStream => write!(f, "TcpStream"),
+            Ty::PipeStream => write!(f, "PipeStream"),
             Ty::IoError => write!(f, "IoError"),
             Ty::Input => write!(f, "Input"),
             Ty::Tuple(elements) => {
@@ -585,6 +589,30 @@ pub enum Builtin {
     /// the `--ref path=address:port` argument for the reference's text
     /// (`docs/slice.md` 16.9, 16.13); effect `process.args`.
     EndpointOf,
+    /// `Pipe.pair() -> (PipeStream, PipeStream)`: two connected in-memory
+    /// stream ends; tests and test-only items only (`docs/slice.md` 18.4).
+    PipePair,
+    /// `p.read(maximum) -> Result<Input, IoError>` on a `PipeStream`.
+    PipeStreamRead,
+    /// `p.write_all(data) -> Result<Unit, IoError>` on a `PipeStream`.
+    PipeStreamWriteAll,
+    /// `p.close() -> Result<Unit, IoError>` on a `PipeStream`.
+    PipeStreamClose,
+    /// `p.set_idle_timeout(ms) -> Result<Unit, IoError>` on a `PipeStream`.
+    PipeStreamSetIdleTimeout,
+    /// `p.received_batches() -> Int`: the deliveries into this end's queue
+    /// since `Pipe.pair()`; effect `<root>.read`.
+    PipeStreamReceivedBatches,
+    /// `s.read(maximum)` on a value of a `ByteStream`-bounded type
+    /// parameter (`docs/slice.md` 18.3). A backend resolves it by the
+    /// instance's type argument to the `TcpStream` or `PipeStream` entry.
+    StreamRead,
+    /// `s.write_all(data)` on a `ByteStream`-bounded receiver.
+    StreamWriteAll,
+    /// `s.close()` on a `ByteStream`-bounded receiver.
+    StreamClose,
+    /// `s.set_idle_timeout(ms)` on a `ByteStream`-bounded receiver.
+    StreamSetIdleTimeout,
 }
 
 /// What a `Call` or `Method` expression calls.
@@ -642,11 +670,16 @@ pub struct ModuleTypes {
     /// Parameter names of every fn (key: its qualified name), for named
     /// arguments (`docs/slice.md` section 14.2).
     pub param_names: BTreeMap<String, Vec<String>>,
+    /// The bounded type parameters of fns (key: the qualified name) and
+    /// roles (key: `Protocol.role`): parameter to interface
+    /// (`docs/slice.md` 18.13). Absent for a fn without bounds.
+    pub bounds: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 impl ModuleTypes {
     /// Owned metadata for the public queries on `TypedProgram`, after typing.
-    /// Keep every record/enum shape, default and generic parameter list.
+    /// Keep every record/enum shape, default, generic parameter list and
+    /// bound ([`TypedProgram::bound`]).
     /// Function/constant signatures, protocols, aliases, constant values and
     /// parameter names are needed while typing, but no retained query reads
     /// them. A new query that needs one must extend this snapshot and the
@@ -657,6 +690,7 @@ impl ModuleTypes {
             enums: self.enums.clone(),
             defaults: self.defaults.clone(),
             generics: self.generics.clone(),
+            bounds: self.bounds.clone(),
             ..ModuleTypes::default()
         }
     }
@@ -1313,6 +1347,19 @@ impl TypedProgram {
             .map(Vec::as_slice)
     }
 
+    /// The interface that bounds type parameter `param` of the fn
+    /// `fn_name` (for a role, the name `Protocol.role`) of this module or a
+    /// module it was typed against: `Some("ByteStream")`, or `None` for an
+    /// unbounded parameter (`docs/slice.md` 18.3, 18.13).
+    pub fn bound(&self, fn_name: &QualName, param: &str) -> Option<&str> {
+        self.modules
+            .get(&fn_name.module)?
+            .bounds
+            .get(&fn_name.name)?
+            .get(param)
+            .map(String::as_str)
+    }
+
     /// The tests this module declares, in declaration order.
     pub fn tests(&self) -> &[TestInfo] {
         &self.tests
@@ -1508,6 +1555,7 @@ pub fn equality(ty: &Ty, modules: &TypedModules) -> Option<Equality> {
             | Ty::EffectFn(..)
             | Ty::TcpListener
             | Ty::TcpStream
+            | Ty::PipeStream
             | Ty::IoError
             | Ty::Store(_)
             | Ty::Param(_)

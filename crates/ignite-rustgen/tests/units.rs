@@ -232,6 +232,7 @@ fn func(
         body: block(stmts),
         span: sp(),
         type_params: Vec::new(),
+        bounds: Vec::new(),
     })
 }
 

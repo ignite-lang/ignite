@@ -83,6 +83,16 @@ fn mutates(builtin: Builtin) -> bool {
         | TcpStreamSetIdleTimeout
         | StoreGet
         | StoreValues
+        | PipePair
+        | PipeStreamRead
+        | PipeStreamWriteAll
+        | PipeStreamClose
+        | PipeStreamSetIdleTimeout
+        | PipeStreamReceivedBatches
+        | StreamRead
+        | StreamWriteAll
+        | StreamClose
+        | StreamSetIdleTimeout
         | Debug => false,
     }
 }

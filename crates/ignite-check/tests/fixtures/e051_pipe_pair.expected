@@ -1,0 +1,1 @@
+e051_pipe_pair.ignite:1:49: error[E051]: `Pipe.pair()` is test-only; a program's streams come from a listener or a connect

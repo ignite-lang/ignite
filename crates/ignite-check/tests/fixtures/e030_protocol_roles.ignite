@@ -19,3 +19,15 @@ protocol Echo {
     return Echo.serve(stream, 1)
   }
 }
+
+protocol Wide {
+  fn serve(stream: TcpStream, limits: Int, application: Int, extra: Int) -> Result<Unit, IoError> requires [stream.read] {
+    return Ok(Unit)
+  }
+}
+
+protocol Limited {
+  fn serve(stream: TcpStream, limits: Int, application: Int) -> Result<Unit, IoError> requires [stream.read] {
+    return Ok(Unit)
+  }
+}

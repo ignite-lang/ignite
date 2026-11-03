@@ -549,9 +549,13 @@ fn decode(json: &Json, ty: &Ty, types: &TypedProgram, path: &str) -> Result<Valu
             "ref",
         )?)))),
         Ty::Fn(..) | Ty::EffectFn(..) => Ok(Value::Fn(qualified(&text_of(tagged("Fn")?, "fn")?))),
-        Ty::TcpListener | Ty::TcpStream | Ty::IoError | Ty::Store(_) | Ty::Never | Ty::Param(_) => {
-            Err(fail(format!("a value of type `{ty}` cannot be decoded")))
-        }
+        Ty::TcpListener
+        | Ty::TcpStream
+        | Ty::PipeStream
+        | Ty::IoError
+        | Ty::Store(_)
+        | Ty::Never
+        | Ty::Param(_) => Err(fail(format!("a value of type `{ty}` cannot be decoded"))),
     }
 }
 
