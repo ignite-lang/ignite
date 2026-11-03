@@ -14,6 +14,7 @@ use std::process::Command;
 
 pub mod apply;
 mod llvm_build;
+pub mod rfc;
 pub mod run;
 mod test_build;
 

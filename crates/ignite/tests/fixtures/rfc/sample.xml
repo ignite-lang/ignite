@@ -1,0 +1,87 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE rfc SYSTEM "rfc2629-xhtml.ent">
+<?rfc toc="yes"?>
+<!-- A hand-written RFCXML v3 document for the importer tests (docs/slice.md 19.8). -->
+<rfc xmlns:xi="http://www.w3.org/2001/XInclude" version="3" number="7001" category='std'>
+  <link href="https://example.invalid/draft-echo-00" rel="prev"/>
+  <link href="https://example.invalid/rfc7001" rel="alternate"/>
+  <link href="urn:issn:2070-1721" rel="alternate"/>
+  <front>
+    <title abbrev="Echo">A Line Echo &amp; Its
+      Keywords</title>
+    <abstract pn="section-abstract">
+      <t indent="0" pn="section-abstract-1">An abstract <bcp14>MUST</bcp14> not become a requirement.</t>
+    </abstract>
+  </front>
+  <middle>
+    <section anchor="intro" numbered="true" pn="section-1">
+      <name slugifiedName="name-introduction">Introduction</name>
+      <t indent="0" pn="section-1-1">
+   An implementation must keep this lowercase word as prose.  It may
+   also say should and required without a mark.
+</t>
+      <t indent="0" pn="section-1-2">The key word "<bcp14>MUST</bcp14>" is to be interpreted as described in <xref target="RFC7000" format="default" sectionFormat="of" derivedContent="RFC7000"/>.</t>
+    </section>
+    <section anchor="echo" numbered="true" pn="section-2">
+      <name slugifiedName="name-echo">Echo</name>
+      <t indent="0" pn="section-2-1">This section has no requirement of its own.</t>
+      <section anchor="lines" numbered="true" pn="section-2.1">
+        <name slugifiedName="name-lines">Lines</name>
+        <iref item="line" primary="true" pn="iref-line-1"/>
+        <t indent="0" pn="section-2.1-1">
+   A server <bcp14>MUST</bcp14> echo every line, and it <bcp14>SHOULD</bcp14> do so at once.
+   A client must not care how.  A recipient <bcp14>MUST NOT</bcp14> treat a bare CR as the
+   end of a line (<xref target="RFC7000" section="2.1" format="default" sectionFormat="of" derivedContent="RFC7000"/>). Echoing a
+   line twice is <bcp14>NOT
+   RECOMMENDED</bcp14>; see <xref target="timing" format="default" sectionFormat="of" derivedContent="Section 3"/>.
+</t>
+        <t indent="0" pn="section-2.1-2">A recipient <bcp14>SHOULD</bcp14> treat a lone <tt>&lt;LF&gt;</tt> as <em>data</em>, not as an <xref target="timing" format="title" derivedContent="Timing">end</xref>.</t>
+      </section>
+      <section anchor="data" numbered="true" pn="section-2.2">
+        <name slugifiedName="name-data">Data</name>
+        <ul pn="section-2.2-1">
+          <li pn="section-2.2-1.1">A sender <bcp14>MAY</bcp14> send an empty line, as <xref target="RFC7000" section="3" format="default" sectionFormat="comma" derivedContent="RFC7000"/> allows.</li>
+          <li pn="section-2.2-1.2">
+            <t indent="0" pn="section-2.2-1.2.1">A proxy <bcp14>SHALL</bcp14> forward a line&apos;s &quot;{braces}&quot; and back\slashes as data&#x2014;unchanged&#8212;in order.</t>
+          </li>
+        </ul>
+        <dl pn="section-2.2-2">
+          <dt pn="section-2.2-2.1">Order:</dt>
+          <dd pn="section-2.2-2.2">An intermediary is <bcp14>REQUIRED</bcp14> to keep the order of lines; see <eref target="https://example.invalid/order"/> and <eref target="https://example.invalid/more">the notes</eref>.</dd>
+        </dl>
+      </section>
+    </section>
+    <section anchor="timing" numbered="true" pn="section-3">
+      <name slugifiedName="name-timing">Timing</name>
+      <t indent="0" pn="section-3-1">A user agent that talks to an origin server <bcp14>MUST</bcp14> wait for the echo. Is a reply <bcp14>OPTIONAL</bcp14>? It is not!  The client's (own) timer <bcp14>SHOULD</bcp14> run.</t>
+      <t indent="0" pn="section-3-2">Data such as <![CDATA[<raw> MUST]]> is skipped, e.g. here.</t>
+      <sourcecode type="abnf" pn="section-3-3">echo = line CRLF ; a reader MUST stop here</sourcecode>
+      <table pn="table-1">
+        <thead>
+          <tr>
+            <th>Rule</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Caches <bcp14>SHOULD NOT</bcp14> store an echo.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </middle>
+  <back>
+    <references pn="section-4">
+      <name slugifiedName="name-references">References</name>
+      <reference anchor="RFC7000" target="https://example.invalid/rfc7000">
+        <front>
+          <title>A Line Echo for the Clause Fixture</title>
+        </front>
+      </reference>
+    </references>
+    <section anchor="notes" numbered="false" pn="section-appendix.a">
+      <name slugifiedName="name-notes">Notes</name>
+      <t indent="0" pn="section-appendix.a-1">Back matter <bcp14>MUST</bcp14> be skipped.</t>
+    </section>
+  </back>
+</rfc>
