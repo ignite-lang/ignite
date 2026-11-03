@@ -1059,3 +1059,79 @@ fn emitted_programs_carry_no_catalogue() {
         }
     }
 }
+
+/// The reason of `unsupported <requirement> "<reason>"` in `source`.
+fn unsupported_reason<'a>(source: &'a str, requirement: &str) -> &'a str {
+    let prefix = format!("unsupported {requirement} \"");
+    source
+        .lines()
+        .find_map(|line| line.trim_start().strip_prefix(&prefix))
+        .and_then(|rest| rest.strip_suffix('"'))
+        .unwrap_or_else(|| panic!("no unsupported {requirement}"))
+}
+
+/// Row 3 of 19.0, P2 test 3, not met in this slice (19.14 item 16): the
+/// RFC 854 claim does not hold, with exactly the four gaps `RP5_3`, `RP5_4`,
+/// `RP10_2` and `RP12_4`, each printing its `unsupported` reason; the RFC 855
+/// claim holds, and its negotiation rows `RP2_3` (IAC SE ends a
+/// subnegotiation) and `RP2_4` (refusal by WON'T or DON'T) pass on
+/// `decode_within` and both its tests.
+#[test]
+fn telnet_matrix_claims_rfc854_for_an_nvt_that_refuses_every_option() {
+    const GAPS: [&str; 4] = ["RP5_3", "RP5_4", "RP10_2", "RP12_4"];
+    let source = std::fs::read_to_string(repository().join("std/protocol/telnet.ignite")).unwrap();
+    let mut outputs = Vec::new();
+    for target in ["rust", "llvm"] {
+        let output = std_conformance("telnet", target);
+        let stdout = text(&output.stdout);
+        for claim in [
+            "claim conformance of Telnet to rfc854: no (4 gaps, 0 failures, 0 inconclusive)\n",
+            "claim conformance of Telnet to rfc855: yes (0 gaps, 0 failures, 0 inconclusive)\n",
+        ] {
+            assert!(
+                stdout.contains(claim),
+                "{target}: {claim}{stdout}{}",
+                text(&output.stderr)
+            );
+        }
+        let rfc854 = block(&stdout, "rfc854");
+        for id in GAPS {
+            let row = columns(rfc854, id);
+            assert_eq!(row.len(), 6, "{target}: {row:?}");
+            assert_eq!(row[3], "unsupported", "{target}: {row:?}");
+            let reason = unsupported_reason(&source, &format!("RFC854.{id}"));
+            assert_eq!(row[4], format!("\"{reason}\""), "{target}: {row:?}");
+            assert_eq!(row[5], "gap", "{target}: {row:?}");
+        }
+        let gaps: Vec<&str> = rfc854
+            .lines()
+            .filter(|line| line.starts_with('R') && line.ends_with("  gap"))
+            .filter_map(|line| line.split(' ').next())
+            .collect();
+        assert_eq!(gaps, GAPS, "{target}: {rfc854}");
+
+        let rfc855 = block(&stdout, "rfc855");
+        for id in ["RP2_3", "RP2_4"] {
+            let row = columns(rfc855, id);
+            assert_eq!(row.len(), 6, "{target}: {row:?}");
+            assert_eq!(row[3], "satisfied", "{target}: {row:?}");
+            assert_eq!(row[5], "pass", "{target}: {row:?}");
+            let (satisfiers, tests) = row[4]
+                .split_once("; ")
+                .unwrap_or_else(|| panic!("{target}: {row:?}"));
+            assert!(
+                satisfiers.split(", ").any(|name| name == "decode_within"),
+                "{target}: {row:?}"
+            );
+            for test in [
+                "test \"a subnegotiation is skipped up to IAC SE\" passed",
+                "test \"DO is answered WONT and WILL is answered DONT\" passed",
+            ] {
+                assert!(tests.split(", ").any(|t| t == test), "{target}: {row:?}");
+            }
+        }
+        assert_eq!(output.status.code(), Some(1), "{target}: {stdout}");
+        outputs.push(stdout);
+    }
+    assert_eq!(outputs[0], outputs[1]);
+}
