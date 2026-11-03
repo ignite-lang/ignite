@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-15-frontend
 kind: story
-status: active
+status: implemented
 title: RFC vocabulary and linking clauses in the frontend
 summary: std/rfc/rfc.ignite, the six clauses, E091 for a non-literal catalogue constant; clauses emit nothing on both targets
 relations:
@@ -42,10 +42,11 @@ scope:
   path: docs/layering.md
 - confidence: inferred
   path: std/rfc.ignite
-revision: 11
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"review_outcome":5}}}
 - {from: "proposed", to: "active", at: "2026-11-03T16:07:58Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"review_outcome":5}}, correlation: "slice-15-wave-1"}
+- {from: "active", to: "implemented", at: "2026-11-03T18:02:30Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"test_result":1,"review_outcome":5}}}
 ---
 
 # Story: slice-15-frontend
