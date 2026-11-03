@@ -31,7 +31,7 @@ use ignite_types::{ExecutableInfo, FnSig, QualName, Ty, TypedModules, TypedProgr
 
 pub use ir::{RUNTIME, TargetSpec};
 pub use layout::{Layout, TypeEnv, repr};
-pub use lower::abi;
+pub use lower::{abi, instance_symbol};
 
 use ir::{Func, Module, Source};
 use lower::{Ctx, Lower, Val, symbol};

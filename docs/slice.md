@@ -4776,6 +4776,16 @@ inherent calls, as `TcpStream`'s do. The Rust copy of `bounds.ignite` is
   `@ignite_rt_tcp_read` and `relay<PipeStream>` calling `@ignite_rt_pipe_read`, and it
   compiles with clang.
 
+As landed (U4): the `ignite_rt_pipe_*` declarations are `ir::PIPE_RUNTIME`, and a module
+declares one only when it calls it, so the IR of every module without pipes, and every
+earlier golden, is unchanged; `RUNTIME` is untouched. A moved `PipeStream` is owned and
+released through `ignite_rt_tcp_own` and `ignite_rt_tcp_release`, which take any handle
+(18.9). `instance_symbol` is exported from the crate root for row 11. The LLVM crate keeps
+its own copy of `bounds.ignite` (its Hub executable and a test); `golden::bounded_streams`
+also links the modules with `libignite_rt.a`, and `golden::bounded_streams_run_over_a_pipe`
+lowers its test in a test build, links it with a `main` written in the test (this crate's
+archive has no runner) and runs it.
+
 ### 18.12 Standard library and examples
 
 `std/protocol/telnet.ignite`:

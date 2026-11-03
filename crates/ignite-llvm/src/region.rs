@@ -282,7 +282,9 @@ pub fn moved_to_task(stmts: &[Stmt], index: usize, call: &Expr) -> Vec<String> {
         .collect()
 }
 
-/// Whether the last `let` of `name` among `stmts` binds a fresh value.
+/// Whether the last `let` of `name` among `stmts` binds a fresh value. A
+/// `copy()` shares its receiver's handle, so it is not fresh: the task
+/// must not release the handle another binding still holds.
 fn fresh_let(stmts: &[Stmt], name: &str) -> bool {
     stmts
         .iter()
@@ -290,16 +292,21 @@ fn fresh_let(stmts: &[Stmt], name: &str) -> bool {
         .find_map(|stmt| match &stmt.kind {
             StmtKind::Let {
                 name: bound, value, ..
-            } if bound.name == name => Some(matches!(
-                value.kind,
-                ExprKind::Try(_)
-                    | ExprKind::Call { .. }
-                    | ExprKind::Method { .. }
-                    | ExprKind::Match { .. }
-            )),
+            } if bound.name == name => Some(fresh_value(value)),
             _ => None,
         })
         .unwrap_or(false)
+}
+
+fn fresh_value(value: &Expr) -> bool {
+    match &value.kind {
+        ExprKind::Method { name, .. } => name.name != "copy",
+        ExprKind::Try(inner) => {
+            !matches!(&inner.kind, ExprKind::Method { name, .. } if name.name == "copy")
+        }
+        ExprKind::Call { .. } | ExprKind::Match { .. } => true,
+        _ => false,
+    }
 }
 
 fn stmt_mentions(stmt: &Stmt, name: &str) -> bool {
