@@ -1432,7 +1432,10 @@ impl<'a, 'p> Live<'a, 'p> {
                 writeln!(out, "port {resource}: {port}")?;
             }
             for declared in &self.config.declared {
-                writeln!(out, "declared, not buildable in slice 12: {declared}")?;
+                writeln!(
+                    out,
+                    "declared, not buildable: {declared} (its kind has no main)"
+                )?;
             }
         }
         out.flush()

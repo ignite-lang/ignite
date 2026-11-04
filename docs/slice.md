@@ -2365,8 +2365,9 @@ rewrite is preventive.
 - Semantics are those of the targets: T6 overflow, 14.8 failures, 14.3 map order, 14.1
   quantity arithmetic and debug text, slice-9 structural `==`.
 - Fuel (O14): one unit per expression evaluated, per loop iteration and per call. The limit is
-  1,000,000 units per property expression, and `--fuel N` on `check`, `plan` and `explain`
-  changes it. A value larger than 1,000,000 nodes (list items, map entries, record fields,
+  1,000,000 units per property expression, and `--fuel N` on `plan` and `explain` changes it;
+  `check` always uses the default, and `--fuel N` on `run` and `replay` bounds the reducer
+  steps only (16.3). A value larger than 1,000,000 nodes (list items, map entries, record fields,
   counted recursively) also stops the evaluation. Either is E115 at the property expression,
   naming the limit and the fn that was running.
 - A failure during evaluation (`assert`, overflow, index, `match`, `?` on `Err`, `slice`) is
@@ -3059,9 +3060,10 @@ Ports:
 `WorkstationExecutable` members (A10):
 
 - A member whose kind has `main` is built, not started, and the run prints its path.
-- A member whose kind has no `main` is listed as "declared, not buildable in slice 12" in
-  the `status` output and in the journal's first `segment`. This is not E129. The design
-  file's `client: Application` is such a member.
+- A member whose kind has no `main` is listed as "declared, not buildable" with the reason
+  "its kind has no main" in the `status` output and on stderr, and in the `declared` field of
+  the journal's first `segment`. This is not E129. The design file's `client: Application`
+  is such a member.
 
 Control input, one command per line on stdin:
 
