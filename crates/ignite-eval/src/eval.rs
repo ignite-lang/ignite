@@ -1304,7 +1304,8 @@ impl<'p> Evaluator<'p> {
                 | Builtin::StorePut
                 | Builtin::StoreRemove
                 | Builtin::StoreValues
-                | Builtin::StoreUpdate,
+                | Builtin::StoreUpdate
+                | Builtin::StoreUpsert,
                 _,
             ) => Err(internal(format!(
                 "builtin `{builtin:?}` has no value at compile time"

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:store-atomic-upsert
 kind: story
-status: active
+status: implemented
 title: Atomic insert-or-update on Store
 summary: 'Store.upsert(id, f: fn(Option<T>) -> T): no lost write when two tasks insert the same new key'
 relations:
@@ -20,10 +20,11 @@ scope:
   path: crates/ignite-types/src
 - confidence: inferred
   path: docs/slice.md
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T04:19:08Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-11-04T04:19:08Z", actor: "human:timo", revision: 9}
+- {from: "active", to: "implemented", at: "2026-11-04T06:34:26Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: store-atomic-upsert
 

@@ -1,0 +1,2 @@
+e040_store_upsert_fn.ignite:4:15: error[E040]: type mismatch: expected `fn(Option<Int>) -> Int`, found `fn(Int) -> Int`
+e040_store_upsert_fn.ignite:8:19: error[E040]: type mismatch: expected `Int`, found `Option<Int>`
