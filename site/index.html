@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ignite: say what your system is for</title>
+  <meta name="description" content="Ignite is an intent-oriented language for specifying, building, deploying and operating systems. One program describes the components, the network, the contracts and the policies, and the compiler turns it into native executables.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0f0a14">
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/site.css">
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem("mdbook-theme"); } catch (e) {}
+      var dark = stored ? !(stored === "light" || stored === "rust") : window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    })();
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="./" aria-label="Ignite home">
+        <img src="assets/logo.svg" alt="" width="34" height="34">
+        <span>Ignite</span>
+      </a>
+      <button class="menu-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="main-nav">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <nav class="nav" id="main-nav" aria-label="Main">
+        <a href="book/guide/install.html">Guide</a>
+        <a href="book/design/index.html">Design</a>
+        <a href="book/reference/index.html">Reference</a>
+        <a href="book/roadmap.html">Roadmap</a>
+        <a href="https://github.com/ignite-lang/ignite" class="nav-gh">GitHub</a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="Switch between dark and light theme" title="Switch theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <svg class="embers" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+        <defs>
+          <radialGradient id="ember" cx="50%" cy="50%" r="50%">
+            <stop offset="0" stop-color="#ffe08a"/>
+            <stop offset="0.45" stop-color="#ff8a00"/>
+            <stop offset="1" stop-color="#ff3d00" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <g class="ember-field">
+          <circle class="e e1" cx="140" cy="640" r="5" fill="url(#ember)"/>
+          <circle class="e e2" cx="260" cy="690" r="3" fill="url(#ember)"/>
+          <circle class="e e3" cx="420" cy="660" r="6" fill="url(#ember)"/>
+          <circle class="e e4" cx="560" cy="700" r="4" fill="url(#ember)"/>
+          <circle class="e e5" cx="700" cy="650" r="5" fill="url(#ember)"/>
+          <circle class="e e6" cx="820" cy="690" r="3" fill="url(#ember)"/>
+          <circle class="e e7" cx="960" cy="670" r="6" fill="url(#ember)"/>
+          <circle class="e e8" cx="1080" cy="700" r="4" fill="url(#ember)"/>
+          <circle class="e e9" cx="340" cy="700" r="2.5" fill="url(#ember)"/>
+          <circle class="e e10" cx="900" cy="705" r="2.5" fill="url(#ember)"/>
+          <circle class="e e11" cx="640" cy="705" r="3.5" fill="url(#ember)"/>
+          <circle class="e e12" cx="60" cy="700" r="3" fill="url(#ember)"/>
+        </g>
+      </svg>
+
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> v0.3.0 &middot; an early prototype</p>
+          <h1 id="hero-title">Say what your system is for. <span class="flame-text">Ignite builds it, runs it and keeps it honest.</span></h1>
+          <p class="lede">An intent-oriented language for specifying, building, deploying and operating systems. One program describes the components, the network, the contracts and the policies, and the compiler turns it into native executables.</p>
+          <div class="cta">
+            <a class="btn btn-primary" href="#quickstart">Get started</a>
+            <a class="btn btn-ghost" href="book/design/index.html">Read the design</a>
+            <a class="btn btn-ghost" href="https://github.com/ignite-lang/ignite">Source on GitHub</a>
+          </div>
+          <ul class="hero-facts" aria-label="At a glance">
+            <li><strong>2</strong> native targets: Rust and LLVM</li>
+            <li><strong>Telnet and HTTP</strong> written in Ignite</li>
+            <li><strong>Tests</strong> inline, on both targets</li>
+          </ul>
+        </div>
+
+        <div class="window hero-window">
+          <div class="window-bar">
+            <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <div class="tabs" role="tablist" aria-label="Example files">
+              <button role="tab" id="tab-system" aria-controls="panel-system" aria-selected="true">terminal.ignite</button>
+              <button role="tab" id="tab-commands" aria-controls="panel-commands" aria-selected="false" tabindex="-1">commands.ignite, excerpt</button>
+              <button role="tab" id="tab-session" aria-controls="panel-session" aria-selected="false" tabindex="-1">session</button>
+            </div>
+          </div>
+          <div class="panel" role="tabpanel" id="panel-system" aria-labelledby="tab-system" tabindex="0">
+<pre><code class="language-ignite" data-dir="examples/terminal">package examples.terminal
+
+import std.console.CommandConsole
+import std.protocol.telnet.{TelnetServer, TelnetClient}
+
+system Terminal {
+  resource ingress: TcpListener {
+    address = "127.0.0.1"
+    port = 2323
+  }
+
+  component console: CommandConsole {
+    implementation = module("examples.terminal.commands")
+    prompt = "terminal&gt; "
+    maximum_line = 4096 bytes
+    command_schema = module("examples.terminal.command_schema")
+  }
+
+  component server: TelnetServer {
+    listener = ingress
+    application = console
+    executable = "terminald"
+  }
+
+  component client: TelnetClient {
+    target = ingress
+    executable = "tn"
+  }
+}</code></pre>
+          </div>
+          <div class="panel" role="tabpanel" id="panel-commands" aria-labelledby="tab-commands" tabindex="0" hidden>
+<pre><code class="language-ignite">import std.console.{Reply, Action, first_word, rest_after_word}
+
+enum Command {
+  Help,
+  Echo(Text),
+  Status,
+  Quit
+}
+
+fn answer(command: Command) -&gt; Reply = match command {
+  Help =&gt; Reply { lines = ["help", "echo &lt;text&gt;", "status", "quit"] }
+  Echo(text) =&gt; Reply { lines = [text] }
+  Status =&gt; Reply { lines = ["ready"] }
+  Quit =&gt; Reply { lines = ["bye"], action = Close }
+}
+
+fn parse(line: Text) -&gt; Option&lt;Command&gt; = match first_word(line) {
+  "help" =&gt; Some(Help)
+  "status" =&gt; Some(Status)
+  "quit" =&gt; Some(Quit)
+  "echo" =&gt; Some(Echo(rest_after_word(line)))
+  _ =&gt; None
+}
+
+test "parse reads the four commands by their first word" {
+  assert parse("echo hello world") == Some(Echo("hello world"))
+  assert parse("quit now") == Some(Quit)
+  assert parse("HELP") == None
+}</code></pre>
+          </div>
+          <div class="panel" role="tabpanel" id="panel-session" aria-labelledby="tab-session" tabindex="0" hidden>
+<pre><code class="language-console"><span class="c-prompt">$</span> ignite build examples/terminal/terminal.ignite
+built target/ignite/terminal/target/debug/terminald
+built target/ignite/terminal/target/debug/tn
+<span class="c-prompt">$</span> cd target/ignite/terminal/target/debug
+<span class="c-prompt">$</span> ./terminald   <span class="c-dim"># terminal 1</span>
+listening on 127.0.0.1:2323
+<span class="c-prompt">$</span> ./tn          <span class="c-dim"># terminal 2</span>
+terminal&gt; help
+help
+echo &lt;text&gt;
+status
+quit
+terminal&gt; echo hello
+hello
+terminal&gt; status
+ready
+terminal&gt; quit
+bye</code></pre>
+          </div>
+          <p class="window-note">The terminal system from <a href="https://github.com/ignite-lang/ignite/tree/main/examples/terminal">examples/terminal</a>, <code>terminal.ignite</code> in full and an excerpt of <code>commands.ignite</code> (it leaves out <code>respond</code> and most tests; a third file, <code>command_schema.ignite</code>, lists the command names): <code>ignite build</code> turns it into the server <code>terminald</code> and the client <code>tn</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="lifecycle" aria-labelledby="lifecycle-title">
+      <div class="wrap">
+        <p class="kicker">One toolchain, source to operations</p>
+        <h2 id="lifecycle-title">From one program to a running, supervised system</h2>
+        <ol class="fuse">
+          <li><code>check</code><span>Parse and check the program and the standard library. No output on success.</span></li>
+          <li><code>test</code><span>Build the inline tests and run them, on Rust, LLVM or both.</span></li>
+          <li><code>build</code><span>Generated Rust built by cargo, or LLVM IR compiled and linked by clang.</span></li>
+          <li><code>plan</code><span>Print the system model as canonical, deterministic JSON.</span></li>
+          <li><code>explain</code><span>Explain one system, member, property or assembly, with its source line.</span></li>
+          <li><code>run</code><span>Build the members, start them, probe them and evaluate the contracts.</span></li>
+          <li><code>replay</code><span>Re-step the journal and compare every effect and standing.</span></li>
+          <li><code>apply</code><span>Apply a saved, source-bound plan through a local host, with durable receipts.</span></li>
+        </ol>
+        <p class="more"><a href="book/reference/cli.html">Every command, flag and exit code &rarr;</a></p>
+      </div>
+    </section>
+
+    <section class="why" aria-labelledby="why-title">
+      <div class="wrap">
+        <p class="kicker">Why Ignite</p>
+        <h2 id="why-title">Intent that the compiler can hold you to</h2>
+        <p class="section-lede">System intent is usually split across application code, infrastructure definitions, deployment configuration, monitoring queries and runbooks, and those can disagree. Ignite keeps it in one typed model.</p>
+        <div class="cards">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h6" /><circle cx="18" cy="16" r="3"/></svg></div>
+            <h3>Intent first</h3>
+            <p>Sizes, durations and ratios are typed quantities: <code>4096 bytes</code>, <code>15 minutes</code>, <code>99.9%</code>. Contracts, restart policies and deployments are declarations the compiler checks, not comments next to a YAML file.</p>
+            <a href="book/design/intent.html">Intent and properties</a>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 5l-4 14"/></svg></div>
+            <h3>Protocols are code</h3>
+            <p>Telnet and HTTP are written in Ignite, in the standard library, generic over any byte stream. Their session tests run in-process over a pipe. Nothing application-specific hides in the runtime.</p>
+            <a href="book/design/protocols.html">Protocols and roles</a>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v6M12 15v6M5 9h14v6H5z"/></svg></div>
+            <h3>One substrate, two targets</h3>
+            <p>Rust, the default, built with cargo, and LLVM, built and linked with clang. Both call the same IO substrate and behave the same, down to the text of an error.</p>
+            <a href="book/design/substrate.html">One substrate, two targets</a>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div>
+            <h3>Effects are explicit</h3>
+            <p>A function names the capabilities it uses with <code>requires [...]</code>. Property expressions are pure and evaluated at compile time under a fuel limit, so configuration cannot reach the network.</p>
+            <a href="book/design/effects.html">Effects and capabilities</a>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h4l2-5 3 10 2-5h3"/></svg></div>
+            <h3>Operate what you declared</h3>
+            <p><code>ignite run</code> supervises the members, runs the probes, evaluates the contracts and journals every event. <code>ignite replay</code> re-derives the same effects and standings from that journal.</p>
+            <a href="book/guide/operate.html">Plan, explain, run and replay</a>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 4h6M10 4v5l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V4"/></svg></div>
+            <h3>Tests live next to the code</h3>
+            <p>A <code>test</code> block sits beside the function it checks. <code>ignite test --target all</code> links one test executable per target and runs every test on both.</p>
+            <a href="book/guide/testing.html">Testing with ignite test</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="showcase" aria-labelledby="showcase-title">
+      <div class="wrap showcase-grid">
+        <div>
+          <p class="kicker">Contracts and policies are declarations</p>
+          <h2 id="showcase-title">An objective with a measurement behind it</h2>
+          <p>The full terminal declaration adds a probe, three contracts, a restart policy and a drain rollout. The compiler evaluates every property, and <code>ignite explain</code> shows what a declaration means, where it came from and which machine will enforce it.</p>
+          <ul class="ticks">
+            <li>Missing telemetry is <em>insufficient evidence</em> by default, not a success; a contract that wants otherwise says <code>counts_as_good</code> or <code>counts_as_bad</code>.</li>
+            <li>A contract is bound to the signal it observes, checked before anything runs.</li>
+            <li>The machines are pure reducers in <code>std.control</code>, stepped by <code>ignite run</code>.</li>
+          </ul>
+          <p class="more"><a href="book/design/contracts.html">Contracts, policies and control &rarr;</a></p>
+        </div>
+        <div class="stack">
+          <div class="window">
+            <div class="window-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="window-title">terminal.design.ignite (excerpt)</span></div>
+<pre><code class="language-ignite" data-fragment>component promptProbe: TelnetPrompt {
+  target = server
+  interval = 10 seconds
+  timeout = 2 seconds
+  expected_prompt = "terminal&gt; "
+  close_after_probe = true
+}
+
+contract reachable: Availability {
+  signal = promptProbe.attempts
+  good = "prompt_received_before_timeout"
+  target = 99.9%
+  window = rolling(30 days)
+  missing_data = "insufficient_evidence"
+}</code></pre>
+          </div>
+          <div class="window">
+            <div class="window-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="window-title">ignite explain terminal.design.ignite Terminal.reachable</span></div>
+<pre><code class="language-text">Terminal.reachable: contract std.contract.Availability (terminal.design.ignite:81:3)
+  signal = Terminal.promptProbe.attempts
+  good = "prompt_received_before_timeout"
+  target = 99.9%
+  window = Rolling(30 days)
+  missing_data = "insufficient_evidence"
+  minimum_completeness = 90% (default)
+observes Terminal.promptProbe.attempts
+readiness Terminal.promptProbe
+machine Terminal.reachable.evaluator: Evaluate
+standing: evaluated at run time (ignite run, ignite replay)</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="failure" aria-labelledby="failure-title">
+      <div class="wrap failure-grid">
+        <div>
+          <p class="kicker">Failure is contained</p>
+          <h2 id="failure-title">A failure ends its task, not your server</h2>
+          <p>A failed <code>assert</code>, an integer overflow or an out-of-range index stops the one session that hit it and reports the file, line and column. Every other session carries on.</p>
+        </div>
+        <div class="window">
+          <div class="window-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="window-title">terminald, stderr</span></div>
+<pre><code class="language-text">task ended with error: index failed at &lt;file&gt;:&lt;line&gt;:&lt;column&gt;: index 5 out of range for length 2
+task ended with error: + failed at &lt;file&gt;:&lt;line&gt;:&lt;column&gt;: 9223372036854775807 + 9</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="quickstart" id="quickstart" aria-labelledby="qs-title">
+      <div class="wrap">
+        <p class="kicker">Quickstart</p>
+        <h2 id="qs-title">From a clone to your first Ignite system</h2>
+        <p class="section-lede">You need git and Rust (stable, with cargo). The Rust target builds programs with cargo; the LLVM target needs clang. Ignite installs from source.</p>
+        <ol class="steps">
+          <li>
+            <h3>Install the compiler from a clone</h3>
+<pre class="copyable"><code class="language-sh">git clone https://github.com/ignite-lang/ignite
+cd ignite
+cargo install --locked --path crates/ignite</code></pre>
+            <p>This puts <code>ignite</code> on your <code>PATH</code>. Keep the clone: <code>ignite</code> reads the standard library from it.</p>
+          </li>
+          <li>
+            <h3>Compile the terminal system</h3>
+<pre class="copyable"><code class="language-sh">ignite build examples/terminal/terminal.ignite</code></pre>
+            <p>This builds <code>terminald</code> and <code>tn</code> into <code>target/ignite/terminal/target/debug/</code>.</p>
+          </li>
+          <li>
+            <h3>Start the server, then connect</h3>
+<pre class="copyable"><code class="language-sh">target/ignite/terminal/target/debug/terminald    # terminal 1
+target/ignite/terminal/target/debug/tn           # terminal 2</code></pre>
+            <p>Type <code>help</code>, <code>echo hello</code>, <code>status</code> and <code>quit</code>. Any Telnet client works too: <code>telnet 127.0.0.1 2323</code>.</p>
+          </li>
+          <li>
+            <h3>Run the example's tests</h3>
+<pre class="copyable"><code class="language-sh">ignite test examples/terminal/commands.ignite</code></pre>
+            <p>Four inline tests, among them the whole Telnet session over an in-process pipe.</p>
+          </li>
+          <li>
+            <h3>Look at the system as the compiler sees it</h3>
+<pre class="copyable"><code class="language-sh">ignite plan examples/terminal/terminal.design.ignite
+ignite explain examples/terminal/terminal.design.ignite local</code></pre>
+          </li>
+        </ol>
+        <p class="more"><a href="book/guide/install.html">The full guide, step by step &rarr;</a></p>
+      </div>
+    </section>
+
+    <section class="docs" aria-labelledby="docs-title">
+      <div class="wrap">
+        <p class="kicker">The book</p>
+        <h2 id="docs-title">Learn it, understand it, look it up</h2>
+        <div class="doc-cards">
+          <a class="doc-card" href="book/guide/install.html">
+            <span class="doc-num">01</span>
+            <h3>Guide</h3>
+            <p>Install from source, write a first program, walk through the terminal system, test, build for both targets, plan, run, replay and apply.</p>
+          </a>
+          <a class="doc-card" href="book/design/index.html">
+            <span class="doc-num">02</span>
+            <h3>Language design</h3>
+            <p>The ideas behind Ignite: intents and properties, effects, protocols and roles, components, systems and assemblies, the substrate and the evaluator.</p>
+          </a>
+          <a class="doc-card" href="book/reference/index.html">
+            <span class="doc-num">03</span>
+            <h3>Reference</h3>
+            <p>Syntax and grammar, types, effects, modules, the standard library module by module, every CLI command and every diagnostic code.</p>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="status" aria-labelledby="status-title">
+      <div class="wrap status-inner">
+        <div>
+          <p class="kicker">Where it stands</p>
+          <h2 id="status-title">Early, honest, moving</h2>
+          <p>Ignite is an early prototype. The language, both native targets, the standard library, the system declaration, planning, running, journal replay and local apply work today. The syntax is not frozen and the design is versioned.</p>
+          <p class="more"><a href="book/roadmap.html">See the roadmap &rarr;</a></p>
+        </div>
+        <ul class="milestones">
+          <li><span class="tag">v0.1.0</span> language, two targets, protocols in Ignite, inline tests, plan, explain, run and replay</li>
+          <li><span class="tag">v0.2.0</span> <code>ignite apply</code>: local host, saved plans, durable receipts, crash recovery</li>
+          <li><span class="tag">v0.3.0</span> in-process streams and protocol roles generic over the byte stream</li>
+          <li><span class="tag tag-next">next</span> RFC catalogues and protocol conformance, not released</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-inner">
+      <div class="foot-brand">
+        <img src="assets/logo.svg" alt="" width="28" height="28">
+        <span>Ignite</span>
+      </div>
+      <nav aria-label="Footer">
+        <a href="book/index.html">Book</a>
+        <a href="book/faq.html">FAQ</a>
+        <a href="book/reference/diagnostics.html">Diagnostics</a>
+        <a href="https://github.com/ignite-lang/ignite">GitHub</a>
+      </nav>
+      <p class="credit">The logo uses the robot and fire emoji from <a href="https://github.com/googlefonts/noto-emoji">Noto Emoji</a> by Google, licensed under the Apache License 2.0.</p>
+    </div>
+  </footer>
+
+  <script src="assets/site.js"></script>
+</body>
+</html>
