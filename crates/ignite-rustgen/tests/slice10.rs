@@ -164,6 +164,18 @@ fn failures_report_the_operation_and_position() {
             "neg",
             format!("error: - failed at {path}:31:10: -(-9223372036854775808)\n"),
         ),
+        (
+            "parse a slice",
+            format!("error: slice failed at {path}:36:20: slice 1..5 out of range for length 2\n"),
+        ),
+        (
+            "parse a slice of a slice",
+            format!("error: slice failed at {path}:41:20: slice 1..3 out of range for length 2\n"),
+        ),
+        (
+            "text of a slice",
+            format!("error: slice failed at {path}:46:10: slice -1..1 out of range for length 2\n"),
+        ),
     ];
     for (name, report) in &cases {
         let output = run(
@@ -180,7 +192,7 @@ fn failures_report_the_operation_and_position() {
     let output = run(&executable, &[]);
     assert_eq!(output.status.code(), Some(1), "{}", text(&output));
     assert!(
-        text(&output).contains("0 passed; 5 failed"),
+        text(&output).contains("0 passed; 8 failed"),
         "{}",
         text(&output)
     );

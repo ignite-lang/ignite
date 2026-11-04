@@ -82,7 +82,7 @@ pub fn generic_line() -> String {
 
 pub fn number(line: &String, command: &String) -> Option<i64> {
     match line.strip_prefix(&command.clone()).map(|s| s.to_string()) {
-        Some(rest) => Some(rest.clone()).filter(|t: &String| !t.starts_with('+')).and_then(|t| t.parse::<i64>().ok()),
+        Some(rest) => ignite_io::parse_int(&rest),
         None => None,
     }
 }
