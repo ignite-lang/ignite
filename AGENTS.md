@@ -420,6 +420,21 @@ cold comparison against each baseline meets the start-load rule and has no faile
 - `ignite test` links one test executable per target for all files given (`docs/slice.md`
   12.7); only two programs with one module path get separate executables.
 
+## Merging
+
+Standing rule (Timo, 2026-11-04): finished work goes to `main` without waiting for a person.
+
+- Every change reaches `main` through a pull request; an agent opens it and turns on auto-merge
+  with `gh pr merge --auto --merge <PR>`. The repository allows auto-merge; merges are merge
+  commits, so a slice keeps its unit history.
+- A change to code, `std/`, tests or `Taskfile.yml` has a green `task gate` on the PR's head
+  before auto-merge is turned on; the PR body names the gate's counts and exit. A change to
+  documents only needs no gate.
+- `main` has no CI check yet, so auto-merge merges as soon as the PR is mergeable: the local gate
+  is the check.
+- Planning-store commits (`.engineering/` only) go to `main` directly as fast-forwards.
+- No force-push to `main`, no rewrite of its history, no moved or deleted release tag.
+
 ## Lifecycle ownership
 
 - `ignite build` owns the generated project directory it was given; it overwrites it.
