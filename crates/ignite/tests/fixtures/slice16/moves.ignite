@@ -308,3 +308,25 @@ test "a local passed to a std fn" {
   assert e.offset == 3
   assert fallback().items == [4]
 }
+
+fn wipe(x: State) -> Int {
+  x.items.clear()
+  0
+}
+
+fn look(s: State, n: Int) -> Int = s.items.len() + n
+
+fn enclosing_argument() -> Int {
+  let s = step(fresh(), 1)
+  look(s, wipe(s))
+}
+
+fn enclosing_receiver() -> Int {
+  let s = step(fresh(), 1)
+  s.items.at(wipe(s))
+}
+
+test "a borrow held by an enclosing call sees the old value" {
+  assert enclosing_argument() == 1
+  assert enclosing_receiver() == 1
+}
