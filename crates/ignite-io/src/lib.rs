@@ -742,13 +742,33 @@ pub use stream::ByteStream;
 /// digits, overflow, bytes that are not UTF-8). Takes the bytes of a
 /// `Text` or of `Bytes`, so `Int.parse(bytes.to_text())` needs no `Text`:
 /// a lossy decode of bytes that are not UTF-8 holds U+FFFD, which never
-/// parses either.
+/// parses either. Reads the bytes directly, with no UTF-8 pass: every byte
+/// that is not an ASCII digit (or the leading `-`) rejects, and every byte
+/// of a multi-byte sequence is one. Accumulates towards the sign, so
+/// `i64::MIN` parses.
 pub fn parse_int(text: impl AsRef<[u8]>) -> Option<i64> {
     let text = text.as_ref();
-    if text.first() == Some(&b'+') {
+    let (negative, digits) = match text.split_first() {
+        Some((b'-', rest)) => (true, rest),
+        _ => (false, text),
+    };
+    if digits.is_empty() {
         return None;
     }
-    std::str::from_utf8(text).ok()?.parse::<i64>().ok()
+    let mut value: i64 = 0;
+    for &byte in digits {
+        let digit = byte.wrapping_sub(b'0');
+        if digit > 9 {
+            return None;
+        }
+        value = value.checked_mul(10)?;
+        value = if negative {
+            value.checked_sub(i64::from(digit))?
+        } else {
+            value.checked_add(i64::from(digit))?
+        };
+    }
+    Some(value)
 }
 
 #[cfg(test)]
@@ -768,5 +788,53 @@ mod parse_int_tests {
             parse_int(String::from_utf8_lossy(&[b'1', 0xff]).as_bytes()),
             None
         );
+    }
+
+    #[test]
+    fn parse_int_matches_i64_from_str_without_plus() {
+        for text in [
+            "0",
+            "-0",
+            "7",
+            "-7",
+            "007",
+            "-007",
+            "00000000000000000000000000042",
+            "42",
+            "-42",
+            "9223372036854775807",
+            "-9223372036854775808",
+            "9223372036854775808",
+            "-9223372036854775809",
+            "99999999999999999999",
+            "",
+            "-",
+            "+",
+            "+1",
+            "+-1",
+            "1-",
+            "--1",
+            " 1",
+            "1 ",
+            "1a",
+            "a1",
+            "1\0",
+            "\u{0}1",
+            "1_000",
+            "0x10",
+            "\u{663}",
+            "\u{ff11}",
+            "1\u{fffd}",
+        ] {
+            let expected = if text.starts_with('+') {
+                None
+            } else {
+                text.parse::<i64>().ok()
+            };
+            assert_eq!(parse_int(text), expected, "{text:?}");
+        }
+        for bad in [&b"1\xff"[..], b"\xff1", b"-\x80", b"\xc0\xb1"] {
+            assert_eq!(parse_int(bad), None, "{bad:?}");
+        }
     }
 }

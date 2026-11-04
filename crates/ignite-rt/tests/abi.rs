@@ -312,6 +312,29 @@ fn text_helpers() {
     assert_eq!(read_text(&out), "ok \u{fffd}\u{fffd} end");
     ignite_rt_text_from_bytes_lossy(&mut out, &empty());
     assert_eq!(read_text(&out), "");
+    ignite_rt_text_from_bytes_lossy(&mut out, &IgniteList::from_bytes(b"GET key"));
+    assert_eq!(read_text(&out), "GET key");
+    ignite_rt_text_from_bytes_lossy(&mut out, &IgniteList::from_bytes("ä€".as_bytes()));
+    assert_eq!(read_text(&out), "ä€");
+    ignite_rt_text_from_bytes_lossy(&mut out, &IgniteList::from_bytes(b"ab\xc3\xa4\x7f\xe2\x82"));
+    assert_eq!(read_text(&out), "ab\u{e4}\u{7f}\u{fffd}");
+    ignite_rt_text_from_bytes_lossy(&mut out, &IgniteList::from_bytes(b"\0\x7f\x80"));
+    assert_eq!(read_text(&out), "\0\u{7f}\u{fffd}");
+
+    let input = IgniteList::from_bytes(b"region");
+    let mark = ignite_rt_arena_mark();
+    ignite_rt_text_from_bytes_lossy(&mut out, &input);
+    assert_ne!(out.ptr, input.ptr);
+    assert!(ignite_rt_arena_mark() >= mark + 6);
+    // SAFETY: `input` is 6 bytes this task allocated.
+    unsafe { std::ptr::write_bytes(input.ptr, b'x', 6) };
+    assert_eq!(read_text(&out), "region");
+    ignite_rt_arena_scratch(1);
+    let mark = ignite_rt_arena_mark();
+    ignite_rt_text_from_bytes_lossy(&mut out, &input);
+    assert_eq!(ignite_rt_arena_mark(), mark);
+    ignite_rt_arena_scratch_clear();
+    ignite_rt_arena_scratch(0);
 
     ignite_rt_text_trim(&mut out, &text("\u{3000}\t hello world \r\n\u{2003}"));
     assert_eq!(read_text(&out), "hello world");
@@ -351,7 +374,19 @@ fn text_helpers() {
     ignite_rt_text_join(&mut out, &empty(), &text(", "));
     assert_eq!(read_text(&out), "");
 
-    for value in [0, 7, -42, i64::MAX, i64::MIN] {
+    for value in [
+        0,
+        1,
+        -1,
+        7,
+        9,
+        10,
+        -10,
+        -42,
+        i64::MAX,
+        i64::MIN,
+        i64::MIN + 1,
+    ] {
         ignite_rt_int_to_text(&mut out, value);
         assert_eq!(read_text(&out), value.to_string());
     }

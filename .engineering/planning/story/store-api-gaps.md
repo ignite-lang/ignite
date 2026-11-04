@@ -16,7 +16,7 @@ scope:
   path: crates/ignite-rustgen/src
 - confidence: inferred
   path: crates/ignite-types/src
-revision: 3
+revision: 4
 ---
 # Story: store-api-gaps
 
@@ -33,9 +33,15 @@ conditional remove, and an update step that returns an outcome beside the new va
   - E2 no atomic insert-or-update: `update` answers `None` for an absent id and a following `put`
     can lose another task's write. Observed at runtime (2026-11-04, compiler `9578530`): 16
     clients each sent `INCR fresh:<r>` for 2,000 fresh keys after a barrier; 1 of 32,000
-    increments lost on the Rust target, 2 of 32,000 on the LLVM target.
+    increments lost on the Rust target, 2 of 32,000 on the LLVM target. Done by
+    `story:store-atomic-upsert` (PR 19): the playground session's ESS history check at `225bda66`
+    (8 histories × 4,000 keys, 4 clients per key behind a barrier) found 1,822 (Rust) and 3,079
+    (LLVM) keys answered `:1` twice with ember on `update` then `put`, and 0 on both targets,
+    8 of 8 histories linearizable, with ember on `upsert`.
   - E3 no conditional remove.
-  - E4 the fn given to `Store.update` returns only the new `T`.
+  - E4 the fn given to `Store.update` returns only the new `T`. Still open after `upsert`:
+    ember's INCR checks for overflow by a lookup before the step, so the check and the step are
+    not one atomic operation.
 
 ## Acceptance
 
