@@ -768,6 +768,7 @@ pub fn run<F>(main: F) -> i32 where F: FnOnce() -> Result<(), IoError>;  // main
 pub fn spawn<F>(task: F) where F: FnOnce() + Send + 'static;             // an idle thread or a new one; returns at once; never panics
 pub fn try_spawn<F>(task: F) -> Result<(), IoError> where F: FnOnce() + Send + 'static; // spawn, Err when no thread can start
 pub const LINGER: Duration;                                              // 1 s: how long a thread without a task waits for one
+pub fn released_memory();                                                // mark freed heap memory for the next trim (Tasks, below)
 pub fn log(line: &str);                                                  // the line and a newline to stderr in one write
 pub fn exit(code: i32) -> !;                                             // restores the terminal mode, flushes stdout, exits the process
 pub mod args {
@@ -797,6 +798,13 @@ The substrate's pending writes are always empty between tasks, because each task
 with a flush. When the operating system cannot start a thread, the task is dropped without
 running (a task that owns a stream closes it), the first such failure after a successful
 start is logged as `cannot start a task: <reason>`, and the process continues.
+
+**Freed memory.** A `Store` that replaces or removes a value, and an LLVM task whose arenas
+held more than 1 MiB at its end, call `released_memory`. On Linux with glibc the substrate
+then calls `malloc_trim(0)` after a task ends, at most once a second and on one thread at a
+time, and when a thread that lingered without a task ends; on other targets it does
+nothing. The trim runs after the task's flush and after the task stops counting as live,
+so neither its writes nor the drain (16.13) wait for it.
 
 **Accept.** `accept` retries a failure that passes with time: out of descriptors
 (`EMFILE`, `ENFILE`), buffers (`ENOBUFS`) or memory, or a connection aborted before it
@@ -2364,8 +2372,9 @@ rewrite is preventive.
 - Semantics are those of the targets: T6 overflow, 14.8 failures, 14.3 map order, 14.1
   quantity arithmetic and debug text, slice-9 structural `==`.
 - Fuel (O14): one unit per expression evaluated, per loop iteration and per call. The limit is
-  1,000,000 units per property expression, and `--fuel N` on `check`, `plan` and `explain`
-  changes it. A value larger than 1,000,000 nodes (list items, map entries, record fields,
+  1,000,000 units per property expression, and `--fuel N` on `plan` and `explain` changes it;
+  `check` always uses the default, and `--fuel N` on `run` and `replay` bounds the reducer
+  steps only (16.3). A value larger than 1,000,000 nodes (list items, map entries, record fields,
   counted recursively) also stops the evaluation. Either is E115 at the property expression,
   naming the limit and the fn that was running.
 - A failure during evaluation (`assert`, overflow, index, `match`, `?` on `Err`, `slice`) is
@@ -3058,9 +3067,10 @@ Ports:
 `WorkstationExecutable` members (A10):
 
 - A member whose kind has `main` is built, not started, and the run prints its path.
-- A member whose kind has no `main` is listed as "declared, not buildable in slice 12" in
-  the `status` output and in the journal's first `segment`. This is not E129. The design
-  file's `client: Application` is such a member.
+- A member whose kind has no `main` is listed as "declared, not buildable" with the reason
+  "its kind has no main" in the `status` output and on stderr, and in the `declared` field of
+  the journal's first `segment`. This is not E129. The design file's `client: Application`
+  is such a member.
 
 Control input, one command per line on stdin:
 

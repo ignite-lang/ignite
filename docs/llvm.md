@@ -350,6 +350,12 @@ position, even with no buffer.
 - A task is the process's main thread, or a task `ignite_io::try_spawn` started for a
   `spawn`. It reuses idle threads (`docs/slice.md` section 7). A task's arena is freed when
   it ends (`task_end`), except for one chunk that the thread keeps for its next task.
+  A task whose arenas held more than 1 MiB at `task_end` calls `ignite_io::released_memory`,
+  as a `Store` does when it drops a value, and the substrate returns the free heap pages
+  with glibc's `malloc_trim(0)` when a later task or an idle thread ends (`docs/slice.md`
+  section 7). Without it glibc keeps the freed pages in the arena of every thread that
+  allocated them: the ember example's churn (10 rounds of 10 MB SET then FLUSHDB) held
+  about 100 MiB RSS on 10 MB of keys (2026-11-04).
   `spawn` hands the new task a pointer to the arguments in the parent's memory. The task
   deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before the parent
   continues (`ignite_rt_spawn` blocks until then and returns 1).

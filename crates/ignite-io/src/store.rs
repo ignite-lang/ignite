@@ -9,6 +9,9 @@
 //! given. `update` holds the lock while it applies `f`, so two updates of
 //! one id never lose a write. A task that panics while holding the lock does
 //! not make the store unusable: the next caller takes the map as it is.
+//! A `put` that replaces a value, a `remove` that finds one and an `update`
+//! call [`crate::released_memory`], so the task's end returns the freed
+//! heap pages to the kernel.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -69,12 +72,19 @@ impl<T> Store<T> {
 
     /// Insert `value` under `id`, replacing what was there.
     pub fn put(&self, id: i64, value: T) {
-        self.map().insert(id, value);
+        let old = self.map().insert(id, value);
+        if old.is_some() {
+            crate::released_memory();
+        }
     }
 
     /// The value under `id`, taken out of the store.
     pub fn remove(&self, id: i64) -> Option<T> {
-        self.map().remove(&id)
+        let old = self.map().remove(&id);
+        if old.is_some() {
+            crate::released_memory();
+        }
+        old
     }
 
     /// The number of values held.
@@ -108,6 +118,7 @@ impl<T: Clone> Store<T> {
         let entry = map.get_mut(&id)?;
         let new = f(entry.clone());
         *entry = new.clone();
+        crate::released_memory();
         Some(new)
     }
 }
@@ -141,6 +152,24 @@ mod tests {
         assert_eq!(store.remove(1), None);
         assert_eq!(store.values(), ["B", "c"]);
         assert_eq!(store.len(), 2);
+    }
+
+    #[test]
+    fn dropping_a_value_marks_memory_released() {
+        let releases = || crate::task::RELEASES.with(std::cell::Cell::get);
+        let start = releases();
+        let store = Store::new();
+        store.put(1, "a".to_string());
+        assert_eq!(store.get(1), Some("a".to_string()));
+        assert_eq!(store.remove(2), None);
+        assert_eq!(store.update(2, |v| v), None);
+        assert_eq!(releases(), start, "nothing was dropped");
+        store.put(1, "b".to_string());
+        assert_eq!(releases(), start + 1, "put replaced a value");
+        store.update(1, |v| v + "c");
+        assert_eq!(releases(), start + 2, "update replaced a value");
+        assert_eq!(store.remove(1), Some("bc".to_string()));
+        assert_eq!(releases(), start + 3, "remove took a value");
     }
 
     #[test]
