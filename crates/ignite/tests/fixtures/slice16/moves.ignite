@@ -1,0 +1,310 @@
+// Last-use moves keep value semantics (docs/slice.md 20.3, rows 11, 12 and 21):
+// each test takes one shape of 20.3.1 and 20.3.2 and checks the values a program
+// sees with copies, so a move that changed a value fails here on either target.
+import std.json.{error, JsonError}
+import std.option.unwrap_or
+
+type State {
+  items: List<Int>
+  count: Int
+}
+
+fn fresh() -> State = State { items = [], count = 0 }
+
+fn step(state: State, x: Int) -> State {
+  var next = state
+  next.items.push(x)
+  next.count = next.count + 1
+  next
+}
+
+fn consume(x: State) -> Int {
+  x.items.push(99)
+  x.count + x.items.len()
+}
+
+fn take(x: State, n: Int) -> Int {
+  x.items.push(n)
+  x.count + n
+}
+
+fn both(a: State, b: State) -> Int {
+  a.items.push(1)
+  a.items.len() + b.items.len()
+}
+
+fn pick(a: State, b: State, c: Bool) -> State = if c { a } else { b }
+
+test "a state threaded through a call keeps a copy made before" {
+  var s = fresh()
+  let before = s
+  var i = 0
+  while i < 10 {
+    s = step(s, i)
+    i = i + 1
+  }
+  assert s.count == 10
+  assert s.items[9] == 9
+  assert before.count == 0
+  assert before.items.len() == 0
+}
+
+test "a read after the call sees the old value" {
+  let s = step(fresh(), 1)
+  let t = step(s, 2)
+  assert t.count + s.count == 3
+  assert s.items.len() == 1
+  assert t.items.len() == 2
+}
+
+fn grow(n: Int) -> State {
+  var s = fresh()
+  var i = 0
+  while i < n {
+    s = step(s, i)
+    i = i + 1
+  }
+  s
+}
+
+test "a moved state grows past 64 KiB inside a loop" {
+  let s = grow(20000)
+  assert s.count == 20000
+  assert s.items.len() == 20000
+  assert s.items[0] == 0
+  assert s.items[19999] == 19999
+}
+
+type Actor {
+  state: State
+  handle: fn(State, Int) -> State
+}
+
+fn run_actor(n: Int) -> Actor {
+  var a = Actor { state = fresh(), handle = step }
+  var i = 0
+  while i < n {
+    a.state = a.handle(a.state, i)
+    i = i + 1
+  }
+  a
+}
+
+test "a handle loop moves the state field" {
+  let a = run_actor(5)
+  assert a.state.count == 5
+  assert a.state.items[4] == 4
+  let b = run_actor(0)
+  assert b.state.count == 0
+}
+
+type Out {
+  log: List<Int>
+}
+
+type Step {
+  state: State
+  out: Out
+}
+
+fn publish(o: Out) -> Out {
+  var p = o
+  p.log.push(1)
+  p
+}
+
+fn advance(st: Step) -> Step = Step { state = st.state, out = publish(st.out) }
+
+test "a step literal takes both fields" {
+  let st = Step { state = step(fresh(), 7), out = Out { log = [] } }
+  let next = advance(st)
+  assert next.state.count == 1
+  assert next.out.log.len() == 1
+  assert st.out.log.len() == 0
+  assert st.state.items[0] == 7
+}
+
+type Table {
+  items: List<Int>
+}
+
+type Server {
+  table: Table
+  n: Int
+}
+
+fn values(t: Table) -> List<Int> {
+  var xs = t.items
+  xs.push(0)
+  xs
+}
+
+fn answer(state: Server, reply: Int, values: List<Int>) -> Server {
+  var s = state
+  s.n = reply + values.len()
+  s
+}
+
+fn answering() -> Server {
+  let state = Server { table = Table { items = [1, 2] }, n = 0 }
+  answer(state, 1, state.table.values())
+}
+
+fn answering_after() -> Server {
+  let state = Server { table = Table { items = [1, 2] }, n = 0 }
+  let vs = state.table.values()
+  answer(state, 1, vs)
+}
+
+test "an argument another argument mentions is copied" {
+  let a = answering()
+  assert a.n == 4
+  assert a.table.items == [1, 2]
+  let b = answering_after()
+  assert b.n == 4
+  assert b.table.items == [1, 2]
+}
+
+fn assigned_in_argument(c: Bool) -> Int {
+  var s = step(fresh(), 5)
+  take(s, if c {
+    s = fresh()
+    10
+  } else {
+    0
+  })
+}
+
+fn same_twice() -> Int {
+  let s = fresh()
+  both(s, s)
+}
+
+test "an argument that the same call assigns or passes twice is copied" {
+  assert assigned_in_argument(true) == 11
+  assert assigned_in_argument(false) == 1
+  assert same_twice() == 1
+}
+
+test "pick copies the one it returns" {
+  let a = step(fresh(), 1)
+  let b = fresh()
+  var p = pick(a, b, true)
+  p.items.push(5)
+  assert a.items.len() == 1
+  assert p.items.len() == 2
+  var q = pick(a, b, false)
+  q.items.push(6)
+  assert b.items.len() == 0
+  assert q.items == [6]
+}
+
+fn in_match_arm() -> Int {
+  let s = step(fresh(), 3)
+  match s.items {
+    [x] => consume(s) + x
+    _ => 0
+  }
+}
+
+fn in_for_body() -> Int {
+  let s = step(step(fresh(), 1), 2)
+  var total = 0
+  for x in s.items {
+    total = total + x + consume(s)
+  }
+  total
+}
+
+test "a match arm or a for body over the place keeps it" {
+  assert in_match_arm() == 6
+  assert in_for_body() == 13
+}
+
+fn branch_moves(c: Bool) -> Int {
+  let s = step(fresh(), 1)
+  if c { consume(s) } else { s.count }
+}
+
+fn shadowed(c: Bool) -> Int {
+  let a = step(fresh(), 1)
+  let b = fresh()
+  var t = step(step(fresh(), 1), 2)
+  let n = consume(t)
+  if c {
+    var t = a
+    t.items.push(0)
+    assert t.items.len() == 2
+  } else {
+    var t = b
+    t.items.push(0)
+    assert t.items.len() == 1
+  }
+  n + t.count
+}
+
+fn capture_reads() -> Int {
+  let s = step(fresh(), 1)
+  let n = consume(s)
+  let f = |x: Int| s.count + x
+  n + f(1)
+}
+
+test "branches, shadowing and captures" {
+  assert branch_moves(true) == 3
+  assert branch_moves(false) == 1
+  assert shadowed(true) == 7
+  assert shadowed(false) == 7
+  assert capture_reads() == 5
+}
+
+type Holder {
+  state: State
+}
+
+enum Wrapped {
+  Wrap(State),
+  Empty,
+}
+
+fn count_of(w: Wrapped) -> Int = match w {
+  Wrap(s) => s.count
+  Empty => 0
+}
+
+test "literals, payloads and tuples take their parts" {
+  let a = step(fresh(), 1)
+  let b = step(fresh(), 2)
+  let c = step(fresh(), 3)
+  let d = step(fresh(), 4)
+  let e = step(fresh(), 5)
+  let xs = [a]
+  let holder = Holder { state = b }
+  let updated = State { count = 9, ..c }
+  let wrapped = Wrap(d)
+  let pair = (e, 1)
+  assert xs[0].items == [1]
+  assert holder.state.items == [2]
+  assert updated.count == 9
+  assert updated.items == [3]
+  assert count_of(wrapped) == 1
+  assert pair.0.items == [5]
+}
+
+fn fail(n: Int) -> JsonError {
+  let message = "bad ".concat(n.to_text())
+  error(message, n)
+}
+
+fn fallback() -> State {
+  let f = step(fresh(), 4)
+  let o: Option<State> = None
+  unwrap_or(o, f)
+}
+
+test "a local passed to a std fn" {
+  let e = fail(3)
+  assert e.message == "bad 3"
+  assert e.offset == 3
+  assert fallback().items == [4]
+}

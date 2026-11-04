@@ -10,6 +10,7 @@ mod fixtures;
 mod generics;
 mod inline_tests;
 mod limits;
+mod moves;
 mod slice9;
 mod surface;
 mod terminal;

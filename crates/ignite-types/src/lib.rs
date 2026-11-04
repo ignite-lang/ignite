@@ -72,6 +72,7 @@
 
 mod builtins;
 mod exhaustive;
+mod moves;
 mod typer;
 
 mod address;
@@ -674,12 +675,16 @@ pub struct ModuleTypes {
     /// roles (key: `Protocol.role`): parameter to interface
     /// (`docs/slice.md` 18.13). Absent for a fn without bounds.
     pub bounds: BTreeMap<String, BTreeMap<String, String>>,
+    /// Consumed parameters per fn, associated fn (`Owner.name`) and role
+    /// (`Protocol.role`), one entry per parameter (`docs/slice.md` 20.3.3).
+    pub consumed: BTreeMap<String, Vec<bool>>,
 }
 
 impl ModuleTypes {
     /// Owned metadata for the public queries on `TypedProgram`, after typing.
     /// Keep every record/enum shape, default, generic parameter list and
-    /// bound ([`TypedProgram::bound`]).
+    /// bound ([`TypedProgram::bound`]), and the consumed parameters
+    /// ([`TypedProgram::consumed`]).
     /// Function/constant signatures, protocols, aliases, constant values and
     /// parameter names are needed while typing, but no retained query reads
     /// them. A new query that needs one must extend this snapshot and the
@@ -691,6 +696,7 @@ impl ModuleTypes {
             defaults: self.defaults.clone(),
             generics: self.generics.clone(),
             bounds: self.bounds.clone(),
+            consumed: self.consumed.clone(),
             ..ModuleTypes::default()
         }
     }
@@ -1243,6 +1249,9 @@ pub struct TypedProgram {
     /// Effect sets of property expressions, constant values and field
     /// defaults and their sub-expressions, keyed by expression address.
     effects: AddressMap<EffectSet>,
+    /// Places in move positions that take their value, by expression
+    /// address (`docs/slice.md` 20.3).
+    moves: AddressMap<()>,
 }
 
 fn key(expr: &Expr) -> usize {
@@ -1510,6 +1519,32 @@ impl TypedProgram {
         self.effects.get(&key(expr))
     }
 
+    /// Whether `expr`, a place in a move position, takes its value without a copy
+    /// (`docs/slice.md` 20.3). False for every other expression.
+    pub fn moves(&self, expr: &Expr) -> bool {
+        self.moves.contains_key(&key(expr))
+    }
+
+    /// Whether the callee consumes its parameter `index` (UFCS receiver = 0). Defined for a
+    /// declared fn, associated fn or role of this module or a module it was typed against;
+    /// false for every other callee (a variant, a builtin, `Callee::Local`,
+    /// `Callee::FieldFn`, `Callee::Const`).
+    pub fn consumed(&self, callee: &Callee, index: usize) -> bool {
+        let (module, name) = match callee {
+            Callee::Fn(q) => (&q.module, q.name.clone()),
+            Callee::Role { protocol, role } => {
+                (&protocol.module, format!("{}.{role}", protocol.name))
+            }
+            _ => return false,
+        };
+        self.modules
+            .get(module)
+            .and_then(|m| m.consumed.get(&name))
+            .and_then(|params| params.get(index))
+            .copied()
+            .unwrap_or(false)
+    }
+
     /// Index and payload types of variant `name` of a value of type `ty`
     /// (an enum, `Option`, `Result` or `Input`), as a pattern on it resolves.
     pub fn variant(&self, ty: &Ty, name: &str) -> Option<(usize, Vec<Ty>)> {
@@ -1743,7 +1778,7 @@ pub fn type_module(
         .map(|(path, types)| (path.clone(), types.query_snapshot()))
         .collect();
     all.insert(typed.module.clone(), typed.exports.query_snapshot());
-    Ok(TypedProgram {
+    let mut program_types = TypedProgram {
         module: typed.module,
         types: typed.types,
         callees: typed.callees,
@@ -1770,5 +1805,13 @@ pub fn type_module(
         systems: typed.system.systems,
         assemblies: typed.system.assemblies,
         effects: typed.system.effects,
-    })
+        moves: AddressMap::default(),
+    };
+    let found = moves::analyse(program, &program_types, modules);
+    program_types.moves = found.moves;
+    if let Some(own) = program_types.modules.get_mut(&program_types.module) {
+        own.consumed = found.consumed.clone();
+    }
+    program_types.exports.consumed = found.consumed;
+    Ok(program_types)
 }
