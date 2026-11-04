@@ -780,9 +780,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// UFCS call whose receiver is the first argument. `e` is the call
     /// expression, for named arguments (`docs/slice.md` section 14.2).
     ///
-    /// A borrowed aggregate goes to a parameter the callee only reads
+    /// A borrowed aggregate goes to a parameter the callee does not consume
     /// without a copy (`docs/llvm.md` section 3), unless a later argument
     /// modifies a variable: then it could change the place before the call.
+    /// A moved place ([`Lower::moved`]) is owned and goes to a consumed
+    /// parameter as its own pointer.
     fn call_with(&mut self, e: Option<&Expr>, symbol: &str, sig: &FnSig, args: &[&Expr]) -> Val {
         if let Some(perm) = e
             .and_then(|e| self.cx.types.named_args(e))
@@ -1210,7 +1212,21 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         if pending {
             self.nested -= 1;
         }
-        value
+        self.moved(e, value)
+    }
+
+    /// A place in a move position that is dead after it
+    /// (`TypedProgram::moves`, `docs/slice.md` 20.3.5) as an owned value:
+    /// every value position then takes it as it takes a temporary, passed
+    /// as the place's own pointer to an owned parameter or through a fn
+    /// value, or stored with a shallow `memcpy`, without `copy.` glue.
+    /// Nothing reads the place before it is reassigned or goes out of
+    /// scope, so the taker may change it in place.
+    fn moved(&self, e: &Expr, value: Val) -> Val {
+        match value {
+            Val::Ptr(p, false) if self.cx.types.moves(e) => Val::Ptr(p, true),
+            other => other,
+        }
     }
 
     fn expr_kind(&mut self, e: &Expr, want: bool) -> Val {

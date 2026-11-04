@@ -208,6 +208,95 @@ fn read_only_parameters_are_borrowed() {
     assert!(!greet.contains("copy.Text"), "{greet}");
 }
 
+/// The operands of the first call of `callee` in `text`, split at `, `.
+fn call_operands<'a>(text: &'a str, callee: &str) -> Vec<&'a str> {
+    let open = format!("{callee}(");
+    let at = text
+        .find(&open)
+        .unwrap_or_else(|| panic!("no call of {callee} in\n{text}"))
+        + open.len();
+    let close = text[at..].find(')').expect("end of the call") + at;
+    text[at..close].split(", ").collect()
+}
+
+/// `docs/slice.md` 20.0 row 14 and 20.3.5: a parameter is owned iff it is
+/// consumed, a place moves at its last use without a `copy.` call, a place
+/// read after the call is copied, and fn-typed expressions are called.
+#[test]
+fn last_use_moves_and_expression_calls() {
+    let generated = lower("slice16");
+    let program = &generated.program;
+    let step_call = "call void @\"tests.slice16.step\"";
+
+    let step = function(program, "tests.slice16.step");
+    assert!(
+        !step.contains("copy."),
+        "`var next = state` and the result `next` move:\n{step}"
+    );
+
+    let run = function(program, "tests.slice16.run");
+    let head = run
+        .find("call i64 @ignite.arena_mark()")
+        .expect("the loop takes a mark");
+    let call = run.find(step_call).expect("run calls step");
+    assert!(head < call, "{run}");
+    assert!(
+        !run[head..call].contains("copy."),
+        "no copy between the loop head and the call of step:\n{run}"
+    );
+    let release = run
+        .find("call void @ignite_rt_arena_scratch(i8 1)")
+        .expect("the loop has a release block");
+    let carried = call_operands(&run[release..], "call void @\"copy.tests.slice16.State\"");
+    let slot = carried[1].strip_prefix("ptr ").expect("a pointer operand");
+    let passed = call_operands(&run[call..], step_call);
+    assert_eq!(
+        passed[1],
+        format!("ptr {slot}"),
+        "step receives the slot of `s`:\n{run}"
+    );
+
+    let after = function(program, "tests.slice16.run_read_after");
+    let call = after.find(step_call).expect("run_read_after calls step");
+    let copy = after
+        .find("call void @\"copy.tests.slice16.State\"")
+        .expect("`s` is read after the call, so it is copied");
+    assert!(copy < call, "{after}");
+    let fresh = call_operands(&after[copy..], "call void @\"copy.tests.slice16.State\"")[0];
+    assert_eq!(
+        call_operands(&after[call..], step_call)[1],
+        fresh,
+        "{after}"
+    );
+
+    let read_only = function(program, "tests.slice16.read_only");
+    assert!(!read_only.contains("copy."), "{read_only}");
+    assert!(
+        read_only.contains("call i64 @\"tests.slice16.size\"(ptr %"),
+        "{read_only}"
+    );
+
+    let actor = function(program, "tests.slice16.run_actor");
+    let head = actor
+        .find("call i64 @ignite.arena_mark()")
+        .expect("the loop takes a mark");
+    let call = actor[head..]
+        .find("call void %")
+        .expect("run_actor calls the handle")
+        + head;
+    assert!(
+        !actor[head..call].contains("copy."),
+        "`a.state` moves into the fn-value call:\n{actor}"
+    );
+
+    let calls = function(program, "tests.slice16.expression_calls");
+    assert!(calls.matches("call i64 %").count() >= 3, "{calls}");
+
+    let dir = golden_dir();
+    compare(&dir.join("slice16.program.ll"), program).unwrap_or_else(|e| panic!("{e}"));
+    compiles("slice16_program", program);
+}
+
 #[test]
 fn symbols_are_module_qualified() {
     let generated = lower("small");
