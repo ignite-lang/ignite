@@ -46,6 +46,7 @@ the IO substrate (Rust) that compiled programs link.
 | `PLAN.md` | the roadmap in outline: slices, waves, state; reasoning stays in `docs/vision.md` |
 | `docs/` | design document, slice contract, `llvm.md` (LLVM target); `friction.md` (language friction backlog); research: `research/lean.md`, `research/ess.md` (comparisons); future designs, not implemented: `wasm.md` (WebAssembly target, runtime in Ignite, hot reload), `actors.md` (typed actors, pub/sub, supervision), `protocols.md` (RFC-bound protocols, pluggable transports) |
 | `.engineering/` | AEP planning store (`aep plan artifact list`): epics and stories of live work, from slice 13 on; slices 1 to 12c stay in `PLAN.md` |
+| `site/` | the website: `index.html` and `assets/` (the landing page, static HTML, CSS and vanilla JS) and `book/` (mdBook 0.5.4: guide, language design, reference; theme in `book/theme/`, Ignite highlighting in `book/theme/highlight.js`); every `ignite` block checks or is marked `fragment`, `fails=Ennn` or `dir=PATH`, and no page names `target/debug/ignite` (`site::` in `crates/ignite/tests/site.rs`); deployed to GitHub Pages by `.github/workflows/pages.yml` on push to `main` |
 
 Rules of the layout:
 
@@ -81,6 +82,8 @@ Rules of the layout:
 | compile the example with the LLVM target | `task compile-llvm` (writes `target/ignite-llvm/terminal/bin/`) |
 | run the LLVM-built binaries | `task server TARGET=llvm`, `task client TARGET=llvm` |
 | run the inline Ignite tests | `task test-ignite` (std/ and examples/, both targets; `FILTER=text` selects tests); one file: `target/debug/ignite test FILE [FILTER]` |
+| build the website | `task site` (landing page at `target/site/index.html`, book at `target/site/book/`; needs `mdbook` 0.5.4) |
+| serve the website | `task site-serve` (`task site`, then `miniserve` on `http://127.0.0.1:8765/`) |
 | print the system model of a program | `target/debug/ignite plan FILE [--assembly NAME] [--out FILE] [--fuel N]` (canonical JSON, `docs/slice.md` 15.5; the design file's model is the golden `crates/ignite/tests/golden/terminal.design.model.json`) |
 | explain one system, member, property or assembly | `target/debug/ignite explain FILE PATH [--assembly NAME]` (`Terminal.reachable`, `Terminal.server.recovery`, `local`; `docs/slice.md` 15.8) |
 | run a system in the foreground | `target/debug/ignite run FILE [--assembly NAME] [--state DIR] [--build DIR] [--target rust\|llvm] [--release] [--clock real\|manual] [--epoch RFC3339] [--port RESOURCE=PORT] [--json] [--fresh]` (`docs/slice.md` 16.3; stdin takes `status`, `rollout <member>`, `stop`, `advance <quantity>`; state defaults to `target/ignite-run/<assembly>/`; exit 0 on a requested stop, 1 when a machine gave up, 2 on a diagnostic; `--fuel N` bounds each reducer step only, the plan inside `run` and `replay` keeps the default fuel) |
@@ -426,6 +429,22 @@ cold comparison against each baseline meets the start-load rule and has no faile
   names are `<file>::<test>`: one file runs with `cargo test -p <crate> --test main <file>::`.
 - `ignite test` links one test executable per target for all files given (`docs/slice.md`
   12.7); only two programs with one module path get separate executables.
+
+## Merging
+
+Standing rule (Timo, 2026-11-04): finished work goes to `main` without waiting for a person.
+
+- Every change reaches `main` through a pull request that the agent opens and merges itself with
+  `gh pr merge --merge <PR>`; merges are merge commits, so a slice keeps its unit history.
+- A change to code, `std/`, tests or `Taskfile.yml` has a green `task gate` on the PR's head
+  before the merge; the PR body names the gate's counts and exit. A change to documents only
+  needs no gate.
+- `main` has no CI check and no branch protection, and GitHub enables auto-merge only on a
+  protected branch (`gh pr merge --auto` fails with "Protected branch rules not configured"), so
+  the local gate is the check and the agent merges directly. Once a CI workflow runs the gate as
+  a required check on `main`, the rule becomes `gh pr merge --auto --merge <PR>`.
+- Planning-store commits (`.engineering/` only) go to `main` directly as fast-forwards.
+- No force-push to `main`, no rewrite of its history, no moved or deleted release tag.
 
 ## Lifecycle ownership
 

@@ -1,0 +1,20 @@
+[book]
+title = "The Ignite Book"
+description = "Guide, language design and reference for Ignite, an intent-oriented language for specifying, building, deploying and operating systems."
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "coal"
+site-url = "/book/"
+git-repository-url = "https://github.com/ignite-lang/ignite"
+edit-url-template = "https://github.com/ignite-lang/ignite/edit/main/site/book/{path}"
+additional-css = ["theme/ignite.css"]
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+limit-results = 20

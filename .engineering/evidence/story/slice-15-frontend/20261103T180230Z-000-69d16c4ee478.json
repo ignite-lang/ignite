@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T18:02:30Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-15-frontend",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "rows 8-13, 38, 39 of docs/slice.md 19.0 at 1fa981a: ignite-syntax 149 passed, ignite-check fixtures 6 and layering 2 passed, ignite-types 44 passed, ignite-llvm 26 passed, ignite-rustgen 90 passed 4 ignored, ignite clauses 3 passed; red first on valid_clauses; adversary fa63ac2: 2 alias cases fixed in 1fa981a, 1 pre-existing closure case ignored",
+    "reference": "https://github.com/ignite-lang/ignite/tree/feat/slice15-protocols-p2"
+  }
+}
