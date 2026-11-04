@@ -61,8 +61,11 @@ use ignite_types::{
 
 /// Header of every generated Rust file. `non_snake_case` because Ignite fn
 /// names follow the design (`localSocket` in `std.deploy`), not Rust's
-/// convention.
-pub const FILE_HEADER: &str = "#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]\n";
+/// convention. `bindings_with_variant_name` (deny by default, E0170)
+/// because a lowercase name in an Ignite pattern binds the value even when
+/// the matched enum has a variant of that name, and the generated code
+/// never brings a variant into scope bare, so rustc binds it too.
+pub const FILE_HEADER: &str = "#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]\n";
 
 /// Header added before [`FILE_HEADER`] in a test build: compiler warnings
 /// about generated code are noise in a test report.
@@ -235,7 +238,7 @@ fn generate_program(
     layout: &Layout,
 ) -> Result<GeneratedProject, Vec<(String, Vec<Diagnostic>)>> {
     let package_name = package_name(program);
-    let crate_name = package_name.replace('-', "_");
+    let crate_name = crate_name(&package_name);
     let module = program_module(program, types);
     let in_lib = layout.in_lib();
     let in_bin = layout.in_bin(&crate_name);
@@ -266,7 +269,7 @@ fn generate_program(
         return Err(own(diagnostics));
     }
 
-    let uses = use_lines(&program.imports, "ignite_std", &in_lib);
+    let uses = use_targets(&program.imports, "ignite_std", &in_lib);
     let mut lib = Writer::new();
     if !options.test_modules.is_empty() {
         lib.raw(TEST_HEADER);
@@ -307,7 +310,7 @@ fn generate_program(
             continue;
         }
         let segments: Vec<&str> = relative.split('.').collect();
-        let sibling_uses = use_lines(&sibling.imports, "ignite_std", &in_lib);
+        let sibling_uses = use_targets(&sibling.imports, "ignite_std", &in_lib);
         tree.insert(
             &segments,
             module_items(
@@ -328,7 +331,7 @@ fn generate_program(
     lib.raw(&siblings_text);
 
     let testing = !options.test_modules.is_empty();
-    let bin_uses = use_lines(&program.imports, "ignite_std", &in_bin);
+    let bin_uses = use_targets(&program.imports, "ignite_std", &in_bin);
     let mut executables = Vec::new();
     if let Some(types) = types {
         for info in executable_infos {
@@ -920,18 +923,50 @@ impl Package {
     }
 }
 
+/// The `use` lines of a program module or executable whose generated text
+/// is `body`: [`UseTarget::render`] of each target, without the imported
+/// constants `body` does not name. A clause (`conforms [RFC855]`) is not
+/// generated, so a catalogue imported only for a clause leaves no `use`
+/// line, and no `use` line roots its constants in the reachable
+/// `ignite-std` (`docs/slice.md` D2 and 19.13; LLVM's `prune` drops them
+/// the same way). Every other imported name keeps its `use`.
+fn kept_use_lines(targets: &[UseTarget], symbols: &Symbols, body: &str) -> Vec<String> {
+    let constants: BTreeSet<String> = symbols
+        .constants
+        .iter()
+        .filter(|name| symbols.imported.contains_key(*name))
+        .map(|name| ident(name))
+        .collect();
+    let mut referenced = BTreeSet::new();
+    rust_identifiers(body, |name| {
+        referenced.insert(name);
+    });
+    targets
+        .iter()
+        .filter_map(|target| {
+            let names: Vec<String> = target
+                .names
+                .iter()
+                .filter(|name| {
+                    !constants.contains(name.as_str()) || referenced.contains(plain_ident(name))
+                })
+                .cloned()
+                .collect();
+            (!names.is_empty()).then(|| {
+                UseTarget {
+                    path: target.path.clone(),
+                    names,
+                }
+                .render()
+            })
+        })
+        .collect()
+}
+
 /// `use <root>::a::b::{X, Y};` per standard-library import and
 /// `use <package root>::c::{f};` per import from a module of the
 /// program's package; nothing for the substrate's own names or for imports
 /// of a module that is neither.
-fn use_lines(imports: &[Import], root: &str, package: &Package) -> Vec<String> {
-    use_targets(imports, root, package)
-        .iter()
-        .map(UseTarget::render)
-        .collect()
-}
-
-/// The targets of [`use_lines`], before rendering.
 fn use_targets(imports: &[Import], root: &str, package: &Package) -> Vec<UseTarget> {
     imports
         .iter()
@@ -957,24 +992,27 @@ fn use_targets(imports: &[Import], root: &str, package: &Package) -> Vec<UseTarg
         .collect()
 }
 
-/// The `use` lines and every record, enum, protocol and fn of one module,
-/// without the file header. `root` is the Rust path of the `ignite-std`
-/// crate from this module: `ignite_std` in a program, `crate` inside it.
+/// The `use` lines ([`kept_use_lines`]) and every record, enum, protocol
+/// and fn of one program module, without the file header. `root` is the
+/// Rust path of the `ignite-std` crate from this module: `ignite_std` in a
+/// program.
 fn module_items(
     program: &Program,
     symbols: &Symbols,
     types: Option<&TypedProgram>,
-    uses: &[String],
+    uses: &[UseTarget],
     root: &'static str,
     module: &ModuleOptions<'_>,
 ) -> String {
-    let mut w = Writer::new();
-    for line in uses {
-        w.line(line);
-    }
+    let mut items = String::new();
     for item in module_item_list(program, symbols, types, root, module) {
-        w.raw(&item.text);
+        items.push_str(&item.text);
     }
+    let mut w = Writer::new();
+    for line in kept_use_lines(uses, symbols, &items) {
+        w.line(&line);
+    }
+    w.raw(&items);
     w.finish()
 }
 
@@ -1261,6 +1299,22 @@ pub fn package_name(program: &Program) -> String {
         .unwrap_or_else(|| "program".to_string())
 }
 
+/// The Rust name of the program crate of the Cargo package `package_name`:
+/// `-` as `_`, with a `_` after a name a crate cannot have in a path
+/// (`async`, `self`, `super_`; [`ident`]'s rule, since a crate name cannot
+/// be raw). [`cargo_toml`] names the lib so when it differs from the
+/// package name.
+fn crate_name(package_name: &str) -> String {
+    let name = package_name.replace('-', "_");
+    if escapes_to(&name, |base| {
+        matches!(base, "self" | "Self" | "crate" | "super") || RUST_KEYWORDS.contains(&base)
+    }) {
+        format!("{name}_")
+    } else {
+        name
+    }
+}
+
 /// A Rust string literal body for `text`: `\\ \" \n \r \t \0` escaped,
 /// other control bytes as `\x..`, everything else as is.
 pub fn escape_str(text: &str) -> String {
@@ -1327,10 +1381,17 @@ fn indentation(level: usize) -> String {
     "    ".repeat(level)
 }
 
-const RUST_ONLY_KEYWORDS: &[&str] = &[
-    "as", "async", "const", "dyn", "extern", "impl", "mod", "move", "mut", "pub", "ref", "static",
-    "struct", "trait", "unsafe", "use", "where", "abstract", "become", "box", "do", "final",
-    "macro", "override", "priv", "typeof", "unsized", "virtual", "yield", "try", "gen",
+/// Every Rust keyword (strict, reserved and edition 2024) that a raw
+/// identifier can spell: [`ident`] writes it as `r#type`. The Ignite
+/// keywords among them reach `ident` too, because a field name may be a
+/// keyword (`type Token { type: Int }`, `t.type`, `Token { type = 1 }`).
+/// `self`, `Self`, `crate` and `super` cannot be raw; `ident` mangles them.
+const RUST_KEYWORDS: &[&str] = &[
+    "as", "async", "await", "break", "const", "continue", "dyn", "else", "enum", "extern", "false",
+    "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref",
+    "return", "static", "struct", "trait", "true", "type", "unsafe", "use", "where", "while",
+    "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof", "unsized",
+    "virtual", "yield", "try", "gen",
 ];
 
 /// Names of the Rust prelude the generated code uses bare (`Box::new`,
@@ -1381,11 +1442,22 @@ const RUST_PRELUDE_NAMES: &[&str] = &[
     "IntoFuture",
 ];
 
-/// A Ignite identifier as a Rust identifier.
+/// `name` is one of `mangled` followed by zero or more `_`.
+fn escapes_to(name: &str, mangled: impl Fn(&str) -> bool) -> bool {
+    mangled(name.trim_end_matches('_'))
+}
+
+/// A Ignite identifier as a Rust identifier. A name Rust cannot spell raw
+/// (`self`, `Self`, `crate`, `super`) or a prelude name gets a `_`, and so
+/// does every name that is one of them followed by `_`s: `self` is
+/// `self_`, `self_` is `self__`. The mapping is one to one, so two Ignite
+/// names never become one Rust name.
 fn ident(name: &str) -> String {
-    if matches!(name, "self" | "Self" | "crate" | "super") || RUST_PRELUDE_NAMES.contains(&name) {
+    if escapes_to(name, |base| {
+        matches!(base, "self" | "Self" | "crate" | "super") || RUST_PRELUDE_NAMES.contains(&base)
+    }) {
         format!("{name}_")
-    } else if RUST_ONLY_KEYWORDS.contains(&name) {
+    } else if RUST_KEYWORDS.contains(&name) {
         format!("r#{name}")
     } else {
         name.to_string()
@@ -1422,24 +1494,38 @@ fn quantity_value(literal: &str, unit: &str) -> Option<i64> {
     Some(value)
 }
 
-/// The Rust path of a variant of `owner`.
+/// The Rust path of a variant of `owner`, which is already Rust (an
+/// [`ident`] or a path; `ident` is not idempotent).
 fn variant_path(owner: &str, variant: &str) -> String {
     match owner {
         "Option" | "Result" => variant.to_string(),
         "Input" => format!("ignite_io::Input::{variant}"),
         "Exposure" => format!("ignite_io::Exposure::{variant}"),
-        _ => format!("{}::{}", ident(owner), ident(variant)),
+        _ => format!("{owner}::{}", ident(variant)),
     }
 }
 
 /// A Ignite type as Rust.
 pub fn rust_type(ty: &Type) -> String {
+    rust_type_in(ty, &BTreeSet::new())
+}
+
+/// [`rust_type`] of an annotation inside a declaration whose type
+/// parameters are `params`: a bare name among them is the parameter, even
+/// when a builtin type has the same name (`fn keep<Text>(value: Text)`), and
+/// a builtin enum they shadow is spelled by its path
+/// ([`builtin_enum_path`]).
+fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
+    let recurse = |t: &Type| rust_type_in(t, params);
     if ty.is_fn() {
-        let params: Vec<String> = ty.fn_params().iter().map(rust_type).collect();
-        let ret = ty.fn_ret().map_or_else(|| "()".to_string(), rust_type);
-        return fn_value_type(&params, &ret);
+        let ps: Vec<String> = ty.fn_params().iter().map(recurse).collect();
+        let ret = ty.fn_ret().map_or_else(|| "()".to_string(), recurse);
+        return fn_value_type(&ps, &ret);
     }
-    let args: Vec<String> = ty.args.iter().map(rust_type).collect();
+    if ty.args.is_empty() && params.contains(&ty.name.name) {
+        return ident(&ty.name.name);
+    }
+    let args: Vec<String> = ty.args.iter().map(recurse).collect();
     let generic = |base: &str| {
         if args.is_empty() {
             base.to_string()
@@ -1465,7 +1551,24 @@ pub fn rust_type(ty: &Type) -> String {
         "Duration" | "ByteSize" | "Ratio" => "i64".to_string(),
         "Ref" | "Signal" | "SystemRef" | "Protocol" => "String".to_string(),
         "Module" if args.len() == 1 => args[0].clone(),
+        name @ ("Option" | "Result") => generic(&builtin_enum_path(name, params)),
         other => generic(&ident(other)),
+    }
+}
+
+/// The Rust name of the builtin enum `Option` or `Result`: the bare name,
+/// or its `std` path when a type parameter in `params` has the same name
+/// (Rust would read the bare name as the parameter, E0109). `ident` leaves
+/// both names as they are, so no other spelling of a parameter reaches
+/// them.
+fn builtin_enum_path(name: &str, params: &BTreeSet<String>) -> String {
+    if !params.contains(name) {
+        return name.to_string();
+    }
+    match name {
+        "Option" => "std::option::Option".to_string(),
+        "Result" => "std::result::Result".to_string(),
+        _ => name.to_string(),
     }
 }
 
@@ -1517,6 +1620,11 @@ fn fn_type_params(decl: &FnDecl) -> String {
         })
         .collect();
     format!("<{}>", params.join(", "))
+}
+
+/// The names of a declaration's type parameters.
+fn param_names(params: &[Ident]) -> BTreeSet<String> {
+    params.iter().map(|p| p.name.clone()).collect()
 }
 
 /// `<A, B>` for a declaration's type parameters, or nothing.
@@ -1755,15 +1863,18 @@ impl<'a> Generator<'a> {
         self.package.path(module)
     }
 
-    /// The Rust name of the user record or enum `name` as written in the
-    /// source: the name unchanged, or its module path when a type parameter in
-    /// scope has the same name.
+    /// The Rust name of the user record, enum or protocol `name` as written
+    /// in the source: its [`ident`], or its module path when a type
+    /// parameter in scope has the same name (`crate::P::serve` inside
+    /// `fn call<P>`). Already Rust: callers do not `ident` it again, since
+    /// `ident` of `Self_` is `Self__`.
     fn unshadowed(&self, name: &str) -> String {
         let user_type = self.symbols.records.contains(name)
+            || self.protocols.contains(name)
             || (self.symbols.enums.contains_key(name)
                 && !BUILTIN_ENUMS.iter().any(|(e, _)| *e == name));
         if !user_type || !self.type_params.contains(name) {
-            return name.to_string();
+            return ident(name);
         }
         let module = match self.symbols.imported.get(name) {
             Some(module) => module.clone(),
@@ -1773,8 +1884,14 @@ impl<'a> Generator<'a> {
         };
         match self.item_module_path(&module) {
             Some(path) => format!("{path}::{}", ident(name)),
-            None => name.to_string(),
+            None => ident(name),
         }
+    }
+
+    /// [`rust_type`] of an annotation in the item being generated, with its
+    /// type parameters in scope ([`rust_type_in`]).
+    fn annotation(&self, ty: &Type) -> String {
+        rust_type_in(ty, &self.type_params)
     }
 
     /// `"<file>", <line>, <col>` of a failure site (`docs/slice.md`
@@ -2032,8 +2149,17 @@ impl<'a> Generator<'a> {
             Ty::Unit | Ty::Never => "()".to_string(),
             Ty::Text => "String".to_string(),
             Ty::List(item) => format!("Vec<{}>", self.rust_ty(item)),
-            Ty::Option(item) => format!("Option<{}>", self.rust_ty(item)),
-            Ty::Result(ok, err) => format!("Result<{}, {}>", self.rust_ty(ok), self.rust_ty(err)),
+            Ty::Option(item) => format!(
+                "{}<{}>",
+                builtin_enum_path("Option", &self.type_params),
+                self.rust_ty(item)
+            ),
+            Ty::Result(ok, err) => format!(
+                "{}<{}, {}>",
+                builtin_enum_path("Result", &self.type_params),
+                self.rust_ty(ok),
+                self.rust_ty(err)
+            ),
             Ty::Record(q) | Ty::Enum(q) => self.enum_name(q),
             Ty::GenericRecord(q, args) | Ty::GenericEnum(q, args) => {
                 format!("{}<{}>", self.enum_name(q), list(args))
@@ -2143,7 +2269,7 @@ impl<'a> Generator<'a> {
         w.line(&format!(
             "pub type {}{params} = {};",
             ident(&alias.name.name),
-            rust_type(&alias.ty)
+            rust_type_in(&alias.ty, &param_names(&alias.params))
         ));
     }
 
@@ -2167,7 +2293,7 @@ impl<'a> Generator<'a> {
             };
             self.scopes = vec![Vec::new()];
             self.indent = w.indent + 1;
-            self.type_params = record.type_params.iter().map(|p| p.name.clone()).collect();
+            self.type_params = param_names(&record.type_params);
             let value = self.value(default);
             self.type_params.clear();
             self.scopes.clear();
@@ -2175,7 +2301,7 @@ impl<'a> Generator<'a> {
             w.open(&format!(
                 "pub fn {}() -> {} {{",
                 default_fn(&field.name.name),
-                rust_type(&field.ty)
+                rust_type_in(&field.ty, &param_names(&record.type_params))
             ));
             w.line(&value);
             w.close("}");
@@ -2245,7 +2371,7 @@ impl<'a> Generator<'a> {
                 (Some(types), Some(q)) => types.boxed_field(q, &field.name.name),
                 _ => false,
             };
-            let ty = rust_type(&field.ty);
+            let ty = rust_type_in(&field.ty, &param_names(&record.type_params));
             let ty = if boxed { format!("Box<{ty}>") } else { ty };
             w.line(&format!("pub {}: {ty},", ident(&field.name.name)));
         }
@@ -2270,6 +2396,7 @@ impl<'a> Generator<'a> {
             ident(&decl.name.name),
             bounded_params(&decl.type_params)
         ));
+        let params = param_names(&decl.type_params);
         for (v, variant) in decl.variants.iter().enumerate() {
             if variant.payload.is_empty() {
                 w.line(&format!("{},", ident(&variant.name.name)));
@@ -2284,9 +2411,9 @@ impl<'a> Generator<'a> {
                             _ => false,
                         };
                         if boxed {
-                            format!("Box<{}>", rust_type(ty))
+                            format!("Box<{}>", rust_type_in(ty, &params))
                         } else {
-                            rust_type(ty)
+                            rust_type_in(ty, &params)
                         }
                     })
                     .collect();
@@ -2432,12 +2559,13 @@ impl<'a> Generator<'a> {
         mutated_names(&decl.body, self.types, &mut mutated);
         let mut prologue = Vec::new();
         self.borrowed.clear();
+        self.type_params = decl.type_params.iter().map(|p| p.name.clone()).collect();
         let params: Vec<String> = decl
             .params
             .iter()
             .map(|p| {
                 let name = ident(&p.name.name);
-                let ty = rust_type(&p.ty);
+                let ty = self.annotation(&p.ty);
                 if role {
                     return format!("mut {name}: {ty}");
                 }
@@ -2450,7 +2578,7 @@ impl<'a> Generator<'a> {
             })
             .collect();
         let ret = match &decl.ret {
-            Some(ty) => format!(" -> {}", rust_type(ty)),
+            Some(ty) => format!(" -> {}", self.annotation(ty)),
             None => String::new(),
         };
         let value = decl
@@ -2459,7 +2587,6 @@ impl<'a> Generator<'a> {
             .is_some_and(|ty| !(ty.name.name == "Unit" && ty.args.is_empty()));
         self.scopes = vec![decl.params.iter().map(|p| p.name.name.clone()).collect()];
         self.indent = w.indent;
-        self.type_params = decl.type_params.iter().map(|p| p.name.clone()).collect();
         let mut body = self.block(&decl.body, value);
         self.type_params.clear();
         self.scopes.clear();
@@ -2615,7 +2742,7 @@ impl<'a> Generator<'a> {
                 let value = self.value(value);
                 self.bind(&name.name);
                 let ty = match ty {
-                    Some(ty) => format!(": {}", rust_type(ty)),
+                    Some(ty) => format!(": {}", self.annotation(ty)),
                     None => String::new(),
                 };
                 let mutability = if *mutable { "mut " } else { "" };
@@ -3021,7 +3148,7 @@ impl<'a> Generator<'a> {
     /// with the literal's type arguments for a generic record (Rust cannot
     /// infer them from a default that does not mention them).
     fn record_literal(&mut self, expr: &Expr, name: &Ident, fields: &[FieldInit]) -> String {
-        let record = ident(&self.unshadowed(&name.name));
+        let record = self.unshadowed(&name.name);
         let ty = self.type_of(expr);
         let boxed = |this: &Self, field: &str, value: String| {
             if this.is_boxed_field(ty, field) {
@@ -3366,7 +3493,7 @@ impl<'a> Generator<'a> {
         if SUBSTRATE_OWNERS.contains(&owner) {
             return Some(format!("ignite_io::{owner}::{}", ident(&name.name)));
         }
-        Some(format!("{}::{}", ident(owner), ident(&name.name)))
+        Some(format!("{}::{}", self.unshadowed(owner), ident(&name.name)))
     }
 
     /// `Owner.name(args)` where `Owner` is a substrate type, a builtin
@@ -3389,7 +3516,7 @@ impl<'a> Generator<'a> {
             let texts = self.args(args);
             return Some(format!(
                 "{}::{}{}({})",
-                ident(owner),
+                self.unshadowed(owner),
                 ident(&name.name),
                 self.bounded_turbofish(expr),
                 texts.join(", ")
@@ -4654,7 +4781,7 @@ impl<'a> Generator<'a> {
                 };
                 let ty = match (info, &p.ty) {
                     (Some(info), _) => format!(": {}", self.rust_ty(&info.params[i].1)),
-                    (None, Some(ty)) => format!(": {}", rust_type(ty)),
+                    (None, Some(ty)) => format!(": {}", self.annotation(ty)),
                     (None, None) => String::new(),
                 };
                 format!("{mutability}{}{ty}", ident(&p.name.name))
@@ -5180,11 +5307,16 @@ fn is_duplicate(properties: &[FieldInit], property: &FieldInit) -> bool {
         .is_some_and(|first| !std::ptr::eq(&properties[first], property))
 }
 
-/// A Rust variable for a resource, kept apart from the names `main` binds.
+/// A Rust variable for a resource, kept apart from the names `main` binds,
+/// escaped one to one as [`ident`] escapes `self`: `port` is `port_`,
+/// `port_` is `port__`.
 fn resource_variable(name: &str) -> String {
-    match name {
-        "application" | "port" | "stream" | "error" => format!("{name}_"),
-        _ => ident(name),
+    if escapes_to(name, |base| {
+        matches!(base, "application" | "port" | "stream" | "error")
+    }) {
+        format!("{name}_")
+    } else {
+        ident(name)
     }
 }
 
@@ -5205,7 +5337,7 @@ fn endpoint_variable(name: &str) -> String {
 #[allow(clippy::too_many_arguments)]
 fn executable_main(
     crate_name: &str,
-    uses: &[String],
+    uses: &[UseTarget],
     program: &Program,
     symbols: &Symbols,
     types: &TypedProgram,
@@ -5228,12 +5360,10 @@ fn executable_main(
             ),
         ));
     };
+    let mut head = Writer::new();
+    head.raw(FILE_HEADER);
+    head.line(&format!("use {crate_name}::*;"));
     let mut w = Writer::new();
-    w.raw(FILE_HEADER);
-    w.line(&format!("use {crate_name}::*;"));
-    for line in uses {
-        w.line(line);
-    }
     w.line("");
     w.open("fn main() {");
     w.open("std::process::exit(ignite_io::run(|| {");
@@ -5363,7 +5493,12 @@ fn executable_main(
     w.close("}))");
     w.close("}");
     w.raw(&generator.glue_items());
-    Ok(w.finish())
+    let body = w.finish();
+    for line in kept_use_lines(uses, symbols, &body) {
+        head.line(&line);
+    }
+    head.raw(&body);
+    Ok(head.finish())
 }
 
 /// The record value of component `decl` of kind `kind` (`docs/slice.md`
@@ -5454,6 +5589,10 @@ fn cargo_toml(
     out.push_str("\n[workspace]\n");
     out.push_str("\n[profile.release]\noverflow-checks = true\n");
     out.push_str("\n[lib]\n");
+    let lib = crate_name(package_name);
+    if lib != package_name.replace('-', "_") {
+        let _ = writeln!(out, "name = {}", toml_string(&lib));
+    }
     out.push_str("path = \"src/lib.rs\"\n");
     for executable in executables {
         out.push_str("\n[[bin]]\n");
