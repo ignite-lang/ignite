@@ -387,7 +387,15 @@ position, even with no buffer.
   pointer to the fn value `f` and the thunk `ptr "store_update.<T>"(ptr f, ptr old)`, which
   copies `old` into the arena, calls `f` (code and env, section 3.1) on it and returns the result copied to the heap. The runtime calls the thunk
   under the store's lock, so `update` is atomic; the arena memory the thunk allocates
-  belongs to the calling task and is released by its loop regions as usual.
+  belongs to the calling task and is released by its loop regions as usual. `get`,
+  `values` and `update`'s result copy from the stored heap value into the arena under the
+  lock (`ignite_io::Store`'s `read`, `read_values`, `replace_with`), so each value is
+  copied once; the thunk reads `old` in place (it does not copy it to the heap first). The
+  thunk calls `_setjmp` and registers its jump buffer with `ignite_rt_guard_callback`
+  before it calls `f`, and `ignite_rt_guard_pop` after: a failure inside `f` keeps its
+  report and jumps back to the thunk, which returns null, instead of jumping past the
+  runtime frame that holds the store's lock. `store_update` then keeps the old value,
+  releases the lock and ends the task with the kept report as below.
 - Failure containment (`docs/slice.md` section 14.8, `vision.md` T1). A failed
   `assert`, a `?` on `Err` or `None` in a test, an integer overflow or division by zero,
   an index or `slice` out of range and a `match` with no arm each end the task that ran
@@ -486,7 +494,7 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `i8 store_get(ptr store, i64 id, ptr out)` | 1 and a copy in the task's arena at `out`, or 0 |
 | `i8 store_remove(ptr store, i64 id, ptr out)` | as `get`, and removes the entry |
 | `void store_values(ptr store, List* out)` | copies of every value, in ascending id order |
-| `i8 store_update(ptr store, i64 id, ptr f, ptr thunk, ptr out)` | 0 when `id` holds nothing (`f` is not called); otherwise replaces the value by `thunk(f, old)` under the store's lock, 1 and a copy of the new value at `out` |
+| `i8 store_update(ptr store, i64 id, ptr f, ptr thunk, ptr out)` | 0 when `id` holds nothing (`f` is not called); otherwise replaces the value by `thunk(f, old)` under the store's lock, 1 and a copy of the new value at `out`; a null from the thunk (a failure of `f` its callback guard stopped) keeps the old value, releases the lock and ends the task with the failure's report |
 | `void assert_failed(Text* cond, Text* message, Text* left, Text* right, Text* at)` | ends the task with `ignite_io::assert_report` (section 4: `error: <report>` and exit 101 on the main task or a test; `task ended with error: <report>` and a `longjmp` to the task wrapper in a spawned task). `message` is null without a message; `left` and `right` are null unless the condition is `a == b` or `a != b` |
 | `void try_failed(Text* error, Text* at)` | ends the task with `ignite_io::try_report`: `? failed at <at>: Err(<error>)` (`error` not null) or `? failed at <at>: None` (section 4) |
 | `void fail_arith(Text* op, Text* file, i64 line, i64 col, i64 left, i64 right)` | ends the task: `<op> failed at <file>:<line>:<col>: <left> <op> <right>` (section 4); `op` is `+`, `-`, `*`, `/` or `%`; `Byte` operands are widened to `i64` |
@@ -495,7 +503,8 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `void fail_slice(Text* file, i64 line, i64 col, i64 from, i64 to, i64 len)` | ends the task: `slice failed at <file>:<line>:<col>: slice <from>..<to> out of range for length <len>` |
 | `void fail_match(Text* file, i64 line, i64 col)` | ends the task: `match failed at <file>:<line>:<col>: no arm matched` |
 | `void guard_push(ptr jb)` | register the `jmp_buf` a task-entry wrapper just passed to `_setjmp` (section 4); a thread-local stack, innermost last |
-| `void guard_pop()` | drop the innermost `jmp_buf` after the task body returned without failing |
+| `void guard_callback(ptr jb)` | register the `jmp_buf` a runtime callback (`store_update.<T>`) just passed to `_setjmp`: a failure whose innermost guard it is keeps its report and jumps back to it (section 4) |
+| `void guard_pop()` | drop the innermost `jmp_buf` after the task body or callback returned without failing |
 | `void tcp_own(i64 stream)` | mark `stream` (a TCP stream or a pipe end) as owned by the current task: a failure of the task releases it (section 4) |
 | `i32 text_cmp(Text* a, Text* b)` | -1, 0 or 1: bytewise order of the UTF-8, the key order of `Map<Text, V>` (section 3) |
 | `void quantity_debug(Text* out, i32 kind, i64 value)` | the debug text of a quantity, `kind` 0 `Duration`, 1 `ByteSize`, 2 `Ratio` (`ignite_io::quantity_debug`) |
