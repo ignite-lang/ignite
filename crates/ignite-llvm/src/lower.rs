@@ -819,26 +819,37 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// receiver. The arguments are evaluated in source order into values,
     /// then passed in parameter order, so the reorder is invisible to their
     /// effects. The borrow shortcut is skipped: a copy of every aggregate is
-    /// correct whatever the order.
+    /// correct whatever the order. Each borrowed value is copied when it is
+    /// evaluated, as on the positional path: a later argument may move the
+    /// same place into a callee that changes it (`docs/slice.md` 20.3.5).
     fn call_named(&mut self, symbol: &str, sig: &FnSig, args: &[&Expr], perm: &[usize]) -> Val {
         let callee = self.function(symbol, &sig.params, &sig.ret);
         let offset = args.len() - perm.len();
+        let source = |i: usize| {
+            if i < offset {
+                i
+            } else {
+                offset + perm[i - offset]
+            }
+        };
+        let mut param_of = vec![None; args.len()];
+        for i in 0..sig.params.len() {
+            param_of[source(i)] = Some(i);
+        }
         let mut values = Vec::with_capacity(args.len());
-        for arg in args {
+        for (arg, param) in args.iter().zip(&param_of) {
             let v = self.expr(arg, true);
             if v == Val::Never {
                 return Val::Never;
             }
-            values.push(v);
+            values.push(match param {
+                Some(i) => self.owned(&sig.params[*i], v),
+                None => v,
+            });
         }
         let mut operands = Vec::with_capacity(sig.params.len());
         for (i, ty) in sig.params.iter().enumerate() {
-            let src = if i < offset {
-                i
-            } else {
-                offset + perm[i - offset]
-            };
-            operands.push(self.arg(ty, values[src].clone()));
+            operands.push(self.arg(ty, values[source(i)].clone()));
         }
         self.call(&callee, &sig.ret, operands)
     }
@@ -2168,14 +2179,25 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let index = layout.index(name).unwrap_or(index);
         let name = layout.variants[index].0.clone();
         let fields = layout.variants[index].1.clone();
+        // The payloads are stored once every one is evaluated, so each but
+        // the last borrowed one is copied when it is evaluated: a later
+        // payload may move the same place into a callee that changes it
+        // (`docs/slice.md` 20.3.5).
         if let Some(perm) = self.cx.types.named_args(e).map(<[usize]>::to_vec) {
+            let mut field_of = vec![None; args.len()];
+            for (field_i, &src) in perm.iter().enumerate().take(fields.len()) {
+                field_of[src] = Some(field_i);
+            }
             let mut evaluated = Vec::with_capacity(args.len());
-            for arg in args {
+            for (k, (arg, field)) in args.iter().zip(&field_of).enumerate() {
                 let v = self.expr(arg, true);
                 if v == Val::Never {
                     return Val::Never;
                 }
-                evaluated.push(v);
+                evaluated.push(match field {
+                    Some(f) if k + 1 < args.len() => self.owned(&fields[*f].0, v),
+                    _ => v,
+                });
             }
             let mut vals = Vec::new();
             for (field_i, (field_ty, _)) in fields.iter().enumerate() {
@@ -2186,13 +2208,19 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             return self.variant(&ty, &name, vals);
         }
         let mut vals = Vec::new();
-        for (arg, (field_ty, _)) in args.iter().zip(&fields) {
+        let count = args.len().min(fields.len());
+        for (k, (arg, (field_ty, _))) in args.iter().zip(&fields).enumerate() {
             let v = self.expr(arg, true);
             if v == Val::Never {
                 return Val::Never;
             }
             let have = self.ty(arg);
-            vals.push(self.coerce(field_ty, &have, v));
+            let v = self.coerce(field_ty, &have, v);
+            vals.push(if k + 1 < count {
+                self.owned(field_ty, v)
+            } else {
+                v
+            });
         }
         self.variant(&ty, &name, vals)
     }

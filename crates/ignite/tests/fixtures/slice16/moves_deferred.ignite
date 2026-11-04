@@ -44,3 +44,12 @@ test "a named argument keeps its value when a later argument moves it" {
 test "a variant payload keeps its value when a later payload moves it" {
   assert payload_order() == 12
 }
+
+fn ufcs_named_order() -> Int {
+  let s = State { items = [1], count = 1 }
+  s.weigh(second = bump_count(s))
+}
+
+test "a UFCS receiver keeps its value when a later named argument moves it" {
+  assert ufcs_named_order() == 22
+}
