@@ -1,0 +1,171 @@
+package fixtures.fields
+
+// Fields of list elements under `ignite test` on both targets
+// (crates/ignite/tests/ignite_test.rs `fields_of_elements_on_both_targets`):
+// read, passed by reference and compared without a copy of the element on
+// the Rust target, nested, read from a Store, and read before the element
+// or its list changes, and matched.
+
+type Entry {
+  key: Bytes
+  name: Text
+  hits: Int
+}
+
+type Bucket {
+  entries: List<Entry>
+  pair: (Int, Text)
+}
+
+type Node {
+  label: Text
+  next: Option<Node>
+}
+
+fn size(b: Bytes) -> Int = b.len()
+
+fn hash(key: Bytes) -> Int {
+  var h = 5381
+  var i = 0
+  while i < key.len() {
+    h = (h * 33 + key.at(i).to_int()) % 1000003
+    i = i + 1
+  }
+  h
+}
+
+fn both(a: Bytes, n: Int) -> Int = a.len() + n
+
+fn first_key(entries: List<Entry>) -> Bytes = entries.at(0).key
+
+fn label_of(node: Option<Node>) -> Text = match node {
+  Some(n) => n.label
+  None => ""
+}
+
+fn first_hits(bucket: Option<Bucket>) -> Int = match bucket {
+  Some(b) => b.entries[0].hits
+  None => 0
+}
+
+fn entry(key: Bytes, name: Text, hits: Int) -> Entry = Entry { key = key, name = name, hits = hits }
+
+fn sample() -> List<Entry> = [entry(b"alpha", "a", 3), entry(b"beta", "b", 4)]
+
+test "a field of an element is read, passed by reference and compared" {
+  let entries = sample()
+  assert size(entries[0].key) == 5
+  assert hash(entries.at(1).key) == hash(b"beta")
+  let same = entries[1].key == b"beta"
+  assert same
+  let ordered = entries[0].hits < entries.at(1).hits
+  assert ordered
+  let differ = entries[0].key != entries[1].key
+  assert differ
+  assert entries.at(0).hits + entries[1].hits == 7
+  let k = entries[1].key
+  assert k == b"beta"
+  assert first_key(entries) == b"alpha"
+  assert entries[0].name + "/" + entries[1].name == "a/b"
+}
+
+test "nested fields of elements" {
+  let buckets = [
+    Bucket { entries = [entry(b"k1", "one", 1)], pair = (10, "ten") },
+    Bucket { entries = [entry(b"k2", "two", 2), entry(b"k3", "three", 3)], pair = (20, "twenty") }
+  ]
+  assert size(buckets[0].entries[0].key) == 2
+  assert hash(buckets.at(1).entries.at(1).key) == hash(b"k3")
+  let name = buckets[1].entries[0].name
+  assert name == "two"
+  assert buckets[1].pair.0 == 20
+  let text = buckets[0].pair.1
+  assert text == "ten"
+  let grid = [[entry(b"g", "grid", 5)]]
+  assert size(grid[0][0].key) == 1
+  assert grid.at(0).at(0).hits == 5
+  let nodes = [Node { label = "a", next = Some(Node { label = "b", next = None }) }]
+  assert label_of(nodes[0].next) == "b"
+  assert nodes[0].label == "a"
+}
+
+test "a field of a Store read" {
+  let s: Store<Bucket> = Store.new()
+  s.put(1, Bucket { entries = [entry(b"k", "key", 7)], pair = (2, "two") })
+  match s.get(1) {
+    Some(b) => {
+      assert size(b.entries[0].key) == 1
+      assert b.entries.at(0).name == "key"
+      assert b.pair.1 == "two"
+    }
+    None => {
+      assert false, "no bucket"
+    }
+  }
+  assert first_hits(s.get(1)) == 7
+  _ = s.update(1, |b| Bucket { entries = b.entries, pair = (size(b.entries[0].key), b.entries.at(0).name) })
+  match s.get(1) {
+    Some(b) => {
+      assert b.pair.0 == 1
+      assert b.pair.1 == "key"
+    }
+    None => {
+      assert false, "no bucket"
+    }
+  }
+  for bucket in s.values() {
+    match bucket.entries {
+      [] => {}
+      entries => {
+        _ = s.remove(hash(entries.at(0).key) - hash(b"k") + 1)
+      }
+    }
+  }
+  assert s.get(1) == None
+}
+
+test "the element changes after its field is read" {
+  var entries = sample()
+  let before = entries[0].key
+  entries[0].key.append(b"!")
+  assert before == b"alpha"
+  assert entries[0].key == b"alpha!"
+  var buckets = [Bucket { entries = sample(), pair = (0, "") }]
+  let inner = buckets[0].entries[1].name
+  buckets[0].entries.push(entry(b"gamma", "c", 5))
+  buckets[0].entries[1].key.append(b"!")
+  assert inner == "b"
+  assert buckets[0].entries[1].key == b"beta!"
+  assert buckets[0].entries.len() == 3
+  let n = both(entries[0].key, if entries.len() > 0 {
+    entries = []
+    1
+  } else {
+    2
+  })
+  assert n == 7
+  assert entries.len() == 0
+}
+
+test "a match on a field of an element" {
+  var nodes = [Node { label = "a", next = Some(Node { label = "b", next = None }) }]
+  let seen = match nodes[0].next {
+    Some(n) => n.label
+    None => ""
+  }
+  assert seen == "b"
+  let kind = match nodes.at(0).label {
+    "a" => 1
+    _ => 2
+  }
+  assert kind == 1
+  let cleared = match nodes[0].next {
+    Some(n) => {
+      nodes = []
+      n.label
+    }
+    None => ""
+  }
+  assert cleared == "b"
+  assert nodes.len() == 0
+}
