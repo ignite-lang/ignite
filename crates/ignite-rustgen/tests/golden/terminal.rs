@@ -46,7 +46,7 @@ pub mod commands {
         } else {
             match parse(&trimmed) {
                 Some(command) => answer(&command),
-                None => Reply { lines: vec![format!("{}{}", String::from("unknown command: "), first_word(&trimmed).clone())], action: Reply::default_action() },
+                None => Reply { lines: vec![format!("unknown command: {}", first_word(&trimmed))], action: Reply::default_action() },
             }
         }
     }

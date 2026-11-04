@@ -77,7 +77,7 @@ pub fn generic_line() -> String {
     let labelled = Labelled { value: pair.second.clone(), label: Labelled::<i64>::default_label() };
     let choice: Choice<String> = Choice::Two(String::from("a"), String::from("b"));
     let id: std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync> = (std::sync::Arc::new(|__a0: i64| identity::<i64>(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>);
-    format!("{}{}{}{}{}{}{}{}{}", pair.first.clone(), String::from(" "), labelled.value.to_string(), String::from(" "), labelled.label.clone(), String::from(" "), count(&choice).to_string(), String::from(" "), twice(&(std::sync::Arc::new(|__a0: i64| bump(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>), &id(5)).to_string())
+    format!("{} {} {} {} {}", pair.first, labelled.value, labelled.label, count(&choice), twice(&(std::sync::Arc::new(|__a0: i64| bump(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>), &id(5)))
 }
 
 pub fn number(line: &String, command: &String) -> Option<i64> {
@@ -114,7 +114,7 @@ pub fn respond(counts: &ignite_io::Store<i64>, line: &String) -> String {
     };
     match number(line, &String::from("del ")) {
         Some(id) => return match counts.remove(id.clone()) {
-            Some(value) => format!("{}{}", String::from("removed "), value.to_string()),
+            Some(value) => format!("removed {}", value),
             None => String::from("missing"),
         },
         None => {
@@ -122,7 +122,7 @@ pub fn respond(counts: &ignite_io::Store<i64>, line: &String) -> String {
     };
     match number(line, &String::from("byte ")) {
         Some(n) => match u8::try_from(n).ok() {
-            Some(b) => format!("{}{}", String::from("byte "), (b as i64).to_string()),
+            Some(b) => format!("byte {}", (b as i64)),
             None => String::from("not a byte"),
         },
         None => String::from("unknown"),
@@ -139,7 +139,7 @@ impl Lines {
                 ignite_io::Input::Eof => return Ok(()),
                 ignite_io::Input::Data(bytes) => {
                     let reply = (app.handle)(app.state.clone(), String::from_utf8_lossy(&bytes).into_owned().trim().to_string());
-                    (stream.write_all((format!("{}{}", reply, String::from("\n"))).into_bytes()))?
+                    (stream.write_all((format!("{}\n", reply)).into_bytes()))?
                 },
             };
         }
