@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-04T06:42:15Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-16-moves-analysis",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on feat/slice16-language-gaps",
+    "reference": "https://github.com/ignite-lang/ignite/commit/659b9edc6"
+  }
+}
