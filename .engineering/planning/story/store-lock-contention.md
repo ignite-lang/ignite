@@ -10,7 +10,7 @@ relations:
 scope:
 - confidence: inferred
   path: crates/ignite-io/src/store.rs
-revision: 3
+revision: 4
 ---
 # Story: store-lock-contention
 
@@ -34,6 +34,12 @@ request on the ember server fall toward the handwritten Rust baseline.
   (`crates/ignite-io/src/store.rs:175` at `88cae227`); on LLVM `copy_to_heap.ember.Bucket` is
   8 % of CPU with about 4 mallocs per copy (`story:llvm-runtime-hot-paths`). Fewer copies shorten
   the time the lock is held.
+- LLVM memory (playground session, round 14, massif and dhat of ember): each upsert makes 4 mallocs
+  in `copy_to_heap.ember.Bucket`; after FLUSHDB RSS is 18.5 MiB against 3.8 MiB for the
+  handwritten Rust server. FLUSHDB's `db.values()` deep-copies the keyspace
+  (`ignite_rt_store_values` → `copy_from_heap.ember.Bucket`), 10.7 MB of a 24.3 MB heap peak; a
+  lending `values` on LLVM (`crates/ignite-io/src/store.rs`, `crates/ignite-llvm/src/lower.rs`)
+  removes it.
 - Options: shard the map by id, a reader-writer lock for reads, clones outside the lock.
 
 ## Acceptance
