@@ -420,6 +420,22 @@ cold comparison against each baseline meets the start-load rule and has no faile
 - `ignite test` links one test executable per target for all files given (`docs/slice.md`
   12.7); only two programs with one module path get separate executables.
 
+## Merging
+
+Standing rule (Timo, 2026-11-04): finished work goes to `main` without waiting for a person.
+
+- Every change reaches `main` through a pull request that the agent opens and merges itself with
+  `gh pr merge --merge <PR>`; merges are merge commits, so a slice keeps its unit history.
+- A change to code, `std/`, tests or `Taskfile.yml` has a green `task gate` on the PR's head
+  before the merge; the PR body names the gate's counts and exit. A change to documents only
+  needs no gate.
+- `main` has no CI check and no branch protection, and GitHub enables auto-merge only on a
+  protected branch (`gh pr merge --auto` fails with "Protected branch rules not configured"), so
+  the local gate is the check and the agent merges directly. Once a CI workflow runs the gate as
+  a required check on `main`, the rule becomes `gh pr merge --auto --merge <PR>`.
+- Planning-store commits (`.engineering/` only) go to `main` directly as fast-forwards.
+- No force-push to `main`, no rewrite of its history, no moved or deleted release tag.
+
 ## Lifecycle ownership
 
 - `ignite build` owns the generated project directory it was given; it overwrites it.
