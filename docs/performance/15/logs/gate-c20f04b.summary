@@ -1,0 +1,35 @@
+LOAD 12.17 HEAD c20f04b START 1793747378
+task: [check] cargo fmt --all -- --check
+task: [check] cargo clippy --workspace --all-targets -- -D warnings
+task: [test] cargo test --workspace
+test result: ok. 72 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.13s
+test result: ok. 310 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 461.69s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 56 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+test result: ok. 27 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.45s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s
+test result: ok. 90 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 2.38s
+test result: ok. 151 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+test result: ok. 45 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+task: [test-ignite] cargo build -q -p ignite
+task: [test-ignite] cargo build -q -p ignite-rt --features runner --target-dir target/ignite-test/rt
+task: [test-ignite] target/debug/ignite test examples/terminal/command_schema.ignite examples/terminal/commands.ignite examples/terminal/terminal.ignite examples/todo/todo.ignite std/cli.ignite std/console.ignite std/contract.ignite std/control.ignite std/deploy.ignite std/json.ignite std/net.ignite std/option.ignite std/policy.ignite std/protocol/http.ignite std/protocol/telnet.ignite std/result.ignite std/rfc.ignite std/rfc/rfc1143.ignite std/rfc/rfc854.ignite std/rfc/rfc855.ignite std/rfc/rfc9110.ignite std/rfc/rfc9112.ignite std/sli.ignite std/text.ignite std/time.ignite   --target=all --out target/ignite-test --target-dir target/ignite-test/cargo --runtime target/ignite-test/rt/debug/libignite_rt.a
+test result: ok. 199 passed; 0 failed; 0 filtered out; finished in 0.34s
+test result: ok. 199 passed; 0 failed; 0 filtered out; finished in 0.35s
+END 1793747854 LOAD 18.43

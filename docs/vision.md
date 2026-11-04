@@ -22,6 +22,12 @@ executables today (Rust target, LLVM target), WebAssembly components with hot re
 later still an operations controller that keeps declared objectives. Self-hosting is the end
 state.
 
+Ignite is also a replacement for Rust: the project exists because of rustc's compile times (Timo,
+2026-11-04). Build time is a product requirement beside the operational goals, not only the gate
+budget of invariant 9, and the LLVM target is the fast-build path (`todod` 0.309 s against
+3.998 s on the Rust target, dev, `AGENTS.md` slice 12b rows). The external review of 2026-11-04
+and what follows from it: `research/review-2026-11-04.md`.
+
 ## 2 Where it stands
 
 | layer | state | evidence |
@@ -148,7 +154,7 @@ steering session against section 6 before agents are dispatched.
 | 12 (done 2026-11-02, uncommitted, `docs/slice.md` section 16: 636 cargo tests, 148 inline tests per target; gate time rose over 10 % on 7 units, measured causes std 3,033 to 5,135 lines loaded per spawn and `ignite-std` 2,191 to 3,792 lines, carried into 12b: reachable-only std loading and emission) | F3 run and control | `ignite run <assembly>` and `ignite replay` over its journal: probes as protocol clients (`TelnetPrompt` over the telnet `connect` role), SLI windows and contract evaluation (design §4.1), `Restart` with backoff and `DrainRollout` (design §4.2, §7.4), event journal, `event("…")` consequences | the terminal system runs under `ignite run`; killing `terminald` restarts it within the policy's backoff; a probe timeout is visible in the journal and in the contract's standing |
 | 13 | F4 apply | `ignite apply` with plan diff, changes and deletion (design §7.3), recovery of a half-applied plan from the journal | a second `apply` of the same plan is a no-op; an interrupted `apply` resumes |
 | 14 | B protocols P1 | `Pipe.pair()` and `PipeStream`, the bound `<S: ByteStream>` on fns and roles, `Telnet` and `Http` generic over the stream with their limits records (`docs/slice.md` section 18) | the 18.0 matrix of `docs/slice.md` |
-| 15+ | B (P2 on), C, D, E, G, H | as the table above, in that order | as the table above |
+| 15+ | slice 15 is G's P2 (`docs/slice.md` section 19); after it B (P2 on), C, D, E, G (P3 to P5), H | slice 15: RFC catalogues as literal data, the claim clauses and E090 to E092, `ignite rfc import` and `ignite rfc check`, `ignite conformance`, the claims of `Telnet` and `Http`; after it as the table above, in that order | slice 15: the 19.0 matrix of `docs/slice.md`; after it as the table above |
 
 Consequences for the open decisions of section 8: D5 moves from the start of H to slice 11;
 D6 moves from "before wasm P1" to slice 10; D7 is scheduled at slice 11; D3 reads "after F,

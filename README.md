@@ -120,10 +120,14 @@ Any Telnet client works too: `telnet 127.0.0.1 2323`.
 ## Status
 
 Ignite is an early prototype. The language, both targets, the standard library and the
-system declaration, planning (`ignite plan` and `ignite explain`), running (`ignite run`)
-and journal replay (`ignite replay`) work. Applying changes (`ignite apply`) is next. The roadmap is in [`PLAN.md`](PLAN.md).
+system declaration, planning (`ignite plan` and `ignite explain`), running (`ignite run`),
+journal replay (`ignite replay`) and local apply (`ignite host`, `ignite apply`, `ignite
+inspect`) work. The roadmap is in [`PLAN.md`](PLAN.md).
 
 ## Read more
+
+The website, [ignite-lang.github.io/ignite](https://ignite-lang.github.io/ignite/), has the
+guide, the language design and the reference; its source is [`site/`](site/).
 
 | document | what is in it |
 |---|---|

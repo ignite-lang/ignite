@@ -115,7 +115,7 @@
     "TodoService.server": "todo.ignite:84:3",
     "TodoService.server.application": "todo.ignite:86:19",
     "TodoService.server.executable": "todo.ignite:87:18",
-    "TodoService.server.limits": "std/protocol/http.ignite:89:24",
+    "TodoService.server.limits": "std/protocol/http.ignite:141:24",
     "TodoService.server.listener": "todo.ignite:85:16",
     "TodoService.todos": "todo.ignite:82:3"
   },

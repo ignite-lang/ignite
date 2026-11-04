@@ -5,6 +5,7 @@
 mod args;
 mod common;
 mod compare;
+mod export;
 mod json;
 mod readiness;
 mod records;

@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T22:05:00Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-15-conformance-command",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "rows 31-37 of docs/slice.md 19.0 at fe88eea: cargo test -p ignite --test main conformance:: 17 passed, --lib conformance:: 8 passed; red first on each_verdict_prints_its_row; adversary 3ed088a: forged result line and empty scope list fixed in fe88eea; merged 7ab3f7c, post-merge workspace: cargo test --workspace 911 passed 0 failed 10 ignored, task test-ignite 191 per target, fmt and clippy exit 0",
+    "reference": "https://github.com/ignite-lang/ignite/tree/feat/slice15-protocols-p2"
+  }
+}

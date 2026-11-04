@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-15-contract
 kind: story
-status: active
+status: implemented
 title: 'Slice 15 contract: docs/slice.md section 19, reviewed against vision section 6'
 summary: Acceptance table, decisions, work split and E090 to E092 rows for protocols P2
 relations:
@@ -14,10 +14,11 @@ scope:
   path: docs/slice.md
 - confidence: inferred
   path: docs/slice15-review.md
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":2}}}
 - {from: "proposed", to: "active", at: "2026-11-03T16:07:58Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":2}}, correlation: "slice-15-wave-1"}
+- {from: "active", to: "implemented", at: "2026-11-03T17:01:31Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 
 # Story: slice-15-contract

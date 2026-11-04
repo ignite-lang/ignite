@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-15-frontend
 kind: story
-status: active
+status: implemented
 title: RFC vocabulary and linking clauses in the frontend
 summary: std/rfc/rfc.ignite, the six clauses, E091 for a non-literal catalogue constant; clauses emit nothing on both targets
 relations:
@@ -19,6 +19,8 @@ scope:
 - confidence: inferred
   path: crates/ignite-check/tests/layering.rs
 - confidence: inferred
+  path: crates/ignite-llvm/src
+- confidence: inferred
   path: crates/ignite-rustgen/tests/units.rs
 - confidence: inferred
   path: crates/ignite-syntax/src
@@ -27,13 +29,24 @@ scope:
 - confidence: inferred
   path: crates/ignite-types/src
 - confidence: inferred
+  path: crates/ignite-types/tests
+- confidence: inferred
+  path: crates/ignite/src/apply/plan.rs
+- confidence: inferred
+  path: crates/ignite/tests/clauses.rs
+- confidence: inferred
+  path: crates/ignite/tests/fixtures/clauses
+- confidence: inferred
+  path: crates/ignite/tests/main.rs
+- confidence: inferred
   path: docs/layering.md
 - confidence: inferred
-  path: std/rfc/rfc.ignite
-revision: 9
+  path: std/rfc.ignite
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"review_outcome":5}}}
 - {from: "proposed", to: "active", at: "2026-11-03T16:07:58Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"review_outcome":5}}, correlation: "slice-15-wave-1"}
+- {from: "active", to: "implemented", at: "2026-11-03T18:02:30Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"test_result":1,"review_outcome":5}}}
 ---
 
 # Story: slice-15-frontend
@@ -83,3 +96,7 @@ today: `docs/slice.md` 4.3. The vocabulary text is the contract's D1.
 
 - E090, E092 and E091's second trigger (a duplicate requirement id): they need each spec's
   requirement set, which the evaluator computes (`story:slice-15-claim-model`).
+
+## Contract
+
+Unit U1 of `docs/slice.md` 19.16 (merged on `feat/slice15-protocols-p2` as c98a41f): its "owns" cell is this story's file list, its rows of 19.0 are 8 to 13, 38, 39, its first failing test is `fixtures::fixtures_match_expected` (ignite-syntax) on `valid_clauses`. Where this body and section 19 differ, section 19 holds; the differences are listed in the contract report and in `docs/slice15-review.md` "Resolution".
