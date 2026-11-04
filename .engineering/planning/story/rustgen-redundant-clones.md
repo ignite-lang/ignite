@@ -10,7 +10,7 @@ relations:
 scope:
 - confidence: inferred
   path: crates/ignite-rustgen/src
-revision: 4
+revision: 5
 ---
 # Story: rustgen-redundant-clones
 
@@ -47,6 +47,12 @@ on a protocol server falls toward the handwritten Rust baseline.
     (the lock is not reentrant; ember's flush calls `db.remove`);
   - `match db.get(id)` arms that only read can use `read(id, …)`, after an analysis of how the
     value is used.
+
+- Step 2, in landing (branch `perf/int-parse-no-copy`): `Int.parse` of text built from bytes or
+  a slice allocates nothing on both targets; Rust-target allocations 652,437 to 564,434 (−13.5 %).
+  Next sites by share of the 564k blocks (playground session): std `to_lower` 7.1 % (clones the
+  text, wraps a closure in an `Arc`, copies twice; map the bytes in place), `Int.to_text(n)
+  .to_bytes()` 4.3 % (a `.clone()` on a temporary receiver), `text_of` before `to_lower` 1.8 %.
 
 ## Acceptance
 
