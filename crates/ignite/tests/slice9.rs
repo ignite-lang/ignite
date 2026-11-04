@@ -172,6 +172,27 @@ fn for_over_a_list_agrees_on_both_targets() {
     assert_passes(&file, "for_borrow", &TARGETS);
 }
 
+/// `match` on a place by reference on the Rust target (`docs/slice.md`
+/// section 6): bindings moved out of arms, nested patterns, guards, loops
+/// over the matched list, Store reads and arms that change the place give
+/// the same answers on both targets.
+#[test]
+fn match_on_a_place_agrees_on_both_targets() {
+    let file = workspace().join("crates/ignite/tests/fixtures/slice9/match_borrow.ignite");
+    assert_passes(&file, "match_borrow", &TARGETS);
+}
+
+/// Arguments borrowed on the Rust target (`docs/slice.md` section 6):
+/// interpolation parts that are calls, temporaries and fields, a variable
+/// changed later in the same expression, `at` on a temporary list and on a
+/// place, and `append` of the receiver itself give the same answers on both
+/// targets.
+#[test]
+fn borrowed_arguments_agree_on_both_targets() {
+    let file = workspace().join("crates/ignite/tests/fixtures/slice9/borrow_args.ignite");
+    assert_passes(&file, "borrow_args", &TARGETS);
+}
+
 /// The report without the time of the summary line.
 fn without_time(report: &str) -> String {
     report

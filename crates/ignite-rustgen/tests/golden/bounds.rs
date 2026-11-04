@@ -31,12 +31,12 @@ pub fn relay<S: ignite_io::ByteStream + Clone + Send + Sync + 'static>(stream: &
         },
     };
     let copy = stream.clone();
-    (<S as ignite_io::ByteStream>::write_all(&copy, String::from("x").clone().into_bytes()))?;
+    (<S as ignite_io::ByteStream>::write_all(&copy, String::from("x").into_bytes()))?;
     <S as ignite_io::ByteStream>::close(&stream)
 }
 
 pub fn once<S: ignite_io::ByteStream + Clone + Send + Sync + 'static>(stream: &S) -> IoResult<()> {
-    <S as ignite_io::ByteStream>::write_all(&stream, String::from("y").clone().into_bytes())
+    <S as ignite_io::ByteStream>::write_all(&stream, String::from("y").into_bytes())
 }
 
 pub fn forward<T: ignite_io::ByteStream + Clone + Send + Sync + 'static>(inner: &T) -> IoResult<()> {
@@ -55,7 +55,7 @@ pub fn over_tcp(stream: &ignite_io::TcpStream) -> IoResult<()> {
 
 pub fn over_pipe(end: &ignite_io::PipeStream) -> IoResult<i64> {
     (end.set_idle_timeout(100))?;
-    (end.write_all(String::from("z").clone().into_bytes()))?;
+    (end.write_all(String::from("z").into_bytes()))?;
     (relay::<ignite_io::PipeStream>(end))?;
     (once::<ignite_io::PipeStream>(end))?;
     (forward::<ignite_io::PipeStream>(end))?;

@@ -476,7 +476,7 @@ Every generated file starts with
 | `if c { a } else { b }` | same |
 | `while`, `loop`, `for x in e`, `break`, `continue`, `return` | same |
 | `a + b` etc. | same on numbers |
-| `a + b + c` on `Text` | `format!("{}{}{}", a, b, c)` (one call per left-folded chain) |
+| `a + b + c` on `Text` | `format!("{}{}{}", a, b, c)` (one call per left-folded chain); `format!` borrows each part, a literal part is inlined into the template with its braces doubled, and a part `x.to_text()` of Text, Int, Byte or Bool (each `{x}` of an interpolation) passes `x` |
 | `a == b` | same |
 | `(a, b)`, type `(A, B)` | `(a, b)`, `(A, B)` |
 | `()` | `()` |
@@ -510,9 +510,10 @@ declared by value, `p: T`, or `mut p: T` when the body assigns or changes it in 
 has no entry copy. A protocol role's parameters are `mut name: T` by value, consumed or not
 (a generated `main` calls a role with owned values). Every other parameter is a reference
 `p: &T`, so a call copies nothing: an argument that is a place is passed as `&place`, a
-parameter that is itself a reference as it is, any other argument as `&(value)`. Such a
-parameter of type `Int`, `Byte`, `Bool`, `Unit` or a fn type (an `Arc`, copied by a
-reference count) is copied once on entry: `let mut p = p.clone();`. An argument to a
+parameter that is itself a reference as it is, any other argument as `&(value)`; `l.at(i)`
+on a place `l` passes the element borrowed from the list, `ignite_io::checked::at(&l, i,
+<site>)`, unless another argument of the call changes `l`. Such a parameter of type `Int`,
+`Byte`, `Bool`, `Unit` or a fn type (an `Arc`, copied by a reference count) is copied once on entry: `let mut p = p.clone();`. An argument to a
 consumed parameter or to a role parameter is a value: a place that moves is emitted bare,
 any other place with `.clone()`, so `s = step(s, i)` passes `s` without a copy and `let t =
 step(s, 1); t.count + s.count` passes `s.clone()`. In the body a reference parameter is
@@ -543,6 +544,15 @@ element or the variable the place is rooted at, iterates `(place).iter()` and co
 In the body the element is a reference, read like a reference parameter. Every other `for`
 copies its iterable.
 
+**`match` on a place.** The same exception for a scrutinee, when the types are known: a
+`match` whose scrutinee is a place of one of those types, not `Copy` in Rust (an `Option`,
+`Result` or tuple of `Int`, `Byte`, `Bool` or `Unit` is), and none of whose arms assigns or
+changes in place the variable the place is rooted at, matches `&place` (a reference parameter
+as it is) and copies no scrutinee. A binding of one of those types that is not `Copy` is a
+reference in its arm, read like a reference parameter; any other binding is copied at the
+start of its arm (`{ let n = (n).clone(); .. }`). An arm whose pattern becomes a guard binds
+`__m` to the reference. Every other `match` copies its scrutinee.
+
 **Builtin methods** are lowered by name; the receiver type is not known, so each name has one
 meaning. The generator emits exactly the Rust on the right.
 
@@ -554,7 +564,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.starts_with(p)` | `t.starts_with(&p)` | |
 | `t.strip_prefix(p)` | `t.strip_prefix(&p).map(\|s\| s.to_string())` | |
 | `t.concat(u)` | `format!("{}{}", t, u)` | |
-| `t.to_bytes()` | `t.clone().into_bytes()` | |
+| `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | |
 | `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
 | `b.slice(i, j).to_text()` | `String::from_utf8_lossy(ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
@@ -563,11 +573,11 @@ meaning. The generator emits exactly the Rust on the right.
 | `i.to_byte()` | `u8::try_from(i).ok()` | Int |
 | `Int.parse(t)` | `ignite_io::parse_int(&t)`: decimal digits with an optional leading `-`, `None` for a leading `+` and for anything `str::parse::<i64>` rejects; the LLVM runtime's `int_parse` calls the same function | static |
 | `Int.parse(b.to_text())`, `Int.parse(b.slice(i, j).to_text())` | `ignite_io::parse_int(&b)`, `ignite_io::parse_int(ignite_io::checked::slice_ref(&b, i, j, <site>))`: no `Text` is built; bytes that are not UTF-8 give `None`, as their lossy text does. The LLVM target passes `b` (or the slice) to `int_parse` without `text_from_bytes_lossy` | static |
-| `s.next_id()`, `s.get(id)`, `s.put(id, v)`, `s.remove(id)`, `s.values()`, `s.update(id, f)` | the same `ignite_io::Store` method | Store |
+| `s.next_id()`, `s.get(id)`, `s.put(id, v)`, `s.remove(id)`, `s.values()`, `s.update(id, f)`, `s.upsert(id, f)` | the same `ignite_io::Store` method | Store |
 | `s.set_idle_timeout(ms)` | `s.set_idle_timeout(ms)` | TcpStream |
 | `b.slice(i, j)` | `b[(i) as usize..(j) as usize].to_vec()` | |
 | `b.push(x)` | `b.push(x)` | Bytes, List |
-| `b.append(c)` | `b.extend_from_slice(&c)` | Bytes |
+| `b.append(c)` | `b.extend_from_slice(&c)`, `c` borrowed; `&c.clone()` when `c` is rooted at the variable of `b` | Bytes, List |
 | `b.clear()` | `b.clear()` | |
 | `l.join(sep)` | `l.join(&sep)` | List<Text> |
 | `x.copy()` | `x.clone()` | |
@@ -1195,6 +1205,7 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
 | `s.remove(id)` | `Option<T>` (the removed value) | `s.write` |
 | `s.values()` | `List<T>` in ascending id order | `s.read` |
 | `s.update(id, f: fn(T) -> T)` | `Option<T>` (the new value), atomic, `f` pure | `s.write` |
+| `s.upsert(id, f: fn(Option<T>) -> T)` | `T` (the stored value): `f` of the current value, `None` when `id` holds nothing, atomic, `f` pure | `s.write` |
 
 - Value semantics: `get`/`values` return copies; `put` stores a copy.
 - One implementation in `ignite-io`: `Store<T: Clone + Send>` over
@@ -1208,6 +1219,11 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
   thunk `store_update.<T>` runs under the lock behind a callback guard: a failure inside `f`
   (14.8) leaves the old value, the lock is released, then the task ends with the failure's
   report, as on the Rust target, where the failure unwinds through `ignite_io::Store`.
+- `upsert` is the atomic insert-or-update: two tasks that upsert one absent id lose neither
+  write, where `update` (which answers `None` for it) followed by `put` can. `ignite_io`'s
+  `upsert` is `upsert_with` over a clone of the stored value; `ignite_rt_store_upsert` calls
+  the thunk `store_upsert.<T>(f, old)` under the lock with the stored heap value, or null for an
+  absent id, which the thunk passes to `f` as `None`. The thunk has `update`'s callback guard.
 - Created as a system resource (11.4). `Store.new()` creates one in tests and test-only items
   only (section 12.3).
 

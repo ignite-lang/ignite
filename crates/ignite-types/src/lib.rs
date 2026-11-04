@@ -549,6 +549,9 @@ pub enum Builtin {
     StoreValues,
     /// `s.update(id, f: fn(T) -> T) -> Option<T>`.
     StoreUpdate,
+    /// `s.upsert(id, f: fn(Option<T>) -> T) -> T`: `f` of the current value or
+    /// `None`, stored and returned, atomically.
+    StoreUpsert,
     /// `Store.new() -> Store<T>`, `T` from the expected type; tests and
     /// test-only items only (`docs/slice.md` section 12.3).
     StoreNew,

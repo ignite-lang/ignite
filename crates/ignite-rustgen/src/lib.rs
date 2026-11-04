@@ -2074,9 +2074,15 @@ impl<'a> Generator<'a> {
             .enumerate()
             .map(|(index, (arg, modified))| {
                 if self.consumes(callee, index) {
-                    self.value(arg)
-                } else if self.is_place(arg)
-                    && place_root(arg).is_some_and(|r| modified.contains(r))
+                    return self.value(arg);
+                }
+                let place = match self.borrowed_at(arg) {
+                    Some((list, _, _)) => Some(list),
+                    None => self.is_place(arg).then_some(*arg),
+                };
+                if place
+                    .and_then(place_root)
+                    .is_some_and(|r| modified.contains(r))
                 {
                     format!("&{}", self.value(arg))
                 } else {
@@ -2095,8 +2101,30 @@ impl<'a> Generator<'a> {
         if self.is_place(arg) {
             return format!("&{}", self.bare(arg));
         }
+        if let Some((list, index, site)) = self.borrowed_at(arg) {
+            return self.checked_at_call(list, index, site);
+        }
         let text = self.value(arg);
         borrow(arg, text)
+    }
+
+    /// `place.at(i)` with a failure site, whose element an argument by
+    /// reference can borrow from the list (`ignite_io::checked::at`
+    /// returns `&T`) instead of copying: the list, the index, the site.
+    fn borrowed_at<'e>(&self, expr: &'e Expr) -> Option<(&'e Expr, &'e Expr, FailureSite)> {
+        let ExprKind::Method { receiver, args, .. } = &expr.kind else {
+            return None;
+        };
+        let [index] = args.as_slice() else {
+            return None;
+        };
+        if !matches!(self.callee(expr), Some(Callee::Builtin(Builtin::ListAt)))
+            || !self.is_place(receiver)
+        {
+            return None;
+        }
+        let site = self.types.and_then(|t| t.failure_site(expr))?;
+        Some((&**receiver, index, site))
     }
 
     /// A value in a result position (the tail of a value block, an arm, a
@@ -2786,6 +2814,28 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// Whether the Rust value of the `Text` expression `expr` is a `String`
+    /// of its own that nothing else reads: a literal, a concatenation or
+    /// interpolation, or a builtin that builds a new text. `to_bytes` then
+    /// consumes it instead of copying it.
+    fn fresh_text(&self, expr: &Expr) -> bool {
+        match &expr.kind {
+            ExprKind::Str(_) => true,
+            ExprKind::Binary { op, .. } => self.is_text_add(expr, *op),
+            _ => matches!(
+                self.callee(expr),
+                Some(Callee::Builtin(
+                    Builtin::IntToText
+                        | Builtin::IntToTextMethod
+                        | Builtin::ByteToText
+                        | Builtin::BoolToText
+                        | Builtin::TextConcat
+                        | Builtin::TextTrim
+                ))
+            ),
+        }
+    }
+
     fn block(&mut self, block: &Block, value: bool) -> String {
         self.scopes.push(Vec::new());
         self.indent += 1;
@@ -3150,12 +3200,21 @@ impl<'a> Generator<'a> {
                         parts[1..].iter().map(|p| (BinaryOp::Add, *p, *p)).collect();
                     return self.chunked(parts[0], &rights, true);
                 }
-                let texts: Vec<String> = parts.iter().map(|p| self.bare(p)).collect();
-                format!(
-                    "format!(\"{}\", {})",
-                    "{}".repeat(texts.len()),
-                    texts.join(", ")
-                )
+                let mut later = BTreeSet::new();
+                let mut modified = vec![BTreeSet::new(); parts.len()];
+                for (index, part) in parts.iter().enumerate().rev() {
+                    modified[index] = later.clone();
+                    mutated_in(part, self.types, &mut later);
+                }
+                let mut template = String::new();
+                let mut texts = Vec::new();
+                for (part, modified) in parts.into_iter().zip(&modified) {
+                    self.format_part(part, modified, &mut template, &mut texts);
+                }
+                if texts.is_empty() {
+                    return format!("format!(\"{template}\")");
+                }
+                format!("format!(\"{template}\", {})", texts.join(", "))
             }
             ExprKind::Binary {
                 op: op @ (BinaryOp::Eq | BinaryOp::Ne),
@@ -3196,6 +3255,63 @@ impl<'a> Generator<'a> {
     /// Whether `expr` (with operator `op`) is `+` on `Text`.
     fn is_text_add(&self, expr: &Expr, op: BinaryOp) -> bool {
         op == BinaryOp::Add && self.type_of(expr) == Some(&Ty::Text)
+    }
+
+    /// One part of a Text `+` chain in its `format!`: a literal inlined
+    /// into `template` with its braces doubled, anything else as `{}` and
+    /// an argument. A `to_text` of Text, Int, Byte or Bool (each `{x}` of
+    /// an interpolation) passes its receiver, whose `Display` is that
+    /// text, so the part is not copied or converted first. `format!`
+    /// borrows every argument until the last part is evaluated, so a part
+    /// that is a place (or the `to_text` of one) rooted at a variable a
+    /// later part assigns or changes (`modified`) is copied, as it is
+    /// written: `x.clone()`, `n.to_string()`.
+    fn format_part(
+        &mut self,
+        part: &Expr,
+        modified: &BTreeSet<String>,
+        template: &mut String,
+        args: &mut Vec<String>,
+    ) {
+        if self.place_in(part, modified) {
+            template.push_str("{}");
+            args.push(self.value(part));
+            return;
+        }
+        if self.types.and_then(|t| t.reference(part)).is_none() {
+            if let ExprKind::Str(text) = &part.kind {
+                template.push_str(&escape_str(text).replace('{', "{{").replace('}', "}}"));
+                return;
+            }
+            if let ExprKind::Method {
+                receiver,
+                args: none,
+                ..
+            } = &part.kind
+                && none.is_empty()
+                && matches!(
+                    self.callee(part),
+                    Some(Callee::Builtin(
+                        Builtin::TextToText
+                            | Builtin::IntToTextMethod
+                            | Builtin::ByteToText
+                            | Builtin::BoolToText
+                    ))
+                )
+                && !self.place_in(receiver, modified)
+            {
+                template.push_str("{}");
+                args.push(self.bare(receiver));
+                return;
+            }
+        }
+        template.push_str("{}");
+        args.push(self.bare(part));
+    }
+
+    /// `expr` is a place rooted at one of `names`.
+    fn place_in(&self, expr: &Expr, names: &BTreeSet<String>) -> bool {
+        self.is_place(expr) && place_root(expr).is_some_and(|root| names.contains(root))
     }
 
     /// The Rust path of the variant a bare name resolves to by expected
@@ -3510,17 +3626,22 @@ impl<'a> Generator<'a> {
         index: &Expr,
         site: FailureSite,
     ) -> String {
-        let list = self.ref_arg(receiver);
-        let index_text = self.value(index);
-        let index_text = self.deref_if_borrowed(index, index_text);
-        let call = format!(
-            "ignite_io::checked::at({list}, {index_text}, {})",
-            self.site_args(site)
-        );
+        let call = self.checked_at_call(receiver, index, site);
         match self.element_clone(expr) {
             "" => format!("(*{call})"),
             clone => format!("{call}{clone}"),
         }
+    }
+
+    /// `ignite_io::checked::at(list, index, site)`: a `&T` into the list.
+    fn checked_at_call(&mut self, receiver: &Expr, index: &Expr, site: FailureSite) -> String {
+        let list = self.ref_arg(receiver);
+        let index_text = self.value(index);
+        let index_text = self.deref_if_borrowed(index, index_text);
+        format!(
+            "ignite_io::checked::at({list}, {index_text}, {})",
+            self.site_args(site)
+        )
     }
 
     fn call(&mut self, expr: &Expr, callee: &Expr, args: &[Expr]) -> String {
@@ -3711,8 +3832,10 @@ impl<'a> Generator<'a> {
     }
 
     /// `list.slice(from, to)` with a failure site, as a borrow of `list`
-    /// (`ignite_io::checked::slice_ref`) where the caller only reads it;
-    /// `None` for any other expression.
+    /// (`ignite_io::checked::slice_ref`) where the caller only reads it, a
+    /// `slice` receiver borrowed the same way; `None` for any other
+    /// expression and for bounds that modify a variable, which the borrow
+    /// of `list` would span.
     fn checked_slice_ref(&mut self, expr: &Expr) -> Option<String> {
         let ExprKind::Method { receiver, args, .. } = &expr.kind else {
             return None;
@@ -3720,8 +3843,17 @@ impl<'a> Generator<'a> {
         if !matches!(self.callee(expr), Some(Callee::Builtin(Builtin::ListSlice))) {
             return None;
         }
+        let mut modified = BTreeSet::new();
+        for arg in args {
+            mutated_in(arg, self.types, &mut modified);
+        }
+        if !modified.is_empty() {
+            return None;
+        }
         let site = self.types.and_then(|t| t.failure_site(expr))?;
-        let list = self.ref_arg(receiver);
+        let list = self
+            .checked_slice_ref(receiver)
+            .unwrap_or_else(|| self.ref_arg(receiver));
         let a = self.args(args);
         Some(format!(
             "ignite_io::checked::slice_ref({list}, {}, {}, {})",
@@ -3825,7 +3957,17 @@ impl<'a> Generator<'a> {
                 if *builtin == Builtin::ListAt {
                     return self.checked_at(expr, receiver, &args[0], site);
                 }
-                let list = self.ref_arg(receiver);
+                let mut modified = BTreeSet::new();
+                for arg in args {
+                    mutated_in(arg, self.types, &mut modified);
+                }
+                let list = if self.is_place(receiver)
+                    && place_root(receiver).is_some_and(|root| modified.contains(root))
+                {
+                    format!("&{}", self.value(receiver))
+                } else {
+                    self.ref_arg(receiver)
+                };
                 let a = self.args(args);
                 return format!(
                     "ignite_io::checked::slice({list}, {}, {}, {})",
@@ -3893,6 +4035,11 @@ impl<'a> Generator<'a> {
                 let a = self.args(args);
                 return format!("{r}.update({}, &*{})", a[0], wrap(&args[1], a[1].clone()));
             }
+            Some(Callee::Builtin(Builtin::StoreUpsert)) => {
+                let r = self.receiver(receiver);
+                let a = self.args(args);
+                return format!("{r}.upsert({}, &*{})", a[0], wrap(&args[1], a[1].clone()));
+            }
             Some(Callee::FieldFn { field, .. }) => {
                 let r = self.receiver(receiver);
                 let a = self.args(args);
@@ -3920,6 +4067,12 @@ impl<'a> Generator<'a> {
         {
             return text;
         }
+        if let ("append", [value]) = (name.name.as_str(), args)
+            && place_root(value).is_none_or(|root| place_root(receiver) != Some(root))
+        {
+            let r = self.receiver(receiver);
+            return format!("{r}.extend_from_slice({})", self.ref_arg(value));
+        }
         let r = self.receiver(receiver);
         let a = self.args(args);
         let arg = |i: usize, a: &[String]| borrow(&args[i], a[i].clone());
@@ -3938,6 +4091,7 @@ impl<'a> Generator<'a> {
                 format!("{r}.strip_prefix({}).map(|s| s.to_string())", arg(0, &a))
             }
             ("concat", 1) => format!("format!(\"{{}}{{}}\", {r}, {})", a[0]),
+            ("to_bytes", 0) if self.fresh_text(receiver) => format!("{r}.into_bytes()"),
             ("to_bytes", 0) => format!("{r}.clone().into_bytes()"),
             ("to_text", 0) => format!(
                 "String::from_utf8_lossy({}).into_owned()",
@@ -3963,11 +4117,16 @@ impl<'a> Generator<'a> {
         let no_arm = self
             .fail_call(expr, "no arm matched")
             .unwrap_or_else(|| "unreachable!()".to_string());
-        let mut scrutinee_text = self.value(scrutinee);
+        let ty = self.type_of(scrutinee).cloned();
+        let lent = self.match_by_ref(scrutinee, ty.as_ref(), arms);
+        let mut scrutinee_text = if lent {
+            self.ref_arg(scrutinee)
+        } else {
+            self.value(scrutinee)
+        };
         if matches!(scrutinee.kind, ExprKind::Record { .. }) {
             scrutinee_text = format!("({scrutinee_text})");
         }
-        let ty = self.type_of(scrutinee).cloned();
         let mut out = format!("match {scrutinee_text} {{\n");
         self.indent += 1;
         let mut guarded = false;
@@ -3984,10 +4143,15 @@ impl<'a> Generator<'a> {
             };
             guarded |= !native && !catch_all;
             ranged |= has_range(&arm.pattern);
+            let lent_before = self.borrowed_elements.len();
             let pattern = if native {
-                self.pattern(&arm.pattern, ty.as_ref())
+                let text = self.pattern(&arm.pattern, ty.as_ref());
+                if lent {
+                    self.lend_bindings(&arm.pattern, &mut bindings);
+                }
+                text
             } else {
-                let subject = "(&__m)".to_string();
+                let subject = if lent { "__m" } else { "(&__m)" }.to_string();
                 let test = self.test(&arm.pattern, &subject, ty.as_ref());
                 self.extract(&arm.pattern, subject, ty.as_ref(), &mut bindings);
                 match test {
@@ -3999,6 +4163,7 @@ impl<'a> Generator<'a> {
                 ExprKind::Block(block) => self.block(block, true),
                 _ => self.result(&arm.body),
             };
+            self.borrowed_elements.truncate(lent_before);
             self.scopes.pop();
             if !bindings.is_empty() {
                 let lets: String = bindings
@@ -4020,6 +4185,47 @@ impl<'a> Generator<'a> {
         out.push_str(&indentation(self.indent));
         out.push('}');
         out
+    }
+
+    /// Whether `match scrutinee { arms }` can match a reference to its
+    /// scrutinee instead of a copy: the scrutinee is a place whose type is
+    /// known, lendable ([`lendable`]) and not `Copy` in Rust, and no arm
+    /// changes the variable the place is rooted at.
+    fn match_by_ref(
+        &self,
+        scrutinee: &Expr,
+        ty: Option<&Ty>,
+        arms: &[ignite_syntax::ast::Arm],
+    ) -> bool {
+        if !self.is_place(scrutinee) || !ty.is_some_and(|ty| lendable(ty) && !rust_copy(ty)) {
+            return false;
+        }
+        let mut mutated = BTreeSet::new();
+        for arm in arms {
+            mutated_in(&arm.body, self.types, &mut mutated);
+        }
+        place_root(scrutinee).is_some_and(|root| !mutated.contains(root))
+    }
+
+    /// The bindings of a native `pattern` matched against a reference,
+    /// where each is a reference: a lendable binding that is not `Copy`
+    /// stays one in the arm, read like a borrowed parameter; any other is
+    /// copied out at the start of the arm (pushed to `out`).
+    fn lend_bindings(&mut self, pattern: &Pattern, out: &mut Vec<(String, String)>) {
+        let mut names = Vec::new();
+        pattern_bindings(pattern, &mut names);
+        let scope = self.scopes.len() - 1;
+        for id in names {
+            if !self.scopes[scope].contains(&id.name) {
+                continue;
+            }
+            let ty = self.types.and_then(|t| t.binding_type(id.span));
+            if ty.is_some_and(|ty| lendable(ty) && !rust_copy(ty)) {
+                self.borrowed_elements.push((scope, id.name.clone()));
+            } else {
+                out.push((id.name.clone(), ident(&id.name)));
+            }
+        }
     }
 
     /// An `if`; `value` says whether it is in value position. Its branches
@@ -5132,6 +5338,52 @@ fn has_range(pattern: &Pattern) -> bool {
             items.iter().any(has_range)
         }
         PatternKind::Variant { args, .. } => args.iter().any(has_range),
+        _ => false,
+    }
+}
+
+/// The names `pattern` binds, in order; an uppercase binding may name a
+/// variant and is told apart by the caller.
+fn pattern_bindings<'p>(pattern: &'p Pattern, out: &mut Vec<&'p Ident>) {
+    match &pattern.kind {
+        PatternKind::Binding(id) => out.push(id),
+        PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
+            items.iter().for_each(|item| pattern_bindings(item, out));
+        }
+        PatternKind::Variant { args, .. } => {
+            args.iter().for_each(|arg| pattern_bindings(arg, out));
+        }
+        _ => {}
+    }
+}
+
+/// Whether a value of type `ty` can be read through a reference where
+/// the generated code reads a borrowed parameter: the types a `for` over
+/// a list place lends its elements as ([`Generator::borrowed_for`]).
+fn lendable(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::Text
+            | Ty::List(_)
+            | Ty::Option(_)
+            | Ty::Result(..)
+            | Ty::Record(_)
+            | Ty::Enum(_)
+            | Ty::Tuple(_)
+            | Ty::GenericRecord(..)
+            | Ty::GenericEnum(..)
+            | Ty::Map(..)
+    )
+}
+
+/// Whether the Rust type of `ty` is `Copy`: scalars, quantities, and
+/// options, results and tuples of those.
+fn rust_copy(ty: &Ty) -> bool {
+    match ty {
+        Ty::Int | Ty::Bool | Ty::Byte | Ty::Unit | Ty::Never | Ty::Quantity(_) => true,
+        Ty::Option(inner) => rust_copy(inner),
+        Ty::Result(ok, err) => rust_copy(ok) && rust_copy(err),
+        Ty::Tuple(items) => items.iter().all(rust_copy),
         _ => false,
     }
 }

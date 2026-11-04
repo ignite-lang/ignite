@@ -3336,6 +3336,84 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         self.owned(&ty, r)
     }
 
+    /// `receiver.slice(from, to)` (`e`) as a borrowed view: a list header
+    /// with the address of element `from` of the receiver and the length
+    /// `to - from`, the elements not copied (`docs/llvm.md` section 4). The
+    /// caller reads it before it evaluates anything else, or copies it.
+    /// When neither bound modifies a variable, a `slice` receiver is a view
+    /// too ([`Self::slice_view`]): nothing evaluated between the two can
+    /// change the elements it points at. When one does, a borrowed receiver
+    /// is copied before the bounds run, so the slice is of the value the
+    /// receiver had (`b.slice(0, if c { b = ..; 1 } else { 2 })`).
+    fn list_slice(&mut self, e: &Expr, receiver: &Expr, args: &[Expr]) -> Val {
+        let ty = self.ty(receiver);
+        let element = match &ty {
+            Ty::List(t) => (**t).clone(),
+            _ => Ty::Byte,
+        };
+        let r = if args
+            .iter()
+            .all(|arg| crate::region::modified_by(arg, self.cx.types).is_empty())
+        {
+            self.slice_view(receiver)
+        } else {
+            let r = self.expr(receiver, true);
+            self.owned(&ty, r)
+        };
+        let p = self.ptr(&r);
+        let i = self.scalar_arg(&args[0]);
+        let j = self.scalar_arg(&args[1]);
+        let len = self.list_len(&p);
+        let neg = self.f.val(format!("icmp slt i64 {i}, 0"));
+        let order = self.f.val(format!("icmp sgt i64 {i}, {j}"));
+        let past = self.f.val(format!("icmp sgt i64 {j}, {len}"));
+        let bad = self.f.val(format!("or i1 {neg}, {order}"));
+        let bad = self.f.val(format!("or i1 {bad}, {past}"));
+        self.fail_slice_if(&bad, e, &i, &j, &len);
+        let size = self.layout(&element).size;
+        let data = self.f.val(format!("load ptr, ptr {p}, align 8"));
+        let at = self.f.val(format!("mul i64 {i}, {size}"));
+        let start = self
+            .f
+            .val(format!("getelementptr inbounds i8, ptr {data}, i64 {at}"));
+        let count = self.f.val(format!("sub i64 {j}, {i}"));
+        let view = self.temp(&ty);
+        self.f
+            .ins(format!("store ptr {start}, ptr {view}, align 8"));
+        let lenp = self.gep(&view, 8);
+        self.f
+            .ins(format!("store i64 {count}, ptr {lenp}, align 8"));
+        let capp = self.gep(&view, 16);
+        self.f
+            .ins(format!("store i64 {count}, ptr {capp}, align 8"));
+        Val::Ptr(view, false)
+    }
+
+    /// The value of `e` where the caller only reads it before it evaluates
+    /// anything else (the receiver of `to_text`, the bytes of
+    /// `Int.parse(bytes.to_text())`): a `slice` call as the view of
+    /// [`Self::list_slice`], with no copy; any other expression as
+    /// [`Self::expr`].
+    fn slice_view(&mut self, e: &Expr) -> Val {
+        let ExprKind::Method { receiver, args, .. } = &e.kind else {
+            return self.expr(e, true);
+        };
+        if !matches!(
+            self.cx.types.callee(e),
+            Some(Callee::Builtin(Builtin::ListSlice))
+        ) {
+            return self.expr(e, true);
+        }
+        self.nested += 1;
+        let previous = self.locate(e.span.start);
+        let view = self.list_slice(e, receiver, args);
+        if let Some(previous) = previous {
+            self.f.restore_location(previous);
+        }
+        self.nested -= 1;
+        view
+    }
+
     /// The debug text (`docs/slice.md` section 13.6) of `v` of type `ty`,
     /// as an owned `Text`.
     fn debug_text(&mut self, ty: &Ty, v: &Val) -> Val {
@@ -3497,48 +3575,16 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 }
             }
             BytesToText => {
-                let r = recv(self);
+                let r = self.slice_view(receiver.expect("receiver"));
                 let p = self.ptr(&r);
                 self.rt_out("text_from_bytes_lossy", &Ty::Text, &[format!("ptr {p}")])
             }
             ListAt => self.list_at(e, receiver.expect("receiver"), args),
             ListSlice => {
                 let rexpr = receiver.expect("receiver");
+                let view = self.list_slice(e, rexpr, args);
                 let ty = self.ty(rexpr);
-                let element = match &ty {
-                    Ty::List(t) => (**t).clone(),
-                    _ => Ty::Byte,
-                };
-                let r = recv(self);
-                let p = self.ptr(&r);
-                let i = self.scalar_arg(&args[0]);
-                let j = self.scalar_arg(&args[1]);
-                let len = self.list_len(&p);
-                let neg = self.f.val(format!("icmp slt i64 {i}, 0"));
-                let order = self.f.val(format!("icmp sgt i64 {i}, {j}"));
-                let past = self.f.val(format!("icmp sgt i64 {j}, {len}"));
-                let bad = self.f.val(format!("or i1 {neg}, {order}"));
-                let bad = self.f.val(format!("or i1 {bad}, {past}"));
-                self.fail_slice_if(&bad, e, &i, &j, &len);
-                let size = self.layout(&element).size;
-                let data = self.f.val(format!("load ptr, ptr {p}, align 8"));
-                let at = self.f.val(format!("mul i64 {i}, {size}"));
-                let start = self
-                    .f
-                    .val(format!("getelementptr inbounds i8, ptr {data}, i64 {at}"));
-                let count = self.f.val(format!("sub i64 {j}, {i}"));
-                let view = self.temp(&ty);
-                self.f
-                    .ins(format!("store ptr {start}, ptr {view}, align 8"));
-                let lenp = self.gep(&view, 8);
-                self.f
-                    .ins(format!("store i64 {count}, ptr {lenp}, align 8"));
-                let capp = self.gep(&view, 16);
-                self.f
-                    .ins(format!("store i64 {count}, ptr {capp}, align 8"));
-                let t = self.temp(&ty);
-                self.copy(&ty, &t, &view);
-                Val::Ptr(t, true)
+                self.owned(&ty, view)
             }
             ListPush => {
                 let rexpr = receiver.expect("receiver");
@@ -3772,7 +3818,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                             Some(Callee::Builtin(BytesToText))
                         ) =>
                     {
-                        self.read_arg(receiver)
+                        let bytes = self.slice_view(receiver);
+                        self.ptr(&bytes)
                     }
                     _ => self.read_arg(&args[0]),
                 };
@@ -3895,6 +3942,37 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.option_from("store_update", &element, |payload| {
                     format!("ptr {s}, i64 {id}, ptr {f}, ptr {thunk}, ptr {payload}")
                 })
+            }
+            StoreUpsert => {
+                let element = self.store_element(receiver);
+                let r = recv(self);
+                let s = self.scalar(&r);
+                let id = self.scalar_arg(&args[0]);
+                let fv = self.expr(&args[1], true);
+                let f = self.ptr(&fv);
+                let thunk = self.m.glue_of(Glue::Upsert, &element);
+                self.m.declare(
+                    "ignite_rt_store_upsert",
+                    "void",
+                    &[
+                        "ptr".into(),
+                        "i64".into(),
+                        "ptr".into(),
+                        "ptr".into(),
+                        "ptr".into(),
+                    ],
+                );
+                let out = self.temp(&element);
+                self.f.ins(format!(
+                    "call void @ignite_rt_store_upsert(ptr {s}, i64 {id}, ptr {f}, ptr {thunk}, ptr {out})"
+                ));
+                if is_aggregate(&element) {
+                    Val::Ptr(out, true)
+                } else if scalar_type(&element).is_some() {
+                    Val::Scalar(self.load_scalar(&element, &out))
+                } else {
+                    Val::Unit
+                }
             }
         }
     }

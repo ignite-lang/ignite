@@ -1,0 +1,582 @@
+import std.text.*
+
+// A `match` on a place matches a reference to it on the Rust target when
+// no arm changes the place's variable (`docs/slice.md` section 6, "`match`
+// on a place"). Each test here is a case that must compile and give the
+// same answer on both targets.
+
+type Item {
+  id: Int
+  name: Text
+  tags: List<Text> = []
+}
+
+enum Held {
+  Empty,
+  One(Item),
+  Many(List<Item>),
+  Named(Text, Int),
+}
+
+type Bag {
+  items: List<Item>
+  held: Held = Empty
+}
+
+enum Tree {
+  Leaf,
+  Node(Tree, Item, Tree),
+}
+
+const LIMIT: Int = 3
+
+fn item(id: Int, name: Text) -> Item = Item { id = id, name = name }
+
+fn items() -> List<Item> = [item(1, "a"), item(2, "b"), item(3, "c")]
+
+fn label(x: Item) -> Text = "{x.id}:{x.name}"
+
+// Bindings moved out of an arm: returned, pushed, put into constructors.
+fn take_one(h: Held) -> Item = match h {
+  One(x) => x
+  Many(xs) => xs[0]
+  Named(name, id) => item(id, name)
+  Empty => item(0, "")
+}
+
+fn collect_held(hs: List<Held>) -> List<Item> {
+  var out = []
+  for h in hs {
+    match h {
+      One(x) => out.push(x)
+      Many(xs) => out.append(xs)
+      Named(name, id) => out.push(Item { id = id, name = name })
+      Empty => {}
+    }
+  }
+  out
+}
+
+fn wrapped(o: Option<Item>) -> Option<Held> = match o {
+  Some(x) => Some(One(x))
+  None => None
+}
+
+fn record_from(h: Held) -> Bag = match h {
+  Many(xs) => Bag { items = xs, held = h }
+  other => Bag { items = [], held = other }
+}
+
+// Nested patterns, native and through a guard.
+fn nested(p: (Option<Held>, List<Text>)) -> Text = match p {
+  (Some(One(x)), [first, _]) => "{x.name}{first}"
+  (Some(Many([a, b])), tags) => "{a.name}{b.name}{tags.len()}"
+  (Some(Named(name, 1)), _) => name
+  (Some(Named(name, n)), [t]) => "{name}{n}{t}"
+  (None, []) => "none"
+  _ => "other"
+}
+
+fn leftmost(t: Tree) -> Text = match t {
+  Node(Leaf, x, _) => x.name
+  Node(left, _, _) => leftmost(left)
+  Leaf => "-"
+}
+
+fn inner(h: Held) -> Int = match h {
+  One(x) => match x.tags {
+    [] => x.id
+    [t] => t.len()
+    ts => ts.len() * 10
+  }
+  Many(xs) => match xs {
+    [] => 0
+    [only] => only.id
+    _ => xs.len()
+  }
+  _ => -1
+}
+
+// A match inside a loop over the list it matches.
+fn loop_same(xs: List<Item>) -> Int {
+  var total = 0
+  for x in xs {
+    total = total + match xs {
+      [first, second, _] => first.id * 100 + second.id * 10 + x.id
+      _ => 0
+    }
+  }
+  total
+}
+
+fn loop_grow(start: List<Item>) -> Int {
+  var xs = start
+  var seen = 0
+  for x in xs {
+    match xs {
+      [a, _, _] => xs.push(a)
+      _ => {
+        seen = seen + x.id
+      }
+    }
+  }
+  seen * 100 + xs.len()
+}
+
+fn count_words(ws: List<Text>) -> Int {
+  var n = 0
+  for w in ws {
+    match w {
+      "stop" => break
+      "skip" => continue
+      other => {
+        n = n + other.len()
+      }
+    }
+  }
+  n
+}
+
+// An arm assigns the variable the scrutinee is rooted at.
+fn reset(start: Option<Item>) -> Int {
+  var o = start
+  var total = 0
+  var i = 0
+  while i < 2 {
+    match o {
+      Some(x) => {
+        o = None
+        total = total + x.id
+      }
+      None => {
+        total = total + 100
+      }
+    }
+    i = i + 1
+  }
+  total
+}
+
+fn sibling(start: Bag) -> Int {
+  var bag = start
+  match bag.held {
+    One(x) => bag.items.push(x)
+    _ => {}
+  }
+  bag.items.len()
+}
+
+// The variable is changed after the match, with a binding copied out.
+fn later(start: List<Item>) -> Int {
+  var xs = start
+  let first = match xs {
+    [a, _, _] => a
+    _ => item(0, "")
+  }
+  xs.push(first)
+  xs.len() * 10 + first.id
+}
+
+// Store reads: the read itself and a place holding it.
+fn from_store(s: Store<Held>) -> Int {
+  let got = s.get(1)
+  let direct = match s.get(1) {
+    Some(One(x)) => x.id
+    Some(_) => -1
+    None => 0
+  }
+  let named = match got {
+    Some(Many(xs)) => xs.len()
+    Some(One(x)) => {
+      s.put(2, One(Item { id = x.id + 10, ..x }))
+      x.id * 10
+    }
+    _ => 0
+  }
+  let second = match s.get(2) {
+    Some(One(y)) => y.id * 100
+    _ => 0
+  }
+  direct * 1000 + named + second
+}
+
+// Text, constant and list patterns become guards beside binding arms.
+fn command(name: Text, args: List<Text>) -> Text = match name {
+  "get" => "G"
+  "set" => match args {
+    [k, v] => "{k}={v}"
+    _ => "bad"
+  }
+  other => to_upper(other)
+}
+
+fn tagged(p: (Int, Text)) -> Text = match p {
+  (LIMIT, t) => "limit {t}"
+  (0, "zero") => "z"
+  (n, t) => if n > 1 && t == "x" {
+    "big {t}"
+  } else {
+    "{t}{n + 1}"
+  }
+}
+
+fn shadow(o: Option<Item>) -> Text = match o {
+  Some(o) => o.name
+  None => "none"
+}
+
+fn closure_arm(h: Held) -> Int = match h {
+  One(x) => {
+    let f = || x.id * 2
+    let g = |n: Int| n + x.id
+    f() + g(1)
+  }
+  Many(xs) => {
+    let size = || xs.len()
+    size()
+  }
+  _ => 0
+}
+
+fn in_closure(h: Held) -> Int {
+  let f = || match h {
+    One(x) => x.id
+    _ => 0
+  }
+  let g = |k: Held| match k {
+    One(x) => x.id * 10
+    _ => 0
+  }
+  f() + g(h)
+}
+
+fn equal_parts(h: Held, target: Item) -> Int = match h {
+  One(x) => if x == target && target == x { 1 } else { 2 }
+  Many(xs) => if xs == [target] { 3 } else { 4 }
+  _ => 5
+}
+
+fn results(r: Result<Item, Text>) -> Text = match r {
+  Ok(x) => x.name
+  Err(e) => e
+}
+
+fn whole(m: Map<Text, Int>) -> Int = match m {
+  all => all.len()
+}
+
+fn try_arm(o: Option<Item>) -> Option<Int> {
+  let n = match o {
+    Some(x) => x.id
+    None => return None
+  }
+  Some(n + 1)
+}
+
+fn bag_label(b: Bag) -> Text = match b.held {
+  One(x) => label(x)
+  Named(n, _) => n
+  _ => match b.items {
+    [] => "empty"
+    xs => "{xs.len()}"
+  }
+}
+
+fn text_ops(h: Held) -> Text = match h {
+  Named(t, n) => t.split(",").join(";").concat(to_upper(t)).concat("{n}")
+  One(x) => if contains(x.name, "a") { x.debug() } else { "no" }
+  _ => ""
+}
+
+fn copy_match(o: Option<(Int, Int)>) -> Int = match o {
+  Some((a, b)) => a * b
+  None => 0
+}
+
+test "bindings moved out of an arm" {
+  assert take_one(One(item(4, "d"))) == item(4, "d")
+  assert take_one(Many(items())) == item(1, "a")
+  assert take_one(Named("n", 5)) == item(5, "n")
+  assert take_one(Empty) == item(0, "")
+  let all = collect_held([One(item(1, "a")), Many(items()), Named("z", 9), Empty])
+  assert all.len() == 5
+  assert all[4] == item(9, "z")
+  assert wrapped(Some(item(1, "a"))) == Some(One(item(1, "a")))
+  assert wrapped(None) == None
+  let bag = record_from(Many(items()))
+  assert bag.items.len() == 3
+  assert bag.held == Many(items())
+  assert record_from(Empty).held == Empty
+}
+
+test "nested patterns" {
+  assert nested((Some(One(item(1, "a"))), ["x", "y"])) == "ax"
+  assert nested((Some(Many([item(1, "a"), item(2, "b")])), ["t"])) == "ab1"
+  assert nested((Some(Named("n", 1)), [])) == "n"
+  assert nested((Some(Named("n", 2)), ["t"])) == "n2t"
+  assert nested((None, [])) == "none"
+  assert nested((Some(Empty), [])) == "other"
+  let tree = Node(Node(Leaf, item(1, "deep"), Leaf), item(2, "top"), Leaf)
+  assert leftmost(tree) == "deep"
+  assert leftmost(Leaf) == "-"
+  assert inner(One(item(7, "g"))) == 7
+  assert inner(One(Item { id = 1, name = "a", tags = ["abc"] })) == 3
+  assert inner(One(Item { id = 1, name = "a", tags = ["a", "b"] })) == 20
+  assert inner(Many([item(6, "f")])) == 6
+  assert inner(Many(items())) == 3
+  assert inner(Empty) == -1
+}
+
+test "a match inside a loop over the same list" {
+  assert loop_same(items()) == 366
+  assert loop_grow(items()) == 504
+  assert count_words(["ab", "skip", "cde", "stop", "zz"]) == 5
+}
+
+test "an arm changes the scrutinee's variable" {
+  assert reset(Some(item(7, "g"))) == 107
+  assert reset(None) == 200
+  assert sibling(Bag { items = items(), held = One(item(4, "d")) }) == 4
+  assert later(items()) == 41
+}
+
+test "a match on a Store-read value" {
+  let s: Store<Held> = Store.new()
+  s.put(1, One(item(5, "e")))
+  assert from_store(s) == 6550
+  assert s.get(2) == Some(One(item(15, "e")))
+}
+
+test "guards beside binding arms" {
+  assert command("get", []) == "G"
+  assert command("set", ["k", "v"]) == "k=v"
+  assert command("set", []) == "bad"
+  assert command("del", []) == "DEL"
+  assert tagged((3, "a")) == "limit a"
+  assert tagged((0, "zero")) == "z"
+  assert tagged((2, "x")) == "big x"
+  assert tagged((0, "x")) == "x1"
+}
+
+test "bindings read by closures, comparisons and methods" {
+  assert shadow(Some(item(1, "a"))) == "a"
+  assert shadow(None) == "none"
+  assert closure_arm(One(item(3, "c"))) == 10
+  assert closure_arm(Many(items())) == 3
+  assert in_closure(One(item(2, "b"))) == 22
+  assert equal_parts(One(item(1, "a")), item(1, "a")) == 1
+  assert equal_parts(One(item(1, "a")), item(2, "a")) == 2
+  assert equal_parts(Many([item(1, "a")]), item(1, "a")) == 3
+  assert equal_parts(Empty, item(1, "a")) == 5
+  assert results(Ok(item(1, "a"))) == "a"
+  assert results(Err("no")) == "no"
+  let m: Map<Text, Int> = { a = 1, b = 2 }
+  assert whole(m) == 2
+  assert try_arm(Some(item(4, "d"))) == Some(5)
+  assert try_arm(None) == None
+  assert bag_label(Bag { items = [], held = One(item(1, "a")) }) == "1:a"
+  assert bag_label(Bag { items = [], held = Named("n", 1) }) == "n"
+  assert bag_label(Bag { items = items() }) == "3"
+  assert bag_label(Bag { items = [] }) == "empty"
+  assert text_ops(Named("a,b", 2)) == "a;bA,B2"
+  assert text_ops(One(item(1, "a"))) == item(1, "a").debug()
+  assert text_ops(One(item(1, "b"))) == "no"
+  assert copy_match(Some((2, 3))) == 6
+  assert copy_match(None) == 0
+}
+
+test "a match in a test body" {
+  let h = One(item(1, "a"))
+  let got = match h {
+    One(x) => x.name
+    _ => ""
+  }
+  assert got == "a"
+  assert h == One(item(1, "a"))
+}
+
+// Review cases: an arm assigns a field of the scrutinee or changes one of its
+// elements in place, the match's value is assigned to its own place, a binding
+// leaves the arm by `return` or in a closure, the scrutinee is passed on whole
+// inside its arm, a list element is matched while an arm pushes to the list.
+fn field_reset(start: Bag) -> Int {
+  var bag = start
+  var total = 0
+  match bag.held {
+    One(x) => {
+      bag.held = Empty
+      total = x.id
+    }
+    _ => {}
+  }
+  match bag.held {
+    Empty => total * 10
+    _ => -1
+  }
+}
+
+fn element_tags(start: List<Item>) -> Int {
+  var xs = start
+  match xs {
+    [a, b, _] => {
+      xs[0].tags.push(b.name)
+      xs[1].tags.append([a.name, a.name])
+    }
+    _ => {}
+  }
+  xs[0].tags.len() * 10 + xs[1].tags.len()
+}
+
+fn field_of_element(start: List<Item>) -> Text {
+  var xs = start
+  match xs {
+    [a, _, _] => {
+      xs[2].tags.push(a.name)
+    }
+    _ => {}
+  }
+  xs[2].tags.join(",")
+}
+
+fn self_assign(start: List<Item>) -> Int {
+  var xs = start
+  xs = match xs {
+    [a, _, _] => [a]
+    other => other
+  }
+  var bag = Bag { items = [], held = One(item(2, "b")) }
+  bag.held = match bag.held {
+    One(x) => Many([x, x])
+    other => other
+  }
+  let held = match bag.held {
+    Many(ys) => ys.len()
+    _ => 0
+  }
+  xs.len() * 10 + held
+}
+
+fn local_return() -> Item {
+  let h = One(item(8, "h"))
+  match h {
+    One(x) => {
+      return x
+    }
+    _ => {}
+  }
+  item(0, "")
+}
+
+fn escaping(h: Held) -> fn(Int) -> Int = match h {
+  One(x) => |n| n + x.id
+  _ => |n| n
+}
+
+fn escaping_local() -> Int {
+  let h = One(item(6, "f"))
+  let f = match h {
+    One(x) => |n: Int| n + x.id
+    _ => |n: Int| n
+  }
+  f(1)
+}
+
+fn pass_whole(s: Store<Held>) -> Int {
+  let h = One(item(3, "c"))
+  var out = []
+  let n = match h {
+    One(x) => {
+      out.push(h)
+      s.put(9, h)
+      take_one(h).id + x.id + label(x).len()
+    }
+    _ => 0
+  }
+  n * 10 + out.len()
+}
+
+fn element_match(start: List<Held>) -> Int {
+  var hs = start
+  let got = match hs[0] {
+    One(x) => {
+      hs.push(One(x))
+      x.id
+    }
+    _ => 0
+  }
+  got * 10 + hs.len()
+}
+
+fn element_field_match(b: Bag) -> Text = match b.items {
+  [_, x, _] => "{x.name}{x.id}"
+  _ => ""
+}
+
+fn nested_move(p: (Option<Held>, List<Text>)) -> List<Item> = match p {
+  (Some(One(x)), _) => [x, x]
+  (Some(Many([a, _])), [t]) => [Item { id = a.id, name = t }]
+  _ => []
+}
+
+fn shadow_local() -> Text {
+  var o = Some(item(1, "a"))
+  let got = match o {
+    Some(o) => o.name
+    None => "none"
+  }
+  o = None
+  "{got}{o == None}"
+}
+
+fn shadow_list(xs: List<Item>) -> Int = match xs {
+  [xs, _, _] => xs.id
+  _ => 0
+}
+
+fn borrowed_element_arm(hs: List<Held>) -> Int {
+  var total = 0
+  for h in hs {
+    total = total + match h {
+      One(x) => x.id
+      Many(xs) => match xs {
+        [first] => first.id * 10
+        [] => 0
+        _ => xs.len() * 100
+      }
+      _ => 0
+    }
+  }
+  total
+}
+
+test "an arm assigns a field or an element of the scrutinee" {
+  assert field_reset(Bag { items = [], held = One(item(4, "d")) }) == 40
+  assert field_reset(Bag { items = [] }) == 0
+  assert element_tags(items()) == 12
+  assert field_of_element(items()) == "a"
+  assert self_assign(items()) == 12
+}
+
+test "bindings leave the arm and the scrutinee is passed on whole" {
+  assert local_return() == item(8, "h")
+  let five = escaping(One(item(5, "e")))
+  assert five(1) == 6
+  let none = escaping(Empty)
+  assert none(1) == 1
+  assert escaping_local() == 7
+  let s: Store<Held> = Store.new()
+  assert pass_whole(s) == 91
+  assert s.get(9) == Some(One(item(3, "c")))
+  assert nested_move((Some(One(item(1, "a"))), [])) == [item(1, "a"), item(1, "a")]
+  assert nested_move((Some(Many([item(2, "b"), item(3, "c")])), ["t"])) == [item(2, "t")]
+  assert nested_move((None, [])) == []
+}
+
+test "a list element as the scrutinee, shadowing and loops" {
+  assert element_match([One(item(7, "g")), Empty]) == 73
+  assert element_match([Empty]) == 1
+  assert element_field_match(Bag { items = items() }) == "b2"
+  assert shadow_local() == "atrue"
+  assert shadow_list(items()) == 1
+  assert borrowed_element_arm([One(item(1, "a")), Many(items()), Many([]), Empty]) == 301
+}

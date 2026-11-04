@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-16-moves-analysis
 kind: story
-status: active
+status: implemented
 title: Last-use moves analysis in ignite-types
 summary: Compute last uses and consumed parameters for every typed module, read by no backend yet
 relations:
@@ -21,10 +21,11 @@ scope:
   path: crates/ignite/tests/fixtures/slice16/moves.ignite
 - confidence: cited
   path: crates/ignite/tests/fixtures/slice16/moves_scale.ignite
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T23:35:37Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-03T23:35:37Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-04T07:01:36Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: slice-16-moves-analysis
 
@@ -39,6 +40,8 @@ defines them. No backend reads the result yet.
 - Contract: `docs/slice.md` section 20 on `feat/slice16-language-gaps`, unit U1 of 20.10, rows 1
   to 5 of 20.0, decisions D1 to D3, the review findings B1 and B2 folded into 20.3.
 - First failing test: `moves::a_var_passed_and_reassigned_moves` (ignite-types).
+- Correction to commit 443f8b57's message: `moves_scale.ignite` does not pass on LLVM today; its
+  200,000-step test times out after 60 s until U4 (`story:slice-16-llvm-moves`).
 
 ## Acceptance
 

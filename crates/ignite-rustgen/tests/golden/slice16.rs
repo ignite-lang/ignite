@@ -49,7 +49,7 @@ pub struct Counter;
 impl Counter {
     pub fn serve(mut stream: ignite_io::TcpStream, mut application: State) -> Result<(), ignite_io::IoError> {
         application.items.push(1);
-        stream.write_all((application.items.len() as i64).to_string().clone().into_bytes())
+        stream.write_all((application.items.len() as i64).to_string().into_bytes())
     }
 }
 

@@ -278,7 +278,10 @@ position, even with no buffer.
   - the receiver of `to_bytes`: the result is the receiver itself, owned or borrowed as the
     receiver is;
   - the argument of `append` when the element type holds no buffer: its elements are
-    copied by the `memcpy` that appends them.
+    copied by the `memcpy` that appends them;
+  - a `slice` that `to_text` or `Int.parse(bytes.to_text())` reads, and the `slice`
+    receiver of a `slice` whose bounds modify no variable: a view, a list header with
+    the address of the first element and the length, pointing into the receiver.
 
   `push`, `append` and `clear` on a receiver that is not a place rooted at a variable
   (`region::root` is `None`, such as `f().push(x)`) work on an owned copy. A `var` bound
@@ -410,7 +413,11 @@ position, even with no buffer.
   before it calls `f`, and `ignite_rt_guard_pop` after: a failure inside `f` keeps its
   report and jumps back to the thunk, which returns null, instead of jumping past the
   runtime frame that holds the store's lock. `store_update` then keeps the old value,
-  releases the lock and ends the task with the kept report as below.
+  releases the lock and ends the task with the kept report as below. `upsert(id, f)` passes
+  the thunk `ptr "store_upsert.<T>"(ptr f, ptr old)` the same way; `old` is null when `id`
+  holds nothing, and the thunk builds `None` or `Some` of an arena copy of `old` for `f`.
+  `store_upsert` stores the result under `id` and copies it to the call's result, the
+  callback guard as for `update`.
 - Failure containment (`docs/slice.md` section 14.8, `vision.md` T1). A failed
   `assert`, a `?` on `Err` or `None` in a test, an integer overflow or division by zero,
   an index or `slice` out of range and a `match` with no arm each end the task that ran
@@ -493,7 +500,7 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `i32 stdin_set_raw(i8 on, IoError* err)` | same termios rules as `docs/slice.md` section 7 |
 | `i32 stdout_write_all(List* bytes, IoError* err)` | write and flush |
 | `void io_error_new(IoError* out, Text* message)` | exit code 1 |
-| `void text_from_bytes_lossy(Text* out, List* bytes)` | |
+| `void text_from_bytes_lossy(Text* out, List* bytes)` | invalid UTF-8 sequences become U+FFFD; ASCII is copied without the decoder |
 | `void text_trim(Text* out, Text* text)` | Unicode whitespace, as Rust `str::trim` |
 | `void text_concat(Text* out, Text* a, Text* b)` | |
 | `i8 text_eq(Text* a, Text* b)` | |
@@ -501,7 +508,7 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `i8 text_starts_with(Text* text, Text* prefix)` | |
 | `void text_join(Text* out, List* texts, Text* separator)` | |
 | `void int_to_text(Text* out, i64 value)` | |
-| `i8 int_parse(Text* text, i64* out)` | 1 and `out` when `text` is a decimal `i64` with an optional leading `-` (`ignite_io::parse_int`: Rust `str::parse`, a leading `+` rejected), else 0; `text` may be the `List` of a `Bytes`, as `Int.parse(b.to_text())` passes `b` |
+| `i8 int_parse(Text* text, i64* out)` | 1 and `out` when `text` is a decimal `i64` with an optional leading `-` (`ignite_io::parse_int`: what Rust `str::parse` accepts less a leading `+`, read from the bytes without a UTF-8 pass), else 0; `text` may be the `List` of a `Bytes`, as `Int.parse(b.to_text())` passes `b` |
 | `i32 tcp_set_idle_timeout(i64 stream, i64 ms, IoError* err)` | a read that waits longer than `ms` returns `Eof`; 0 or less removes the timeout (`ignite_io::TcpStream::set_idle_timeout`) |
 | `ptr store_new(ptr to_heap, ptr from_heap, ptr free_heap, i64 size, i64 align)` | a `ignite_io::Store` of heap copies of `size`-byte values; the three functions are the element type's glue (section 4); never freed |
 | `i64 store_next_id(ptr store)` | |
@@ -510,6 +517,7 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `i8 store_remove(ptr store, i64 id, ptr out)` | as `get`, and removes the entry |
 | `void store_values(ptr store, List* out)` | copies of every value, in ascending id order |
 | `i8 store_update(ptr store, i64 id, ptr f, ptr thunk, ptr out)` | 0 when `id` holds nothing (`f` is not called); otherwise replaces the value by `thunk(f, old)` under the store's lock, 1 and a copy of the new value at `out`; a null from the thunk (a failure of `f` its callback guard stopped) keeps the old value, releases the lock and ends the task with the failure's report |
+| `void store_upsert(ptr store, i64 id, ptr f, ptr thunk, ptr out)` | under the store's lock stores `thunk(f, old)` under `id`, `old` null when `id` holds nothing, and copies the stored value to `out`; a null from the thunk leaves the store unchanged, releases the lock and ends the task with the failure's report; declared only in a module that calls it |
 | `void assert_failed(Text* cond, Text* message, Text* left, Text* right, Text* at)` | ends the task with `ignite_io::assert_report` (section 4: `error: <report>` and exit 101 on the main task or a test; `task ended with error: <report>` and a `longjmp` to the task wrapper in a spawned task). `message` is null without a message; `left` and `right` are null unless the condition is `a == b` or `a != b` |
 | `void try_failed(Text* error, Text* at)` | ends the task with `ignite_io::try_report`: `? failed at <at>: Err(<error>)` (`error` not null) or `? failed at <at>: None` (section 4) |
 | `void fail_arith(Text* op, Text* file, i64 line, i64 col, i64 left, i64 right)` | ends the task: `<op> failed at <file>:<line>:<col>: <left> <op> <right>` (section 4); `op` is `+`, `-`, `*`, `/` or `%`; `Byte` operands are widened to `i64` |
@@ -518,7 +526,7 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `void fail_slice(Text* file, i64 line, i64 col, i64 from, i64 to, i64 len)` | ends the task: `slice failed at <file>:<line>:<col>: slice <from>..<to> out of range for length <len>` |
 | `void fail_match(Text* file, i64 line, i64 col)` | ends the task: `match failed at <file>:<line>:<col>: no arm matched` |
 | `void guard_push(ptr jb)` | register the `jmp_buf` a task-entry wrapper just passed to `_setjmp` (section 4); a thread-local stack, innermost last |
-| `void guard_callback(ptr jb)` | register the `jmp_buf` a runtime callback (`store_update.<T>`) just passed to `_setjmp`: a failure whose innermost guard it is keeps its report and jumps back to it (section 4) |
+| `void guard_callback(ptr jb)` | register the `jmp_buf` a runtime callback (`store_update.<T>`, `store_upsert.<T>`) just passed to `_setjmp`: a failure whose innermost guard it is keeps its report and jumps back to it (section 4) |
 | `void guard_pop()` | drop the innermost `jmp_buf` after the task body or callback returned without failing |
 | `void tcp_own(i64 stream)` | mark `stream` (a TCP stream or a pipe end) as owned by the current task: a failure of the task releases it (section 4) |
 | `i32 text_cmp(Text* a, Text* b)` | -1, 0 or 1: bytewise order of the UTF-8, the key order of `Map<Text, V>` (section 3) |

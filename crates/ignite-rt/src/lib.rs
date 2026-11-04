@@ -56,9 +56,9 @@ pub use stdio::{
     ignite_rt_stdout_write_all,
 };
 pub use store::{
-    FreeHeap, FromHeap, RtStore, ToHeap, UpdateThunk, ignite_rt_store_get, ignite_rt_store_new,
-    ignite_rt_store_next_id, ignite_rt_store_put, ignite_rt_store_remove, ignite_rt_store_update,
-    ignite_rt_store_values,
+    FreeHeap, FromHeap, RtStore, ToHeap, UpdateThunk, UpsertThunk, ignite_rt_store_get,
+    ignite_rt_store_new, ignite_rt_store_next_id, ignite_rt_store_put, ignite_rt_store_remove,
+    ignite_rt_store_update, ignite_rt_store_upsert, ignite_rt_store_values,
 };
 pub use task::{TaskFn, ignite_rt_spawn, ignite_rt_spawn_ready};
 pub use text::{

@@ -584,6 +584,80 @@ fn outer<S: ByteStream>(stream: S) -> IoResult<Int> requires [stream.write] {\n\
     cargo_build(&program, &std, "adv-shadow");
 }
 
+/// The bytes a session reads and writes are borrowed where they are only
+/// read: `append` borrows a place it does not alias, an interpolation
+/// formats its parts in place, and an element passed by reference is
+/// borrowed from its list. An `append` of the receiver itself is still
+/// copied, and `write_all` still copies a local even at its last use (a
+/// move there is slice 16 U3's). The program checks and types, so it must
+/// build.
+#[test]
+fn session_bytes_are_borrowed_where_they_are_only_read() {
+    let source = "package examples.borrows\n\
+\n\
+import std.net.ByteStream\n\
+import std.io.IoError\n\
+\n\
+type IoResult<T> = Result<T, IoError>\n\
+\n\
+fn line(prefix: Text, n: Int) -> Bytes = \"{prefix}{n} {{x}}\\r\\n\".to_bytes()\n\
+\n\
+fn session<S: ByteStream>(stream: S) -> IoResult<Unit> requires [stream.read, stream.write] {\n\
+  var buffer = Bytes.empty()\n\
+  loop {\n\
+    match stream.read(16)? {\n\
+      Eof => return Ok(())\n\
+      Data(more) => buffer.append(more)\n\
+    }\n\
+    let fresh = line(\"+\", buffer.len())\n\
+    if fresh.len() > 0 {\n\
+      stream.write_all(fresh)?\n\
+    }\n\
+    let kept = buffer.slice(0, 1)\n\
+    stream.write_all(kept)?\n\
+    buffer.append(kept)\n\
+  }\n\
+}\n\
+\n\
+fn twice<S: ByteStream>(stream: S) -> IoResult<Unit> requires [stream.write] {\n\
+  var outer = Bytes.empty()\n\
+  outer.append(outer)\n\
+  var count = 0\n\
+  while count < 2 {\n\
+    stream.write_all(outer)?\n\
+    count = count + 1\n\
+  }\n\
+  Ok(())\n\
+}\n\
+\n\
+fn size(data: Bytes) -> Int = data.len()\n\
+\n\
+fn first(args: List<Bytes>) -> Int = size(args.at(0))\n";
+    let dir = adversary_sources("borrows-src", &[("borrows.ignite", source)]);
+    let file = dir.join("borrows.ignite");
+    let (program, std) = common::lower_typed(&file, &common::golden_std(), &adversary_substrate());
+    let lib = norm(&program.lib_rs);
+    for expected in [
+        "(format!(\"{}{} {{x}}\\r\\n\", prefix, n))",
+        "size(ignite_io::checked::at(args, 0, ",
+        "buffer.extend_from_slice(&more)",
+        "<S as ignite_io::ByteStream>::write_all(&stream, fresh.clone())",
+        "<S as ignite_io::ByteStream>::write_all(&stream, kept.clone())",
+        "buffer.extend_from_slice(&kept)",
+        "outer.extend_from_slice(&outer.clone())",
+        "<S as ignite_io::ByteStream>::write_all(&stream, outer.clone())",
+    ] {
+        assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
+    }
+    let borrowed = program
+        .lib_rs
+        .lines()
+        .find(|line| line.contains("size(ignite_io::checked::at(args"))
+        .unwrap_or_default();
+    assert!(!borrowed.contains(".clone()"), "{borrowed}");
+    cargo_build(&program, &std, "borrows");
+}
+
 /// story:rustgen-type-parameter-shadowing: inside `fn outer<S>` the
 /// literal `S { .. }` is the record `S`, and inside `fn pick<E>` the
 /// variants `E.A` and `E.B(n)` are the enum `E`'s; the generated Rust

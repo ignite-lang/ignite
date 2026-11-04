@@ -16,7 +16,7 @@ scope:
   path: crates/ignite-rustgen/src
 - confidence: inferred
   path: crates/ignite-types/src
-revision: 3
+revision: 5
 ---
 # Story: store-api-gaps
 
@@ -33,9 +33,20 @@ conditional remove, and an update step that returns an outcome beside the new va
   - E2 no atomic insert-or-update: `update` answers `None` for an absent id and a following `put`
     can lose another task's write. Observed at runtime (2026-11-04, compiler `9578530`): 16
     clients each sent `INCR fresh:<r>` for 2,000 fresh keys after a barrier; 1 of 32,000
-    increments lost on the Rust target, 2 of 32,000 on the LLVM target.
+    increments lost on the Rust target, 2 of 32,000 on the LLVM target. Done by
+    `story:store-atomic-upsert` (PR 19): the playground session's ESS history check at `225bda66`
+    (8 histories × 4,000 keys, 4 clients per key behind a barrier) found 1,822 (Rust) and 3,079
+    (LLVM) keys answered `:1` twice with ember on `update` then `put`, and 0 on both targets,
+    8 of 8 histories linearizable, with ember on `upsert`.
   - E3 no conditional remove.
-  - E4 the fn given to `Store.update` returns only the new `T`.
+  - E4 the fn given to `Store.update` and `Store.upsert` returns only the new `T`. ember
+    (playground session, 2026-11-04) now runs SETNX, SET NX/XX, GETSET, GETDEL, DEL, EXPIRE,
+    PERSIST and INCR's overflow check each as one `upsert` step. Its 4-client race probe went from
+    21 to 1,870 broken rounds of 8,000 per command to 0 on both targets. To get the command's reply
+    out of the step, ember stores it in an `Outcome` field of every bucket and reads it from the
+    returned value. That costs one field per bucket (24 B, inferred) and keeps the last GETSET or
+    GETDEL value until the next write. Wanted: a step that returns a reply beside the new value,
+    for example `upsert_with(id, f: fn(Option<T>) -> Step<T, R>) -> R`.
 
 ## Acceptance
 

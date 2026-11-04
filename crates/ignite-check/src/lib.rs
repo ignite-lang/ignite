@@ -326,7 +326,7 @@ pub fn method_effect(method: &str) -> Option<&'static str> {
 pub fn store_effect(method: &str) -> Option<&'static str> {
     match method {
         "get" | "values" => Some("read"),
-        "next_id" | "put" | "remove" | "update" => Some("write"),
+        "next_id" | "put" | "remove" | "update" | "upsert" => Some("write"),
         _ => None,
     }
 }
@@ -2806,6 +2806,7 @@ impl Checker {
                     "values" if receiver.name.name == "Store" => {
                         named("List", receiver.args.clone())
                     }
+                    "upsert" if receiver.name.name == "Store" => receiver.args.first()?.clone(),
                     _ => return None,
                 }
             }
@@ -3738,7 +3739,7 @@ fn builtin_applies(ty: &Type, method: &str) -> bool {
         }
         "Store" => matches!(
             method,
-            "next_id" | "get" | "put" | "remove" | "values" | "update"
+            "next_id" | "get" | "put" | "remove" | "values" | "update" | "upsert"
         ),
         "TcpListener" => matches!(method, "accept" | "local_port"),
         "TcpStream" => is_stream_method(method),

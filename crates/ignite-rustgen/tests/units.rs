@@ -544,6 +544,10 @@ fn builtin_methods() {
             "x.clone().into_bytes()",
         ),
         (
+            method(text("u"), "to_bytes", vec![]),
+            "String::from(\"u\").into_bytes()",
+        ),
+        (
             method(name("b"), "to_text", vec![]),
             "String::from_utf8_lossy(&b).into_owned()",
         ),
