@@ -5,6 +5,8 @@ kind: story
 status: active
 title: Atomic insert-or-update on Store
 summary: 'Store.upsert(id, f: fn(Option<T>) -> T): no lost write when two tasks insert the same new key'
+relations:
+- derived_from: story:store-api-gaps
 scope:
 - confidence: inferred
   path: crates/ignite-io/src
