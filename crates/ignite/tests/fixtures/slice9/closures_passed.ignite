@@ -1,0 +1,285 @@
+// A closure literal passed straight to `Store.update` or `List.map` is
+// called before the call returns. On the Rust target it is emitted as a
+// plain closure that borrows its captures instead of an `Arc` that copies
+// each one (`docs/slice.md` section 13.3). Captures are still by copy: each
+// test here must give the same answer on both targets, for captures read,
+// copied into the result, shadowed, rebound after the call, and for a
+// closure stored in a binding beside one passed.
+
+type Entry {
+  key: Text
+  hits: Int
+  tags: List<Text> = []
+}
+
+type Bucket {
+  entries: List<Entry>
+  stamp: Int = 0
+}
+
+fn entry(key: Text, hits: Int) -> Entry = Entry { key = key, hits = hits }
+
+fn bucket() -> Bucket = Bucket { entries = [entry("a", 1), entry("b", 2)] }
+
+fn bumped(bucket: Bucket, key: Text, by: Int, now: Int) -> Bucket {
+  var out = []
+  for e in bucket.entries {
+    if e.key == key {
+      out.push(Entry { hits = e.hits + by, ..e })
+    } else {
+      out.push(e)
+    }
+  }
+  Bucket { entries = out, stamp = now }
+}
+
+// Borrowed parameters captured, read by a call and compared.
+fn bump(db: Store<Bucket>, id: Int, key: Text, by: Int, now: Int) -> Int {
+  match db.update(id, |b| if by > 0 { bumped(b, key, by, now) } else { b }) {
+    Some(b) => b.stamp + b.entries.len()
+    None => -1
+  }
+}
+
+// A captured record and text copied into the closure's result: the
+// enclosing fn still owns them after the call.
+fn replace_with(db: Store<Bucket>, id: Int, extra: Entry, label: Text) -> Text {
+  let tagged = Entry { tags = [label], ..extra }
+  _ = db.update(id, |b| Bucket { entries = [tagged, extra], ..b })
+  let got = match db.get(id) {
+    Some(b) => b.entries.len()
+    None => 0
+  }
+  tagged.key + extra.key + label + got.to_text()
+}
+
+// A local captured, then rebound after the call: the closure saw the value
+// at creation.
+fn rebound(db: Store<Bucket>, id: Int) -> Int {
+  var stamp = 7
+  let first = db.update(id, |b| Bucket { stamp = stamp, ..b })
+  stamp = stamp + 100
+  let second = db.update(id, |b| Bucket { stamp = b.stamp + stamp, ..b })
+  stamp = 0
+  match (first, second) {
+    (Some(a), Some(b)) => a.stamp * 1000 + b.stamp + stamp
+    _ => -1
+  }
+}
+
+// A closure parameter shadowing a captured name, and a `for` element
+// captured by reference.
+fn shadowed(db: Store<Bucket>, ids: List<Int>, keys: List<Text>) -> Int {
+  var total = 0
+  for key in keys {
+    for id in ids {
+      match db.update(id, |key| Bucket { stamp = key.stamp + 1, ..key }) {
+        Some(b) => {
+          total = total + b.stamp
+        }
+        None => {}
+      }
+      _ = db.update(id, |b| bumped(b, key, 10, b.stamp))
+    }
+  }
+  total
+}
+
+// `map` with captures: a borrowed parameter, an owned local, a field of a
+// borrowed record, a nested `map` and a stored closure inside a passed one.
+fn mapped(xs: List<Int>, offset: Int, bag: Bucket) -> List<Int> {
+  let scale = 3
+  let base = bag.stamp
+  let ys = xs.map(|x| x * scale + offset + base + bag.entries.len())
+  let nested = ys.map(|y| [y, offset].map(|z| z + y).len() + y)
+  let inner = nested.map(|n| {
+    let f = |m: Int| m + scale
+    f(n) + offset
+  })
+  inner
+}
+
+// `map` whose closure copies a captured text and record into each result.
+fn labels(xs: List<Int>, prefix: Text, template: Entry) -> List<Entry> {
+  xs.map(|x| Entry { key = prefix + x.to_text(), hits = x, ..template })
+}
+
+// The receiver's own variable read in the closure, and the result pushed
+// to a list the closure also reads.
+fn self_read(xs: List<Int>) -> List<List<Int>> {
+  var out: List<List<Int>> = []
+  var ys = xs
+  ys = ys.map(|y| y + ys.len())
+  out.push(ys.map(|y| y + out.len()))
+  out.push(ys.map(|y| y * out.len()))
+  out
+}
+
+// A closure stored in a binding beside the same closure passed: the stored
+// one keeps the value at creation after the captured binding is rebound.
+fn stored_and_passed(xs: List<Int>) -> Int {
+  var n = 1
+  let stored = |x: Int| x + n
+  let passed = xs.map(|x| x + n)
+  n = 50
+  let later = xs.map(stored)
+  let again = xs.map(|x| x + n)
+  passed[0] * 10000 + later[0] * 100 + again[0]
+}
+
+fn stored(db: Store<Bucket>, id: Int) -> Bucket = match db.get(id) {
+  Some(b) => b
+  None => Bucket { entries = [], stamp = -1 }
+}
+
+test "store update with captured parameters" {
+  let db: Store<Bucket> = Store.new()
+  db.put(1, bucket())
+  assert bump(db, 1, "b", 5, 9) == 11
+  assert bump(db, 1, "b", 0, 4) == 11
+  assert bump(db, 2, "a", 1, 1) == -1
+  assert stored(db, 1).entries[1].hits == 7
+}
+
+test "store update copying captured values into the result" {
+  let db: Store<Bucket> = Store.new()
+  db.put(3, bucket())
+  assert replace_with(db, 3, entry("x", 4), "t") == "xxt2"
+  assert stored(db, 3).entries[0].tags == ["t"]
+  assert stored(db, 3).entries[1].tags == []
+}
+
+test "store update after the captured binding is rebound" {
+  let db: Store<Bucket> = Store.new()
+  db.put(1, bucket())
+  assert rebound(db, 1) == 7114
+}
+
+test "store update with shadowed and loop captures" {
+  let db: Store<Bucket> = Store.new()
+  db.put(1, bucket())
+  db.put(2, bucket())
+  assert shadowed(db, [1, 2, 3], ["a", "b"]) == 6
+  let b = stored(db, 2)
+  assert b.entries[0].hits + b.entries[1].hits == 23
+}
+
+test "map with captures" {
+  assert mapped([1, 2], 10, bucket()) == [30, 33]
+  let t = Entry { key = "", hits = 0, tags = ["k"] }
+  let got = labels([1, 2], "p", t)
+  assert got == [Entry { key = "p1", hits = 1, tags = ["k"] }, Entry { key = "p2", hits = 2, tags = ["k"] }]
+  assert t.tags == ["k"]
+}
+
+test "map reading its receiver's variable" {
+  assert self_read([1, 2]) == [[3, 4], [3, 4]]
+}
+
+test "a stored closure beside a passed one" {
+  assert stored_and_passed([1]) == 20251
+}
+
+// `upsert` with a closure literal: borrowed parameters, a local and a `for`
+// element captured, the captured values copied into the stored value and
+// read again after the call.
+fn upsert_hits(db: Store<Bucket>, ids: List<Int>, key: Text, by: Int) -> Text {
+  let fresh = entry(key, by)
+  var seen = ""
+  for id in ids {
+    let b = db.upsert(id, |old| match old {
+      Some(b) => bumped(b, key, by, id)
+      None => Bucket { entries = [fresh], stamp = id }
+    })
+    seen = seen + "{id}:{b.stamp}:{b.entries.len()},"
+  }
+  seen + fresh.key + fresh.hits.to_text() + key
+}
+
+// Nested passed closures: a `map` inside an `update` inside an `upsert`'s
+// sibling, each reading captures of the enclosing fn and of the outer
+// closure's parameter.
+fn nested(db: Store<Bucket>, id: Int, by: Int, label: Text) -> Int {
+  _ = db.update(id, |b| Bucket { entries = b.entries.map(|e| Entry { hits = e.hits + by + b.stamp, tags = [label], ..e }), ..b })
+  let up = db.upsert(id, |old| match old {
+    Some(b) => Bucket { stamp = b.entries.map(|e| e.hits * by).len() + by, ..b }
+    None => bucket()
+  })
+  up.stamp * 100 + up.entries[0].hits + up.entries[1].hits
+}
+
+// A closure stored in a binding and then passed keeps the stored form: the
+// captured local is rebound between creation and the call.
+fn stored_then_passed(db: Store<Bucket>, id: Int) -> Int {
+  var stamp = 3
+  let f = |b: Bucket| Bucket { stamp = b.stamp + stamp, ..b }
+  let g = |old: Option<Bucket>| match old {
+    Some(b) => Bucket { stamp = b.stamp * stamp, ..b }
+    None => Bucket { entries = [], stamp = stamp }
+  }
+  stamp = 1000
+  _ = db.update(id, f)
+  let up = db.upsert(id, g)
+  let other = db.upsert(id + 1, g)
+  up.stamp * 10 + other.stamp + stamp
+}
+
+// A capture read after the call that the closure's result holds a copy of,
+// then changed: the stored value does not change with it.
+fn kept_after(db: Store<Bucket>, id: Int) -> Int {
+  var tags = ["x"]
+  _ = db.upsert(id, |old| Bucket { entries = [Entry { key = "k", hits = tags.len(), tags = tags }] })
+  tags.push("y")
+  let ys = [1, 2].map(|n| tags.len() + n)
+  tags.push("z")
+  stored(db, id).entries[0].tags.len() * 1000 + ys[1] * 10 + tags.len()
+}
+
+test "store upsert with captured parameters, a local and a for element" {
+  let db: Store<Bucket> = Store.new()
+  db.put(2, bucket())
+  assert upsert_hits(db, [1, 2, 1], "a", 4) == "1:1:1,2:2:2,1:1:1,a4a"
+  assert stored(db, 1).entries == [entry("a", 8)]
+  assert stored(db, 2).entries[0].hits == 5
+}
+
+test "nested passed closures" {
+  let db: Store<Bucket> = Store.new()
+  db.put(1, Bucket { entries = [entry("a", 1), entry("b", 2)], stamp = 10 })
+  assert nested(db, 1, 2, "n") == 427
+  assert stored(db, 1).entries[0].tags == ["n"]
+  let fresh: Store<Bucket> = Store.new()
+  assert nested(fresh, 1, 2, "n") == 3
+}
+
+test "a closure stored in a binding, then passed to update and upsert" {
+  let db: Store<Bucket> = Store.new()
+  db.put(1, bucket())
+  assert stored_then_passed(db, 1) == 1093
+}
+
+test "a capture changed after the call it was passed to" {
+  let db: Store<Bucket> = Store.new()
+  assert kept_after(db, 1) == 1043
+}
+
+// A closure parameter with the name of a borrowed parameter of the
+// enclosing fn: inside the closure the name is the closure's own value.
+fn shadow_param(db: Store<Bucket>, b: Bucket, by: Int) -> Int {
+  let up = db.update(1, |b| Bucket { stamp = b.stamp + by, ..b })
+  let ins = db.upsert(2, |by| match by {
+    Some(x) => x
+    None => b
+  })
+  let xs = [1, 2].map(|by| by * 10)
+  match up {
+    Some(u) => u.stamp * 1000 + ins.stamp * 100 + xs[1] + b.stamp
+    None => -1
+  }
+}
+
+test "a closure parameter shadowing a borrowed parameter" {
+  let db: Store<Bucket> = Store.new()
+  db.put(1, Bucket { entries = [], stamp = 4 })
+  assert shadow_param(db, Bucket { entries = [], stamp = 3 }, 5) == 9323
+}
