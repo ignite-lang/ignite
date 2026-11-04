@@ -6145,11 +6145,16 @@ No move, even when the rule above would allow one:
 - inside the arms of a `match` whose scrutinee is a place overlapping the moved one, and inside
   the body of a `for` whose iterable overlaps it: on LLVM their pattern bindings point into it
   (`docs/llvm.md` §4), on Rust they borrow it;
-- at an argument when another argument of the same call, or its receiver, mentions an
-  overlapping place at all: a read, an in-place change, or an assignment to it or to a place
-  rooted at it. A borrowed parameter would see the moved value change (`f(s, s)`,
-  `f(s.count, s)`), and on LLVM a later argument that assigns `s` would overwrite the slot the
-  callee owns (`take(s, if c { s = fresh(); 0 } else { 0 })`);
+- at an argument when another argument of the same call or of an enclosing call, or the
+  receiver of an enclosing builtin, mentions an overlapping place at all: a read, an in-place
+  change, or an assignment to it or to a place rooted at it. A borrowed parameter would see the
+  moved value change (`f(s, s)`, `f(s.count, s)`, `look(s, wipe(s))`, `s.items.at(wipe(s))`),
+  and on LLVM a later argument that assigns `s` would overwrite the slot the callee owns
+  (`take(s, if c { s = fresh(); 0 } else { 0 })`). For an enclosing call the operands that count
+  are those evaluated before the one the move is in and passed in place: a borrowed argument, a
+  builtin or borrowed UFCS receiver, the receiver of a fn-field call. An argument of an enclosing
+  call in a move position is a value once evaluated (moved or copied), and a later one is kept by
+  liveness;
 - anywhere inside a closure body (the analysis does not enter closure bodies).
 
 Examples. R1's shape: in `while i < n { s = step(s, i); i = i + 1 }` the `s` argument moves,
@@ -6338,8 +6343,9 @@ pub struct ModuleTypes {
 }
 ```
 
-Both struct literals of `ModuleTypes` end in `..Default::default()`, so the field is add-only;
-`query_snapshot` need not copy it (snapshots are no typing input). In `crates/ignite-syntax/src/ast.rs`:
+Both struct literals of `ModuleTypes` end in `..Default::default()`, so the field is add-only.
+`query_snapshot` copies it: `TypedProgram::consumed` answers for a callee of an imported module
+from that module's snapshot, so a backend asks it about a std fn the program calls. In `crates/ignite-syntax/src/ast.rs`:
 `PatternKind::Rest(Option<Ident>)`. Nothing is renamed.
 
 ### 20.7 Diagnostics
