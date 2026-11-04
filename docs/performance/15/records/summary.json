@@ -1,0 +1,457 @@
+{
+  "accepted": false,
+  "any_command_failed": true,
+  "candidate_failed": false,
+  "closure_controls_pass": false,
+  "commits": {
+    "baseline": "296f84973552c9deab9b90df669b4701fc27da66",
+    "candidate": "c20f04b6feadc488869c2211f1f2d32ca67ff9d5"
+  },
+  "comparable_low_load": false,
+  "comparison_missing": [
+    "published comparison not configured"
+  ],
+  "coverage_pass": false,
+  "frozen_baseline_matches": false,
+  "ignite_test_absolute_pass": true,
+  "missing": [
+    "cold-clippy",
+    "cold-fmt",
+    "cold-workspace",
+    "gate-cold"
+  ],
+  "over_budget": [
+    "check",
+    "file-ignite_test",
+    "file-rustgen",
+    "no-run-touch",
+    "todod-llvm-dev",
+    "todod-llvm-release",
+    "warm-inline"
+  ],
+  "results": [
+    {
+      "baseline": "baseline",
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            12.68017578125,
+            5.40966796875
+          ],
+          "pair": "1793748018410286893-cold-1",
+          "reason": "load_mismatch"
+        },
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            6.052734375,
+            15.6044921875
+          ],
+          "pair": "1793748018410286893-cold-2",
+          "reason": "load_mismatch"
+        }
+      ],
+      "unit": "cold-fmt",
+      "valid_pairs": 0
+    },
+    {
+      "baseline": "baseline",
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            13.5869140625,
+            5.40966796875
+          ],
+          "pair": "1793748018410286893-cold-1",
+          "reason": "load_mismatch"
+        },
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            6.052734375,
+            14.1337890625
+          ],
+          "pair": "1793748018410286893-cold-2",
+          "reason": "load_mismatch"
+        }
+      ],
+      "unit": "cold-clippy",
+      "valid_pairs": 0
+    },
+    {
+      "baseline": "baseline",
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            16.60693359375,
+            5.13623046875
+          ],
+          "pair": "1793748018410286893-cold-1",
+          "reason": "load_mismatch"
+        },
+        {
+          "exits": [
+            101,
+            0
+          ],
+          "loads": [
+            8.07275390625,
+            14.123046875
+          ],
+          "pair": "1793748018410286893-cold-2",
+          "reason": "command_failed"
+        }
+      ],
+      "unit": "cold-workspace",
+      "valid_pairs": 0
+    },
+    {
+      "baseline": "baseline",
+      "before": 14.2886445145,
+      "candidate": 12.1869405915,
+      "excluded": [],
+      "loads": [
+        4.18701171875,
+        6.20361328125
+      ],
+      "ratio": 0.9798009245167647,
+      "unit": "cold-inline",
+      "valid_pairs": 2
+    },
+    {
+      "baseline": "baseline",
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            12.68017578125,
+            5.40966796875
+          ],
+          "pair": "1793748018410286893-cold-1",
+          "reason": "load_mismatch"
+        },
+        {
+          "exits": [
+            1,
+            0
+          ],
+          "loads": [
+            6.052734375,
+            15.6044921875
+          ],
+          "pair": "1793748018410286893-cold-2",
+          "reason": "command_failed"
+        }
+      ],
+      "unit": "gate-cold",
+      "valid_pairs": 0
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.967226064,
+      "candidate": 0.798174661,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            5.90478515625,
+            11.419921875
+          ],
+          "pair": "1793750215707755748-warm-1",
+          "reason": "load_mismatch"
+        },
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            11.2880859375,
+            5.3115234375
+          ],
+          "pair": "1793750215707755748-warm-3",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        2.74853515625,
+        12.259765625
+      ],
+      "ratio": 0.8201563486816873,
+      "unit": "warm-fmt",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 4.38396765,
+      "candidate": 4.035283594,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            5.90478515625,
+            11.419921875
+          ],
+          "pair": "1793750215707755748-warm-1",
+          "reason": "load_mismatch"
+        },
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            11.2880859375,
+            5.3115234375
+          ],
+          "pair": "1793750215707755748-warm-3",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        2.74853515625,
+        12.259765625
+      ],
+      "ratio": 1.0029923765518662,
+      "unit": "warm-clippy",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 403.407447059,
+      "candidate": 401.0981799125,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            13.19140625,
+            5.0458984375
+          ],
+          "pair": "1793750215707755748-warm-3",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        2.6083984375,
+        11.83837890625
+      ],
+      "ratio": 0.9921988218545915,
+      "unit": "warm-workspace",
+      "valid_pairs": 4
+    },
+    {
+      "baseline": "baseline",
+      "before": 1.256956355,
+      "candidate": 1.42458343,
+      "excluded": [],
+      "loads": [
+        2.7265625,
+        12.1533203125
+      ],
+      "ratio": 1.1642747812631928,
+      "unit": "warm-inline",
+      "valid_pairs": 5
+    },
+    {
+      "baseline": "baseline",
+      "before": 395.386812717,
+      "candidate": 393.148413014,
+      "excluded": [
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            5.90478515625,
+            11.419921875
+          ],
+          "pair": "1793750215707755748-warm-1",
+          "reason": "load_mismatch"
+        },
+        {
+          "exits": [
+            0,
+            0
+          ],
+          "loads": [
+            11.2880859375,
+            5.3115234375
+          ],
+          "pair": "1793750215707755748-warm-3",
+          "reason": "load_mismatch"
+        }
+      ],
+      "loads": [
+        2.74853515625,
+        12.259765625
+      ],
+      "ratio": 1.0163841113369547,
+      "unit": "gate-warm",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.03221378,
+      "candidate": 0.030166744,
+      "excluded": [],
+      "loads": [
+        2.7265625,
+        12.1533203125
+      ],
+      "ratio": 0.9293507933561352,
+      "unit": "no-run-warm",
+      "valid_pairs": 5
+    },
+    {
+      "baseline": "baseline",
+      "before": 2.987165627,
+      "candidate": 4.025378736,
+      "excluded": [],
+      "loads": [
+        2.7265625,
+        12.1533203125
+      ],
+      "ratio": 1.1319165206101243,
+      "unit": "no-run-touch",
+      "valid_pairs": 5
+    },
+    {
+      "baseline": "baseline",
+      "before": 2.134548105,
+      "candidate": 2.362729771,
+      "excluded": [],
+      "loads": [
+        2.7265625,
+        11.49853515625
+      ],
+      "ratio": 1.122081302789682,
+      "unit": "file-ignite_test",
+      "valid_pairs": 5
+    },
+    {
+      "baseline": "baseline",
+      "before": 1.825403391,
+      "candidate": 2.428537299,
+      "excluded": [],
+      "loads": [
+        2.74853515625,
+        11.49853515625
+      ],
+      "ratio": 1.3251538161081327,
+      "unit": "file-rustgen",
+      "valid_pairs": 5
+    },
+    {
+      "baseline": "baseline",
+      "before": 3.468007548,
+      "candidate": 3.44911093,
+      "excluded": [],
+      "loads": [
+        8.1181640625,
+        10.88232421875
+      ],
+      "ratio": 0.9698007468376724,
+      "unit": "todod-rust-dev",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.292595232,
+      "candidate": 0.340316779,
+      "excluded": [],
+      "loads": [
+        7.7880859375,
+        10.4912109375
+      ],
+      "ratio": 1.1377040170643413,
+      "unit": "todod-llvm-dev",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 4.537091485,
+      "candidate": 4.581609707,
+      "excluded": [],
+      "loads": [
+        7.7880859375,
+        10.4912109375
+      ],
+      "ratio": 0.9769953395594799,
+      "unit": "todod-rust-release",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.752435174,
+      "candidate": 0.86615631,
+      "excluded": [],
+      "loads": [
+        8.1875,
+        9.66552734375
+      ],
+      "ratio": 1.151137453337608,
+      "unit": "todod-llvm-release",
+      "valid_pairs": 3
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.07875783,
+      "candidate": 0.088584263,
+      "excluded": [],
+      "loads": [
+        7.3388671875,
+        7.6298828125
+      ],
+      "ratio": 1.1166063209783894,
+      "unit": "check",
+      "valid_pairs": 15
+    },
+    {
+      "baseline": "baseline",
+      "before": 0.077245461,
+      "candidate": 0.084408712,
+      "excluded": [],
+      "loads": [
+        7.3388671875,
+        7.6298828125
+      ],
+      "ratio": 1.0920998467907415,
+      "unit": "plan",
+      "valid_pairs": 15
+    }
+  ],
+  "rustgen_11b_pass": false,
+  "schema": "ignite-performance/1",
+  "warm_workspace_absolute_pass": false
+}

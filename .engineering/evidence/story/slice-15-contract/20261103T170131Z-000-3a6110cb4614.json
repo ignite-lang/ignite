@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T17:01:31Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-15-contract",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "docs/slice15-review.md (0c4eeed): vision section 6 items checked, 2 blockers and 10 should-fix, each resolved in a211216 per its Resolution section; merged c98a41f",
+    "reference": "https://github.com/ignite-lang/ignite/tree/feat/slice15-protocols-p2"
+  }
+}

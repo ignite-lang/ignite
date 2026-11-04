@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T19:27:42Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-15-rfc-importer",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "rows 19-24 of docs/slice.md 19.0 at 70a5777: cargo test -p ignite --test main rfc:: 24 passed, layering:: 2 passed, cargo tree -p ignite -e normal has no HTTP client; red first on import_writes_the_golden_twice; RFC 9112 131 and RFC 9110 subset 73 requirements, digests as 19.9; adversary 9e1c1cc: 5 cases fixed in 70a5777; merged 9c3cc73, post-merge workspace: cargo test --workspace 878 passed 0 failed 9 ignored, task test-ignite 191 per target, fmt and clippy exit 0",
+    "reference": "https://github.com/ignite-lang/ignite/tree/feat/slice15-protocols-p2"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T22:05:00Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-15-catalogues",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "rows 25-30 of docs/slice.md 19.0 at 066e046: cargo test -p ignite --test main rfc:: 32 passed 1 ignored (verbatim test passes with IGNITE_RFC_TEXT_DIR); RFC 854 47, 855 12, 1143 27, 9112 131, 9110 73 requirements; sources match 19.9; red first on committed_catalogues_check_silently; adversary 707608f: 7 missing RFC 854 sentences and the RFC 1143 header fixed in 066e046, word-table limits recorded as 19.14 item 15; merged 7ab3f7c, post-merge workspace: cargo test --workspace 911 passed 0 failed 10 ignored, task test-ignite 191 per target, fmt and clippy exit 0",
+    "reference": "https://github.com/ignite-lang/ignite/tree/feat/slice15-protocols-p2"
+  }
+}

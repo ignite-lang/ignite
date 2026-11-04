@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T19:27:42Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-15-claim-model",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "rows 14-18, 40, 41 of docs/slice.md 19.0 at e804408: cargo test -p ignite-eval --test main 22 passed, cargo test -p ignite --test main plan:: 15 passed; red first on e090_missing_status; adversary c3b8f29: 2 cases (duplicate satisfier, duplicate requirement row) fixed in e804408; merged 9c3cc73, post-merge workspace: cargo test --workspace 878 passed 0 failed 9 ignored, task test-ignite 191 per target, fmt and clippy exit 0",
+    "reference": "https://github.com/ignite-lang/ignite/tree/feat/slice15-protocols-p2"
+  }
+}
