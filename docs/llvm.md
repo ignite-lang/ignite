@@ -387,7 +387,10 @@ position, even with no buffer.
   pointer to the fn value `f` and the thunk `ptr "store_update.<T>"(ptr f, ptr old)`, which
   copies `old` into the arena, calls `f` (code and env, section 3.1) on it and returns the result copied to the heap. The runtime calls the thunk
   under the store's lock, so `update` is atomic; the arena memory the thunk allocates
-  belongs to the calling task and is released by its loop regions as usual.
+  belongs to the calling task and is released by its loop regions as usual. `get`,
+  `values` and `update`'s result copy from the stored heap value into the arena under the
+  lock (`ignite_io::Store`'s `read`, `read_values`, `replace_with`), so each value is
+  copied once; the thunk reads `old` in place.
 - Failure containment (`docs/slice.md` section 14.8, `vision.md` T1). A failed
   `assert`, a `?` on `Err` or `None` in a test, an integer overflow or division by zero,
   an index or `slice` out of range and a `match` with no arm each end the task that ran
