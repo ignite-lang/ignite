@@ -22,6 +22,12 @@ executables today (Rust target, LLVM target), WebAssembly components with hot re
 later still an operations controller that keeps declared objectives. Self-hosting is the end
 state.
 
+Ignite is also a replacement for Rust: the project exists because of rustc's compile times (Timo,
+2026-11-04). Build time is a product requirement beside the operational goals, not only the gate
+budget of invariant 9, and the LLVM target is the fast-build path (`todod` 0.309 s against
+3.998 s on the Rust target, dev, `AGENTS.md` slice 12b rows). The external review of 2026-11-04
+and what follows from it: `research/review-2026-11-04.md`.
+
 ## 2 Where it stands
 
 | layer | state | evidence |
