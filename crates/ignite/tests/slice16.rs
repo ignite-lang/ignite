@@ -52,3 +52,37 @@ fn closure_shapes_pass_on_both_targets() {
     );
     assert!(!stdout.contains("FAILED"), "{stdout}");
 }
+
+/// 20.4.2 on both targets for the callee forms `closures.ignite` and
+/// `calls.ignite` leave out: the evaluation order (callee first, then the
+/// arguments left to right) and an indexed callee whose list's element type
+/// a later `push` decides, which `ignite check` accepts.
+#[test]
+fn callee_forms_pass_on_both_targets() {
+    let dir = out_dir("callee_forms");
+    let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("test")
+        .arg(fixture("callee_forms.ignite"))
+        .args(["--target", "all", "--out"])
+        .arg(&dir)
+        .arg("--target-dir")
+        .arg(dir.join("cargo"))
+        .arg("--runtime")
+        .arg(common::runner_archive())
+        .output()
+        .expect("run ignite test");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert_eq!(
+        stdout
+            .matches("test result: ok. 2 passed; 0 failed;")
+            .count(),
+        2,
+        "{stdout}"
+    );
+}

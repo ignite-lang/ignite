@@ -1,0 +1,61 @@
+import std.net.{Pipe, PipeStream}
+
+type IoResult<T> = Result<T, IoError>
+
+type IntFn = fn(Int) -> Int
+
+type IntFn2 = fn(Int, Int) -> Int
+
+fn double(x: Int) -> Int = x * 2
+
+fn sum2(a: Int, b: Int) -> Int = a + b
+
+fn tag(s: PipeStream, t: Text) -> IntFn requires [s.write] {
+  let r = s.write_all(t.to_bytes())
+  double
+}
+
+fn tag2(s: PipeStream, t: Text) -> IntFn2 requires [s.write] {
+  let r = s.write_all(t.to_bytes())
+  sum2
+}
+
+fn arg(s: PipeStream, t: Text, n: Int) -> Int requires [s.write] {
+  let r = s.write_all(t.to_bytes())
+  n
+}
+
+fn drain(b: PipeStream) -> IoResult<Text> requires [b.read] {
+  var out = Bytes.empty()
+  loop {
+    match b.read(64)? {
+      Eof => break
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out.to_text())
+}
+
+fn called_before_push() -> Int {
+  var fs = []
+  let n = if fs.len() > 0 { fs[0](1) } else { 0 }
+  fs.push(double)
+  n
+}
+
+test "the callee is evaluated before the arguments" {
+  let (a, b) = Pipe.pair()
+  let fs = [double, double]
+  let x = tag(a, "F")(arg(a, "1", 1))
+  let y = tag2(a, "G")(arg(a, "2", 2), arg(a, "3", 3))
+  let z = fs[arg(a, "I", 1)](arg(a, "4", 4))
+  a.close()
+  assert x == 2
+  assert y == 5
+  assert z == 8
+  assert drain(b)? == "F1G23I4"
+}
+
+test "an indexed callee whose list a later push decides" {
+  assert called_before_push() == 0
+}
