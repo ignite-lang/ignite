@@ -1,0 +1,32 @@
+package fixtures.store
+
+// `Store<T>` under `ignite test` on both targets (crates/ignite/tests/ignite_test.rs):
+// a failure inside `update`'s `f`, which runs under the store's lock, ends
+// its task with its report and leaves the store usable.
+
+fn overflow(s: Store<Int>, done: PipeStream) -> Result<Unit, IoError> requires [s.write, done.write] {
+  _ = s.update(1, |v| v + 1)
+  done.write_all(b"not failed")?
+  Ok(())
+}
+
+test "a failing update in a task leaves the store usable" {
+  let s: Store<Int> = Store.new()
+  s.put(1, 9223372036854775807)
+  let (a, b) = Pipe.pair()
+  a.set_idle_timeout(5000)?
+  spawn overflow(s, b)
+  match a.read(16)? {
+    Eof => {}
+    Data(_) => assert false, "the update did not fail"
+  }
+  assert s.get(1) == Some(9223372036854775807)
+  s.put(2, 5)
+  assert s.update(2, |v| v * 2) == Some(10)
+}
+
+test "a failing update fails its test" {
+  let s: Store<Int> = Store.new()
+  s.put(1, 9223372036854775807)
+  _ = s.update(1, |v| v + 1)
+}
