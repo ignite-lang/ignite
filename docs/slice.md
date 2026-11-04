@@ -852,7 +852,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E041 | (slice 9) a name two glob imports provide, used without an explicit import (section 13.1 row 6) |
 | E054 | nesting deeper than 256 levels of brackets, type arguments, prefix operators or `return` (section 3); string literals nested deeper than 32 interpolations (section 13.1 row 1) |
 | E055 | a record that contains itself through fields and tuples alone, so a value would be infinite; recursion through an enum payload, `Option`, `Result` or `List` is allowed and boxed (section 13.4) |
-| E056 | a parameter of a fn, role, fn type or closure named like an ambient capability: `stdin`, `stdout`, `process`, `net` (section 13.11) |
+| E056 | a parameter of a fn, role, fn type or closure named like an ambient capability: `stdin`, `stdout`, `process`, `net`, since slice 17 also `clock` (section 13.11, 21.1 probe p1) |
 | E057 | a type parameter of a generic record, enum or alias that no field, payload or aliased type uses (section 13.11) |
 | E099 | (slice 14) a bound naming an interface other than `ByteStream` or more than one interface, or `ByteStream` in a type position (section 18.7) |
 
@@ -5159,18 +5159,28 @@ Fixture paths without a directory are under `crates/ignite/tests/fixtures/slice1
 | 32 | codegen revision | `git diff c539392 -- crates/ignite/src/apply/plan.rs` | `CODEGEN_REVISION` differs from the base | U1 |
 | 33 | gate | `task gate` | exit 0 on the slice branch at the close | every unit |
 | 34 | gate time | 21.14 | the records of 21.14 exist under `docs/performance/17/` and in `AGENTS.md` | U6 |
+| 35 | no laundering through a parameter named `clock` | `cargo test -p ignite-check --test main fixtures::` | fixture `e056_clock_parameter` (probe p1) gives exactly one `E056` at the parameter `clock`; `AMBIENT_HEADS` holds `clock` | U1 |
 
 ### 21.1 Current state and verdicts (at `c539392`)
 
-Probes, run with `target/debug/ignite check` built from the base:
+Probes, run 2026-11-04 with `target/debug/ignite check` built from the base (`cargo build -p
+ignite`, exit 0):
 
 - p1, `fn helper(clock: Int) -> Duration requires [clock.read] = Clock.monotonic()` called from
-  `fn outer() requires []`: PROBE_P1.
-- p2, an `HttpServer` handler over `Store<Int>` that calls `Clock.monotonic()`: PROBE_P2.
-- p3, `resource files: Directory { path = "workspace" }` and `resource tools: Launcher`:
-  PROBE_P3.
+  `fn outer() -> Duration requires [] = helper(1)`: silent, exit 0. A parameter named `clock`
+  absorbs the ambient `clock.read`, so `outer` reads the clock while declaring nothing. A
+  handler can launder an ambient effect this way past `requires [state.*]`, which breaks P3;
+  U1 closes it (row 35).
+- p2, an `HttpServer` handler over `Store<Int>` that calls `Clock.monotonic()`: exactly one
+  ``E017 effectful function `handle` does not fit `fn(state: Store<Int>, request: Request) ->
+  Response requires [state.*]`: its effect `clock.read` is not covered by the type's
+  `requires` ``, exit 1.
+- p3, `resource files: Directory { path = "workspace" }` and `resource tools: Launcher`: two
+  ``E020 unsupported resource kind `Directory`; expected `TcpListener` or `Store` `` (and the same
+  for `Launcher`), exit 1.
 - p4, one state record built from two `Store` resources, `HttpApp { state = Both { counts =
-  counts, names = names }, handle }`: PROBE_P4.
+  counts, names = names }, handle }`, the handler using both through `state`: silent, exit 0.
+  A state record composes several capabilities today.
 
 | fact | where | verdict |
 |---|---|---|
@@ -5179,7 +5189,7 @@ Probes, run with `target/debug/ignite check` built from the base:
 | F3 the resource kinds are `TcpListener` and `Store` | `resource` in `crates/ignite-types/src/typer/system.rs`, `lower_resources` in `crates/ignite-rustgen/src/lib.rs` | four kinds added; the E020 text changes (row 31) |
 | F4 a handler may act only on its state | `HttpApp` in `std/protocol/http.ignite` (`requires [state.*]`); probe p2 | capabilities are values in the state, not statics (21.3) |
 | F5 `Store` methods are effectful by the receiver's declared type, other substrate methods by name | `store_op` and `store_effect`; `EFFECTFUL_METHODS` and `method_effect` | the new methods follow `store_op`, because `list` (`examples/todo`), `run` (`std.control`) and `entries` (`std.deploy`) are fn names a by-name table would capture |
-| F6 the ambient heads are `stdin`, `stdout`, `process`, `net` | `AMBIENT_HEADS` | no new head: the capabilities are not ambient; the `clock` finding of p1 is 21.15's |
+| F6 the ambient heads are `stdin`, `stdout`, `process`, `net` | `AMBIENT_HEADS` | `clock` is missing (probe p1): U1 adds it, so a parameter named `clock` is E056 (row 35); the capabilities add no head, they are not ambient |
 | F7 `ignite run` starts an executable without a working directory of its own | `spawn` in `crates/ignite/src/run/process.rs` | a relative `Directory.path` resolves against `ignite run`'s working directory (21.6) |
 | F8 the drain blocks SIGTERM in the main thread and in every thread it starts | `ignite_io::drain::install` | a child must start with an empty signal mask; Rust's `Command` is believed to reset it, unverified, so row 13 is required |
 | F9 sockets are opened close-on-exec by Rust's `std::net` | `ignite_io::net` | believed, unverified for every descriptor the runtime opens; row 14 |
@@ -5553,7 +5563,7 @@ Changed codes:
 | unit | story | owns | depends on | first failing test | rows |
 |---|---|---|---|---|---|
 | U0 | `story:slice-17-contract` | this section, the section-8 rows, `docs/slice17-review.md` | — | — | — |
-| U1 | `story:slice-17-frontend` | the builtin types, statics, methods and effects in `crates/ignite-check/src/lib.rs` (with `can_hold_handle`) and `crates/ignite-types/src/{builtins.rs,typer/effects.rs,typer/system.rs}`; E104, E140, E141 texts and fixtures; the model arm in `crates/ignite-eval`; `std/fs.ignite` and `std/process.ignite` with their records, helpers and builtin doc comments, without tests; `SUBSTRATE_MODULES`, `docs/layering.md` and `layering::`; resource lowering and method lowering in `crates/ignite-rustgen` and `crates/ignite-llvm` calling the substrate; skeleton modules `ignite_io::{fs,child,entropy}`, `args::flag_from_args`, `crates/ignite-rt/src/{fs,child,entropy}.rs` and the `Handle` variants, every operation a placeholder arm (21.13); fixtures of rows 8, 15, 19, 21, 22, 23, 27; `studio.ignite`, the golden of row 25; `CODEGEN_REVISION`; forward lines in sections 6.1 and 7 | U0 | `fixtures::fixtures_match_expected` (ignite-check) on `e016_directory_effect` | 8, 15, 19, 21 to 23, 25, 27, 28, 31, 32 |
+| U1 | `story:slice-17-frontend` | the builtin types, statics, methods and effects in `crates/ignite-check/src/lib.rs` (with `can_hold_handle`, and `clock` in `AMBIENT_HEADS` with fixture `e056_clock_parameter`) and `crates/ignite-types/src/{builtins.rs,typer/effects.rs,typer/system.rs}`; E104, E140, E141 texts and fixtures; the model arm in `crates/ignite-eval`; `std/fs.ignite` and `std/process.ignite` with their records, helpers and builtin doc comments, without tests; `SUBSTRATE_MODULES`, `docs/layering.md` and `layering::`; resource lowering and method lowering in `crates/ignite-rustgen` and `crates/ignite-llvm` calling the substrate; skeleton modules `ignite_io::{fs,child,entropy}`, `args::flag_from_args`, `crates/ignite-rt/src/{fs,child,entropy}.rs` and the `Handle` variants, every operation a placeholder arm (21.13); fixtures of rows 8, 15, 19, 21, 22, 23, 27; `studio.ignite`, the golden of row 25; `CODEGEN_REVISION`; forward lines in sections 6.1 and 7 | U0 | `fixtures::fixtures_match_expected` (ignite-check) on `e016_directory_effect` | 8, 15, 19, 21 to 23, 25, 27, 28, 31, 32, 35 |
 | U2 | `story:file-system` | `crates/ignite-io/src/fs.rs` and its unit tests, `crates/ignite-rt/src/fs.rs`, `Directory.temporary()`'s cleanup, the tests in `std/fs.ignite`, the `nix` feature `fs` | U1 | `fs::symlinks_out_are_refused` | 1 to 7, 29 |
 | U3 | `story:process-spawn` | `crates/ignite-io/src/child.rs` (the watcher, moved out of `test.rs` with `run_child` calling it), the kill at orderly exit in `ignite_io::exit`, `run` and the drain, `crates/ignite-rt/src/child.rs`, the process tests in `std/process.ignite`, fixtures `signal_mask.ignite`, `orphans.ignite` and their tests in `crates/ignite/tests/slice17.rs` (the file and its `mod` line), the `nix` features `process` and `poll` | U1 | the test "a child's output and status are captured" in `std/process.ignite` | 9 to 14, 16, 17, 29 |
 | U4 | `story:program-arguments` | `args::flag_from_args`, the setting and directory-flag reads in both backends' generated `main` (lowering written by U1, U4 fills the substrate call), fixture `arguments.ignite` and its tests appended to `slice17.rs`, E142 in `crates/ignite/src/run/` and `crates/ignite/src/apply/plan.rs` with fixtures `e142_setting_without_default`, `studio_defaults.ignite`, the `run::` test | U1, U3 (for `slice17.rs`) | `slice17::rust::settings_read_their_flags` | 18, 26 |
@@ -5623,7 +5633,6 @@ Records: a "Slice 17" paragraph in `AGENTS.md`'s gate-time section; raw logs and
   child; a later slice decides).
 - Releasing an unwaited `ChildProcess` slot on LLVM before exit (F10).
 - Setting values through `ignite run` and `ignite apply` (D12).
-- The `clock` finding of probe p1 (21.1): PROBE_P1_DEFERRED.
 
 ### 21.16 Open questions
 
