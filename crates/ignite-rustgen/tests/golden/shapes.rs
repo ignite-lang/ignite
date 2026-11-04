@@ -36,7 +36,7 @@ pub fn unit_square() -> Labelled {
 pub fn largest(items: &Vec<Labelled>) -> Option<Labelled> {
     let mut best = None;
     let mut best_area = ignite_io::checked::sub(0, 1, "crates/ignite-rustgen/tests/golden/shapes.ignite", 36, 19);
-    for item in (items.clone()) {
+    for item in (items).iter() {
         let a = area(&item.shape);
         if a > best_area {
             best_area = a.clone();
