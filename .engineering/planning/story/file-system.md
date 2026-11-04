@@ -16,7 +16,7 @@ scope:
   path: crates/ignite-rt/src
 - confidence: inferred
   path: std
-revision: 2
+revision: 4
 ---
 # Story: file-system
 
@@ -30,6 +30,7 @@ directory it is given, on both targets, and cannot reach a path outside that roo
 - Gap P2 of the playground session (2026-11-04): its server holds the user's `.ignite` files.
 - Substrate in `crates/ignite-io`, a std module over it, a new effect the checker tracks; the root
   is a capability value, as a listener is.
+- Constraint P3 (playground session, 2026-11-04): an `HttpApp` handler may use effects only on its state (`std/protocol/http.ignite:50`; `Clock.monotonic()` in a handler is E017, also in a task it spawns), so this capability arrives as a handle passed in the state, as `Store` does, not as an ambient static.
 
 ## Acceptance
 

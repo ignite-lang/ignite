@@ -16,7 +16,7 @@ scope:
   path: crates/ignite-rt/src
 - confidence: inferred
   path: std
-revision: 2
+revision: 4
 ---
 # Story: process-spawn
 
@@ -31,6 +31,7 @@ captures its stdout, stderr and exit status, and can kill it, on both targets.
   and `build`, then the built program.
 - Substrate in `crates/ignite-io` (one implementation, both targets; `crates/ignite-rt` adapts it
   over the C ABI), a std module over it, and a new effect the checker tracks.
+- Constraint P3 (playground session, 2026-11-04): an `HttpApp` handler may use effects only on its state (`std/protocol/http.ignite:50`; `Clock.monotonic()` in a handler is E017, also in a task it spawns), so this capability arrives as a handle passed in the state, as `Store` does, not as an ambient static.
 
 ## Acceptance
 
