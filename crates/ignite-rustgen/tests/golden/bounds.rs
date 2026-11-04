@@ -18,8 +18,8 @@ impl Relay {
     }
 }
 
-pub fn identity<T: Clone + Send + Sync + 'static>(value: &T) -> T {
-    value.clone()
+pub fn identity<T: Clone + Send + Sync + 'static>(value: T) -> T {
+    value
 }
 
 pub fn relay<S: ignite_io::ByteStream + Clone + Send + Sync + 'static>(stream: &S) -> IoResult<()> {
@@ -27,7 +27,7 @@ pub fn relay<S: ignite_io::ByteStream + Clone + Send + Sync + 'static>(stream: &
         ignite_io::Input::Eof => {
         },
         ignite_io::Input::Data(bytes) => {
-            (<S as ignite_io::ByteStream>::write_all(&stream, identity(&bytes)))?
+            (<S as ignite_io::ByteStream>::write_all(&stream, identity(bytes.clone())))?
         },
     };
     let copy = stream.clone();

@@ -446,15 +446,15 @@ Every generated file starts with
 | `Unit` (type) | `()` |
 | `List<T>` | `Vec<T>` |
 | `Option<T>`, `Result<T, E>` | same |
-| `fn(A, B) -> R` | `fn(A, B) -> R` |
+| `fn(A, B) -> R` | `std::sync::Arc<dyn Fn(A, B) -> R + Send + Sync>` (13.3) |
 | `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError` | `ignite_io::` same name |
 | record `type R { a: T }` | `#[derive(Clone, Debug)] pub struct R { pub a: T }` |
 | `enum E { A, B(T) }` | `#[derive(Clone, Debug)] pub enum E { A, B(T) }` |
-| `fn f(p: T) -> U` | `pub fn f(p: &T) -> U` (parameters, below) |
+| `fn f(p: T) -> U` | `pub fn f(p: &T) -> U`, or `pub fn f(p: T) -> U` when `f` consumes `p` (parameters, below) |
 | `fn f(...) requires [...]` | `pub fn f(...)` |
 | `type R<A> {..}`, `enum E<A> {..}`, `fn f<A>(..)`, a role `fn serve<A>(..)` | `pub struct R<A: Clone + Send + Sync + 'static>` and so on: every type parameter carries these bounds (11.1) |
 | `Store<T>` | `ignite_io::Store<T>` |
-| `fn(p: A) -> R requires [p.*]` | `fn(A) -> R` |
+| `fn(p: A) -> R requires [p.*]` | `std::sync::Arc<dyn Fn(A) -> R + Send + Sync>` |
 | `protocol P { fn serve ... fn connect ... }` | `pub struct P;` and `impl P { pub fn serve ... pub fn connect ... }` |
 | `P.serve(a, b)` | `P::serve(a, b)` |
 | `import std.a.b.{X, Y}` in a program | `use ignite_std::a::b::{X, Y};` |
@@ -494,7 +494,9 @@ The `spawn` arguments are evaluated (and cloned, ownership rule) before the task
 the spawning function keeps its own copies.
 
 **Ownership rule.** Rust moves what Ignite copies. A *place* (an identifier, or a place
-followed by `.field`) used in a value position is emitted with `.clone()`. Value positions:
+followed by `.field`) used in a value position is emitted with `.clone()`, except where
+`TypedProgram::moves` marks it (20.3): that place is dead after its move position, and it is
+emitted bare, so Rust moves it. Value positions:
 call and method arguments, `let`/`var` initializers, assignment right-hand sides, `match`
 scrutinees, `return` operands, list elements, record field values, `for` iterables, and
 operands of `await`, `?`, `!` and `-`. Non-value positions: the receiver of a method call or
@@ -502,16 +504,28 @@ field access, the left-hand side of an assignment, and operands of binary arithm
 comparison and logic operators. Every substrate handle implements `Clone` so this rule has
 no exceptions.
 
-**Parameters.** Every parameter of a fn (not of a protocol role, which a generated `main`
-calls with owned values) is a reference `p: &T`, so a call copies nothing: an argument that
-is a place is passed as `&place`, a parameter that is itself a reference as it is, any other
-argument as `&(value)`. A parameter the body assigns or changes in place (`push`, `append`,
-`clear` on it or a field of it), and one of a `Copy` type (`Int`, `Byte`, `Bool`, `Unit`, fn
-types), is copied once on entry: `let mut p = p.clone();`. In the body a reference
-parameter is dereferenced as an operand of an operator, a condition or an index (`(*p)`), and
-copied where it is the result of a block, arm or branch. A fn of the module or an imported
-one used as a value is a closure that borrows for it, cast to the fn pointer type:
-`((|__a0: i64| f(&__a0)) as fn(i64) -> i64)`; `spawn f(a)` calls `f(&__spawn_0)`.
+**Parameters.** A parameter of a fn or associated fn that its fn consumes
+(`TypedProgram::consumed`, 20.3.3: changed in place on some path or moved on every path) is
+declared by value, `p: T`, or `mut p: T` when the body assigns or changes it in place, and
+has no entry copy. A protocol role's parameters are `mut name: T` by value, consumed or not
+(a generated `main` calls a role with owned values). Every other parameter is a reference
+`p: &T`, so a call copies nothing: an argument that is a place is passed as `&place`, a
+parameter that is itself a reference as it is, any other argument as `&(value)`. Such a
+parameter of type `Int`, `Byte`, `Bool`, `Unit` or a fn type (an `Arc`, copied by a
+reference count) is copied once on entry: `let mut p = p.clone();`. An argument to a
+consumed parameter or to a role parameter is a value: a place that moves is emitted bare,
+any other place with `.clone()`, so `s = step(s, i)` passes `s` without a copy and `let t =
+step(s, 1); t.count + s.count` passes `s.clone()`. In the body a reference parameter is
+dereferenced as an operand of an operator, a condition or an index (`(*p)`), and copied
+where it is the result of a block, arm or branch. A fn of the module or an imported one used
+as a value is a closure in an `Arc` cast to the fn value type (13.3); it takes its arguments
+by value and passes each as its parameter is declared:
+`(std::sync::Arc::new(|__a0: i64| f(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send +
+Sync>)`, and `step(__a0, &__a1)` for a `step` that consumes its first parameter. The calls
+the generator writes itself follow the same rule: `spawn f(a)` calls `f(&__spawn_0)`, or
+`f(__spawn_0)` when `f` consumes the parameter; a generated `main` calls `K.main(&value)`,
+or `K.main(value)` when `K.main` consumes `self`; a `to_text` fn that shows a value in an
+`assert` or `?` report gets `&value`, or `value.clone()` when it consumes it.
 
 **Block values.** A block in *value position* emits its last statement, when it is an
 expression, without a trailing `;` so it becomes the block's value. Value positions: a

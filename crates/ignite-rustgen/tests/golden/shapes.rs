@@ -43,5 +43,5 @@ pub fn largest(items: &Vec<Labelled>) -> Option<Labelled> {
             best = Some(item.clone());
         };
     }
-    return best.clone();
+    return best;
 }
