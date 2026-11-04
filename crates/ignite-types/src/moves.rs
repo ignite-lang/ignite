@@ -31,8 +31,9 @@ use ignite_syntax::ast::{
 use crate::address::AddressMap;
 use crate::{BraceKind, Builtin, Callee, Ty, TypedModules, TypedProgram};
 
-/// Rounds a loop or the module's consumed sets may take before the walk
-/// gives up and assumes every place live (no move at all inside).
+/// Rounds a loop may take before the walk gives up and assumes every
+/// place live (no move at all inside). The module's consumed sets have no
+/// such bound: they iterate to the least fixpoint (20.3.3).
 const ROUNDS: usize = 64;
 
 /// The result of [`analyse`]: the addresses of the expressions that move,
@@ -60,7 +61,11 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
             consumed.insert(key.clone(), changed);
         }
     }
-    for _ in 0..ROUNDS {
+    // Each round that changes something sets at least one more entry and
+    // none is ever cleared, so the fixpoint is reached within one round
+    // per parameter of the module, plus the round that sees no change.
+    let rounds = consumed.values().map(Vec::len).sum::<usize>() + 1;
+    for _ in 0..rounds {
         let mut changed = false;
         for (body, res) in bodies.iter().zip(&resolved) {
             let Some(key) = &body.key else { continue };
@@ -507,14 +512,29 @@ fn mutates(builtin: Builtin) -> bool {
 /// callee (`MUTATING_METHODS` in `ignite-rustgen`).
 const MUTATING_METHODS: [&str; 3] = ["push", "append", "clear"];
 
-/// The variable a place expression is rooted at, through fields, tuple
-/// fields and indexes.
-fn root(e: &Expr) -> Option<&str> {
+/// The variable a place expression is rooted at, through every expression
+/// `region::root` (LLVM) follows: fields, tuple fields, indexes, `?`,
+/// `await`, the builtin `at` and a block's last expression. It is a
+/// superset of `place_root` (Rust), so the in-place set is a superset of
+/// both backends' (20.3.3).
+fn root<'a>(e: &'a Expr, types: &TypedProgram) -> Option<&'a str> {
+    let at = || matches!(types.callee(e), Some(Callee::Builtin(Builtin::ListAt)));
     match &e.kind {
         ExprKind::Name(id) => Some(&id.name),
         ExprKind::Field { receiver, .. }
         | ExprKind::TupleField { receiver, .. }
-        | ExprKind::Index { receiver, .. } => root(receiver),
+        | ExprKind::Index { receiver, .. }
+        | ExprKind::Try(receiver)
+        | ExprKind::Await(receiver) => root(receiver, types),
+        ExprKind::Method { receiver, .. } if at() => root(receiver, types),
+        ExprKind::Call { callee, .. } if at() => match &callee.kind {
+            ExprKind::Field { receiver, .. } => root(receiver, types),
+            _ => None,
+        },
+        ExprKind::Block(body) => match body.stmts.last().map(|s| &s.kind) {
+            Some(StmtKind::Expr(last)) => root(last, types),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -537,11 +557,11 @@ fn changed_names<'a>(body: &'a Block, types: &TypedProgram) -> BTreeSet<&'a str>
                     ExprKind::Method { receiver, name, .. }
                         if builtin || MUTATING_METHODS.contains(&name.name.as_str()) =>
                     {
-                        names.extend(root(receiver));
+                        names.extend(root(receiver, types));
                     }
                     ExprKind::Call { callee, .. } if builtin => {
                         if let ExprKind::Field { receiver, .. } = &callee.kind {
-                            names.extend(root(receiver));
+                            names.extend(root(receiver, types));
                         }
                     }
                     _ => {}
@@ -705,21 +725,34 @@ struct Walk<'a> {
     top: BTreeSet<usize>,
     /// Places of enclosing `match` scrutinees and `for` iterables.
     pins: Vec<Place>,
+    /// The operands of the enclosing calls that are still held while the
+    /// operand being walked runs (20.3.2).
+    held: Vec<Held<'a>>,
     /// The states after the innermost loops: (break, continue).
     loops: Vec<(State, State)>,
-    /// Parameters some path moves.
+    /// Parameters some path moves, from the settled round of every loop.
     any_move: BTreeSet<usize>,
     marks: Option<AddressMap<bool>>,
 }
 
+/// An operand of an enclosing call that the call holds while a later
+/// operand runs: a borrowed argument, a builtin receiver, or the receiver
+/// of a fn-field call (`field` is the field read). `places` caches what it
+/// mentions; it is computed only when a move asks.
+struct Held<'a> {
+    expr: &'a Expr,
+    field: Option<&'a str>,
+    places: Option<Vec<Place>>,
+}
+
 /// Walk one body; the parameters it moves on every path to an exit (and
 /// on some path), and when `record`, every move position's decision.
-fn walk(
-    body: &Body<'_>,
-    res: &Resolved,
-    types: &TypedProgram,
-    modules: &TypedModules,
-    consumed: &BTreeMap<String, Vec<bool>>,
+fn walk<'a>(
+    body: &Body<'a>,
+    res: &'a Resolved,
+    types: &'a TypedProgram,
+    modules: &'a TypedModules,
+    consumed: &'a BTreeMap<String, Vec<bool>>,
     record: bool,
 ) -> (BTreeSet<usize>, AddressMap<bool>) {
     let own: &[bool] = body
@@ -736,6 +769,7 @@ fn walk(
         own,
         top: (0..body.params.len()).collect(),
         pins: Vec::new(),
+        held: Vec::new(),
         loops: Vec::new(),
         any_move: BTreeSet::new(),
         marks: record.then(AddressMap::default),
@@ -838,6 +872,39 @@ impl<'a> Walk<'a> {
         self.pins.iter().any(|q| q.overlaps(p))
     }
 
+    /// Whether an operand an enclosing call holds mentions a place
+    /// overlapping `p` (20.3.2).
+    fn held_overlaps(&mut self, p: &Place) -> bool {
+        for i in 0..self.held.len() {
+            if self.held[i].places.is_none() {
+                let places = self.operand_places(self.held[i].expr, self.held[i].field);
+                self.held[i].places = Some(places);
+            }
+            if self.held[i]
+                .places
+                .as_ref()
+                .is_some_and(|places| places.iter().any(|q| q.overlaps(p)))
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// The places an operand mentions; for the receiver of a fn-field call
+    /// that is a place, the field it reads.
+    fn operand_places(&self, operand: &Expr, field: Option<&str>) -> Vec<Place> {
+        let mut found = Vec::new();
+        match (field, self.read_place(operand)) {
+            (Some(name), Some(mut place)) => {
+                place.path.push(name.to_string());
+                found.push(place);
+            }
+            _ => self.mentions(operand, &mut found),
+        }
+        found
+    }
+
     /// Every place `e` mentions: reads, assignments, closure captures.
     fn mentions(&self, e: &Expr, out: &mut Vec<Place>) {
         let mut stack = vec![Node::Expr(e)];
@@ -888,8 +955,9 @@ impl<'a> Walk<'a> {
     }
 
     /// A move position: `e` moves when it is a movable place, dead after,
-    /// not pinned and not `excluded` by another operand of its call.
-    fn take(&mut self, e: &Expr, mut st: State, excluded: bool) -> State {
+    /// not pinned, not `excluded` by another operand of its call and not
+    /// held by an operand of an enclosing call.
+    fn take(&mut self, e: &'a Expr, mut st: State, excluded: bool) -> State {
         let e = match &e.kind {
             ExprKind::NamedArg { value, .. } => &**value,
             _ => e,
@@ -897,7 +965,10 @@ impl<'a> Walk<'a> {
         let Some(place) = self.movable(e).filter(|_| self.aggregate_expr(e)) else {
             return self.expr(e, st);
         };
-        let would = !excluded && !self.pinned(&place) && st.live.dead(&place);
+        let would = !excluded
+            && !self.pinned(&place)
+            && st.live.dead(&place)
+            && !self.held_overlaps(&place);
         let param = self.res.vars[place.var].param;
         if would && let Some(i) = param {
             st.moved.insert(i);
@@ -910,7 +981,7 @@ impl<'a> Walk<'a> {
     }
 
     /// `e` in a value position: a move position when `used`.
-    fn value(&mut self, e: &Expr, used: bool, st: State) -> State {
+    fn value(&mut self, e: &'a Expr, used: bool, st: State) -> State {
         if used {
             self.take(e, st, false)
         } else {
@@ -918,13 +989,13 @@ impl<'a> Walk<'a> {
         }
     }
 
-    fn expr(&mut self, e: &Expr, st: State) -> State {
+    fn expr(&mut self, e: &'a Expr, st: State) -> State {
         self.expr_in(e, true, st)
     }
 
     /// The state before `e` from the state `st` after it; `used` says
     /// whether the value of a block, `if` or `match` is used.
-    fn expr_in(&mut self, e: &Expr, used: bool, mut st: State) -> State {
+    fn expr_in(&mut self, e: &'a Expr, used: bool, mut st: State) -> State {
         match &e.kind {
             ExprKind::Int(_) | ExprKind::Str(_) | ExprKind::Bool(_) | ExprKind::Quantity { .. } => {
                 st
@@ -1044,7 +1115,7 @@ impl<'a> Walk<'a> {
         }
     }
 
-    fn block(&mut self, block: &Block, used: bool, mut st: State) -> State {
+    fn block(&mut self, block: &'a Block, used: bool, mut st: State) -> State {
         let count = block.stmts.len();
         for (i, stmt) in block.stmts.iter().enumerate().rev() {
             st = self.stmt(stmt, used && i + 1 == count, st);
@@ -1052,7 +1123,7 @@ impl<'a> Walk<'a> {
         st
     }
 
-    fn stmt(&mut self, stmt: &Stmt, last_used: bool, mut st: State) -> State {
+    fn stmt(&mut self, stmt: &'a Stmt, last_used: bool, mut st: State) -> State {
         match &stmt.kind {
             StmtKind::Expr(e) => self.value(e, last_used, st),
             StmtKind::Let { name, value, .. } => {
@@ -1113,7 +1184,9 @@ impl<'a> Walk<'a> {
     /// one (the continue target is the head, the break target `exit`),
     /// iterated from no live place and every parameter moved until it
     /// settles. A loop that does not settle within [`ROUNDS`] is walked
-    /// once more with every place live, so nothing inside it moves.
+    /// once more with every place live, so nothing inside it moves. Only
+    /// the round walked from the settled head adds to `any_move`: the
+    /// earlier rounds start from fewer live places than any execution has.
     fn cycle(
         &mut self,
         exit: &State,
@@ -1123,7 +1196,9 @@ impl<'a> Walk<'a> {
             live: Live::default(),
             moved: self.top.clone(),
         };
+        let before = self.any_move.clone();
         for _ in 0..ROUNDS {
+            self.any_move.clone_from(&before);
             self.loops.push((exit.clone(), head.clone()));
             let next = round(self, &head);
             self.loops.pop();
@@ -1132,6 +1207,7 @@ impl<'a> Walk<'a> {
             }
             head = next;
         }
+        self.any_move = before;
         let head = State {
             live: Live {
                 all: true,
@@ -1147,9 +1223,9 @@ impl<'a> Walk<'a> {
 
     /// A call or method call; `spawned` for the call of a `spawn`, whose
     /// arguments are no move positions.
-    fn call(&mut self, e: &Expr, mut st: State, spawned: bool) -> State {
+    fn call(&mut self, e: &'a Expr, mut st: State, spawned: bool) -> State {
         let callee = self.types.callee(e).cloned();
-        let mut operands: Vec<(&Expr, Operand<'_>)> = Vec::new();
+        let mut operands: Vec<(&'a Expr, Operand<'a>)> = Vec::new();
         match &e.kind {
             ExprKind::Call { callee: head, args } => {
                 operands.push((&**head, Operand::Read));
@@ -1183,6 +1259,25 @@ impl<'a> Walk<'a> {
             }
         }
         for (i, &(operand, kind)) in operands.iter().enumerate().rev() {
+            // While operand `i` runs, the call holds the operands before
+            // it that it reads in place (borrowed arguments, builtin
+            // receivers, a fn-field receiver); a move under operand `i`
+            // must not change them (20.3.2). An operand in a move
+            // position is a value (moved or copied) once evaluated, and
+            // an operand after `i` reads what liveness already keeps.
+            let depth = self.held.len();
+            for (other, other_kind) in operands[..i].iter().copied() {
+                let field = match other_kind {
+                    Operand::Move => continue,
+                    Operand::Read => None,
+                    Operand::Field(name) => Some(name),
+                };
+                self.held.push(Held {
+                    expr: other,
+                    field,
+                    places: None,
+                });
+            }
             st = match kind {
                 Operand::Read => self.expr(operand, st),
                 Operand::Move => {
@@ -1207,6 +1302,7 @@ impl<'a> Walk<'a> {
                     None => self.expr(operand, st),
                 },
             };
+            self.held.truncate(depth);
         }
         st
     }
@@ -1254,15 +1350,13 @@ impl<'a> Walk<'a> {
             if k == i {
                 return false;
             }
-            let mut found = Vec::new();
-            match (kind, self.read_place(operand)) {
-                (Operand::Field(name), Some(mut field)) => {
-                    field.path.push(name.to_string());
-                    found.push(field);
-                }
-                _ => self.mentions(operand, &mut found),
-            }
-            found.iter().any(|q| q.overlaps(place))
+            let field = match kind {
+                Operand::Field(name) => Some(*name),
+                Operand::Read | Operand::Move => None,
+            };
+            self.operand_places(operand, field)
+                .iter()
+                .any(|q| q.overlaps(place))
         })
     }
 }

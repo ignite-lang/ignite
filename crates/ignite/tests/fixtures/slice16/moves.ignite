@@ -326,7 +326,24 @@ fn enclosing_receiver() -> Int {
   s.items.at(wipe(s))
 }
 
+fn drain(l: List<Int>) -> Int {
+  l.clear()
+  0
+}
+
+fn enclosing_field() -> Int {
+  let s = step(fresh(), 1)
+  look(s, drain(s.items))
+}
+
+fn enclosing_ufcs_receiver() -> Int {
+  let s = step(fresh(), 1)
+  s.look(wipe(s))
+}
+
 test "a borrow held by an enclosing call sees the old value" {
   assert enclosing_argument() == 1
   assert enclosing_receiver() == 1
+  assert enclosing_field() == 1
+  assert enclosing_ufcs_receiver() == 1
 }
