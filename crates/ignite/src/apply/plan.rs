@@ -14,7 +14,7 @@ pub const FORMAT: &str = "ignite-apply-plan/0.1";
 pub const CONTROLLER_ABI: &str = "ignite-local-host/0.1";
 /// Increment when compiler/backend generation semantics change. The admitted
 /// compiler bytes are a separate raw input, so a rebuild never changes a plan.
-pub const CODEGEN_REVISION: &str = "ignite-codegen/0.1.0-11";
+pub const CODEGEN_REVISION: &str = "ignite-codegen/0.1.0-12";
 /// Increment when the evaluator's stepping of `std.control` reducers may
 /// change. With the digests of the standard-library inputs it forms a plan's
 /// reducer revision.
