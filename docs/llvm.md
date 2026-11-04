@@ -267,7 +267,10 @@ position, even with no buffer.
   - the receiver of `to_bytes`: the result is the receiver itself, owned or borrowed as the
     receiver is;
   - the argument of `append` when the element type holds no buffer: its elements are
-    copied by the `memcpy` that appends them.
+    copied by the `memcpy` that appends them;
+  - a `slice` that `to_text` or `Int.parse(bytes.to_text())` reads, and the `slice`
+    receiver of a `slice` whose bounds modify no variable: a view, a list header with
+    the address of the first element and the length, pointing into the receiver.
 
   `push`, `append` and `clear` on a receiver that is not a place rooted at a variable
   (`region::root` is `None`, such as `f().push(x)`) work on an owned copy. A `var` bound

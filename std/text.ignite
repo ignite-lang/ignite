@@ -254,6 +254,172 @@ test "Int.parse reads bytes from any receiver and leaves them as they were" {
   assert raws.get(7) == Some(b"-64")
 }
 
+test "to_text and Int.parse of nested, empty and final slices" {
+  let data = b"12|-34|56"
+  assert parse_part(data, 0, 2) == Some(12)
+  assert parse_part(data, 7, 9) == Some(56)
+  assert parse_part(data, 9, 9) == None
+  assert parse_part(data, 0, 0) == None
+  assert data.slice(9, 9).to_text() == ""
+  assert data.slice(0, 0).to_text() == ""
+  assert data.slice(7, 9).to_text() == "56"
+  assert data.slice(0, 9).to_text() == "12|-34|56"
+  assert Int.parse(data.slice(0, 9).slice(3, 6).to_text()) == Some(-34)
+  assert Int.parse(data.slice(3, 9).slice(1, 3).slice(1, 2).to_text()) == Some(4)
+  assert Int.parse(data.slice(3, 9).slice(4, 6).slice(0, 2).to_text()) == Some(56)
+  assert Int.parse(data.slice(0, 9).slice(9, 9).slice(0, 0).to_text()) == None
+  assert data.slice(3, 9).slice(4, 6).to_text() == "56"
+  assert data.slice(3, 9).slice(6, 6).to_text() == ""
+  assert Int.parse(parse_digits(-123).slice(0, 4).slice(1, 4).to_text()) == Some(123)
+  let inner = data.slice(3, 9).slice(1, 3)
+  assert inner == b"34"
+  assert data == b"12|-34|56"
+}
+
+test "a later bound that changes the bytes leaves the slice before it as it was" {
+  var data = b"12345"
+  let n = Int.parse(data.slice(0, 4).slice(1, if data.len() > 0 {
+    data = b"99999"
+    3
+  } else {
+    3
+  }).to_text())
+  assert n == Some(23)
+  assert data == b"99999"
+  var more = b"12345"
+  let t = more.slice(0, 4).slice(1, if more.len() > 0 {
+    more.clear()
+    more.append(b"9999")
+    3
+  } else {
+    3
+  }).to_text()
+  assert t == "23"
+  assert more == b"9999"
+  var once = b"12345"
+  let m = Int.parse(once.slice(1, if once.len() > 0 {
+    once = b"99999"
+    3
+  } else {
+    3
+  }).to_text())
+  assert m == Some(23)
+  var last = b"12345"
+  let u = last.slice(1, if last.len() > 0 {
+    last.clear()
+    last.append(b"9999")
+    3
+  } else {
+    3
+  }).to_text()
+  assert u == "23"
+  assert once == b"99999" && last == b"9999"
+}
+
+test type SliceKeeper {
+  raw: Bytes
+}
+
+test fn keep_slice(raw: Bytes) -> SliceKeeper = SliceKeeper { raw = raw }
+
+test "a start bound, both bounds or a bound in a loop that change the receiver" {
+  var data = b"12345"
+  let t = data.slice(if data.len() > 0 {
+    data = b"99999"
+    1
+  } else {
+    1
+  }, 3).to_text()
+  assert t == "23"
+  var both = b"12345"
+  let b = both.slice(if both.len() > 0 {
+    both.push(b'6')
+    1
+  } else {
+    1
+  }, if both.len() > 5 {
+    both = b"x"
+    3
+  } else {
+    4
+  }).to_text()
+  assert b == "23" && both == b"x"
+  var outer = b"12345"
+  let z = outer.slice(0, 4).slice(1, if outer.len() > 0 {
+    outer = b"99999"
+    3
+  } else {
+    3
+  })
+  assert z == b"23" && outer == b"99999"
+  var holder = SliceKeeper { raw = b"12345" }
+  let h = holder.raw.slice(1, if holder.raw.len() > 0 {
+    holder = SliceKeeper { raw = b"99999" }
+    3
+  } else {
+    3
+  }).to_text()
+  assert h == "23"
+  var names = ["a", "b", "c"]
+  let s = names.slice(0, if names.len() > 0 {
+    names.push("d")
+    2
+  } else {
+    2
+  })
+  assert s == ["a", "b"] && names.len() == 4
+  var grown = b"1234"
+  var out = ""
+  var i = 0
+  while i < 3 {
+    out = out.concat(grown.slice(0, if i >= 0 {
+      grown.push(b'1')
+      2
+    } else {
+      2
+    }).to_text())
+    i = i + 1
+  }
+  assert out == "121212" && grown.len() == 7
+  let fill = b"12345"
+  let filled = fill.slice(1, if fill.len() > 0 {
+    var junk = b""
+    var n = 0
+    while n < 20000 {
+      junk.push(b'x')
+      n = n + 1
+    }
+    junk.len() - 19997
+  } else {
+    3
+  }).to_text()
+  assert filled == "23"
+}
+
+test "a slice that is kept, stored or put does not see later changes of its receiver" {
+  var data = b"12345"
+  let v = data.slice(1, 3)
+  let w = data.slice(0, 4).slice(1, 3)
+  let k = keep_slice(data.slice(1, 3))
+  let raws: Store<Bytes> = Store.new()
+  raws.put(1, data.slice(1, 3))
+  raws.put(2, data.slice(0, 4).slice(2, 4))
+  data.push(b'6')
+  data = b"99999"
+  data.clear()
+  assert v == b"23" && w == b"23" && k.raw == b"23"
+  assert raws.get(1) == Some(b"23") && raws.get(2) == Some(b"34")
+  let got = raws.get(1).unwrap_or(b"").slice(0, 1)
+  raws.put(1, b"99")
+  assert got == b"2"
+  assert Int.parse(raws.get(2).unwrap_or(b"").slice(0, 2).to_text()) == Some(34)
+  var x = b"12345"
+  var y = x.slice(1, 3)
+  y.push(b'9')
+  x.clear()
+  assert y == b"239"
+}
+
 // Whether `needle` occurs in `bytes` at offset `at`.
 fn bytes_match_at(bytes: Bytes, needle: Bytes, at: Int) -> Bool {
   if at < 0 || at + needle.len() > bytes.len() {
