@@ -549,7 +549,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.starts_with(p)` | `t.starts_with(&p)` | |
 | `t.strip_prefix(p)` | `t.strip_prefix(&p).map(\|s\| s.to_string())` | |
 | `t.concat(u)` | `format!("{}{}", t, u)` | |
-| `t.to_bytes()` | `t.clone().into_bytes()` | |
+| `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | |
 | `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
 | `b.slice(i, j).to_text()` | `String::from_utf8_lossy(ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
