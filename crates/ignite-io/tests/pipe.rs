@@ -610,3 +610,81 @@ fn adv_a_plain_thread_end_delivers() {
         assert_eq!(server.read(8).unwrap(), Input::Eof);
     });
 }
+
+/// The thread's kept read buffer: a short read after a long one on the
+/// same thread returns only the new bytes, never the tail of the earlier
+/// read, and an idle timeout after a long read is `Eof`, not stale bytes.
+#[test]
+fn adv_a_short_read_after_a_long_read_returns_only_the_new_bytes() {
+    bounded("short after long", || {
+        let (client, server) = Pipe::pair();
+        client.write_all(vec![7; 65536]).unwrap();
+        ignite_io::flush();
+        assert_eq!(server.read(65536).unwrap(), data(&[7; 65536]));
+        client.write_all(b"new".to_vec()).unwrap();
+        ignite_io::flush();
+        assert_eq!(server.read(65536).unwrap(), data(b"new"));
+        server.set_idle_timeout(20).unwrap();
+        assert_eq!(server.read(65536).unwrap(), Input::Eof);
+        client.write_all(b"z".to_vec()).unwrap();
+        ignite_io::flush();
+        assert_eq!(server.read(4).unwrap(), data(b"z"));
+    });
+}
+
+/// The same across tasks: tasks run on reused worker threads, and a task
+/// whose short read follows another task's long read gets only its own
+/// bytes.
+#[test]
+fn adv_a_later_task_reads_none_of_an_earlier_tasks_bytes() {
+    bounded("later task", || {
+        for _ in 0..8 {
+            let (done, results) = mpsc::channel();
+            let (client, server) = Pipe::pair();
+            let long = done.clone();
+            let reader = server.clone();
+            client.write_all(vec![9; 60000]).unwrap();
+            ignite_io::flush();
+            ignite_io::spawn(move || {
+                let _ = long.send(reader.read(65536).unwrap());
+            });
+            assert_eq!(results.recv().unwrap(), data(&[9; 60000]));
+            client.write_all(b"ab".to_vec()).unwrap();
+            ignite_io::flush();
+            ignite_io::spawn(move || {
+                let _ = done.send(server.read(65536).unwrap());
+            });
+            assert_eq!(results.recv().unwrap(), data(b"ab"));
+        }
+    });
+}
+
+/// Reads around the kept buffer's size of 64 KiB: each takes exactly
+/// `maximum` bytes of the queue (0 and negative as 1), in order.
+#[test]
+fn adv_reads_at_the_kept_buffer_boundary_take_exactly_maximum() {
+    bounded("boundary", || {
+        let (client, server) = Pipe::pair();
+        let sent: Vec<u8> = (0..300_000u32).map(|i| (i % 251) as u8).collect();
+        client.write_all(sent.clone()).unwrap();
+        ignite_io::flush();
+        let mut received = Vec::new();
+        for (maximum, expected) in [
+            (0, 1),
+            (-5, 1),
+            (1, 1),
+            (65536, 65536),
+            (65537, 65537),
+            (65535, 65535),
+            (65536, 65536),
+            (1 << 20, 300_000 - 3 - 4 * 65536),
+        ] {
+            let Input::Data(bytes) = server.read(maximum).unwrap() else {
+                panic!("maximum {maximum}: Eof");
+            };
+            assert_eq!(bytes.len(), expected, "maximum {maximum}");
+            received.extend(bytes);
+        }
+        assert_eq!(received, sent);
+    });
+}

@@ -28,7 +28,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use crate::net::{Buffered, register};
-use crate::{Input, IoError, SEND_BUFFER, flush, input, read_buffer};
+use crate::{Input, IoError, SEND_BUFFER, flush, read_input};
 
 /// Unread bytes a receive queue holds before a delivery into it fails.
 pub const PIPE_CAPACITY: usize = 16 * 1024 * 1024;
@@ -217,9 +217,7 @@ impl PipeStream {
     /// One read of up to `maximum` bytes, clamped to `1..=1 MiB`. Zero
     /// bytes is `Input::Eof`. Flushes the current task's writes first.
     pub fn read(&self, maximum: i64) -> Result<Input, IoError> {
-        let mut buffer = read_buffer(maximum);
-        let count = self.read_into(&mut buffer)?;
-        Ok(input(buffer, count))
+        read_input(maximum, |buffer| self.read_into(buffer))
     }
 
     /// One read into `buffer`, as [`PipeStream::read`]: the number of bytes
