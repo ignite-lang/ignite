@@ -113,6 +113,8 @@ underneath.
 | [Contracts, policies and control](contracts.md) | indicators, objectives and agreements, restart and rollout policies, standings |
 | [One substrate, two targets](substrate.md) | the IO substrate written once in Rust, and the Rust and LLVM targets on top of it |
 | [The compile-time evaluator](evaluator.md) | property evaluation with fuel, the system model, and the reducers it steps at run time |
+| [Inspirations](inspirations.md) | the projects Ignite borrows from: what it takes from each and where it differs |
+| [Ignite among related work](related-work.md) | a side-by-side comparison, what Ignite does not have, and what the combination adds |
 
 Read them in order: each page uses the terms of the ones before it.
 

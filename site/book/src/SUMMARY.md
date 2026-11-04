@@ -23,6 +23,8 @@
 - [Contracts, policies and control](design/contracts.md)
 - [One substrate, two targets](design/substrate.md)
 - [The compile-time evaluator](design/evaluator.md)
+- [Inspirations](design/inspirations.md)
+- [Ignite among related work](design/related-work.md)
 
 # Reference
 
