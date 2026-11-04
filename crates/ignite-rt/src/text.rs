@@ -15,10 +15,16 @@ fn texts<'a>(list: *const IgniteList) -> &'a [IgniteList] {
 }
 
 /// `void text_from_bytes_lossy(Text* out, List* bytes)`: invalid UTF-8
-/// sequences become U+FFFD.
+/// sequences become U+FFFD. ASCII is valid UTF-8 and is copied as it is,
+/// without the decoder.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_text_from_bytes_lossy(out: *mut IgniteList, data: *const IgniteList) {
-    let text = String::from_utf8_lossy(bytes(data));
+    let data = bytes(data);
+    if data.is_ascii() {
+        put(out, IgniteList::from_bytes(data));
+        return;
+    }
+    let text = String::from_utf8_lossy(data);
     put(out, IgniteList::from_bytes(text.as_bytes()));
 }
 
@@ -117,9 +123,25 @@ pub extern "C" fn ignite_rt_int_parse(text: *const IgniteList, out: *mut i64) ->
 }
 
 /// `void int_to_text(Text* out, i64 value)`: decimal, `-` for negatives.
+/// Formats into a stack buffer of 20 bytes, the length of `i64::MIN`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_int_to_text(out: *mut IgniteList, value: i64) {
-    put(out, IgniteList::from_bytes(value.to_string().as_bytes()));
+    let mut buffer = [0u8; 20];
+    let mut at = buffer.len();
+    let mut rest = value.unsigned_abs();
+    loop {
+        at -= 1;
+        buffer[at] = b'0' + (rest % 10) as u8;
+        rest /= 10;
+        if rest == 0 {
+            break;
+        }
+    }
+    if value < 0 {
+        at -= 1;
+        buffer[at] = b'-';
+    }
+    put(out, IgniteList::from_bytes(&buffer[at..]));
 }
 
 /// `i32 text_cmp(Text* a, Text* b)`: -1, 0 or 1 for the bytewise order of
