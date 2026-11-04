@@ -872,6 +872,18 @@ impl<'a> Walk<'a> {
         self.pins.iter().any(|q| q.overlaps(p))
     }
 
+    /// Hold `operand`, read in place, while a later operand runs; the depth
+    /// of [`Walk::held`] to truncate back to afterwards.
+    fn hold(&mut self, operand: &'a Expr) -> usize {
+        let depth = self.held.len();
+        self.held.push(Held {
+            expr: operand,
+            field: None,
+            places: None,
+        });
+        depth
+    }
+
     /// Whether an operand an enclosing call holds mentions a place
     /// overlapping `p` (20.3.2).
     fn held_overlaps(&mut self, p: &Place) -> bool {
@@ -1015,7 +1027,11 @@ impl<'a> Walk<'a> {
             },
             ExprKind::TupleField { receiver, .. } => self.expr(receiver, st),
             ExprKind::Index { receiver, index } => {
+                // The receiver is read in place after the index ran: a
+                // move under the index must not change it (20.3.2).
+                let depth = self.hold(receiver);
                 let st = self.expr(index, st);
+                self.held.truncate(depth);
                 self.expr(receiver, st)
             }
             ExprKind::Record { fields, .. } => fields
@@ -1061,6 +1077,13 @@ impl<'a> Walk<'a> {
             ExprKind::Binary { .. } => {
                 let mut cur = e;
                 while let ExprKind::Binary { op, left, right } = &cur.kind {
+                    // An aggregate left operand is read in place after the
+                    // right one ran (20.3.2); a scalar one, the `Bool` of
+                    // `&&` and `||` included, is a value by then.
+                    let depth = self.held.len();
+                    if self.aggregate_expr(left) {
+                        self.hold(left);
+                    }
                     if matches!(op, BinaryOp::And | BinaryOp::Or) {
                         let skipped = st.clone();
                         let evaluated = self.expr(right, st);
@@ -1068,6 +1091,7 @@ impl<'a> Walk<'a> {
                     } else {
                         st = self.expr(right, st);
                     }
+                    self.held.truncate(depth);
                     cur = &**left;
                 }
                 self.expr(cur, st)

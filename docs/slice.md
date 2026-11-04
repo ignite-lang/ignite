@@ -6209,15 +6209,20 @@ No move, even when the rule above would allow one:
 - inside the arms of a `match` whose scrutinee is a place overlapping the moved one, and inside
   the body of a `for` whose iterable overlaps it: on LLVM their pattern bindings point into it
   (`docs/llvm.md` §4), on Rust they borrow it;
-- at an argument when another argument of the same call or of an enclosing call, or the
-  receiver of an enclosing builtin, mentions an overlapping place at all: a read, an in-place
-  change, or an assignment to it or to a place rooted at it. A borrowed parameter would see the
-  moved value change (`f(s, s)`, `f(s.count, s)`, `look(s, wipe(s))`, `s.items.at(wipe(s))`),
-  and on LLVM a later argument that assigns `s` would overwrite the slot the callee owns
-  (`take(s, if c { s = fresh(); 0 } else { 0 })`). For an enclosing call the operands that count
-  are those evaluated before the one the move is in and passed in place: a borrowed argument, a
-  builtin or borrowed UFCS receiver, the receiver of a fn-field call. An argument of an enclosing
-  call in a move position is a value once evaluated (moved or copied), and a later one is kept by
+- at an argument when another argument of the same call or of an enclosing call, the receiver
+  of an enclosing builtin, the left operand of an enclosing operator or the receiver of an
+  enclosing index mentions an overlapping place at all: a read, an in-place change, or an
+  assignment to it or to a place rooted at it. A borrowed parameter or an operand read in place
+  would see the moved value change (`f(s, s)`, `f(s.count, s)`, `look(s, wipe(s))`,
+  `s.items.at(wipe(s))`, `s == bump(s)`, `s.items == bump(s).items`, `xs[reset(xs)]`), and on
+  LLVM a later argument that assigns `s` would overwrite the slot the callee owns
+  (`take(s, if c { s = fresh(); 0 } else { 0 })`). For an enclosing call, operator or index the
+  operands that count are those evaluated before the one the move is in and read in place after
+  it ran: a borrowed argument, a builtin or borrowed UFCS receiver, the receiver of a fn-field
+  call, the left operand of a binary operator when it is an aggregate (an `Int`, `Bool` or
+  other scalar left operand is a value once evaluated, and `&&` and `||` branch on theirs before
+  the right one runs), the receiver of an index. An argument of an enclosing call in a move
+  position is a value once evaluated (moved or copied, 20.3.5), and a later one is kept by
   liveness;
 - anywhere inside a closure body (the analysis does not enter closure bodies).
 
@@ -6281,6 +6286,11 @@ call makes more copies than before.
 - A moving argument passes the place's own pointer to the owned parameter, with no `copy.` call;
   ownership passes to the callee, which may change the value in place. A non-moving argument to
   an owned parameter is a fresh copy, as today.
+- A non-moving operand in a move position is copied when it is evaluated, before the next
+  operand runs, in every form that evaluates several: positional and named arguments, variant
+  payloads, list, tuple and record literal elements, record update fields. 20.3.2 relies on it:
+  a later operand may move the same place into a callee that changes it in place
+  (`weigh(first = s, second = bump_count(s))`, `Both(s, bump_count(s))`).
 - A moving `let`/`var` initializer, assignment, field value, element or payload takes the value
   with a shallow `memcpy` of its representation, without `copy.` glue.
 - The result slot never aliases a moved variable: `s = step(s, i)` writes the result to a

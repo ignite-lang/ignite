@@ -780,9 +780,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// UFCS call whose receiver is the first argument. `e` is the call
     /// expression, for named arguments (`docs/slice.md` section 14.2).
     ///
-    /// A borrowed aggregate goes to a parameter the callee only reads
+    /// A borrowed aggregate goes to a parameter the callee does not consume
     /// without a copy (`docs/llvm.md` section 3), unless a later argument
     /// modifies a variable: then it could change the place before the call.
+    /// A moved place ([`Lower::moved`]) is owned and goes to a consumed
+    /// parameter as its own pointer.
     fn call_with(&mut self, e: Option<&Expr>, symbol: &str, sig: &FnSig, args: &[&Expr]) -> Val {
         if let Some(perm) = e
             .and_then(|e| self.cx.types.named_args(e))
@@ -817,26 +819,37 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// receiver. The arguments are evaluated in source order into values,
     /// then passed in parameter order, so the reorder is invisible to their
     /// effects. The borrow shortcut is skipped: a copy of every aggregate is
-    /// correct whatever the order.
+    /// correct whatever the order. Each borrowed value is copied when it is
+    /// evaluated, as on the positional path: a later argument may move the
+    /// same place into a callee that changes it (`docs/slice.md` 20.3.5).
     fn call_named(&mut self, symbol: &str, sig: &FnSig, args: &[&Expr], perm: &[usize]) -> Val {
         let callee = self.function(symbol, &sig.params, &sig.ret);
         let offset = args.len() - perm.len();
+        let source = |i: usize| {
+            if i < offset {
+                i
+            } else {
+                offset + perm[i - offset]
+            }
+        };
+        let mut param_of = vec![None; args.len()];
+        for i in 0..sig.params.len() {
+            param_of[source(i)] = Some(i);
+        }
         let mut values = Vec::with_capacity(args.len());
-        for arg in args {
+        for (arg, param) in args.iter().zip(&param_of) {
             let v = self.expr(arg, true);
             if v == Val::Never {
                 return Val::Never;
             }
-            values.push(v);
+            values.push(match param {
+                Some(i) => self.owned(&sig.params[*i], v),
+                None => v,
+            });
         }
         let mut operands = Vec::with_capacity(sig.params.len());
         for (i, ty) in sig.params.iter().enumerate() {
-            let src = if i < offset {
-                i
-            } else {
-                offset + perm[i - offset]
-            };
-            operands.push(self.arg(ty, values[src].clone()));
+            operands.push(self.arg(ty, values[source(i)].clone()));
         }
         self.call(&callee, &sig.ret, operands)
     }
@@ -1210,7 +1223,21 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         if pending {
             self.nested -= 1;
         }
-        value
+        self.moved(e, value)
+    }
+
+    /// A place in a move position that is dead after it
+    /// (`TypedProgram::moves`, `docs/slice.md` 20.3.5) as an owned value:
+    /// every value position then takes it as it takes a temporary, passed
+    /// as the place's own pointer to an owned parameter or through a fn
+    /// value, or stored with a shallow `memcpy`, without `copy.` glue.
+    /// Nothing reads the place before it is reassigned or goes out of
+    /// scope, so the taker may change it in place.
+    fn moved(&self, e: &Expr, value: Val) -> Val {
+        match value {
+            Val::Ptr(p, false) if self.cx.types.moves(e) => Val::Ptr(p, true),
+            other => other,
+        }
     }
 
     fn expr_kind(&mut self, e: &Expr, want: bool) -> Val {
@@ -2152,14 +2179,25 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let index = layout.index(name).unwrap_or(index);
         let name = layout.variants[index].0.clone();
         let fields = layout.variants[index].1.clone();
+        // The payloads are stored once every one is evaluated, so each but
+        // the last borrowed one is copied when it is evaluated: a later
+        // payload may move the same place into a callee that changes it
+        // (`docs/slice.md` 20.3.5).
         if let Some(perm) = self.cx.types.named_args(e).map(<[usize]>::to_vec) {
+            let mut field_of = vec![None; args.len()];
+            for (field_i, &src) in perm.iter().enumerate().take(fields.len()) {
+                field_of[src] = Some(field_i);
+            }
             let mut evaluated = Vec::with_capacity(args.len());
-            for arg in args {
+            for (k, (arg, field)) in args.iter().zip(&field_of).enumerate() {
                 let v = self.expr(arg, true);
                 if v == Val::Never {
                     return Val::Never;
                 }
-                evaluated.push(v);
+                evaluated.push(match field {
+                    Some(f) if k + 1 < args.len() => self.owned(&fields[*f].0, v),
+                    _ => v,
+                });
             }
             let mut vals = Vec::new();
             for (field_i, (field_ty, _)) in fields.iter().enumerate() {
@@ -2170,13 +2208,19 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             return self.variant(&ty, &name, vals);
         }
         let mut vals = Vec::new();
-        for (arg, (field_ty, _)) in args.iter().zip(&fields) {
+        let count = args.len().min(fields.len());
+        for (k, (arg, (field_ty, _))) in args.iter().zip(&fields).enumerate() {
             let v = self.expr(arg, true);
             if v == Val::Never {
                 return Val::Never;
             }
             let have = self.ty(arg);
-            vals.push(self.coerce(field_ty, &have, v));
+            let v = self.coerce(field_ty, &have, v);
+            vals.push(if k + 1 < count {
+                self.owned(field_ty, v)
+            } else {
+                v
+            });
         }
         self.variant(&ty, &name, vals)
     }

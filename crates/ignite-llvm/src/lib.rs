@@ -27,7 +27,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ignite_check::Symbols;
 use ignite_syntax::SourceFile;
 use ignite_syntax::ast::{ComponentDecl, Decl, Expr, ExprKind, Program, ResourceDecl, SystemDecl};
-use ignite_types::{ExecutableInfo, FnSig, QualName, Ty, TypedModules, TypedProgram};
+use ignite_types::{Callee, ExecutableInfo, FnSig, QualName, Ty, TypedModules, TypedProgram};
 
 pub use ir::{RUNTIME, TargetSpec};
 pub use layout::{Layout, TypeEnv, repr};
@@ -91,30 +91,53 @@ fn type_env_of(std: &[ModuleInput<'_>], programs: &[ModuleInput<'_>]) -> TypeEnv
     env
 }
 
-/// Record, for every function and role of `input`, which parameters its body
-/// never modifies: callers pass those without a copy (`docs/llvm.md`
-/// section 3).
+/// Record, for every function and role of `input`, which parameters it
+/// borrows: those it does not consume (`TypedProgram::consumed`,
+/// `docs/slice.md` 20.3.3). Callers pass a borrowed parameter's place
+/// without a copy; a consumed parameter is owned (`docs/llvm.md` section 3).
+///
+/// The consumed set is a superset of the parameters the body modifies
+/// (`region::modified`), which owned a parameter before slice 16; a debug
+/// build checks it for every function it lowers.
 fn read_only_params(env: &mut TypeEnv, input: &ModuleInput<'_>) {
     let qual = |name: &str| QualName {
         module: input.path.to_string(),
         name: name.to_string(),
     };
-    let mut record = |symbol: String, f: &ignite_syntax::ast::FnDecl| {
-        let modified = region::modified(&f.body, input.types);
-        let params = f
-            .params
-            .iter()
-            .map(|p| !modified.contains(&p.name.name))
+    let mut record = |symbol: String, callee: Callee, f: &ignite_syntax::ast::FnDecl| {
+        let params: Vec<bool> = (0..f.params.len())
+            .map(|i| !input.types.consumed(&callee, i))
             .collect();
+        if cfg!(debug_assertions) {
+            let modified = region::modified(&f.body, input.types);
+            for (p, borrowed) in f.params.iter().zip(&params) {
+                debug_assert!(
+                    !(*borrowed && modified.contains(&p.name.name)),
+                    "{symbol}: `{}` is modified but not consumed",
+                    p.name.name
+                );
+            }
+        }
         env.set_read_only(symbol, params);
     };
     for decl in &input.program.decls {
         match decl {
-            Decl::Fn(f) => record(symbol(&qual(&f.qualified_name())), f),
+            Decl::Fn(f) => {
+                let q = qual(&f.qualified_name());
+                record(symbol(&q), Callee::Fn(q), f)
+            }
             Decl::Protocol(p) => {
                 for role in &p.fns {
-                    let protocol = symbol(&qual(&p.name.name));
-                    record(format!("{protocol}.{}", role.name.name), role);
+                    let protocol = qual(&p.name.name);
+                    let callee = Callee::Role {
+                        protocol: protocol.clone(),
+                        role: role.name.name.clone(),
+                    };
+                    record(
+                        format!("{}.{}", symbol(&protocol), role.name.name),
+                        callee,
+                        role,
+                    );
                 }
             }
             _ => {}

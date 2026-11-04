@@ -140,6 +140,82 @@ fn enclosing_builtin_receiver() -> Int {
     );
 }
 
+/// 20.3.2: the left operand of an operator on aggregates and the receiver
+/// of an index are held while the later operand runs: LLVM's
+/// `binary_step` and `list_at` read them in place after it, so a move
+/// under the later operand into a callee that changes the place would
+/// change them (`s == bump(s)` was `true`, `xs[drain(xs)]` read the
+/// cleared list). A scalar left operand is a value once evaluated, and
+/// `&&` and `||` branch on theirs first, so neither holds anything.
+#[test]
+fn an_operator_or_index_that_reads_the_place_keeps_the_copy() {
+    let t = typed(&format!(
+        "{PRELUDE}\n{}",
+        r#"
+fn bump(x: State) -> State {
+  x.items.push(9)
+  x
+}
+
+fn compared() -> Bool {
+  let s = fresh()
+  s == bump(s)
+}
+
+fn compared_items() -> Bool {
+  let s = fresh()
+  s.items == bump(s).items
+}
+
+fn compared_nested() -> Bool {
+  let s = fresh()
+  s.count == 1 && s == bump(s)
+}
+
+fn indexed() -> Int {
+  let xs = [1, 2]
+  xs[drain(xs)]
+}
+
+fn indexed_field() -> Int {
+  let s = fresh()
+  s.items[wipe(s)]
+}
+
+fn scalar_left() -> Int {
+  let s = fresh()
+  s.count + consume(s)
+}
+
+fn short_circuit() -> Bool {
+  let s = fresh()
+  s.count == 0 || consume(s) == 0
+}
+"#
+    ));
+    assert!(t.consumed("bump", 0), "bump changes its State in place");
+    let mut wrong = Vec::new();
+    for name in [
+        "compared",
+        "compared_items",
+        "compared_nested",
+        "indexed",
+        "indexed_field",
+    ] {
+        let marked = t.marked_in(name);
+        if !marked.is_empty() {
+            wrong.push(format!("{name}: {marked:?}"));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "moved while an operator or index holds the place:\n{}",
+        wrong.join("\n")
+    );
+    assert_eq!(t.marked_in("scalar_left"), vec!["s"]);
+    assert_eq!(t.marked_in("short_circuit"), vec!["s"]);
+}
+
 /// The module's own reading of 20.3.3 (moves.rs, module doc): "a fn whose
 /// every path loops forever moves nothing, so its parameters are not
 /// consumed". `spin` never exits and its parameter is never dead at the
