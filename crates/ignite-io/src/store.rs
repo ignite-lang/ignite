@@ -6,15 +6,17 @@
 //! every method sees a consistent map; ids come from a separate atomic
 //! counter, so `next_id` never waits for the lock. Values have copy
 //! semantics: `get` and `values` return clones, `put` stores the value it is
-//! given. `update` holds the lock while it applies `f`, so two updates of
-//! one id never lose a write. A task that panics while holding the lock does
-//! not make the store unusable: the next caller takes the map as it is.
-//! A `put` that replaces a value, a `remove` that finds one and an `update`
-//! call [`crate::released_memory`], so the task's end returns the freed
-//! heap pages to the kernel.
+//! given. `update` and `upsert` hold the lock while they apply `f`, so two
+//! updates or upserts of one id never lose a write. A task that panics while
+//! holding the lock does not make the store unusable: the next caller takes
+//! the map as it is. A `put` that replaces a value, a `remove` that finds
+//! one and an `update` or `upsert` that replaces one call
+//! [`crate::released_memory`], so the task's end returns the freed heap
+//! pages to the kernel.
 //!
-//! `read`, `read_values` and `replace_with` are the borrowing forms of
-//! `get`, `values` and `update`: their callbacks see the stored values under
+//! `read`, `read_values`, `replace_with` and `upsert_with` are the borrowing
+//! forms of `get`, `values`, `update` and `upsert`: their callbacks see the
+//! stored values under
 //! the lock and copy only what they need, so a caller that makes its own
 //! copy (the LLVM target's runtime, into a task's arena) makes one, not two.
 //! A callback must not call the same store: the lock is not reentrant.
@@ -154,6 +156,34 @@ impl<T> Store<T> {
             Err(error) => Some(Err(error)),
         }
     }
+
+    /// Store `f` of a borrow of the value under `id`, or of `None` when it
+    /// holds nothing, under `id` and return `read` of it, atomically: no
+    /// other method runs on the store between reading the old value and
+    /// `read` of the new one. On `Err` from `f` the store is unchanged,
+    /// `read` is not called and the lock is released before the error is
+    /// returned; when `f` panics the store is unchanged too.
+    pub fn upsert_with<R, E>(
+        &self,
+        id: i64,
+        f: impl FnOnce(Option<&T>) -> Result<T, E>,
+        read: impl FnOnce(&T) -> R,
+    ) -> Result<R, E> {
+        use std::collections::btree_map::Entry;
+        let mut map = self.map();
+        match map.entry(id) {
+            Entry::Occupied(mut entry) => {
+                let new = f(Some(entry.get()))?;
+                *entry.get_mut() = new;
+                crate::released_memory();
+                Ok(read(entry.get()))
+            }
+            Entry::Vacant(entry) => {
+                let new = f(None)?;
+                Ok(read(entry.insert(new)))
+            }
+        }
+    }
 }
 
 impl<T: Clone> Store<T> {
@@ -173,6 +203,18 @@ impl<T: Clone> Store<T> {
     /// holds nothing. When `f` panics the old value stays.
     pub fn update(&self, id: i64, f: impl FnOnce(T) -> T) -> Option<T> {
         self.replace_with(id, |old| f(old.clone()), T::clone)
+    }
+
+    /// Store `f` of a copy of the value under `id`, or of `None` when it
+    /// holds nothing, under `id`, atomically: no other method runs on the
+    /// store between reading the value and storing the result, so two tasks
+    /// that upsert one new id lose neither write. The stored value. When `f`
+    /// panics the store is unchanged.
+    pub fn upsert(&self, id: i64, f: impl FnOnce(Option<T>) -> T) -> T {
+        let stored = self.upsert_with(id, |old| Ok::<T, Infallible>(f(old.cloned())), T::clone);
+        match stored {
+            Ok(value) => value,
+        }
     }
 }
 
@@ -308,6 +350,59 @@ mod tests {
         let replaced: Option<Result<i64, &str>> = store.try_replace_with(1, |v| Ok(v + 1), |v| *v);
         assert_eq!(replaced, Some(Ok(6)));
         assert_eq!(releases(), start + 1, "the old value was dropped");
+    }
+
+    #[test]
+    fn upsert_inserts_then_replaces_and_marks_only_a_replacement() {
+        let releases = || crate::task::RELEASES.with(std::cell::Cell::get);
+        let store: Store<String> = Store::new();
+        let start = releases();
+        let append = |old: Option<String>| old.map_or("a".to_string(), |v| v + "b");
+        assert_eq!(store.upsert(1, append), "a");
+        assert_eq!(releases(), start, "an insert drops nothing");
+        assert_eq!(store.upsert(1, append), "ab");
+        assert_eq!(releases(), start + 1, "a replacement drops the old value");
+        assert_eq!(store.get(1), Some("ab".to_string()));
+        assert_eq!(store.len(), 1);
+    }
+
+    #[test]
+    fn a_failed_or_panicking_upsert_leaves_the_store_unchanged() {
+        let store: Store<i64> = Store::new();
+        store.put(1, 5);
+        let failed: Result<i64, &str> =
+            store.upsert_with(1, |_| Err("failed"), |_| panic!("read called"));
+        assert_eq!(failed, Err("failed"));
+        let failed: Result<i64, &str> =
+            store.upsert_with(2, |_| Err("failed"), |_| panic!("read called"));
+        assert_eq!(failed, Err("failed"));
+        let clone = store.clone();
+        let result = std::thread::spawn(move || clone.upsert(3, |_| panic!("boom"))).join();
+        assert!(result.is_err());
+        assert_eq!(store.values(), [5], "neither id 2 nor id 3 was inserted");
+        assert_eq!(store.upsert(1, |v| v.unwrap_or(0) * 2), 10);
+    }
+
+    #[test]
+    fn concurrent_upserts_of_one_new_id_lose_nothing() {
+        let store: Store<i64> = Store::new();
+        let threads: Vec<_> = (0..16)
+            .map(|_| {
+                let store = store.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..100 {
+                        store.upsert(9, |v| {
+                            std::thread::yield_now();
+                            v.unwrap_or(0) + 1
+                        });
+                    }
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        assert_eq!(store.get(9), Some(1600));
     }
 
     #[test]

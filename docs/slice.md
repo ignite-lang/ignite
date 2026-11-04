@@ -547,7 +547,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `b.to_int()` | `(b as i64)` | Byte |
 | `i.to_byte()` | `u8::try_from(i).ok()` | Int |
 | `Int.parse(t)` | `Some(t).filter(\|t: &String\| !t.starts_with('+')).and_then(\|t\| t.parse::<i64>().ok())` | static |
-| `s.next_id()`, `s.get(id)`, `s.put(id, v)`, `s.remove(id)`, `s.values()`, `s.update(id, f)` | the same `ignite_io::Store` method | Store |
+| `s.next_id()`, `s.get(id)`, `s.put(id, v)`, `s.remove(id)`, `s.values()`, `s.update(id, f)`, `s.upsert(id, f)` | the same `ignite_io::Store` method | Store |
 | `s.set_idle_timeout(ms)` | `s.set_idle_timeout(ms)` | TcpStream |
 | `b.slice(i, j)` | `b[(i) as usize..(j) as usize].to_vec()` | |
 | `b.push(x)` | `b.push(x)` | Bytes, List |
@@ -1169,6 +1169,7 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
 | `s.remove(id)` | `Option<T>` (the removed value) | `s.write` |
 | `s.values()` | `List<T>` in ascending id order | `s.read` |
 | `s.update(id, f: fn(T) -> T)` | `Option<T>` (the new value), atomic, `f` pure | `s.write` |
+| `s.upsert(id, f: fn(Option<T>) -> T)` | `T` (the stored value): `f` of the current value, `None` when `id` holds nothing, atomic, `f` pure | `s.write` |
 
 - Value semantics: `get`/`values` return copies; `put` stores a copy.
 - One implementation in `ignite-io`: `Store<T: Clone + Send>` over
@@ -1182,6 +1183,11 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
   thunk `store_update.<T>` runs under the lock behind a callback guard: a failure inside `f`
   (14.8) leaves the old value, the lock is released, then the task ends with the failure's
   report, as on the Rust target, where the failure unwinds through `ignite_io::Store`.
+- `upsert` is the atomic insert-or-update: two tasks that upsert one absent id lose neither
+  write, where `update` (which answers `None` for it) followed by `put` can. `ignite_io`'s
+  `upsert` is `upsert_with` over a clone of the stored value; `ignite_rt_store_upsert` calls
+  the thunk `store_upsert.<T>(f, old)` under the lock with the stored heap value, or null for an
+  absent id, which the thunk passes to `f` as `None`. The thunk has `update`'s callback guard.
 - Created as a system resource (11.4). `Store.new()` creates one in tests and test-only items
   only (section 12.3).
 

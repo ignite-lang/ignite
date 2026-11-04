@@ -25,7 +25,7 @@ fn mutates(builtin: Builtin) -> bool {
     use Builtin::*;
     match builtin {
         ListPush | ListAppend | ListClear | MapPut | MapRemove | StoreNextId | StorePut
-        | StoreRemove | StoreUpdate => true,
+        | StoreRemove | StoreUpdate | StoreUpsert => true,
         MapEmpty
         | MapGet
         | MapKeys

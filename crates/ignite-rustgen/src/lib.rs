@@ -3730,6 +3730,11 @@ impl<'a> Generator<'a> {
                 let a = self.args(args);
                 return format!("{r}.update({}, &*{})", a[0], wrap(&args[1], a[1].clone()));
             }
+            Some(Callee::Builtin(Builtin::StoreUpsert)) => {
+                let r = self.receiver(receiver);
+                let a = self.args(args);
+                return format!("{r}.upsert({}, &*{})", a[0], wrap(&args[1], a[1].clone()));
+            }
             Some(Callee::FieldFn { field, .. }) => {
                 let r = self.receiver(receiver);
                 let a = self.args(args);
