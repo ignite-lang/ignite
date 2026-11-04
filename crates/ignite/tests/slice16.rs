@@ -177,3 +177,54 @@ fn llvm_fixtures_pass() {
     );
     assert!(!stdout.contains("FAILED"), "{stdout}");
 }
+
+/// `ignite test FILE --target all` of one slice-16 fixture: exit status and
+/// stdout, with stderr appended for the failure message.
+fn both_targets(name: &str) -> (Option<i32>, String) {
+    let dir = out_dir(name.trim_end_matches(".ignite"));
+    let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("test")
+        .arg(fixture(name))
+        .args(["--target", "all", "--out"])
+        .arg(&dir)
+        .arg("--target-dir")
+        .arg(dir.join("cargo"))
+        .arg("--runtime")
+        .arg(common::runner_archive())
+        .output()
+        .expect("run ignite test");
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    (output.status.code(), format!("{stdout}\nstderr:\n{stderr}"))
+}
+
+/// 20.3.2, "an argument when another argument of the same call or of an
+/// enclosing call ... mentions an overlapping place": an operator's left
+/// operand, a field operand and an index receiver are read in place after
+/// the right operand ran, so a move under the right operand that changes
+/// the place shows the changed value. Every case passes with copies.
+#[test]
+fn held_operands_keep_their_values_on_both_targets() {
+    let (status, out) = both_targets("moves_held.ignite");
+    assert_eq!(status, Some(0), "{out}");
+    assert_eq!(
+        out.matches("test result: ok. 3 passed; 0 failed;").count(),
+        2,
+        "{out}"
+    );
+}
+
+/// 20.3.2 and 20.3.5: named arguments and variant payloads are evaluated
+/// into values and copied only after the last one, so an earlier operand in
+/// a move position that is copied (not moved) must still read its value
+/// from before a later operand moved the same place.
+#[test]
+fn deferred_copies_keep_their_values_on_both_targets() {
+    let (status, out) = both_targets("moves_deferred.ignite");
+    assert_eq!(status, Some(0), "{out}");
+    assert_eq!(
+        out.matches("test result: ok. 2 passed; 0 failed;").count(),
+        2,
+        "{out}"
+    );
+}
