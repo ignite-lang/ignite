@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ignite: say what your system is for</title>
-  <meta name="description" content="Ignite is an intent-oriented language for specifying, building, deploying and operating systems. One program describes the components, the network, the contracts and the policies, and the compiler turns it into native executables.">
+  <title>Ignite: say what your program is for</title>
+  <meta name="description" content="Ignite is a compiled, intent-oriented language for fast, resource-efficient software development by humans and AI agents. One typed file holds the program, its components, its contracts and its policies; the compiler turns it into native executables, then runs and checks them.">
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0f0a14">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
@@ -72,9 +72,9 @@
 
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> v0.3.0 &middot; an early prototype</p>
-          <h1 id="hero-title">Say what your system is for. <span class="flame-text">Ignite builds it, runs it and keeps it honest.</span></h1>
-          <p class="lede">An intent-oriented language for specifying, building, deploying and operating systems. One program describes the components, the network, the contracts and the policies, and the compiler turns it into native executables.</p>
+          <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> v0.4.0 &middot; an early prototype</p>
+          <h1 id="hero-title">Say what your program is for. <span class="flame-text">One file, one build, one native executable.</span></h1>
+          <p class="lede">A compiled, intent-oriented language for fast, resource-efficient software development by humans and AI agents. One typed file holds the program, its components, its contracts and its policies; the compiler turns it into native executables, then runs and checks them.</p>
           <div class="cta">
             <a class="btn btn-primary" href="#quickstart">Get started</a>
             <a class="btn btn-ghost" href="book/design/index.html">Read the design</a>
@@ -180,6 +180,51 @@ bye</code></pre>
           </div>
           <p class="window-note">The terminal system from <a href="https://github.com/ignite-lang/ignite/tree/main/examples/terminal">examples/terminal</a>, <code>terminal.ignite</code> in full and an excerpt of <code>commands.ignite</code> (it leaves out <code>respond</code> and most tests; a third file, <code>command_schema.ignite</code>, lists the command names): <code>ignite build</code> turns it into the server <code>terminald</code> and the client <code>tn</code>.</p>
         </div>
+      </div>
+    </section>
+
+    <section class="speed" id="build-speed" aria-labelledby="speed-title">
+      <div class="wrap speed-grid">
+        <div>
+          <p class="kicker">Build speed</p>
+          <h2 id="speed-title">Built for many agents compiling at once</h2>
+          <p>Ignite exists in part as a replacement for Rust, because rustc takes a long time to compile. In agentic software development many agents work at the same time and each of them runs compilations; with rustc, that grinds the machine to a halt. Compilation caches did not solve it.</p>
+          <p>In Ignite a whole program can be one file. It compiles in one step, and on the LLVM target clang compiles and links the result: no cargo, no crate graph, and the binary is there. The todo HTTP service builds in 0.22&nbsp;s (dev) and 0.75&nbsp;s (release) on the LLVM target. The default target is still Rust, built by cargo, at 2.5 to 3.2&nbsp;s for the same program.</p>
+          <p>For many agents the figure that adds up is CPU time, not wall time: N builds at once need about N times the CPU seconds of one. Eight LLVM-target builds of the todo service started together finished in 0.34&nbsp;s and used 2.4 CPU seconds between them.</p>
+        </div>
+        <figure class="speed-figure">
+          <table class="speed-table">
+            <caption>CPU seconds per build, cold, median of five runs</caption>
+            <thead>
+              <tr><th scope="col">Build</th><th scope="col" class="cpu-col">CPU s</th><th scope="col" class="n">Wall s</th><th scope="col" class="n">Peak RSS</th></tr>
+            </thead>
+            <tbody>
+              <tr class="group"><th scope="rowgroup" colspan="4">todo, an HTTP JSON service: one Ignite file, 146 lines</th></tr>
+              <tr><th scope="row">Ignite, LLVM target, dev</th><td><div class="cpu"><span class="track"><span class="bar bar-ignite" style="--w: 3.5%"></span></span><span class="n">0.223</span></div></td><td class="n">0.224</td><td class="n">80&nbsp;MiB</td></tr>
+              <tr><th scope="row">Ignite, Rust target (cargo), dev</th><td><div class="cpu"><span class="track"><span class="bar bar-cargo" style="--w: 51.1%"></span></span><span class="n">3.271</span></div></td><td class="n">2.460</td><td class="n">290&nbsp;MiB</td></tr>
+              <tr><th scope="row">Ignite, LLVM target, release</th><td><div class="cpu"><span class="track"><span class="bar bar-ignite" style="--w: 11.6%"></span></span><span class="n">0.743</span></div></td><td class="n">0.749</td><td class="n">94&nbsp;MiB</td></tr>
+              <tr><th scope="row">Ignite, Rust target (cargo), release</th><td><div class="cpu"><span class="track"><span class="bar bar-cargo" style="--w: 98%"></span></span><span class="n">6.274</span></div></td><td class="n">3.187</td><td class="n">308&nbsp;MiB</td></tr>
+              <tr class="group"><th scope="rowgroup" colspan="4">ember, a Redis-protocol key-value server: 1,069 lines of Ignite against 1,461 lines of handwritten Rust</th></tr>
+              <tr><th scope="row">Ignite, LLVM target, dev</th><td><div class="cpu"><span class="track"><span class="bar bar-ignite" style="--w: 2.9%"></span></span><span class="n">0.188</span></div></td><td class="n">0.193</td><td class="n">81&nbsp;MiB</td></tr>
+              <tr><th scope="row">Handwritten Rust (cargo), dev</th><td><div class="cpu"><span class="track"><span class="bar bar-cargo" style="--w: 27.5%"></span></span><span class="n">1.761</span></div></td><td class="n">1.011</td><td class="n">200&nbsp;MiB</td></tr>
+              <tr><th scope="row">Ignite, LLVM target, release</th><td><div class="cpu"><span class="track"><span class="bar bar-ignite" style="--w: 9.1%"></span></span><span class="n">0.581</span></div></td><td class="n">0.583</td><td class="n">92&nbsp;MiB</td></tr>
+              <tr><th scope="row">Handwritten Rust (cargo), release</th><td><div class="cpu"><span class="track"><span class="bar bar-cargo" style="--w: 74.7%"></span></span><span class="n">4.782</span></div></td><td class="n">4.532</td><td class="n">225&nbsp;MiB</td></tr>
+            </tbody>
+          </table>
+          <figcaption>
+            <span class="legend"><span class="key bar-ignite" aria-hidden="true"></span>Ignite, LLVM target</span>
+            <span class="legend"><span class="key bar-cargo" aria-hidden="true"></span>built by cargo</span>
+            <span class="speed-note">CPU is user plus system time of every process a build starts. Cold builds: fresh output and target directories, sccache off; the LLVM runtime archive is built once and not counted. The handwritten Rust release profile uses fat LTO and one codegen unit. Measured 2026-11-04 at commit <code>f2881ab</code> on a 10-core Intel i9-10900K shared with other builds (load 6 to 11). <a href="https://github.com/ignite-lang/ignite/blob/main/docs/performance/build-speed/README.md">Method and raw samples</a>.</span>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="spec" aria-labelledby="spec-title">
+      <div class="wrap">
+        <p class="kicker">Planned, not built</p>
+        <h2 id="spec-title">Specified, then checked</h2>
+        <p class="section-lede">Ignite is meant as a native realization target for <a href="https://github.com/beyond10x/ess">ESS</a>, which turns intent into typed, machine-checkable specifications with conformance suites. ESS stays language-independent: the conformance tests it generates check an Ignite executable like any other. None of this is built yet; the plan is in the <a href="https://github.com/ignite-lang/ignite/blob/main/docs/research/review-2026-11-04-ecosystem.md">ecosystem review</a>.</p>
       </div>
     </section>
 
@@ -380,14 +425,15 @@ ignite explain examples/terminal/terminal.design.ignite local</code></pre>
         <div>
           <p class="kicker">Where it stands</p>
           <h2 id="status-title">Early, honest, moving</h2>
-          <p>Ignite is an early prototype. The language, both native targets, the standard library, the system declaration, planning, running, journal replay and local apply work today. The syntax is not frozen and the design is versioned.</p>
+          <p>Ignite is an early prototype. The language, both native targets, the standard library, the system declaration, planning, running, journal replay, local apply and protocol conformance claims work today. The syntax is not frozen and the design is versioned.</p>
           <p class="more"><a href="book/roadmap.html">See the roadmap &rarr;</a></p>
         </div>
         <ul class="milestones">
           <li><span class="tag">v0.1.0</span> language, two targets, protocols in Ignite, inline tests, plan, explain, run and replay</li>
           <li><span class="tag">v0.2.0</span> <code>ignite apply</code>: local host, saved plans, durable receipts, crash recovery</li>
           <li><span class="tag">v0.3.0</span> in-process streams and protocol roles generic over the byte stream</li>
-          <li><span class="tag tag-next">next</span> RFC catalogues and protocol conformance, not released</li>
+          <li><span class="tag">v0.4.0</span> RFC catalogues, protocol conformance claims, <code>ignite conformance</code></li>
+          <li><span class="tag tag-next">next</span> closures and last-use moves, processes and files, not released</li>
         </ul>
       </div>
     </section>
