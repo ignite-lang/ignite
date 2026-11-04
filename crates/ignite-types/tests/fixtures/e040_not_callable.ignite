@@ -1,0 +1,5 @@
+fn literal() -> Int = (1)(2)
+
+fn element(xs: List<Int>) -> Int = xs[0](1)
+
+fn text() -> Int = "a"(1)
