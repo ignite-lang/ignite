@@ -23,7 +23,7 @@ test fn start_overflow(s: Store<Int>) -> PipeStream requires [s.write] {
   a
 }
 
-test "a failing update in a task leaves the store usable" {
+test "an overflow in update in a task leaves the store usable" {
   let s: Store<Int> = Store.new()
   s.put(1, 9223372036854775807)
   let a = start_overflow(s)
@@ -38,7 +38,7 @@ test "a failing update in a task leaves the store usable" {
   assert s.update(2, |v| v * 2) == Some(10)
 }
 
-test "a failing update fails its test" {
+test "an overflow in update ends its test" {
   let s: Store<Int> = Store.new()
   s.put(1, 9223372036854775807)
   _ = s.update(1, |v| v + 1)

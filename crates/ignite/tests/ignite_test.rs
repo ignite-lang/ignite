@@ -403,10 +403,10 @@ fn a_failing_store_update_ends_its_task_and_frees_the_store() {
     on_both_targets(|target| {
         let out = &fixtures_run(target).stdout;
         for line in [
-            "test fixtures.store/a failing update in a task leaves the store usable ... ok\n",
-            "test fixtures.store/a failing update fails its test ... FAILED\n",
+            "test fixtures.store/an overflow in update in a task leaves the store usable ... ok\n",
+            "test fixtures.store/an overflow in update ends its test ... FAILED\n",
             &format!(
-                "---- fixtures.store/a failing update fails its test stderr ----\nerror: + failed at {file}:44:23: 9223372036854775807 + 1\n"
+                "---- fixtures.store/an overflow in update ends its test stderr ----\nerror: + failed at {file}:44:23: 9223372036854775807 + 1\n"
             ),
         ] {
             assert!(out.contains(line), "{target}: no `{line}` in\n{out}");
