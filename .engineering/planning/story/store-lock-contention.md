@@ -1,0 +1,41 @@
+---
+format: aep.planning-md/3
+id: story:store-lock-contention
+kind: story
+status: draft
+title: Store under pipelined load without lock contention
+summary: Shard or split the Store lock; futex calls per request toward the handwritten baseline
+relations:
+- depends_on: story:store-atomic-upsert
+scope:
+- confidence: inferred
+  path: crates/ignite-io/src/store.rs
+revision: 2
+---
+# Story: store-lock-contention
+
+## Outcome
+
+Pipelined load on a `Store` no longer spends its time contending on one mutex: futex calls per
+request on the ember server fall toward the handwritten Rust baseline.
+
+## Context
+
+- Measured by the playground session (2026-11-04, after round 7), ember key-value server, Rust
+  target, pipeline 50: futex calls per request 0.75 against 0.07 for the handwritten Rust server;
+  `lock_contended` 11.9 % of user CPU (strace `opt7/b-s50.strace`, perf `opt7/b-p50.perf.data` in
+  that session's scratch directory).
+- Causes named there: one `Mutex<BTreeMap>` per store (`ignite_io::Store`, `docs/slice.md` 11.3);
+  INCR takes the lock twice (`get`, then `update`); `update` clones the value twice while holding
+  the lock. `story:store-atomic-upsert` turns INCR into one lock; `story:store-borrowing-reads`
+  changes the copies.
+- Options: shard the map by id, a reader-writer lock for reads, clones outside the lock.
+
+## Acceptance
+
+- futex calls per request and `lock_contended` share measured before and after on the same load,
+  recorded in `docs/performance/`; `values()` keeps ascending id order; `task gate` green.
+
+## Out of Scope
+
+- Transactions across keys.

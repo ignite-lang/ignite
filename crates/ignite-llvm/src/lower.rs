@@ -3721,7 +3721,17 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             ListMap => self.list_map(receiver.expect("receiver"), &args[0]),
             IntParse => {
-                let text = self.read_arg(&args[0]);
+                let text = match &args[0].kind {
+                    ExprKind::Method { receiver, .. }
+                        if matches!(
+                            self.cx.types.callee(&args[0]),
+                            Some(Callee::Builtin(BytesToText))
+                        ) =>
+                    {
+                        self.read_arg(receiver)
+                    }
+                    _ => self.read_arg(&args[0]),
+                };
                 self.option_from("int_parse", &Ty::Int, |payload| {
                     format!("ptr {text}, ptr {payload}")
                 })

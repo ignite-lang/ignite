@@ -3533,6 +3533,9 @@ impl<'a> Generator<'a> {
     }
 
     fn static_call(&mut self, owner: &str, name: &str, args: &[Expr]) -> String {
+        if let ("Int", "parse", [text]) = (owner, name, args) {
+            return format!("ignite_io::parse_int({})", self.text_bytes(text));
+        }
         let texts = self.args(args);
         match (owner, name, texts.as_slice()) {
             ("Bytes", "empty", []) => "Vec::<u8>::new()".to_string(),
@@ -3558,14 +3561,50 @@ impl<'a> Generator<'a> {
                     borrow(&args[0], reference.clone())
                 )
             }
-            ("Int", "parse", [text]) => format!(
-                "Some({text}).filter(|t: &String| !t.starts_with('+')).and_then(|t| t.parse::<i64>().ok())"
-            ),
             (owner, _, _) if SUBSTRATE_OWNERS.contains(&owner) => {
                 format!("ignite_io::{owner}::{name}({})", texts.join(", "))
             }
             _ => format!("{owner}::{name}({})", texts.join(", ")),
         }
+    }
+
+    /// The bytes of a `Text` argument that is only read, for
+    /// `ignite_io::parse_int`: `bytes.to_text()` reads `bytes` itself, with
+    /// no `Text` built, and a checked `slice` borrows
+    /// ([`checked_slice_ref`](Self::checked_slice_ref)).
+    fn text_bytes(&mut self, text: &Expr) -> String {
+        if let ExprKind::Method { receiver, .. } = &text.kind
+            && matches!(
+                self.callee(text),
+                Some(Callee::Builtin(Builtin::BytesToText))
+            )
+        {
+            return self
+                .checked_slice_ref(receiver)
+                .unwrap_or_else(|| self.ref_arg(receiver));
+        }
+        self.ref_arg(text)
+    }
+
+    /// `list.slice(from, to)` with a failure site, as a borrow of `list`
+    /// (`ignite_io::checked::slice_ref`) where the caller only reads it;
+    /// `None` for any other expression.
+    fn checked_slice_ref(&mut self, expr: &Expr) -> Option<String> {
+        let ExprKind::Method { receiver, args, .. } = &expr.kind else {
+            return None;
+        };
+        if !matches!(self.callee(expr), Some(Callee::Builtin(Builtin::ListSlice))) {
+            return None;
+        }
+        let site = self.types.and_then(|t| t.failure_site(expr))?;
+        let list = self.ref_arg(receiver);
+        let a = self.args(args);
+        Some(format!(
+            "ignite_io::checked::slice_ref({list}, {}, {}, {})",
+            a[0],
+            a[1],
+            self.site_args(site)
+        ))
     }
 
     /// A call that changes an indexed receiver in place
@@ -3749,6 +3788,11 @@ impl<'a> Generator<'a> {
             Some(Callee::Builtin(Builtin::TextToText)) => {
                 let r = self.receiver(receiver);
                 return format!("{r}.clone()");
+            }
+            Some(Callee::Builtin(Builtin::BytesToText)) => {
+                if let Some(bytes) = self.checked_slice_ref(receiver) {
+                    return format!("String::from_utf8_lossy({bytes}).into_owned()");
+                }
             }
             _ => {}
         }

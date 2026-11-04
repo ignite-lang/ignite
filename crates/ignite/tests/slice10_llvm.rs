@@ -95,6 +95,8 @@ fn failures_fail_on_both_targets_with_the_same_report() {
             ("/", "1 / 0"),
             ("+", "9223372036854775807 + 1"),
             ("-", "-(-9223372036854775808)"),
+            ("slice", "slice 1..3 out of range for length 2"),
+            ("slice", "slice -1..1 out of range for length 2"),
         ] {
             assert!(
                 run.stdout.contains(&format!("error: {op} failed at "))

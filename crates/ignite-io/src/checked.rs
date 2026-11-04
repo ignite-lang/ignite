@@ -171,12 +171,27 @@ pub fn slice<T: Clone>(
     line: usize,
     col: usize,
 ) -> Vec<T> {
+    slice_ref(list, from, to, file, line, col).to_vec()
+}
+
+/// [`slice`] without the copy: the elements `from..to` borrowed from
+/// `list`, or the same failure. Generated code uses it where the slice is
+/// only read, as in `bytes.slice(from, to).to_text()`.
+#[inline]
+pub fn slice_ref<'a, T>(
+    list: &'a [T],
+    from: i64,
+    to: i64,
+    file: &str,
+    line: usize,
+    col: usize,
+) -> &'a [T] {
     let range = usize::try_from(from)
         .ok()
         .zip(usize::try_from(to).ok())
         .filter(|(start, end)| start <= end && *end <= list.len());
     match range {
-        Some((start, end)) => list[start..end].to_vec(),
+        Some((start, end)) => &list[start..end],
         None => out_of_range(
             "slice",
             format!("slice {from}..{to} out of range for length {}", list.len()),
@@ -292,6 +307,11 @@ mod tests {
         assert_eq!(
             failure(|| slice(&list, -1, 1, "t.ignite", 3, 4)),
             "slice failed at t.ignite:3:4: slice -1..1 out of range for length 2"
+        );
+        assert_eq!(slice_ref(&list, 1, 2, "f", 1, 1), [20]);
+        assert_eq!(
+            failure(|| slice_ref(&list, 1, 3, "t.ignite", 3, 4).len()),
+            "slice failed at t.ignite:3:4: slice 1..3 out of range for length 2"
         );
     }
 }
