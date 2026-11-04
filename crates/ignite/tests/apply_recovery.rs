@@ -1004,3 +1004,83 @@ fn a_foreign_listener_block_keeps_the_reducer_revision_changed_report() {
     assert_eq!(recovery.get("laterReasons"), None);
     host.stop();
 }
+
+/// 17.5: "Lifting the block keeps the report, no longer blocking, until the
+/// next commit". A host stop and start is not a commit (17.5: "Stopping or
+/// restarting a host is not a new apply"), so the `reducer_revision_changed`
+/// report the lift kept must still stand after one.
+#[test]
+#[ignore = "adversary: the reducer_revision_changed report kept by the lift is gone after a host restart, before any commit"]
+fn adversary_the_lifted_report_survives_a_host_restart_until_a_commit() {
+    let flow = Flow::new("lifted-restart");
+    let mut host = Host::start(&flow, "first", &[]);
+    let first = flow.prepare("first");
+    let committed = plan_of(&first);
+    let name = server_name(&committed);
+    flow.apply("first-apply", &first);
+    await_converged(&flow, &host, 1);
+    host.stop();
+
+    let std = flow.root.join("std");
+    copy_tree(&repo().join("std"), &std);
+    let control = std.join("control.ignite");
+    fs::write(&control, read(&control) + "// another reducer revision\n").unwrap();
+    change_command_body(&flow);
+    let mut host = Host::start(&flow, "mid-transition", &[(FAULT, "mid_transition")]);
+    await_converged(&flow, &host, 1);
+    let second = flow.prepare_with("other-reducer", &["--std", std.to_str().unwrap()]);
+    let changed = plan_of(&second);
+    flow.apply_fails("apply-crashes-mid-transition", &second);
+    host.crashed("mid_transition");
+    let changed_name = server_name(&changed);
+    until(
+        "the instances end with their host",
+        || flow.servers(&name).is_empty() && flow.servers(&changed_name).is_empty(),
+        || format!("{:?}", flow.servers(&name)),
+    );
+
+    let foreign = TcpListener::bind(("127.0.0.1", flow.port)).expect("a foreign listener");
+    let reducer = [(
+        "IGNITE_DEBUG_HOST_REDUCER_REVISION",
+        committed.reducer_revision.as_str(),
+    )];
+    let mut host = Host::start(&flow, "blocked", &reducer);
+    drop(foreign);
+    host.line("status");
+    await_converged(&flow, &host, 1);
+    let lifted = flow.inspect();
+    let reason = |status: &Json| {
+        status
+            .get("recovery")
+            .and_then(|recovery| recovery.get("reason"))
+            .and_then(Json::as_str)
+            .map(str::to_string)
+    };
+    assert_eq!(
+        reason(&lifted).as_deref(),
+        Some("reducer_revision_changed"),
+        "the lift keeps the report: {}",
+        lifted.compact()
+    );
+    host.stop();
+
+    let mut host = Host::start(&flow, "restarted", &reducer);
+    await_converged(&flow, &host, 1);
+    let restarted = flow.inspect();
+    host.stop();
+    assert_eq!(
+        restarted.get("committedRevision").and_then(Json::as_i64),
+        Some(1),
+        "no commit happened"
+    );
+    assert_eq!(
+        reason(&restarted).as_deref(),
+        Some("reducer_revision_changed"),
+        "the report kept by the lift vanished at a restart before any commit: {}",
+        restarted.compact()
+    );
+    assert_eq!(
+        restarted.get("recoveryReason").and_then(Json::as_str),
+        Some("reducer_revision_changed")
+    );
+}

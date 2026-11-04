@@ -1108,4 +1108,115 @@ mod tests {
             )]
         );
     }
+
+    /// 17.5 lists "a process that failed to start" among the later failures
+    /// kept beside an unresolved `gave_up`, "whichever operation the run's
+    /// records carry". A `SpawnFailed` of the committed revision's run whose
+    /// records carry the committed operation (the run after an abandoned
+    /// transition gave it back, `release_operation`) is a reason a corrective
+    /// does not resolve: it must be kept beside `gave_up`, turn the next
+    /// action into an inspection and block further effects.
+    #[test]
+    #[ignore = "adversary: a SpawnFailed of the committed run carrying the committed operation is not kept beside gave_up (17.5 says whichever operation the records carry)"]
+    fn adversary_a_spawn_failure_of_the_committed_run_is_kept_beside_the_gave_up_operation() {
+        let root = scratch("spawn-failed");
+        let mut host = gave_up_host(&root);
+        let mut runtime = committed_runtime("committed");
+        runtime
+            .supervised
+            .insert("Terminal.server.supervisor".to_string());
+        host.runtime = Some(runtime);
+        let failed = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("event")),
+                ("machine", text("Terminal.server.supervisor")),
+                (
+                    "value",
+                    object([(
+                        "fields",
+                        object([(
+                            "kind",
+                            object([
+                                ("variant", text("SpawnFailed")),
+                                ("fields", Json::Array(vec![text("no such file")])),
+                            ]),
+                        )]),
+                    )]),
+                ),
+            ]),
+        );
+        let effect = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("effect")),
+                ("machine", text("Terminal.server.supervisor")),
+                ("value", object([("variant", text("Spawn"))])),
+            ]),
+        );
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(failed.is_ok(), "{failed:?}");
+        assert_eq!(host.active.as_deref(), Some("failed"));
+        assert_eq!(host.recovery_reason.as_deref(), Some("gave_up"));
+        assert_eq!(
+            later_of(&host, "failed"),
+            vec![(
+                "committed".to_string(),
+                "a required owned process failed to start".to_string()
+            )],
+            "the spawn failure is kept beside gave_up"
+        );
+        assert_eq!(
+            receipt_of(&host, "failed").2.as_deref(),
+            Some(INSPECT),
+            "a corrective does not resolve a failed start"
+        );
+        assert!(
+            effect.is_err(),
+            "the unresolvable later reason blocks every effect"
+        );
+    }
+
+    /// 17.5: a later reason a corrective does not resolve means "no
+    /// corrective is admitted". The live inspection's top-level next action
+    /// must then not tell the operator to prepare and apply one.
+    #[test]
+    #[ignore = "adversary: inspect's nextAction asks for a corrective plan that admission refuses after a later reducer failure"]
+    fn adversary_inspect_after_a_later_reducer_failure_does_not_ask_for_a_corrective() {
+        let root = scratch("inspect-next");
+        let mut host = gave_up_host(&root);
+        host.runtime = Some(committed_runtime("committed"));
+        let failed = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("error")),
+                ("machine", text("Terminal.probe.scheduler")),
+                (
+                    "value",
+                    object([
+                        ("code", text("E128")),
+                        ("report", text("reducer of Terminal.probe.scheduler failed")),
+                    ]),
+                ),
+            ]),
+        );
+        let view = host.inspection();
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(failed.is_ok(), "{failed:?}");
+        assert!(!host.correctable(), "admission refuses a corrective");
+        let next = view
+            .get("nextAction")
+            .and_then(Json::as_str)
+            .unwrap_or_default()
+            .to_string();
+        assert!(
+            !next.contains("corrective"),
+            "inspect asks for a corrective that admission refuses: {next}"
+        );
+    }
 }
