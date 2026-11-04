@@ -1,0 +1,1 @@
+e092_verifies_foreign.ignite:15:56: error[E092]: `RFC2.R1_1` belongs to RFC 2, which no protocol of this module conforms to

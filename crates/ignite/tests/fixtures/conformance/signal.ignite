@@ -1,0 +1,34 @@
+package tests.conformance.signal
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7112: Spec = Spec {
+  rfc = 7112
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7112"
+  digest = "sha256:7112"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7112
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+fn echo(line: Text) -> Text satisfies [RFC7112.R2_1] = line
+
+protocol Echo conforms [RFC7112] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}
+
+test "never ends" verifies [RFC7112.R2_1] {
+  var n = 0
+  while true {
+    n = n + 1
+  }
+}

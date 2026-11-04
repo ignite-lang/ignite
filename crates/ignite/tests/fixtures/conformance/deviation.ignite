@@ -1,0 +1,27 @@
+package tests.conformance.deviation
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7104: Spec = Spec {
+  rfc = 7104
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7104"
+  digest = "sha256:7104"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7104
+  section = "2"
+  ordinal = 1
+  level = ShouldNot
+  text = "A server SHOULD NOT answer before the line ends."
+}
+
+protocol Echo conforms [RFC7104] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+
+  unsupported RFC7104.R2_1 "ok is sent at once"
+}

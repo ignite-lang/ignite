@@ -2,7 +2,8 @@
 //! (`docs/layering.md`): a general layer knows no application protocol.
 //!
 //! Every std module is parsed with the real parser and placed in a layer by
-//! [`LAYERS`] or, for `std.protocol.*`, by its path. A module imports only
+//! [`LAYERS`] or, for `std.protocol.*`, `std.rfc` and `std.rfc.*`, by its
+//! path. A module imports only
 //! modules of its own layer or a lower one; no module outside
 //! `std.protocol.*` imports a protocol module or declares a name that
 //! contains a protocol's name; and no file under `crates/*/src` mentions
@@ -43,7 +44,8 @@ impl fmt::Display for Layer {
     }
 }
 
-/// The layer of every std module outside `std.protocol.*`; the table of
+/// The layer of every std module outside `std.protocol.*`, `std.rfc` and
+/// `std.rfc.*`; the table of
 /// `docs/layering.md`. A new module fails the test until it is listed.
 const LAYERS: &[(&str, Layer)] = &[
     ("std.io", Layer::Base),
@@ -69,6 +71,21 @@ const CRATES_EXEMPT: &[(&str, &str)] = &[(
 )];
 
 const PROTOCOL_PREFIX: &str = "std.protocol.";
+
+/// `std.rfc` and every catalogue under it are leaf (`docs/slice.md` 19.11).
+const RFC_PREFIX: &str = "std.rfc";
+
+/// The layer a module's path decides: protocol for `std.protocol.*`, leaf
+/// for `std.rfc` and `std.rfc.*`.
+fn prefix_layer(module: &str) -> Option<Layer> {
+    if module.starts_with(PROTOCOL_PREFIX) {
+        return Some(Layer::Protocol);
+    }
+    let rfc = module
+        .strip_prefix(RFC_PREFIX)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'));
+    rfc.then_some(Layer::Leaf)
+}
 
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -107,8 +124,8 @@ impl StdModule {
     }
 
     fn layer(&self) -> Option<Layer> {
-        if self.module.starts_with(PROTOCOL_PREFIX) {
-            return Some(Layer::Protocol);
+        if let Some(layer) = prefix_layer(&self.module) {
+            return Some(layer);
         }
         LAYERS
             .iter()
@@ -148,8 +165,8 @@ fn standard_library() -> Vec<StdModule> {
 
 /// The layer of an imported module; `std.io` has no file.
 fn layer_of(module: &str, std: &[StdModule]) -> Option<Layer> {
-    if module.starts_with(PROTOCOL_PREFIX) {
-        return Some(Layer::Protocol);
+    if let Some(layer) = prefix_layer(module) {
+        return Some(layer);
     }
     std.iter()
         .find(|m| m.module == module)

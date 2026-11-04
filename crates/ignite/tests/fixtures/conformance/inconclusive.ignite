@@ -1,0 +1,27 @@
+package tests.conformance.inconclusive
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7105: Spec = Spec {
+  rfc = 7105
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7105"
+  digest = "sha256:7105"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7105
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+fn echo(line: Text) -> Text satisfies [RFC7105.R2_1] = line
+
+protocol Echo conforms [RFC7105] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}

@@ -85,6 +85,8 @@ use ignite_syntax::ast::{
 };
 use ignite_syntax::diagnostic::Diagnostic;
 
+mod clauses;
+
 /// Builtin enums and their variants, in scope in every program.
 pub const BUILTIN_ENUMS: &[(&str, &[&str])] = &[
     ("Option", &["Some", "None"]),
@@ -481,6 +483,8 @@ pub fn check_module(program: &Program, modules: &Modules) -> Result<Symbols, Vec
         }
         checker.diagnostics.truncate(collected);
     }
+    checker.clauses(program, modules);
+    checker.catalogue_literals(program, modules);
     if checker.diagnostics.is_empty() {
         Ok(checker.symbols)
     } else {
@@ -3849,6 +3853,7 @@ mod tests {
 
     fn func(n: &str, params: &[&str], effectful: bool, stmts: Vec<Stmt>) -> Decl {
         Decl::Fn(FnDecl {
+            satisfies: Vec::new(),
             name: id(n),
             params: params
                 .iter()

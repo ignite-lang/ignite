@@ -1,0 +1,64 @@
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const LIMIT: Int = 8000
+
+fn section() -> Text = "2.1"
+
+const R2_1_1: Requirement = Requirement {
+  rfc = 9
+  section = section()
+  ordinal = 1
+  level = Must
+  text = "a call"
+}
+
+const R2_1_2: Requirement = Requirement {
+  rfc = 9
+  section = "2.1"
+  ordinal = 2
+  level = Must
+  text = "an interpolated {LIMIT} text"
+}
+
+const A: Requirement = R2_1_1
+
+const R2_1_3: Requirement = Requirement {
+  rfc = 9
+  section = "2.1"
+  ordinal = 3
+  level = if true { Must } else { May }
+  text = "an if"
+}
+
+const R2_1_4: Requirement = Requirement {
+  rfc = 9
+  section = "2.1"
+  ordinal = 4
+  level = Should
+  minimum = Some(LIMIT)
+  text = "a name inside Some"
+}
+
+const RFC9: Spec = Spec {
+  rfc = 9
+  title = "names"
+  url = "https://example.invalid/rfc9"
+  digest = "sha256:0009"
+  requirements = [R2_1_1, LIMIT]
+}
+
+const RFC10: Spec = Spec {
+  rfc = 10
+  title = "a list built with plus"
+  url = "https://example.invalid/rfc10"
+  digest = "sha256:0010"
+  requirements = [R2_1_1] + [R2_1_2]
+}
+
+const R2_1_5: Requirement = Requirement {
+  rfc = 9
+  section = "2.1"
+  ordinal = 5
+  level = Must
+  text = "fine"
+}

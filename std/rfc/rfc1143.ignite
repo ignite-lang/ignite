@@ -1,0 +1,318 @@
+// RFC 1143: The Q Method of Implementing TELNET Option Negotiation
+// Quoted by hand from https://www.rfc-editor.org/rfc/rfc1143.txt (22,771 bytes, read
+// 2026-11-03), which is not vendored (docs/slice.md 19.9): `ignite rfc check` reports this
+// catalogue unchecked. One requirement per sentence outside the text marked DISCUSSION
+// (which the RFC's note exempts from compliance) that says what an implementation must,
+// should or may do, section 7's example included; the note's own definitions of compliance
+// describe the RFC's standing and are no requirement. `section` is the section number, the
+// level that of the sentence's strongest word (19.4); a row label such as "NO" is left out.
+
+package std.rfc.rfc1143
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC1143: Spec = Spec {
+  rfc = 1143
+  title = "The Q Method of Implementing TELNET Option Negotiation"
+  url = "https://www.rfc-editor.org/rfc/rfc1143"
+  digest = "sha256:4d2ef5878b0b88742c860fc777d6d91ad61580633fe277eae06410a6eee04bdf"
+  requirements = [
+    R2_1,
+    R2_2,
+    R2_3,
+    R2_4,
+    R2_5,
+    R2_6,
+    R2_7,
+    R2_8,
+    R2_9,
+    R2_10,
+    R3_1,
+    R4_1,
+    R5_1,
+    R5_2,
+    R5_3,
+    R5_4,
+    R5_5,
+    R5_6,
+    R5_7,
+    R5_8,
+    R5_9,
+    R5_10,
+    R5_11,
+    R6_1,
+    R7_1,
+    R7_2,
+    R7_3
+  ]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 1143
+  section = "2"
+  ordinal = 1
+  level = Must
+  party = Any
+  source = Prose
+  text = "As specified by RFC 854: A TELNET implementation MUST obey a refusal to enable an option; i.e., if it receives a DONT/WONT in response to a WILL/DO, it MUST NOT enable the option."
+}
+
+const R2_2: Requirement = Requirement {
+  rfc = 1143
+  section = "2"
+  ordinal = 2
+  level = Must
+  party = Any
+  source = Prose
+  text = "It MUST therefore remember that it is negotiating a WILL/DO, and this negotiation state MUST be separate from the enabled state and from the disabled state."
+}
+
+const R2_3: Requirement = Requirement {
+  rfc = 1143
+  section = "2"
+  ordinal = 3
+  level = MustNot
+  party = Any
+  source = Prose
+  text = "During the negotiation state, any effects of having the option enabled MUST NOT be used."
+}
+
+const R2_4: Requirement = Requirement {
+  rfc = 1143
+  section = "2"
+  ordinal = 4
+  level = Must
+  party = Recipient
+  source = Prose
+  text = "If it receives WONT/DONT and the option is enabled, it MUST respond DONT/WONT repectively and disable the option."
+}
+
+const R2_5: Requirement = Requirement {
+  rfc = 1143
+  section = "2"
+  ordinal = 5
+  level = MustNot
+  party = Any
+  source = Prose
+  text = "It MUST NOT initiate a DO/WILL negotiation for an already enabled option or a DONT/WONT negotiation for a disabled option."
+}
+
+const R2_6: Requirement = Requirement {
+  rfc = 1143
+  section = "2"
+  ordinal = 6
+  level = MustNot
+  party = Recipient
+  source = Prose
+  text = "It MUST NOT respond to receipt of such a negotiation."
+}
+
+const R2_7: Requirement = Requirement {
+  rfc = 1143
+  section = "2"
+  ordinal = 7
+  level = Must
+  party = Recipient
+  source = Prose
+  text = "It MUST respond to receipt of a negotiation that does propose to change the status quo."
+}
+
+const R2_8: Requirement = Requirement {
+  rfc = 1143
+  section = "2"
+  ordinal = 8
+  level = MustNot
+  party = Any
+  source = Prose
+  text = "The implementation MUST NOT automatically respond to the rejection of a request by submitting a new request."
+}
+
+const R2_9: Requirement = Requirement {
+  rfc = 1143
+  section = "2"
+  ordinal = 9
+  level = Should
+  party = Any
+  source = Prose
+  text = "As a rule of thumb, new requests should be sent either at the beginning of a connection or in response to an external stimulus, i.e., input from the human user or from the process behind the server."
+}
+
+const R2_10: Requirement = Requirement {
+  rfc = 1143
+  section = "2"
+  ordinal = 10
+  level = Must
+  party = Any
+  source = Prose
+  text = "A TELNET implementation MUST refuse (DONT/WONT) a request to enable an option for which it does not comply with the appropriate protocol specification."
+}
+
+const R3_1: Requirement = Requirement {
+  rfc = 1143
+  section = "3"
+  ordinal = 1
+  level = Must
+  party = Any
+  source = Prose
+  text = "A TELNET implementation MUST remember starting a DONT/WONT negotiation."
+}
+
+const R4_1: Requirement = Requirement {
+  rfc = 1143
+  section = "4"
+  ordinal = 1
+  level = MustNot
+  party = Any
+  source = Prose
+  text = "A TELNET implementation MUST NOT initiate a new WILL/WONT/DO/DONT request about an option that is under negotiation, i.e., for which it has already made such a request and not yet received a response."
+}
+
+const R5_1: Requirement = Requirement {
+  rfc = 1143
+  section = "5"
+  ordinal = 1
+  level = Should
+  party = Any
+  source = Prose
+  text = "An implementation SHOULD support the queue, where support is defined by the rules following."
+}
+
+const R5_2: Requirement = Requirement {
+  rfc = 1143
+  section = "5"
+  ordinal = 2
+  level = MustNot
+  party = Any
+  source = Prose
+  text = "If it does support the queue, and if an option is currently under negotiation, it MUST NOT handle a new request from the user or process to switch the state of that option by sending a new request through the network."
+}
+
+const R5_3: Requirement = Requirement {
+  rfc = 1143
+  section = "5"
+  ordinal = 3
+  level = Must
+  party = Any
+  source = Prose
+  text = "Instead, it MUST remember internally that the new request was made."
+}
+
+const R5_4: Requirement = Requirement {
+  rfc = 1143
+  section = "5"
+  ordinal = 4
+  level = Should
+  party = Any
+  source = Prose
+  text = "If the user or process makes a second new request, for switching back again, while the original negotiation is still incomplete, the implementation SHOULD handle the request simply by forgetting the previous one."
+}
+
+const R5_5: Requirement = Requirement {
+  rfc = 1143
+  section = "5"
+  ordinal = 5
+  level = Should
+  party = Any
+  source = Prose
+  text = "The third request SHOULD be treated like the first, etc."
+}
+
+const R5_6: Requirement = Requirement {
+  rfc = 1143
+  section = "5"
+  ordinal = 6
+  level = MustNot
+  party = Any
+  source = Prose
+  text = "In any case, these further requests MUST NOT generate immediate requests through the network."
+}
+
+const R5_7: Requirement = Requirement {
+  rfc = 1143
+  section = "5"
+  ordinal = 7
+  level = Must
+  party = Any
+  source = Prose
+  text = "When the option negotiation completes, if the implementation is remembering a request internally, and that request is for the opposite state to the result of the completed negotiation, then the implementation MUST act as if that request had been made after the completion of the negotiation."
+}
+
+const R5_8: Requirement = Requirement {
+  rfc = 1143
+  section = "5"
+  ordinal = 8
+  level = Should
+  party = Any
+  source = Prose
+  text = "It SHOULD thus immediately generate a new request through the network."
+}
+
+const R5_9: Requirement = Requirement {
+  rfc = 1143
+  section = "5"
+  ordinal = 9
+  level = May
+  party = Any
+  source = Prose
+  text = "The implementation MAY provide a method by which support for the queue may be turned off and back on."
+}
+
+const R5_10: Requirement = Requirement {
+  rfc = 1143
+  section = "5"
+  ordinal = 10
+  level = Must
+  party = Any
+  source = Prose
+  text = "In this case, it MUST default to having the support turned on."
+}
+
+const R5_11: Requirement = Requirement {
+  rfc = 1143
+  section = "5"
+  ordinal = 11
+  level = Should
+  party = Any
+  source = Prose
+  text = "Furthermore, when support is turned off, if the implementation is remembering a new request for an outstanding negotiation, it SHOULD continue remembering and then deal with it at the close of the outstanding negotiation, as if support were still turned on through that point."
+}
+
+const R6_1: Requirement = Requirement {
+  rfc = 1143
+  section = "6"
+  ordinal = 1
+  level = Should
+  party = Any
+  source = Prose
+  text = "Implementations SHOULD separate any states of negotiating WILL/DO from any states of negotiating WONT/DONT."
+}
+
+const R7_1: Requirement = Requirement {
+  rfc = 1143
+  section = "7"
+  ordinal = 1
+  level = Should
+  party = Any
+  source = Prose
+  text = "All TELNET implementations compliant with this RFC SHOULD follow the procedures shown here."
+}
+
+const R7_2: Requirement = Requirement {
+  rfc = 1143
+  section = "7"
+  ordinal = 2
+  level = Required
+  party = Any
+  source = Prose
+  text = "\"Error\" below means that producing diagnostic information may be a good idea, though it isn't required."
+}
+
+const R7_3: Requirement = Requirement {
+  rfc = 1143
+  section = "7"
+  ordinal = 3
+  level = Should
+  party = Recipient
+  source = Prose
+  text = "If we agree that he should enable, him=YES, send DO; otherwise, send DONT."
+}

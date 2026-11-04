@@ -1,0 +1,40 @@
+package std.rfc.rfc1
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const R2_1: Requirement = Requirement {
+  rfc = 1
+  section = "2"
+  ordinal = 1
+  level = Must
+  party = Server
+  text = "A server " + "MUST answer."
+}
+
+const R2_2: Requirement = Requirement {
+  rfc = 1
+  section = "2"
+  ordinal = 2
+  level = Level.Should
+  party = Party.Client
+  source = Source.Prose
+  minimum = Some(8000)
+  text = "A client should wait."
+}
+
+const R3_1: Requirement = Requirement {
+  rfc = 1
+  section = "3"
+  ordinal = 1
+  level = May
+  minimum = None
+  text = "Anyone may close."
+}
+
+const RFC1: Spec = Spec {
+  rfc = 1
+  title = "A fixture specification"
+  url = "https://example.invalid/rfc1"
+  digest = "sha256:0000"
+  requirements = [R2_1, R2_2, R3_1]
+}

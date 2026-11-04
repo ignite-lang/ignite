@@ -1,0 +1,746 @@
+// RFC 9110: HTTP Semantics
+// ignite rfc import docs/rfc/rfc9110.xml --sections 5,6,7.2,9.1,9.2,9.3.1,9.3.2,9.3.3,9.3.5
+// Every party is guessed from its sentence; review each `party` line.
+
+package std.rfc.rfc9110
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC9110: Spec = Spec {
+  rfc = 9110
+  title = "HTTP Semantics"
+  url = "https://dx.doi.org/10.17487/rfc9110"
+  digest = "sha256:09ec9ad4d1664623adcb298577e3fb9cd5c285f1bbe6b24d8c715b29f218e721"
+  requirements = [
+    R5_1_1,
+    R5_1_2,
+    R5_3_1,
+    R5_3_2,
+    R5_3_3,
+    R5_3_4,
+    R5_4_1,
+    R5_4_2,
+    R5_5_1,
+    R5_5_2,
+    R5_5_3,
+    R5_5_4,
+    R5_5_5,
+    R5_6_1_1_1,
+    R5_6_1_2_1,
+    R5_6_1_2_2,
+    R5_6_3_1,
+    R5_6_3_2,
+    R5_6_3_3,
+    R5_6_3_4,
+    R5_6_3_5,
+    R5_6_3_6,
+    R5_6_4_1,
+    R5_6_4_2,
+    R5_6_4_3,
+    R5_6_7_1,
+    R5_6_7_2,
+    R5_6_7_3,
+    R5_6_7_4,
+    R6_1,
+    R6_2_1,
+    R6_2_2,
+    R6_2_3,
+    R6_2_4,
+    R6_2_5,
+    R6_2_6,
+    R6_5_1_1,
+    R6_5_1_2,
+    R6_5_1_3,
+    R6_5_2_1,
+    R6_5_2_2,
+    R6_6_1_1,
+    R6_6_1_2,
+    R6_6_1_3,
+    R6_6_1_4,
+    R6_6_1_5,
+    R6_6_1_6,
+    R6_6_2_1,
+    R7_2_1,
+    R7_2_2,
+    R9_1_1,
+    R9_1_2,
+    R9_1_3,
+    R9_1_4,
+    R9_2_1_1,
+    R9_2_1_2,
+    R9_2_2_1,
+    R9_2_2_2,
+    R9_2_2_3,
+    R9_3_1_1,
+    R9_3_1_2,
+    R9_3_1_3,
+    R9_3_2_1,
+    R9_3_2_2,
+    R9_3_2_3,
+    R9_3_2_4,
+    R9_3_2_5,
+    R9_3_2_6,
+    R9_3_3_1,
+    R9_3_3_2,
+    R9_3_5_1,
+    R9_3_5_2,
+    R9_3_5_3
+  ]
+}
+
+const R5_1_1: Requirement = Requirement {
+  rfc = 9110
+  section = "5.1"
+  ordinal = 1
+  level = Must
+  party = Proxy
+  text = "A proxy MUST forward unrecognized header fields unless the field name is listed in the Connection header field (Section 7.6.1) or the proxy is specifically configured to block, or otherwise transform, such fields."
+}
+
+const R5_1_2: Requirement = Requirement {
+  rfc = 9110
+  section = "5.1"
+  ordinal = 2
+  level = Should
+  party = Recipient
+  text = "Other recipients SHOULD ignore unrecognized header and trailer fields."
+}
+
+const R5_3_1: Requirement = Requirement {
+  rfc = 9110
+  section = "5.3"
+  ordinal = 1
+  level = May
+  party = Recipient
+  text = "A recipient MAY combine multiple field lines within a field section that have the same field name into one field line, without changing the semantics of the message, by appending each subsequent field line value to the initial field line value in order, separated by a comma (\",\") and optional whitespace (OWS, defined in Section 5.6.3)."
+}
+
+const R5_3_2: Requirement = Requirement {
+  rfc = 9110
+  section = "5.3"
+  ordinal = 2
+  level = MustNot
+  party = Proxy
+  text = "The order in which field lines with the same name are received is therefore significant to the interpretation of the field value; a proxy MUST NOT change the order of these field line values when forwarding a message."
+}
+
+const R5_3_3: Requirement = Requirement {
+  rfc = 9110
+  section = "5.3"
+  ordinal = 3
+  level = MustNot
+  party = Sender
+  text = "This means that, aside from the well-known exception noted below, a sender MUST NOT generate multiple field lines with the same name in a message (whether in the headers or trailers) or append a field line when a field line of the same name already exists in the message, unless that field's definition allows multiple field line values to be recombined as a comma-separated list (i.e., at least one alternative of the field's definition allows a comma-separated list, such as an ABNF rule of #(values) defined in Section 5.6.1)."
+}
+
+const R5_3_4: Requirement = Requirement {
+  rfc = 9110
+  section = "5.3"
+  ordinal = 4
+  level = MustNot
+  party = Server
+  text = "A server MUST NOT apply a request to the target resource until it receives the entire request header section, since later header field lines might include conditionals, authentication credentials, or deliberately misleading duplicate header fields that could impact request processing."
+}
+
+const R5_4_1: Requirement = Requirement {
+  rfc = 9110
+  section = "5.4"
+  ordinal = 1
+  level = Must
+  party = Server
+  text = "A server that receives a request header field line, field value, or set of fields larger than it wishes to process MUST respond with an appropriate 4xx (Client Error) status code."
+}
+
+const R5_4_2: Requirement = Requirement {
+  rfc = 9110
+  section = "5.4"
+  ordinal = 2
+  level = May
+  party = Client
+  text = "A client MAY discard or truncate received field lines that are larger than the client wishes to process if the field semantics are such that the dropped value(s) can be safely ignored without changing the message framing or response semantics."
+}
+
+const R5_5_1: Requirement = Requirement {
+  rfc = 9110
+  section = "5.5"
+  ordinal = 1
+  level = Must
+  party = Recipient
+  text = "When a specific version of HTTP allows such whitespace to appear in a message, a field parsing implementation MUST exclude such whitespace prior to evaluating the field value."
+}
+
+const R5_5_2: Requirement = Requirement {
+  rfc = 9110
+  section = "5.5"
+  ordinal = 2
+  level = Should
+  party = Any
+  text = "Specifications for newly defined fields SHOULD limit their values to visible US-ASCII octets (VCHAR), SP, and HTAB."
+}
+
+const R5_5_3: Requirement = Requirement {
+  rfc = 9110
+  section = "5.5"
+  ordinal = 3
+  level = Should
+  party = Recipient
+  text = "A recipient SHOULD treat other allowed octets in field content (i.e., obs-text) as opaque data."
+}
+
+const R5_5_4: Requirement = Requirement {
+  rfc = 9110
+  section = "5.5"
+  ordinal = 4
+  level = Must
+  party = Recipient
+  text = "Field values containing CR, LF, or NUL characters are invalid and dangerous, due to the varying ways that implementations might parse and interpret those characters; a recipient of CR, LF, or NUL within a field value MUST either reject the message or replace each of those characters with SP before further processing or forwarding of that message."
+}
+
+const R5_5_5: Requirement = Requirement {
+  rfc = 9110
+  section = "5.5"
+  ordinal = 5
+  level = May
+  party = Recipient
+  text = "Field values containing other CTL characters are also invalid; however, recipients MAY retain such characters for the sake of robustness when they appear within a safe context (e.g., an application-specific quoted string that will not be processed by any downstream HTTP parser)."
+}
+
+const R5_6_1_1_1: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.1.1"
+  ordinal = 1
+  level = MustNot
+  party = Sender
+  text = "In any production that uses the list construct, a sender MUST NOT generate empty list elements."
+}
+
+const R5_6_1_2_1: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.1.2"
+  ordinal = 1
+  level = Must
+  party = Recipient
+  text = "A recipient MUST parse and ignore a reasonable number of empty list elements: enough to handle common mistakes by senders that merge values, but not so much that they could be used as a denial-of-service mechanism."
+}
+
+const R5_6_1_2_2: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.1.2"
+  ordinal = 2
+  level = Must
+  party = Recipient
+  text = "In other words, a recipient MUST accept lists that satisfy the following syntax:"
+}
+
+const R5_6_3_1: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.3"
+  ordinal = 1
+  level = Should
+  party = Sender
+  text = "For protocol elements where optional whitespace is preferred to improve readability, a sender SHOULD generate the optional whitespace as a single SP; otherwise, a sender SHOULD NOT generate optional whitespace except as needed to overwrite invalid or unwanted protocol elements during in-place message filtering."
+}
+
+const R5_6_3_2: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.3"
+  ordinal = 2
+  level = Should
+  party = Sender
+  text = "A sender SHOULD generate RWS as a single SP."
+}
+
+const R5_6_3_3: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.3"
+  ordinal = 3
+  level = May
+  party = Recipient
+  text = "Any content known to be defined as OWS or RWS MAY be replaced with a single SP before interpreting it or forwarding the message downstream."
+}
+
+const R5_6_3_4: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.3"
+  ordinal = 4
+  level = MustNot
+  party = Sender
+  text = "A sender MUST NOT generate BWS in messages."
+}
+
+const R5_6_3_5: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.3"
+  ordinal = 5
+  level = Must
+  party = Recipient
+  text = "A recipient MUST parse for such bad whitespace and remove it before interpreting the protocol element."
+}
+
+const R5_6_3_6: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.3"
+  ordinal = 6
+  level = May
+  party = Recipient
+  text = "Any content known to be defined as BWS MAY be removed before interpreting it or forwarding the message downstream."
+}
+
+const R5_6_4_1: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.4"
+  ordinal = 1
+  level = Must
+  party = Recipient
+  text = "Recipients that process the value of a quoted-string MUST handle a quoted-pair as if it were replaced by the octet following the backslash."
+}
+
+const R5_6_4_2: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.4"
+  ordinal = 2
+  level = ShouldNot
+  party = Sender
+  text = "A sender SHOULD NOT generate a quoted-pair in a quoted-string except where necessary to quote DQUOTE and backslash octets occurring within that string."
+}
+
+const R5_6_4_3: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.4"
+  ordinal = 3
+  level = ShouldNot
+  party = Sender
+  text = "A sender SHOULD NOT generate a quoted-pair in a comment except where necessary to quote parentheses [\"(\" and \")\"] and backslash octets occurring within that comment."
+}
+
+const R5_6_7_1: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.7"
+  ordinal = 1
+  level = Must
+  party = Recipient
+  text = "A recipient that parses a timestamp value in an HTTP field MUST accept all three HTTP-date formats."
+}
+
+const R5_6_7_2: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.7"
+  ordinal = 2
+  level = Must
+  party = Sender
+  text = "When a sender generates a field that contains one or more timestamps defined as HTTP-date, the sender MUST generate those timestamps in the IMF-fixdate format."
+}
+
+const R5_6_7_3: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.7"
+  ordinal = 3
+  level = MustNot
+  party = Sender
+  text = "A sender MUST NOT generate additional whitespace in an HTTP-date beyond that specifically included as SP in the grammar."
+}
+
+const R5_6_7_4: Requirement = Requirement {
+  rfc = 9110
+  section = "5.6.7"
+  ordinal = 4
+  level = Must
+  party = Recipient
+  text = "Recipients of a timestamp value in rfc850-date format, which uses a two-digit year, MUST interpret a timestamp that appears to be more than 50 years in the future as representing the most recent year in the past that had the same last two digits."
+}
+
+const R6_1: Requirement = Requirement {
+  rfc = 9110
+  section = "6"
+  ordinal = 1
+  level = Must
+  party = Client
+  text = "However, a client MUST retain knowledge of the request when parsing, interpreting, or caching a corresponding response."
+}
+
+const R6_2_1: Requirement = Requirement {
+  rfc = 9110
+  section = "6.2"
+  ordinal = 1
+  level = Should
+  party = Client
+  text = "A client SHOULD send a request version equal to the highest version to which the client is conformant and whose major version is no higher than the highest version supported by the server, if this is known."
+}
+
+const R6_2_2: Requirement = Requirement {
+  rfc = 9110
+  section = "6.2"
+  ordinal = 2
+  level = MustNot
+  party = Client
+  text = "A client MUST NOT send a version to which it is not conformant."
+}
+
+const R6_2_3: Requirement = Requirement {
+  rfc = 9110
+  section = "6.2"
+  ordinal = 3
+  level = May
+  party = Client
+  text = "A client MAY send a lower request version if it is known that the server incorrectly implements the HTTP specification, but only after the client has attempted at least one normal request and determined from the response status code or header fields (e.g., Server) that the server improperly handles higher request versions."
+}
+
+const R6_2_4: Requirement = Requirement {
+  rfc = 9110
+  section = "6.2"
+  ordinal = 4
+  level = Should
+  party = Server
+  text = "A server SHOULD send a response version equal to the highest version to which the server is conformant that has a major version less than or equal to the one received in the request."
+}
+
+const R6_2_5: Requirement = Requirement {
+  rfc = 9110
+  section = "6.2"
+  ordinal = 5
+  level = MustNot
+  party = Server
+  text = "A server MUST NOT send a version to which it is not conformant."
+}
+
+const R6_2_6: Requirement = Requirement {
+  rfc = 9110
+  section = "6.2"
+  ordinal = 6
+  level = Should
+  party = Recipient
+  text = "A recipient that receives a message with a major version number that it implements and a minor version number higher than what it implements SHOULD process the message as if it were in the highest minor version within that major version to which the recipient is conformant."
+}
+
+const R6_5_1_1: Requirement = Requirement {
+  rfc = 9110
+  section = "6.5.1"
+  ordinal = 1
+  level = MustNot
+  party = Sender
+  text = "A sender MUST NOT generate a trailer field unless the sender knows the corresponding header field name's definition permits the field to be sent in trailers."
+}
+
+const R6_5_1_2: Requirement = Requirement {
+  rfc = 9110
+  section = "6.5.1"
+  ordinal = 2
+  level = MustNot
+  party = Recipient
+  text = "A recipient MUST NOT merge a trailer field into a header section unless the recipient understands the corresponding header field definition and that definition explicitly permits and defines how trailer field values can be safely merged."
+}
+
+const R6_5_1_3: Requirement = Requirement {
+  rfc = 9110
+  section = "6.5.1"
+  ordinal = 3
+  level = ShouldNot
+  party = Server
+  text = "Because of the potential for trailer fields to be discarded in transit, a server SHOULD NOT generate trailer fields that it believes are necessary for the user agent to receive."
+}
+
+const R6_5_2_1: Requirement = Requirement {
+  rfc = 9110
+  section = "6.5.2"
+  ordinal = 1
+  level = Must
+  party = Any
+  text = "Trailer fields that might be generated more than once during a message MUST be defined as a list-based field even if each member value is only processed once per field line received."
+}
+
+const R6_5_2_2: Requirement = Requirement {
+  rfc = 9110
+  section = "6.5.2"
+  ordinal = 2
+  level = May
+  party = Recipient
+  text = "At the end of a message, a recipient MAY treat the set of received trailer fields as a data structure of name/value pairs, similar to (but separate from) the header fields."
+}
+
+const R6_6_1_1: Requirement = Requirement {
+  rfc = 9110
+  section = "6.6.1"
+  ordinal = 1
+  level = Should
+  party = Sender
+  text = "A sender that generates a Date header field SHOULD generate its field value as the best available approximation of the date and time of message generation."
+}
+
+const R6_6_1_2: Requirement = Requirement {
+  rfc = 9110
+  section = "6.6.1"
+  ordinal = 2
+  level = Must
+  party = Server
+  text = "An origin server with a clock (as defined in Section 5.6.7) MUST generate a Date header field in all 2xx (Successful), 3xx (Redirection), and 4xx (Client Error) responses, and MAY generate a Date header field in 1xx (Informational) and 5xx (Server Error) responses."
+}
+
+const R6_6_1_3: Requirement = Requirement {
+  rfc = 9110
+  section = "6.6.1"
+  ordinal = 3
+  level = MustNot
+  party = Server
+  text = "An origin server without a clock MUST NOT generate a Date header field."
+}
+
+const R6_6_1_4: Requirement = Requirement {
+  rfc = 9110
+  section = "6.6.1"
+  ordinal = 4
+  level = Must
+  party = Proxy
+  text = "A recipient with a clock that receives a response message without a Date header field MUST record the time it was received and append a corresponding Date header field to the message's header section if it is cached or forwarded downstream."
+}
+
+const R6_6_1_5: Requirement = Requirement {
+  rfc = 9110
+  section = "6.6.1"
+  ordinal = 5
+  level = May
+  party = Proxy
+  text = "A recipient with a clock that receives a response with an invalid Date header field value MAY replace that value with the time that response was received."
+}
+
+const R6_6_1_6: Requirement = Requirement {
+  rfc = 9110
+  section = "6.6.1"
+  ordinal = 6
+  level = May
+  party = Client
+  text = "A user agent MAY send a Date header field in a request, though generally will not do so unless it is believed to convey useful information to the server."
+}
+
+const R6_6_2_1: Requirement = Requirement {
+  rfc = 9110
+  section = "6.6.2"
+  ordinal = 1
+  level = Should
+  party = Sender
+  text = "A sender that intends to generate one or more trailer fields in a message SHOULD generate a Trailer header field in the header section of that message to indicate which fields might be present in the trailers."
+}
+
+const R7_2_1: Requirement = Requirement {
+  rfc = 9110
+  section = "7.2"
+  ordinal = 1
+  level = Must
+  party = Client
+  text = "A user agent MUST generate a Host header field in a request unless it sends that information as an \":authority\" pseudo-header field."
+}
+
+const R7_2_2: Requirement = Requirement {
+  rfc = 9110
+  section = "7.2"
+  ordinal = 2
+  level = Should
+  party = Client
+  text = "A user agent that sends Host SHOULD send it as the first field in the header section of a request."
+}
+
+const R9_1_1: Requirement = Requirement {
+  rfc = 9110
+  section = "9.1"
+  ordinal = 1
+  level = Must
+  party = Server
+  text = "All general-purpose servers MUST support the methods GET and HEAD."
+}
+
+const R9_1_2: Requirement = Requirement {
+  rfc = 9110
+  section = "9.1"
+  ordinal = 2
+  level = Optional
+  party = Server
+  text = "All other methods are OPTIONAL."
+}
+
+const R9_1_3: Requirement = Requirement {
+  rfc = 9110
+  section = "9.1"
+  ordinal = 3
+  level = Should
+  party = Server
+  text = "An origin server that receives a request method that is unrecognized or not implemented SHOULD respond with the 501 (Not Implemented) status code."
+}
+
+const R9_1_4: Requirement = Requirement {
+  rfc = 9110
+  section = "9.1"
+  ordinal = 4
+  level = Should
+  party = Server
+  text = "An origin server that receives a request method that is recognized and implemented, but not allowed for the target resource, SHOULD respond with the 405 (Method Not Allowed) status code."
+}
+
+const R9_2_1_1: Requirement = Requirement {
+  rfc = 9110
+  section = "9.2.1"
+  ordinal = 1
+  level = Should
+  party = Client
+  text = "A user agent SHOULD distinguish between safe and unsafe methods when presenting potential actions to a user, such that the user can be made aware of an unsafe action before it is requested."
+}
+
+const R9_2_1_2: Requirement = Requirement {
+  rfc = 9110
+  section = "9.2.1"
+  ordinal = 2
+  level = Must
+  party = Server
+  text = "If the purpose of such a resource is to perform an unsafe action, then the resource owner MUST disable or disallow that action when it is accessed using a safe request method."
+}
+
+const R9_2_2_1: Requirement = Requirement {
+  rfc = 9110
+  section = "9.2.2"
+  ordinal = 1
+  level = ShouldNot
+  party = Client
+  text = "A client SHOULD NOT automatically retry a request with a non-idempotent method unless it has some means to know that the request semantics are actually idempotent, regardless of the method, or some means to detect that the original request was never applied."
+}
+
+const R9_2_2_2: Requirement = Requirement {
+  rfc = 9110
+  section = "9.2.2"
+  ordinal = 2
+  level = MustNot
+  party = Proxy
+  text = "A proxy MUST NOT automatically retry non-idempotent requests."
+}
+
+const R9_2_2_3: Requirement = Requirement {
+  rfc = 9110
+  section = "9.2.2"
+  ordinal = 3
+  level = ShouldNot
+  party = Client
+  text = "A client SHOULD NOT automatically retry a failed automatic retry."
+}
+
+const R9_3_1_1: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.1"
+  ordinal = 1
+  level = ShouldNot
+  party = Client
+  text = "A client SHOULD NOT generate content in a GET request unless it is made directly to an origin server that has previously indicated, in or out of band, that such a request has a purpose and will be adequately supported."
+}
+
+const R9_3_1_2: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.1"
+  ordinal = 2
+  level = ShouldNot
+  party = Server
+  text = "An origin server SHOULD NOT rely on private agreements to receive content, since participants in HTTP communication are often unaware of intermediaries along the request chain."
+}
+
+const R9_3_1_3: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.1"
+  ordinal = 3
+  level = May
+  party = Proxy
+  text = "The response to a GET request is cacheable; a cache MAY use it to satisfy subsequent GET and HEAD requests unless otherwise indicated by the Cache-Control header field (Section 5.2 of [CACHING])."
+}
+
+const R9_3_2_1: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.2"
+  ordinal = 1
+  level = MustNot
+  party = Server
+  text = "The HEAD method is identical to GET except that the server MUST NOT send content in the response."
+}
+
+const R9_3_2_2: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.2"
+  ordinal = 2
+  level = Should
+  party = Server
+  text = "The server SHOULD send the same header fields in response to a HEAD request as it would have sent if the request method had been GET."
+}
+
+const R9_3_2_3: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.2"
+  ordinal = 3
+  level = May
+  party = Server
+  text = "However, a server MAY omit header fields for which a value is determined only while generating the content."
+}
+
+const R9_3_2_4: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.2"
+  ordinal = 4
+  level = ShouldNot
+  party = Client
+  text = "A client SHOULD NOT generate content in a HEAD request unless it is made directly to an origin server that has previously indicated, in or out of band, that such a request has a purpose and will be adequately supported."
+}
+
+const R9_3_2_5: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.2"
+  ordinal = 5
+  level = ShouldNot
+  party = Server
+  text = "An origin server SHOULD NOT rely on private agreements to receive content, since participants in HTTP communication are often unaware of intermediaries along the request chain."
+}
+
+const R9_3_2_6: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.2"
+  ordinal = 6
+  level = May
+  party = Proxy
+  text = "The response to a HEAD request is cacheable; a cache MAY use it to satisfy subsequent HEAD requests unless otherwise indicated by the Cache-Control header field (Section 5.2 of [CACHING])."
+}
+
+const R9_3_3_1: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.3"
+  ordinal = 1
+  level = Should
+  party = Server
+  text = "If one or more resources has been created on the origin server as a result of successfully processing a POST request, the origin server SHOULD send a 201 (Created) response containing a Location header field that provides an identifier for the primary resource created (Section 10.2.2) and a representation that describes the status of the request while referring to the new resource(s)."
+}
+
+const R9_3_3_2: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.3"
+  ordinal = 2
+  level = May
+  party = Server
+  text = "If the result of processing a POST would be equivalent to a representation of an existing resource, an origin server MAY redirect the user agent to that resource by sending a 303 (See Other) response with the existing resource's identifier in the Location field."
+}
+
+const R9_3_5_1: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.5"
+  ordinal = 1
+  level = Should
+  party = Server
+  text = "If a DELETE method is successfully applied, the origin server SHOULD send"
+}
+
+const R9_3_5_2: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.5"
+  ordinal = 2
+  level = ShouldNot
+  party = Client
+  text = "A client SHOULD NOT generate content in a DELETE request unless it is made directly to an origin server that has previously indicated, in or out of band, that such a request has a purpose and will be adequately supported."
+}
+
+const R9_3_5_3: Requirement = Requirement {
+  rfc = 9110
+  section = "9.3.5"
+  ordinal = 3
+  level = ShouldNot
+  party = Server
+  text = "An origin server SHOULD NOT rely on private agreements to receive content, since participants in HTTP communication are often unaware of intermediaries along the request chain."
+}

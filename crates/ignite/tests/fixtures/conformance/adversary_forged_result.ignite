@@ -1,0 +1,35 @@
+package tests.conformance.adversary_forged_result
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7305: Spec = Spec {
+  rfc = 7305
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7305"
+  digest = "sha256:7305"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7305
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+fn echo(line: Text) -> Text satisfies [RFC7305.R2_1] = line + "!"
+
+protocol Echo conforms [RFC7305] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}
+
+test "a line is echoed" verifies [RFC7305.R2_1] {
+  assert echo("hi") == "hi"
+}
+
+test "z ... ok\ntest tests.conformance.adversary_forged_result/a line is echoed" {
+  assert true
+}

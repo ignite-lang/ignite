@@ -1,0 +1,6 @@
+e001_malformed_clause.ignite:1:36: error[E001]: expected `[` after `satisfies`, found identifier `RFC1`
+e001_malformed_clause.ignite:6:24: error[E001]: expected a reason (a string literal) after `unsupported RFC1.R2_1`, found newline
+e001_malformed_clause.ignite:9:16: error[E001]: `scope` follows `conforms [..]`; a protocol without `conforms` has no scope
+e001_malformed_clause.ignite:17:3: error[E001]: `verifies` goes between the test's name and its block
+e001_malformed_clause.ignite:19:30: error[E001]: a requirement reference is `Spec.Id`; `R2_1` alone names no requirement
+e001_malformed_clause.ignite:23:30: error[E001]: a `conforms` entry is the name of a `Spec` constant; import the constant instead of qualifying it with `std.`

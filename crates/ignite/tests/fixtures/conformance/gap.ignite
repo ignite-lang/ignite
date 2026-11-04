@@ -1,0 +1,27 @@
+package tests.conformance.gap
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7103: Spec = Spec {
+  rfc = 7103
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7103"
+  digest = "sha256:7103"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7103
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+protocol Echo conforms [RFC7103] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+
+  unsupported RFC7103.R2_1 "lines are answered with ok"
+}

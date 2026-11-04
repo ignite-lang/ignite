@@ -1,0 +1,25 @@
+package tests.conformance.unclassified
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7108: Spec = Spec {
+  rfc = 7108
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7108"
+  digest = "sha256:7108"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7108
+  section = "2"
+  ordinal = 1
+  level = May
+  text = "A server MAY greet."
+}
+
+protocol Echo conforms [RFC7108] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}

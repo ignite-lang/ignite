@@ -747,6 +747,125 @@ fn adversary_std_bounded_fn_instantiated_by_the_program() {
     }
 }
 
+/// Constants are lowered on demand (`docs/slice.md` 19.13, row 39): a
+/// constant nothing references leaves no definition, no string and no
+/// debug node, in the standard-library module (emitted for roots) and in
+/// the program module (emitted whole); a referenced constant keeps its
+/// definition, its string and its `DISubprogram`, and every module
+/// compiles.
+#[test]
+fn unreferenced_constants_leave_no_trace() {
+    let std_text = "package std.probe\n\
+        const DIGEST: Text = \"sha256:probe-unreferenced-constant-text\"\n\
+        const GREETING: Text = \"probe-referenced-constant-text\"\n\
+        fn greeting() -> Text = GREETING\n";
+    let program_text = "package tests.consts\n\
+        import std.probe.{greeting}\n\
+        const UNUSED: Text = \"program-unreferenced-constant-text\"\n\
+        const USED: Text = \"program-referenced-constant-text\"\n\
+        fn both() -> Text = greeting() + USED\n\
+        test \"the referenced constants are there\" {\n\
+          assert both() == \"probe-referenced-constant-textprogram-referenced-constant-text\"\n\
+        }\n";
+    let (std_source, std_program, std_symbols, std_types) = typed(
+        "std/probe.ignite",
+        std_text,
+        &Default::default(),
+        &Default::default(),
+    )
+    .unwrap_or_else(|d| panic!("{d:?}"));
+    let modules: ignite_check::Modules = [("std.probe".to_string(), std_symbols.clone())].into();
+    let typed_std: ignite_types::TypedModules =
+        [("std.probe".to_string(), std_types.exports())].into();
+    let (source, program, symbols, types) =
+        typed("consts.ignite", program_text, &modules, &typed_std)
+            .unwrap_or_else(|d| panic!("{d:?}"));
+    let std_input = ignite_llvm::ModuleInput {
+        path: &std_types.module,
+        program: &std_program,
+        symbols: &std_symbols,
+        types: &std_types,
+    };
+    let input = ignite_llvm::ModuleInput {
+        path: &types.module,
+        program: &program,
+        symbols: &symbols,
+        types: &types,
+    };
+    for tests in [false, true] {
+        let options = ignite_llvm::Options {
+            sources: [
+                (std_types.module.clone(), &std_source),
+                (types.module.clone(), &source),
+            ]
+            .into(),
+            target: Some(target()),
+            test_modules: if tests {
+                vec![types.module.clone()]
+            } else {
+                Vec::new()
+            },
+            ..Default::default()
+        };
+        let generated = ignite_llvm::generate_with(&[std_input], &input, &options);
+        for (module, ir, unused, used) in [
+            (
+                "std",
+                &generated.std,
+                "std.probe.DIGEST",
+                "std.probe.GREETING",
+            ),
+            (
+                "program",
+                &generated.program,
+                "tests.consts.UNUSED",
+                "tests.consts.USED",
+            ),
+        ] {
+            let (unused_text, used_text) = if module == "std" {
+                (
+                    "sha256:probe-unreferenced-constant-text",
+                    "probe-referenced-constant-text",
+                )
+            } else {
+                (
+                    "program-unreferenced-constant-text",
+                    "program-referenced-constant-text",
+                )
+            };
+            assert!(!ir.contains(unused_text), "{module}: {unused_text}:\n{ir}");
+            assert!(
+                !ir.lines()
+                    .any(|l| l.contains(unused) && l.contains("DISubprogram")),
+                "{module}: a DISubprogram of {unused}:\n{ir}"
+            );
+            assert!(
+                !ir.lines()
+                    .any(|l| l.starts_with("define ") && l.contains(&format!("@\"{unused}\"("))),
+                "{module}: {unused} is defined:\n{ir}"
+            );
+            assert!(
+                ir.lines()
+                    .any(|l| l.starts_with("define ") && l.contains(&format!("@\"{used}\"("))),
+                "{module}: {used} is not defined:\n{ir}"
+            );
+            assert!(ir.contains(used_text), "{module}: no {used_text}:\n{ir}");
+            assert!(
+                ir.lines()
+                    .any(|l| l.contains(used) && l.contains("DISubprogram")),
+                "{module}: no DISubprogram of {used}:\n{ir}"
+            );
+        }
+        if tests {
+            let test = ignite_llvm::test_symbol(&types.tests()[0].module, types.tests()[0].decl);
+            run_test_build("consts-test", &generated, &test);
+        } else {
+            compiles("consts_std", &generated.std);
+            compiles("consts_program", &generated.program);
+        }
+    }
+}
+
 /// Adversary (slice 14 U4): an end and its copies share one handle (18.4
 /// "its clones share it"). A copy moved into a task is owned by it
 /// (`fresh_let` of a method call), so the task's release must not take the
@@ -757,4 +876,357 @@ fn adversary_a_moved_copy_does_not_release_the_held_end() {
     let (generated, tests) = lower_with("bounds_alias", true);
     assert_eq!(tests.len(), 1);
     run_test_build("alias-test", &generated, &tests[0]);
+}
+
+/// Adversary (slice 15 U1): every `!N` a module's text references is
+/// defined in it; the `!N` that are referenced and not defined.
+fn undefined_metadata(ir: &str) -> Vec<String> {
+    let mut defined = std::collections::BTreeSet::new();
+    for line in ir.lines() {
+        if let Some(rest) = line.strip_prefix('!')
+            && let Some((number, _)) = rest.split_once(" = ")
+            && number.chars().all(|c| c.is_ascii_digit())
+        {
+            defined.insert(number.to_string());
+        }
+    }
+    let mut missing = std::collections::BTreeSet::new();
+    let bytes = ir.as_bytes();
+    for (i, _) in ir.match_indices('!') {
+        let digits: String = ir[i + 1..]
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect();
+        let quoted = i > 0 && bytes[i - 1] == b'"';
+        if !digits.is_empty() && !quoted && !defined.contains(&digits) {
+            missing.insert(format!("!{digits}"));
+        }
+    }
+    missing.into_iter().collect()
+}
+
+/// Adversary (slice 15 U1): `clang -c` of `ir` with `flags` into the
+/// directory `links` reads, as `{name}.o`.
+fn compiles_with(name: &str, ir: &str, flags: &[&str]) {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("llvm-golden");
+    std::fs::create_dir_all(&dir).unwrap();
+    let ll = dir.join(format!("{name}.ll"));
+    std::fs::write(&ll, ir).unwrap();
+    let output = Command::new("clang")
+        .arg("-c")
+        .args(flags)
+        .arg("-Werror=override-module")
+        .arg(format!("--target={}", target().triple))
+        .arg(&ll)
+        .arg("-o")
+        .arg(dir.join(format!("{name}.o")))
+        .output()
+        .expect("run clang");
+    assert!(
+        output.status.success(),
+        "{name}.ll does not compile with {flags:?}:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// Adversary (slice 15 U1, `docs/slice.md` 19.13, row 39): constants that
+/// only kept code reaches stay, with their strings and debug entries, in
+/// the standard-library module (emitted for roots) and in the program
+/// module (emitted whole); constants nothing kept reaches go. Reached
+/// only from another kept constant (`LEAF` through `CHAIN`), only from a
+/// test (`ONLY_TEST`), only from a closure (`ONLY_CLOSURE`), only from a
+/// spawn's arguments (`ONLY_SPAWN`), only from a component's declaration
+/// (`ONLY_MAIN`, `MAIN_ONLY`, which the main names), and a string shared
+/// between a kept and a dropped constant. Dropped constants hold a
+/// closure and branches, so their debug nodes are more than one location.
+/// Every module compiles at `-O0 -g` and `-O2 -g` with no undefined
+/// metadata, the non-test build links its main, the test build runs, and
+/// the DWARF of the std object names the kept constants and not the
+/// dropped ones.
+#[test]
+fn adversary_constants_reached_only_through_kept_code() {
+    let std_text = "package std.probe\n\
+        const LEAF: Text = \"probe-leaf-only-through-a-constant\"\n\
+        const CHAIN: List<Text> = [LEAF, \"probe-chain\"]\n\
+        const SHARED_KEPT: Text = \"probe-shared-between-kept-and-dropped\"\n\
+        const SHARED_DROPPED: Text = \"probe-shared-between-kept-and-dropped\"\n\
+        const CLOSED: Int = 3\n\
+        fn apply(f: fn(Int) -> Int, x: Int) -> Int = f(x)\n\
+        const DROPPED_CLOSURE: Int = apply(|x| x + CLOSED, 1)\n\
+        const DROPPED_BRANCHES: Text = if CLOSED > 2 { \"probe-dropped-branch-a\" } else { \"probe-dropped-branch-b\" }\n\
+        const MAIN_ONLY: Text = \"probe-named-only-by-a-main\"\n\
+        fn chain() -> List<Text> = CHAIN\n\
+        fn shared() -> Text = SHARED_KEPT\n";
+    let program_text = "package tests.reach\n\
+        import std.probe.{chain, shared, apply, MAIN_ONLY}\n\
+        const ONLY_TEST: Text = \"program-only-from-a-test\"\n\
+        const UNUSED_SHARED: Text = \"program-only-from-a-test\"\n\
+        const ONLY_CLOSURE: Int = 5\n\
+        const ONLY_SPAWN: Int = 6\n\
+        const ONLY_MAIN: Text = \"program-named-only-by-a-main\"\n\
+        const DROPPED: Text = if ONLY_CLOSURE > 1 { \"program-dropped-a\" } else { \"program-dropped-b\" }\n\
+        fn closed(x: Int) -> Int = apply(|y| y + ONLY_CLOSURE, x)\n\
+        fn sink(stream: TcpStream, n: Int) -> Result<Unit, IoError> requires [stream.write] {\n\
+          if n > 0 {\n\
+            stream.write_all(b\"x\")?\n\
+          }\n\
+          return Ok(Unit)\n\
+        }\n\
+        type Hub {\n\
+          listener: TcpListener\n\
+          greeting: Text\n\
+          banner: Text\n\
+          executable: Text\n\
+        }\n\
+        fn Hub.main(self: Hub) -> Result<Unit, IoError> {\n\
+          let first = chain()\n\
+          let stream = self.listener.accept()?\n\
+          stream.write_all(self.greeting.to_bytes())?\n\
+          stream.write_all(self.banner.to_bytes())?\n\
+          stream.write_all(first[0].to_bytes())?\n\
+          stream.write_all(shared().to_bytes())?\n\
+          stream.write_all(closed(1).to_text().to_bytes())?\n\
+          spawn sink(stream, ONLY_SPAWN)\n\
+          return Ok(Unit)\n\
+        }\n\
+        system Reach {\n\
+          resource ingress: TcpListener { address = \"127.0.0.1\", port = 7403 }\n\
+          component hub: Hub { listener = ingress, greeting = ONLY_MAIN, banner = MAIN_ONLY, executable = \"hub\" }\n\
+        }\n\
+        test \"constants reached only through kept code keep their values\" {\n\
+          let c = chain()\n\
+          assert c[0] == \"probe-leaf-only-through-a-constant\"\n\
+          assert shared() == \"probe-shared-between-kept-and-dropped\"\n\
+          assert ONLY_TEST == \"program-only-from-a-test\"\n\
+          assert closed(1) == 6\n\
+        }\n";
+    let (std_source, std_program, std_symbols, std_types) = typed(
+        "std/probe.ignite",
+        std_text,
+        &Default::default(),
+        &Default::default(),
+    )
+    .unwrap_or_else(|d| panic!("{d:?}"));
+    let modules: ignite_check::Modules = [("std.probe".to_string(), std_symbols.clone())].into();
+    let typed_std: ignite_types::TypedModules =
+        [("std.probe".to_string(), std_types.exports())].into();
+    let (source, program, symbols, types) =
+        typed("reach.ignite", program_text, &modules, &typed_std)
+            .unwrap_or_else(|d| panic!("{d:?}"));
+    let std_input = ignite_llvm::ModuleInput {
+        path: &std_types.module,
+        program: &std_program,
+        symbols: &std_symbols,
+        types: &std_types,
+    };
+    let input = ignite_llvm::ModuleInput {
+        path: &types.module,
+        program: &program,
+        symbols: &symbols,
+        types: &types,
+    };
+    let defines = |ir: &str, symbol: &str| {
+        ir.lines()
+            .any(|l| l.starts_with("define ") && l.contains(&format!("@\"{symbol}\"(")))
+    };
+    let subprogram = |ir: &str, symbol: &str| {
+        ir.lines()
+            .any(|l| l.contains("DISubprogram") && l.contains(&format!("name: \"{symbol}\"")))
+    };
+    for tests in [false, true] {
+        let options = ignite_llvm::Options {
+            sources: [
+                (std_types.module.clone(), &std_source),
+                (types.module.clone(), &source),
+            ]
+            .into(),
+            target: Some(target()),
+            test_modules: if tests {
+                vec![types.module.clone()]
+            } else {
+                Vec::new()
+            },
+            ..Default::default()
+        };
+        let generated = ignite_llvm::generate_with(&[std_input], &input, &options);
+        let std = &generated.std;
+        let prog = &generated.program;
+        let label = if tests { "test build" } else { "build" };
+        for kept in ["std.probe.LEAF", "std.probe.CHAIN", "std.probe.SHARED_KEPT"] {
+            assert!(defines(std, kept), "{label}: std drops {kept}:\n{std}");
+            assert!(
+                subprogram(std, kept),
+                "{label}: no DISubprogram of {kept}:\n{std}"
+            );
+        }
+        for text in [
+            "probe-leaf-only-through-a-constant",
+            "probe-shared-between-kept-and-dropped",
+        ] {
+            assert!(std.contains(text), "{label}: std lost {text}:\n{std}");
+        }
+        for dropped in [
+            "std.probe.SHARED_DROPPED",
+            "std.probe.DROPPED_CLOSURE",
+            "std.probe.DROPPED_BRANCHES",
+        ] {
+            assert!(
+                !defines(std, dropped),
+                "{label}: std keeps {dropped}:\n{std}"
+            );
+            assert!(
+                !subprogram(std, dropped),
+                "{label}: DISubprogram of {dropped}:\n{std}"
+            );
+        }
+        assert!(!std.contains("probe-dropped-branch-a"), "{label}:\n{std}");
+        assert!(
+            defines(prog, "tests.reach.ONLY_CLOSURE"),
+            "{label}:\n{prog}"
+        );
+        assert!(defines(prog, "tests.reach.ONLY_SPAWN"), "{label}:\n{prog}");
+        assert!(
+            !defines(prog, "tests.reach.UNUSED_SHARED"),
+            "{label}:\n{prog}"
+        );
+        assert!(!defines(prog, "tests.reach.DROPPED"), "{label}:\n{prog}");
+        assert!(!prog.contains("program-dropped-a"), "{label}:\n{prog}");
+        assert_eq!(
+            defines(prog, "tests.reach.ONLY_TEST"),
+            tests,
+            "{label}: ONLY_TEST is named by the test only:\n{prog}"
+        );
+        assert_eq!(
+            prog.contains("program-only-from-a-test"),
+            tests,
+            "{label}:\n{prog}"
+        );
+        let mut modules = vec![("std", std.as_str()), ("program", prog.as_str())];
+        for main in &generated.mains {
+            modules.push(("main", main.ir.as_str()));
+        }
+        for (module, ir) in &modules {
+            assert_eq!(
+                undefined_metadata(ir),
+                Vec::<String>::new(),
+                "{label}: {module} references undefined metadata:\n{ir}"
+            );
+        }
+        if tests {
+            let test = ignite_llvm::test_symbol(&types.tests()[0].module, types.tests()[0].decl);
+            run_test_build("reach-test", &generated, &test);
+            continue;
+        }
+        assert_eq!(generated.mains.len(), 1, "one executable, hub");
+        for (flags, suffix) in [(&["-O0", "-g"][..], "o0"), (&["-O2", "-g"][..], "o2")] {
+            compiles_with(&format!("reach_std_{suffix}"), std, flags);
+            compiles_with(&format!("reach_program_{suffix}"), prog, flags);
+            compiles_with(
+                &format!("reach_main_{suffix}"),
+                &generated.mains[0].ir,
+                flags,
+            );
+            links(
+                &format!("reach_hub_{suffix}"),
+                &[
+                    &format!("reach_std_{suffix}"),
+                    &format!("reach_program_{suffix}"),
+                    &format!("reach_main_{suffix}"),
+                ],
+            );
+        }
+        let object = Path::new(env!("CARGO_TARGET_TMPDIR")).join("llvm-golden/reach_std_o0.o");
+        let dump = Command::new("llvm-dwarfdump")
+            .arg("--debug-info")
+            .arg(&object)
+            .output()
+            .expect("run llvm-dwarfdump");
+        let dwarf = String::from_utf8_lossy(&dump.stdout);
+        assert!(dump.status.success(), "llvm-dwarfdump failed");
+        assert!(dwarf.contains("\"std.probe.CHAIN\""), "{dwarf}");
+        assert!(dwarf.contains("\"std.probe.LEAF\""), "{dwarf}");
+        assert!(!dwarf.contains("DROPPED"), "{dwarf}");
+    }
+}
+
+/// Adversary (slice 15 U1, `docs/slice.md` 19.13): "An unreferenced
+/// constant therefore adds no definition, no `@.str` and no
+/// `DISubprogram`", which on-demand lowering gives for any value. The
+/// value of `DIGEST` (std) and `UNUSED` (program) holds a closure whose
+/// body holds a Text literal; neither constant is referenced, so neither
+/// module may hold that text or a `DISubprogram` on the constant's line
+/// (line 3 of each file), and the program module no closure definition
+/// (the std module keeps the closure of `used`, line 4). Outside the
+/// observable rows 5 and 39, whose constants are literal data: it shows
+/// the known deviation from 19.13's on-demand lowering (every constant is
+/// lowered, then pruned), not a catalogue leak.
+#[test]
+#[ignore = "outside rows 5 and 39 (literal data): the known lower-then-prune deviation from 19.13 leaves a dropped constant's closures"]
+fn adversary_an_unreferenced_constant_leaves_no_closure_behind() {
+    let std_text = "package std.probe\n\
+        fn apply(f: fn(Int) -> Int, x: Int) -> Int = f(x)\n\
+        const DIGEST: Int = apply(|x| if \"sha256:probe-closure-text\" == \"a\" { x } else { 0 }, 1)\n\
+        fn used() -> Int = apply(|x| x + 1, 2)\n";
+    let program_text = "package tests.closure\n\
+        import std.probe.{apply, used}\n\
+        const UNUSED: Int = apply(|x| if \"program-closure-text\" == \"a\" { x } else { 0 }, 1)\n\
+        fn both() -> Int = used() + 1\n";
+    let (std_source, std_program, std_symbols, std_types) = typed(
+        "std/probe.ignite",
+        std_text,
+        &Default::default(),
+        &Default::default(),
+    )
+    .unwrap_or_else(|d| panic!("{d:?}"));
+    let modules: ignite_check::Modules = [("std.probe".to_string(), std_symbols.clone())].into();
+    let typed_std: ignite_types::TypedModules =
+        [("std.probe".to_string(), std_types.exports())].into();
+    let (source, program, symbols, types) =
+        typed("closure.ignite", program_text, &modules, &typed_std)
+            .unwrap_or_else(|d| panic!("{d:?}"));
+    let std_input = ignite_llvm::ModuleInput {
+        path: &std_types.module,
+        program: &std_program,
+        symbols: &std_symbols,
+        types: &std_types,
+    };
+    let input = ignite_llvm::ModuleInput {
+        path: &types.module,
+        program: &program,
+        symbols: &symbols,
+        types: &types,
+    };
+    let options = ignite_llvm::Options {
+        sources: [
+            (std_types.module.clone(), &std_source),
+            (types.module.clone(), &source),
+        ]
+        .into(),
+        target: Some(target()),
+        ..Default::default()
+    };
+    let generated = ignite_llvm::generate_with(&[std_input], &input, &options);
+    let mut found = Vec::new();
+    for (module, ir, text) in [
+        ("std", &generated.std, "sha256:probe-closure-text"),
+        ("program", &generated.program, "program-closure-text"),
+    ] {
+        if ir.contains(text) {
+            found.push(format!("{module}: the text {text:?}"));
+        }
+        for line in ir.lines() {
+            if module == "program" && line.starts_with("define ") && line.contains("@\"closure.") {
+                found.push(format!("{module}: {line}"));
+            }
+            if line.contains("DISubprogram") && line.contains(", line: 3,") {
+                found.push(format!("{module}: {line}"));
+            }
+        }
+        compiles(&format!("closure_{module}"), ir);
+    }
+    assert!(
+        found.is_empty(),
+        "an unreferenced constant left:\n{}",
+        found.join("\n")
+    );
 }

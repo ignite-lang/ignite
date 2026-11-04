@@ -1,0 +1,6 @@
+e091_catalogue.ignite:21:7: error[E091]: requirement `R2_0` has ordinal 0; an ordinal is 1 or more
+e091_catalogue.ignite:29:7: error[E091]: requirement `R2_9` must be named `R2_1`, the id of section 2 and ordinal 1
+e091_catalogue.ignite:37:7: error[E091]: requirement `R3_1` is not listed in the requirements of `RFC7003`
+e091_catalogue.ignite:45:7: error[E091]: requirement `R3_2` is listed 2 times in the requirements of `RFC7003`
+e091_catalogue.ignite:53:7: error[E091]: requirement `R3_3` has rfc 9, and `RFC7003` is RFC 7003
+e091_catalogue.ignite:69:7: error[E091]: a module declares one `Spec` constant; `RFC7004` is a second beside `RFC7003`

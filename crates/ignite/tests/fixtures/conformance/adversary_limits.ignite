@@ -1,0 +1,70 @@
+package tests.conformance.adversary_limits
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7306: Spec = Spec {
+  rfc = 7306
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7306"
+  digest = "sha256:7306"
+  requirements = [R2_1, R2_2, R2_3, R2_4, R2_5]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7306
+  section = "2"
+  ordinal = 1
+  level = Must
+  minimum = Some(8000)
+  text = "A server MUST accept a head of at least 8000 bytes."
+}
+
+const R2_2: Requirement = Requirement {
+  rfc = 7306
+  section = "2"
+  ordinal = 2
+  level = Must
+  minimum = Some(64)
+  text = "A server MUST accept at least 64 lines."
+}
+
+const R2_3: Requirement = Requirement {
+  rfc = 7306
+  section = "2"
+  ordinal = 3
+  level = Must
+  minimum = Some(1)
+  text = "A server MUST have a name of at least one character."
+}
+
+const R2_4: Requirement = Requirement {
+  rfc = 7306
+  section = "2"
+  ordinal = 4
+  level = Must
+  minimum = Some(1)
+  text = "A server MUST serve at least one session."
+}
+
+const R2_5: Requirement = Requirement {
+  rfc = 7306
+  section = "2"
+  ordinal = 5
+  level = Should
+  minimum = Some(100)
+  text = "A server SHOULD keep at least 100 lines of history."
+}
+
+type EchoLimits {
+  head: ByteSize = 8 KiB satisfies [RFC7306.R2_1]
+  lines: Int = 63 satisfies [RFC7306.R2_2]
+  name: Text = "echo" satisfies [RFC7306.R2_3]
+  sessions: Int satisfies [RFC7306.R2_4]
+  history: Int = 5 satisfies [RFC7306.R2_5]
+}
+
+protocol Echo conforms [RFC7306] {
+  fn serve(stream: TcpStream, limits: EchoLimits, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}

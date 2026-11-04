@@ -175,7 +175,6 @@ pub fn generate_with(
     let mut env = type_env_of(std, &programs);
     env.cache_layouts();
     let all: Vec<ModuleInput<'_>> = std.iter().chain(programs.iter()).copied().collect();
-    let program_ir = lower_inputs(&env, &all, &programs, program.path, options, None);
     let mains: Vec<Main> = if options.test_modules.is_empty() {
         program
             .types
@@ -192,9 +191,11 @@ pub fn generate_with(
             ir: test_main_module(&env, &all, options),
         }]
     };
+    let named = mains_symbols(&mains);
+    let program_ir = lower_inputs(&env, &all, &programs, program.path, options, None, &named);
     let roots = std_roots(&program_ir, &mains);
     Generated {
-        std: lower_inputs(&env, &all, std, "std", options, Some(roots)),
+        std: lower_inputs(&env, &all, std, "std", options, Some(roots), &named),
         program: program_ir,
         mains,
     }
@@ -204,10 +205,18 @@ pub fn generate_with(
 /// program module and the mains name (`docs/llvm.md` section 1).
 fn std_roots(program: &str, mains: &[Main]) -> BTreeSet<String> {
     let mut roots = ir::referenced_symbols(program);
-    for main in mains {
-        roots.extend(ir::referenced_symbols(&main.ir));
-    }
+    roots.extend(mains_symbols(mains));
     roots
+}
+
+/// Every symbol the mains name: the constants among them stay in the
+/// program module, which has no roots (`Module::add_const_roots`).
+fn mains_symbols(mains: &[Main]) -> BTreeSet<String> {
+    let mut symbols = BTreeSet::new();
+    for main in mains {
+        symbols.extend(ir::referenced_symbols(&main.ir));
+    }
+    symbols
 }
 
 /// A test build of several programs in one executable (`docs/slice.md`
@@ -225,14 +234,15 @@ pub fn generate_tests(
     let mut env = type_env_of(std, programs);
     env.cache_layouts();
     let all: Vec<ModuleInput<'_>> = std.iter().chain(programs).copied().collect();
-    let program = lower_inputs(&env, &all, programs, "program", options, None);
     let mains = vec![Main {
         executable: TEST_EXECUTABLE.to_string(),
         ir: test_main_module(&env, &all, options),
     }];
+    let named = mains_symbols(&mains);
+    let program = lower_inputs(&env, &all, programs, "program", options, None, &named);
     let roots = std_roots(&program, &mains);
     Generated {
-        std: lower_inputs(&env, &all, std, "std", options, Some(roots)),
+        std: lower_inputs(&env, &all, std, "std", options, Some(roots), &named),
         program,
         mains,
     }
@@ -252,11 +262,21 @@ pub fn lower_modules_with(
     inputs: &[ModuleInput<'_>],
     name: &str,
 ) -> String {
-    lower_inputs(env, sources, inputs, name, &Options::default(), None)
+    lower_inputs(
+        env,
+        sources,
+        inputs,
+        name,
+        &Options::default(),
+        None,
+        &BTreeSet::new(),
+    )
 }
 
 /// One IR module of `inputs`; with `roots`, only the functions reachable
-/// from those symbols (`Module::set_roots`).
+/// from those symbols (`Module::set_roots`). A constant is kept only when
+/// a kept function, a root or a symbol of `named` (what other modules of
+/// the build name) names it.
 fn lower_inputs<'e>(
     env: &'e TypeEnv,
     sources: &[ModuleInput<'e>],
@@ -264,6 +284,7 @@ fn lower_inputs<'e>(
     name: &str,
     options: &Options<'e>,
     roots: Option<BTreeSet<String>>,
+    named: &BTreeSet<String>,
 ) -> String {
     let mut m = Module::new(env, name);
     configure(&mut m, options);
@@ -271,6 +292,7 @@ fn lower_inputs<'e>(
     if let Some(roots) = roots {
         m.set_roots(roots);
     }
+    m.add_const_roots(named.clone());
     for input in inputs {
         let cx = Ctx::new(input.path, input.program, input.symbols, input.types);
         let tests = options.test_modules.iter().any(|path| path == input.path);
@@ -403,6 +425,7 @@ fn lower_decls(m: &mut Module<'_>, cx: &Ctx<'_>, env: &TypeEnv, tests: bool) {
                     .map(repr)
                     .unwrap_or_else(|| repr(cx.types.type_of(&c.value)));
                 Lower::define_const(m, cx, &symbol(&q), &ty, &c.value);
+                m.mark_const(&symbol(&q));
             }
             Decl::Record(_) | Decl::Fn(_) | Decl::Enum(_) | Decl::System(_) | Decl::Alias(_) => {}
             Decl::Test(test) => {

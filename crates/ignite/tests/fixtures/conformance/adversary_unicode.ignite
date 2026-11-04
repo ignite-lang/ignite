@@ -1,0 +1,41 @@
+package tests.conformance.adversary_unicode
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7303: Spec = Spec {
+  rfc = 7303
+  title = "Zeilen-Echo – „Größe“"
+  url = "https://example.invalid/rfc7303"
+  digest = "sha256:7303"
+  requirements = [R2_1, R2_2]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7303
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "Ein Server MUST jede Zeile „zurückgeben“ – \"wörtlich\"."
+}
+
+const R2_2: Requirement = Requirement {
+  rfc = 7303
+  section = "2"
+  ordinal = 2
+  level = Should
+  text = "Ein Server SHOULD binnen einer Sekunde antworten."
+}
+
+fn echo(line: Text) -> Text satisfies [RFC7303.R2_1] = line
+
+protocol Echo conforms [RFC7303] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+
+  unsupported RFC7303.R2_2 "kein \"Timeout\" – nie ✓"
+}
+
+test "Größe \"ü\" ✓ wird geechot" verifies [RFC7303.R2_1] {
+  assert echo("ü") == "ü"
+}

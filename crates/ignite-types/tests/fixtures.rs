@@ -57,7 +57,13 @@ fn fixtures_match_expected() {
         .unwrap_or_else(|e| panic!("fixture standard library:\n{e}"));
     assert_eq!(
         std.typed.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["std.net", "std.shapes", "std.shapes.protocol"]
+        [
+            "std.net",
+            "std.rfc",
+            "std.rfc.rfc1",
+            "std.shapes",
+            "std.shapes.protocol"
+        ]
     );
     let paths = fixtures();
     assert!(!paths.is_empty(), "no fixtures found");
@@ -76,6 +82,83 @@ fn fixtures_match_expected() {
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+/// `valid_clauses.ignite` through `clause_constant` (`docs/slice.md` 19.6,
+/// 19.13): every `conforms` entry and every requirement reference resolves
+/// to the constant it names, imported or local.
+#[test]
+fn valid_clauses_record_their_constants() {
+    use ignite_syntax::ast::Decl;
+    use ignite_types::QualName;
+
+    let std = common::load_std(&fixture_dir().join("std"))
+        .unwrap_or_else(|e| panic!("fixture standard library:\n{e}"));
+    let path = fixture_dir().join("valid_clauses.ignite");
+    let source = SourceFile::new(
+        "valid_clauses.ignite",
+        std::fs::read_to_string(&path).unwrap(),
+    );
+    let program = ignite_syntax::parse(&source).unwrap();
+    let symbols = ignite_check::check_module(&program, &std.modules).unwrap();
+    let typed = ignite_types::type_module(&program, &symbols, &std.typed)
+        .unwrap_or_else(|d| panic!("type failed:\n{}", source.render_all(&d)));
+    let resolved = |span| {
+        typed
+            .clause_constant(span)
+            .map(|q: &QualName| format!("{}.{}", q.module, q.name))
+    };
+    let mut names = Vec::new();
+    for decl in &program.decls {
+        match decl {
+            Decl::Protocol(p) => {
+                names.extend(p.conforms.iter().map(|c| resolved(c.span)));
+                names.extend(
+                    p.fns
+                        .iter()
+                        .flat_map(|f| &f.satisfies)
+                        .map(|r| resolved(r.span)),
+                );
+                names.extend(p.statuses.iter().map(|s| resolved(s.requirement.span)));
+                names.extend(
+                    p.statuses
+                        .iter()
+                        .map(|s| resolved(s.requirement.segments[0].span)),
+                );
+            }
+            Decl::Record(r) => {
+                names.extend(r.satisfies.iter().map(|s| resolved(s.span)));
+                names.extend(
+                    r.fields
+                        .iter()
+                        .flat_map(|f| &f.satisfies)
+                        .map(|s| resolved(s.span)),
+                );
+            }
+            Decl::Test(t) => names.extend(t.verifies.iter().map(|v| resolved(v.span))),
+            _ => {}
+        }
+    }
+    let names: Vec<String> = names
+        .into_iter()
+        .map(|n| n.unwrap_or_else(|| "unresolved".to_string()))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "std.rfc.rfc1.RFC1",
+            "fixtures.clauses.RFC7",
+            "std.rfc.rfc1.R2_1",
+            "std.rfc.rfc1.R2_2",
+            "fixtures.clauses.R1_1",
+            "std.rfc.rfc1.RFC1",
+            "fixtures.clauses.RFC7",
+            "fixtures.clauses.R1_2",
+            "std.rfc.rfc1.R2_2",
+            "std.rfc.rfc1.R2_1",
+            "fixtures.clauses.R1_2",
+        ]
+    );
 }
 
 /// `valid_system.ignite` through the slice-11 API (`docs/slice.md` 15.9):
@@ -225,4 +308,61 @@ fn every_type_code_has_a_fixture() {
             "no fixture for {code}"
         );
     }
+}
+
+/// Adversary (slice 15 U1, `docs/slice.md` 19.5, 19.6, 19.13): the second
+/// segment of `Spec.Id` is looked up in the spec's module, so a local
+/// requirement of the same id does not capture a reference through an
+/// imported spec; a spec declared through an alias of `Spec` is a `Spec`
+/// constant; an empty `parties` list is no E040.
+#[test]
+fn adversary_reqrefs_resolve_through_their_spec_module() {
+    let std = common::load_std(&fixture_dir().join("std"))
+        .unwrap_or_else(|e| panic!("fixture standard library:\n{e}"));
+    let text = "package fixtures.probe\n\
+        import std.rfc.{Level, Requirement, Spec}\n\
+        import std.rfc.rfc1.{RFC1}\n\
+        type S = Spec\n\
+        const RFC7: S = Spec { rfc = 7, title = \"t\", url = \"u\", digest = \"d\", requirements = [R2_1] }\n\
+        const R2_1: Requirement = Requirement { rfc = 7, section = \"2\", ordinal = 1, level = Must, text = \"t\" }\n\
+        protocol Echo conforms [RFC1, RFC7] scope { parties = [] } {\n\
+          fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] satisfies [RFC1.R2_1, RFC7.R2_1] {\n\
+            return stream.write_all(b\"ok\")\n\
+          }\n\
+        }\n";
+    let source = SourceFile::new("probe.ignite", text.to_string());
+    let program = ignite_syntax::parse(&source).unwrap();
+    let symbols = ignite_check::check_module(&program, &std.modules)
+        .unwrap_or_else(|d| panic!("check failed:\n{}", source.render_all(&d)));
+    let typed = ignite_types::type_module(&program, &symbols, &std.typed)
+        .unwrap_or_else(|d| panic!("type failed:\n{}", source.render_all(&d)));
+    let ignite_syntax::ast::Decl::Protocol(p) = program
+        .decls
+        .iter()
+        .find(|d| matches!(d, ignite_syntax::ast::Decl::Protocol(_)))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let resolved: Vec<String> = p
+        .conforms
+        .iter()
+        .map(|c| c.span)
+        .chain(p.fns[0].satisfies.iter().map(|r| r.span))
+        .map(|span| {
+            typed
+                .clause_constant(span)
+                .map(|q| format!("{}.{}", q.module, q.name))
+                .unwrap_or_else(|| "unresolved".to_string())
+        })
+        .collect();
+    assert_eq!(
+        resolved,
+        [
+            "std.rfc.rfc1.RFC1",
+            "fixtures.probe.RFC7",
+            "std.rfc.rfc1.R2_1",
+            "fixtures.probe.R2_1",
+        ]
+    );
 }

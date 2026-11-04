@@ -1,0 +1,41 @@
+package tests.conformance.inconclusive_must
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7111: Spec = Spec {
+  rfc = 7111
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7111"
+  digest = "sha256:7111"
+  requirements = [R2_1, R2_2]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7111
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+const R2_2: Requirement = Requirement {
+  rfc = 7111
+  section = "2"
+  ordinal = 2
+  level = Must
+  text = "A server MUST end every reply with a line end."
+}
+
+fn echo(line: Text) -> Text satisfies [RFC7111.R2_1] = line
+
+fn reply(line: Text) -> Text satisfies [RFC7111.R2_2] = line + "\n"
+
+protocol Echo conforms [RFC7111] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}
+
+test "a line is echoed" verifies [RFC7111.R2_1] {
+  assert echo("hi") == "hi"
+}

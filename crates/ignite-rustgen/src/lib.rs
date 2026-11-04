@@ -1613,6 +1613,11 @@ struct Generator<'a> {
     closure_base: Option<usize>,
     /// The program's package: paths of its sibling modules.
     package: Package,
+    /// The type parameters in scope of the item being generated. A record
+    /// or enum of the same name is spelled by its module path
+    /// ([`Generator::unshadowed`]), since Rust would read the bare name as
+    /// the parameter.
+    type_params: BTreeSet<String>,
 }
 
 /// An enum variant of a concrete type: its name and its payload types,
@@ -1699,6 +1704,7 @@ impl<'a> Generator<'a> {
             glue: Vec::new(),
             closure_base: None,
             package: Package::new("", "crate"),
+            type_params: BTreeSet::new(),
         }
     }
 
@@ -1724,6 +1730,47 @@ impl<'a> Generator<'a> {
             return Some(path);
         }
         self.package.path(module)
+    }
+
+    /// [`Generator::module_path`] that also names the module being
+    /// generated (`crate`, `crate::commands`, `crate::console` inside
+    /// `ignite-std`): the path of a record or enum shadowed by a type
+    /// parameter.
+    fn item_module_path(&self, module: &str) -> Option<String> {
+        if !self.is_own_module(module) {
+            return self.module_path(module);
+        }
+        if module == "std" || module.starts_with("std.") {
+            let mut path = self.root.to_string();
+            for segment in module.split('.').skip(1) {
+                path.push_str("::");
+                path.push_str(&ident(segment));
+            }
+            return Some(path);
+        }
+        self.package.path(module)
+    }
+
+    /// The Rust name of the user record or enum `name` as written in the
+    /// source: the name unchanged, or its module path when a type parameter in
+    /// scope has the same name.
+    fn unshadowed(&self, name: &str) -> String {
+        let user_type = self.symbols.records.contains(name)
+            || (self.symbols.enums.contains_key(name)
+                && !BUILTIN_ENUMS.iter().any(|(e, _)| *e == name));
+        if !user_type || !self.type_params.contains(name) {
+            return name.to_string();
+        }
+        let module = match self.symbols.imported.get(name) {
+            Some(module) => module.clone(),
+            None => self
+                .types
+                .map_or_else(|| self.module.clone(), |t| t.module.clone()),
+        };
+        match self.item_module_path(&module) {
+            Some(path) => format!("{path}::{}", ident(name)),
+            None => name.to_string(),
+        }
     }
 
     /// `"<file>", <line>, <col>` of a failure site (`docs/slice.md`
@@ -2009,6 +2056,11 @@ impl<'a> Generator<'a> {
                 _ => q.name.clone(),
             };
         }
+        if self.type_params.contains(&q.name)
+            && let Some(path) = self.item_module_path(&q.module)
+        {
+            return format!("{path}::{}", ident(&q.name));
+        }
         if self.symbols.imported.get(&q.name) == Some(&q.module) {
             return ident(&q.name);
         }
@@ -2068,7 +2120,9 @@ impl<'a> Generator<'a> {
             };
             self.scopes = vec![Vec::new()];
             self.indent = w.indent + 1;
+            self.type_params = record.type_params.iter().map(|p| p.name.clone()).collect();
             let value = self.value(default);
+            self.type_params.clear();
             self.scopes.clear();
             w.line("#[allow(non_snake_case)]");
             w.open(&format!(
@@ -2358,7 +2412,9 @@ impl<'a> Generator<'a> {
             .is_some_and(|ty| !(ty.name.name == "Unit" && ty.args.is_empty()));
         self.scopes = vec![decl.params.iter().map(|p| p.name.name.clone()).collect()];
         self.indent = w.indent;
+        self.type_params = decl.type_params.iter().map(|p| p.name.clone()).collect();
         let mut body = self.block(&decl.body, value);
+        self.type_params.clear();
         self.scopes.clear();
         self.borrowed.clear();
         if !prologue.is_empty() {
@@ -2735,7 +2791,7 @@ impl<'a> Generator<'a> {
                 if let Some(owner) = self.qualifier(receiver)
                     && self.is_enum(owner)
                 {
-                    return variant_path(owner, &name.name);
+                    return variant_path(&self.unshadowed(owner), &name.name);
                 }
                 let receiver_ty = self.type_of(receiver);
                 let text = format!("{}.{}", self.receiver(receiver), ident(&name.name));
@@ -2899,7 +2955,7 @@ impl<'a> Generator<'a> {
             return format!("{}()", ident(&id.name));
         }
         if let Some(owner) = self.enum_of_variant(&id.name) {
-            return variant_path(&owner, &id.name);
+            return variant_path(&self.unshadowed(&owner), &id.name);
         }
         ident(&id.name)
     }
@@ -2908,7 +2964,7 @@ impl<'a> Generator<'a> {
     /// with the literal's type arguments for a generic record (Rust cannot
     /// infer them from a default that does not mention them).
     fn record_literal(&mut self, expr: &Expr, name: &Ident, fields: &[FieldInit]) -> String {
-        let record = ident(&name.name);
+        let record = ident(&self.unshadowed(&name.name));
         let ty = self.type_of(expr);
         let boxed = |this: &Self, field: &str, value: String| {
             if this.is_boxed_field(ty, field) {
@@ -3283,7 +3339,7 @@ impl<'a> Generator<'a> {
             ));
         }
         if self.is_enum(owner) {
-            let path = variant_path(owner, &name.name);
+            let path = variant_path(&self.unshadowed(owner), &name.name);
             return Some(format!(
                 "{path}({})",
                 self.variant_args(expr, args).join(", ")
@@ -3736,11 +3792,11 @@ impl<'a> Generator<'a> {
         };
         let payload = typed.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
         let owner = if path.len() >= 2 {
-            Some(path[path.len() - 2].name.clone())
+            Some(self.unshadowed(&path[path.len() - 2].name))
         } else if let Some((owner, _)) = typed {
             Some(owner)
         } else {
-            self.enum_of_variant(name)
+            self.enum_of_variant(name).map(|o| self.unshadowed(&o))
         };
         (owner, payload)
     }

@@ -1,0 +1,93 @@
+package tests.conformance.adversary_should_failure
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7301: Spec = Spec {
+  rfc = 7301
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7301"
+  digest = "sha256:7301"
+  requirements = [R2_1, R2_2, R2_3, R2_4, R2_5, R4_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7301
+  section = "2"
+  ordinal = 1
+  level = Must
+  party = Server
+  text = "A server MUST echo every line."
+}
+
+const R2_2: Requirement = Requirement {
+  rfc = 7301
+  section = "2"
+  ordinal = 2
+  level = Should
+  party = Server
+  text = "A server SHOULD keep the case of a line."
+}
+
+const R2_3: Requirement = Requirement {
+  rfc = 7301
+  section = "2"
+  ordinal = 3
+  level = Should
+  party = Server
+  text = "A server SHOULD trim nothing."
+}
+
+const R2_4: Requirement = Requirement {
+  rfc = 7301
+  section = "2"
+  ordinal = 4
+  level = May
+  party = Server
+  text = "A server MAY log a line."
+}
+
+const R2_5: Requirement = Requirement {
+  rfc = 7301
+  section = "2"
+  ordinal = 5
+  level = Should
+  party = Server
+  text = "A server SHOULD answer within a second."
+}
+
+const R4_1: Requirement = Requirement {
+  rfc = 7301
+  section = "4"
+  ordinal = 1
+  level = Must
+  party = Proxy
+  text = "A proxy MUST forward every line."
+}
+
+fn echo(line: Text) -> Text satisfies [RFC7301.R2_1, RFC7301.R2_2] = line
+
+fn keep(line: Text) -> Text satisfies [RFC7301.R2_3] = line
+
+fn forward(line: Text) -> Text satisfies [RFC7301.R4_1] = line
+
+protocol Echo conforms [RFC7301] scope { parties = [Server] } {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+
+  unsupported RFC7301.R2_4 "nothing is logged"
+  unsupported RFC7301.R2_5 "no answer is timed"
+}
+
+test "a line is echoed" verifies [RFC7301.R2_1, RFC7301.R2_2] {
+  assert echo("hi") == "hi"
+}
+
+test "an index out of range fails" verifies [RFC7301.R2_2] {
+  let items = [1, 2]
+  assert items[5] == 0
+}
+
+test "a forwarded line exits with seven" verifies [RFC7301.R4_1] {
+  Process.exit(7)
+}

@@ -1,0 +1,66 @@
+package tests.adversary.two
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+import tests.adversary.two.other.{RFC7202}
+
+const RFC7201: Spec = Spec {
+  rfc = 7201
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7201"
+  digest = "sha256:7201"
+  requirements = [R1_1, R2_1, R3_1]
+}
+
+const R1_1: Requirement = Requirement {
+  rfc = 7201
+  section = "1"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7201
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "A server MUST close an idle session."
+}
+
+const R3_1: Requirement = Requirement {
+  rfc = 7201
+  section = "3"
+  ordinal = 1
+  level = Must
+  text = "A server MUST pad a short line."
+}
+
+fn echo(line: Text) -> Text satisfies [RFC7201.R1_1, RFC7202.R1_1] = line
+
+fn pad(line: Text) -> Text satisfies [RFC7201.R3_1] = line + " "
+
+protocol Zeta conforms [RFC7202, RFC7201] scope { sections = ["1"] } {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"zeta")
+  }
+}
+
+protocol Alpha conforms [RFC7201] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"alpha")
+  }
+
+  unsupported RFC7201.R2_1 "sessions never idle out"
+}
+
+test "a line is echoed" verifies [RFC7201.R1_1, RFC7202.R1_1] {
+  assert echo("hi") == "hi"
+}
+
+test "a short line is padded" verifies [RFC7201.R3_1] {
+  assert pad("a") == "a "
+}
+
+test "padding exits with seven" verifies [RFC7201.R3_1] {
+  Process.exit(7)
+}

@@ -1,0 +1,19 @@
+package tests.conformance.adversary_imports_rfc
+
+import std.rfc.{Level, Requirement, Spec}
+
+// U6's adversary, row 5 of 19.0 for a program that imports `std.rfc`
+// directly and names the vocabulary's types, but no catalogue.
+
+fn word(level: Level) -> Text = match level {
+  Must => "MUST"
+  _ => "other"
+}
+
+fn section(requirement: Requirement) -> Text = requirement.section
+
+fn number(spec: Spec) -> Int = spec.rfc
+
+test "adversary: a program that imports std.rfc runs" {
+  assert word(Must) == "MUST"
+}

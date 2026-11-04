@@ -1,0 +1,28 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE rfc SYSTEM "rfc[2629]-xhtml.ent">
+<!-- Adversary fixture (docs/slice.md 19.8, "Reader" and "Extraction"): entities decoded once,
+     comments, processing instructions and CDATA inside a paragraph, single-quoted attributes,
+     marks inside inline elements. -->
+<rfc number='7002' version='3'>
+  <link rel='alternate' href='https://example.invalid/rfc7002'/>
+  <front>
+    <title>Markup &amp;amp; Entities</title>
+  </front>
+  <middle>
+    <section pn='section-1'>
+      <t pn='section-1-1'>A server <!-- a comment --><bcp14>MUST</bcp14> keep &amp;amp; as written<?pi skipped?>, decode &#65;&#x42;&#x43; and &lt;x&gt;<![CDATA[ MUST]]> once.</t>
+      <t pn='section-1-2'>A client <em><bcp14>MUST NOT</bcp14></em> see <xref target='r' format='default' derivedContent='say "R"'/> as &apos;data&apos;.</t>
+      <t pn='section-1-3'>A sender <bcp14>MUST <em>NOT</em></bcp14> split, and a proxy <bcp14>SHALL</bcp14> wait.</t>
+      <t pn='section-1-4'>See <xref target='r' format='none' derivedContent=''>a server <bcp14>MAY</bcp14> retry</xref>. Nothing else is said.</t>
+    </section>
+  </middle>
+  <back>
+    <references pn='section-2'>
+      <reference anchor='r' target='https://example.invalid/r'>
+        <front>
+          <title>R</title>
+        </front>
+      </reference>
+    </references>
+  </back>
+</rfc>
