@@ -7,16 +7,15 @@ title: Files under a root directory
 summary: Read, write, list, create directories and remove files under a root, never outside it
 relations:
 - decomposes: epic:playground-substrate
+- depends_on: story:slice-17-frontend
 scope:
-- confidence: inferred
-  path: crates/ignite-check/src
-- confidence: inferred
-  path: crates/ignite-io/src
-- confidence: inferred
-  path: crates/ignite-rt/src
-- confidence: inferred
-  path: std
-revision: 4
+- confidence: cited
+  path: crates/ignite-io/src/fs.rs
+- confidence: cited
+  path: crates/ignite-rt/src/fs.rs
+- confidence: cited
+  path: std/fs.ignite
+revision: 6
 ---
 # Story: file-system
 
@@ -31,6 +30,7 @@ directory it is given, on both targets, and cannot reach a path outside that roo
 - Substrate in `crates/ignite-io`, a std module over it, a new effect the checker tracks; the root
   is a capability value, as a listener is.
 - Constraint P3 (playground session, 2026-11-04): an `HttpApp` handler may use effects only on its state (`std/protocol/http.ignite:50`; `Clock.monotonic()` in a handler is E017, also in a task it spawns), so this capability arrives as a handle passed in the state, as `Store` does, not as an ambient static.
+- Contract: `docs/slice.md` section 21 on `feat/slice17-processes-files`, unit U2 of 21.12, rows 1 to 7 of 21.0; first failing test `fs::symlinks_out_are_refused`; after `story:slice-17-frontend`.
 
 ## Acceptance
 

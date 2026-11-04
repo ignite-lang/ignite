@@ -7,14 +7,18 @@ title: Programs read their own arguments
 summary: Read command-line arguments beyond --port and --ref, so a server takes its root and tool paths at launch
 relations:
 - decomposes: epic:playground-substrate
+- depends_on: story:slice-17-frontend
+- depends_on: story:process-spawn
 scope:
-- confidence: inferred
-  path: crates/ignite-io/src
-- confidence: inferred
-  path: crates/ignite-rt/src
-- confidence: inferred
-  path: std
-revision: 2
+- confidence: cited
+  path: crates/ignite-io/src/lib.rs
+- confidence: cited
+  path: crates/ignite/src/apply/plan.rs
+- confidence: cited
+  path: crates/ignite/src/run
+- confidence: cited
+  path: crates/ignite/tests/slice17.rs
+revision: 4
 ---
 # Story: program-arguments
 
@@ -29,6 +33,7 @@ compiler's path at launch instead of compiling them in.
   `--port` and `Endpoint.of`'s `--ref` (`crates/ignite-io/src/lib.rs:346`).
 - Under `epic:playground-substrate`; the arguments reach handlers the way P3 requires (as values
   passed in, not ambient statics).
+- Contract: `docs/slice.md` section 21 on `feat/slice17-processes-files`, unit U4 of 21.12, rows 18, 26 and 32 of 21.0 (the `Setting` handle; open question Q6 confirmed: it fits this story); first failing test `slice17::rust::settings_read_their_flags`; after `story:slice-17-frontend` and `story:process-spawn`.
 
 ## Acceptance
 
