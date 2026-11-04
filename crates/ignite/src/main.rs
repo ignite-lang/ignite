@@ -1,7 +1,8 @@
 //! `ignite` management CLI (`docs/slice.md` sections 1 and 6, `docs/llvm.md` section 1).
 //!
 //! ```text
-//! ignite check <file.ignite> [--std PATH]
+//! ignite check <file.ignite> [--std PATH] [--json]
+//! ignite check --stdin-for <file.ignite> [--std PATH] [--json]
 //! ignite emit <file.ignite> [--substrate PATH] [--std PATH]
 //! ignite build <file.ignite> [--target rust|llvm] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE]
 //! ignite test <file.ignite>… [FILTER] [--target rust|llvm|all] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE]
@@ -54,10 +55,18 @@ struct Cli {
 enum Commands {
     /// Parse and check a program and the standard library; no output on success.
     Check {
-        file: PathBuf,
+        #[arg(required_unless_present = "stdin_for", conflicts_with = "stdin_for")]
+        file: Option<PathBuf>,
         /// Root of the standard library.
         #[arg(long)]
         std: Option<PathBuf>,
+        /// Print `{"diagnostics": [...]}` on stdout instead of text on stderr.
+        #[arg(long)]
+        json: bool,
+        /// Check the program text on stdin as the file PATH; its siblings and the
+        /// standard library are read from disk, PATH is not.
+        #[arg(long, value_name = "PATH")]
+        stdin_for: Option<PathBuf>,
     },
     /// Print the generated Rust projects: the program, then `std/`.
     Emit {
@@ -655,7 +664,12 @@ fn run() {
         | Commands::Conformance { .. } => {
             unreachable!("handled above")
         }
-        Commands::Check { file, std } => ignite::check_with_std(&file, std.as_deref()),
+        Commands::Check {
+            file,
+            std,
+            json,
+            stdin_for,
+        } => check(file, std, json, stdin_for),
         Commands::Emit {
             file,
             substrate,
@@ -797,6 +811,53 @@ fn run() {
             _ => eprintln!("error: {error}"),
         }
         std::process::exit(error.exit_status());
+    }
+}
+
+/// `ignite check` (`docs/slice.md` 1.1). With `--json` the diagnostics are
+/// one document on stdout and exit 1 here; other errors return to the
+/// caller's text form.
+fn check(
+    file: Option<PathBuf>,
+    std: Option<PathBuf>,
+    json: bool,
+    stdin_for: Option<PathBuf>,
+) -> Result<(), ignite::Error> {
+    let result = match stdin_for {
+        Some(path) => {
+            let mut text = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut text).map_err(|error| {
+                ignite::Error::Io {
+                    path: PathBuf::from("<stdin>"),
+                    error,
+                }
+            })?;
+            ignite::check_text(&path, text, std.as_deref())
+        }
+        None => ignite::check_with_std(
+            &file.expect("clap requires FILE without --stdin-for"),
+            std.as_deref(),
+        ),
+    };
+    if !json {
+        return result;
+    }
+    let diagnostics = match &result {
+        Ok(()) => ignite_eval::Json::Array(Vec::new()),
+        Err(ignite::Error::Diagnostics {
+            source,
+            diagnostics,
+        }) => ignite::diagnostics_json(source, diagnostics),
+        Err(_) => return result,
+    };
+    let document = ignite_eval::Json::Object(std::collections::BTreeMap::from([(
+        "diagnostics".to_string(),
+        diagnostics,
+    )]));
+    println!("{}", document.compact());
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) => std::process::exit(error.exit_status()),
     }
 }
 

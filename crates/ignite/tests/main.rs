@@ -9,6 +9,7 @@ mod apply_host;
 mod apply_recovery;
 mod apply_transition;
 mod build_cache;
+mod check_json;
 mod clauses;
 mod cli;
 mod common;

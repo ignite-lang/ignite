@@ -81,6 +81,7 @@ Rules of the layout:
 | run the compiled client | `task client` |
 | compile the example with the LLVM target | `task compile-llvm` (writes `target/ignite-llvm/terminal/bin/`) |
 | run the LLVM-built binaries | `task server TARGET=llvm`, `task client TARGET=llvm` |
+| check a program | `target/debug/ignite check FILE [--json]`; an unsaved buffer on stdin: `target/debug/ignite check --stdin-for FILE [--json]` (`docs/slice.md` 1.1: `{"diagnostics":[{path, code, message, start, end}]}` on stdout, each position `line`, `column`, byte `offset`; exit 0 clean, 1 diagnostics) |
 | run the inline Ignite tests | `task test-ignite` (std/ and examples/, both targets; `FILTER=text` selects tests); one file: `target/debug/ignite test FILE [FILTER]` |
 | build the website | `task site` (landing page at `target/site/index.html`, book at `target/site/book/`; needs `mdbook` 0.5.4) |
 | serve the website | `task site-serve` (`task site`, then `miniserve` on `http://127.0.0.1:8765/`) |
