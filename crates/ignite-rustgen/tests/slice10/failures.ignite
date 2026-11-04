@@ -30,3 +30,18 @@ test "quantity overflow" {
 test "neg" {
   assert -int("-9223372036854775808") == 0
 }
+
+test "parse a slice" {
+  let data = b"12"
+  assert Int.parse(data.slice(1, 5).to_text()) == None
+}
+
+test "parse a slice of a slice" {
+  let data = b"123"
+  assert Int.parse(data.slice(0, 2).slice(1, 3).to_text()) == None
+}
+
+test "text of a slice" {
+  let data = b"12"
+  assert data.slice(-1, 1).to_text() == ""
+}
