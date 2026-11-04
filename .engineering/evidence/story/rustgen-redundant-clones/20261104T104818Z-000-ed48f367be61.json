@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-04T10:48:18Z",
+  "actor": "human:timo",
+  "artifact": "story:rustgen-redundant-clones",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate",
+    "reference": "https://github.com/ignite-lang/ignite/pull/23"
+  }
+}
