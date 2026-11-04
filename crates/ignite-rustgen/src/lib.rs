@@ -1729,6 +1729,23 @@ struct Generator<'a> {
     /// ([`Generator::unshadowed`]), since Rust would read the bare name as
     /// the parameter.
     type_params: BTreeSet<String>,
+    /// The blocks being generated, outermost first
+    /// ([`Generator::last_use`]).
+    flow: Vec<Flow>,
+    /// Set by a loop or a closure for the body block it generates next:
+    /// that block can run more than once.
+    repeats: bool,
+    /// The offsets of every mention of each name in the outermost block
+    /// being generated ([`block_mentions`]).
+    mentions: BTreeMap<String, Vec<usize>>,
+}
+
+/// A block being generated: the index of its scope, the offset where it
+/// ends, and whether it can run more than once (a loop or closure body).
+struct Flow {
+    scope: usize,
+    end: usize,
+    repeats: bool,
 }
 
 /// An enum variant of a concrete type: its name and its payload types,
@@ -1817,6 +1834,9 @@ impl<'a> Generator<'a> {
             closure_base: None,
             package: Package::new("", "crate"),
             type_params: BTreeSet::new(),
+            flow: Vec::new(),
+            repeats: false,
+            mentions: BTreeMap::new(),
         }
     }
 
@@ -2690,7 +2710,16 @@ impl<'a> Generator<'a> {
     }
 
     fn block(&mut self, block: &Block, value: bool) -> String {
+        if self.flow.is_empty() {
+            self.mentions.clear();
+            block_mentions(block, &mut self.mentions);
+        }
         self.scopes.push(Vec::new());
+        self.flow.push(Flow {
+            scope: self.scopes.len() - 1,
+            end: block.span.end,
+            repeats: std::mem::take(&mut self.repeats),
+        });
         self.indent += 1;
         let mut out = String::from("{\n");
         let count = block.stmts.len();
@@ -2704,8 +2733,58 @@ impl<'a> Generator<'a> {
         self.indent -= 1;
         out.push_str(&indentation(self.indent));
         out.push('}');
+        self.flow.pop();
         self.scopes.pop();
         out
+    }
+
+    /// Whether this mention of local `id` is its last before its value
+    /// dies, so the value can be moved instead of copied: the name is
+    /// bound in a block being generated, not mentioned again before that
+    /// block ends, and no block between the mention and the binding runs
+    /// more than once (a loop or closure body that binds the name binds a
+    /// new value each time).
+    fn last_use(&self, id: &Ident) -> bool {
+        if self.is_borrowed(&id.name)
+            || self.is_captured(&id.name)
+            || self.renames.contains_key(&id.name)
+        {
+            return false;
+        }
+        let Some(bound) = self
+            .scopes
+            .iter()
+            .rposition(|scope| scope.contains(&id.name))
+        else {
+            return false;
+        };
+        for flow in self.flow.iter().rev() {
+            if bound >= flow.scope {
+                return self.mentions.get(&id.name).is_some_and(|offsets| {
+                    offsets.contains(&id.span.start)
+                        && !offsets
+                            .iter()
+                            .any(|&at| at > id.span.start && at < flow.end)
+                });
+            }
+            if flow.repeats {
+                return false;
+            }
+        }
+        false
+    }
+
+    /// Arguments passed by value: a local at its [`last_use`](Self::last_use)
+    /// moved, anything else as [`args`](Self::args) gives it.
+    fn owned_args(&mut self, args: &[Expr]) -> Vec<String> {
+        args.iter()
+            .map(|arg| match &arg.kind {
+                ExprKind::Name(id) if self.is_local(&id.name) && self.last_use(id) => {
+                    self.bare(arg)
+                }
+                _ => self.value(arg),
+            })
+            .collect()
     }
 
     /// One statement; `tail` is set for the last statement of a
@@ -2720,6 +2799,7 @@ impl<'a> Generator<'a> {
                 let iter = self.value(iter);
                 self.scopes.push(Vec::new());
                 let pattern = self.let_pattern(pattern, false);
+                self.repeats = true;
                 let body = self.block(body, false);
                 self.scopes.pop();
                 format!("for {pattern} in ({iter}) {body}")
@@ -2767,14 +2847,19 @@ impl<'a> Generator<'a> {
             StmtKind::Return(None) => "return;".to_string(),
             StmtKind::While { cond, body } => {
                 let cond = self.condition(cond);
+                self.repeats = true;
                 format!("while {cond} {}", self.block(body, false))
             }
-            StmtKind::Loop { body } => format!("loop {}", self.block(body, false)),
+            StmtKind::Loop { body } => {
+                self.repeats = true;
+                format!("loop {}", self.block(body, false))
+            }
             StmtKind::For { name, iter, body } if self.borrowed_for(&name.name, iter, body) => {
                 let iter = self.bare(iter);
                 let scope = self.scopes.len();
                 self.scopes.push(vec![name.name.clone()]);
                 self.borrowed_elements.push((scope, name.name.clone()));
+                self.repeats = true;
                 let body = self.block(body, false);
                 self.borrowed_elements.pop();
                 self.scopes.pop();
@@ -2783,6 +2868,7 @@ impl<'a> Generator<'a> {
             StmtKind::For { name, iter, body } => {
                 let iter = self.value(iter);
                 self.scopes.push(vec![name.name.clone()]);
+                self.repeats = true;
                 let body = self.block(body, false);
                 self.scopes.pop();
                 format!("for {} in ({iter}) {body}", ident(&name.name))
@@ -3045,12 +3131,15 @@ impl<'a> Generator<'a> {
                         parts[1..].iter().map(|p| (BinaryOp::Add, *p, *p)).collect();
                     return self.chunked(parts[0], &rights, true);
                 }
-                let texts: Vec<String> = parts.iter().map(|p| self.bare(p)).collect();
-                format!(
-                    "format!(\"{}\", {})",
-                    "{}".repeat(texts.len()),
-                    texts.join(", ")
-                )
+                let mut template = String::new();
+                let mut texts = Vec::new();
+                for part in parts {
+                    self.format_part(part, &mut template, &mut texts);
+                }
+                if texts.is_empty() {
+                    return format!("format!(\"{template}\")");
+                }
+                format!("format!(\"{template}\", {})", texts.join(", "))
             }
             ExprKind::Binary {
                 op: op @ (BinaryOp::Eq | BinaryOp::Ne),
@@ -3091,6 +3180,42 @@ impl<'a> Generator<'a> {
     /// Whether `expr` (with operator `op`) is `+` on `Text`.
     fn is_text_add(&self, expr: &Expr, op: BinaryOp) -> bool {
         op == BinaryOp::Add && self.type_of(expr) == Some(&Ty::Text)
+    }
+
+    /// One part of a Text `+` chain in its `format!`: a literal inlined
+    /// into `template` with its braces doubled, anything else as `{}` and
+    /// an argument. A `to_text` of Text, Int, Byte or Bool (each `{x}` of
+    /// an interpolation) passes its receiver, whose `Display` is that
+    /// text, so the part is not copied or converted first.
+    fn format_part(&mut self, part: &Expr, template: &mut String, args: &mut Vec<String>) {
+        if self.types.and_then(|t| t.reference(part)).is_none() {
+            if let ExprKind::Str(text) = &part.kind {
+                template.push_str(&escape_str(text).replace('{', "{{").replace('}', "}}"));
+                return;
+            }
+            if let ExprKind::Method {
+                receiver,
+                args: none,
+                ..
+            } = &part.kind
+                && none.is_empty()
+                && matches!(
+                    self.callee(part),
+                    Some(Callee::Builtin(
+                        Builtin::TextToText
+                            | Builtin::IntToTextMethod
+                            | Builtin::ByteToText
+                            | Builtin::BoolToText
+                    ))
+                )
+            {
+                template.push_str("{}");
+                args.push(self.bare(receiver));
+                return;
+            }
+        }
+        template.push_str("{}");
+        args.push(self.bare(part));
     }
 
     /// The Rust path of the variant a bare name resolves to by expected
@@ -3627,7 +3752,7 @@ impl<'a> Generator<'a> {
                 | Builtin::PipeStreamReceivedBatches,
             )) => {
                 let r = self.receiver(receiver);
-                let a = self.args(args);
+                let a = self.owned_args(args);
                 return format!("{r}.{}({})", ident(&name.name), a.join(", "));
             }
             Some(Callee::Builtin(
@@ -3641,7 +3766,7 @@ impl<'a> Generator<'a> {
                     .map(|ty| self.rust_ty(ty))
                     .expect("a bounded receiver has a type");
                 let r = self.receiver(receiver);
-                let a = self.args(args);
+                let a = self.owned_args(args);
                 let a: Vec<String> = std::iter::once(format!("&{r}")).chain(a).collect();
                 return format!(
                     "<{stream} as ignite_io::ByteStream>::{}({})",
@@ -3752,6 +3877,12 @@ impl<'a> Generator<'a> {
         {
             return text;
         }
+        if let ("append", [value]) = (name.name.as_str(), args)
+            && place_root(value).is_none_or(|root| place_root(receiver) != Some(root))
+        {
+            let r = self.receiver(receiver);
+            return format!("{r}.extend_from_slice({})", self.ref_arg(value));
+        }
         let r = self.receiver(receiver);
         let a = self.args(args);
         let arg = |i: usize, a: &[String]| borrow(&args[i], a[i].clone());
@@ -3770,6 +3901,17 @@ impl<'a> Generator<'a> {
                 format!("{r}.strip_prefix({}).map(|s| s.to_string())", arg(0, &a))
             }
             ("concat", 1) => format!("format!(\"{{}}{{}}\", {r}, {})", a[0]),
+            ("to_bytes", 0)
+                if !matches!(
+                    receiver.kind,
+                    ExprKind::Name(_)
+                        | ExprKind::Field { .. }
+                        | ExprKind::TupleField { .. }
+                        | ExprKind::Index { .. }
+                ) =>
+            {
+                format!("{r}.into_bytes()")
+            }
             ("to_bytes", 0) => format!("{r}.clone().into_bytes()"),
             ("to_text", 0) => format!(
                 "String::from_utf8_lossy({}).into_owned()",
@@ -4796,7 +4938,10 @@ impl<'a> Generator<'a> {
         self.scopes
             .push(closure.params.iter().map(|p| p.name.name.clone()).collect());
         let body = match &closure.body.kind {
-            ExprKind::Block(block) => self.block(block, value),
+            ExprKind::Block(block) => {
+                self.repeats = true;
+                self.block(block, value)
+            }
             _ => format!("{{ {} }}", self.result(&closure.body)),
         };
         self.scopes.pop();
@@ -5127,6 +5272,111 @@ fn place_root(expr: &Expr) -> Option<&str> {
         | ExprKind::TupleField { receiver, .. }
         | ExprKind::Index { receiver, .. } => place_root(receiver),
         _ => None,
+    }
+}
+
+/// The offset of every mention of a name in `block` (a read, an
+/// assignment's base, a capture), by name. Names bound by a pattern or a
+/// parameter are not mentions; a mention of another binding of the same
+/// name still counts, so the answer can only be too large.
+fn block_mentions(block: &Block, out: &mut BTreeMap<String, Vec<usize>>) {
+    for stmt in &block.stmts {
+        match &stmt.kind {
+            StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => {
+                expr_mentions(value, out);
+            }
+            StmtKind::Assign { target, value } => {
+                mention(&target.base, out);
+                expr_mentions(value, out);
+            }
+            StmtKind::Return(value) => value.iter().for_each(|v| expr_mentions(v, out)),
+            StmtKind::While { cond: iter, body }
+            | StmtKind::For { iter, body, .. }
+            | StmtKind::ForPattern { iter, body, .. } => {
+                expr_mentions(iter, out);
+                block_mentions(body, out);
+            }
+            StmtKind::Loop { body } => block_mentions(body, out),
+            StmtKind::Break | StmtKind::Continue => {}
+            StmtKind::Expr(expr) => expr_mentions(expr, out),
+            StmtKind::Assert { cond, message } => {
+                expr_mentions(cond, out);
+                message.iter().for_each(|m| expr_mentions(m, out));
+            }
+        }
+    }
+}
+
+fn mention(id: &Ident, out: &mut BTreeMap<String, Vec<usize>>) {
+    out.entry(id.name.clone()).or_default().push(id.span.start);
+}
+
+fn expr_mentions(expr: &Expr, out: &mut BTreeMap<String, Vec<usize>>) {
+    match &expr.kind {
+        ExprKind::Name(id) => mention(id, out),
+        ExprKind::Int(_)
+        | ExprKind::Str(_)
+        | ExprKind::Bool(_)
+        | ExprKind::Break
+        | ExprKind::Continue
+        | ExprKind::Quantity { .. } => {}
+        ExprKind::Record { fields, .. } => fields.iter().for_each(|f| expr_mentions(&f.value, out)),
+        ExprKind::RecordUpdate { fields, base, .. } => {
+            fields.iter().for_each(|f| expr_mentions(&f.value, out));
+            expr_mentions(base, out);
+        }
+        ExprKind::List(items) | ExprKind::Tuple(items) => {
+            items.iter().for_each(|item| expr_mentions(item, out));
+        }
+        ExprKind::Return(value) => value.iter().for_each(|v| expr_mentions(v, out)),
+        ExprKind::Call { callee: head, args }
+        | ExprKind::Method {
+            receiver: head,
+            args,
+            ..
+        } => {
+            expr_mentions(head, out);
+            args.iter().for_each(|arg| expr_mentions(arg, out));
+        }
+        ExprKind::Field {
+            receiver: inner, ..
+        }
+        | ExprKind::TupleField {
+            receiver: inner, ..
+        }
+        | ExprKind::Try(inner)
+        | ExprKind::Await(inner)
+        | ExprKind::Spawn(inner)
+        | ExprKind::Unary { operand: inner, .. }
+        | ExprKind::NamedArg { value: inner, .. } => expr_mentions(inner, out),
+        ExprKind::Index { receiver, index } => {
+            expr_mentions(receiver, out);
+            expr_mentions(index, out);
+        }
+        ExprKind::Binary { .. } => {
+            let mut head = expr;
+            while let ExprKind::Binary { left, right, .. } = &head.kind {
+                expr_mentions(right, out);
+                head = left;
+            }
+            expr_mentions(head, out);
+        }
+        ExprKind::Match { scrutinee, arms } => {
+            expr_mentions(scrutinee, out);
+            arms.iter().for_each(|arm| expr_mentions(&arm.body, out));
+        }
+        ExprKind::If {
+            cond,
+            then,
+            otherwise,
+        } => {
+            expr_mentions(cond, out);
+            block_mentions(then, out);
+            otherwise.iter().for_each(|o| expr_mentions(o, out));
+        }
+        ExprKind::Block(block) => block_mentions(block, out),
+        ExprKind::Closure(closure) => expr_mentions(&closure.body, out),
+        ExprKind::Brace { entries } => entries.iter().for_each(|e| expr_mentions(&e.value, out)),
     }
 }
 
