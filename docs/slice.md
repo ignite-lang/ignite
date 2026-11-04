@@ -761,6 +761,7 @@ pub fn run<F>(main: F) -> i32 where F: FnOnce() -> Result<(), IoError>;  // main
 pub fn spawn<F>(task: F) where F: FnOnce() + Send + 'static;             // an idle thread or a new one; returns at once; never panics
 pub fn try_spawn<F>(task: F) -> Result<(), IoError> where F: FnOnce() + Send + 'static; // spawn, Err when no thread can start
 pub const LINGER: Duration;                                              // 1 s: how long a thread without a task waits for one
+pub fn released_memory();                                                // mark freed heap memory for the next trim (Tasks, below)
 pub fn log(line: &str);                                                  // the line and a newline to stderr in one write
 pub fn exit(code: i32) -> !;                                             // restores the terminal mode, flushes stdout, exits the process
 pub mod args {
@@ -790,6 +791,13 @@ The substrate's pending writes are always empty between tasks, because each task
 with a flush. When the operating system cannot start a thread, the task is dropped without
 running (a task that owns a stream closes it), the first such failure after a successful
 start is logged as `cannot start a task: <reason>`, and the process continues.
+
+**Freed memory.** A `Store` that replaces or removes a value, and an LLVM task whose arenas
+held more than 1 MiB at its end, call `released_memory`. On Linux with glibc the substrate
+then calls `malloc_trim(0)` after a task ends, at most once a second and on one thread at a
+time, and when a thread that lingered without a task ends; on other targets it does
+nothing. The trim runs after the task's flush and after the task stops counting as live,
+so neither its writes nor the drain (16.13) wait for it.
 
 **Accept.** `accept` retries a failure that passes with time: out of descriptors
 (`EMFILE`, `ENFILE`), buffers (`ENOBUFS`) or memory, or a connection aborted before it
