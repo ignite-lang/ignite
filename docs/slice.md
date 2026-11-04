@@ -1706,6 +1706,10 @@ the arguments' roots plus the others (`Symbols::effect_sites` lists it).
 `std::sync::Arc<dyn Fn(P1, ..) -> R + Send + Sync>` (generics where cheaper and equivalent). A
 closure lowers to `Arc::new({ let c1 = c1.clone(); .. move |p1, ..| body })`, cloning each
 capture at creation. A named fn used as a value is wrapped the same way.
+A closure literal passed straight to `Store.update`, `Store.upsert` or `List.map`, which call
+it before they return, lowers to a plain `|p1, ..| body` that borrows its captures: no `Arc`,
+no clone per capture, and the same values, since no binding of the enclosing fn changes during
+the call.
 
 **LLVM target (N3).** A fn value is a pair `{ ptr code, ptr env }`. `code` takes `env` first,
 then the parameters. `env` points to a struct of the captures in `ClosureInfo.captures` order,

@@ -3908,14 +3908,10 @@ impl<'a> Generator<'a> {
                 return self.debug_text(&ty, &value);
             }
             Some(Callee::Builtin(Builtin::StoreUpdate)) => {
-                let r = self.receiver(receiver);
-                let a = self.args(args);
-                return format!("{r}.update({}, &*{})", a[0], wrap(&args[1], a[1].clone()));
+                return self.store_with(receiver, "update", args);
             }
             Some(Callee::Builtin(Builtin::StoreUpsert)) => {
-                let r = self.receiver(receiver);
-                let a = self.args(args);
-                return format!("{r}.upsert({}, &*{})", a[0], wrap(&args[1], a[1].clone()));
+                return self.store_with(receiver, "upsert", args);
             }
             Some(Callee::FieldFn { field, .. }) => {
                 let r = self.receiver(receiver);
@@ -3951,6 +3947,12 @@ impl<'a> Generator<'a> {
             return format!("{r}.extend_from_slice({})", self.ref_arg(value));
         }
         let r = self.receiver(receiver);
+        if matches!(self.callee(expr), Some(Callee::Builtin(Builtin::ListMap)))
+            && let [arg] = args
+            && let Some(f) = self.passed_closure(arg)
+        {
+            return format!("{r}.iter().cloned().map({f}).collect::<Vec<_>>()");
+        }
         let a = self.args(args);
         let arg = |i: usize, a: &[String]| borrow(&args[i], a[i].clone());
         match (name.name.as_str(), a.len()) {
@@ -5008,9 +5010,51 @@ impl<'a> Generator<'a> {
     /// `|p1, ..| body` (`docs/slice.md` section 13.3): each capture cloned
     /// at creation, the closure in an `Arc` cast to the fn value type.
     fn closure(&mut self, expr: &Expr, closure: &ignite_syntax::ast::Closure) -> String {
+        self.closure_with(expr, closure, true)
+    }
+
+    /// `s.update(id, f)` or `s.upsert(id, f)`: a closure literal `f` passed
+    /// as a plain closure, any other fn value as `&*f`.
+    fn store_with(&mut self, receiver: &Expr, method: &str, args: &[Expr]) -> String {
+        let r = self.receiver(receiver);
+        let id = self.value(&args[0]);
+        let f = match self.passed_closure(&args[1]) {
+            Some(f) => f,
+            None => {
+                let f = self.value(&args[1]);
+                format!("&*{}", wrap(&args[1], f))
+            }
+        };
+        format!("{r}.{method}({id}, {f})")
+    }
+
+    /// A closure literal passed as an argument the callee calls before it
+    /// returns and takes as `impl FnOnce`/`FnMut` (`Store.update`,
+    /// `Store.upsert`, `List.map`): a plain closure that borrows its
+    /// captures, without the `Arc` and the clone of each capture. Captures
+    /// stay by copy (13.3): nothing can assign the enclosing fn's bindings
+    /// while the call runs.
+    fn passed_closure(&mut self, arg: &Expr) -> Option<String> {
+        match &arg.kind {
+            ExprKind::Closure(closure) if self.types.is_some() => {
+                Some(self.closure_with(arg, closure, false))
+            }
+            _ => None,
+        }
+    }
+
+    /// [`Generator::closure`] when `stored`, else
+    /// [`Generator::passed_closure`]: not `move`, captures read through the
+    /// enclosing fn's bindings, borrowed ones still borrowed.
+    fn closure_with(
+        &mut self,
+        expr: &Expr,
+        closure: &ignite_syntax::ast::Closure,
+        stored: bool,
+    ) -> String {
         let info = self.types.and_then(|t| t.closure(expr));
         let mut lets = String::new();
-        if let Some(info) = info {
+        if stored && let Some(info) = info {
             for capture in &info.captures {
                 if self.is_local(&capture.name) {
                     let name = self.local_name(&capture.name);
@@ -5041,8 +5085,14 @@ impl<'a> Generator<'a> {
         let ret = info.map(|info| self.rust_ty(&info.ret));
         let value = info.is_none_or(|info| !matches!(info.ret, Ty::Unit));
 
-        let borrowed = std::mem::take(&mut self.borrowed);
-        let borrowed_elements = std::mem::take(&mut self.borrowed_elements);
+        let (borrowed, borrowed_elements) = if stored {
+            (
+                std::mem::take(&mut self.borrowed),
+                std::mem::take(&mut self.borrowed_elements),
+            )
+        } else {
+            (self.borrowed.clone(), self.borrowed_elements.clone())
+        };
         let base = self.closure_base.replace(self.scopes.len());
         self.scopes
             .push(closure.params.iter().map(|p| p.name.name.clone()).collect());
@@ -5058,6 +5108,9 @@ impl<'a> Generator<'a> {
         let arrow = ret
             .as_ref()
             .map_or_else(String::new, |ret| format!(" -> {ret}"));
+        if !stored {
+            return format!("|{}|{arrow} {body}", params.join(", "));
+        }
         let function = format!("move |{}|{arrow} {body}", params.join(", "));
         let arc = if lets.is_empty() {
             format!("std::sync::Arc::new({function})")
