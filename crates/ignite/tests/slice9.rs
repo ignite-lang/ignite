@@ -182,6 +182,17 @@ fn match_on_a_place_agrees_on_both_targets() {
     assert_passes(&file, "match_borrow", &TARGETS);
 }
 
+/// Arguments borrowed on the Rust target (`docs/slice.md` section 6):
+/// interpolation parts that are calls, temporaries and fields, a variable
+/// changed later in the same expression, `at` on a temporary list and on a
+/// place, and `append` of the receiver itself give the same answers on both
+/// targets.
+#[test]
+fn borrowed_arguments_agree_on_both_targets() {
+    let file = workspace().join("crates/ignite/tests/fixtures/slice9/borrow_args.ignite");
+    assert_passes(&file, "borrow_args", &TARGETS);
+}
+
 /// The report without the time of the summary line.
 fn without_time(report: &str) -> String {
     report

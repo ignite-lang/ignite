@@ -2045,7 +2045,14 @@ impl<'a> Generator<'a> {
         args.iter()
             .zip(modified)
             .map(|(arg, modified)| {
-                if self.is_place(arg) && place_root(arg).is_some_and(|r| modified.contains(r)) {
+                let place = match self.borrowed_at(arg) {
+                    Some((list, _, _)) => Some(list),
+                    None => self.is_place(arg).then_some(*arg),
+                };
+                if place
+                    .and_then(place_root)
+                    .is_some_and(|r| modified.contains(r))
+                {
                     format!("&{}", self.value(arg))
                 } else {
                     self.ref_arg(arg)
@@ -2063,8 +2070,30 @@ impl<'a> Generator<'a> {
         if self.is_place(arg) {
             return format!("&{}", self.bare(arg));
         }
+        if let Some((list, index, site)) = self.borrowed_at(arg) {
+            return self.checked_at_call(list, index, site);
+        }
         let text = self.value(arg);
         borrow(arg, text)
+    }
+
+    /// `place.at(i)` with a failure site, whose element an argument by
+    /// reference can borrow from the list (`ignite_io::checked::at`
+    /// returns `&T`) instead of copying: the list, the index, the site.
+    fn borrowed_at<'e>(&self, expr: &'e Expr) -> Option<(&'e Expr, &'e Expr, FailureSite)> {
+        let ExprKind::Method { receiver, args, .. } = &expr.kind else {
+            return None;
+        };
+        let [index] = args.as_slice() else {
+            return None;
+        };
+        if !matches!(self.callee(expr), Some(Callee::Builtin(Builtin::ListAt)))
+            || !self.is_place(receiver)
+        {
+            return None;
+        }
+        let site = self.types.and_then(|t| t.failure_site(expr))?;
+        Some((&**receiver, index, site))
     }
 
     /// A value in a result position (the tail of a value block, an arm, a
@@ -3045,12 +3074,15 @@ impl<'a> Generator<'a> {
                         parts[1..].iter().map(|p| (BinaryOp::Add, *p, *p)).collect();
                     return self.chunked(parts[0], &rights, true);
                 }
-                let texts: Vec<String> = parts.iter().map(|p| self.bare(p)).collect();
-                format!(
-                    "format!(\"{}\", {})",
-                    "{}".repeat(texts.len()),
-                    texts.join(", ")
-                )
+                let mut template = String::new();
+                let mut texts = Vec::new();
+                for part in parts {
+                    self.format_part(part, &mut template, &mut texts);
+                }
+                if texts.is_empty() {
+                    return format!("format!(\"{template}\")");
+                }
+                format!("format!(\"{template}\", {})", texts.join(", "))
             }
             ExprKind::Binary {
                 op: op @ (BinaryOp::Eq | BinaryOp::Ne),
@@ -3091,6 +3123,42 @@ impl<'a> Generator<'a> {
     /// Whether `expr` (with operator `op`) is `+` on `Text`.
     fn is_text_add(&self, expr: &Expr, op: BinaryOp) -> bool {
         op == BinaryOp::Add && self.type_of(expr) == Some(&Ty::Text)
+    }
+
+    /// One part of a Text `+` chain in its `format!`: a literal inlined
+    /// into `template` with its braces doubled, anything else as `{}` and
+    /// an argument. A `to_text` of Text, Int, Byte or Bool (each `{x}` of
+    /// an interpolation) passes its receiver, whose `Display` is that
+    /// text, so the part is not copied or converted first.
+    fn format_part(&mut self, part: &Expr, template: &mut String, args: &mut Vec<String>) {
+        if self.types.and_then(|t| t.reference(part)).is_none() {
+            if let ExprKind::Str(text) = &part.kind {
+                template.push_str(&escape_str(text).replace('{', "{{").replace('}', "}}"));
+                return;
+            }
+            if let ExprKind::Method {
+                receiver,
+                args: none,
+                ..
+            } = &part.kind
+                && none.is_empty()
+                && matches!(
+                    self.callee(part),
+                    Some(Callee::Builtin(
+                        Builtin::TextToText
+                            | Builtin::IntToTextMethod
+                            | Builtin::ByteToText
+                            | Builtin::BoolToText
+                    ))
+                )
+            {
+                template.push_str("{}");
+                args.push(self.bare(receiver));
+                return;
+            }
+        }
+        template.push_str("{}");
+        args.push(self.bare(part));
     }
 
     /// The Rust path of the variant a bare name resolves to by expected
@@ -3391,17 +3459,22 @@ impl<'a> Generator<'a> {
         index: &Expr,
         site: FailureSite,
     ) -> String {
-        let list = self.ref_arg(receiver);
-        let index_text = self.value(index);
-        let index_text = self.deref_if_borrowed(index, index_text);
-        let call = format!(
-            "ignite_io::checked::at({list}, {index_text}, {})",
-            self.site_args(site)
-        );
+        let call = self.checked_at_call(receiver, index, site);
         match self.element_clone(expr) {
             "" => format!("(*{call})"),
             clone => format!("{call}{clone}"),
         }
+    }
+
+    /// `ignite_io::checked::at(list, index, site)`: a `&T` into the list.
+    fn checked_at_call(&mut self, receiver: &Expr, index: &Expr, site: FailureSite) -> String {
+        let list = self.ref_arg(receiver);
+        let index_text = self.value(index);
+        let index_text = self.deref_if_borrowed(index, index_text);
+        format!(
+            "ignite_io::checked::at({list}, {index_text}, {})",
+            self.site_args(site)
+        )
     }
 
     fn call(&mut self, expr: &Expr, callee: &Expr, args: &[Expr]) -> String {
@@ -3800,6 +3873,12 @@ impl<'a> Generator<'a> {
             && let Some(text) = self.qualified_call(expr, owner, name, args)
         {
             return text;
+        }
+        if let ("append", [value]) = (name.name.as_str(), args)
+            && place_root(value).is_none_or(|root| place_root(receiver) != Some(root))
+        {
+            let r = self.receiver(receiver);
+            return format!("{r}.extend_from_slice({})", self.ref_arg(value));
         }
         let r = self.receiver(receiver);
         let a = self.args(args);
