@@ -1,0 +1,12 @@
+// `update`'s `f` runs under the store's lock, which is not reentrant: a
+// closure that reaches its own store is effectful and E017.
+fn bump(s: Store<Int>) -> Option<Int> requires [s.read, s.write] {
+  s.update(1, |v| match s.get(2) {
+    Some(w) => v + w
+    None => v
+  })
+}
+
+fn next(s: Store<Int>) -> Option<Int> requires [s.read, s.write] {
+  s.update(1, |v| v + s.next_id())
+}

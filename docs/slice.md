@@ -1178,6 +1178,12 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
   directly. `ignite-rt` exposes `ignite_rt_store_*` over a `Store<HeapValue>`, where
   `HeapValue` is a pointer to a malloc'd deep copy made and freed by generator glue
   (`copy_to_heap.<T>`, `copy_from_heap.<T>`, `free_heap.<T>`), passed to `store_new`.
+  `get`, `values` and `update`'s result use the store's borrowing reads (`read`,
+  `read_values`, `replace_with`): `copy_from_heap` copies the stored value straight into the
+  calling task's arena under the lock, so a read makes one copy and frees nothing. `update`'s
+  thunk `store_update.<T>` runs under the lock behind a callback guard: a failure inside `f`
+  (14.8) leaves the old value, the lock is released, then the task ends with the failure's
+  report, as on the Rust target, where the failure unwinds through `ignite_io::Store`.
 - Created as a system resource (11.4). `Store.new()` creates one in tests and test-only items
   only (section 12.3).
 

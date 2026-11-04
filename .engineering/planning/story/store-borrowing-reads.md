@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:store-borrowing-reads
 kind: story
-status: draft
+status: implemented
 title: Store reads without a second heap copy on LLVM
 summary: values, get and update on the LLVM target copy each value at most once
 scope:
@@ -10,7 +10,11 @@ scope:
   path: crates/ignite-io/src/store.rs
 - confidence: inferred
   path: crates/ignite-rt/src
-revision: 2
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-04T05:55:04Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":1}}}
+- {from: "proposed", to: "active", at: "2026-11-04T05:55:04Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
+- {from: "active", to: "implemented", at: "2026-11-04T05:55:04Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: store-borrowing-reads
 
