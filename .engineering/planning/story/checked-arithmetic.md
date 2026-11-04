@@ -16,7 +16,7 @@ scope:
   path: crates/ignite-types/src
 - confidence: inferred
   path: std
-revision: 2
+revision: 3
 ---
 # Story: checked-arithmetic
 
@@ -34,15 +34,14 @@ on both targets and in the evaluator, so a program tests for overflow instead of
   implementation. Workaround in ember: divide first (`n <= (MAX_INT - now) / unit`).
 - Overflow ends the task by design (`overflow_fails_the_same_everywhere`); the missing piece is a
   way to test first.
-- Second effect, to check: replies already written by the task before it ended were not sent.
-  Whether the substrate drops a task's unflushed output when the task ends is unverified.
+- The replies to earlier commands of the same read were lost because ember collects them in a
+  local buffer and writes it once after the loop (ember's `session`), so the overflow dropped
+  the unwritten buffer; the substrate dropped nothing written (playground session, 2026-11-04).
 
 ## Acceptance
 
 - Inline tests on both targets and an evaluator equivalence family: `checked_add(MAX_INT, 1)` is
   `None`, `checked_mul(3, 4)` is `Some(12)`, the same for sub and the minimum.
-- A test shows whether output written before an overflow in the same task reaches the peer; if it
-  does not, the story records the finding as its own story.
 
 ## Out of Scope
 
