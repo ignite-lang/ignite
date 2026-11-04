@@ -39,14 +39,14 @@ pub fn swap<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static>(
 }
 
 pub fn or<T: Clone + Send + Sync + 'static>(value: &Option<T>, fallback: &T) -> T {
-    match value.clone() {
-        Some(present) => present,
+    match value {
+        Some(present) => { let present = (present).clone(); present },
         None => fallback.clone(),
     }
 }
 
 pub fn count<T: Clone + Send + Sync + 'static>(choice: &Choice<T>) -> i64 {
-    match choice.clone() {
+    match choice {
         Choice::Nothing => 0,
         Choice::One(_) => 1,
         Choice::Two(_, _) => 2,

@@ -529,6 +529,15 @@ element or the variable the place is rooted at, iterates `(place).iter()` and co
 In the body the element is a reference, read like a reference parameter. Every other `for`
 copies its iterable.
 
+**`match` on a place.** The same exception for a scrutinee, when the types are known: a
+`match` whose scrutinee is a place of one of those types, not `Copy` in Rust (an `Option`,
+`Result` or tuple of `Int`, `Byte`, `Bool` or `Unit` is), and none of whose arms assigns or
+changes in place the variable the place is rooted at, matches `&place` (a reference parameter
+as it is) and copies no scrutinee. A binding of one of those types that is not `Copy` is a
+reference in its arm, read like a reference parameter; any other binding is copied at the
+start of its arm (`{ let n = (n).clone(); .. }`). An arm whose pattern becomes a guard binds
+`__m` to the reference. Every other `match` copies its scrutinee.
+
 **Builtin methods** are lowered by name; the receiver type is not known, so each name has one
 meaning. The generator emits exactly the Rust on the right.
 

@@ -8,7 +8,7 @@ pub fn quiet(line: &String) -> String {
 }
 
 pub fn pick(mode: &Mode) -> std::sync::Arc<dyn Fn(String) -> String + Send + Sync> {
-    match mode.clone() {
+    match mode {
         Mode::Loud => (std::sync::Arc::new(|__a0: String| shout(&__a0)) as std::sync::Arc<dyn Fn(String) -> String + Send + Sync>),
         Mode::Quiet => (std::sync::Arc::new(|__a0: String| quiet(&__a0)) as std::sync::Arc<dyn Fn(String) -> String + Send + Sync>),
     }

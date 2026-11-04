@@ -96,18 +96,18 @@ pub fn describe(n: &i64) -> String {
 }
 
 pub fn classify(words: &Vec<String>) -> String {
-    match words.clone() {
-        __m if ((&__m).len() == 0) => String::from("none"),
-        __m if ((&__m).len() == 1) => { let w = ((&(&__m)[0])).clone(); format!("{}{}", String::from("one "), w) },
-        __m if ((&__m).len() == 2 && { let __p2 = &(&__m)[0]; (*__p2 == QUIT()) }) => String::from("quit with argument"),
-        __m if ((&__m).len() == 2) => { let a = ((&(&__m)[0])).clone(); let b = ((&(&__m)[1])).clone(); format!("{}{}{}", String::from("two "), a, b) },
+    match words {
+        __m if (__m.len() == 0) => String::from("none"),
+        __m if (__m.len() == 1) => { let w = ((&__m[0])).clone(); format!("{}{}", String::from("one "), w) },
+        __m if (__m.len() == 2 && { let __p2 = &__m[0]; (*__p2 == QUIT()) }) => String::from("quit with argument"),
+        __m if (__m.len() == 2) => { let a = ((&__m[0])).clone(); let b = ((&__m[1])).clone(); format!("{}{}{}", String::from("two "), a, b) },
         _ => String::from("many"),
     }
 }
 
 pub fn nested(v: &Option<(bool, Vec<i64>)>) -> String {
-    match v.clone() {
-        __m if (match (&__m) { Some(__p6) => { let (__p7, __p8) = __p6; (*__p7 == true) && (__p8.len() == 2) }, _ => false }) => { let x = ((&(&(match (&__m) { Some(__x) => __x, _ => unreachable!() }).1)[0])).clone(); let y = ((&(&(match (&__m) { Some(__x) => __x, _ => unreachable!() }).1)[1])).clone(); format!("{}{}{}{}", String::from("pair "), x.to_string(), String::from(" "), y.to_string()) },
+    match v {
+        __m if (match __m { Some(__p6) => { let (__p7, __p8) = __p6; (*__p7 == true) && (__p8.len() == 2) }, _ => false }) => { let x = ((&(&(match __m { Some(__x) => __x, _ => unreachable!() }).1)[0])).clone(); let y = ((&(&(match __m { Some(__x) => __x, _ => unreachable!() }).1)[1])).clone(); format!("{}{}{}{}", String::from("pair "), x.to_string(), String::from(" "), y.to_string()) },
         Some((false, _)) | None => String::from("off or none"),
         Some((true, _)) => String::from("other"),
         #[allow(unreachable_patterns)]
@@ -116,8 +116,8 @@ pub fn nested(v: &Option<(bool, Vec<i64>)>) -> String {
 }
 
 pub fn vowel(w: &String) -> bool {
-    match w.clone() {
-        __m if ((*(&__m) == "a") || (*(&__m) == "e") || (*(&__m) == "i") || (*(&__m) == "o") || (*(&__m) == "u")) => true,
+    match w {
+        __m if ((*__m == "a") || (*__m == "e") || (*__m == "i") || (*__m == "o") || (*__m == "u")) => true,
         _ => false,
     }
 }
@@ -193,7 +193,7 @@ impl Syntax {
         (show(&(h.respond)(h.name.clone())))?;
         let r = Reply { lines: vec![String::from("l")], action: Reply::default_action(), code: Reply::default_code() };
         (show(&(format!("{}{}", String::from("code "), r.code.to_string()))))?;
-        match r.action.clone() {
+        match &r.action {
             Action::Continue => (show(&String::from("continue")))?,
             Action::Close => (show(&String::from("close")))?,
         };
@@ -218,7 +218,7 @@ impl Syntax {
         let _ = twice(&1);
         let _ = twice(&2);
         let light: Light = Light::Off;
-        match light.clone() {
+        match &light {
             Light::Off => (show(&String::from("light off")))?,
             Light::On => (show(&String::from("light on")))?,
         };

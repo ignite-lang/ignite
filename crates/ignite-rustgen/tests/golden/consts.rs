@@ -36,14 +36,14 @@ pub fn judge(size: &i64) -> Verdict {
 }
 
 pub fn describe(verdict: &Verdict, mode: &Mode) -> String {
-    match verdict.clone() {
-        Verdict::Accept(room) => {
-            match mode.clone() {
+    match verdict {
+        Verdict::Accept(room) => { let room = (room).clone(); {
+            match mode {
                 Mode::Loud => shout(&GREETING()),
                 Mode::Quiet => room.clone().to_string(),
             }
-        },
-        Verdict::Reject(reason) => reason,
+        } },
+        Verdict::Reject(reason) => reason.clone(),
     }
 }
 
