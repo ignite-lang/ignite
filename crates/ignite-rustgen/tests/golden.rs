@@ -860,3 +860,420 @@ fn total() -> Int {\n\
     );
     cargo_build(&program, &std, "rust-keywords");
 }
+
+/// Adversary (story:rustgen-builtin-and-role-shadowing): `source` written
+/// as `<name>.ignite`, lowered as a test build against `std_root`, built
+/// with cargo in its own target directory and its `ignite-test` run. Returns
+/// the run's output after asserting the build succeeded.
+fn adversary_run_tests(name: &str, source: &str, std_root: &Path) -> std::process::Output {
+    let file = format!("{name}.ignite");
+    let dir = adversary_sources(&format!("{name}-src"), &[(file.as_str(), source)]);
+    let (project, std) = common::lower_tests(&dir.join(&file), std_root, &adversary_substrate());
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| common::workspace().join("target"));
+    let out = target.join("ignite-rustgen-test").join(name);
+    ignite_rustgen::write_project(&project, &out).unwrap();
+    ignite_rustgen::write_project(&std, &out.join("std")).unwrap();
+    let builds = target
+        .join("ignite-rustgen-test")
+        .join(format!("{name}-target"));
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let status = std::process::Command::new(cargo)
+        .arg("build")
+        .arg("--manifest-path")
+        .arg(out.join("Cargo.toml"))
+        .arg("--target-dir")
+        .arg(&builds)
+        .env("CARGO_INCREMENTAL", "0")
+        .status()
+        .unwrap();
+    assert!(status.success(), "cargo build of {} failed", out.display());
+    let executable = builds.join("debug").join(format!(
+        "{}{}",
+        ignite_rustgen::TEST_EXECUTABLE,
+        std::env::consts::EXE_SUFFIX
+    ));
+    std::process::Command::new(executable).output().unwrap()
+}
+
+/// [`adversary_run_tests`], asserting that every test passed and that
+/// `passed` of them ran.
+fn adversary_tests_pass(name: &str, source: &str, std_root: &Path, passed: usize) {
+    let output = adversary_run_tests(name, source, std_root);
+    let shown = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.status.success(), "{shown}");
+    assert!(shown.contains(&format!("{passed} passed")), "{shown}");
+}
+
+/// Adversary: the 2018+ and reserved Rust keywords that are not Ignite
+/// keywords, as record fields (with defaults), an enum's variants, a fn,
+/// a generic fn and its type parameter, params, locals, a closure param, a
+/// `for` binding, payload bindings and a UFCS call. The test build runs and
+/// asserts the values, so a keyword spelled the wrong way cannot pass.
+#[test]
+fn adversary_reserved_and_edition_keywords_in_every_position_run() {
+    let source = "package examples.kwa\n\
+\n\
+type Token { type: Int, async: Int = 1, dyn: Int = 2, try: Int = 3, gen: Int = 4, abstract: Int = 5, become: Int = 6, box: Int = 7, final: Int = 8, macro: Int = 9, override: Int = 10, priv: Int = 11, typeof: Int = 12, unsized: Int = 13, virtual: Int = 14, yield: Int = 15 }\n\
+\n\
+enum Self { become(Int), final, yield(Int) }\n\
+\n\
+fn macro(override: Int, priv: Int) -> Int {\n\
+  let typeof = override + priv\n\
+  let unsized = |virtual: Int| virtual * 2\n\
+  unsized(typeof)\n\
+}\n\
+\n\
+fn gen<box>(try: box) -> box = try\n\
+\n\
+fn sum(xs: List<Int>) -> Int {\n\
+  var async = 0\n\
+  for dyn in xs {\n\
+    async = async + dyn\n\
+  }\n\
+  async\n\
+}\n\
+\n\
+fn pick(a: Self) -> Int = match a {\n\
+  become(yield) => yield\n\
+  Self.final => 0\n\
+  Self.yield(box) => box + 100\n\
+}\n\
+\n\
+fn all(t: Token) -> Int = t.type + t.async + t.dyn + t.try + t.gen + t.abstract + t.become + t.box + t.final + t.macro + t.override + t.priv + t.typeof + t.unsized + t.virtual + t.yield\n\
+\n\
+test \"keywords in every position\" {\n\
+  let t = Token { type = 0 }\n\
+  assert all(t) == 120\n\
+  assert macro(2, 3) == 10\n\
+  assert gen(7) == 7\n\
+  assert sum([1, 2, 3]) == 6\n\
+  assert pick(Self.become(4)) == 4\n\
+  assert pick(Self.final) == 0\n\
+  assert pick(Self.yield(1)) == 101\n\
+  assert 3.macro(4) == 14\n\
+}\n";
+    adversary_tests_pass("adv-kw-positions", source, &common::golden_std(), 1);
+}
+
+/// Adversary, inside 995907a's claim (`self` "stays mangled"): `ident`
+/// spells the field `self` as `self_`, the name of the record's other
+/// field, so the struct declares `self_` twice (E0124) and the literal
+/// sets it twice (E0062). `ignite check` accepts the program.
+#[test]
+#[ignore = "adversary: a field self beside a field self_ both become self_ (E0124)"]
+fn adversary_a_field_self_beside_a_field_self_underscore_builds() {
+    let source = "package examples.kwb\n\
+\n\
+type Pair { self: Int, self_: Int }\n\
+\n\
+test \"a field self beside a field self_\" {\n\
+  let p = Pair { self = 1, self_ = 2 }\n\
+  assert p.self + p.self_ == 3\n\
+}\n";
+    adversary_tests_pass("adv-kw-self-field", source, &common::golden_std(), 1);
+}
+
+/// Adversary, inside 995907a's claim: the param `self` is `self_` in Rust,
+/// so the local `let self_ = 10` shadows the param and `self + self_` is
+/// `10 + 10`. The program builds and the test fails at run time
+/// (`shadow(1) == 11`): a silent miscompile, not a rustc error.
+#[test]
+#[ignore = "adversary: param self and local self_ are one Rust name, self + self_ is 20 not 11"]
+fn adversary_a_param_self_beside_a_local_self_underscore_keeps_both() {
+    let source = "package examples.kwc\n\
+\n\
+fn shadow(self: Int) -> Int {\n\
+  let self_ = 10\n\
+  self + self_\n\
+}\n\
+\n\
+test \"a param self beside a local self_\" {\n\
+  assert shadow(1) == 11\n\
+}\n";
+    adversary_tests_pass("adv-kw-self-local", source, &common::golden_std(), 1);
+}
+
+/// Adversary, inside 995907a's claim: the fns `super` and `super_` are both
+/// `super_` in Rust (E0428).
+#[test]
+#[ignore = "adversary: fns super and super_ both become super_ (E0428)"]
+fn adversary_fns_super_and_super_underscore_build() {
+    let source = "package examples.kwe\n\
+\n\
+fn super() -> Int = 1\n\
+\n\
+fn super_() -> Int = 2\n\
+\n\
+test \"fns super and super_\" {\n\
+  assert super() + super_() == 3\n\
+}\n";
+    adversary_tests_pass("adv-kw-super-fns", source, &common::golden_std(), 1);
+}
+
+/// Adversary, inside 995907a's claim: the params `self` and `self_` are
+/// both `self_` in Rust (E0415).
+#[test]
+#[ignore = "adversary: params self and self_ both become self_ (E0415)"]
+fn adversary_params_self_and_self_underscore_build() {
+    let source = "package examples.kwf\n\
+\n\
+fn twice(self: Int, self_: Int) -> Int = self * 10 + self_\n\
+\n\
+test \"params self and self_\" {\n\
+  assert twice(1, 2) == 12\n\
+}\n";
+    adversary_tests_pass("adv-kw-self-params", source, &common::golden_std(), 1);
+}
+
+/// `tests/golden/exits.ignite` (a system with one executable) under the
+/// package `examples.<package>`, whose `stop_tried` calls `code()` from the
+/// sibling module `examples.<package>.<sibling>`.
+fn adversary_package_named(package: &str, sibling: &str) -> PathBuf {
+    let main = include_str!("golden/exits.ignite")
+        .replace(
+            "package golden.exits",
+            &format!("package examples.{package}\n\nimport examples.{package}.{sibling}.{{code}}"),
+        )
+        .replace("Process.exit(7)?", "Process.exit(code())?");
+    let other = format!("package examples.{package}.{sibling}\n\nfn code() -> Int = 7\n");
+    let dir = adversary_sources(
+        &format!("adv-package-{package}-src"),
+        &[
+            (format!("{package}.ignite").as_str(), main.as_str()),
+            (format!("{sibling}.ignite").as_str(), other.as_str()),
+        ],
+    );
+    dir.join(format!("{package}.ignite"))
+}
+
+/// Adversary, inside 995907a's claim (every Rust keyword a raw identifier):
+/// a package whose last segment is `async`, with a sibling module `dyn`.
+/// The module path is `r#dyn`, but the executable's `use async::*;` and
+/// `use async::r#dyn::code;` spell the crate name bare (`executable_main`,
+/// `Layout::in_bin`), a parse error in rustc. `ignite build --target llvm`
+/// builds the same program.
+#[test]
+#[ignore = "adversary: the crate name async is not raw in the executable's use lines"]
+fn adversary_a_package_named_async_builds() {
+    let file = adversary_package_named("async", "dyn");
+    let (program, std) = common::lower_typed(&file, &common::golden_std(), &adversary_substrate());
+    cargo_build(&program, &std, "adv-package-async");
+}
+
+/// Adversary, inside 995907a's claim (`self` mangled): a package whose last
+/// segment is `self`, with a sibling module `super`. The crate is named
+/// `self`, and the executable's `use self::*;` imports the bin into itself
+/// (E0432); `self` cannot be raw, so the crate needs another name.
+/// `ignite build --target llvm` builds the same program.
+#[test]
+#[ignore = "adversary: a crate named self makes the executable's use self::* import the bin into itself"]
+fn adversary_a_package_named_self_builds() {
+    let file = adversary_package_named("self", "super");
+    let (program, std) = common::lower_typed(&file, &common::golden_std(), &adversary_substrate());
+    cargo_build(&program, &std, "adv-package-self");
+}
+
+/// Adversary: type parameters named `Result`, `List`, `Map`, `Bytes`,
+/// `Int` and `Bool`. `Result` shadows the builtin enum the closure
+/// returns; the others shadow builtin types in the signature. The values
+/// are asserted at run time.
+#[test]
+fn adversary_type_parameters_named_like_builtins_run() {
+    let source = "package examples.tpa\n\
+\n\
+import std.option.{ok_or}\n\
+\n\
+fn res<Result>(item: Result) -> Int {\n\
+  let parse = |s: Text| Int.parse(s).ok_or(\"bad\")\n\
+  match parse(\"3\") {\n\
+    Ok(n) => n\n\
+    Err(e) => 0\n\
+  }\n\
+}\n\
+\n\
+fn lst<List>(item: List) -> Int {\n\
+  let xs = [1, 2]\n\
+  xs.len()\n\
+}\n\
+\n\
+fn mp<Map>(item: Map) -> Map = item\n\
+\n\
+fn byt<Bytes>(item: Bytes) -> Bytes = item\n\
+\n\
+fn int<Int>(item: Int) -> Int = item\n\
+\n\
+fn bol<Bool>(item: Bool) -> Bool = item\n\
+\n\
+test \"type parameters named like builtins\" {\n\
+  assert res(1) == 3\n\
+  assert lst(\"x\") == 2\n\
+  assert mp(4) == 4\n\
+  assert byt(5) == 5\n\
+  assert int(\"i\") == \"i\"\n\
+  assert bol(6) == 6\n\
+}\n";
+    adversary_tests_pass("adv-tp-builtins", source, &common::repository_std(), 1);
+}
+
+/// Adversary: a type parameter named like a program's type alias (`Num`),
+/// one named `Text` inside closures (an annotated closure param and a
+/// closure returning `Text` by interpolation) and as a generic record's
+/// field beside an `Option<Int>` field with a default.
+#[test]
+fn adversary_type_parameters_named_like_an_alias_or_text_in_closures_and_records_run() {
+    let source = "package examples.tpb\n\
+\n\
+type Num = Int\n\
+\n\
+type Holder<Text> { value: Text, label: Option<Int> = None }\n\
+\n\
+fn alias<Num>(item: Num) -> Num = item\n\
+\n\
+fn real() -> Num = 3\n\
+\n\
+fn closure<Text>(item: Text) -> Int {\n\
+  let f = |t: Text| 1\n\
+  let g = |s: Int| \"n={s}\"\n\
+  f(item) + g(2).len()\n\
+}\n\
+\n\
+fn hold<Text>(item: Text) -> Holder<Text> = Holder { value = item }\n\
+\n\
+test \"type parameters named like an alias or a builtin inside closures and records\" {\n\
+  assert alias(\"a\") == \"a\"\n\
+  assert real() == 3\n\
+  assert closure(5) == 4\n\
+  assert hold(7).value == 7\n\
+}\n";
+    adversary_tests_pass("adv-tp-alias-text", source, &common::golden_std(), 1);
+}
+
+/// Adversary, outside the story's claim (not a keyword, not a type
+/// parameter): in Ignite a lowercase name in a pattern binds the value
+/// (`PatternKind::Binding`), also when the matched enum has a lowercase
+/// variant of that name. Rust's deny-by-default `bindings_with_variant_name`
+/// rejects the generated `fin => 0` (E0170). The LLVM target builds and
+/// passes the same program.
+#[test]
+#[ignore = "adversary: a binding named like a lowercase variant of the matched enum is E0170"]
+fn adversary_a_binding_named_like_a_lowercase_variant_builds() {
+    let source = "package examples.kwg\n\
+\n\
+enum Shape { fin, Other(Int) }\n\
+\n\
+fn pick(s: Shape) -> Int = match s {\n\
+  Other(n) => n\n\
+  fin => 0\n\
+}\n\
+\n\
+test \"a lowercase binding named like a lowercase variant\" {\n\
+  assert pick(Shape.Other(4)) == 4\n\
+  assert pick(Shape.fin) == 0\n\
+}\n";
+    adversary_tests_pass("adv-binding-variant", source, &common::golden_std(), 1);
+}
+
+/// Adversary: a role whose type parameter is named `Text` and holds an
+/// annotated `Option<Int>` local, called through a fn whose type parameter
+/// is named `Option`; the role writes into a pipe and the result is
+/// asserted at run time.
+#[test]
+fn adversary_a_role_type_parameter_named_text_called_under_option_runs() {
+    let source = "package examples.tpc\n\
+\n\
+import std.net.{ByteStream, Pipe, PipeStream}\n\
+import std.io.IoError\n\
+import std.option.{unwrap_or}\n\
+\n\
+type IoResult<T> = Result<T, IoError>\n\
+\n\
+protocol P {\n\
+  fn serve<Text: ByteStream>(stream: Text, application: Int) -> IoResult<Int> requires [stream.write] {\n\
+    let label: Option<Int> = Some(application)\n\
+    stream.write_all(\"x\".to_bytes())?\n\
+    Ok(label.unwrap_or(0))\n\
+  }\n\
+}\n\
+\n\
+fn call<Option>(item: Option, end: PipeStream) -> IoResult<Int> requires [end.write] = P.serve(end, 3)\n\
+\n\
+test \"a role whose type parameter is named Text and a caller whose is named Option\" {\n\
+  let (a, b) = Pipe.pair()\n\
+  let n = match call(1, a) {\n\
+    Ok(v) => v\n\
+    Err(e) => 0\n\
+  }\n\
+  assert n == 3\n\
+}\n";
+    adversary_tests_pass("adv-tp-role-text", source, &common::repository_std(), 1);
+}
+
+/// Adversary (9bbd4b2): one import of three catalogue constants, of which
+/// `RFC855` is named only by the `conforms` clause and its status clauses,
+/// `RP1_2` is read by a fn and `RP1_1` only by a test. The program crate
+/// keeps the two read and drops `RFC855`; `ignite-std` keeps `RP1_1` and
+/// `RP1_2` without the catalogue's title or the other requirements.
+#[test]
+fn adversary_a_clause_beside_read_constants_keeps_only_the_read_ones() {
+    let source = "package examples.cla\n\
+\n\
+import std.rfc.rfc855.{RFC855, RP1_1, RP1_2}\n\
+\n\
+protocol Echo conforms [RFC855] {\n\
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {\n\
+    return stream.write_all(b\"ok\")\n\
+  }\n\
+\n\
+  not_applicable RFC855.RP1_2 \"no options\"\n\
+  not_applicable RFC855.RP1_3 \"no options\"\n\
+  not_applicable RFC855.RP2_1 \"no options\"\n\
+  not_applicable RFC855.RP3_1 \"no options\"\n\
+  not_applicable RFC855.RP3_2 \"no options\"\n\
+}\n\
+\n\
+fn section() -> Text = RP1_2.section\n\
+\n\
+test \"a clause-only constant beside read ones\" {\n\
+  assert section() == \"p1\"\n\
+  assert RP1_1.ordinal == 1\n\
+}\n";
+    let dir = adversary_sources("adv-clause-mixed-src", &[("cla.ignite", source)]);
+    let (program, std) = common::lower_tests(
+        &dir.join("cla.ignite"),
+        &common::repository_std(),
+        &adversary_substrate(),
+    );
+    assert!(
+        program
+            .lib_rs
+            .contains("use ignite_std::rfc::rfc855::{RP1_1, RP1_2};"),
+        "{}",
+        program.lib_rs
+    );
+    assert!(!program.lib_rs.contains("RFC855"), "{}", program.lib_rs);
+    for kept in ["pub fn RP1_1(", "pub fn RP1_2("] {
+        assert!(
+            std.lib_rs.contains(kept),
+            "{kept} missing from:\n{}",
+            std.lib_rs
+        );
+    }
+    for dropped in [
+        "pub fn RFC855(",
+        "pub fn RP1_3(",
+        "Telnet Option Specifications",
+    ] {
+        assert!(
+            !std.lib_rs.contains(dropped),
+            "{dropped} in:\n{}",
+            std.lib_rs
+        );
+    }
+    adversary_tests_pass("adv-clause-mixed", source, &common::repository_std(), 1);
+}
