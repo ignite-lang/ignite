@@ -314,7 +314,10 @@ position, even with no buffer.
   frees everything allocated after the mark. When the mark is inside the last chunk, this
   resets the cursor inline; otherwise it calls `ignite_rt_arena_release`. Released chunks
   are kept for reuse, up to 16 per arena; larger blocks and further chunks go back to the
-  system allocator (both measured equal on the memory test). Each task also has a scratch
+  system allocator (both measured equal on the memory test). Chunks are anonymous
+  mappings of their own (`mmap`, given back with `munmap`), not `malloc` blocks, so a freed
+  chunk leaves the RSS at once instead of waiting for the next heap trim, and a live chunk
+  pins no freed heap memory below it; large blocks come from `malloc`. Each task also has a scratch
   arena, which allocations use while `ignite_rt_arena_scratch(1)` is on. The runtime moves
   the bump state between the two arenas.
 - Loop regions. Every `while`, `loop` and `for` takes a mark at its entry (for `for`, after
@@ -353,12 +356,15 @@ position, even with no buffer.
 - A task is the process's main thread, or a task `ignite_io::try_spawn` started for a
   `spawn`. It reuses idle threads (`docs/slice.md` section 7). A task's arena is freed when
   it ends (`task_end`), except for one chunk that the thread keeps for its next task.
-  A task whose arenas held more than 1 MiB at `task_end` calls `ignite_io::released_memory`,
+  A task whose arenas held more than 1 MiB of large blocks at `task_end` calls `ignite_io::released_memory`,
   as a `Store` does when it drops a value, and the substrate returns the free heap pages
   with glibc's `malloc_trim(0)` when a later task or an idle thread ends (`docs/slice.md`
   section 7). Without it glibc keeps the freed pages in the arena of every thread that
   allocated them: the ember example's churn (10 rounds of 10 MB SET then FLUSHDB) held
-  about 100 MiB RSS on 10 MB of keys (2026-11-04).
+  about 100 MiB RSS on 10 MB of keys (2026-11-04). The chunks a task frees go back to the
+  kernel without a trim: ember's `FLUSHDB` (`db.values()` copies the keyspace into the
+  arena) left 10 MB of freed chunks resident until the next trim while chunks were
+  `malloc` blocks (2026-11-04).
   `spawn` hands the new task a pointer to the arguments in the parent's memory. The task
   deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before the parent
   continues (`ignite_rt_spawn` blocks until then and returns 1).
