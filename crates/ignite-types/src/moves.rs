@@ -505,6 +505,7 @@ fn mutates(builtin: Builtin) -> bool {
             | Builtin::StorePut
             | Builtin::StoreRemove
             | Builtin::StoreUpdate
+            | Builtin::StoreUpsert
     )
 }
 
