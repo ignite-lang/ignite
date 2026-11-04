@@ -1,0 +1,655 @@
+import std.text.*
+import std.option.unwrap_or
+
+// A `for` over a list place iterates it by reference on the Rust target
+// when its body changes neither the element nor the list's variable
+// (`docs/slice.md` section 6, "`for` over a list"). Each test here is a
+// case that must compile and give the same answer on both targets.
+
+type Item {
+  id: Int
+  name: Text
+  tags: List<Text> = []
+}
+
+type Bag {
+  items: List<Item>
+  count: Int = 0
+  other: List<Item> = []
+}
+
+type Wrap {
+  item: Item
+}
+
+type Pair<T> {
+  left: T
+  right: T
+}
+
+type Holder {
+  store: Store<Item>
+  items: List<Item>
+}
+
+enum Shape {
+  Dot,
+  Circle(Int),
+  Rect(Int, Int),
+}
+
+enum Held {
+  One(Item),
+  Many(List<Item>),
+}
+
+fn item(id: Int, name: Text) -> Item = Item { id = id, name = name }
+
+fn items() -> List<Item> = [item(1, "a"), item(2, "b"), item(3, "c")]
+
+fn with_extra(xs: List<Item>, extra: Item) -> List<Item> {
+  var out = xs
+  out.push(extra)
+  out
+}
+
+fn total_ids(xs: List<Item>) -> Int {
+  var total = 0
+  for x in xs {
+    total = total + x.id
+  }
+  total
+}
+
+fn score(x: Item) -> Int = x.id * 10
+
+fn Item.label(x: Item) -> Text = "{x.id}={x.name}"
+
+// The body passes the list by value to a fn and reassigns the result.
+fn grow_by_call(start: List<Item>) -> Int {
+  var xs = start
+  var seen = 0
+  for x in xs {
+    xs = with_extra(xs, Item { id = x.id + 100, ..x })
+    seen = seen + 1
+  }
+  seen * 1000 + xs.len()
+}
+
+// The body reads the list through a call without changing it.
+fn read_by_call(xs: List<Item>) -> Int {
+  var sum = 0
+  for x in xs {
+    sum = sum + total_ids(xs) + x.id
+  }
+  sum
+}
+
+// The body assigns the root variable itself.
+fn reassign_root(start: List<Item>) -> Int {
+  var xs = start
+  var seen = 0
+  for x in xs {
+    xs = []
+    seen = seen + x.id
+  }
+  seen * 10 + xs.len()
+}
+
+// The list is a field of a record whose other fields the body assigns.
+fn assign_sibling_field(start: Bag) -> Int {
+  var bag = start
+  for x in bag.items {
+    bag.count = bag.count + x.id
+    bag.other.push(x)
+  }
+  bag.count * 10 + bag.other.len()
+}
+
+// The body assigns the very field it iterates.
+fn assign_iterated_field(start: Bag) -> Int {
+  var bag = start
+  var seen = 0
+  for x in bag.items {
+    bag.items = [x, x]
+    seen = seen + 1
+  }
+  seen * 10 + bag.items.len()
+}
+
+// The body pushes into the iterated field through an index.
+fn push_through_index(start: List<List<Int>>) -> Int {
+  var grid = start
+  var seen = 0
+  for row in grid {
+    grid[0].push(row.len())
+    seen = seen + 1
+  }
+  seen * 100 + grid[0].len()
+}
+
+fn nested_pairs(xs: List<Item>) -> Int {
+  var count = 0
+  for a in xs {
+    for b in xs {
+      if a == b {
+        count = count + 100
+      }
+      if a.id < b.id && b != a {
+        count = count + 1
+      }
+    }
+  }
+  count
+}
+
+fn nested_grow(start: List<Item>) -> Int {
+  var xs = start
+  var count = 0
+  for a in xs {
+    for b in xs {
+      if a == b {
+        xs.push(b)
+      }
+      count = count + 1
+    }
+  }
+  count * 100 + xs.len()
+}
+
+fn closure_in_body(xs: List<Item>) -> Int {
+  var sum = 0
+  for x in xs {
+    let size = || xs.len()
+    let own = || x.id
+    let label = |n: Int| "{x.name}{n}"
+    sum = sum + size() + own()
+    if label(1) == "{x.name}1" {
+      sum = sum + 1000
+    }
+  }
+  sum
+}
+
+fn for_in_closure(xs: List<Item>) -> Int {
+  let over_capture = || {
+    var n = 0
+    for x in xs {
+      n = n + x.id
+    }
+    n
+  }
+  let over_param = |ys: List<Item>| {
+    var n = 0
+    for y in ys {
+      n = n + y.id
+    }
+    n
+  }
+  over_capture() + over_param(xs) * 100
+}
+
+fn first_named(xs: List<Item>, name: Text) -> Option<Item> {
+  for x in xs {
+    if x.name == name {
+      return Some(x)
+    }
+  }
+  None
+}
+
+fn last_before(xs: List<Item>, stop: Int) -> Item {
+  var found = item(0, "none")
+  for x in xs {
+    if x.id == stop {
+      break
+    }
+    found = x
+  }
+  found
+}
+
+fn return_bare(xs: List<Item>) -> Item {
+  for x in xs {
+    return x
+  }
+  item(0, "none")
+}
+
+fn collect(xs: List<Item>) -> List<Item> {
+  var out = []
+  for x in xs {
+    out.push(x)
+    out.append([x])
+  }
+  out
+}
+
+fn into_store(xs: List<Item>, s: Store<Item>) -> Int {
+  var m: Map<Int, Item> = Map.empty()
+  for x in xs {
+    s.put(x.id, x)
+    m.put(x.id, x)
+  }
+  match s.get(2) {
+    Some(found) => found.id * 10 + m.len()
+    None => -1
+  }
+}
+
+fn constructors(xs: List<Item>) -> Int {
+  var total = 0
+  for x in xs {
+    let wrapped = Wrap { item = x }
+    let option = Some(x)
+    let pair = (x, 1)
+    let list = [x, x]
+    let held = One(x)
+    let generic = Pair { left = x, right = x }
+    let chosen = if x.id > 1 { x } else { item(9, "z") }
+    let matched = match x.id {
+      1 => x
+      _ => item(8, "y")
+    }
+    let block = match x.id {
+      _ => {
+        let copy = x
+        copy
+      }
+    }
+    total = total + wrapped.item.id + pair.1 + list.len() + generic.right.id + chosen.id
+    total = total + matched.id + block.id
+    total = total + match option {
+      Some(o) => o.id
+      None => 0
+    }
+    total = total + match held {
+      One(h) => h.id
+      Many(_) => 0
+    }
+  }
+  total
+}
+
+fn match_element(shapes: List<Shape>) -> Int {
+  var total = 0
+  for s in shapes {
+    total = total + match s {
+      Dot => 1
+      Circle(r) => r * 10
+      Rect(w, h) => w * h * 100
+    }
+    if s == Dot {
+      total = total + 1000
+    }
+  }
+  total
+}
+
+fn match_held(xs: List<Held>) -> Int {
+  var total = 0
+  for h in xs {
+    total = total + match h {
+      One(x) => x.id
+      Many(ys) => {
+        var n = 0
+        for y in ys {
+          n = n + y.id * 10
+        }
+        n
+      }
+    }
+  }
+  total
+}
+
+fn grid_sum(grid: List<List<Int>>) -> Int {
+  var total = 0
+  for row in grid {
+    for x in row {
+      total = total + x
+    }
+    total = total + row.len() * 100
+    if row.len() > 0 {
+      total = total + row[0] * 1000
+    }
+    if row == [1, 2] {
+      total = total + 10000
+    }
+  }
+  total
+}
+
+fn words(rows: List<List<Text>>) -> List<Text> {
+  var out = []
+  for row in rows {
+    for w in row {
+      out.push(w)
+    }
+    out.push(row.join("+"))
+  }
+  out
+}
+
+fn rows_out(rows: List<List<Item>>) -> List<List<Item>> {
+  var out = []
+  for row in rows {
+    out.push(row)
+  }
+  out
+}
+
+fn firsts<T>(rows: List<List<T>>) -> List<T> {
+  var out = []
+  for row in rows {
+    if row.len() > 0 {
+      out.push(row[0])
+    }
+  }
+  out
+}
+
+fn texts(xs: List<Text>, other: Text) -> Text {
+  var out = ""
+  var m: Map<Text, Int> = Map.empty()
+  for s in xs {
+    if s == other || other == s {
+      out = out.concat("=")
+    }
+    if s.len() > other.len() {
+      out = out.concat("<")
+    }
+    out = out.concat(s).concat("{s}|").concat(to_upper(s))
+    out = out.concat(s.split(",").join(";"))
+    m.put(s, s.len())
+    if s.len() > 0 && contains(s, "a") {
+      out = out.concat("!")
+    }
+    let t = s
+    out = out.concat(t)
+  }
+  "{out}#{m.len()}"
+}
+
+fn options(xs: List<Option<Int>>) -> Int {
+  var total = 0
+  for o in xs {
+    if o == Some(1) {
+      total = total + 100
+    }
+    total = total + unwrap_or(o, 5)
+    total = total + match o {
+      Some(v) => v
+      None => 1000
+    }
+  }
+  total
+}
+
+fn options_try(xs: List<Option<Item>>) -> Option<Int> {
+  var total = 0
+  for o in xs {
+    let v = match o {
+      Some(found) => found
+      None => return None
+    }
+    total = total + v.id
+  }
+  Some(total)
+}
+
+fn results_try(xs: List<Result<Int, Text>>) -> Result<Int, Text> {
+  var total = 0
+  for r in xs {
+    total = total + r?
+    if r == Ok(2) {
+      total = total + 10
+    }
+  }
+  Ok(total)
+}
+
+fn tuples(xs: List<(Int, Text)>) -> Int {
+  var total = 0
+  for p in xs {
+    total = total + p.0 + p.1.len() * 10
+    if p == (1, "a") {
+      total = total + 1000
+    }
+  }
+  total
+}
+
+fn maps(xs: List<Map<Text, Int>>) -> Int {
+  var total = 0
+  for m in xs {
+    total = total + unwrap_or(m.get("a"), 0) + m.len() * 10 + m.keys().len() * 100
+    if m.contains("b") {
+      total = total + 1000
+    }
+  }
+  total
+}
+
+fn calls(xs: List<Item>, f: fn(Item) -> Int) -> Int {
+  var total = 0
+  let g = |x: Item| x.id + 1
+  for x in xs {
+    total = total + f(x) + g(x) + score(x) + to_upper(x.name).len() + Item.label(x).len()
+    total = total + x.debug().len()
+  }
+  total
+}
+
+fn shadow(xs: List<Item>) -> Int {
+  var total = 0
+  for x in xs {
+    let x = Item { id = x.id * 2, ..x }
+    total = total + x.id
+  }
+  for xs in [xs, xs] {
+    total = total + xs.len() * 100
+  }
+  total
+}
+
+fn field_of_element(xs: List<Item>) -> Text {
+  var out = ""
+  for x in xs {
+    for tag in x.tags {
+      out = out.concat(tag)
+    }
+  }
+  out
+}
+
+fn field_of_param(bag: Bag) -> Int {
+  var total = 0
+  for x in bag.items {
+    total = total + x.id + bag.items.len()
+  }
+  total
+}
+
+fn while_mutates(start: List<Item>) -> Int {
+  var xs = start
+  var count = 0
+  for x in xs {
+    var i = 0
+    while i < 1 {
+      xs.push(x)
+      i = i + 1
+    }
+    count = count + 1
+  }
+  count * 100 + xs.len()
+}
+
+fn through_store_handle(h: Holder) -> Int {
+  for x in h.items {
+    h.store.put(x.id, Item { id = x.id * 10, ..x })
+  }
+  var total = 0
+  for v in h.store.values() {
+    total = total + v.id
+  }
+  total
+}
+
+fn from_store_value(s: Store<List<Item>>) -> Int {
+  var total = 0
+  match s.get(1) {
+    Some(list) => {
+      for x in list {
+        total = total + x.id
+        s.put(2, [x])
+      }
+    }
+    None => {}
+  }
+  total
+}
+
+type Op {
+  name: Text
+  run: fn(Int) -> Int
+}
+
+fn list_methods(rows: List<List<Int>>) -> List<Int> {
+  var out = []
+  for row in rows {
+    out.append(row.map(|v| v + 1))
+    if !row.is_empty() {
+      out.push(row.at(0))
+      out.append(row.slice(0, 1))
+    }
+  }
+  out
+}
+
+fn count_equal(xs: List<Item>, target: Item) -> Int {
+  var n = 0
+  for x in xs {
+    if x == target || target == x {
+      n = n + 1
+    }
+  }
+  n
+}
+
+fn run_ops(ops: List<Op>, start: Int) -> Int {
+  var value = start
+  for op in ops {
+    value = op.run(value) + op.name.len()
+  }
+  value
+}
+
+test "the body changes the list through a call" {
+  assert grow_by_call(items()) == 3006
+  assert read_by_call(items()) == 24
+}
+
+test "the body assigns the root or a field of the record holding the list" {
+  assert reassign_root(items()) == 60
+  let bag = Bag { items = items() }
+  assert assign_sibling_field(bag) == 63
+  assert assign_iterated_field(bag) == 32
+  assert push_through_index([[1], [2, 3]]) == 203
+}
+
+test "nested loops over the same list" {
+  assert nested_pairs(items()) == 303
+  assert nested_grow(items()) == 1206
+}
+
+test "closures and loops" {
+  assert closure_in_body(items()) == 3015
+  assert for_in_closure(items()) == 606
+}
+
+test "return and break with the element" {
+  assert first_named(items(), "b") == Some(item(2, "b"))
+  assert first_named(items(), "q") == None
+  assert last_before(items(), 3) == item(2, "b")
+  assert return_bare(items()) == item(1, "a")
+}
+
+test "the element stored into another list, a store and a map" {
+  let all = collect(items())
+  assert all.len() == 6
+  assert all[5] == item(3, "c")
+  let s: Store<Item> = Store.new()
+  assert into_store(items(), s) == 23
+}
+
+test "the element moved into constructors and matches" {
+  assert constructors(items()) == 70
+  assert match_element([Dot, Circle(2), Rect(2, 3)]) == 1621
+  assert match_held([One(item(1, "a")), Many(items())]) == 61
+}
+
+test "lists of lists" {
+  assert grid_sum([[1, 2], [3], []]) == 14306
+  assert words([["a", "b"], ["c"]]) == ["a", "b", "a+b", "c", "c"]
+  let rows = [items(), [item(7, "g")]]
+  assert rows_out(rows) == rows
+  assert firsts([[1, 2], [], [3]]) == [1, 3]
+  assert firsts([["x"], ["y", "z"]]) == ["x", "y"]
+}
+
+test "elements of every borrowed kind" {
+  assert texts(["a,b", "b", "c"], "b") == "<a,ba,b|A,Ba;b!a,b=bb|Bbbcc|Ccc#3"
+  assert options([Some(1), None, Some(3)]) == 1113
+  assert options_try([Some(item(1, "a")), Some(item(2, "b"))]) == Some(3)
+  assert options_try([Some(item(1, "a")), None]) == None
+  assert results_try([Ok(1), Ok(2)]) == Ok(13)
+  assert results_try([Ok(1), Err("no"), Ok(2)]) == Err("no")
+  assert tuples([(1, "a"), (2, "bb")]) == 1033
+  let a: Map<Text, Int> = { a = 1, b = 2 }
+  let b: Map<Text, Int> = { c = 3 }
+  assert maps([a, b]) == 1331
+}
+
+test "the element passed to fns, fn values and methods" {
+  let f = |x: Item| x.id * 2
+  let got = calls([item(1, "a")], f)
+  let shown = item(1, "a").debug().len()
+  assert got == 2 + 2 + 10 + 1 + 3 + shown
+}
+
+test "shadowed elements and fields" {
+  assert shadow(items()) == 612
+  let tagged = [Item { id = 1, name = "a", tags = ["x", "y"] }, Item { id = 2, name = "b", tags = ["z"] }]
+  assert field_of_element(tagged) == "xyz"
+  assert field_of_param(Bag { items = items() }) == 15
+  assert while_mutates(items()) == 306
+}
+
+test "stores" {
+  let s: Store<Item> = Store.new()
+  assert through_store_handle(Holder { store = s, items = items() }) == 60
+  let lists: Store<List<Item>> = Store.new()
+  lists.put(1, items())
+  assert from_store_value(lists) == 6
+  assert lists.get(2) == Some([item(3, "c")])
+}
+
+test "for in a test body" {
+  let xs = items()
+  var n = 0
+  for x in xs {
+    assert x == x
+    assert x.id > 0
+    assert xs.len() == 3
+    n = n + x.id
+  }
+  assert n == 6
+}
+
+test "list methods, borrowed operands and fn fields" {
+  assert list_methods([[1, 2], []]) == [2, 3, 1, 1]
+  assert count_equal(items(), item(2, "b")) == 1
+  let ops = [Op { name = "a", run = |v| v * 2 }, Op { name = "bb", run = |v| v + 1 }]
+  assert run_ops(ops, 3) == 10
+}

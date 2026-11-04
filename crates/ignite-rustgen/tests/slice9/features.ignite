@@ -116,6 +116,38 @@ fn first_even(items: List<Int>) -> Option<Int> {
   return found
 }
 
+// A `for` over a list of records reads each element where it is (no copy
+// of the list) unless its body changes the list.
+fn open_titles(todos: List<Todo>) -> List<Text> {
+  var titles = []
+  for todo in todos {
+    let finished = Todo { done = true, ..todo }
+    let named = || todo.title
+    if todo != finished && Todo.title_of(todo) == named() {
+      titles.push("{todo.id}:{todo.title}")
+    }
+  }
+  titles
+}
+
+fn first_done(todos: List<Todo>) -> Option<Todo> {
+  for todo in todos {
+    match todo.done {
+      true => return Some(todo)
+      false => continue
+    }
+  }
+  None
+}
+
+fn doubled(todos: List<Todo>) -> List<Todo> {
+  var all = todos
+  for todo in all {
+    all.push(Todo { id = todo.id + 10, ..todo })
+  }
+  all
+}
+
 fn count_until(items: List<Int>, stop: Int) -> Int {
   var count = 0
   for item in items {
@@ -206,6 +238,16 @@ test "break and continue expressions" {
   assert first_even([1, 3, 4, 6]) == Some(4)
   assert first_even([1, 3]) == None
   assert count_until([1, 2, 3, 4], 3) == 2
+}
+
+test "for over a list of records" {
+  let todos = [Todo.new(1, "milk"), Todo { id = 2, title = "eggs", done = true }]
+  assert open_titles(todos) == ["1:milk"]
+  assert first_done(todos) == Some(Todo { id = 2, title = "eggs", done = true })
+  assert first_done([Todo.new(3, "tea")]) == None
+  assert doubled(todos).len() == 4
+  assert doubled(todos).at(3).id == 12
+  assert todos.len() == 2
 }
 
 test "closures capture by copy" {

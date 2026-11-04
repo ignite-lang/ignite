@@ -267,10 +267,7 @@ impl Host {
                 .runtime
                 .as_ref()
                 .is_none_or(|runtime| runtime.restore_to.is_none())
-            && self
-                .recovery_reason
-                .as_deref()
-                .is_some_and(super::controller::resolvable)
+            && self.correctable()
             && self
                 .active
                 .as_ref()

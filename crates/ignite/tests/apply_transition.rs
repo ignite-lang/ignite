@@ -1457,6 +1457,12 @@ fn a_corrective_after_a_failed_replacement_completes_with_its_receipt() {
         "the old server stays owned by the committed operation: {}",
         failed.compact()
     );
+    assert_eq!(
+        failed.get("runtimeOperation").and_then(Json::as_str),
+        Some(plan_id(&first_plan).as_str()),
+        "the running revision is still the committed operation's, not the refused plan's: {}",
+        failed.compact()
+    );
 
     let corrected_port = free_port();
     let (corrective, corrective_plan) = flow.prepare(
@@ -1491,6 +1497,12 @@ fn a_corrective_after_a_failed_replacement_completes_with_its_receipt() {
     assert_eq!(
         status.get("committedRevision").and_then(Json::as_i64),
         Some(2)
+    );
+    assert_eq!(
+        status.get("runtimeOperation").and_then(Json::as_str),
+        Some(id.as_str()),
+        "after the corrective the running revision is the corrective's: {}",
+        status.compact()
     );
     let server = owned_pid(&status, "Terminal.server").expect("the corrective's server");
     assert!(alive(server) && !alive(old), "{}", status.compact());

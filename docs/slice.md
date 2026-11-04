@@ -522,6 +522,13 @@ with no return type or `Unit`) ends every statement with `;`. An `if` is in valu
 when it is a `let`/`var` initializer, a `return` operand, an argument, an arm body, or the
 last statement of a value-position block.
 
+**`for` over a list.** An exception to the ownership rule, when the types are known: a `for`
+whose iterable is a place of type `List<T>`, `T` being `Text`, a list, map, `Option`,
+`Result`, tuple, record or enum, and whose body neither assigns nor changes in place the
+element or the variable the place is rooted at, iterates `(place).iter()` and copies no list.
+In the body the element is a reference, read like a reference parameter. Every other `for`
+copies its iterable.
+
 **Builtin methods** are lowered by name; the receiver type is not known, so each name has one
 meaning. The generator emits exactly the Rust on the right.
 
@@ -4055,7 +4062,8 @@ that is not one is exit 3 and is never replaced, and a missing identity on a sta
 `host-journal.jsonl` or `status.json` is exit 3 with nothing written. An apply of a plan with neither a receipt
 nor `plans/<id>.json` is exit 2. `inspect` adds `host` (PID and start time), `currentOperation`,
 `actionProgress` (per member action of the desired plan: `done`, `pending` or `blocked`),
-`readiness` (expected and ready machines, `converged`) and `nextAction`; offline it sets
+`readiness` (expected and ready machines, `converged`) and `nextAction`, which asks for a
+corrective plan only while admission takes one; offline it sets
 `online` false, `host` null, `health` and `readiness` to `unknown: host offline`, and renames
 every `ready` flag at any depth, `retiringInstances` included, to `lastRecordedReady`.
 
@@ -4216,16 +4224,40 @@ a name no earlier host of the state used, and `revisions/` and the state root ar
 is created; a temporary that a crash left behind never blocks the next write. Decision D2: a revision whose reducer revision
 differs from the host's is neither re-stepped nor driven; the snapshot's `history` lists each
 revision state with `restepped`, and `recovery` is `recovery_required`, `reducer_revision_changed`,
-next action "replan and apply", without blocking an apply; the next commit clears it. Debug
+next action "replan and apply", without blocking an apply; the next commit clears it. A start
+before that commit keeps a report that names an operation other than the committed one, which no
+start examines again, and finds the report of a committed revision still not driven again. Debug
 builds read `IGNITE_DEBUG_HOST_FAULT` (`after_intent`, `before_dispatch`, `after_dispatch`,
 `mid_transition` crash the host with SIGKILL there; `sync_intent`, `sync_effect` fail that
 sync) and `IGNITE_DEBUG_HOST_REDUCER_REVISION` (the reducer revision the host claims); release
-builds read neither. Known gaps:
+builds read neither.
 
-- A `foreign_listener` block of the committed revision replaces a `reducer_revision_changed`
-  report in `recovery`; the not-driven operation's receipt keeps the reason.
-- A reducer failure of the committed revision's run while a `gave_up` is unresolved makes the
-  committed revision the active operation, replacing that recovery reason.
+Precedence of recovery reasons: the first reason recorded stands as the reported one, and a later
+one is kept beside it without replacing it.
+
+- While an unresolved recovery holds, a later failure (a reducer failure of the committed
+  revision's run, that run's controller ending, a process that failed to start, a ready artifact
+  that differs), whichever operation the run's records carry, leaves the active operation,
+  `recoveryReason` and the receipt's `reason` as they were; it is kept in that receipt's
+  `laterReasons` (`operationId`, `reason`). A later reason that a corrective plan does not resolve
+  (any but `gave_up` and `listener_unavailable`) still governs what the host does, because the
+  corrective's premise, the committed revision's instances as they were, no longer holds: the
+  receipt's next action becomes "inspect retained ownership and journal before recovery", the
+  running revision dispatches no further effect, no corrective is admitted and no start resumes
+  the committed revision. Keeping the first reason never weakens what the later one blocks. While
+  the unresolved recovery is the committed revision's own (its receipt stays `completed`, and its
+  reason is never resolvable), nothing is kept beside it.
+- In `recovery` the first entry recorded stands; a later one is kept in `recovery.laterReasons`
+  with its own `reason`, `planId`, `nextAction`, `blocking` and `evidence`, and a later block makes
+  `recovery.blocking` true. A `foreign_listener` block of the committed revision found after the
+  `reducer_revision_changed` report of a not-driven operation therefore leaves `recovery.reason`
+  and `recoveryReason` at `reducer_revision_changed`, refuses every apply but a retry, and changes
+  neither the active operation nor the host's recovery reason. Lifting the block keeps the report,
+  no longer blocking, until the next commit; a block found again at the lift or the next start
+  goes beside it again.
+- A transition abandoned before the running revision realizes its plan gives the run back the
+  operation it carried before: `runtimeOperation` and the run's records name the committed
+  revision's operation again, not the refused plan.
 
 ### 17.6 Terminal walkthrough
 

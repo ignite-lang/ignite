@@ -10,7 +10,7 @@ relations:
 scope:
 - confidence: inferred
   path: crates/ignite-rustgen/src
-revision: 3
+revision: 4
 ---
 # Story: rustgen-redundant-clones
 
@@ -37,6 +37,16 @@ on a protocol server falls toward the handwritten Rust baseline.
   - `&x.clone()` where a borrow is enough 3.2 %.
 - Slice 16's U3 (`story:slice-16-moves-analysis`, Rust last-use moves) covers
   `Parsed::Command(args.clone(), ..)` (4.3 %) and `next.entries.push(entry.clone())` (3.2 %).
+
+- After story:store-borrowing-reads (lending reads `read`, `read_values`, `replace_with` in
+  `ignite_io::Store`), the Rust target can use them, which needs generator changes (playground
+  session, 2026-11-04):
+  - an `update` whose result is discarded (ember `write`, `delete_key`) becomes
+    `replace_with(id, |b| f(b.clone()), |_| ())`, one copy fewer per SET or DEL;
+  - `for x in store.values()` becomes `read_values` only when the body does not touch the store
+    (the lock is not reentrant; ember's flush calls `db.remove`);
+  - `match db.get(id)` arms that only read can use `read(id, …)`, after an analysis of how the
+    value is used.
 
 ## Acceptance
 
