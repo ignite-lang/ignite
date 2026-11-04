@@ -102,17 +102,12 @@ pub extern "C" fn ignite_rt_text_join(
 
 /// `i8 int_parse(Text* text, i64* out)`: `Int.parse`, 1 and the value in
 /// `out` for decimal digits with an optional leading `-`; 0 for anything
-/// else (a `+`, spaces, no digits, overflow).
+/// else (a `+`, spaces, no digits, overflow): [`ignite_io::parse_int`].
+/// `text` may be the bytes of `Bytes`: the lowering of
+/// `Int.parse(bytes.to_text())` passes them without a `Text`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_int_parse(text: *const IgniteList, out: *mut i64) -> i8 {
-    let text = bytes(text);
-    if text.first() == Some(&b'+') {
-        return 0;
-    }
-    match std::str::from_utf8(text)
-        .ok()
-        .and_then(|t| t.parse::<i64>().ok())
-    {
+    match ignite_io::parse_int(bytes(text)) {
         Some(value) => {
             put(out, value);
             1

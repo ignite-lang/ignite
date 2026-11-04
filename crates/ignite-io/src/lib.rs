@@ -623,3 +623,37 @@ mod pipe;
 mod stream;
 pub use pipe::{PIPE_CAPACITY, Pipe, PipeStream};
 pub use stream::ByteStream;
+
+/// `Int.parse(text)` of both targets: the value of decimal digits with an
+/// optional leading `-`; `None` for anything else (a `+`, spaces, no
+/// digits, overflow, bytes that are not UTF-8). Takes the bytes of a
+/// `Text` or of `Bytes`, so `Int.parse(bytes.to_text())` needs no `Text`:
+/// a lossy decode of bytes that are not UTF-8 holds U+FFFD, which never
+/// parses either.
+pub fn parse_int(text: impl AsRef<[u8]>) -> Option<i64> {
+    let text = text.as_ref();
+    if text.first() == Some(&b'+') {
+        return None;
+    }
+    std::str::from_utf8(text).ok()?.parse::<i64>().ok()
+}
+
+#[cfg(test)]
+mod parse_int_tests {
+    use super::parse_int;
+
+    #[test]
+    fn parse_int_takes_decimal_digits_and_a_leading_minus_only() {
+        assert_eq!(parse_int("42"), Some(42));
+        assert_eq!(parse_int(b"-7".as_slice()), Some(-7));
+        assert_eq!(parse_int("-9223372036854775808"), Some(i64::MIN));
+        for bad in ["+1", "", "-", " 1", "1 ", "1x", "9223372036854775808"] {
+            assert_eq!(parse_int(bad), None, "{bad:?}");
+        }
+        assert_eq!(parse_int(vec![b'1', 0xff]), None);
+        assert_eq!(
+            parse_int(String::from_utf8_lossy(&[b'1', 0xff]).as_bytes()),
+            None
+        );
+    }
+}
