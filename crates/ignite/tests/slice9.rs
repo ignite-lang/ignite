@@ -163,6 +163,15 @@ fn rust_target_features_pass_on_llvm() {
     assert_passes(&file, "features", &["llvm"]);
 }
 
+/// `for` over a list place by reference on the Rust target (`docs/slice.md`
+/// section 6): every body that may or may not borrow gives the same
+/// answers on both targets.
+#[test]
+fn for_over_a_list_agrees_on_both_targets() {
+    let file = workspace().join("crates/ignite/tests/fixtures/slice9/for_borrow.ignite");
+    assert_passes(&file, "for_borrow", &TARGETS);
+}
+
 /// The report without the time of the summary line.
 fn without_time(report: &str) -> String {
     report

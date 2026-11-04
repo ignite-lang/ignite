@@ -1599,6 +1599,9 @@ struct Generator<'a> {
     /// Parameters of the current fn that are references (`&T`) in its
     /// body: read only and not `Copy`.
     borrowed: BTreeSet<String>,
+    /// `for` elements that are references (`&T`) in their body, with the
+    /// index of the scope that binds them ([`Generator::borrowed_for`]).
+    borrowed_elements: Vec<(usize, String)>,
     /// The source the module was read from, for `assert` and `?` reports.
     source: Option<&'a SourceFile>,
     /// Fixed filename escaped once for every failure site in this module.
@@ -1698,6 +1701,7 @@ impl<'a> Generator<'a> {
             renames: BTreeMap::new(),
             renamed_uses: BTreeSet::new(),
             borrowed: BTreeSet::new(),
+            borrowed_elements: Vec::new(),
             source,
             escaped_site_file: escape_str(source.map_or(module, |source| source.path.as_str())),
             module: module.to_string(),
@@ -1848,10 +1852,53 @@ impl<'a> Generator<'a> {
         }
     }
 
-    /// Whether local `name` is a parameter passed by reference, not
-    /// shadowed.
+    /// Whether local `name` is a parameter passed by reference or a `for`
+    /// element bound by reference, not shadowed.
     fn is_borrowed(&self, name: &str) -> bool {
-        self.borrowed.contains(name) && self.is_outermost(name)
+        if self.borrowed.contains(name) && self.is_outermost(name) {
+            return true;
+        }
+        let owned = name.to_string();
+        self.scopes
+            .iter()
+            .rposition(|scope| scope.contains(&owned))
+            .is_some_and(|index| {
+                self.borrowed_elements
+                    .iter()
+                    .any(|(at, element)| *at == index && *element == owned)
+            })
+    }
+
+    /// Whether `for name in iter { body }` can iterate `iter` by reference
+    /// instead of over a copy: `iter` is a place holding a list whose
+    /// elements are not `Copy` in Rust, and `body` changes neither `name`
+    /// nor the variable `iter` is rooted at. The element is then a
+    /// reference in `body`, read like a borrowed parameter.
+    fn borrowed_for(&self, name: &str, iter: &Expr, body: &Block) -> bool {
+        if !self.is_place(iter) {
+            return false;
+        }
+        let Some(Ty::List(element)) = self.type_of(iter) else {
+            return false;
+        };
+        if !matches!(
+            **element,
+            Ty::Text
+                | Ty::List(_)
+                | Ty::Option(_)
+                | Ty::Result(..)
+                | Ty::Record(_)
+                | Ty::Enum(_)
+                | Ty::Tuple(_)
+                | Ty::GenericRecord(..)
+                | Ty::GenericEnum(..)
+                | Ty::Map(..)
+        ) {
+            return false;
+        }
+        let mut mutated = BTreeSet::new();
+        mutated_names(body, self.types, &mut mutated);
+        !mutated.contains(name) && place_root(iter).is_some_and(|root| !mutated.contains(root))
     }
 
     /// `name` as a Rust operand that must not be a reference: `(*name)`
@@ -2596,6 +2643,16 @@ impl<'a> Generator<'a> {
                 format!("while {cond} {}", self.block(body, false))
             }
             StmtKind::Loop { body } => format!("loop {}", self.block(body, false)),
+            StmtKind::For { name, iter, body } if self.borrowed_for(&name.name, iter, body) => {
+                let iter = self.bare(iter);
+                let scope = self.scopes.len();
+                self.scopes.push(vec![name.name.clone()]);
+                self.borrowed_elements.push((scope, name.name.clone()));
+                let body = self.block(body, false);
+                self.borrowed_elements.pop();
+                self.scopes.pop();
+                format!("for {} in ({iter}).iter() {body}", ident(&name.name))
+            }
             StmtKind::For { name, iter, body } => {
                 let iter = self.value(iter);
                 self.scopes.push(vec![name.name.clone()]);
@@ -4607,6 +4664,7 @@ impl<'a> Generator<'a> {
         let value = info.is_none_or(|info| !matches!(info.ret, Ty::Unit));
 
         let borrowed = std::mem::take(&mut self.borrowed);
+        let borrowed_elements = std::mem::take(&mut self.borrowed_elements);
         let base = self.closure_base.replace(self.scopes.len());
         self.scopes
             .push(closure.params.iter().map(|p| p.name.name.clone()).collect());
@@ -4617,6 +4675,7 @@ impl<'a> Generator<'a> {
         self.scopes.pop();
         self.closure_base = base;
         self.borrowed = borrowed;
+        self.borrowed_elements = borrowed_elements;
 
         let arrow = ret
             .as_ref()

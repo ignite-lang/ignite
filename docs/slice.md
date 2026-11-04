@@ -522,6 +522,13 @@ with no return type or `Unit`) ends every statement with `;`. An `if` is in valu
 when it is a `let`/`var` initializer, a `return` operand, an argument, an arm body, or the
 last statement of a value-position block.
 
+**`for` over a list.** An exception to the ownership rule, when the types are known: a `for`
+whose iterable is a place of type `List<T>`, `T` being `Text`, a list, map, `Option`,
+`Result`, tuple, record or enum, and whose body neither assigns nor changes in place the
+element or the variable the place is rooted at, iterates `(place).iter()` and copies no list.
+In the body the element is a reference, read like a reference parameter. Every other `for`
+copies its iterable.
+
 **Builtin methods** are lowered by name; the receiver type is not known, so each name has one
 meaning. The generator emits exactly the Rust on the right.
 
