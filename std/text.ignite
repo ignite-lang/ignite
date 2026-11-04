@@ -147,6 +147,55 @@ test "Int.parse of bytes that are not UTF-8 is None" {
   assert Int.parse(broken.to_text()) == None
   assert Int.parse(broken.slice(0, 1).to_text()) == Some(7)
   assert broken == Bytes.of([b'7', 0xFF])
+  assert Int.parse(Bytes.of([b'1', 0, b'2']).to_text()) == None
+  assert Int.parse(Bytes.of([0, b'1']).to_text()) == None
+  assert Int.parse(Bytes.of([b'-', 0]).to_text()) == None
+}
+
+test "Int.to_text is decimal with a minus for negatives" {
+  let max = 9223372036854775807
+  let min = -9223372036854775807 - 1
+  assert max.to_text() == "9223372036854775807"
+  assert min.to_text() == "-9223372036854775808"
+  assert (min + 1).to_text() == "-9223372036854775807"
+  assert 0.to_text() == "0"
+  assert (-1).to_text() == "-1"
+  assert (-10).to_text() == "-10"
+  assert (-42).to_text() == "-42"
+  assert 1000000.to_text() == "1000000"
+  assert Int.parse(min.to_text()) == Some(min)
+  assert Int.parse(max.to_text()) == Some(max)
+  assert Int.parse((-0).to_text()) == Some(0)
+}
+
+test "Bytes.to_text keeps UTF-8 and turns invalid sequences into U+FFFD" {
+  assert b"GET key".to_text() == "GET key"
+  assert Bytes.of([]).to_text() == ""
+  assert Bytes.of([0, 0x7F]).to_text() == "\u{0}\u{7F}"
+  assert Bytes.of([0xC3, 0xA4, 0xE2, 0x82, 0xAC]).to_text() == "\u{E4}\u{20AC}"
+  assert Bytes.of([b'a', b'b', 0xC3, 0xA4, 0x7F, 0xE2, 0x82]).to_text() == "ab\u{E4}\u{7F}\u{FFFD}"
+  assert Bytes.of([b'o', b'k', 0xFF, 0xFE, b'!']).to_text() == "ok\u{FFFD}\u{FFFD}!"
+  assert Bytes.of([0x80]).to_text() == "\u{FFFD}"
+  assert Bytes.of([0xC0, 0xB1]).to_text() == "\u{FFFD}\u{FFFD}"
+  assert Bytes.of([0xED, 0xA0, 0x80]).to_text() == "\u{FFFD}\u{FFFD}\u{FFFD}"
+  assert Bytes.of([0xF0, 0x9F, 0x98, 0x80, b'x']).to_text() == "\u{1F600}x"
+  assert Bytes.of([0xF0, 0x9F, 0x98, b'x']).to_text() == "\u{FFFD}x"
+  var bytes = b"ab"
+  let text = bytes.to_text()
+  bytes.push(b'c')
+  assert text == "ab" && bytes.to_text() == "abc"
+  var kept = ""
+  var last = ""
+  var i = 0
+  while i < 2000 {
+    let line = i.to_text().to_bytes()
+    last = line.to_text()
+    if i % 500 == 0 {
+      kept = kept.concat(last).concat(",")
+    }
+    i = i + 1
+  }
+  assert kept == "0,500,1000,1500," && last == "1999"
 }
 
 test type ParseHolder {
