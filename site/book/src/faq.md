@@ -9,7 +9,7 @@ turns it into native executables. The same declaration is what `ignite plan` mod
 
 ## Can I use it in production?
 
-No. Ignite is an early prototype. v0.3.0 runs systems on one machine, in the foreground
+No. Ignite is an early prototype. v0.4.0 runs systems on one machine, in the foreground
 (`ignite run`) or under a local host (`ignite apply`); there is no cloud provider, no
 portable bundle and no stateful migration. See the [roadmap](roadmap.md).
 
