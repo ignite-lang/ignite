@@ -20,29 +20,23 @@ dependencies between the waves are in
 | **v0.1.0** | the language; the Rust and LLVM targets over one IO substrate; Telnet and HTTP written in Ignite; inline `test` blocks on both targets; the system declaration (`resource`, `component`, `contract`, `policy`, `assembly`, quantities with units); `ignite plan` and `ignite explain` with the compile-time evaluator; `ignite run` and `ignite replay` with probes, contract evaluation, `Restart`, `DrainRollout` and the journal |
 | **v0.2.0** | local apply: `ignite host`, `ignite plan --for-apply`, `ignite apply`, `ignite inspect`; source-bound saved plans, durable receipts and crash recovery ([guide](guide/apply.md)) |
 | **v0.3.0** | in-process streams: `Pipe.pair()`, the `ByteStream` bound `<S: ByteStream>`, the Telnet and HTTP roles generic over the stream with `SessionLimits` and `HttpLimits`, protocol tests without a network on both targets |
+| **v0.4.0** | protocols that state which RFC requirements they meet: `std.rfc` and catalogues of RFC 854, 855, 1143, 9112 and 9110; the clauses `conforms`, `scope`, `satisfies`, `verifies`, `unsupported` and `not_applicable` with E090 to E092; `ignite conformance`, `ignite rfc import` and `ignite rfc check`; the claims of `Telnet` (RFC 855 met, RFC 854 with four gaps) and `Http` (gaps listed, nothing claimed) ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.4.0)) |
 
-## Being built: RFC catalogues and conformance <span class="badge wip">unreleased</span>
+## Being built <span class="badge wip">unreleased</span>
 
-The next step ("protocols P2") is being implemented on the branch
-[`feat/slice15-protocols-p2`](https://github.com/ignite-lang/ignite/tree/feat/slice15-protocols-p2)
-and is in no release. Its contract, in `docs/slice.md` section 19 of that branch, adds:
+Two steps are being implemented on their branches and are in no release:
 
-- `std.rfc`, a vocabulary for requirements (`Level`, the BCP 14 keywords; `Party`; `Spec`;
-  `Requirement`), and catalogue modules for RFC 854, 855, 1143, 9112 and 9110 whose
-  constants are literal data;
-- clauses that bind code to requirements: `conforms`, `scope`, `satisfies`, `verifies`,
-  `unsupported` and `not_applicable`; no backend reads them, so they change no emitted byte;
-- checks over those claims (E090 to E092): a MUST-class requirement in scope with no status
-  is an error;
-- `ignite rfc import` and `ignite rfc check`, reading an RFC's XML source from a local file;
-- `ignite conformance FILE`, which runs the verifying tests and prints a matrix of
-  requirements, evidence and verdicts, ending in a line such as
-  `claim conformance of Telnet to rfc854: yes (0 gaps, 0 failures, 0 inconclusive)`;
-- the claims of the standard library's own protocols: Telnet against RFC 854 and 855, HTTP
-  against RFC 9112 and a server subset of RFC 9110, where the missing chunked coding and Host
-  check are listed as gaps rather than claimed.
+- slice 16, language gaps: closures, last-use moves and the smaller gaps of wave A, on both
+  targets, on
+  [`feat/slice16-language-gaps`](https://github.com/ignite-lang/ignite/tree/feat/slice16-language-gaps);
+- slice 17, processes, files, settings and entropy for programs, on
+  [`feat/slice17-processes-files`](https://github.com/ignite-lang/ignite/tree/feat/slice17-processes-files).
 
-Until it is released, treat this list as a plan, not as documentation.
+Planned after them, slice 18: one service operated, the todo service on the LLVM target with
+its data in a directory, an HTTP probe, an availability contract and `ignite apply` rollouts
+that keep the data.
+
+Until they are released, treat this list as a plan, not as documentation.
 
 ## Designs <span class="badge design">design</span>
 
