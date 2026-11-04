@@ -139,7 +139,7 @@ impl Lines {
                 ignite_io::Input::Eof => return Ok(()),
                 ignite_io::Input::Data(bytes) => {
                     let reply = (app.handle)(app.state.clone(), String::from_utf8_lossy(&bytes).into_owned().trim().to_string());
-                    (stream.write_all((format!("{}{}", reply, String::from("\n"))).clone().into_bytes()))?
+                    (stream.write_all((format!("{}{}", reply, String::from("\n"))).into_bytes()))?
                 },
             };
         }
