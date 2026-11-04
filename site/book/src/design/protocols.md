@@ -195,7 +195,8 @@ the full rule.
 
 ## What is not built
 
-User `interface` and `impl` declarations, TLS and Unix-socket transports, RFC catalogues and
-conformance checking are a design, not implemented ([roadmap](../roadmap.md)).
+User `interface` and `impl` declarations, ABNF grammars, and TLS and Unix-socket transports
+are a design, not implemented ([roadmap](../roadmap.md)). RFC catalogues and conformance
+claims are released in v0.4.0.
 
 Next: [Components](components.md).

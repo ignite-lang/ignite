@@ -800,6 +800,145 @@ section h2 {
   border-block: 1px solid var(--border);
 }
 
+/* Build speed */
+
+:root,
+[data-theme="dark"] {
+  --bar-ignite: #e8650f;
+  --bar-cargo: #8f7f92;
+}
+
+[data-theme="light"] {
+  --bar-ignite: #e85d00;
+  --bar-cargo: #8f7f92;
+}
+
+.speed {
+  background: var(--bg-2);
+  border-block: 1px solid var(--border);
+}
+
+.speed-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: clamp(2rem, 4vw, 4rem);
+  align-items: center;
+}
+
+.speed-grid > div > p {
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.speed-figure {
+  margin: 0;
+  padding: 1.2rem 1.4rem 1.3rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.speed-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.speed-table caption {
+  text-align: left;
+  font-weight: 700;
+  padding-bottom: 0.6rem;
+}
+
+.speed-table th,
+.speed-table td {
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+}
+
+.speed-table thead th {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.speed-table .group th {
+  padding-top: 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.speed-table .n {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cpu {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.track {
+  flex: 1;
+  min-width: 5rem;
+  height: 0.6rem;
+}
+
+.bar {
+  display: block;
+  height: 100%;
+  width: var(--w);
+  min-width: 3px;
+  border-radius: 0 4px 4px 0;
+}
+
+.bar-ignite {
+  background: var(--bar-ignite);
+}
+
+.bar-cargo {
+  background: var(--bar-cargo);
+}
+
+.speed-figure figcaption {
+  margin-top: 0.9rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-right: 1.1rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.key {
+  width: 0.9rem;
+  height: 0.6rem;
+  border-radius: 0 3px 3px 0;
+}
+
+.speed-note {
+  display: block;
+  margin-top: 0.5rem;
+}
+
+.speed-table .cpu-col {
+  width: 40%;
+}
+
 /* Quickstart */
 
 .steps {
@@ -1047,6 +1186,7 @@ section h2 {
   .hero-grid,
   .showcase-grid,
   .failure-grid,
+  .speed-grid,
   .status-inner {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1113,6 +1253,19 @@ section h2 {
 
   .window pre {
     font-size: 0.78rem;
+  }
+
+  .speed-figure {
+    padding: 1rem 0.8rem;
+    overflow-x: auto;
+  }
+
+  .speed-table {
+    font-size: 0.8rem;
+  }
+
+  .track {
+    min-width: 3rem;
   }
 }
 

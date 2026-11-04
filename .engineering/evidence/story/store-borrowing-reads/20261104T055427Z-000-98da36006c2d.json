@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-04T05:54:27Z",
+  "actor": "human:timo",
+  "artifact": "story:store-borrowing-reads",
+  "kind": "story",
+  "revision": 2,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate",
+    "reference": "https://github.com/ignite-lang/ignite/pull/17"
+  }
+}

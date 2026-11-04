@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-13-recovery-gaps
 kind: story
-status: active
+status: implemented
 title: Close the slice-13 recovery and inspect gaps
 summary: Two recovery precedence cases from 17.5 As landed (U5), and inspect naming a refused plan as runtimeOperation after a later corrective
 relations:
@@ -16,10 +16,11 @@ scope:
   path: crates/ignite/tests/apply_transition.rs
 - confidence: cited
   path: docs/slice.md
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T22:38:33Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-03T22:38:33Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-04T04:06:03Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 
 # Story: slice-13-recovery-gaps

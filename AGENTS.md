@@ -44,7 +44,7 @@ the IO substrate (Rust) that compiled programs link.
 | `docs/rfc/` | the RFCXML sources of RFC 9110 and RFC 9112, vendored unmodified for `ignite rfc check` in the gate; `README.md` states their licence (`docs/slice.md` 19.9, D5) |
 | `docs/vision.md` | direction: target architecture, sequencing of waves and slices, contradictions between documents, open and taken decisions |
 | `PLAN.md` | the roadmap in outline: slices, waves, state; reasoning stays in `docs/vision.md` |
-| `docs/` | design document, slice contract, `llvm.md` (LLVM target); `friction.md` (language friction backlog); research: `research/lean.md`, `research/ess.md` (comparisons), `research/review-2026-11-04.md` (external review and what the plan does with it); future designs, not implemented: `wasm.md` (WebAssembly target, runtime in Ignite, hot reload), `actors.md` (typed actors, pub/sub, supervision), `protocols.md` (RFC-bound protocols, pluggable transports) |
+| `docs/` | design document, slice contract, `llvm.md` (LLVM target); `friction.md` (language friction backlog); research: `research/lean.md`, `research/ess.md` (comparisons), `research/review-2026-11-04.md` and `research/review-2026-11-04-ecosystem.md` (external reviews and what the plan does with them); future designs, not implemented: `wasm.md` (WebAssembly target, runtime in Ignite, hot reload), `actors.md` (typed actors, pub/sub, supervision), `protocols.md` (RFC-bound protocols, pluggable transports) |
 | `.engineering/` | AEP planning store (`aep plan artifact list`): epics and stories of live work, from slice 13 on; slices 1 to 12c stay in `PLAN.md` |
 | `site/` | the website: `index.html` and `assets/` (the landing page, static HTML, CSS and vanilla JS) and `book/` (mdBook 0.5.4: guide, language design, reference; theme in `book/theme/`, Ignite highlighting in `book/theme/highlight.js`); every `ignite` block checks or is marked `fragment`, `fails=Ennn` or `dir=PATH`, and no page names `target/debug/ignite` (`site::` in `crates/ignite/tests/site.rs`); deployed to GitHub Pages by `.github/workflows/pages.yml` on push to `main` |
 
@@ -476,8 +476,8 @@ raw samples and exclusions: `docs/performance/12c/release-815cf74/README.md`.
 
 Implemented: `ignite host`, `ignite plan --for-apply`, `ignite apply`, `ignite inspect`, the
 `Transition` reducer, durable receipts, crash recovery and the `docs/slice.md` 17.7 matrix on
-both targets (coverage table after 17.7, standing in `STATUS.md`). Known gaps: the two
-precedence cases in 17.5 "As landed (U5)".
+both targets (coverage table after 17.7, standing in `STATUS.md`). The precedence of recovery
+reasons is in 17.5 "As landed (U5)"; no known gaps.
 
 - Gate at the close, `task gate` on `feat/slice13-local-apply` (d93f059), 2026-11-03 03:39:49
   to 03:46:39 UTC, 410 s, exit 0, one cargo build on the host, `RUST_TEST_THREADS=4`: 746 cargo

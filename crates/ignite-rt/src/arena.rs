@@ -42,6 +42,9 @@ const LARGE: usize = CHUNK / 4;
 const SPARE: usize = 16;
 /// Chunks the task arena keeps for the next task on the same thread.
 const SPARE_AFTER_TASK: usize = 1;
+/// Bytes a task's arenas must hold at `task_end` for the worker to return
+/// the freed heap pages to the kernel (`ignite_io::released_memory`).
+const RELEASED_AT_TASK_END: usize = 1024 * 1024;
 /// Bytes a loop allocates above its mark before a release is due, at
 /// least (`ignite_rt_arena_due`).
 const DUE: u64 = 64 * 1024;
@@ -421,10 +424,14 @@ pub extern "C" fn ignite_rt_arena_scratch_clear() {
 
 /// `void task_end()`: free the current task's arenas. Every pointer they
 /// handed out is invalid afterwards; later allocations start new arenas.
-/// The thread keeps one chunk for the next task it runs.
+/// The thread keeps one chunk for the next task it runs. Arenas that held
+/// more than 1 MiB mark the memory released, so the worker trims the heap.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_task_end() {
     let _ = with_task(|task| {
+        if task.arena.reserved + task.scratch.reserved > RELEASED_AT_TASK_END {
+            ignite_io::released_memory();
+        }
         task.in_scratch = false;
         task.arena.clear(SPARE_AFTER_TASK);
         task.scratch.clear(0);

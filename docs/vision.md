@@ -26,7 +26,7 @@ Ignite is also a replacement for Rust: the project exists because of rustc's com
 2026-11-04). Build time is a product requirement beside the operational goals, not only the gate
 budget of invariant 9, and the LLVM target is the fast-build path (`todod` 0.309 s against
 3.998 s on the Rust target, dev, `AGENTS.md` slice 12b rows). The external review of 2026-11-04
-and what follows from it: `research/review-2026-11-04.md`.
+and what follows from it: `research/review-2026-11-04.md`; the second review, on agentic delivery and ESS: `research/review-2026-11-04-ecosystem.md`.
 
 ## 2 Where it stands
 
@@ -216,6 +216,7 @@ Each row names the two places, what disagrees, and the resolution this document 
 | X22 | `slice.md` §12.5 `assert` outside a test exits the process with 101; `actors.md` wants a failure to end only its task | one bad request kills a server | T1 covers `assert` too |
 | X23 | `llvm.md` §7 and `slice.md` §1 "a program that passes both is valid for the Rust and the LLVM target"; section 10.1 shows programs the checker accepts that rustc rejects and the LLVM target miscompiles | the checker lacks a mutability rule | wave A0: E006 for in-place mutation |
 | X24 | `slice.md` §5.1 "The capability is a parameter of the function (`stream.read`) or an ambient one (`stdin.read`)"; the implementation cannot tell the two apart when a parameter carries an ambient's name | section 10.2, E1 to E3 | wave A0: refuse or namespace ambient names |
+| X25 | section 8 D2 option B "LLVM becomes the default `--target`", taken 2026-11-01 by the steering session as reversible; `BuildOptions::default` in `crates/ignite/src/lib.rs` (`target: Target::Rust`) and every `--target` of `crates/ignite/src/main.rs` still default to Rust | which target is the default | resolved 2026-11-04: D2 B stands (Timo: build time is why Ignite exists, `vision.md` section 1); `BuildOptions::default` and the CLI switch to LLVM after slice 16 U4 (`story:slice-16-llvm-moves`) lands, in `story:llvm-default-target` |
 
 Logic flaws inside one document, found by reading:
 

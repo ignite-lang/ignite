@@ -256,7 +256,8 @@ enum Commands {
         /// Root of the standard library.
         #[arg(long)]
         std: Option<PathBuf>,
-        /// Fuel limit per property expression and reducer step (default 1,000,000 units).
+        /// Fuel limit per reducer step (default 1,000,000 units); the plan inside `run` keeps the
+        /// default fuel.
         #[arg(long)]
         fuel: Option<u64>,
         /// Runtime archive `libignite_rt.a` of the LLVM target.
@@ -279,7 +280,8 @@ enum Commands {
         /// Root of the standard library.
         #[arg(long)]
         std: Option<PathBuf>,
-        /// Fuel limit per reducer step (default 1,000,000 units).
+        /// Fuel limit per reducer step (default 1,000,000 units); the plan inside `replay` keeps
+        /// the default fuel.
         #[arg(long)]
         fuel: Option<u64>,
     },
