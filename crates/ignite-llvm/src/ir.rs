@@ -140,6 +140,10 @@ pub enum Glue {
     /// `ptr store_update.<T>(ptr f, ptr old)`: the heap copy of `f` applied
     /// to a copy of the heap value `old` (`Store.update`).
     Update,
+    /// `ptr store_upsert.<T>(ptr f, ptr old)`: the heap copy of `f` applied
+    /// to `None` when `old` is null, else to `Some` of a copy of the heap
+    /// value `old` (`Store.upsert`).
+    Upsert,
     /// `i1 eq.<T>(ptr a, ptr b)`: structural equality of the values at `a`
     /// and `b` (`==`, `!=`, `assert a == b`; `docs/slice.md` sections 12.5
     /// and 13.5).
@@ -160,6 +164,7 @@ impl Glue {
             Glue::FromHeap => "copy_from_heap",
             Glue::FreeHeap => "free_heap",
             Glue::Update => "store_update",
+            Glue::Upsert => "store_upsert",
             Glue::Eq => "eq",
             Glue::Debug => "debug",
         }

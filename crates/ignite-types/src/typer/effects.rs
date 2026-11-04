@@ -62,6 +62,7 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         StorePut => (Effect::Receiver("write"), "put"),
         StoreRemove => (Effect::Receiver("write"), "remove"),
         StoreUpdate => (Effect::Receiver("write"), "update"),
+        StoreUpsert => (Effect::Receiver("write"), "upsert"),
         _ => return None,
     })
 }

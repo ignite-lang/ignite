@@ -3852,6 +3852,37 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     format!("ptr {s}, i64 {id}, ptr {f}, ptr {thunk}, ptr {payload}")
                 })
             }
+            StoreUpsert => {
+                let element = self.store_element(receiver);
+                let r = recv(self);
+                let s = self.scalar(&r);
+                let id = self.scalar_arg(&args[0]);
+                let fv = self.expr(&args[1], true);
+                let f = self.ptr(&fv);
+                let thunk = self.m.glue_of(Glue::Upsert, &element);
+                self.m.declare(
+                    "ignite_rt_store_upsert",
+                    "void",
+                    &[
+                        "ptr".into(),
+                        "i64".into(),
+                        "ptr".into(),
+                        "ptr".into(),
+                        "ptr".into(),
+                    ],
+                );
+                let out = self.temp(&element);
+                self.f.ins(format!(
+                    "call void @ignite_rt_store_upsert(ptr {s}, i64 {id}, ptr {f}, ptr {thunk}, ptr {out})"
+                ));
+                if is_aggregate(&element) {
+                    Val::Ptr(out, true)
+                } else if scalar_type(&element).is_some() {
+                    Val::Scalar(self.load_scalar(&element, &out))
+                } else {
+                    Val::Unit
+                }
+            }
         }
     }
 
