@@ -431,11 +431,25 @@ test "trim_start and trim_end drop ASCII whitespace" {
   assert trim_start("\n€") == "€"
 }
 
-// ASCII letters in lower case; every other byte unchanged.
-fn to_lower(text: Text) -> Text = text.to_bytes().map(|b| if b >= b'A' && b <= b'Z' { b + 32 } else { b }).to_text()
+// ASCII letters in lower case; every other byte unchanged. A loop and
+// not `map` with a closure: on the Rust target short text (command and
+// header names) takes one allocation fewer.
+fn to_lower(text: Text) -> Text {
+  var out = Bytes.empty()
+  for b in text.to_bytes() {
+    out.push(if b >= b'A' && b <= b'Z' { b + 32 } else { b })
+  }
+  out.to_text()
+}
 
 // ASCII letters in upper case; every other byte unchanged.
-fn to_upper(text: Text) -> Text = text.to_bytes().map(|b| if b >= b'a' && b <= b'z' { b - 32 } else { b }).to_text()
+fn to_upper(text: Text) -> Text {
+  var out = Bytes.empty()
+  for b in text.to_bytes() {
+    out.push(if b >= b'a' && b <= b'z' { b - 32 } else { b })
+  }
+  out.to_text()
+}
 
 // Equal after ASCII case folding: header names, `Content-Length` and
 // `content-length`.
@@ -452,6 +466,61 @@ test "case mapping is ASCII only" {
   assert !equals_ignore_case("a", "b")
   assert !equals_ignore_case("Ä", "ä")
   assert equals_ignore_case("", "")
+}
+
+test "case mapping leaves bytes outside ASCII letters as they were" {
+  let upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  let lower = "abcdefghijklmnopqrstuvwxyz"
+  assert upper.to_lower() == lower && lower.to_upper() == upper
+  assert upper.to_upper() == upper && lower.to_lower() == lower
+  assert upper == "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  assert to_lower("ÉÀÖẞ ß ǅ Σ ﬀ 😀 \u{0}\u{7F}\t") == "ÉÀÖẞ ß ǅ Σ ﬀ 😀 \u{0}\u{7F}\t"
+  assert to_upper("éàöß ẞ ǆ σ ﬀ 😀 \u{0}\u{7F}\t") == "éàöß ẞ ǆ σ ﬀ 😀 \u{0}\u{7F}\t"
+  assert to_lower("ÄbC é") == "Äbc é" && to_upper("äBc é") == "äBC é"
+  assert to_lower("x\u{FFFD}Y") == "x\u{FFFD}y"
+  assert Bytes.of([0xFF, b'A', 0xC3]).to_text().to_lower() == "\u{FFFD}a\u{FFFD}"
+  assert to_lower("A".concat("B")) == "ab" && to_upper("a" + "b") == "AB"
+  assert to_lower(to_upper("MiXeD")) == "mixed"
+  var long = ""
+  var i = 0
+  while i < 100 {
+    long = long.concat("aB")
+    i = i + 1
+  }
+  assert to_upper(long).len() == 200 && to_lower(long) == to_lower(to_upper(long))
+  assert long.slice(0, 4) == "aBaB"
+}
+
+test "to_bytes of a text leaves every other owner of the text as it was" {
+  let t = "ab"
+  let b = t.to_bytes()
+  assert b == b"ab" && t == "ab"
+  assert t.to_bytes() == b"ab" && t.len() == 2
+  var v = " x "
+  assert v.trim().to_bytes() == b"x" && v == " x "
+  assert v.concat("y").to_bytes() == b" x y" && v == " x "
+  assert (v + "z").to_bytes() == b" x z" && v == " x "
+  let n = 42
+  assert "{n}-{v}".to_bytes() == b"42- x " && v == " x "
+  assert n.to_text().to_bytes() == b"42"
+  assert true.to_text().to_bytes() == b"true"
+  assert b'a'.to_text().to_bytes().to_text() == b'a'.to_text()
+  var all = Bytes.empty()
+  var k = 0
+  while k < 3 {
+    all.append("{k},".to_bytes())
+    all.append(v.to_bytes())
+    all.append(v.trim().to_bytes())
+    k = k + 1
+  }
+  assert all == b"0, x x1, x x2, x x" && v == " x "
+  for w in ["a", "b"] {
+    all.append(w.to_bytes())
+    all.append(w.concat("!").to_bytes())
+  }
+  assert all.slice(all.len() - 6, all.len()) == b"aa!bb!"
+  v = v.trim()
+  assert v.to_bytes() == b"x" && t == "ab"
 }
 
 // The lines of `text`, split at LF with a CR before it dropped. A final

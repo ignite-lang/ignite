@@ -2689,6 +2689,28 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// Whether the Rust value of the `Text` expression `expr` is a `String`
+    /// of its own that nothing else reads: a literal, a concatenation or
+    /// interpolation, or a builtin that builds a new text. `to_bytes` then
+    /// consumes it instead of copying it.
+    fn fresh_text(&self, expr: &Expr) -> bool {
+        match &expr.kind {
+            ExprKind::Str(_) => true,
+            ExprKind::Binary { op, .. } => self.is_text_add(expr, *op),
+            _ => matches!(
+                self.callee(expr),
+                Some(Callee::Builtin(
+                    Builtin::IntToText
+                        | Builtin::IntToTextMethod
+                        | Builtin::ByteToText
+                        | Builtin::BoolToText
+                        | Builtin::TextConcat
+                        | Builtin::TextTrim
+                ))
+            ),
+        }
+    }
+
     fn block(&mut self, block: &Block, value: bool) -> String {
         self.scopes.push(Vec::new());
         self.indent += 1;
@@ -3819,6 +3841,7 @@ impl<'a> Generator<'a> {
                 format!("{r}.strip_prefix({}).map(|s| s.to_string())", arg(0, &a))
             }
             ("concat", 1) => format!("format!(\"{{}}{{}}\", {r}, {})", a[0]),
+            ("to_bytes", 0) if self.fresh_text(receiver) => format!("{r}.into_bytes()"),
             ("to_bytes", 0) => format!("{r}.clone().into_bytes()"),
             ("to_text", 0) => format!(
                 "String::from_utf8_lossy({}).into_owned()",

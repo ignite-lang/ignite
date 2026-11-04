@@ -39,7 +39,7 @@ pub fn Greeter__main(self_: &Greeter) -> Result<(), ignite_io::IoError> {
     let stream = (self_.listener.accept())?;
     let id = self_.seen.next_id();
     self_.seen.put(id.clone(), self_.banner.text.clone());
-    (stream.write_all((format!("{}{}", self_.banner.text, format!("{}{}{}{}{}", String::from(" "), { let __ignite_v = &self_.banner.width; let mut __ignite_text = String::new(); (&mut __ignite_text).push_str(&ignite_io::quantity_debug(ignite_io::Quantity::ByteSize, *__ignite_v)); __ignite_text }.clone(), String::from(" "), { let __ignite_v = &self_.idle; let mut __ignite_text = String::new(); (&mut __ignite_text).push_str(&ignite_io::quantity_debug(ignite_io::Quantity::Duration, *__ignite_v)); __ignite_text }.clone(), String::from("\n")))).clone().into_bytes()))?;
+    (stream.write_all((format!("{}{}", self_.banner.text, format!("{}{}{}{}{}", String::from(" "), { let __ignite_v = &self_.banner.width; let mut __ignite_text = String::new(); (&mut __ignite_text).push_str(&ignite_io::quantity_debug(ignite_io::Quantity::ByteSize, *__ignite_v)); __ignite_text }.clone(), String::from(" "), { let __ignite_v = &self_.idle; let mut __ignite_text = String::new(); (&mut __ignite_text).push_str(&ignite_io::quantity_debug(ignite_io::Quantity::Duration, *__ignite_v)); __ignite_text }.clone(), String::from("\n")))).into_bytes()))?;
     match (stream.read(4096))? {
         ignite_io::Input::Eof => Ok(()),
         ignite_io::Input::Data(bytes) => if String::from_utf8_lossy(&bytes).into_owned().trim().to_string() == String::from("fail") {
@@ -69,7 +69,7 @@ pub fn Pinger__main(self_: &Pinger) -> Result<(), ignite_io::IoError> {
     match (stream.read(4096))? {
         ignite_io::Input::Eof => Err(ignite_io::IoError::new(String::from("no banner"))),
         ignite_io::Input::Data(bytes) => {
-            (stream.write_all(String::from("hello\n").clone().into_bytes()))?;
+            (stream.write_all(String::from("hello\n").into_bytes()))?;
             Ok(())
         },
     }

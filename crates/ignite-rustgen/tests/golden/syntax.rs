@@ -185,7 +185,7 @@ impl Syntax {
         (show(&(format!("{}{}{}", e.to_string(), String::from(" "), x.to_string()))))?;
         (show(&first_positive(&vec![ignite_io::checked::neg(1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 130, 26), 0, 5, 6]).to_string()))?;
         (show(&(format!("{}{}{}", sign(&0), sign(&3), sign(&(ignite_io::checked::neg(3, "crates/ignite-rustgen/tests/golden/syntax.ignite", 131, 35)))))))?;
-        (show(&count_spaces(&String::from("a b c ").clone().into_bytes()).to_string()))?;
+        (show(&count_spaces(&String::from("a b c ").into_bytes()).to_string()))?;
         let n = 21;
         (show(&twice(&n).to_string()))?;
         (show(&shout(&String::from("hey"))))?;
