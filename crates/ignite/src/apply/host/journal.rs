@@ -369,7 +369,7 @@ impl Host {
     /// A recovery reason that only reported a startup recovery
     /// (`reducer_revision_changed`, with or without a block kept beside it)
     /// is not taken: the next start recomputes it, or keeps it from the
-    /// block's `recovery` ([`Host::recover`]).
+    /// restored `recovery` until the next commit ([`Host::recover`]).
     pub(super) fn restore(&mut self, previous: &Json) -> Result<(), Failure> {
         if required(previous, "formatVersion")? != FORMAT
             || required(previous, "stateIdentity")? != self.identity

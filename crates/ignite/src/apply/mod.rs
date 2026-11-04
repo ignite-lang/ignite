@@ -428,6 +428,8 @@ struct Liveness {
     start_time: Option<String>,
     expected: Vec<String>,
     ready: Vec<String>,
+    /// Whether admission takes a corrective plan for the host's recovery.
+    correctable: bool,
 }
 
 /// The inspect view of a host snapshot (17.1): the snapshot's identity,
@@ -482,10 +484,15 @@ fn describe(snapshot: &Json, state: &Path, live: Option<Liveness>) -> Json {
     {
         next.to_string()
     } else if recovery.is_some() {
-        receipt_text("nextAction")
+        let first = receipt_text("nextAction")
             .unwrap_or("inspect retained ownership and the host journal")
-            .to_string()
-            + "; then prepare and apply a corrective plan"
+            .to_string();
+        // A corrective is named only when admission would take one.
+        if live.as_ref().is_some_and(|live| live.correctable) {
+            first + "; then prepare and apply a corrective plan"
+        } else {
+            first
+        }
     } else if let (Some(id), Some(progress @ ("accepted" | "applying"))) =
         (get("activeOperation"), operation_state)
     {

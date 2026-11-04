@@ -1010,7 +1010,6 @@ fn a_foreign_listener_block_keeps_the_reducer_revision_changed_report() {
 /// restarting a host is not a new apply"), so the `reducer_revision_changed`
 /// report the lift kept must still stand after one.
 #[test]
-#[ignore = "adversary: the reducer_revision_changed report kept by the lift is gone after a host restart, before any commit"]
 fn adversary_the_lifted_report_survives_a_host_restart_until_a_commit() {
     let flow = Flow::new("lifted-restart");
     let mut host = Host::start(&flow, "first", &[]);

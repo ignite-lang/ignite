@@ -1525,7 +1525,13 @@ impl Host {
                             }
                         };
                     if expected != Some(actual.as_str()) {
-                        let id = self.active.clone().unwrap_or(id);
+                        // Beside an unresolved recovery the mismatch is kept
+                        // under the operation the run's records carry (17.5).
+                        let id = if self.standing().is_some() {
+                            operation.to_string()
+                        } else {
+                            self.active.clone().unwrap_or(id)
+                        };
                         let reason =
                             "ready process artifact differs from the admitted desired artifact";
                         if !self.effect_failed(reason, member)? {
@@ -1574,8 +1580,12 @@ impl Host {
         {
             self.retiring.remove(&pid.to_string());
         }
+        // While an unresolved recovery stands, a failed start is kept beside
+        // it whichever operation the run's records carry (17.5).
         if variant == Some("SpawnFailed")
-            && (self.transition.is_some() || self.active.as_deref() == Some(operation))
+            && (self.transition.is_some()
+                || self.active.as_deref() == Some(operation)
+                || self.standing().is_some())
         {
             if let Some(runtime) = &mut self.runtime {
                 runtime.ready.remove(machine);

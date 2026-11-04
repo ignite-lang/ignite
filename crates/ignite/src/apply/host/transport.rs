@@ -305,6 +305,7 @@ impl Host {
                 start_time: super::controller::process_identity(i64::from(pid)),
                 expected,
                 ready,
+                correctable: self.correctable(),
             }),
         )
     }

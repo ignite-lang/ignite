@@ -4045,7 +4045,8 @@ that is not one is exit 3 and is never replaced, and a missing identity on a sta
 `host-journal.jsonl` or `status.json` is exit 3 with nothing written. An apply of a plan with neither a receipt
 nor `plans/<id>.json` is exit 2. `inspect` adds `host` (PID and start time), `currentOperation`,
 `actionProgress` (per member action of the desired plan: `done`, `pending` or `blocked`),
-`readiness` (expected and ready machines, `converged`) and `nextAction`; offline it sets
+`readiness` (expected and ready machines, `converged`) and `nextAction`, which asks for a
+corrective plan only while admission takes one; offline it sets
 `online` false, `host` null, `health` and `readiness` to `unknown: host offline`, and renames
 every `ready` flag at any depth, `retiringInstances` included, to `lastRecordedReady`.
 
@@ -4206,7 +4207,9 @@ a name no earlier host of the state used, and `revisions/` and the state root ar
 is created; a temporary that a crash left behind never blocks the next write. Decision D2: a revision whose reducer revision
 differs from the host's is neither re-stepped nor driven; the snapshot's `history` lists each
 revision state with `restepped`, and `recovery` is `recovery_required`, `reducer_revision_changed`,
-next action "replan and apply", without blocking an apply; the next commit clears it. Debug
+next action "replan and apply", without blocking an apply; the next commit clears it. A start
+before that commit keeps a report that names an operation other than the committed one, which no
+start examines again, and finds the report of a committed revision still not driven again. Debug
 builds read `IGNITE_DEBUG_HOST_FAULT` (`after_intent`, `before_dispatch`, `after_dispatch`,
 `mid_transition` crash the host with SIGKILL there; `sync_intent`, `sync_effect` fail that
 sync) and `IGNITE_DEBUG_HOST_REDUCER_REVISION` (the reducer revision the host claims); release

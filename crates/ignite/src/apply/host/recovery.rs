@@ -150,11 +150,14 @@ fn listeners(plan: &Plan) -> Vec<(String, String, u16)> {
         .collect()
 }
 
-/// The D2 report of a `recovery` that a block was kept beside, without the
-/// block: what [`Host::recover`] starts from, so that the report stays the
-/// first reason once the block is lifted. Any other recovery is examined
-/// anew.
-fn lifted_report(recovery: Json) -> Option<Json> {
+/// The D2 report of a `recovery` that a start cannot find again, without
+/// the blocks kept beside it: what [`Host::recover`] starts from, so that
+/// the report stays the first reason until the next commit (17.5). That is
+/// a report a block was kept beside, or one naming an operation other than
+/// `committed` as not driven: that operation is no longer active, and no
+/// later start examines it. A report of the committed revision alone, and
+/// any other recovery, is examined anew.
+fn lifted_report(recovery: Json, committed: Option<&str>) -> Option<Json> {
     let Json::Object(mut fields) = recovery else {
         return None;
     };
@@ -166,12 +169,30 @@ fn lifted_report(recovery: Json) -> Option<Json> {
                 .iter()
                 .any(|entry| entry.get("blocking") == Some(&Json::Bool(true)))
         });
-    if fields.get("reason").and_then(Json::as_str) != Some(REDUCER_CHANGED) || !blocked_beside {
+    let other_not_driven = not_driven_ids(&Json::Object(fields.clone()))
+        .iter()
+        .any(|id| Some(id.as_str()) != committed);
+    if fields.get("reason").and_then(Json::as_str) != Some(REDUCER_CHANGED)
+        || !(blocked_beside || other_not_driven)
+    {
         return None;
     }
     fields.remove("laterReasons");
     fields.insert("blocking".into(), Json::Bool(false));
     Some(Json::Object(fields))
+}
+
+/// The plan ids a D2 report lists in `evidence.notDriven`.
+fn not_driven_ids(report: &Json) -> Vec<String> {
+    report
+        .get("evidence")
+        .and_then(|evidence| evidence.get("notDriven"))
+        .and_then(Json::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.get("planId").and_then(Json::as_str))
+        .map(str::to_string)
+        .collect()
 }
 
 fn instance_json(key: &str, owner: &Json) -> Json {
@@ -322,9 +343,14 @@ impl Host {
         {
             self.unblock();
         }
-        // A report a block was kept beside stays the first reason recorded
-        // once the block is lifted; a block found again goes beside it.
-        self.recovery = self.recovery.take().and_then(lifted_report);
+        // A report a block was kept beside, or one no start finds again,
+        // stays the first reason recorded until the next commit; a block
+        // found again goes beside it.
+        let committed = self.committed.clone();
+        self.recovery = self
+            .recovery
+            .take()
+            .and_then(|recovery| lifted_report(recovery, committed.as_deref()));
         let intents: Vec<Json> = self.pending.iter().map(|intent| intent.json()).collect();
         let recorded: Vec<(String, Json)> = self
             .owned
@@ -423,7 +449,24 @@ impl Host {
                 target = self.committed.clone();
             }
         }
-        if let Some(first) = not_driven.first() {
+        // The kept report already names what this start found again.
+        let reported = self
+            .recovery
+            .as_ref()
+            .filter(|recovery| {
+                recovery.get("reason").and_then(Json::as_str) == Some(REDUCER_CHANGED)
+            })
+            .map(not_driven_ids)
+            .unwrap_or_default();
+        let found_again = not_driven.iter().all(|entry| {
+            entry
+                .get("planId")
+                .and_then(Json::as_str)
+                .is_some_and(|id| reported.iter().any(|kept| kept == id))
+        });
+        if let Some(first) = not_driven.first()
+            && !found_again
+        {
             self.note_recovery(object([
                 ("state", text("recovery_required")),
                 ("reason", text(REDUCER_CHANGED)),
@@ -1117,7 +1160,6 @@ mod tests {
     /// does not resolve: it must be kept beside `gave_up`, turn the next
     /// action into an inspection and block further effects.
     #[test]
-    #[ignore = "adversary: a SpawnFailed of the committed run carrying the committed operation is not kept beside gave_up (17.5 says whichever operation the records carry)"]
     fn adversary_a_spawn_failure_of_the_committed_run_is_kept_beside_the_gave_up_operation() {
         let root = scratch("spawn-failed");
         let mut host = gave_up_host(&root);
@@ -1184,7 +1226,6 @@ mod tests {
     /// corrective is admitted". The live inspection's top-level next action
     /// must then not tell the operator to prepare and apply one.
     #[test]
-    #[ignore = "adversary: inspect's nextAction asks for a corrective plan that admission refuses after a later reducer failure"]
     fn adversary_inspect_after_a_later_reducer_failure_does_not_ask_for_a_corrective() {
         let root = scratch("inspect-next");
         let mut host = gave_up_host(&root);
@@ -1218,5 +1259,82 @@ mod tests {
             !next.contains("corrective"),
             "inspect asks for a corrective that admission refuses: {next}"
         );
+    }
+
+    /// 17.5's last later failure, a ready artifact that differs: kept
+    /// beside an unresolved `gave_up` under the operation the run's records
+    /// carry, as the reducer failure and the failed start are, and blocking
+    /// as a reason a corrective does not resolve.
+    #[test]
+    fn a_differing_ready_artifact_of_the_committed_run_is_kept_under_its_operation() {
+        let root = scratch("artifact");
+        std::fs::create_dir_all(root.join("plans")).unwrap();
+        std::fs::write(
+            root.join("plans/committed.json"),
+            object([(
+                "artifacts",
+                object([(
+                    "Terminal.server",
+                    object([("digest", text("sha256:another"))]),
+                )]),
+            )])
+            .compact(),
+        )
+        .unwrap();
+        let pid = i64::from(std::process::id());
+        let mut host = gave_up_host(&root);
+        host.owned.insert(
+            "Terminal.server".into(),
+            object([
+                ("pid", Json::Int(pid)),
+                ("ready", Json::Bool(false)),
+                ("operationId", text("committed")),
+                (
+                    "instance",
+                    super::super::controller::process_identity(pid).map_or(Json::Null, text),
+                ),
+                ("generation", Json::Int(1)),
+            ]),
+        );
+        let mut runtime = committed_runtime("committed");
+        runtime
+            .supervised
+            .insert("Terminal.server.supervisor".to_string());
+        host.runtime = Some(runtime);
+        let ready = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("event")),
+                ("machine", text("Terminal.server.supervisor")),
+                (
+                    "value",
+                    object([(
+                        "fields",
+                        object([(
+                            "kind",
+                            object([
+                                ("variant", text("Ready")),
+                                ("fields", Json::Array(vec![Json::Int(pid)])),
+                            ]),
+                        )]),
+                    )]),
+                ),
+            ]),
+        );
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(ready.is_err(), "the mismatch fails the record: {ready:?}");
+        assert_eq!(host.active.as_deref(), Some("failed"));
+        assert_eq!(host.recovery_reason.as_deref(), Some("gave_up"));
+        assert_eq!(
+            later_of(&host, "failed"),
+            vec![(
+                "committed".to_string(),
+                "ready process artifact differs from the admitted desired artifact".to_string()
+            )]
+        );
+        assert_eq!(receipt_of(&host, "failed").2.as_deref(), Some(INSPECT));
+        assert!(!host.correctable());
     }
 }
