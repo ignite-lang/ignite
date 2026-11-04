@@ -128,6 +128,7 @@ pub fn function(module: &mut Module<'_>, kind: Glue, ty: &Ty) -> String {
         Glue::FromHeap => from_heap(module, ty),
         Glue::FreeHeap => free_heap(module, ty),
         Glue::Update => update_thunk(module, ty),
+        Glue::Upsert => upsert_thunk(module, ty),
         Glue::Eq => eq_function(module, ty),
         Glue::Debug => debug_function(module, ty),
     }
@@ -771,25 +772,9 @@ fn update_thunk(module: &mut Module<'_>, ty: &Ty) -> String {
     let mut f = header(Glue::Update, ty, "ptr", "ptr %f, ptr %old");
     let layout = env.layout(ty);
     let to_heap = module.glue_of(Glue::ToHeap, ty);
-    module.declare_raw("_setjmp", "declare i32 @_setjmp(ptr) returns_twice");
-    module.declare("ignite_rt_guard_callback", "void", &["ptr".into()]);
-    module.declare("ignite_rt_guard_pop", "void", &[]);
-    let jb = f.alloca(crate::layout::Layout {
-        size: 256,
-        align: 16,
-    });
-    let landed = f.val(format!("call i32 @_setjmp(ptr {jb})"));
-    let fresh = f.val(format!("icmp eq i32 {landed}, 0"));
-    let (run, failed) = (f.label(), f.label());
-    f.cond_br(&fresh, &run, &failed);
-    f.place(&failed);
-    f.term("ret ptr null");
-    f.place(&run);
-    f.ins(format!("call void @ignite_rt_guard_callback(ptr {jb})"));
+    guard_callback(module, &mut f);
     let result = f.alloca(layout);
-    let code = f.val("load ptr, ptr %f, align 8");
-    let at = f.val("getelementptr inbounds i8, ptr %f, i64 8");
-    let fenv = f.val(format!("load ptr, ptr {at}, align 8"));
+    let (code, fenv) = fn_value_parts(&mut f);
     if is_aggregate(ty) {
         let arg = f.alloca(layout);
         let from = module.glue_of(Glue::FromHeap, ty);
@@ -819,6 +804,92 @@ fn update_thunk(module: &mut Module<'_>, ty: &Ty) -> String {
     let heap = f.val(format!("call ptr {to_heap}(ptr {result})"));
     f.term(format!("ret ptr {heap}"));
     f.finish("unreachable")
+}
+
+/// `ptr store_upsert.<T>(ptr f, ptr old)`: call the Ignite fn value at `f`,
+/// a `fn(Option<T>) -> T`, on `None` when `old` is null and otherwise on
+/// `Some` of an arena copy of the heap value `old`, and return a heap copy
+/// of the result; null when `f` failed, behind the same callback guard as
+/// [`update_thunk`].
+fn upsert_thunk(module: &mut Module<'_>, ty: &Ty) -> String {
+    let env = module.env;
+    let mut f = header(Glue::Upsert, ty, "ptr", "ptr %f, ptr %old");
+    let layout = env.layout(ty);
+    let option = Ty::Option(Box::new(ty.clone()));
+    let enum_layout = env.enum_layout(&option);
+    let some = enum_layout.index("Some").expect("Option has Some");
+    let none = enum_layout.index("None").expect("Option has None");
+    let payload = enum_layout.variants[some].1[0].1;
+    let to_heap = module.glue_of(Glue::ToHeap, ty);
+    let from = module.glue_of(Glue::FromHeap, ty);
+    guard_callback(module, &mut f);
+    let result = f.alloca(layout);
+    let arg = f.alloca(enum_layout.layout);
+    let (code, fenv) = fn_value_parts(&mut f);
+    let absent = f.val("icmp eq ptr %old, null");
+    let (empty, held, call) = (f.label(), f.label(), f.label());
+    f.cond_br(&absent, &empty, &held);
+    f.place(&empty);
+    f.ins(format!("store i32 {none}, ptr {arg}, align 4"));
+    f.br(&call);
+    f.place(&held);
+    f.ins(format!("store i32 {some}, ptr {arg}, align 4"));
+    let at = f.val(format!(
+        "getelementptr inbounds i8, ptr {arg}, i64 {payload}"
+    ));
+    f.ins(format!("call void {from}(ptr {at}, ptr %old)"));
+    f.br(&call);
+    f.place(&call);
+    if is_aggregate(ty) {
+        f.ins(format!(
+            "call void {code}(ptr {fenv}, ptr {result}, ptr {arg})"
+        ));
+    } else if let (Some(t), Some(mt)) = (scalar_type(ty), memory_type(ty)) {
+        let align = layout.align;
+        let r = f.val(format!("call {t} {code}(ptr {fenv}, ptr {arg})"));
+        let r = if *ty == Ty::Bool {
+            f.val(format!("zext i1 {r} to i8"))
+        } else {
+            r
+        };
+        f.ins(format!("store {mt} {r}, ptr {result}, align {align}"));
+    } else {
+        f.ins(format!("call void {code}(ptr {fenv}, ptr {arg})"));
+    }
+    f.ins("call void @ignite_rt_guard_pop()");
+    let heap = f.val(format!("call ptr {to_heap}(ptr {result})"));
+    f.term(format!("ret ptr {heap}"));
+    f.finish("unreachable")
+}
+
+/// The start of a store callback thunk: `_setjmp` into a jump buffer and
+/// `ignite_rt_guard_callback` of it; the second return of `_setjmp` (a
+/// failure inside the callback, `crates/ignite-rt/src/fail.rs`) returns
+/// null. Emission continues in the block of the first return.
+fn guard_callback(module: &mut Module<'_>, f: &mut Func) {
+    module.declare_raw("_setjmp", "declare i32 @_setjmp(ptr) returns_twice");
+    module.declare("ignite_rt_guard_callback", "void", &["ptr".into()]);
+    module.declare("ignite_rt_guard_pop", "void", &[]);
+    let jb = f.alloca(crate::layout::Layout {
+        size: 256,
+        align: 16,
+    });
+    let landed = f.val(format!("call i32 @_setjmp(ptr {jb})"));
+    let fresh = f.val(format!("icmp eq i32 {landed}, 0"));
+    let (run, failed) = (f.label(), f.label());
+    f.cond_br(&fresh, &run, &failed);
+    f.place(&failed);
+    f.term("ret ptr null");
+    f.place(&run);
+    f.ins(format!("call void @ignite_rt_guard_callback(ptr {jb})"));
+}
+
+/// The code and environment pointers of the fn value at `%f`.
+fn fn_value_parts(f: &mut Func) -> (String, String) {
+    let code = f.val("load ptr, ptr %f, align 8");
+    let at = f.val("getelementptr inbounds i8, ptr %f, i64 8");
+    let fenv = f.val(format!("load ptr, ptr {at}, align 8"));
+    (code, fenv)
 }
 
 /// `ptr envglue.<closure>(i32 op, ptr env)` of one closure, whose

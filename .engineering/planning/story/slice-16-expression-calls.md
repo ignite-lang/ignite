@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-16-expression-calls
 kind: story
-status: active
+status: implemented
 title: Calls of fn-typed expressions
 summary: Check and type a call whose callee is an expression of fn type, with E040, E042 and E043
 relations:
@@ -25,10 +25,11 @@ scope:
   path: crates/ignite/tests/main.rs
 - confidence: cited
   path: crates/ignite/tests/slice16.rs
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T23:35:37Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-03T23:35:37Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-04T07:01:36Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: slice-16-expression-calls
 

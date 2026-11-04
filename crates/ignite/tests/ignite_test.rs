@@ -144,8 +144,8 @@ fn without_time(report: &str) -> String {
 }
 
 /// The run of the [`FIXTURES`] in one executable with `--timeout 1` on
-/// `target`, once per test binary: eight tests read it. `slow`'s `never
-/// ends` is the test the timeout kills; the other 20 finish well inside
+/// `target`, once per test binary: nine tests read it. `slow`'s `never
+/// ends` is the test the timeout kills; the other 23 finish well inside
 /// a second.
 fn fixtures_run(target: &str) -> &'static Run {
     static RUNS: [OnceLock<Run>; 2] = [OnceLock::new(), OnceLock::new()];
@@ -158,7 +158,7 @@ fn counts_results_and_failures() {
         let run = fixtures_run(target);
         let out = &run.stdout;
         assert_eq!(run.status, 1, "{target}: {out}\n{}", run.stderr);
-        assert!(out.starts_with("running 21 tests\n"), "{target}: {out}");
+        assert!(out.starts_with("running 24 tests\n"), "{target}: {out}");
         for line in [
             "test fixtures.basics/arithmetic passes ... ok",
             "test fixtures.basics/int differs ... FAILED",
@@ -166,7 +166,7 @@ fn counts_results_and_failures() {
             "test fixtures.basics/index out of range panics ... FAILED",
             "test fixtures.basics/output hidden on success ... ok",
             "test fixtures.basics/tcp echo through a task ... ok",
-            "test result: FAILED. 10 passed; 11 failed; 0 filtered out; finished in ",
+            "test result: FAILED. 13 passed; 11 failed; 0 filtered out; finished in ",
         ] {
             assert!(out.contains(line), "{target}: no `{line}` in\n{out}");
         }
@@ -251,7 +251,7 @@ fn filter_exact_passing_and_none() {
         assert!(
             exact
                 .stdout
-                .contains("test result: FAILED. 0 passed; 1 failed; 20 filtered out;"),
+                .contains("test result: FAILED. 0 passed; 1 failed; 23 filtered out;"),
             "{target}: {}",
             exact.stdout
         );
@@ -259,14 +259,14 @@ fn filter_exact_passing_and_none() {
         assert_eq!(passing.status, 0, "{target}: {}", passing.stdout);
         assert_eq!(
             without_time(&passing.stdout),
-            "running 1 test\ntest fixtures.basics/arithmetic passes ... ok\n\ntest result: ok. 1 passed; 0 failed; 20 filtered out",
+            "running 1 test\ntest fixtures.basics/arithmetic passes ... ok\n\ntest result: ok. 1 passed; 0 failed; 23 filtered out",
             "{target}"
         );
         let none = fixtures_test(target, &["no such test"]);
         assert_eq!(none.status, 0, "{target}");
         assert_eq!(
             without_time(&none.stdout),
-            "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 21 filtered out",
+            "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 24 filtered out",
             "{target}"
         );
     });
@@ -410,6 +410,26 @@ fn a_failing_store_update_ends_its_task_and_frees_the_store() {
             ),
         ] {
             assert!(out.contains(line), "{target}: no `{line}` in\n{out}");
+        }
+    });
+}
+
+/// `Store.upsert` on both targets (`fixtures/tests/store.ignite`): it
+/// inserts on an empty id and replaces a held value, 8 tasks that each
+/// upsert one new id 500 times leave 4,000 (`update` then `put` lost
+/// writes there, `story:store-atomic-upsert`), and an overflow inside its
+/// `f` ends the task and leaves the store usable.
+#[test]
+fn store_upsert_is_atomic_on_both_targets() {
+    on_both_targets(|target| {
+        let out = &fixtures_run(target).stdout;
+        for name in [
+            "upsert inserts on an empty id and replaces a held value",
+            "upsert from 8 tasks on one new id keeps every write",
+            "an overflow in upsert in a task leaves the store usable",
+        ] {
+            let line = format!("test fixtures.store/{name} ... ok\n");
+            assert!(out.contains(&line), "{target}: no `{line}` in\n{out}");
         }
     });
 }
