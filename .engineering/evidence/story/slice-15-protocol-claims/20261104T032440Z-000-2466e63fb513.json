@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-04T03:24:40Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-15-protocol-claims",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 6add35b: exit 0, 926 cargo passed, 0 failed, 13 ignored; 199 inline per target",
+    "reference": "https://github.com/ignite-lang/ignite/pull/8"
+  }
+}

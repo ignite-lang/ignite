@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-15-protocol-claims
 kind: story
-status: active
+status: implemented
 title: Telnet and Http state their claims; P2 acceptance and records
 summary: conforms and statuses in std/protocol, the three P2 acceptance tests on both targets, close records
 relations:
@@ -21,13 +21,16 @@ scope:
 - confidence: inferred
   path: docs/performance/15
 - confidence: inferred
+  path: docs/vision.md
+- confidence: inferred
   path: std/protocol/http.ignite
 - confidence: inferred
   path: std/protocol/telnet.ignite
-revision: 6
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":3}}}
 - {from: "proposed", to: "active", at: "2026-11-03T16:07:59Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":3}}, correlation: "slice-15-wave-1"}
+- {from: "active", to: "implemented", at: "2026-11-04T02:25:51Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 
 # Story: slice-15-protocol-claims
@@ -77,3 +80,7 @@ matrix claims RFC 854 for an NVT that refuses every option." The slice-14 tests 
 ## Depends on
 
 `story:slice-15-catalogues`, `story:slice-15-conformance-command`.
+
+## Contract
+
+Unit U6 of `docs/slice.md` 19.16 (merged on `feat/slice15-protocols-p2` as c98a41f): its "owns" cell is this story's file list, its rows of 19.0 are 1 to 7, 38, its first failing test is `conformance::telnet_matrix_claims_rfc854_for_an_nvt_that_refuses_every_option`. Where this body and section 19 differ, section 19 holds; the differences are listed in the contract report and in `docs/slice15-review.md` "Resolution".

@@ -654,3 +654,21 @@ fn client_exit_statuses() {
     assert_eq!(code, Some(4), "{stderr}");
     assert_eq!(stderr, "error: role failed\n");
 }
+
+/// `docs/slice.md` 15.3 and 16.3: `--fuel` of `run` and `replay` bounds the
+/// reducer steps only, the plan inside them keeps the default fuel, and
+/// `check` takes no `--fuel`.
+#[test]
+fn fuel_help_names_the_reducer_step_for_run_and_replay() {
+    for command in ["run", "replay"] {
+        let output = ignite(&[command, "--help"]);
+        assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+        let help = text(&output.stdout);
+        assert!(help.contains("Fuel limit per reducer step"), "{help}");
+        assert!(help.contains("keeps the default fuel"), "{help}");
+        assert!(!help.contains("property expression"), "{help}");
+    }
+    let output = ignite(&["check", "--help"]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert!(!text(&output.stdout).contains("--fuel"));
+}

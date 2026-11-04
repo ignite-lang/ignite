@@ -34,6 +34,9 @@ The roadmap in outline. The reasoning and the dependency analysis are in `docs/v
 | 12c | invariant 9 | remove repeated std preparation in tests, profile inline-test and frontend work, close cold/warm compiler costs | every required unit ≤1.10 of frozen 11b, warm workspace ≤10.8 s, unchanged behaviour and coverage | tested fixes delivered; performance acceptance unmet and deferred by user; `docs/performance-plan.md` |
 | 13 | F4 apply | `ignite apply` with plan diff, changes, deletion, recovery of a half-applied plan from the journal | a second `apply` is a no-op; an interrupted `apply` resumes | done 2026-11-03, release `v0.2.0`: the 17.7 matrix on both targets (coverage table after 17.7, `STATUS.md`); gate-budget exception in `AGENTS.md` |
 | 14 | B protocols P1 | `Pipe.pair()` and `PipeStream` in `ignite-io` and `ignite-rt`, coalescing as TCP, with `received_batches`; the bound `<S: ByteStream>` on fns and roles (E096, E099); `Telnet` and `Http` roles generic over the stream, taking `SessionLimits` and the new `HttpLimits`; in-process protocol tests on both targets (`docs/slice.md` section 18) | the 18.0 matrix: `ignite test` of `std/protocol/telnet.ignite` and `http.ignite` passes on both targets; over a pipe, slice 9 item 4's transcript, `IAC DO ECHO` answered `IAC WONT ECHO`, `IAC IAC` as one byte, an oversized subnegotiation closing, 3 pipelined requests in 1 batch, and 400, 413 and 431; `terminal.rs` and `todo.rs` pass unchanged over TCP; the generated `ignite-std` calls `Telnet::serve::<ignite_io::TcpStream>` with no `dyn ByteStream`; no new dependency | done 2026-11-03, release `v0.3.0`: the 18.0 matrix holds (`STATUS.md`); gate time in `AGENTS.md` "Slice 14" |
+| 15 | G protocols P2 | the vocabulary `std.rfc` and five catalogues under `std/rfc/` (RFC 854, 855, 1143, 9112, 9110 server subset) as literal data; the clauses `conforms`, `scope`, `satisfies`, `verifies`, `unsupported`, `not_applicable`; the claim model with E090 to E092; `ignite rfc import` and `ignite rfc check`; `ignite conformance`; the claims of `Telnet` and `Http` (`docs/slice.md` section 19) | the 19.0 matrix: removing a `satisfies` from a MUST is E090; the HTTP matrix lists the section 7.1 and 3.2 gaps and claims nothing; the Telnet matrix claims RFC 854 and RFC 855 | done 2026-11-04 on `s15/claims`, merge into `main` pending: units U1 to U6; every row of 19.0 passes, `task gate` exit 0 at 621070e (`STATUS.md`); P2 test 3 is not met in this slice: RFC 855 is claimed, RFC 854 is not (four MUST-class gaps: Go Ahead, Synch on send and receive, sending buffered data at once from `tn`; `docs/slice.md` 19.14 item 16); the U6 adversary's findings in 19.14 item 17 |
+| 18 | F5 one service operated | the todo service on the LLVM target with its data in a `Directory`, an HTTP probe kind and its typed outcome written outside `std/`, an `Availability` contract over it, `ignite apply` rollouts that keep the data, fault-injection rows for lost acknowledgement, stale plan and corrupt journal; build time as an acceptance row (`docs/research/review-2026-11-04.md`, `epic:slice-18-one-service-operated`) | contract to be written in `docs/slice.md` section 22 | planned, after slice 17 |
+| | agent delivery benchmark | the same requirements through direct Rust, ESS to service-sdk, direct Ignite and ESS to Ignite; tokens, cost, wall time, builds, memory, repairs at equal correctness (`docs/research/review-2026-11-04-ecosystem.md`, `epic:agent-delivery-benchmark`) | `docs/performance/agent-delivery/` | planned, beside slice 18 |
 | | C actors P1 to P3 | `Address`, `ReplyTo`, `Outbox`, `Actor` kind, mailboxes, `std/actor`, `std/table`, `Topic`, `Sink`, `Supervisor`, todo example on an actor (D4) | | |
 | | D slice 5 async | tokio inside the substrate, Rust-target futures, LLVM-target coroutines, `Task.yield_now` | 10,000 idle actors | |
 | | E wasm P0 to P4 | machine scalars, `Buffer`, indexed assignment, `--target wasm`, runtime in the language, `ignite run --watch`, hot reload with `migrate` | | |
@@ -45,7 +48,9 @@ The roadmap in outline. The reasoning and the dependency analysis are in `docs/v
 - Compile time is a budget (`docs/vision.md` invariant 9): the `task gate` wall time and the program
   build times are measured before and after each slice and recorded in `AGENTS.md`; a rise
   over 10 % is a deviation to explain.
-- Both targets agree: the Rust target stays the default (D2), every feature lands on both.
+- Both targets agree: every feature lands on both. D2 B makes LLVM the default `--target`, but
+  the CLI default is still Rust (X25 in `docs/vision.md` section 6); it switches to LLVM after
+  slice 16 U4 lands (`story:llvm-default-target`, 2026-11-04).
 - Each slice starts with a contract section in `docs/slice.md`, reviewed against `docs/vision.md`
   section 6 before agents are dispatched; each diagnostic code gets a fixture.
 - Future designs (`docs/wasm.md`, `docs/actors.md`, `docs/protocols.md`, `docs/syntax.md`) stay
@@ -53,8 +58,9 @@ The roadmap in outline. The reasoning and the dependency analysis are in `docs/v
 
 ## Decisions taken
 
-D1 to D9 of `docs/vision.md` section 8, taken 2026-11-01: D1 A operations first (Timo); D2 B two
-targets, Rust default; D3 B self-hosting after F, B and C; D4 A todo example moves to an actor
+D1 to D9 of `docs/vision.md` section 8, taken 2026-11-01: D1 A operations first (Timo); D2 B LLVM
+primary (LLVM the default `--target`, the Rust target the test oracle; by the steering session,
+reversible, not yet carried out: X25); D3 B self-hosting after F, B and C; D4 A todo example moves to an actor
 in C; D5 A pure evaluator at slice 11; D6 A components as record types at slice 10; D7 A
 canonical model at slice 11; D8 all three async consumers; D9 B first self-hosted backend.
 Slice-level decisions are in `docs/slice.md` (section 14.13 and 14.14 for slice 10).

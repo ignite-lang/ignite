@@ -27,7 +27,7 @@ pub use net::{
 };
 pub use stdio::{Stdin, Stdout};
 pub use store::Store;
-pub use task::{LINGER, spawn, try_spawn};
+pub use task::{LINGER, released_memory, spawn, try_spawn};
 
 /// An IO failure, carrying the operating system's message and the exit
 /// status [`run`] returns when `main` ends with it.

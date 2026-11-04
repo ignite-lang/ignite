@@ -511,7 +511,7 @@ fn terminal_runs(target: &str) {
     assert_no_process_left(&pids);
     let stderr = run.stderr();
     assert!(
-        stderr.contains("Terminal.client: declared, not buildable in slice 12"),
+        stderr.contains("Terminal.client: declared, not buildable: its kind has no main"),
         "{stderr}"
     );
     let first_signal = run

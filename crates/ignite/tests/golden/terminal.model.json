@@ -209,10 +209,10 @@
     "Terminal.server.application": "terminal.ignite:28:19",
     "Terminal.server.executable": "terminal.ignite:29:18",
     "Terminal.server.listener": "terminal.ignite:27:16",
-    "Terminal.server.protocol": "std/protocol/telnet.ignite:134:29",
-    "Terminal.server.recovery": "std/protocol/telnet.ignite:136:23",
-    "Terminal.server.rollout": "std/protocol/telnet.ignite:137:27",
-    "Terminal.server.sessions": "std/protocol/telnet.ignite:135:29"
+    "Terminal.server.protocol": "std/protocol/telnet.ignite:157:29",
+    "Terminal.server.recovery": "std/protocol/telnet.ignite:159:23",
+    "Terminal.server.rollout": "std/protocol/telnet.ignite:160:27",
+    "Terminal.server.sessions": "std/protocol/telnet.ignite:158:29"
   },
   "systemId": "Terminal"
 }

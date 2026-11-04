@@ -764,3 +764,660 @@ fn adversary_exit_statuses_follow_d8() {
     assert_eq!(usage.status.code(), Some(2), "{}", text(&usage.stderr));
     assert_eq!(text(&usage.stdout), "");
 }
+
+// The claims of the standard library (slice 15, U6; rows 1 to 5 of 19.0).
+
+/// The repository root, two levels above this crate.
+fn repository() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// `ignite conformance std/protocol/<name>.ignite --target <target>`.
+fn std_conformance(name: &str, target: &str) -> Output {
+    let file = repository().join(format!("std/protocol/{name}.ignite"));
+    let _guard = BUILDS.lock().unwrap_or_else(|e| e.into_inner());
+    adversary_command(&file, target, &format!("std-{name}-{target}"), None)
+        .output()
+        .expect("run ignite conformance")
+}
+
+/// The block of `stdout` whose header starts with `rfc<n> `.
+fn block<'a>(stdout: &'a str, rfc: &str) -> &'a str {
+    stdout
+        .split("\n\n")
+        .find(|block| block.starts_with(&format!("{rfc} ")))
+        .unwrap_or_else(|| panic!("no {rfc} block in {stdout}"))
+}
+
+/// The row of `id` in `block`, split into its columns at runs of two spaces.
+fn columns<'a>(block: &'a str, id: &str) -> Vec<&'a str> {
+    let row = block
+        .lines()
+        .find(|line| line.starts_with(&format!("{id} ")))
+        .unwrap_or_else(|| panic!("no row {id} in {block}"));
+    row.split("  ")
+        .map(str::trim)
+        .filter(|cell| !cell.is_empty())
+        .collect()
+}
+
+/// `ignite check --std <std> <file>`.
+fn check_with_std(std: &Path, file: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("check")
+        .arg("--std")
+        .arg(std)
+        .arg(file)
+        .output()
+        .expect("run ignite check")
+}
+
+/// A copy of the directory `from` at `to`, replacing what was there.
+fn copy_tree(from: &Path, to: &Path) {
+    let _ = std::fs::remove_dir_all(to);
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), &target).unwrap();
+        }
+    }
+}
+
+/// `source` with `requirement` removed from every `satisfies [..]` clause,
+/// and a clause it leaves empty deleted with the space before it; the
+/// number of clauses that named it.
+fn without_satisfies(source: &str, requirement: &str) -> (String, usize) {
+    let mut out = String::new();
+    let mut rest = source;
+    let mut removed = 0;
+    while let Some(at) = rest.find(" satisfies [") {
+        let open = at + " satisfies [".len();
+        let close = open + rest[open..].find(']').expect("a closed satisfies clause");
+        let entries: Vec<&str> = rest[open..close]
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+            .collect();
+        let kept: Vec<&str> = entries
+            .iter()
+            .copied()
+            .filter(|entry| *entry != requirement)
+            .collect();
+        if kept.len() == entries.len() {
+            out.push_str(&rest[..=close]);
+        } else {
+            removed += 1;
+            out.push_str(&rest[..at]);
+            if !kept.is_empty() {
+                out.push_str(&format!(" satisfies [{}]", kept.join(", ")));
+            }
+        }
+        rest = &rest[close + 1..];
+    }
+    out.push_str(rest);
+    (out, removed)
+}
+
+/// Row 1 of 19.0, P2 test 1: with `RFC854.RP14_1` (IAC doubling) removed
+/// from every `satisfies` of a copy of `std/`, `ignite check` of the copy's
+/// Telnet module reports exactly one E090, naming it.
+#[test]
+fn removing_a_satisfies_from_a_must_is_e090() {
+    let std = tmp("row1-std");
+    copy_tree(&repository().join("std"), &std);
+    let telnet = std.join("protocol/telnet.ignite");
+    let unchanged = check_with_std(&std, &telnet);
+    assert_eq!(
+        unchanged.status.code(),
+        Some(0),
+        "{}",
+        text(&unchanged.stderr)
+    );
+    assert_eq!(text(&unchanged.stdout), "");
+    assert_eq!(text(&unchanged.stderr), "");
+
+    let source = std::fs::read_to_string(&telnet).unwrap();
+    let (edited, removed) = without_satisfies(&source, "RFC854.RP14_1");
+    assert!(removed > 0, "no satisfies clause names RFC854.RP14_1");
+    let (_, left) = without_satisfies(&edited, "RFC854.RP14_1");
+    assert_eq!(left, 0);
+    std::fs::write(&telnet, edited).unwrap();
+
+    let output = check_with_std(&std, &telnet);
+    assert_eq!(output.status.code(), Some(1), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "");
+    let stderr = text(&output.stderr);
+    let lines: Vec<&str> = stderr.lines().collect();
+    assert_eq!(lines.len(), 1, "{stderr}");
+    let prefix = format!("{}:", telnet.display());
+    let rest = lines[0]
+        .strip_prefix(&prefix)
+        .unwrap_or_else(|| panic!("{stderr}"));
+    let (position, message) = rest
+        .split_once(": error[E090]: ")
+        .unwrap_or_else(|| panic!("{stderr}"));
+    let (line, column) = position
+        .split_once(':')
+        .unwrap_or_else(|| panic!("{stderr}"));
+    assert!(
+        line.parse::<u32>().is_ok() && column.parse::<u32>().is_ok(),
+        "{stderr}"
+    );
+    assert!(message.contains("`RFC854.RP14_1`"), "{stderr}");
+}
+
+/// Row 2 of 19.0, P2 test 2: the HTTP matrix lists RFC 9112's chunked
+/// coding (section 7.1) and Host (section 3.2) as gaps and claims nothing.
+#[test]
+fn http_matrix_lists_the_chunked_and_host_gaps() {
+    let mut outputs = Vec::new();
+    for target in ["rust", "llvm"] {
+        let output = std_conformance("http", target);
+        let stdout = text(&output.stdout);
+        let rfc9112 = block(&stdout, "rfc9112");
+        for (id, section, level) in [
+            ("R7_1_2", "7.1", "MUST"),
+            ("R3_2_6", "3.2", "MUST"),
+            ("R2_2_1", "2.2", "MUST"),
+            ("R6_1_2", "6.1", "MUST NOT"),
+            ("R6_1_4", "6.1", "MUST"),
+        ] {
+            let row = columns(rfc9112, id);
+            assert_eq!(row.len(), 6, "{target}: {row:?}");
+            assert_eq!(row[1], section, "{target}: {row:?}");
+            assert_eq!(row[2], level, "{target}: {row:?}");
+            assert_eq!(row[3], "unsupported", "{target}: {row:?}");
+            assert_eq!(row[5], "gap", "{target}: {row:?}");
+        }
+        let last = rfc9112.trim_end().lines().last().unwrap_or_default();
+        assert_eq!(
+            last, "claim conformance of Http to rfc9112: no (15 gaps, 0 failures, 0 inconclusive)",
+            "{target}"
+        );
+        assert!(
+            stdout.contains(
+                "claim conformance of Http to rfc9110: no (9 gaps, 0 failures, 0 inconclusive)\n"
+            ),
+            "{target}: {stdout}"
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{target}: {stdout}{}",
+            text(&output.stderr)
+        );
+        outputs.push(stdout);
+    }
+    assert_eq!(outputs[0], outputs[1]);
+}
+
+/// Row 4 of 19.0: both std protocol modules carry a status for every
+/// MUST-class requirement in scope.
+#[test]
+fn std_protocol_modules_check_silently() {
+    for name in ["telnet", "http"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+            .arg("check")
+            .arg(repository().join(format!("std/protocol/{name}.ignite")))
+            .output()
+            .expect("run ignite check");
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{name}: {}",
+            text(&output.stderr)
+        );
+        assert_eq!(text(&output.stdout), "", "{name}");
+        assert_eq!(text(&output.stderr), "", "{name}");
+    }
+}
+
+/// The digests of the five `Spec` constants (19.9).
+const SPEC_DIGESTS: [&str; 5] = [
+    "f9cb6d4a7d7a67e5a1ac5ae3c2962b1183fb26119632a1617f3c8379820dfb10",
+    "c8c4744c9fa7650c0ae78d140f560b26e26b2935391e1ff624476c5fdbf4e03a",
+    "4d2ef5878b0b88742c860fc777d6d91ad61580633fe277eae06410a6eee04bdf",
+    "09ec9ad4d1664623adcb298577e3fb9cd5c285f1bbe6b24d8c715b29f218e721",
+    "ce82219c272374005115c909244a79e587687df3858edca4112b8563c02ccf19",
+];
+
+/// Row 5 of 19.0: the Rust that `ignite emit` prints and every `.ll` file
+/// that `ignite build --target llvm` writes for the two examples hold no
+/// `Spec` digest and no requirement text.
+#[test]
+fn emitted_programs_carry_no_catalogue() {
+    for digest in SPEC_DIGESTS {
+        let catalogues = ["rfc854", "rfc855", "rfc1143", "rfc9110", "rfc9112"];
+        assert!(
+            catalogues.iter().any(|name| {
+                std::fs::read_to_string(repository().join(format!("std/rfc/{name}.ignite")))
+                    .unwrap()
+                    .contains(&format!("digest = \"sha256:{digest}\""))
+            }),
+            "no catalogue has the digest {digest}"
+        );
+    }
+    let runtime = common::runtime_archive();
+    for example in ["todo/todo.ignite", "terminal/terminal.ignite"] {
+        let file = repository().join("examples").join(example);
+        let emit = Command::new(env!("CARGO_BIN_EXE_ignite"))
+            .arg("emit")
+            .arg(&file)
+            .output()
+            .expect("run ignite emit");
+        assert_eq!(
+            emit.status.code(),
+            Some(0),
+            "{example}: {}",
+            text(&emit.stderr)
+        );
+        let mut emitted = vec![(format!("{example}: ignite emit"), text(&emit.stdout))];
+        assert!(!emitted[0].1.is_empty(), "{example}");
+
+        let out = tmp(&format!("row5-{}", example.replace('/', "-")));
+        let _ = std::fs::remove_dir_all(&out);
+        let build = Command::new(env!("CARGO_BIN_EXE_ignite"))
+            .args(["build", "--target", "llvm"])
+            .arg(&file)
+            .arg("--out")
+            .arg(&out)
+            .arg("--runtime")
+            .arg(&runtime)
+            .output()
+            .expect("run ignite build");
+        assert_eq!(
+            build.status.code(),
+            Some(0),
+            "{example}: {}",
+            text(&build.stderr)
+        );
+        let mut pending = vec![out.clone()];
+        while let Some(path) = pending.pop() {
+            for entry in std::fs::read_dir(&path).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else if path.extension().is_some_and(|e| e == "ll") {
+                    let content = std::fs::read_to_string(&path).unwrap();
+                    emitted.push((path.display().to_string(), content));
+                }
+            }
+        }
+        let names: Vec<&str> = emitted.iter().map(|(name, _)| name.as_str()).collect();
+        for file in ["std.ll", "program.ll"] {
+            assert!(
+                names.iter().any(|name| name.ends_with(&format!("/{file}"))),
+                "{example}: {names:?}"
+            );
+        }
+        assert!(
+            names
+                .iter()
+                .any(|name| name.contains("/main_") && name.ends_with(".ll")),
+            "{example}: {names:?}"
+        );
+        for (name, content) in &emitted {
+            for digest in SPEC_DIGESTS {
+                assert!(!content.contains(digest), "{name} holds {digest}");
+            }
+            assert!(
+                !content.contains("parse and decode the chunked transfer coding"),
+                "{name} holds the text of RFC9112.R7_1_2"
+            );
+        }
+    }
+}
+
+/// The reason of `unsupported <requirement> "<reason>"` in `source`.
+fn unsupported_reason<'a>(source: &'a str, requirement: &str) -> &'a str {
+    let prefix = format!("unsupported {requirement} \"");
+    source
+        .lines()
+        .find_map(|line| line.trim_start().strip_prefix(&prefix))
+        .and_then(|rest| rest.strip_suffix('"'))
+        .unwrap_or_else(|| panic!("no unsupported {requirement}"))
+}
+
+/// Row 3 of 19.0, P2 test 3, not met in this slice (19.14 item 16): the
+/// RFC 854 claim does not hold, with exactly the four gaps `RP5_3`, `RP5_4`,
+/// `RP10_2` and `RP12_4`, each printing its `unsupported` reason; the RFC 855
+/// claim holds, and its negotiation rows `RP2_3` (IAC SE ends a
+/// subnegotiation) and `RP2_4` (refusal by WON'T or DON'T) pass on
+/// `decode_within` and both its tests.
+#[test]
+fn telnet_matrix_claims_rfc854_for_an_nvt_that_refuses_every_option() {
+    const GAPS: [&str; 4] = ["RP5_3", "RP5_4", "RP10_2", "RP12_4"];
+    let source = std::fs::read_to_string(repository().join("std/protocol/telnet.ignite")).unwrap();
+    let mut outputs = Vec::new();
+    for target in ["rust", "llvm"] {
+        let output = std_conformance("telnet", target);
+        let stdout = text(&output.stdout);
+        for claim in [
+            "claim conformance of Telnet to rfc854: no (4 gaps, 0 failures, 0 inconclusive)\n",
+            "claim conformance of Telnet to rfc855: yes (0 gaps, 0 failures, 0 inconclusive)\n",
+        ] {
+            assert!(
+                stdout.contains(claim),
+                "{target}: {claim}{stdout}{}",
+                text(&output.stderr)
+            );
+        }
+        let rfc854 = block(&stdout, "rfc854");
+        for id in GAPS {
+            let row = columns(rfc854, id);
+            assert_eq!(row.len(), 6, "{target}: {row:?}");
+            assert_eq!(row[3], "unsupported", "{target}: {row:?}");
+            let reason = unsupported_reason(&source, &format!("RFC854.{id}"));
+            assert_eq!(row[4], format!("\"{reason}\""), "{target}: {row:?}");
+            assert_eq!(row[5], "gap", "{target}: {row:?}");
+        }
+        let gaps: Vec<&str> = rfc854
+            .lines()
+            .filter(|line| line.starts_with('R') && line.ends_with("  gap"))
+            .filter_map(|line| line.split(' ').next())
+            .collect();
+        assert_eq!(gaps, GAPS, "{target}: {rfc854}");
+
+        let rfc855 = block(&stdout, "rfc855");
+        for id in ["RP2_3", "RP2_4"] {
+            let row = columns(rfc855, id);
+            assert_eq!(row.len(), 6, "{target}: {row:?}");
+            assert_eq!(row[3], "satisfied", "{target}: {row:?}");
+            assert_eq!(row[5], "pass", "{target}: {row:?}");
+            let (satisfiers, tests) = row[4]
+                .split_once("; ")
+                .unwrap_or_else(|| panic!("{target}: {row:?}"));
+            assert!(
+                satisfiers.split(", ").any(|name| name == "decode_within"),
+                "{target}: {row:?}"
+            );
+            for test in [
+                "test \"a subnegotiation is skipped up to IAC SE\" passed",
+                "test \"DO is answered WONT and WILL is answered DONT\" passed",
+            ] {
+                assert!(tests.split(", ").any(|t| t == test), "{target}: {row:?}");
+            }
+        }
+        assert_eq!(output.status.code(), Some(1), "{target}: {stdout}");
+        outputs.push(stdout);
+    }
+    assert_eq!(outputs[0], outputs[1]);
+}
+
+// U6's adversary: the claims of `std/protocol/telnet.ignite` and
+// `http.ignite` against their RFC sentences, and rows 1 and 5 of 19.0 at
+// their edges.
+
+/// `ignite test <fixture> [filter] --target <target>`, its builds under
+/// `tmp`, the Rust builds in the shared cargo target directory.
+fn adversary_inline(name: &str, filter: Option<&str>, target: &str) -> Output {
+    let _guard = BUILDS.lock().unwrap_or_else(|e| e.into_inner());
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
+    command.arg("test").arg(fixture(name));
+    if let Some(filter) = filter {
+        command.arg(filter);
+    }
+    command
+        .args(["--target", target, "--out"])
+        .arg(tmp(&format!("inline-{name}-{target}")));
+    if target == "rust" {
+        command.arg("--target-dir").arg(tmp("cargo"));
+    } else {
+        command.arg("--runtime").arg(common::runner_archive());
+    }
+    command.output().expect("run ignite test")
+}
+
+/// The inline test `test` of fixture `name` passes on both targets.
+fn assert_inline_passes(name: &str, test: &str) {
+    let line = format!("test tests.conformance.{name}/{test} ... ok\n");
+    let mut failed = Vec::new();
+    for target in ["rust", "llvm"] {
+        let output = adversary_inline(name, Some(test), target);
+        let stdout = text(&output.stdout);
+        if !stdout.contains(&line) || output.status.code() != Some(0) {
+            failed.push(format!(
+                "{target}: exit {:?}\n{stdout}{}",
+                output.status.code(),
+                text(&output.stderr)
+            ));
+        }
+    }
+    assert!(failed.is_empty(), "{}", failed.join("\n"));
+}
+
+/// RFC 854 p11, `RFC854.RP11_3`, and p14, `RP14_1`, which `render`,
+/// `encode_input`, `answer_line` and `session` claim: a reply line with a
+/// bare CR, a bare LF and the text made of the byte 255, and the prompt
+/// `"\r>\n"` both before and after a reply, reach the client as CR NUL and
+/// CR LF, with no byte 255, on both targets. U6's own pipe test closes on
+/// its first line, so the prompt that `answer_line` sends after a reply is
+/// covered only here.
+#[test]
+fn adversary_telnet_replies_and_prompts_are_nvt_data_on_both_targets() {
+    assert_inline_passes(
+        "adversary_std_telnet",
+        "adversary: replies and the prompt after a reply are NVT data",
+    );
+}
+
+/// `source` with `requirement` removed from every `<word> [..]` clause,
+/// and a clause it leaves empty deleted with the space before it; the
+/// number of clauses that named it.
+fn adversary_without(source: &str, word: &str, requirement: &str) -> (String, usize) {
+    let opening = format!(" {word} [");
+    let mut out = String::new();
+    let mut rest = source;
+    let mut removed = 0;
+    while let Some(at) = rest.find(&opening) {
+        let open = at + opening.len();
+        let close = open + rest[open..].find(']').expect("a closed clause");
+        let entries: Vec<&str> = rest[open..close]
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+            .collect();
+        let kept: Vec<&str> = entries
+            .iter()
+            .copied()
+            .filter(|entry| *entry != requirement)
+            .collect();
+        if kept.len() == entries.len() {
+            out.push_str(&rest[..=close]);
+        } else {
+            removed += 1;
+            out.push_str(&rest[..at]);
+            if !kept.is_empty() {
+                out.push_str(&format!("{opening}{}]", kept.join(", ")));
+            }
+        }
+        rest = &rest[close + 1..];
+    }
+    out.push_str(rest);
+    (out, removed)
+}
+
+/// Row 1 of 19.0 at its edges. 19.7: the E090 message is "requirement
+/// `RFC9112.R7_1_2` (MUST, section 7.1) is in scope of `Http` and has no
+/// status; add `satisfies`, `unsupported` or `not_applicable`", at "the
+/// spec's entry in P's `conforms`". With `RFC854.RP14_1` gone from every
+/// `satisfies`, and then also from every `verifies`, stderr is that one
+/// line at the `RFC854` of `protocol Telnet conforms [RFC854, RFC855]`.
+#[test]
+fn adversary_row1_e090_is_the_contract_line_at_the_conforms_entry() {
+    let std = tmp("adversary-row1-std");
+    copy_tree(&repository().join("std"), &std);
+    let telnet = std.join("protocol/telnet.ignite");
+    let source = std::fs::read_to_string(&telnet).unwrap();
+    let (line, column) = source
+        .lines()
+        .enumerate()
+        .find_map(|(i, line)| {
+            line.strip_prefix("protocol Telnet conforms [")
+                .map(|_| (i + 1, "protocol Telnet conforms [".len() + 1))
+        })
+        .expect("the conforms line of Telnet");
+    let want = format!(
+        "{}:{line}:{column}: error[E090]: requirement `RFC854.RP14_1` (MUST, section p14) is in scope of `Telnet` and has no status; add `satisfies`, `unsupported` or `not_applicable`\n",
+        telnet.display()
+    );
+
+    let (satisfied_nowhere, removed) = adversary_without(&source, "satisfies", "RFC854.RP14_1");
+    assert_eq!(removed, 3, "decode_within, render and encode_input");
+    std::fs::write(&telnet, &satisfied_nowhere).unwrap();
+    let output = check_with_std(&std, &telnet);
+    assert_eq!(text(&output.stderr), want);
+    assert_eq!(text(&output.stdout), "");
+    assert_eq!(output.status.code(), Some(1));
+
+    let (verified_nowhere, removed) =
+        adversary_without(&satisfied_nowhere, "verifies", "RFC854.RP14_1");
+    assert!(removed >= 4, "{removed} verifies clauses named RP14_1");
+    std::fs::write(&telnet, &verified_nowhere).unwrap();
+    let output = check_with_std(&std, &telnet);
+    assert_eq!(text(&output.stderr), want);
+    assert_eq!(text(&output.stdout), "");
+    assert_eq!(output.status.code(), Some(1));
+}
+
+/// Row 5 of 19.0 for a program that imports `std.rfc` directly and names
+/// `Level`, `Requirement` and `Spec`, but no catalogue.
+#[test]
+fn adversary_row5_a_program_importing_std_rfc_carries_no_catalogue() {
+    assert_carries_no_catalogue("adversary_imports_rfc", "rfc-types");
+}
+
+/// Row 5 of 19.0 for a program whose own protocol `conforms [RFC855]`,
+/// the import of `RFC855` used by that clause only. D2: "Clauses are no
+/// expressions: no backend reads them and no reachability walk starts at
+/// them", and "an unreferenced constant leaves no text or debug entry on
+/// either target". LLVM holds none; the generated `ignite-std` of
+/// `ignite emit` holds all of `std.rfc.rfc855`, because D2 also makes "a
+/// program's `use` lines" roots on Rust.
+#[test]
+#[ignore = "fixed on branch fix/rustgen-builtin-shadowing (9bbd4b2, a clause-only catalogue import emits none of its constants), not merged into s15/claims"]
+fn adversary_row5_a_program_conforming_to_a_std_catalogue_carries_none() {
+    assert_carries_no_catalogue("adversary_conforms_rfc855", "rfc855-claim");
+}
+
+/// `ignite emit` of fixture `name` and every `.ll` of its `ignite build
+/// --target llvm` hold none of the five digests of 19.9 and no requirement
+/// text of RFC 854, 855 or 9112.
+fn assert_carries_no_catalogue(name: &str, out: &str) {
+    let file = fixture(name);
+    let check = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("check")
+        .arg(&file)
+        .output()
+        .expect("run ignite check");
+    assert_eq!(check.status.code(), Some(0), "{}", text(&check.stderr));
+    assert_eq!(text(&check.stderr), "");
+    let emit = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("emit")
+        .arg(&file)
+        .output()
+        .expect("run ignite emit");
+    assert_eq!(emit.status.code(), Some(0), "{}", text(&emit.stderr));
+    let mut emitted = vec![("ignite emit".to_string(), text(&emit.stdout))];
+    assert!(!emitted[0].1.is_empty());
+    let out = tmp(&format!("adversary-row5-{out}"));
+    let _ = std::fs::remove_dir_all(&out);
+    let build = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .args(["build", "--target", "llvm"])
+        .arg(&file)
+        .arg("--out")
+        .arg(&out)
+        .arg("--runtime")
+        .arg(common::runtime_archive())
+        .output()
+        .expect("run ignite build");
+    assert_eq!(build.status.code(), Some(0), "{}", text(&build.stderr));
+    let mut pending = vec![out.clone()];
+    while let Some(path) = pending.pop() {
+        for entry in std::fs::read_dir(&path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|e| e == "ll") {
+                let content = std::fs::read_to_string(&path).unwrap();
+                emitted.push((path.display().to_string(), content));
+            }
+        }
+    }
+    assert!(
+        emitted.iter().any(|(name, _)| name.ends_with("/std.ll")),
+        "{:?}",
+        emitted.iter().map(|(name, _)| name).collect::<Vec<_>>()
+    );
+    for (name, content) in &emitted {
+        for digest in SPEC_DIGESTS {
+            assert!(!content.contains(digest), "{name} holds {digest}");
+        }
+        for requirement in [
+            "parse and decode the chunked transfer coding",
+            "only the IAC need be doubled to be sent as data",
+            "Telnet Option Specifications",
+            "either party may refuse to pursue further subnegotiation",
+        ] {
+            assert!(!content.contains(requirement), "{name} holds {requirement}");
+        }
+    }
+}
+
+/// RFC 9112 6.3, `RFC9112.R6_3_4` and `R6_3_5`, claimed satisfied by
+/// `next_request` and `parse_length`: `Content-Length: 3<U+00A0>` (also
+/// U+0085, U+3000) is answered 400. Found red while `parse_head` trimmed
+/// field values with the Unicode `trim`; it now trims SP and HTAB only
+/// (`trim_ows`, RFC 9110 OWS).
+#[test]
+fn adversary_http_content_length_beside_a_unicode_space_is_400() {
+    assert_inline_passes(
+        "adversary_std_http",
+        "adversary: a Content-Length beside a Unicode space is 400",
+    );
+}
+
+/// RFC 9112 9.6, `RFC9112.R9_6_6` and `R9_6_7`, claimed satisfied by
+/// `reject` and `session`: after a response whose application headers
+/// carry `Connection: close`, the server closes the connection and answers
+/// no further pipelined request. Found red while `session` looked only at
+/// the request; it now also asks `response_closes`.
+#[test]
+fn adversary_http_a_response_with_the_close_option_ends_the_connection() {
+    assert_inline_passes(
+        "adversary_std_http",
+        "adversary: a response with the close option ends the connection",
+    );
+}
+
+/// RFC 9112 6.1, `RFC9112.R6_1_4`: an application's `Transfer-Encoding:
+/// gzip` is sent beside Http's Content-Length on a kept connection. Found
+/// while R6_1_4 was `not_applicable`; it is now `unsupported`, a gap of the
+/// matrix like its siblings R6_1_7, R6_1_8, R6_1_11 and R6_2_1, and this
+/// test stays ignored until the gap is closed.
+#[test]
+#[ignore = "gap RFC9112.R6_1_4 (unsupported in http.ignite): an application Transfer-Encoding is sent on a kept connection; story http-rfc9112-9110-gaps"]
+fn adversary_http_a_response_with_a_transfer_coding_ends_the_connection() {
+    assert_inline_passes(
+        "adversary_std_http",
+        "adversary: a response with a transfer coding other than chunked ends the connection",
+    );
+}
+
+/// RFC 9112 2.2, `RFC9112.R2_2_1`: the head is decoded to text before it
+/// is parsed, so the obs-text octet 0xE9 reaches the application as
+/// U+FFFD, three octets. Found while `parse_head` and `read_head` claimed
+/// it; it is now `unsupported`, a gap, and this test stays ignored until
+/// the gap is closed.
+#[test]
+#[ignore = "gap RFC9112.R2_2_1 (unsupported in http.ignite): the head is parsed as lossy UTF-8 text, octet 0xE9 reaches the application as U+FFFD; story http-rfc9112-9110-gaps"]
+fn adversary_http_an_obs_text_octet_reaches_the_application_as_one_octet() {
+    assert_inline_passes(
+        "adversary_std_http",
+        "adversary: an obs-text octet reaches the application as one octet",
+    );
+}

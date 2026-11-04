@@ -22,6 +22,12 @@ executables today (Rust target, LLVM target), WebAssembly components with hot re
 later still an operations controller that keeps declared objectives. Self-hosting is the end
 state.
 
+Ignite is also a replacement for Rust: the project exists because of rustc's compile times (Timo,
+2026-11-04). Build time is a product requirement beside the operational goals, not only the gate
+budget of invariant 9, and the LLVM target is the fast-build path (`todod` 0.309 s against
+3.998 s on the Rust target, dev, `AGENTS.md` slice 12b rows). The external review of 2026-11-04
+and what follows from it: `research/review-2026-11-04.md`; the second review, on agentic delivery and ESS: `research/review-2026-11-04-ecosystem.md`.
+
 ## 2 Where it stands
 
 | layer | state | evidence |
@@ -148,7 +154,7 @@ steering session against section 6 before agents are dispatched.
 | 12 (done 2026-11-02, uncommitted, `docs/slice.md` section 16: 636 cargo tests, 148 inline tests per target; gate time rose over 10 % on 7 units, measured causes std 3,033 to 5,135 lines loaded per spawn and `ignite-std` 2,191 to 3,792 lines, carried into 12b: reachable-only std loading and emission) | F3 run and control | `ignite run <assembly>` and `ignite replay` over its journal: probes as protocol clients (`TelnetPrompt` over the telnet `connect` role), SLI windows and contract evaluation (design §4.1), `Restart` with backoff and `DrainRollout` (design §4.2, §7.4), event journal, `event("…")` consequences | the terminal system runs under `ignite run`; killing `terminald` restarts it within the policy's backoff; a probe timeout is visible in the journal and in the contract's standing |
 | 13 | F4 apply | `ignite apply` with plan diff, changes and deletion (design §7.3), recovery of a half-applied plan from the journal | a second `apply` of the same plan is a no-op; an interrupted `apply` resumes |
 | 14 | B protocols P1 | `Pipe.pair()` and `PipeStream`, the bound `<S: ByteStream>` on fns and roles, `Telnet` and `Http` generic over the stream with their limits records (`docs/slice.md` section 18) | the 18.0 matrix of `docs/slice.md` |
-| 15+ | B (P2 on), C, D, E, G, H | as the table above, in that order | as the table above |
+| 15+ | slice 15 is G's P2 (`docs/slice.md` section 19); after it B (P2 on), C, D, E, G (P3 to P5), H | slice 15: RFC catalogues as literal data, the claim clauses and E090 to E092, `ignite rfc import` and `ignite rfc check`, `ignite conformance`, the claims of `Telnet` and `Http`; after it as the table above, in that order | slice 15: the 19.0 matrix of `docs/slice.md`; after it as the table above |
 
 Consequences for the open decisions of section 8: D5 moves from the start of H to slice 11;
 D6 moves from "before wasm P1" to slice 10; D7 is scheduled at slice 11; D3 reads "after F,
@@ -210,6 +216,7 @@ Each row names the two places, what disagrees, and the resolution this document 
 | X22 | `slice.md` §12.5 `assert` outside a test exits the process with 101; `actors.md` wants a failure to end only its task | one bad request kills a server | T1 covers `assert` too |
 | X23 | `llvm.md` §7 and `slice.md` §1 "a program that passes both is valid for the Rust and the LLVM target"; section 10.1 shows programs the checker accepts that rustc rejects and the LLVM target miscompiles | the checker lacks a mutability rule | wave A0: E006 for in-place mutation |
 | X24 | `slice.md` §5.1 "The capability is a parameter of the function (`stream.read`) or an ambient one (`stdin.read`)"; the implementation cannot tell the two apart when a parameter carries an ambient's name | section 10.2, E1 to E3 | wave A0: refuse or namespace ambient names |
+| X25 | section 8 D2 option B "LLVM becomes the default `--target`", taken 2026-11-01 by the steering session as reversible; `BuildOptions::default` in `crates/ignite/src/lib.rs` (`target: Target::Rust`) and every `--target` of `crates/ignite/src/main.rs` still default to Rust | which target is the default | resolved 2026-11-04: D2 B stands (Timo: build time is why Ignite exists, `vision.md` section 1); `BuildOptions::default` and the CLI switch to LLVM after slice 16 U4 (`story:slice-16-llvm-moves`) lands, in `story:llvm-default-target` |
 
 Logic flaws inside one document, found by reading:
 

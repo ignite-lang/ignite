@@ -148,8 +148,9 @@ pub struct RunOptions {
     pub fresh: bool,
     /// Root of the standard library. Default: [`default_std_path`].
     pub std: Option<PathBuf>,
-    /// `--fuel N`: the fuel limit per property expression and per reducer
-    /// step (15.3, 16.6); default `ignite_eval::Fuel::DEFAULT_LIMIT`.
+    /// `--fuel N`: the fuel limit per reducer step (16.6); default
+    /// `ignite_eval::Fuel::DEFAULT_LIMIT`. The plan inside `run` keeps the
+    /// default fuel per property expression (15.3).
     pub fuel: Option<u64>,
     /// `--runtime PATH`: the runtime archive of the LLVM target. Default:
     /// [`default_runtime_path`].
@@ -1590,7 +1591,7 @@ pub fn run(file: &Path, options: &RunOptions) -> Result<i32, Error> {
         }
     }
     for member in &declared {
-        eprintln!("ignite run: {member}: declared, not buildable in slice 12");
+        eprintln!("ignite run: {member}: declared, not buildable: its kind has no main");
     }
     let (tx, rx) = std::sync::mpsc::channel();
     let adapters = run::control::Adapters::start(tx.clone()).map_err(io_error(&state))?;
