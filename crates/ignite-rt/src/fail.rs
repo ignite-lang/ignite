@@ -17,6 +17,14 @@
 //! `ignite_io::spawn`'s `catch_unwind` at the task's thread (`crate::task`),
 //! never across the generator's frames; a main-thread panic is reported in
 //! the same format by the hook `crate::process` installs.
+//!
+//! A runtime entry that calls generated code while it holds a Rust resource
+//! (the store's lock around `update`'s `f`) must not be jumped over: the
+//! generated thunk registers a callback guard ([`ignite_rt_guard_callback`])
+//! before it calls the Ignite fn. A failure whose innermost guard is a
+//! callback guard keeps its report and jumps back to the thunk, which
+//! returns null; the runtime entry releases what it holds and calls
+//! [`resume`], which ends the task with the kept report as above.
 
 use std::cell::RefCell;
 use std::ffi::{c_int, c_void};
@@ -31,25 +39,63 @@ unsafe extern "C" {
     fn longjmp(env: *mut c_void, val: c_int) -> !;
 }
 
+/// A registered jump buffer and whether it is a callback guard.
+#[derive(Clone, Copy)]
+struct Handler {
+    jb: *mut c_void,
+    callback: bool,
+}
+
 thread_local! {
-    /// Jump buffers of the task-entry wrappers open on this thread, the
-    /// innermost last. A task registers one; a nested guard pushes another
-    /// for its duration.
-    static HANDLERS: RefCell<Vec<*mut c_void>> = const { RefCell::new(Vec::new()) };
+    /// Jump buffers of the task-entry wrappers and callback guards open on
+    /// this thread, the innermost last. A task registers one; a nested
+    /// guard pushes another for its duration.
+    static HANDLERS: RefCell<Vec<Handler>> = const { RefCell::new(Vec::new()) };
+    /// The report of a failure stopped at a callback guard, until the
+    /// runtime entry that called the callback [`resume`]s it.
+    static PENDING: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+fn push(handler: Handler) {
+    let _ = HANDLERS.try_with(|handlers| handlers.borrow_mut().push(handler));
 }
 
 /// `void guard_push(ptr jb)`: register the jump buffer `jb` of a task-entry
 /// wrapper that just called `setjmp`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_guard_push(jb: *mut c_void) {
-    let _ = HANDLERS.try_with(|handlers| handlers.borrow_mut().push(jb));
+    push(Handler {
+        jb,
+        callback: false,
+    });
+}
+
+/// `void guard_callback(ptr jb)`: register the jump buffer `jb` of a
+/// generated callback (`store_update.<T>`) that just called `setjmp`; a
+/// failure inside the callback jumps back to it instead of ending the task
+/// (crate docs).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_guard_callback(jb: *mut c_void) {
+    push(Handler { jb, callback: true });
 }
 
 /// `void guard_pop()`: drop the innermost jump buffer after its task body
-/// returned without failing.
+/// or callback returned without failing.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_guard_pop() {
     let _ = HANDLERS.try_with(|handlers| handlers.borrow_mut().pop());
+}
+
+/// End the current task with the report of the failure a callback guard
+/// stopped, once the runtime entry that called the callback has released
+/// what it held.
+pub(crate) fn resume() -> ! {
+    let report = PENDING
+        .try_with(|pending| pending.borrow_mut().take())
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| String::from("a callback failed without a report"));
+    fail(report)
 }
 
 /// The text of a `Text*` argument, lossily decoded; empty for null.
@@ -60,14 +106,24 @@ fn text(value: *const IgniteList) -> String {
 /// End the current task with `report`: release its handles, then jump back
 /// to the innermost task wrapper (`task ended with error: <report>`); with
 /// none (the main task or a test), log `error: <report>` and exit
-/// [`FAILURE_EXIT_CODE`].
+/// [`FAILURE_EXIT_CODE`]. When the innermost guard is a callback guard,
+/// keep `report` for [`resume`] and jump back to the callback instead.
 pub(crate) fn fail(report: String) -> ! {
-    net::release_task_handles();
-    let jb = HANDLERS
+    let handler = HANDLERS
         .try_with(|handlers| handlers.borrow_mut().pop())
         .ok()
         .flatten();
-    match jb {
+    if let Some(Handler { jb, callback: true }) = handler {
+        let _ = PENDING.try_with(|pending| *pending.borrow_mut() = Some(report));
+        // SAFETY: `jb` is the jump buffer of a still-live generated callback
+        // that called `setjmp` and registered it through `guard_callback`;
+        // the frames between it and here are generated code and this
+        // runtime's failure entries, which hold nothing that needs a
+        // destructor beyond what a task wrapper's jump already skips.
+        unsafe { longjmp(jb, 1) }
+    }
+    net::release_task_handles();
+    match handler.map(|handler| handler.jb) {
         Some(jb) => {
             ignite_io::task_failed(&report);
             ignite_io::flush();

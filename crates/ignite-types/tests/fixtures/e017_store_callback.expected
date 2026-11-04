@@ -1,0 +1,2 @@
+e017_store_callback.ignite:4:15: error[E017]: effectful closure (requires [s.read]) where the pure fn type `fn(Int) -> Int` is expected
+e017_store_callback.ignite:11:15: error[E017]: effectful closure (requires [s.write]) where the pure fn type `fn(Int) -> Int` is expected

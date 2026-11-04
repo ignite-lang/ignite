@@ -39,8 +39,8 @@ pub use arena::{
 pub use clock::ignite_rt_clock_monotonic;
 pub use fail::{
     ignite_rt_assert_failed, ignite_rt_fail_arith, ignite_rt_fail_index, ignite_rt_fail_match,
-    ignite_rt_fail_neg, ignite_rt_fail_slice, ignite_rt_guard_pop, ignite_rt_guard_push,
-    ignite_rt_try_failed,
+    ignite_rt_fail_neg, ignite_rt_fail_slice, ignite_rt_guard_callback, ignite_rt_guard_pop,
+    ignite_rt_guard_push, ignite_rt_try_failed,
 };
 pub use net::{
     ignite_rt_tcp_accept, ignite_rt_tcp_bind, ignite_rt_tcp_close, ignite_rt_tcp_connect,

@@ -761,12 +761,31 @@ fn free_heap(module: &mut Module<'_>, ty: &Ty) -> String {
 /// a `fn(T) -> T` (`docs/llvm.md` section 3: its code takes the
 /// environment first, then an aggregate result through a pointer, then an
 /// aggregate argument by pointer to a copy), on an arena copy of the heap
-/// value `old`, and return a heap copy of the result.
+/// value `old`, and return a heap copy of the result. The runtime calls it
+/// under the store's lock, so a failure inside `f` must not jump past the
+/// runtime's frames: the thunk registers a callback guard behind a
+/// `setjmp` (`crates/ignite-rt/src/fail.rs`) and returns null when `f`
+/// failed; the runtime releases the lock and ends the task.
 fn update_thunk(module: &mut Module<'_>, ty: &Ty) -> String {
     let env = module.env;
     let mut f = header(Glue::Update, ty, "ptr", "ptr %f, ptr %old");
     let layout = env.layout(ty);
     let to_heap = module.glue_of(Glue::ToHeap, ty);
+    module.declare_raw("_setjmp", "declare i32 @_setjmp(ptr) returns_twice");
+    module.declare("ignite_rt_guard_callback", "void", &["ptr".into()]);
+    module.declare("ignite_rt_guard_pop", "void", &[]);
+    let jb = f.alloca(crate::layout::Layout {
+        size: 256,
+        align: 16,
+    });
+    let landed = f.val(format!("call i32 @_setjmp(ptr {jb})"));
+    let fresh = f.val(format!("icmp eq i32 {landed}, 0"));
+    let (run, failed) = (f.label(), f.label());
+    f.cond_br(&fresh, &run, &failed);
+    f.place(&failed);
+    f.term("ret ptr null");
+    f.place(&run);
+    f.ins(format!("call void @ignite_rt_guard_callback(ptr {jb})"));
     let result = f.alloca(layout);
     let code = f.val("load ptr, ptr %f, align 8");
     let at = f.val("getelementptr inbounds i8, ptr %f, i64 8");
@@ -796,6 +815,7 @@ fn update_thunk(module: &mut Module<'_>, ty: &Ty) -> String {
     } else {
         f.ins(format!("call void {code}(ptr {fenv})"));
     }
+    f.ins("call void @ignite_rt_guard_pop()");
     let heap = f.val(format!("call ptr {to_heap}(ptr {result})"));
     f.term(format!("ret ptr {heap}"));
     f.finish("unreachable")
