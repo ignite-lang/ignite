@@ -50,5 +50,5 @@ pub fn countdown(n: &i64) -> Vec<i64> {
         out.push(i.clone());
         i = ignite_io::checked::sub(i, 1, "crates/ignite-rustgen/tests/golden/pure.ignite", 34, 9);
     }
-    return out.clone();
+    return out;
 }

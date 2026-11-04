@@ -1955,6 +1955,27 @@ impl<'a> Generator<'a> {
         ty.is_fn() || matches!(ty.name.name.as_str(), "Int" | "Byte" | "Bool" | "Unit")
     }
 
+    /// Whether `expr`, a place in a move position, takes its value without
+    /// a copy: the moves analysis marks it (`docs/slice.md` 20.3). Rust
+    /// cannot move out of a reference or a capture; the analysis marks no
+    /// place rooted at a borrowed parameter, a `for` element or a capture,
+    /// and this keeps the copy should it ever mark one.
+    fn moves(&self, expr: &Expr) -> bool {
+        self.types.is_some_and(|t| t.moves(expr))
+            && place_root(expr)
+                .is_some_and(|root| !self.is_borrowed(root) && !self.is_captured(root))
+    }
+
+    /// Whether `callee` consumes its parameter `index` (`docs/slice.md`
+    /// 20.3.3): such a parameter is declared by value and takes its
+    /// argument as a value. False without types.
+    fn consumes(&self, callee: Option<&Callee>, index: usize) -> bool {
+        match (self.types, callee) {
+            (Some(types), Some(callee)) => types.consumed(callee, index),
+            _ => false,
+        }
+    }
+
     /// Whether the call `expr` of the non-local name `id` calls a fn of the
     /// module or an imported one (not a variant, `log` or a constant).
     fn calls_fn(&self, expr: &Expr, id: &Ident) -> bool {
@@ -2033,8 +2054,14 @@ impl<'a> Generator<'a> {
     /// Arguments by reference, left to right. A place whose variable a
     /// later argument modifies (`x.pick(if c { x = ..; 1 } else { 2 })`)
     /// is copied before the later argument runs, so the call sees the
-    /// value the place had when its argument was evaluated.
-    fn ref_args<'e>(&mut self, args: impl IntoIterator<Item = &'e Expr>) -> Vec<String> {
+    /// value the place had when its argument was evaluated. The argument
+    /// of a parameter that `callee` consumes is a value instead
+    /// ([`Generator::value`]: moved when the analysis says so, else a copy).
+    fn ref_args<'e>(
+        &mut self,
+        callee: Option<&Callee>,
+        args: impl IntoIterator<Item = &'e Expr>,
+    ) -> Vec<String> {
         let args: Vec<&Expr> = args.into_iter().collect();
         let mut later = BTreeSet::new();
         let mut modified = vec![BTreeSet::new(); args.len()];
@@ -2044,8 +2071,13 @@ impl<'a> Generator<'a> {
         }
         args.iter()
             .zip(modified)
-            .map(|(arg, modified)| {
-                if self.is_place(arg) && place_root(arg).is_some_and(|r| modified.contains(r)) {
+            .enumerate()
+            .map(|(index, (arg, modified))| {
+                if self.consumes(callee, index) {
+                    self.value(arg)
+                } else if self.is_place(arg)
+                    && place_root(arg).is_some_and(|r| modified.contains(r))
+                {
                     format!("&{}", self.value(arg))
                 } else {
                     self.ref_arg(arg)
@@ -2079,9 +2111,27 @@ impl<'a> Generator<'a> {
         self.bare(expr)
     }
 
+    /// The arguments a fn-value wrapper passes on to the fn `callee`: its
+    /// owned `names`, each by reference, or by value to a parameter the
+    /// callee consumes (`docs/slice.md` 20.3.4).
+    fn wrapper_args(&self, callee: Option<&Callee>, names: &[String]) -> Vec<String> {
+        names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| {
+                if self.consumes(callee, index) {
+                    name.clone()
+                } else {
+                    format!("&{name}")
+                }
+            })
+            .collect()
+    }
+
     /// A fn of the module or an imported one used as a value: a closure
-    /// that borrows its arguments for the fn, in an `Arc` cast to the fn
-    /// value type (`docs/slice.md` section 13.3:
+    /// that takes its arguments for the fn (by reference, or by value to
+    /// a consumed parameter), in an `Arc` cast to the fn value type
+    /// (`docs/slice.md` section 13.3:
     /// `(Arc::new(|__a0: i64| f(&__a0)) as Arc<dyn Fn(i64) -> i64 + ..>)`).
     /// Without types the closure is left to inference.
     fn fn_value(&mut self, expr: &Expr, id: &Ident) -> String {
@@ -2105,7 +2155,7 @@ impl<'a> Generator<'a> {
             (None, None) => return target,
         };
         let names: Vec<String> = (0..arity).map(|i| format!("__a{i}")).collect();
-        let refs: Vec<String> = names.iter().map(|n| format!("&{n}")).collect();
+        let refs = self.wrapper_args(self.callee(expr), &names);
         let call = format!("{target}({})", refs.join(", "));
         match fn_ty {
             Some((params, ret)) => {
@@ -2471,6 +2521,9 @@ impl<'a> Generator<'a> {
                 format!("String::from_utf8_lossy(&{value}).into_owned()")
             }
             Some(Show::Builtin(_)) => format!("{value}.to_string()"),
+            Some(Show::Fn(q)) if self.consumes(Some(&Callee::Fn(q.clone())), 0) => {
+                format!("{}({value}.clone())", self.fn_path(q))
+            }
             Some(Show::Fn(q)) => format!("{}(&{value})", self.fn_path(q)),
             Some(Show::IoErrorMessage) => format!("{value}.message.clone()"),
             None => format!("String::from(\"{}\")", escape_str(&format!("<{ty}>"))),
@@ -2560,14 +2613,26 @@ impl<'a> Generator<'a> {
         let mut prologue = Vec::new();
         self.borrowed.clear();
         self.type_params = decl.type_params.iter().map(|p| p.name.clone()).collect();
+        let callee = self
+            .types
+            .map(|t| Callee::Fn(QualName::new(t.module.clone(), decl.qualified_name())));
         let params: Vec<String> = decl
             .params
             .iter()
-            .map(|p| {
+            .enumerate()
+            .map(|(index, p)| {
                 let name = ident(&p.name.name);
                 let ty = self.annotation(&p.ty);
                 if role {
                     return format!("mut {name}: {ty}");
+                }
+                if self.consumes(callee.as_ref(), index) {
+                    let mutability = if mutated.contains(&p.name.name) {
+                        "mut "
+                    } else {
+                        ""
+                    };
+                    return format!("{mutability}{name}: {ty}");
                 }
                 if mutated.contains(&p.name.name) || self.is_copy(&p.ty) {
                     prologue.push(format!("let mut {name} = {name}.clone();"));
@@ -2930,6 +2995,9 @@ impl<'a> Generator<'a> {
             return format!("String::from(\"{}\")", escape_str(&reference.text()));
         }
         if clone && self.is_place(expr) {
+            if self.moves(expr) {
+                return self.bare(expr);
+            }
             return format!("{}.clone()", self.bare(expr));
         }
         match &expr.kind {
@@ -3343,7 +3411,9 @@ impl<'a> Generator<'a> {
             .map(|(field, q)| {
                 let target = self.module_fn_path(q);
                 let value = match declared.iter().find(|(name, _, _)| name == field) {
-                    Some((_, ty, _)) => self.fn_value_typed(target, ty),
+                    Some((_, ty, _)) => {
+                        self.fn_value_typed(target, ty, Some(&Callee::Fn(q.clone())))
+                    }
                     None => target,
                 };
                 format!("{}: {value}", ident(field))
@@ -3362,13 +3432,13 @@ impl<'a> Generator<'a> {
 
     /// The Rust fn `target` as a fn value of fn type `ty`
     /// ([`Generator::fn_value_of`] with the type given).
-    fn fn_value_typed(&mut self, target: String, ty: &Ty) -> String {
+    fn fn_value_typed(&mut self, target: String, ty: &Ty, callee: Option<&Callee>) -> String {
         let (params, ret) = match ty {
             Ty::Fn(params, ret) | Ty::EffectFn(params, ret, _) => (params, &**ret),
             _ => return target,
         };
         let names: Vec<String> = (0..params.len()).map(|i| format!("__a{i}")).collect();
-        let refs: Vec<String> = names.iter().map(|n| format!("&{n}")).collect();
+        let refs = self.wrapper_args(callee, &names);
         let typed: Vec<String> = names
             .iter()
             .zip(params)
@@ -3383,8 +3453,9 @@ impl<'a> Generator<'a> {
         )
     }
 
-    /// A call of the Ignite fn `target` with `args` by reference, the
-    /// receiver of a UFCS call first. Named arguments (`docs/slice.md`
+    /// A call of the Ignite fn `target` with `args` by reference, by value
+    /// to a parameter the callee consumes, the receiver of a UFCS call
+    /// first. Named arguments (`docs/slice.md`
     /// section 14.2) are reordered to the parameters; when the order
     /// changes, every argument is evaluated into a temporary first, in
     /// source order.
@@ -3400,22 +3471,33 @@ impl<'a> Generator<'a> {
             .and_then(|t| t.named_args(call))
             .filter(|order| order.iter().enumerate().any(|(i, j)| i != *j))
             .map(<[usize]>::to_vec);
+        let callee = self.callee(call);
         let Some(order) = order else {
-            let texts = self.ref_args(receiver.into_iter().chain(args));
+            let texts = self.ref_args(callee, receiver.into_iter().chain(args));
             return format!("{target}({})", texts.join(", "));
+        };
+        let borrow = |this: &Self, param: usize| {
+            if this.consumes(callee, param) {
+                ""
+            } else {
+                "&"
+            }
         };
         let mut lets = String::new();
         let mut texts = Vec::new();
         if let Some(receiver) = receiver {
             let value = self.value(receiver);
             let _ = write!(lets, "let __ignite_r = {value}; ");
-            texts.push("&__ignite_r".to_string());
+            texts.push(format!("{}__ignite_r", borrow(self, 0)));
         }
         for (index, arg) in args.iter().enumerate() {
             let value = self.value(arg);
             let _ = write!(lets, "let __ignite_a{index} = {value}; ");
         }
-        texts.extend(order.iter().map(|index| format!("&__ignite_a{index}")));
+        let first = usize::from(receiver.is_some());
+        for (param, index) in order.iter().enumerate() {
+            texts.push(format!("{}__ignite_a{index}", borrow(self, first + param)));
+        }
         format!("{{ {lets}{target}({}) }}", texts.join(", "))
     }
 
@@ -3507,12 +3589,17 @@ impl<'a> Generator<'a> {
                 "{{ ignite_io::spawn(move || {{ if let Err(error) = ({task}) {{ {LOG} }} }}); }}"
             );
         };
+        let callee = self.callee(operand);
         let mut out = String::from("{ ");
         let mut names = Vec::new();
         for (index, arg) in args.iter().enumerate() {
             let value = self.value(arg);
             let _ = write!(out, "let __spawn_{index} = {value}; ");
-            let borrow = if by_ref { "&" } else { "" };
+            let borrow = if by_ref && !self.consumes(callee, index) {
+                "&"
+            } else {
+                ""
+            };
             names.push(format!("{borrow}__spawn_{index}"));
         }
         let _ = write!(
@@ -5566,8 +5653,13 @@ fn executable_main(
             ),
         ));
     }
+    let borrow = if generator.consumes(Some(&Callee::Fn(info.main.clone())), 0) {
+        ""
+    } else {
+        "&"
+    };
     w.line(&format!(
-        "{}(&{})",
+        "{}({borrow}{})",
         generator.fn_path(&info.main),
         resource_variable(&info.component)
     ));

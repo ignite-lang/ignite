@@ -34,8 +34,8 @@ pub struct App<S: Clone + Send + Sync + 'static> {
     pub handle: std::sync::Arc<dyn Fn(S, String) -> String + Send + Sync>,
 }
 
-pub fn swap<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static>(p: &Pair<A, B>) -> Pair<B, A> {
-    Pair { first: p.second.clone(), second: p.first.clone() }
+pub fn swap<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static>(p: Pair<A, B>) -> Pair<B, A> {
+    Pair { first: p.second, second: p.first }
 }
 
 pub fn or<T: Clone + Send + Sync + 'static>(value: &Option<T>, fallback: &T) -> T {
@@ -53,13 +53,13 @@ pub fn count<T: Clone + Send + Sync + 'static>(choice: &Choice<T>) -> i64 {
     }
 }
 
-pub fn twice<T: Clone + Send + Sync + 'static>(f: &std::sync::Arc<dyn Fn(T) -> T + Send + Sync>, value: &T) -> T {
+pub fn twice<T: Clone + Send + Sync + 'static>(f: &std::sync::Arc<dyn Fn(T) -> T + Send + Sync>, value: T) -> T {
     let mut f = f.clone();
-    f(f(value.clone()))
+    f(f(value))
 }
 
-pub fn identity<T: Clone + Send + Sync + 'static>(value: &T) -> T {
-    value.clone()
+pub fn identity<T: Clone + Send + Sync + 'static>(value: T) -> T {
+    value
 }
 
 pub fn bump(n: &i64) -> i64 {
@@ -73,11 +73,11 @@ pub fn show(n: &i64) -> String {
 }
 
 pub fn generic_line() -> String {
-    let pair = swap(&(Pair { first: 1, second: String::from("one") }));
+    let pair = swap(Pair { first: 1, second: String::from("one") });
     let labelled = Labelled { value: pair.second.clone(), label: Labelled::<i64>::default_label() };
     let choice: Choice<String> = Choice::Two(String::from("a"), String::from("b"));
-    let id: std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync> = (std::sync::Arc::new(|__a0: i64| identity::<i64>(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>);
-    format!("{}{}{}{}{}{}{}{}{}", pair.first.clone(), String::from(" "), labelled.value.to_string(), String::from(" "), labelled.label.clone(), String::from(" "), count(&choice).to_string(), String::from(" "), twice(&(std::sync::Arc::new(|__a0: i64| bump(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>), &id(5)).to_string())
+    let id: std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync> = (std::sync::Arc::new(|__a0: i64| identity::<i64>(__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>);
+    format!("{}{}{}{}{}{}{}{}{}", pair.first.clone(), String::from(" "), labelled.value.to_string(), String::from(" "), labelled.label.clone(), String::from(" "), count(&choice).to_string(), String::from(" "), twice(&(std::sync::Arc::new(|__a0: i64| bump(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>), id(5)).to_string())
 }
 
 pub fn number(line: &String, command: &String) -> Option<i64> {
@@ -87,7 +87,7 @@ pub fn number(line: &String, command: &String) -> Option<i64> {
     }
 }
 
-pub fn respond(counts: &ignite_io::Store<i64>, line: &String) -> String {
+pub fn respond(counts: ignite_io::Store<i64>, line: &String) -> String {
     if (*line) == String::from("new") {
         let id = counts.next_id();
         counts.put(id.clone(), 0);

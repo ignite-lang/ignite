@@ -14,9 +14,9 @@ pub fn pick(mode: &Mode) -> std::sync::Arc<dyn Fn(String) -> String + Send + Syn
     }
 }
 
-pub fn apply_twice(f: &std::sync::Arc<dyn Fn(String) -> String + Send + Sync>, line: &String) -> String {
+pub fn apply_twice(f: &std::sync::Arc<dyn Fn(String) -> String + Send + Sync>, line: String) -> String {
     let mut f = f.clone();
-    return f(f(line.clone()));
+    return f(f(line));
 }
 
 pub fn relay(stream: &ignite_io::TcpStream, handler: &Handler) -> Result<(), ignite_io::IoError> {

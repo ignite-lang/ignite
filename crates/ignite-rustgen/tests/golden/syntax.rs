@@ -190,7 +190,7 @@ impl Syntax {
         (show(&twice(&n).to_string()))?;
         (show(&shout(&String::from("hey"))))?;
         let h = Handler { name: String::from("h"), respond: (std::sync::Arc::new(|__a0: String| shout(&__a0)) as std::sync::Arc<dyn Fn(String) -> String + Send + Sync>) };
-        (show(&(h.respond)(h.name.clone())))?;
+        (show(&(h.respond)(h.name)))?;
         let r = Reply { lines: vec![String::from("l")], action: Reply::default_action(), code: Reply::default_code() };
         (show(&(format!("{}{}", String::from("code "), r.code.to_string()))))?;
         match r.action.clone() {
