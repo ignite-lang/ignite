@@ -16,7 +16,7 @@ scope:
   path: crates/ignite-rustgen/src
 - confidence: inferred
   path: crates/ignite-types/src
-revision: 2
+revision: 3
 ---
 # Story: store-api-gaps
 
@@ -31,7 +31,9 @@ conditional remove, and an update step that returns an outcome beside the new va
   `examples/friction.md` in the sibling examples repository, compiler at `9578530`:
   - E1 `Store<T>` is keyed by `Int` only (`docs/slice.md` 11.3).
   - E2 no atomic insert-or-update: `update` answers `None` for an absent id and a following `put`
-    can lose another task's write.
+    can lose another task's write. Observed at runtime (2026-11-04, compiler `9578530`): 16
+    clients each sent `INCR fresh:<r>` for 2,000 fresh keys after a barrier; 1 of 32,000
+    increments lost on the Rust target, 2 of 32,000 on the LLVM target.
   - E3 no conditional remove.
   - E4 the fn given to `Store.update` returns only the new `T`.
 
