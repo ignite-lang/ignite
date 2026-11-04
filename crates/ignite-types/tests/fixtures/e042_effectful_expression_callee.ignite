@@ -1,0 +1,14 @@
+fn send_one(c: PipeStream) -> Int requires [c.write] {
+  let r = c.write_all([1])
+  return 1
+}
+
+fn pick_sender(first: Bool) -> fn(c: PipeStream) -> Int requires [c.write] = send_one
+
+fn declared(conn: PipeStream) -> Int requires [conn.write] {
+  return pick_sender(true)(conn)
+}
+
+fn undeclared(conn: PipeStream) -> Int {
+  return pick_sender(true)(conn)
+}

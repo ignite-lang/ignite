@@ -3169,21 +3169,31 @@ impl Checker {
             }
             ExprKind::Field { receiver, name } => match self.path_head(receiver) {
                 Some(ty) => self.path_call(expr, ty, name, args),
-                None => {
-                    self.expr(receiver);
-                    for arg in args {
-                        self.expr(arg);
-                    }
-                    self.error("E003", callee.span, "not callable".to_string());
-                }
+                None => self.expression_call(expr, callee, &name.name, args),
             },
-            _ => {
-                self.expr(callee);
-                for arg in args {
-                    self.expr(arg);
-                }
-                self.error("E003", callee.span, "not callable".to_string());
-            }
+            _ => self.expression_call(expr, callee, "fn value", args),
+        }
+    }
+
+    /// `e(args)` whose callee is an expression, not a name or a path
+    /// (`adder(1)(2)`, `fs[1](10)`, `(h.send)(conn)`; `docs/slice.md`
+    /// 20.4.2): the callee's names are resolved, and when `static_type`
+    /// gives it an effectful fn type the effects are charged and the call is
+    /// an effect site, as for a local of that type. Whether the callee is a
+    /// fn at all is the type checker's (E040, and E042 for an effectful
+    /// callee without a declared type).
+    fn expression_call(&mut self, expr: &Expr, callee: &Expr, what: &str, args: &[Expr]) {
+        self.expr(callee);
+        for arg in args {
+            self.expr(arg);
+        }
+        let all: Vec<&Expr> = args.iter().collect();
+        if let Some(needed) = self
+            .static_type(callee)
+            .and_then(|ty| self.fn_value_effects(&ty, &all))
+        {
+            self.effectful_op(needed, expr.span, what);
+            self.symbols.effect_sites.insert(expr.span);
         }
     }
 

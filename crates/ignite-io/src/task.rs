@@ -223,17 +223,57 @@ mod tests {
             );
         });
         let a = finished.recv().unwrap();
-        let mut reused = false;
+        assert!(reaches(a), "no task ran on the failed task's thread");
+    }
+
+    /// How many spawns pop the idle worker on thread `id`, once it pushed
+    /// itself onto [`IDLE`], waiting at most 5 s for that: the stack is
+    /// LIFO, and under load a worker of another test can sit above it.
+    fn depth_of_idle(id: std::thread::ThreadId) -> Option<usize> {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            {
+                let idle = lock(&IDLE);
+                if let Some(at) = idle.iter().position(|w| w.thread.id() == id) {
+                    return Some(idle.len() - at);
+                }
+            }
+            if Instant::now() >= deadline {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    /// Whether a task runs on thread `id` again: each attempt waits until
+    /// its worker is idle, then holds as many tasks at once as the workers
+    /// at and above it, so every one of them takes a task. An attempt
+    /// misses only when another worker went idle in between.
+    fn reaches(id: std::thread::ThreadId) -> bool {
         for _ in 0..50 {
-            std::thread::sleep(Duration::from_millis(10));
-            let next = done.clone();
-            spawn(move || next.send(std::thread::current().id()).unwrap());
-            if finished.recv().unwrap() == a {
-                reused = true;
-                break;
+            let Some(depth) = depth_of_idle(id) else {
+                return false;
+            };
+            let (release, held) = channel::<()>();
+            let held = Arc::new(Mutex::new(held));
+            let (done, ran) = channel();
+            for _ in 0..depth {
+                let held = Arc::clone(&held);
+                let done = done.clone();
+                spawn(move || {
+                    done.send(std::thread::current().id()).unwrap();
+                    lock(&held).recv().unwrap();
+                });
+            }
+            let ids: Vec<_> = (0..depth).map(|_| ran.recv().unwrap()).collect();
+            for _ in 0..depth {
+                release.send(()).unwrap();
+            }
+            if ids.contains(&id) {
+                return true;
             }
         }
-        assert!(reused, "no task ran on the failed task's thread");
+        false
     }
 
     fn a_finished_worker_runs_the_next_task() {
@@ -241,17 +281,7 @@ mod tests {
         let first = done.clone();
         spawn(move || first.send(std::thread::current().id()).unwrap());
         let a = finished.recv().unwrap();
-        let mut reused = false;
-        for _ in 0..50 {
-            std::thread::sleep(Duration::from_millis(10));
-            let next = done.clone();
-            spawn(move || next.send(std::thread::current().id()).unwrap());
-            if finished.recv().unwrap() == a {
-                reused = true;
-                break;
-            }
-        }
-        assert!(reused, "no task ran on the first task's thread");
+        assert!(reaches(a), "no task ran on the first task's thread");
     }
 
     fn every_task_runs_once_under_contention() {

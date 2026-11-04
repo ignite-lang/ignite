@@ -30,6 +30,7 @@ mod run;
 mod siblings;
 mod site;
 mod slice10_llvm;
+mod slice16;
 mod slice9;
 mod syntax;
 mod terminal;

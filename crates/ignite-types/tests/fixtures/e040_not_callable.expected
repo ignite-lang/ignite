@@ -1,0 +1,3 @@
+e040_not_callable.ignite:1:24: error[E040]: type mismatch: this expression has type `Int` and cannot be called
+e040_not_callable.ignite:3:36: error[E040]: type mismatch: this expression has type `Int` and cannot be called
+e040_not_callable.ignite:5:20: error[E040]: type mismatch: this expression has type `Text` and cannot be called
