@@ -3587,8 +3587,10 @@ impl<'a> Generator<'a> {
     }
 
     /// `list.slice(from, to)` with a failure site, as a borrow of `list`
-    /// (`ignite_io::checked::slice_ref`) where the caller only reads it;
-    /// `None` for any other expression.
+    /// (`ignite_io::checked::slice_ref`) where the caller only reads it, a
+    /// `slice` receiver borrowed the same way; `None` for any other
+    /// expression and for bounds that modify a variable, which the borrow
+    /// of `list` would span.
     fn checked_slice_ref(&mut self, expr: &Expr) -> Option<String> {
         let ExprKind::Method { receiver, args, .. } = &expr.kind else {
             return None;
@@ -3596,8 +3598,17 @@ impl<'a> Generator<'a> {
         if !matches!(self.callee(expr), Some(Callee::Builtin(Builtin::ListSlice))) {
             return None;
         }
+        let mut modified = BTreeSet::new();
+        for arg in args {
+            mutated_in(arg, self.types, &mut modified);
+        }
+        if !modified.is_empty() {
+            return None;
+        }
         let site = self.types.and_then(|t| t.failure_site(expr))?;
-        let list = self.ref_arg(receiver);
+        let list = self
+            .checked_slice_ref(receiver)
+            .unwrap_or_else(|| self.ref_arg(receiver));
         let a = self.args(args);
         Some(format!(
             "ignite_io::checked::slice_ref({list}, {}, {}, {})",
@@ -3701,7 +3712,17 @@ impl<'a> Generator<'a> {
                 if *builtin == Builtin::ListAt {
                     return self.checked_at(expr, receiver, &args[0], site);
                 }
-                let list = self.ref_arg(receiver);
+                let mut modified = BTreeSet::new();
+                for arg in args {
+                    mutated_in(arg, self.types, &mut modified);
+                }
+                let list = if self.is_place(receiver)
+                    && place_root(receiver).is_some_and(|root| modified.contains(root))
+                {
+                    format!("&{}", self.value(receiver))
+                } else {
+                    self.ref_arg(receiver)
+                };
                 let a = self.args(args);
                 return format!(
                     "ignite_io::checked::slice({list}, {}, {}, {})",

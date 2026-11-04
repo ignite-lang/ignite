@@ -1230,3 +1230,71 @@ fn adversary_an_unreferenced_constant_leaves_no_closure_behind() {
         found.join("\n")
     );
 }
+
+/// `docs/llvm.md` section 4: a `slice` that `to_text` or
+/// `Int.parse(bytes.to_text())` only reads is a view into its receiver,
+/// and so is the inner slice of a slice whose bounds modify no variable:
+/// no copy glue, no arena allocation. A slice that is stored is copied,
+/// and so is an inner slice whose outer bound changes a variable.
+#[test]
+fn slices_that_are_only_read_are_not_copied() {
+    let empty = (Default::default(), Default::default());
+    let text = "package tests.views\n\
+        fn parse_at(data: Bytes, from: Int, to: Int) -> Option<Int> = Int.parse(data.slice(from, to).to_text())\n\
+        fn text_at(data: Bytes, from: Int, to: Int) -> Text = data.slice(from, to).to_text()\n\
+        fn nested(data: Bytes, to: Int) -> Option<Int> = Int.parse(data.slice(0, to).slice(1, to).slice(1, to - 1).to_text())\n\
+        fn kept(data: Bytes, to: Int) -> Bytes = data.slice(0, to).slice(1, to)\n\
+        fn changed(data: Bytes, to: Int) -> Text {\n\
+          var bytes = data\n\
+          bytes.slice(0, to).slice(1, if to > 1 {\n\
+            bytes.clear()\n\
+            to\n\
+          } else {\n\
+            to\n\
+          }).to_text()\n\
+        }\n\
+        fn unchanged(data: Bytes, to: Int) -> Text {\n\
+          var bytes = data\n\
+          bytes.slice(0, to).slice(1, if to > 1 {\n\
+            to\n\
+          } else {\n\
+            to\n\
+          }).to_text()\n\
+        }\n";
+    let (source, program, symbols, types) =
+        typed("views.ignite", text, &empty.0, &empty.1).unwrap_or_else(|d| panic!("{d:?}"));
+    let input = ignite_llvm::ModuleInput {
+        path: &types.module,
+        program: &program,
+        symbols: &symbols,
+        types: &types,
+    };
+    let options = ignite_llvm::Options {
+        sources: [(types.module.clone(), &source)].into(),
+        target: Some(target()),
+        ..Default::default()
+    };
+    let generated = ignite_llvm::generate_with(&[], &input, &options);
+    let ir = &generated.program;
+    let copies = |symbol: &str| function(ir, symbol).matches("call void @\"copy.").count();
+    for symbol in [
+        "tests.views.parse_at",
+        "tests.views.text_at",
+        "tests.views.nested",
+    ] {
+        let body = function(ir, symbol);
+        assert_eq!(copies(symbol), 0, "{body}");
+        assert!(!body.contains("@ignite.alloc("), "{body}");
+    }
+    assert!(function(ir, "tests.views.parse_at").contains("call i8 @ignite_rt_int_parse(ptr %"));
+    assert!(
+        function(ir, "tests.views.text_at")
+            .contains("call void @ignite_rt_text_from_bytes_lossy(ptr %")
+    );
+    assert_eq!(copies("tests.views.kept"), 1);
+    assert_eq!(
+        copies("tests.views.changed"),
+        copies("tests.views.unchanged") + 1
+    );
+    compiles("views_program", ir);
+}
