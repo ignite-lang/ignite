@@ -5,13 +5,13 @@
 <h1 align="center">Ignite</h1>
 
 <p align="center">
-  <strong>Say what your system is for. Ignite builds it, runs it and keeps it honest.</strong>
+  <strong>Say what your program is for. One file, one build, one native executable.</strong>
 </p>
 
 <p align="center">
-  An intent-oriented language for specifying, building, deploying and operating systems.<br>
-  One file describes the components, the network, the contracts and the policies,<br>
-  and the compiler turns it into native executables.
+  A compiled, intent-oriented language for fast, resource-efficient software development<br>
+  by humans and AI agents. One typed file holds the program, its components, its contracts<br>
+  and its policies; the compiler turns it into native executables, then runs and checks them.
 </p>
 
 ---
@@ -71,6 +71,16 @@ test "slice takes byte offsets" {
 
 ## Why Ignite
 
+- **Built for many agents compiling at once.** Ignite started as a replacement for Rust, whose
+  compile times bring a machine to a halt when several coding agents build at the same time, and
+  caches did not fix that. An Ignite program is one file compiled in one pass: the todo HTTP
+  service builds in 0.286 s on the LLVM target against 3.125 s through cargo on the Rust target
+  (dev; release 0.733 s against 4.177 s; `AGENTS.md`, slice 14).
+- **Specified, then checked.** Ignite is meant as a native realization target for
+  [ESS](https://github.com/beyond10x/ess), which turns intent into typed, machine-checkable
+  specifications with conformance suites. ESS stays language-independent; ESS-generated
+  conformance tests check an Ignite executable like any other (planned, see
+  [`docs/research/review-2026-11-04-ecosystem.md`](docs/research/review-2026-11-04-ecosystem.md)).
 - **Intent first.** Sizes, durations and ratios are typed quantities (`4096 bytes`,
   `15 minutes`, `99.9%`). Contracts, restart policies and deployments are declarations the
   compiler checks, not comments next to a YAML file.
