@@ -476,8 +476,8 @@ raw samples and exclusions: `docs/performance/12c/release-815cf74/README.md`.
 
 Implemented: `ignite host`, `ignite plan --for-apply`, `ignite apply`, `ignite inspect`, the
 `Transition` reducer, durable receipts, crash recovery and the `docs/slice.md` 17.7 matrix on
-both targets (coverage table after 17.7, standing in `STATUS.md`). Known gaps: the two
-precedence cases in 17.5 "As landed (U5)".
+both targets (coverage table after 17.7, standing in `STATUS.md`). The precedence of recovery
+reasons is in 17.5 "As landed (U5)"; no known gaps.
 
 - Gate at the close, `task gate` on `feat/slice13-local-apply` (d93f059), 2026-11-03 03:39:49
   to 03:46:39 UTC, 410 s, exit 0, one cargo build on the host, `RUST_TEST_THREADS=4`: 746 cargo

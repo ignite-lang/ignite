@@ -131,6 +131,10 @@ pub(super) struct Driving {
     displaced: BTreeMap<String, i64>,
     /// Member to the plan's action kind.
     kinds: BTreeMap<String, String>,
+    /// The operation the running revision carried before this transition
+    /// took it over; it carries it again when the transition is abandoned
+    /// before the run realizes the desired plan.
+    base_operation: Option<String>,
 }
 
 /// Whether an operation failed with `reason` left the committed revision's
@@ -138,6 +142,9 @@ pub(super) struct Driving {
 pub(super) fn resolvable(reason: &str) -> bool {
     matches!(reason, "gave_up" | "listener_unavailable")
 }
+
+const NEXT_CORRECTIVE: &str = "apply a corrective plan prepared against the committed revision";
+const NEXT_INSPECT: &str = "inspect retained ownership and journal before recovery";
 
 /// The address and declared port of the listener `member` provisions in
 /// `model`.
@@ -321,6 +328,10 @@ impl Host {
         Ok(())
     }
 
+    /// Fail operation `id` with `reason`. While an unresolved recovery stands
+    /// ([`Host::standing`]) the first reason recorded stays the reported one
+    /// (17.5): `reason` is kept beside it ([`Host::keep_beside`]) and
+    /// neither the active operation nor the recovery reason changes.
     pub(super) fn reject_operation(&mut self, id: &str, reason: &str) -> Result<(), Failure> {
         if self
             .transition
@@ -328,6 +339,14 @@ impl Host {
             .is_some_and(|driving| driving.operation == id)
         {
             self.transition = None;
+        }
+        if let Some(standing) = self.standing() {
+            self.keep_beside(&standing, id, reason);
+            self.persist()?;
+            for waiter in self.waiters.remove(id).unwrap_or_default() {
+                let _ = waiter.send(Err(fail(1, reason)));
+            }
+            return Ok(());
         }
         if let Some(Json::Object(receipt)) = self.receipts.get_mut(id)
             && receipt.get("state").and_then(Json::as_str) != Some("completed")
@@ -337,9 +356,9 @@ impl Host {
             receipt.insert(
                 "nextAction".into(),
                 text(if resolvable(reason) {
-                    "apply a corrective plan prepared against the committed revision"
+                    NEXT_CORRECTIVE
                 } else {
-                    "inspect retained ownership and journal before recovery"
+                    NEXT_INSPECT
                 }),
             );
         }
@@ -350,6 +369,60 @@ impl Host {
             let _ = waiter.send(Err(fail(1, reason)));
         }
         Ok(())
+    }
+
+    /// The active operation whose unresolved recovery stands, if one does
+    /// ([`Host::unresolved`]).
+    pub(super) fn standing(&self) -> Option<String> {
+        self.active.clone().filter(|active| self.unresolved(active))
+    }
+
+    /// Keep `reason`, recorded later for operation `id`, in the receipt of
+    /// the `standing` operation as an entry of `laterReasons`, beside the
+    /// reason it reports and without replacing it (17.5). A later reason a
+    /// corrective plan does not resolve makes the next action an inspection
+    /// and the recovery no longer correctable ([`Host::correctable`]). The
+    /// committed revision's own recovery keeps nothing beside it: its
+    /// receipt stays `completed`, and its reason is never resolvable.
+    pub(super) fn keep_beside(&mut self, standing: &str, id: &str, reason: &str) {
+        let Some(Json::Object(receipt)) = self.receipts.get_mut(standing) else {
+            return;
+        };
+        if receipt.get("state").and_then(Json::as_str) != Some("recovery_required") {
+            return;
+        }
+        let entry = object([("operationId", text(id)), ("reason", text(reason))]);
+        match receipt
+            .entry("laterReasons".to_string())
+            .or_insert_with(|| Json::Array(Vec::new()))
+        {
+            Json::Array(later) => later.push(entry),
+            other => *other = Json::Array(vec![entry]),
+        }
+        if !resolvable(reason) {
+            receipt.insert("nextAction".into(), text(NEXT_INSPECT));
+        }
+    }
+
+    /// Whether a corrective plan resolves the host's recovery (D3): its
+    /// reason is resolvable and the active operation's receipt keeps no
+    /// later reason beside it that is not.
+    pub(super) fn correctable(&self) -> bool {
+        let later_unresolvable = self
+            .active
+            .as_ref()
+            .and_then(|id| self.receipts.get(id))
+            .and_then(|receipt| receipt.get("laterReasons"))
+            .and_then(Json::as_array)
+            .into_iter()
+            .flatten()
+            .any(|later| {
+                later
+                    .get("reason")
+                    .and_then(Json::as_str)
+                    .is_none_or(|reason| !resolvable(reason))
+            });
+        self.recovery_reason.as_deref().is_some_and(resolvable) && !later_unresolvable
     }
 
     /// Hand an admitted, journaled operation to the transition driver: build
@@ -566,13 +639,11 @@ impl Host {
                 )
                 .map_err(|error| fail(2, format!("transition: {error:?}")))?
         };
-        if let Some(runtime) = &mut self.runtime {
-            runtime.operation = plan.id.clone();
-            *runtime
-                .operation_sink
-                .lock()
-                .map_err(|_| fail(3, "operation identity lock failed"))? = plan.id.clone();
-        }
+        let base_operation = self
+            .runtime
+            .as_ref()
+            .map(|runtime| runtime.operation.clone());
+        self.carry_operation(&plan.id)?;
         self.transition = Some(Driving {
             operation: plan.id.clone(),
             plan: frozen,
@@ -591,8 +662,42 @@ impl Host {
             start_first,
             displaced: BTreeMap::new(),
             kinds,
+            base_operation,
         });
         self.drive()
+    }
+
+    /// The transition of `operation` is abandoned. A running revision that
+    /// does not realize its plan (the run never switched to it, and no
+    /// restoration hands the run over to the committed plan) carries the
+    /// operation it carried before again: its records and `runtimeOperation`
+    /// no longer name the failed operation.
+    fn release_operation(&mut self, operation: &str) -> Result<(), Failure> {
+        let base = self
+            .transition
+            .as_ref()
+            .and_then(|driving| driving.base_operation.clone());
+        let realizes_base = self
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.desired != operation && runtime.restore_to.is_none());
+        match base {
+            Some(base) if realizes_base => self.carry_operation(&base),
+            _ => Ok(()),
+        }
+    }
+
+    /// The running revision's records and `runtimeOperation` carry
+    /// operation `id` from here on.
+    fn carry_operation(&mut self, id: &str) -> Result<(), Failure> {
+        if let Some(runtime) = &mut self.runtime {
+            runtime.operation = id.to_string();
+            *runtime
+                .operation_sink
+                .lock()
+                .map_err(|_| fail(3, "operation identity lock failed"))? = id.to_string();
+        }
+        Ok(())
     }
 
     /// Whether `member` has no live owned process.
@@ -728,6 +833,7 @@ impl Host {
                 }
                 ("Abandon", Some(reason)) => {
                     self.restore_displaced(&operation)?;
+                    self.release_operation(&operation)?;
                     return self.reject_operation(&operation, &reason);
                 }
                 _ => {}
@@ -1162,7 +1268,18 @@ impl Host {
             }
             return Ok(());
         }
+        // An unresolved recovery stands (17.5): the end is kept beside its
+        // reason, and nothing starts or fails another operation.
         if self.recovery_reason.is_some() {
+            if let Some(standing) = self.standing() {
+                let reason = if self.committed.as_deref() == Some(id) {
+                    format!("committed revision controller ended: {result:?}")
+                } else {
+                    format!("revision controller ended before convergence: {result:?}")
+                };
+                self.keep_beside(&standing, id, &reason);
+                self.persist()?;
+            }
             return Ok(());
         }
         if let Some(active) = self.active.clone() {
@@ -1225,13 +1342,9 @@ impl Host {
             self.standings.insert(machine.to_string(), record.clone());
         }
         // A machine that gave up blocks nothing: the operation it failed
-        // waits for a corrective apply, and the other machines go on.
-        if kind == Some("effect")
-            && self
-                .recovery_reason
-                .as_deref()
-                .is_some_and(|reason| !resolvable(reason))
-        {
+        // waits for a corrective apply, and the other machines go on. A
+        // failure kept beside it that a corrective does not resolve blocks.
+        if kind == Some("effect") && self.recovery_reason.is_some() && !self.correctable() {
             return Err(fail(1, "effect dispatch blocked by unresolved recovery"));
         }
         if kind == Some("error") {
@@ -1412,7 +1525,13 @@ impl Host {
                             }
                         };
                     if expected != Some(actual.as_str()) {
-                        let id = self.active.clone().unwrap_or(id);
+                        // Beside an unresolved recovery the mismatch is kept
+                        // under the operation the run's records carry (17.5).
+                        let id = if self.standing().is_some() {
+                            operation.to_string()
+                        } else {
+                            self.active.clone().unwrap_or(id)
+                        };
                         let reason =
                             "ready process artifact differs from the admitted desired artifact";
                         if !self.effect_failed(reason, member)? {
@@ -1461,8 +1580,12 @@ impl Host {
         {
             self.retiring.remove(&pid.to_string());
         }
+        // While an unresolved recovery stands, a failed start is kept beside
+        // it whichever operation the run's records carry (17.5).
         if variant == Some("SpawnFailed")
-            && (self.transition.is_some() || self.active.as_deref() == Some(operation))
+            && (self.transition.is_some()
+                || self.active.as_deref() == Some(operation)
+                || self.standing().is_some())
         {
             if let Some(runtime) = &mut self.runtime {
                 runtime.ready.remove(machine);

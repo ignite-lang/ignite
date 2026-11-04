@@ -37,7 +37,6 @@ use std::time::{Duration, Instant};
 use ignite_eval::Json;
 
 use super::admission::retained_plan;
-use super::controller::resolvable;
 use super::journal::FORMAT;
 use super::{Host, read_json};
 use crate::apply::{Failure, fail, object, plan::Plan, required, text};
@@ -148,6 +147,51 @@ fn listeners(plan: &Plan) -> Vec<(String, String, u16)> {
                 .unwrap_or("127.0.0.1");
             (port > 0).then(|| (member.to_string(), address.to_string(), port))
         })
+        .collect()
+}
+
+/// The D2 report of a `recovery` that a start cannot find again, without
+/// the blocks kept beside it: what [`Host::recover`] starts from, so that
+/// the report stays the first reason until the next commit (17.5). That is
+/// a report a block was kept beside, or one naming an operation other than
+/// `committed` as not driven: that operation is no longer active, and no
+/// later start examines it. A report of the committed revision alone, and
+/// any other recovery, is examined anew.
+fn lifted_report(recovery: Json, committed: Option<&str>) -> Option<Json> {
+    let Json::Object(mut fields) = recovery else {
+        return None;
+    };
+    let blocked_beside = fields
+        .get("laterReasons")
+        .and_then(Json::as_array)
+        .is_some_and(|later| {
+            later
+                .iter()
+                .any(|entry| entry.get("blocking") == Some(&Json::Bool(true)))
+        });
+    let other_not_driven = not_driven_ids(&Json::Object(fields.clone()))
+        .iter()
+        .any(|id| Some(id.as_str()) != committed);
+    if fields.get("reason").and_then(Json::as_str) != Some(REDUCER_CHANGED)
+        || !(blocked_beside || other_not_driven)
+    {
+        return None;
+    }
+    fields.remove("laterReasons");
+    fields.insert("blocking".into(), Json::Bool(false));
+    Some(Json::Object(fields))
+}
+
+/// The plan ids a D2 report lists in `evidence.notDriven`.
+fn not_driven_ids(report: &Json) -> Vec<String> {
+    report
+        .get("evidence")
+        .and_then(|evidence| evidence.get("notDriven"))
+        .and_then(Json::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.get("planId").and_then(Json::as_str))
+        .map(str::to_string)
         .collect()
 }
 
@@ -299,7 +343,14 @@ impl Host {
         {
             self.unblock();
         }
-        self.recovery = None;
+        // A report a block was kept beside, or one no start finds again,
+        // stays the first reason recorded until the next commit; a block
+        // found again goes beside it.
+        let committed = self.committed.clone();
+        self.recovery = self
+            .recovery
+            .take()
+            .and_then(|recovery| lifted_report(recovery, committed.as_deref()));
         let intents: Vec<Json> = self.pending.iter().map(|intent| intent.json()).collect();
         let recorded: Vec<(String, Json)> = self
             .owned
@@ -370,7 +421,7 @@ impl Host {
         self.retiring.clear();
         let mut target = match self.recovery_reason.as_deref() {
             None => self.active.clone().or_else(|| self.committed.clone()),
-            Some(reason) if resolvable(reason) => self.committed.clone(),
+            Some(_) if self.correctable() => self.committed.clone(),
             Some(_) => None,
         };
         let mut not_driven = Vec::new();
@@ -398,8 +449,25 @@ impl Host {
                 target = self.committed.clone();
             }
         }
-        if let Some(first) = not_driven.first() {
-            self.recovery = Some(object([
+        // The kept report already names what this start found again.
+        let reported = self
+            .recovery
+            .as_ref()
+            .filter(|recovery| {
+                recovery.get("reason").and_then(Json::as_str) == Some(REDUCER_CHANGED)
+            })
+            .map(not_driven_ids)
+            .unwrap_or_default();
+        let found_again = not_driven.iter().all(|entry| {
+            entry
+                .get("planId")
+                .and_then(Json::as_str)
+                .is_some_and(|id| reported.iter().any(|kept| kept == id))
+        });
+        if let Some(first) = not_driven.first()
+            && !found_again
+        {
+            self.note_recovery(object([
                 ("state", text("recovery_required")),
                 ("reason", text(REDUCER_CHANGED)),
                 ("planId", first.get("planId").cloned().unwrap_or(Json::Null)),
@@ -479,6 +547,10 @@ impl Host {
     /// recovery reason stay, admission refuses every apply but a retry, the
     /// block lives in `recovery` alone and names that operation as
     /// `unresolved`, and lifting it leaves the unresolved recovery as it was.
+    /// Nor does a block replace a report recorded before it (D2's
+    /// `reducer_revision_changed`): it goes beside the report
+    /// ([`Host::note_recovery`]), which then blocks, and changes neither the
+    /// active operation nor the recovery reason.
     fn block(
         &mut self,
         id: &str,
@@ -487,6 +559,7 @@ impl Host {
         evidence: Json,
     ) -> Result<(), Failure> {
         let unresolved = self.active.clone().filter(|active| self.unresolved(active));
+        let reported = self.recovery.is_some();
         let mut recovery = object([
             ("state", text("recovery_required")),
             ("reason", text(reason)),
@@ -508,7 +581,11 @@ impl Host {
                     ]),
                 );
             }
-            self.recovery = Some(recovery);
+            self.note_recovery(recovery);
+            return self.persist();
+        }
+        if reported {
+            self.note_recovery(recovery);
             return self.persist();
         }
         self.reject_operation(id, reason)?;
@@ -518,15 +595,35 @@ impl Host {
             receipt.insert("nextAction".into(), text(next_action));
             receipt.insert("evidence".into(), evidence);
         }
-        self.recovery = Some(recovery);
+        self.note_recovery(recovery);
         self.persist()
+    }
+
+    /// Record `entry` as the startup recovery (17.5): the first recorded
+    /// stands as `recovery`, and a later one is kept in its `laterReasons`
+    /// without replacing it; a later block makes the recovery block.
+    fn note_recovery(&mut self, entry: Json) {
+        let Some(Json::Object(first)) = &mut self.recovery else {
+            self.recovery = Some(entry);
+            return;
+        };
+        if entry.get("blocking") == Some(&Json::Bool(true)) {
+            first.insert("blocking".into(), Json::Bool(true));
+        }
+        match first
+            .entry("laterReasons".to_string())
+            .or_insert_with(|| Json::Array(Vec::new()))
+        {
+            Json::Array(later) => later.push(entry),
+            other => *other = Json::Array(vec![entry]),
+        }
     }
 
     /// Whether `active` carries a recovery no block may overwrite: a reason
     /// other than a block's own, on an operation whose receipt is
     /// `recovery_required` or on the committed revision itself (its
     /// controller ended; its receipt stays `completed`).
-    fn unresolved(&self, active: &str) -> bool {
+    pub(super) fn unresolved(&self, active: &str) -> bool {
         let reason = self
             .recovery_reason
             .as_deref()
@@ -881,5 +978,363 @@ mod tests {
                 .and_then(Json::as_str);
             assert_eq!(unresolved, Some("failed"));
         }
+    }
+
+    /// A fresh directory under the workspace target for one host.
+    fn scratch(label: &str) -> PathBuf {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/adversary-u5")
+            .join(format!(
+                "{label}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    /// The committed revision's run, its records attributed to `operation`.
+    fn committed_runtime(operation: &str) -> super::super::Runtime {
+        use std::sync::{Arc, Mutex};
+        super::super::Runtime {
+            operation: operation.into(),
+            controller_plan: "committed".into(),
+            desired: "committed".into(),
+            model: Json::Null,
+            reducer: String::new(),
+            operation_sink: Arc::new(Mutex::new(operation.into())),
+            artifacts: Arc::new(Mutex::new(Default::default())),
+            minimum_generation: Default::default(),
+            control: std::sync::mpsc::channel().0,
+            ready: Default::default(),
+            expected: Default::default(),
+            adopted: Default::default(),
+            supervised: Default::default(),
+            restore_to: None,
+        }
+    }
+
+    /// The state, reason and next action of `id`'s receipt.
+    fn receipt_of(host: &Host, id: &str) -> (Option<String>, Option<String>, Option<String>) {
+        let field = |key: &str| {
+            host.receipts
+                .get(id)
+                .and_then(|receipt| receipt.get(key))
+                .and_then(Json::as_str)
+                .map(str::to_string)
+        };
+        (field("state"), field("reason"), field("nextAction"))
+    }
+
+    /// The operation and reason of each later reason `id`'s receipt keeps.
+    fn later_of(host: &Host, id: &str) -> Vec<(String, String)> {
+        host.receipts
+            .get(id)
+            .and_then(|receipt| receipt.get("laterReasons"))
+            .and_then(Json::as_array)
+            .into_iter()
+            .flatten()
+            .map(|later| {
+                let field = |key: &str| {
+                    later
+                        .get(key)
+                        .and_then(Json::as_str)
+                        .unwrap_or_default()
+                        .to_string()
+                };
+                (field("operationId"), field("reason"))
+            })
+            .collect()
+    }
+
+    const INSPECT: &str = "inspect retained ownership and journal before recovery";
+
+    /// 17.5, the precedence of recovery reasons: a reducer failure of the
+    /// committed revision's run while a `gave_up` is unresolved, whether the
+    /// run's records carry the committed operation or still the failed one,
+    /// leaves the failed operation active with `gave_up` as its reason and
+    /// keeps the failure beside it in that receipt. A corrective plan does
+    /// not resolve the failure, so the next action is to inspect, and the
+    /// run dispatches no further effect.
+    #[test]
+    fn a_reducer_failure_of_the_committed_run_keeps_the_gave_up_operation() {
+        for sink in ["committed", "failed"] {
+            let root = scratch("reducer-failed");
+            let mut host = gave_up_host(&root);
+            host.runtime = Some(committed_runtime(sink));
+            let error = object([
+                ("kind", text("error")),
+                ("machine", text("Terminal.probe.scheduler")),
+                (
+                    "value",
+                    object([
+                        ("code", text("E128")),
+                        ("report", text("reducer of Terminal.probe.scheduler failed")),
+                    ]),
+                ),
+            ]);
+            let failed = host.record(sink, "committed", error);
+            let effect = host.record(
+                sink,
+                "committed",
+                object([
+                    ("kind", text("effect")),
+                    ("machine", text("Terminal.server.supervisor")),
+                    ("value", object([("variant", text("Spawn"))])),
+                ]),
+            );
+            let _ = std::fs::remove_dir_all(&root);
+
+            assert!(failed.is_ok(), "{sink}: {failed:?}");
+            assert_eq!(host.active.as_deref(), Some("failed"), "{sink}");
+            assert_eq!(host.recovery_reason.as_deref(), Some("gave_up"), "{sink}");
+            assert_eq!(
+                receipt_of(&host, "failed"),
+                (
+                    Some("recovery_required".into()),
+                    Some("gave_up".into()),
+                    Some(INSPECT.into())
+                ),
+                "{sink}"
+            );
+            assert_eq!(
+                later_of(&host, "failed"),
+                vec![(
+                    sink.to_string(),
+                    "revision reducer failed; inspect retained journal".to_string()
+                )],
+                "{sink}"
+            );
+            assert_eq!(
+                receipt_of(&host, "committed").0.as_deref(),
+                Some("completed"),
+                "{sink}"
+            );
+            assert!(
+                effect.is_err(),
+                "{sink}: the reducer failure still blocks every effect"
+            );
+        }
+    }
+
+    /// `finished`: the committed revision's controller that ends while a
+    /// `gave_up` is unresolved leaves that operation active with its reason
+    /// and keeps the end beside it; nothing resumes the failed operation.
+    #[test]
+    fn an_ended_committed_controller_is_kept_beside_the_gave_up_operation() {
+        let root = scratch("controller-ended");
+        let mut host = gave_up_host(&root);
+        host.runtime = Some(committed_runtime("committed"));
+        let ended = host.finished("committed", Ok(1), false);
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(ended.is_ok(), "{ended:?}");
+        assert!(host.runtime.is_none());
+        assert_eq!(host.active.as_deref(), Some("failed"));
+        assert_eq!(host.recovery_reason.as_deref(), Some("gave_up"));
+        assert_eq!(
+            receipt_of(&host, "failed"),
+            (
+                Some("recovery_required".into()),
+                Some("gave_up".into()),
+                Some(INSPECT.into())
+            )
+        );
+        assert_eq!(
+            later_of(&host, "failed"),
+            vec![(
+                "committed".to_string(),
+                "committed revision controller ended: Ok(1)".to_string()
+            )]
+        );
+    }
+
+    /// 17.5 lists "a process that failed to start" among the later failures
+    /// kept beside an unresolved `gave_up`, "whichever operation the run's
+    /// records carry". A `SpawnFailed` of the committed revision's run whose
+    /// records carry the committed operation (the run after an abandoned
+    /// transition gave it back, `release_operation`) is a reason a corrective
+    /// does not resolve: it must be kept beside `gave_up`, turn the next
+    /// action into an inspection and block further effects.
+    #[test]
+    fn adversary_a_spawn_failure_of_the_committed_run_is_kept_beside_the_gave_up_operation() {
+        let root = scratch("spawn-failed");
+        let mut host = gave_up_host(&root);
+        let mut runtime = committed_runtime("committed");
+        runtime
+            .supervised
+            .insert("Terminal.server.supervisor".to_string());
+        host.runtime = Some(runtime);
+        let failed = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("event")),
+                ("machine", text("Terminal.server.supervisor")),
+                (
+                    "value",
+                    object([(
+                        "fields",
+                        object([(
+                            "kind",
+                            object([
+                                ("variant", text("SpawnFailed")),
+                                ("fields", Json::Array(vec![text("no such file")])),
+                            ]),
+                        )]),
+                    )]),
+                ),
+            ]),
+        );
+        let effect = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("effect")),
+                ("machine", text("Terminal.server.supervisor")),
+                ("value", object([("variant", text("Spawn"))])),
+            ]),
+        );
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(failed.is_ok(), "{failed:?}");
+        assert_eq!(host.active.as_deref(), Some("failed"));
+        assert_eq!(host.recovery_reason.as_deref(), Some("gave_up"));
+        assert_eq!(
+            later_of(&host, "failed"),
+            vec![(
+                "committed".to_string(),
+                "a required owned process failed to start".to_string()
+            )],
+            "the spawn failure is kept beside gave_up"
+        );
+        assert_eq!(
+            receipt_of(&host, "failed").2.as_deref(),
+            Some(INSPECT),
+            "a corrective does not resolve a failed start"
+        );
+        assert!(
+            effect.is_err(),
+            "the unresolvable later reason blocks every effect"
+        );
+    }
+
+    /// 17.5: a later reason a corrective does not resolve means "no
+    /// corrective is admitted". The live inspection's top-level next action
+    /// must then not tell the operator to prepare and apply one.
+    #[test]
+    fn adversary_inspect_after_a_later_reducer_failure_does_not_ask_for_a_corrective() {
+        let root = scratch("inspect-next");
+        let mut host = gave_up_host(&root);
+        host.runtime = Some(committed_runtime("committed"));
+        let failed = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("error")),
+                ("machine", text("Terminal.probe.scheduler")),
+                (
+                    "value",
+                    object([
+                        ("code", text("E128")),
+                        ("report", text("reducer of Terminal.probe.scheduler failed")),
+                    ]),
+                ),
+            ]),
+        );
+        let view = host.inspection();
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(failed.is_ok(), "{failed:?}");
+        assert!(!host.correctable(), "admission refuses a corrective");
+        let next = view
+            .get("nextAction")
+            .and_then(Json::as_str)
+            .unwrap_or_default()
+            .to_string();
+        assert!(
+            !next.contains("corrective"),
+            "inspect asks for a corrective that admission refuses: {next}"
+        );
+    }
+
+    /// 17.5's last later failure, a ready artifact that differs: kept
+    /// beside an unresolved `gave_up` under the operation the run's records
+    /// carry, as the reducer failure and the failed start are, and blocking
+    /// as a reason a corrective does not resolve.
+    #[test]
+    fn a_differing_ready_artifact_of_the_committed_run_is_kept_under_its_operation() {
+        let root = scratch("artifact");
+        std::fs::create_dir_all(root.join("plans")).unwrap();
+        std::fs::write(
+            root.join("plans/committed.json"),
+            object([(
+                "artifacts",
+                object([(
+                    "Terminal.server",
+                    object([("digest", text("sha256:another"))]),
+                )]),
+            )])
+            .compact(),
+        )
+        .unwrap();
+        let pid = i64::from(std::process::id());
+        let mut host = gave_up_host(&root);
+        host.owned.insert(
+            "Terminal.server".into(),
+            object([
+                ("pid", Json::Int(pid)),
+                ("ready", Json::Bool(false)),
+                ("operationId", text("committed")),
+                (
+                    "instance",
+                    super::super::controller::process_identity(pid).map_or(Json::Null, text),
+                ),
+                ("generation", Json::Int(1)),
+            ]),
+        );
+        let mut runtime = committed_runtime("committed");
+        runtime
+            .supervised
+            .insert("Terminal.server.supervisor".to_string());
+        host.runtime = Some(runtime);
+        let ready = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("event")),
+                ("machine", text("Terminal.server.supervisor")),
+                (
+                    "value",
+                    object([(
+                        "fields",
+                        object([(
+                            "kind",
+                            object([
+                                ("variant", text("Ready")),
+                                ("fields", Json::Array(vec![Json::Int(pid)])),
+                            ]),
+                        )]),
+                    )]),
+                ),
+            ]),
+        );
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(ready.is_err(), "the mismatch fails the record: {ready:?}");
+        assert_eq!(host.active.as_deref(), Some("failed"));
+        assert_eq!(host.recovery_reason.as_deref(), Some("gave_up"));
+        assert_eq!(
+            later_of(&host, "failed"),
+            vec![(
+                "committed".to_string(),
+                "ready process artifact differs from the admitted desired artifact".to_string()
+            )]
+        );
+        assert_eq!(receipt_of(&host, "failed").2.as_deref(), Some(INSPECT));
+        assert!(!host.correctable());
     }
 }
