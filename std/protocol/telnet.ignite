@@ -6,6 +6,8 @@ import std.console.{Console, Reply, Action, CommandConsole, ConsoleCommands, con
 import std.policy.{Restart, DrainRollout}
 import std.control.{Machine, Supervisor, ProbeScheduler}
 import std.sli.ProbeAttempt
+import std.rfc.rfc854.{RFC854}
+import std.rfc.rfc855.{RFC855}
 
 // Telnet over one byte stream (RFC 854): a Network Virtual Terminal with
 // every option refused. Both roles are generic over the stream
@@ -17,10 +19,28 @@ import std.sli.ProbeAttempt
 // and one probe attempt in their `main` fns. `await_prompt` is the probe's
 // side of a session: a protocol has the roles `serve` and `connect` only
 // (4.2), so it is a module fn beside the protocol.
+//
+// Claims (`docs/slice.md` 19.7): RFC 854 and RFC 855 for every party,
+// since both roles are implemented. The statuses below are the MUST-class
+// requirements no declaration satisfies; the `satisfies` clauses are on
+// `decode_within`, `session`, `render`, `encode_input` and `edit_input`,
+// the `verifies` clauses on the tests.
 
 type IoResult<T> = Result<T, IoError>
 
-protocol Telnet {
+protocol Telnet conforms [RFC854, RFC855] {
+  unsupported RFC854.RP5_3 "the server and a piped client send at once, but tn's terminal line editor holds a line until Enter and has no key that sends it earlier"
+  unsupported RFC854.RP5_4 "no Go Ahead is sent: the server writes its prompt and waits for input without IAC GA, and Suppress Go Ahead is refused like every option"
+  unsupported RFC854.RP10_2 "tn sends IAC IP on Ctrl+C without the Synch (IAC DM in TCP urgent mode): the substrate has no urgent send"
+  unsupported RFC854.RP12_4 "TCP urgent data is not observed, so no Synch is honoured: IAC DM is read as a no-op and the data before it is not discarded"
+  not_applicable RFC854.RP4_2 "a hope about the design of options; Telnet defines no option"
+  not_applicable RFC854.RP6_3 "terminal-to-terminal communication; Telnet connects a server and a client"
+  not_applicable RFC855.RP1_2 "addresses the assignment of option codes; Telnet assigns none"
+  not_applicable RFC855.RP1_3 "addresses the assignment of option codes; Telnet assigns none"
+  not_applicable RFC855.RP2_1 "addresses the documentation of an option; Telnet defines no option"
+  not_applicable RFC855.RP3_1 "addresses designers of options with subnegotiation; Telnet defines no option"
+  not_applicable RFC855.RP3_2 "Telnet sends no subnegotiation: every option is refused, so no option parameter is sent"
+
   // Server role: show the console's prompt, pass each input line to the
   // console and send its reply. The session ends on the console's Close
   // action, end of input, IAC IP, an overlong line or a subnegotiation
@@ -36,8 +56,9 @@ protocol Telnet {
     result
   }
 
-  // Client role: the server's text, with Telnet commands removed and line
-  // ends as LF, goes to standard output. Standard input goes to the server:
+  // Client role: the server's text, with Telnet commands removed, CR NUL
+  // as a carriage return and every other line end as LF (`print_byte`),
+  // goes to standard output. Standard input goes to the server:
   // from a terminal through the local line editor (`edit_input`), otherwise
   // as NVT lines (`forward_input`). Ends with Ok when the server closes the
   // connection, with Err on an overlong subnegotiation.
@@ -54,17 +75,19 @@ protocol Telnet {
     loop {
       match stream.read(4096)? {
         Eof => {
+          if state == CarriageReturn {
+            Stdout.write_all(b"\n")?
+          }
           Stdin.set_raw(false)?
           return Ok(())
         }
         Data(bytes) => {
           var out = Bytes.empty()
           for b in bytes {
-            let (next, event) = decode(state, b)
+            let (next, event, printed) = print_byte(state, b)
             state = next
+            out.append(printed)
             match event {
-              Literal(c) => out.push(c)
-              EndOfLine => out.push(b'\n')
               Answer(answer) => stream.write_all(answer)?
               SubnegotiationTooLong => {
                 Stdout.write_all(out)?
@@ -392,7 +415,10 @@ fn decode(state: Decoder, b: Byte) -> (Decoder, Event) = decode_within(state, b,
 
 // `decode` with a subnegotiation skipped up to `maximum` bytes, counting
 // the IAC of IAC SE; one byte more is `SubnegotiationTooLong`.
-fn decode_within(state: Decoder, b: Byte, maximum: Int) -> (Decoder, Event) = match (state, b) {
+fn decode_within(state: Decoder, b: Byte, maximum: Int) -> (Decoder, Event) satisfies [
+  RFC854.RP2_2, RFC854.RP2_5, RFC854.RP4_4, RFC854.RP7_1, RFC854.RP11_1, RFC854.RP11_3, RFC854.RP13_3,
+  RFC854.RP14_1, RFC855.RP2_3, RFC855.RP2_4
+] = match (state, b) {
   (Ground, IAC) => (Interpret, Nothing)
   (Ground, b'\r') => (CarriageReturn, EndOfLine)
   (Ground, b'\n') => (Ground, EndOfLine)
@@ -454,7 +480,7 @@ test "data bytes are literals" {
   assert feed(Ground, b"x") == (Ground, [Literal(b'x')])
 }
 
-test "CR LF, CR NUL, a lone CR and a lone LF end one line" {
+test "CR LF, CR NUL, a lone CR and a lone LF end one line" verifies [RFC854.RP11_3, RFC854.RP13_3] {
   assert events(b"a\r\nb") == [Literal(b'a'), EndOfLine, Literal(b'b')]
   assert events(b"a\r\0b") == [Literal(b'a'), EndOfLine, Literal(b'b')]
   assert events(b"a\nb") == [Literal(b'a'), EndOfLine, Literal(b'b')]
@@ -473,7 +499,63 @@ test "a CR LF split across reads ends one line" {
   assert feed(state, b"\0") == (Ground, [])
 }
 
-test "IAC IAC is the data byte 255" {
+// One byte of the server's stream as the client role prints it: the
+// decoder's next state, the byte's event and the bytes to print. A CR is
+// printed once the next byte shows which line end it starts: CR NUL is a
+// carriage return alone (RFC 854 p11), CR LF and a lone CR are LF; a CR
+// that ends the stream is printed as LF by `connect`.
+fn print_byte(state: Decoder, b: Byte) -> (Decoder, Event, Bytes) satisfies [RFC854.RP11_3, RFC854.RP13_3] {
+  var out = Bytes.empty()
+  if state == CarriageReturn {
+    out.push(if b == b'\0' { b'\r' } else { b'\n' })
+  }
+  let (next, event) = decode(state, b)
+  match event {
+    Literal(c) => out.push(c)
+    EndOfLine => {
+      if next != CarriageReturn {
+        out.push(b'\n')
+      }
+    }
+    _ => {}
+  }
+  (next, event, out)
+}
+
+// What the client prints for `parts`, read one after another.
+test fn printed(parts: List<Bytes>) -> Bytes {
+  var state = Ground
+  var out = Bytes.empty()
+  for part in parts {
+    for b in part {
+      let (next, _, bytes) = print_byte(state, b)
+      state = next
+      out.append(bytes)
+    }
+  }
+  if state == CarriageReturn {
+    out.push(b'\n')
+  }
+  out
+}
+
+test "the client prints CR NUL as a carriage return and every other line end as LF" verifies [RFC854.RP11_3, RFC854.RP13_3] {
+  assert printed([b"a\r\0b"]) == b"a\rb"
+  assert printed([b"a\r\nb"]) == b"a\nb"
+  assert printed([b"a\rb"]) == b"a\nb"
+  assert printed([b"a\nb"]) == b"a\nb"
+  assert printed([b"\r\r\n\r\0"]) == b"\n\n\r"
+  assert printed([b"a\r"]) == b"a\n"
+  assert printed([b"a\r", b"\0b"]) == b"a\rb"
+  assert printed([b"a\r", b"\nb"]) == b"a\nb"
+  let doubled: Bytes = [b'\r', IAC, IAC, b'x']
+  let literal: Bytes = [b'\n', IAC, b'x']
+  assert printed([doubled]) == literal
+  let negotiation: Bytes = [b'\r', IAC, DO, 1, b'x']
+  assert printed([negotiation]) == b"\nx"
+}
+
+test "IAC IAC is the data byte 255" verifies [RFC854.RP14_1] {
   assert events([IAC, IAC]) == [Literal(255)]
   assert events([b'a', IAC, IAC, b'b']) == [Literal(b'a'), Literal(255), Literal(b'b')]
   assert events([IAC, IAC, IAC, IAC]) == [Literal(255), Literal(255)]
@@ -483,13 +565,15 @@ test "IAC IAC is the data byte 255" {
   assert feed(state, [IAC, b'x']) == (Ground, [Literal(255), Literal(b'x')])
 }
 
-test "DO is answered WONT and WILL is answered DONT" {
+test "DO is answered WONT and WILL is answered DONT" verifies [RFC854.RP2_2, RFC854.RP2_5, RFC855.RP2_3, RFC855.RP2_4] {
   assert events([IAC, DO, 1]) == [Answer([IAC, WONT, 1])]
   assert events([IAC, WILL, 3]) == [Answer([IAC, DONT, 3])]
   assert events([IAC, DONT, 1]) == []
   assert events([IAC, WONT, 1]) == []
   assert events([IAC, DO, IAC, b'x']) == [Answer([IAC, WONT, IAC]), Literal(b'x')]
   assert events([IAC, WILL, b'\r', b'x']) == [Answer([IAC, DONT, b'\r']), Literal(b'x')]
+  // RFC 855: the refused option's parameters are skipped up to IAC SE.
+  assert events([IAC, WILL, 24, IAC, SB, 24, 1, IAC, SE, b'a']) == [Answer([IAC, DONT, 24]), Literal(b'a')]
 }
 
 test "a negotiation split across reads is answered once complete" {
@@ -501,14 +585,14 @@ test "a negotiation split across reads is answered once complete" {
   assert feed(after_do, [24, b'b']) == (Ground, [Answer([IAC, WONT, 24]), Literal(b'b')])
 }
 
-test "AYT and IP are reported and other commands ignored" {
+test "AYT and IP are reported and other commands ignored" verifies [RFC854.RP7_1, RFC854.RP7_2] {
   assert events([IAC, AYT]) == [AreYouThere]
   assert events([IAC, IP, b'x']) == [Interrupt, Literal(b'x')]
   assert events([IAC, 241, b'x']) == [Literal(b'x')]
   assert events([IAC, SE, b'x']) == [Literal(b'x')]
 }
 
-test "a subnegotiation is skipped up to IAC SE" {
+test "a subnegotiation is skipped up to IAC SE" verifies [RFC855.RP2_3, RFC855.RP2_4] {
   let terminal_type = [IAC, SB, 24, 0, b'x', b't', b'e', b'r', b'm', IAC, SE, b'a']
   assert feed(Ground, terminal_type) == (Ground, [Literal(b'a')])
   assert events([IAC, SB, 1, IAC, IAC, 2, IAC, SE, b'a']) == [Literal(b'a')]
@@ -518,6 +602,8 @@ test "a subnegotiation is skipped up to IAC SE" {
   assert none == []
   assert feed(state, [IAC]) == (SubnegotiationInterpret(3), [])
   assert feed(SubnegotiationInterpret(3), [SE, b'b']) == (Ground, [Literal(b'b')])
+  // RFC 855: after a subnegotiation the option is still refused by WON'T.
+  assert events([IAC, SB, 24, 1, IAC, SE, IAC, DO, 24, b'a']) == [Answer([IAC, WONT, 24]), Literal(b'a')]
 }
 
 test "a subnegotiation is limited to 1024 bytes including the IAC of IAC SE" {
@@ -538,11 +624,12 @@ test "a subnegotiation is limited to 1024 bytes including the IAC of IAC SE" {
 
 fn write_text<S: ByteStream>(stream: S, text: Text) -> IoResult<Unit> = stream.write_all(text.to_bytes())
 
-// Each reply line followed by CR LF.
-fn render(reply: Reply) -> Bytes {
+// Each reply line as NVT data (`encode_input`: a line end inside it becomes
+// CR LF, a lone CR becomes CR NUL), followed by CR LF.
+fn render(reply: Reply) -> Bytes satisfies [RFC854.RP11_3, RFC854.RP11_4, RFC854.RP14_1] {
   var out = Bytes.empty()
   for line in reply.lines {
-    out.append(line.to_bytes())
+    out.append(encode_input(line.to_bytes()))
     out.append(b"\r\n")
   }
   out
@@ -550,7 +637,7 @@ fn render(reply: Reply) -> Bytes {
 
 // Standard input as NVT data: LF becomes CR LF, a CR before LF is dropped,
 // any other CR becomes CR NUL, and the data byte 255 is doubled.
-fn encode_input(bytes: Bytes) -> Bytes {
+fn encode_input(bytes: Bytes) -> Bytes satisfies [RFC854.RP11_3, RFC854.RP11_4, RFC854.RP14_1] {
   var out = Bytes.empty()
   var i = 0
   while i < bytes.len() {
@@ -568,12 +655,21 @@ fn encode_input(bytes: Bytes) -> Bytes {
   out
 }
 
-test "render ends each reply line with CR LF" {
+test "render ends each reply line with CR LF" verifies [RFC854.RP11_3, RFC854.RP11_4] {
   assert render(Reply { lines = ["a", "", "é"] }) == "a\r\n\r\né\r\n".to_bytes()
   assert render(Reply { lines = [] }) == Bytes.empty()
 }
 
-test "encode_input writes NVT line ends and doubles IAC" {
+test "a line end inside a reply line is sent as CR LF, a lone CR as CR NUL" verifies [RFC854.RP11_3, RFC854.RP11_4] {
+  assert render(Reply { lines = ["a\nb", "c\rd", "e\r\nf"] }) == b"a\r\nb\r\nc\r\0d\r\ne\r\nf\r\n"
+  assert render(Reply { lines = ["\r"] }) == b"\r\0\r\n"
+}
+
+test "the NVT printer codes BEL, BS, HT, VT and FF are passed as data" verifies [RFC854.RP11_1] {
+  assert events([7, 8, 9, 11, 12]) == [Literal(7), Literal(8), Literal(9), Literal(11), Literal(12)]
+}
+
+test "encode_input writes NVT line ends and doubles IAC" verifies [RFC854.RP11_3, RFC854.RP11_4, RFC854.RP14_1] {
   assert encode_input(b"a\nb") == b"a\r\nb"
   assert encode_input(b"a\r\nb") == b"a\r\nb"
   assert encode_input(b"a\rb") == b"a\r\0b"
@@ -585,7 +681,7 @@ test "encode_input writes NVT line ends and doubles IAC" {
   assert encode_input("é\n".to_bytes()) == "é\r\n".to_bytes()
 }
 
-test "encoded input decodes to the same lines" {
+test "encoded input decodes to the same lines" verifies [RFC854.RP13_3] {
   let input = [b'x', IAC, b'\r', b'y', b'\n', b'\n']
   let expected = [Literal(b'x'), Literal(IAC), EndOfLine, Literal(b'y'), EndOfLine, EndOfLine]
   assert events(encode_input(input)) == expected
@@ -667,7 +763,7 @@ test "erase_last removes one UTF-8 character" {
   assert erase_last("😀😀".to_bytes()) == "😀".to_bytes()
 }
 
-test "apply_key edits the line" {
+test "apply_key edits the line" verifies [RFC854.RP7_2] {
   assert apply_key(b"ab", b'c') == (b"abc", Show(b"c"))
   assert apply_key(Bytes.empty(), 0xC3) == ([0xC3], Show([0xC3]))
   assert apply_key(b"ab", b'\r') == (Bytes.empty(), Enter(b"ab"))
@@ -713,7 +809,7 @@ fn run_command<S: ByteStream>(stream: S, command: Bytes) -> IoResult<Unit> {
 // on an empty line closes the stream's write half, and Ctrl+] reads one
 // local command after the `telnet> ` prompt (`run_command`). Leaving the
 // command prompt shows the session line edited so far again.
-fn edit_input<S: ByteStream>(stream: S) -> IoResult<Unit> {
+fn edit_input<S: ByteStream>(stream: S) -> IoResult<Unit> satisfies [RFC854.RP7_2] {
   var line = Bytes.empty()
   var command = Bytes.empty()
   var commanding = false
@@ -770,12 +866,12 @@ fn edit_input<S: ByteStream>(stream: S) -> IoResult<Unit> {
 // Answer one input line: the reply and, unless the console closed the
 // session, the next prompt, in one write. Ok(false) when the console
 // closed the session.
-fn answer_line<S: ByteStream>(stream: S, application: Console, line: Bytes) -> IoResult<Bool> {
+fn answer_line<S: ByteStream>(stream: S, application: Console, line: Bytes) -> IoResult<Bool> satisfies [RFC854.RP11_3] {
   let reply = application.respond(line.to_text())
   var out = render(reply)
   match reply.action {
     Continue => {
-      out.append(application.prompt.to_bytes())
+      out.append(encode_input(application.prompt.to_bytes()))
       stream.write_all(out)?
       Ok(true)
     }
@@ -788,9 +884,11 @@ fn answer_line<S: ByteStream>(stream: S, application: Console, line: Bytes) -> I
 
 // The server's side of one session, `Telnet.serve` without the idle
 // timeout and the close.
-fn session<S: ByteStream>(stream: S, limits: SessionLimits, application: Console) -> IoResult<Unit> {
+fn session<S: ByteStream>(stream: S, limits: SessionLimits, application: Console) -> IoResult<Unit> satisfies [
+  RFC854.RP2_6, RFC854.RP7_2, RFC854.RP11_3
+] {
   let maximum = limits.maximum_subnegotiation.to_int()
-  write_text(stream, application.prompt)?
+  stream.write_all(encode_input(application.prompt.to_bytes()))?
   var state = Ground
   var line = Bytes.empty()
   loop {
@@ -904,7 +1002,7 @@ test "the server answers each line and ends on the console's close" {
   assert exchange(b"hi\r\n\r\nbye\r\nlost\r\n")? == b"> hi\r\n> \r\n> bye\r\n"
 }
 
-test "the server answers options and AYT between lines" {
+test "the server answers options and AYT between lines" verifies [RFC854.RP2_5, RFC854.RP2_6] {
   var input = [b'a', IAC, DO, 1, b'b', IAC, AYT, b'\r', 0, IAC, WILL, 3]
   input.append(b"bye\r\n")
   var expected = b"> "
@@ -915,7 +1013,7 @@ test "the server answers options and AYT between lines" {
   assert exchange(input)? == expected
 }
 
-test "the server closes on an overlong line, IAC IP and an overlong subnegotiation" {
+test "the server closes on an overlong line, IAC IP and an overlong subnegotiation" verifies [RFC854.RP7_2] {
   assert exchange(b"12345678\r\n123456789")? == b"> 12345678\r\n> line too long\r\n"
   assert exchange([b'a', IAC, IP, b'b', b'\n'])? == b"> "
   var long = [IAC, SB]
@@ -924,7 +1022,7 @@ test "the server closes on an overlong line, IAC IP and an overlong subnegotiati
   assert exchange(long)? == b"> "
 }
 
-test "a pipe session answers IAC DO ECHO with IAC WONT ECHO" {
+test "a pipe session answers IAC DO ECHO with IAC WONT ECHO" verifies [RFC854.RP2_5, RFC854.RP4_4] {
   var input = [IAC, DO, 1]
   input.append(b"hi\r\nbye\r\n")
   var expected = b"> "
@@ -933,7 +1031,7 @@ test "a pipe session answers IAC DO ECHO with IAC WONT ECHO" {
   assert exchange(input)? == expected
 }
 
-test "over a pipe IAC IAC is one data byte" {
+test "over a pipe IAC IAC is one data byte" verifies [RFC854.RP14_1] {
   let input = [IAC, IAC, IAC, IAC, 13, 10, IAC, IAC, IAC, IAC, IAC, IAC, 13, 10]
   var expected = b"> "
   expected.append([0xEF, 0xBF, 0xBD, 0xEF, 0xBF, 0xBD, 0x0D, 0x0A])
@@ -986,7 +1084,7 @@ test "an IAC at the end of one delivery, its command in the next" {
   assert rest(client)? == b"bye\r\n"
 }
 
-test "IAC IAC split across deliveries is one data byte" {
+test "IAC IAC split across deliveries is one data byte" verifies [RFC854.RP14_1] {
   var first = b"a"
   first.push(IAC)
   var second = [IAC]
@@ -1003,6 +1101,17 @@ test "CR at the end of one delivery, LF in the next, is one line end" {
 
 test "a lone CR ends a line" {
   assert exchange(b"a\rb\rbye\r")? == b"> a\r\n> b\r\n> bye\r\n"
+}
+
+// The prompt and the reply each hold a lone CR and an LF; the session
+// sends them as NVT data, so no CR is sent outside CR LF and CR NUL.
+test "a session sends its prompt and replies as NVT data" verifies [RFC854.RP11_3] {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  let console = Console { prompt = "\r>\n", respond = |line| Reply { lines = ["x\ry"], action = Close }, maximum_line = 8 }
+  spawn Telnet.serve(server, SessionLimits {}, console)
+  client.write_all(b"hi\r\n")?
+  assert rest(client)? == b"\r\0>\r\nx\r\0y\r\n"
 }
 
 test "a subnegotiation at exactly the limit, split across three deliveries" {
