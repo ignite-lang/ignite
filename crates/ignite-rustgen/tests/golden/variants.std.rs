@@ -21,9 +21,9 @@ pub mod modes {
     }
 
     pub fn level(mode: &Mode) -> i64 {
-        match mode.clone() {
+        match mode {
             Mode::Loud => 10,
-            Mode::Quiet(n) => n,
+            Mode::Quiet(n) => { let n = (n).clone(); n },
         }
     }
 

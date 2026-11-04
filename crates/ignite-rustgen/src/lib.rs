@@ -3844,11 +3844,16 @@ impl<'a> Generator<'a> {
         let no_arm = self
             .fail_call(expr, "no arm matched")
             .unwrap_or_else(|| "unreachable!()".to_string());
-        let mut scrutinee_text = self.value(scrutinee);
+        let ty = self.type_of(scrutinee).cloned();
+        let lent = self.match_by_ref(scrutinee, ty.as_ref(), arms);
+        let mut scrutinee_text = if lent {
+            self.ref_arg(scrutinee)
+        } else {
+            self.value(scrutinee)
+        };
         if matches!(scrutinee.kind, ExprKind::Record { .. }) {
             scrutinee_text = format!("({scrutinee_text})");
         }
-        let ty = self.type_of(scrutinee).cloned();
         let mut out = format!("match {scrutinee_text} {{\n");
         self.indent += 1;
         let mut guarded = false;
@@ -3865,10 +3870,15 @@ impl<'a> Generator<'a> {
             };
             guarded |= !native && !catch_all;
             ranged |= has_range(&arm.pattern);
+            let lent_before = self.borrowed_elements.len();
             let pattern = if native {
-                self.pattern(&arm.pattern, ty.as_ref())
+                let text = self.pattern(&arm.pattern, ty.as_ref());
+                if lent {
+                    self.lend_bindings(&arm.pattern, &mut bindings);
+                }
+                text
             } else {
-                let subject = "(&__m)".to_string();
+                let subject = if lent { "__m" } else { "(&__m)" }.to_string();
                 let test = self.test(&arm.pattern, &subject, ty.as_ref());
                 self.extract(&arm.pattern, subject, ty.as_ref(), &mut bindings);
                 match test {
@@ -3880,6 +3890,7 @@ impl<'a> Generator<'a> {
                 ExprKind::Block(block) => self.block(block, true),
                 _ => self.result(&arm.body),
             };
+            self.borrowed_elements.truncate(lent_before);
             self.scopes.pop();
             if !bindings.is_empty() {
                 let lets: String = bindings
@@ -3901,6 +3912,47 @@ impl<'a> Generator<'a> {
         out.push_str(&indentation(self.indent));
         out.push('}');
         out
+    }
+
+    /// Whether `match scrutinee { arms }` can match a reference to its
+    /// scrutinee instead of a copy: the scrutinee is a place whose type is
+    /// known, lendable ([`lendable`]) and not `Copy` in Rust, and no arm
+    /// changes the variable the place is rooted at.
+    fn match_by_ref(
+        &self,
+        scrutinee: &Expr,
+        ty: Option<&Ty>,
+        arms: &[ignite_syntax::ast::Arm],
+    ) -> bool {
+        if !self.is_place(scrutinee) || !ty.is_some_and(|ty| lendable(ty) && !rust_copy(ty)) {
+            return false;
+        }
+        let mut mutated = BTreeSet::new();
+        for arm in arms {
+            mutated_in(&arm.body, self.types, &mut mutated);
+        }
+        place_root(scrutinee).is_some_and(|root| !mutated.contains(root))
+    }
+
+    /// The bindings of a native `pattern` matched against a reference,
+    /// where each is a reference: a lendable binding that is not `Copy`
+    /// stays one in the arm, read like a borrowed parameter; any other is
+    /// copied out at the start of the arm (pushed to `out`).
+    fn lend_bindings(&mut self, pattern: &Pattern, out: &mut Vec<(String, String)>) {
+        let mut names = Vec::new();
+        pattern_bindings(pattern, &mut names);
+        let scope = self.scopes.len() - 1;
+        for id in names {
+            if !self.scopes[scope].contains(&id.name) {
+                continue;
+            }
+            let ty = self.types.and_then(|t| t.binding_type(id.span));
+            if ty.is_some_and(|ty| lendable(ty) && !rust_copy(ty)) {
+                self.borrowed_elements.push((scope, id.name.clone()));
+            } else {
+                out.push((id.name.clone(), ident(&id.name)));
+            }
+        }
     }
 
     /// An `if`; `value` says whether it is in value position. Its branches
@@ -5013,6 +5065,52 @@ fn has_range(pattern: &Pattern) -> bool {
             items.iter().any(has_range)
         }
         PatternKind::Variant { args, .. } => args.iter().any(has_range),
+        _ => false,
+    }
+}
+
+/// The names `pattern` binds, in order; an uppercase binding may name a
+/// variant and is told apart by the caller.
+fn pattern_bindings<'p>(pattern: &'p Pattern, out: &mut Vec<&'p Ident>) {
+    match &pattern.kind {
+        PatternKind::Binding(id) => out.push(id),
+        PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
+            items.iter().for_each(|item| pattern_bindings(item, out));
+        }
+        PatternKind::Variant { args, .. } => {
+            args.iter().for_each(|arg| pattern_bindings(arg, out));
+        }
+        _ => {}
+    }
+}
+
+/// Whether a value of type `ty` can be read through a reference where
+/// the generated code reads a borrowed parameter: the types a `for` over
+/// a list place lends its elements as ([`Generator::borrowed_for`]).
+fn lendable(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::Text
+            | Ty::List(_)
+            | Ty::Option(_)
+            | Ty::Result(..)
+            | Ty::Record(_)
+            | Ty::Enum(_)
+            | Ty::Tuple(_)
+            | Ty::GenericRecord(..)
+            | Ty::GenericEnum(..)
+            | Ty::Map(..)
+    )
+}
+
+/// Whether the Rust type of `ty` is `Copy`: scalars, quantities, and
+/// options, results and tuples of those.
+fn rust_copy(ty: &Ty) -> bool {
+    match ty {
+        Ty::Int | Ty::Bool | Ty::Byte | Ty::Unit | Ty::Never | Ty::Quantity(_) => true,
+        Ty::Option(inner) => rust_copy(inner),
+        Ty::Result(ok, err) => rust_copy(ok) && rust_copy(err),
+        Ty::Tuple(items) => items.iter().all(rust_copy),
         _ => false,
     }
 }
