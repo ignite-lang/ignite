@@ -21,7 +21,7 @@ pub mod commands {
     }
 
     pub fn answer(command: &Command) -> Reply {
-        match command.clone() {
+        match command {
             Command::Help => Reply { lines: vec![String::from("help"), String::from("echo <text>"), String::from("status"), String::from("quit")], action: Reply::default_action() },
             Command::Echo(text) => Reply { lines: vec![text.clone()], action: Reply::default_action() },
             Command::Status => Reply { lines: vec![String::from("ready")], action: Reply::default_action() },
