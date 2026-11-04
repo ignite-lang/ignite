@@ -1,0 +1,121 @@
+// Arguments the Rust target borrows instead of copying (`docs/slice.md`
+// section 6): the parts of a text `+` chain or interpolation, an `at`
+// element passed by reference, and the list `append` reads. Each test here
+// is a case that must compile and give the same answer on both targets.
+
+type Item {
+  id: Int
+  name: Text
+}
+
+type Bag {
+  items: List<Item>
+  data: Bytes = b""
+}
+
+fn item(id: Int, name: Text) -> Item = Item { id = id, name = name }
+
+fn items() -> List<Item> = [item(1, "a"), item(2, "b"), item(3, "c")]
+
+fn name_of(x: Item) -> Text = x.name
+
+fn size(data: Bytes) -> Int = data.len()
+
+fn pick(x: Item, n: Int) -> Int = x.id * 10 + n
+
+fn count() -> Int = 7
+
+test "interpolation parts that are calls, temporaries and fields" {
+  let xs = items()
+  let n = -9223372036854775807 - 1
+  let byte = 0xFF
+  let bag = Bag { items = xs }
+  assert "{count()}" == "7"
+  assert "{count() + 1}-{items().len()}" == "8-3"
+  assert "{name_of(xs.at(1))}{xs.at(2).name}{items().at(0).name}" == "bca"
+  assert "{n} {byte} {true} {false}" == "-9223372036854775808 255 true false"
+  assert "{bag.items.len()}:{bag.items.at(0).name}" == "3:a"
+  assert "é{xs.at(0).name}ü" == "éaü"
+  assert "{{x}}" + n.to_text() == r"{x}" + "-9223372036854775808"
+  assert r"{}{0}" + "{byte}" == r"{}{0}" + "255"
+  assert "a" + "" + "b" == "ab"
+  assert "{"q"}" == "q"
+  assert xs == items()
+}
+
+test "an interpolated variable changed later in the same expression" {
+  var n = 1
+  let s = "{n}" + (if n > 0 {
+    n = n + 1
+    "a"
+  } else {
+    "b"
+  })
+  assert s == "1a" && n == 2
+  var t = "x"
+  let u = t + (if t == "x" {
+    t = "y"
+    "z"
+  } else {
+    ""
+  })
+  assert u == "xz" && t == "y"
+  var xs = items()
+  let got = pick(xs.at(0), if xs.len() == 3 {
+    xs = [item(9, "z")]
+    1
+  } else {
+    2
+  })
+  assert got == 11 && xs == [item(9, "z")]
+  var p = item(4, "d")
+  let w = "{p.id}:" + p.name + (if p.id == 4 {
+    p = item(5, "e")
+    "!"
+  } else {
+    "?"
+  }) + "{p.id}" + p.name
+  assert w == "4:d!5e" && p == item(5, "e")
+  var flag = true
+  var bytes = b"ab"
+  let v = "{flag}{bytes.len()}" + (if flag {
+    flag = false
+    bytes.push(b'c')
+    "+"
+  } else {
+    "-"
+  }) + "{flag}{bytes.len()}"
+  assert v == "true2+false3"
+}
+
+test "at on a temporary list and on a place, passed by reference" {
+  let xs = items()
+  assert name_of(items().at(1)) == "b"
+  assert name_of(xs.at(2)) == "c"
+  assert pick(xs.at(1), xs.at(0).id) == 21
+  let datas = [b"ab", b"cde"]
+  assert size(datas.at(1)) == 3
+  assert size([b"x"].at(0)) == 1
+  assert xs == items() && datas == [b"ab", b"cde"]
+}
+
+test "append of the receiver itself and of values built from it" {
+  var bytes = b"ab"
+  bytes.append(bytes)
+  assert bytes == b"abab"
+  bytes.append(bytes.slice(0, 1))
+  assert bytes == b"ababa"
+  var bag = Bag { items = items(), data = b"z" }
+  bag.items.append(bag.items)
+  assert bag.items.len() == 6
+  bag.data.append(bag.data)
+  assert bag.data == b"zz"
+  var xs = items()
+  xs.append(xs.map(|x| item(x.id * 10, x.name)))
+  assert xs.len() == 6 && xs.at(5) == item(30, "c")
+  let more = [item(4, "d")]
+  xs.append(more)
+  assert more == [item(4, "d")] && xs.len() == 7
+  xs.append(bag.items)
+  assert xs.len() == 13 && bag.items.len() == 6
+}

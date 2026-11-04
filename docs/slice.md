@@ -476,7 +476,7 @@ Every generated file starts with
 | `if c { a } else { b }` | same |
 | `while`, `loop`, `for x in e`, `break`, `continue`, `return` | same |
 | `a + b` etc. | same on numbers |
-| `a + b + c` on `Text` | `format!("{}{}{}", a, b, c)` (one call per left-folded chain) |
+| `a + b + c` on `Text` | `format!("{}{}{}", a, b, c)` (one call per left-folded chain); `format!` borrows each part, a literal part is inlined into the template with its braces doubled, and a part `x.to_text()` of Text, Int, Byte or Bool (each `{x}` of an interpolation) passes `x` |
 | `a == b` | same |
 | `(a, b)`, type `(A, B)` | `(a, b)`, `(A, B)` |
 | `()` | `()` |
@@ -505,9 +505,11 @@ no exceptions.
 **Parameters.** Every parameter of a fn (not of a protocol role, which a generated `main`
 calls with owned values) is a reference `p: &T`, so a call copies nothing: an argument that
 is a place is passed as `&place`, a parameter that is itself a reference as it is, any other
-argument as `&(value)`. A parameter the body assigns or changes in place (`push`, `append`,
-`clear` on it or a field of it), and one of a `Copy` type (`Int`, `Byte`, `Bool`, `Unit`, fn
-types), is copied once on entry: `let mut p = p.clone();`. In the body a reference
+argument as `&(value)`; `l.at(i)` on a place `l` passes the element borrowed from the list,
+`ignite_io::checked::at(&l, i, <site>)`, unless another argument of the call changes `l`. A
+parameter the body assigns or changes in place (`push`, `append`, `clear` on it or a field of
+it), and one of a `Copy` type (`Int`, `Byte`, `Bool`, `Unit`, fn types), is copied once on
+entry: `let mut p = p.clone();`. In the body a reference
 parameter is dereferenced as an operand of an operator, a condition or an index (`(*p)`), and
 copied where it is the result of a block, arm or branch. A fn of the module or an imported
 one used as a value is a closure that borrows for it, cast to the fn pointer type:
@@ -562,7 +564,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `s.set_idle_timeout(ms)` | `s.set_idle_timeout(ms)` | TcpStream |
 | `b.slice(i, j)` | `b[(i) as usize..(j) as usize].to_vec()` | |
 | `b.push(x)` | `b.push(x)` | Bytes, List |
-| `b.append(c)` | `b.extend_from_slice(&c)` | Bytes |
+| `b.append(c)` | `b.extend_from_slice(&c)`, `c` borrowed; `&c.clone()` when `c` is rooted at the variable of `b` | Bytes, List |
 | `b.clear()` | `b.clear()` | |
 | `l.join(sep)` | `l.join(&sep)` | List<Text> |
 | `x.copy()` | `x.clone()` | |
