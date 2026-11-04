@@ -18,7 +18,12 @@ fn texts<'a>(list: *const IgniteList) -> &'a [IgniteList] {
 /// sequences become U+FFFD.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_text_from_bytes_lossy(out: *mut IgniteList, data: *const IgniteList) {
-    let text = String::from_utf8_lossy(bytes(data));
+    let data = bytes(data);
+    if data.is_ascii() {
+        put(out, IgniteList::from_bytes(data));
+        return;
+    }
+    let text = String::from_utf8_lossy(data);
     put(out, IgniteList::from_bytes(text.as_bytes()));
 }
 
@@ -105,14 +110,7 @@ pub extern "C" fn ignite_rt_text_join(
 /// else (a `+`, spaces, no digits, overflow).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_int_parse(text: *const IgniteList, out: *mut i64) -> i8 {
-    let text = bytes(text);
-    if text.first() == Some(&b'+') {
-        return 0;
-    }
-    match std::str::from_utf8(text)
-        .ok()
-        .and_then(|t| t.parse::<i64>().ok())
-    {
+    match parse_int(bytes(text)) {
         Some(value) => {
             put(out, value);
             1
@@ -121,10 +119,52 @@ pub extern "C" fn ignite_rt_int_parse(text: *const IgniteList, out: *mut i64) ->
     }
 }
 
+/// The value of an optional `-` and one or more ASCII digits, `None` for
+/// anything else or on overflow. Accumulates towards the sign, so
+/// `i64::MIN` parses.
+fn parse_int(text: &[u8]) -> Option<i64> {
+    let (negative, digits) = match text.split_first() {
+        Some((b'-', rest)) => (true, rest),
+        _ => (false, text),
+    };
+    if digits.is_empty() {
+        return None;
+    }
+    let mut value: i64 = 0;
+    for &byte in digits {
+        let digit = byte.wrapping_sub(b'0');
+        if digit > 9 {
+            return None;
+        }
+        value = value.checked_mul(10)?;
+        value = if negative {
+            value.checked_sub(i64::from(digit))?
+        } else {
+            value.checked_add(i64::from(digit))?
+        };
+    }
+    Some(value)
+}
+
 /// `void int_to_text(Text* out, i64 value)`: decimal, `-` for negatives.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_int_to_text(out: *mut IgniteList, value: i64) {
-    put(out, IgniteList::from_bytes(value.to_string().as_bytes()));
+    let mut buffer = [0u8; 20];
+    let mut at = buffer.len();
+    let mut rest = value.unsigned_abs();
+    loop {
+        at -= 1;
+        buffer[at] = b'0' + (rest % 10) as u8;
+        rest /= 10;
+        if rest == 0 {
+            break;
+        }
+    }
+    if value < 0 {
+        at -= 1;
+        buffer[at] = b'-';
+    }
+    put(out, IgniteList::from_bytes(&buffer[at..]));
 }
 
 /// `i32 text_cmp(Text* a, Text* b)`: -1, 0 or 1 for the bytewise order of
@@ -156,6 +196,24 @@ pub extern "C" fn ignite_rt_quantity_debug(out: *mut IgniteList, kind: i32, valu
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn int_parse_matches_i64_from_str_without_plus() {
+        for text in [
+            "0", "-0", "7", "-7", "007", "42", "-42", "9223372036854775807",
+            "-9223372036854775808", "9223372036854775808", "-9223372036854775809",
+            "99999999999999999999", "", "-", "+", "+1", "1-", "--1", " 1", "1 ",
+            "1a", "a1", "\u{663}", "\u{ff11}",
+        ] {
+            let expected = if text.starts_with('+') {
+                None
+            } else {
+                text.parse::<i64>().ok()
+            };
+            assert_eq!(super::parse_int(text.as_bytes()), expected, "{text:?}");
+        }
+        assert_eq!(super::parse_int(b"1\xff"), None);
+    }
+
     #[test]
     fn debug_escapes_as_section_13_6() {
         assert_eq!(
