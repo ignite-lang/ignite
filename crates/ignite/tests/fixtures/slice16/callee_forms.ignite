@@ -43,6 +43,38 @@ fn called_before_push() -> Int {
   n
 }
 
+fn bound_before_push() -> Int {
+  var fs = []
+  let n = if fs.len() > 0 {
+    let f = fs[0]
+    f(1)
+  } else {
+    0
+  }
+  fs.push(double)
+  n
+}
+
+fn map_before_put() -> Int {
+  var m = Map.empty()
+  let n = match m.get(1) {
+    Some(f) => f(1)
+    None => 0
+  }
+  m.put(1, double)
+  n
+}
+
+fn none_before_set() -> Int {
+  var o = None
+  let n = match o {
+    Some(f) => f(1)
+    None => 0
+  }
+  o = Some(double)
+  n
+}
+
 test "the callee is evaluated before the arguments" {
   let (a, b) = Pipe.pair()
   let fs = [double, double]
@@ -58,4 +90,16 @@ test "the callee is evaluated before the arguments" {
 
 test "an indexed callee whose list a later push decides" {
   assert called_before_push() == 0
+}
+
+test "a fn value bound from a list a later push decides" {
+  assert bound_before_push() == 0
+}
+
+test "a fn value from a map a later put decides" {
+  assert map_before_put() == 0
+}
+
+test "a fn value from an option a later assignment decides" {
+  assert none_before_set() == 0
 }

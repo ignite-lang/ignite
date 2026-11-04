@@ -2505,6 +2505,38 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// Whether `expr` is a value whose type only its context decides: `[]`,
+    /// `None`, `List.empty()`, `Map.empty()`, `Store.new()`, or a block or
+    /// `if` ending in one. The typer decides such a `let` from later uses
+    /// (`docs/slice.md` section 13, row 3); rustc does not when the first
+    /// use is a generic fn such as `ignite_io::checked::at`, so the `let`
+    /// carries the type the typer recorded.
+    fn undecided(&self, expr: &Expr) -> bool {
+        let tail = |block: &Block| matches!(block.stmts.last(), Some(Stmt { kind: StmtKind::Expr(e), .. }) if self.undecided(e));
+        let empty = |receiver: &Expr, name: &Ident| {
+            matches!(
+                (self.qualifier(receiver), name.name.as_str()),
+                (Some("List" | "Map"), "empty") | (Some("Store"), "new")
+            )
+        };
+        match &expr.kind {
+            ExprKind::List(items) => items.is_empty(),
+            ExprKind::Name(id) => id.name == "None" && !self.is_local(&id.name),
+            ExprKind::Method {
+                receiver,
+                name,
+                args,
+            } => args.is_empty() && empty(receiver, name),
+            ExprKind::Call { callee, args } => {
+                args.is_empty()
+                    && matches!(&callee.kind, ExprKind::Field { receiver, name } if empty(receiver, name))
+            }
+            ExprKind::Block(block) => tail(block),
+            ExprKind::If { then, .. } => tail(then),
+            _ => false,
+        }
+    }
+
     fn is_place(&self, expr: &Expr) -> bool {
         match &expr.kind {
             ExprKind::Name(id) => self.is_local(&id.name),
@@ -2565,11 +2597,16 @@ impl<'a> Generator<'a> {
                 value,
                 mutable,
             } => {
+                let decided = match ty {
+                    None if self.undecided(value) => self.type_of(value).cloned(),
+                    _ => None,
+                };
                 let value = self.value(value);
                 self.bind(&name.name);
-                let ty = match ty {
-                    Some(ty) => format!(": {}", rust_type(ty)),
-                    None => String::new(),
+                let ty = match (ty, decided) {
+                    (Some(ty), _) => format!(": {}", rust_type(ty)),
+                    (None, Some(decided)) => format!(": {}", self.rust_ty(&decided)),
+                    (None, None) => String::new(),
                 };
                 let mutability = if *mutable { "mut " } else { "" };
                 format!("let {mutability}{}{ty} = {value};", ident(&name.name))

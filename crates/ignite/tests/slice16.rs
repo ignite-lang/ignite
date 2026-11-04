@@ -56,7 +56,9 @@ fn closure_shapes_pass_on_both_targets() {
 /// 20.4.2 on both targets for the callee forms `closures.ignite` and
 /// `calls.ignite` leave out: the evaluation order (callee first, then the
 /// arguments left to right) and an indexed callee whose list's element type
-/// a later `push` decides, which `ignite check` accepts.
+/// a later `push` decides, which `ignite check` accepts; also a fn value
+/// bound from such a list, and a `Map.empty()` and a `None` that a later
+/// `put` or assignment decides, whose generated `let`s carry the type.
 #[test]
 fn callee_forms_pass_on_both_targets() {
     let dir = out_dir("callee_forms");
@@ -80,7 +82,7 @@ fn callee_forms_pass_on_both_targets() {
     );
     assert_eq!(
         stdout
-            .matches("test result: ok. 2 passed; 0 failed;")
+            .matches("test result: ok. 5 passed; 0 failed;")
             .count(),
         2,
         "{stdout}"
