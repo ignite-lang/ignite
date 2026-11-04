@@ -181,7 +181,9 @@ pub extern "C" fn ignite_rt_store_values(handle: *const RtStore, out: *mut Ignit
 /// `i8 store_update(ptr store, i64 id, ptr f, ptr thunk, ptr out)`: under
 /// the store's lock, replace the value under `id` by `thunk(f, value)`; 1
 /// and a copy of the new value in `out`, or 0 (and `f` not called) when
-/// there is none.
+/// there is none. A null from the thunk is a failure of `f` its callback
+/// guard stopped (`crate::fail`): the old value stays, the lock is
+/// released, then the task ends with the failure's report.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_update(
     handle: *const RtStore,
@@ -191,15 +193,19 @@ pub extern "C" fn ignite_rt_store_update(
     out: *mut u8,
 ) -> i8 {
     let s = store(handle);
-    let updated = s.store.replace_with(
+    let updated = s.store.try_replace_with(
         id,
-        |old| HeapValue {
-            ptr: thunk(f, old.ptr),
-            glue: s.glue,
+        |old| match thunk(f, old.ptr) {
+            ptr if ptr.is_null() => Err(()),
+            ptr => Ok(HeapValue { ptr, glue: s.glue }),
         },
         |new| new.copy_out(out),
     );
-    i8::from(updated.is_some())
+    match updated {
+        Some(Ok(())) => 1,
+        Some(Err(())) => crate::fail::resume(),
+        None => 0,
+    }
 }
 
 #[cfg(test)]

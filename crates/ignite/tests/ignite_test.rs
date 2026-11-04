@@ -6,8 +6,8 @@
 //! The invocations of one target form two chains ([`Chain`]), each with
 //! an output directory, a cargo target directory and a lock of its own,
 //! so a Rust build (cargo) and an LLVM build (clang) overlap and so do the
-//! chains. The fixtures chain builds `slow`, `basics`, `targets` and
-//! `builtins` into one executable once per target ([`fixtures_run`]) and
+//! chains. The fixtures chain builds `slow`, `basics`, `targets`, `builtins`
+//! and `store` into one executable once per target ([`fixtures_run`]) and
 //! runs the filter, list and overflow invocations over the same files,
 //! which cargo keeps incremental. The groups chain holds the invocations
 //! that change the project's shape (a second group `tests-2`, a standard
@@ -28,11 +28,12 @@ const TARGETS: [&str; 2] = ["rust", "llvm"];
 /// The fixture programs of one test executable, in command-line order:
 /// `slow` before `basics` shows the order is the command line's, not the
 /// alphabet's.
-const FIXTURES: [&str; 4] = [
+const FIXTURES: [&str; 5] = [
     "slow.ignite",
     "basics.ignite",
     "targets.ignite",
     "builtins.ignite",
+    "store.ignite",
 ];
 
 /// The invocations of one target that share an output directory and a
@@ -144,7 +145,7 @@ fn without_time(report: &str) -> String {
 
 /// The run of the [`FIXTURES`] in one executable with `--timeout 1` on
 /// `target`, once per test binary: eight tests read it. `slow`'s `never
-/// ends` is the test the timeout kills; the other 18 finish well inside
+/// ends` is the test the timeout kills; the other 20 finish well inside
 /// a second.
 fn fixtures_run(target: &str) -> &'static Run {
     static RUNS: [OnceLock<Run>; 2] = [OnceLock::new(), OnceLock::new()];
@@ -157,7 +158,7 @@ fn counts_results_and_failures() {
         let run = fixtures_run(target);
         let out = &run.stdout;
         assert_eq!(run.status, 1, "{target}: {out}\n{}", run.stderr);
-        assert!(out.starts_with("running 19 tests\n"), "{target}: {out}");
+        assert!(out.starts_with("running 21 tests\n"), "{target}: {out}");
         for line in [
             "test fixtures.basics/arithmetic passes ... ok",
             "test fixtures.basics/int differs ... FAILED",
@@ -165,7 +166,7 @@ fn counts_results_and_failures() {
             "test fixtures.basics/index out of range panics ... FAILED",
             "test fixtures.basics/output hidden on success ... ok",
             "test fixtures.basics/tcp echo through a task ... ok",
-            "test result: FAILED. 9 passed; 10 failed; 0 filtered out; finished in ",
+            "test result: FAILED. 10 passed; 11 failed; 0 filtered out; finished in ",
         ] {
             assert!(out.contains(line), "{target}: no `{line}` in\n{out}");
         }
@@ -250,7 +251,7 @@ fn filter_exact_passing_and_none() {
         assert!(
             exact
                 .stdout
-                .contains("test result: FAILED. 0 passed; 1 failed; 18 filtered out;"),
+                .contains("test result: FAILED. 0 passed; 1 failed; 20 filtered out;"),
             "{target}: {}",
             exact.stdout
         );
@@ -258,14 +259,14 @@ fn filter_exact_passing_and_none() {
         assert_eq!(passing.status, 0, "{target}: {}", passing.stdout);
         assert_eq!(
             without_time(&passing.stdout),
-            "running 1 test\ntest fixtures.basics/arithmetic passes ... ok\n\ntest result: ok. 1 passed; 0 failed; 18 filtered out",
+            "running 1 test\ntest fixtures.basics/arithmetic passes ... ok\n\ntest result: ok. 1 passed; 0 failed; 20 filtered out",
             "{target}"
         );
         let none = fixtures_test(target, &["no such test"]);
         assert_eq!(none.status, 0, "{target}");
         assert_eq!(
             without_time(&none.stdout),
-            "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 19 filtered out",
+            "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 21 filtered out",
             "{target}"
         );
     });
@@ -388,6 +389,28 @@ fn substrate_builtins_run_on_both_targets() {
             out.contains("test tests.builtins/Clock.monotonic: two reads are ordered ... ok\n"),
             "{target}: {out}"
         );
+    });
+}
+
+/// A failure inside `Store.update`'s `f`, which runs under the store's
+/// lock, ends its task with its report and leaves the lock free on both
+/// targets (`fixtures/tests/store.ignite`). On LLVM the failure used to
+/// `longjmp` past the runtime frame holding the lock, so the next use of
+/// the store waited forever.
+#[test]
+fn a_failing_store_update_ends_its_task_and_frees_the_store() {
+    let file = fixture("store.ignite");
+    on_both_targets(|target| {
+        let out = &fixtures_run(target).stdout;
+        for line in [
+            "test fixtures.store/a failing update in a task leaves the store usable ... ok\n",
+            "test fixtures.store/a failing update fails its test ... FAILED\n",
+            &format!(
+                "---- fixtures.store/a failing update fails its test stderr ----\nerror: + failed at {file}:44:23: 9223372036854775807 + 1\n"
+            ),
+        ] {
+            assert!(out.contains(line), "{target}: no `{line}` in\n{out}");
+        }
     });
 }
 

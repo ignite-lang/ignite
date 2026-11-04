@@ -21,6 +21,7 @@
 
 use std::collections::BTreeMap;
 use std::collections::btree_map::Values;
+use std::convert::Infallible;
 use std::fmt;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -126,11 +127,32 @@ impl<T> Store<T> {
         f: impl FnOnce(&T) -> T,
         read: impl FnOnce(&T) -> R,
     ) -> Option<R> {
+        let replaced = self.try_replace_with(id, |old| Ok::<T, Infallible>(f(old)), read);
+        replaced.map(|result| match result {
+            Ok(read) => read,
+        })
+    }
+
+    /// [`Store::replace_with`] with an `f` that may fail: on `Err` the old
+    /// value stays, `read` is not called and the lock is released before
+    /// the error is returned. The LLVM target's runtime uses it to end a
+    /// task whose `update` callback failed only after the lock is free.
+    pub fn try_replace_with<R, E>(
+        &self,
+        id: i64,
+        f: impl FnOnce(&T) -> Result<T, E>,
+        read: impl FnOnce(&T) -> R,
+    ) -> Option<Result<R, E>> {
         let mut map = self.map();
         let entry = map.get_mut(&id)?;
-        *entry = f(entry);
-        crate::released_memory();
-        Some(read(entry))
+        match f(entry) {
+            Ok(new) => {
+                *entry = new;
+                crate::released_memory();
+                Some(Ok(read(entry)))
+            }
+            Err(error) => Some(Err(error)),
+        }
     }
 }
 
@@ -267,6 +289,25 @@ mod tests {
             std::thread::spawn(move || clone.replace_with(1, |_| panic!("boom"), |v| *v)).join();
         assert!(result.is_err());
         assert_eq!(store.read(1, |v| *v), Some(5));
+    }
+
+    #[test]
+    fn a_failed_try_replace_with_keeps_the_old_value_and_frees_the_lock() {
+        let releases = || crate::task::RELEASES.with(std::cell::Cell::get);
+        let store: Store<i64> = Store::new();
+        store.put(1, 5);
+        let start = releases();
+        let failed: Option<Result<i64, &str>> =
+            store.try_replace_with(1, |_| Err("failed"), |_| panic!("read called"));
+        assert_eq!(failed, Some(Err("failed")));
+        assert_eq!(releases(), start, "nothing was dropped");
+        assert_eq!(store.get(1), Some(5), "the old value stays");
+        let missing: Option<Result<i64, &str>> =
+            store.try_replace_with(2, |_| panic!("f called"), |v| *v);
+        assert_eq!(missing, None);
+        let replaced: Option<Result<i64, &str>> = store.try_replace_with(1, |v| Ok(v + 1), |v| *v);
+        assert_eq!(replaced, Some(Ok(6)));
+        assert_eq!(releases(), start + 1, "the old value was dropped");
     }
 
     #[test]
