@@ -10,7 +10,7 @@ relations:
 scope:
 - confidence: inferred
   path: crates/ignite-io/src/store.rs
-revision: 2
+revision: 3
 ---
 # Story: store-lock-contention
 
@@ -29,6 +29,11 @@ request on the ember server fall toward the handwritten Rust baseline.
   INCR takes the lock twice (`get`, then `update`); `update` clones the value twice while holding
   the lock. `story:store-atomic-upsert` turns INCR into one lock; `story:store-borrowing-reads`
   changes the copies.
+- Copies under the lock: after round 10 (passed closures), 48,000 blocks remain at ember's INCR
+  update site, inferred to be `f(old.clone())` in `ignite_io::Store::update`
+  (`crates/ignite-io/src/store.rs:175` at `88cae227`); on LLVM `copy_to_heap.ember.Bucket` is
+  8 % of CPU with about 4 mallocs per copy (`story:llvm-runtime-hot-paths`). Fewer copies shorten
+  the time the lock is held.
 - Options: shard the map by id, a reader-writer lock for reads, clones outside the lock.
 
 ## Acceptance
