@@ -49,8 +49,8 @@ The roadmap in outline. The reasoning and the dependency analysis are in `docs/v
   build times are measured before and after each slice and recorded in `AGENTS.md`; a rise
   over 10 % is a deviation to explain.
 - Both targets agree: every feature lands on both. D2 B makes LLVM the default `--target`, but
-  the CLI default is still Rust; that is contradiction X25 in `docs/vision.md` section 6, open
-  until Timo decides.
+  the CLI default is still Rust (X25 in `docs/vision.md` section 6); it switches to LLVM after
+  slice 16 U4 lands (`story:llvm-default-target`, 2026-11-04).
 - Each slice starts with a contract section in `docs/slice.md`, reviewed against `docs/vision.md`
   section 6 before agents are dispatched; each diagnostic code gets a fixture.
 - Future designs (`docs/wasm.md`, `docs/actors.md`, `docs/protocols.md`, `docs/syntax.md`) stay
