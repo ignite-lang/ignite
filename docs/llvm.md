@@ -478,7 +478,7 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `i8 text_starts_with(Text* text, Text* prefix)` | |
 | `void text_join(Text* out, List* texts, Text* separator)` | |
 | `void int_to_text(Text* out, i64 value)` | |
-| `i8 int_parse(Text* text, i64* out)` | 1 and `out` when `text` is a decimal `i64` with an optional leading `-` (Rust `str::parse`; a leading `+` is rejected), else 0 |
+| `i8 int_parse(Text* text, i64* out)` | 1 and `out` when `text` is a decimal `i64` with an optional leading `-` (`ignite_io::parse_int`: Rust `str::parse`, a leading `+` rejected), else 0; `text` may be the `List` of a `Bytes`, as `Int.parse(b.to_text())` passes `b` |
 | `i32 tcp_set_idle_timeout(i64 stream, i64 ms, IoError* err)` | a read that waits longer than `ms` returns `Eof`; 0 or less removes the timeout (`ignite_io::TcpStream::set_idle_timeout`) |
 | `ptr store_new(ptr to_heap, ptr from_heap, ptr free_heap, i64 size, i64 align)` | a `ignite_io::Store` of heap copies of `size`-byte values; the three functions are the element type's glue (section 4); never freed |
 | `i64 store_next_id(ptr store)` | |
