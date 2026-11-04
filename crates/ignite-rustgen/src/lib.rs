@@ -61,8 +61,11 @@ use ignite_types::{
 
 /// Header of every generated Rust file. `non_snake_case` because Ignite fn
 /// names follow the design (`localSocket` in `std.deploy`), not Rust's
-/// convention.
-pub const FILE_HEADER: &str = "#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]\n";
+/// convention. `bindings_with_variant_name` (deny by default, E0170)
+/// because a lowercase name in an Ignite pattern binds the value even when
+/// the matched enum has a variant of that name, and the generated code
+/// never brings a variant into scope bare, so rustc binds it too.
+pub const FILE_HEADER: &str = "#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]\n";
 
 /// Header added before [`FILE_HEADER`] in a test build: compiler warnings
 /// about generated code are noise in a test report.
@@ -235,7 +238,7 @@ fn generate_program(
     layout: &Layout,
 ) -> Result<GeneratedProject, Vec<(String, Vec<Diagnostic>)>> {
     let package_name = package_name(program);
-    let crate_name = package_name.replace('-', "_");
+    let crate_name = crate_name(&package_name);
     let module = program_module(program, types);
     let in_lib = layout.in_lib();
     let in_bin = layout.in_bin(&crate_name);
@@ -1296,6 +1299,22 @@ pub fn package_name(program: &Program) -> String {
         .unwrap_or_else(|| "program".to_string())
 }
 
+/// The Rust name of the program crate of the Cargo package `package_name`:
+/// `-` as `_`, with a `_` after a name a crate cannot have in a path
+/// (`async`, `self`, `super_`; [`ident`]'s rule, since a crate name cannot
+/// be raw). [`cargo_toml`] names the lib so when it differs from the
+/// package name.
+fn crate_name(package_name: &str) -> String {
+    let name = package_name.replace('-', "_");
+    if escapes_to(&name, |base| {
+        matches!(base, "self" | "Self" | "crate" | "super") || RUST_KEYWORDS.contains(&base)
+    }) {
+        format!("{name}_")
+    } else {
+        name
+    }
+}
+
 /// A Rust string literal body for `text`: `\\ \" \n \r \t \0` escaped,
 /// other control bytes as `\x..`, everything else as is.
 pub fn escape_str(text: &str) -> String {
@@ -1423,9 +1442,20 @@ const RUST_PRELUDE_NAMES: &[&str] = &[
     "IntoFuture",
 ];
 
-/// A Ignite identifier as a Rust identifier.
+/// `name` is one of `mangled` followed by zero or more `_`.
+fn escapes_to(name: &str, mangled: impl Fn(&str) -> bool) -> bool {
+    mangled(name.trim_end_matches('_'))
+}
+
+/// A Ignite identifier as a Rust identifier. A name Rust cannot spell raw
+/// (`self`, `Self`, `crate`, `super`) or a prelude name gets a `_`, and so
+/// does every name that is one of them followed by `_`s: `self` is
+/// `self_`, `self_` is `self__`. The mapping is one to one, so two Ignite
+/// names never become one Rust name.
 fn ident(name: &str) -> String {
-    if matches!(name, "self" | "Self" | "crate" | "super") || RUST_PRELUDE_NAMES.contains(&name) {
+    if escapes_to(name, |base| {
+        matches!(base, "self" | "Self" | "crate" | "super") || RUST_PRELUDE_NAMES.contains(&base)
+    }) {
         format!("{name}_")
     } else if RUST_KEYWORDS.contains(&name) {
         format!("r#{name}")
@@ -1464,13 +1494,14 @@ fn quantity_value(literal: &str, unit: &str) -> Option<i64> {
     Some(value)
 }
 
-/// The Rust path of a variant of `owner`.
+/// The Rust path of a variant of `owner`, which is already Rust (an
+/// [`ident`] or a path; `ident` is not idempotent).
 fn variant_path(owner: &str, variant: &str) -> String {
     match owner {
         "Option" | "Result" => variant.to_string(),
         "Input" => format!("ignite_io::Input::{variant}"),
         "Exposure" => format!("ignite_io::Exposure::{variant}"),
-        _ => format!("{}::{}", ident(owner), ident(variant)),
+        _ => format!("{owner}::{}", ident(variant)),
     }
 }
 
@@ -1829,16 +1860,17 @@ impl<'a> Generator<'a> {
     }
 
     /// The Rust name of the user record, enum or protocol `name` as written
-    /// in the source: the name unchanged, or its module path when a type
+    /// in the source: its [`ident`], or its module path when a type
     /// parameter in scope has the same name (`crate::P::serve` inside
-    /// `fn call<P>`).
+    /// `fn call<P>`). Already Rust: callers do not `ident` it again, since
+    /// `ident` of `Self_` is `Self__`.
     fn unshadowed(&self, name: &str) -> String {
         let user_type = self.symbols.records.contains(name)
             || self.protocols.contains(name)
             || (self.symbols.enums.contains_key(name)
                 && !BUILTIN_ENUMS.iter().any(|(e, _)| *e == name));
         if !user_type || !self.type_params.contains(name) {
-            return name.to_string();
+            return ident(name);
         }
         let module = match self.symbols.imported.get(name) {
             Some(module) => module.clone(),
@@ -1848,7 +1880,7 @@ impl<'a> Generator<'a> {
         };
         match self.item_module_path(&module) {
             Some(path) => format!("{path}::{}", ident(name)),
-            None => name.to_string(),
+            None => ident(name),
         }
     }
 
@@ -3059,7 +3091,7 @@ impl<'a> Generator<'a> {
     /// with the literal's type arguments for a generic record (Rust cannot
     /// infer them from a default that does not mention them).
     fn record_literal(&mut self, expr: &Expr, name: &Ident, fields: &[FieldInit]) -> String {
-        let record = ident(&self.unshadowed(&name.name));
+        let record = self.unshadowed(&name.name);
         let ty = self.type_of(expr);
         let boxed = |this: &Self, field: &str, value: String| {
             if this.is_boxed_field(ty, field) {
@@ -3404,11 +3436,7 @@ impl<'a> Generator<'a> {
         if SUBSTRATE_OWNERS.contains(&owner) {
             return Some(format!("ignite_io::{owner}::{}", ident(&name.name)));
         }
-        Some(format!(
-            "{}::{}",
-            ident(&self.unshadowed(owner)),
-            ident(&name.name)
-        ))
+        Some(format!("{}::{}", self.unshadowed(owner), ident(&name.name)))
     }
 
     /// `Owner.name(args)` where `Owner` is a substrate type, a builtin
@@ -3431,7 +3459,7 @@ impl<'a> Generator<'a> {
             let texts = self.args(args);
             return Some(format!(
                 "{}::{}{}({})",
-                ident(&self.unshadowed(owner)),
+                self.unshadowed(owner),
                 ident(&name.name),
                 self.bounded_turbofish(expr),
                 texts.join(", ")
@@ -5220,11 +5248,16 @@ fn is_duplicate(properties: &[FieldInit], property: &FieldInit) -> bool {
         .is_some_and(|first| !std::ptr::eq(&properties[first], property))
 }
 
-/// A Rust variable for a resource, kept apart from the names `main` binds.
+/// A Rust variable for a resource, kept apart from the names `main` binds,
+/// escaped one to one as [`ident`] escapes `self`: `port` is `port_`,
+/// `port_` is `port__`.
 fn resource_variable(name: &str) -> String {
-    match name {
-        "application" | "port" | "stream" | "error" => format!("{name}_"),
-        _ => ident(name),
+    if escapes_to(name, |base| {
+        matches!(base, "application" | "port" | "stream" | "error")
+    }) {
+        format!("{name}_")
+    } else {
+        ident(name)
     }
 }
 
@@ -5497,6 +5530,10 @@ fn cargo_toml(
     out.push_str("\n[workspace]\n");
     out.push_str("\n[profile.release]\noverflow-checks = true\n");
     out.push_str("\n[lib]\n");
+    let lib = crate_name(package_name);
+    if lib != package_name.replace('-', "_") {
+        let _ = writeln!(out, "name = {}", toml_string(&lib));
+    }
     out.push_str("path = \"src/lib.rs\"\n");
     for executable in executables {
         out.push_str("\n[[bin]]\n");

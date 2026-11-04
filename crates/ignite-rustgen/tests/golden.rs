@@ -966,7 +966,6 @@ test \"keywords in every position\" {\n\
 /// field, so the struct declares `self_` twice (E0124) and the literal
 /// sets it twice (E0062). `ignite check` accepts the program.
 #[test]
-#[ignore = "adversary: a field self beside a field self_ both become self_ (E0124)"]
 fn adversary_a_field_self_beside_a_field_self_underscore_builds() {
     let source = "package examples.kwb\n\
 \n\
@@ -984,7 +983,6 @@ test \"a field self beside a field self_\" {\n\
 /// `10 + 10`. The program builds and the test fails at run time
 /// (`shadow(1) == 11`): a silent miscompile, not a rustc error.
 #[test]
-#[ignore = "adversary: param self and local self_ are one Rust name, self + self_ is 20 not 11"]
 fn adversary_a_param_self_beside_a_local_self_underscore_keeps_both() {
     let source = "package examples.kwc\n\
 \n\
@@ -1002,7 +1000,6 @@ test \"a param self beside a local self_\" {\n\
 /// Adversary, inside 995907a's claim: the fns `super` and `super_` are both
 /// `super_` in Rust (E0428).
 #[test]
-#[ignore = "adversary: fns super and super_ both become super_ (E0428)"]
 fn adversary_fns_super_and_super_underscore_build() {
     let source = "package examples.kwe\n\
 \n\
@@ -1019,7 +1016,6 @@ test \"fns super and super_\" {\n\
 /// Adversary, inside 995907a's claim: the params `self` and `self_` are
 /// both `self_` in Rust (E0415).
 #[test]
-#[ignore = "adversary: params self and self_ both become self_ (E0415)"]
 fn adversary_params_self_and_self_underscore_build() {
     let source = "package examples.kwf\n\
 \n\
@@ -1059,7 +1055,6 @@ fn adversary_package_named(package: &str, sibling: &str) -> PathBuf {
 /// `Layout::in_bin`), a parse error in rustc. `ignite build --target llvm`
 /// builds the same program.
 #[test]
-#[ignore = "adversary: the crate name async is not raw in the executable's use lines"]
 fn adversary_a_package_named_async_builds() {
     let file = adversary_package_named("async", "dyn");
     let (program, std) = common::lower_typed(&file, &common::golden_std(), &adversary_substrate());
@@ -1072,7 +1067,6 @@ fn adversary_a_package_named_async_builds() {
 /// (E0432); `self` cannot be raw, so the crate needs another name.
 /// `ignite build --target llvm` builds the same program.
 #[test]
-#[ignore = "adversary: a crate named self makes the executable's use self::* import the bin into itself"]
 fn adversary_a_package_named_self_builds() {
     let file = adversary_package_named("self", "super");
     let (program, std) = common::lower_typed(&file, &common::golden_std(), &adversary_substrate());
@@ -1161,7 +1155,6 @@ test \"type parameters named like an alias or a builtin inside closures and reco
 /// rejects the generated `fin => 0` (E0170). The LLVM target builds and
 /// passes the same program.
 #[test]
-#[ignore = "adversary: a binding named like a lowercase variant of the matched enum is E0170"]
 fn adversary_a_binding_named_like_a_lowercase_variant_builds() {
     let source = "package examples.kwg\n\
 \n\
