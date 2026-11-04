@@ -514,3 +514,47 @@ precedence cases in 17.5 "As landed (U5)".
     compile and execution is inferred.
 - No baseline moved. The apply suites stay the slice-13 exception and inside the full
   `task gate` only.
+
+## Slice 15 RFC catalogues and the conformance matrix (2026-11-04)
+
+- Gate at the close (the slice's merge gate), `task gate` on `s15/claims` (621070e),
+  2026-11-04 01:37:59 to 01:45:26 UTC, 447 s, exit 0, start load 11.6, the worktree's own
+  target, `RUST_TEST_THREADS=4`: 923 cargo tests passed, 0 failed, 13 ignored; 199 inline tests
+  per target. The `crates/ignite` end-to-end binary is 430.29 s of it (310 passed, 8 ignored).
+  Claims: Telnet `rfc854: no (4 gaps, 0 failures, 0 inconclusive)` (P2 test 3 not met,
+  `docs/slice.md` 19.14 item 16), `rfc855: yes (0 gaps, 0 failures, 0 inconclusive)`; Http
+  `rfc9112: no (15 gaps, 0 failures, 0 inconclusive)`, `rfc9110: no (9 gaps, 0 failures, 0
+  inconclusive)`.
+- 19.17 method through `tools/ignite-perf` (`cold`, `warm`, `programs`, `cli`): "before" is
+  `296f849`, "after" `c20f04b`, both exported and built by the harness. Five warm passes at start
+  loads 2.6 to 13.2; pairs whose loads differ by more than 5 are dropped. Medians of pair ratios;
+  records, logs and scripts in `docs/performance/15/` (`README.md`, `records/summary.md`).
+
+| unit | before s | after s | ratio | pairs |
+|---|---|---|---|---|
+| gate, warm after the touch | 395.39 | 393.15 | 1.02 | 3 |
+| `cargo test --workspace`, warm | 403.41 | 401.10 | 0.99 | 4 |
+| fmt, clippy, warm | 0.967, 4.384 | 0.798, 4.035 | 0.82, 1.00 | 3 |
+| `task test-ignite`, warm | 1.257 | 1.425 | 1.16 | 5 |
+| `--no-run` after the touch | 2.987 | 4.025 | 1.13 | 5 |
+| `ignite_test::`, `ignite-rustgen` tests | 2.135, 1.825 | 2.363, 2.429 | 1.12, 1.33 | 5 |
+| todod Rust dev / release | 3.468 / 4.537 | 3.449 / 4.582 | 0.97 / 0.98 | 3 |
+| todod LLVM dev / release | 0.293 / 0.752 | 0.340 / 0.866 | 1.14 / 1.15 | 3 |
+| `ignite check`, `ignite plan` of the design file | 0.079, 0.077 | 0.089, 0.084 | 1.12, 1.09 | 15 |
+| `ignite check examples/todo/todo.ignite` | 0.0370 | 0.0496 | 1.35 | 15 |
+| `ignite conformance` telnet, Rust / LLVM, cold and warm (after only) | | 4.545 and 0.546 / 0.805 and 0.554 | | 3 runs |
+| `ignite conformance` http, Rust / LLVM, cold and warm (after only) | | 5.193 and 0.385 / 0.651 and 0.361 | | 3 runs |
+| `ignite rfc import` of RFC 9110, D4's sections (after only) | | 0.177 | | 5 runs |
+
+- Cold gate: no valid pair. Pair 1 was dropped by the load rule (12.7 against 5.4); in the retry
+  the before tree failed `limits::effect_inference_is_linear_in_either_order`, a timing bound, and
+  the loads differed by 9.5. The after tree passed both (448.0 s and 543.8 s).
+- Rises over 10 %, measured growth (`git diff --shortstat 296f849 c20f04b`): `std/` +3,407 lines,
+  3,108 of them the five catalogues; `crates/*/src` +3,954, `crates/*/tests` +7,786. Inline tests
+  191 to 199 per target with execution unchanged at 0.34 s, measured. Inferred: `ignite check` and
+  `plan` (and todod LLVM, the rustgen tests, `ignite_test::`, `task test-ignite`) pay the frontend
+  on the catalogues that `std.protocol.http` and `std.protocol.telnet` import, the cost 19.17
+  expected; `--no-run` after the touch pays the larger crates that depend on `ignite-check`.
+- `ignite-perf` needed one fix to measure at all: it refused every tree since 9ad4640 for
+  `docs/performance/evidence/.gitattributes` (621070e). No baseline moved. The apply suites stay
+  the slice-13 exception.
