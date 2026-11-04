@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-03T17:01:31Z",
+  "actor": "human:timo",
+  "artifact": "story:rustgen-type-parameter-shadowing",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p ignite-rustgen --test main: 90 passed, 0 failed, 4 ignored at f3ad1e0 (red first: 2 failed at the fix stashed); adversary: claim held, 3 cases outside it ignored",
+    "reference": "https://github.com/ignite-lang/ignite/tree/feat/slice15-protocols-p2"
+  }
+}

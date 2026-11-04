@@ -122,3 +122,17 @@ tasks:
     cmds:
       - task: '{{if eq .TARGET "llvm"}}compile-llvm{{else}}compile{{end}}'
       - '{{.BIN}}/tn --port {{.PORT | default "2323"}}'
+
+  site:
+    desc: Build the website into target/site, the landing page at the root and the book under book/
+    cmds:
+      - mkdir -p target/site
+      - cp -R site/index.html site/assets target/site/
+      - mdbook build site/book --dest-dir target/site/book
+      - cp target/site/book/404.html target/site/404.html
+
+  site-serve:
+    desc: Build the website and serve target/site on http://127.0.0.1:8765/
+    cmds:
+      - task: site
+      - miniserve --index index.html -p 8765 target/site
