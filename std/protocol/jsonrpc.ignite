@@ -1,0 +1,547 @@
+package std.protocol.jsonrpc
+
+import std.net.{ByteStream, Pipe, PipeStream}
+import std.io.IoError
+import std.text.{bytes_find_from, is_digit, split, split_once, to_lower, trim_start, trim_end}
+import std.option.unwrap_or
+import std.json.{Json, encode, parse, get}
+
+// JSON-RPC 2.0 over a byte stream with the base protocol's framing (the
+// Language Server Protocol's): each message is a header of `Name: value`
+// lines ended by an empty line, then exactly `Content-Length` bytes of
+// UTF-8 JSON. `Content-Type` and any other header are read and ignored.
+// The header and the body are bounded by `JsonRpcLimits`; a violation is a
+// typed `FrameError`, after which the stream cannot be resynchronised.
+// Batches (JSON arrays of messages) are not supported: one is an invalid
+// request.
+
+type IoResult<T> = Result<T, IoError>
+
+// The limits of one message: the header including its empty line, and the
+// body.
+type JsonRpcLimits {
+  header: ByteSize = 8 KiB
+  body: ByteSize = 16 MiB
+}
+
+// Framing facts, not limits: the size of one read and the longest
+// `Content-Length` value.
+const READ_SIZE: Int = 65536
+const MAXIMUM_LENGTH_DIGITS: Int = 18
+
+// ---- framing ----------------------------------------------------------------
+
+// Why a message could not be framed.
+enum FrameError {
+  MissingLength,
+  InvalidLength,
+  MalformedHeader,
+  HeaderTooLarge,
+  BodyTooLarge,
+  Truncated
+}
+
+// What comes next on a stream: a message body and the bytes read after it,
+// the end of the stream between messages, or a framing error.
+enum Frame { Got(Bytes, Bytes), Closed, Failed(FrameError) }
+
+// `body` framed: its header, whose `Content-Length` counts the bytes of
+// `body` (`Text.len()` is a byte count), then `body`.
+fn frame(body: Text) -> Bytes {
+  var out = "Content-Length: {body.len()}\r\n\r\n".to_bytes()
+  out.append(body.to_bytes())
+  out
+}
+
+fn write_message<T: ByteStream>(stream: T, body: Text) -> IoResult<Unit> = stream.write_all(frame(body))
+
+// A `Content-Length` value: 1 to 18 decimal digits, nothing else.
+fn parse_length(text: Text) -> Option<Int> {
+  if text.is_empty() || text.len() > MAXIMUM_LENGTH_DIGITS {
+    return None
+  }
+  for b in text.to_bytes() {
+    if !is_digit(b) {
+      return None
+    }
+  }
+  Int.parse(text)
+}
+
+// The `Content-Length` of a header without its empty line.
+fn content_length(header: Text) -> Result<Int, FrameError> {
+  var length = None
+  for line in header.split("\r\n") {
+    match line.split_once(":") {
+      Some((name, value)) => if name.to_lower() == "content-length" {
+        if length != None {
+          return Err(InvalidLength)
+        }
+        length = match parse_length(value.trim_start().trim_end()) {
+          Some(n) => Some(n)
+          None => return Err(InvalidLength)
+        }
+      }
+      None => if !line.is_empty() {
+        return Err(MalformedHeader)
+      }
+    }
+  }
+  match length {
+    Some(n) => Ok(n)
+    None => Err(MissingLength)
+  }
+}
+
+// Reads the next message from `stream`, starting with the bytes already
+// read in `buffer`.
+fn read_message<T: ByteStream>(stream: T, limits: JsonRpcLimits, buffer: Bytes) -> IoResult<Frame> {
+  let maximum = limits.header.to_int()
+  var data = buffer
+  var from = 0
+  var header_end = 0
+  loop {
+    match bytes_find_from(data, b"\r\n\r\n", from) {
+      Some(at) => {
+        if at + 4 > maximum {
+          return Ok(Failed(HeaderTooLarge))
+        }
+        header_end = at + 4
+        break
+      }
+      None => {}
+    }
+    if data.len() > maximum {
+      return Ok(Failed(HeaderTooLarge))
+    }
+    from = if data.len() > 3 { data.len() - 3 } else { 0 }
+    match stream.read(READ_SIZE)? {
+      Eof => return Ok(if data.is_empty() { Closed } else { Failed(Truncated) })
+      Data(more) => data.append(more)
+    }
+  }
+  let length = match content_length(data.slice(0, header_end - 4).to_text()) {
+    Ok(n) => n
+    Err(error) => return Ok(Failed(error))
+  }
+  if length > limits.body.to_int() {
+    return Ok(Failed(BodyTooLarge))
+  }
+  let end = header_end + length
+  while data.len() < end {
+    match stream.read(READ_SIZE)? {
+      Eof => return Ok(Failed(Truncated))
+      Data(more) => data.append(more)
+    }
+  }
+  Ok(Got(data.slice(header_end, end), data.slice(end, data.len())))
+}
+
+// ---- messages ---------------------------------------------------------------
+
+// A request id: a number or a string. A response to a request whose id
+// could not be read has none (`null`).
+enum Id { NumberId(Int), TextId(Text) }
+
+type Request {
+  id: Id
+  method: Text
+  params: Option<Json> = None
+}
+
+type Notification {
+  method: Text
+  params: Option<Json> = None
+}
+
+type ErrorObject {
+  code: Int
+  message: Text
+  data: Option<Json> = None
+}
+
+// A response: its request's id, and the result or the error.
+type Response {
+  id: Option<Id>
+  outcome: Result<Json, ErrorObject>
+}
+
+enum Message { Call(Request), Notify(Notification), Reply(Response) }
+
+// The error codes JSON-RPC 2.0 defines.
+const PARSE_ERROR: Int = -32700
+const INVALID_REQUEST: Int = -32600
+const METHOD_NOT_FOUND: Int = -32601
+const INVALID_PARAMS: Int = -32602
+const INTERNAL_ERROR: Int = -32603
+
+// The error object of a standard code, with the specification's message.
+fn standard_error(code: Int) -> ErrorObject {
+  let message = match code {
+    -32700 => "Parse error"
+    -32600 => "Invalid Request"
+    -32601 => "Method not found"
+    -32602 => "Invalid params"
+    -32603 => "Internal error"
+    _ => "Server error"
+  }
+  ErrorObject { code, message }
+}
+
+fn id_json(id: Option<Id>) -> Json = match id {
+  Some(NumberId(n)) => Number(n)
+  Some(TextId(text)) => Str(text)
+  None => Null
+}
+
+fn error_json(error: ErrorObject) -> Json {
+  var members = [("code", Number(error.code)), ("message", Str(error.message))]
+  match error.data {
+    Some(data) => members.push(("data", data))
+    None => {}
+  }
+  Object(members)
+}
+
+// The members of `message` after `"jsonrpc":"2.0"`.
+fn message_json(message: Message) -> Json {
+  var members = [("jsonrpc", Str("2.0"))]
+  match message {
+    Call(request) => {
+      members.push(("id", id_json(Some(request.id))))
+      members.push(("method", Str(request.method)))
+      match request.params {
+        Some(params) => members.push(("params", params))
+        None => {}
+      }
+    }
+    Notify(notification) => {
+      members.push(("method", Str(notification.method)))
+      match notification.params {
+        Some(params) => members.push(("params", params))
+        None => {}
+      }
+    }
+    Reply(response) => {
+      members.push(("id", id_json(response.id)))
+      match response.outcome {
+        Ok(result) => members.push(("result", result))
+        Err(error) => members.push(("error", error_json(error)))
+      }
+    }
+  }
+  Object(members)
+}
+
+// The JSON text of `message`, the body `write_message` frames.
+fn encode_message(message: Message) -> Text = encode(message_json(message))
+
+fn invalid_request() -> Result<Message, ErrorObject> = Err(standard_error(INVALID_REQUEST))
+
+fn id_of(value: Json) -> Option<Id> = match value {
+  Number(n) => Some(NumberId(n))
+  Str(text) => Some(TextId(text))
+  _ => None
+}
+
+fn error_of(value: Json) -> Option<ErrorObject> = match (value.get("code"), value.get("message")) {
+  (Some(Number(code)), Some(Str(message))) => Some(ErrorObject { code, message, data = value.get("data") })
+  _ => None
+}
+
+// A response: exactly one of `result` and `error`; `id` may be null.
+fn decode_response(value: Json, id: Json) -> Result<Message, ErrorObject> {
+  let known = match id {
+    Null => None
+    other => match id_of(other) {
+      Some(found) => Some(found)
+      None => return invalid_request()
+    }
+  }
+  match (value.get("result"), value.get("error")) {
+    (Some(result), None) => Ok(Reply(Response { id = known, outcome = Ok(result) }))
+    (None, Some(error)) => match error_of(error) {
+      Some(object) => Ok(Reply(Response { id = known, outcome = Err(object) }))
+      None => invalid_request()
+    }
+    _ => invalid_request()
+  }
+}
+
+// The message of a body: the parse error when it is not JSON, the
+// invalid-request error when it is not an object with `"jsonrpc":"2.0"`
+// and a string `method` (request, notification) or an `id` without one
+// (response), or when `params` is neither array nor object.
+fn decode(text: Text) -> Result<Message, ErrorObject> {
+  let value = match parse(text) {
+    Ok(value) => value
+    Err(_) => return Err(standard_error(PARSE_ERROR))
+  }
+  if value.get("jsonrpc") != Some(Str("2.0")) {
+    return invalid_request()
+  }
+  let params = value.get("params")
+  match params {
+    None => {}
+    Some(Array(_)) => {}
+    Some(Object(_)) => {}
+    _ => return invalid_request()
+  }
+  match (value.get("id"), value.get("method")) {
+    (None, Some(Str(method))) => Ok(Notify(Notification { method, params }))
+    (Some(id), Some(Str(method))) => match id_of(id) {
+      Some(known) => Ok(Call(Request { id = known, method, params }))
+      None => invalid_request()
+    }
+    (Some(id), None) => decode_response(value, id)
+    _ => invalid_request()
+  }
+}
+
+// ---- the protocol -----------------------------------------------------------
+
+// What a server runs: shared state, and the handler called once per
+// decoded message, which returns the message to send back, if any.
+type JsonRpcApp<S> {
+  state: S
+  handle: fn(state: S, message: Message) -> Option<Message> requires [state.*]
+}
+
+// No `conforms` yet: the catalogue of JSON-RPC 2.0 and the LSP base
+// protocol waits for `std.rfc` to name a non-RFC specification.
+protocol JsonRpc {
+  // Server role: read messages until the stream ends or a framing error,
+  // pass each decoded one to the application and write its reply; a body
+  // that does not decode is answered with its error and a null id.
+  fn serve<T: ByteStream, S>(stream: T, limits: JsonRpcLimits, application: JsonRpcApp<S>) -> IoResult<Unit> requires [
+    stream.read, stream.write, application.*
+  ] {
+    let result = session(stream, limits, application)
+    _ = stream.close()
+    result
+  }
+}
+
+fn session<T: ByteStream, S>(stream: T, limits: JsonRpcLimits, application: JsonRpcApp<S>) -> IoResult<Unit> {
+  var buffer = Bytes.empty()
+  loop {
+    match read_message(stream, limits, buffer)? {
+      Got(body, rest) => {
+        let reply = match decode(body.to_text()) {
+          Ok(message) => application.handle(application.state, message)
+          Err(error) => Some(Reply(Response { id = None, outcome = Err(error) }))
+        }
+        match reply {
+          Some(message) => write_message(stream, encode_message(message))?
+          None => {}
+        }
+        buffer = rest
+      }
+      _ => return Ok(())
+    }
+  }
+}
+
+// ---- tests ------------------------------------------------------------------
+
+// A connected pair of pipe ends; each gives up on a peer silent for 5 s,
+// so a read that never completes fails the test instead of hanging it.
+test fn connected() -> IoResult<(PipeStream, PipeStream)> {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  server.set_idle_timeout(5000)?
+  Ok((client, server))
+}
+
+// Flushes the task's pending writes as their own delivery and waits 50 ms,
+// so the next write is a separate delivery the reader reads on its own.
+test fn pause() -> IoResult<Unit> {
+  let (a, b) = Pipe.pair()
+  a.set_idle_timeout(50)?
+  _ = a.read(1)?
+  _ = b.close()
+  Ok(())
+}
+
+// What `read_message` makes of `input` under `limits`, sent with the write
+// half closed after it.
+test fn read_with(input: Bytes, limits: JsonRpcLimits) -> IoResult<Frame> {
+  let (client, server) = connected()?
+  client.write_all(input)?
+  _ = client.close()
+  read_message(server, limits, Bytes.empty())
+}
+
+test fn read_of(input: Bytes) -> IoResult<Frame> = read_with(input, JsonRpcLimits {})
+
+test "a written message is read back byte-identical, its length in bytes" {
+  let body = r#"{"jsonrpc":"2.0","method":"note","params":["é€"#  + "\u{1F600}\"]}}"
+  assert frame("é") == "Content-Length: 2\r\n\r\né".to_bytes()
+  assert frame(body).slice(0, 20) == b"Content-Length: 56\r\n"
+  let (client, server) = connected()?
+  write_message(client, body)?
+  _ = client.close()
+  assert read_message(server, JsonRpcLimits {}, Bytes.empty())? == Got(body.to_bytes(), Bytes.empty())
+}
+
+test "two messages back to back are read as two" {
+  let (client, server) = connected()?
+  write_message(client, "[1]")?
+  write_message(client, r#"{"a":"ü"}"#)?
+  _ = client.close()
+  match read_message(server, JsonRpcLimits {}, Bytes.empty())? {
+    Got(first, rest) => {
+      assert first == b"[1]"
+      match read_message(server, JsonRpcLimits {}, rest)? {
+        Got(second, after) => {
+          assert second.to_text() == r#"{"a":"ü"}"#
+          assert read_message(server, JsonRpcLimits {}, after)? == Closed
+        }
+        _ => {
+          assert false, "the second message is read"
+        }
+      }
+    }
+    _ => {
+      assert false, "the first message is read"
+    }
+  }
+}
+
+test "a message split over many small writes is read as one" {
+  let (client, server) = connected()?
+  let parts = [b"Content-Le", b"ngth: 1", b"1\r\nContent-Type: application/vscode-jsonrpc; charset=utf-8\r", b"\n\r", b"\n{\"a\"", b":", b"\"bcd\"}"]
+  for part in parts {
+    client.write_all(part)?
+    pause()?
+  }
+  assert read_message(server, JsonRpcLimits {}, Bytes.empty())? == Got(b"{\"a\":\"bcd\"}", Bytes.empty())
+  assert server.received_batches() == 7
+}
+
+test "a stream that ends between messages is closed, inside one truncated" {
+  assert read_of(Bytes.empty())? == Closed
+  assert read_of(b"Content-Length: 3\r\n")? == Failed(Truncated)
+  assert read_of(b"Content-Length: 3\r\n\r\nab")? == Failed(Truncated)
+}
+
+test "a missing or non-numeric Content-Length is its own error" {
+  assert read_of(b"Content-Type: application/json\r\n\r\n{}")? == Failed(MissingLength)
+  assert read_of(b"\r\n\r\n")? == Failed(MissingLength)
+  assert read_of(b"Content-Length: abc\r\n\r\n{}")? == Failed(InvalidLength)
+  assert read_of(b"Content-Length: -2\r\n\r\n{}")? == Failed(InvalidLength)
+  assert read_of(b"Content-Length:\r\n\r\n{}")? == Failed(InvalidLength)
+  assert read_of(b"Content-Length: 2\r\nContent-Length: 2\r\n\r\n{}")? == Failed(InvalidLength)
+  assert read_of(b"Content-Length 2\r\n\r\n{}")? == Failed(MalformedHeader)
+  assert read_of(b"content-length:  2 \r\n\r\n{}")? == Got(b"{}", Bytes.empty())
+}
+
+test "a body over the limit and a header over the limit are their own errors" {
+  let limits = JsonRpcLimits { header = 32 bytes, body = 4 bytes }
+  assert read_with(b"Content-Length: 4\r\n\r\nabcd", limits)? == Got(b"abcd", Bytes.empty())
+  assert read_with(b"Content-Length: 5\r\n\r\nabcde", limits)? == Failed(BodyTooLarge)
+  assert read_with(b"Content-Length: 999999999999999999\r\n\r\n", JsonRpcLimits {})? == Failed(BodyTooLarge)
+  assert read_with(b"Content-Length: 4\r\nX: 123456\r\n\r\nabcd", limits)? == Got(b"abcd", Bytes.empty())
+  assert read_with(b"Content-Length: 4\r\nX: 1234567\r\n\r\nabcd", limits)? == Failed(HeaderTooLarge)
+  assert read_with(b"Content-Length: 4\r\nX: 1234567890123456789", limits)? == Failed(HeaderTooLarge)
+}
+
+test "the limits default to 8 KiB of header and 16 MiB of body" {
+  let limits = JsonRpcLimits {}
+  assert limits.header.to_int() == 8192
+  assert limits.body.to_int() == 16777216
+}
+
+test "requests, notifications and responses round-trip" {
+  let messages = [
+    Call(Request { id = NumberId(1), method = "initialize", params = Some(Object([("rootUri", Null)])) }),
+    Call(Request { id = TextId("é-7"), method = "shutdown" }),
+    Notify(Notification { method = "textDocument/didOpen", params = Some(Array([Number(-3), Str("x")])) }),
+    Notify(Notification { method = "exit" }),
+    Reply(Response { id = Some(NumberId(1)), outcome = Ok(Object([("capabilities", Object([]))])) }),
+    Reply(Response { id = Some(TextId("a")), outcome = Ok(Null) }),
+    Reply(Response { id = Some(NumberId(2)), outcome = Err(ErrorObject { code = METHOD_NOT_FOUND, message = "no such method", data = Some(Str("foo")) }) }),
+    Reply(Response { id = None, outcome = Err(standard_error(PARSE_ERROR)) })
+  ]
+  for message in messages {
+    assert decode(encode_message(message)) == Ok(message)
+  }
+}
+
+test "messages encode with jsonrpc 2.0 in member order" {
+  assert encode_message(Call(Request { id = NumberId(1), method = "m", params = Some(Array([])) })) == r#"{"jsonrpc":"2.0","id":1,"method":"m","params":[]}"#
+  assert encode_message(Notify(Notification { method = "n" })) == r#"{"jsonrpc":"2.0","method":"n"}"#
+  assert encode_message(Reply(Response { id = Some(TextId("x")), outcome = Ok(Bool(true)) })) == r#"{"jsonrpc":"2.0","id":"x","result":true}"#
+  let failed = Reply(Response { id = None, outcome = Err(standard_error(INVALID_REQUEST)) })
+  assert encode_message(failed) == r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request"}}"#
+}
+
+test "the standard error codes" {
+  assert [PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR] == [-32700, -32600, -32601, -32602, -32603]
+  assert standard_error(PARSE_ERROR).message == "Parse error"
+  assert standard_error(METHOD_NOT_FOUND).message == "Method not found"
+  assert standard_error(INVALID_PARAMS).message == "Invalid params"
+  assert standard_error(INTERNAL_ERROR).message == "Internal error"
+  assert standard_error(INVALID_REQUEST) == ErrorObject { code = -32600, message = "Invalid Request" }
+}
+
+test "an object without jsonrpc 2.0 or without id and method is an invalid request" {
+  let invalid = Err(standard_error(INVALID_REQUEST))
+  assert decode(r#"{"id":1,"method":"m"}"#) == invalid
+  assert decode(r#"{"jsonrpc":"1.0","id":1,"method":"m"}"#) == invalid
+  assert decode(r#"{"jsonrpc":2,"id":1,"method":"m"}"#) == invalid
+  assert decode(r#"{"jsonrpc":"2.0"}"#) == invalid
+  assert decode(r#"{"jsonrpc":"2.0","params":[]}"#) == invalid
+  assert decode(r#"[{"jsonrpc":"2.0","method":"m"}]"#) == invalid
+  assert decode(r#"{"jsonrpc":"2.0","method":1}"#) == invalid
+  assert decode(r#"{"jsonrpc":"2.0","id":true,"method":"m"}"#) == invalid
+  assert decode(r#"{"jsonrpc":"2.0","method":"m","params":3}"#) == invalid
+  assert decode(r#"{"jsonrpc":"2.0","id":1}"#) == invalid
+  assert decode(r#"{"jsonrpc":"2.0","id":1,"result":1,"error":{"code":1,"message":"x"}}"#) == invalid
+  assert decode(r#"{"jsonrpc":"2.0","id":1,"error":{"code":"x","message":"x"}}"#) == invalid
+  assert decode(r"{") == Err(standard_error(PARSE_ERROR))
+}
+
+// Answers a request for `echo` with its params, any other request with
+// method not found, and ignores notifications and responses.
+test fn answer(state: Unit, message: Message) -> Option<Message> = match message {
+  Call(request) => if request.method == "echo" {
+    Some(Reply(Response { id = Some(request.id), outcome = Ok(request.params.unwrap_or(Null)) }))
+  } else {
+    Some(Reply(Response { id = Some(request.id), outcome = Err(standard_error(METHOD_NOT_FOUND)) }))
+  }
+  _ => None
+}
+
+test "serve answers each request, an undecodable one with its error, until the stream ends" {
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, JsonRpcApp { state = (), handle = answer })
+  write_message(client, r#"{"jsonrpc":"2.0","id":1,"method":"echo","params":["hi"]}"#)?
+  write_message(client, r#"{"jsonrpc":"2.0","method":"note"}"#)?
+  write_message(client, r"{")?
+  write_message(client, r#"{"jsonrpc":"2.0","id":"b","method":"nope"}"#)?
+  _ = client.close()
+  var replies = []
+  var buffer = Bytes.empty()
+  loop {
+    match read_message(client, JsonRpcLimits {}, buffer)? {
+      Got(body, rest) => {
+        replies.push(body.to_text())
+        buffer = rest
+      }
+      _ => break
+    }
+  }
+  assert replies == [
+    r#"{"jsonrpc":"2.0","id":1,"result":["hi"]}"#,
+    r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}"#,
+    r#"{"jsonrpc":"2.0","id":"b","error":{"code":-32601,"message":"Method not found"}}"#
+  ]
+}
+
+test "serve ends on a framing error" {
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, JsonRpcApp { state = (), handle = answer })
+  client.write_all(b"Content-Length: x\r\n\r\n")?
+  assert client.read(10)? == Eof
+}
