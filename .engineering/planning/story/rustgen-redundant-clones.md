@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:rustgen-redundant-clones
 kind: story
-status: draft
+status: proposed
 title: Drop redundant clones in generated Rust
 summary: The Rust target clones only where Ignite semantics need a copy
 relations:
@@ -10,7 +10,9 @@ relations:
 scope:
 - confidence: inferred
   path: crates/ignite-rustgen/src
-revision: 5
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T08:56:32Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":5}}}
 ---
 # Story: rustgen-redundant-clones
 
@@ -23,36 +25,25 @@ on a protocol server falls toward the handwritten Rust baseline.
 
 - Found by the playground session (2026-11-04, ember): the Rust target makes 748k allocations
   where the handwritten Rust baseline makes 4,797.
-- Step 1, in landing (branch `perf/rustgen-for-borrow`): a `for` over a `List<T>` place whose body
-  mutates neither the element nor the root iterates by reference; ember allocations 748,453 to
-  652,439 (−12.8 %), throughput at pipeline 50 494,590 to 566,371 ops/s (tournament
-  `results/2026-11-04T02-34-13Z.json` to `02-36-02Z.json` in the examples repository).
-- Remaining sites, dhat share of the Rust target's allocations after step 1, measured by the
-  playground session:
-  - text conversions (`parse_int` `slice().to_text()`, int and text `to_text`) 13.1 %;
-  - `Store` copies in `get`, `update`, `values` 10.4 % (story:store-borrowing-reads);
-  - `match place.clone()` scrutinees 10.2 %;
-  - interpolation copies and `format!(..).clone().into_bytes()` 5.1 %;
-  - byte literals rebuilt as a `Vec` on every call 4.3 %;
-  - `&x.clone()` where a borrow is enough 3.2 %.
-- Slice 16's U3 (`story:slice-16-moves-analysis`, Rust last-use moves) covers
-  `Parsed::Command(args.clone(), ..)` (4.3 %) and `next.entries.push(entry.clone())` (3.2 %).
-
-- After story:store-borrowing-reads (lending reads `read`, `read_values`, `replace_with` in
-  `ignite_io::Store`), the Rust target can use them, which needs generator changes (playground
-  session, 2026-11-04):
-  - an `update` whose result is discarded (ember `write`, `delete_key`) becomes
-    `replace_with(id, |b| f(b.clone()), |_| ())`, one copy fewer per SET or DEL;
-  - `for x in store.values()` becomes `read_values` only when the body does not touch the store
-    (the lock is not reentrant; ember's flush calls `db.remove`);
-  - `match db.get(id)` arms that only read can use `read(id, …)`, after an analysis of how the
-    value is used.
-
-- Step 2, in landing (branch `perf/int-parse-no-copy`): `Int.parse` of text built from bytes or
-  a slice allocates nothing on both targets; Rust-target allocations 652,437 to 564,434 (−13.5 %).
-  Next sites by share of the 564k blocks (playground session): std `to_lower` 7.1 % (clones the
-  text, wraps a closure in an `Arc`, copies twice; map the bytes in place), `Int.to_text(n)
-  .to_bytes()` 4.3 % (a `.clone()` on a temporary receiver), `text_of` before `to_lower` 1.8 %.
+- Landed (merged to `main`): step 1, `for` over a list place by reference (PR 15; ember
+  allocations 748,453 to 652,439); step 2, `Int.parse` of bytes and slices without a copy (PR 18;
+  652,437 to 564,434); a match on a place by reference (PR 21); `to_lower`/`to_upper` as a loop
+  and `to_bytes` of a fresh text (PR 23); borrowed interpolation parts, `at` elements and appended
+  values (PR 25); plain closures for `update`, `upsert` and `map` literals (PR 27); a field of a
+  list element through the borrowed element (PR 28). Slice 16's last-use moves (PR 30) cover
+  `Parsed::Command(args.clone(), ..)` and `next.entries.push(entry.clone())`.
+- Remaining sites, from the playground session's dhat profiles (shares measured before the PRs
+  above, not re-measured since):
+  - `Store` copies in `get`, `update`, `values`: the lending reads `read`, `read_values`,
+    `replace_with` of `ignite_io::Store` (PR 17) are not used by the generator yet: a discarded
+    `update` result as `replace_with`, `for x in store.values()` as `read_values` when the body
+    does not touch the store (the lock is not reentrant), read-only `match db.get(id)` arms as
+    `read`;
+  - byte literals rebuilt as a `Vec` on every call (4.3 %);
+  - `Int.to_text(n).to_bytes()` clones a temporary receiver (4.3 %);
+  - untracked pattern bindings copied at branch tails (`story:moves-for-pattern-bindings`).
+- Not met yet: the acceptance's dhat records per step; only
+  `docs/performance/store-borrowing-reads.md` has one.
 
 ## Acceptance
 

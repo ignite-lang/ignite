@@ -1291,10 +1291,7 @@ pub fn prepare(
         }
     }
     let runtime = if build_options.target == crate::Target::Llvm {
-        let runtime = build_options
-            .runtime
-            .clone()
-            .unwrap_or_else(crate::default_runtime_path);
+        let runtime = crate::runtime_or_default(build_options.runtime.as_ref())?;
         if !runtime.is_file() {
             return Err(crate::llvm_build::missing_runtime(runtime));
         }

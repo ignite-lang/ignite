@@ -82,7 +82,7 @@ Rules of the layout:
 | run the compiled server | `task server` |
 | run the compiled client | `task client` |
 | compile the example with the LLVM target | `task compile-llvm` (writes `target/ignite-llvm/terminal/bin/`) |
-| build a program | `target/debug/ignite build FILE [--target llvm\|rust] [--runtime ARCHIVE] [--out DIR] [--release]` (LLVM by default, `docs/vision.md` D2 B: clang links `libignite_rt.a`, looked up next to the binary and in its parent directory unless `--runtime` names it, exit 3 naming `cargo build -p ignite-rt --features runner` when missing; `--target rust` runs cargo; every command with `--target` defaults to `llvm`) |
+| build a program | `target/debug/ignite build FILE [--target llvm\|rust] [--runtime ARCHIVE] [--out DIR] [--release]` (LLVM by default, `docs/vision.md` D2 B: clang links `libignite_rt.a`, the first of `--runtime`, the archive next to the binary, the one in its parent directory, and the one the binary carries (built by `crates/ignite/build.rs` with `--features runner`, written once to `$XDG_CACHE_HOME/ignite/runtime/<hash>/`, else `~/.cache`); exit 3 when that write fails; `--target rust` runs cargo; every command with `--target` defaults to `llvm`) |
 | run the LLVM-built binaries | `task server TARGET=llvm`, `task client TARGET=llvm` |
 | run the inline Ignite tests | `task test-ignite` (std/ and examples/, both targets; `FILTER=text` selects tests); one file: `target/debug/ignite test FILE [FILTER]` (LLVM, the default target, with `--runtime` a `libignite_rt.a` built with `--features runner`; `--target rust` needs none) |
 | build the website | `task site` (landing page at `target/site/index.html`, book at `target/site/book/`; needs `mdbook` 0.5.4) |

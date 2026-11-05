@@ -13,12 +13,11 @@ substrate, and both must behave the same, down to the text of an error.
 
 ## The LLVM target
 
-The LLVM target needs clang and the runtime archive `libignite_rt.a`, which is built once
-in the clone (the commands below run from it):
+The LLVM target needs clang and the runtime archive `libignite_rt.a`. The `ignite` binary
+carries one, built with it, so from the clone:
 
 ```sh
-cargo build -p ignite-rt --features runner
-ignite build examples/todo/todo.ignite --runtime target/debug/libignite_rt.a
+ignite build examples/todo/todo.ignite
 ```
 
 ```text
@@ -26,10 +25,12 @@ built target/ignite/todo/bin/todod
 ```
 
 `ignite build` writes into `--out` (default `target/ignite/<package>`) and prints one
-`built …` line per executable. Without `--runtime`, `ignite` looks for `libignite_rt.a` next
-to its own binary, then in that directory's parent; when it finds none, the error names the
-command that builds it. The feature `runner` adds the test runner that `ignite test` links;
-programs link against the same archive. `--clang PATH` names another clang. A program build
+`built …` line per executable. The archive is the first of: `--runtime FILE`;
+`libignite_rt.a` next to the `ignite` binary, then in that directory's parent; the archive
+`ignite` carries, written once to `$XDG_CACHE_HOME/ignite/runtime/<hash>/` (`~/.cache` when
+`XDG_CACHE_HOME` is unset). An archive of your own is built in the clone with
+`cargo build -p ignite-rt --features runner`. The feature `runner` adds the test runner that
+`ignite test` links; programs link against the same archive. `--clang PATH` names another clang. A program build
 on this target never runs cargo or rustc.
 
 What happens:

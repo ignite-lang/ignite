@@ -2,11 +2,22 @@
 format: aep.planning-md/3
 id: story:llvm-runtime-without-flags
 kind: story
-status: draft
+status: implemented
 title: Installed ignite finds its LLVM runtime
 relations:
 - derived_from: story:llvm-default-target
-revision: 1
+scope:
+- confidence: cited
+  path: crates/ignite/src/llvm_build.rs
+- confidence: cited
+  path: crates/ignite/src/test_build.rs
+- confidence: cited
+  path: site/book/src/guide/install.md
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T08:00:51Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-05T08:00:51Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T09:23:11Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: llvm-runtime-without-flags
 

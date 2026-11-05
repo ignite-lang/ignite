@@ -6,7 +6,20 @@ status: draft
 title: Moves analysis tracks pattern bindings
 relations:
 - derived_from: story:slice-16-rust-moves
-revision: 1
+scope:
+- confidence: cited
+  path: crates/ignite-llvm/src
+- confidence: cited
+  path: crates/ignite-rustgen/src/lib.rs
+- confidence: cited
+  path: crates/ignite-rustgen/tests/golden
+- confidence: cited
+  path: crates/ignite-types/src/moves.rs
+- confidence: cited
+  path: crates/ignite/src/apply/plan.rs
+- confidence: cited
+  path: docs/slice.md
+revision: 2
 ---
 # Story: moves-for-pattern-bindings
 

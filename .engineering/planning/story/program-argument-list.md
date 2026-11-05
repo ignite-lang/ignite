@@ -6,8 +6,8 @@ status: draft
 title: Read the program's argument list
 summary: A program reads its whole command line as a list of Text, so a CLI with subcommands and positional arguments can be written
 relations:
-- decomposes: epic:playground-substrate
 - depends_on: story:program-arguments
+- depends_on: story:slice-17-records
 scope:
 - confidence: inferred
   path: crates/ignite-io/src/lib.rs

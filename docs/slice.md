@@ -6679,8 +6679,9 @@ Code is cited by symbol (T3).
 Since PR 32 (2026-11-05, before U1) LLVM is the default target of the CLI and of
 `BuildOptions::default`. A command in this section without `--target` builds with LLVM and,
 for `ignite build`, `ignite run` and `ignite plan --for-apply`, needs the runtime archive
-(`--runtime`, or `libignite_rt.a` beside the driver); the end-to-end tests pass the target and
-the runtime explicitly. Where a row below names one target, it names it.
+(`--runtime`, or `libignite_rt.a` beside the driver; since PR 33, merged into this slice at its
+close, else the archive the driver carries, `docs/llvm.md` section 1); the end-to-end tests pass
+the target and the runtime explicitly. Where a row below names one target, it names it.
 
 Out of this slice by the steering session's word: `story:http-server-responses` (gaps P4 to
 P6), which follows the HTTP RFC gaps story.

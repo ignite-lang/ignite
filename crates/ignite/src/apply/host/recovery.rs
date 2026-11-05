@@ -674,6 +674,25 @@ mod tests {
     use std::os::unix::process::ExitStatusExt;
     use std::process::Command;
 
+    /// `sleep 30` from the copy `sleep` just written. Another test thread's
+    /// fork can inherit the copy's write descriptor for an instant, and the
+    /// exec then fails with ETXTBSY; retry only that, as
+    /// `run::process` does, until a deadline of 2 s.
+    fn spawn_copied(sleep: &Path) -> std::process::Child {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            match Command::new(sleep).arg("30").spawn() {
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::ExecutableFileBusy
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                result => return result.unwrap(),
+            }
+        }
+    }
+
     fn owner(pid: i64, instance: &str) -> Json {
         object([("pid", Json::Int(pid)), ("instance", text(instance))])
     }
@@ -719,7 +738,7 @@ mod tests {
         std::fs::copy("/bin/sleep", &sleep).unwrap();
         let generations = root.join("revisions");
         assert!(generation_processes(&generations).is_empty());
-        let mut child = Command::new(&sleep).arg("30").spawn().unwrap();
+        let mut child = spawn_copied(&sleep);
         let pid = i64::from(child.id());
         let found = generation_processes(&generations);
         assert_eq!(found.len(), 1, "{found:?}");
@@ -804,7 +823,7 @@ mod tests {
         let root = std::fs::canonicalize(&root).unwrap();
         let sleep = root.join("revisions/2-1-1/bin/1/sleep");
         std::fs::copy("/bin/sleep", &sleep).unwrap();
-        let mut unknown = Command::new(&sleep).arg("30").spawn().unwrap();
+        let mut unknown = spawn_copied(&sleep);
         let mut host = gave_up_host(&root);
 
         let blocked = host.recover();
@@ -871,7 +890,7 @@ mod tests {
         let root = std::fs::canonicalize(&root).unwrap();
         let sleep = root.join("revisions/2-1-1/bin/1/sleep");
         std::fs::copy("/bin/sleep", &sleep).unwrap();
-        let mut unknown = Command::new(&sleep).arg("30").spawn().unwrap();
+        let mut unknown = spawn_copied(&sleep);
         let ended = "committed revision controller ended: Ok(1)";
         let mut host = gave_up_host(&root);
         host.receipts.remove("failed");

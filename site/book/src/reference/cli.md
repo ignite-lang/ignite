@@ -22,7 +22,7 @@ Options:   -h, --help     Print help
 | `--fuel N` | `plan`, `explain`, `run`, `replay` | `plan`, `explain`: fuel per property expression; `run`, `replay`: fuel per reducer step only, the plan inside them keeps the default; default 1,000,000 units |
 | `--target llvm\|rust` | `build`, `test`, `run`, `plan --for-apply`, `conformance` | native target, default `llvm`; `test` also takes `all` |
 | `--release` | `build`, `test`, `run`, `plan --for-apply` | optimised build (release profile on Rust, clang `-O2` on LLVM) |
-| `--runtime FILE` | `build`, `test`, `run`, `plan --for-apply`, `conformance` | the LLVM runtime archive `libignite_rt.a` (default: next to `ignite`, then in its parent directory); when it is missing, the error names the command that builds it |
+| `--runtime FILE` | `build`, `test`, `run`, `plan --for-apply`, `conformance` | the LLVM runtime archive `libignite_rt.a` (default: next to `ignite`, then in its parent directory, then the archive `ignite` carries, written once to `$XDG_CACHE_HOME/ignite/runtime/`) |
 | `--clang PATH`, `--triple T` | `build`, `test` | clang for the LLVM target (default `clang` on `PATH`) and its target triple (default: clang's own) |
 | `--target-dir DIR` | `build`, `test`, `run` | cargo target directory of the Rust target |
 
