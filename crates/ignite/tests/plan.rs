@@ -285,6 +285,26 @@ fn todo_example_model_matches_golden() {
     compare(&golden_dir().join("todo.model.json"), &model);
 }
 
+/// `docs/slice.md` 21.0 row 25: the four capability resources in the model,
+/// `Launcher`'s `maximum_children` as a default.
+#[test]
+fn studio_model_matches_golden() {
+    let fixture = fixtures_dir().join("slice17/studio.ignite");
+    let model = success(&ignite(&["plan", fixture.to_str().unwrap()]));
+    for resource in [
+        r#""id": "Studio.files""#,
+        r#""kind": "Directory""#,
+        r#""id": "Studio.tools""#,
+        r#""maximum_children": 16"#,
+        r#""id": "Studio.entropy""#,
+        r#""id": "Studio.tool""#,
+        r#""flag": "--tool""#,
+    ] {
+        assert!(model.contains(resource), "{resource} missing:\n{model}");
+    }
+    compare(&golden_dir().join("studio.model.json"), &model);
+}
+
 #[test]
 fn explain_matches_the_goldens_of_15_8() {
     for (path, golden) in [

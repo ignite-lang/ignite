@@ -1,0 +1,200 @@
+{
+  "assembly": null,
+  "components": [
+    {
+      "declaration": "component",
+      "defaults": [
+        "limits"
+      ],
+      "executable": "studiod",
+      "id": "Studio.server",
+      "kind": "std.protocol.http.HttpServer<studio.Bench>",
+      "outputs": {},
+      "properties": {
+        "application": {
+          "fields": {
+            "handle": {
+              "fn": "studio.handle",
+              "type": "Fn"
+            },
+            "state": {
+              "fields": {
+                "entropy": {
+                  "ref": "Studio.entropy",
+                  "type": "Ref"
+                },
+                "files": {
+                  "ref": "Studio.files",
+                  "type": "Ref"
+                },
+                "tool": {
+                  "ref": "Studio.tool",
+                  "type": "Ref"
+                },
+                "tools": {
+                  "ref": "Studio.tools",
+                  "type": "Ref"
+                }
+              },
+              "type": "studio.Bench"
+            }
+          },
+          "type": "std.protocol.http.HttpApp"
+        },
+        "executable": "studiod",
+        "limits": {
+          "fields": {
+            "body": {
+              "bytes": 1048576,
+              "type": "ByteSize"
+            },
+            "drain": {
+              "bytes": 65536,
+              "type": "ByteSize"
+            },
+            "drain_timeout": {
+              "ns": 1000000000,
+              "type": "Duration"
+            },
+            "head": {
+              "bytes": 8192,
+              "type": "ByteSize"
+            },
+            "idle_timeout": {
+              "ns": 30000000000,
+              "type": "Duration"
+            }
+          },
+          "type": "std.protocol.http.HttpLimits"
+        },
+        "listener": {
+          "ref": "Studio.ingress",
+          "type": "Ref"
+        }
+      }
+    }
+  ],
+  "contracts": [],
+  "edges": [
+    {
+      "from": "Studio.server",
+      "kind": "uses",
+      "to": "Studio.entropy"
+    },
+    {
+      "from": "Studio.server",
+      "kind": "uses",
+      "to": "Studio.files"
+    },
+    {
+      "from": "Studio.server",
+      "kind": "uses",
+      "to": "Studio.ingress"
+    },
+    {
+      "from": "Studio.server",
+      "kind": "uses",
+      "to": "Studio.tool"
+    },
+    {
+      "from": "Studio.server",
+      "kind": "uses",
+      "to": "Studio.tools"
+    }
+  ],
+  "formatVersion": "ignite-model/0.1",
+  "machines": [],
+  "observations": [],
+  "policies": [],
+  "resources": [
+    {
+      "declaration": "resource",
+      "defaults": [],
+      "executable": null,
+      "id": "Studio.entropy",
+      "kind": "Entropy",
+      "outputs": {},
+      "properties": {}
+    },
+    {
+      "declaration": "resource",
+      "defaults": [],
+      "executable": null,
+      "id": "Studio.files",
+      "kind": "Directory",
+      "outputs": {},
+      "properties": {
+        "create": true,
+        "flag": "--root",
+        "path": "workspace"
+      }
+    },
+    {
+      "declaration": "resource",
+      "defaults": [
+        "backlog",
+        "exposure"
+      ],
+      "executable": null,
+      "id": "Studio.ingress",
+      "kind": "TcpListener",
+      "outputs": {},
+      "properties": {
+        "address": "127.0.0.1",
+        "backlog": 128,
+        "exposure": {
+          "type": "Exposure",
+          "variant": "Loopback"
+        },
+        "port": 8095
+      }
+    },
+    {
+      "declaration": "resource",
+      "defaults": [],
+      "executable": null,
+      "id": "Studio.tool",
+      "kind": "Setting",
+      "outputs": {},
+      "properties": {
+        "flag": "--tool"
+      }
+    },
+    {
+      "declaration": "resource",
+      "defaults": [
+        "maximum_children"
+      ],
+      "executable": null,
+      "id": "Studio.tools",
+      "kind": "Launcher",
+      "outputs": {},
+      "properties": {
+        "maximum_children": 16
+      }
+    }
+  ],
+  "sourceMap": {
+    "Studio": "studio.ignite:72:1",
+    "Studio.entropy": "studio.ignite:76:3",
+    "Studio.files": "studio.ignite:74:3",
+    "Studio.files.create": "studio.ignite:74:60",
+    "Studio.files.flag": "studio.ignite:74:73",
+    "Studio.files.path": "studio.ignite:74:38",
+    "Studio.ingress": "studio.ignite:73:3",
+    "Studio.ingress.address": "studio.ignite:73:45",
+    "Studio.ingress.backlog": "studio.ignite:73:3",
+    "Studio.ingress.exposure": "studio.ignite:73:3",
+    "Studio.ingress.port": "studio.ignite:73:65",
+    "Studio.server": "studio.ignite:79:3",
+    "Studio.server.application": "studio.ignite:81:19",
+    "Studio.server.executable": "studio.ignite:82:18",
+    "Studio.server.limits": "std/protocol/http.ignite:141:24",
+    "Studio.server.listener": "studio.ignite:80:16",
+    "Studio.tool": "studio.ignite:77:3",
+    "Studio.tool.flag": "studio.ignite:77:35",
+    "Studio.tools": "studio.ignite:75:3",
+    "Studio.tools.maximum_children": "studio.ignite:75:3"
+  },
+  "systemId": "Studio"
+}

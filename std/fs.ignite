@@ -1,0 +1,61 @@
+package std.fs
+
+// Files under a root directory (`docs/slice.md` 21.4). The module is also
+// the substrate's capability `Directory`, a handle a system declares as a
+// resource and passes in values (21.3):
+//
+//   resource files: Directory { path = "workspace", create = true, flag = "--root" }
+//
+// `path` is required; `create` (default `false`) creates the root at
+// launch; `flag` (default `""`, none) names a command-line flag whose value
+// replaces `path` at launch (21.6). Tests make one with the test-only
+// `Directory.temporary() -> Result<Directory, IoError>`, a new empty
+// directory inside the test's scratch directory.
+//
+// The methods of `Directory`, builtins of the substrate (each returns
+// `Result<_, IoError>`; the effect is on the receiver's roots, 21.3):
+//
+//   read_file(path: Text) -> Bytes                    effect read; at most 16 MiB
+//   write_file(path: Text, data: Bytes) -> Unit       effect write; atomic replace
+//   read_directory(path: Text) -> List<Text>          effect read; byte order, a directory ends with `/`
+//   create_directory(path: Text) -> Unit              effect write; with missing parents
+//   remove(path: Text) -> Unit                        effect write; a file, a link or an empty directory
+//   remove_tree(path: Text) -> Unit                   effect write; never follows a link
+//   absolute_path() -> Text                           effect read; the root as resolved at launch
+//
+// Paths are relative and separated by `/`; `""` and `.` name the root. An
+// absolute path, a `..` component or a NUL is refused before any IO (and is
+// E140 when it is a literal), and so is a symbolic link at any component.
+
+// The file at `path` as text; bytes that are not UTF-8 are an error naming
+// the path.
+fn read_text_file(files: Directory, path: Text) -> Result<Text, IoError> requires [files.read] {
+  let bytes = files.read_file(path)?
+  let text = bytes.to_text()
+  if text.to_bytes() != bytes {
+    return Err(IoError.new("path ".concat(path).concat(": not UTF-8")))
+  }
+  return Ok(text)
+}
+
+// `text` written to `path` as UTF-8, replacing the file atomically.
+fn write_text_file(files: Directory, path: Text, text: Text) -> Result<Unit, IoError> requires [files.write] = files.write_file(path, text.to_bytes())
+
+// `left` and `right` with one `/` between them when both are non-empty.
+fn join_path(left: Text, right: Text) -> Text {
+  if left.is_empty() {
+    return right
+  }
+  if right.is_empty() {
+    return left
+  }
+  return left.concat("/").concat(right)
+}
+
+test "join_path puts one slash between non-empty parts" {
+  assert join_path("a", "b") == "a/b"
+  assert join_path("a/b", "c.txt") == "a/b/c.txt"
+  assert join_path("", "b") == "b"
+  assert join_path("a", "") == "a"
+  assert join_path("", "") == ""
+}

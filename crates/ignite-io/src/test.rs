@@ -243,7 +243,9 @@ fn run_tests(tests: &[Test<'_>], arguments: &Arguments) -> i32 {
                     let Some(name) = selected.get(index) else {
                         break;
                     };
-                    let outcome = run_child(exe, name, arguments.timeout);
+                    let scratch = Scratch::create(index);
+                    let outcome = run_child(exe, name, arguments.timeout, &scratch.path);
+                    drop(scratch);
                     if sender.send((index, outcome)).is_err() {
                         break;
                     }
@@ -320,12 +322,47 @@ fn count(n: usize) -> String {
     }
 }
 
-/// Run `<exe> --run-one <name>` with its output captured; kill it after
-/// `timeout` seconds.
-fn run_child(exe: &std::path::Path, name: &str, timeout: u64) -> Outcome {
+/// The environment variable that names a test child's scratch directory
+/// (`docs/slice.md` 21.8), where `Directory.temporary()` makes its roots.
+pub const SCRATCH_VARIABLE: &str = "IGNITE_TEST_SCRATCH";
+
+/// The scratch directory of one test child: created under
+/// `std::env::temp_dir()` before the child starts, removed with its
+/// contents when dropped, after the runner reaped the child, so a test
+/// killed at its timeout leaves nothing.
+struct Scratch {
+    path: std::path::PathBuf,
+}
+
+impl Scratch {
+    /// `<temp>/ignite-test-<runner pid>-<index>`, empty. A directory left
+    /// by an earlier runner with the same pid is emptied first.
+    fn create(index: usize) -> Scratch {
+        let path = std::env::temp_dir().join(format!("ignite-test-{}-{index}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        let _ = std::fs::create_dir_all(&path);
+        Scratch { path }
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
+/// Run `<exe> --run-one <name>` with its output captured and `scratch` as
+/// its [`SCRATCH_VARIABLE`]; kill it after `timeout` seconds.
+fn run_child(
+    exe: &std::path::Path,
+    name: &str,
+    timeout: u64,
+    scratch: &std::path::Path,
+) -> Outcome {
     let spawned = Command::new(exe)
         .arg("--run-one")
         .arg(name)
+        .env(SCRATCH_VARIABLE, scratch)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -471,5 +508,20 @@ mod tests {
         assert_eq!(Verdict::Exited(3).word(), "FAILED (exited with code 3)");
         assert_eq!(Verdict::TimedOut(1).word(), "FAILED (timed out after 1 s)");
         assert_eq!(Verdict::Signal(9).word(), "FAILED (killed by signal 9)");
+    }
+
+    /// `docs/slice.md` 21.8: a test child's scratch directory exists and
+    /// is empty before the child starts and is gone, with its contents,
+    /// once the runner drops it after reaping the child.
+    #[test]
+    fn scratch_is_created_empty_and_removed_with_its_contents() {
+        let scratch = super::Scratch::create(usize::MAX);
+        let path = scratch.path.clone();
+        assert!(path.starts_with(std::env::temp_dir()));
+        assert_eq!(std::fs::read_dir(&path).unwrap().count(), 0);
+        std::fs::create_dir_all(path.join("a/b")).unwrap();
+        std::fs::write(path.join("a/b/c"), b"x").unwrap();
+        drop(scratch);
+        assert!(!path.exists());
     }
 }

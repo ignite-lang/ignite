@@ -16,7 +16,7 @@ use ignite_syntax::ast::{
     BinaryOp, Block, BraceEntry, Decl, Expr, ExprKind, Ident, Pattern, PatternKind, Program, Stmt,
     StmtKind, UnaryOp,
 };
-use ignite_types::{BraceKind, Builtin, Callee, FnSig, QualName, Ty, TypedProgram};
+use ignite_types::{BraceKind, Builtin, Callee, Capability, FnSig, QualName, Ty, TypedProgram};
 
 use crate::ir::{Func, Generic, Glue, Instance, Module, global};
 use crate::layout::{
@@ -3520,6 +3520,170 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         self.scalar(&v)
     }
 
+    /// A capability builtin (`docs/slice.md` 21.3 to 21.8): a call of its
+    /// runtime entry, declared on first use so a module without
+    /// capabilities keeps its text. A capability is an `i64` handle of the
+    /// runtime's table; `Invocation` and `ChildExit` cross as their record
+    /// layouts (`IgniteInvocation`, `IgniteChildExit`).
+    fn capability(&mut self, b: Builtin, receiver: Option<&Expr>, args: &[Expr]) -> Val {
+        use Builtin::*;
+        let ptr = || "ptr".to_string();
+        let i64 = || "i64".to_string();
+        let handle = |this: &mut Self| -> String {
+            let r = this.expr(receiver.expect("a method has a receiver"), true);
+            this.scalar(&r)
+        };
+        let child_exit = Ty::Record(QualName::new("std.process", "ChildExit"));
+        let texts = Ty::List(Box::new(Ty::Text));
+        match b {
+            DirectoryTemporary => {
+                self.m
+                    .declare("ignite_rt_directory_temporary", "i32", &[ptr(), ptr()]);
+                self.rt_result(
+                    "directory_temporary",
+                    &[],
+                    Ty::Capability(Capability::Directory),
+                )
+            }
+            DirectoryReadFile | DirectoryReadDirectory => {
+                let (entry, ok) = if b == DirectoryReadFile {
+                    ("directory_read_file", bytes())
+                } else {
+                    ("directory_read_directory", texts)
+                };
+                self.m.declare(
+                    &format!("ignite_rt_{entry}"),
+                    "i32",
+                    &[i64(), ptr(), ptr(), ptr()],
+                );
+                let d = handle(self);
+                let path = self.read_arg(&args[0]);
+                self.rt_result(entry, &[format!("i64 {d}"), format!("ptr {path}")], ok)
+            }
+            DirectoryWriteFile => {
+                self.m.declare(
+                    "ignite_rt_directory_write_file",
+                    "i32",
+                    &[i64(), ptr(), ptr(), ptr()],
+                );
+                let d = handle(self);
+                let path = self.read_arg(&args[0]);
+                let data = self.read_arg(&args[1]);
+                self.rt_result(
+                    "directory_write_file",
+                    &[
+                        format!("i64 {d}"),
+                        format!("ptr {path}"),
+                        format!("ptr {data}"),
+                    ],
+                    Ty::Unit,
+                )
+            }
+            DirectoryCreateDirectory | DirectoryRemove | DirectoryRemoveTree => {
+                let entry = match b {
+                    DirectoryCreateDirectory => "directory_create_directory",
+                    DirectoryRemove => "directory_remove",
+                    _ => "directory_remove_tree",
+                };
+                self.m
+                    .declare(&format!("ignite_rt_{entry}"), "i32", &[i64(), ptr(), ptr()]);
+                let d = handle(self);
+                let path = self.read_arg(&args[0]);
+                self.rt_result(
+                    entry,
+                    &[format!("i64 {d}"), format!("ptr {path}")],
+                    Ty::Unit,
+                )
+            }
+            DirectoryAbsolutePath => {
+                self.m.declare(
+                    "ignite_rt_directory_absolute_path",
+                    "i32",
+                    &[i64(), ptr(), ptr()],
+                );
+                let d = handle(self);
+                self.rt_result("directory_absolute_path", &[format!("i64 {d}")], Ty::Text)
+            }
+            LauncherNew => {
+                self.m.declare("ignite_rt_launcher_new", "i64", &[i64()]);
+                Val::Scalar(self.f.val(format!(
+                    "call i64 @ignite_rt_launcher_new(i64 {})",
+                    ignite_types::LAUNCHER_DEFAULT_MAXIMUM_CHILDREN
+                )))
+            }
+            LauncherStart | LauncherExecute => {
+                let (entry, ok) = if b == LauncherStart {
+                    ("launcher_start", Ty::Capability(Capability::ChildProcess))
+                } else {
+                    ("launcher_execute", child_exit)
+                };
+                self.m.declare(
+                    &format!("ignite_rt_{entry}"),
+                    "i32",
+                    &[i64(), ptr(), ptr(), ptr()],
+                );
+                let l = handle(self);
+                let invocation = self.read_arg(&args[0]);
+                self.rt_result(
+                    entry,
+                    &[format!("i64 {l}"), format!("ptr {invocation}")],
+                    ok,
+                )
+            }
+            ChildProcessId => {
+                self.m.declare("ignite_rt_child_id", "i64", &[i64()]);
+                let c = handle(self);
+                Val::Scalar(self.f.val(format!("call i64 @ignite_rt_child_id(i64 {c})")))
+            }
+            ChildProcessWait => {
+                self.m
+                    .declare("ignite_rt_child_wait", "i32", &[i64(), ptr(), ptr()]);
+                let c = handle(self);
+                self.rt_result("child_wait", &[format!("i64 {c}")], child_exit)
+            }
+            ChildProcessKill => {
+                self.m
+                    .declare("ignite_rt_child_kill", "i32", &[i64(), ptr()]);
+                let c = handle(self);
+                self.rt_result("child_kill", &[format!("i64 {c}")], Ty::Unit)
+            }
+            EntropyNew => {
+                self.m.declare("ignite_rt_entropy_new", "i64", &[]);
+                Val::Scalar(self.f.val("call i64 @ignite_rt_entropy_new()"))
+            }
+            EntropyRandomBytes => {
+                self.m.declare(
+                    "ignite_rt_entropy_random_bytes",
+                    "i32",
+                    &[i64(), i64(), ptr(), ptr()],
+                );
+                let e = handle(self);
+                let count = self.scalar_arg(&args[0]);
+                self.rt_result(
+                    "entropy_random_bytes",
+                    &[format!("i64 {e}"), format!("i64 {count}")],
+                    bytes(),
+                )
+            }
+            SettingOf => {
+                self.m
+                    .declare("ignite_rt_setting_of", "i64", &[ptr(), ptr()]);
+                let flag = self.read_arg(&args[0]);
+                let value = self.read_arg(&args[1]);
+                Val::Scalar(self.f.val(format!(
+                    "call i64 @ignite_rt_setting_of(ptr {flag}, ptr {value})"
+                )))
+            }
+            SettingValue => {
+                self.m
+                    .declare("ignite_rt_setting_value", "void", &[ptr(), i64()]);
+                let s = handle(self);
+                self.rt_out("setting_value", &Ty::Text, &[format!("i64 {s}")])
+            }
+            other => unreachable!("`{other:?}` is no capability builtin"),
+        }
+    }
+
     fn builtin(&mut self, e: &Expr, b: Builtin, receiver: Option<&Expr>, args: &[Expr]) -> Val {
         use Builtin::*;
         let recv = |this: &mut Self| -> Val {
@@ -3755,6 +3919,24 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             BytesEmpty | ListEmpty => self.empty_list(),
             StoreNew => unreachable!("`Store.new()` is lowered by `store_new`"),
+            DirectoryTemporary
+            | DirectoryReadFile
+            | DirectoryWriteFile
+            | DirectoryReadDirectory
+            | DirectoryCreateDirectory
+            | DirectoryRemove
+            | DirectoryRemoveTree
+            | DirectoryAbsolutePath
+            | LauncherNew
+            | LauncherStart
+            | LauncherExecute
+            | ChildProcessId
+            | ChildProcessWait
+            | ChildProcessKill
+            | EntropyNew
+            | EntropyRandomBytes
+            | SettingOf
+            | SettingValue => self.capability(b, receiver, args),
             ClockMonotonic => {
                 self.m.declare("ignite_rt_clock_monotonic", "i64", &[]);
                 Val::Scalar(self.f.val("call i64 @ignite_rt_clock_monotonic()"))

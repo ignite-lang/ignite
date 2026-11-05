@@ -33,6 +33,7 @@ const TYPED: &[&str] = &[
     "bounds",
     "slice16",
     "rest",
+    "capabilities",
 ];
 
 fn lower(stem: &str, std_root: &Path) -> (GeneratedProject, GeneratedProject) {
@@ -511,6 +512,85 @@ fn rest_patterns() {
         "tests/golden/rest.ignite is a copy of the LLVM golden program"
     );
     check_program("rest", &common::golden_std(), false);
+}
+
+/// Row 36 of `docs/slice.md` 21.0: the four capability resources are
+/// created after the stores in the order of 21.8 (settings, directories,
+/// launchers, entropy), `--tool` and `--root` are read in the generated
+/// main, every method lowers to its `ignite_io` call, and the project
+/// builds with cargo. `capabilities.ignite` is a copy of the LLVM golden
+/// program.
+#[test]
+fn capabilities() {
+    let project = check_program("capabilities", &common::repository_std(), false);
+    assert_eq!(executable_names(&project), ["bench"]);
+    let main = norm(&project.executables[0].source);
+    let order = [
+        "ignite_io::Setting::launch(\"--tool\", Some(\"/bin/sh\"))?",
+        "ignite_io::Directory::launch(\"workspace\", true, \"--root\")?",
+        "ignite_io::Launcher::with_maximum(4)",
+        "ignite_io::Entropy::open()?",
+        "let bench = Bench {",
+    ];
+    let mut at = 0;
+    for expected in order {
+        let found = main[at..]
+            .find(expected)
+            .unwrap_or_else(|| panic!("missing `{expected}` after offset {at} in\n{main}"));
+        at += found + expected.len();
+    }
+    let lib = norm(&project.lib_rs);
+    for call in [
+        ".read_file(",
+        ".write_file(",
+        ".read_directory(",
+        ".create_directory(",
+        ".remove(",
+        ".remove_tree(",
+        ".absolute_path()",
+        ".execute(",
+        ".start(",
+        ".id()",
+        ".kill()",
+        ".wait()",
+        ".random_bytes(",
+        ".value()",
+    ] {
+        assert!(lib.contains(call), "no `{call}` in\n{lib}");
+    }
+    let copy = std::fs::read_to_string(golden_dir().join("capabilities.ignite")).unwrap();
+    let original = std::fs::read_to_string(
+        common::workspace().join("crates/ignite-llvm/tests/golden/capabilities.ignite"),
+    )
+    .unwrap();
+    assert_eq!(
+        copy, original,
+        "tests/golden/capabilities.ignite is a copy of the LLVM golden program"
+    );
+
+    let substrate = common::workspace().join("crates/ignite-io");
+    let (project, std) = common::lower_typed(
+        &golden_dir().join("capabilities.ignite"),
+        &common::repository_std(),
+        &substrate,
+    );
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| common::workspace().join("target"));
+    let out = target.join("ignite-rustgen-test").join("capabilities");
+    ignite_rustgen::write_project(&project, &out).unwrap();
+    ignite_rustgen::write_project(&std, &out.join("std")).unwrap();
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let status = std::process::Command::new(cargo)
+        .arg("build")
+        .arg("--manifest-path")
+        .arg(out.join("Cargo.toml"))
+        .arg("--target-dir")
+        .arg(&target)
+        .env("CARGO_INCREMENTAL", "0")
+        .status()
+        .unwrap();
+    assert!(status.success(), "cargo build of {} failed", out.display());
 }
 
 #[test]

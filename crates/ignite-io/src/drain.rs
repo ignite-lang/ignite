@@ -68,6 +68,7 @@ pub fn install() {
                 }
                 begin();
                 let _ = set.wait();
+                crate::run_exit_hooks();
                 crate::flush();
                 crate::terminal::restore();
                 let _ = pthread_sigmask(SigmaskHow::SIG_UNBLOCK, Some(&set), None);

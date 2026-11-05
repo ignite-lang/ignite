@@ -198,6 +198,57 @@ pub enum Ty {
     SystemRef,
     /// `Protocol`: the value of a protocol name (`endpoint(Echo)`).
     Protocol,
+    /// `Directory`, `Launcher`, `ChildProcess`, `Entropy` or `Setting`
+    /// (`docs/slice.md` 21.3): a handle like `TcpListener`, passed in values.
+    Capability(Capability),
+}
+
+/// The capability handle types of `docs/slice.md` 21.3 to 21.7.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Capability {
+    /// A root directory (21.4).
+    Directory,
+    /// The authority to start child processes (21.5).
+    Launcher,
+    /// A started child process (21.5); no resource kind.
+    ChildProcess,
+    /// Random bytes from the operating system (21.7).
+    Entropy,
+    /// One command-line argument of the executable (21.6).
+    Setting,
+}
+
+impl Capability {
+    /// Every capability, in the order of 21.8.
+    pub const ALL: [Capability; 5] = [
+        Capability::Directory,
+        Capability::Launcher,
+        Capability::ChildProcess,
+        Capability::Entropy,
+        Capability::Setting,
+    ];
+
+    /// The type name.
+    pub fn name(self) -> &'static str {
+        match self {
+            Capability::Directory => "Directory",
+            Capability::Launcher => "Launcher",
+            Capability::ChildProcess => "ChildProcess",
+            Capability::Entropy => "Entropy",
+            Capability::Setting => "Setting",
+        }
+    }
+
+    /// The capability named `name`.
+    pub fn from_name(name: &str) -> Option<Capability> {
+        Capability::ALL.into_iter().find(|c| c.name() == name)
+    }
+
+    /// Whether a system may declare it as a resource: all but
+    /// `ChildProcess`.
+    pub fn is_resource_kind(self) -> bool {
+        self != Capability::ChildProcess
+    }
 }
 
 /// The three quantity types of `docs/slice.md` section 14.1.
@@ -462,6 +513,7 @@ impl fmt::Display for Ty {
             Ty::Signal(t) => write!(f, "Signal<{t}>"),
             Ty::SystemRef => write!(f, "SystemRef"),
             Ty::Protocol => write!(f, "Protocol"),
+            Ty::Capability(kind) => write!(f, "{}", kind.name()),
             Ty::EffectFn(params, ret, effects) => {
                 let params = params
                     .iter()
@@ -617,6 +669,43 @@ pub enum Builtin {
     StreamClose,
     /// `s.set_idle_timeout(ms)` on a `ByteStream`-bounded receiver.
     StreamSetIdleTimeout,
+    /// `Directory.temporary() -> Result<Directory, IoError>`: test-only
+    /// (`docs/slice.md` 21.8).
+    DirectoryTemporary,
+    /// `d.read_file(path) -> Result<Bytes, IoError>`; effect `<root>.read`.
+    DirectoryReadFile,
+    /// `d.write_file(path, data) -> Result<Unit, IoError>`; `<root>.write`.
+    DirectoryWriteFile,
+    /// `d.read_directory(path) -> Result<List<Text>, IoError>`; `<root>.read`.
+    DirectoryReadDirectory,
+    /// `d.create_directory(path) -> Result<Unit, IoError>`; `<root>.write`.
+    DirectoryCreateDirectory,
+    /// `d.remove(path) -> Result<Unit, IoError>`; `<root>.write`.
+    DirectoryRemove,
+    /// `d.remove_tree(path) -> Result<Unit, IoError>`; `<root>.write`.
+    DirectoryRemoveTree,
+    /// `d.absolute_path() -> Result<Text, IoError>`; `<root>.read`.
+    DirectoryAbsolutePath,
+    /// `Launcher.new() -> Launcher`: test-only, `maximum_children` 16.
+    LauncherNew,
+    /// `l.start(invocation) -> Result<ChildProcess, IoError>`; `<root>.launch`.
+    LauncherStart,
+    /// `l.execute(invocation) -> Result<ChildExit, IoError>`; `<root>.launch`.
+    LauncherExecute,
+    /// `c.id() -> Int`: pure.
+    ChildProcessId,
+    /// `c.wait() -> Result<ChildExit, IoError>`; `<root>.wait`.
+    ChildProcessWait,
+    /// `c.kill() -> Result<Unit, IoError>`; `<root>.kill`.
+    ChildProcessKill,
+    /// `Entropy.new() -> Entropy`: test-only.
+    EntropyNew,
+    /// `e.random_bytes(count) -> Result<Bytes, IoError>`; `<root>.draw`.
+    EntropyRandomBytes,
+    /// `Setting.of(flag, value) -> Setting`: test-only.
+    SettingOf,
+    /// `s.value() -> Text`; `<root>.argument`.
+    SettingValue,
 }
 
 /// What a `Call` or `Method` expression calls.
@@ -976,6 +1065,12 @@ impl FailureSite {
 /// builtin module `""`.
 pub const TCP_LISTENER_DEFAULT_EXPOSURE: &str = "Loopback";
 pub const TCP_LISTENER_DEFAULT_BACKLOG: i64 = 128;
+
+/// The default `maximum_children` of the resource kind `Launcher`
+/// (`docs/slice.md` 21.5), `Launcher.maximum_children` in the builtin
+/// module `""`; `Directory.create` defaults to `false` and
+/// `Directory.flag` to `""` (21.4).
+pub const LAUNCHER_DEFAULT_MAXIMUM_CHILDREN: i64 = 16;
 
 /// Where a property of a member or assembly declaration takes its value
 /// (`docs/slice.md` section 15.9).
@@ -1604,6 +1699,7 @@ pub fn equality(ty: &Ty, modules: &TypedModules) -> Option<Equality> {
             Ty::Fn(..)
             | Ty::EffectFn(..)
             | Ty::TcpListener
+            | Ty::Capability(_)
             | Ty::TcpStream
             | Ty::PipeStream
             | Ty::IoError

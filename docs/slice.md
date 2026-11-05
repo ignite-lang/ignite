@@ -405,7 +405,8 @@ may come from:
 - `if`, `match` and a block have the roots of every value they may produce: the last
   expression of each branch, arm or block, with that branch's locals in scope;
 - the result of any call has the roots of each argument whose type can hold a substrate
-  handle (`TcpStream`, `TcpListener`, `Store`, `Stdin`, `Stdout`, directly or in a field,
+  handle (`TcpStream`, `TcpListener`, `Store`, `Stdin`, `Stdout`, and since slice 17
+  `Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting` (21.3); directly or in a field,
   payload, element or type argument; a type parameter or an unknown type may). This covers a
   user fn called by name or by UFCS (the receiver is an argument), pure or effectful,
   `requires []` included; a fn value or fn-typed field; a variant constructor (`Some(s)`); a
@@ -636,6 +637,10 @@ accept loop, connect and exit codes are Ignite in `std.protocol.telnet.TelnetSer
 `std.protocol.telnet.TelnetClient` and `std.protocol.http.HttpServer` (section 14.6), and
 the backends know no component kind by name.
 
+Slice 17 adds the resource kinds `Directory`, `Launcher`, `Entropy` and `Setting`, created by
+the generated `main` after the stores and before the listeners: section 21 (21.3, 21.8)
+supersedes this section where they differ.
+
 ```ignite
 system Terminal {
   resource ingress: TcpListener { address = "127.0.0.1", port = 2323 }
@@ -732,6 +737,10 @@ C ABI adapter `ignite-rt` (`docs/llvm.md` section 5).
 
 Slice 14 adds `Pipe`, `PipeStream`, `ByteStream` and the `ignite_rt_pipe_*` entries: 18.8 and
 18.9 supersede this section where they differ.
+
+Slice 17 adds files (`Directory`), child processes (`Launcher`, `ChildProcess`), random bytes
+(`Entropy`), launch arguments (`Setting`, `args::flag_from_args`) and the exit hooks: section 21
+supersedes this section where they differ.
 
 Slice 4: blocking. Sockets are `std::net`, standard input is one unbuffered `read(0)` per
 call, every task is an OS thread (`spawn`), and there is no event loop and no tokio. An

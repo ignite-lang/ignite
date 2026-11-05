@@ -667,3 +667,24 @@ fn capture_reads() -> Int {
     assert_eq!(t.marked_in("closure_body"), none());
     assert_eq!(t.marked_in("capture_reads"), none());
 }
+
+/// Stale point S10 of `docs/slice.md` 21.10: the five capability types are
+/// handles (invariant 3), so a capability passed on at its last use is
+/// shared, never moved as an aggregate.
+#[test]
+fn capabilities_are_handles_and_never_move() {
+    let t = typed(
+        r#"
+fn keep(files: Directory) -> Directory = files
+
+fn pass(files: Directory, tools: Launcher, child: ChildProcess, entropy: Entropy, tool: Setting) -> Directory {
+  let t = tools
+  let c = child
+  let e = entropy
+  let s = tool
+  keep(files)
+}
+"#,
+    );
+    assert_eq!(t.marked_in("pass"), none());
+}

@@ -1217,6 +1217,7 @@ fn debug_function(module: &mut Module<'_>, ty: &Ty) -> String {
         Ty::PipeStream => append_literal(module, &mut f, buf, "<PipeStream>"),
         Ty::TcpListener => append_literal(module, &mut f, buf, "<TcpListener>"),
         Ty::Store(_) => append_literal(module, &mut f, buf, "<Store>"),
+        Ty::Capability(kind) => append_literal(module, &mut f, buf, &format!("<{}>", kind.name())),
         Ty::Param(name) => append_literal(module, &mut f, buf, &format!("<{name}>")),
     }
     f.finish("ret void")

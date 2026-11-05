@@ -27,7 +27,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use ignite_check::Symbols;
 use ignite_syntax::SourceFile;
 use ignite_syntax::ast::{ComponentDecl, Decl, Expr, ExprKind, Program, ResourceDecl, SystemDecl};
-use ignite_types::{Callee, ExecutableInfo, FnSig, QualName, Ty, TypedModules, TypedProgram};
+use ignite_types::{
+    Callee, Capability, ExecutableInfo, FnSig, QualName, Ty, TypedModules, TypedProgram,
+};
 
 pub use ir::{RUNTIME, TargetSpec};
 pub use layout::{Layout, TypeEnv, repr};
@@ -629,6 +631,27 @@ fn executable_main_in<'e>(
             l.create_store(name, element);
         }
     }
+    let mut capabilities: Vec<(&str, Capability, &ResourceDecl)> = info
+        .resources
+        .iter()
+        .filter_map(|(name, ty)| match ty {
+            Ty::Capability(kind) => system
+                .resources
+                .iter()
+                .find(|r| r.name.name == *name)
+                .map(|resource| (name.as_str(), *kind, resource)),
+            _ => None,
+        })
+        .collect();
+    capabilities.sort_by_key(|(_, kind, _)| launch_order(*kind));
+    for (name, kind, resource) in capabilities {
+        if created.contains(&name) {
+            continue;
+        }
+        created.push(name);
+        let handle = launch_capability(&mut l, kind, resource);
+        l.bind_local(name, &Ty::Capability(kind), Val::Scalar(handle));
+    }
     let mut listeners: Vec<&str> = Vec::new();
     let mut endpoints: Vec<(&str, &Ty)> = Vec::new();
     for (name, ty) in &info.resources {
@@ -754,6 +777,101 @@ fn executable_main_in<'e>(
     m.define("main", text);
     m.finish()
 }
+/// The creation order of capability resources in a generated `main`
+/// (`docs/slice.md` 21.8): settings, directories, launchers, entropy.
+fn launch_order(kind: Capability) -> u8 {
+    match kind {
+        Capability::Setting => 0,
+        Capability::Directory => 1,
+        Capability::Launcher => 2,
+        Capability::Entropy | Capability::ChildProcess => 3,
+    }
+}
+
+/// Create the capability resource `resource` of kind `kind` at launch
+/// (`docs/slice.md` 21.4 to 21.7) through its runtime entry; its handle.
+/// A failure ends the program with the error's own exit code (2 for a
+/// missing setting or root).
+fn launch_capability(
+    l: &mut Lower<'_, '_, '_>,
+    kind: Capability,
+    resource: &ResourceDecl,
+) -> String {
+    let property = |name: &str| {
+        resource
+            .properties
+            .iter()
+            .find(|p| p.name.name == name)
+            .map(|p| &p.value)
+    };
+    let text = |l: &mut Lower<'_, '_, '_>, name: &str| -> (String, bool) {
+        let (value, given) = match property(name).map(|e| &e.kind) {
+            Some(ExprKind::Str(text)) => (l.text_literal(text.as_bytes()), true),
+            _ => (l.text_literal(b""), false),
+        };
+        (l.ptr(&value), given)
+    };
+    let err = l.temp(&Ty::IoError);
+    let handle = l.temp(&Ty::Int);
+    let ptr = || "ptr".to_string();
+    let status = match kind {
+        Capability::Setting => {
+            l.m.declare(
+                "ignite_rt_setting_launch",
+                "i32",
+                &[ptr(), ptr(), "i8".to_string(), ptr(), ptr()],
+            );
+            let (flag, _) = text(l, "flag");
+            let (default, has_default) = text(l, "default");
+            l.f.val(format!(
+                "call i32 @ignite_rt_setting_launch(ptr {flag}, ptr {default}, i8 {}, ptr {handle}, ptr {err})",
+                u8::from(has_default)
+            ))
+        }
+        Capability::Directory => {
+            l.m.declare(
+                "ignite_rt_directory_launch",
+                "i32",
+                &[ptr(), "i8".to_string(), ptr(), ptr(), ptr()],
+            );
+            let (path, _) = text(l, "path");
+            let (flag, _) = text(l, "flag");
+            let create = matches!(
+                property("create").map(|e| &e.kind),
+                Some(ExprKind::Bool(true))
+            );
+            l.f.val(format!(
+                "call i32 @ignite_rt_directory_launch(ptr {path}, i8 {}, ptr {flag}, ptr {handle}, ptr {err})",
+                u8::from(create)
+            ))
+        }
+        Capability::Launcher => {
+            l.m.declare("ignite_rt_launcher_new", "i64", &["i64".to_string()]);
+            let maximum = match property("maximum_children").map(|e| &e.kind) {
+                Some(ExprKind::Int(n)) => *n,
+                _ => ignite_types::LAUNCHER_DEFAULT_MAXIMUM_CHILDREN,
+            };
+            return l
+                .f
+                .val(format!("call i64 @ignite_rt_launcher_new(i64 {maximum})"));
+        }
+        Capability::Entropy | Capability::ChildProcess => {
+            l.m.declare("ignite_rt_entropy_open", "i32", &[ptr(), ptr()]);
+            l.f.val(format!(
+                "call i32 @ignite_rt_entropy_open(ptr {handle}, ptr {err})"
+            ))
+        }
+    };
+    let failed = l.f.val(format!("icmp ne i32 {status}, 0"));
+    let (bad, good) = (l.f.label(), l.f.label());
+    l.f.cond_br(&failed, &bad, &good);
+    l.f.place(&bad);
+    l.f.ins(format!("call void @ignite_rt_fail(ptr {err})"));
+    l.f.term("unreachable");
+    l.f.place(&good);
+    l.f.val(format!("load i64, ptr {handle}, align 8"))
+}
+
 /// Unless `status` is 0: fail with the error in `err` and `code`.
 fn fail_unless_ok(l: &mut Lower<'_, '_, '_>, status: &str, err: &str, code: i32) {
     let failed = l.f.val(format!("icmp ne i32 {status}, 0"));

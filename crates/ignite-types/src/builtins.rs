@@ -1,7 +1,7 @@
 //! Signatures of the builtin methods and statics (`docs/slice.md` sections 6
 //! and 7), resolved by receiver type or owner name.
 
-use crate::{Builtin, QuantityKind, Ty};
+use crate::{Builtin, Capability, QuantityKind, Ty};
 
 /// A builtin's parameter types and result type, receiver excluded.
 pub(crate) struct Sig {
@@ -77,8 +77,60 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
             sig(PipeStreamSetIdleTimeout, vec![Ty::Int], io(Ty::Unit))
         }
         (Ty::PipeStream, "received_batches") => sig(PipeStreamReceivedBatches, vec![], Ty::Int),
+        (Ty::Capability(kind), _) => capability_method(*kind, name),
         _ => None,
     }
+}
+
+/// The methods of a capability (`docs/slice.md` 21.3 to 21.7).
+fn capability_method(kind: Capability, name: &str) -> Option<Sig> {
+    use Builtin::*;
+    let texts = Ty::List(Box::new(Ty::Text));
+    match (kind, name) {
+        (Capability::Directory, "read_file") => sig(DirectoryReadFile, vec![Ty::Text], io(bytes())),
+        (Capability::Directory, "write_file") => {
+            sig(DirectoryWriteFile, vec![Ty::Text, bytes()], io(Ty::Unit))
+        }
+        (Capability::Directory, "read_directory") => {
+            sig(DirectoryReadDirectory, vec![Ty::Text], io(texts))
+        }
+        (Capability::Directory, "create_directory") => {
+            sig(DirectoryCreateDirectory, vec![Ty::Text], io(Ty::Unit))
+        }
+        (Capability::Directory, "remove") => sig(DirectoryRemove, vec![Ty::Text], io(Ty::Unit)),
+        (Capability::Directory, "remove_tree") => {
+            sig(DirectoryRemoveTree, vec![Ty::Text], io(Ty::Unit))
+        }
+        (Capability::Directory, "absolute_path") => {
+            sig(DirectoryAbsolutePath, vec![], io(Ty::Text))
+        }
+        (Capability::Launcher, "start") => sig(
+            LauncherStart,
+            vec![invocation()],
+            io(Ty::Capability(Capability::ChildProcess)),
+        ),
+        (Capability::Launcher, "execute") => {
+            sig(LauncherExecute, vec![invocation()], io(child_exit()))
+        }
+        (Capability::ChildProcess, "id") => sig(ChildProcessId, vec![], Ty::Int),
+        (Capability::ChildProcess, "wait") => sig(ChildProcessWait, vec![], io(child_exit())),
+        (Capability::ChildProcess, "kill") => sig(ChildProcessKill, vec![], io(Ty::Unit)),
+        (Capability::Entropy, "random_bytes") => {
+            sig(EntropyRandomBytes, vec![Ty::Int], io(bytes()))
+        }
+        (Capability::Setting, "value") => sig(SettingValue, vec![], Ty::Text),
+        _ => None,
+    }
+}
+
+/// The record `std.process.Invocation` (`docs/slice.md` 21.5).
+pub(crate) fn invocation() -> Ty {
+    Ty::Record(crate::QualName::new("std.process", "Invocation"))
+}
+
+/// The record `std.process.ChildExit` (`docs/slice.md` 21.5).
+pub(crate) fn child_exit() -> Ty {
+    Ty::Record(crate::QualName::new("std.process", "ChildExit"))
 }
 
 /// `receiver.name(..)` for a receiver whose type is a type parameter bounded
@@ -178,6 +230,18 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
             PipePair,
             vec![],
             Ty::Tuple(vec![Ty::PipeStream, Ty::PipeStream]),
+        ),
+        ("Directory", "temporary") => sig(
+            DirectoryTemporary,
+            vec![],
+            io(Ty::Capability(Capability::Directory)),
+        ),
+        ("Launcher", "new") => sig(LauncherNew, vec![], Ty::Capability(Capability::Launcher)),
+        ("Entropy", "new") => sig(EntropyNew, vec![], Ty::Capability(Capability::Entropy)),
+        ("Setting", "of") => sig(
+            SettingOf,
+            vec![Ty::Text, Ty::Text],
+            Ty::Capability(Capability::Setting),
         ),
         _ => None,
     }

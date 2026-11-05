@@ -175,6 +175,7 @@ impl Process {
 /// so there is nothing to send, and a task stalled in one must not hold up
 /// the exit.
 pub fn exit(code: i32) -> ! {
+    run_exit_hooks();
     flush();
     terminal::restore();
     std::process::exit(code)
@@ -289,9 +290,11 @@ where
             Err(report) => log(&format!("error: {report}")),
         }
         wait_for_tasks();
+        run_exit_hooks();
         flush();
         return 0;
     }
+    run_exit_hooks();
     match result {
         Ok(Ok(())) => 0,
         Ok(Err(e)) => {
@@ -402,6 +405,64 @@ pub mod args {
             }
         }
         Err(IoError::new(format!("no binding for {reference}")))
+    }
+
+    /// The value of the first `--flag V` or `--flag=V` in `args`
+    /// (`docs/slice.md` 21.6): `Ok(None)` when absent; a flag without a
+    /// value, or one followed by an argument that starts with `--`, is the
+    /// error `<flag> needs a value` with exit code 2.
+    pub fn flag_from_args(
+        args: impl Iterator<Item = String>,
+        flag: &str,
+    ) -> Result<Option<String>, IoError> {
+        let _ = (args, flag);
+        unimplemented!("slice 17: args::flag_from_args")
+    }
+
+    /// [`flag_from_args`] over the process arguments.
+    pub fn flag(flag: &str) -> Result<Option<String>, IoError> {
+        flag_from_args(std::env::args(), flag)
+    }
+
+    /// One command-line argument of the executable (`docs/slice.md` 21.6):
+    /// the capability `Setting`, a resource the generated `main` reads once
+    /// at launch. A cheap clone.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct Setting {
+        flag: std::sync::Arc<str>,
+        value: std::sync::Arc<str>,
+    }
+
+    impl Setting {
+        /// `Setting.of(flag, value)`, test-only.
+        pub fn of(flag: impl AsRef<str>, value: impl AsRef<str>) -> Setting {
+            Setting {
+                flag: flag.as_ref().into(),
+                value: value.as_ref().into(),
+            }
+        }
+
+        /// The resource `Setting { flag, default }` at launch: the flag's
+        /// value from the process arguments, else `default`; neither is the
+        /// error `<flag>: required argument missing` with exit code 2.
+        pub fn launch(flag: &str, default: Option<&str>) -> Result<Setting, IoError> {
+            match (self::flag(flag)?, default) {
+                (Some(value), _) => Ok(Setting::of(flag, value)),
+                (None, Some(value)) => Ok(Setting::of(flag, value)),
+                (None, None) => Err(IoError::new(format!("{flag}: required argument missing"))
+                    .with_exit_code(PORT_EXIT_CODE)),
+            }
+        }
+
+        /// The flag this setting reads.
+        pub fn flag(&self) -> String {
+            self.flag.to_string()
+        }
+
+        /// `setting.value()`: the value as text.
+        pub fn value(&self) -> String {
+            self.value.to_string()
+        }
     }
 
     /// `path=address:port` split into the path and the endpoint.
@@ -552,6 +613,37 @@ pub mod args {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `docs/slice.md` 21.8: hooks run in registration order, each once,
+    /// whichever exit path runs them first.
+    #[test]
+    fn exit_hooks_run_once_in_order() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static RAN: AtomicUsize = AtomicUsize::new(0);
+        static FIRST: AtomicUsize = AtomicUsize::new(0);
+        static SECOND: AtomicUsize = AtomicUsize::new(0);
+        fn first() {
+            FIRST.store(RAN.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
+        }
+        fn second() {
+            SECOND.store(RAN.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
+        }
+        at_exit(first);
+        at_exit(second);
+        run_exit_hooks();
+        run_exit_hooks();
+        assert_eq!(RAN.load(Ordering::SeqCst), 2);
+        assert_eq!(FIRST.load(Ordering::SeqCst), 1);
+        assert_eq!(SECOND.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn setting_of_keeps_its_flag_and_value() {
+        let setting = Setting::of("--tool", "/bin/sh");
+        assert_eq!(setting.flag(), "--tool");
+        assert_eq!(setting.value(), "/bin/sh");
+        assert_eq!(setting.clone(), setting);
+    }
 
     #[test]
     fn io_error_display_is_message() {
@@ -736,6 +828,45 @@ mod pipe;
 mod stream;
 pub use pipe::{PIPE_CAPACITY, Pipe, PipeStream};
 pub use stream::ByteStream;
+
+// Slice 17 (`docs/slice.md` 21.8): the capabilities `Directory`,
+// `Launcher` with `ChildProcess`, `Entropy` and `Setting`, and the exit
+// hooks, after the tests for the same reason. Owner of the surface: U1;
+// `fs` U2, `child` U3, `entropy` U5, `args::flag_from_args` U4.
+pub mod child;
+pub mod entropy;
+pub mod fs;
+pub use args::Setting;
+pub use child::{ChildExit, ChildProcess, Invocation, Launcher};
+pub use entropy::Entropy;
+pub use fs::Directory;
+
+static EXIT_HOOKS: std::sync::Mutex<Vec<fn()>> = std::sync::Mutex::new(Vec::new());
+
+/// Register `hook` to run once before the process ends in order: [`exit`],
+/// the end of [`run`], the end of a drain and a second SIGTERM during the
+/// drain call every registered hook, in registration order, the first time
+/// one of them runs (`docs/slice.md` 21.5: the live children's groups get
+/// SIGKILL).
+pub fn at_exit(hook: fn()) {
+    EXIT_HOOKS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .push(hook);
+}
+
+/// Run and forget every hook [`at_exit`] registered; a later call runs
+/// only hooks registered since.
+pub fn run_exit_hooks() {
+    let hooks = std::mem::take(
+        &mut *EXIT_HOOKS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    );
+    for hook in hooks {
+        hook();
+    }
+}
 
 /// `Int.parse(text)` of both targets: the value of decimal digits with an
 /// optional leading `-`; `None` for anything else (a `+`, spaces, no

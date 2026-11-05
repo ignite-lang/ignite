@@ -128,6 +128,85 @@ pub extern "C" fn ignite_rt_args_port(
     status(result.map(|port| port.unwrap_or(0)), out_port, err)
 }
 
+/// The value of `flag` in the arguments `init` stored
+/// (`ignite_io::args::flag_from_args`); `None` for an empty flag.
+pub(crate) fn flag_value(flag: &str) -> Result<Option<String>, IoError> {
+    if flag.is_empty() {
+        return Ok(None);
+    }
+    ignite_io::args::flag_from_args(args().into_iter(), flag)
+}
+
+/// `i32 args_flag(Text* flag, Text* out, i32* present, IoError* err)`: the
+/// value of `--flag V` or `--flag=V` from the arguments `init` stored
+/// (`docs/slice.md` 21.6). Absent: `present` 0. A flag without a value is
+/// an error with exit code 2.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_args_flag(
+    flag: *const IgniteList,
+    out: *mut IgniteList,
+    present: *mut i32,
+    err: *mut IgniteIoError,
+) -> i32 {
+    let flag = String::from_utf8_lossy(bytes(flag)).into_owned();
+    let result = flag_value(&flag);
+    if let Ok(value) = &result {
+        put(present, i32::from(value.is_some()));
+    }
+    status(
+        result.map(|value| IgniteList::from_bytes(value.unwrap_or_default().as_bytes())),
+        out,
+        err,
+    )
+}
+
+/// `i32 setting_launch(Text* flag, Text* default, i8 has_default, i64* out,
+/// IoError* err)`: the resource `Setting` at launch (21.6): the flag's
+/// value, else `default` when `has_default`, else the error `<flag>:
+/// required argument missing` with exit code 2.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_setting_launch(
+    flag: *const IgniteList,
+    default: *const IgniteList,
+    has_default: i8,
+    out: *mut i64,
+    err: *mut IgniteIoError,
+) -> i32 {
+    let flag = String::from_utf8_lossy(bytes(flag)).into_owned();
+    let default = (has_default != 0).then(|| String::from_utf8_lossy(bytes(default)).into_owned());
+    let made = flag_value(&flag).and_then(|given| match given.or(default) {
+        Some(value) => Ok(ignite_io::Setting::of(&flag, value)),
+        None => Err(IoError::new(format!("{flag}: required argument missing")).with_exit_code(2)),
+    });
+    status(
+        made.map(|setting| crate::net::register(crate::net::Handle::Setting(setting))),
+        out,
+        err,
+    )
+}
+
+/// `i64 setting_of(Text* flag, Text* value)`: `Setting.of(flag, value)`.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_setting_of(flag: *const IgniteList, value: *const IgniteList) -> i64 {
+    let setting = ignite_io::Setting::of(
+        String::from_utf8_lossy(bytes(flag)),
+        String::from_utf8_lossy(bytes(value)),
+    );
+    crate::net::register(crate::net::Handle::Setting(setting))
+}
+
+/// `void setting_value(Text* out, i64 s)`: `setting.value()`; empty for a
+/// handle that is no setting.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_setting_value(out: *mut IgniteList, handle: i64) {
+    let value = crate::net::capability(handle, "setting", |found| match found {
+        crate::net::Handle::Setting(setting) => Some(setting.value()),
+        _ => None,
+    })
+    .unwrap_or_default();
+    put(out, IgniteList::from_bytes(value.as_bytes()));
+}
+
 /// `i32 endpoint_of(Text* reference, Endpoint* out, IoError* err)`: the
 /// `--ref <path>=<address>:<port>` argument `init` stored whose path is
 /// `reference` (`docs/slice.md` 16.9, 16.13), as an `Endpoint` whose

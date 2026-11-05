@@ -15,8 +15,8 @@ use std::path::Path;
 use ignite_syntax::ast::{Decl, Expr, ExprKind, Span, SystemDecl};
 use ignite_syntax::diagnostic::Diagnostic;
 use ignite_types::{
-    AssemblyInfo, ExecutableInfo, MemberDeclaration, MemberInfo, PropertySource, QualName,
-    QuantityKind, Reference, SystemInfo, TCP_LISTENER_DEFAULT_BACKLOG,
+    AssemblyInfo, ExecutableInfo, LAUNCHER_DEFAULT_MAXIMUM_CHILDREN, MemberDeclaration, MemberInfo,
+    PropertySource, QualName, QuantityKind, Reference, SystemInfo, TCP_LISTENER_DEFAULT_BACKLOG,
     TCP_LISTENER_DEFAULT_EXPOSURE, Ty, TypedProgram, field_default,
 };
 
@@ -761,6 +761,9 @@ impl<'a, 'p> Builder<'a, 'p> {
                         fields: Vec::new(),
                     },
                     "TcpListener.backlog" => Value::Int(TCP_LISTENER_DEFAULT_BACKLOG),
+                    "Directory.create" => Value::Bool(false),
+                    "Directory.flag" => Value::Text(String::new()),
+                    "Launcher.maximum_children" => Value::Int(LAUNCHER_DEFAULT_MAXIMUM_CHILDREN),
                     _ => return None,
                 };
                 (value, true)

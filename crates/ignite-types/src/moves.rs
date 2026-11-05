@@ -173,6 +173,7 @@ fn aggregate(ty: &Ty) -> bool {
             | Ty::TcpStream
             | Ty::PipeStream
             | Ty::Store(_)
+            | Ty::Capability(_)
             | Ty::Fn(..)
             | Ty::EffectFn(..)
             | Ty::Never

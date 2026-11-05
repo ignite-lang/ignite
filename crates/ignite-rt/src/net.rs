@@ -24,7 +24,10 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use ignite_io::{IoError, PipeStream, TcpListener, TcpStream};
+use ignite_io::{
+    ChildProcess, Directory, Entropy, IoError, Launcher, PipeStream, Setting, TcpListener,
+    TcpStream,
+};
 
 use crate::{IgniteInput, IgniteIoError, IgniteList, arena, bytes, status};
 
@@ -62,6 +65,26 @@ pub(crate) enum Handle {
     Stream(TcpStream),
     /// An end of an in-memory pipe (`crate::pipe`).
     Pipe(PipeStream),
+    /// A root directory (`crate::fs`, `docs/slice.md` 21.4).
+    Directory(Directory),
+    /// The authority to start children (`crate::child`, 21.5).
+    Launcher(Launcher),
+    /// A started child (`crate::child`, 21.5).
+    Child(ChildProcess),
+    /// A source of random bytes (`crate::entropy`, 21.7).
+    Entropy(Entropy),
+    /// A launch argument (`crate::process`, 21.6).
+    Setting(Setting),
+}
+
+/// The capability `handle` names, picked by `pick`; another handle is
+/// "`<h>` is not a <what>" (`docs/slice.md` 21.8).
+pub(crate) fn capability<T>(
+    handle: i64,
+    what: &str,
+    pick: impl FnOnce(Handle) -> Option<T>,
+) -> Result<T, IoError> {
+    pick(lookup(handle)?).ok_or_else(|| IoError::new(format!("{handle} is not a {what}")))
 }
 
 /// One table entry: the generation of the handle it holds or will hold
@@ -194,18 +217,14 @@ fn lookup(handle: i64) -> Result<Handle, IoError> {
 fn listener(handle: i64) -> Result<TcpListener, IoError> {
     match lookup(handle)? {
         Handle::Listener(listener) => Ok(listener),
-        Handle::Stream(_) | Handle::Pipe(_) => {
-            Err(IoError::new(format!("{handle} is not a TCP listener")))
-        }
+        _ => Err(IoError::new(format!("{handle} is not a TCP listener"))),
     }
 }
 
 fn stream(handle: i64) -> Result<TcpStream, IoError> {
     match lookup(handle)? {
         Handle::Stream(stream) => Ok(stream),
-        Handle::Listener(_) | Handle::Pipe(_) => {
-            Err(IoError::new(format!("{handle} is not a TCP stream")))
-        }
+        _ => Err(IoError::new(format!("{handle} is not a TCP stream"))),
     }
 }
 
@@ -213,9 +232,7 @@ fn stream(handle: i64) -> Result<TcpStream, IoError> {
 pub(crate) fn pipe(handle: i64) -> Result<PipeStream, IoError> {
     match lookup(handle)? {
         Handle::Pipe(pipe) => Ok(pipe),
-        Handle::Listener(_) | Handle::Stream(_) => {
-            Err(IoError::new(format!("{handle} is not a pipe")))
-        }
+        _ => Err(IoError::new(format!("{handle} is not a pipe"))),
     }
 }
 
