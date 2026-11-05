@@ -9,6 +9,7 @@ relations:
 - depends_on: story:slice-13-recovery-gaps
 - decomposes: epic:slice-18-one-service-operated
 - depends_on: story:slice-18-contract
+- depends_on: story:host-journal-integrity
 scope:
 - confidence: inferred
   path: crates/ignite/src/apply

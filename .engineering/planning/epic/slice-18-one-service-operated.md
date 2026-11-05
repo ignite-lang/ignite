@@ -8,7 +8,7 @@ summary: The todo service built on LLVM, its data durable, probed by an HTTP pro
 relations:
 - depends_on: epic:playground-substrate
 - depends_on: epic:slice-13-local-apply
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T08:56:51Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-05T08:56:51Z", actor: "human:timo", revision: 3}
@@ -44,13 +44,18 @@ target in a fraction of the Rust target's time.
 - An HTTP probe kind and its outcome type live under `examples/todo/`; an `Availability` contract
   over them reaches each `Status` (`Compliant`, `Violated`,
   `InsufficientEvidence`, `std/control.ignite:199`) under `ignite run`
-  with a manual clock; no file under `crates/` or `std/` names the probe or its outcome.
+  with a manual clock; no general layer names the probe or its outcome:
+  `git grep -n -e HttpHealth -e HealthCheck -e 'examples\.todo\.health' -- 'crates/*/src' std 'tools/*/src'`
+  prints nothing (`docs/slice.md` 22.0 row 8; tests and goldens under `crates/*/tests` may name
+  the example).
 - The fault-injection matrix of the contract passes on the todo system: a host killed after an
   effect and before its receipt, a plan saved before a source change, and a journal with a
   truncated or altered last record each end in a stated recovery or refusal, never in `completed`
   over an unobserved effect or in a second start of the same operation.
 - The todo service's dev build on the LLVM target, and its edit-build-restart cycle under
-  `ignite apply`, are timed before and after the slice and recorded in `docs/performance/18/`.
+  `ignite apply`, are timed and recorded in `docs/performance/18/`. Deviation (22.12 D12): the
+  todo cannot be applied at the slice's base (22.1 F8 to F10), so its cycle is timed after only,
+  and the before/after pair of the cycle is the terminal design's.
 
 ## Out of Scope
 
