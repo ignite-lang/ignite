@@ -1,7 +1,7 @@
 //! `ignite recover` (`docs/slice.md` 22.9, 22.0 rows 25 and 26): the
 //! operator's way back to accepting plans from a recovery that no
 //! corrective plan resolves, through the real CLI, host socket and native
-//! program on the terminal design without its probe ([`without_probe`]).
+//! program on the terminal design, its probe and contracts kept.
 //!
 //! The state both rows drive (22.9): revision 1 committed; revision 2 adds
 //! a second server on a held port, which exits at once, so its supervisor
@@ -194,7 +194,7 @@ impl Flow {
         assert!(original.contains("port = 2323"), "terminal fixture port");
         fs::write(
             &source,
-            without_probe(&original).replace("port = 2323", &format!("port = {port}")),
+            original.replace("port = 2323", &format!("port = {port}")),
         )
         .unwrap();
         let state = root.join("state");
@@ -431,23 +431,6 @@ fn terminal_status(port: u16) -> String {
     let reply = prompt(&mut stream);
     let _ = stream.write_all(b"quit\r\n");
     reply
-}
-
-/// The terminal design without its probe and the contracts over it, so
-/// the handover to revision 2's run waits for no probe attempt. With them
-/// that handover did not happen within 120 s once in four runs, while
-/// every probe attempt after the handover request timed out (`task gate`
-/// at load, 2026-11-05); the cause is not established.
-fn without_probe(source: &str) -> String {
-    let probe = source
-        .find("\n  component promptProbe")
-        .expect("the design's probe");
-    let end = source
-        .find("\n}\n\nassembly local")
-        .expect("the end of the system");
-    let binding = "    Terminal.promptProbe = scheduledProbeHost()\n";
-    assert!(source.contains(binding), "the probe's binding");
-    format!("{}{}", &source[..probe], &source[end..]).replace(binding, "")
 }
 
 /// `source` with a second server on `port` that gives up after one
@@ -1123,8 +1106,8 @@ fn llvm_recover_ends_a_live_instance() {
     recover_ends_a_live_instance("llvm");
 }
 
-/// Row 25's flow with the design's probe and contracts kept, which
-/// [`without_probe`] strips: the state of 22.9, `ignite recover`, then the
+/// Row 25's flow with the design's probe and contracts kept, as every
+/// flow here keeps them since W3's fixes: the state of 22.9, `ignite recover`, then the
 /// next plan replaces the server (revision 2) and must complete with the
 /// replacement serving, the probe's attempts answered again.
 fn recover_then_rollout_with_the_probe(target: &'static str) {

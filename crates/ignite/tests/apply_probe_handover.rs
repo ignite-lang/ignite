@@ -1,8 +1,8 @@
 //! The terminal design with its probe kept, through a rollout that hands
 //! the running revision's instances to a new run (`docs/slice.md` 17.4,
-//! 22.9): `apply_way_out.rs` strips the probe ([`without_probe`] there)
-//! because with it the handover to revision 2 stalled once, every probe
-//! attempt after the handover request timing out. These cases keep the
+//! 22.9): `apply_way_out.rs` stripped the probe until W3's fixes, because
+//! with it the handover to revision 2 stalled once, every probe attempt
+//! after the handover request timing out. These cases keep the
 //! probe and assert the handover happens: revision 2 gets a run directory
 //! of its own and the apply ends.
 //!
