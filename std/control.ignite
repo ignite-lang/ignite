@@ -1,14 +1,14 @@
 package std.control
 
-import std.sli.{ProbeAttempt, Window, MissingData, satisfies, meets}
+import std.sli.{Sample, Verdict, Window, MissingData, meets}
 import std.policy.{Restart, DrainRollout, OnDeadline, delay, allows, on_deadline}
 import std.time.{month_start, next_month_start}
 
 // The reducer interface of `ignite run` (`docs/slice.md` 16.6, actors.md
 // R8): a machine is a value, an event is a value, and `step` is a pure fn
 // from both to the next machine and the effects to dispatch. The driver in
-// `crates/ignite/src/run/` knows these types, the hook names `machine`
-// and `validate` and the fns `step` and `companions`, nothing else (vision
+// `crates/ignite/src/run/` knows these types, the hook names `machine`,
+// `validate` and `classify` and the fns `step` and `companions`, nothing else (vision
 // invariant 6). Reducers read no clock: every event carries `at`, a
 // Duration since the journal's epoch.
 //
@@ -50,8 +50,11 @@ type Event {
 // since 1970-01-01T00:00:00Z) and reaches every machine at every segment
 // start. Process lifecycle events carry the pid they concern and go to the
 // member's supervisor, its rollout machine and every scheduler probing
-// that member (A4); `Timer` returns to the machine that set it; `Emitted`
-// reaches every subscriber of the signal; `Control` carries a control
+// that member (A4); `Timer` returns to the machine that set it;
+// `AttemptDone` carries the probe's line, which the driver has decoded by
+// the signal's element type (`docs/slice.md` 22.3); `Emitted`
+// reaches every subscriber of the signal with the `Verdict` of its
+// contract's `classify`; `Control` carries a control
 // line (16.3).
 enum EventKind {
   Start(Duration),
@@ -60,10 +63,10 @@ enum EventKind {
   Exited(Int, Int),
   Signalled(Int, Int),
   SpawnFailed(Text),
-  AttemptDone(Int, ProbeAttempt),
+  AttemptDone(Int, Text),
   AttemptFailed(Int, Text),
   Timer(Int),
-  Emitted(Text, ProbeAttempt),
+  Emitted(Text, Verdict),
   Built(Int),
   BuildFailed(Text),
   Released,
@@ -85,7 +88,7 @@ enum Effect {
   Abort(Text, Int),
   SetTimer(Int, Duration),
   CancelTimer(Int),
-  Emit(Text, ProbeAttempt),
+  Emit(Text, Sample),
   Publish(Standing),
   Fire(Fired),
   Build(Text),
@@ -125,6 +128,8 @@ type Supervisor {
 
 // The scheduler of one probe member (16.8): one attempt per `interval`
 // from the target's first `Ready` on, each with a deadline of `timeout`.
+// `in_flight_slot` is the slot the attempt in flight was dispatched for,
+// which its emission carries (D14).
 type ProbeScheduler {
   id: Text
   member: Text
@@ -136,6 +141,7 @@ type ProbeScheduler {
   next_id: Int = 1
   slot: Option<Duration> = None
   in_flight: Option<Int> = None
+  in_flight_slot: Option<Duration> = None
   deadline_timer: Option<Int> = None
   slot_timer: Option<Int> = None
 }
@@ -148,8 +154,8 @@ type Bucket {
   executed: Int = 0
 }
 
-// The evaluator of one contract (16.10, 16.11): classifies each emission
-// of its signal, keeps the window's counts and publishes a `Standing` at
+// The evaluator of one contract (16.10, 16.11): counts each `Verdict` of
+// its signal (the driver classified it, 22.3), keeps the window's counts and publishes a `Standing` at
 // every emission and period boundary; an `SLA` also fires its consequence
 // at a period close that is `Violated`. `interval` is the signal's, set by
 // the driver from the model's `observations`; `epoch` comes from `Start`.
@@ -160,8 +166,6 @@ type Evaluator {
   contract: Text
   signal: Text
   interval: Duration = 0 ms
-  good: Text
-  threshold: Duration = 0 ms
   target: Ratio
   window: Window
   missing_data: MissingData
@@ -483,8 +487,9 @@ fn stop(s: Supervisor) -> Step = match s.state {
 
 // Probe scheduler (16.8). Slots open every `interval` from the target's
 // first `Ready` on (O40); each slot dispatches one attempt with a deadline
-// of `timeout`. A result before the deadline is emitted; the deadline
-// aborts the attempt and emits a bad attempt with `latency = timeout`; a
+// of `timeout`. A result before the deadline is emitted as a `Sample` of
+// the attempt's slot with the probe's line; the deadline
+// aborts the attempt and emits the slot's `Sample` without a line; a
 // failed attempt (no executable, exit status, undecodable line) is
 // missing evidence and emits nothing. `Start` forgets the schedule, since
 // no timer survives a run: the target's next `Ready` reopens it.
@@ -496,6 +501,7 @@ fn schedule(p: ProbeScheduler, event: Event) -> Step {
       next.target_ready = false
       next.slot = None
       next.in_flight = None
+      next.in_flight_slot = None
       next.deadline_timer = None
       next.slot_timer = None
       scheduled(next, [])
@@ -512,26 +518,29 @@ fn schedule(p: ProbeScheduler, event: Event) -> Step {
     } else if p.deadline_timer == Some(id) && p.in_flight == Some(id) {
       var next = p
       next.in_flight = None
+      next.in_flight_slot = None
       next.deadline_timer = None
       scheduled(next, [
         Abort(p.member, id),
         Note("probe timeout"),
-        Emit(p.signal, ProbeAttempt { received = false, latency = p.timeout })
+        Emit(p.signal, Sample { slot = slot_in_flight(p, at), line = None })
       ])
     } else {
       unchanged(Schedule(p))
     }
-    AttemptDone(id, attempt) => if p.in_flight == Some(id) {
+    AttemptDone(id, line) => if p.in_flight == Some(id) {
       var next = p
       next.in_flight = None
+      next.in_flight_slot = None
       next.deadline_timer = None
-      scheduled(next, [CancelTimer(id), Emit(p.signal, attempt)])
+      scheduled(next, [CancelTimer(id), Emit(p.signal, Sample { slot = slot_in_flight(p, at), line = Some(line) })])
     } else {
       scheduled(p, [Note("late attempt {id} ignored")])
     }
     AttemptFailed(id, _) => if p.in_flight == Some(id) {
       var next = p
       next.in_flight = None
+      next.in_flight_slot = None
       next.deadline_timer = None
       scheduled(next, [CancelTimer(id), Note("missing")])
     } else {
@@ -553,6 +562,7 @@ fn open_slot(p: ProbeScheduler, at: Duration) -> Step {
       let id = p.next_id
       next.next_id = id + 1
       next.in_flight = Some(id)
+      next.in_flight_slot = Some(at)
       next.deadline_timer = Some(id)
       effects.push(Attempt(p.member, id))
       effects.push(SetTimer(id, at + p.timeout))
@@ -563,8 +573,17 @@ fn open_slot(p: ProbeScheduler, at: Duration) -> Step {
   scheduled(next, effects)
 }
 
-// Contract evaluator (16.10, 16.11). Every emission of its signal is
-// classified by `satisfies`, counted in the bucket of its slot and
+// The slot the attempt in flight was dispatched for; `at` for a scheduler
+// state that has none (a machine resumed from a journal of a scheduler
+// written before `in_flight_slot` existed is refused by E126, so this is
+// only a guard).
+fn slot_in_flight(p: ProbeScheduler, at: Duration) -> Duration = match p.in_flight_slot {
+  Some(slot) => slot
+  None => at
+}
+
+// Contract evaluator (16.10, 16.11). Every `Verdict` of its signal (the
+// driver classified it, 22.3) is counted in the bucket of its slot and
 // followed by a `Standing` of the window; a `CalendarMonth` window also
 // publishes the closed period at each boundary, fires the consequence of
 // a violated period once and withholds it with a note on insufficient
@@ -577,8 +596,8 @@ fn evaluate(e: Evaluator, event: Event) -> Step {
       next.epoch = epoch
       arm_period(next, at)
     }
-    Emitted(signal, attempt) => if signal == e.signal {
-      emission(e, at, attempt)
+    Emitted(signal, verdict) => if signal == e.signal {
+      emission(e, at, verdict)
     } else {
       unchanged(Evaluate(e))
     }
@@ -620,23 +639,18 @@ fn bucket_width(span: Duration, interval: Duration) -> Duration {
   }
 }
 
-// The instant an emission's attempt was dispatched: its `at` less the
-// probe's own latency (a timeout emission arrives `timeout` after its
-// slot), never before the epoch.
-fn slot_of(at: Duration, attempt: ProbeAttempt) -> Duration =
-  if attempt.latency >= at { 0 ms } else { at - attempt.latency }
-
-// One emission at `at`: count it, drop buckets that left the window,
+// One emission at `at`: count its verdict in the bucket of the slot the
+// scheduler dispatched it for (D14), drop buckets that left the window,
 // publish the standing.
-fn emission(e: Evaluator, at: Duration, attempt: ProbeAttempt) -> Step {
-  let slot = slot_of(at, attempt)
+fn emission(e: Evaluator, at: Duration, verdict: Verdict) -> Step {
+  let slot = verdict.slot
   var next = e
   let horizon = match e.horizon {
     Some(h) => h
     None => slot
   }
   next.horizon = Some(horizon)
-  let good = if satisfies(attempt, e.good, e.threshold) { 1 } else { 0 }
+  let good = if verdict.good { 1 } else { 0 }
   next = count(next, slot, good)
   next = expire(next, at)
   let standing = standing_at(next, at, slot + e.interval / 2)
@@ -1360,7 +1374,6 @@ test fn reachable() -> Evaluator = Evaluator {
   contract = "T.reachable"
   signal = "T.probe.attempts"
   interval = 10 seconds
-  good = "prompt_received_before_timeout"
   target = 99.9%
   window = Rolling(30 days)
   missing_data = MissingData.InsufficientEvidence
@@ -1372,7 +1385,6 @@ test fn sla() -> Evaluator = Evaluator {
   contract = "T.customerAccess"
   signal = "T.probe.attempts"
   interval = 10 seconds
-  good = "prompt_received_before_timeout"
   target = 99.5%
   window = CalendarMonth("Europe/Berlin")
   missing_data = MissingData.InsufficientEvidence
@@ -1380,9 +1392,9 @@ test fn sla() -> Evaluator = Evaluator {
   consequence = Some("access_commitment_breached")
 }
 
-test fn good(latency: Duration) -> ProbeAttempt = ProbeAttempt { received = true, latency }
+test fn good(slot: Duration) -> Verdict = Verdict { slot, good = true }
 
-test fn bad() -> ProbeAttempt = ProbeAttempt { received = false, latency = 2 seconds }
+test fn bad(slot: Duration) -> Verdict = Verdict { slot, good = false }
 
 // Step `machine` through `events`, collecting every effect.
 test fn run(machine: Machine, events: List<Event>) -> (Machine, List<Effect>) {
@@ -1581,20 +1593,20 @@ test "slots open at the target's first ready and every interval after" {
   assert e1 == [Attempt("T.probe", 1), SetTimer(1, 3000 ms), SetTimer(SLOT_TIMER, 11000 ms)]
   assert scheduler_of(first).in_flight == Some(1)
   assert scheduler_of(first).slot == Some(1 second)
-  let (done, e2) = run(first, [at(1000, AttemptDone(1, good(3 ms)))])
-  assert e2 == [CancelTimer(1), Emit("T.probe.attempts", good(3 ms))]
+  let (done, e2) = run(first, [at(1800, AttemptDone(1, "ok"))])
+  assert e2 == [CancelTimer(1), Emit("T.probe.attempts", Sample { slot = 1 second, line = Some("ok") })]
   assert scheduler_of(done).in_flight == None
   let (second, e3) = run(done, [at(5000, Ready(43)), at(11000, Timer(SLOT_TIMER))])
   assert e3 == [Attempt("T.probe", 2), SetTimer(2, 13000 ms), SetTimer(SLOT_TIMER, 21000 ms)]
   assert scheduler_of(second).next_id == 3
 }
 
-test "the deadline aborts the attempt and emits a bad attempt with the timeout as latency" {
+test "the deadline aborts the attempt and emits its slot without a line" {
   let (first, _) = run(Schedule(probe()), [at(1000, Ready(42))])
   let (timed_out, e1) = run(first, [at(3000, Timer(1))])
-  assert e1 == [Abort("T.probe", 1), Note("probe timeout"), Emit("T.probe.attempts", bad())]
+  assert e1 == [Abort("T.probe", 1), Note("probe timeout"), Emit("T.probe.attempts", Sample { slot = 1 second, line = None })]
   assert scheduler_of(timed_out).in_flight == None
-  let (_, e2) = run(timed_out, [at(3500, AttemptDone(1, good(2500 ms)))])
+  let (_, e2) = run(timed_out, [at(3500, AttemptDone(1, "late"))])
   assert e2 == [Note("late attempt 1 ignored")]
   assert run(timed_out, [at(3600, Timer(1))]).1 == []
 }
@@ -1674,9 +1686,9 @@ test "expected slots are counted from the horizon within the span" {
 }
 
 test "a probe timeout violates reachability over the rolling window" {
-  let (first, e1) = run(Evaluate(reachable()), [at(0, Start(0 ms)), at(0, Emitted("T.probe.attempts", good(3 ms)))])
+  let (first, e1) = run(Evaluate(reachable()), [at(0, Start(0 ms)), at(0, Emitted("T.probe.attempts", good(0 ms)))])
   assert standings(e1) == [Standing { contract = "T.reachable", status = Compliant, good = 1, executed = 1, expected = 1, completeness = 100%, from = 0 ms, to = 0 ms, coverage = 0% }]
-  let (second, e2) = run(first, [at(12000, Emitted("T.probe.attempts", bad()))])
+  let (second, e2) = run(first, [at(12000, Emitted("T.probe.attempts", bad(10 seconds)))])
   let violated = standings(e2).at(0)
   assert violated.status == Violated
   assert violated.good == 1 && violated.executed == 2 && violated.expected == 2
@@ -1684,25 +1696,25 @@ test "a probe timeout violates reachability over the rolling window" {
   assert violated.from == 0 ms && violated.to == 12 seconds
   assert violated.coverage.ppm() == 4
   assert evaluator_of(second).horizon == Some(0 ms)
-  assert run(second, [at(13000, Emitted("T.other", good(1 ms)))]) == (second, [])
+  assert run(second, [at(13000, Emitted("T.other", good(12999 ms)))]) == (second, [])
 }
 
 test "the rolling window forgets buckets that left it" {
   var e = reachable()
   e.window = Rolling(1 hour)
   e.missing_data = CountsAsGood
-  let (m1, e1) = run(Evaluate(e), [at(2000, Emitted("T.probe.attempts", bad()))])
+  let (m1, e1) = run(Evaluate(e), [at(2000, Emitted("T.probe.attempts", bad(0 ms)))])
   let s1 = standings(e1).at(0)
   assert s1.status == Violated && s1.good == 0 && s1.executed == 1 && s1.expected == 1
   assert evaluator_of(m1).horizon == Some(0 ms)
-  let (m2, e2) = run(m1, [at(3600000, Emitted("T.probe.attempts", good(1 ms)))])
+  let (m2, e2) = run(m1, [at(3600000, Emitted("T.probe.attempts", good(3599999 ms)))])
   let s2 = standings(e2).at(0)
   assert s2.expected == 361 && s2.executed == 361 && s2.good == 360
   assert s2.status == Violated
   assert s2.completeness.ppm() == 5540
   assert s2.coverage == 100%
   assert evaluator_of(m2).buckets.len() == 1
-  let (m3, e3) = run(m2, [at(3610000, Emitted("T.probe.attempts", good(1 ms)))])
+  let (m3, e3) = run(m2, [at(3610000, Emitted("T.probe.attempts", good(3609999 ms)))])
   let s3 = standings(e3).at(0)
   assert evaluator_of(m3).buckets.len() == 1
   assert evaluator_of(m3).sum_executed == 2 && evaluator_of(m3).sum_good == 2
@@ -1714,14 +1726,14 @@ test "a calendar period closes at the zone's month boundary and fires its conseq
   let (armed, e0) = run(Evaluate(sla()), [at(0, Start(epoch))])
   assert e0 == [SetTimer(PERIOD_TIMER, 10 minutes)]
   assert evaluator_of(armed).epoch == epoch
-  let (observed, e1) = run(armed, [at(0, Emitted("T.probe.attempts", good(2 ms))), at(12000, Emitted("T.probe.attempts", bad()))])
+  let (observed, e1) = run(armed, [at(0, Emitted("T.probe.attempts", good(0 ms))), at(12000, Emitted("T.probe.attempts", bad(10 seconds)))])
   let open = standings(e1).at(1)
   assert open.status == Violated && open.from == 0 ms && open.to == 12 seconds
   assert open.coverage.ppm() == 4
   var events = []
   var k = 2
   while k < 60 {
-    events.push(at(k * 10000, Emitted("T.probe.attempts", good(1 ms))))
+    events.push(at(k * 10000, Emitted("T.probe.attempts", good(k * 10 seconds - 1 ms))))
     k = k + 1
   }
   let (observed2, _) = run(observed, events)
@@ -1752,7 +1764,7 @@ test "a compliant period fires nothing and a contract without a consequence note
   var events = [at(0, Start(epoch))]
   var k = 0
   while k < 60 {
-    events.push(at(k * 10000, Emitted("T.probe.attempts", good(1 ms))))
+    events.push(at(k * 10000, Emitted("T.probe.attempts", good(later(k * 10 seconds - 1 ms, 0 ms)))))
     k = k + 1
   }
   events.push(at(600000, Timer(PERIOD_TIMER)))
@@ -1771,7 +1783,7 @@ test "period boundaries follow the zone through months with a summer time change
   let march_epoch = 1772319600 seconds
   let (armed, e0) = run(Evaluate(sla()), [at(0, Start(march_epoch))])
   assert e0 == [SetTimer(PERIOD_TIMER, 31 days - 1 hour)]
-  let (_, e1) = run(armed, [at(0, Emitted("T.probe.attempts", good(1 ms))), at(1337400000, Emitted("T.probe.attempts", good(1 ms)))])
+  let (_, e1) = run(armed, [at(0, Emitted("T.probe.attempts", good(0 ms))), at(1337400000, Emitted("T.probe.attempts", good(1337399999 ms)))])
   assert standings(e1).at(1).coverage == 50%
   let (_, e2) = run(Evaluate(sla()), [at(0, Start(1790805600 seconds))])
   assert e2 == [SetTimer(PERIOD_TIMER, 31 days + 1 hour)]
@@ -1794,7 +1806,7 @@ test "ten thousand emissions into a thirty-day window at five-second slots" {
   var i = 0
   var published = 0
   while i < 10000 {
-    let result = step(machine, at(i * 5000, Emitted("T.probe.attempts", good(1 ms))))
+    let result = step(machine, at(i * 5000, Emitted("T.probe.attempts", good(later(i * 5 seconds - 1 ms, 0 ms)))))
     machine = result.machine
     published = published + standings(result.effects).len()
     i = i + 1
@@ -1803,7 +1815,7 @@ test "ten thousand emissions into a thirty-day window at five-second slots" {
   assert published == 10000
   assert final.sum_executed == 10000 && final.sum_good == 10000
   assert final.buckets.len() == 192
-  let last = standings(step(machine, at(50000000, Emitted("T.probe.attempts", good(1 ms)))).effects).at(0)
+  let last = standings(step(machine, at(50000000, Emitted("T.probe.attempts", good(49999999 ms)))).effects).at(0)
   assert last.status == Compliant && last.executed == 10001 && last.expected == 10001 && last.completeness == 100%
   assert last.coverage.ppm() == 19290
 }

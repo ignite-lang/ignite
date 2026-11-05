@@ -1,13 +1,14 @@
 # std.sli
 
-The vocabulary of service-level indicators: the sample a probe emits, the outcome a contract
-names, the window a contract is judged over, the rule for attempts the probe never made, and
+The vocabulary of service-level indicators: the outcome of the prompt probe and its predicates,
+the sample a scheduler emits and the verdict an evaluator counts,
+the window a contract is judged over, the rule for attempts the probe never made, and
 the target comparison. [std.contract](contract.md), the Telnet probe and the reducers of
 [std.control](control.md) all read it. It imports nothing, so no import cycle can arise.
 
 - Layer: leaf.
 - Source: [`std/sli.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/sli.ignite).
-- Import: `import std.sli.{ProbeAttempt, Window, satisfies, meets}`.
+- Import: `import std.sli.{ProbeAttempt, Window, prompt_received_before_timeout, meets}`.
 
 ## Probe attempts and outcomes
 
@@ -17,24 +18,41 @@ type ProbeAttempt {
   latency: Duration
 }
 
-fn satisfies(attempt: ProbeAttempt, good: Text, threshold: Duration) -> Bool
-fn known_outcome(good: Text) -> Bool
+fn prompt_received_before_timeout(attempt: ProbeAttempt) -> Bool
+fn prompt_received_within_threshold(attempt: ProbeAttempt, threshold: Duration) -> Bool
 ```
 
 - `ProbeAttempt` is one attempt of a prompt probe: whether the prompt arrived before the
-  probe's timeout, and how long it took. It is the element type of a probe's
+  probe's timeout, and how long it took. It is the outcome type of the Telnet probe's
   `Signal<ProbeAttempt>`.
-- `satisfies` tells whether an attempt counts as good for the outcome a contract names in
-  `good`:
+- The two predicates are what a contract over that signal names in `good`:
 
-| outcome | holds when |
+| predicate | holds when |
 |---|---|
 | `prompt_received_before_timeout` | the prompt arrived |
 | `prompt_received_within_threshold` | the prompt arrived in at most `threshold` |
-| any other name | never |
 
-- `known_outcome` is whether `good` names one of these two outcomes. The contract kinds'
-  `validate` refuses any other name (E120).
+A probe kind outside `std` declares its own outcome type and predicates; a contract's `good`
+is any named fn over the outcome type of its signal.
+
+## Samples and verdicts
+
+```ignite,fragment
+type Sample {
+  slot: Duration
+  line: Option<Text>
+}
+
+type Verdict {
+  slot: Duration
+  good: Bool
+}
+```
+
+- `Sample` is one attempt as a probe scheduler emits it: the slot it was dispatched for and the
+  probe's printed line, `None` when the attempt timed out.
+- `Verdict` is one emission as a contract's evaluator receives it: the slot and whether the
+  contract's `classify` held for the decoded line (`false` for a sample without a line).
 
 ## Windows
 
@@ -84,15 +102,14 @@ reach no target: zero traffic does not prove compliance.
 ```ignite
 import std.sli.*
 
-test "an attempt satisfies the outcomes it earned" {
+test "the prompt outcomes are predicates" {
   let fast = ProbeAttempt { received = true, latency = 50 ms }
   let slow = ProbeAttempt { received = true, latency = 900 ms }
   let missed = ProbeAttempt { received = false, latency = 2 seconds }
-  assert satisfies(fast, "prompt_received_within_threshold", 200 ms)
-  assert satisfies(slow, "prompt_received_before_timeout", 200 ms)
-  assert !satisfies(slow, "prompt_received_within_threshold", 200 ms)
-  assert !satisfies(missed, "prompt_received_before_timeout", 200 ms)
-  assert !known_outcome("unknown")
+  assert prompt_received_within_threshold(fast, 200 ms)
+  assert prompt_received_before_timeout(slow)
+  assert !prompt_received_within_threshold(slow, 200 ms)
+  assert !prompt_received_before_timeout(missed)
 }
 
 test "windows, missing data and targets" {

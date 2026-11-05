@@ -1,0 +1,1 @@
+e151_undecodable_element.ignite:79:32: error[E151]: signal `S.p.beats` carries `fn() -> Int`; a probe outcome holds no fn, handle, reference or signal

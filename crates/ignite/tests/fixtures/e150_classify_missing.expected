@@ -1,0 +1,1 @@
+e150_classify_missing.ignite:52:32: error[E150]: contract `S.c` of kind `fixture_e150.Watch` subscribes to `S.p.beats` of `fixture_e150.Beat` but declares no `fn Watch.classify(self: Watch, sample: fixture_e150.Beat) -> Bool`

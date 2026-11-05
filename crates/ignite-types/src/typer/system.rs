@@ -1650,10 +1650,13 @@ impl Typer<'_> {
         (ty, uses)
     }
 
-    /// E109 at a `fn K.machine` or `fn K.validate` declaration whose
-    /// signature is not the hook's (`docs/slice.md` 16.6, 16.17): `fn
-    /// K.machine(self: K, id: Text) -> std.control.Machine` and `fn
-    /// K.validate(self: K) -> List<Text>`, both pure, like `K.main` (14.5).
+    /// E109 at a `fn K.machine`, `fn K.validate` or `fn K.classify`
+    /// declaration whose signature is not the hook's (`docs/slice.md` 16.6,
+    /// 16.17, 22.3): `fn K.machine(self: K, id: Text) ->
+    /// std.control.Machine`, `fn K.validate(self: K) -> List<Text>` and `fn
+    /// K.classify(self: K, sample: T) -> Bool`, all pure, like `K.main`
+    /// (14.5). The sample's type is the element type of the signal the
+    /// contract subscribes to, which only an assembly decides (E150).
     /// The driver finds both by name on every record, the kinds of
     /// members and of their property values alike, so the shape is checked
     /// where the fn is declared, on records and enums of this module. A
@@ -1670,7 +1673,12 @@ impl Typer<'_> {
                 Ty::Enum(QualName::new("std.control", "Machine")),
             ),
             "validate" => ("", 1, Ty::List(Box::new(Ty::Text))),
+            "classify" => ("sample: T", 2, Ty::Bool),
             _ => return,
+        };
+        let second_ok = |params: &[Ty]| match f.name.name.as_str() {
+            "machine" => params[1] == Ty::Text,
+            _ => true,
         };
         let hook_name = f.qualified_name();
         let Some(sig) = self.own.fns.get(&hook_name).cloned() else {
@@ -1683,7 +1691,7 @@ impl Typer<'_> {
         );
         let shape_ok = self_ok
             && sig.params.len() == arity
-            && (arity == 1 || sig.params[1] == Ty::Text)
+            && (arity == 1 || second_ok(&sig.params))
             && sig.ret == ret;
         if shape_ok && !sig.effectful {
             return;

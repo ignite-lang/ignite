@@ -59,15 +59,33 @@ fn a_missing_consequence_fails_the_probe_scenario() {
 
 #[test]
 fn predicates_match_exact_kinds_and_booleans() {
-    let signal = |received: &str| {
+    let sample = |line: &str| {
         Json::parse(&format!(
-            r#"{{"kind": "signal", "value": {{"ref": "Terminal.promptProbe.attempts", "value": {{"fields": {{"received": {received}}}}}}}}}"#
+            r#"{{"kind": "signal", "value": {{"ref": "Terminal.promptProbe.attempts", "value": {{"fields": {{"line": {line}, "slot": {{"ns": 0, "type": "Duration"}}}}, "type": "std.sli.Sample"}}}}}}"#
         ))
         .unwrap()
+    };
+    let signal = |received: &str| {
+        sample(&format!(
+            r#"{{"fields": ["{{\"fields\":{{\"received\":{received}}},\"type\":\"std.sli.ProbeAttempt\"}}"], "type": "Option", "variant": "Some"}}"#
+        ))
     };
     assert!(received(&signal("false"), false));
     assert!(!received(&signal("0"), false));
     assert!(!received(&signal("true"), false));
+    assert!(received(&signal("true"), true));
+    let timed_out = sample(r#"{"type": "Option", "variant": "None"}"#);
+    assert!(received(&timed_out, false));
+    assert!(!received(&timed_out, true));
+    let recorded = |received: &str| {
+        Json::parse(&format!(
+            r#"{{"kind": "signal", "value": {{"ref": "Terminal.promptProbe.attempts", "value": {{"fields": {{"received": {received}}}, "type": "std.sli.ProbeAttempt"}}}}}}"#
+        ))
+        .unwrap()
+    };
+    assert!(received(&recorded("true"), true));
+    assert!(received(&recorded("false"), false));
+    assert!(!received(&recorded("0"), false));
     let started = Json::parse(
         r#"{"kind": "event", "machine": "Terminal.server.supervisor", "value": {"fields": {"kind": {"variant": "Started", "fields": [42]}}}}"#,
     )

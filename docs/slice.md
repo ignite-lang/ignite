@@ -3271,6 +3271,10 @@ Rules:
 
 ### 16.6 Machines: the reducer interface (`std/control.ignite`)
 
+Slice 18 (22.3): `AttemptDone(Int, Text)`, `Emitted(Text, Verdict)` and `Emit(Text, Sample)`
+replace the `ProbeAttempt` payloads below; `Evaluator` loses `good` and `threshold`; the hooks
+the driver knows are `machine`, `validate` and `classify`.
+
 ```
 enum Machine { Supervise(Supervisor), Schedule(ProbeScheduler), Evaluate(Evaluator), Roll(Rollout) }
 type Step { machine: Machine, effects: List<Effect> }
@@ -3373,6 +3377,10 @@ Failures:
 
 ### 16.8 Probe scheduler and the probe process
 
+Slice 18 (22.3): `AttemptDone` carries the probe's line as `Text`, decoded first by the
+element type of the scheduler's signal; the scheduler emits `Sample { slot, line }` (the
+deadline `line = None`) instead of a `ProbeAttempt` with the timeout as latency.
+
 The probe executable:
 
 - `TelnetPrompt` gains `executable: Text` (defaulting to the component name, the 6.1 rule)
@@ -3420,6 +3428,10 @@ The scheduler: `TelnetPrompt.machine` returns `Schedule`.
 
 ### 16.9 Signals and references at run time
 
+Slice 18 (22.3): an emission is a `std.sli.Sample` (slot and the probe's line); each
+subscriber receives its own `std.sli.Verdict` in `Emitted`, built by the driver through the
+subscriber's `classify`.
+
 Signals:
 
 - A `Signal<T>` value is a stream name, its 15.4 `ref` text.
@@ -3444,6 +3456,11 @@ References:
 - No such resource, or several, is E122.
 
 ### 16.10 Contract evaluation
+
+Slice 18 (22.3, D1, D14): `good` is a predicate `fn(T) -> Bool` the contract kind's `classify`
+hook applies to the decoded line; the evaluator counts the `std.sli.Verdict` the driver builds,
+in the bucket of the slot the scheduler dispatched the attempt for. `satisfies` and the
+latency-derived slot below are the slice-12 form.
 
 - `Availability.machine`, `ThresholdCompliance.machine` and `SLA.machine` return `Evaluate`.
   Each subscribes to its `signal`.
@@ -3668,7 +3685,7 @@ As landed in the skeleton (P1, 2026-11-02), where it differs from the list above
 
 | code | rule | phase | fixture |
 |---|---|---|---|
-| E120 | a declaration its kind's `validate` refuses, with the reason text from std: an unknown `good` outcome, `missing_data`, `on_deadline` or time zone; `maximum_attempts` < 1; `target` not in (0 %, 100 %]; non-empty `exclusions`; a backoff initial greater than its maximum | check | `e120_validate_refused` |
+| E120 | a declaration its kind's `validate` refuses, with the reason text from std: an unknown `missing_data`, `on_deadline` or time zone (an unknown `good` outcome until slice 18; an unknown `good` predicate is E003 since, 22.10); `maximum_attempts` < 1; `target` not in (0 %, 100 %]; non-empty `exclusions`; a backoff initial greater than its maximum | check | `e120_validate_refused` |
 | E121 | a contract's `signal` has no producer the assembly runs: its member is not bound to a host that runs it, or the ref is no output | check | `e121_signal_without_producer` |
 | E122 | a run-time `Ref` (a probe's `target`) names a member the assembly does not run as a process, or resolves to no endpoint or to several | check | `e122_unresolvable_ref` |
 | E123 | probe timing: `interval` or `timeout` not positive, or `timeout >= interval` | check | `e123_probe_timing` |

@@ -15,20 +15,28 @@ type ProbeAttempt {
   latency: Duration
 }
 
-// The outcome a contract names in `good` for `attempt`:
-// `prompt_received_before_timeout` holds when the prompt arrived,
-// `prompt_received_within_threshold` when it arrived in at most
-// `threshold`. An unknown outcome name holds for no attempt.
-fn satisfies(attempt: ProbeAttempt, good: Text, threshold: Duration) -> Bool = match good {
-  "prompt_received_before_timeout" => attempt.received
-  "prompt_received_within_threshold" => attempt.received && attempt.latency <= threshold
-  _ => false
+// The two outcomes of a prompt probe, as predicates a contract names in
+// `good` (`docs/slice.md` 22.3, D2): the prompt arrived before the probe's
+// timeout, or it arrived in at most `threshold`.
+fn prompt_received_before_timeout(attempt: ProbeAttempt) -> Bool = attempt.received
+
+fn prompt_received_within_threshold(attempt: ProbeAttempt, threshold: Duration) -> Bool =
+  attempt.received && attempt.latency <= threshold
+
+// One attempt as a scheduler emits it: the slot it was dispatched for and
+// the probe's printed line, `None` when the attempt timed out (22.3, D14).
+type Sample {
+  slot: Duration
+  line: Option<Text>
 }
 
-// Whether `good` names an outcome `satisfies` knows; the kinds' `validate`
-// refuses any other (E120).
-fn known_outcome(good: Text) -> Bool =
-  good == "prompt_received_before_timeout" || good == "prompt_received_within_threshold"
+// One emission as an evaluator receives it: the slot and whether its
+// contract's `classify` held for the decoded line (`false` for
+// `line = None`).
+type Verdict {
+  slot: Duration
+  good: Bool
+}
 
 // The span a contract is judged over.
 enum Window {
@@ -64,22 +72,17 @@ fn missing_data(text: Text) -> Option<MissingData> = match text {
 fn meets(target: Ratio, good: Int, total: Int) -> Bool =
   total > 0 && good * 1000000 >= target.ppm() * total
 
-test "an attempt satisfies the outcomes it earned" {
+test "the prompt outcomes are predicates" {
   let fast = ProbeAttempt { received = true, latency = 50 ms }
   let slow = ProbeAttempt { received = true, latency = 900 ms }
   let missed = ProbeAttempt { received = false, latency = 2 seconds }
-  assert satisfies(fast, "prompt_received_before_timeout", 200 ms)
-  assert satisfies(fast, "prompt_received_within_threshold", 200 ms)
-  assert satisfies(slow, "prompt_received_before_timeout", 200 ms)
-  assert !satisfies(slow, "prompt_received_within_threshold", 200 ms)
-  assert satisfies(slow, "prompt_received_within_threshold", 900 ms)
-  assert !satisfies(missed, "prompt_received_before_timeout", 200 ms)
-  assert !satisfies(missed, "prompt_received_within_threshold", 5 seconds)
-  assert !satisfies(fast, "unknown", 5 seconds)
-  assert known_outcome("prompt_received_before_timeout")
-  assert known_outcome("prompt_received_within_threshold")
-  assert !known_outcome("unknown")
-  assert !known_outcome("")
+  assert prompt_received_before_timeout(fast)
+  assert prompt_received_before_timeout(slow)
+  assert !prompt_received_before_timeout(missed)
+  assert prompt_received_within_threshold(fast, 200 ms)
+  assert !prompt_received_within_threshold(slow, 200 ms)
+  assert !prompt_received_within_threshold(missed, 200 ms)
+  assert prompt_received_within_threshold(slow, 900 ms)
 }
 
 test "windows are built by name" {
