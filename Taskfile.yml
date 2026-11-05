@@ -40,6 +40,11 @@ tasks:
       - cargo build -q -p ignite-rt --features runner --target-dir {{.T}}/ignite-test/rt
       - '{{.T}}/debug/ignite test {{.FILES}} {{.SELECT}} --target=all --out {{.T}}/ignite-test --target-dir {{.T}}/ignite-test/cargo --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a'
 
+  lsp-types:
+    desc: Regenerate examples/lsp/lsp_types.ignite from docs/lsp/metaModel.json
+    cmds:
+      - cargo run -q -p ignite-lsp-types -- --meta-model docs/lsp/metaModel.json --root initialize --root initialized --root shutdown --root exit --root textDocument/didOpen --root textDocument/didChange --root textDocument/didClose --root textDocument/publishDiagnostics --root '$/cancelRequest' --out examples/lsp/lsp_types.ignite
+
   check:
     desc: Format check and clippy with warnings denied
     cmds:
