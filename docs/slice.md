@@ -7764,7 +7764,7 @@ Not in scope:
 - consistency between two processes of the todo: during an occupied-listener rollout the
   draining instance may still answer a request on an open keep-alive connection after the new
   instance has loaded (16.12). Each process allocates ids and versions from its own memory
-  store, so the two can write the same `todos/<id>/<version>.json`, and `write_file` replaces
+  store, so the two can write the same `<shard>/<id>/<version>.json`, and `write_file` replaces
   (21.4): an acknowledged write in the drain window can be lost or hidden from the new instance.
   This is a known limit, stated here, in the todo's header comment and in `AGENTS.md` (S9, S10);
   rows 17 and 18 create their todo before the rollout and send no request on the old instance
@@ -7959,10 +7959,17 @@ host writes `<state>/workdir` at its first start and refuses to start from anoth
 (exit 2, row 33, U3), so a host restarted elsewhere cannot silently open an empty `todo-data`.
 This settles 21.16 Q2's open end for `apply` without changing 21.4's resolution rule.
 
-- `todos/<id>/<version>.json`: the `to_record` JSON of the todo at that version, an object with
+- `<shard>/<id>/<version>.json`: the `to_record` JSON of the todo at that version, an object with
   `id`, `title`, `done`, `version` and `deleted`, written with `write_file` (atomic replace,
   21.4). The HTTP bodies keep the three fields of `to_json` (`examples/todo/todo.ignite:20`), so
   every existing response and test is unchanged.
+- The shard of an id (`shard_of`) is `todos` for ids 1 to 65,536 and `todos-<k>` for ids
+  `k * 65536 + 1` to `(k + 1) * 65536`. `read_directory` lists at most 65,536 entries (21.4) and
+  every id keeps its directory forever, so no shard outgrows a listing; the root of `data`
+  lists one shard per 65,536 ids, which bounds the ids at about 4.29 billion (65,536 shards).
+  Before W3's fix every id was under `todos/`, and the 65,537th made every later load fail
+  (`todo::todo_w3_adversary::*::the_65537th_todo_survives_a_restart`); a `todos/` of up to
+  65,536 ids written before is the first shard as it is.
 - A deleted todo is a file whose `deleted` is true at the next version (a tombstone); its id is
   never reused.
 
@@ -7970,14 +7977,15 @@ Behaviour:
 
 - The memory `Store<Todo>` is the authority inside a process; every change goes through one
   atomic `update` or `upsert` that also increments `version` (`f` stays pure, 11.3), and the
-  handler then creates `todos/<id>` (`create_directory`; `write_file` needs its parent, 21.4)
+  handler then creates `<shard>/<id>` (`create_directory`; `write_file` needs its parent, 21.4)
   and writes the returned value's file before it answers. A failed write answers 500 with the
   body `not stored\n`; 500 means "not durable", not "not applied": the memory value stays, and a
   later successful write of that id persists it. After the write, files of that id with a lower version are
   removed; a failed removal is ignored (the next load takes the highest version).
 - Load: each request first checks `loaded.get(0)`; while it is not `Some(true)`, the request
-  loads: `create_directory("todos")`, then for each `<id>/` the highest `<version>.json` that
-  parses, merged with `todos.upsert(id, |held| keep the higher version)`, then
+  loads: `create_directory("todos")`, then for each shard directory at the root of `data`
+  (`todos/` and every `todos-<digits>/`; other entries are skipped) and each `<id>/` in it the
+  highest `<version>.json` that parses, merged with `todos.upsert(id, |held| keep the higher version)`, then
   `loaded.put(0, true)`. Loads are idempotent and monotone, so concurrent first requests may each
   load and no load overwrites a newer change. `GET /health` loads too, then answers 200
   `ok\n`; a failed load answers 503 `loading failed: <reason>\n`.

@@ -21,7 +21,9 @@ import examples.todo.health.{HttpHealth, healthy}
 // Durable (`docs/slice.md` 22.4): the memory store `todos` is the authority
 // inside a process; every change is one atomic `update` or `upsert` that
 // also raises the todo's `version`, and the handler writes
-// `todos/<id>/<version>.json` under the directory `data` before it answers.
+// `<shard>/<id>/<version>.json` under the directory `data` before it
+// answers, the shard `todos` for ids up to 65,536 and `todos-<k>` for each
+// later range of 65,536 ids (`shard_of`).
 // A failed write answers 500 `not stored`: the change is applied in memory
 // but not durable. A deleted todo is a tombstone file, so its id is never
 // given again. The first request of a process loads the newest version of
@@ -73,7 +75,23 @@ fn from_record(value: Json) -> Option<Todo> = match (value.int("id"), value.text
 
 // ---- files ------------------------------------------------------------------
 
-fn todo_directory(id: Int) -> Text = "todos/{id}"
+// The ids one shard directory holds: `read_directory` lists at most 65,536
+// entries (`docs/slice.md` 21.4), and every id keeps its directory forever,
+// tombstones included.
+const SHARD_SIZE: Int = 65536
+
+// The shard of `id`: `todos` for ids 1 to 65,536, `todos-<k>` for the k-th
+// range of 65,536 ids after it. The root of `data` holds the shards, so it
+// lists one entry per 65,536 ids.
+fn shard_of(id: Int) -> Text = if id <= SHARD_SIZE { "todos" } else { "todos-{(id - 1) / SHARD_SIZE}" }
+
+// Whether the directory `name` at the root of `data` is a shard.
+fn is_shard(name: Text) -> Bool = name == "todos" || match name.strip_prefix("todos-") {
+  Some(digits) => Int.parse(digits) != None
+  None => false
+}
+
+fn todo_directory(id: Int) -> Text = join_path(shard_of(id), "{id}")
 
 fn version_file(version: Int) -> Text = "{version}.json"
 
@@ -146,9 +164,23 @@ fn load(state: Todos) -> Result<Unit, IoError> {
     return Ok(())
   }
   state.data.create_directory("todos")?
-  for entry in state.data.read_directory("todos")? {
+  for entry in state.data.read_directory(".")? {
     match entry.strip_suffix("/") {
-      Some(name) => match newest(state, join_path("todos", name))? {
+      Some(shard) => if is_shard(shard) {
+        load_shard(state, shard)?
+      }
+      None => {}
+    }
+  }
+  state.loaded.put(0, true)
+  Ok(())
+}
+
+// Every todo of the shard directory `shard` merged into memory.
+fn load_shard(state: Todos, shard: Text) -> Result<Unit, IoError> {
+  for entry in state.data.read_directory(shard)? {
+    match entry.strip_suffix("/") {
+      Some(name) => match newest(state, join_path(shard, name))? {
         Some(todo) => {
           _ = state.todos.upsert(todo.id, |held| keep_newer(held, todo))
         }
@@ -157,7 +189,6 @@ fn load(state: Todos) -> Result<Unit, IoError> {
       None => {}
     }
   }
-  state.loaded.put(0, true)
   Ok(())
 }
 
@@ -376,4 +407,22 @@ test "a todo written is loaded by a fresh state" {
   assert answer(second, "POST", "/todos", r#"{"title":"tea"}"#) == (201, r#"{"id":3,"title":"tea","done":false}"#)
   assert data.read_directory("todos/2")? == ["2.json"]
   assert answer(second, "GET", "/health", "") == (200, "ok\n")
+}
+
+test "ids past 65,536 go to the next shard and load from it" {
+  assert shard_of(1) == "todos"
+  assert shard_of(65536) == "todos"
+  assert shard_of(65537) == "todos-1"
+  assert todo_directory(131073) == "todos-2/131073"
+  assert is_shard("todos-12") && !is_shard("todos-") && !is_shard("other")
+  let data = Directory.temporary()?
+  data.create_directory("todos-1/65537")?
+  data.create_directory("other/1")?
+  write_text_file(data, "todos-1/65537/1.json", encode(to_record(Todo { id = 65537, title = "far" })))?
+  write_text_file(data, "other/1/1.json", encode(to_record(Todo { id = 1, title = "not a shard" })))?
+  let todos = state_over(data)
+  assert answer(todos, "GET", "/todos", "") == (200, r#"[{"id":65537,"title":"far","done":false}]"#)
+  assert answer(todos, "PATCH", "/todos/65537", r#"{"done":true}"#) == (200, r#"{"id":65537,"title":"far","done":true}"#)
+  assert data.read_directory("todos-1/65537")? == ["2.json"]
+  assert data.read_directory("todos")? == []
 }
