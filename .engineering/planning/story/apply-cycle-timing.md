@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:apply-cycle-timing
 kind: story
-status: draft
+status: active
 title: ignite-perf times the edit-build-restart cycle under ignite apply
 relations:
 - decomposes: epic:slice-18-one-service-operated
@@ -11,7 +11,10 @@ relations:
 scope:
 - confidence: cited
   path: tools/ignite-perf/src
-revision: 4
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T15:54:39Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-11-05T15:54:39Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":2}}}
 ---
 # Story: apply-cycle-timing
 
