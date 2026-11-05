@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:test-timing-hygiene
 kind: story
-status: active
+status: implemented
 title: Tests do not depend on wall-clock bounds under load
 scope:
 - confidence: inferred
@@ -11,10 +11,11 @@ scope:
   path: crates/ignite-types/tests
 - confidence: inferred
   path: crates/ignite/tests
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T20:33:19Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-05T20:33:19Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-05T22:48:00Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: test-timing-hygiene
 
