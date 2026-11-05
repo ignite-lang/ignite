@@ -4,7 +4,9 @@
     {
       "declaration": "component",
       "defaults": [
-        "limits"
+        "limits",
+        "recovery",
+        "rollout"
       ],
       "executable": "studiod",
       "id": "Studio.server",
@@ -70,6 +72,44 @@
         "listener": {
           "ref": "Studio.ingress",
           "type": "Ref"
+        },
+        "recovery": {
+          "fields": {
+            "backoff": {
+              "fields": [
+                {
+                  "ns": 100000000,
+                  "type": "Duration"
+                },
+                {
+                  "ns": 10000000000,
+                  "type": "Duration"
+                }
+              ],
+              "type": "std.policy.Backoff",
+              "variant": "Exponential"
+            },
+            "interval": {
+              "ns": 300000000000,
+              "type": "Duration"
+            },
+            "maximum_attempts": 10,
+            "readiness_timeout": {
+              "ns": 10000000000,
+              "type": "Duration"
+            }
+          },
+          "type": "std.policy.Restart"
+        },
+        "rollout": {
+          "fields": {
+            "deadline": {
+              "ns": 120000000000,
+              "type": "Duration"
+            },
+            "on_deadline": "disconnect_remaining"
+          },
+          "type": "std.policy.DrainRollout"
         }
       }
     }
@@ -189,8 +229,10 @@
     "Studio.server": "studio.ignite:79:3",
     "Studio.server.application": "studio.ignite:81:19",
     "Studio.server.executable": "studio.ignite:82:18",
-    "Studio.server.limits": "std/protocol/http.ignite:141:24",
+    "Studio.server.limits": "std/protocol/http.ignite:143:24",
     "Studio.server.listener": "studio.ignite:80:16",
+    "Studio.server.recovery": "std/protocol/http.ignite:144:23",
+    "Studio.server.rollout": "std/protocol/http.ignite:145:27",
     "Studio.tool": "studio.ignite:77:3",
     "Studio.tool.flag": "studio.ignite:77:35",
     "Studio.tools": "studio.ignite:75:3",

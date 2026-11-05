@@ -4,7 +4,9 @@
     {
       "declaration": "component",
       "defaults": [
-        "limits"
+        "limits",
+        "recovery",
+        "rollout"
       ],
       "executable": "todod",
       "id": "TodoService.server",
@@ -53,6 +55,44 @@
         "listener": {
           "ref": "TodoService.ingress",
           "type": "Ref"
+        },
+        "recovery": {
+          "fields": {
+            "backoff": {
+              "fields": [
+                {
+                  "ns": 100000000,
+                  "type": "Duration"
+                },
+                {
+                  "ns": 10000000000,
+                  "type": "Duration"
+                }
+              ],
+              "type": "std.policy.Backoff",
+              "variant": "Exponential"
+            },
+            "interval": {
+              "ns": 300000000000,
+              "type": "Duration"
+            },
+            "maximum_attempts": 10,
+            "readiness_timeout": {
+              "ns": 10000000000,
+              "type": "Duration"
+            }
+          },
+          "type": "std.policy.Restart"
+        },
+        "rollout": {
+          "fields": {
+            "deadline": {
+              "ns": 120000000000,
+              "type": "Duration"
+            },
+            "on_deadline": "disconnect_remaining"
+          },
+          "type": "std.policy.DrainRollout"
         }
       }
     }
@@ -115,8 +155,10 @@
     "TodoService.server": "todo.ignite:84:3",
     "TodoService.server.application": "todo.ignite:86:19",
     "TodoService.server.executable": "todo.ignite:87:18",
-    "TodoService.server.limits": "std/protocol/http.ignite:141:24",
+    "TodoService.server.limits": "std/protocol/http.ignite:143:24",
     "TodoService.server.listener": "todo.ignite:85:16",
+    "TodoService.server.recovery": "std/protocol/http.ignite:144:23",
+    "TodoService.server.rollout": "std/protocol/http.ignite:145:27",
     "TodoService.todos": "todo.ignite:82:3"
   },
   "systemId": "TodoService"

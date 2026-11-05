@@ -1,15 +1,14 @@
 package studio_deployment
 
-import std.control.{Machine, Supervisor}
 import std.deploy.{Deployment, localSocket, nativeProcess}
-import std.policy.Restart
 import std.protocol.http.*
 
 // `docs/slice.md` 15.6 and 21.3: the studio of row 26 under the standard
 // `Deployment`. Its capability resources are no bindings keys: each is
 // hosted by the process of the member that uses it, so the assembly binds
-// only the listener and the server. `Workbench` is `HttpServer` with a
-// supervisor, so that `ignite run` has a machine to step.
+// only the listener and the server. The server is the standard
+// `HttpServer`, whose `machine` hook (16.16) gives `ignite run` its
+// supervisor; without the hook `nativeProcess` is E129.
 //   GET /tool   200 with the setting's value
 //   GET /root   200 with the root as resolved at launch
 
@@ -29,25 +28,6 @@ fn handle(state: Bench, request: Request) -> Response = match (request.method, r
   _ => status_response(404)
 }
 
-type Workbench {
-  listener: TcpListener
-  application: HttpApp<Bench>
-  executable: Text
-}
-
-fn Workbench.main(self: Workbench) -> Result<Unit, IoError> {
-  loop {
-    let stream = self.listener.accept()?
-    spawn Http.serve(stream, HttpLimits {}, self.application)
-  }
-}
-
-fn Workbench.machine(self: Workbench, id: Text) -> Machine = Machine.Supervise(Supervisor {
-  id = "{id}.supervisor"
-  member = id
-  restart = Restart {}
-})
-
 system Studio {
   resource ingress: TcpListener { address = "127.0.0.1", port = 8095 }
   resource files: Directory { path = "workspace", create = true, flag = "--root" }
@@ -55,7 +35,7 @@ system Studio {
   resource entropy: Entropy
   resource tool: Setting { flag = "--tool", default = "/bin/sh" }
 
-  component server: Workbench {
+  component server: HttpServer {
     listener = ingress
     application = HttpApp { state = Bench { files = files, tools = tools, entropy = entropy, tool = tool }, handle }
     executable = "studiod"

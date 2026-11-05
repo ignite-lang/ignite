@@ -7,6 +7,8 @@ import std.option.unwrap_or
 import std.json.{Json, encode}
 import std.rfc.rfc9112.{RFC9112}
 import std.rfc.rfc9110.{RFC9110}
+import std.policy.{Restart, DrainRollout}
+import std.control.{Machine, Supervisor}
 
 // HTTP/1.1 server (RFC 9112) over one byte stream (a `TcpStream`, or a
 // `PipeStream` in tests): requests with a `Content-Length` body, keep-alive
@@ -139,6 +141,8 @@ type HttpServer<S> {
   application: HttpApp<S>
   executable: Text
   limits: HttpLimits = HttpLimits {}
+  recovery: Restart = Restart {}
+  rollout: DrainRollout = DrainRollout {}
 }
 
 fn HttpServer.main<S>(self: HttpServer<S>) -> IoResult<Unit> {
@@ -146,6 +150,43 @@ fn HttpServer.main<S>(self: HttpServer<S>) -> IoResult<Unit> {
     let stream = self.listener.accept()?
     spawn Http.serve(stream, self.limits, self.application)
   }
+}
+
+// The supervisor of a server under `ignite run` (`docs/slice.md` 16.7), as
+// `TelnetServer.machine`: restarts under `recovery`; the `rollout` policy
+// gives the member its rollout machine through `std.control.companions`
+// (16.12). With it the standard `Deployment` hosts an `HttpServer` as a
+// `nativeProcess` (E129 without it).
+fn HttpServer.machine<S>(self: HttpServer<S>, id: Text) -> Machine = Machine.Supervise(Supervisor {
+  id = "{id}.supervisor"
+  member = id
+  restart = self.recovery
+  rollout = Some(self.rollout)
+})
+
+// The declaration rules of a server (E120): limits that admit a request.
+// The policies are validated as declarations of their own.
+fn HttpServer.validate<S>(self: HttpServer<S>) -> List<Text> = limit_reasons(self.limits)
+
+fn limit_reasons(limits: HttpLimits) -> List<Text> {
+  var reasons = []
+  if limits.head < 1 byte {
+    reasons.push("limits.head must be at least 1 byte, found {limits.head.to_int()} bytes")
+  }
+  if limits.idle_timeout <= 0 ms {
+    reasons.push("limits.idle_timeout must be positive, found {limits.idle_timeout.debug()}")
+  }
+  if limits.drain_timeout <= 0 ms {
+    reasons.push("limits.drain_timeout must be positive, found {limits.drain_timeout.debug()}")
+  }
+  reasons
+}
+
+test "a server refuses limits that admit no request" {
+  assert limit_reasons(HttpLimits {}) == []
+  assert limit_reasons(HttpLimits { head = 0 bytes }) == ["limits.head must be at least 1 byte, found 0 bytes"]
+  assert limit_reasons(HttpLimits { idle_timeout = 0 ms }) == ["limits.idle_timeout must be positive, found 0 ns"]
+  assert limit_reasons(HttpLimits { drain_timeout = 0 ms }) == ["limits.drain_timeout must be positive, found 0 ns"]
 }
 
 // ---- responses ----------------------------------------------------------

@@ -1226,7 +1226,9 @@ fn studio_defaults_runs() {
 /// 15.6 and 21.3: the studio under the standard `Deployment`, which binds
 /// only its listener and server, runs: its capability resources are
 /// hosted by the server's process without a binding, the member reads its
-/// setting's default, and `stop` exits 0.
+/// setting's default, and `stop` exits 0. The server is the standard
+/// `HttpServer`, whose `machine` hook (16.16) is the supervisor the run
+/// steps.
 #[test]
 fn studio_under_the_standard_deployment_runs() {
     let work = Path::new(env!("CARGO_TARGET_TMPDIR")).join("run-work-studio-deployment");
@@ -1243,6 +1245,17 @@ fn studio_under_the_standard_deployment_runs() {
     );
     run.wait_event("Ready");
     let status = run.status();
+    let supervisor = status
+        .get("machines")
+        .and_then(Json::as_array)
+        .and_then(|machines| {
+            machines
+                .iter()
+                .find(|m| m.get("id").and_then(Json::as_str) == Some("Studio.server.supervisor"))
+        })
+        .unwrap_or_else(|| panic!("no supervisor in {}", status.compact()))
+        .compact();
+    assert!(supervisor.contains("Running"), "{supervisor}");
     let port = status
         .get("ports")
         .and_then(|p| p.get("Studio.ingress"))
