@@ -624,3 +624,49 @@ reasons is in 17.5 "As landed (U5)"; no known gaps.
   copied (the analysis does not track pattern bindings; draft story
   `moves-for-pattern-bindings`).
 - No baseline moved. The apply suites stay the slice-13 exception.
+
+## Slice 17 playground substrate (2026-11-05)
+
+- Gate at the close, `task gate` on `s17/u6-records` (3c5cc34f, the code of the slice's final
+  head; the later commit changes documents only), 2026-11-05 08:52:12 to 09:01:03 UTC, 531 s,
+  exit 0, start load 10.0, the worktree's own target, `RUST_TEST_THREADS=4`: 1089 cargo tests
+  passed, 0 failed, 10 ignored; 233 inline tests per target. The `crates/ignite` end-to-end
+  binary is 510.73 s of it (380 passed, 8 ignored). The first gate on the same head failed
+  `slice10::executable_component_main_runs_and_maps_the_exit_code` (`ignite-rustgen`: the
+  exit code matched, the stderr line was not yet in the captured log); 5 of 5 runs alone
+  passed, and the second gate is the one above.
+- 21.14 method through `tools/ignite-perf`: "before" is `99647132` (`main`, the merge base at
+  the close; the code of the slice's start `651be04c`), "after" `884d6b19`. Partly collected:
+  `smoke`, `programs`, `cli` and one `cold` attempt; check of the todo example, terminald and the
+  after-only units as `STEP` lines. Loads 5.1 to 25.8, so no pair was taken under load 5.
+  Records, scripts and the uncollected units in `docs/performance/17/README.md`.
+
+| unit | before s | after s | ratio | pairs | start loads |
+|---|---|---|---|---|---|
+| gate, cold (fmt, clippy, test, test-ignite) | 1070.99 (1.62, 10.15, 1031.21, 28.01) | 810.17 (2.76, 24.37, 763.85, 19.17) | no valid pair | 0/1 | 21.8 against 15.8 |
+| `ignite check`, `ignite plan` of the design file | 0.150, 0.144 | 0.177, 0.153 | 1.09, 1.06 | 15 | 16.2 to 16.7 |
+| `ignite check examples/todo/todo.ignite` | 0.067 | 0.127 | 1.94 | 15 | 9.5 to 9.9 |
+| same, after compiler, std without and with the `HttpServer` hooks | 0.068 | 0.131 | 1.89 | 15 | 9.5 to 9.9 |
+| todod Rust dev / release | 3.916 / 5.145 | 4.324 / 7.096 | 1.14 / 1.42 | 4, 3 | 5.1 to 22.6 |
+| todod LLVM dev / release | 0.383 / 1.368 | 0.476 / 0.999 | 1.24 / 1.05 | 3, 4 | 7.4 to 22.6 |
+| terminald Rust dev / release | 3.915 / 4.615 | 5.866 / 5.556 | 1.50 / 1.19 | 2, 3 | 9.5 to 19.9 |
+| terminald LLVM dev / release | 0.568 / 0.926 | 0.596 / 0.895 | 1.03 / 1.05 | 3 | 9.3 to 21.3 |
+| `studio.ignite` build, Rust dev / release, LLVM dev / release (after only) | | 5.113 / 7.057, 0.498 / 0.988 | | 3 runs | 9.6 to 21.2 |
+| `ignite test std/fs.ignite`, Rust / LLVM, cold and warm (after only) | | 5.512 and 0.109 / 0.361 and 0.100 | | 3 runs | 15.0 to 17.7 |
+| `ignite test std/process.ignite`, Rust / LLVM, cold and warm (after only) | | 8.981 and 0.746 / 0.735 and 0.430 | | 3 runs | 17.7 to 22.5 |
+
+- Uncollected: the `warm` mode (gate, workspace, fmt, clippy, `task test-ignite`, `--no-run`,
+  `ignite_test::`, rustgen units): its passes need both trees' targets built at once (the after
+  tree's was 9.0 GiB), against the disk request of 09:22 (one tree's target at a time, the
+  unit's scratch under 8 GB); the cold retry, stopped for the same request.
+- Rises over 10 %: the check of the todo example (1.94) is measured to `HttpServer`'s run hooks
+  (the after compiler: 0.068 s with the std before them, 0.131 s with them; the before tree
+  0.067 s): `std.protocol.http` imports `std.control` and `std.policy`, which every HTTP program
+  loads and types (`docs/friction.md` row 43). todod Rust release 1.42 and dev 1.14: its
+  generated `ignite-std` grows from 1,049 to 1,700 lines with the hooks (measured); which types
+  make up the growth is not split. todod LLVM dev 1.24: the same frontend, inferred. terminald
+  Rust (1.50 over 2 pairs, 1.19): its std is unchanged; `ignite-io`, which every Rust program
+  build compiles, grew by 2,201 lines and the `nix` features `dir` and `poll` (measured growth,
+  inferred cause). Cold clippy 2.40 in the per-step comparison, inferred: larger crates and a
+  different load.
+- No baseline moved. The apply suites stay the slice-13 exception.
