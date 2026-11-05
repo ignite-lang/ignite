@@ -92,3 +92,23 @@ test "an invocation's defaults" {
 }
 
 // ---- entropy tests ----
+
+test "two draws differ" {
+  let entropy = Entropy.new()
+  let first = entropy.random_bytes(32)?
+  let second = entropy.random_bytes(32)?
+  assert first.len() == 32
+  assert second.len() == 32
+  assert first != second
+  assert entropy.random_bytes(0)?.len() == 0
+  let too_many = match entropy.random_bytes(65537) {
+    Ok(_) => ""
+    Err(error) => error.message
+  }
+  assert too_many == "random_bytes: count must be in 0..=65536"
+  let negative = match entropy.random_bytes(-1) {
+    Ok(_) => ""
+    Err(error) => error.message
+  }
+  assert negative == "random_bytes: count must be in 0..=65536"
+}
