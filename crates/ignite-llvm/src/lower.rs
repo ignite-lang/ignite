@@ -4551,7 +4551,18 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         };
         let owned: Vec<String> = last
             .into_iter()
-            .filter(|name| self.lookup(name).is_some_and(|l| l.owned))
+            .filter(|name| {
+                // Only in the binding's own block: a spawn inside a nested loop
+                // or branch runs again or is followed by later statements of
+                // the outer block.
+                self.scopes.last().is_some_and(|scope| {
+                    scope
+                        .iter()
+                        .rev()
+                        .find(|l| l.name == *name)
+                        .is_some_and(|l| l.owned)
+                })
+            })
             .collect();
         let moves =
             |arg: &Expr| name_of(arg).is_some_and(|n| moved.contains(&n) && !owned.contains(&n));
