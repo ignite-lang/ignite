@@ -49,9 +49,9 @@ The roadmap in outline. The reasoning and the dependency analysis are in `docs/v
 - Compile time is a budget (`docs/vision.md` invariant 9): the `task gate` wall time and the program
   build times are measured before and after each slice and recorded in `AGENTS.md`; a rise
   over 10 % is a deviation to explain.
-- Both targets agree: every feature lands on both. D2 B makes LLVM the default `--target`, but
-  the CLI default is still Rust (X25 in `docs/vision.md` section 6); it switches to LLVM after
-  slice 16 U4 lands (`story:llvm-default-target`, 2026-11-04).
+- Both targets agree: every feature lands on both. D2 B makes LLVM the default `--target`, in
+  the CLI and in `BuildOptions::default` since 2026-11-05 (`story:llvm-default-target`, X25 in
+  `docs/vision.md` section 6); the Rust target stays as the differential check.
 - Each slice starts with a contract section in `docs/slice.md`, reviewed against `docs/vision.md`
   section 6 before agents are dispatched; each diagnostic code gets a fixture.
 - Future designs (`docs/wasm.md`, `docs/actors.md`, `docs/protocols.md`, `docs/syntax.md`) stay
@@ -61,7 +61,7 @@ The roadmap in outline. The reasoning and the dependency analysis are in `docs/v
 
 D1 to D9 of `docs/vision.md` section 8, taken 2026-11-01: D1 A operations first (Timo); D2 B LLVM
 primary (LLVM the default `--target`, the Rust target the test oracle; by the steering session,
-reversible, not yet carried out: X25); D3 B self-hosting after F, B and C; D4 A todo example moves to an actor
+reversible, carried out 2026-11-05: X25); D3 B self-hosting after F, B and C; D4 A todo example moves to an actor
 in C; D5 A pure evaluator at slice 11; D6 A components as record types at slice 10; D7 A
 canonical model at slice 11; D8 all three async consumers; D9 B first self-hosted backend.
 Slice-level decisions are in `docs/slice.md` (section 14.13 and 14.14 for slice 10).

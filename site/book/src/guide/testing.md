@@ -46,18 +46,20 @@ ignite test examples/terminal/commands.ignite
 
 Arguments ending in `.ignite` are files; at most one other argument is the filter. All named
 files share one test executable per target: one compile and one link. Every module the
-files load is built normally, with its own tests dropped.
+files load is built normally, with its own tests dropped. The default target is LLVM, which
+links the runtime archive with the test runner ([Both targets](#both-targets) shows how to
+build it); `--target rust` builds with cargo instead.
 
 | flag | meaning |
 |---|---|
-| `--target rust\|llvm\|all` | which target to build for; `all` runs every supported target with shared preparation (default `rust`) |
+| `--target llvm\|rust\|all` | which target to build for; `all` runs every supported target with shared preparation (default `llvm`) |
 | `--exact` | run only the test whose full name equals the filter |
 | `--list` | print `<full name>: test` per selected test, run nothing |
 | `--jobs N` | tests run at once (default: the CPU count) |
 | `--timeout SECS` | a test still running after this is killed and fails (default 60) |
 | `--release` | release profile on Rust, clang `-O2` on LLVM |
 | `--out DIR` | where the test builds go (default `target/ignite-test`) |
-| `--runtime FILE`, `--clang PATH`, `--triple T` | the LLVM runtime archive, clang and target triple |
+| `--runtime FILE`, `--clang PATH`, `--triple T` | the LLVM runtime archive with the test runner, clang and target triple |
 
 Each test runs as its own child process, so one test that crashes, hangs or calls
 `Process.exit` cannot take the others down. Output is modelled on `cargo test`:
@@ -111,11 +113,13 @@ task test-ignite FILTER=json
 
 `task test-ignite` builds the compiler and the LLVM runtime with the test runner
 (`cargo build -p ignite-rt --features runner`), then runs every file of `std/` and
-`examples/` with `--target=all`. To run the LLVM target by hand, pass that runtime:
+`examples/` with `--target=all`. By hand, the default target needs that runtime, and
+`--target rust` needs none:
 
 ```sh
 cargo build -p ignite-rt --features runner --target-dir target/ignite-test/rt
-ignite test std/json.ignite --target llvm --runtime target/ignite-test/rt/debug/libignite_rt.a
+ignite test std/json.ignite --runtime target/ignite-test/rt/debug/libignite_rt.a
+ignite test std/json.ignite --target rust
 ```
 
 ## Protocol tests without a network

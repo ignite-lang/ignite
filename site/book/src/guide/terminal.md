@@ -113,19 +113,20 @@ lines of at most `maximum_line` bytes, calls `respond` and renders the reply. `R
 From the clone:
 
 ```sh
-ignite build examples/terminal/terminal.ignite
+cargo build -p ignite-rt --features runner
+ignite build examples/terminal/terminal.ignite --runtime target/debug/libignite_rt.a
 ```
 
 ```text
-built target/ignite/terminal/target/debug/terminald
-built target/ignite/terminal/target/debug/tn
+built target/ignite/terminal/bin/terminald
+built target/ignite/terminal/bin/tn
 ```
 
 Start the server in one terminal and the client in another:
 
 ```sh
-target/ignite/terminal/target/debug/terminald
-target/ignite/terminal/target/debug/tn
+target/ignite/terminal/bin/terminald
+target/ignite/terminal/bin/tn
 ```
 
 The server prints `listening on 127.0.0.1:2323`; the client shows the prompt:
@@ -188,24 +189,23 @@ test "the terminal transcript over a pipe" {
 }
 ```
 
-Run the example's tests (`--target all` adds the LLVM target; [Testing](testing.md#both-targets)
-shows the runtime archive it needs):
+Run the example's tests on the default target with the same runtime archive (`--target all`
+adds the Rust target; [Testing](testing.md#both-targets) has the details):
 
 ```sh
-ignite test examples/terminal/commands.ignite
+ignite test examples/terminal/commands.ignite --runtime target/debug/libignite_rt.a
 ```
 
-## With the LLVM target
+## With the Rust target
 
 ```sh
-cargo build -p ignite-rt
-ignite build examples/terminal/terminal.ignite --target llvm --out target/ignite-llvm/terminal \
-  --runtime target/debug/libignite_rt.a
-target/ignite-llvm/terminal/bin/terminald
+ignite build examples/terminal/terminal.ignite --target rust
+target/ignite/terminal/target/debug/terminald
 ```
 
-The programs behave the same; the binaries are in `target/ignite-llvm/terminal/bin/`
-(`task server TARGET=llvm` and `task client TARGET=llvm` do the same in the clone). See
+The programs behave the same; cargo builds them, and the binaries are in
+`target/ignite/terminal/target/debug/` (in the clone, `task server` and `task client` build
+with the Rust target and start them, `TARGET=llvm` with the LLVM target). See
 [Building for Rust and LLVM](targets.md).
 
 Next: [testing with ignite test](testing.md), then

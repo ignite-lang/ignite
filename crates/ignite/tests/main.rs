@@ -15,6 +15,7 @@ mod common;
 mod conformance;
 mod control_trace;
 mod decode;
+mod default_target;
 mod drain;
 mod eval;
 mod failover;
