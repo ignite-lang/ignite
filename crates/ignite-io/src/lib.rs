@@ -317,20 +317,54 @@ pub fn log(line: &str) {
 }
 
 pub mod args {
+    //! The process arguments the substrate reads (`docs/slice.md` 16.9,
+    //! 21.6): `--port`, `--ref` and the flags of `Setting` and `Directory`
+    //! resources. Each read scans the arguments as the OS gave them, as
+    //! bytes: an argument that is not UTF-8 is never decoded lossily. It is
+    //! ignored when the read does not ask for it, like any argument the
+    //! read does not know, and refused when it is the value the read asks
+    //! for (`<flag>: value <bytes> is not UTF-8`, the bytes as
+    //! `escape_ascii` writes them, exit code 2). The `String` forms take
+    //! UTF-8 arguments and share the scan.
+
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStrExt;
+
     use super::IoError;
 
     /// Exit status of a malformed or out-of-range `--port`.
     const PORT_EXIT_CODE: i32 = 2;
 
+    fn os(args: impl Iterator<Item = String>) -> impl Iterator<Item = OsString> {
+        args.map(OsString::from)
+    }
+
+    /// `value`, the value of `flag`, as text; not UTF-8 is the error
+    /// `<flag>: value <bytes> is not UTF-8` with exit code 2.
+    fn text(flag: &str, value: &[u8]) -> Result<String, IoError> {
+        String::from_utf8(value.to_vec()).map_err(|_| {
+            IoError::new(format!(
+                "{flag}: value {} is not UTF-8",
+                value.escape_ascii()
+            ))
+            .with_exit_code(PORT_EXIT_CODE)
+        })
+    }
+
+    /// The value of `arg` when it is `<flag>=V`.
+    fn joined<'a>(arg: &'a [u8], flag: &str) -> Option<&'a [u8]> {
+        arg.strip_prefix(flag.as_bytes())?.strip_prefix(b"=")
+    }
+
     /// `--port N` from the process arguments, if present and valid.
     pub fn port_override() -> Option<i64> {
-        from_args(std::env::args())
+        port_from_os_args(std::env::args_os()).ok().flatten()
     }
 
     /// `--port N` from the process arguments: `Ok(None)` when absent, an
     /// error with exit code 2 when malformed or outside `0..=65535`.
     pub fn port() -> Result<Option<i64>, IoError> {
-        port_from_args(std::env::args())
+        port_from_os_args(std::env::args_os())
     }
 
     /// The first `--port N` or `--port=N` in `args`, parsed as an integer
@@ -344,18 +378,24 @@ pub mod args {
     /// is none, an error with exit code 2 when its value is missing, not an
     /// integer or outside `0..=65535`.
     pub fn port_from_args(args: impl Iterator<Item = String>) -> Result<Option<i64>, IoError> {
+        port_from_os_args(os(args))
+    }
+
+    /// [`port_from_args`] over arguments as the OS gave them (module doc).
+    pub fn port_from_os_args(args: impl Iterator<Item = OsString>) -> Result<Option<i64>, IoError> {
         let mut args = args;
         while let Some(arg) = args.next() {
-            if arg == "--port" {
+            let arg = arg.as_bytes();
+            if arg == b"--port" {
                 return match args.next() {
-                    Some(value) => parse_port(&value).map(Some),
+                    Some(value) => parse_port(&text("--port", value.as_bytes())?).map(Some),
                     None => {
                         Err(IoError::new("--port needs a value").with_exit_code(PORT_EXIT_CODE))
                     }
                 };
             }
-            if let Some(value) = arg.strip_prefix("--port=") {
-                return parse_port(value).map(Some);
+            if let Some(value) = joined(arg, "--port") {
+                return parse_port(&text("--port", value)?).map(Some);
             }
         }
         Ok(None)
@@ -383,19 +423,28 @@ pub mod args {
         args: impl Iterator<Item = String>,
         reference: &str,
     ) -> Result<(String, i64), IoError> {
+        endpoint_from_os_args(os(args), reference)
+    }
+
+    /// [`endpoint_from_args`] over arguments as the OS gave them (module
+    /// doc): a binding that is not UTF-8 is refused, since it is read.
+    pub fn endpoint_from_os_args(
+        args: impl Iterator<Item = OsString>,
+        reference: &str,
+    ) -> Result<(String, i64), IoError> {
         let mut args = args;
         while let Some(arg) = args.next() {
-            let binding = if arg == "--ref" {
+            let binding = if arg.as_bytes() == b"--ref" {
                 match args.next() {
-                    Some(value) => value,
+                    Some(value) => text("--ref", value.as_bytes())?,
                     None => {
                         return Err(
                             IoError::new("--ref needs a value").with_exit_code(PORT_EXIT_CODE)
                         );
                     }
                 }
-            } else if let Some(value) = arg.strip_prefix("--ref=") {
-                value.to_string()
+            } else if let Some(value) = joined(arg.as_bytes(), "--ref") {
+                text("--ref", value)?
             } else {
                 continue;
             };
@@ -410,18 +459,43 @@ pub mod args {
     /// The value of the first `--flag V` or `--flag=V` in `args`
     /// (`docs/slice.md` 21.6): `Ok(None)` when absent; a flag without a
     /// value, or one followed by an argument that starts with `--`, is the
-    /// error `<flag> needs a value` with exit code 2.
+    /// error `<flag> needs a value` with exit code 2. `--flag=V` takes `V`
+    /// as it is, also when it is empty or starts with `--`.
     pub fn flag_from_args(
         args: impl Iterator<Item = String>,
         flag: &str,
     ) -> Result<Option<String>, IoError> {
-        let _ = (args, flag);
-        unimplemented!("slice 17: args::flag_from_args")
+        flag_from_os_args(os(args), flag)
+    }
+
+    /// [`flag_from_args`] over arguments as the OS gave them (module doc).
+    pub fn flag_from_os_args(
+        args: impl Iterator<Item = OsString>,
+        flag: &str,
+    ) -> Result<Option<String>, IoError> {
+        let needs_value =
+            || IoError::new(format!("{flag} needs a value")).with_exit_code(PORT_EXIT_CODE);
+        let mut args = args;
+        while let Some(arg) = args.next() {
+            let arg = arg.as_bytes();
+            if arg == flag.as_bytes() {
+                return match args.next() {
+                    Some(value) if !value.as_bytes().starts_with(b"--") => {
+                        text(flag, value.as_bytes()).map(Some)
+                    }
+                    _ => Err(needs_value()),
+                };
+            }
+            if let Some(value) = joined(arg, flag) {
+                return text(flag, value).map(Some);
+            }
+        }
+        Ok(None)
     }
 
     /// [`flag_from_args`] over the process arguments.
     pub fn flag(flag: &str) -> Result<Option<String>, IoError> {
-        flag_from_args(std::env::args(), flag)
+        flag_from_os_args(std::env::args_os(), flag)
     }
 
     /// One command-line argument of the executable (`docs/slice.md` 21.6):
@@ -606,6 +680,105 @@ pub mod args {
                 assert_eq!(code, 2, "{bad:?}");
                 assert!(message.starts_with("--ref"), "{message}");
             }
+        }
+
+        fn os(args: &[&[u8]]) -> Vec<std::ffi::OsString> {
+            use std::os::unix::ffi::OsStrExt;
+            std::iter::once(&b"prog"[..])
+                .chain(args.iter().copied())
+                .map(|arg| std::ffi::OsStr::from_bytes(arg).to_os_string())
+                .collect()
+        }
+
+        fn flag(args: &[&[u8]], flag: &str) -> Result<Option<String>, (String, i32)> {
+            super::flag_from_os_args(os(args).into_iter(), flag)
+                .map_err(|e| (e.message.clone(), e.exit_code()))
+        }
+
+        /// 21.6: the first `--flag V` or `--flag=V` wins; arguments it does
+        /// not know are ignored, so `--port` and `--ref` share the list.
+        #[test]
+        fn flag_reads_the_first_value() {
+            let list: &[&[u8]] = &[
+                b"--port",
+                b"0",
+                b"--tool",
+                b"/bin/true",
+                b"--ref",
+                b"A.b=127.0.0.1:9",
+                b"--tool=/bin/false",
+                b"--mode=slow",
+            ];
+            assert_eq!(flag(list, "--tool"), Ok(Some("/bin/true".to_string())));
+            assert_eq!(flag(list, "--mode"), Ok(Some("slow".to_string())));
+            assert_eq!(flag(list, "--root"), Ok(None));
+            assert_eq!(flag(&[], "--tool"), Ok(None));
+            assert_eq!(flag(&[b"--toolbox", b"x"], "--tool"), Ok(None));
+            assert_eq!(flag(&[b"--tool="], "--tool"), Ok(Some(String::new())));
+            assert_eq!(
+                flag(&[b"--tool=--x"], "--tool"),
+                Ok(Some("--x".to_string()))
+            );
+            assert_eq!(
+                super::flag_from_args(
+                    ["prog", "--root", "/srv"].into_iter().map(String::from),
+                    "--root"
+                ),
+                Ok(Some("/srv".to_string()))
+            );
+            assert_eq!(super::port_from_os_args(os(list).into_iter()), Ok(Some(0)));
+        }
+
+        /// 21.6: a flag at the end, or followed by an argument that starts
+        /// with `--`, has no value.
+        #[test]
+        fn flag_without_a_value_has_exit_code_two() {
+            let needs = Err(("--mode needs a value".to_string(), 2));
+            assert_eq!(flag(&[b"--mode"], "--mode"), needs);
+            assert_eq!(flag(&[b"--mode", b"--tool", b"/x"], "--mode"), needs);
+            assert_eq!(
+                flag(&[b"--mode", b"--tool", b"/x"], "--tool"),
+                Ok(Some("/x".to_string()))
+            );
+        }
+
+        /// 21.6: a value that is not UTF-8 is refused with its bytes as
+        /// `escape_ascii` writes them; an argument that is not UTF-8 and
+        /// that the read does not ask for is ignored, by every read.
+        #[test]
+        fn a_value_that_is_not_utf8_is_refused() {
+            let refused = Err(("--tool: value a\\xffb is not UTF-8".to_string(), 2));
+            assert_eq!(flag(&[b"--tool", b"a\xffb"], "--tool"), refused);
+            assert_eq!(flag(&[b"--tool=a\xffb"], "--tool"), refused);
+            let stray: &[&[u8]] = &[
+                b"\xfe",
+                b"--other=\xfe",
+                b"--tool",
+                b"x",
+                b"--port",
+                b"7",
+                b"--ref",
+                b"A.b=h:1",
+            ];
+            assert_eq!(flag(stray, "--tool"), Ok(Some("x".to_string())));
+            assert_eq!(super::port_from_os_args(os(stray).into_iter()), Ok(Some(7)));
+            assert_eq!(
+                super::endpoint_from_os_args(os(stray).into_iter(), "A.b"),
+                Ok(("h".to_string(), 1))
+            );
+            let port = super::port_from_os_args(os(&[b"--port", b"\xff"]).into_iter())
+                .map_err(|e| (e.message.clone(), e.exit_code()));
+            assert_eq!(
+                port,
+                Err(("--port: value \\xff is not UTF-8".to_string(), 2))
+            );
+            let reference =
+                super::endpoint_from_os_args(os(&[b"--ref=A.b=\xff:1"]).into_iter(), "A.b")
+                    .map_err(|e| (e.message.clone(), e.exit_code()));
+            assert_eq!(
+                reference,
+                Err(("--ref: value A.b=\\xff:1 is not UTF-8".to_string(), 2))
+            );
         }
     }
 }

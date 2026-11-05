@@ -1,0 +1,64 @@
+package e142_setting_without_default
+
+import std.control.{Machine, Supervisor}
+import std.deploy.Member
+import std.policy.Restart
+
+// E142 (`docs/slice.md` 21.6, 21.9, row 26 of 21.0): `ignite run` and
+// `ignite plan --for-apply` pass no setting values, so a started member
+// whose `Setting` has no `default` would exit 2 at every start. Both
+// refuse the system before anything starts. `mode` has a default and is
+// not reported.
+//
+// `std.deploy.Binding` admits no `Setting` resource, so the assembly uses
+// a placement of its own (15.6): a native process, and the resources it
+// creates in its own process.
+
+type Tool {
+  tool: Setting
+  mode: Setting
+}
+
+fn Tool.main(self: Tool) -> Result<Unit, IoError> = Ok(Unit)
+
+fn Tool.machine(self: Tool, id: Text) -> Machine = Machine.Supervise(Supervisor {
+  id = "{id}.supervisor"
+  member = id
+  restart = Restart {}
+  has_listener = false
+})
+
+enum Place {
+  NativeProcess,
+  InProcess
+}
+
+fn admits(binding: Place, member: Member) -> Option<Text> = None
+
+fn includes(binding: Place) -> List<Ref> = []
+
+fn entries(binding: Place) -> List<Text> = match binding {
+  NativeProcess => ["main", "machine"]
+  InProcess => []
+}
+
+type Placement {
+  system: SystemRef
+  bindings: Map<Ref, Place>
+}
+
+system Bench {
+  resource tool: Setting { flag = "--tool" }
+  resource mode: Setting { flag = "--mode", default = "fast" }
+
+  component runner: Tool { tool = tool, mode = mode }
+}
+
+assembly local: Placement {
+  system = Bench
+  bindings = {
+    Bench.tool = InProcess
+    Bench.mode = InProcess
+    Bench.runner = NativeProcess
+  }
+}

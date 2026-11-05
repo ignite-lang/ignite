@@ -7048,6 +7048,16 @@ Resource kind `Setting`:
   the first `--flag V` or `--flag=V` wins; arguments it does not know are ignored, so `--port`
   and `--ref` keep their meaning and the same argument list serves all. A value after `--flag`
   that itself starts with `--` is no value: `--mode --tool /x` is `--mode needs a value`.
+  `--flag=V` takes `V` as it is, also when it is empty or starts with `--`.
+- Arguments are read as the bytes the OS gave, on both targets (`args_os` on Rust, `argv` kept
+  as bytes by `ignite-rt`'s `init` on LLVM); nothing is decoded lossily. A value that is not
+  UTF-8 has no `Text`, so the read that asks for it refuses it: `error: <flag>: value <bytes>
+  is not UTF-8`, exit status 2, `<bytes>` as Rust's `escape_ascii` writes them (`/bin/\xff`),
+  as 21.4 names an entry. This holds for `--port`, `--ref` (each binding is read) and every
+  setting and directory flag. An argument that is not UTF-8 and that no read asks for is
+  ignored, like any other argument a read does not know. (As landed, U4:
+  `ignite_io::args::{flag,port,endpoint}_from_os_args`; before U4 the Rust target panicked in
+  `std::env::args` on any such argument and the LLVM target replaced its bytes with U+FFFD.)
 - A required flag that is absent ends the program with exit status 2 and `error: <flag>:
   required argument missing` on stderr; a flag without a value, exit status 2 and `error:
   <flag> needs a value`, as `--port` does (the `error: ` prefix is `ignite_io::run`'s).

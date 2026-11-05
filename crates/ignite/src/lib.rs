@@ -1539,6 +1539,7 @@ pub fn run(file: &Path, options: &RunOptions) -> Result<i32, Error> {
             })?,
         None => DEFAULT_SETTLE,
     };
+    run::refuse_settings_without_default(&loaded, &model)?;
     let (executables, declared) = run_members(&model);
     if state.join("host-journal.jsonl").exists() || state.join("identity").exists() {
         return Err(run_diagnostic(
