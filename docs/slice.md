@@ -3565,6 +3565,13 @@ Rules:
   `Ready.at`.
 - The old process's exit during `Draining` is not a failure. A failure of the new process
   follows 16.7.
+- An old process that exits during `Draining` before `Released` ends the drain as `Released`
+  would: the journal records `retired`, the new generation starts and the disruption counts
+  from the exit. A process the supervisor starts while the new generation is pending is the
+  one the next rollout drains.
+- At `deadline`, a new generation that has not started aborts the rollout (`rollout aborted:
+  generation <n> did not start by the deadline`) and leaves the serving process alone. A
+  rollout past its deadline does not refuse the next `rollout <member>`.
 - `on_deadline` stays `Text`, with the closed set `{"disconnect_remaining"}` (O35).
   `fn on_deadline(text) -> Option<OnDeadline>` parses it, as `missing_data` does; any other
   value is E120.
