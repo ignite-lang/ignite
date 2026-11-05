@@ -14,6 +14,7 @@ use std::process::Command;
 
 pub mod apply;
 pub mod conformance;
+mod embedded_runtime;
 mod llvm_build;
 pub mod rfc;
 pub mod run;
@@ -1296,7 +1297,10 @@ fn build_stamp(file: &Path, options: &RunOptions) -> Result<u64, Error> {
         stat(&exe);
     }
     if options.target == Target::Llvm {
-        stat(&options.runtime.clone().unwrap_or_else(default_runtime_path));
+        stat(
+            &runtime_or_default(options.runtime.as_ref())
+                .unwrap_or_else(|_| default_runtime_path()),
+        );
     }
     Ok(hasher.finish())
 }
@@ -1826,6 +1830,26 @@ pub fn default_runtime_path() -> PathBuf {
         .find(|candidate| candidate.is_file())
         .unwrap_or(&candidates[0])
         .clone()
+}
+
+/// The runtime archive of the LLVM target when `--runtime` names none:
+/// the first of [`runtime_candidates`] that is a file, else the archive
+/// this driver carries, written to its cache directory on first use
+/// (`docs/llvm.md` section 1). Exit 3 when that write fails.
+pub fn default_runtime() -> Result<PathBuf, Error> {
+    let path = default_runtime_path();
+    if path.is_file() {
+        return Ok(path);
+    }
+    embedded_runtime::materialize(&path)
+}
+
+/// `runtime`, else [`default_runtime`].
+pub(crate) fn runtime_or_default(runtime: Option<&PathBuf>) -> Result<PathBuf, Error> {
+    match runtime {
+        Some(runtime) => Ok(runtime.clone()),
+        None => default_runtime(),
+    }
 }
 
 /// The LLVM IR modules of a program: `std.ll`, `program.ll` and one

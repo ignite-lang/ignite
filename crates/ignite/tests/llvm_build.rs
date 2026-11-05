@@ -268,7 +268,9 @@ fn runtime_for_another_target_is_refused() {
 
 /// `docs/llvm.md` section 1, runtime lookup: `libignite_rt.a` next to the
 /// driver, then in its parent directory, as for a driver in
-/// `target/<profile>/deps`.
+/// `target/<profile>/deps`. Both come before the runtime the driver
+/// carries; with neither and a cache directory that cannot be written the
+/// build is exit 3, naming the archive next to the driver and `--runtime`.
 #[test]
 fn default_runtime_is_next_to_the_driver_or_in_its_parent() {
     let dir = tmp("llvm-runtime-lookup");
@@ -281,36 +283,33 @@ fn default_runtime_is_next_to_the_driver_or_in_its_parent() {
         [deps.join("libignite_rt.a"), dir.join("libignite_rt.a")]
     );
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/probe.ignite");
-    // Another test thread's fork can hold the copy's write descriptor open
-    // for an instant, and the exec then fails with ETXTBSY (seen twice in
-    // eight gate runs of slice 11); the exec is retried until it starts.
+    let unwritable = dir.join("cache-is-a-file");
+    std::fs::write(&unwritable, "").unwrap();
+    let out = dir.join("out");
     let build = || {
-        let mut attempts = 0;
-        loop {
-            let output = Command::new(&driver)
-                .args(["build", "--target", "llvm"])
-                .arg(&source)
-                .arg("--out")
-                .arg(dir.join("out"))
-                .output();
-            match output {
-                Err(error) if error.raw_os_error() == Some(26) && attempts < 100 => {
-                    attempts += 1;
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }
-                other => return other.unwrap(),
-            }
-        }
+        run_copied(
+            &driver,
+            &[
+                "build".as_ref(),
+                "--target".as_ref(),
+                "llvm".as_ref(),
+                source.as_os_str(),
+                "--out".as_ref(),
+                out.as_os_str(),
+            ],
+            &unwritable,
+            &unwritable,
+        )
     };
 
     let missing = build();
-    assert_eq!(missing.status.code(), Some(3));
+    let stderr = String::from_utf8_lossy(&missing.stderr);
+    assert_eq!(missing.status.code(), Some(3), "{stderr}");
     assert!(
-        String::from_utf8_lossy(&missing.stderr)
-            .contains(&*deps.join("libignite_rt.a").to_string_lossy()),
-        "{}",
-        String::from_utf8_lossy(&missing.stderr)
+        stderr.contains(&*deps.join("libignite_rt.a").to_string_lossy()),
+        "{stderr}"
     );
+    assert!(stderr.contains("--runtime"), "{stderr}");
 
     std::fs::copy(common::runtime_archive(), dir.join("libignite_rt.a")).unwrap();
     let parent = build();
@@ -327,6 +326,178 @@ fn default_runtime_is_next_to_the_driver_or_in_its_parent() {
         Some(2),
         "the archive next to the driver comes first"
     );
+}
+
+/// Run `driver` with `args`, the runtime cache under `cache` and `HOME`
+/// under `home`, retrying an exec that fails with ETXTBSY (a copied
+/// driver's write descriptor held for an instant by another test thread's
+/// fork).
+fn run_copied(driver: &Path, args: &[&std::ffi::OsStr], cache: &Path, home: &Path) -> Output {
+    let mut attempts = 0;
+    loop {
+        let output = Command::new(driver)
+            .args(args)
+            .env("XDG_CACHE_HOME", cache)
+            .env("HOME", home)
+            .output();
+        match output {
+            Err(error) if error.raw_os_error() == Some(26) && attempts < 100 => {
+                attempts += 1;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            other => return other.unwrap(),
+        }
+    }
+}
+
+/// The archives in the runtime cache under `cache`, each with its inode
+/// and modification time.
+fn cached_runtimes(cache: &Path) -> Vec<(PathBuf, u64, std::time::SystemTime)> {
+    use std::os::unix::fs::MetadataExt;
+    let root = cache.join("ignite/runtime");
+    let Ok(entries) = std::fs::read_dir(&root) else {
+        return Vec::new();
+    };
+    let mut found: Vec<_> = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path().join("libignite_rt.a"))
+        .filter_map(|path| {
+            let metadata = std::fs::metadata(&path).ok()?;
+            Some((path, metadata.ino(), metadata.modified().ok()?))
+        })
+        .collect();
+    found.sort();
+    found
+}
+
+/// Story `llvm-runtime-without-flags`: an `ignite` copied alone into a
+/// fresh directory, with no `libignite_rt.a` beside it, no `--runtime` and
+/// an empty cache, builds the todo example on the default target by
+/// writing the runtime it carries to `$XDG_CACHE_HOME/ignite/runtime/`; a
+/// second build links the cached archive without writing it again.
+#[test]
+fn a_driver_alone_links_the_runtime_it_carries() {
+    let dir = tmp("llvm-runtime-embedded");
+    let bin = dir.join("bin");
+    let cache = dir.join("cache");
+    let home = dir.join("home");
+    for path in [&bin, &cache, &home] {
+        std::fs::create_dir_all(path).unwrap();
+    }
+    let driver = bin.join("ignite");
+    std::fs::copy(env!("CARGO_BIN_EXE_ignite"), &driver).unwrap();
+    let source = workspace().join("examples/todo/todo.ignite");
+    let build = |out: &Path| {
+        run_copied(
+            &driver,
+            &[
+                "build".as_ref(),
+                source.as_os_str(),
+                "--out".as_ref(),
+                out.as_os_str(),
+            ],
+            &cache,
+            &home,
+        )
+    };
+
+    let first_out = dir.join("out1");
+    let first = build(&first_out);
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert!(first_out.join("bin/todod").is_file());
+    assert!(
+        first_out.join("llvm/program.ll").is_file(),
+        "the default target is LLVM"
+    );
+    assert!(!first_out.join("Cargo.toml").exists());
+    let cached = cached_runtimes(&cache);
+    assert_eq!(cached.len(), 1, "{cached:?}");
+    assert!(!bin.join("libignite_rt.a").exists());
+    assert!(!home.join(".cache").exists(), "XDG_CACHE_HOME comes first");
+
+    let second_out = dir.join("out2");
+    let second = build(&second_out);
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    assert!(second_out.join("bin/todod").is_file());
+    assert_eq!(
+        cached_runtimes(&cache),
+        cached,
+        "the cached archive is reused"
+    );
+
+    let tests = workspace().join("std/option.ignite");
+    let test_out = dir.join("test-out");
+    let tested = run_copied(
+        &driver,
+        &[
+            "test".as_ref(),
+            tests.as_os_str(),
+            "--out".as_ref(),
+            test_out.as_os_str(),
+        ],
+        &cache,
+        &home,
+    );
+    assert!(
+        tested.status.success(),
+        "the carried archive has the test runner: {}{}",
+        String::from_utf8_lossy(&tested.stdout),
+        String::from_utf8_lossy(&tested.stderr)
+    );
+    assert_eq!(cached_runtimes(&cache), cached);
+}
+
+/// Story `llvm-runtime-without-flags`, end to end: `cargo install --root`
+/// into a fresh directory, then the installed `ignite` builds the todo
+/// example with no flags and an empty cache. Ignored: it compiles the
+/// workspace in release once more.
+#[test]
+#[ignore = "cargo install of the workspace; run with --ignored"]
+fn cargo_install_builds_without_a_runtime_flag() {
+    let dir = tmp("llvm-runtime-install");
+    let root = dir.join("root");
+    let cache = dir.join("cache");
+    let home = dir.join("home");
+    std::fs::create_dir_all(&cache).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    run(Command::new(cargo())
+        .args(["install", "--locked", "--path"])
+        .arg(workspace().join("crates/ignite"))
+        .arg("--root")
+        .arg(&root)
+        .arg("--target-dir")
+        .arg(dir.join("target")));
+    let driver = root.join("bin/ignite");
+    assert!(!root.join("bin/libignite_rt.a").exists());
+    let source = workspace().join("examples/todo/todo.ignite");
+    let out = dir.join("out");
+    let built = run_copied(
+        &driver,
+        &[
+            "build".as_ref(),
+            source.as_os_str(),
+            "--out".as_ref(),
+            out.as_os_str(),
+        ],
+        &cache,
+        &home,
+    );
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    assert!(out.join("bin/todod").is_file());
+    assert!(out.join("llvm/program.ll").is_file());
+    assert_eq!(cached_runtimes(&cache).len(), 1);
 }
 
 /// Seconds `f` takes.
