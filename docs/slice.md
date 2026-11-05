@@ -7902,6 +7902,7 @@ type Todo {
   done: Bool = false
   version: Int = 1
   deleted: Bool = false
+  deleted_by: Int = 0
 }
 
 type Todos {
@@ -7983,6 +7984,12 @@ Behaviour:
 - `POST /todos` takes `todos.next_id()` until `todos.get(id)` is `None` (after the load every id
   on disk, tombstones included, is in memory), so ids continue after a restart (row 12).
 - `GET` and the listing skip tombstones; `PATCH` and `DELETE` of a tombstone answer 404.
+- `DELETE` decides 204 or 404 inside its one atomic `update`, not from a `get` before it: the
+  request takes a token, `loaded.next_id()`, and the tombstone it makes carries it in
+  `deleted_by` (memory only; `to_record` leaves it out and a loaded todo has 0). The request
+  answers 204 when the value `update` returns carries its token, else 404, so of two concurrent
+  DELETEs of one todo exactly one answers 204, as two in sequence do (W3 adversary,
+  `todo::todo_w3_adversary::*::concurrent_deletes_answer_one_204`).
 - The tests of `todo.ignite` build the state record with `Store.new()` twice and
   `Directory.temporary()?` (21.8).
 

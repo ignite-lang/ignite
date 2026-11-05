@@ -40,10 +40,13 @@ type Todo {
   done: Bool = false
   version: Int = 1
   deleted: Bool = false
+  deleted_by: Int = 0
 }
 
 // The state of the handler: the todos in memory, whether this process has
-// loaded them (under id 0), and the directory that holds their files.
+// loaded them (under id 0; the store's counter gives each DELETE its
+// token, `deleted_by`, which only memory holds), and the directory that
+// holds their files.
 type Todos {
   todos: Store<Todo>
   loaded: Store<Bool>
@@ -228,13 +231,16 @@ fn patch(state: Todos, id: Int, body: Text) -> Response = match parse(body) {
   Err(_) => status_response(if live(state.todos.get(id)) == None { 404 } else { 400 })
 }
 
-// A tombstone at the next version.
-fn delete(state: Todos, id: Int) -> Response = match live(state.todos.get(id)) {
-  Some(_) => match state.todos.update(id, |todo| if todo.deleted { todo } else { Todo { deleted = true, version = todo.version + 1, ..todo } }) {
-    Some(todo) => stored(state, todo, status_response(204))
+// A tombstone at the next version. Whether this request made it is
+// decided inside the one atomic `update`: the tombstone carries the
+// request's token, so of two concurrent DELETEs of one todo exactly one
+// answers 204 and the other, which found the tombstone, 404.
+fn delete(state: Todos, id: Int) -> Response {
+  let token = state.loaded.next_id()
+  match state.todos.update(id, |todo| if todo.deleted { todo } else { Todo { deleted = true, version = todo.version + 1, deleted_by = token, ..todo } }) {
+    Some(todo) => if todo.deleted_by == token { stored(state, todo, status_response(204)) } else { status_response(404) }
     None => status_response(404)
   }
-  None => status_response(404)
 }
 
 fn route(state: Todos, request: Request) -> Response = match (request.method, request.segments()) {
