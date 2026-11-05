@@ -59,3 +59,71 @@ test "join_path puts one slash between non-empty parts" {
   assert join_path("a", "") == "a"
   assert join_path("", "") == ""
 }
+
+// The message of a refused operation, `ok` when it succeeded.
+test fn refusal<T>(result: Result<T, IoError>) -> Text = match result {
+  Ok(_) => "ok"
+  Err(error) => error.message
+}
+
+// The byte of value `i`, for `0 <= i < 256`.
+test fn byte_of(i: Int) -> Byte = match i.to_byte() {
+  Some(b) => b
+  None => b'?'
+}
+
+test "a file written is read back, listed, nested and removed" {
+  let files = Directory.temporary()?
+  var every = Bytes.empty()
+  var i = 0
+  while i < 256 {
+    every.push(byte_of(i))
+    i = i + 1
+  }
+  files.write_file("a.bin", every)?
+  let read = files.read_file("a.bin")?
+  assert read.len() == 256 && read == every
+  assert files.read_directory("")? == ["a.bin"]
+  files.create_directory("sub/deeper")?
+  assert files.read_directory("")? == ["a.bin", "sub/"]
+  files.remove("a.bin")?
+  files.remove_tree("sub")?
+  assert files.read_directory("")?.is_empty()
+}
+
+test "paths that leave the root are refused" {
+  let files = Directory.temporary()?
+  let paths = ["../x", "a/../../x", "/etc/passwd", "a\0b"]
+  let reasons = ["leaves its root", "leaves its root", "absolute", "contains NUL"]
+  var i = 0
+  while i < paths.len() {
+    let path = paths.at(i)
+    let want = "path ".concat(path).concat(": ").concat(reasons.at(i))
+    assert refusal(files.read_file(path)) == want
+    assert refusal(files.write_file(path, b"x")) == want
+    assert refusal(files.read_directory(path)) == want
+    assert refusal(files.create_directory(path)) == want
+    assert refusal(files.remove(path)) == want
+    assert refusal(files.remove_tree(path)) == want
+    i = i + 1
+  }
+  assert files.read_directory("")?.is_empty()
+  assert refusal(files.read_file("")).starts_with("path : ")
+}
+
+test "a file over the read bound is refused" {
+  let files = Directory.temporary()?
+  var big = b"x"
+  var i = 0
+  while i < 24 {
+    let copy = big.slice(0, big.len())
+    big.append(copy)
+    i = i + 1
+  }
+  assert big.len() == 16777216
+  files.write_file("exact.bin", big)?
+  assert files.read_file("exact.bin")?.len() == 16777216
+  big.push(b'x')
+  files.write_file("big.bin", big)?
+  assert refusal(files.read_file("big.bin")) == "path big.bin: larger than 16 MiB"
+}
