@@ -1,0 +1,73 @@
+package command_line
+
+// `docs/slice.md` 21.19: a program reads its whole command line through a
+// `CommandLine` resource, the arguments after the executable's name, in
+// order, flags included. `todo` prints each argument on a line of its own,
+// then what `parse` makes of them:
+//   <argument 1>
+//   ...
+//   command <describe(parse(arguments))>
+// The test at the end runs the same `parse` on a `CommandLine.of(..)`.
+
+enum Command {
+  Add(Text)
+  Done(Int)
+  Listing
+  Usage(Text)
+}
+
+// The subcommand and its operands; anything after them is ignored here.
+fn parse(arguments: List<Text>) -> Command = match arguments {
+  ["add", title, ..] => Add(title)
+  ["done", number, ..] => match Int.parse(number) {
+    Some(n) => Done(n)
+    None => Usage("done: {number} is not a number")
+  }
+  ["list", ..] => Listing
+  _ => Usage("usage: todo add TITLE | done N | list")
+}
+
+fn describe(command: Command) -> Text = match command {
+  Add(title) => "add {title}"
+  Done(n) => "done {n}"
+  Listing => "list"
+  Usage(text) => text
+}
+
+type Todo {
+  command_line: CommandLine
+  executable: Text
+}
+
+fn Todo.main(self: Todo) -> Result<Unit, IoError> {
+  let arguments = self.command_line.arguments()
+  let command = describe(parse(arguments))
+  for argument in arguments {
+    Stdout.write_all("{argument}\n".to_bytes())?
+  }
+  Stdout.write_all("command {command}\n".to_bytes())
+}
+
+system TodoCli {
+  resource command_line: CommandLine
+
+  component cli: Todo {
+    command_line = command_line
+    executable = "todo"
+  }
+}
+
+test "the acceptance's command line parses to an add" {
+  let command_line = CommandLine.of(["add", "buy milk", "--port", "0"])
+  let arguments = command_line.arguments()
+  assert arguments == ["add", "buy milk", "--port", "0"]
+  assert arguments.len() == 4
+  assert describe(parse(arguments)) == "add buy milk"
+}
+
+test "other command lines parse by their subcommand" {
+  assert describe(parse(CommandLine.of(["done", "3"]).arguments())) == "done 3"
+  assert describe(parse(CommandLine.of(["done", "x"]).arguments())) == "done: x is not a number"
+  assert describe(parse(CommandLine.of(["list", "--all"]).arguments())) == "list"
+  assert describe(parse(CommandLine.of([]).arguments())) == "usage: todo add TITLE | done N | list"
+}

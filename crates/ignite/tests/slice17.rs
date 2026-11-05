@@ -10,6 +10,11 @@
 //!
 //! Arguments (row 18): `arguments.ignite` reads two settings, a directory
 //! flag, `--port` and `--ref` from one argument list (21.6).
+//!
+//! The command line (21.19): `command_line.ignite` reads every argument
+//! after the executable's name through a `CommandLine` resource and parses
+//! a subcommand from them; its inline tests run the same parse on
+//! `CommandLine.of(..)` on both targets.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
@@ -417,6 +422,8 @@ both_targets!(
     adversary_port_ref_root_not_utf8,
     adversary_directory_flag_errors,
     studio_serves_through_its_state,
+    the_command_line_reaches_the_program,
+    an_argument_that_is_not_utf8_ends_the_launch,
 );
 
 /// Adversary: a server started by a parent that left SIGCHLD ignored (a
@@ -905,4 +912,92 @@ fn studio_serves_through_its_state(target: Target) {
     drop(server);
     let again = studio_server("studio-again", &root, target);
     assert_ne!(first, token(&again), "two launches drew the same token");
+}
+
+// ---- the command line (21.19) ----
+
+/// `todo` of `command_line.ignite` started with `args`: its exit code,
+/// stdout and stderr.
+fn todo(target: Target, args: &[&std::ffi::OsStr]) -> (Option<i32>, String, String) {
+    let todo = executable("command_line.ignite", "todo", target);
+    let output = Command::new(&todo)
+        .args(args)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap_or_else(|e| panic!("run {}: {e}", todo.display()));
+    (
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
+}
+
+/// 21.19, the story's acceptance: `todo add "buy milk" --port 0` sees its
+/// arguments in order, without the executable's name, `--port` included;
+/// no arguments is an empty list.
+fn the_command_line_reaches_the_program(target: Target) {
+    let (code, stdout, stderr) = todo(target, &os(&["add", "buy milk", "--port", "0"]));
+    assert_eq!(code, Some(0), "{stdout}{stderr}");
+    assert_eq!(
+        stdout.lines().collect::<Vec<_>>(),
+        ["add", "buy milk", "--port", "0", "command add buy milk"],
+        "{stderr}"
+    );
+
+    let (code, stdout, stderr) = todo(target, &[]);
+    assert_eq!(code, Some(0), "{stdout}{stderr}");
+    assert_eq!(stdout, "command usage: todo add TITLE | done N | list\n");
+
+    let (code, stdout, stderr) = todo(target, &os(&["done", "", "--", "é✓"]));
+    assert_eq!(code, Some(0), "{stdout}{stderr}");
+    assert_eq!(
+        stdout.lines().collect::<Vec<_>>(),
+        ["done", "", "--", "é✓", "command done:  is not a number"]
+    );
+}
+
+/// 21.19: the launch reads every argument, so one that is not UTF-8 ends
+/// the program before `main` with exit 2 and its position and bytes.
+fn an_argument_that_is_not_utf8_ends_the_launch(target: Target) {
+    use std::os::unix::ffi::OsStrExt;
+    let args = [
+        std::ffi::OsStr::new("add"),
+        std::ffi::OsStr::from_bytes(b"a\xffb"),
+    ];
+    let (code, stdout, stderr) = todo(target, &args);
+    assert_eq!(code, Some(2), "{stdout}{stderr}");
+    assert_eq!(stderr, "error: argument 2: value a\\xffb is not UTF-8\n");
+    assert!(stdout.is_empty(), "{stdout}");
+}
+
+/// 21.19: the inline tests of `command_line.ignite` build the handle with
+/// `CommandLine.of(..)` and run the program's parse, on both targets.
+#[test]
+fn the_command_line_parse_runs_inline_on_both_targets() {
+    let dir = tmp("command-line-inline");
+    let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("test")
+        .arg(fixture("command_line.ignite"))
+        .args(["--target", "all", "--out"])
+        .arg(&dir)
+        .arg("--target-dir")
+        .arg(dir.join("cargo"))
+        .arg("--runtime")
+        .arg(common::runner_archive())
+        .output()
+        .expect("run ignite test");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert_eq!(
+        stdout
+            .matches("test result: ok. 2 passed; 0 failed;")
+            .count(),
+        2,
+        "{stdout}"
+    );
 }
