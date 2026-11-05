@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T23:07:33Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-18-records",
+  "kind": "story",
+  "revision": 13,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on feat/slice18-one-service f64adfec8: EXIT=0, 1190 cargo passed, 0 failed, 11 ignored; 322 inline per target; records in docs/performance/18/",
+    "reference": "https://github.com/ignite-lang/ignite/commit/87f7181ef"
+  }
+}
