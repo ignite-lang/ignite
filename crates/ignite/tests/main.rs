@@ -29,6 +29,7 @@ mod lsp;
 mod plan;
 mod reachability;
 mod rfc;
+mod rollout_repeat;
 mod run;
 mod siblings;
 mod site;
