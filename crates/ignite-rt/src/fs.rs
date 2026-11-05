@@ -31,19 +31,23 @@ pub extern "C" fn ignite_rt_directory_launch(
     out: *mut i64,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let flag = text(flag);
-    let opened = crate::process::flag_value(&flag).and_then(|given| {
-        let path = given.unwrap_or_else(|| text(path));
-        Directory::open(&path, create != 0)
-    });
-    status(opened.map(|d| register(Handle::Directory(d))), out, err)
+    crate::entry(move || {
+        let flag = text(flag);
+        let opened = crate::process::flag_value(&flag).and_then(|given| {
+            let path = given.unwrap_or_else(|| text(path));
+            Directory::open(&path, create != 0)
+        });
+        status(opened.map(|d| register(Handle::Directory(d))), out, err)
+    })
 }
 
 /// `i32 directory_temporary(i64* out, IoError* err)`: `Directory.temporary()`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_directory_temporary(out: *mut i64, err: *mut IgniteIoError) -> i32 {
-    let made = Directory::temporary().map(|d| register(Handle::Directory(d)));
-    status(made, out, err)
+    crate::entry(move || {
+        let made = Directory::temporary().map(|d| register(Handle::Directory(d)));
+        status(made, out, err)
+    })
 }
 
 /// `i32 directory_read_file(i64 d, Text* path, Bytes* out, IoError* err)`.
@@ -54,8 +58,10 @@ pub extern "C" fn ignite_rt_directory_read_file(
     out: *mut IgniteList,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let read = directory(handle).and_then(|d| d.read_file(text(path)));
-    status(read.map(|data| IgniteList::from_bytes(&data)), out, err)
+    crate::entry(move || {
+        let read = directory(handle).and_then(|d| d.read_file(text(path)));
+        status(read.map(|data| IgniteList::from_bytes(&data)), out, err)
+    })
 }
 
 /// `i32 directory_write_file(i64 d, Text* path, Bytes* data, IoError* err)`.
@@ -66,8 +72,10 @@ pub extern "C" fn ignite_rt_directory_write_file(
     data: *const IgniteList,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let written = directory(handle).and_then(|d| d.write_file(text(path), bytes(data)));
-    status(written, std::ptr::null_mut(), err)
+    crate::entry(move || {
+        let written = directory(handle).and_then(|d| d.write_file(text(path), bytes(data)));
+        status(written, std::ptr::null_mut(), err)
+    })
 }
 
 /// `i32 directory_read_directory(i64 d, Text* path, List<Text>* out,
@@ -79,8 +87,10 @@ pub extern "C" fn ignite_rt_directory_read_directory(
     out: *mut IgniteList,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let listed = directory(handle).and_then(|d| d.read_directory(text(path)));
-    status(listed.map(|names| IgniteList::from_texts(&names)), out, err)
+    crate::entry(move || {
+        let listed = directory(handle).and_then(|d| d.read_directory(text(path)));
+        status(listed.map(|names| IgniteList::from_texts(&names)), out, err)
+    })
 }
 
 /// `i32 directory_create_directory(i64 d, Text* path, IoError* err)`.
@@ -90,8 +100,10 @@ pub extern "C" fn ignite_rt_directory_create_directory(
     path: *const IgniteList,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let made = directory(handle).and_then(|d| d.create_directory(text(path)));
-    status(made, std::ptr::null_mut(), err)
+    crate::entry(move || {
+        let made = directory(handle).and_then(|d| d.create_directory(text(path)));
+        status(made, std::ptr::null_mut(), err)
+    })
 }
 
 /// `i32 directory_remove(i64 d, Text* path, IoError* err)`.
@@ -101,8 +113,10 @@ pub extern "C" fn ignite_rt_directory_remove(
     path: *const IgniteList,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let removed = directory(handle).and_then(|d| d.remove(text(path)));
-    status(removed, std::ptr::null_mut(), err)
+    crate::entry(move || {
+        let removed = directory(handle).and_then(|d| d.remove(text(path)));
+        status(removed, std::ptr::null_mut(), err)
+    })
 }
 
 /// `i32 directory_remove_tree(i64 d, Text* path, IoError* err)`.
@@ -112,8 +126,10 @@ pub extern "C" fn ignite_rt_directory_remove_tree(
     path: *const IgniteList,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let removed = directory(handle).and_then(|d| d.remove_tree(text(path)));
-    status(removed, std::ptr::null_mut(), err)
+    crate::entry(move || {
+        let removed = directory(handle).and_then(|d| d.remove_tree(text(path)));
+        status(removed, std::ptr::null_mut(), err)
+    })
 }
 
 /// `i32 directory_absolute_path(i64 d, Text* out, IoError* err)`.
@@ -123,6 +139,8 @@ pub extern "C" fn ignite_rt_directory_absolute_path(
     out: *mut IgniteList,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let path = directory(handle).and_then(|d| d.absolute_path());
-    status(path.map(|p| IgniteList::from_bytes(p.as_bytes())), out, err)
+    crate::entry(move || {
+        let path = directory(handle).and_then(|d| d.absolute_path());
+        status(path.map(|p| IgniteList::from_bytes(p.as_bytes())), out, err)
+    })
 }

@@ -17,7 +17,7 @@ ignite-check.workspace = true
 ignite-types.workspace = true
 
 [dev-dependencies]
-ignite-rt.workspace = true
+ignite-rt = { workspace = true, features = ["panic-probe"] }
 
 [[test]]
 name = "main"

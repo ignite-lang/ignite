@@ -13,10 +13,10 @@
 //! report is logged as `error: <report>` and the process exits
 //! [`ignite_io::FAILURE_EXIT_CODE`].
 //!
-//! A Rust panic inside the runtime is a different path: it unwinds to
-//! `ignite_io::spawn`'s `catch_unwind` at the task's thread (`crate::task`),
-//! never across the generator's frames; a main-thread panic is reported in
-//! the same format by the hook `crate::process` installs.
+//! A Rust panic inside the runtime ends its task on the same path: the
+//! entry it happened in catches it and calls [`fail`] with the panic's
+//! report (`crate::contain`), so it never unwinds across the generator's
+//! frames.
 //!
 //! A runtime entry that calls generated code while it holds a Rust resource
 //! (the store's lock around `update`'s `f`) must not be jumped over: the
@@ -64,10 +64,12 @@ fn push(handler: Handler) {
 /// wrapper that just called `setjmp`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_guard_push(jb: *mut c_void) {
-    push(Handler {
-        jb,
-        callback: false,
-    });
+    crate::entry(move || {
+        push(Handler {
+            jb,
+            callback: false,
+        });
+    })
 }
 
 /// `void guard_callback(ptr jb)`: register the jump buffer `jb` of a
@@ -76,14 +78,18 @@ pub extern "C" fn ignite_rt_guard_push(jb: *mut c_void) {
 /// (crate docs).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_guard_callback(jb: *mut c_void) {
-    push(Handler { jb, callback: true });
+    crate::entry(move || {
+        push(Handler { jb, callback: true });
+    })
 }
 
 /// `void guard_pop()`: drop the innermost jump buffer after its task body
 /// or callback returned without failing.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_guard_pop() {
-    let _ = HANDLERS.try_with(|handlers| handlers.borrow_mut().pop());
+    crate::entry(move || {
+        let _ = HANDLERS.try_with(|handlers| handlers.borrow_mut().pop());
+    })
 }
 
 /// End the current task with the report of the failure a callback guard
@@ -152,15 +158,11 @@ pub extern "C" fn ignite_rt_fail_arith(
     left: i64,
     right: i64,
 ) -> ! {
-    let op = text(op);
-    let detail = format!("{left} {op} {right}");
-    fail(failure_report(
-        &op,
-        &text(file),
-        line as usize,
-        col as usize,
-        &detail,
-    ))
+    fail(crate::entry(move || {
+        let op = text(op);
+        let detail = format!("{left} {op} {right}");
+        failure_report(&op, &text(file), line as usize, col as usize, &detail)
+    }))
 }
 
 /// `void fail_neg(Text* file, i64 line, i64 col, i64 value)`: a unary `-`
@@ -172,13 +174,15 @@ pub extern "C" fn ignite_rt_fail_neg(
     col: i64,
     value: i64,
 ) -> ! {
-    fail(failure_report(
-        "-",
-        &text(file),
-        line as usize,
-        col as usize,
-        &format!("-({value})"),
-    ))
+    fail(crate::entry(move || {
+        failure_report(
+            "-",
+            &text(file),
+            line as usize,
+            col as usize,
+            &format!("-({value})"),
+        )
+    }))
 }
 
 /// `void fail_index(Text* file, i64 line, i64 col, i64 index, i64 len)`: an
@@ -191,13 +195,15 @@ pub extern "C" fn ignite_rt_fail_index(
     index: i64,
     len: i64,
 ) -> ! {
-    fail(failure_report(
-        "index",
-        &text(file),
-        line as usize,
-        col as usize,
-        &format!("index {index} out of range for length {len}"),
-    ))
+    fail(crate::entry(move || {
+        failure_report(
+            "index",
+            &text(file),
+            line as usize,
+            col as usize,
+            &format!("index {index} out of range for length {len}"),
+        )
+    }))
 }
 
 /// `void fail_slice(Text* file, i64 line, i64 col, i64 from, i64 to,
@@ -211,26 +217,30 @@ pub extern "C" fn ignite_rt_fail_slice(
     to: i64,
     len: i64,
 ) -> ! {
-    fail(failure_report(
-        "slice",
-        &text(file),
-        line as usize,
-        col as usize,
-        &format!("slice {from}..{to} out of range for length {len}"),
-    ))
+    fail(crate::entry(move || {
+        failure_report(
+            "slice",
+            &text(file),
+            line as usize,
+            col as usize,
+            &format!("slice {from}..{to} out of range for length {len}"),
+        )
+    }))
 }
 
 /// `void fail_match(Text* file, i64 line, i64 col)`: a `match` with no arm
 /// for the value.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_fail_match(file: *const IgniteList, line: i64, col: i64) -> ! {
-    fail(failure_report(
-        "match",
-        &text(file),
-        line as usize,
-        col as usize,
-        "no arm matched",
-    ))
+    fail(crate::entry(move || {
+        failure_report(
+            "match",
+            &text(file),
+            line as usize,
+            col as usize,
+            "no arm matched",
+        )
+    }))
 }
 
 /// `void assert_failed(Text* cond, Text* message, Text* left, Text* right,
@@ -245,28 +255,30 @@ pub extern "C" fn ignite_rt_assert_failed(
     right: *const IgniteList,
     at: *const IgniteList,
 ) -> ! {
-    let message = optional(message);
-    let operands = match (optional(left), optional(right)) {
-        (Some(left), Some(right)) => Some((left, right)),
-        _ => None,
-    };
-    let report = assert_report(
-        &text(cond),
-        message.as_deref(),
-        operands
-            .as_ref()
-            .map(|(left, right)| (left.as_str(), right.as_str())),
-        &text(at),
-    );
-    fail(report)
+    fail(crate::entry(move || {
+        let message = optional(message);
+        let operands = match (optional(left), optional(right)) {
+            (Some(left), Some(right)) => Some((left, right)),
+            _ => None,
+        };
+        assert_report(
+            &text(cond),
+            message.as_deref(),
+            operands
+                .as_ref()
+                .map(|(left, right)| (left.as_str(), right.as_str())),
+            &text(at),
+        )
+    }))
 }
 
 /// `void try_failed(Text* error, Text* at)`: end the task with
 /// [`ignite_io::try_report`]; `error` is null for a `None`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_try_failed(error: *const IgniteList, at: *const IgniteList) -> ! {
-    let error = optional(error);
-    fail(try_report(error.as_deref(), &text(at)))
+    fail(crate::entry(move || {
+        try_report(optional(error).as_deref(), &text(at))
+    }))
 }
 
 /// The text of a `Text*` argument, or `None` when it is null.

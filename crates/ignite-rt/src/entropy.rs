@@ -16,17 +16,19 @@ fn entropy(handle: i64) -> Result<Entropy, IoError> {
 /// `i64 entropy_new()`: `Entropy.new()`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_entropy_new() -> i64 {
-    register(Handle::Entropy(Entropy::new()))
+    crate::entry(move || register(Handle::Entropy(Entropy::new())))
 }
 
 /// `i32 entropy_open(i64* out, IoError* err)`: the resource at launch.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_entropy_open(out: *mut i64, err: *mut IgniteIoError) -> i32 {
-    status(
-        Entropy::open().map(|e| register(Handle::Entropy(e))),
-        out,
-        err,
-    )
+    crate::entry(move || {
+        status(
+            Entropy::open().map(|e| register(Handle::Entropy(e))),
+            out,
+            err,
+        )
+    })
 }
 
 /// `i32 entropy_random_bytes(i64 e, i64 count, Bytes* out, IoError* err)`.
@@ -37,6 +39,8 @@ pub extern "C" fn ignite_rt_entropy_random_bytes(
     out: *mut IgniteList,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let drawn = entropy(handle).and_then(|e| e.random_bytes(count));
-    status(drawn.map(|data| IgniteList::from_bytes(&data)), out, err)
+    crate::entry(move || {
+        let drawn = entropy(handle).and_then(|e| e.random_bytes(count));
+        status(drawn.map(|data| IgniteList::from_bytes(&data)), out, err)
+    })
 }

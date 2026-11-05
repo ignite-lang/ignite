@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::ffi::c_void;
 use std::sync::mpsc::{SyncSender, sync_channel};
 
-use crate::arena::ignite_rt_task_end;
+use crate::arena::task_end;
 
 /// A task's entry point: `void fn(ptr env)`.
 pub type TaskFn = extern "C" fn(*mut c_void);
@@ -40,29 +40,38 @@ impl Environment {
 /// names, and the generated code releases the stream handles among them.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_spawn(function: Option<TaskFn>, env: *mut c_void) -> i8 {
-    let Some(function) = function else {
-        crate::process::die("spawn of a null function");
-    };
-    let (ready, started) = sync_channel::<()>(1);
-    let env = Environment(env);
-    let result = ignite_io::try_spawn(move || {
-        READY.with(|slot| *slot.borrow_mut() = Some(ready));
-        function(env.into_inner());
-        ignite_rt_spawn_ready();
-        ignite_rt_task_end();
-    });
-    ignite_io::flush();
-    if result.is_err() {
-        return 0;
-    }
-    let _ = started.recv();
-    1
+    crate::entry(move || {
+        let Some(function) = function else {
+            crate::process::die("spawn of a null function");
+        };
+        let (ready, started) = sync_channel::<()>(1);
+        let env = Environment(env);
+        let result = ignite_io::try_spawn(move || {
+            READY.with(|slot| *slot.borrow_mut() = Some(ready));
+            function(env.into_inner());
+            spawn_ready();
+            task_end();
+        });
+        ignite_io::flush();
+        if result.is_err() {
+            return 0;
+        }
+        let _ = started.recv();
+        1
+    })
 }
 
 /// `void spawn_ready()`: let the parent of this task continue. Later calls,
 /// and calls on a task that was not spawned, do nothing.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_spawn_ready() {
+    crate::entry(spawn_ready)
+}
+
+/// The body of [`ignite_rt_spawn_ready`], which [`ignite_rt_spawn`]'s
+/// thread calls from Rust after the task's function returned (as
+/// `arena::task_end`).
+fn spawn_ready() {
     let ready = READY
         .try_with(|slot| slot.borrow_mut().take())
         .ok()

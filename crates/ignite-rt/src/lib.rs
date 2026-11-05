@@ -15,7 +15,9 @@
 //! (an aggregate argument is the callee's own copy, an `out`/`err` pointer is
 //! writable). That is why the exported functions are safe to call from Rust
 //! by signature and dereference their pointers inside; a null `out` or `err`
-//! pointer is skipped, a null `Text`/`List` reads as empty.
+//! pointer is skipped, a null `Text`/`List` reads as empty. Every one but
+//! `init` runs its body through `contain::entry`, so a Rust panic inside it
+//! is a failure of the calling task, never an unwind into generated code.
 //!
 //! Every `Text`, `List` and `IoError` message the runtime returns is
 //! allocated in the calling task's arena ([`ignite_rt_alloc`]).
@@ -263,5 +265,26 @@ impl IgniteList {
             len: texts.len() as i64,
             cap: texts.len() as i64,
         }
+    }
+}
+
+// Panic containment at the C ABI (`crate::contain`), after the tests for
+// the same reason.
+mod contain;
+use contain::{entry, entry_never};
+
+/// The log line on which [`ignite_rt_log`] panics in an archive built with
+/// the feature `panic-probe`: the one way a test drives a Rust panic inside
+/// a runtime entry from generated code (`docs/llvm.md` section 4). Only
+/// `ignite-llvm`'s tests enable the feature (a dev-dependency); the archive
+/// `ignite build` links, built by `crates/ignite/build.rs` and by
+/// `cargo build -p ignite-rt [--features runner]`, has no probe.
+#[cfg(feature = "panic-probe")]
+pub const PANIC_PROBE: &str = "ignite-rt panic probe";
+
+#[cfg(feature = "panic-probe")]
+fn panic_probe(line: &[u8]) {
+    if line == PANIC_PROBE.as_bytes() {
+        panic!("{PANIC_PROBE}");
     }
 }

@@ -101,86 +101,95 @@ fn store<'a>(handle: *const RtStore) -> &'a RtStore {
 /// `ptr store_new(ptr copy_to_heap, ptr copy_from_heap, ptr free_heap,
 /// i64 size, i64 align)`: an empty store of elements of `size` bytes
 /// aligned to `align`. A store is a system resource and lives until the
-/// process exits.
+/// process exits. A null glue pointer is a panic the entry contains: it
+/// ends the calling task (`crate::contain`).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_new(
-    to_heap: ToHeap,
-    from_heap: FromHeap,
-    free: FreeHeap,
+    to_heap: Option<ToHeap>,
+    from_heap: Option<FromHeap>,
+    free: Option<FreeHeap>,
     size: i64,
     align: i64,
 ) -> *const RtStore {
-    let glue = Glue {
-        to_heap,
-        from_heap,
-        free,
-        size: usize::try_from(size).unwrap_or(0),
-        align: usize::try_from(align).unwrap_or(1).max(1),
-    };
-    Box::into_raw(Box::new(RtStore {
-        store: Store::new(),
-        glue,
-    }))
+    crate::entry(move || {
+        let glue = Glue {
+            to_heap: to_heap.expect("store_new of a null copy_to_heap"),
+            from_heap: from_heap.expect("store_new of a null copy_from_heap"),
+            free: free.expect("store_new of a null free_heap"),
+            size: usize::try_from(size).unwrap_or(0),
+            align: usize::try_from(align).unwrap_or(1).max(1),
+        };
+        Box::into_raw(Box::new(RtStore {
+            store: Store::new(),
+            glue,
+        }))
+    })
 }
 
 /// `i64 store_next_id(ptr store)`: 1, 2, 3, … per store.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_next_id(handle: *const RtStore) -> i64 {
-    store(handle).store.next_id()
+    crate::entry(move || store(handle).store.next_id())
 }
 
 /// `void store_put(ptr store, i64 id, ptr value)`: store a copy of the
 /// value at `value`, replacing any value under `id`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_put(handle: *const RtStore, id: i64, value: *const u8) {
-    let s = store(handle);
-    let value = HeapValue {
-        ptr: (s.glue.to_heap)(value),
-        glue: s.glue,
-    };
-    s.store.put(id, value);
+    crate::entry(move || {
+        let s = store(handle);
+        let value = HeapValue {
+            ptr: (s.glue.to_heap)(value),
+            glue: s.glue,
+        };
+        s.store.put(id, value);
+    })
 }
 
 /// `i8 store_get(ptr store, i64 id, ptr out)`: 1 and a copy of the value in
 /// `out`, or 0 when there is none.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_get(handle: *const RtStore, id: i64, out: *mut u8) -> i8 {
-    let found = store(handle).store.read(id, |value| value.copy_out(out));
-    i8::from(found.is_some())
+    crate::entry(move || {
+        let found = store(handle).store.read(id, |value| value.copy_out(out));
+        i8::from(found.is_some())
+    })
 }
 
 /// `i8 store_remove(ptr store, i64 id, ptr out)`: 1 and the removed value
 /// in `out`, or 0 when there was none.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_remove(handle: *const RtStore, id: i64, out: *mut u8) -> i8 {
-    match store(handle).store.remove(id) {
+    crate::entry(move || match store(handle).store.remove(id) {
         Some(value) => {
             value.copy_out(out);
             1
         }
         None => 0,
-    }
+    })
 }
 
 /// `void store_values(ptr store, List* out)`: copies of every value in
 /// ascending id order.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_values(handle: *const RtStore, out: *mut IgniteList) {
-    let s = store(handle);
-    let size = s.glue.size;
-    let list = s.store.read_values(|values| {
-        let len = values.len();
-        let buffer = arena::alloc(size * len, s.glue.align);
-        for (i, value) in values.enumerate() {
-            value.copy_out(buffer.wrapping_add(i * size));
-        }
-        IgniteList {
-            ptr: buffer,
-            len: len as i64,
-            cap: len as i64,
-        }
-    });
-    put(out, list);
+    crate::entry(move || {
+        let s = store(handle);
+        let size = s.glue.size;
+        let list = s.store.read_values(|values| {
+            let len = values.len();
+            let buffer = arena::alloc(size * len, s.glue.align);
+            for (i, value) in values.enumerate() {
+                value.copy_out(buffer.wrapping_add(i * size));
+            }
+            IgniteList {
+                ptr: buffer,
+                len: len as i64,
+                cap: len as i64,
+            }
+        });
+        put(out, list);
+    })
 }
 
 /// `i8 store_update(ptr store, i64 id, ptr f, ptr thunk, ptr out)`: under
@@ -189,23 +198,27 @@ pub extern "C" fn ignite_rt_store_values(handle: *const RtStore, out: *mut Ignit
 /// there is none. A null from the thunk is a failure of `f` its callback
 /// guard stopped (`crate::fail`): the old value stays, the lock is
 /// released, then the task ends with the failure's report.
+/// A null `thunk` ends the task as a contained panic, as in `store_new`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_update(
     handle: *const RtStore,
     id: i64,
     f: *const u8,
-    thunk: UpdateThunk,
+    thunk: Option<UpdateThunk>,
     out: *mut u8,
 ) -> i8 {
-    let s = store(handle);
-    let updated = s.store.try_replace_with(
-        id,
-        |old| match thunk(f, old.ptr) {
-            ptr if ptr.is_null() => Err(()),
-            ptr => Ok(HeapValue { ptr, glue: s.glue }),
-        },
-        |new| new.copy_out(out),
-    );
+    let updated = crate::entry(move || {
+        let thunk = thunk.expect("store_update of a null thunk");
+        let s = store(handle);
+        s.store.try_replace_with(
+            id,
+            |old| match thunk(f, old.ptr) {
+                ptr if ptr.is_null() => Err(()),
+                ptr => Ok(HeapValue { ptr, glue: s.glue }),
+            },
+            |new| new.copy_out(out),
+        )
+    });
     match updated {
         Some(Ok(())) => 1,
         Some(Err(())) => crate::fail::resume(),
@@ -219,23 +232,27 @@ pub extern "C" fn ignite_rt_store_update(
 /// stored value to `out`. A null from the thunk is a failure of `f` its
 /// callback guard stopped, as for [`ignite_rt_store_update`]: the store is
 /// unchanged, the lock is released, then the task ends with the report.
+/// A null `thunk` ends the task as a contained panic.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_upsert(
     handle: *const RtStore,
     id: i64,
     f: *const u8,
-    thunk: UpsertThunk,
+    thunk: Option<UpsertThunk>,
     out: *mut u8,
 ) {
-    let s = store(handle);
-    let stored = s.store.upsert_with(
-        id,
-        |old| match thunk(f, old.map_or(std::ptr::null(), |old| old.ptr)) {
-            ptr if ptr.is_null() => Err(()),
-            ptr => Ok(HeapValue { ptr, glue: s.glue }),
-        },
-        |new| new.copy_out(out),
-    );
+    let stored = crate::entry(move || {
+        let thunk = thunk.expect("store_upsert of a null thunk");
+        let s = store(handle);
+        s.store.upsert_with(
+            id,
+            |old| match thunk(f, old.map_or(std::ptr::null(), |old| old.ptr)) {
+                ptr if ptr.is_null() => Err(()),
+                ptr => Ok(HeapValue { ptr, glue: s.glue }),
+            },
+            |new| new.copy_out(out),
+        )
+    });
     if stored.is_err() {
         crate::fail::resume()
     }
@@ -276,7 +293,7 @@ mod tests {
 
     #[test]
     fn values_are_copied_in_and_out_and_freed() {
-        let s = ignite_rt_store_new(to_heap, from_heap, free, 8, 8);
+        let s = ignite_rt_store_new(Some(to_heap), Some(from_heap), Some(free), 8, 8);
         assert_eq!(ignite_rt_store_next_id(s), 1);
         assert_eq!(ignite_rt_store_next_id(s), 2);
         let seven: i64 = 7;
@@ -287,12 +304,12 @@ mod tests {
         assert_eq!(out, 7);
         assert_eq!(ignite_rt_store_get(s, 3, (&raw mut out).cast()), 0);
         assert_eq!(
-            ignite_rt_store_update(s, 2, std::ptr::null(), double, (&raw mut out).cast()),
+            ignite_rt_store_update(s, 2, std::ptr::null(), Some(double), (&raw mut out).cast()),
             1
         );
         assert_eq!(out, 14);
         assert_eq!(
-            ignite_rt_store_update(s, 9, std::ptr::null(), double, (&raw mut out).cast()),
+            ignite_rt_store_update(s, 9, std::ptr::null(), Some(double), (&raw mut out).cast()),
             0
         );
         let mut list = IgniteList {
@@ -346,11 +363,17 @@ mod tests {
 
     #[test]
     fn upsert_inserts_then_replaces() {
-        let s = ignite_rt_store_new(upsert_to_heap, from_heap, upsert_free, 8, 8);
+        let s = ignite_rt_store_new(
+            Some(upsert_to_heap),
+            Some(from_heap),
+            Some(upsert_free),
+            8,
+            8,
+        );
         let mut out: i64 = 0;
-        ignite_rt_store_upsert(s, 4, std::ptr::null(), count, (&raw mut out).cast());
+        ignite_rt_store_upsert(s, 4, std::ptr::null(), Some(count), (&raw mut out).cast());
         assert_eq!(out, 1, "a null old for an empty id");
-        ignite_rt_store_upsert(s, 4, std::ptr::null(), count, (&raw mut out).cast());
+        ignite_rt_store_upsert(s, 4, std::ptr::null(), Some(count), (&raw mut out).cast());
         assert_eq!(out, 2);
         assert_eq!(ignite_rt_store_get(s, 4, (&raw mut out).cast()), 1);
         assert_eq!(out, 2);

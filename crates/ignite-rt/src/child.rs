@@ -96,7 +96,7 @@ fn released(handle: i64, error: &IoError) -> bool {
 /// resource at launch.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_launcher_new(maximum_children: i64) -> i64 {
-    register(Handle::Launcher(Launcher::with_maximum(maximum_children)))
+    crate::entry(move || register(Handle::Launcher(Launcher::with_maximum(maximum_children))))
 }
 
 /// `i32 launcher_execute(i64 l, Invocation* invocation, ChildExit* out,
@@ -108,10 +108,12 @@ pub extern "C" fn ignite_rt_launcher_execute(
     out: *mut IgniteChildExit,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let ran = launcher(handle)
-        .and_then(|l| l.execute(IgniteInvocation::read(invocation)?))
-        .map(|exit| IgniteChildExit::of(&exit));
-    status(ran, out, err)
+    crate::entry(move || {
+        let ran = launcher(handle)
+            .and_then(|l| l.execute(IgniteInvocation::read(invocation)?))
+            .map(|exit| IgniteChildExit::of(&exit));
+        status(ran, out, err)
+    })
 }
 
 /// `i32 launcher_start(i64 l, Invocation* invocation, i64* out, IoError*
@@ -123,10 +125,12 @@ pub extern "C" fn ignite_rt_launcher_start(
     out: *mut i64,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let started = launcher(handle)
-        .and_then(|l| l.start(IgniteInvocation::read(invocation)?))
-        .map(|child| register(Handle::Child(child)));
-    status(started, out, err)
+    crate::entry(move || {
+        let started = launcher(handle)
+            .and_then(|l| l.start(IgniteInvocation::read(invocation)?))
+            .map(|child| register(Handle::Child(child)));
+        status(started, out, err)
+    })
 }
 
 /// `i64 child_id(i64 c)`: the child's process id, also once it was waited
@@ -134,7 +138,9 @@ pub extern "C" fn ignite_rt_launcher_start(
 /// for a handle that names no child.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_child_id(handle: i64) -> i64 {
-    child(handle).map_or_else(|_| waited_child_id(handle).unwrap_or(0), |c| c.id())
+    crate::entry(move || {
+        child(handle).map_or_else(|_| waited_child_id(handle).unwrap_or(0), |c| c.id())
+    })
 }
 
 /// `i32 child_wait(i64 c, ChildExit* out, IoError* err)`: the first wait
@@ -146,24 +152,28 @@ pub extern "C" fn ignite_rt_child_wait(
     out: *mut IgniteChildExit,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let waited = match child(handle) {
-        Ok(c) => c.wait().inspect(|_| {
-            release_waited_child(handle, c.id());
-        }),
-        Err(error) if released(handle, &error) => Err(IoError::new("child already waited")),
-        Err(error) => Err(error),
-    };
-    status(waited.map(|exit| IgniteChildExit::of(&exit)), out, err)
+    crate::entry(move || {
+        let waited = match child(handle) {
+            Ok(c) => c.wait().inspect(|_| {
+                release_waited_child(handle, c.id());
+            }),
+            Err(error) if released(handle, &error) => Err(IoError::new("child already waited")),
+            Err(error) => Err(error),
+        };
+        status(waited.map(|exit| IgniteChildExit::of(&exit)), out, err)
+    })
 }
 
 /// `i32 child_kill(i64 c, IoError* err)`: `Ok` and nothing sent once the
 /// child was waited.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_child_kill(handle: i64, err: *mut IgniteIoError) -> i32 {
-    let killed = match child(handle) {
-        Ok(c) => c.kill(),
-        Err(error) if released(handle, &error) => Ok(()),
-        Err(error) => Err(error),
-    };
-    status(killed, std::ptr::null_mut(), err)
+    crate::entry(move || {
+        let killed = match child(handle) {
+            Ok(c) => c.kill(),
+            Err(error) if released(handle, &error) => Ok(()),
+            Err(error) => Err(error),
+        };
+        status(killed, std::ptr::null_mut(), err)
+    })
 }

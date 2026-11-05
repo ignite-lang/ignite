@@ -1,0 +1,39 @@
+package tests.panic_probe
+
+// A Rust panic inside a runtime entry on a task thread. Built with the
+// feature `panic-probe` of `ignite-rt`, `ignite_rt_log` panics on the line
+// `ignite-rt panic probe`: the spawned `doomed` task ends with the panic's
+// report and its pipe end is released, while the test's own task and the
+// `survivor` task keep running.
+
+type IoResult<T> = Result<T, IoError>
+
+fn doomed(end: PipeStream) -> IoResult<Unit> requires [end.write] {
+  log("ignite-rt panic probe")
+  end.write_all("not reached".to_bytes())?
+  end.close()
+}
+
+fn survivor(end: PipeStream) -> IoResult<Unit> requires [end.write] {
+  end.write_all("alive".to_bytes())?
+  end.close()
+}
+
+fn reply(end: PipeStream) -> IoResult<Text> requires [end.read, end.write] {
+  end.set_idle_timeout(10000)?
+  match end.read(64)? {
+    Eof => Ok("eof")
+    Data(bytes) => Ok(bytes.to_text())
+  }
+}
+
+test "a panic inside the runtime fails its task only" {
+  let (near, far) = Pipe.pair()
+  spawn doomed(far)
+  let first = reply(near)?
+  log("main: the doomed task's end reads {first}")
+  let (here, there) = Pipe.pair()
+  spawn survivor(there)
+  let second = reply(here)?
+  log("main: the survivor says {second}")
+}
