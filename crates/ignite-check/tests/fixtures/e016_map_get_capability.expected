@@ -1,0 +1,5 @@
+e016_map_get_capability.ignite:8:5: error[E016]: missing effect `settings.argument` for `setting.value`; add it to the `requires` of `tool`
+e016_map_get_capability.ignite:16:5: error[E016]: missing effect `settings.argument` for `setting.value`; add it to the `requires` of `taken`
+e016_map_get_capability.ignite:24:5: error[E016]: missing effect `tools.argument` for `setting.value`; add it to the `requires` of `nested`
+e016_map_get_capability.ignite:31:10: error[E016]: missing effect `settings.argument` for `setting.value`; add it to the `requires` of `first`
+e016_map_get_capability.ignite:34:59: error[E016]: missing effect `settings.argument` for `value`; add it to the `requires` of `indexed`

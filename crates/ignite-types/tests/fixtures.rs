@@ -301,7 +301,7 @@ fn every_type_code_has_a_fixture() {
     for code in [
         "e005", "e040", "e041", "e042", "e043", "e044", "e045", "e046", "e048", "e017", "e051",
         "e052", "e100", "e101", "e102", "e103", "e104", "e105", "e106", "e107", "e108", "e109",
-        "e116", "e096", "valid",
+        "e116", "e096", "e140", "e141", "valid",
     ] {
         assert!(
             names.iter().any(|n| n.starts_with(code)),

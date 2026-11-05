@@ -35,7 +35,7 @@ and what follows from it: `research/review-2026-11-04.md`; the second review, on
 | language core | records, enums, aliases, tuples, generics without bounds, exhaustive `match`, declared and inferred effects, effectful fn types, UFCS, field defaults, interpolation, inline `test` and `assert`; 29 keywords | `slice.md` §2 to §5, §10 to §12; `crates/ignite-syntax/src/lexer.rs` keyword table |
 | standard library | `std/console`, `std/text`, `std/json`, `std/protocol/telnet` (602 lines, tests from line 148), `std/protocol/http` (678 lines, tests from line 138) | `wc -l`, `grep -n '^test'` |
 | systems | `system` with `TcpListener` and `Store<T>` resources, `Service` and `Client` components, one executable per component | `slice.md` §6.1, §11.4 |
-| targets | Rust (default, cargo) and LLVM (IR text, clang, `libignite_rt.a`, arenas with loop regions) | `llvm.md` §1, §4 |
+| targets | LLVM (default since 2026-11-05; IR text, clang, `libignite_rt.a`, arenas with loop regions) and Rust (cargo, the differential check) | `llvm.md` §1, §4 |
 | substrate | `ignite-io`: blocking `std::net`, one OS thread per task, write coalescing, `Store`, test runner; `ignite-rt`: C ABI adapter, arenas, handle table | `slice.md` §7, `llvm.md` §5 |
 | CLI | `ignite check`, `emit`, `build`, `test` | `crates/ignite/src/main.rs` |
 | examples | `examples/terminal` (`terminald`, `tn`), `examples/todo` (`todod`); `terminal.design.ignite` does not parse (E001 at `4096 bytes`, line 23) | `target/debug/ignite check` |
@@ -58,7 +58,7 @@ One table for the layers every document agrees on. "Home" says which language it
 
 | layer | contents | home | source |
 |---|---|---|---|
-| L0 substrate | sockets, TLS engine (rustls), stdio, terminal mode, tasks, timers, bounded mailboxes and one-shot slots, `Store`, `Buffer`, process entry and exit; tokio event loop in slice 5 | Rust: `crates/ignite-io`, C ABI in `crates/ignite-rt` | `AGENTS.md`; `slice.md` §7; `actors.md` §8.4; `wasm.md` §4.2, G2 |
+| L0 substrate | sockets, TLS engine (rustls), stdio, terminal mode, tasks, timers, bounded mailboxes and one-shot slots, `Store`, `Buffer`, process entry and exit; files under a root (`Directory`), child processes (`Launcher`, `ChildProcess`), random bytes (`Entropy`) and program arguments (`Setting`) since slice 17; tokio event loop in slice 5 | Rust: `crates/ignite-io`, C ABI in `crates/ignite-rt` | `AGENTS.md`; `slice.md` §7; `actors.md` §8.4; `wasm.md` §4.2, G2 |
 | L1 language | values with value semantics, capability effects, generics; later bounds and interfaces, closures, `Map`, machine scalars, indexed assignment, rest patterns, ranges | Rust compiler until M6, then Ignite | `slice.md`; `protocols.md` §2; `wasm.md` §4.3; `friction.md` |
 | L2 std | text, json; `transport/` (Pipe, Tcp, Tls); `protocol/` (Telnet, Http, later WebSocket, Http3); `actor/` (Step, Topic, Supervisor, Table); `rfc/` catalogues; `check/explore`; `wasm/` decoder, validator, interpreter | Ignite | `protocols.md` §4; `actors.md` §8.4; `wasm.md` §4.1 |
 | L3 systems | `resource` kinds (TcpListener, Store, Topic, Listener with a transport), component kinds (Service, Client, Actor, Supervisor, application components), contracts, policies, assemblies | Ignite declarations, library kinds | design §3.2, §11.3; `actors.md` §2; `protocols.md` §2.3 |
@@ -71,7 +71,8 @@ Invariants shared by every document:
 2. Everything above IO is Ignite in `std/` or the program. Nothing named after an application
    protocol lives under `crates/`.
 3. Value semantics everywhere. The only shared things are handle types: `TcpStream`,
-   `PipeStream` (slice 14), `TcpListener`, `Store<T>`, `Buffer` (wasm G2), `Address<M>` (actors). Copying a handle copies
+   `PipeStream` (slice 14), `TcpListener`, `Store<T>`, `Directory`, `Launcher`, `ChildProcess`,
+   `Entropy`, `Setting` (slice 17), `Buffer` (wasm G2), `Address<M>` (actors). Copying a handle copies
    8 bytes and shares the resource.
 4. Effects are capabilities on parameters. Authority is passed, never ambient. A component's
    imports (wasm) and an actor's reach (actors) derive from the same effect sets.
@@ -111,7 +112,7 @@ counts. Sizes marked "estimate" are this document's.
 | wave | content | size | needs | unblocks |
 |---|---|---|---|---|
 | A0 soundness fixes | the audit findings of section 10: E006 for in-place mutation through `let`, `for` and pattern bindings, `to_bytes()` not a mutable receiver (M1 to M3); index and `len` on `if`/`match` receivers (M4, M5); ambient capability names (E1 to E3); roots of `map` (E4) and of `push`/`append` on field receivers (E5); unused type parameters (R1); regression tests from `docs/audit/2026-11-01/` | S, estimate | none | everything: both targets must agree before more features land |
-| A language gaps | closures (`friction` 9, 13; actors P4); `Option.unwrap_or` and `!=` on Option (7); rest patterns `..` (protocols §5.2); ranges in patterns (8); raw strings (2); tuple field access (10); `break` as expression (4); recursive enums by boxing (15); `Map<K, V>` (design §3.3); last-use moves (actors R1); T1 failure rule (section 7) | M, estimate | A0 | B, C, E, H |
+| A language gaps (done: slices 9, 10 and 16) | closures (`friction` 9, 13; actors P4; slice 9, calls of fn-typed expressions slice 16); `Option.unwrap_or` and `!=` on Option (7; slice 9); rest patterns `..` (protocols §5.2; slice 16); ranges in patterns (8; slice 9); raw strings (2; slice 9); tuple field access (10; slice 9); `break` as expression (4; slice 9); recursive enums by boxing (15; slice 9); `Map<K, V>` (design §3.3; slice 10); last-use moves (actors R1; slice 16); T1 failure rule (section 7; slice 10). Where each holds: `docs/slice.md` 20.1 | M, estimate | A0 | B, C, E, H |
 | B protocols P1 | `Pipe.pair()` and `PipeStream` in the substrate; `ByteStream` bound with one compiler-known interface; `Telnet` and `Http` roles generic over the stream with a `Limits` record; in-process protocol tests | S | slice 8 (done) | C's tests, G, TLS |
 | C actors P1 to P3 | `Address`, `ReplyTo`, `Outbox`; `Actor` kind; mailboxes and dispatch in the substrate; `std/actor`, `std/table`; `Topic`, `Sink`, `Supervisor`, monitors; exit status 5; todo example on an actor (D4) | M + S + L | A (last-use moves), T1 | events for the ESS bridge (`research/ess.md` option c), F |
 | D slice 5 async | tokio inside `ignite-io`; Rust-target futures; LLVM-target coroutines; `Task.yield_now` (wasm G6) | L | B, C stable | E (host suspension), actors P5, 10,000 idle actors |
@@ -154,6 +155,8 @@ steering session against section 6 before agents are dispatched.
 | 12 (done 2026-11-02, uncommitted, `docs/slice.md` section 16: 636 cargo tests, 148 inline tests per target; gate time rose over 10 % on 7 units, measured causes std 3,033 to 5,135 lines loaded per spawn and `ignite-std` 2,191 to 3,792 lines, carried into 12b: reachable-only std loading and emission) | F3 run and control | `ignite run <assembly>` and `ignite replay` over its journal: probes as protocol clients (`TelnetPrompt` over the telnet `connect` role), SLI windows and contract evaluation (design §4.1), `Restart` with backoff and `DrainRollout` (design §4.2, §7.4), event journal, `event("…")` consequences | the terminal system runs under `ignite run`; killing `terminald` restarts it within the policy's backoff; a probe timeout is visible in the journal and in the contract's standing |
 | 13 | F4 apply | `ignite apply` with plan diff, changes and deletion (design §7.3), recovery of a half-applied plan from the journal | a second `apply` of the same plan is a no-op; an interrupted `apply` resumes |
 | 14 | B protocols P1 | `Pipe.pair()` and `PipeStream`, the bound `<S: ByteStream>` on fns and roles, `Telnet` and `Http` generic over the stream with their limits records (`docs/slice.md` section 18) | the 18.0 matrix of `docs/slice.md` |
+| 16 (done 2026-11-05, `docs/slice.md` section 20; counts and gate time in `AGENTS.md` "Slice 16") | A language gaps | the items of wave A that slices 9 and 10 had not delivered: last-use moves (one analysis in `ignite-types`, read by both targets; actors R1), calls of fn-typed expressions (`adder(1)(2)`, `fs[i](x)`), rest patterns in list patterns (`docs/syntax.md` P9, E076); a both-target fixture for every item that already held | the 20.0 matrix of `docs/slice.md` |
+| 17 (done 2026-11-05, `docs/slice.md` section 21; counts and gate time in `AGENTS.md` "Slice 17") | playground substrate (`epic:playground-substrate`) | capabilities as values (P3): `Directory` (files under a root, confined by an `openat` walk), `Launcher` and `ChildProcess` (child processes with timeout, bounded output, process-group kill), `Entropy` (random bytes), `Setting` (one command-line flag), each a resource kind and handle type on both targets over `crates/ignite-io`; `std.fs`, `std.process`; E140 to E142; capability resources hosted by their member's process (15.6); `HttpServer` gains the run hooks `TelnetServer` has | the 21.0 matrix of `docs/slice.md` |
 | 15+ | slice 15 is G's P2 (`docs/slice.md` section 19); after it B (P2 on), C, D, E, G (P3 to P5), H | slice 15: RFC catalogues as literal data, the claim clauses and E090 to E092, `ignite rfc import` and `ignite rfc check`, `ignite conformance`, the claims of `Telnet` and `Http`; after it as the table above, in that order | slice 15: the 19.0 matrix of `docs/slice.md`; after it as the table above |
 
 Consequences for the open decisions of section 8: D5 moves from the start of H to slice 11;
@@ -168,14 +171,14 @@ and §11, `research/ess.md` §3 and `research/lean.md` §3.
 
 | gap | wanted by | wave |
 |---|---|---|
-| closures capturing locals | todo PATCH (`friction` 9), `map` arguments (13), actors `call(fn)` and dynamic actors (P4) | A |
-| `Option.unwrap_or`, `!=` on `Option` | todo (`friction` 7) | A |
-| rest pattern `[a, ..]`, range patterns | protocols §5.2, `digit_value` (`friction` 8) | A |
-| raw strings, `\u{..}`, interpolation holding a string literal | json fixtures (`friction` 1, 2, 12) | A |
-| tuple field access `.0`, `break` as an expression, static fns on records | tests (`friction` 10, 4, 17) | A |
-| recursive enums without `List` boxing (E055) | `Tree<T>`, json (`friction` 15) | A |
-| `Map<K, V>` with canonical order | design §3.3; a self-hosted frontend (H) | A |
-| last-use move of a `var` passed and reassigned | actors R1 (state through the loop) | A |
+| closures capturing locals | todo PATCH (`friction` 9), `map` arguments (13), actors `call(fn)` and dynamic actors (P4) | A: slice 9 (13.3); calls of fn-typed expressions slice 16 (20.4) |
+| `Option.unwrap_or`, `!=` on `Option` | todo (`friction` 7) | A: slice 9 |
+| rest pattern `[a, ..]`, range patterns | protocols §5.2, `digit_value` (`friction` 8) | A: range patterns slice 9; rest patterns slice 16 (20.5) |
+| raw strings, `\u{..}`, interpolation holding a string literal | json fixtures (`friction` 1, 2, 12) | A: slice 9 |
+| tuple field access `.0`, `break` as an expression, static fns on records | tests (`friction` 10, 4, 17) | A: slice 9 |
+| recursive enums without `List` boxing (E055) | `Tree<T>`, json (`friction` 15) | A: slice 9 (13.4) |
+| `Map<K, V>` with canonical order | design §3.3; a self-hosted frontend (H) | A: slice 10 (14.3) |
+| last-use move of a `var` passed and reassigned | actors R1 (state through the loop) | A: slice 16 (20.3) |
 | typed bounds on generics, `interface`, `impl`, associated types, `Eq` | protocols §2.2 (P1 ships one builtin bound; P4 user-declared) | B, G |
 | machine scalars `I32`, `F32`, `F64`; `Buffer`; `xs[i] = e`; dense `match` to `switch` | wasm G1 to G4 | E |
 | `Task.yield_now` | wasm G6 under tokio | D |
@@ -216,7 +219,8 @@ Each row names the two places, what disagrees, and the resolution this document 
 | X22 | `slice.md` §12.5 `assert` outside a test exits the process with 101; `actors.md` wants a failure to end only its task | one bad request kills a server | T1 covers `assert` too |
 | X23 | `llvm.md` §7 and `slice.md` §1 "a program that passes both is valid for the Rust and the LLVM target"; section 10.1 shows programs the checker accepts that rustc rejects and the LLVM target miscompiles | the checker lacks a mutability rule | wave A0: E006 for in-place mutation |
 | X24 | `slice.md` §5.1 "The capability is a parameter of the function (`stream.read`) or an ambient one (`stdin.read`)"; the implementation cannot tell the two apart when a parameter carries an ambient's name | section 10.2, E1 to E3 | wave A0: refuse or namespace ambient names |
-| X25 | section 8 D2 option B "LLVM becomes the default `--target`", taken 2026-11-01 by the steering session as reversible; `BuildOptions::default` in `crates/ignite/src/lib.rs` (`target: Target::Rust`) and every `--target` of `crates/ignite/src/main.rs` still default to Rust | which target is the default | resolved 2026-11-04: D2 B stands (Timo: build time is why Ignite exists, `vision.md` section 1); `BuildOptions::default` and the CLI switch to LLVM after slice 16 U4 (`story:slice-16-llvm-moves`) lands, in `story:llvm-default-target` |
+| X25 | section 8 D2 option B "LLVM becomes the default `--target`", taken 2026-11-01 by the steering session as reversible; `BuildOptions::default` in `crates/ignite/src/lib.rs` (`target: Target::Rust`) and every `--target` of `crates/ignite/src/main.rs` still default to Rust | which target is the default | resolved 2026-11-04: D2 B stands (Timo: build time is why Ignite exists, `vision.md` section 1); `BuildOptions::default` and the CLI switch to LLVM after slice 16 U4 (`story:slice-16-llvm-moves`) lands, in `story:llvm-default-target`; carried out 2026-11-05: `Target::default`, `BuildOptions::default` and every `--target` of the CLI are LLVM |
+| X26 | design §3.5 "effect interfaces cover operations such as reading declared files, spawning processes, accessing a clock", read as ambient interfaces; `docs/slice.md` §21.3 (slice 17) makes files, processes, random bytes and arguments capability values (`Directory`, `Launcher`, `Entropy`, `Setting`) that a system declares as resources and passes to the code that uses them, with test-only constructors as the only other way to obtain one (E051) | ambient effect interfaces or passed capabilities | resolved by slice 17 (`docs/slice.md` §21.11 D1, invariant 4): passed capabilities; the design text stays as it is (direction, T2); the clock stays an ambient head (`clock.read`), a parameter named `clock` is E056 |
 
 Logic flaws inside one document, found by reading:
 
@@ -249,7 +253,8 @@ T3. **Line-number citations are banned in design documents.** Cite a symbol (`de
 T4. **Diagnostic code ranges are reserved per wave** (steering, 2026-11-01). E001 to E059:
 slices 1 to 9 (`slice.md`). E060 to E069: actors. E070 to E079: the sugar proposal
 (`syntax.md`). E080 to E089: wasm. E090 to E099: protocols. E100 to E109: slice 10 (F1),
-E110 to E119: slice 11 (F2), E120 to E129: slice 12 (F3), E130 to E139: slice 13 (F4). A
+E110 to E119: slice 11 (F2), E120 to E129: slice 12 (F3), E130 to E139: slice 13 (F4), E140
+to E149: slice 17 (playground substrate). A
 document that cites a code from another range cites it, it does not define it. Reason: on
 2026-11-01 four documents used codes E080 to E098 with no written range table; the check that
 day found `wasm.md` defining E080 to E083 and `protocols.md` E090 to E098, the others citing

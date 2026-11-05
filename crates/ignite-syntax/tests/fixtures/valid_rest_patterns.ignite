@@ -1,0 +1,55 @@
+package fixtures.rest
+
+fn any(xs: List<Int>) -> Int {
+  return match xs {
+    [..] => 0
+  }
+}
+
+fn at_least_two(xs: List<Int>) -> Bool {
+  return match xs {
+    [_, _, ..] => true
+    _ => false
+  }
+}
+
+fn head(xs: List<Int>) -> Int {
+  return match xs {
+    [first, ..rest] => first + rest.len()
+    [] => 0
+  }
+}
+
+fn last(xs: List<Int>) -> Int {
+  return match xs {
+    [.., last] => last
+    [] => 0
+  }
+}
+
+fn ends(xs: List<Int>) -> Int {
+  return match xs {
+    [a, .., z] => a + z
+    _ => 0
+  }
+}
+
+fn nested(xss: List<List<Int>>) -> Int {
+  return match xss {
+    [[a, ..], ..] => a
+    _ => 0
+  }
+}
+
+fn empty_or_not(xs: List<Int>) -> Int {
+  return match xs {
+    [] | [_, ..] => 1
+  }
+}
+
+fn first_byte(bytes: Bytes) -> Int {
+  return match bytes {
+    [b, ..rest] => rest.len()
+    [] => 0
+  }
+}

@@ -35,7 +35,7 @@ planned and not built; see the [roadmap](../roadmap.md).
 
 ## The Rust target
 
-The default. The compiler generates a Rust project and cargo builds it:
+Selected with `--target rust`. The compiler generates a Rust project and cargo builds it:
 
 | step | output |
 |---|---|
@@ -48,8 +48,8 @@ the generated std calls `Telnet::serve::<ignite_io::TcpStream>`, with no `dyn By
 
 ## The LLVM target
 
-The compiler emits LLVM IR text and clang compiles and links it. Building a program never runs
-cargo or rustc.
+The default. The compiler emits LLVM IR text and clang compiles and links it. Building a
+program never runs cargo or rustc.
 
 | step | output |
 |---|---|
@@ -110,25 +110,23 @@ native controller." It calls faster builds, smaller binaries and higher throughp
 
 ## Which target is the default
 
-Today both targets stay, `--target rust` is the default of `ignite build` and `ignite test`
-(their `--help`), and every feature lands on both. The sources:
+LLVM. `--target llvm` is the default of every command that builds (`build`, `test`, `run`,
+`plan --for-apply`, `conformance`; their `--help` says `[default: llvm]`), and `--target rust`
+selects the Rust target. Both targets stay, and every feature lands on both. The sources:
 
-- [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md), its standing
-  invariants: "Both targets agree: the Rust target stays the default (D2), every feature lands on
-  both."
-- [`docs/llvm.md`](https://github.com/ignite-lang/ignite/blob/main/docs/llvm.md): "The Rust
-  target stays and stays the default."
-- design section 8.10: "The LLVM target runs beside the Rust target, which stays and stays the
-  default".
+- [`docs/vision.md`](https://github.com/ignite-lang/ignite/blob/main/docs/vision.md),
+  decision D2 in section 8, taken with option B, "LLVM primary": LLVM becomes the default
+  `--target` and the Rust target stays the test oracle. Contradiction X25 recorded that the
+  code still defaulted to Rust; it was resolved on 2026-11-04 (build time is why Ignite exists,
+  section 1) and carried out on 2026-11-05.
+- [`docs/llvm.md`](https://github.com/ignite-lang/ignite/blob/main/docs/llvm.md): the LLVM
+  target is the default; the Rust target stays as the differential check.
 - [`docs/vision.md`](https://github.com/ignite-lang/ignite/blob/main/docs/vision.md),
   invariant 7: "Every language feature lands on both native targets with a golden and a
   fixture, until D2 says otherwise."
 
-The sources disagree about the future. Decision D2 in `docs/vision.md` section 8 is recorded
-there as taken with option B, "LLVM primary": LLVM becomes the default `--target` and the Rust
-target stays the test oracle. `PLAN.md` summarises the same decision as "D2 B two targets,
-Rust default". The code follows the second reading. Either way `--target llvm` is a full
-peer, not an experiment.
+The measured reason is in the [targets guide](../guide/targets.md#build-times-as-measured):
+`todod` builds in about 0.29 s on LLVM against 3.1 s on Rust.
 
 ## Where the code lives
 

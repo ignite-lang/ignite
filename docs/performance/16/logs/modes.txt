@@ -1,0 +1,17 @@
+perf2.log:WAIT 03:01:18 free=92G floor=45G
+perf2.log:START 03:22:09 free=71G
+perf2.log:MODE warm 03:22:10 load 8.57 free   71G
+perf2.log:EXIT=143 04:01:50 free=56G
+perf.log:WAIT 02:53:24 free=90G floor=45G
+perf.log:START 03:00:39 free=87G
+perf.log:MODE cold 03:00:41 load 11.42 free   87G
+perf.log:MODE_EXIT cold=0 03:22:02 builds 13G
+perf.log:MODE warm 03:22:03 load 9.86 free   71G
+perf.log:MODE_EXIT warm=127 03:22:03 builds 13G
+perf.log:MODE programs 03:22:03 load 9.86 free   71G
+perf.log:MODE_EXIT programs=127 03:22:03 builds 13G
+perf.log:MODE cli 03:22:03 load 9.86 free   71G
+perf.log:MODE_EXIT cli=127 03:22:03 builds 13G
+perf.log:SUMMARIZE_EXIT=127
+perf.log:EXTRA_EXIT=3
+perf.log:EXIT=0 03:22:09 free=71G

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:llvm-runtime-hot-paths
 kind: story
-status: active
+status: implemented
 title: LLVM runtime hot paths for text servers
 summary: Text conversions without UTF-8 pass or heap, inlined literal text equality
 scope:
@@ -10,10 +10,11 @@ scope:
   path: crates/ignite-llvm/src
 - confidence: inferred
   path: crates/ignite-rt/src
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:02:51Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-04T07:02:51Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-05T08:00:51Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":5,"metric_observation":1}}}
 ---
 # Story: llvm-runtime-hot-paths
 

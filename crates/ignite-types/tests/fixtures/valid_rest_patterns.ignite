@@ -1,0 +1,88 @@
+fn sum(xs: List<Int>) -> Int {
+  var total = 0
+  for x in xs {
+    total = total + x
+  }
+  return total
+}
+
+fn empty_or_not(xs: List<Int>) -> Int {
+  return match xs {
+    [] => 0
+    [_, ..] => 1
+  }
+}
+
+fn empty_or_not_bytes(bytes: Bytes) -> Int {
+  return match bytes {
+    [] => 0
+    [_, ..] => 1
+  }
+}
+
+fn head_and_rest(xs: List<Int>) -> Int {
+  return match xs {
+    [first, ..rest] => first + sum(rest)
+    [] => 0
+  }
+}
+
+fn bytes_rest(bytes: Bytes) -> Bytes {
+  return match bytes {
+    [_, ..rest] => rest
+    [] => bytes
+  }
+}
+
+fn last(xs: List<Int>) -> Int {
+  return match xs {
+    [.., z] => z
+    [] => 0
+  }
+}
+
+fn ends(xs: List<Int>) -> Int {
+  return match xs {
+    [a, .., z] => a + z
+    [a] => a
+    [] => 0
+  }
+}
+
+fn nested(xss: List<List<Int>>) -> Int {
+  return match xss {
+    [[a, ..], ..] => a
+    [[], ..] => 1
+    [] => 0
+  }
+}
+
+fn any(xs: List<Int>) -> Int {
+  return match xs {
+    [..] => 0
+  }
+}
+
+fn either(xs: List<Int>) -> Int {
+  return match xs {
+    [] | [_, ..] => 1
+  }
+}
+
+fn bools(xs: List<Bool>) -> Int {
+  return match xs {
+    [] => 0
+    [_] => 1
+    [_, _] => 2
+    [_, true, ..] => 3
+    [.., false, _] => 4
+    [_, _, _, _, ..] => 5
+  }
+}
+
+fn request(line: (List<Text>, Int, Int)) -> Int {
+  return match line {
+    ([_, _, ..], _, _) => 400
+    (_, _, _) => 200
+  }
+}

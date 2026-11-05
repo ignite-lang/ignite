@@ -2529,6 +2529,57 @@ impl<'t> Parser<'t> {
         Ok((items, comma))
     }
 
+    /// `'[' (elem (',' elem)*)? ']'` with `elem := pattern | '..' ident?`
+    /// (`docs/slice.md` 20.5). A second `..`, or a `..name` that is not
+    /// last, is E076; the list is still returned.
+    fn list_pattern_items(&mut self) -> PResult<Vec<Pattern>> {
+        self.open(&TokenKind::LBracket, true)?;
+        let mut items = Vec::new();
+        while !self.at(&TokenKind::RBracket) {
+            if self.at(&TokenKind::DotDot) {
+                let start = self.bump().span.start;
+                let name = if matches!(self.peek_token().kind, TokenKind::Ident(_)) {
+                    Some(self.ident()?)
+                } else {
+                    None
+                };
+                items.push(Pattern {
+                    kind: PatternKind::Rest(name),
+                    span: self.span_from(start),
+                });
+            } else {
+                items.push(self.pattern()?);
+            }
+            if !self.eat(&TokenKind::Comma) {
+                break;
+            }
+        }
+        self.close(&TokenKind::RBracket)?;
+        let rests: Vec<&Pattern> = items
+            .iter()
+            .filter(|item| matches!(item.kind, PatternKind::Rest(_)))
+            .collect();
+        if let Some(second) = rests.get(1) {
+            let span = second.span;
+            self.report(
+                "E076",
+                span,
+                "a list pattern has at most one `..`".to_string(),
+            );
+        } else if let Some(named) = items[..items.len().saturating_sub(1)]
+            .iter()
+            .find(|item| matches!(item.kind, PatternKind::Rest(Some(_))))
+        {
+            let span = named.span;
+            self.report(
+                "E076",
+                span,
+                "`..name` must be the last element of a list pattern".to_string(),
+            );
+        }
+        Ok(items)
+    }
+
     /// One alternative, or `start..=end` between two bounds. The checker
     /// and typer decide what a bound may be (`docs/slice.md` section 13.7).
     fn pattern_alternative(&mut self) -> PResult<Pattern> {
@@ -2578,10 +2629,7 @@ impl<'t> Parser<'t> {
                 }
                 PatternKind::Tuple(items)
             }
-            TokenKind::LBracket => {
-                let (items, _) = self.pattern_list(TokenKind::LBracket, TokenKind::RBracket)?;
-                PatternKind::List(items)
-            }
+            TokenKind::LBracket => PatternKind::List(self.list_pattern_items()?),
             TokenKind::Int(i64::MIN) => return Err(self.int_too_large(token)),
             TokenKind::Int(value) => {
                 self.bump();

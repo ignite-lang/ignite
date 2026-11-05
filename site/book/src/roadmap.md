@@ -21,22 +21,19 @@ dependencies between the waves are in
 | **v0.2.0** | local apply: `ignite host`, `ignite plan --for-apply`, `ignite apply`, `ignite inspect`; source-bound saved plans, durable receipts and crash recovery ([guide](guide/apply.md)) |
 | **v0.3.0** | in-process streams: `Pipe.pair()`, the `ByteStream` bound `<S: ByteStream>`, the Telnet and HTTP roles generic over the stream with `SessionLimits` and `HttpLimits`, protocol tests without a network on both targets |
 | **v0.4.0** | protocols that state which RFC requirements they meet: `std.rfc` and catalogues of RFC 854, 855, 1143, 9112 and 9110; the clauses `conforms`, `scope`, `satisfies`, `verifies`, `unsupported` and `not_applicable` with E090 to E092; `ignite conformance`, `ignite rfc import` and `ignite rfc check`; the claims of `Telnet` (RFC 855 met, RFC 854 with four gaps) and `Http` (gaps listed, nothing claimed) ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.4.0)) |
+| **v0.5.0** | the language gaps of wave A on both targets: values move at their last use, calls of fn-typed expressions, rest patterns in list patterns with E076; store `upsert`, borrowed store reads and performance work on both targets ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.5.0)) |
+| **v0.6.0** | processes, files, settings and random bytes for programs: `std.fs` with the `Directory` resource, `std.process`, one `--flag` per `Setting` with E142, `std.random`; `HttpServer` runs under `ignite run` and `ignite apply`; LLVM is the default `--target`, and an installed `ignite` carries its runtime ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.6.0)) |
 
 ## Being built <span class="badge wip">unreleased</span>
 
-Two steps are being implemented on their branches and are in no release:
+One step is next and is in no release:
 
-- slice 16, language gaps: closures, last-use moves and the smaller gaps of wave A, on both
-  targets, on
-  [`feat/slice16-language-gaps`](https://github.com/ignite-lang/ignite/tree/feat/slice16-language-gaps);
-- slice 17, processes, files, settings and entropy for programs, on
-  [`feat/slice17-processes-files`](https://github.com/ignite-lang/ignite/tree/feat/slice17-processes-files).
+- slice 18, one service operated: the todo service on the LLVM target with its data in a
+  directory, an HTTP probe, an availability contract and `ignite apply` rollouts that keep the
+  data; its contract is in
+  [`docs/slice.md`](https://github.com/ignite-lang/ignite/blob/main/docs/slice.md) section 22.
 
-Planned after them, slice 18: one service operated, the todo service on the LLVM target with
-its data in a directory, an HTTP probe, an availability contract and `ignite apply` rollouts
-that keep the data.
-
-Until they are released, treat this list as a plan, not as documentation.
+Until it is released, treat this list as a plan, not as documentation.
 
 ## Designs <span class="badge design">design</span>
 
@@ -59,7 +56,8 @@ the declarations of a planned step need it.
 
 From [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md):
 
-- Both targets agree: the Rust target stays the default, and every feature lands on both.
+- Both targets agree: every feature lands on both; LLVM is the default target and the Rust
+  target the differential check.
 - Compile time is a budget: the gate time and the program build times are measured before and
   after each step and recorded; a rise over 10 % is a deviation to explain.
 - Each step starts with a contract section in `docs/slice.md`, reviewed before work starts,

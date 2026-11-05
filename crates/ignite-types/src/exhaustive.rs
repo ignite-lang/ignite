@@ -9,9 +9,10 @@
 //! one column per element. `()` covers `Unit`. An `Int` or `Byte` column
 //! with a range pattern is split into the intervals between the bounds of
 //! its literal, constant and range patterns (`docs/slice.md` section 13.7).
-//! Every other type (`Text`, records, lists, and `Int` or `Byte` without a
-//! range) is covered only by a `_` or a binding: a literal, constant or
-//! list pattern covers some values, never all.
+//! A list (and `Bytes`) is split by length, each length a tuple of its
+//! elements (`docs/slice.md` 20.5). Every other type (`Text`, records, and
+//! `Int` or `Byte` without a range) is covered only by a `_` or a binding:
+//! a literal or constant pattern covers some values, never all.
 
 use ignite_syntax::ast::{Pattern, PatternKind, Span};
 
@@ -214,6 +215,11 @@ pub(crate) fn uncovered(rows: &[Vec<&Pattern>], tys: &[Ty], cx: &Context) -> Vec
     // A column of catch-alls only is not split: no row tells its cases
     // apart, and a split would only multiply the rows.
     let only_catch_all = !rows.is_empty() && rows.iter().all(|row| cx.is_catch_all(row[0]));
+    if let Ty::List(element) = ty
+        && !only_catch_all
+    {
+        return uncovered_list(&rows, element, rest, cx);
+    }
     let ranged = rows
         .iter()
         .any(|row| matches!(row[0].kind, PatternKind::Range { .. }));
@@ -280,6 +286,101 @@ pub(crate) fn uncovered(rows: &[Vec<&Pattern>], tys: &[Ty], cx: &Context) -> Vec
             let mut row = vec![split.show(&name, inner)];
             row.extend(tail.iter().cloned());
             out.push(row);
+        }
+    }
+    out
+}
+
+/// A list pattern's elements before its `..`, after it, and whether it
+/// has one.
+fn list_shape(items: &[Pattern]) -> (&[Pattern], &[Pattern], bool) {
+    match items
+        .iter()
+        .position(|item| matches!(item.kind, PatternKind::Rest(_)))
+    {
+        Some(at) => (&items[..at], &items[at + 1..], true),
+        None => (items, &[], false),
+    }
+}
+
+/// [`uncovered`] on a first column of type `List<element>` (`Bytes` is
+/// `List<Byte>`), split by length (`docs/slice.md` 20.5): with `m` the
+/// longest exact pattern and `p`, `s` the longest prefix and suffix of a
+/// rest pattern, every length up to `max(m, p + s - 1)` is checked on its
+/// own as a tuple of that many elements, and `max(m + 1, p + s)` stands
+/// for every longer length. A witness at that length prints its first
+/// `representative - s` elements, `..`, then its last `s`, so it names
+/// every length it stands for.
+fn uncovered_list(
+    rows: &[Vec<&Pattern>],
+    element: &Ty,
+    rest: &[Ty],
+    cx: &Context,
+) -> Vec<Vec<String>> {
+    let (mut exact, mut prefix, mut suffix) = (0, 0, 0);
+    for row in rows {
+        if let PatternKind::List(items) = &row[0].kind {
+            let (before, after, has_rest) = list_shape(items);
+            if has_rest {
+                prefix = prefix.max(before.len());
+                suffix = suffix.max(after.len());
+            } else {
+                exact = exact.max(items.len());
+            }
+        }
+    }
+    let longest = exact.max((prefix + suffix).saturating_sub(1));
+    let representative = (exact + 1).max(prefix + suffix);
+    let mut out = Vec::new();
+    for length in (0..=longest).chain(std::iter::once(representative)) {
+        let specialised: Vec<Vec<&Pattern>> = rows
+            .iter()
+            .filter_map(|row| {
+                let head: Vec<&Pattern> = match &row[0].kind {
+                    PatternKind::List(items) => {
+                        let (before, after, has_rest) = list_shape(items);
+                        if !has_rest && items.len() == length {
+                            items.iter().collect()
+                        } else if has_rest && before.len() + after.len() <= length {
+                            let middle = length - before.len() - after.len();
+                            before
+                                .iter()
+                                .chain(std::iter::repeat_n(&WILDCARD, middle))
+                                .chain(after.iter())
+                                .collect()
+                        } else {
+                            return None;
+                        }
+                    }
+                    _ if cx.is_catch_all(row[0]) => vec![&WILDCARD; length],
+                    _ => return None,
+                };
+                Some(head.into_iter().chain(row[1..].iter().copied()).collect())
+            })
+            .collect();
+        let witnesses = if specialised.is_empty() {
+            vec![vec!["_".to_string(); length + rest.len()]]
+        } else {
+            let columns: Vec<Ty> = std::iter::repeat_n(element.clone(), length)
+                .chain(rest.iter().cloned())
+                .collect();
+            uncovered(&specialised, &columns, cx)
+        };
+        for witness in witnesses {
+            let (inner, tail) = witness.split_at(length);
+            let shown = if length == representative {
+                let (front, back) = inner.split_at(representative - suffix);
+                let items: Vec<&str> = front
+                    .iter()
+                    .map(String::as_str)
+                    .chain(std::iter::once(".."))
+                    .chain(back.iter().map(String::as_str))
+                    .collect();
+                format!("[{}]", items.join(", "))
+            } else {
+                format!("[{}]", inner.join(", "))
+            };
+            out.push(std::iter::once(shown).chain(tail.iter().cloned()).collect());
         }
     }
     out

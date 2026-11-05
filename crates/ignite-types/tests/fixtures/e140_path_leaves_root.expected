@@ -1,0 +1,3 @@
+e140_path_leaves_root.ignite:2:19: error[E140]: path `../x` of `read_file`: leaves its root
+e140_path_leaves_root.ignite:3:20: error[E140]: path `/etc/x` of `write_file`: absolute
+e140_path_leaves_root.ignite:4:24: error[E140]: path `a/../..` of `read_directory`: leaves its root

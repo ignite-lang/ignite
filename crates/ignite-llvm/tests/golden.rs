@@ -208,6 +208,95 @@ fn read_only_parameters_are_borrowed() {
     assert!(!greet.contains("copy.Text"), "{greet}");
 }
 
+/// The operands of the first call of `callee` in `text`, split at `, `.
+fn call_operands<'a>(text: &'a str, callee: &str) -> Vec<&'a str> {
+    let open = format!("{callee}(");
+    let at = text
+        .find(&open)
+        .unwrap_or_else(|| panic!("no call of {callee} in\n{text}"))
+        + open.len();
+    let close = text[at..].find(')').expect("end of the call") + at;
+    text[at..close].split(", ").collect()
+}
+
+/// `docs/slice.md` 20.0 row 14 and 20.3.5: a parameter is owned iff it is
+/// consumed, a place moves at its last use without a `copy.` call, a place
+/// read after the call is copied, and fn-typed expressions are called.
+#[test]
+fn last_use_moves_and_expression_calls() {
+    let generated = lower("slice16");
+    let program = &generated.program;
+    let step_call = "call void @\"tests.slice16.step\"";
+
+    let step = function(program, "tests.slice16.step");
+    assert!(
+        !step.contains("copy."),
+        "`var next = state` and the result `next` move:\n{step}"
+    );
+
+    let run = function(program, "tests.slice16.run");
+    let head = run
+        .find("call i64 @ignite.arena_mark()")
+        .expect("the loop takes a mark");
+    let call = run.find(step_call).expect("run calls step");
+    assert!(head < call, "{run}");
+    assert!(
+        !run[head..call].contains("copy."),
+        "no copy between the loop head and the call of step:\n{run}"
+    );
+    let release = run
+        .find("call void @ignite_rt_arena_scratch(i8 1)")
+        .expect("the loop has a release block");
+    let carried = call_operands(&run[release..], "call void @\"copy.tests.slice16.State\"");
+    let slot = carried[1].strip_prefix("ptr ").expect("a pointer operand");
+    let passed = call_operands(&run[call..], step_call);
+    assert_eq!(
+        passed[1],
+        format!("ptr {slot}"),
+        "step receives the slot of `s`:\n{run}"
+    );
+
+    let after = function(program, "tests.slice16.run_read_after");
+    let call = after.find(step_call).expect("run_read_after calls step");
+    let copy = after
+        .find("call void @\"copy.tests.slice16.State\"")
+        .expect("`s` is read after the call, so it is copied");
+    assert!(copy < call, "{after}");
+    let fresh = call_operands(&after[copy..], "call void @\"copy.tests.slice16.State\"")[0];
+    assert_eq!(
+        call_operands(&after[call..], step_call)[1],
+        fresh,
+        "{after}"
+    );
+
+    let read_only = function(program, "tests.slice16.read_only");
+    assert!(!read_only.contains("copy."), "{read_only}");
+    assert!(
+        read_only.contains("call i64 @\"tests.slice16.size\"(ptr %"),
+        "{read_only}"
+    );
+
+    let actor = function(program, "tests.slice16.run_actor");
+    let head = actor
+        .find("call i64 @ignite.arena_mark()")
+        .expect("the loop takes a mark");
+    let call = actor[head..]
+        .find("call void %")
+        .expect("run_actor calls the handle")
+        + head;
+    assert!(
+        !actor[head..call].contains("copy."),
+        "`a.state` moves into the fn-value call:\n{actor}"
+    );
+
+    let calls = function(program, "tests.slice16.expression_calls");
+    assert!(calls.matches("call i64 %").count() >= 3, "{calls}");
+
+    let dir = golden_dir();
+    compare(&dir.join("slice16.program.ll"), program).unwrap_or_else(|e| panic!("{e}"));
+    compiles("slice16_program", program);
+}
+
 #[test]
 fn symbols_are_module_qualified() {
     let generated = lower("small");
@@ -261,6 +350,56 @@ fn modules_name_target_and_source() {
             .any(|l| l.starts_with("  %") && l.contains(", !dbg !"))
     );
     assert!(program.contains("!llvm.dbg.cu = !{!"));
+}
+
+/// Row 19 of `docs/slice.md` 20.0: rest patterns (20.5) lower to a length
+/// test `len >= k`, suffix elements read at `len - s + j`, and a rest
+/// binding that is a copy of the elements between, on a list and on
+/// `Bytes`.
+#[test]
+fn rest_patterns() {
+    let generated = lower("rest");
+    let program = &generated.program;
+
+    let shape = function(program, "tests.rest.shape");
+    assert!(shape.contains(", 2, !dbg"), "{shape}");
+    let at_least = shape
+        .find("icmp sge i64")
+        .expect("`[_, _, ..]` tests len >= 2");
+    assert!(
+        !shape[at_least..].contains("load ptr"),
+        "`[_, _, ..]` reads no element:\n{shape}"
+    );
+
+    let tail = function(program, "tests.rest.tail");
+    let test = tail
+        .find("icmp sge i64")
+        .expect("`[_, ..rest]` tests len >= 1");
+    let copy = tail
+        .find("call void @\"copy.List<Text>\"")
+        .expect("`rest` is a copy");
+    assert!(test < copy, "{tail}");
+
+    let ends = function(program, "tests.rest.ends");
+    assert!(ends.contains("icmp sge i64"), "{ends}");
+    assert!(
+        ends.contains(", 1, !dbg"),
+        "`z` is read at len - 1:\n{ends}"
+    );
+    assert!(
+        !ends.contains("copy."),
+        "`[a, .., z]` binds no rest:\n{ends}"
+    );
+
+    let bytes = function(program, "tests.rest.after_command");
+    assert!(
+        bytes.contains("call void @\"copy.List<Byte>\""),
+        "a rest on `Bytes` is a copy:\n{bytes}"
+    );
+
+    let dir = golden_dir();
+    compare(&dir.join("rest.program.ll"), program).unwrap_or_else(|e| panic!("{e}"));
+    compiles("rest_program", program);
 }
 
 /// The text of the function defined as `symbol` in `ir`, from its `define`
@@ -1297,4 +1436,113 @@ fn slices_that_are_only_read_are_not_copied() {
         copies("tests.views.unchanged") + 1
     );
     compiles("views_program", ir);
+}
+
+/// Row 36 of `docs/slice.md` 21.0: `capabilities.ignite` (the four
+/// capability resources and one call of each method) against the
+/// repository's `std.process`; the program module equals
+/// `capabilities.program.ll`, its main launches the resources in the order
+/// of 21.8 with the flags `--tool` and `--root`, every method calls its
+/// `ignite_rt_*` entry, and the modules compile with clang and link with
+/// `libignite_rt.a`.
+#[test]
+fn capabilities() {
+    let std_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../std/process.ignite");
+    let std_text = std::fs::read_to_string(&std_path).unwrap();
+    let std_source = SourceFile::new("std/process.ignite".to_string(), std_text);
+    let std_program = ignite_syntax::parse(&std_source).unwrap_or_else(|d| panic!("{d:?}"));
+    let mut modules = ignite_check::Modules::new();
+    let mut typed = ignite_types::TypedModules::new();
+    let std_symbols = ignite_check::check_module(&std_program, &modules)
+        .unwrap_or_else(|d| panic!("{}", std_source.render_all(&d)));
+    let std_types = ignite_types::type_module(&std_program, &std_symbols, &typed)
+        .unwrap_or_else(|d| panic!("{}", std_source.render_all(&d)));
+    modules.insert("std.process".to_string(), std_symbols.clone());
+    typed.insert("std.process".to_string(), std_types.exports());
+
+    let path = golden_dir().join("capabilities.ignite");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let source = SourceFile::new("tests/golden/capabilities.ignite".to_string(), text);
+    let program = ignite_syntax::parse(&source).unwrap_or_else(|d| panic!("{d:?}"));
+    let symbols = ignite_check::check_module(&program, &modules)
+        .unwrap_or_else(|d| panic!("{}", source.render_all(&d)));
+    let types = ignite_types::type_module(&program, &symbols, &typed)
+        .unwrap_or_else(|d| panic!("{}", source.render_all(&d)));
+    let std_input = ignite_llvm::ModuleInput {
+        path: "std.process",
+        program: &std_program,
+        symbols: &std_symbols,
+        types: &std_types,
+    };
+    let input = ignite_llvm::ModuleInput {
+        path: &types.module,
+        program: &program,
+        symbols: &symbols,
+        types: &types,
+    };
+    let options = ignite_llvm::Options {
+        sources: [
+            ("std.process".to_string(), &std_source),
+            (types.module.clone(), &source),
+        ]
+        .into(),
+        target: Some(target()),
+        ..Default::default()
+    };
+    let generated = ignite_llvm::generate_with(&[std_input], &input, &options);
+
+    let main_ir = &generated.mains[0].ir;
+    assert_eq!(generated.mains[0].executable, "bench");
+    let mut at = 0;
+    for entry in [
+        "call i32 @ignite_rt_setting_launch(",
+        "call i32 @ignite_rt_directory_launch(",
+        "call i64 @ignite_rt_launcher_new(i64 4)",
+        "call i32 @ignite_rt_entropy_open(",
+    ] {
+        let found = main_ir[at..]
+            .find(entry)
+            .unwrap_or_else(|| panic!("no `{entry}` after offset {at} in\n{main_ir}"));
+        at += found + entry.len();
+    }
+    for flag in ["c\"--tool\"", "c\"--root\""] {
+        assert!(main_ir.contains(flag), "no {flag} in\n{main_ir}");
+    }
+    let program_ir = &generated.program;
+    for entry in [
+        "@ignite_rt_directory_read_file(",
+        "@ignite_rt_directory_write_file(",
+        "@ignite_rt_directory_read_directory(",
+        "@ignite_rt_directory_create_directory(",
+        "@ignite_rt_directory_remove(",
+        "@ignite_rt_directory_remove_tree(",
+        "@ignite_rt_directory_absolute_path(",
+        "@ignite_rt_launcher_execute(",
+        "@ignite_rt_launcher_start(",
+        "@ignite_rt_child_id(",
+        "@ignite_rt_child_kill(",
+        "@ignite_rt_child_wait(",
+        "@ignite_rt_entropy_random_bytes(",
+        "@ignite_rt_setting_value(",
+    ] {
+        assert!(
+            program_ir.contains(&format!("call i32 {entry}"))
+                || program_ir.contains(&format!("call i64 {entry}"))
+                || program_ir.contains(&format!("call void {entry}")),
+            "no call of {entry} in\n{program_ir}"
+        );
+    }
+    compare(&golden_dir().join("capabilities.program.ll"), program_ir)
+        .unwrap_or_else(|e| panic!("{e}"));
+    compiles("capabilities_std", &generated.std);
+    compiles("capabilities_program", program_ir);
+    compiles("capabilities_main", main_ir);
+    links(
+        "capabilities",
+        &[
+            "capabilities_std",
+            "capabilities_program",
+            "capabilities_main",
+        ],
+    );
 }

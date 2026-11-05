@@ -64,6 +64,7 @@ fn eqprint(target: Target) -> &'static Path {
         let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
         let options = match target {
             Target::Rust => ignite::BuildOptions {
+                target: Target::Rust,
                 out: Some(tmp.join("eval-equivalence")),
                 ..Default::default()
             },
@@ -149,6 +150,9 @@ fn fixture_covers_every_family() {
         "debug_",
         "named_args",
         "match_",
+        "rest_",
+        "call_",
+        "move_",
     ] {
         assert!(
             names.iter().any(|name| name.starts_with(family)),

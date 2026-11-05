@@ -72,6 +72,7 @@
 
 mod builtins;
 mod exhaustive;
+mod moves;
 mod typer;
 
 mod address;
@@ -197,6 +198,78 @@ pub enum Ty {
     SystemRef,
     /// `Protocol`: the value of a protocol name (`endpoint(Echo)`).
     Protocol,
+    /// `Directory`, `Launcher`, `ChildProcess`, `Entropy` or `Setting`
+    /// (`docs/slice.md` 21.3): a handle like `TcpListener`, passed in values.
+    Capability(Capability),
+}
+
+/// The capability handle types of `docs/slice.md` 21.3 to 21.7.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Capability {
+    /// A root directory (21.4).
+    Directory,
+    /// The authority to start child processes (21.5).
+    Launcher,
+    /// A started child process (21.5); no resource kind.
+    ChildProcess,
+    /// Random bytes from the operating system (21.7).
+    Entropy,
+    /// One command-line argument of the executable (21.6).
+    Setting,
+}
+
+impl Capability {
+    /// Every capability, in the order of 21.8.
+    pub const ALL: [Capability; 5] = [
+        Capability::Directory,
+        Capability::Launcher,
+        Capability::ChildProcess,
+        Capability::Entropy,
+        Capability::Setting,
+    ];
+
+    /// The type name.
+    pub fn name(self) -> &'static str {
+        match self {
+            Capability::Directory => "Directory",
+            Capability::Launcher => "Launcher",
+            Capability::ChildProcess => "ChildProcess",
+            Capability::Entropy => "Entropy",
+            Capability::Setting => "Setting",
+        }
+    }
+
+    /// The capability named `name`.
+    pub fn from_name(name: &str) -> Option<Capability> {
+        Capability::ALL.into_iter().find(|c| c.name() == name)
+    }
+
+    /// Whether a system may declare it as a resource: all but
+    /// `ChildProcess`.
+    pub fn is_resource_kind(self) -> bool {
+        self != Capability::ChildProcess
+    }
+}
+
+/// The standard-library modules that builtin signatures name, by the type
+/// or owner name that reaches them: a name's statics (`Endpoint.of`:
+/// `std.net`), its methods when it is a capability (`ChildProcess.wait`:
+/// `std.process`, 21.5) and the methods of the capabilities those return
+/// (`Launcher.start`). A program that names the type loads the modules,
+/// though it imports nothing from them (`docs/slice.md` 16.22, 21.8). Only
+/// names with at least one module are keys.
+pub fn builtin_std_modules() -> BTreeMap<&'static str, std::collections::BTreeSet<String>> {
+    Capability::ALL
+        .into_iter()
+        .map(Capability::name)
+        .chain(
+            ignite_check::BUILTIN_STATICS
+                .iter()
+                .map(|(owner, _)| *owner),
+        )
+        .map(|name| (name, builtins::std_modules_of(name)))
+        .filter(|(_, modules)| !modules.is_empty())
+        .collect()
 }
 
 /// The three quantity types of `docs/slice.md` section 14.1.
@@ -461,6 +534,7 @@ impl fmt::Display for Ty {
             Ty::Signal(t) => write!(f, "Signal<{t}>"),
             Ty::SystemRef => write!(f, "SystemRef"),
             Ty::Protocol => write!(f, "Protocol"),
+            Ty::Capability(kind) => write!(f, "{}", kind.name()),
             Ty::EffectFn(params, ret, effects) => {
                 let params = params
                     .iter()
@@ -616,6 +690,43 @@ pub enum Builtin {
     StreamClose,
     /// `s.set_idle_timeout(ms)` on a `ByteStream`-bounded receiver.
     StreamSetIdleTimeout,
+    /// `Directory.temporary() -> Result<Directory, IoError>`: test-only
+    /// (`docs/slice.md` 21.8).
+    DirectoryTemporary,
+    /// `d.read_file(path) -> Result<Bytes, IoError>`; effect `<root>.read`.
+    DirectoryReadFile,
+    /// `d.write_file(path, data) -> Result<Unit, IoError>`; `<root>.write`.
+    DirectoryWriteFile,
+    /// `d.read_directory(path) -> Result<List<Text>, IoError>`; `<root>.read`.
+    DirectoryReadDirectory,
+    /// `d.create_directory(path) -> Result<Unit, IoError>`; `<root>.write`.
+    DirectoryCreateDirectory,
+    /// `d.remove(path) -> Result<Unit, IoError>`; `<root>.write`.
+    DirectoryRemove,
+    /// `d.remove_tree(path) -> Result<Unit, IoError>`; `<root>.write`.
+    DirectoryRemoveTree,
+    /// `d.absolute_path() -> Result<Text, IoError>`; `<root>.read`.
+    DirectoryAbsolutePath,
+    /// `Launcher.new() -> Launcher`: test-only, `maximum_children` 16.
+    LauncherNew,
+    /// `l.start(invocation) -> Result<ChildProcess, IoError>`; `<root>.launch`.
+    LauncherStart,
+    /// `l.execute(invocation) -> Result<ChildExit, IoError>`; `<root>.launch`.
+    LauncherExecute,
+    /// `c.id() -> Int`: pure.
+    ChildProcessId,
+    /// `c.wait() -> Result<ChildExit, IoError>`; `<root>.wait`.
+    ChildProcessWait,
+    /// `c.kill() -> Result<Unit, IoError>`; `<root>.kill`.
+    ChildProcessKill,
+    /// `Entropy.new() -> Entropy`: test-only.
+    EntropyNew,
+    /// `e.random_bytes(count) -> Result<Bytes, IoError>`; `<root>.draw`.
+    EntropyRandomBytes,
+    /// `Setting.of(flag, value) -> Setting`: test-only.
+    SettingOf,
+    /// `s.value() -> Text`; `<root>.argument`.
+    SettingValue,
 }
 
 /// What a `Call` or `Method` expression calls.
@@ -677,12 +788,16 @@ pub struct ModuleTypes {
     /// roles (key: `Protocol.role`): parameter to interface
     /// (`docs/slice.md` 18.13). Absent for a fn without bounds.
     pub bounds: BTreeMap<String, BTreeMap<String, String>>,
+    /// Consumed parameters per fn, associated fn (`Owner.name`) and role
+    /// (`Protocol.role`), one entry per parameter (`docs/slice.md` 20.3.3).
+    pub consumed: BTreeMap<String, Vec<bool>>,
 }
 
 impl ModuleTypes {
     /// Owned metadata for the public queries on `TypedProgram`, after typing.
     /// Keep every record/enum shape, default, generic parameter list and
-    /// bound ([`TypedProgram::bound`]).
+    /// bound ([`TypedProgram::bound`]), and the consumed parameters
+    /// ([`TypedProgram::consumed`]).
     /// Function/constant signatures, protocols, aliases, constant values and
     /// parameter names are needed while typing, but no retained query reads
     /// them. A new query that needs one must extend this snapshot and the
@@ -694,6 +809,7 @@ impl ModuleTypes {
             defaults: self.defaults.clone(),
             generics: self.generics.clone(),
             bounds: self.bounds.clone(),
+            consumed: self.consumed.clone(),
             ..ModuleTypes::default()
         }
     }
@@ -971,6 +1087,12 @@ impl FailureSite {
 pub const TCP_LISTENER_DEFAULT_EXPOSURE: &str = "Loopback";
 pub const TCP_LISTENER_DEFAULT_BACKLOG: i64 = 128;
 
+/// The default `maximum_children` of the resource kind `Launcher`
+/// (`docs/slice.md` 21.5), `Launcher.maximum_children` in the builtin
+/// module `""`; `Directory.create` defaults to `false` and
+/// `Directory.flag` to `""` (21.4).
+pub const LAUNCHER_DEFAULT_MAXIMUM_CHILDREN: i64 = 16;
+
 /// Where a property of a member or assembly declaration takes its value
 /// (`docs/slice.md` section 15.9).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1246,6 +1368,9 @@ pub struct TypedProgram {
     /// Effect sets of property expressions, constant values and field
     /// defaults and their sub-expressions, keyed by expression address.
     effects: AddressMap<EffectSet>,
+    /// Places in move positions that take their value, by expression
+    /// address (`docs/slice.md` 20.3).
+    moves: AddressMap<()>,
 }
 
 fn key(expr: &Expr) -> usize {
@@ -1513,6 +1638,32 @@ impl TypedProgram {
         self.effects.get(&key(expr))
     }
 
+    /// Whether `expr`, a place in a move position, takes its value without a copy
+    /// (`docs/slice.md` 20.3). False for every other expression.
+    pub fn moves(&self, expr: &Expr) -> bool {
+        self.moves.contains_key(&key(expr))
+    }
+
+    /// Whether the callee consumes its parameter `index` (UFCS receiver = 0). Defined for a
+    /// declared fn, associated fn or role of this module or a module it was typed against;
+    /// false for every other callee (a variant, a builtin, `Callee::Local`,
+    /// `Callee::FieldFn`, `Callee::Const`).
+    pub fn consumed(&self, callee: &Callee, index: usize) -> bool {
+        let (module, name) = match callee {
+            Callee::Fn(q) => (&q.module, q.name.clone()),
+            Callee::Role { protocol, role } => {
+                (&protocol.module, format!("{}.{role}", protocol.name))
+            }
+            _ => return false,
+        };
+        self.modules
+            .get(module)
+            .and_then(|m| m.consumed.get(&name))
+            .and_then(|params| params.get(index))
+            .copied()
+            .unwrap_or(false)
+    }
+
     /// Index and payload types of variant `name` of a value of type `ty`
     /// (an enum, `Option`, `Result` or `Input`), as a pattern on it resolves.
     pub fn variant(&self, ty: &Ty, name: &str) -> Option<(usize, Vec<Ty>)> {
@@ -1569,6 +1720,7 @@ pub fn equality(ty: &Ty, modules: &TypedModules) -> Option<Equality> {
             Ty::Fn(..)
             | Ty::EffectFn(..)
             | Ty::TcpListener
+            | Ty::Capability(_)
             | Ty::TcpStream
             | Ty::PipeStream
             | Ty::IoError
@@ -1746,7 +1898,7 @@ pub fn type_module(
         .map(|(path, types)| (path.clone(), types.query_snapshot()))
         .collect();
     all.insert(typed.module.clone(), typed.exports.query_snapshot());
-    Ok(TypedProgram {
+    let mut program_types = TypedProgram {
         module: typed.module,
         types: typed.types,
         callees: typed.callees,
@@ -1773,5 +1925,13 @@ pub fn type_module(
         systems: typed.system.systems,
         assemblies: typed.system.assemblies,
         effects: typed.system.effects,
-    })
+        moves: AddressMap::default(),
+    };
+    let found = moves::analyse(program, &program_types, modules);
+    program_types.moves = found.moves;
+    if let Some(own) = program_types.modules.get_mut(&program_types.module) {
+        own.consumed = found.consumed.clone();
+    }
+    program_types.exports.consumed = found.consumed;
+    Ok(program_types)
 }

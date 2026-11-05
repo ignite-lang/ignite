@@ -86,8 +86,8 @@ test "slice takes byte offsets" {
   compiler checks, not comments next to a YAML file.
 - **Protocols are code.** Telnet and HTTP are written in Ignite, in [`std/`](std/). Nothing
   application-specific is hidden in the runtime.
-- **Two native targets.** Rust (the default, built with cargo) and LLVM (`--target llvm`,
-  built and linked with clang). Both behave the same, down to the text of an error.
+- **Two native targets.** LLVM (the default, built and linked with clang) and Rust
+  (`--target rust`, built with cargo). Both behave the same, down to the text of an error.
 - **A failure ends its task, not your server.** A failed `assert`, an integer overflow or an
   out-of-range index stops the one session that hit it and reports the file, line and column:
 
@@ -101,7 +101,7 @@ test "slice takes byte offsets" {
 You need Rust (stable), [go-task](https://taskfile.dev) and, for the LLVM target, clang.
 
 ```bash
-task compile      # build terminald and tn from examples/terminal/terminal.ignite
+task compile      # build terminald and tn from examples/terminal/terminal.ignite (Rust target)
 task server       # start terminald on 127.0.0.1:2323
 task client       # connect with tn, in a second terminal
 ```

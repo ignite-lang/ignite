@@ -49,12 +49,14 @@ pub(crate) fn register(slot: &Arc<Slot>) {
     listeners.push(Arc::downgrade(slot));
 }
 
-/// Block SIGTERM in the calling thread (and so in every thread it starts
+/// Reset SIGCHLD to its default action (`crate::child::default_sigchld`),
+/// block SIGTERM in the calling thread (and so in every thread it starts
 /// from now on) and start the signal thread, once per process. A later
 /// call does nothing. Called by [`crate::run`] and by the LLVM runtime's
 /// `init`, before any task thread exists.
 pub fn install() {
     INSTALL.call_once(|| {
+        crate::child::default_sigchld();
         let mut set = SigSet::empty();
         set.add(Signal::SIGTERM);
         if pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&set), None).is_err() {
@@ -68,6 +70,7 @@ pub fn install() {
                 }
                 begin();
                 let _ = set.wait();
+                crate::run_exit_hooks();
                 crate::flush();
                 crate::terminal::restore();
                 let _ = pthread_sigmask(SigmaskHow::SIG_UNBLOCK, Some(&set), None);

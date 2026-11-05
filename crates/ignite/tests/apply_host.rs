@@ -144,6 +144,8 @@ impl Case {
                 self.state_arg(),
                 "--out",
                 out.to_str().unwrap(),
+                "--target",
+                "rust",
             ],
             0,
         );

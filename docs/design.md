@@ -348,7 +348,7 @@ Missing telemetry produces insufficient evidence and blocks automatic promotion.
 
 **Native application assembly:** Link compatible implementation modules into that executable or emit separate native workers and CLI binaries. This requires a module ABI and host capability contract. It follows controller compilation.
 
-Both native targets exist for the implemented subset: generated Rust built by cargo (`--target rust`, the default; contract `docs/slice.md`) and LLVM IR text compiled and linked by clang against the runtime archive `libignite_rt.a` (`--target llvm`; contract `docs/llvm.md`). Both call the same IO substrate. Which target becomes primary is decision D2 of `vision.md`. The roadmap below follows the LLVM path so its runtime and bootstrap requirements are concrete; neither target compiles Controller IR yet.
+Both native targets exist for the implemented subset: LLVM IR text compiled and linked by clang against the runtime archive `libignite_rt.a` (`--target llvm`, the default since 2026-11-05; contract `docs/llvm.md`) and generated Rust built by cargo (`--target rust`; contract `docs/slice.md`). Both call the same IO substrate. LLVM is primary by decision D2 B of `vision.md`. The roadmap below follows the LLVM path so its runtime and bootstrap requirements are concrete; neither target compiles Controller IR yet.
 
 The LLVM path lowers Ignite implementation code and Controller IR into a lower-level Ignite Code IR, then LLVM IR, then target object files. The release links those objects with the Ignite runtime and selected protocol libraries. LLVM IR is a backend format; it must not replace System IR or Controller IR as the public executable specification. Self-hosting does not require implementing LLVM, a linker, or an operating system.
 
@@ -476,7 +476,7 @@ Control-plane effects such as creating a durable consumer enter the controller j
 
 First compile pure functions and controller reducers through LLVM. Then add a small runtime shim with handles, buffers, timers, file and process operations, and TCP from the substrate (§8.6). Run the terminal slice on that foundation. Next add HTTP client bindings, a bounded HTTP server implementation, and NATS/JetStream bindings. Freeze each interface only after cancellation, backpressure, recovery, and target-platform tests pass.
 
-Retain the interpreter and System/Controller IR throughout this work. The LLVM target runs beside the Rust target, which stays and stays the default (`docs/llvm.md`); neither replaces the executable specification, provider model, or operational control loop. The terminal slice already runs on both targets over the blocking substrate `ignite-io`.
+Retain the interpreter and System/Controller IR throughout this work. The LLVM target runs beside the Rust target; since 2026-11-05 LLVM is the default and the Rust target stays as the differential check (`docs/llvm.md`); neither replaces the executable specification, provider model, or operational control loop. The terminal slice already runs on both targets over the blocking substrate `ignite-io`.
 
 ### 8.11 What Rust means by no runtime
 

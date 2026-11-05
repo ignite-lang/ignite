@@ -2,3 +2,7 @@ fn f() -> Int {
   let a = 1
   return a + b
 }
+
+fn g() -> Int {
+  return nope(1)(2)
+}

@@ -1,0 +1,99 @@
+package studio_defaults
+
+import std.control.{Machine, Supervisor}
+import std.deploy.Member
+import std.policy.Restart
+import std.protocol.http.*
+
+// Row 26 of `docs/slice.md` 21.0: the studio of row 22 with a `default` on
+// its setting runs under `ignite run`, which passes no setting values
+// (21.6): `--tool` takes `/bin/sh`, and the relative root `workspace` is
+// created in the run's working directory. `Workbench` is `HttpServer` with
+// a supervisor, so that the run has a machine to step. `std.deploy.Binding`
+// admits none of the four capabilities, so the assembly uses a placement
+// of its own (15.6): a native process, a local socket, and the resources
+// the process creates in its own process.
+//   GET /tool   200 with the setting's value
+//   GET /root   200 with the root as resolved at launch
+
+type Bench {
+  files: Directory
+  tools: Launcher
+  entropy: Entropy
+  tool: Setting
+}
+
+fn handle(state: Bench, request: Request) -> Response = match (request.method, request.segments()) {
+  ("GET", ["tool"]) => Response.plain(200, state.tool.value())
+  ("GET", ["root"]) => match state.files.absolute_path() {
+    Ok(root) => Response.plain(200, root)
+    Err(error) => Response.plain(500, error.message)
+  }
+  _ => status_response(404)
+}
+
+type Workbench {
+  listener: TcpListener
+  application: HttpApp<Bench>
+  executable: Text
+}
+
+fn Workbench.main(self: Workbench) -> Result<Unit, IoError> {
+  loop {
+    let stream = self.listener.accept()?
+    spawn Http.serve(stream, HttpLimits {}, self.application)
+  }
+}
+
+fn Workbench.machine(self: Workbench, id: Text) -> Machine = Machine.Supervise(Supervisor {
+  id = "{id}.supervisor"
+  member = id
+  restart = Restart {}
+})
+
+system Studio {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 8095 }
+  resource files: Directory { path = "workspace", create = true, flag = "--root" }
+  resource tools: Launcher
+  resource entropy: Entropy
+  resource tool: Setting { flag = "--tool", default = "/bin/sh" }
+
+  component server: Workbench {
+    listener = ingress
+    application = HttpApp { state = Bench { files = files, tools = tools, entropy = entropy, tool = tool }, handle }
+    executable = "studiod"
+  }
+}
+
+enum Place {
+  NativeProcess,
+  LocalSocket,
+  InProcess
+}
+
+fn admits(binding: Place, member: Member) -> Option<Text> = None
+
+fn includes(binding: Place) -> List<Ref> = []
+
+fn entries(binding: Place) -> List<Text> = match binding {
+  NativeProcess => ["main", "machine"]
+  LocalSocket | InProcess => []
+}
+
+type Placement {
+  system: SystemRef
+  bindings: Map<Ref, Place>
+}
+
+assembly local: Placement {
+  system = Studio
+  bindings = {
+    Studio.ingress = LocalSocket
+    Studio.files = InProcess
+    Studio.tools = InProcess
+    Studio.entropy = InProcess
+    Studio.tool = InProcess
+    Studio.server = NativeProcess
+  }
+}
+

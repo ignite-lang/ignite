@@ -1,0 +1,34 @@
+package fixture_e110_capability
+
+import std.deploy.{Deployment, localSocket, nativeProcess}
+
+type Bench {
+  entropy: Entropy
+}
+
+type Worker {
+  listener: TcpListener
+  bench: Bench
+  executable: Text
+}
+
+fn Worker.main(self: Worker) -> Result<Unit, IoError> {
+  let stream = self.listener.accept()?
+  stream.close()?
+  Ok(Unit)
+}
+
+system S {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  resource entropy: Entropy
+  resource spare: Entropy
+  component w: Worker { listener = ingress, bench = Bench { entropy = entropy } }
+}
+
+assembly a: Deployment {
+  system = S
+  bindings = {
+    S.ingress = localSocket()
+    S.w = nativeProcess(includes = [])
+  }
+}

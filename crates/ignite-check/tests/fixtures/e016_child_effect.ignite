@@ -1,0 +1,3 @@
+fn stop(child: ChildProcess) -> Result<Unit, IoError> requires [] {
+  return child.kill()
+}

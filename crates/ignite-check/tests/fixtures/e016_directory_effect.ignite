@@ -1,0 +1,3 @@
+fn save(files: Directory) -> Result<Unit, IoError> requires [files.read] {
+  return files.write_file("a.txt", "x".to_bytes())
+}

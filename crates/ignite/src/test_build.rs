@@ -476,10 +476,7 @@ fn build_group(
                 siblings: Vec::new(),
             };
             let generated = ignite_llvm::generate_tests(&std_inputs, &inputs, &options);
-            let runtime = build
-                .runtime
-                .clone()
-                .unwrap_or_else(crate::default_runtime_path);
+            let runtime = crate::runtime_or_default(build.runtime.as_ref())?;
             check_runner(&runtime)?;
             let build = BuildOptions {
                 out: Some(out),
@@ -533,6 +530,9 @@ fn contains_runner(input: &mut impl Read) -> std::io::Result<bool> {
 /// `libignite_rt.a` leaves it out so that programs link as they did before
 /// tests existed (`docs/llvm.md` section 5).
 fn check_runner(runtime: &Path) -> Result<(), Error> {
+    if !runtime.is_file() {
+        return Err(crate::llvm_build::missing_runtime(runtime.to_path_buf()));
+    }
     let mut archive = std::fs::File::open(runtime).map_err(io_error(runtime))?;
     if contains_runner(&mut archive).map_err(io_error(runtime))? {
         return Ok(());

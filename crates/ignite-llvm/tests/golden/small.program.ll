@@ -264,7 +264,7 @@ entry:
   %t20 = alloca [24 x i8], align 8
   %t1 = call ptr @ignite.alloc(i64 24, i64 8), !dbg !18
   %t2 = getelementptr inbounds i8, ptr %p0, i64 8, !dbg !19
-  call void @"copy.Text"(ptr %t1, ptr %t2), !dbg !18
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t2, i64 24, i1 false), !dbg !18
   store ptr %t1, ptr %t3, align 8, !dbg !18
   %t4 = getelementptr inbounds i8, ptr %t3, i64 8, !dbg !18
   store i64 1, ptr %t4, align 8, !dbg !18
@@ -410,7 +410,7 @@ L40:
   call void @ignite.arena_release(i64 %t37), !dbg !41
   br label %L38, !dbg !41
 L41:
-  call void @"copy.Text"(ptr %sret, ptr %t6), !dbg !46
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t6, i64 24, i1 false), !dbg !46
   ret void, !dbg !46
 }
 

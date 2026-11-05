@@ -10,7 +10,7 @@ holds the same table; change both together.
 
 | layer | modules | may import |
 |---|---|---|
-| base | `std.io`, `std.net` (substrate), `std.option`, `std.result`, `std.text`, `std.json` | base |
+| base | `std.io`, `std.net`, `std.fs`, `std.process` (substrate), `std.option`, `std.result`, `std.text`, `std.json` | base |
 | leaf | `std.sli`, `std.time`, `std.policy` (O45), `std.rfc` and every `std.rfc.*` | base, leaf |
 | general | `std.control`, `std.contract`, `std.deploy`, `std.console`, `std.cli` | base, leaf, general |
 | protocol | every `std.protocol.*` | every layer |

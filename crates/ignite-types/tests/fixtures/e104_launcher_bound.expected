@@ -1,0 +1,1 @@
+e104_launcher_bound.ignite:2:49: error[E104]: `maximum_children` of `Launcher` must be in 1..=1024, got 0
