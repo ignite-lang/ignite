@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-04T23:54:39Z",
+  "actor": "human:timo",
+  "artifact": "story:check-json-diagnostics",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on feat/check-json 556b19e: exit 0, 688 s, 1401 passed, 0 failed, 10 ignored"
+  }
+}
