@@ -955,11 +955,62 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
     assert_eq!(outputs[0], outputs[1]);
 }
 
+/// The JsonRpc claim of 19.19: one block labelled by the text id, every
+/// MUST-class row in scope held or stated, the batch rows unsupported, the
+/// three rows std.json's integer numbers break stated as gaps naming
+/// story:json-decimals, so the claim is no and exits 1; the same matrix on
+/// both targets.
+#[test]
+fn json_rpc_matrix_is_labelled_by_its_id_and_states_its_gaps() {
+    let mut outputs = Vec::new();
+    for target in ["rust", "llvm"] {
+        let output = std_conformance("jsonrpc", target);
+        let stdout = text(&output.stdout);
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{target}: {stdout}{}",
+            text(&output.stderr)
+        );
+        assert!(
+            stdout.starts_with(
+                "jsonrpc-2.0 JSON-RPC 2.0 Specification, protocol JsonRpc, parties Server Any, sections all\n"
+            ),
+            "{target}: {stdout}"
+        );
+        let block = block(&stdout, "jsonrpc-2.0");
+        assert_eq!(
+            block.trim_end().lines().last().unwrap_or_default(),
+            "claim conformance of JsonRpc to jsonrpc-2.0: no (3 gaps, 0 failures, 0 inconclusive)",
+            "{target}"
+        );
+        for id in ["R6_2", "R6_3", "R6_4", "R6_5"] {
+            let row = columns(block, id);
+            assert_eq!(row[1], "6", "{target}: {row:?}");
+            assert_eq!(row[3], "unsupported", "{target}: {row:?}");
+        }
+        for id in ["R4_6", "R4_1_1", "R5_9"] {
+            let row = columns(block, id);
+            assert_eq!(row[3], "unsupported", "{target}: {row:?}");
+            assert!(row[4].contains("story:json-decimals"), "{target}: {row:?}");
+            assert_eq!(row[5], "gap", "{target}: {row:?}");
+        }
+        for id in ["R5_1", "R5_10", "R6_7"] {
+            let row = columns(block, id);
+            assert_eq!(row[3], "satisfied", "{target}: {row:?}");
+            assert_eq!(row[5], "pass", "{target}: {row:?}");
+        }
+        assert_eq!(columns(block, "R4_1")[5], "out of scope", "{target}");
+        outputs.push(stdout);
+    }
+    assert_eq!(outputs[0], outputs[1]);
+}
+
 /// Row 4 of 19.0: both std protocol modules carry a status for every
 /// MUST-class requirement in scope.
 #[test]
 fn std_protocol_modules_check_silently() {
-    for name in ["telnet", "http"] {
+    for name in ["telnet", "http", "jsonrpc"] {
         let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
             .arg("check")
             .arg(repository().join(format!("std/protocol/{name}.ignite")))

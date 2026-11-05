@@ -1,0 +1,21 @@
+package tests.e091
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+// A requirement with an RFC number in a spec that is no RFC (docs/slice.md 19.19).
+const LINE_ECHO_1: Spec = Spec {
+  id = "line-echo-1"
+  title = "A line echo that is no RFC"
+  url = "https://example.invalid/line-echo-1"
+  digest = "sha256:0001"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 5
+  section = "2"
+  ordinal = 1
+  level = Must
+  source = Prose
+  text = "A server MUST echo every line."
+}

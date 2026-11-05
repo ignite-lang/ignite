@@ -5,6 +5,7 @@ import std.io.IoError
 import std.text.{bytes_find_from, is_digit, split, split_once, to_lower, trim_start, trim_end}
 import std.option.unwrap_or
 import std.json.{Json, encode, parse, get}
+import std.rfc.jsonrpc_2.{JSONRPC_2}
 
 // JSON-RPC 2.0 over a byte stream with the base protocol's framing (the
 // Language Server Protocol's): each message is a header of `Name: value`
@@ -154,7 +155,7 @@ type Notification {
   params: Option<Json> = None
 }
 
-type ErrorObject {
+type ErrorObject satisfies [JSONRPC_2.R5_1_2] {
   code: Int
   message: Text
   data: Option<Json> = None
@@ -194,7 +195,7 @@ fn id_json(id: Option<Id>) -> Json = match id {
   None => Null
 }
 
-fn error_json(error: ErrorObject) -> Json {
+fn error_json(error: ErrorObject) -> Json satisfies [JSONRPC_2.R5_7, JSONRPC_2.R5_1_1, JSONRPC_2.R5_1_4] {
   var members = [("code", Number(error.code)), ("message", Str(error.message))]
   match error.data {
     Some(data) => members.push(("data", data))
@@ -204,7 +205,9 @@ fn error_json(error: ErrorObject) -> Json {
 }
 
 // The members of `message` after `"jsonrpc":"2.0"`.
-fn message_json(message: Message) -> Json {
+fn message_json(message: Message) -> Json satisfies [
+  JSONRPC_2.R5_2, JSONRPC_2.R5_3, JSONRPC_2.R5_4, JSONRPC_2.R5_5, JSONRPC_2.R5_6, JSONRPC_2.R5_8, JSONRPC_2.R5_11
+] {
   var members = [("jsonrpc", Str("2.0"))]
   match message {
     Call(request) => {
@@ -372,13 +375,35 @@ type JsonRpcApp<S> {
   notify: fn(state: S, notification: Notification) -> Unit requires [state.*]
 }
 
-// No `conforms` yet: the catalogue of JSON-RPC 2.0 and the LSP base
-// protocol waits for `std.rfc` to name a non-RFC specification.
-protocol JsonRpc {
+// Claims (`docs/slice.md` 19.19): JSON-RPC 2.0 sections 4 to 6, for the
+// parties a server is; the Client's requirements are out of scope. The
+// `satisfies` clauses are on `session` and the message encoders, the
+// `verifies` clauses on the tests. Batches are not supported: a batch that
+// holds a request is answered with one invalid-request error; a batch of
+// notifications only is delivered to the application and not answered.
+// `std.json` reads integer numbers only, so a valid message holding a
+// fraction, an exponent or an integer beyond 64 bits is answered with the
+// parse error under a null id: R4_1_1, R4_6 and R5_9 are unsupported until
+// story:json-decimals.
+protocol JsonRpc conforms [JSONRPC_2] scope { parties = [Server, Any] } {
+  unsupported JSONRPC_2.R4_6 "an id that is a fraction or an integer beyond 64 bits is not read: std.json parses integer numbers only, so the request is answered with the parse error under a null id (story:json-decimals)"
+  unsupported JSONRPC_2.R4_1_1 "a notification whose params hold a fraction or an exponent is answered with the parse error: std.json parses integer numbers only (story:json-decimals)"
+  unsupported JSONRPC_2.R5_9 "a request whose id or params hold a fraction, an exponent or an integer beyond 64 bits is answered with the parse error under a null id, not its own: std.json parses integer numbers only (story:json-decimals)"
+  not_applicable JSONRPC_2.R4_2 "addresses whoever names methods: every method name reaches the application's handlers, and JsonRpc defines none of its own"
+  not_applicable JSONRPC_2.R4_2_4 "addresses the application's handler, which reads the params of its methods"
+  not_applicable JSONRPC_2.R5_1_3 "addresses the error's author: the standard errors carry the specification's messages, the application's errors its own"
+  unsupported JSONRPC_2.R6_2 "batches are not supported: a batch that holds a request is answered with one invalid-request error"
+  unsupported JSONRPC_2.R6_3 "batches are not supported: a batch that holds a request is answered with one invalid-request error"
+  unsupported JSONRPC_2.R6_4 "batches are not supported: a batch that holds a request is answered with one invalid-request error"
+  unsupported JSONRPC_2.R6_5 "batches are not supported: a batch that holds a request is answered with one invalid-request error"
+  not_applicable JSONRPC_2.R6_8 "no batch is processed, so no response array is ever sent: a batch that holds a request is answered with one invalid-request error, one of notifications only with nothing"
+
   // Server role: read messages until the stream ends or a framing error,
   // pass each request and notification to the application and write each
   // request's response; a body that is not UTF-8 JSON or not a message is
-  // answered with its error and a null id. A response from the peer is
+  // answered with its error under the id it holds, or a null id when none
+  // can be read. A batch of notifications only is passed to the
+  // application in order and not answered. A response from the peer is
   // dropped: the server sends no requests of its own.
   fn serve<T: ByteStream, S>(stream: T, limits: JsonRpcLimits, application: JsonRpcApp<S>) -> IoResult<Unit> requires [
     stream.read, stream.write, application.*
@@ -389,7 +414,50 @@ protocol JsonRpc {
   }
 }
 
-fn session<T: ByteStream, S>(stream: T, limits: JsonRpcLimits, application: JsonRpcApp<S>) -> IoResult<Unit> {
+// The id of a body that is no message, when the body is a JSON object
+// whose `id` is a number or a string; none otherwise, and the error's id
+// is null (JSON-RPC 2.0 section 5).
+fn detected_id(body: Bytes) -> Option<Id> {
+  if !is_utf8(body) {
+    return None
+  }
+  match parse(body.to_text()) {
+    Ok(value) => match value.get("id") {
+      Some(id) => id_of(id)
+      None => None
+    }
+    Err(_) => None
+  }
+}
+
+// The notifications of a body that is a non-empty JSON array of
+// notifications only, which no response answers (JSON-RPC 2.0 section
+// 4.1, "including those that are within a batch request"); none for any
+// other body.
+fn notification_batch(body: Bytes) -> Option<List<Notification>> {
+  if !is_utf8(body) {
+    return None
+  }
+  let items = match parse(body.to_text()) {
+    Ok(Array(items)) => items
+    _ => return None
+  }
+  if items.len() == 0 {
+    return None
+  }
+  var notifications = []
+  for item in items {
+    match decode(encode(item)) {
+      Ok(Notify(notification)) => notifications.push(notification)
+      _ => return None
+    }
+  }
+  Some(notifications)
+}
+
+fn session<T: ByteStream, S>(stream: T, limits: JsonRpcLimits, application: JsonRpcApp<S>) -> IoResult<Unit> satisfies [
+  JSONRPC_2.R5_1, JSONRPC_2.R5_10, JSONRPC_2.R6_7
+] {
   var buffer = Bytes.empty()
   loop {
     match read_message(stream, limits, buffer)? {
@@ -401,7 +469,14 @@ fn session<T: ByteStream, S>(stream: T, limits: JsonRpcLimits, application: Json
           }
           Ok(Notify(notification)) => application.notify(application.state, notification)
           Ok(Reply(_)) => {}
-          Err(error) => write_message(stream, encode_message(Reply(Response { id = None, outcome = Err(error) })))?
+          Err(error) => match notification_batch(body) {
+            Some(notifications) => {
+              for notification in notifications {
+                application.notify(application.state, notification)
+              }
+            }
+            None => write_message(stream, encode_message(Reply(Response { id = detected_id(body), outcome = Err(error) })))?
+          }
         }
         buffer = rest
       }
@@ -536,7 +611,10 @@ test "requests, notifications and responses round-trip" {
   }
 }
 
-test "messages encode with jsonrpc 2.0 in member order" {
+test "messages encode with jsonrpc 2.0 in member order" verifies [
+  JSONRPC_2.R5_2, JSONRPC_2.R5_3, JSONRPC_2.R5_4, JSONRPC_2.R5_5, JSONRPC_2.R5_6, JSONRPC_2.R5_8, JSONRPC_2.R5_11,
+  JSONRPC_2.R5_7, JSONRPC_2.R5_1_1, JSONRPC_2.R5_1_4
+] {
   assert encode_message(Call(Request { id = NumberId(1), method = "m", params = Some(Array([])) })) == r#"{"jsonrpc":"2.0","id":1,"method":"m","params":[]}"#
   assert encode_message(Notify(Notification { method = "n" })) == r#"{"jsonrpc":"2.0","method":"n"}"#
   assert encode_message(Reply(Response { id = Some(TextId("x")), outcome = Ok(Bool(true)) })) == r#"{"jsonrpc":"2.0","id":"x","result":true}"#
@@ -544,7 +622,7 @@ test "messages encode with jsonrpc 2.0 in member order" {
   assert encode_message(failed) == r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request"}}"#
 }
 
-test "the standard error codes" {
+test "the standard error codes" verifies [JSONRPC_2.R5_1_2] {
   assert [PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR] == [-32700, -32600, -32601, -32602, -32603]
   assert standard_error(PARSE_ERROR).message == "Parse error"
   assert standard_error(METHOD_NOT_FOUND).message == "Method not found"
@@ -616,7 +694,9 @@ test fn replies_of(client: PipeStream) -> IoResult<List<Text>> {
   }
 }
 
-test "serve answers each request, an undecodable one with its error, until the stream ends" {
+test "serve answers each request, an undecodable one with its error, until the stream ends" verifies [
+  JSONRPC_2.R4_6, JSONRPC_2.R5_1, JSONRPC_2.R5_9, JSONRPC_2.R5_10
+] {
   let (client, server) = connected()?
   spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
   write_message(client, r#"{"jsonrpc":"2.0","id":1,"method":"echo","params":["hi"]}"#)?
@@ -665,7 +745,7 @@ test "a body that is not UTF-8 is answered with the parse error" {
 // "The Server MUST NOT reply to a Notification" (JSON-RPC 2.0 §4.1): the
 // notification handler has no response to return, and a response from
 // the peer is not answered either; only the request is.
-test "serve does not write a response to a notification" {
+test "serve does not write a response to a notification" verifies [JSONRPC_2.R4_1_1] {
   let (client, server) = connected()?
   spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
   write_message(client, r#"{"jsonrpc":"2.0","method":"note"}"#)?
@@ -673,4 +753,59 @@ test "serve does not write a response to a notification" {
   write_message(client, r#"{"jsonrpc":"2.0","id":0,"method":"echo"}"#)?
   _ = client.close()
   assert replies_of(client)? == [r#"{"jsonrpc":"2.0","id":0,"result":null}"#]
+}
+
+// "It MUST be the same as the value of the id member in the Request
+// Object" and "If there was an error in detecting the id ..., it MUST be
+// Null" (JSON-RPC 2.0 §5): an invalid request whose id can be read is
+// answered under that id; one whose id cannot be read, under null.
+test "an invalid request is answered under the id it holds, null when none can be read" verifies [
+  JSONRPC_2.R5_9, JSONRPC_2.R5_10
+] {
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
+  write_message(client, r#"{"jsonrpc":"2.0","id":5,"method":"m","params":3}"#)?
+  write_message(client, r#"{"jsonrpc":"1.0","id":"q","method":"m"}"#)?
+  write_message(client, r#"{"jsonrpc":"2.0","id":true,"method":"m"}"#)?
+  write_message(client, r#"{"jsonrpc":"2.0","method":1}"#)?
+  _ = client.close()
+  assert replies_of(client)? == [
+    r#"{"jsonrpc":"2.0","id":5,"error":{"code":-32600,"message":"Invalid Request"}}"#,
+    r#"{"jsonrpc":"2.0","id":"q","error":{"code":-32600,"message":"Invalid Request"}}"#,
+    r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request"}}"#,
+    r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request"}}"#
+  ]
+}
+
+// "If the batch rpc call itself fails to be recognized as an valid JSON or
+// as an Array with at least one value, the response from the Server MUST
+// be a single Response object" (JSON-RPC 2.0 §6). A batch that holds a
+// request is unsupported and also gets one error object, never an array;
+// one of notifications only gets nothing (the next test).
+test "an empty or unparsable batch is answered with one error object" verifies [JSONRPC_2.R6_7] {
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
+  write_message(client, r#"[{"jsonrpc":"2.0","method":"sum","params":[1,2],"id":"1"},{"jsonrpc":"2.0","method""#)?
+  write_message(client, "[]")?
+  write_message(client, r#"[{"jsonrpc":"2.0","method":"note"},{"jsonrpc":"2.0","id":2,"method":"echo"}]"#)?
+  _ = client.close()
+  assert replies_of(client)? == [
+    r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}"#,
+    r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request"}}"#,
+    r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request"}}"#
+  ]
+}
+
+// ---- adversary cases of the JSONRPC_2 claim (story rfc-spec-id) -------------
+
+// "The Server MUST NOT reply to a Notification, including those that are
+// within a batch request" (R4_1_1, its own text): a batch of notifications
+// only is answered with nothing, batches supported or not.
+test "a batch that holds only notifications is not answered" verifies [JSONRPC_2.R4_1_1] {
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
+  write_message(client, r#"[{"jsonrpc":"2.0","method":"a"},{"jsonrpc":"2.0","method":"b"}]"#)?
+  write_message(client, r#"{"jsonrpc":"2.0","id":1,"method":"echo","params":["after"]}"#)?
+  _ = client.close()
+  assert replies_of(client)? == [r#"{"jsonrpc":"2.0","id":1,"result":["after"]}"#]
 }

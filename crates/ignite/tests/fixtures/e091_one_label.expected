@@ -1,0 +1,1 @@
+e091_one_label.ignite:7:49: error[E091]: specs `TEXT3` and `DUP3` have one label `text-3.0`; a label names one specification

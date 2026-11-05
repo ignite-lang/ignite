@@ -22,6 +22,10 @@ Rules, each a failure of the test that names the file, line and identifier or im
 3. No module outside `std.protocol.*` declares an item, owner, field, variant or role whose
    name contains a protocol name. Protocol names are read from std: each `protocol`
    declaration and each file name under `std/protocol/` (today `telnet`, `http`, `jsonrpc`).
+   Exempt: a catalogue `std.rfc.*` may declare names that contain the name of a protocol
+   whose module imports it, because it quotes that protocol's specification (`JSONRPC_2`
+   in `std.rfc.jsonrpc_2`, which `std.protocol.jsonrpc` imports). No other module is
+   exempt, `std.rfc` itself included.
 4. Every std module outside the prefixes `std.protocol.` and `std.rfc` (`std.rfc` itself and
    every `std.rfc.*`) has a row in the table above.
 5. No file under `crates/*/src` contains a protocol name, in code or in comments, except
