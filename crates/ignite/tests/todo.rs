@@ -24,6 +24,7 @@ fn build(source: &Path, out: &str, target: Target, name: &str) -> PathBuf {
     let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
     let options = match target {
         Target::Rust => ignite::BuildOptions {
+            target: Target::Rust,
             out: Some(tmp.join(out)),
             ..Default::default()
         },

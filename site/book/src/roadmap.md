@@ -30,6 +30,9 @@ One step is being implemented on its branch and is in no release:
 - slice 17, processes, files, settings and entropy for programs, on
   [`feat/slice17-processes-files`](https://github.com/ignite-lang/ignite/tree/feat/slice17-processes-files).
 
+On `main` since v0.5.0 and in no release yet: LLVM is the default `--target` of every command
+that builds; `--target rust` keeps the Rust target.
+
 Planned after it, slice 18: one service operated, the todo service on the LLVM target with
 its data in a directory, an HTTP probe, an availability contract and `ignite apply` rollouts
 that keep the data.
@@ -57,7 +60,8 @@ the declarations of a planned step need it.
 
 From [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md):
 
-- Both targets agree: the Rust target stays the default, and every feature lands on both.
+- Both targets agree: every feature lands on both; LLVM is the default target and the Rust
+  target the differential check.
 - Compile time is a budget: the gate time and the program build times are measured before and
   after each step and recorded; a rise over 10 % is a deviation to explain.
 - Each step starts with a contract section in `docs/slice.md`, reviewed before work starts,

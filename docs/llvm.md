@@ -7,7 +7,8 @@ Direction (Timo, 2026-11-01): an LLVM target that bypasses Rust code generation.
 emits LLVM IR text; clang compiles and links it. The substrate is the Rust crate `ignite-io`,
 the same one the Rust target calls, behind the C ABI adapter `ignite-rt`, prebuilt as the
 static library `libignite_rt.a`. Building a program
-for this target never runs cargo or rustc. The Rust target stays and stays the default.
+for this target never runs cargo or rustc. Since 2026-11-05 it is the default `--target`
+(D2 B, `story:llvm-default-target`); the Rust target stays as the differential check.
 
 ## 1 Pipeline
 
@@ -92,7 +93,8 @@ the same path is not noticed; delete `DIR/llvm`.
 `libignite_rt.a` in the directory of the running executable, which `cargo build -p ignite-rt`
 writes next to `target/<profile>/ignite`; (2) `libignite_rt.a` in that directory's parent, for
 a driver running in a test binary in `target/<profile>/deps`. When neither exists the error
-(exit 3) names the first. Tests pass `--runtime` with the newest `deps/libignite_rt-*.a`,
+(exit 3) names the first and the fix: `cargo build -p ignite-rt --features runner` and
+`--runtime`, or `--target rust`. Tests pass `--runtime` with the newest `deps/libignite_rt-*.a`,
 because a test build does not refresh the top-level copy. `task bench` prints sizes, build
 times and startup time of both targets.
 

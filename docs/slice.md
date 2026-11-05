@@ -703,7 +703,9 @@ the component rules are E020 and E104 to E109 (section 14.11). A program with no
 produces a library crate with no executable.
 ### 6.2 Generated projects
 
-For `ignite build terminal.ignite --out DIR`:
+For `ignite build terminal.ignite --target rust --out DIR` (the default target until
+2026-11-05; since `story:llvm-default-target` a build without `--target` is the LLVM target of
+`docs/llvm.md`):
 
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
@@ -4066,7 +4068,8 @@ under the existing parent-death rule. Neither promises workload survival during 
 Ordinary `plan` keeps its existing model JSON and options. `--for-apply` requires a live
 host and explicit output file; it obtains a consistent base revision and ownership snapshot,
 checks the source, and prepares immutable local artifacts without changing running resources.
-Target defaults to Rust; profile defaults to dev. LLVM runtime selection follows `build`.
+Target defaults to LLVM (Rust until 2026-11-05, `story:llvm-default-target`); profile defaults
+to dev. LLVM runtime selection follows `build`.
 `--fuel` still bounds planning evaluation. Artifact preparation may build; ordinary planning
 continues to generate no executables. No native build may occur after destructive cutover.
 
@@ -5722,7 +5725,7 @@ ignite conformance FILE [--target rust|llvm] [the build flags of `ignite test`]
 1. Load and check FILE as `ignite check` does. A diagnostic: print it as `ignite check` does,
    exit 2, no stdout.
 2. Read the claim model (19.7). No protocol of FILE conforms: one line on stderr, exit 2.
-3. If any row names a test, build FILE's test executable on the target (default `rust`)
+3. If any row names a test, build FILE's test executable on the target (default `llvm`)
    through `ignite::build_tests`, run it once without arguments, and read its stdout. Result
    lines are read after the `running N tests` line, one entry per test of FILE in the order
    the runner runs them (declaration order, 12.7), each matched against that test's exact
@@ -5969,7 +5972,7 @@ run`'s.
 | D5 | Only the RFCXML sources of RFC 9112 and RFC 9110 are vendored, unmodified, under `docs/rfc/`, with `docs/rfc/README.md` citing the IETF Trust Legal Provisions (19.9). RFC 854, 855 and 1143 are not vendored: their catalogues quote the sentences they need with page or section citations, their digest is recorded from the published text file as read on the import day, and `ignite rfc check` without SOURCE reports them `unchecked` | vendor all five; tests download | steering decision, 2026-11-03: the post-2008 RFCs are under the Trust's licence; the gate runs offline; `rfc check` of the imported catalogues needs their bytes (1.49 MB) |
 | D6 | `ignite rfc import FILE [--sections] [--package] [--url] [--out]` reads a local RFCXML v3 file with a hand-written reader (`crates/ignite/src/rfc/xml.rs`, no dependency, so the commit needs no "replaces" line). The digest is `sha256:<hex>` through the existing `sha2` dependency. Extraction as 19.8 | an XML crate | RFCXML uses a small subset of XML; no new dependency |
 | D7 | `std.rfc` and `std.rfc.*` are leaf by a prefix rule (19.11), in `docs/layering.md` and `layering.rs`; U1 adds it | one row per module | five catalogues now and more with every protocol; a prefix rule needs no edit per catalogue |
-| D8 | `ignite conformance FILE [--target rust\|llvm]`, default `rust`. It builds FILE's test executable on that target through `ignite::build_tests`, runs it once, and reads the result lines between `running N tests` and the first blank line. Output and verdicts as 19.10, with the claim line `claim conformance of <P> to rfc<n>: yes\|no (<g> gaps, <f> failures, <i> inconclusive)`. Exit 0 when every claim holds, 1 when one does not, 2 on a diagnostic, usage error or no conforming protocol, 3 on a test build or run failure or IO | run on all targets at once; JSON output | one target per run matches `ignite test --target`; rows 2, 3 and 36 run both and compare. JSON can be added later without changing the text |
+| D8 | `ignite conformance FILE [--target rust\|llvm]`, default `rust` (`llvm` since 2026-11-05, `story:llvm-default-target`). It builds FILE's test executable on that target through `ignite::build_tests`, runs it once, and reads the result lines between `running N tests` and the first blank line. Output and verdicts as 19.10, with the claim line `claim conformance of <P> to rfc<n>: yes\|no (<g> gaps, <f> failures, <i> inconclusive)`. Exit 0 when every claim holds, 1 when one does not, 2 on a diagnostic, usage error or no conforming protocol, 3 on a test build or run failure or IO | run on all targets at once; JSON output | one target per run matches `ignite test --target`; rows 2, 3 and 36 run both and compare. JSON can be added later without changing the text |
 | D9 | Seven units as 19.16, one per story, in five waves | merge importer and catalogues | the stories are already cut this way; their file scopes do not overlap within a wave |
 
 ### 19.16 Work split

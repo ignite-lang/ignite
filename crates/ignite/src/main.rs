@@ -3,19 +3,19 @@
 //! ```text
 //! ignite check <file.ignite> [--std PATH]
 //! ignite emit <file.ignite> [--substrate PATH] [--std PATH]
-//! ignite build <file.ignite> [--target rust|llvm] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE]
-//! ignite test <file.ignite>… [FILTER] [--target rust|llvm|all] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE]
+//! ignite build <file.ignite> [--target llvm|rust] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE]
+//! ignite test <file.ignite>… [FILTER] [--target llvm|rust|all] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE]
 //! ignite plan <file.ignite> [--assembly NAME] [--out FILE] [--fuel N] [--std PATH]
-//! ignite plan <file.ignite> --for-apply --state DIR --out PLAN [--assembly NAME] [--target rust|llvm] [--release] [--std PATH] [--runtime FILE] [--fuel N]
+//! ignite plan <file.ignite> --for-apply --state DIR --out PLAN [--assembly NAME] [--target llvm|rust] [--release] [--std PATH] [--runtime FILE] [--fuel N]
 //! ignite host --state DIR
 //! ignite apply PLAN --state DIR
 //! ignite inspect --state DIR [--operation ID] [--json]
 //! ignite explain <file.ignite> <path> [--assembly NAME] [--fuel N] [--std PATH]
-//! ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target rust|llvm] [--release] [--clock real|manual] [--epoch RFC3339] [--settle DURATION] [--port RESOURCE=PORT]... [--json] [--fresh] [--std PATH] [--fuel N] [--runtime PATH] [--target-dir DIR]
+//! ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target llvm|rust] [--release] [--clock real|manual] [--epoch RFC3339] [--settle DURATION] [--port RESOURCE=PORT]... [--json] [--fresh] [--std PATH] [--fuel N] [--runtime PATH] [--target-dir DIR]
 //! ignite replay <file.ignite> [--assembly NAME] [--state DIR] [--std PATH] [--fuel N]
 //! ignite rfc import FILE [--sections LIST] [--package NAME] [--url URL] [--out FILE]
 //! ignite rfc check CATALOGUE [SOURCE]
-//! ignite conformance <file.ignite> [--target rust|llvm] [--std DIR] [--out DIR] [--clang PATH] [--runtime PATH] [--target-dir DIR] [--release] [--triple TRIPLE]
+//! ignite conformance <file.ignite> [--target llvm|rust] [--std DIR] [--out DIR] [--clang PATH] [--runtime PATH] [--target-dir DIR] [--release] [--triple TRIPLE]
 //! ```
 //!
 //! `--std` is the standard-library root (default: the repository's `std/`
@@ -69,12 +69,12 @@ enum Commands {
         #[arg(long)]
         std: Option<PathBuf>,
     },
-    /// Build the program: generated Rust with cargo (`--target rust`) or LLVM IR with clang
-    /// (`--target llvm`).
+    /// Build the program: LLVM IR with clang (`--target llvm`, the default) or generated Rust
+    /// with cargo (`--target rust`).
     Build {
         file: PathBuf,
-        /// `rust` (default) or `llvm`.
-        #[arg(long, value_enum, default_value = "rust")]
+        /// `llvm` (default) or `rust`.
+        #[arg(long, value_enum, default_value = "llvm")]
         target: TargetArg,
         /// clang for `--target llvm` (default `clang` on `PATH`).
         #[arg(long)]
@@ -106,8 +106,8 @@ enum Commands {
         /// `FILE.ignite…` and at most one `FILTER`.
         #[arg(required = true)]
         args: Vec<String>,
-        /// `rust` (default), `llvm`, or `all` supported targets with shared preparation.
-        #[arg(long, value_enum, default_value = "rust")]
+        /// `llvm` (default), `rust`, or `all` supported targets with shared preparation.
+        #[arg(long, value_enum, default_value = "llvm")]
         target: TestTargetArg,
         /// Root of the standard library.
         #[arg(long)]
@@ -165,7 +165,7 @@ enum Commands {
         #[arg(long)]
         std: Option<PathBuf>,
         /// Native target for an apply plan.
-        #[arg(long, value_enum, default_value = "rust", requires = "for_apply")]
+        #[arg(long, value_enum, default_value = "llvm", requires = "for_apply")]
         target: TargetArg,
         /// Build apply artifacts with optimizations.
         #[arg(long, requires = "for_apply")]
@@ -231,7 +231,7 @@ enum Commands {
         /// Build directory (default: `<state>/build/`).
         #[arg(long)]
         build: Option<PathBuf>,
-        #[arg(long, value_enum, default_value_t = TargetArg::Rust)]
+        #[arg(long, value_enum, default_value_t = TargetArg::Llvm)]
         target: TargetArg,
         /// Build the members with optimizations.
         #[arg(long)]
@@ -296,8 +296,8 @@ enum Commands {
     /// 2 a diagnostic or no conforming protocol, 3 a test build or run failure.
     Conformance {
         file: PathBuf,
-        /// `rust` (default) or `llvm`.
-        #[arg(long, value_enum, default_value = "rust")]
+        /// `llvm` (default) or `rust`.
+        #[arg(long, value_enum, default_value = "llvm")]
         target: TargetArg,
         /// Root of the standard library.
         #[arg(long)]

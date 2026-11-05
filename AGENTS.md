@@ -76,25 +76,26 @@ Rules of the layout:
 | all tests | `task test` |
 | format and lint | `task check` |
 | merge gate | `task gate` |
-| compile the example | `task compile` (writes `target/ignite/terminal/`, prints `built …/terminald` and `built …/tn`) |
+| compile the example | `task compile` (`ignite build --target rust`; writes `target/ignite/terminal/`, prints `built …/terminald` and `built …/tn`) |
 | run the compiled server | `task server` |
 | run the compiled client | `task client` |
 | compile the example with the LLVM target | `task compile-llvm` (writes `target/ignite-llvm/terminal/bin/`) |
+| build a program | `target/debug/ignite build FILE [--target llvm\|rust] [--runtime ARCHIVE] [--out DIR] [--release]` (LLVM by default, `docs/vision.md` D2 B: clang links `libignite_rt.a`, looked up next to the binary and in its parent directory unless `--runtime` names it, exit 3 naming `cargo build -p ignite-rt --features runner` when missing; `--target rust` runs cargo; every command with `--target` defaults to `llvm`) |
 | run the LLVM-built binaries | `task server TARGET=llvm`, `task client TARGET=llvm` |
-| run the inline Ignite tests | `task test-ignite` (std/ and examples/, both targets; `FILTER=text` selects tests); one file: `target/debug/ignite test FILE [FILTER]` |
+| run the inline Ignite tests | `task test-ignite` (std/ and examples/, both targets; `FILTER=text` selects tests); one file: `target/debug/ignite test FILE [FILTER]` (LLVM, the default target, with `--runtime` a `libignite_rt.a` built with `--features runner`; `--target rust` needs none) |
 | build the website | `task site` (landing page at `target/site/index.html`, book at `target/site/book/`; needs `mdbook` 0.5.4) |
 | serve the website | `task site-serve` (`task site`, then `miniserve` on `http://127.0.0.1:8765/`) |
 | print the system model of a program | `target/debug/ignite plan FILE [--assembly NAME] [--out FILE] [--fuel N]` (canonical JSON, `docs/slice.md` 15.5; the design file's model is the golden `crates/ignite/tests/golden/terminal.design.model.json`) |
 | explain one system, member, property or assembly | `target/debug/ignite explain FILE PATH [--assembly NAME]` (`Terminal.reachable`, `Terminal.server.recovery`, `local`; `docs/slice.md` 15.8) |
-| run a system in the foreground | `target/debug/ignite run FILE [--assembly NAME] [--state DIR] [--build DIR] [--target rust\|llvm] [--release] [--clock real\|manual] [--epoch RFC3339] [--port RESOURCE=PORT] [--json] [--fresh]` (`docs/slice.md` 16.3; stdin takes `status`, `rollout <member>`, `stop`, `advance <quantity>`; state defaults to `target/ignite-run/<assembly>/`; exit 0 on a requested stop, 1 when a machine gave up, 2 on a diagnostic; `--fuel N` bounds each reducer step only, the plan inside `run` and `replay` keeps the default fuel) |
+| run a system in the foreground | `target/debug/ignite run FILE [--assembly NAME] [--state DIR] [--build DIR] [--target llvm\|rust] [--release] [--clock real\|manual] [--epoch RFC3339] [--port RESOURCE=PORT] [--json] [--fresh]` (`docs/slice.md` 16.3; stdin takes `status`, `rollout <member>`, `stop`, `advance <quantity>`; state defaults to `target/ignite-run/<assembly>/`; exit 0 on a requested stop, 1 when a machine gave up, 2 on a diagnostic; `--fuel N` bounds each reducer step only, the plan inside `run` and `replay` keeps the default fuel) |
 | replay a run's journal | `target/debug/ignite replay FILE [--assembly NAME] [--state DIR]` (re-steps the reducers over the journaled events, compares every effect and standing record, E127, prints the final standings) |
 | host a state directory | `target/debug/ignite host --state DIR` (`docs/slice.md` 17; owns the state lock and the control socket until stopped; exit 2 when another host or run holds the state, 3 on a host or storage failure) |
-| save a plan for apply | `target/debug/ignite plan FILE --for-apply --state DIR [--assembly NAME] [--target rust\|llvm] [--release] [--runtime ARCHIVE] --out PLAN` (needs the running `ignite host` of DIR, exit 3 without one; source-bound plan, `ignite-apply-plan/0.1`) |
+| save a plan for apply | `target/debug/ignite plan FILE --for-apply --state DIR [--assembly NAME] [--target llvm\|rust] [--release] [--runtime ARCHIVE] --out PLAN` (needs the running `ignite host` of DIR, exit 3 without one; source-bound plan, `ignite-apply-plan/0.1`) |
 | apply a saved plan | `target/debug/ignite apply --state DIR PLAN` (waits for completion; exit 0 completed, 1 failed or recovery required, 2 rejected, 3 host or storage failure) |
 | inspect a host | `target/debug/ignite inspect --state DIR [--operation ID] [--json]` (live status, or the durable snapshot labelled offline) |
 | import an RFC catalogue | `target/debug/ignite rfc import FILE [--sections LIST] [--package NAME] [--url URL] [--out FILE]` (a local RFCXML v3 file, no network; `docs/slice.md` 19.8; exit 2 on a usage error or malformed XML, 3 on a file error); each catalogue's header names the command that wrote it |
 | check a catalogue against its source | `target/debug/ignite rfc check CATALOGUE [SOURCE]` (exit 0 silent when the digests match, 1 when they differ; without SOURCE prints `<CATALOGUE>: unchecked`) |
-| print a conformance matrix | `target/debug/ignite conformance FILE [--target rust\|llvm] [the build flags of ignite test]` (`docs/slice.md` 19.10: runs FILE's tests once, one block per protocol and spec, a claim line each; exit 0 every claim holds, 1 one does not, 2 a diagnostic or no conforming protocol, 3 a test build or run failure) |
+| print a conformance matrix | `target/debug/ignite conformance FILE [--target llvm\|rust] [the build flags of ignite test]` (`docs/slice.md` 19.10: runs FILE's tests once, one block per protocol and spec, a claim line each; exit 0 every claim holds, 1 one does not, 2 a diagnostic or no conforming protocol, 3 a test build or run failure) |
 
 `task` is go-task. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
 invocation in automation sets `CARGO_INCREMENTAL=0`. `task test-ignite` honours

@@ -167,7 +167,7 @@ with four lines on stdin: `status`, `advance 30 seconds`, `status`, `stop`.
 
 ```sh
 ignite run examples/terminal/terminal.design.ignite \
-  --clock manual --port Terminal.ingress=0
+  --clock manual --port Terminal.ingress=0 --runtime target/debug/libignite_rt.a
 ```
 
 Every journal record is one line on stderr. Shortened, the first probe attempt and its
@@ -235,7 +235,7 @@ How the run works:
 | `--clock real\|manual` | the clock the reducers see (default `real`) |
 | `--epoch RFC3339`, `--settle DURATION` | the manual clock's epoch (default `2026-01-01T00:00:00Z`) and settle time (default `2 s`) |
 | `--port RESOURCE=PORT` | bind a resource to a port; `0` binds a free one |
-| `--target rust\|llvm`, `--release` | how the members are built |
+| `--target llvm\|rust`, `--release`, `--runtime FILE` | how the members are built (default `llvm`, with the runtime archive of [the targets guide](targets.md#the-llvm-target)) |
 | `--json` | print the journal records on stdout |
 | `--fresh` | rename an existing journal and start a new one |
 

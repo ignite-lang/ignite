@@ -189,7 +189,7 @@ bye</code></pre>
           <p class="kicker">Build speed</p>
           <h2 id="speed-title">Built for many agents compiling at once</h2>
           <p>Ignite exists in part as a replacement for Rust, because rustc takes a long time to compile. In agentic software development many agents work at the same time and each of them runs compilations; with rustc, that grinds the machine to a halt. Compilation caches did not solve it.</p>
-          <p>In Ignite a whole program can be one file. It compiles in one step, and on the LLVM target clang compiles and links the result: no cargo, no crate graph, and the binary is there. The todo HTTP service builds in 0.22&nbsp;s (dev) and 0.75&nbsp;s (release) on the LLVM target. The default target is still Rust, built by cargo, at 2.5 to 3.2&nbsp;s for the same program; LLVM becomes the default once its last-use moves land in slice 16.</p>
+          <p>In Ignite a whole program can be one file. It compiles in one step, and on the LLVM target clang compiles and links the result: no cargo, no crate graph, and the binary is there. The todo HTTP service builds in 0.22&nbsp;s (dev) and 0.75&nbsp;s (release) on the LLVM target. LLVM is the default target; the Rust target, built by cargo, takes 2.5 to 3.2&nbsp;s for the same program and stays as the differential check (<code>--target rust</code>).</p>
           <p>For many agents the figure that adds up is CPU time, not wall time: N builds at once need about N times the CPU seconds of one. Eight LLVM-target builds of the todo service started together finished in 0.34&nbsp;s and used 2.4 CPU seconds between them.</p>
         </div>
         <figure class="speed-figure">
@@ -267,7 +267,7 @@ bye</code></pre>
           <article class="card">
             <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v6M12 15v6M5 9h14v6H5z"/></svg></div>
             <h3>One substrate, two targets</h3>
-            <p>Rust, the default, built with cargo, and LLVM, built and linked with clang. Both call the same IO substrate and behave the same, down to the text of an error.</p>
+            <p>LLVM, the default, built and linked with clang, and Rust, built with cargo. Both call the same IO substrate and behave the same, down to the text of an error.</p>
             <a href="book/design/substrate.html">One substrate, two targets</a>
           </article>
           <article class="card">
