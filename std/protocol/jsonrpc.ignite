@@ -141,7 +141,7 @@ fn read_message<T: ByteStream>(stream: T, limits: JsonRpcLimits, buffer: Bytes) 
 // ---- messages ---------------------------------------------------------------
 
 // A request id: a number or a string. A number with a fraction, an
-// exponent or more than 18 digits is a `DecimalId` of its exact text, so
+// exponent, `-0` or beyond `Int` is a `DecimalId` of its exact text, so
 // the response carries it as sent (JSON-RPC 2.0 section 4 discourages a
 // fractional id but allows it). A response to a request whose id could not
 // be read has none (`null`).
@@ -386,8 +386,8 @@ type JsonRpcApp<S> {
 // `verifies` clauses on the tests. Batches are not supported: a batch that
 // holds a request is answered with one invalid-request error; a batch of
 // notifications only is delivered to the application and not answered.
-// `std.json` reads every JSON number, a fraction, an exponent or more
-// than 18 digits as a `Decimal` of its text, so such an id comes back as
+// `std.json` reads a number with a fraction, an exponent, `-0` or beyond
+// `Int` as a `Decimal` of its text, so such an id comes back as
 // sent (`DecimalId`) and such params reach the application.
 protocol JsonRpc conforms [JSONRPC_2] scope { parties = [Server, Any] } {
   not_applicable JSONRPC_2.R4_2 "addresses whoever names methods: every method name reaches the application's handlers, and JsonRpc defines none of its own"

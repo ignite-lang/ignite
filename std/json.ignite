@@ -6,10 +6,12 @@ import std.option.{and_then, unwrap_or}
 // JSON values (RFC 8259): `encode` writes the compact form, `parse` reads
 // one value surrounded by optional whitespace, and the accessors read
 // object members (`body.text("title")`). A number without fraction or
-// exponent of at most 18 digits is a `Number(Int)`; every other number is a
-// `Decimal` holding the token's exact text, never converted, so `encode`
-// writes it back unchanged. Two values are equal when their structure is:
-// `Decimal("1.0")` is neither `Number(1)` nor `Decimal("1.00")`. Strings
+// exponent that fits the 64-bit `Int` is a `Number(Int)`, except `-0`;
+// every other number is a `Decimal` holding the token's exact text, never
+// converted, so `encode` writes it back unchanged. `Decimal(text)` built by
+// hand is not checked; `decimal(text)` is the checked constructor. Two
+// values are equal when their structure is: `Decimal("1.0")` is neither
+// `Number(1)` nor `Decimal("1.00")`. Strings
 // are decoded completely, `\uXXXX` with surrogate pairs included; a lone
 // surrogate is an error.
 
@@ -32,7 +34,9 @@ type JsonError {
 // A value and the offset just after it.
 type Parsed = Result<(Json, Int), JsonError>
 
-const MAXIMUM_DIGITS: Int = 18
+// The digit count of the longest `Int`: an integer token of more digits is
+// a `Decimal`; one of exactly this many is a `Number` when it fits `Int`.
+const MAXIMUM_DIGITS: Int = 19
 const MAXIMUM_DEPTH: Int = 64
 
 // ---- encoding ---------------------------------------------------------------
@@ -177,10 +181,34 @@ fn some_digits(bytes: Bytes, at: Int) -> Result<Int, JsonError> {
   Ok(end)
 }
 
+// Whether the digits of `bytes` from `start` to `end`, as many as `limit`
+// has and without leading zero, are at most `limit`: a comparison of the
+// digit text, so nothing overflows.
+fn at_most(bytes: Bytes, start: Int, end: Int, limit: Bytes) -> Bool {
+  if end - start != limit.len() {
+    return end - start < limit.len()
+  }
+  var k = 0
+  while k < limit.len() {
+    let b = bytes.at(start + k)
+    if b != limit.at(k) {
+      return b < limit.at(k)
+    }
+    k = k + 1
+  }
+  true
+}
+
+// Whether the integer token with digits from `start` to `end` fits `Int`
+// (64 bits): at most 9223372036854775807, at least -9223372036854775808.
+fn fits_int(bytes: Bytes, start: Int, end: Int, negative: Bool) -> Bool =
+  if negative { at_most(bytes, start, end, b"9223372036854775808") } else { at_most(bytes, start, end, b"9223372036854775807") }
+
 // The number token at `at` (RFC 8259 section 6): `-`, an integer part
 // without leading zero, an optional fraction, an optional exponent. An
-// integer part alone of at most `MAXIMUM_DIGITS` digits is a `Number`;
-// every other token is a `Decimal` of its exact text.
+// integer part alone that fits `Int` is a `Number`, except `-0`; every
+// other token is a `Decimal` of its exact text, `-0` included, so `encode`
+// writes it back byte-identical.
 fn parse_number(bytes: Bytes, at: Int) -> Parsed {
   let negative = bytes.at(at) == b'-'
   let start = if negative { at + 1 } else { at }
@@ -199,16 +227,40 @@ fn parse_number(bytes: Bytes, at: Int) -> Parsed {
     }
     i = some_digits(bytes, from)?
   }
-  if i > integer_end || integer_end - start > MAXIMUM_DIGITS {
+  let minus_zero = negative && bytes.at(start) == b'0'
+  if i > integer_end || minus_zero || !fits_int(bytes, start, integer_end, negative) {
     return Ok((Decimal(bytes.slice(at, i).to_text()), i))
   }
+  // Accumulated on the token's side of zero, so -9223372036854775808
+  // never passes through its positive, which does not fit.
   var value = 0
   var j = start
   while j < integer_end {
-    value = value * 10 + digit_value(bytes.at(j)).unwrap_or(0)
+    let digit = digit_value(bytes.at(j)).unwrap_or(0)
+    value = if negative { value * 10 - digit } else { value * 10 + digit }
     j = j + 1
   }
-  Ok((Number(if negative { -value } else { value }), i))
+  Ok((Number(value), i))
+}
+
+// The `Json` of `text` when it is exactly one JSON number token, no
+// whitespace around it: `Number` or `Decimal` as `parse` gives it. The
+// checked way to build a `Decimal`: `Decimal(text)` built by hand is not
+// checked, and `encode` writes its text whatever it is.
+fn decimal(text: Text) -> Result<Json, JsonError> {
+  let bytes = text.to_bytes()
+  if bytes.is_empty() {
+    return Err(error("unexpected end of input", 0))
+  }
+  match bytes.at(0) {
+    b'-' | b'0'..=b'9' => {}
+    _ => return Err(error("unexpected character", 0))
+  }
+  let (value, end) = parse_number(bytes, 0)?
+  if end < bytes.len() {
+    return Err(error("unexpected character after the value", end))
+  }
+  Ok(value)
 }
 
 // The string whose opening quote is at `at`: its text and the offset after
@@ -400,7 +452,6 @@ test "parse reads every kind of value" {
   assert parse("true")? == Bool(true)
   assert parse("false")? == Bool(false)
   assert parse("0")? == Number(0)
-  assert parse("-0")? == Number(0)
   assert parse("42")? == Number(42)
   assert parse("-12")? == Number(-12)
   assert parse(r#""milk""#)? == Str("milk")
@@ -466,7 +517,7 @@ test "a number with a fraction, an exponent or more than 18 digits is a decimal 
   assert parse("1e2")? == Decimal("1e2")
   assert parse("1E+2")? == Decimal("1E+2")
   assert parse("-0.0")? == Decimal("-0.0")
-  assert parse("1234567890123456789")? == Decimal("1234567890123456789")
+  assert parse("12345678901234567890")? == Decimal("12345678901234567890")
   assert parse("-12345678901234567890")? == Decimal("-12345678901234567890")
   assert parse(r#"[0.0, {"x": 2e-0}]"#)? == Array([Decimal("0.0"), Object([("x", Decimal("2e-0"))])])
   for token in ["0.5", "-1.25E-3", "1e2", "12345678901234567890", "-0.0", "42", "-7", "[1.50,2E10]"] {
@@ -495,6 +546,31 @@ test "numbers compare by their structure, not their value" {
   assert Decimal("1e2") == Decimal("1e2")
   assert parse("1")? != parse("1.0")?
   assert parse("1e2")? == parse("1e2")?
+}
+
+// The error of `decimal(text)`, `None` when it builds a value.
+test fn decimal_failure(text: Text) -> Option<JsonError> = match decimal(text) {
+  Ok(_) => None
+  Err(e) => Some(e)
+}
+
+test "decimal builds what parse gives for one number token and refuses the rest" {
+  for token in ["0", "42", "-7", "-0", "0.5", "-1.25E-3", "1e2", "9223372036854775807", "-9223372036854775808", "9223372036854775808"] {
+    assert decimal(token)? == parse(token)?
+  }
+  assert decimal("1.50")? == Decimal("1.50")
+  assert decimal("12")? == Number(12)
+  assert decimal("-0")? == Decimal("-0")
+  assert decimal_failure("") == at("unexpected end of input", 0)
+  assert decimal_failure(" 1") == at("unexpected character", 0)
+  assert decimal_failure("1 ") == at("unexpected character after the value", 1)
+  assert decimal_failure("abc") == at("unexpected character", 0)
+  assert decimal_failure(r#""1""#) == at("unexpected character", 0)
+  assert decimal_failure("[1]") == at("unexpected character", 0)
+  assert decimal_failure("01") == at("leading zero in a number", 0)
+  assert decimal_failure("1.") == at("expected a digit", 2)
+  assert decimal_failure("1e5x") == at("unexpected character after the value", 3)
+  assert decimal_failure("+1") == at("unexpected character", 0)
 }
 
 // ---- adversary cases of story json-decimals ---------------------------------
