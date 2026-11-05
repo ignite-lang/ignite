@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-16-records
 kind: story
-status: active
+status: implemented
 title: Slice 16 records and close
 summary: Holds fixture, evaluator families, performance records and the standing documents for wave A
 relations:
@@ -33,10 +33,11 @@ scope:
   path: docs/syntax.md
 - confidence: cited
   path: docs/vision.md
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T01:45:01Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-05T01:45:01Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-05T03:28:27Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: slice-16-records
 

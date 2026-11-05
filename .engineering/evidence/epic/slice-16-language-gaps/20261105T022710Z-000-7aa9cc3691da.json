@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T02:27:10Z",
+  "actor": "human:timo",
+  "artifact": "epic:slice-16-language-gaps",
+  "kind": "epic",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on d208141e, merged to main as PR 30: 1009 passed, 0 failed; 211 inline per target",
+    "reference": "https://github.com/ignite-lang/ignite/pull/30"
+  }
+}
