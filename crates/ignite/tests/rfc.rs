@@ -1688,3 +1688,26 @@ fn text_id_catalogues_check_and_quote_their_pages() {
         }
     }
 }
+
+/// The LSP catalogue covers "the base protocol and the server lifecycle" (19.19), but the
+/// page's Server lifecycle heading also holds Register Capability, whose prose says
+/// "Server must not register the same capability both statically through the initialize
+/// result and dynamically for the same document selector." That MUST NOT for the Server is
+/// neither a requirement nor among the sentences the header lists as left out.
+#[test]
+fn lsp_catalogue_holds_or_lists_every_server_lifecycle_rule() {
+    let module = catalogue("language_server_3_17");
+    let flat: String = module
+        .replace("\n//", " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for sentence in [
+        "Server must not register the same capability both statically through the initialize result and dynamically for the same document selector.",
+    ] {
+        assert!(
+            flat.contains(sentence),
+            "std/rfc/language_server_3_17.ignite neither quotes nor leaves out: {sentence}"
+        );
+    }
+}
