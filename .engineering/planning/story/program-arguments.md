@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:program-arguments
 kind: story
-status: active
+status: implemented
 title: Programs read their own arguments
 summary: Read command-line arguments beyond --port and --ref, so a server takes its root and tool paths at launch
 relations:
@@ -18,10 +18,11 @@ scope:
   path: crates/ignite/src/run
 - confidence: cited
   path: crates/ignite/tests/slice17.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T06:27:17Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-05T06:27:17Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-05T07:34:50Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: program-arguments
 
