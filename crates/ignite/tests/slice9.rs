@@ -193,6 +193,17 @@ fn borrowed_arguments_agree_on_both_targets() {
     assert_passes(&file, "borrow_args", &TARGETS);
 }
 
+/// A closure literal passed to `Store.update`, `Store.upsert` or `List.map`
+/// is a plain closure borrowing its captures on the Rust target
+/// (`docs/slice.md` section 13.3): captures read, copied into the result,
+/// shadowed and rebound after the call, nested closures, and a stored
+/// closure beside a passed one, give the same answers on both targets.
+#[test]
+fn passed_closures_agree_on_both_targets() {
+    let file = workspace().join("crates/ignite/tests/fixtures/slice9/closures_passed.ignite");
+    assert_passes(&file, "closures_passed", &TARGETS);
+}
+
 /// The report without the time of the summary line.
 fn without_time(report: &str) -> String {
     report

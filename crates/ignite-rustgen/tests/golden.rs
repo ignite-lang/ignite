@@ -316,6 +316,52 @@ fn element_reads_copy_only_non_copy_elements() {
     );
 }
 
+/// A field of a list element is read through the `&T` that
+/// `ignite_io::checked::at` returns: passed by reference and compared in
+/// place, matched by reference, copied alone where a value is needed,
+/// never after a copy of the whole element. An argument whose list a
+/// later argument changes is copied before that argument runs.
+#[test]
+fn fields_of_elements_borrow_the_element() {
+    let project = common::generate_source(
+        "type E { key: Bytes, n: Int, name: Text }\n\
+         type B { items: List<E> }\n\
+         fn size(b: Bytes) -> Int = b.len()\n\
+         fn both(a: Bytes, n: Int) -> Int = a.len() + n\n\
+         fn by_ref(es: List<E>) -> Int = size(es[0].key)\n\
+         fn key(es: List<E>) -> Bytes = es.at(0).key\n\
+         fn same(es: List<E>) -> Bool { let s = es[0].key == es[1].key\n s }\n\
+         fn count(es: List<E>) -> Int = es[0].n\n\
+         fn nested(bs: List<B>) -> Int = size(bs[0].items.at(1).key)\n\
+         fn later() -> Int { var es = [E { key = b\"a\", n = 1, name = \"a\" }]\n both(es[0].key, if true { es = []\n 1 } else { 2 }) }\n\
+         fn named(es: List<E>) -> Bool = es[0].name == es.at(1).name\n\
+         fn kind(es: List<E>) -> Int = match es[0].name { \"a\" => 1\n _ => 2 }\n",
+        &common::golden_std(),
+    )
+    .unwrap();
+    let lib = norm(&project.lib_rs);
+    for expected in [
+        "size(&ignite_io::checked::at(es, 0, \"test.ignite\", 5, 38).key)",
+        "ignite_io::checked::at(es, 0, \"test.ignite\", 6, 32).key.clone()",
+        "(&ignite_io::checked::at(es, 0, \"test.ignite\", 7, 40).key, &ignite_io::checked::at(es, 1, \"test.ignite\", 7, 53).key);",
+        "ignite_io::checked::at(es, 0, \"test.ignite\", 9, 32).n",
+        "size(&ignite_io::checked::at(&ignite_io::checked::at(bs, 0, \"test.ignite\", 10, 38).items, 1, \"test.ignite\", 10, 38).key)",
+        "both(&ignite_io::checked::at(&es, 0, \"test.ignite\", 12, 7).key.clone(), &(if true {",
+        "match &ignite_io::checked::at(es, 0, \"test.ignite\", 15, 37).name {",
+        "ignite_io::checked::at(es, 0, \"test.ignite\", 14, 33).name == ignite_io::checked::at(es, 1, \"test.ignite\", 14, 47).name",
+    ] {
+        assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
+    }
+    for copy in [
+        ".clone().key",
+        ".clone().n",
+        ".clone().items",
+        ".clone().name",
+    ] {
+        assert!(!lib.contains(copy), "`{copy}` in\n{lib}");
+    }
+}
+
 /// Read-only parameters that are not `Copy` are references, and one of a
 /// `Copy` type is copied once on entry; a parameter the body changes or
 /// returns is consumed (`docs/slice.md` 20.3.3) and declared by value,
