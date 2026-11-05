@@ -479,8 +479,8 @@ pub fn observations(
 }
 
 /// The edge classes of 16.14 for `system` under `resolution`:
-/// `provisioning` from each resource a hosted executable binds (its
-/// [`ExecutableInfo::resources`]) to that executable, `readiness` from a
+/// `provisioning` from each `TcpListener` a hosted executable binds (among
+/// its [`ExecutableInfo::resources`]) to that executable, `readiness` from a
 /// hosted member to each member its `Ref` values name and from a contract
 /// to the producer of each `Signal` it names, `recovery` from a member to
 /// its `Supervise` machine.
@@ -505,7 +505,10 @@ fn control_edges(
             .iter()
             .find(|e| e.system == system.name && e.component == component)
         {
-            for (resource, _) in &executable.resources {
+            for (resource, ty) in &executable.resources {
+                if !matches!(ty, Ty::TcpListener) {
+                    continue;
+                }
                 edge(
                     EdgeKind::Provisioning,
                     format!("{}.{resource}", system.name),

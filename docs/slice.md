@@ -3564,7 +3564,7 @@ Other rules:
 |---|---|
 | `machines` | array sorted by id: `{"id", "machine": <encoded initial Machine value>, "member", "subscribes": [refs], "disruption"?}` |
 | `observations` | array sorted by ref: `{"ref", "producer", "element": "<qualified type>", "interval"}` |
-| `edges.provisioning` | resource → the component that binds it (`Terminal.ingress` → `Terminal.server`) |
+| `edges.provisioning` | `TcpListener` resource → the component that binds it (`Terminal.ingress` → `Terminal.server`); no other resource kind provisions its component (a `Store`, the capabilities of 21.3; slice 17) |
 | `edges.readiness` | probe → its target; evaluator → its signal's producer; the routing of 16.8 reads it |
 | `edges.recovery` | member → its supervisor machine |
 

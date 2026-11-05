@@ -305,6 +305,25 @@ fn studio_model_matches_golden() {
     compare(&golden_dir().join("studio.model.json"), &model);
 }
 
+/// Slice 17: only a `TcpListener` provisions the executable that binds it
+/// (16.14). The studio's capability resources, among them `Studio.entropy`,
+/// which sorts before its listener `Studio.ingress`, are created by the
+/// process but provision nothing, so a reader of the first provisioning
+/// edge finds the listener.
+#[test]
+fn only_a_listener_provisions_its_executable() {
+    let fixture = fixtures_dir().join("slice17/studio_defaults.ignite");
+    let json = Json::parse(&success(&ignite(&["plan", fixture.to_str().unwrap()])));
+    let provisioning: Vec<(&str, &str)> = json.object()["edges"]
+        .array()
+        .iter()
+        .map(Json::object)
+        .filter(|edge| edge["kind"].string() == "provisioning")
+        .map(|edge| (edge["from"].string(), edge["to"].string()))
+        .collect();
+    assert_eq!(provisioning, [("Studio.ingress", "Studio.server")]);
+}
+
 #[test]
 fn explain_matches_the_goldens_of_15_8() {
     for (path, golden) in [

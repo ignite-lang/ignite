@@ -1612,6 +1612,32 @@ mod tests {
         ignite_syntax::parser::parse(&tokens).unwrap()
     }
 
+    /// Only a `TcpListener` resource has a listener provider: the studio's
+    /// capability resources (`Studio.entropy` sorts before the listener)
+    /// carry no listener authority in an action.
+    #[test]
+    fn a_capability_resource_has_no_listener_provider() {
+        let file = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/slice17/studio_defaults.ignite");
+        let loaded = crate::load_for(&file, None, crate::RUN_ROOTS).expect("the studio loads");
+        let model = loaded
+            .model(&crate::PlanOptions::default())
+            .expect("the studio models");
+        let model = Json::parse(&model.to_json()).expect("the model is JSON");
+        assert_eq!(
+            listener_provider(&model, "Studio.ingress").as_deref(),
+            Some("Studio.server")
+        );
+        for capability in [
+            "Studio.entropy",
+            "Studio.files",
+            "Studio.tool",
+            "Studio.tools",
+        ] {
+            assert_eq!(listener_provider(&model, capability), None, "{capability}");
+        }
+    }
+
     #[test]
     fn projection_ignores_locations_and_declaration_order_but_keeps_statement_structure() {
         let first = parsed("fn one() -> Int { return 1 }\nfn two() -> Int { return 2 }\n");
