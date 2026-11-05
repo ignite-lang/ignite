@@ -577,13 +577,28 @@ impl Finished {
 /// an empty signal mask, `PR_SET_PDEATHSIG` SIGKILL and no descriptor from
 /// 3 up. After `timeout` the child (its group) gets SIGKILL. `started`
 /// learns the pid, or the error when the child did not start, which is
-/// then also the result.
+/// then also the result; a child whose `child-input` thread cannot be
+/// started is killed and reaped, and that error is the result.
 pub(crate) fn watch(
+    command: Command,
+    watched: &Watched,
+    timeout: Duration,
+    limit: usize,
+    input: Vec<u8>,
+    started: impl FnOnce(Result<u32, std::io::Error>),
+) -> Result<Finished, std::io::Error> {
+    let writer = std::thread::Builder::new().name("child-input".to_string());
+    watch_feeding(command, watched, timeout, limit, input, writer, started)
+}
+
+/// [`watch`] with the builder of the thread that writes `input`.
+fn watch_feeding(
     mut command: Command,
     watched: &Watched,
     timeout: Duration,
     limit: usize,
     input: Vec<u8>,
+    writer: std::thread::Builder,
     started: impl FnOnce(Result<u32, std::io::Error>),
 ) -> Result<Finished, std::io::Error> {
     let own_group = lock(&watched.state).own_group;
@@ -606,27 +621,43 @@ pub(crate) fn watch(
         Ok(child) => child,
         Err(error) => {
             drop(state);
-            let copy = match error.raw_os_error() {
-                Some(code) => std::io::Error::from_raw_os_error(code),
-                None => std::io::Error::new(error.kind(), error.to_string()),
-            };
-            started(Err(copy));
+            started(Err(copied(&error)));
             return Err(error);
         }
     };
+    if let Some(mut stdin) = child.stdin.take() {
+        let fed = writer.spawn(move || {
+            use std::io::Write;
+            let _ = stdin.write_all(&input);
+        });
+        if let Err(error) = fed {
+            // The child would read an early end of input and check a truncated buffer as if
+            // it were whole: kill it (its group) and report that it did not start.
+            let pid = Pid::from_raw(child.id() as i32);
+            let _ = if own_group {
+                killpg(pid, Signal::SIGKILL)
+            } else {
+                kill(pid, Signal::SIGKILL)
+            };
+            let _ = child.wait();
+            drop(state);
+            started(Err(copied(&error)));
+            return Err(error);
+        }
+    }
     state.pid = child.id() as i32;
     state.started = true;
     drop(state);
     started(Ok(child.id()));
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = std::thread::Builder::new()
-            .name("child-input".to_string())
-            .spawn(move || {
-                use std::io::Write;
-                let _ = stdin.write_all(&input);
-            });
-    }
     Ok(supervise(&mut child, watched, timeout, limit))
+}
+
+/// A copy of `error`, which `std::io::Error` does not implement `Clone` for.
+fn copied(error: &std::io::Error) -> std::io::Error {
+    match error.raw_os_error() {
+        Some(code) => std::io::Error::from_raw_os_error(code),
+        None => std::io::Error::new(error.kind(), error.to_string()),
+    }
 }
 
 /// Install the `pre_exec` hook: an empty signal mask (the drain blocks
@@ -809,5 +840,40 @@ fn supervise(child: &mut Child, watched: &Watched, timeout: Duration, limit: usi
         stdout: out.kept,
         stderr: err.kept,
         dropped,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A thread builder whose spawn fails: no address space holds a 1 PiB stack.
+    fn unspawnable() -> std::thread::Builder {
+        std::thread::Builder::new().stack_size(1 << 50)
+    }
+
+    #[test]
+    fn a_child_whose_input_writer_cannot_start_is_not_started() {
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "cat > /dev/null; echo read-eof"]);
+        let watched = Watched::new(false);
+        let mut seen = None;
+        let finished = watch_feeding(
+            command,
+            &watched,
+            Duration::from_secs(10),
+            usize::MAX,
+            b"input".to_vec(),
+            unspawnable(),
+            |started| seen = Some(started.is_ok()),
+        );
+        assert!(
+            finished.is_err(),
+            "the child ran with no input: {:?}",
+            finished
+                .ok()
+                .map(|f| String::from_utf8_lossy(&f.stdout).into_owned())
+        );
+        assert_eq!(seen, Some(false));
     }
 }
