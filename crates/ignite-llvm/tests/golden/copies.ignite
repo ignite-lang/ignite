@@ -1,0 +1,18 @@
+package tests.copies
+
+test fn letter(i: Int) -> Text = if i % 2 == 0 { "A" } else { "B" }
+
+test "one-byte texts that fill arena chunks to the last byte keep their bytes" {
+  var kept: List<Text> = []
+  var i = 0
+  while i < 200000 {
+    kept.push(letter(i))
+    i = i + 1
+  }
+  assert kept.len() == 200000
+  var j = 0
+  while j < 200000 {
+    assert kept[j] == letter(j), "text {j} changed"
+    j = j + 1
+  }
+}

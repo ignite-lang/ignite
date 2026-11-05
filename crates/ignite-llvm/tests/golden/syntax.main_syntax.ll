@@ -103,8 +103,10 @@ entry:
   %start = and i64 %up, %mask
   %end = add i64 %start, %size
   %small = icmp ult i64 %size, 65536
-  %fits = icmp ult i64 %end, %li
-  %ok = and i1 %small, %fits
+  %fits = icmp ule i64 %end, %li
+  %live = icmp ne i64 %li, 0
+  %fit = and i1 %fits, %live
+  %ok = and i1 %small, %fit
   br i1 %ok, label %fast, label %slow
 fast:
   %skip = sub i64 %start, %ci

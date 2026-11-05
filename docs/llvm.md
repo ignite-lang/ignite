@@ -610,7 +610,9 @@ still an error and no handle value is issued twice. Neither crate uses tokio.
 Inline helpers. Every IR module defines these as internal `alwaysinline` functions over
 `arena_state()`:
 - `ptr @ignite.alloc(i64 size, i64 align)` bumps the cursor when an aligned request under
-  64 KiB ends below `limit`; otherwise it calls `alloc`.
+  64 KiB ends at or below a non-null `limit` (a request that fills the chunk exactly stays
+  inline); otherwise it calls `alloc`. With no chunk last (`limit` null) even a zero-size
+  request calls `alloc`, which returns a non-null dangling pointer, never null.
 - `i64 @ignite.arena_mark()` returns `cursor + offset`.
 - `i1 @ignite.arena_due(i64 mark, i64 kept)` is `arena_due` without the call.
 - `void @ignite.arena_release(i64 mark)` does nothing when `mark` is at or above the

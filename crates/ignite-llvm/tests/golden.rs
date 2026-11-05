@@ -22,7 +22,7 @@ fn lower(stem: &str) -> ignite_llvm::Generated {
 
 /// [`lower`], in a test build when `tests` (`docs/slice.md` 12.6), with the
 /// symbols of the module's tests.
-fn lower_with(stem: &str, tests: bool) -> (ignite_llvm::Generated, Vec<String>) {
+pub(crate) fn lower_with(stem: &str, tests: bool) -> (ignite_llvm::Generated, Vec<String>) {
     let path = golden_dir().join(format!("{stem}.ignite"));
     let text = std::fs::read_to_string(&path).unwrap();
     let source = SourceFile::new(path.display().to_string(), text);
@@ -404,7 +404,7 @@ fn rest_patterns() {
 
 /// The text of the function defined as `symbol` in `ir`, from its `define`
 /// line to its closing brace.
-fn function<'a>(ir: &'a str, symbol: &str) -> &'a str {
+pub(crate) fn function<'a>(ir: &'a str, symbol: &str) -> &'a str {
     let quoted = format!("@\"{symbol}\"(");
     let start = ir
         .match_indices("define ")
@@ -695,7 +695,7 @@ fn a_runtime_panic_on_a_task_thread_fails_only_that_task() {
 /// Link `generated` (a test build) with a `main` that calls `test` and run
 /// it, as `bounded_streams_run_over_a_pipe` does; `name` keeps the objects
 /// apart.
-fn run_test_build(name: &str, generated: &ignite_llvm::Generated, test: &str) {
+pub(crate) fn run_test_build(name: &str, generated: &ignite_llvm::Generated, test: &str) {
     let spec = target();
     let main = format!(
         "target triple = \"{}\"\ntarget datalayout = \"{}\"\n\n\
