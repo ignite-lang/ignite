@@ -35,3 +35,10 @@ nix = { version = "0.31", features = ["term", "fs"] }
 
 [profile.release.package.ignite-rt]
 codegen-units = 1
+
+[profile.dev.build-override]
+debug = "line-tables-only"
+
+[profile.release.build-override]
+opt-level = 3
+codegen-units = 16

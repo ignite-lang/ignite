@@ -24,6 +24,9 @@ clap.workspace = true
 sha2 = "0.10"
 nix = { workspace = true, features = ["poll", "process", "signal"] }
 
+[build-dependencies]
+ignite-rt = { workspace = true, features = ["runner"] }
+
 [dev-dependencies]
 ignite-rt = { workspace = true, features = ["runner"] }
 
