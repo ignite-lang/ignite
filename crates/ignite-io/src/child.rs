@@ -59,7 +59,8 @@ const KILLED: i64 = 3;
 
 /// What `Launcher::execute` and `Launcher::start` run: the fields of
 /// `std.process.Invocation`; `timeout` in nanoseconds, `output_limit` in
-/// bytes.
+/// bytes; `input` is written to the child's stdin, which is then closed
+/// (empty: stdin is the null device).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Invocation {
     pub program: String,
@@ -69,6 +70,7 @@ pub struct Invocation {
     pub inherit_environment: bool,
     pub timeout: i64,
     pub output_limit: i64,
+    pub input: Vec<u8>,
 }
 
 /// How a child ended: the fields of `std.process.ChildExit`.
@@ -352,6 +354,7 @@ struct Prepared {
     command: Command,
     timeout: Duration,
     limit: usize,
+    input: Vec<u8>,
 }
 
 fn prepare(invocation: &Invocation) -> Result<Prepared, IoError> {
@@ -411,6 +414,7 @@ fn prepare(invocation: &Invocation) -> Result<Prepared, IoError> {
         command,
         timeout: Duration::from_nanos(invocation.timeout as u64),
         limit: invocation.output_limit as usize,
+        input: invocation.input.clone(),
     })
 }
 
@@ -485,8 +489,9 @@ fn launch(prepared: Prepared) -> Result<(i64, Arc<Watched>), IoError> {
                 command,
                 timeout,
                 limit,
+                input,
             } = prepared;
-            let finished = watch(command, &shared, timeout, limit, |started| {
+            let finished = watch(command, &shared, timeout, limit, input, |started| {
                 let _ = sender.send(started);
             });
             if let Ok(finished) = finished {
@@ -564,10 +569,13 @@ impl Finished {
 }
 
 /// Start `command` on the calling thread and watch it to its end: stdin
-/// the null device, stdout and stderr captured up to `limit` bytes each
-/// (the rest counted), its own process group when `watched` says so, an
-/// empty signal mask, `PR_SET_PDEATHSIG` SIGKILL and no descriptor from 3
-/// up. After `timeout` the child (its group) gets SIGKILL. `started`
+/// the null device when `input` is empty, else a pipe that a thread named
+/// `child-input` writes `input` to and closes (a child that stops reading
+/// ends the write with `EPIPE`, which is ignored; SIGPIPE is ignored by
+/// both targets' entry), stdout and stderr captured up to `limit` bytes
+/// each (the rest counted), its own process group when `watched` says so,
+/// an empty signal mask, `PR_SET_PDEATHSIG` SIGKILL and no descriptor from
+/// 3 up. After `timeout` the child (its group) gets SIGKILL. `started`
 /// learns the pid, or the error when the child did not start, which is
 /// then also the result.
 pub(crate) fn watch(
@@ -575,11 +583,16 @@ pub(crate) fn watch(
     watched: &Watched,
     timeout: Duration,
     limit: usize,
+    input: Vec<u8>,
     started: impl FnOnce(Result<u32, std::io::Error>),
 ) -> Result<Finished, std::io::Error> {
     let own_group = lock(&watched.state).own_group;
     command
-        .stdin(Stdio::null())
+        .stdin(if input.is_empty() {
+            Stdio::null()
+        } else {
+            Stdio::piped()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if own_group {
@@ -605,6 +618,14 @@ pub(crate) fn watch(
     state.started = true;
     drop(state);
     started(Ok(child.id()));
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = std::thread::Builder::new()
+            .name("child-input".to_string())
+            .spawn(move || {
+                use std::io::Write;
+                let _ = stdin.write_all(&input);
+            });
+    }
     Ok(supervise(&mut child, watched, timeout, limit))
 }
 

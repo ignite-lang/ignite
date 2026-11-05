@@ -81,6 +81,7 @@ declare i32 @"ignite_rt_launcher_start"(i64, ptr, ptr, ptr)
 declare void @"ignite_rt_setting_value"(ptr, i64)
 declare void @"std.process.Invocation.environment"(ptr)
 declare i1 @"std.process.Invocation.inherit_environment"()
+declare void @"std.process.Invocation.input"(ptr)
 declare i64 @"std.process.Invocation.output_limit"()
 declare i64 @"std.process.Invocation.timeout"()
 
@@ -238,7 +239,7 @@ entry:
   %t129 = alloca [24 x i8], align 8
   %t130 = alloca [32 x i8], align 8
   %t145 = alloca [24 x i8], align 8
-  %t146 = alloca [120 x i8], align 8
+  %t146 = alloca [144 x i8], align 8
   %t149 = alloca [24 x i8], align 8
   %t151 = alloca [24 x i8], align 8
   %t154 = alloca [24 x i8], align 8
@@ -246,27 +247,28 @@ entry:
   %t158 = alloca [24 x i8], align 8
   %t160 = alloca [24 x i8], align 8
   %t165 = alloca [24 x i8], align 8
-  %t174 = alloca [120 x i8], align 8
-  %t177 = alloca [80 x i8], align 8
-  %t178 = alloca [72 x i8], align 8
-  %t179 = alloca [32 x i8], align 8
-  %t194 = alloca [72 x i8], align 8
-  %t197 = alloca [40 x i8], align 8
-  %t198 = alloca [8 x i8], align 8
-  %t199 = alloca [32 x i8], align 8
-  %t215 = alloca [8 x i8], align 8
-  %t218 = alloca [8 x i8], align 8
-  %t220 = alloca [40 x i8], align 8
-  %t221 = alloca [32 x i8], align 8
-  %t236 = alloca [80 x i8], align 8
-  %t237 = alloca [72 x i8], align 8
-  %t238 = alloca [32 x i8], align 8
-  %t253 = alloca [72 x i8], align 8
-  %t256 = alloca [40 x i8], align 8
-  %t257 = alloca [24 x i8], align 8
-  %t258 = alloca [32 x i8], align 8
-  %t273 = alloca [24 x i8], align 8
-  %t274 = alloca [40 x i8], align 8
+  %t174 = alloca [24 x i8], align 8
+  %t176 = alloca [144 x i8], align 8
+  %t179 = alloca [80 x i8], align 8
+  %t180 = alloca [72 x i8], align 8
+  %t181 = alloca [32 x i8], align 8
+  %t196 = alloca [72 x i8], align 8
+  %t199 = alloca [40 x i8], align 8
+  %t200 = alloca [8 x i8], align 8
+  %t201 = alloca [32 x i8], align 8
+  %t217 = alloca [8 x i8], align 8
+  %t220 = alloca [8 x i8], align 8
+  %t222 = alloca [40 x i8], align 8
+  %t223 = alloca [32 x i8], align 8
+  %t238 = alloca [80 x i8], align 8
+  %t239 = alloca [72 x i8], align 8
+  %t240 = alloca [32 x i8], align 8
+  %t255 = alloca [72 x i8], align 8
+  %t258 = alloca [40 x i8], align 8
+  %t259 = alloca [24 x i8], align 8
+  %t260 = alloca [32 x i8], align 8
+  %t275 = alloca [24 x i8], align 8
+  %t276 = alloca [40 x i8], align 8
   %t1 = load i64, ptr %p0, align 8, !dbg !9
   store ptr @.str.1, ptr %t2, align 8, !dbg !10
   %t3 = getelementptr inbounds i8, ptr %t2, i64 8, !dbg !10
@@ -522,149 +524,152 @@ L141:
   %t172 = call i64 @"std.process.Invocation.output_limit"(), !dbg !26
   %t173 = getelementptr inbounds i8, ptr %t146, i64 112, !dbg !26
   store i64 %t172, ptr %t173, align 8, !dbg !26
-  call void @llvm.memcpy.p0.p0.i64(ptr %t174, ptr %t146, i64 120, i1 false), !dbg !25
-  %t175 = getelementptr inbounds i8, ptr %p0, i64 8, !dbg !33
-  %t176 = load i64, ptr %t175, align 8, !dbg !33
-  %t180 = call i32 @ignite_rt_launcher_execute(i64 %t176, ptr %t174, ptr %t178, ptr %t179), !dbg !33
-  %t181 = icmp ne i32 %t180, 0, !dbg !33
-  br i1 %t181, label %L182, label %L183, !dbg !33
-L182:
-  store i32 1, ptr %t177, align 4, !dbg !33
-  %t185 = getelementptr inbounds i8, ptr %t177, i64 8, !dbg !33
-  call void @llvm.memcpy.p0.p0.i64(ptr %t185, ptr %t179, i64 32, i1 false), !dbg !33
-  br label %L184, !dbg !33
-L183:
-  store i32 0, ptr %t177, align 4, !dbg !33
-  %t186 = getelementptr inbounds i8, ptr %t177, i64 8, !dbg !33
-  call void @llvm.memcpy.p0.p0.i64(ptr %t186, ptr %t178, i64 72, i1 false), !dbg !33
-  br label %L184, !dbg !33
+  call void @"std.process.Invocation.input"(ptr %t174), !dbg !26
+  %t175 = getelementptr inbounds i8, ptr %t146, i64 120, !dbg !26
+  call void @llvm.memcpy.p0.p0.i64(ptr %t175, ptr %t174, i64 24, i1 false), !dbg !26
+  call void @llvm.memcpy.p0.p0.i64(ptr %t176, ptr %t146, i64 144, i1 false), !dbg !25
+  %t177 = getelementptr inbounds i8, ptr %p0, i64 8, !dbg !33
+  %t178 = load i64, ptr %t177, align 8, !dbg !33
+  %t182 = call i32 @ignite_rt_launcher_execute(i64 %t178, ptr %t176, ptr %t180, ptr %t181), !dbg !33
+  %t183 = icmp ne i32 %t182, 0, !dbg !33
+  br i1 %t183, label %L184, label %L185, !dbg !33
 L184:
-  %t187 = load i32, ptr %t177, align 4, !dbg !33
-  %t188 = icmp eq i32 %t187, 1, !dbg !33
-  br i1 %t188, label %L189, label %L190, !dbg !33
-L189:
+  store i32 1, ptr %t179, align 4, !dbg !33
+  %t187 = getelementptr inbounds i8, ptr %t179, i64 8, !dbg !33
+  call void @llvm.memcpy.p0.p0.i64(ptr %t187, ptr %t181, i64 32, i1 false), !dbg !33
+  br label %L186, !dbg !33
+L185:
+  store i32 0, ptr %t179, align 4, !dbg !33
+  %t188 = getelementptr inbounds i8, ptr %t179, i64 8, !dbg !33
+  call void @llvm.memcpy.p0.p0.i64(ptr %t188, ptr %t180, i64 72, i1 false), !dbg !33
+  br label %L186, !dbg !33
+L186:
+  %t189 = load i32, ptr %t179, align 4, !dbg !33
+  %t190 = icmp eq i32 %t189, 1, !dbg !33
+  br i1 %t190, label %L191, label %L192, !dbg !33
+L191:
   store i32 1, ptr %sret, align 4, !dbg !33
-  %t191 = getelementptr inbounds i8, ptr %t177, i64 8, !dbg !33
-  %t192 = getelementptr inbounds i8, ptr %sret, i64 8, !dbg !33
-  call void @llvm.memcpy.p0.p0.i64(ptr %t192, ptr %t191, i64 32, i1 false), !dbg !33
+  %t193 = getelementptr inbounds i8, ptr %t179, i64 8, !dbg !33
+  %t194 = getelementptr inbounds i8, ptr %sret, i64 8, !dbg !33
+  call void @llvm.memcpy.p0.p0.i64(ptr %t194, ptr %t193, i64 32, i1 false), !dbg !33
   ret void, !dbg !33
-L190:
-  %t193 = getelementptr inbounds i8, ptr %t177, i64 8, !dbg !33
-  call void @llvm.memcpy.p0.p0.i64(ptr %t194, ptr %t193, i64 72, i1 false), !dbg !32
-  %t195 = getelementptr inbounds i8, ptr %p0, i64 8, !dbg !36
-  %t196 = load i64, ptr %t195, align 8, !dbg !36
-  %t200 = call i32 @ignite_rt_launcher_start(i64 %t196, ptr %t174, ptr %t198, ptr %t199), !dbg !36
-  %t201 = icmp ne i32 %t200, 0, !dbg !36
-  br i1 %t201, label %L202, label %L203, !dbg !36
-L202:
-  store i32 1, ptr %t197, align 4, !dbg !36
-  %t205 = getelementptr inbounds i8, ptr %t197, i64 8, !dbg !36
-  call void @llvm.memcpy.p0.p0.i64(ptr %t205, ptr %t199, i64 32, i1 false), !dbg !36
-  br label %L204, !dbg !36
-L203:
-  store i32 0, ptr %t197, align 4, !dbg !36
-  %t206 = getelementptr inbounds i8, ptr %t197, i64 8, !dbg !36
-  call void @llvm.memcpy.p0.p0.i64(ptr %t206, ptr %t198, i64 8, i1 false), !dbg !36
-  br label %L204, !dbg !36
+L192:
+  %t195 = getelementptr inbounds i8, ptr %t179, i64 8, !dbg !33
+  call void @llvm.memcpy.p0.p0.i64(ptr %t196, ptr %t195, i64 72, i1 false), !dbg !32
+  %t197 = getelementptr inbounds i8, ptr %p0, i64 8, !dbg !36
+  %t198 = load i64, ptr %t197, align 8, !dbg !36
+  %t202 = call i32 @ignite_rt_launcher_start(i64 %t198, ptr %t176, ptr %t200, ptr %t201), !dbg !36
+  %t203 = icmp ne i32 %t202, 0, !dbg !36
+  br i1 %t203, label %L204, label %L205, !dbg !36
 L204:
-  %t207 = load i32, ptr %t197, align 4, !dbg !36
-  %t208 = icmp eq i32 %t207, 1, !dbg !36
-  br i1 %t208, label %L209, label %L210, !dbg !36
-L209:
+  store i32 1, ptr %t199, align 4, !dbg !36
+  %t207 = getelementptr inbounds i8, ptr %t199, i64 8, !dbg !36
+  call void @llvm.memcpy.p0.p0.i64(ptr %t207, ptr %t201, i64 32, i1 false), !dbg !36
+  br label %L206, !dbg !36
+L205:
+  store i32 0, ptr %t199, align 4, !dbg !36
+  %t208 = getelementptr inbounds i8, ptr %t199, i64 8, !dbg !36
+  call void @llvm.memcpy.p0.p0.i64(ptr %t208, ptr %t200, i64 8, i1 false), !dbg !36
+  br label %L206, !dbg !36
+L206:
+  %t209 = load i32, ptr %t199, align 4, !dbg !36
+  %t210 = icmp eq i32 %t209, 1, !dbg !36
+  br i1 %t210, label %L211, label %L212, !dbg !36
+L211:
   store i32 1, ptr %sret, align 4, !dbg !36
-  %t211 = getelementptr inbounds i8, ptr %t197, i64 8, !dbg !36
-  %t212 = getelementptr inbounds i8, ptr %sret, i64 8, !dbg !36
-  call void @llvm.memcpy.p0.p0.i64(ptr %t212, ptr %t211, i64 32, i1 false), !dbg !36
+  %t213 = getelementptr inbounds i8, ptr %t199, i64 8, !dbg !36
+  %t214 = getelementptr inbounds i8, ptr %sret, i64 8, !dbg !36
+  call void @llvm.memcpy.p0.p0.i64(ptr %t214, ptr %t213, i64 32, i1 false), !dbg !36
   ret void, !dbg !36
-L210:
-  %t213 = getelementptr inbounds i8, ptr %t197, i64 8, !dbg !36
-  %t214 = load i64, ptr %t213, align 8, !dbg !36
-  store i64 %t214, ptr %t215, align 8, !dbg !35
-  %t216 = load i64, ptr %t215, align 8, !dbg !39
-  %t217 = call i64 @ignite_rt_child_id(i64 %t216), !dbg !39
-  store i64 %t217, ptr %t218, align 8, !dbg !38
-  %t219 = load i64, ptr %t215, align 8, !dbg !40
-  %t222 = call i32 @ignite_rt_child_kill(i64 %t219, ptr %t221), !dbg !40
-  %t223 = icmp ne i32 %t222, 0, !dbg !40
-  br i1 %t223, label %L224, label %L225, !dbg !40
-L224:
-  store i32 1, ptr %t220, align 4, !dbg !40
-  %t227 = getelementptr inbounds i8, ptr %t220, i64 8, !dbg !40
-  call void @llvm.memcpy.p0.p0.i64(ptr %t227, ptr %t221, i64 32, i1 false), !dbg !40
-  br label %L226, !dbg !40
-L225:
-  store i32 0, ptr %t220, align 4, !dbg !40
-  br label %L226, !dbg !40
+L212:
+  %t215 = getelementptr inbounds i8, ptr %t199, i64 8, !dbg !36
+  %t216 = load i64, ptr %t215, align 8, !dbg !36
+  store i64 %t216, ptr %t217, align 8, !dbg !35
+  %t218 = load i64, ptr %t217, align 8, !dbg !39
+  %t219 = call i64 @ignite_rt_child_id(i64 %t218), !dbg !39
+  store i64 %t219, ptr %t220, align 8, !dbg !38
+  %t221 = load i64, ptr %t217, align 8, !dbg !40
+  %t224 = call i32 @ignite_rt_child_kill(i64 %t221, ptr %t223), !dbg !40
+  %t225 = icmp ne i32 %t224, 0, !dbg !40
+  br i1 %t225, label %L226, label %L227, !dbg !40
 L226:
-  %t228 = load i32, ptr %t220, align 4, !dbg !40
-  %t229 = icmp eq i32 %t228, 1, !dbg !40
-  br i1 %t229, label %L230, label %L231, !dbg !40
-L230:
+  store i32 1, ptr %t222, align 4, !dbg !40
+  %t229 = getelementptr inbounds i8, ptr %t222, i64 8, !dbg !40
+  call void @llvm.memcpy.p0.p0.i64(ptr %t229, ptr %t223, i64 32, i1 false), !dbg !40
+  br label %L228, !dbg !40
+L227:
+  store i32 0, ptr %t222, align 4, !dbg !40
+  br label %L228, !dbg !40
+L228:
+  %t230 = load i32, ptr %t222, align 4, !dbg !40
+  %t231 = icmp eq i32 %t230, 1, !dbg !40
+  br i1 %t231, label %L232, label %L233, !dbg !40
+L232:
   store i32 1, ptr %sret, align 4, !dbg !40
-  %t232 = getelementptr inbounds i8, ptr %t220, i64 8, !dbg !40
-  %t233 = getelementptr inbounds i8, ptr %sret, i64 8, !dbg !40
-  call void @llvm.memcpy.p0.p0.i64(ptr %t233, ptr %t232, i64 32, i1 false), !dbg !40
+  %t234 = getelementptr inbounds i8, ptr %t222, i64 8, !dbg !40
+  %t235 = getelementptr inbounds i8, ptr %sret, i64 8, !dbg !40
+  call void @llvm.memcpy.p0.p0.i64(ptr %t235, ptr %t234, i64 32, i1 false), !dbg !40
   ret void, !dbg !40
-L231:
-  %t234 = getelementptr inbounds i8, ptr %t220, i64 8, !dbg !40
-  %t235 = load i64, ptr %t215, align 8, !dbg !42
-  %t239 = call i32 @ignite_rt_child_wait(i64 %t235, ptr %t237, ptr %t238), !dbg !42
-  %t240 = icmp ne i32 %t239, 0, !dbg !42
-  br i1 %t240, label %L241, label %L242, !dbg !42
-L241:
-  store i32 1, ptr %t236, align 4, !dbg !42
-  %t244 = getelementptr inbounds i8, ptr %t236, i64 8, !dbg !42
-  call void @llvm.memcpy.p0.p0.i64(ptr %t244, ptr %t238, i64 32, i1 false), !dbg !42
-  br label %L243, !dbg !42
-L242:
-  store i32 0, ptr %t236, align 4, !dbg !42
-  %t245 = getelementptr inbounds i8, ptr %t236, i64 8, !dbg !42
-  call void @llvm.memcpy.p0.p0.i64(ptr %t245, ptr %t237, i64 72, i1 false), !dbg !42
-  br label %L243, !dbg !42
+L233:
+  %t236 = getelementptr inbounds i8, ptr %t222, i64 8, !dbg !40
+  %t237 = load i64, ptr %t217, align 8, !dbg !42
+  %t241 = call i32 @ignite_rt_child_wait(i64 %t237, ptr %t239, ptr %t240), !dbg !42
+  %t242 = icmp ne i32 %t241, 0, !dbg !42
+  br i1 %t242, label %L243, label %L244, !dbg !42
 L243:
-  %t246 = load i32, ptr %t236, align 4, !dbg !42
-  %t247 = icmp eq i32 %t246, 1, !dbg !42
-  br i1 %t247, label %L248, label %L249, !dbg !42
-L248:
+  store i32 1, ptr %t238, align 4, !dbg !42
+  %t246 = getelementptr inbounds i8, ptr %t238, i64 8, !dbg !42
+  call void @llvm.memcpy.p0.p0.i64(ptr %t246, ptr %t240, i64 32, i1 false), !dbg !42
+  br label %L245, !dbg !42
+L244:
+  store i32 0, ptr %t238, align 4, !dbg !42
+  %t247 = getelementptr inbounds i8, ptr %t238, i64 8, !dbg !42
+  call void @llvm.memcpy.p0.p0.i64(ptr %t247, ptr %t239, i64 72, i1 false), !dbg !42
+  br label %L245, !dbg !42
+L245:
+  %t248 = load i32, ptr %t238, align 4, !dbg !42
+  %t249 = icmp eq i32 %t248, 1, !dbg !42
+  br i1 %t249, label %L250, label %L251, !dbg !42
+L250:
   store i32 1, ptr %sret, align 4, !dbg !42
-  %t250 = getelementptr inbounds i8, ptr %t236, i64 8, !dbg !42
-  %t251 = getelementptr inbounds i8, ptr %sret, i64 8, !dbg !42
-  call void @llvm.memcpy.p0.p0.i64(ptr %t251, ptr %t250, i64 32, i1 false), !dbg !42
+  %t252 = getelementptr inbounds i8, ptr %t238, i64 8, !dbg !42
+  %t253 = getelementptr inbounds i8, ptr %sret, i64 8, !dbg !42
+  call void @llvm.memcpy.p0.p0.i64(ptr %t253, ptr %t252, i64 32, i1 false), !dbg !42
   ret void, !dbg !42
-L249:
-  %t252 = getelementptr inbounds i8, ptr %t236, i64 8, !dbg !42
-  call void @llvm.memcpy.p0.p0.i64(ptr %t253, ptr %t252, i64 72, i1 false), !dbg !41
-  %t254 = getelementptr inbounds i8, ptr %p0, i64 16, !dbg !44
-  %t255 = load i64, ptr %t254, align 8, !dbg !44
-  %t259 = call i32 @ignite_rt_entropy_random_bytes(i64 %t255, i64 32, ptr %t257, ptr %t258), !dbg !44
-  %t260 = icmp ne i32 %t259, 0, !dbg !44
-  br i1 %t260, label %L261, label %L262, !dbg !44
-L261:
-  store i32 1, ptr %t256, align 4, !dbg !44
-  %t264 = getelementptr inbounds i8, ptr %t256, i64 8, !dbg !44
-  call void @llvm.memcpy.p0.p0.i64(ptr %t264, ptr %t258, i64 32, i1 false), !dbg !44
-  br label %L263, !dbg !44
-L262:
-  store i32 0, ptr %t256, align 4, !dbg !44
-  %t265 = getelementptr inbounds i8, ptr %t256, i64 8, !dbg !44
-  call void @llvm.memcpy.p0.p0.i64(ptr %t265, ptr %t257, i64 24, i1 false), !dbg !44
-  br label %L263, !dbg !44
+L251:
+  %t254 = getelementptr inbounds i8, ptr %t238, i64 8, !dbg !42
+  call void @llvm.memcpy.p0.p0.i64(ptr %t255, ptr %t254, i64 72, i1 false), !dbg !41
+  %t256 = getelementptr inbounds i8, ptr %p0, i64 16, !dbg !44
+  %t257 = load i64, ptr %t256, align 8, !dbg !44
+  %t261 = call i32 @ignite_rt_entropy_random_bytes(i64 %t257, i64 32, ptr %t259, ptr %t260), !dbg !44
+  %t262 = icmp ne i32 %t261, 0, !dbg !44
+  br i1 %t262, label %L263, label %L264, !dbg !44
 L263:
-  %t266 = load i32, ptr %t256, align 4, !dbg !44
-  %t267 = icmp eq i32 %t266, 1, !dbg !44
-  br i1 %t267, label %L268, label %L269, !dbg !44
-L268:
+  store i32 1, ptr %t258, align 4, !dbg !44
+  %t266 = getelementptr inbounds i8, ptr %t258, i64 8, !dbg !44
+  call void @llvm.memcpy.p0.p0.i64(ptr %t266, ptr %t260, i64 32, i1 false), !dbg !44
+  br label %L265, !dbg !44
+L264:
+  store i32 0, ptr %t258, align 4, !dbg !44
+  %t267 = getelementptr inbounds i8, ptr %t258, i64 8, !dbg !44
+  call void @llvm.memcpy.p0.p0.i64(ptr %t267, ptr %t259, i64 24, i1 false), !dbg !44
+  br label %L265, !dbg !44
+L265:
+  %t268 = load i32, ptr %t258, align 4, !dbg !44
+  %t269 = icmp eq i32 %t268, 1, !dbg !44
+  br i1 %t269, label %L270, label %L271, !dbg !44
+L270:
   store i32 1, ptr %sret, align 4, !dbg !44
-  %t270 = getelementptr inbounds i8, ptr %t256, i64 8, !dbg !44
-  %t271 = getelementptr inbounds i8, ptr %sret, i64 8, !dbg !44
-  call void @llvm.memcpy.p0.p0.i64(ptr %t271, ptr %t270, i64 32, i1 false), !dbg !44
+  %t272 = getelementptr inbounds i8, ptr %t258, i64 8, !dbg !44
+  %t273 = getelementptr inbounds i8, ptr %sret, i64 8, !dbg !44
+  call void @llvm.memcpy.p0.p0.i64(ptr %t273, ptr %t272, i64 32, i1 false), !dbg !44
   ret void, !dbg !44
-L269:
-  %t272 = getelementptr inbounds i8, ptr %t256, i64 8, !dbg !44
-  call void @llvm.memcpy.p0.p0.i64(ptr %t273, ptr %t272, i64 24, i1 false), !dbg !43
-  store i32 0, ptr %t274, align 4, !dbg !46
-  %t275 = getelementptr inbounds i8, ptr %t274, i64 8, !dbg !46
-  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t274, i64 40, i1 false), !dbg !7
+L271:
+  %t274 = getelementptr inbounds i8, ptr %t258, i64 8, !dbg !44
+  call void @llvm.memcpy.p0.p0.i64(ptr %t275, ptr %t274, i64 24, i1 false), !dbg !43
+  store i32 0, ptr %t276, align 4, !dbg !46
+  %t277 = getelementptr inbounds i8, ptr %t276, i64 8, !dbg !46
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t276, i64 40, i1 false), !dbg !7
   ret void, !dbg !7
 }
 
