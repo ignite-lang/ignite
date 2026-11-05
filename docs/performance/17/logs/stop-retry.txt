@@ -1,0 +1,5 @@
+STOP_RETRY 09:23:02
+     Removed 1319 files, 1.1GiB total
+     Removed 14616 files, 9.0GiB total
+833M	/home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/..
+STOP_RETRY_END 09:23:08

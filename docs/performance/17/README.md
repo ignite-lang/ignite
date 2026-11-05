@@ -2,7 +2,7 @@
 
 Measured 2026-11-05 08:42 to 09:26 local time (UTC+1). 20 cores, shared with other sessions'
 builds; start loads 5.1 to 25.8, with a peak of 54 during the before tree's cold gate
-(`logs/watch-2.log`). sccache was on. Every command ran through the session's build-slot wrapper
+(`logs/watch-2.txt`). sccache was on. Every command ran through the session's build-slot wrapper
 (`CARGO_INCREMENTAL=0`, `CARGO_PROFILE_DEV_DEBUG=line-tables-only`, `RUST_TEST_THREADS=4`,
 `CARGO_BUILD_JOBS=8`, `nice -n 10`, `ionice -c3`). The record is in `AGENTS.md`, "Slice 17".
 
@@ -20,7 +20,7 @@ builds; start loads 5.1 to 25.8, with a peak of 54 during the before tree's cold
 
 ## What ran
 
-1. `scripts/mode.sh smoke programs cli` with `scripts/watch.sh` beside it (`logs/modes-1.log`):
+1. `scripts/mode.sh smoke programs cli` with `scripts/watch.sh` beside it (`logs/modes-1.txt`):
    each tree's compiler, then todod per target and profile (the harness stops after 3 valid
    pairs, at most 5 passes), then `ignite check` and `ignite plan` of the design file, 15 pairs.
 2. `scripts/extra.sh` (`records/extra-steps.txt`, `STEP` lines) with each tree's compiler and
@@ -32,7 +32,7 @@ builds; start loads 5.1 to 25.8, with a peak of 54 during the before tree's cold
    Every build has a fresh `--out` and `--target-dir`, cold builds run with
    `SCCACHE_RECACHE=1`. `scripts/pairs.awk` (slice 16's) applies the pair rules and wrote
    `records/extra-pairs.txt`.
-3. `scripts/mode.sh cold` (`logs/modes-2.log`): the before tree's cold gate, then the after
+3. `scripts/mode.sh cold` (`logs/modes-2.txt`): the before tree's cold gate, then the after
    tree's. The watch cleaned the before tree's target once the after tree's cold rows began.
    The two gates' start loads differ by 6.0 (21.8 against 15.8), so the harness started its
    retry; `scripts/stop-retry.sh` stopped it at the retry's clippy step and cleaned both targets,
@@ -104,7 +104,7 @@ No baseline moved. The apply suites stay the slice-13 exception.
 
 - **`warm`** (gate, `cargo test --workspace`, fmt, clippy, `task test-ignite`, `--no-run`,
   `ignite_test::`, rustgen tests): the interleaved passes need both trees' gate targets built at
-  once. The after tree's target was 9.0 GiB at the end of its cold gate (`logs/stop-retry.log`),
+  once. The after tree's target was 9.0 GiB at the end of its cold gate (`logs/stop-retry.txt`),
   and the machine's disk owner asked during the run (09:22) to keep at most one tree's target
   built at a time and this unit's scratch under 8 GB, with free space at 45 GB. Taking fewer
   passes does not help: one pass already needs both targets.
@@ -118,5 +118,5 @@ No baseline moved. The apply suites stay the slice-13 exception.
 | `records/records.jsonl`, `run.json`, `summary.json`, `summary.md`, `tools.json` | the `ignite-perf` records (`ignite-performance/1`) of smoke, programs, cli and the cold attempt |
 | `records/extra-steps.txt`, `extra-pairs.txt` | the `STEP` lines of `scripts/extra.sh` and their pairs |
 | `records/emit-todo-std.txt` | the generated `ignite-std` line counts of todod with each std |
-| `logs/` | mode, watch, retry-stop and summarize logs |
+| `logs/` | mode, watch, retry-stop and summarize logs, as `.txt` (`*.log` is ignored by git) |
 | `scripts/` | the scripts as run; their paths point into the session's scratch directory |
