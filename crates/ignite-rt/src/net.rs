@@ -89,10 +89,15 @@ pub(crate) fn capability<T>(
 
 /// One table entry: the generation of the handle it holds or will hold
 /// next, and the handle; `None` before it is filled and once released.
+/// `waited` holds, per generation, the process id of each waited child
+/// this slot held: 16 bytes per waited child, kept until the process
+/// exits, because an LLVM program may ask a waited handle's id at any
+/// time (`docs/slice.md` 21.5).
 #[derive(Default)]
 struct Entry {
     generation: u32,
     handle: Option<Handle>,
+    waited: Vec<(u32, i64)>,
 }
 
 type Slot = Mutex<Entry>;
@@ -370,6 +375,28 @@ pub extern "C" fn ignite_rt_tcp_close(handle: i64, err: *mut IgniteIoError) -> i
 /// closes it.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_release(handle: i64) {
+    release(handle, None);
+}
+
+/// Release the handle of a waited child and keep its process id in the
+/// slot, by the handle's generation, so `child.id()` answers it for that
+/// handle value also after the slot was reused (`docs/slice.md` 21.5).
+pub(crate) fn release_waited_child(handle: i64, id: i64) {
+    release(handle, Some(id));
+}
+
+/// The process id kept for `handle` by [`release_waited_child`].
+pub(crate) fn waited_child_id(handle: i64) -> Option<i64> {
+    let (index, generation) = decode(handle)?;
+    let entry = lock(slot_at(index, false)?);
+    entry
+        .waited
+        .iter()
+        .find(|(g, _)| *g == generation)
+        .map(|(_, id)| *id)
+}
+
+fn release(handle: i64, waited_child: Option<i64>) {
     let _ = OWNED.try_with(|owned| owned.borrow_mut().retain(|owned| *owned != handle));
     let Some((index, generation)) = decode(handle) else {
         return;
@@ -380,6 +407,9 @@ pub extern "C" fn ignite_rt_tcp_release(handle: i64) {
     let mut entry = lock(slot);
     if entry.generation != generation || entry.handle.is_none() {
         return;
+    }
+    if let Some(id) = waited_child {
+        entry.waited.push((generation, id));
     }
     let released = entry.handle.take();
     entry.generation += 1;

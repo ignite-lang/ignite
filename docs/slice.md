@@ -6745,7 +6745,7 @@ ignite`, exit 0):
 | F5 `Store` methods are effectful by the receiver's declared type, other substrate methods by name | `store_op` and `store_effect`; `EFFECTFUL_METHODS` and `method_effect` | the new methods follow `store_op`: a by-name table would capture user fns named like them, such as `start` (fixtures `valid_protocol`, `e013_spawn_not_effectful_call`), `value`, `wait`, `kill`, `execute`; a receiver bound without annotation needs `static_type` arms (21.3, R4) |
 | F6 the ambient heads are `stdin`, `stdout`, `process`, `net` | `AMBIENT_HEADS` | `clock` is missing (probe p1): U1 adds it, so a parameter named `clock` is E056 (row 35); the capabilities add no head, they are not ambient |
 | F7 `ignite run` starts an executable without a working directory of its own | `spawn` in `crates/ignite/src/run/process.rs` | a relative `Directory.path` resolves against `ignite run`'s working directory (21.6) |
-| F8 the drain blocks SIGTERM in the main thread and in every thread it starts | `ignite_io::drain::install` | a child must start with an empty signal mask; Rust's `Command` is believed to reset it, unverified, so row 13 is required |
+| F8 the drain blocks SIGTERM in the main thread and in every thread it starts | `ignite_io::drain::install` | a child must start with an empty signal mask. Resolved by U3: Rust's `Command` keeps the mask of the thread that forks (row 13 failed without the hook), so the `pre_exec` hook of 21.5 empties it |
 | F9 sockets are opened close-on-exec by Rust's `std::net` | `ignite_io::net` | covers only what the runtime opens; a descriptor the server inherited without close-on-exec would pass to a child, so the child closes every descriptor from 3 up (21.5, row 14) |
 | F10 on LLVM a handle lives until the process exits unless a `spawn` moved it | `docs/llvm.md` §4 | `wait` frees a child's slot and the adapter answers a released child handle as Rust does (21.5); `execute` allocates none |
 | F11 `nix` 0.31: the workspace enables `term` and `fs`, `ignite-io` adds `signal` (which implies `process`) and `poll` under `runner` | root `Cargo.toml`, `crates/ignite-io/Cargo.toml` | `openat`, `fstatat`, `unlinkat`, `mkdirat`, `renameat2` and `killpg` are on already; U1 adds `dir` (for `Dir`) and `poll` outside `runner` (row 29) |
@@ -6962,7 +6962,11 @@ fn succeeded(exit: ChildExit) -> Bool
   name not found is `program not found: <p>`.
 - `arguments`: passed as they are; no shell.
 - `directory`: `""` keeps the program's own working directory; otherwise an absolute path
-  (`directory <d>: not absolute`). `Directory.absolute_path()` gives one.
+  (`directory <d>: not absolute`). `Directory.absolute_path()` gives one. It is checked before
+  the child starts: one that does not exist, is no directory or cannot be entered is the error
+  `directory <d>: <reason>` (the OS reason, such as `No such file or directory`), never
+  `program not found`. `program not found: <p>` means only that the program's path does not
+  exist; any other failure to start is `program <p>: <reason>`.
 - `environment`: entries `NAME=value`, applied over the inherited environment, or over an empty
   one when `inherit_environment` is false. An entry without `=` or with an empty name is an
   error. The default `true` hands the server's whole environment, secrets included, to every
@@ -6992,12 +6996,20 @@ The substrate (`ignite_io::child`):
 - Every child is started by its own watcher thread (named `child`), also for `execute`, so that
   `PR_SET_PDEATHSIG` (which fires when the starting thread ends) lives as long as the watcher.
 - The child starts with `Command` (Rust std), stdin the null device, stdout and stderr pipes,
-  its own process group (`process_group(0)`) and an empty signal mask (Rust's `Command` resets
-  the mask and SIGPIPE; other dispositions the server inherited as ignored stay ignored). A
-  `pre_exec` hook, the one `unsafe` block of `child.rs`, sets `PR_SET_PDEATHSIG` to SIGKILL
-  (and exits at once if the parent already died), and closes every descriptor from 3 up with
-  `close_range` (row 14), so a descriptor the server inherited without close-on-exec does not
-  reach the child either.
+  its own process group (`process_group(0)`) and an empty signal mask. Rust's `Command`
+  resets SIGPIPE but keeps the signal mask of the thread that forks, which blocks SIGTERM (16.13;
+  row 13 failed without the hook), so a `pre_exec` hook empties the mask; other dispositions the
+  server inherited as ignored stay ignored. The same hook sets `PR_SET_PDEATHSIG` to SIGKILL
+  (and exits at once if the parent already died), and marks every descriptor from 3 up
+  close-on-exec with `close_range` (row 14), so a descriptor the server inherited without
+  close-on-exec does not reach the child either.
+- SIGCHLD is reset to its default action at program start on both targets (`drain::install`,
+  which `ignite_io::run` and the runtime's `init` call) and before the first spawn (the test
+  runner). A SIGCHLD inherited as ignored (a parent's `trap '' CHLD` survives exec) makes the
+  kernel reap every child itself, so no status could be read. Children therefore start with
+  SIGCHLD at its default too. Should a child still be reaped by someone else (`waitid` fails
+  with ECHILD), it counts as ended with `ending 1 code -1`, and nothing signals its pid or
+  group again, since either may be reused.
 - The watcher reads both pipes with `poll`, enforces the deadline, waits for the child's end
   with `waitid(WEXITED | WNOWAIT)` (the child stays a zombie, so its pid and group id cannot be
   reused), sends SIGKILL to the group, reaps the child, then reads the pipes until end of file
@@ -7017,7 +7029,9 @@ The substrate (`ignite_io::child`):
   `execute` allocates none. The `ignite-rt` adapter answers a released `Child` handle (its
   generation tells released from never-allocated) as Rust answers a waited child: `wait` is
   `Err` `child already waited`, `kill` is `Ok`, `id` returns the id kept in the released entry
-  (row 11). An unwaited child keeps its slot and its output, up to twice `output_limit`, until
+  (row 11). The entry keeps the id by the handle's generation, so a waited handle answers its
+  id after a later handle reused the slot, as the Rust target does; that is 16 bytes per waited
+  child until the process exits. An unwaited child keeps its slot and its output, up to twice `output_limit`, until
   the process exits; `maximum_children` bounds how many (21.15).
 
 ### 21.6 Arguments (`Setting`)

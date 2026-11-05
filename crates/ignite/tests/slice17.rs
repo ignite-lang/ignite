@@ -404,27 +404,46 @@ both_targets!(
 );
 
 /// Adversary: a server started by a parent that left SIGCHLD ignored (a
-/// wrapper's `trap '' CHLD`; the disposition survives exec). The kernel
-/// then reaps the server's children itself, so `waitid` and the reap see
-/// ECHILD; the child of row 13 must still report `ending 1 code 15`.
+/// wrapper's `trap '' CHLD`; the disposition survives exec). Left so, the
+/// kernel reaps the server's children itself, so `waitid` and the reap
+/// see ECHILD. The substrate resets SIGCHLD to its default at start
+/// (`docs/slice.md` 21.5), so the child of row 13 still reports `ending 1
+/// code 15`. The wrapper records the `SigIgn` of a child before the exec,
+/// which shows the setup took; the server's shows the reset.
 fn a_child_status_survives_an_ignored_sigchld(target: Target) {
     let maskd = executable("signal_mask.ignite", "maskd", target);
+    let dir = workdir("sigchld", target);
     let server = Server::start(
         Command::new("/bin/sh")
-            .args(["-c", "trap '' CHLD; exec \"$0\" --port 0"])
+            .args([
+                "-c",
+                "trap '' CHLD; grep '^SigIgn:' /proc/self/status > wrapper.status; exec \"$0\" --port 0",
+            ])
             .arg(maskd)
-            .current_dir(workdir("sigchld", target)),
+            .current_dir(&dir),
+    );
+    let sigchld_ignored = |status: &str| {
+        let ignored = status
+            .lines()
+            .find_map(|line| line.strip_prefix("SigIgn:"))
+            .expect("a SigIgn line")
+            .trim()
+            .to_string();
+        let mask = u64::from_str_radix(&ignored, 16).expect("a hex mask");
+        mask & (1 << 16) != 0
+    };
+    let wrapper =
+        std::fs::read_to_string(dir.join("wrapper.status")).expect("the wrapper's status");
+    assert!(
+        sigchld_ignored(&wrapper),
+        "SIGCHLD is not ignored: {wrapper}"
     );
     let status = std::fs::read_to_string(format!("/proc/{}/status", server.pid()))
         .expect("the server's status");
-    let ignored = status
-        .lines()
-        .find_map(|line| line.strip_prefix("SigIgn:"))
-        .expect("a SigIgn line")
-        .trim()
-        .to_string();
-    let mask = u64::from_str_radix(&ignored, 16).expect("a hex mask");
-    assert_ne!(mask & (1 << 16), 0, "SIGCHLD is not ignored: {ignored}");
+    assert!(
+        !sigchld_ignored(&status),
+        "SIGCHLD stayed ignored in the server"
+    );
     let (code, body) = server.get("/");
     assert_eq!((code, body.as_str()), (200, "ending 1 code 15"));
 }

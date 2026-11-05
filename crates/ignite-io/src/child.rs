@@ -26,7 +26,7 @@ use std::time::{Duration, Instant};
 use nix::errno::Errno;
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use nix::poll::{PollFd, PollFlags, poll};
-use nix::sys::signal::{Signal, kill, killpg};
+use nix::sys::signal::{SigHandler, Signal, kill, killpg};
 use nix::sys::wait::{Id, WaitPidFlag, WaitStatus, waitid};
 use nix::unistd::Pid;
 
@@ -260,7 +260,7 @@ impl Watched {
         if !state.started || state.reaped {
             return;
         }
-        if !state.ended && exited(state.pid) {
+        if !state.ended && ended(&mut state) {
             state.ended = true;
         }
         signal(&state);
@@ -279,8 +279,12 @@ impl Watched {
 }
 
 /// SIGKILL to the child of `state`: its group, or the child alone when it
-/// shares the starter's group.
+/// shares the starter's group. Nothing once it was reaped, by the watcher
+/// or by anyone else ([`ended`]): its pid and group id may be reused.
 fn signal(state: &State) {
+    if state.reaped {
+        return;
+    }
     let pid = Pid::from_raw(state.pid);
     if state.own_group {
         let _ = killpg(pid, Signal::SIGKILL);
@@ -289,18 +293,39 @@ fn signal(state: &State) {
     }
 }
 
-/// Whether the unreaped child `pid` has ended; it stays a zombie.
-fn exited(pid: i32) -> bool {
+/// Whether the unreaped child of `state` has ended; it stays a zombie.
+/// An error of `waitid` (ECHILD: the child was reaped by someone else, as
+/// the kernel does while SIGCHLD is ignored) also ends it and marks it
+/// reaped, so nothing signals its pid or group again.
+fn ended(state: &mut State) -> bool {
     loop {
         match waitid(
-            Id::Pid(Pid::from_raw(pid)),
+            Id::Pid(Pid::from_raw(state.pid)),
             WaitPidFlag::WEXITED | WaitPidFlag::WNOHANG | WaitPidFlag::WNOWAIT,
         ) {
             Ok(WaitStatus::StillAlive) => return false,
             Err(Errno::EINTR) => continue,
-            Ok(_) | Err(_) => return true,
+            Ok(_) => return true,
+            Err(_) => {
+                state.reaped = true;
+                return true;
+            }
         }
     }
+}
+
+static SIGCHLD_DEFAULT: Once = Once::new();
+
+/// Reset SIGCHLD to its default action, once per process. A disposition
+/// inherited as ignored (a parent's `trap '' CHLD` survives exec) makes the
+/// kernel reap every child itself, so no status could be read
+/// (`docs/slice.md` 21.5). Called at program start by [`crate::drain`] and
+/// before every spawn, which covers the test runner.
+pub(crate) fn default_sigchld() {
+    SIGCHLD_DEFAULT.call_once(|| {
+        // SAFETY: the default action installs no handler code.
+        let _ = unsafe { nix::sys::signal::signal(Signal::SIGCHLD, SigHandler::SigDfl) };
+    });
 }
 
 /// The live children with their own group, for the exit hook.
@@ -340,8 +365,13 @@ fn prepare(invocation: &Invocation) -> Result<Prepared, IoError> {
         return Err(IoError::new("output_limit must not be negative"));
     }
     let directory = &invocation.directory;
-    if !directory.is_empty() && !directory.starts_with('/') {
-        return Err(IoError::new(format!("directory {directory}: not absolute")));
+    if !directory.is_empty() {
+        if !directory.starts_with('/') {
+            return Err(IoError::new(format!("directory {directory}: not absolute")));
+        }
+        if let Err(error) = enterable(directory) {
+            return Err(IoError::new(format!("directory {directory}: {error}")));
+        }
     }
     let mut environment = Vec::with_capacity(invocation.environment.len());
     for entry in &invocation.environment {
@@ -406,6 +436,27 @@ fn resolve(program: &str, path: Option<&std::ffi::OsStr>) -> Result<PathBuf, IoE
     found.ok_or_else(|| IoError::new(format!("program not found: {program}")))
 }
 
+/// Whether the child can change into `directory`: it exists, is a
+/// directory and is searchable; otherwise the OS reason. Checked before the
+/// spawn, so an error of `chdir` in the child is not taken for one of the
+/// program.
+fn enterable(directory: &str) -> Result<(), String> {
+    let found = std::fs::metadata(directory).map_err(|error| reason(&error))?;
+    if !found.is_dir() {
+        return Err(Errno::ENOTDIR.desc().to_string());
+    }
+    nix::unistd::access(directory, nix::unistd::AccessFlags::X_OK)
+        .map_err(|errno| errno.desc().to_string())
+}
+
+/// The OS reason of a `std::io::Error`, in the words of [`Errno::desc`].
+fn reason(error: &std::io::Error) -> String {
+    match error.raw_os_error() {
+        Some(code) => Errno::from_raw(code).desc().to_string(),
+        None => error.to_string(),
+    }
+}
+
 fn executable(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
     std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
@@ -421,6 +472,10 @@ fn launch(prepared: Prepared) -> Result<(i64, Arc<Watched>), IoError> {
         .get_program()
         .to_string_lossy()
         .into_owned();
+    let directory = prepared
+        .command
+        .get_current_dir()
+        .map(|d| d.to_string_lossy().into_owned());
     let (sender, receiver) = mpsc::channel::<Result<u32, std::io::Error>>();
     let shared = Arc::clone(&watched);
     std::thread::Builder::new()
@@ -444,12 +499,30 @@ fn launch(prepared: Prepared) -> Result<(i64, Arc<Watched>), IoError> {
         .map_err(|error| IoError::new(format!("program {program}: {error}")))?;
     match receiver.recv() {
         Ok(Ok(pid)) => Ok((i64::from(pid), watched)),
-        Ok(Err(error)) if error.kind() == ErrorKind::NotFound => {
-            Err(IoError::new(format!("program not found: {program}")))
-        }
-        Ok(Err(error)) => Err(IoError::new(format!("program {program}: {error}"))),
+        Ok(Err(error)) => Err(IoError::new(refusal(
+            &program,
+            directory.as_deref(),
+            &error,
+        ))),
         Err(_) => Err(IoError::new(format!("program {program}: not started"))),
     }
+}
+
+/// The message of a failed spawn. `prepare` checked the
+/// directory, but it can be gone by the time the child changes into it;
+/// a program that exists can still fail with ENOENT (a script whose
+/// interpreter is missing). Only a program path that does not exist is
+/// `program not found` (`docs/slice.md` 21.5).
+fn refusal(program: &str, directory: Option<&str>, error: &std::io::Error) -> String {
+    if let Some(directory) = directory
+        && let Err(missing) = enterable(directory)
+    {
+        return format!("directory {directory}: {missing}");
+    }
+    if error.kind() == ErrorKind::NotFound && std::fs::metadata(program).is_err() {
+        return format!("program not found: {program}");
+    }
+    format!("program {program}: {}", reason(error))
 }
 
 /// How a watched child ended.
@@ -513,13 +586,18 @@ pub(crate) fn watch(
         command.process_group(0);
     }
     confine(&mut command);
+    default_sigchld();
     let mut state = lock(&watched.state);
     let spawned = command.spawn();
     let mut child = match spawned {
         Ok(child) => child,
         Err(error) => {
             drop(state);
-            started(Err(std::io::Error::new(error.kind(), error.to_string())));
+            let copy = match error.raw_os_error() {
+                Some(code) => std::io::Error::from_raw_os_error(code),
+                None => std::io::Error::new(error.kind(), error.to_string()),
+            };
+            started(Err(copy));
             return Err(error);
         }
     };
@@ -663,7 +741,7 @@ fn supervise(child: &mut Child, watched: &Watched, timeout: Duration, limit: usi
     let mut idle = Duration::from_millis(1);
     loop {
         let fresh = out.drain(limit, &mut dropped) | err.drain(limit, &mut dropped);
-        if exited(pid) {
+        if ended(&mut lock(&watched.state)) {
             break;
         }
         let now = Instant::now();
@@ -685,10 +763,11 @@ fn supervise(child: &mut Child, watched: &Watched, timeout: Duration, limit: usi
     }
     let mut state = lock(&watched.state);
     state.ended = true;
-    if state.own_group {
+    let gone = state.reaped;
+    if state.own_group && !gone {
         let _ = killpg(Pid::from_raw(pid), Signal::SIGKILL);
     }
-    let status = child.wait().ok();
+    let status = if gone { None } else { child.wait().ok() };
     state.reaped = true;
     let (timed_out, killed) = (state.timed_out, state.killed);
     drop(state);
