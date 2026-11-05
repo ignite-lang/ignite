@@ -1,0 +1,201 @@
+STEP check-design before 1 .096589645 8.80 0
+STEP plan-design before 1 .089139359 8.80 0
+STEP check-todo before 1 .055098396 8.80 0
+STEP check-design after 1 .120285055 8.80 0
+STEP plan-design after 1 .126506563 8.80 0
+STEP check-todo after 1 .068354184 8.80 0
+STEP check-design before 2 .088995713 8.80 0
+STEP plan-design before 2 .089650086 8.80 0
+STEP check-todo before 2 .057881041 8.80 0
+STEP check-design after 2 .122200364 8.80 0
+STEP plan-design after 2 .121311608 8.80 0
+STEP check-todo after 2 .077852703 8.80 0
+STEP check-design before 3 .094799414 8.80 0
+STEP plan-design before 3 .094834468 8.80 0
+STEP check-todo before 3 .058473546 8.80 0
+STEP check-design after 3 .122731461 8.80 0
+STEP plan-design after 3 .124785050 8.80 0
+STEP check-todo after 3 .069938961 8.80 0
+STEP check-design before 4 .090814506 8.80 0
+STEP plan-design before 4 .091986023 8.80 0
+STEP check-todo before 4 .058361425 8.80 0
+STEP check-design after 4 .120221504 8.80 0
+STEP plan-design after 4 .118526840 8.80 0
+STEP check-todo after 4 .067140494 8.80 0
+STEP check-design before 5 .087140461 8.80 0
+STEP plan-design before 5 .088086848 8.80 0
+STEP check-todo before 5 .054979117 8.80 0
+STEP check-design after 5 .115843481 8.80 0
+STEP plan-design after 5 .115803466 8.80 0
+STEP check-todo after 5 .070172005 8.80 0
+STEP check-design before 6 .088154706 8.73 0
+STEP plan-design before 6 .087463254 8.73 0
+STEP check-todo before 6 .055894709 8.73 0
+STEP check-design after 6 .116757284 8.73 0
+STEP plan-design after 6 .116523838 8.73 0
+STEP check-todo after 6 .065042590 8.73 0
+STEP check-design before 7 .087818259 8.73 0
+STEP plan-design before 7 .088613031 8.73 0
+STEP check-todo before 7 .055168393 8.73 0
+STEP check-design after 7 .113560450 8.73 0
+STEP plan-design after 7 .118553523 8.73 0
+STEP check-todo after 7 .068684874 8.73 0
+STEP check-design before 8 .087118604 8.73 0
+STEP plan-design before 8 .087660622 8.73 0
+STEP check-todo before 8 .053428318 8.73 0
+STEP check-design after 8 .111203432 8.73 0
+STEP plan-design after 8 .117921823 8.73 0
+STEP check-todo after 8 .063924586 8.73 0
+STEP check-design before 9 .088759322 8.73 0
+STEP plan-design before 9 .088044592 8.73 0
+STEP check-todo before 9 .054398905 8.73 0
+STEP check-design after 9 .114353540 8.73 0
+STEP plan-design after 9 .114738139 8.73 0
+STEP check-todo after 9 .065629131 8.73 0
+STEP check-design before 10 .086946043 8.73 0
+STEP plan-design before 10 .097422543 8.73 0
+STEP check-todo before 10 .056095592 8.73 0
+STEP check-design after 10 .112671765 8.73 0
+STEP plan-design after 10 .115280500 8.73 0
+STEP check-todo after 10 .063290185 8.73 0
+STEP check-design before 11 .085494312 8.73 0
+STEP plan-design before 11 .085656124 8.73 0
+STEP check-todo before 11 .053927456 8.73 0
+STEP check-design after 11 .124707265 8.73 0
+STEP plan-design after 11 .126475991 8.73 0
+STEP check-todo after 11 .075066163 8.73 0
+STEP check-design before 12 .093792663 8.73 0
+STEP plan-design before 12 .096926993 8.73 0
+STEP check-todo before 12 .060204212 8.73 0
+STEP check-design after 12 .128040619 8.73 0
+STEP plan-design after 12 .150928967 8.73 0
+STEP check-todo after 12 .075797451 8.73 0
+STEP check-design before 13 .103472570 8.73 0
+STEP plan-design before 13 .138076925 8.73 0
+STEP check-todo before 13 .061006569 8.73 0
+STEP check-design after 13 .138864749 8.73 0
+STEP plan-design after 13 .138553333 8.73 0
+STEP check-todo after 13 .067302728 8.73 0
+STEP check-design before 14 .090972172 8.73 0
+STEP plan-design before 14 .090518593 8.73 0
+STEP check-todo before 14 .055773199 8.73 0
+STEP check-design after 14 .122253122 8.73 0
+STEP plan-design after 14 .121605978 8.73 0
+STEP check-todo after 14 .067784408 8.76 0
+STEP check-design before 15 .090001834 8.76 0
+STEP plan-design before 15 .091198048 8.76 0
+STEP check-todo before 15 .057254411 8.76 0
+STEP check-design after 15 .121378357 8.76 0
+STEP plan-design after 15 .123200951 8.76 0
+STEP check-todo after 15 .069381340 8.76 0
+STEP todod-rust-dev before 1 4.434080009 8.76 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-before-rust-dev-1 exit=101
+STEP todod-rust-dev after 1 4.402456485 8.78 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-after-rust-dev-1 exit=101
+STEP todod-llvm-dev before 1 .411793886 8.78 0
+STEP todod-llvm-dev after 1 .407476251 9.03 0
+STEP todod-rust-release before 1 5.958609451 9.03 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-before-rust-release-1 exit=101
+STEP todod-rust-release after 1 4.613321093 8.71 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-after-rust-release-1 exit=101
+STEP todod-llvm-release before 1 1.772350741 8.25 0
+STEP todod-llvm-release after 1 .854384149 8.25 0
+STEP terminald-rust-dev before 1 4.060606598 8.25 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-before-rust-dev-1 exit=101
+STEP terminald-rust-dev after 1 4.151297893 8.23 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-after-rust-dev-1 exit=101
+STEP terminald-llvm-dev before 1 .511583708 7.89 0
+STEP terminald-llvm-dev after 1 .528557723 7.89 0
+STEP terminald-rust-release before 1 5.516747763 7.89 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-before-rust-release-1 exit=101
+STEP terminald-rust-release after 1 3.954623493 9.18 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-after-rust-release-1 exit=101
+STEP terminald-llvm-release before 1 .630198409 8.53 0
+STEP terminald-llvm-release after 1 .768264422 8.53 0
+STEP todod-rust-dev before 2 4.361542657 8.53 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-before-rust-dev-2 exit=101
+STEP todod-rust-dev after 2 5.148787377 8.33 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-after-rust-dev-2 exit=101
+STEP todod-llvm-dev before 2 .495399037 8.62 0
+STEP todod-llvm-dev after 2 .575199963 8.62 0
+STEP todod-rust-release before 2 4.821747267 8.62 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-before-rust-release-2 exit=101
+STEP todod-rust-release after 2 4.369156076 9.13 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-after-rust-release-2 exit=101
+STEP todod-llvm-release before 2 .798850469 8.56 0
+STEP todod-llvm-release after 2 .771940141 8.56 0
+STEP terminald-rust-dev before 2 3.705359417 8.03 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-before-rust-dev-2 exit=101
+STEP terminald-rust-dev after 2 4.874114696 8.03 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-after-rust-dev-2 exit=101
+STEP terminald-llvm-dev before 2 .462514395 7.71 0
+STEP terminald-llvm-dev after 2 .506159541 7.71 0
+STEP terminald-rust-release before 2 4.091648288 7.71 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-before-rust-release-2 exit=101
+STEP terminald-rust-release after 2 5.901771421 7.57 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-after-rust-release-2 exit=101
+STEP terminald-llvm-release before 2 .593869449 7.13 0
+STEP terminald-llvm-release after 2 .593124711 7.04 0
+STEP todod-rust-dev before 3 3.325378203 7.04 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-before-rust-dev-3 exit=101
+STEP todod-rust-dev after 3 4.307716639 7.04 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-after-rust-dev-3 exit=101
+STEP todod-llvm-dev before 3 .377773689 6.71 0
+STEP todod-llvm-dev after 3 .518596594 6.71 0
+STEP todod-rust-release before 3 4.890373858 6.71 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-before-rust-release-3 exit=101
+STEP todod-rust-release after 3 5.283059493 9.38 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/todod-after-rust-release-3 exit=101
+STEP todod-llvm-release before 3 .767156931 8.70 0
+STEP todod-llvm-release after 3 .757637251 8.70 0
+STEP terminald-rust-dev before 3 3.726620288 8.70 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-before-rust-dev-3 exit=101
+STEP terminald-rust-dev after 3 3.654036088 8.49 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-after-rust-dev-3 exit=101
+STEP terminald-llvm-dev before 3 .455754819 8.49 0
+STEP terminald-llvm-dev after 3 .488580560 8.49 0
+STEP terminald-rust-release before 3 3.847383529 8.49 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-before-rust-release-3 exit=101
+STEP terminald-rust-release after 3 3.856703590 8.13 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/terminald-after-rust-release-3 exit=101
+STEP terminald-llvm-release before 3 .555295042 7.80 0
+STEP terminald-llvm-release after 3 .662473044 7.80 0
+STEP moves-scale-rust-cold after 1 3.655222185 7.80 0
+STEP moves-scale-rust-warm after 1 .031469994 7.57 0
+STEP moves-scale-rust-50000 after 1 .029423971 7.57 0
+FINISHED moves-scale-rust-50000 after 1 finished in 0.01s
+STEP moves-scale-rust-200000 after 1 .032131654 7.57 0
+FINISHED moves-scale-rust-200000 after 1 finished in 0.01s
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/moves-scale-rust-1 exit=101
+STEP moves-scale-rust-cold after 2 3.345041276 7.57 0
+STEP moves-scale-rust-warm after 2 .030817456 7.53 0
+STEP moves-scale-rust-50000 after 2 .028334992 7.53 0
+FINISHED moves-scale-rust-50000 after 2 finished in 0.01s
+STEP moves-scale-rust-200000 after 2 .026758564 7.53 0
+FINISHED moves-scale-rust-200000 after 2 finished in 0.00s
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/moves-scale-rust-2 exit=101
+STEP moves-scale-rust-cold after 3 3.071927726 7.53 0
+STEP moves-scale-rust-warm after 3 .027106948 7.53 0
+STEP moves-scale-rust-50000 after 3 .021181146 7.53 0
+FINISHED moves-scale-rust-50000 after 3 finished in 0.00s
+STEP moves-scale-rust-200000 after 3 .044415318 7.53 0
+FINISHED moves-scale-rust-200000 after 3 finished in 0.02s
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/u6/perf16/salvage/moves-scale-rust-3 exit=101
+STEP moves-scale-llvm-cold after 1 .176570397 7.53 0
+STEP moves-scale-llvm-warm after 1 .017299800 7.53 0
+STEP moves-scale-llvm-50000 after 1 .012713480 7.53 0
+FINISHED moves-scale-llvm-50000 after 1 finished in 0.01s
+STEP moves-scale-llvm-200000 after 1 .016431905 7.53 0
+FINISHED moves-scale-llvm-200000 after 1 finished in 0.01s
+STEP moves-scale-llvm-cold after 2 .180517103 7.53 0
+STEP moves-scale-llvm-warm after 2 .013093968 7.53 0
+STEP moves-scale-llvm-50000 after 2 .013374256 7.53 0
+FINISHED moves-scale-llvm-50000 after 2 finished in 0.01s
+STEP moves-scale-llvm-200000 after 2 .011842556 7.53 0
+FINISHED moves-scale-llvm-200000 after 2 finished in 0.01s
+STEP moves-scale-llvm-cold after 3 .184660690 7.53 0
+STEP moves-scale-llvm-warm after 3 .016919054 7.53 0
+STEP moves-scale-llvm-50000 after 3 .013002217 7.53 0
+FINISHED moves-scale-llvm-50000 after 3 finished in 0.01s
+STEP moves-scale-llvm-200000 after 3 .016878069 7.53 0
+FINISHED moves-scale-llvm-200000 after 3 finished in 0.01s

@@ -1,4 +1,4 @@
-# Ignite slices 1 to 15: language subset, standard library, substrate and lowering
+# Ignite slices 1 to 16: language subset, standard library, substrate and lowering
 
 Status: implementation contract for the compiler slice, 2026-11-01. It narrows
 `design.md` to what `examples/terminal/terminal.ignite` and `std/` need. Where the two
@@ -6051,7 +6051,8 @@ Q3 (licence of vendoring the older RFCs) is closed by D5.
 
 **Status: contract written 2026-11-04. The independent review (`docs/slice16-review.md`, 4
 blockers, 5 should-fix, 14 notes) is resolved in this text; its "Resolution" section maps each
-finding to the place that resolves it. Implementation has not started.** The rows of 20.0 are
+finding to the place that resolves it. Implemented 2026-11-04 to 2026-11-05 in units U1 to U6
+(20.10); every row of 20.0 has a dated row in `STATUS.md`.** The rows of 20.0 are
 required checks, not results.
 
 Sources:
