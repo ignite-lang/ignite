@@ -8,7 +8,9 @@
 //! swapped for one between two steps is refused at the step that opens it
 //! (D4, row 4). Every symbolic link is refused, inside links too (21.15).
 
+use std::ffi::{CStr, CString};
 use std::io::Read;
+use std::os::unix::fs::PermissionsExt;
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -131,9 +133,14 @@ fn reopen(parent: BorrowedFd<'_>, path: &Checked<'_>) -> Result<OwnedFd, IoError
     openat(parent, ".", DIRECTORY_FLAGS, Mode::empty()).map_err(|e| path.os(e))
 }
 
-/// The names in `directory` without `.` and `..`, each with whether it is a
-/// directory (never following a link), in byte order; at most [`ENTRY_LIMIT`].
-fn entries(directory: OwnedFd, path: &Checked<'_>) -> Result<Vec<(String, bool)>, IoError> {
+/// The names in `directory` without `.` and `..`, as the raw bytes the OS
+/// gave, each with whether it is a directory (never following a link), in
+/// byte order; at most `limit` when one is given.
+fn entries(
+    directory: OwnedFd,
+    path: &Checked<'_>,
+    limit: Option<usize>,
+) -> Result<Vec<(CString, bool)>, IoError> {
     let mut dir = Dir::from_fd(directory).map_err(|e| path.os(e))?;
     let mut read = Vec::new();
     for entry in dir.iter() {
@@ -142,12 +149,12 @@ fn entries(directory: OwnedFd, path: &Checked<'_>) -> Result<Vec<(String, bool)>
         if name.to_bytes() == b"." || name.to_bytes() == b".." {
             continue;
         }
-        if read.len() == ENTRY_LIMIT {
+        if limit == Some(read.len()) {
             return Err(path.error(format_args!("more than {ENTRY_LIMIT} entries")));
         }
         read.push((name.to_owned(), entry.file_type()));
     }
-    let mut found: Vec<(String, bool)> = read
+    let mut found: Vec<(CString, bool)> = read
         .into_iter()
         .map(|(name, kind)| {
             let directory = match kind {
@@ -156,10 +163,7 @@ fn entries(directory: OwnedFd, path: &Checked<'_>) -> Result<Vec<(String, bool)>
                 None => fstatat(dir.as_fd(), name.as_c_str(), AtFlags::AT_SYMLINK_NOFOLLOW)
                     .is_ok_and(|stat| is_directory(&stat)),
             };
-            (
-                String::from_utf8_lossy(name.to_bytes()).into_owned(),
-                directory,
-            )
+            (name, directory)
         })
         .collect();
     found.sort();
@@ -312,21 +316,24 @@ impl Directory {
     }
 
     /// Create or replace the file atomically: a temporary
-    /// `.<name>.ignite-<pid>-<n>` in the same directory, renamed over the
-    /// target. A link at the target is refused, not replaced.
+    /// `.ignite-<pid>-<n>` in the same directory, its length independent of
+    /// the target's name, renamed over the target. A replaced regular file
+    /// keeps its permission bits; a new one is created 0644 under the umask.
+    /// A link at the target is refused, not replaced.
     pub fn write_file(&self, path: impl AsRef<str>, data: impl AsRef<[u8]>) -> Result<(), IoError> {
         let path = check(path.as_ref())?;
         let Some((parent, name)) = self.parent(&path)? else {
             return Err(path.error("the root itself"));
         };
         let last = path.components.len() - 1;
-        match fstatat(parent.as_fd(), name, AtFlags::AT_SYMLINK_NOFOLLOW) {
+        let kept = match fstatat(parent.as_fd(), name, AtFlags::AT_SYMLINK_NOFOLLOW) {
             Ok(stat) if is_link(&stat) => return Err(path.link(last)),
             Ok(stat) if is_directory(&stat) => return Err(path.os(Errno::EISDIR)),
-            _ => {}
-        }
+            Ok(stat) if is_regular(&stat) => Some(stat.st_mode & 0o777),
+            _ => None,
+        };
         let n = WRITES.fetch_add(1, Ordering::Relaxed);
-        let temporary = format!(".{name}.ignite-{}-{n}", std::process::id());
+        let temporary = format!(".ignite-{}-{n}", std::process::id());
         let flags =
             OFlag::O_WRONLY | OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC;
         let fd = openat(
@@ -336,9 +343,14 @@ impl Directory {
             Mode::from_bits_truncate(0o644),
         )
         .map_err(|e| path.os(e))?;
-        let written = std::io::Write::write_all(&mut std::fs::File::from(fd), data.as_ref())
-            .map_err(|e| path.error(reason(&e)))
-            .and_then(|()| {
+        let mut file = std::fs::File::from(fd);
+        let written = match kept {
+            Some(mode) => file.set_permissions(std::fs::Permissions::from_mode(mode)),
+            None => Ok(()),
+        }
+        .and_then(|()| std::io::Write::write_all(&mut file, data.as_ref()))
+        .map_err(|e| path.error(reason(&e)))
+        .and_then(|()| {
                 renameat(parent.as_fd(), temporary.as_str(), parent.as_fd(), name)
                     .map_err(|e| path.os(e))
             });
@@ -352,14 +364,26 @@ impl Directory {
         written
     }
 
-    /// The entries' names in byte order; a directory's ends with `/`.
+    /// The entries' names in byte order; a directory's ends with `/`. A
+    /// name that is not UTF-8 has no `Text` that names it back, so the
+    /// listing is refused with that name's bytes escaped
+    /// (`path <p>: entry <name> is not UTF-8`).
     pub fn read_directory(&self, path: impl AsRef<str>) -> Result<Vec<String>, IoError> {
         let path = check(path.as_ref())?;
         let directory = self.walk(&path, path.components.len())?;
-        Ok(entries(directory, &path)?
+        entries(directory, &path, Some(ENTRY_LIMIT))?
             .into_iter()
-            .map(|(name, directory)| if directory { name + "/" } else { name })
-            .collect())
+            .map(|(name, directory)| {
+                let text = name.into_string().map_err(|e| {
+                    let bytes = e.into_cstring();
+                    path.error(format_args!(
+                        "entry {} is not UTF-8",
+                        bytes.as_bytes().escape_ascii()
+                    ))
+                })?;
+                Ok(if directory { text + "/" } else { text })
+            })
+            .collect()
     }
 
     /// Create the directory and its missing parents.
@@ -425,20 +449,20 @@ impl Directory {
 /// [`empty`]).
 struct Level {
     descriptor: OwnedFd,
-    pending: Vec<(String, bool)>,
+    pending: Vec<(CString, bool)>,
 }
 
 impl Level {
     fn open(descriptor: OwnedFd, path: &Checked<'_>) -> Result<Level, IoError> {
         let listing = descriptor.try_clone().map_err(|e| path.error(reason(&e)))?;
-        let pending = entries(listing, path)?;
+        let pending = entries(listing, path, None)?;
         Ok(Level {
             descriptor,
             pending,
         })
     }
 
-    fn child(&self, name: &str, path: &Checked<'_>) -> Result<OwnedFd, IoError> {
+    fn child(&self, name: &CStr, path: &Checked<'_>) -> Result<OwnedFd, IoError> {
         match openat(
             self.descriptor.as_fd(),
             name,
@@ -483,7 +507,7 @@ fn too_deep(path: &Checked<'_>) -> IoError {
 /// link. A tree that grew past [`DEPTH_LIMIT`] since [`measure`] is
 /// refused where it is found.
 fn empty(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
-    let mut stack: Vec<(Level, String)> = vec![(Level::open(top, path)?, String::new())];
+    let mut stack: Vec<(Level, CString)> = vec![(Level::open(top, path)?, CString::default())];
     loop {
         let depth = stack.len();
         let Some((level, _)) = stack.last_mut() else {
@@ -495,7 +519,7 @@ fn empty(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
                 if let Some((parent, _)) = stack.last() {
                     unlinkat(
                         parent.descriptor.as_fd(),
-                        name.as_str(),
+                        name.as_c_str(),
                         UnlinkatFlags::RemoveDir,
                     )
                     .map_err(|e| path.os(e))?;
@@ -504,7 +528,7 @@ fn empty(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
             Some((name, false)) => {
                 unlinkat(
                     level.descriptor.as_fd(),
-                    name.as_str(),
+                    name.as_c_str(),
                     UnlinkatFlags::NoRemoveDir,
                 )
                 .map_err(|e| path.os(e))?;
@@ -715,6 +739,39 @@ mod tests {
         }
         writer.join().unwrap();
         assert_eq!(d.read_directory("").unwrap(), ["file"]);
+    }
+
+    /// `write_file` replacing a file keeps the file's permission bits and
+    /// leaves no temporary; the temporary's name does not grow with the
+    /// target's.
+    #[test]
+    fn a_replaced_file_keeps_its_permission_bits() {
+        use std::os::unix::fs::PermissionsExt;
+        let scratch = Scratch::new("mode");
+        let d = scratch.directory();
+        let mode = |name: &str| {
+            std::fs::metadata(scratch.root().join(name))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777
+        };
+        for (name, bits) in [("private", 0o600), ("script", 0o751), ("shared", 0o664)] {
+            d.write_file(name, b"first").unwrap();
+            std::fs::set_permissions(
+                scratch.root().join(name),
+                std::fs::Permissions::from_mode(bits),
+            )
+            .unwrap();
+            d.write_file(name, b"second").unwrap();
+            assert_eq!(mode(name), bits, "{name}");
+            assert_eq!(d.read_file(name).unwrap(), b"second");
+        }
+        let long = "n".repeat(255);
+        d.write_file(&long, b"x").unwrap();
+        d.write_file(&long, b"y").unwrap();
+        assert_eq!(d.read_file(&long).unwrap(), b"y");
+        assert_eq!(names(&scratch.root()), [long.as_str(), "private", "script", "shared"]);
     }
 
     /// Row 7: the listing and depth bounds; a refused `remove_tree` removes
