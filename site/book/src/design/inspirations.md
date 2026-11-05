@@ -7,7 +7,7 @@ combination adds.
 
 Two rules hold for both pages. Every statement about another project is taken from that
 project's own documentation, linked where it is made, as read on 2026-11-04. Every statement
-about Ignite describes release v0.6.0, an early prototype: one local host, two native targets,
+about Ignite describes release v0.7.0, an early prototype: one local host, two native targets,
 and "planned" wherever something is designed and not built.
 
 ## Why Ignite exists

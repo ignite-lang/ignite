@@ -23,17 +23,12 @@ dependencies between the waves are in
 | **v0.4.0** | protocols that state which RFC requirements they meet: `std.rfc` and catalogues of RFC 854, 855, 1143, 9112 and 9110; the clauses `conforms`, `scope`, `satisfies`, `verifies`, `unsupported` and `not_applicable` with E090 to E092; `ignite conformance`, `ignite rfc import` and `ignite rfc check`; the claims of `Telnet` (RFC 855 met, RFC 854 with four gaps) and `Http` (gaps listed, nothing claimed) ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.4.0)) |
 | **v0.5.0** | the language gaps of wave A on both targets: values move at their last use, calls of fn-typed expressions, rest patterns in list patterns with E076; store `upsert`, borrowed store reads and performance work on both targets ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.5.0)) |
 | **v0.6.0** | processes, files, settings and random bytes for programs: `std.fs` with the `Directory` resource, `std.process`, one `--flag` per `Setting` with E142, `std.random`; `HttpServer` runs under `ignite run` and `ignite apply`; LLVM is the default `--target`, and an installed `ignite` carries its runtime ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.6.0)) |
+| **v0.7.0** | one service operated (slice 18): the todo service on the LLVM target keeps its data in a `Directory` across a kill and an `ignite apply` rollout, an HTTP probe kind with a typed outcome and an `Availability` contract over it, a hosted `Store`, host journal integrity checks, fault rows for lost acknowledgement, stale plans and corrupt journals, and `ignite recover`; also `CommandLine`, the language server example `ignite-lsp` written in Ignite, and fixes to rollouts, LLVM stream ownership and runtime panics ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.7.0)) |
 
 ## Being built <span class="badge wip">unreleased</span>
 
-One step is next and is in no release:
-
-- slice 18, one service operated: the todo service on the LLVM target with its data in a
-  directory, an HTTP probe, an availability contract and `ignite apply` rollouts that keep the
-  data; its contract is in
-  [`docs/slice.md`](https://github.com/ignite-lang/ignite/blob/main/docs/slice.md) section 22.
-
-Until it is released, treat this list as a plan, not as documentation.
+No slice is being implemented. The next waves are the designs below; their order is in
+[`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md).
 
 ## Designs <span class="badge design">design</span>
 
