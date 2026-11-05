@@ -1,0 +1,55 @@
+package arguments
+
+import std.net.Endpoint
+
+// Row 18 of `docs/slice.md` 21.0: a program reads its own arguments
+// through `Setting` resources and a `Directory`'s `flag` (21.6), beside
+// `--port` and `--ref`, which keep their meaning. `show` prints its state
+// and returns:
+//   tool <--tool>
+//   mode <--mode, default fast>
+//   root <the root given by --root, as resolved at launch>
+//   listening 127.0.0.1:<the bound port>
+//   peer <the endpoint of --ref Arguments.peer=..>
+
+type Peer {
+  port: Int
+}
+
+fn Peer.main(self: Peer) -> Result<Unit, IoError> = Ok(Unit)
+
+type Show {
+  tool: Setting
+  mode: Setting
+  root: Directory
+  listener: TcpListener
+  peer: Ref<Peer>
+  executable: Text
+}
+
+fn Show.main(self: Show) -> Result<Unit, IoError> {
+  let tool = self.tool.value()
+  let mode = self.mode.value()
+  let root = self.root.absolute_path()?
+  let port = self.listener.local_port()
+  let endpoint = Endpoint.of(self.peer)?
+  Stdout.write_all("tool {tool}\nmode {mode}\nroot {root}\nlistening 127.0.0.1:{port}\npeer {endpoint.address}:{endpoint.port}\n".to_bytes())
+}
+
+system Arguments {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 8096 }
+  resource tool: Setting { flag = "--tool" }
+  resource mode: Setting { flag = "--mode", default = "fast" }
+  resource root: Directory { path = "missing", flag = "--root" }
+
+  component peer: Peer { port = 9 }
+
+  component show: Show {
+    tool = tool
+    mode = mode
+    root = root
+    listener = ingress
+    peer = peer
+    executable = "show"
+  }
+}

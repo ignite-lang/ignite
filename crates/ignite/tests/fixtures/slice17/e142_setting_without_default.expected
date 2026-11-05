@@ -1,0 +1,1 @@
+slice17/e142_setting_without_default.ignite:1:1: error[E142]: setting `Bench.tool` (`--tool`) has no `default`, and `Bench.runner` uses it: `ignite run` and `ignite apply` pass no setting values, so the member would exit 2 at every start; give it a `default`

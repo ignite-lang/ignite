@@ -1,0 +1,18 @@
+WAIT 08:50:16 free=69G floor=45G
+START 08:50:16 free=69G
+MODE cold 08:50:16 load 20.56 free 69G
+{"label": "baseline", "unit": "clean", "pair": "1793865026956223606-cold-1", "seconds": 0.156711803, "exit": 0, "load_before": 21.80517578125}
+{"label": "baseline", "unit": "cold-fmt", "pair": "1793865026956223606-cold-1", "seconds": 1.6230605009999999, "exit": 0, "load_before": 21.80517578125}
+{"label": "baseline", "unit": "cold-clippy", "pair": "1793865026956223606-cold-1", "seconds": 10.14763824, "exit": 0, "load_before": 21.1796875}
+{"label": "baseline", "unit": "cold-workspace", "pair": "1793865026956223606-cold-1", "seconds": 1031.20686176, "exit": 0, "load_before": 20.837890625}
+{"label": "baseline", "unit": "cold-inline", "pair": "1793865026956223606-cold-1", "seconds": 28.012004436, "exit": 0, "load_before": 14.1328125}
+{"label": "baseline", "unit": "gate-cold", "pair": "1793865026956223606-cold-1", "seconds": 1070.994649973, "exit": 0, "load_before": 21.80517578125}
+{"label": "candidate", "unit": "clean", "pair": "1793865026956223606-cold-1", "seconds": 0.172777584, "exit": 0, "load_before": 15.833984375}
+{"label": "candidate", "unit": "cold-fmt", "pair": "1793865026956223606-cold-1", "seconds": 2.761556321, "exit": 0, "load_before": 15.833984375}
+{"label": "candidate", "unit": "cold-clippy", "pair": "1793865026956223606-cold-1", "seconds": 24.37440887, "exit": 0, "load_before": 16.48828125}
+{"label": "candidate", "unit": "cold-workspace", "pair": "1793865026956223606-cold-1", "seconds": 763.852012136, "exit": 0, "load_before": 19.44482421875}
+{"label": "candidate", "unit": "cold-inline", "pair": "1793865026956223606-cold-1", "seconds": 19.173199852, "exit": 0, "load_before": 10.0654296875}
+{"label": "candidate", "unit": "gate-cold", "pair": "1793865026956223606-cold-1", "seconds": 810.16860375, "exit": 0, "load_before": 15.833984375}
+{"label": "baseline", "unit": "cold-fmt", "pair": "1793865026956223606-cold-2", "seconds": 6.160533652, "exit": 0, "load_before": 9.515625}
+{"label": "baseline", "unit": "cold-clippy", "pair": "1793865026956223606-cold-2", "seconds": 7.208684982, "exit": 0, "load_before": 8.98095703125}
+EXIT=143 09:23:07 free=45G

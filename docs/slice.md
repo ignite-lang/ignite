@@ -399,18 +399,22 @@ may come from:
   from; an assignment `x = e` (or `x.f = e`) adds the roots of `e` to those of `x`, whatever
   the control flow, so a `var` assigned from two parameters needs effects on both; `l.push(e)`
   and `l.append(e)` add the roots of `e` to those of the local `l`;
-- `e.f`, `e[i]`, `e.copy()`, `e.at(i)`, `e.slice(a, b)` and `e?` have the roots of `e`;
+- `e.f`, `e[i]`, `e.copy()`, `e.at(i)`, `e.slice(a, b)` and `e?` have the roots of `e`; so
+  do the container reads that return an element on a receiver `e` of declared type `Map`:
+  `e.get(k)`, `e.remove(k)` and `e.keys()` (since slice 17: a `requires []` fn could otherwise
+  use a `Setting` or `Launcher` held in a `Map`);
   `a.concat(b)` has those of `a` and `b`;
 - a tuple, list literal or record literal has the roots of its elements or field values;
 - `if`, `match` and a block have the roots of every value they may produce: the last
   expression of each branch, arm or block, with that branch's locals in scope;
 - the result of any call has the roots of each argument whose type can hold a substrate
-  handle (`TcpStream`, `TcpListener`, `Store`, `Stdin`, `Stdout`, directly or in a field,
+  handle (`TcpStream`, `TcpListener`, `Store`, `Stdin`, `Stdout`, and since slice 17
+  `Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting` (21.3); directly or in a field,
   payload, element or type argument; a type parameter or an unknown type may). This covers a
   user fn called by name or by UFCS (the receiver is an argument), pure or effectful,
   `requires []` included; a fn value or fn-typed field; a variant constructor (`Some(s)`); a
-  protocol role; and a `Store` method (receiver and arguments). A callee cannot launder a
-  parameter by returning it;
+  protocol role; and every `Store` method, `get`, `remove`, `values`, `update` and `upsert`
+  included (receiver and arguments). A callee cannot launder a parameter by returning it;
 - every other expression has no roots: literals, operators, the other builtin methods and the
   results of substrate operations. Such a value is owned by the function: a stream returned by
   `accept` or `TcpStream.connect` needs no effect for its own operations or for the calls it
@@ -636,6 +640,10 @@ accept loop, connect and exit codes are Ignite in `std.protocol.telnet.TelnetSer
 `std.protocol.telnet.TelnetClient` and `std.protocol.http.HttpServer` (section 14.6), and
 the backends know no component kind by name.
 
+Slice 17 adds the resource kinds `Directory`, `Launcher`, `Entropy` and `Setting`, created by
+the generated `main` after the stores and before the listeners: section 21 (21.3, 21.8)
+supersedes this section where they differ.
+
 ```ignite
 system Terminal {
   resource ingress: TcpListener { address = "127.0.0.1", port = 2323 }
@@ -732,6 +740,10 @@ C ABI adapter `ignite-rt` (`docs/llvm.md` section 5).
 
 Slice 14 adds `Pipe`, `PipeStream`, `ByteStream` and the `ignite_rt_pipe_*` entries: 18.8 and
 18.9 supersede this section where they differ.
+
+Slice 17 adds files (`Directory`), child processes (`Launcher`, `ChildProcess`), random bytes
+(`Entropy`), launch arguments (`Setting`, `args::flag_from_args`) and the exit hooks: section 21
+supersedes this section where they differ.
 
 Slice 4: blocking. Sockets are `std::net`, standard input is one unbuffered `read(0)` per
 call, every task is an OS thread (`spawn`), and there is no event loop and no tokio. An
@@ -890,12 +902,12 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E032 | import cycle |
 | E049 | a binding inside an or-pattern |
 | E050 | two tests of one module with the same name (section 12.2) |
-| E051 | a test-only item used outside tests and test-only items, or imported (section 12.2), or `Store.new()` there (section 12.3), or `Pipe.pair()` there (section 18.4); a UFCS use is reported by the type checker |
+| E051 | a test-only item used outside tests and test-only items, or imported (section 12.2), or `Store.new()` there (section 12.3), or `Pipe.pair()` there (section 18.4), or since slice 17 `Directory.temporary()`, `Launcher.new()`, `Entropy.new()` or `Setting.of(..)` there (section 21.8); a UFCS use is reported by the type checker |
 | E053 | a test name that is empty or interpolated; reported by the parser (section 12.1) |
 | E041 | (slice 9) a name two glob imports provide, used without an explicit import (section 13.1 row 6) |
 | E054 | nesting deeper than 256 levels of brackets, type arguments, prefix operators or `return` (section 3); string literals nested deeper than 32 interpolations (section 13.1 row 1) |
 | E055 | a record that contains itself through fields and tuples alone, so a value would be infinite; recursion through an enum payload, `Option`, `Result` or `List` is allowed and boxed (section 13.4) |
-| E056 | a parameter of a fn, role, fn type or closure named like an ambient capability: `stdin`, `stdout`, `process`, `net` (section 13.11) |
+| E056 | a parameter of a fn, role, fn type or closure named like an ambient capability: `stdin`, `stdout`, `process`, `net`, since slice 17 also `clock` (section 13.11, 21.1 probe p1) |
 | E057 | a type parameter of a generic record, enum or alias that no field, payload or aliased type uses (section 13.11) |
 | E099 | (slice 14) a bound naming an interface other than `ByteStream` or more than one interface, or `ByteStream` in a type position (section 18.7) |
 | E091 | (slice 15) a catalogue constant, of type `std.rfc.Requirement` or `std.rfc.Spec`, whose value is not literal data (section 19.4); the consistency trigger is the evaluator's (below) |
@@ -971,6 +983,17 @@ column by length and names the missing lengths as list patterns. Fixtures: `e076
 `e001_rest_outside_list` under `crates/ignite-syntax/tests/fixtures`; `e040_not_callable`,
 `e043_expression_call_arity`, `e042_effectful_expression_callee`, `e040_rest_binding` and
 `e046_rest` under `crates/ignite-types/tests/fixtures`.
+
+Codes of slice 17 (section 21.9): from the type checker, E140 a `Text` literal path argument
+of a `Directory` method that is absolute, has a `..` component or a NUL, and E141 a flag of a
+`Setting` or `Directory` resource that another resource of the system also uses, or that is
+`--port` or `--ref`; from `ignite run` and `ignite plan --for-apply`, E142 a `Setting` without
+`default` in a member the run or the plan would start. Slice 17 also extends E104 (malformed
+`Directory`, `Launcher` and `Setting` properties), E047 (unknown properties of those kinds and
+`Entropy`), E020 (the resource kinds the text lists), E051 (the test-only constructors), E016
+and E042 (the capability methods, section 21.3) and E056 (`clock`, section 21.1). Fixtures:
+E140 and E141 under `crates/ignite-types/tests/fixtures`, E142 under
+`crates/ignite/tests/fixtures`, named as in section 21.9.
 
 Fixtures: E001 (including a keyword as a variable, fn and type name, beside
 `valid_keyword_fields`), E002, E053 and E054 under `crates/ignite-syntax/tests/fixtures`;
@@ -2565,12 +2588,23 @@ The design 6.2 envelope's `machines`, `observations`, `artifacts`, `stateSchema`
 
 | rule | diagnostic |
 |---|---|
-| every resource and component of the system is a `bindings` key or in exactly one binding's `includes` | E110 when neither |
+| every resource and component of the system is a `bindings` key, in exactly one binding's `includes`, or a capability resource hosted implicitly (below) | E110 when none of the three |
 | no member is both a key and included, or included by two bindings | E111 |
 | `admits(binding, member)` returns `Some(reason)` for a key | E112 with that reason |
 | a binding's `includes` equals the components its member embeds (`ExecutableInfo.embedded`, 14.14 item 12) | E113, naming the missing or extra member |
 | contracts and policies are never keys | E112 (`admits` is not consulted) |
 
+- Implicit hosting (slice 17, 21.3): a capability resource (`Directory`, `Launcher`, `Entropy`,
+  `Setting`) belongs to the process of the member that creates it and needs no binding. One
+  that is neither a key nor included is hosted by the first declared executable component
+  whose `ExecutableInfo.resources` name it (its embedded components' included), with that
+  component's binding and `via` (the component itself when it is a key, else the key that
+  includes it); its entry is `{"binding": <the server's binding>, "member": "Studio.entropy",
+  "via": "Studio.server"}` and the model gains a `hosts` edge from `via` to it. `admits` is
+  not consulted for it, and E113 does not count it (`includes` names components only). A
+  capability resource no hosted executable creates is E110. A capability resource may still
+  be a key; `admits` then decides as for any key (`std.deploy.Binding` admits none, E112).
+  `TcpListener` and `Store` resources keep needing a key or an `includes`.
 - `assembly.resolution` lists one entry per resource and component, sorted by member id:
   `{"binding": <value>, "member": "Terminal.console", "via": "Terminal.server"}`, where `via`
   is the key whose binding hosts the member (the member itself when it is a key).
@@ -3117,6 +3151,10 @@ Ports:
 - `--port Terminal.ingress=0` binds a free port.
 - The driver reads the port from the child's `listening on <address>:<port>` line (6.1) and
   pins it for every restart of that member.
+- A member's listener, the resource whose `--port RESOURCE=PORT`, pinned port and endpoint
+  the driver uses, is the first `TcpListener` its executable declares
+  (`ExecutableInfo.resources`), the one the generated `main` applies `--port` to on both
+  targets, not the first by resource id (slice 17).
 
 `WorkstationExecutable` members (A10):
 
@@ -3541,7 +3579,7 @@ Other rules:
 |---|---|
 | `machines` | array sorted by id: `{"id", "machine": <encoded initial Machine value>, "member", "subscribes": [refs], "disruption"?}` |
 | `observations` | array sorted by ref: `{"ref", "producer", "element": "<qualified type>", "interval"}` |
-| `edges.provisioning` | resource → the component that binds it (`Terminal.ingress` → `Terminal.server`) |
+| `edges.provisioning` | `TcpListener` resource → the component that binds it (`Terminal.ingress` → `Terminal.server`); no other resource kind provisions its component (a `Store`, the capabilities of 21.3; slice 17) |
 | `edges.readiness` | probe → its target; evaluator → its signal's producer; the routing of 16.8 reads it |
 | `edges.recovery` | member → its supervisor machine |
 
@@ -3897,6 +3935,12 @@ Work:
 1. Frontend: a program's build, `check`, `plan`, `explain`, `run` and `test` load, check and
    type only the std modules it reaches. The reached set is:
    - the modules its files import, transitively;
+   - the modules whose records a builtin signature names, for each type or static owner a
+     loaded file spells (since slice 17): `std.process` for `Launcher` and `ChildProcess`
+     (`ChildExit`, `Invocation`), `std.net` for `Endpoint` (`Endpoint.of`), derived from
+     `ignite_check::CAPABILITY_METHODS`, `BUILTIN_STATICS` and the signatures of
+     `ignite-types` (`ignite_types::builtin_std_modules`); `child.wait()` in a module that
+     imports nothing from `std.process` reaches it;
    - the modules the compiler itself calls into for that command: `std.deploy` for
      assembly resolution (15.6), the kinds' modules for `K.main`, the reducers' modules for
      `ignite run`.
@@ -6597,3 +6641,774 @@ Each has a default, which the units follow unless the review changes it.
 | Q1 | actors R1 says "Measure on the 1600-POST test", which exists only once actors P1 lands | rows 9 and 10 stand in for it; actors P1 measures R1 on its own acceptance test |
 | Q2 | the rebase onto the slice-15 merge changes the base values this section quotes (`CODEGEN_REVISION`, test counts) | rows 15 and 25 are relative to the base; U3 and U5 read the value at their wave's base |
 | Q3 | whether a copy the analysis keeps in a loop (a read after the call) should be reported to the user | no diagnostic in this slice (D3); a later lint can use `moves` |
+
+## 21 Slice 17: processes, files, arguments and random bytes (playground substrate)
+
+**Status: contract written 2026-11-04. The independent review (`docs/slice17-review.md`, 37
+findings) is resolved in this text; 21.17 maps each finding to its resolution. Implemented
+2026-11-05 on `feat/slice17-processes-files`, units U1 to U6; the standing of each row of 21.0
+is in `STATUS.md`, the stale points of the contract found during the slice in 21.18.** The
+rows of 21.0 are required checks, not results.
+
+Sections 19 (slice 15) and 20 (slice 16) are on `main` (slice 16 merged in PR 30 before this
+slice started). This section is numbered 21 so that no merge order renumbers it.
+
+Sources:
+
+- the planning store at `7dcb08e`: `epic:playground-substrate`, `story:process-spawn` (gap P1),
+  `story:file-system` (P2), `story:program-arguments` (P8), `story:random-bytes` (P7), and the
+  constraint P3 that the first two stories carry;
+- `docs/design.md` §3.5 (effect interfaces for files, processes and the clock), §8.6 (IO is a
+  runtime interface), §8.7 (handles across the ABI), §8.8 (process isolation), §9.3 (effects of
+  toolchain builds);
+- `docs/vision.md` §3 invariants 3 (handles are types), 4 (authority is passed, never ambient),
+  5 (nothing lost silently, bounded queues), 7 (both targets), 8 (a fixture per code) and 9
+  (compile-time budget); §6 and §7 (T2, T3, T4);
+- this file: sections 5 and 5.1 (effects), 6.1 (system lowering), 7 (substrate), 8, 12.3
+  (test-only constructors), 14.4 to 14.6 (resources and kinds), 15.5 (the model), 16.3 and 16.9
+  (`ignite run`, `--ref`), 17 (`ignite apply`), 18 (the form this section follows);
+  `docs/layering.md`; `docs/llvm.md` §4 (handle lifetime).
+
+The base of the slice is commit `651be04c` (`main` when U1 started, with slice 16, release
+`v0.5.0` and the LLVM default target of PR 32). `main` moved after it by planning-store commits
+only, and U6 merged it, so the merge base at the close is `99647132`, whose code is the same as
+`651be04c`'s. Every `git diff` in 21.0 and the before tree of 21.14 are taken from that base.
+The contract was written against `c539392`, an older `main`; the probes of 21.1 ran there.
+Code is cited by symbol (T3).
+
+Since PR 32 (2026-11-05, before U1) LLVM is the default target of the CLI and of
+`BuildOptions::default`. A command in this section without `--target` builds with LLVM and,
+for `ignite build`, `ignite run` and `ignite plan --for-apply`, needs the runtime archive
+(`--runtime`, or `libignite_rt.a` beside the driver; since PR 33, merged into this slice at its
+close, else the archive the driver carries, `docs/llvm.md` section 1); the end-to-end tests pass
+the target and the runtime explicitly. Where a row below names one target, it names it.
+
+Out of this slice by the steering session's word: `story:http-server-responses` (gaps P4 to
+P6), which follows the HTTP RFC gaps story.
+
+The slice adds four capabilities, each a handle type that a system declares as a resource and
+passes to the code that uses it:
+
+- `Directory`: a root directory; read, write, list, create and remove files and directories
+  under it, never outside it;
+- `Launcher`: start child processes with arguments, a working directory, an environment, a
+  timeout and bounded captured output; wait for them and kill them;
+- `Entropy`: random bytes from the operating system;
+- `Setting`: one command-line argument of the executable, such as `--tool PATH`.
+
+### 21.0 Acceptance
+
+`both` in the command column means the test runs on the Rust and the LLVM target
+(`ignite test FILE --target all`, or a `crates/ignite` end-to-end test that builds with both).
+Fixture paths without a directory are under `crates/ignite/tests/fixtures/slice17/`.
+
+| # | check | command | exact required observation | unit |
+|---|---|---|---|---|
+| 1 | files round trip | `ignite test std/fs.ignite --target all` | the test "a file written is read back, listed, nested and removed" passes on both targets: it writes 256 bytes holding every byte value to `a.bin` in `Directory.temporary()`, reads them back equal, `read_directory("")` is `["a.bin"]`, after `create_directory("sub/deeper")` it is `["a.bin", "sub/"]`, after `remove("a.bin")` and `remove_tree("sub")` it is `[]` | U2 |
+| 2 | lexical confinement | same file | the test "paths that leave the root are refused" passes on both targets: for each of `../x`, `a/../../x`, `/etc/passwd` and `a\0b`, taken from a `List<Text>` so that E140 (literals only) does not apply, each of the six `Directory` operations of 21.4 that take a path returns `Err` whose message is `path <p>: leaves its root`, `path <p>: absolute` or `path <p>: contains NUL`; the parent of the root holds no entry named `x` afterwards; `read_file("")` returns `Err` starting `path : ` | U2 |
+| 3 | symlinks out, non-regular files | `cargo test -p ignite-io --lib fs::` | `fs::symlinks_out_are_refused` passes: a root holding `out -> <a sibling directory with secret>` and `f -> <a file outside>` refuses `read_file("out/secret")`, `write_file("out/new", ..)`, `read_directory("out")`, `create_directory("out/d")`, `read_file("f")` and `write_file("f", ..)` with the message `path <p>: symbolic link <component>`; the outside directory's listing and the outside file's bytes are unchanged; `remove("f")` removes the link and leaves the outside file. `fs::a_fifo_is_not_read` passes: `read_file` of a FIFO in the root returns `Err` `path <p>: not a regular file` within 1 s, with no writer on the FIFO | U2 |
+| 4 | symlink race | same | `fs::a_swapped_component_never_escapes` passes: one thread exchanges `d` (a directory holding `inner`) with `e` (a symlink to an outside directory holding `inner`) by `renameat2(RENAME_EXCHANGE)`, 10,000 times; 10,000 `read_file("d/inner")` calls on another thread each return the inside bytes or an `Err`, never the outside bytes, and every `Err` whose cause was the link reads `path d/inner: symbolic link d` | U2 |
+| 5 | atomic replace | same | `fs::write_replaces_atomically` passes: 1,000 alternating `write_file` calls of a 64 KiB A-file and a 64 KiB B-file race 1,000 `read_file` calls, every read is all A or all B, and the directory lists only the file afterwards (no temporary left) | U2 |
+| 6 | tree removal | `ignite test std/fs.ignite --target all` | "remove_tree removes links, not their targets" passes on both targets: a tree with nested files and a link to a directory outside the root (made by `Launcher.new()` running `/bin/ln -s` as `tree/out`); before the removal `read_directory("tree/out")` returns `Err` `path tree/out: symbolic link tree/out`; the tree is removed and the outside directory keeps its files; `remove_tree("")` returns `Err` `path : the root itself` and `remove_tree(".")` returns `Err` `path .: the root itself` (`<p>` is the path as given) | U2 |
+| 7 | read and size bounds | same | "a file over the read bound is refused" passes: a file of 16 MiB + 1 byte, written by `write_file`, makes `read_file` return `Err` whose message contains `larger than 16 MiB`; a file of exactly 16 MiB is read. `fs::bounds_hold` (`cargo test -p ignite-io --lib`): a directory of 65,537 entries makes `read_directory` return `Err` `path <p>: more than 65536 entries`; a chain of 257 nested directories makes `remove_tree` return `Err` `path <p>: deeper than 256 levels` and removes nothing | U2 |
+| 8 | file effects checked | `cargo test -p ignite-check --test main fixtures::` | fixture `e016_directory_effect` (`fn save(files: Directory) -> Result<Unit, IoError> requires [files.read]` calling `files.write_file`) gives exactly ``missing effect `files.write` for `files.write_file`; add it to the `requires` of `save` ``; `valid_capabilities` (each capability method called with its effect declared, receivers bound without annotation from the four test-only constructors and from `start`, 21.3) is silent | U1 |
+| 9 | process output and status | `ignite test std/process.ignite --target all` | "a child's output and status are captured" passes on both targets: `Launcher.new().execute(Invocation { program = "/bin/sh", arguments = ["-c", "echo out; echo err >&2; exit 3"] })` gives `ending == 0`, `code == 3`, `stdout == "out\n"`, `stderr == "err\n"`, `dropped == 0`, and `outcome(exit)` matches `ExitCode(3)` | U3 |
+| 10 | timeout kills the group | same | "a child over its timeout is killed with its group" passes on both targets: `/bin/sh -c "echo $$; sleep 30 & sleep 30"` with `timeout = 200 milliseconds` returns `TimedOut` (`ending == 2`, `code == -1`) within 3 s of the start with the shell's pid as `stdout`, and a follow-up `execute` of `/bin/sh -c "ps -o stat= -g <that pid> \| grep -v Z \|\| echo gone"` prints `gone` (the backgrounded grandchild died with the group; a zombie counts as gone) | U3 |
+| 11 | kill | same | "a started child is killed" passes on both targets: `start` of `/bin/sleep 30`, then `kill()` returns `Ok`, `wait()` returns `Killed` (`ending == 3`) within 1 s; then a second `wait()` returns `Err` `child already waited` and `kill()` returns `Ok` | U3 |
+| 12 | bounded output | same | "output past the limit is counted, not kept" passes on both targets: a child writing 2 MiB to stdout with `output_limit = 1 KiB` exits 0, `stdout.len() == 1024`, `dropped == 2097152 - 1024`, and the call returns (no deadlock on the full pipe); `output_limit = 17 MiB` returns `Err` `output_limit must be at most 16 MiB` | U3 |
+| 13 | SIGTERM reaches a child of a drained server | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::a_child_of_a_server_gets_sigterm`: the fixture `signal_mask.ignite`, an `HttpServer` whose handler executes `/bin/sh -c "kill -TERM $$; sleep 5"`, answers `GET /` with `ending 1 code 15` within 2 s | U3 |
+| 14 | no inherited descriptors | same | `slice17::{rust,llvm}::a_child_inherits_no_descriptors`: the test starts the server with a descriptor 5 open without close-on-exec; the same fixture's `GET /fds` executes `/bin/ls /proc/self/fd` and the body lists exactly `0`, `1`, `2` and `3` (the last is the directory `ls` reads; descriptor 5, the listener, the accepted connection, the root directory and `/dev/urandom` are absent; the fixture declares a `Directory` and an `Entropy` so they exist) | U3 |
+| 15 | process effects checked | `cargo test -p ignite-check --test main fixtures::` | fixture `e016_launcher_effect` (`fn build(tools: Launcher) -> Result<ChildExit, IoError> requires []` calling `tools.execute`) gives exactly ``missing effect `tools.launch` for `tools.execute`; add it to the `requires` of `build` ``; `e016_child_effect` (`fn stop(child: ChildProcess) -> Result<Unit, IoError> requires []` calling `child.kill()`) gives exactly ``missing effect `child.kill` for `child.kill`; add it to the `requires` of `stop` `` | U1 |
+| 16 | child bound and refusals | `ignite test std/process.ignite --target all` | "the launcher refuses what it cannot run" passes on both targets: with `Launcher.new()` (bound 16) the 17th `start` of `/bin/sleep 30` returns `Err` `too many children (16)`, and after `kill` and `wait` of one of the 16 a further `start` succeeds; `program = "nosuch-ignite-17"` returns `Err` starting `program not found`; `program = "bin/sh"` returns `Err` `program bin/sh: a relative path with /`; `timeout = 0 seconds` returns `Err` `timeout must be positive`; `directory = "rel"` returns `Err` `directory rel: not absolute` | U3 |
+| 17 | children end with the program | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::live_children_die_with_the_program`: the fixture `orphans.ignite` starts `/bin/sleep 30`, prints `child.id()` and returns from `main`; within 1 s of the program's exit the pid is absent or a zombie (`/proc/<pid>/stat` state `Z`). The same holds after one SIGTERM to a drained server (`orphans_after_drain`), after a second SIGTERM during the drain (`orphans_after_second_sigterm`), and for the direct child after SIGKILL of the server (`orphans_after_sigkill`, through `PR_SET_PDEATHSIG`) | U3 |
+| 18 | arguments | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::settings_read_their_flags`: the fixture `arguments.ignite` (a kind declared in the fixture whose `main` prints its state; resources `Setting { flag = "--tool" }`, `Setting { flag = "--mode", default = "fast" }`, `Directory { path = "missing", flag = "--root" }`, a `TcpListener`; `main` also prints `Endpoint.of` of a `Ref`), started as `<exe> --root DIR --tool /bin/true --port 0 --ref Arguments.peer=127.0.0.1:9` (a `Ref` resolves by its path `<System>.<member>`, 16.9), prints `tool /bin/true`, `mode fast`, `root <DIR canonical>`, `listening 127.0.0.1:<port>` and `peer 127.0.0.1:9`; with `--mode=slow` it prints `mode slow`; without `--tool` it exits 2 with stderr `error: --tool: required argument missing` and binds no port; with `--mode --tool /bin/true` it exits 2 with stderr `error: --mode needs a value` | U4 |
+| 19 | property checks | `cargo test -p ignite-types --test main fixtures::` | fixtures `e104_setting_flag` (`flag = "tool"`), `e104_directory_path` (`path = ""`), `e104_launcher_bound` (`maximum_children = 0`) each give exactly one E104 with the texts of 21.9; `e141_flag_collision` (two resources with `flag = "--root"`, a third with `flag = "--port"`) gives exactly two E141; `fixtures::every_type_code_has_a_fixture` lists E140 and E141 | U1 |
+| 20 | random bytes | `ignite test std/process.ignite --target all` | "two draws differ" passes on both targets: `Entropy.new()` gives two `random_bytes(32)` results of length 32 each that differ; `random_bytes(65537)` and `random_bytes(-1)` return `Err` `random_bytes: count must be in 0..=65536`; `random_bytes(0)` is empty | U5 |
+| 21 | random effect checked | `cargo test -p ignite-check --test main fixtures::` | fixture `e016_entropy_effect` (`fn token(entropy: Entropy) -> Result<Bytes, IoError> requires []` calling `entropy.random_bytes(32)`) gives exactly ``missing effect `entropy.draw` for `entropy.random_bytes`; add it to the `requires` of `token` `` | U1 |
+| 22 | P3: a handler uses the capabilities through its state, check | `ignite check crates/ignite/tests/fixtures/slice17/studio.ignite` | silent, exit 0. `studio.ignite` is a `system Studio` with `resource files: Directory { path = "workspace", create = true, flag = "--root" }`, `resource tools: Launcher`, `resource entropy: Entropy`, `resource tool: Setting { flag = "--tool" }`, an `HttpServer` with `application = HttpApp { state = Bench { files = files, tools = tools, entropy = entropy, tool = tool }, handle }`, and a handler with no `requires` that uses all four through `state` | U1 |
+| 23 | P3: capabilities reached ambiently are refused | `cargo test -p ignite-check --test main fixtures::` and `cargo test -p ignite-types --test main fixtures::` | fixture `e051_capability_outside_state` (ignite-check): a handler that calls `Entropy.new()` and `Directory.temporary()` gives exactly two E051; no other way to name a capability exists outside a resource (21.3). Fixture `e017_ambient_in_handler` (ignite-types; it declares an `HttpApp`-shaped record locally, because the fixture standard library has no `std/protocol`): a handler calling `Clock.monotonic()` gives exactly one E017, as probe p2 | U1 |
+| 24 | P3: the handler runs on both targets | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::studio_serves_through_its_state`: `studio.ignite` built and started with `--port 0 --root <tmp> --tool /bin/sh`; `POST /write` with body `a.ignite\nx` answers 204 and `<tmp>/a.ignite` holds `x`; `POST /read` with body `a.ignite` answers 200 `x`; `POST /read` with body `../x` answers 400 with the body `path ../x: leaves its root`; `POST /run` (the handler executes `state.tool.value()` with `-c "cat a.ignite"` in `state.files.absolute_path()`) answers 200 `x`; `GET /token` answers 64 lowercase hex digits, and a second launch answers a different token | U6 |
+| 25 | the model lists the capabilities | `cargo test -p ignite --test main plan::` | `plan::studio_model_matches_golden`: `ignite plan studio.ignite` equals `crates/ignite/tests/golden/studio.model.json`, whose `resources` hold `{"id":"Studio.files","kind":"Directory","properties":{"create":true,"flag":"--root","path":"workspace"}}`, `Studio.tools` with `{"maximum_children":16}`, `Studio.entropy` with `{}` and `Studio.tool` with `{"flag":"--tool"}` | U1 |
+| 26 | `ignite run` and `plan --for-apply` refuse an unset setting | `cargo test -p ignite --test main run::` and `apply::` | `run::a_setting_without_default_is_e142`: `ignite run e142_setting_without_default.ignite` exits 2 with exactly one `E142` naming the setting; `apply::plan_refuses_a_setting_without_default`: `ignite plan e142_setting_without_default.ignite --for-apply --state <tmp> --out <tmp>/p` exits 2 with the same diagnostic, reported before the host is contacted (no `ignite host` runs); `run::studio_defaults_runs`: `studio_defaults.ignite` (`default = "/bin/sh"`) run with `--target llvm` and the test runtime in a temporary working directory starts, `status` shows `Studio.server` running, `stop` exits 0, and the repository gains no file | U4 |
+| 27 | path literals checked | `cargo test -p ignite-types --test main fixtures::` | fixture `e140_path_leaves_root`: `files.read_file("../x")`, `files.write_file("/etc/x", ..)` and `files.read_directory("a/../..")` give exactly three E140; `files.read_file(name)` with a variable and `files.read_file("a/b")` give none | U1 |
+| 28 | layering | `cargo test -p ignite-check --test main layering::` | passes with rows for `std.fs` and `std.process` in `docs/layering.md` and in the test's table, both in the base layer | U1 |
+| 29 | no new dependency | `cargo tree -p ignite-io -e normal --prefix none \| sort -u` and `cargo tree -p ignite-io -e features` | the first lists the same crate set as at the base; the second shows `nix` with the added features `dir` and `poll` (the latter now outside `runner` too), recorded in the commit message that adds them | U1 |
+| 30 | names stay free | `ignite check` of every `std/` and `examples/` file; `cargo test -p ignite-check --test main fixtures::` | silent; `std/cli.ignite` still declares `Command` and `Argument`; the fixtures that declare a fn `start` (`valid_protocol`, `e013_spawn_not_effectful_call`) give their expected output unchanged; no existing `.expected` file newly mentions `value`, `wait`, `kill` or `execute` | every unit |
+| 31 | the old resource error | `git diff --stat 651be04c -- '*.expected'` at U1's merge | only files whose E020 text "expected `TcpListener` or `Store`" became the new text of 21.9, and the new fixtures, appear | U1 |
+| 32 | codegen revision | `git diff 651be04c -- crates/ignite/src/apply/plan.rs`; `cargo test -p ignite --test main apply_admission::` | `CODEGEN_REVISION` differs from the base, bumped by U1 and again by U4: `ignite-codegen/0.1.0-16` at `651be04c` (`0.1.0-2` at `c539392`; slice 16 and PRs 27 to 29 stepped it in between), `-17` after U1, `-18` after U4; the admission tests pass | U1, U4 |
+| 33 | gate | `task gate` | exit 0 on the slice branch at the close | every unit |
+| 34 | gate time | 21.14 | the records of 21.14 exist under `docs/performance/17/` and in `AGENTS.md` | U6 |
+| 35 | no laundering through a parameter named `clock` | `cargo test -p ignite-check --test main fixtures::` | fixture `e056_clock_parameter` (probe p1) gives exactly one `E056` at the parameter `clock`; `AMBIENT_HEADS` holds `clock` | U1 |
+| 36 | generator goldens | `cargo test -p ignite-rustgen --test main golden::` and `cargo test -p ignite-llvm --test main golden::` | `golden::capabilities` on each backend: `crates/ignite-rustgen/tests/golden/capabilities.{ignite,rs}` and `crates/ignite-llvm/tests/golden/capabilities.{ignite,program.ll}` (the four resources, a flag read in the generated `main`, one call of each method) match, and the Rust output builds with cargo and the LLVM output compiles with clang | U1 |
+
+### 21.1 Current state and verdicts (at `c539392`)
+
+Probes, run 2026-11-04 with `target/debug/ignite check` built from the base (`cargo build -p
+ignite`, exit 0):
+
+- p1, `fn helper(clock: Int) -> Duration requires [clock.read] = Clock.monotonic()` called from
+  `fn outer() -> Duration requires [] = helper(1)`: silent, exit 0. A parameter named `clock`
+  absorbs the ambient `clock.read`, so `outer` reads the clock while declaring nothing. A
+  handler can launder an ambient effect this way past `requires [state.*]`, which breaks P3;
+  U1 closes it (row 35).
+- p2, an `HttpServer` handler over `Store<Int>` that calls `Clock.monotonic()`: exactly one
+  ``E017 effectful function `handle` does not fit `fn(state: Store<Int>, request: Request) ->
+  Response requires [state.*]`: its effect `clock.read` is not covered by the type's
+  `requires` ``, exit 1.
+- p3, `resource files: Directory { path = "workspace" }` and `resource tools: Launcher`: two
+  ``E020 unsupported resource kind `Directory`; expected `TcpListener` or `Store` `` (and the same
+  for `Launcher`), exit 1.
+- p4, one state record built from two `Store` resources, `HttpApp { state = Both { counts =
+  counts, names = names }, handle }`, the handler using both through `state`: silent, exit 0.
+  A state record composes several capabilities today.
+
+| fact | where | verdict |
+|---|---|---|
+| F1 the substrate reads only `--port` and `--ref` | `ignite_io::args::port_from_args`, `endpoint_from_args` | `Setting` adds flags beside them; both keep their meaning (row 18) |
+| F2 no file, process or random operation exists in a builtin table | `BUILTIN_STATICS`, `BUILTIN_METHODS` in `crates/ignite-check/src/lib.rs`; `crates/ignite-types/src/builtins.rs` | all four capabilities are new |
+| F3 the resource kinds are `TcpListener` and `Store` | `resource` in `crates/ignite-types/src/typer/system.rs`, `lower_resources` in `crates/ignite-rustgen/src/lib.rs` | four kinds added; the E020 text changes (row 31) |
+| F4 a handler may act only on its state | `HttpApp` in `std/protocol/http.ignite` (`requires [state.*]`); probe p2 | capabilities are values in the state, not statics (21.3) |
+| F5 `Store` methods are effectful by the receiver's declared type, other substrate methods by name | `store_op` and `store_effect`; `EFFECTFUL_METHODS` and `method_effect` | the new methods follow `store_op`: a by-name table would capture user fns named like them, such as `start` (fixtures `valid_protocol`, `e013_spawn_not_effectful_call`), `value`, `wait`, `kill`, `execute`; a receiver bound without annotation needs `static_type` arms (21.3, R4) |
+| F6 the ambient heads are `stdin`, `stdout`, `process`, `net` | `AMBIENT_HEADS` | `clock` is missing (probe p1): U1 adds it, so a parameter named `clock` is E056 (row 35); the capabilities add no head, they are not ambient |
+| F7 `ignite run` starts an executable without a working directory of its own | `spawn` in `crates/ignite/src/run/process.rs` | a relative `Directory.path` resolves against `ignite run`'s working directory (21.6) |
+| F8 the drain blocks SIGTERM in the main thread and in every thread it starts | `ignite_io::drain::install` | a child must start with an empty signal mask. Resolved by U3: Rust's `Command` keeps the mask of the thread that forks (row 13 failed without the hook), so the `pre_exec` hook of 21.5 empties it |
+| F9 sockets are opened close-on-exec by Rust's `std::net` | `ignite_io::net` | covers only what the runtime opens; a descriptor the server inherited without close-on-exec would pass to a child, so the child closes every descriptor from 3 up (21.5, row 14) |
+| F10 on LLVM a handle lives until the process exits unless a `spawn` moved it | `docs/llvm.md` §4 | `wait` frees a child's slot and the adapter answers a released child handle as Rust does (21.5); `execute` allocates none |
+| F11 `nix` 0.31: the workspace enables `term` and `fs`, `ignite-io` adds `signal` (which implies `process`) and `poll` under `runner` | root `Cargo.toml`, `crates/ignite-io/Cargo.toml` | `openat`, `fstatat`, `unlinkat`, `mkdirat`, `renameat2` and `killpg` are on already; U1 adds `dir` (for `Dir`) and `poll` outside `runner` (row 29) |
+| F12 the test runner already captures a child's output with `poll` and kills it at a deadline | `run_child`, `drain_output` in `crates/ignite-io/src/test.rs` | the watcher of 21.5 is the same loop, moved into `ignite_io::child` and shared; the runner keeps its own process-group behaviour (the watcher takes the group as a parameter), so Ctrl-C still reaches test children |
+| F13 the model encodes a resource as `{"id","kind","properties"}` | the resource arm of the model in `crates/ignite-eval/src/eval.rs` | no format change; the new kinds appear with their properties (row 25) |
+| F14 names in use: `Command`, `Argument` (`std.cli`), `Exited`, `Signalled` (variants of `std.control`'s `Event`), `write_text` (`std.protocol.telnet`) | those modules | the new names avoid them: `Invocation`, `ChildExit`, `Ending` with `ExitCode`, `BySignal`, `TimedOut`, `Killed`, `read_text_file`, `write_text_file` |
+| F15 E140 to E149 are unused on `main` and on `feat/slice16-language-gaps`; T4 ends at E139 | section 8; `docs/vision.md` §7 T4 | this slice takes E140 to E149 (stale point S1) |
+
+The facts above are as found at `c539392`; how each stands at the close is in 21.18.
+
+### 21.2 Scope and non-goals
+
+In scope: the four capability types and their resource kinds, their effects, their methods on
+both targets over one implementation in `crates/ignite-io`, the std modules `std.fs` and
+`std.process`, the test-only constructors, the model entries, `ignite run`'s handling of
+settings, and the P3 end-to-end row.
+
+Not in scope:
+
+- sandboxing a child: a child process is not confined to any `Directory`; the launcher is the
+  authority to run programs (design §8.8 leaves isolation to a later slice);
+- shells, pipes between children, a pty, writing to a child's stdin (stdin is the null device),
+  streaming a child's output while it runs;
+- file watching, permissions and modes, memory-mapped files, file handles for partial reads,
+  symlinks that stay inside the root (they are refused, 21.4), renaming;
+- seeded or deterministic random generators;
+- an argument-parsing library beyond `Setting` (the stories exclude it; `std.cli` keeps its
+  declarations);
+- passing setting values from `ignite run` or `ignite apply` (21.15);
+- `story:http-server-responses` (P4 to P6);
+- killing grandchildren when the program dies without an orderly exit (SIGKILL, a crash):
+  direct children are killed (21.5), grandchildren are 21.15's;
+- platforms other than Linux; the code uses POSIX calls, but no row runs elsewhere.
+
+### 21.3 Capabilities are values (P3)
+
+A capability is obtained in exactly two ways:
+
+1. A system declares it as a resource, and the generated `main` creates it before the kind's
+   `main` runs, as it creates a `Store` and binds a `TcpListener` (section 6.1). A component
+   receives it through a property, typically the `state` of an `HttpApp`.
+2. A test or test-only item creates one with a test-only constructor: `Directory.temporary()`,
+   `Launcher.new()`, `Entropy.new()`, `Setting.of(flag, value)`. Anywhere else these are E051.
+
+A capability resource needs no deployment binding: it belongs to the process of the member
+that creates it, and an assembly's resolution hosts it there implicitly (15.6), so the studio
+below resolves under the standard `Deployment` with bindings for `Studio.ingress` and
+`Studio.server` only. A capability resource provisions nothing: only a `TcpListener` has a
+`provisioning` edge (16.14).
+
+There is no static that yields a capability outside tests, and no new ambient head: `process`
+stays the head of `process.exit` and `process.args` only. A handler of an `HttpApp<S>` can use a
+capability only if `S` holds it, so `requires [state.*]` covers every effect it uses (probe p2
+shows that an ambient effect there is E017).
+
+```ignite
+type Bench {
+  files: Directory
+  tools: Launcher
+  entropy: Entropy
+  tool: Setting
+}
+
+fn handle(state: Bench, request: Request) -> Response = ...
+
+system Studio {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 8095 }
+  resource files: Directory { path = "workspace", create = true, flag = "--root" }
+  resource tools: Launcher
+  resource entropy: Entropy
+  resource tool: Setting { flag = "--tool" }
+
+  component server: HttpServer {
+    listener = ingress
+    application = HttpApp { state = Bench { files = files, tools = tools, entropy = entropy, tool = tool }, handle }
+    executable = "studiod"
+  }
+}
+```
+
+Effects. Each method needs `<root>.<op>` on each root of its receiver (section 5.1), checked by
+the receiver's declared type as `Store` methods are (F5):
+
+| type | method | op |
+|---|---|---|
+| `Directory` | `read_file`, `read_directory` | `read` |
+| `Directory` | `write_file`, `create_directory`, `remove`, `remove_tree` | `write` |
+| `Directory` | `absolute_path` | `read` |
+| `Launcher` | `start`, `execute` | `launch` |
+| `ChildProcess` | `wait` | `wait` |
+| `ChildProcess` | `id` | none (pure; a `ChildProcess` exists only at run time) |
+| `ChildProcess` | `kill` | `kill` |
+| `Entropy` | `random_bytes` | `draw` |
+| `Setting` | `value` | `argument` |
+
+- The op is `launch`, not `spawn`, because `spawn` is a keyword.
+- The ops differ per kind (`read`, `write`, `launch`, `draw`, `argument`), so `requires
+  [b.read]` on a record holding a `Directory`, an `Entropy` and a `Setting` grants only the
+  directory's reads; `b.*` grants all.
+- `Setting.value` and `Directory.absolute_path` are effectful although their values are fixed
+  at launch: that keeps them out of compile-time evaluation (a property expression must be pure,
+  E116; design §3.5), and keeps reading a launch argument a tracked authority, as
+  `Endpoint.of`'s `process.args` is.
+- A `ChildProcess` returned by `start` has no roots (vision §6 L4: authority over a listener is
+  authority over its connections), so the function that started it waits for and kills it
+  without further `requires`. A `ChildProcess` received as a parameter needs `p.wait` and
+  `p.kill`.
+- All five types are handles (`can_hold_handle`), so a record holding one carries roots, and a
+  closure that captures one is charged where it is created (section 13.3).
+- `ignite-check`'s `static_type` knows the result types of the four test-only constructors
+  (also through `?`) and of `start` on a receiver it knows as `Launcher` (also through `?`), so
+  `let files = Directory.temporary()?`, `Launcher.new().execute(..)` and `let child =
+  tools.start(..)?` need no annotation. Any other receiver whose type `ignite-check` cannot see
+  is E042, as for `Store` (section 11.7).
+
+Concurrency: every capability may be used by several tasks at once. On the Rust target each is
+a cheap clone of an `Arc`; on LLVM each is an `i64` handle into the runtime's table, and the
+substrate object behind it is shared.
+
+### 21.4 Files (`Directory`, `std.fs`)
+
+Resource kind `Directory`:
+
+| property | type | default | meaning |
+|---|---|---|---|
+| `path` | `Text` | required (E104) | the root; relative to the executable's working directory at launch |
+| `create` | `Bool` | `false` | create the root and its parents at launch when it is missing |
+| `flag` | `Text` | `""` | a command-line flag whose value replaces `path` at launch, for example `"--root"` (21.6) |
+
+At launch the generated `main` resolves the path (flag value first, else `path`), creates it if
+`create` is true, opens it with `O_DIRECTORY | O_CLOEXEC` and keeps that descriptor for the
+process's life. A missing root, a root that is no directory, or a failing open ends the program
+with exit status 2 and the line `error: directory <path>: <reason>` on stderr (the form of
+`ignite_io::run`), before any listener is bound. Every operation resolves relative to the kept
+descriptor, so renaming the root's path later moves nothing.
+
+Methods. Each returns `Result<_, IoError>`, and the result column names the `Ok` type.
+`std.fs` and `std.process` declare no `IoResult` alias: `std.protocol.http` and
+`std.protocol.telnet` each declare one, and a name two glob imports provide is E041 at use.
+
+| method | result | behaviour |
+|---|---|---|
+| `read_file(path)` | `Bytes` | the file's bytes. The last component is opened with `O_NONBLOCK`, checked with `fstat` and refused unless it is a regular file (`path <p>: not a regular file`, so a FIFO cannot block the task), then read; a file larger than 16 MiB is the error `path <p>: larger than 16 MiB` |
+| `write_file(path, data: Bytes)` | `Unit` | creates or replaces the file atomically: writes a temporary `.ignite-<pid>-<n>` in the same directory with `O_CREAT \| O_EXCL \| O_NOFOLLOW` (its name does not grow with the target's, so every name the OS takes, up to `NAME_MAX`, is written), then renames it over the target; a replaced regular file keeps its permission bits (`mode & 0o777`, given to the temporary with `fchmod` before the rename), a new file is created with mode 0644 under the process's umask; no `fsync` (durability is not promised); the parent must exist |
+| `read_directory(path)` | `List<Text>` | the entries' names in byte order, without `.` and `..`; a directory's name ends with `/`; a symlink is listed by its name without following it; more than 65,536 entries is the error `path <p>: more than 65536 entries`; this bound is the listing's only. An entry whose name is not UTF-8 has no `Text` that names it back, so it is neither dropped nor listed under another name: the listing is the error `path <p>: entry <name> is not UTF-8`, `<name>` its bytes as Rust's `escape_ascii` writes them (`a\xff`); `remove_tree` of a directory above it removes it |
+| `create_directory(path)` | `Unit` | creates the directory and its missing parents; an existing directory is `Ok` |
+| `remove(path)` | `Unit` | removes a file, a symlink (not its target) or an empty directory; a missing entry is an error |
+| `remove_tree(path)` | `Unit` | removes a directory and everything under it without following any symlink, iteratively, by the raw names the OS lists (a name that is not UTF-8 is removed with the rest) and with no bound on the entries of a directory; a missing entry is an error; a tree deeper than 256 levels is the error `path <p>: deeper than 256 levels`, found before anything is removed; the root itself (`""`, `.`) is the error `path <p>: the root itself`, where `<p>` is the path as given |
+| `absolute_path()` | `Text` | the root's canonical absolute path as resolved at launch; needs `read` (21.3) |
+
+Paths are `Text`, relative, separated by `/`. Empty components and `.` are skipped, so `""` and
+`.` name the root (which `read_directory` and `create_directory` accept and `read_file` refuses
+as a directory). Refused before any IO, as error values (row 2):
+
+- an absolute path (`/` first): `path <p>: absolute`;
+- a `..` component anywhere: `path <p>: leaves its root`;
+- a NUL byte: `path <p>: contains NUL`.
+
+Symlinks. Resolution walks the components from the root descriptor with `openat(...,
+O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC)` for each directory and `O_NOFOLLOW` for the last
+component. A symlink at any component is the error `path <p>: symbolic link <component>`, where
+`<component>` is the path up to and including the link,
+except that `remove` and `remove_tree` remove a link that is the last component (or lies inside
+the tree) as a link. Because no step follows a link and each step opens relative to the
+descriptor of the one before, a component swapped for a link between steps is caught at the step
+that opens it (row 4). The kernel reports such an open as `ELOOP` or `ENOTDIR`; the substrate
+then checks the component with `fstatat(.., AT_SYMLINK_NOFOLLOW)` and reports `symbolic link
+<component>` when it is a link, else the OS reason. A walk that loses a race (the component is
+missing for an instant) is an ordinary `Err`; it never reaches outside the root. Symlinks that
+stay inside the root are refused too; following them is 21.15's.
+
+Errors from the operating system are `IoError` values whose message is `path <p>: <reason>` with
+the OS reason text.
+
+`std.fs` (new file `std/fs.ignite`, base layer, a substrate module beside `std.net`) declares
+the doc comments of the builtins and:
+
+- `fn read_text_file(files: Directory, path: Text) -> Result<Text, IoError> requires [files.read]`
+  (invalid UTF-8 is an error naming the path);
+- `fn write_text_file(files: Directory, path: Text, text: Text) -> Result<Unit, IoError> requires
+  [files.write]`;
+- `fn join_path(left: Text, right: Text) -> Text` (one `/` between non-empty parts).
+
+### 21.5 Processes (`Launcher`, `ChildProcess`, `std.process`)
+
+Resource kind `Launcher`:
+
+| property | type | default | meaning |
+|---|---|---|---|
+| `maximum_children` | `Int` | `16` | the most children started and not yet waited, at once; `1..=1024` (E104) |
+
+`std.process` (new file `std/process.ignite`, base layer, a substrate module) declares the
+records that cross the ABI, as `Endpoint` does (section 16.13):
+
+```ignite
+type Invocation {
+  program: Text
+  arguments: List<Text> = []
+  directory: Text = ""
+  environment: List<Text> = []
+  inherit_environment: Bool = true
+  timeout: Duration = 30 seconds
+  output_limit: ByteSize = 1 MiB
+}
+
+type ChildExit {
+  ending: Int
+  code: Int
+  stdout: Bytes
+  stderr: Bytes
+  dropped: Int
+}
+
+enum Ending { ExitCode(Int), BySignal(Int), TimedOut, Killed }
+
+fn outcome(exit: ChildExit) -> Ending
+fn succeeded(exit: ChildExit) -> Bool
+```
+
+- `program`: a bare name, looked up in the `PATH` of the child's environment, or an absolute
+  path. A relative path containing `/` is the error `program <p>: a relative path with /`; a
+  name not found is `program not found: <p>`.
+- `arguments`: passed as they are; no shell.
+- `directory`: `""` keeps the program's own working directory; otherwise an absolute path
+  (`directory <d>: not absolute`). `Directory.absolute_path()` gives one. It is checked before
+  the child starts: one that does not exist, is no directory or cannot be entered is the error
+  `directory <d>: <reason>` (the OS reason, such as `No such file or directory`), never
+  `program not found`. `program not found: <p>` means only that the program's path does not
+  exist; any other failure to start is `program <p>: <reason>`.
+- `environment`: entries `NAME=value`, applied over the inherited environment, or over an empty
+  one when `inherit_environment` is false. An entry without `=` or with an empty name is an
+  error. The default `true` hands the server's whole environment, secrets included, to every
+  child; a caller that runs untrusted programs sets it to false and passes `PATH` and what else
+  the child needs (design §9.3 asks that effects name what a build reaches).
+- `timeout`: positive (`timeout must be positive`). On expiry the child's process group gets
+  SIGKILL and the result is `TimedOut`.
+- `output_limit`: per stream, at most 16 MiB (`output_limit must be at most 16 MiB`). Output
+  past it is read and discarded and counted in `dropped` (both streams together), so a child
+  that writes a lot never blocks on a full pipe.
+- `ChildExit.ending`: 0 exited (`code` is the exit status), 1 signalled (`code` is the signal
+  number), 2 timed out, 3 killed (`code` -1 for both). `outcome(exit)` maps it to `Ending`; a
+  fn named `ending` would shadow the field in a UFCS call.
+
+Methods:
+
+| method | result | behaviour |
+|---|---|---|
+| `launcher.execute(invocation)` | `Result<ChildExit, IoError>` | starts the child and waits for it on the calling task |
+| `launcher.start(invocation)` | `Result<ChildProcess, IoError>` | starts the child and returns at once |
+| `child.id()` | `Int` | the child's process id, which is also its process group id; pure |
+| `child.wait()` | `Result<ChildExit, IoError>` | waits for the end; a second `wait` is the error `child already waited` |
+| `child.kill()` | `Result<Unit, IoError>` | sends SIGKILL to the child's group while the child is unreaped; `Ok` and nothing sent once it was reaped; the result of a later `wait` is `Killed` unless it had already ended |
+
+The substrate (`ignite_io::child`):
+
+- Every child is started by its own watcher thread (named `child`), also for `execute`, so that
+  `PR_SET_PDEATHSIG` (which fires when the starting thread ends) lives as long as the watcher.
+- The child starts with `Command` (Rust std), stdin the null device, stdout and stderr pipes,
+  its own process group (`process_group(0)`) and an empty signal mask. Rust's `Command`
+  resets SIGPIPE but keeps the signal mask of the thread that forks, which blocks SIGTERM (16.13;
+  row 13 failed without the hook), so a `pre_exec` hook empties the mask; other dispositions the
+  server inherited as ignored stay ignored. The same hook sets `PR_SET_PDEATHSIG` to SIGKILL
+  (and exits at once if the parent already died), and marks every descriptor from 3 up
+  close-on-exec with `close_range` (row 14), so a descriptor the server inherited without
+  close-on-exec does not reach the child either.
+- SIGCHLD is reset to its default action at program start on both targets (`drain::install`,
+  which `ignite_io::run` and the runtime's `init` call) and before the first spawn (the test
+  runner). A SIGCHLD inherited as ignored (a parent's `trap '' CHLD` survives exec) makes the
+  kernel reap every child itself, so no status could be read. Children therefore start with
+  SIGCHLD at its default too. Should a child still be reaped by someone else (`waitid` fails
+  with ECHILD), it counts as ended with `ending 1 code -1`, and nothing signals its pid or
+  group again, since either may be reused.
+- The watcher reads both pipes with `poll`, enforces the deadline, waits for the child's end
+  with `waitid(WEXITED | WNOWAIT)` (the child stays a zombie, so its pid and group id cannot be
+  reused), sends SIGKILL to the group, reaps the child, then reads the pipes until end of file
+  or 100 ms, whichever comes first. A grandchild that left the group and holds a pipe open
+  therefore delays the result by at most 100 ms. `kill` sends to the group only while the child
+  is unreaped, under the same lock as the reaping, so it never reaches a reused group id.
+- A child counts against `maximum_children` from `start` until its `wait` returns (`execute`
+  waits itself). An unwaited child keeps counting until the process exits, on both targets, so
+  a program that starts and never waits runs into `too many children (<n>)` instead of growing.
+  Nothing waits for a free slot.
+- When the program ends in order (`main` returns, `Process.exit`, a fatal `?` report, the end of
+  a SIGTERM drain, or a second SIGTERM during the drain), every live child's group gets SIGKILL
+  before the process exits, through the exit hooks of `ignite_io` (21.12). When the program is
+  killed (SIGKILL, a crash), `PR_SET_PDEATHSIG` kills each direct child; its grandchildren are
+  not reached (21.15). Row 17.
+- LLVM: `start` allocates a table slot and `wait` frees it, so a waited child leaks no slot;
+  `execute` allocates none. The `ignite-rt` adapter answers a released `Child` handle (its
+  generation tells released from never-allocated) as Rust answers a waited child: `wait` is
+  `Err` `child already waited`, `kill` is `Ok`, `id` returns the id kept in the released entry
+  (row 11). The entry keeps the id by the handle's generation, so a waited handle answers its
+  id after a later handle reused the slot, as the Rust target does; that is 16 bytes per waited
+  child until the process exits. An unwaited child keeps its slot and its output, up to twice `output_limit`, until
+  the process exits; `maximum_children` bounds how many (21.15).
+
+### 21.6 Arguments (`Setting`)
+
+Resource kind `Setting`:
+
+| property | type | default | meaning |
+|---|---|---|---|
+| `flag` | `Text` | required (E104) | the flag, `--` followed by `[a-z0-9-]+` |
+| `default` | `Text` | absent | the value when the flag is not given; absent makes the flag required at launch |
+
+- The generated `main` reads each setting's flag, and each `Directory`'s `flag`, from the
+  process arguments before it binds a listener, by the rule of `--port` (`args::port_from_args`):
+  the first `--flag V` or `--flag=V` wins; arguments it does not know are ignored, so `--port`
+  and `--ref` keep their meaning and the same argument list serves all. A value after `--flag`
+  that itself starts with `--` is no value: `--mode --tool /x` is `--mode needs a value`.
+  `--flag=V` takes `V` as it is, also when it is empty or starts with `--`.
+- Arguments are read as the bytes the OS gave, on both targets (`args_os` on Rust, `argv` kept
+  as bytes by `ignite-rt`'s `init` on LLVM); nothing is decoded lossily. A value that is not
+  UTF-8 has no `Text`, so the read that asks for it refuses it: `error: <flag>: value <bytes>
+  is not UTF-8`, exit status 2, `<bytes>` as Rust's `escape_ascii` writes them (`/bin/\xff`),
+  as 21.4 names an entry. This holds for `--port`, `--ref` (each binding is read) and every
+  setting and directory flag. An argument that is not UTF-8 and that no read asks for is
+  ignored, like any other argument a read does not know. (As landed, U4:
+  `ignite_io::args::{flag,port,endpoint}_from_os_args`; before U4 the Rust target panicked in
+  `std::env::args` on any such argument and the LLVM target replaced its bytes with U+FFFD.)
+- A required flag that is absent ends the program with exit status 2 and `error: <flag>:
+  required argument missing` on stderr; a flag without a value, exit status 2 and `error:
+  <flag> needs a value`, as `--port` does (the `error: ` prefix is `ignite_io::run`'s).
+- `setting.value()` returns the value as `Text` and needs `<root>.argument` (21.3).
+- Flags are unique per system and differ from `--port` and `--ref` (E141).
+- A `default` is part of the declaration and so of the model `ignite plan` prints; a secret
+  belongs in a flag given at launch, not in a `default`.
+
+`ignite run` and `ignite apply` pass no setting values in this slice. They start an executable
+with its own arguments (`--port`, `--ref`), so a setting takes its `default` and a `Directory`
+its `path`. A relative `path` resolves against the executable's working directory: under
+`ignite run` the run's (F7), under `ignite apply` the `ignite host`'s, which a saved plan does
+not record (21.16 Q2). A system that `ignite run` or `ignite plan --for-apply` would start with a
+`Setting` without `default` is E142 before anything starts and before the host is contacted
+(row 26): the alternative, a member that exits 2 at every restart until its policy gives up,
+reports the same mistake late.
+
+The model (section 15.5) is unchanged in format: each resource appears as `{"id", "kind",
+"properties"}` with its declared and defaulted properties (`default` only when given), as
+row 25 fixes.
+
+### 21.7 Random bytes (`Entropy`)
+
+Resource kind `Entropy`, no properties (E047 for any). At launch the generated `main` opens
+`/dev/urandom` with `O_CLOEXEC` once; `entropy.random_bytes(count)` (op `draw`) reads `count`
+bytes from it, `0..=65536`, else the error `random_bytes: count must be in 0..=65536`.
+`/dev/urandom` gives cryptographically secure bytes once the kernel's pool is initialised,
+which on Linux happens during boot; no new dependency (`getrandom`) is needed for that.
+
+### 21.8 Typed API (add-only)
+
+Builtin types (in `ignite-check`'s builtin type list and `ignite-types`' `Ty`): `Directory`,
+`Launcher`, `ChildProcess`, `Entropy`, `Setting`. Declaring a type of one of these names is E004.
+
+Builtin statics, all test-only (E051 outside tests and test-only items):
+
+| static | type |
+|---|---|
+| `Directory.temporary()` | `Result<Directory, IoError>`: a new empty directory inside the per-test scratch directory that the test runner creates before it starts the test child and removes with its contents after it reaped the child, so a test killed at its timeout leaves nothing; the scratch directory lies under `std::env::temp_dir()`, and its path reaches the child in the environment variable `IGNITE_TEST_SCRATCH` |
+| `Launcher.new()` | `Launcher` with `maximum_children = 16` |
+| `Entropy.new()` | `Entropy` |
+| `Setting.of(flag: Text, value: Text)` | `Setting` |
+
+Builtin methods: those of 21.3, with the signatures of 21.4 to 21.7. They dispatch on the
+receiver's type and are not in `BUILTIN_METHODS` (D3): `ignite-check` finds them by the
+receiver's declared type in `CAPABILITY_METHODS` (type, method, effect operation), and
+`ignite-types` types them by the receiver's type; none is added to `EFFECTFUL_METHODS`. The
+std modules their signatures name are loaded with any file that names the type (16.22).
+
+Resource kinds: `Directory`, `Launcher`, `Entropy`, `Setting`, beside `TcpListener` and
+`Store`. The generated `main`'s order becomes: `run`; stores; settings and directory flags read
+from the arguments; directories; launchers; entropy; bind listeners (with `--port`); build the
+values; call `K.main`.
+
+`ignite-io` (new public modules): `fs` (`Directory`), `child` (`Launcher`, `ChildProcess`,
+`Invocation`, `ChildExit`), `entropy` (`Entropy`), and in `args` the function
+`flag_from_args(args, flag) -> Result<Option<String>, IoError>`; in `lib.rs` an exit-hook
+registry, `at_exit(hook: fn())`, whose hooks `exit`, the end of `run`, the end of a drain and
+the second-SIGTERM path call once before the process ends. `ignite-rt`: the files `fs.rs`,
+`child.rs`, `entropy.rs`, the `Handle` variants `Directory`, `Launcher`, `Child`, `Entropy`,
+`Setting`, `repr(C)` records `IgniteInvocation` and `IgniteChildExit` beside `IgniteEndpoint`,
+and `ignite_rt_args_flag` beside `ignite_rt_args_port` in `process.rs`. Public APIs of the
+compiler crates only gain items.
+
+### 21.9 Diagnostics
+
+New codes (section 8 gets a "Codes of slice 17" paragraph):
+
+| code | stage | meaning | fixture |
+|---|---|---|---|
+| E140 | type checker | a `Text` literal path argument of a `Directory` method that is absolute, has a `..` component or a NUL; the run-time check stays (row 2) | `e140_path_leaves_root` (ignite-types) |
+| E141 | type checker | a flag of a `Setting` or `Directory` that another resource of the system also uses, or that is `--port` or `--ref` | `e141_flag_collision` (ignite-types) |
+| E142 | `ignite run`, `ignite plan --for-apply` (before the host is contacted) | a `Setting` without `default` in a member the run or the plan would start | `e142_setting_without_default` (crates/ignite) |
+
+Changed codes:
+
+- E104 gains three texts: `` `path` of `Directory` must be a non-empty text without NUL``,
+  `` `maximum_children` of `Launcher` must be in 1..=1024, got <n>``, `` `flag` must be `--`
+  followed by lowercase letters, digits or `-`, got <text>`` (for `Setting` and `Directory`);
+  and the required-field text for `Directory.path` and `Setting.flag`. A property that is not a
+  literal where a literal is needed (`flag`, `path`, `default`, `maximum_children`) is E104 with
+  `` `<p>` of `<Kind>` must be a literal``.
+- E047 for an unknown property of the new kinds, listing the kind's properties.
+- E020's resource text becomes ``unsupported resource kind `X`; expected `TcpListener`,
+  `Store`, `Directory`, `Launcher`, `Entropy` or `Setting` `` in the type checker and in
+  `lower_resources`.
+- E051 covers the four test-only statics of 21.8.
+- E016 and E042 cover the new methods as section 5.1 and 11.7 define them, with the existing
+  text ``missing effect `<root>.<op>` for `<receiver>.<method>`; add it to the `requires` of
+  `<fn>` `` (rows 8, 15, 21).
+- E056 also names `clock` (row 35).
+- `every_checker_code_has_a_fixture` and `every_type_code_has_a_fixture` list the new and
+  extended codes; the `crates/ignite` fixture list gains E142.
+
+### 21.10 Stale points
+
+| # | where | stale text | resolution, by whom |
+|---|---|---|---|
+| S1 | `docs/vision.md` §7 T4 | the ranges end at "E130 to E139: slice 13 (F4)" | add "E140 to E149: slice 17 (playground substrate)"; U6 |
+| S2 | `docs/layering.md` and `layering::` | no rows for `std.fs`, `std.process` | add both to the base layer with `std.net`; U1 |
+| S3 | section 7 (substrate) and section 6.1 (system lowering) | list only TCP, pipes, stdin, stdout, process exit and arguments, and only `TcpListener` and `Store` | one forward line each to 21; U1 |
+| S4 | `AGENTS.md` layout table | no `std/fs.ignite`, `std/process.ignite`; the `crates/ignite-io` row omits files, children and entropy | rows; U6 |
+| S5 | `std/net.ignite` doc comment listing the substrate builtins | lists only the network builtins | unchanged; the new builtins are documented in `std/fs.ignite` and `std/process.ignite` (`Entropy`, `Setting` in `std/process.ignite`); U1 |
+| S6 | the E020 text in fixtures and tests (row 31) | "expected `TcpListener` or `Store`" | the new text; U1 |
+| S7 | `docs/design.md` §3.5 | effect interfaces for files and processes as ambient interfaces | unchanged (design is direction, T2); this section is the contract, and the difference is recorded in `docs/vision.md` §6 as a new X-row by U6 |
+| S8 | `docs/vision.md` §3 invariant 3 | enumerates the handle types (`TcpStream`, `PipeStream`, `TcpListener`, `Store<T>`, …) | add `Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`; U6 |
+| S9 | section 5.1, the roots rule | lists `TcpStream`, `TcpListener`, `Store`, `Stdin`, `Stdout` as handle types | add the five; U1 |
+| S10 | `feat/slice16-language-gaps` 20.3.1, the move analysis' handle predicate | "a handle type (invariant 3)" without the five, which would be moved as aggregates | whichever of slice 16 and slice 17 merges second adds the five to that predicate and a move test for one of them; that unit's commit names S10 |
+| S11 | `docs/vision.md` §3, the L0 substrate row | no files, children or entropy | add them; U6 |
+
+### 21.11 Decisions
+
+| # | decision | alternative | why |
+|---|---|---|---|
+| D1 | capabilities are resource handles passed in values | ambient statics with effects such as `fs.write` | P3: a handler may act only on its state; vision invariant 4 |
+| D2 | four kinds, one per authority, each with its own op names | one `Host` capability with all four | a handler that only reads files should not be able to run programs; the state record composes them (probe p4), and distinct ops keep `requires [b.read]` from granting more than reads (21.3) |
+| D3 | effects checked by the receiver's declared type, with `static_type` arms for the constructors and `start` | by method name in `EFFECTFUL_METHODS` | a by-name table would capture user fns named `start`, `value`, `wait`, `kill` or `execute` (F5); the arms spare tests the annotations `Store` needs |
+| D4 | confinement by an `openat` walk with `O_NOFOLLOW`, every symlink refused | `openat2` with `RESOLVE_BENEATH` (follows inside links); `canonicalize` and a prefix check | the walk needs no kernel 5.6 feature; the prefix check races (row 4); inside links are rare in a workspace |
+| D5 | no `Directory.subdirectory` (attenuation) in this slice | `open(path) -> Directory` sharing the receiver's roots | on LLVM every call would hold a table slot until exit (F10), unbounded in a handler; relative paths cover the playground |
+| D6 | `execute` beside `start` | only `start` and `wait` | `execute` allocates no LLVM slot and is what a run button does |
+| D7 | one watcher thread per child, which also starts it | one shared reaper thread with `poll` over every pipe | the test runner's loop already works per child (F12); `PR_SET_PDEATHSIG` needs the starting thread to live as long as the child; `maximum_children` bounds the threads |
+| D8 | environment as `List<Text>` of `NAME=value` | `Map<Text, Text>` | `List<Text>` already crosses the ABI (`texts` in `ignite-rt`); a map does not |
+| D9 | `ChildExit.ending: Int` and the enum `Ending` beside it | the enum in the record | an enum with payload does not cross the ABI today; `Endpoint`-style records do |
+| D10 | `Setting` as the name, a resource kind and not a parser | `Flag`, `Argument`; extending `std.cli` | `Argument` is a `std.cli` type; `Flag` is design §3.6's future CLI vocabulary; the story excludes a parsing library, and one flag per resource is none (21.16 Q6) |
+| D11 | settings and the directory flag are read once at launch | a `process.args` static readable anywhere | P3, and a misconfigured server fails before it binds a port (row 18) |
+| D12 | `ignite run` passes no setting values; E142 for a setting without default | `--setting member.flag=value` on `ignite run` | the playground starts its server directly; the flag syntax for `run` and the saved-plan identity of the values deserve their own decision (21.16 Q1) |
+| D13 | `/dev/urandom`, no new dependency | the `getrandom` crate | one file read; AGENTS.md asks a line for every new dependency, and none is needed |
+| D14 | E104 for malformed property values, new E141 for collisions | a new code for every property rule | E104 already carries property texts (the loopback rule of 14.11); a collision is a system rule, like E105 |
+| D15 | a frontend unit U1 before the four behaviour units | each story adds its own frontend | the four touch the same tables in `ignite-check`, `ignite-types`, `ignite-eval` and both backends; one owner avoids four-way conflicts, as 16.18 to 16.20's skeleton did |
+| D16 | a `pre_exec` hook with `close_range` and `PR_SET_PDEATHSIG`, the second `unsafe` block of `ignite-io` (the first is `net.rs`'s `shutdown`) | close-on-exec only; no death signal | close-on-exec cannot cover descriptors the server inherited (R10); without the death signal a killed server leaves children unbounded (R11) |
+| D17 | a child counts against `maximum_children` until waited, on both targets | until reaped | an unwaited child keeps an LLVM slot; counting it bounds the slots (invariant 5) and keeps both targets alike |
+| D18 | `clock` becomes an ambient head (E056) in this slice | defer the finding of probe p1 | it is the P3 hole this slice exists to respect, a one-line change, and no parameter named `clock` exists |
+
+### 21.12 Work split
+
+| unit | story | owns | depends on | first failing test | rows |
+|---|---|---|---|---|---|
+| U0 | `story:slice-17-contract` | this section, the section-8 rows, `docs/slice17-review.md` | — | — | — |
+| U1 | `story:slice-17-frontend` | in `crates/ignite-check/src/lib.rs` the builtin types, statics, methods and effects, `can_hold_handle`, the `static_type` arms of 21.3, `clock` in `AMBIENT_HEADS`; in `crates/ignite-types/src/` the `Ty` variants (`lib.rs`), `builtins.rs`, `typer.rs` (`effect_site`, E140), `typer/effects.rs`, `typer/system.rs` (kinds, E104, E141); `crates/ignite-eval/src/{eval,value}.rs` (the model arm and builtin values); `std/fs.ignite` and `std/process.ignite` with records, helpers, builtin doc comments and the line `// ---- entropy tests ----`; `SUBSTRATE_MODULES`, `docs/layering.md`, `layering::`; resource, flag and method lowering in `crates/ignite-rustgen` and in `crates/ignite-llvm` (`lower.rs`, `region.rs`, `layout.rs`, `glue.rs` as needed), calling the substrate; skeleton modules `ignite_io::{fs,child,entropy}`, `args::flag_from_args`, the `at_exit` registry in `crates/ignite-io/src/lib.rs` called by `exit`, `run` and `drain.rs`, the per-test scratch directory in `crates/ignite-io/src/test.rs` (created before, removed after each test child); `crates/ignite-rt/src/{fs,child,entropy}.rs`, the `Handle` variants in `net.rs`, `ignite_rt_args_flag` in `process.rs`; the `nix` features `dir` and `poll`; every operation a placeholder arm (21.13); the fixtures of rows 8, 15, 19, 21 to 23, 27, 35; `studio.ignite` and the golden of row 25; the goldens of row 36; `CODEGEN_REVISION`; the forward lines and lists of S3 and S9 | U0 | `fixtures::fixtures_match_expected` (ignite-check) on `e016_directory_effect` | 8, 15, 19, 21 to 23, 25, 27 to 29, 31, 32, 35, 36 |
+| U2 | `story:file-system` | `crates/ignite-io/src/fs.rs` and its unit tests (`Directory.temporary()` inside the scratch directory), `crates/ignite-rt/src/fs.rs`, the tests in `std/fs.ignite` | U1 | `fs::symlinks_out_are_refused` | 1 to 7 |
+| U3 | `story:process-spawn` | `crates/ignite-io/src/child.rs` (the watcher, its `pre_exec` hook, its `at_exit` hook killing live groups); in `crates/ignite-io/src/test.rs` only `run_child` and `drain_output`, moved onto the watcher with the runner's process-group behaviour kept; `crates/ignite-rt/src/child.rs`; the process tests in `std/process.ignite` above the entropy line; fixtures `signal_mask.ignite`, `orphans.ignite` and their tests in `crates/ignite/tests/slice17.rs` (the file and its `mod` line) | U1 | the test "a child's output and status are captured" in `std/process.ignite` | 9 to 14, 16, 17 |
+| U4 | `story:program-arguments` | `args::flag_from_args` in `crates/ignite-io/src/lib.rs` (the `args` module only), `ignite_rt_args_flag`'s body, the setting and directory-flag reads in both backends' generated `main` (U1 wrote the lowering, U4 completes what row 18 needs) and `CODEGEN_REVISION` if it changes generation; fixture `arguments.ignite` and its tests appended to `slice17.rs`; E142 in `crates/ignite/src/run/` and `crates/ignite/src/apply/plan.rs` with fixtures `e142_setting_without_default.ignite`, `studio_defaults.ignite` and the `run::` and `apply::` tests of row 26 | U1, U3 (for `slice17.rs`) | `slice17::rust::settings_read_their_flags` | 18, 26, 32 |
+| U5 | `story:random-bytes` | `crates/ignite-io/src/entropy.rs`, `crates/ignite-rt/src/entropy.rs`, the entropy test in `std/process.ignite` below the entropy line | U1 | the test "two draws differ" | 20 |
+| U6 | `story:slice-17-records` | row 24's test appended to `slice17.rs`; `STATUS.md`, `AGENTS.md`, `PLAN.md`, `docs/vision.md` §3 (S8, S11), §4.1, §6 (S7) and §7 T4 (S1); `docs/performance/17/` | U2 to U5 | `slice17::rust::studio_serves_through_its_state` | 24, 34 |
+
+Rows 30 and 33 belong to every unit.
+
+Order: W1 U0; W2 U1; W3 U2, U3 and U5; W4 U4; W5 U6.
+
+Shared files:
+
+- W3: U2, U3 and U5 each own their own files in `crates/ignite-io/src/` and
+  `crates/ignite-rt/src/`, which U1 created. `lib.rs` of both crates, `drain.rs`, `net.rs`,
+  `process.rs` (rt) and `Cargo.toml` are U1's, and no W3 unit edits them: the exit kill goes
+  through `at_exit`, the test scratch through U1's runner change. U3 alone edits `test.rs` in
+  W3, and only `run_child` and `drain_output`. U2 adds tests to `std/fs.ignite`; U3 and U5 add
+  tests to `std/process.ignite`, U3 above the line `// ---- entropy tests ----`, U5 below it.
+- W4: U4 edits the `args` module of `crates/ignite-io/src/lib.rs`,
+  `crates/ignite-rt/src/process.rs`, `crates/ignite/src/run/` and `apply/plan.rs` alone, and
+  appends to `slice17.rs` after U3 merged.
+- W5: U6 appends to `slice17.rs` after U4.
+
+Rules: one integration-test binary per crate (`AGENTS.md`), so `slice17.rs` is a `mod` line in
+`crates/ignite/tests/main.rs`. Each unit's commit names the rows of 21.0 it makes pass. The story
+ids above are the contract's names; `story:slice-17-frontend`, `story:slice-17-contract` and
+`story:slice-17-records` are new; the steering session creates or updates the stories, U0 does
+not edit the store. Stale point S10 belongs to whichever of slices 16 and 17 merges second.
+
+### 21.13 Placeholder arms
+
+After U1 every new operation exists end to end and fails at run time with one of:
+
+- `unimplemented!("slice 17: Directory.<method>")` and `unimplemented!("slice 17:
+  Directory.temporary")` in `ignite_io::fs`;
+- `unimplemented!("slice 17: Launcher.<method>")`, `unimplemented!("slice 17:
+  ChildProcess.<method>")` in `ignite_io::child`;
+- `unimplemented!("slice 17: Entropy.random_bytes")` in `ignite_io::entropy`;
+- `unimplemented!("slice 17: args::flag_from_args")` in `ignite_io::args`.
+
+The `ignite-rt` adapters of U1 call these and contain no placeholder of their own. No existing
+program declares the new resources, so the workspace stays green after U1; rows 22, 25 and the
+fixtures check without running anything. `studio.ignite` builds on both targets after U1
+(checked by U1 with `ignite build`, not run).
+
+### 21.14 Gate time
+
+Method of 18.18 (section 15.1), through `tools/ignite-perf` (modes `cold`, `warm`, `programs`,
+`cli`). "Before" is a `git archive` copy of the slice base, "after" the closed tree, each with its
+own `CARGO_TARGET_DIR`. One cold gate per tree, then three interleaved warm passes. A pair whose
+two 1-minute loads differ by more than 5 is dropped. Report the medians of the pair ratios next
+to the absolute times.
+
+Units: those of 18.18, plus `ignite test std/fs.ignite` and `ignite test std/process.ignite`
+per target, cold and warm (after only), and the build of `studio.ignite`, both targets, dev and
+release (after only). A unit that rises over 10 % gets a measured cause or the record labels the
+cause inferred. No baseline moves. The apply suites stay the slice-13 exception.
+
+Records: a "Slice 17" paragraph in `AGENTS.md`'s gate-time section; raw logs and scripts under
+`docs/performance/17/`.
+
+
+### 21.15 Deferred
+
+- Symlinks that stay inside the root; `Directory.subdirectory` (attenuation, D5); renaming;
+  permissions.
+- Writing to a child's stdin, streaming output, pipes between children.
+- Killing grandchildren when the program dies without an orderly exit: `PR_SET_PDEATHSIG`
+  reaches only direct children (21.5); a cgroup or a child subreaper would reach the rest.
+- Resetting signal dispositions that the server inherited as ignored, beyond what Rust's
+  `Command` resets (21.5).
+- Releasing an unwaited `ChildProcess` slot on LLVM before exit (F10); `maximum_children`
+  bounds it meanwhile (D17).
+- Setting values through `ignite run` and `ignite apply` (D12).
+
+### 21.16 Open questions
+
+Each has a default the units follow unless the steering session says otherwise.
+
+| # | question | default |
+|---|---|---|
+| Q1 | How does `ignite run` pass a setting's value? | not in this slice; E142 when a started member has a setting without default |
+| Q2 | What is a relative `Directory.path` relative to? | the executable's working directory: `ignite run`'s under `run` (F7), `ignite host`'s under `apply`, which the saved plan does not record; a declaration meant for `apply` uses an absolute `path` |
+| Q3 | Is 16 MiB the right read bound, and fixed? | fixed 16 MiB, as the other bounds of 21.4 and 21.5; a property later if a consumer needs more |
+| Q4 | Should `Setting` values be redacted? | the journal records no argument values; the model prints a `default`, so a secret is passed at launch and never written as a `default` (21.6) |
+| Q5 | Does a `Directory` root need `create = true` by default? | no: a missing root is a launch error unless the declaration asks for creation |
+| Q6 | Is `Setting` inside `story:program-arguments`, whose out-of-scope line excludes "an argument-parsing library beyond what `std.cli` declares"? | yes: one flag per resource read by the generated `main` is no parsing library (D10); the steering session confirms when it updates the story |
+| Q7 | Should `inherit_environment` default to false? | no: the playground's children (`ignite`, `cargo`) need `PATH` and `HOME`; the risk is documented in 21.5 |
+
+### 21.17 Resolution of the review
+
+`docs/slice17-review.md` (37 findings at `212d2eb`) is resolved in this text as follows.
+
+| finding | resolution |
+|---|---|
+| R1 (blocker) | rows 8, 15, 21 quote the existing E016 text; 21.9 states it |
+| R2 (blocker) | `child.id()` added (21.5, pure); row 17 prints it |
+| R3 (blocker) | the `ignite-rt` adapter answers a released `Child` handle as Rust answers a waited child (21.5); row 11 adds `kill` after `wait` |
+| R4 (blocker) | `static_type` arms for the four constructors and `start` (21.3, D3, U1) |
+| R5 | `absolute_path` needs `read` (21.3, 21.4) |
+| R6 | U1 owns `lib.rs`, `drain.rs`, the `at_exit` registry, the runner's scratch directory and `ignite_rt_args_flag`'s declaration; U3 edits only `run_child` and `drain_output` in `test.rs`; U4's `args` edit is stated (21.12) |
+| R7 | F11 and row 29 corrected: `fs` and `process` are on already, U1 adds `dir` and `poll`, observed with `cargo tree -e features` |
+| R8 | row 23 runs both crates' fixtures; `e017_ambient_in_handler` declares its `HttpApp`-shaped record |
+| R9 | stale points S8, S9, S10 |
+| R10 | `close_range` from 3 in `pre_exec` (21.5, D16); row 14 leaks a descriptor 5 on purpose |
+| R11 | the second-SIGTERM path runs the exit hooks; `PR_SET_PDEATHSIG` from the watcher thread (21.5, D7, D16); row 17 gains both cases; grandchildren deferred (21.15) |
+| R12 | a child counts until waited, on both targets (21.5, D17); row 16 checks the slot comes back after `wait` |
+| R13 | `read_file` refuses non-regular files via `O_NONBLOCK` and `fstat` (21.4); row 3 adds a FIFO |
+| R14 | `waitid(WNOWAIT)`, then `killpg`, then reap; `kill` sends only while unreaped (21.5) |
+| R15 | row 4 uses `renameat2(RENAME_EXCHANGE)` and allows any `Err`; 21.4 maps `ELOOP` and `ENOTDIR` |
+| R16 | row 36 (goldens on both backends); row 19 checks the code list; 21.9 names the lists |
+| R17 | row 26 uses `e142_setting_without_default` and adds `plan --for-apply` |
+| R18 | F5, D3 and row 30 name the real collisions (`start`, `value`, `wait`, `kill`, `execute`) |
+| R19 | 21.3 cites vision §6 L4 |
+| R20 | rows 18 and 21.4, 21.6 give the `error: ` prefix |
+| R21 | `<p>` is the path as given; row 6 expects both forms |
+| R22 | the fixture fns of rows 8, 15, 21 declare `requires` |
+| R23 | stale point S11 |
+| R24 | 21.6 and Q2 name `ignite host`'s working directory under `apply` |
+| R25 | a value starting with `--` is no value (21.6, row 18) |
+| R26 | bounds: `output_limit` at most 16 MiB, 65,536 directory entries, 256 levels for `remove_tree` (21.4, 21.5; rows 7, 12) |
+| R27 | row 26 runs in a temporary working directory |
+| R28 | the runner keeps its process-group behaviour (F12, U3) |
+| R29 | `Directory.temporary()` lives in a runner-owned per-test scratch directory (21.8) |
+| R30 | 21.5 says what `Command` resets; the rest is deferred (21.15) |
+| R31 | rows 10 and 17 count a zombie as gone |
+| R32 | U1's list completed; U4 bumps `CODEGEN_REVISION` if it changes generation; row 32 runs `apply_admission::` |
+| R33 | row 31 reads `git diff --stat` |
+| R34 | 21.5 documents the inherited environment, 21.6 the printed `default`; Q4, Q7 |
+| R35 | row 6 makes an outside link with `Launcher` and checks on both targets that a read through it is refused and that removal leaves the target |
+| R36 | distinct ops `draw` and `argument` (21.3, D2) |
+| R37 | Q6 |
+
+### 21.18 The close (U6)
+
+Row 24 is `slice17::{rust,llvm}::studio_serves_through_its_state` in `crates/ignite/tests/slice17.rs`.
+It passed on its first run: U2 to U5 had landed what it needs. A mutation (`--tool /bin/true`)
+fails it on both targets at `POST /run` with `(200, "")`.
+
+Stale points of this section, found during the slice and fixed at the close:
+
+- the opening said sections 19 and 20 were not on `main`; both are;
+- the base was `c539392`; the slice started at `651be04c`, and the merge base at the close is
+  `99647132` (planning-store commits only after `651be04c`); rows 31 and 32 diff against
+  `651be04c`, and row 32 names the revisions (`0.1.0-16` at the base, `-17` after U1, `-18`
+  after U4);
+- LLVM became the default target before U1 (PR 32): a paragraph after the base says what a
+  command without `--target` builds, and row 26 names the target of `run::studio_defaults_runs`;
+- row 18 passed `--ref peer=127.0.0.1:9`; a `Ref` resolves by its path `<System>.<member>`
+  (16.9), so the test passes `--ref Arguments.peer=127.0.0.1:9`, and the row now says so.
+
+The facts of 21.1 at the close:
+
+| fact | at the close |
+|---|---|
+| F1 | holds: `--port` and `--ref` keep their meaning beside the settings (row 18) |
+| F2, F3 | resolved by U1: the four capabilities are builtin types with `CAPABILITY_METHODS`; E020 names the six kinds (row 31) |
+| F4 | holds; the handler of row 24 reaches the capabilities only through `state` |
+| F5 | resolved by U1 as D3: `CAPABILITY_METHODS` by receiver type, nothing added to `EFFECTFUL_METHODS` (row 30) |
+| F6 | resolved by U1: `clock` is in `AMBIENT_HEADS` (row 35) |
+| F7 | confirmed by U4: `run::studio_defaults_runs` finds the relative root `workspace` in the run's working directory |
+| F8 | resolved by U3 (row 13), as stated in 21.1 |
+| F9 | resolved by U3: the child closes every descriptor from 3 up (row 14) |
+| F10 | resolved by U3: `wait` releases the child's slot, and a released child handle answers as a waited child on both targets (row 11) |
+| F11 | resolved by U1: `ignite-io` enables `signal`, `dir` and `poll` (row 29) |
+| F12 | resolved by U3: `ignite_io::child::watch` is the watcher of `Launcher` and of the test runner's `run_child` |
+| F13 | holds: the new kinds appear in the model unchanged in format (row 25) |
+| F14 | holds: the names of F14 stay free (row 30) |
+| F15 | resolved: E140 to E142 are taken; `docs/vision.md` §7 T4 reserves E140 to E149 for slice 17 (S1) |
+
+One gap found during the slice and closed by U6: the standard `HttpServer<S>` had no `machine`
+hook (16.16), so a system that used it directly under the standard `Deployment` with
+`nativeProcess` was E129, and the studio fixtures of row 26 and of the hosting rule (15.6) wrapped
+it in a kind of their own. `HttpServer` now has `recovery: Restart` and `rollout: DrainRollout`
+(both defaulted), `HttpServer.machine` as `TelnetServer.machine` and `HttpServer.validate` (E120:
+`limits.head` at least 1 byte, `limits.idle_timeout` and `limits.drain_timeout` positive).
+`studio_deployment.ignite` uses `HttpServer` directly, and
+`run::studio_under_the_standard_deployment_runs` runs it under `ignite run` with its supervisor
+`Running`. The model of every `HttpServer` member gains the two defaulted properties
+(`todo.model.json`, `studio.model.json`). `studio_defaults.ignite` keeps its own kind: its
+placement is not `std.deploy`'s.

@@ -87,7 +87,7 @@ const SUBSTRATE_OWNERS: &[&str] = &[
 /// Modules that are the substrate: importing their substrate names emits
 /// nothing. A Ignite declaration in one of them (`std.net.Endpoint`) is an
 /// item of `ignite-std` like any other.
-const SUBSTRATE_MODULES: &[&str] = &["std.net", "std.io"];
+const SUBSTRATE_MODULES: &[&str] = &["std.net", "std.io", "std.fs", "std.process"];
 
 /// The names of [`SUBSTRATE_MODULES`] that are the substrate's own types
 /// and variants, lowered to `ignite_io::` paths rather than imported.
@@ -105,6 +105,11 @@ const SUBSTRATE_NAMES: &[&str] = &[
     "ByteStream",
     "Pipe",
     "PipeStream",
+    "Directory",
+    "Launcher",
+    "ChildProcess",
+    "Entropy",
+    "Setting",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -1543,7 +1548,7 @@ fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
         "Tuple" => format!("({})", args.join(", ")),
         "List" => generic("Vec"),
         "TcpListener" | "TcpStream" | "PipeStream" | "Stdin" | "Stdout" | "Input" | "IoError"
-        | "Exposure" => {
+        | "Exposure" | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting" => {
             format!("ignite_io::{}", ty.name.name)
         }
         "Store" => generic("ignite_io::Store"),
@@ -2263,6 +2268,7 @@ impl<'a> Generator<'a> {
             }
             Ty::Tuple(items) => format!("({})", list(items)),
             Ty::TcpListener => "ignite_io::TcpListener".to_string(),
+            Ty::Capability(kind) => format!("ignite_io::{}", kind.name()),
             Ty::TcpStream => "ignite_io::TcpStream".to_string(),
             Ty::PipeStream => "ignite_io::PipeStream".to_string(),
             Ty::IoError => "ignite_io::IoError".to_string(),
@@ -3937,6 +3943,10 @@ impl<'a> Generator<'a> {
             ("Map", "empty", []) => "std::collections::BTreeMap::new()".to_string(),
             ("Store", "new", []) => "ignite_io::Store::new()".to_string(),
             ("Pipe", "pair", []) => "ignite_io::Pipe::pair()".to_string(),
+            ("Directory", "temporary", []) => "ignite_io::Directory::temporary()".to_string(),
+            ("Launcher", "new", []) => "ignite_io::Launcher::new()".to_string(),
+            ("Entropy", "new", []) => "ignite_io::Entropy::new()".to_string(),
+            ("Setting", "of", [flag, value]) => format!("ignite_io::Setting::of({flag}, {value})"),
             ("Int", "to_text", [value]) => {
                 format!("{}.to_string()", wrap(&args[0], value.clone()))
             }
@@ -4067,6 +4077,21 @@ impl<'a> Generator<'a> {
                 let r = self.receiver(receiver);
                 let a = self.args(args);
                 return format!("{r}.{}({})", ident(&name.name), a.join(", "));
+            }
+            Some(Callee::Builtin(
+                b @ (Builtin::LauncherExecute | Builtin::LauncherStart | Builtin::ChildProcessWait),
+            )) => {
+                let r = self.receiver(receiver);
+                let a = self.args(args);
+                let call = match b {
+                    Builtin::ChildProcessWait => format!("{r}.wait()"),
+                    _ => format!("{r}.{}({})", ident(&name.name), substrate_invocation(&a[0])),
+                };
+                if *b == Builtin::LauncherStart {
+                    return call;
+                }
+                let exit = self.enum_name(&QualName::new("std.process", "ChildExit"));
+                return format!("{call}.map(|e| {})", record_from_substrate(&exit, "e"));
             }
             Some(Callee::Builtin(
                 Builtin::StreamRead
@@ -4953,6 +4978,7 @@ impl<'a> Generator<'a> {
             Ty::PipeStream => fixed("<PipeStream>"),
             Ty::TcpListener => fixed("<TcpListener>"),
             Ty::Store(_) => fixed("<Store>"),
+            Ty::Capability(kind) => fixed(&format!("<{}>", kind.name())),
             Ty::Param(name) => fixed(&format!("<{name}>")),
             _ => format!("{}({v}, {out});", self.glue_fn(Glue::Debug, ty)),
         }
@@ -5714,6 +5740,43 @@ fn mutated_names(block: &Block, types: Option<&TypedProgram>, out: &mut BTreeSet
 /// Whether the method call `expr` named `name` changes its receiver in
 /// place: a [`MUTATING_METHODS`] name, or `put` and `remove` on a `Map`
 /// (known from the types; `Store` has the same names and is a handle).
+/// The fields of `std.process.Invocation` and `std.process.ChildExit` in
+/// declaration order, as `ignite_io::Invocation` and
+/// `ignite_io::ChildExit` name them (`docs/slice.md` 21.5).
+const INVOCATION_FIELDS: [&str; 7] = [
+    "program",
+    "arguments",
+    "directory",
+    "environment",
+    "inherit_environment",
+    "timeout",
+    "output_limit",
+];
+const CHILD_EXIT_FIELDS: [&str; 5] = ["ending", "code", "stdout", "stderr", "dropped"];
+
+/// The `ignite_io::Invocation` of the generated `std.process.Invocation`
+/// value `value`, field by field.
+fn substrate_invocation(value: &str) -> String {
+    let fields: Vec<String> = INVOCATION_FIELDS
+        .iter()
+        .map(|f| format!("{f}: i.{}", ident(f)))
+        .collect();
+    format!(
+        "{{ let i = {value}; ignite_io::Invocation {{ {} }} }}",
+        fields.join(", ")
+    )
+}
+
+/// The generated record `record` (`std.process.ChildExit`) of the
+/// `ignite_io::ChildExit` named `value`, field by field.
+fn record_from_substrate(record: &str, value: &str) -> String {
+    let fields: Vec<String> = CHILD_EXIT_FIELDS
+        .iter()
+        .map(|f| format!("{}: {value}.{f}", ident(f)))
+        .collect();
+    format!("{record} {{ {} }}", fields.join(", "))
+}
+
 fn mutates_receiver(expr: &Expr, name: &str, types: Option<&TypedProgram>) -> bool {
     if MUTATING_METHODS.contains(&name) {
         return true;
@@ -5853,6 +5916,104 @@ struct Resources {
     listeners: BTreeMap<String, Option<Listener>>,
     /// `Store` resources: name and Rust type, in declaration order.
     stores: Vec<(String, String)>,
+    /// `Directory`, `Launcher`, `Entropy` and `Setting` resources
+    /// (`docs/slice.md` 21.4 to 21.7) with their literal properties.
+    capabilities: BTreeMap<String, CapabilityResource>,
+}
+
+/// A capability resource as the generated `main` creates it at launch.
+#[derive(Clone, Debug)]
+enum CapabilityResource {
+    Directory {
+        path: String,
+        create: bool,
+        flag: String,
+    },
+    Launcher {
+        maximum_children: i64,
+    },
+    Entropy,
+    Setting {
+        flag: String,
+        default: Option<String>,
+    },
+}
+
+impl CapabilityResource {
+    /// The creation order of the generated `main` (`docs/slice.md` 21.8):
+    /// settings, directories, launchers, entropy.
+    fn order(&self) -> u8 {
+        match self {
+            CapabilityResource::Setting { .. } => 0,
+            CapabilityResource::Directory { .. } => 1,
+            CapabilityResource::Launcher { .. } => 2,
+            CapabilityResource::Entropy => 3,
+        }
+    }
+
+    /// The Rust expression that creates the capability at launch; `?`
+    /// ends the program through `ignite_io::run` on a failure.
+    fn launch(&self) -> String {
+        match self {
+            CapabilityResource::Setting { flag, default } => {
+                let default = match default {
+                    Some(text) => format!("Some(\"{}\")", escape_str(text)),
+                    None => "None".to_string(),
+                };
+                format!(
+                    "ignite_io::Setting::launch(\"{}\", {default})?",
+                    escape_str(flag)
+                )
+            }
+            CapabilityResource::Directory { path, create, flag } => format!(
+                "ignite_io::Directory::launch(\"{}\", {create}, \"{}\")?",
+                escape_str(path),
+                escape_str(flag)
+            ),
+            CapabilityResource::Launcher { maximum_children } => {
+                format!("ignite_io::Launcher::with_maximum({maximum_children})")
+            }
+            CapabilityResource::Entropy => "ignite_io::Entropy::open()?".to_string(),
+        }
+    }
+}
+
+/// `resource name: Directory { .. }` and the other capability kinds: the
+/// literal properties the type checker validated (E104), defaults filled.
+fn lower_capability(resource: &ResourceDecl) -> Option<CapabilityResource> {
+    let text = |name: &str| {
+        resource
+            .properties
+            .iter()
+            .find(|p| p.name.name == name)
+            .and_then(|p| match &p.value.kind {
+                ExprKind::Str(text) => Some(text.clone()),
+                _ => None,
+            })
+    };
+    let property = |name: &str| resource.properties.iter().find(|p| p.name.name == name);
+    Some(match resource.kind.name.as_str() {
+        "Directory" => CapabilityResource::Directory {
+            path: text("path").unwrap_or_default(),
+            create: property("create")
+                .is_some_and(|p| matches!(p.value.kind, ExprKind::Bool(true))),
+            flag: text("flag").unwrap_or_default(),
+        },
+        "Launcher" => CapabilityResource::Launcher {
+            maximum_children: property("maximum_children")
+                .and_then(|p| match p.value.kind {
+                    ExprKind::Int(n) => Some(n),
+                    _ => None,
+                })
+                .unwrap_or(ignite_types::LAUNCHER_DEFAULT_MAXIMUM_CHILDREN),
+        },
+        "Entropy" => CapabilityResource::Entropy,
+        "Setting" => CapabilityResource::Setting {
+            flag: text("flag").unwrap_or_default(),
+            default: text("default"),
+        },
+        _ => return None,
+    })
 }
 
 fn e020(span: Span, message: impl Into<String>) -> Diagnostic {
@@ -5874,10 +6035,17 @@ fn lower_resources(system: &SystemDecl, diagnostics: &mut Vec<Diagnostic>) -> Re
                     resources.stores.push((name, ty));
                 }
             }
-            other => diagnostics.push(e020(
-                resource.kind.span,
-                format!("unsupported resource kind `{other}`; expected `TcpListener` or `Store`"),
-            )),
+            other => match lower_capability(resource) {
+                Some(capability) => {
+                    resources.capabilities.insert(name, capability);
+                }
+                None => diagnostics.push(e020(
+                    resource.kind.span,
+                    format!(
+                        "unsupported resource kind `{other}`; expected `TcpListener`, `Store`, `Directory`, `Launcher`, `Entropy` or `Setting`"
+                    ),
+                )),
+            },
         }
     }
     resources
@@ -6089,6 +6257,27 @@ fn executable_main(
                 "let {}: {} = ignite_io::Store::new();",
                 resource_variable(name),
                 generator.rust_ty(ty)
+            ));
+        }
+    }
+    let mut capabilities: Vec<(&str, &CapabilityResource)> = info
+        .resources
+        .iter()
+        .filter(|(_, ty)| matches!(ty, Ty::Capability(_)))
+        .filter_map(|(name, _)| {
+            resources
+                .capabilities
+                .get(name)
+                .map(|capability| (name.as_str(), capability))
+        })
+        .collect();
+    capabilities.sort_by_key(|(_, capability)| capability.order());
+    for (name, capability) in capabilities {
+        if defined.insert(name.to_string()) {
+            w.line(&format!(
+                "let {} = {};",
+                resource_variable(name),
+                capability.launch()
             ));
         }
     }

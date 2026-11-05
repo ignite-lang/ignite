@@ -1,0 +1,2 @@
+e141_flag_collision.ignite:3:36: error[E141]: flag `--root` of resource `other` is also the flag of resource `files`; each flag names one resource
+e141_flag_collision.ignite:4:37: error[E141]: flag `--port` of resource `listen` is reserved: `--port` and `--ref` are the substrate's own

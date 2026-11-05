@@ -93,6 +93,24 @@ fn mutates(builtin: Builtin) -> bool {
         | StreamWriteAll
         | StreamClose
         | StreamSetIdleTimeout
+        | DirectoryTemporary
+        | DirectoryReadFile
+        | DirectoryWriteFile
+        | DirectoryReadDirectory
+        | DirectoryCreateDirectory
+        | DirectoryRemove
+        | DirectoryRemoveTree
+        | DirectoryAbsolutePath
+        | LauncherNew
+        | LauncherStart
+        | LauncherExecute
+        | ChildProcessId
+        | ChildProcessWait
+        | ChildProcessKill
+        | EntropyNew
+        | EntropyRandomBytes
+        | SettingOf
+        | SettingValue
         | Debug => false,
     }
 }

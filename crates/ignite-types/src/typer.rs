@@ -18,10 +18,10 @@ use crate::address::AddressMap;
 use crate::builtins::{self, bytes, io};
 use crate::exhaustive;
 use crate::{
-    Alias, AssemblyInfo, AssertCompare, BraceKind, Builtin, Callee, Capture, ClosureInfo,
-    EXPOSURE_VARIANTS, EffectSet, ExecutableInfo, FailureOp, FailureSite, FnEffects, FnSig,
-    ModuleRecord, ModuleTypes, QualName, QuantityKind, Reference, Show, SystemInfo, TestInfo,
-    TestTry, Ty, TypedModules, Variants, instantiate, key, variants_of,
+    Alias, AssemblyInfo, AssertCompare, BraceKind, Builtin, Callee, Capability, Capture,
+    ClosureInfo, EXPOSURE_VARIANTS, EffectSet, ExecutableInfo, FailureOp, FailureSite, FnEffects,
+    FnSig, ModuleRecord, ModuleTypes, QualName, QuantityKind, Reference, Show, SystemInfo,
+    TestInfo, TestTry, Ty, TypedModules, Variants, instantiate, key, variants_of,
 };
 
 /// What [`Typer::run`] produces for a module without diagnostics.
@@ -742,6 +742,32 @@ impl<'a> Typer<'a> {
         }
     }
 
+    /// E140 for a `Text` literal path argument of a `Directory` method that
+    /// is absolute, has a `..` component or a NUL (`docs/slice.md` 21.4,
+    /// 21.9). A path from anything but a literal is checked at run time only.
+    fn path_literal(&mut self, method: &str, arg: Option<&Expr>) {
+        let Some(arg) = arg else {
+            return;
+        };
+        let ExprKind::Str(path) = &arg.kind else {
+            return;
+        };
+        let reason = if path.starts_with('/') {
+            "absolute"
+        } else if path.split('/').any(|c| c == "..") {
+            "leaves its root"
+        } else if path.contains('\0') {
+            "contains NUL"
+        } else {
+            return;
+        };
+        self.error(
+            "E140",
+            arg.span,
+            format!("path `{path}` of `{method}`: {reason}"),
+        );
+    }
+
     /// Whether the effectful operation `expr` is one `ignite-check` did not
     /// record as an effect site, outside a `system` or `assembly`.
     fn unchecked_effects(&self, expr: &Expr) -> bool {
@@ -1169,6 +1195,11 @@ impl<'a> Typer<'a> {
             "Text" => Ty::Text,
             "Bytes" => bytes(),
             "TcpListener" => Ty::TcpListener,
+            "Directory" => Ty::Capability(Capability::Directory),
+            "Launcher" => Ty::Capability(Capability::Launcher),
+            "ChildProcess" => Ty::Capability(Capability::ChildProcess),
+            "Entropy" => Ty::Capability(Capability::Entropy),
+            "Setting" => Ty::Capability(Capability::Setting),
             "TcpStream" => Ty::TcpStream,
             "PipeStream" => Ty::PipeStream,
             "IoError" => Ty::IoError,
@@ -1631,6 +1662,7 @@ impl<'a> Typer<'a> {
             Ty::Fn(..)
             | Ty::EffectFn(..)
             | Ty::TcpListener
+            | Ty::Capability(_)
             | Ty::TcpStream
             | Ty::PipeStream
             | Ty::IoError
@@ -3220,6 +3252,14 @@ impl<'a> Typer<'a> {
         if let Some(sig) = bounded.or_else(|| builtins::method(&receiver_ty, &name.name)) {
             if matches!(receiver_ty, Ty::Store(_)) {
                 self.effect_site(expr, &name.name);
+            }
+            if let Ty::Capability(kind) = receiver_ty {
+                if sig.builtin != Builtin::ChildProcessId {
+                    self.effect_site(expr, &format!("{}.{}", kind.name(), name.name));
+                }
+                if kind == Capability::Directory {
+                    self.path_literal(&name.name, args.first());
+                }
             }
             match sig.builtin {
                 Builtin::ListAt => self.fail_site(expr, FailureOp::Index, expr.span.start),

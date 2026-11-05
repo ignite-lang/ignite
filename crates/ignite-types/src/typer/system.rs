@@ -6,12 +6,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ignite_syntax::ast::{
     AssemblyDecl, BinaryOp, BraceEntry, ComponentDecl, Expr, ExprKind, FieldInit, FnDecl, Ident,
-    Path, ResourceDecl, Span, SystemDecl,
+    Path, ResourceDecl, Span, SystemDecl, UnaryOp,
 };
 
 use super::{Typer, compatible, exposure, fn_ty};
 use crate::{
-    AssemblyInfo, BraceKind, Builtin, Callee, ExecutableInfo, FailureOp, FailureSite,
+    AssemblyInfo, BraceKind, Builtin, Callee, Capability, ExecutableInfo, FailureOp, FailureSite,
     MemberDeclaration, MemberInfo, ModuleRecord, PropertySource, QualName, QuantityKind, Reference,
     SystemInfo, Ty, key,
 };
@@ -69,6 +69,73 @@ const TCP_LISTENER_FIELDS: [(&str, bool); 4] = [
     ("exposure", true),
     ("backlog", true),
 ];
+
+/// One compiler-known property of a capability resource kind
+/// (`docs/slice.md` 21.4 to 21.7).
+pub(crate) struct CapabilityField {
+    pub name: &'static str,
+    pub ty: Ty,
+    /// Whether the model shows a default when the property is not given.
+    pub defaulted: bool,
+    /// Whether a declaration must give it (E104).
+    pub required: bool,
+}
+
+/// The properties of the resource kind `kind`, in field order: `Directory`
+/// `path`, `create`, `flag`; `Launcher` `maximum_children`; `Setting`
+/// `flag`, `default`; `Entropy` none. Every value must be a literal (E104).
+pub(crate) fn capability_fields(kind: Capability) -> Vec<CapabilityField> {
+    let field = |name, ty, defaulted, required| CapabilityField {
+        name,
+        ty,
+        defaulted,
+        required,
+    };
+    match kind {
+        Capability::Directory => vec![
+            field("path", Ty::Text, false, true),
+            field("create", Ty::Bool, true, false),
+            field("flag", Ty::Text, true, false),
+        ],
+        Capability::Launcher => vec![field("maximum_children", Ty::Int, true, false)],
+        Capability::Setting => vec![
+            field("flag", Ty::Text, false, true),
+            field("default", Ty::Text, false, false),
+        ],
+        Capability::Entropy | Capability::ChildProcess => Vec::new(),
+    }
+}
+
+/// The resource kinds a system may declare, for E020.
+const RESOURCE_KINDS: &str =
+    "`TcpListener`, `Store`, `Directory`, `Launcher`, `Entropy` or `Setting`";
+
+/// The value of an integer literal, negated or not (`-1`): a literal for
+/// E104 (`docs/slice.md` 21.9), so its range is checked.
+fn int_literal(expr: &Expr) -> Option<i64> {
+    match &expr.kind {
+        ExprKind::Int(n) => Some(*n),
+        ExprKind::Unary {
+            op: UnaryOp::Neg,
+            operand,
+        } => match &operand.kind {
+            ExprKind::Int(n) => n.checked_neg(),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Whether `flag` is `--` followed by one or more of `[a-z0-9-]`
+/// (`docs/slice.md` 21.6).
+fn valid_flag(flag: &str) -> bool {
+    flag.strip_prefix("--").is_some_and(|rest| {
+        !rest.is_empty()
+            && rest
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    })
+}
 
 /// What a list of `field = value` entries builds, for the diagnostics of
 /// [`Typer::fields_literal`].
@@ -994,7 +1061,9 @@ impl Typer<'_> {
                         None
                     }
                 },
-                _ => None,
+                other => Capability::from_name(other)
+                    .filter(|kind| kind.is_resource_kind())
+                    .map(Ty::Capability),
             };
             members.push(Member {
                 name: resource.name.name.clone(),
@@ -1095,6 +1164,23 @@ impl Typer<'_> {
                 (sources, Vec::new())
             }
             Ty::Store(_) => (Vec::new(), Vec::new()),
+            Ty::Capability(kind) => {
+                let sources = capability_fields(*kind)
+                    .into_iter()
+                    .filter_map(|field| {
+                        let source = match properties.iter().position(|p| p.name.name == field.name)
+                        {
+                            Some(i) => PropertySource::Set(i),
+                            None if field.defaulted => PropertySource::Default(QualName::builtin(
+                                format!("{}.{}", kind.name(), field.name),
+                            )),
+                            None => return None,
+                        };
+                        Some((field.name.to_string(), source))
+                    })
+                    .collect();
+                (sources, Vec::new())
+            }
             other => self.property_sources(other, properties),
         };
         Some(MemberInfo {
@@ -1138,6 +1224,7 @@ impl Typer<'_> {
         for resource in &system.resources {
             self.resource(resource);
         }
+        self.flag_collisions(system);
         let mut uses: BTreeMap<String, Vec<(String, Ty)>> = BTreeMap::new();
         let mut typed: Vec<(&ComponentDecl, Ty)> = Vec::new();
         let lists = [
@@ -1342,18 +1429,167 @@ impl Typer<'_> {
                     self.synth(&property.value);
                 }
             }
-            other => {
-                for property in &resource.properties {
-                    self.synth(&property.value);
+            other => match Capability::from_name(other).filter(|k| k.is_resource_kind()) {
+                Some(kind) => self.capability_resource(resource, kind),
+                None => {
+                    for property in &resource.properties {
+                        self.synth(&property.value);
+                    }
+                    self.error(
+                        "E020",
+                        resource.kind.span,
+                        format!("unsupported resource kind `{other}`; expected {RESOURCE_KINDS}"),
+                    );
                 }
+            },
+        }
+    }
+
+    /// A `Directory`, `Launcher`, `Entropy` or `Setting` resource
+    /// (`docs/slice.md` 21.4 to 21.7, 21.9): E047 for a repeated or unknown
+    /// property, E104 for a missing required one, a value that is not a
+    /// literal, or a literal out of its range.
+    fn capability_resource(&mut self, resource: &ResourceDecl, kind: Capability) {
+        let fields = capability_fields(kind);
+        let kind_name = kind.name();
+        let mut seen: Vec<&str> = Vec::new();
+        for property in &resource.properties {
+            let name = property.name.name.as_str();
+            if seen.contains(&name) {
                 self.error(
-                    "E020",
-                    resource.kind.span,
+                    "E047",
+                    property.name.span,
                     format!(
-                        "unsupported resource kind `{other}`; expected `TcpListener` or `Store`"
+                        "property `{name}` is given twice in resource `{}`",
+                        resource.name.name
                     ),
                 );
             }
+            seen.push(name);
+            let Some(field) = fields.iter().find(|f| f.name == name) else {
+                let known = fields
+                    .iter()
+                    .map(|f| format!("`{}`", f.name))
+                    .collect::<Vec<_>>();
+                let listed = match known.as_slice() {
+                    [] => "it takes no properties".to_string(),
+                    [one] => format!("its property is {one}"),
+                    [init @ .., last] => {
+                        format!("its properties are {} and {last}", init.join(", "))
+                    }
+                };
+                self.error(
+                    "E047",
+                    property.name.span,
+                    format!("`{kind_name}` has no property `{name}`; {listed}"),
+                );
+                self.synth(&property.value);
+                continue;
+            };
+            self.check(&property.value, &field.ty);
+            self.property_effects(
+                &property.value,
+                name,
+                &format!("resource `{}`", resource.name.name),
+            );
+            let value = &property.value;
+            match (&value.kind, name) {
+                (ExprKind::Str(path), "path") => {
+                    if path.is_empty() || path.contains('\0') {
+                        self.error(
+                            "E104",
+                            value.span,
+                            format!("`path` of `{kind_name}` must be a non-empty text without NUL"),
+                        );
+                    }
+                }
+                (ExprKind::Str(flag), "flag") => {
+                    let allowed_empty = kind == Capability::Directory && flag.is_empty();
+                    if !allowed_empty && !valid_flag(flag) {
+                        self.error(
+                            "E104",
+                            value.span,
+                            format!(
+                                "`flag` must be `--` followed by lowercase letters, digits or `-`, got {flag}"
+                            ),
+                        );
+                    }
+                }
+                (_, "maximum_children") if int_literal(value).is_some() => {
+                    let n = int_literal(value).expect("guarded by the arm");
+                    if !(1..=1024).contains(&n) {
+                        self.error(
+                            "E104",
+                            value.span,
+                            format!(
+                                "`maximum_children` of `{kind_name}` must be in 1..=1024, got {n}"
+                            ),
+                        );
+                    }
+                }
+                (ExprKind::Str(_), "default") | (ExprKind::Bool(_), "create") => {}
+                _ => self.error(
+                    "E104",
+                    value.span,
+                    format!("`{name}` of `{kind_name}` must be a literal"),
+                ),
+            }
+        }
+        for field in fields.iter().filter(|f| f.required) {
+            if !seen.contains(&field.name) {
+                self.error(
+                    "E104",
+                    resource.span,
+                    format!(
+                        "required field `{}` of `{kind_name}` is missing",
+                        field.name
+                    ),
+                );
+            }
+        }
+    }
+
+    /// E141 for a flag of a `Setting` or `Directory` resource that an
+    /// earlier resource of the system already uses, or that is `--port` or
+    /// `--ref` (`docs/slice.md` 21.6, 21.9).
+    fn flag_collisions(&mut self, system: &SystemDecl) {
+        let mut taken: Vec<(String, String)> = Vec::new();
+        for resource in &system.resources {
+            if !matches!(resource.kind.name.as_str(), "Directory" | "Setting") {
+                continue;
+            }
+            let Some(property) = resource.properties.iter().find(|p| p.name.name == "flag") else {
+                continue;
+            };
+            let ExprKind::Str(flag) = &property.value.kind else {
+                continue;
+            };
+            if flag.is_empty() {
+                continue;
+            }
+            if flag == "--port" || flag == "--ref" {
+                self.error(
+                    "E141",
+                    property.value.span,
+                    format!(
+                        "flag `{flag}` of resource `{}` is reserved: `--port` and `--ref` are the substrate's own",
+                        resource.name.name
+                    ),
+                );
+                continue;
+            }
+            if let Some((_, owner)) = taken.iter().find(|(f, _)| f == flag) {
+                self.error(
+                    "E141",
+                    property.value.span,
+                    format!(
+                        "flag `{flag}` of resource `{}` is also the flag of resource `{owner}`; each flag names one resource",
+                        resource.name.name
+                    ),
+                );
+                continue;
+            }
+            taken.push((flag.clone(), resource.name.name.clone()));
         }
     }
 

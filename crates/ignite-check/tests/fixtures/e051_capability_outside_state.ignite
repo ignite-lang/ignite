@@ -1,0 +1,9 @@
+type State {
+  count: Int
+}
+
+fn handle(state: State, request: Text) -> Text {
+  let entropy = Entropy.new()
+  let files = Directory.temporary()
+  return request
+}

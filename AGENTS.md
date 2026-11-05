@@ -15,7 +15,7 @@ the IO substrate (Rust) that compiled programs link.
 | `crates/ignite-rustgen/` | Rust target: the `ignite-std` crate and the program crate |
 | `crates/ignite-llvm/` | LLVM target: IR text for std, program and one main per executable |
 | `crates/ignite-rt/` | runtime of the LLVM target, `libignite_rt.a`: C ABI adapter over `ignite-io` (value conversion, handle table), arenas and regions, the spawn handshake; no IO of its own |
-| `crates/ignite-io/` | IO substrate of both targets, blocking: TCP listener and stream, the in-process pipe (`Pipe.pair()`, `PipeStream`, coalescing as TCP, bounded at `PIPE_CAPACITY`, `received_batches`; `docs/slice.md` 18.4, 18.8) and the `ByteStream` trait both streams implement, stdin, stdout, terminal mode, tasks (one thread each), `run`, process arguments and exit, the reports of `assert` and `?`, the test runner (feature `runner`) |
+| `crates/ignite-io/` | IO substrate of both targets, blocking: TCP listener and stream, the in-process pipe (`Pipe.pair()`, `PipeStream`, coalescing as TCP, bounded at `PIPE_CAPACITY`, `received_batches`; `docs/slice.md` 18.4, 18.8) and the `ByteStream` trait both streams implement, stdin, stdout, terminal mode, tasks (one thread each), `run`, process arguments and exit, the reports of `assert` and `?`, the test runner (feature `runner`); since slice 17 (`docs/slice.md` 21.4 to 21.8) `fs` (`Directory`: files under a root, an `openat` walk that refuses every symlink, atomic replace, bounds), `child` (`Launcher`, `ChildProcess`: one watcher thread per child, timeout and kill by process group, bounded output, `close_range` and `PR_SET_PDEATHSIG` in `pre_exec`; the test runner's `run_child` uses the same watcher), `entropy` (`/dev/urandom`), `args::flag_from_args` (settings and directory flags) and the `at_exit` hooks that kill live children |
 | `crates/ignite-eval/` | compile-time evaluator (`docs/slice.md` section 15): interprets property expressions over the typed modules with fuel (E115, E117, E118), builds the system model `ignite plan` prints, resolves assemblies through `std.deploy`'s `admits` and `includes` (E110 to E114), renders `ignite explain`; steps the reducers of `std.control` for `ignite run` and `ignite replay` (`docs/slice.md` 16.2, O27); used by `check`, `plan`, `explain`, `run` and `replay` only, linked by no backend and no compiled program |
 | `crates/ignite/` | `ignite` CLI: `check`, `emit`, `build`, `test`, `plan`, `explain`, `run`, `replay`, `host`, `apply`, `inspect`, `rfc import`, `rfc check`, `conformance` (`src/conformance.rs`: the matrix and verdicts of `docs/slice.md` 19.10); end-to-end tests of the example in `tests/terminal.rs`, model and explain goldens in `tests/golden/` |
 | `crates/ignite/src/run/` | the driver of `ignite run` and `ignite replay` (`docs/slice.md` 16.3): `engine` steps the `std.control` reducers in `ignite-eval`, `live` runs the adapters `process`, `probe`, `clock` and `control` that turn effects into processes, attempts, timers and stdin commands and feed events back, `journal` records every event, effect, signal, standing and consequence (16.5), `replay` re-steps a journal and compares (E127) |
@@ -29,13 +29,15 @@ the IO substrate (Rust) that compiled programs link.
 | `std/option.ignite`, `std/result.ignite` | UFCS helpers on `Option` and `Result` (`unwrap_or`, `map`, `and_then`, `ok_or`, `map_err`, `ok`, …); the shared names make a glob import of both E041 at use |
 | `std/json.ignite` | `Json` with integer numbers (RFC 8259): `encode`, `parse` |
 | `std/net.ignite` | `Endpoint { address, port }`: the client-side target a bare `TcpListener` resource name gives where `Endpoint` is expected (slice 10); the module is also the substrate builtins `TcpListener`, `TcpStream`, `Exposure` and, since slice 14, the interface `ByteStream`, the test-only `Pipe.pair()` and its ends `PipeStream` (`docs/slice.md` 18.3, 18.4); `Endpoint.of(ref)` is the substrate builtin that resolves a `Ref` through `ignite run`'s `--ref` arguments (16.9) |
+| `std/fs.ignite` | `std.fs`, the capability `Directory` (`docs/slice.md` 21.4): its builtin methods (`read_file`, `write_file`, `read_directory`, `create_directory`, `remove`, `remove_tree`, `absolute_path`), the helpers `read_text_file`, `write_text_file`, `join_path`, the test-only `Directory.temporary()`; base layer |
+| `std/process.ignite` | `std.process`, the capabilities `Launcher` and `ChildProcess` (`execute`, `start`, `id`, `wait`, `kill`; `Invocation`, `ChildExit`, `Ending`, `outcome`), `Entropy` (`random_bytes`) and `Setting` (`value`) (`docs/slice.md` 21.5 to 21.7); test-only `Launcher.new()`, `Entropy.new()`, `Setting.of(flag, value)`; base layer |
 | `std/rfc.ignite` | `std.rfc`, the vocabulary of requirements (`docs/slice.md` 19.3): `Level`, `Party`, `Source`, `Requirement`, `Spec`; a leaf, like every `std.rfc.*` module; declares no fn |
 | `std/rfc/` | the RFC catalogues, one module per RFC (`std.rfc.rfc854`, `rfc855`, `rfc1143`, `rfc9110`, `rfc9112`): one `Spec` constant and one `Requirement` constant per requirement, all literal data (E091); `rfc9110` and `rfc9112` written by `ignite rfc import`, the three older RFCs quoted by hand (`source = Prose`); a protocol names them in `conforms` |
 | `std/sli.ignite` | probe attempts, windows, missing data and the meets check; the leaf module that `std.control`, `std.contract` and `std.protocol.telnet` import |
 | `std/time.ignite` | civil time for calendar windows, a leaf: `month_start` and `next_month_start` of an instant in `UTC` or `Europe/Berlin` (EU summer-time rule), `zone_known` |
 | `std/control.ignite` | the pure reducers `ignite run` steps (`docs/slice.md` 16.5 to 16.12): `Machine` (`Supervise`, `Schedule`, `Evaluate`, `Roll`), `Event`, `Effect`, `Standing`, `Fired`, `step(machine, event) -> Step`, `companions(machine)`; imports only the leaves `std.sli`, `std.policy`, `std.time` (O45), tested inline with synthetic event lists; `crates/ignite/tests/fixtures/control_trace.ignite` steps the same reducers in the evaluator and on both targets (`control_trace::reducers_agree_across_the_evaluator_and_both_targets`) and times A7 (`control_trace::a7_evaluator_steps_10000_emissions_into_a_30_day_window`) |
 | `std/protocol/telnet.ignite` | `protocol Telnet`: declares `conforms [RFC854, RFC855]` (`docs/slice.md` 19.5; `ignite conformance` prints the matrix and whether each claim holds); server role `serve(stream, limits: SessionLimits, application)`, client role `connect`, both generic over `S: ByteStream` (`docs/slice.md` 18.6); its session tests run over a pipe, one stays on TCP; the executable kinds `TelnetServer` (accept loop, `SessionLimits`, `TelnetProfile`), `TelnetClient` (exit 3 and 4) and the probe `TelnetPrompt` (`main` runs one attempt, the probe process of `docs/slice.md` 16.8; `machine` its scheduler) |
-| `std/protocol/http.ignite` | `protocol Http`: declares `conforms [RFC9112, RFC9110]`, scoped to the parties a server is; server role `serve(stream: T, limits: HttpLimits, application: HttpApp<S>)`, generic over `T: ByteStream`; `Request`, `Response`, `HttpLimits`; the executable kind `HttpServer<S>`; its session tests run over a pipe, one also on TCP |
+| `std/protocol/http.ignite` | `protocol Http`: declares `conforms [RFC9112, RFC9110]`, scoped to the parties a server is; server role `serve(stream: T, limits: HttpLimits, application: HttpApp<S>)`, generic over `T: ByteStream`; `Request`, `Response`, `HttpLimits`; the executable kind `HttpServer<S>` with the hooks `machine` (supervisor, `recovery`, `rollout`) and `validate` of `docs/slice.md` 16.16, so the standard `Deployment` runs it as a `nativeProcess`; its session tests run over a pipe, one also on TCP |
 | `std/contract.ignite`, `std/policy.ignite`, `std/deploy.ignite`, `std/cli.ignite` | the declaration vocabulary of design section 11.3 (`SLA`, `Availability`, `Restart`, `DrainRollout`, `Deployment`, `Application`, …; the Telnet probe `TelnetPrompt` is in `std/protocol/telnet.ignite`), checked and tested; `std.deploy`'s `Member`, `admits` and `includes` are what the compiler calls to resolve an assembly (`docs/slice.md` 15.6); since slice 12 each runnable kind has the hooks `machine` and `validate` of 16.16 (`ignite run` steps the machines, `ignite check` reports `validate`'s reasons as E120) and `std.deploy.entries` names the entries a binding needs (E129) |
 | `examples/terminal/terminal.ignite` | the terminal system in component form (`CommandConsole`, `TelnetServer`, `TelnetClient`); `ignite build` emits `terminald` and `tn` |
 | `examples/terminal/commands.ignite`, `command_schema.ignite` | sibling modules of the terminal: the console's commands (`respond`) and their names (`commands`), filled into the declaration by `module(..)`; `commands.ignite` ends with the test "the terminal transcript over a pipe", slice 9 item 4's transcript through `Telnet.serve` over `Pipe.pair()` (`docs/slice.md` 18.0 row 3); tests elsewhere rewrite its `lines = ["ready"]`, so that test writes `ready` as bytes |
@@ -621,4 +623,50 @@ reasons is in 17.5 "As landed (U5)"; no known gaps.
 - Known cost not measured: since wave 3 a pattern binding that is a used branch or arm tail is
   copied (the analysis does not track pattern bindings; draft story
   `moves-for-pattern-bindings`).
+- No baseline moved. The apply suites stay the slice-13 exception.
+
+## Slice 17 playground substrate (2026-11-05)
+
+- Gate at the close, `task gate` on `s17/u6-records` (3c5cc34f, the code of the slice's final
+  head; the later commit changes documents only), 2026-11-05 08:52:12 to 09:01:03 UTC, 531 s,
+  exit 0, start load 10.0, the worktree's own target, `RUST_TEST_THREADS=4`: 1089 cargo tests
+  passed, 0 failed, 10 ignored; 233 inline tests per target. The `crates/ignite` end-to-end
+  binary is 510.73 s of it (380 passed, 8 ignored). The first gate on the same head failed
+  `slice10::executable_component_main_runs_and_maps_the_exit_code` (`ignite-rustgen`: the
+  exit code matched, the stderr line was not yet in the captured log); 5 of 5 runs alone
+  passed, and the second gate is the one above.
+- 21.14 method through `tools/ignite-perf`: "before" is `99647132` (`main`, the merge base at
+  the close; the code of the slice's start `651be04c`), "after" `884d6b19`. Partly collected:
+  `smoke`, `programs`, `cli` and one `cold` attempt; check of the todo example, terminald and the
+  after-only units as `STEP` lines. Loads 5.1 to 25.8, so no pair was taken under load 5.
+  Records, scripts and the uncollected units in `docs/performance/17/README.md`.
+
+| unit | before s | after s | ratio | pairs | start loads |
+|---|---|---|---|---|---|
+| gate, cold (fmt, clippy, test, test-ignite) | 1070.99 (1.62, 10.15, 1031.21, 28.01) | 810.17 (2.76, 24.37, 763.85, 19.17) | no valid pair | 0/1 | 21.8 against 15.8 |
+| `ignite check`, `ignite plan` of the design file | 0.150, 0.144 | 0.177, 0.153 | 1.09, 1.06 | 15 | 16.2 to 16.7 |
+| `ignite check examples/todo/todo.ignite` | 0.067 | 0.127 | 1.94 | 15 | 9.5 to 9.9 |
+| same, after compiler, std without and with the `HttpServer` hooks | 0.068 | 0.131 | 1.89 | 15 | 9.5 to 9.9 |
+| todod Rust dev / release | 3.916 / 5.145 | 4.324 / 7.096 | 1.14 / 1.42 | 4, 3 | 5.1 to 22.6 |
+| todod LLVM dev / release | 0.383 / 1.368 | 0.476 / 0.999 | 1.24 / 1.05 | 3, 4 | 7.4 to 22.6 |
+| terminald Rust dev / release | 3.915 / 4.615 | 5.866 / 5.556 | 1.50 / 1.19 | 2, 3 | 9.5 to 19.9 |
+| terminald LLVM dev / release | 0.568 / 0.926 | 0.596 / 0.895 | 1.03 / 1.05 | 3 | 9.3 to 21.3 |
+| `studio.ignite` build, Rust dev / release, LLVM dev / release (after only) | | 5.113 / 7.057, 0.498 / 0.988 | | 3 runs | 9.6 to 21.2 |
+| `ignite test std/fs.ignite`, Rust / LLVM, cold and warm (after only) | | 5.512 and 0.109 / 0.361 and 0.100 | | 3 runs | 15.0 to 17.7 |
+| `ignite test std/process.ignite`, Rust / LLVM, cold and warm (after only) | | 8.981 and 0.746 / 0.735 and 0.430 | | 3 runs | 17.7 to 22.5 |
+
+- Uncollected: the `warm` mode (gate, workspace, fmt, clippy, `task test-ignite`, `--no-run`,
+  `ignite_test::`, rustgen units): its passes need both trees' targets built at once (the after
+  tree's was 9.0 GiB), against the disk request of 09:22 (one tree's target at a time, the
+  unit's scratch under 8 GB); the cold retry, stopped for the same request.
+- Rises over 10 %: the check of the todo example (1.94) is measured to `HttpServer`'s run hooks
+  (the after compiler: 0.068 s with the std before them, 0.131 s with them; the before tree
+  0.067 s): `std.protocol.http` imports `std.control` and `std.policy`, which every HTTP program
+  loads and types (`docs/friction.md` row 43). todod Rust release 1.42 and dev 1.14: its
+  generated `ignite-std` grows from 1,049 to 1,700 lines with the hooks (measured); which types
+  make up the growth is not split. todod LLVM dev 1.24: the same frontend, inferred. terminald
+  Rust (1.50 over 2 pairs, 1.19): its std is unchanged; `ignite-io`, which every Rust program
+  build compiles, grew by 2,201 lines and the `nix` features `dir` and `poll` (measured growth,
+  inferred cause). Cold clippy 2.40 in the per-step comparison, inferred: larger crates and a
+  different load.
 - No baseline moved. The apply suites stay the slice-13 exception.

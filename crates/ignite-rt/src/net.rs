@@ -24,7 +24,10 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use ignite_io::{IoError, PipeStream, TcpListener, TcpStream};
+use ignite_io::{
+    ChildProcess, Directory, Entropy, IoError, Launcher, PipeStream, Setting, TcpListener,
+    TcpStream,
+};
 
 use crate::{IgniteInput, IgniteIoError, IgniteList, arena, bytes, status};
 
@@ -62,14 +65,39 @@ pub(crate) enum Handle {
     Stream(TcpStream),
     /// An end of an in-memory pipe (`crate::pipe`).
     Pipe(PipeStream),
+    /// A root directory (`crate::fs`, `docs/slice.md` 21.4).
+    Directory(Directory),
+    /// The authority to start children (`crate::child`, 21.5).
+    Launcher(Launcher),
+    /// A started child (`crate::child`, 21.5).
+    Child(ChildProcess),
+    /// A source of random bytes (`crate::entropy`, 21.7).
+    Entropy(Entropy),
+    /// A launch argument (`crate::process`, 21.6).
+    Setting(Setting),
+}
+
+/// The capability `handle` names, picked by `pick`; another handle is
+/// "`<h>` is not a <what>" (`docs/slice.md` 21.8).
+pub(crate) fn capability<T>(
+    handle: i64,
+    what: &str,
+    pick: impl FnOnce(Handle) -> Option<T>,
+) -> Result<T, IoError> {
+    pick(lookup(handle)?).ok_or_else(|| IoError::new(format!("{handle} is not a {what}")))
 }
 
 /// One table entry: the generation of the handle it holds or will hold
 /// next, and the handle; `None` before it is filled and once released.
+/// `waited` holds, per generation, the process id of each waited child
+/// this slot held: 16 bytes per waited child, kept until the process
+/// exits, because an LLVM program may ask a waited handle's id at any
+/// time (`docs/slice.md` 21.5).
 #[derive(Default)]
 struct Entry {
     generation: u32,
     handle: Option<Handle>,
+    waited: Vec<(u32, i64)>,
 }
 
 type Slot = Mutex<Entry>;
@@ -194,18 +222,14 @@ fn lookup(handle: i64) -> Result<Handle, IoError> {
 fn listener(handle: i64) -> Result<TcpListener, IoError> {
     match lookup(handle)? {
         Handle::Listener(listener) => Ok(listener),
-        Handle::Stream(_) | Handle::Pipe(_) => {
-            Err(IoError::new(format!("{handle} is not a TCP listener")))
-        }
+        _ => Err(IoError::new(format!("{handle} is not a TCP listener"))),
     }
 }
 
 fn stream(handle: i64) -> Result<TcpStream, IoError> {
     match lookup(handle)? {
         Handle::Stream(stream) => Ok(stream),
-        Handle::Listener(_) | Handle::Pipe(_) => {
-            Err(IoError::new(format!("{handle} is not a TCP stream")))
-        }
+        _ => Err(IoError::new(format!("{handle} is not a TCP stream"))),
     }
 }
 
@@ -213,9 +237,7 @@ fn stream(handle: i64) -> Result<TcpStream, IoError> {
 pub(crate) fn pipe(handle: i64) -> Result<PipeStream, IoError> {
     match lookup(handle)? {
         Handle::Pipe(pipe) => Ok(pipe),
-        Handle::Listener(_) | Handle::Stream(_) => {
-            Err(IoError::new(format!("{handle} is not a pipe")))
-        }
+        _ => Err(IoError::new(format!("{handle} is not a pipe"))),
     }
 }
 
@@ -353,6 +375,28 @@ pub extern "C" fn ignite_rt_tcp_close(handle: i64, err: *mut IgniteIoError) -> i
 /// closes it.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_release(handle: i64) {
+    release(handle, None);
+}
+
+/// Release the handle of a waited child and keep its process id in the
+/// slot, by the handle's generation, so `child.id()` answers it for that
+/// handle value also after the slot was reused (`docs/slice.md` 21.5).
+pub(crate) fn release_waited_child(handle: i64, id: i64) {
+    release(handle, Some(id));
+}
+
+/// The process id kept for `handle` by [`release_waited_child`].
+pub(crate) fn waited_child_id(handle: i64) -> Option<i64> {
+    let (index, generation) = decode(handle)?;
+    let entry = lock(slot_at(index, false)?);
+    entry
+        .waited
+        .iter()
+        .find(|(g, _)| *g == generation)
+        .map(|(_, id)| *id)
+}
+
+fn release(handle: i64, waited_child: Option<i64>) {
     let _ = OWNED.try_with(|owned| owned.borrow_mut().retain(|owned| *owned != handle));
     let Some((index, generation)) = decode(handle) else {
         return;
@@ -363,6 +407,9 @@ pub extern "C" fn ignite_rt_tcp_release(handle: i64) {
     let mut entry = lock(slot);
     if entry.generation != generation || entry.handle.is_none() {
         return;
+    }
+    if let Some(id) = waited_child {
+        entry.waited.push((generation, id));
     }
     let released = entry.handle.take();
     entry.generation += 1;

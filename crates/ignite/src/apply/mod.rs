@@ -319,6 +319,7 @@ pub fn prepare(
     options: &crate::PlanOptions,
     build: &crate::RunOptions,
 ) -> Result<Json, Failure> {
+    plan::refuse_settings_without_default(file, options)?;
     let snapshot = request(state, "snapshot", "", Json::Null)?;
     let identity = required(&snapshot, "stateIdentity")?;
     let fuel = options

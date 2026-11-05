@@ -333,10 +333,41 @@ fn imported_module(import: &Import) -> String {
         .join(".")
 }
 
+/// The standard-library modules a module depends on through builtins
+/// (`docs/slice.md` 16.22, 21.8): for each type or owner name in
+/// [`ignite_types::builtin_std_modules`] that `source` spells as an
+/// identifier (a type, a resource kind, the owner of a static), the
+/// modules whose records its builtin signatures name. `child.wait()`
+/// returns a `std.process.ChildExit` in a module that imports nothing from
+/// `std.process`; the typer and both backends need the record. The module
+/// itself (`own`) is no dependency of its own.
+fn builtin_dependencies(source: &SourceFile, own: Option<&str>) -> BTreeSet<String> {
+    let names = ignite_types::builtin_std_modules();
+    let text = source.text.as_str();
+    if !names.keys().any(|name| text.contains(name)) {
+        return BTreeSet::new();
+    }
+    let Ok(tokens) = ignite_syntax::lexer::lex(text) else {
+        return BTreeSet::new();
+    };
+    tokens
+        .iter()
+        .filter_map(|token| match &token.kind {
+            ignite_syntax::lexer::TokenKind::Ident(name) => names.get(name.as_str()),
+            _ => None,
+        })
+        .flatten()
+        .filter(|module| own != Some(module.as_str()))
+        .cloned()
+        .collect()
+}
+
 /// Imports and literal `module("p")` calls are dependencies before typing:
 /// module records resolve their functions without an accompanying import.
 /// Walk expression chains iteratively, including defaults and test bodies.
-fn module_dependencies(program: &Program) -> BTreeSet<String> {
+/// The modules builtins name are dependencies too
+/// ([`builtin_dependencies`]).
+fn module_dependencies(program: &Program, source: &SourceFile) -> BTreeSet<String> {
     use ignite_syntax::ast::{Block, Decl, Expr, ExprKind, StmtKind};
 
     enum Node<'a> {
@@ -385,6 +416,7 @@ fn module_dependencies(program: &Program) -> BTreeSet<String> {
         }
     }
     let own = program.package.as_ref().map(|p| p.dotted());
+    dependencies.extend(builtin_dependencies(source, own.as_deref()));
     while let Some(node) = pending.pop() {
         match node {
             Node::Block(block) => {
@@ -578,7 +610,7 @@ fn load_modules(
         let program = parse(&source)?;
         check_package(&path, &source, &program)?;
         pending.extend(
-            module_dependencies(&program)
+            module_dependencies(&program, &source)
                 .into_iter()
                 .filter(|module| !seen.contains(module)),
         );
@@ -641,7 +673,7 @@ fn import_order(parsed: &BTreeMap<String, Parsed>) -> Result<Vec<String>, Error>
     let edges: BTreeMap<&str, BTreeSet<&str>> = parsed
         .iter()
         .map(|(path, module)| {
-            let targets = module_dependencies(&module.program)
+            let targets = module_dependencies(&module.program, &module.source)
                 .into_iter()
                 .filter_map(|m| parsed.get_key_value(&m).map(|(k, _)| k.as_str()))
                 .collect();
@@ -858,9 +890,13 @@ impl ParsedFile {
     /// Every module the program and its siblings import, standard-library
     /// or not; the loader skips the ones that are no standard-library file.
     fn std_modules(&self) -> impl Iterator<Item = String> + '_ {
-        std::iter::once(&self.program)
-            .chain(self.siblings.values().map(|sibling| &sibling.program))
-            .flat_map(module_dependencies)
+        std::iter::once((&self.program, &self.source))
+            .chain(
+                self.siblings
+                    .values()
+                    .map(|sibling| (&sibling.program, &sibling.source)),
+            )
+            .flat_map(|(program, source)| module_dependencies(program, source))
     }
 }
 
@@ -1507,6 +1543,7 @@ pub fn run(file: &Path, options: &RunOptions) -> Result<i32, Error> {
             })?,
         None => DEFAULT_SETTLE,
     };
+    run::refuse_settings_without_default(&loaded, &model)?;
     let (executables, declared) = run_members(&model);
     if state.join("host-journal.jsonl").exists() || state.join("identity").exists() {
         return Err(run_diagnostic(
@@ -1618,6 +1655,7 @@ pub fn run(file: &Path, options: &RunOptions) -> Result<i32, Error> {
         ports: options.ports.iter().cloned().collect(),
         declared,
         executables,
+        first_listeners: run::live::first_listeners(loaded.types()),
         generation,
         start_at,
         builder,

@@ -92,6 +92,8 @@ pub struct Config {
     /// Member id to executable file name, for every member that runs or is
     /// built.
     pub executables: BTreeMap<String, String>,
+    /// Member id to the listener `--port` applies to ([`first_listeners`]).
+    pub first_listeners: BTreeMap<String, String>,
     /// The generation this segment starts with.
     pub generation: i64,
     /// The `at` this segment starts at (0 for a fresh journal).
@@ -115,14 +117,50 @@ struct Members {
     refs: BTreeMap<String, Vec<String>>,
 }
 
+/// Member id to the first `TcpListener` resource its executable declares
+/// (`ExecutableInfo::resources`, `Duo.server` to `Duo.zeta`): the listener
+/// whose port the generated `main` takes from `--port` on both targets
+/// (`docs/slice.md` 16.3). `program` is the program's own typed module.
+pub fn first_listeners(program: &TypedProgram) -> BTreeMap<String, String> {
+    program
+        .executables()
+        .iter()
+        .filter_map(|executable| {
+            let (name, _) = executable
+                .resources
+                .iter()
+                .find(|(_, ty)| matches!(ty, Ty::TcpListener))?;
+            Some((
+                format!("{}.{}", executable.system, executable.component),
+                format!("{}.{name}", executable.system),
+            ))
+        })
+        .collect()
+}
+
 impl Members {
-    fn of(model: &Model) -> Members {
-        let mut listeners = BTreeMap::new();
+    /// The listener of each member is the one `first` names for it (see
+    /// [`first_listeners`]); the provisioning edges are sorted by resource
+    /// id, which need not be the order the member declares them in. A
+    /// member `first` does not name takes its first edge.
+    fn of(model: &Model, first: &BTreeMap<String, String>) -> Members {
+        let mut listeners: BTreeMap<String, Listener> = BTreeMap::new();
         for edge in &model.edges {
             if edge.kind != EdgeKind::Provisioning {
                 continue;
             }
-            let Some(resource) = model.member(&edge.from) else {
+            if first
+                .get(&edge.to)
+                .is_some_and(|resource| *resource != edge.from)
+            {
+                continue;
+            }
+            // Only a listener provisions its executable (16.14); the kind
+            // is checked again, as a listener is what is read here.
+            let Some(resource) = model
+                .member(&edge.from)
+                .filter(|resource| resource.kind == "TcpListener")
+            else {
                 continue;
             };
             let property = |name: &str| resource.properties.iter().find(|(f, _)| f == name);
@@ -271,7 +309,7 @@ impl<'a, 'p> Live<'a, 'p> {
                     .and_then(|(_, payload)| payload.get(1).cloned())
             })
             .unwrap_or_else(|| Ty::Record(QualName::new("std.sli", "ProbeAttempt")));
-        let members = Members::of(model);
+        let members = Members::of(model, &config.first_listeners);
         let manual = Manual {
             now: config.start_at,
         };
@@ -1623,6 +1661,7 @@ mod tests {
             ports: BTreeMap::new(),
             declared: Vec::new(),
             executables: BTreeMap::from([("Terminal.server".to_string(), "server".to_string())]),
+            first_listeners: BTreeMap::new(),
             generation: 1,
             start_at: 0,
             builder: Arc::new(|| Ok(BTreeMap::new())),

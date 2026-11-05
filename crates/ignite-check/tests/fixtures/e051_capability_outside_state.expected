@@ -1,0 +1,2 @@
+e051_capability_outside_state.ignite:6:25: error[E051]: `Entropy.new()` is test-only; a program's capabilities are `resource`s
+e051_capability_outside_state.ignite:7:25: error[E051]: `Directory.temporary()` is test-only; a program's capabilities are `resource`s

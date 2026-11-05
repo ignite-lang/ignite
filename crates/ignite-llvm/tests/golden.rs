@@ -1437,3 +1437,112 @@ fn slices_that_are_only_read_are_not_copied() {
     );
     compiles("views_program", ir);
 }
+
+/// Row 36 of `docs/slice.md` 21.0: `capabilities.ignite` (the four
+/// capability resources and one call of each method) against the
+/// repository's `std.process`; the program module equals
+/// `capabilities.program.ll`, its main launches the resources in the order
+/// of 21.8 with the flags `--tool` and `--root`, every method calls its
+/// `ignite_rt_*` entry, and the modules compile with clang and link with
+/// `libignite_rt.a`.
+#[test]
+fn capabilities() {
+    let std_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../std/process.ignite");
+    let std_text = std::fs::read_to_string(&std_path).unwrap();
+    let std_source = SourceFile::new("std/process.ignite".to_string(), std_text);
+    let std_program = ignite_syntax::parse(&std_source).unwrap_or_else(|d| panic!("{d:?}"));
+    let mut modules = ignite_check::Modules::new();
+    let mut typed = ignite_types::TypedModules::new();
+    let std_symbols = ignite_check::check_module(&std_program, &modules)
+        .unwrap_or_else(|d| panic!("{}", std_source.render_all(&d)));
+    let std_types = ignite_types::type_module(&std_program, &std_symbols, &typed)
+        .unwrap_or_else(|d| panic!("{}", std_source.render_all(&d)));
+    modules.insert("std.process".to_string(), std_symbols.clone());
+    typed.insert("std.process".to_string(), std_types.exports());
+
+    let path = golden_dir().join("capabilities.ignite");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let source = SourceFile::new("tests/golden/capabilities.ignite".to_string(), text);
+    let program = ignite_syntax::parse(&source).unwrap_or_else(|d| panic!("{d:?}"));
+    let symbols = ignite_check::check_module(&program, &modules)
+        .unwrap_or_else(|d| panic!("{}", source.render_all(&d)));
+    let types = ignite_types::type_module(&program, &symbols, &typed)
+        .unwrap_or_else(|d| panic!("{}", source.render_all(&d)));
+    let std_input = ignite_llvm::ModuleInput {
+        path: "std.process",
+        program: &std_program,
+        symbols: &std_symbols,
+        types: &std_types,
+    };
+    let input = ignite_llvm::ModuleInput {
+        path: &types.module,
+        program: &program,
+        symbols: &symbols,
+        types: &types,
+    };
+    let options = ignite_llvm::Options {
+        sources: [
+            ("std.process".to_string(), &std_source),
+            (types.module.clone(), &source),
+        ]
+        .into(),
+        target: Some(target()),
+        ..Default::default()
+    };
+    let generated = ignite_llvm::generate_with(&[std_input], &input, &options);
+
+    let main_ir = &generated.mains[0].ir;
+    assert_eq!(generated.mains[0].executable, "bench");
+    let mut at = 0;
+    for entry in [
+        "call i32 @ignite_rt_setting_launch(",
+        "call i32 @ignite_rt_directory_launch(",
+        "call i64 @ignite_rt_launcher_new(i64 4)",
+        "call i32 @ignite_rt_entropy_open(",
+    ] {
+        let found = main_ir[at..]
+            .find(entry)
+            .unwrap_or_else(|| panic!("no `{entry}` after offset {at} in\n{main_ir}"));
+        at += found + entry.len();
+    }
+    for flag in ["c\"--tool\"", "c\"--root\""] {
+        assert!(main_ir.contains(flag), "no {flag} in\n{main_ir}");
+    }
+    let program_ir = &generated.program;
+    for entry in [
+        "@ignite_rt_directory_read_file(",
+        "@ignite_rt_directory_write_file(",
+        "@ignite_rt_directory_read_directory(",
+        "@ignite_rt_directory_create_directory(",
+        "@ignite_rt_directory_remove(",
+        "@ignite_rt_directory_remove_tree(",
+        "@ignite_rt_directory_absolute_path(",
+        "@ignite_rt_launcher_execute(",
+        "@ignite_rt_launcher_start(",
+        "@ignite_rt_child_id(",
+        "@ignite_rt_child_kill(",
+        "@ignite_rt_child_wait(",
+        "@ignite_rt_entropy_random_bytes(",
+        "@ignite_rt_setting_value(",
+    ] {
+        assert!(
+            program_ir.contains(&format!("call i32 {entry}"))
+                || program_ir.contains(&format!("call i64 {entry}"))
+                || program_ir.contains(&format!("call void {entry}")),
+            "no call of {entry} in\n{program_ir}"
+        );
+    }
+    compare(&golden_dir().join("capabilities.program.ll"), program_ir)
+        .unwrap_or_else(|e| panic!("{e}"));
+    compiles("capabilities_std", &generated.std);
+    compiles("capabilities_program", program_ir);
+    compiles("capabilities_main", main_ir);
+    links(
+        "capabilities",
+        &[
+            "capabilities_std",
+            "capabilities_program",
+            "capabilities_main",
+        ],
+    );
+}

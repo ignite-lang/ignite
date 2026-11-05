@@ -1,0 +1,45 @@
+package signal_mask
+
+import std.process.{ChildExit, Invocation}
+import std.protocol.http.*
+
+// Rows 13 and 14 of `docs/slice.md` 21.0: what a child of a server
+// inherits. The drain blocks SIGTERM in every thread of the server, and the
+// server holds a listener, connections, a root directory and the entropy
+// source; a child starts with none of them.
+//   GET /      runs /bin/sh -c "kill -TERM $$; sleep 5"; 200 `ending <e> code <c>`
+//   GET /fds   runs /bin/ls /proc/self/fd; 200 with its stdout
+
+type Bench {
+  tools: Launcher
+  files: Directory
+  entropy: Entropy
+}
+
+fn ran(state: Bench, invocation: Invocation, show: fn(exit: ChildExit) -> Text) -> Response = match state.tools.execute(invocation) {
+  Ok(exit) => Response.plain(200, show(exit))
+  Err(error) => Response.plain(500, error.message)
+}
+
+fn ending(exit: ChildExit) -> Text = "ending ".concat(exit.ending.to_text()).concat(" code ").concat(exit.code.to_text())
+
+fn listing(exit: ChildExit) -> Text = exit.stdout.to_text()
+
+fn handle(state: Bench, request: Request) -> Response = match (request.method, request.segments()) {
+  ("GET", []) => ran(state, Invocation { program = "/bin/sh", arguments = ["-c", "kill -TERM $$; sleep 5"] }, ending)
+  ("GET", ["fds"]) => ran(state, Invocation { program = "/bin/ls", arguments = ["/proc/self/fd"] }, listing)
+  _ => status_response(404)
+}
+
+system SignalMask {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 8096 }
+  resource tools: Launcher
+  resource files: Directory { path = "root", create = true }
+  resource entropy: Entropy
+
+  component server: HttpServer {
+    listener = ingress
+    application = HttpApp { state = Bench { tools = tools, files = files, entropy = entropy }, handle }
+    executable = "maskd"
+  }
+}
