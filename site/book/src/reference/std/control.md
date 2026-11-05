@@ -2,7 +2,7 @@
 
 The pure reducers that `ignite run` steps. A machine is a value, an event is a value, and
 `step` is a pure function from both to the next machine and the effects to dispatch. The
-driver of `ignite run` knows these types, the hook names `machine` and `validate`, and the
+driver of `ignite run` knows these types, the hook names `machine`, `validate` and `classify`, and the
 functions `step` and `companions`; `ignite apply` also calls the constructors
 `member_action` and `transition` and steps `Transition` with `transit` (below). Reducers read no clock: every event carries
 `at`, a `Duration` since the start of the run's journal. The module also holds the
@@ -65,10 +65,10 @@ enum EventKind {
   Exited(Int, Int),
   Signalled(Int, Int),
   SpawnFailed(Text),
-  AttemptDone(Int, ProbeAttempt),
+  AttemptDone(Int, Text),
   AttemptFailed(Int, Text),
   Timer(Int),
-  Emitted(Text, ProbeAttempt),
+  Emitted(Text, Verdict),
   Built(Int),
   BuildFailed(Text),
   Released,
@@ -83,9 +83,9 @@ enum EventKind {
 | `Ready(pid)` | the process printed its `listening on` line |
 | `Exited(pid, code)`, `Signalled(pid, signal)` | the process ended |
 | `SpawnFailed(reason)` | the process could not be started |
-| `AttemptDone(id, attempt)`, `AttemptFailed(id, reason)` | a probe attempt finished, or failed without a result |
+| `AttemptDone(id, line)`, `AttemptFailed(id, reason)` | a probe attempt finished with its line (decoded by the signal's element type before it is fed), or failed without a result |
 | `Timer(id)` | a timer the machine set fired |
-| `Emitted(signal, value)` | a value on a signal the machine subscribes to |
+| `Emitted(signal, verdict)` | an emission on a signal the machine subscribes to, with the [`Verdict`](sli.md#samples-and-verdicts) of the machine's contract |
 | `Built(generation)`, `BuildFailed(reason)` | a rollout's build finished |
 | `Released` | the old process released its listener during a rollout |
 | `Control(line)` | a control line from `ignite run`'s standard input, such as `stop` or `rollout` |
@@ -103,7 +103,7 @@ enum Effect {
   Abort(Text, Int),
   SetTimer(Int, Duration),
   CancelTimer(Int),
-  Emit(Text, ProbeAttempt),
+  Emit(Text, Sample),
   Publish(Standing),
   Fire(Fired),
   Build(Text),
@@ -118,7 +118,7 @@ enum Effect {
 | `Kill(member, pid, signal)` | send a POSIX signal to one process of the member |
 | `Attempt(member, id)`, `Abort(member, id)` | run one probe attempt, or end its process |
 | `SetTimer(id, instant)`, `CancelTimer(id)` | arm a timer for an absolute instant, or disarm it |
-| `Emit(signal, value)` | emit a value on a signal |
+| `Emit(signal, sample)` | emit a [`Sample`](sli.md#samples-and-verdicts) on a signal |
 | `Publish(standing)` | record a contract's standing |
 | `Fire(fired)` | record a consequence that fired |
 | `Build(member)` | build the member's next generation |
@@ -177,6 +177,7 @@ type ProbeScheduler {
   next_id: Int = 1
   slot: Option<Duration> = None
   in_flight: Option<Int> = None
+  in_flight_slot: Option<Duration> = None
   deadline_timer: Option<Int> = None
   slot_timer: Option<Int> = None
 }
@@ -185,8 +186,9 @@ type ProbeScheduler {
 The scheduler of one probe member. Slots open every `interval` from the target's first
 `Ready` on; each slot dispatches one attempt with a deadline of `timeout`.
 
-- A result before the deadline is emitted on `signal`.
-- The deadline aborts the attempt and emits a bad attempt with `latency = timeout`.
+- A result before the deadline is emitted on `signal` as `Sample { slot, line = Some(line) }`,
+  `slot` being the slot the attempt was dispatched for.
+- The deadline aborts the attempt and emits `Sample { slot, line = None }`, a bad attempt.
 - A failed attempt (no executable, an exit status other than 0, an undecodable line) is
   missing evidence: it emits nothing and notes `missing`.
 - `Start` forgets the schedule; the target's next `Ready` reopens it.
@@ -199,8 +201,6 @@ type Evaluator {
   contract: Text
   signal: Text
   interval: Duration = 0 ms
-  good: Text
-  threshold: Duration = 0 ms
   target: Ratio
   window: Window
   missing_data: MissingData
@@ -223,8 +223,9 @@ type Bucket {
 }
 ```
 
-The evaluator of one [contract](contract.md). It classifies each emission of its signal with
-`satisfies`, keeps the window's counts, and publishes a `Standing` at every emission and every
+The evaluator of one [contract](contract.md). It counts each `Verdict` of its signal (the driver
+has applied the contract's `classify` to the decoded line) in the bucket of its slot,
+keeps the window's counts, and publishes a `Standing` at every emission and every
 period boundary.
 
 - A `Rolling(span)` window keeps its counts in buckets of `max(interval, span / 10,000)`.

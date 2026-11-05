@@ -37,8 +37,8 @@ pub use eval::{EvalError, Evaluator, Fuel, Limit};
 pub use explain::explain;
 pub use model::{
     CONTROL_MODULE, DISRUPTION, Edge, EdgeKind, FORMAT_VERSION, Json, Model, ModelAssembly,
-    ModelMachine, ModelMember, ModelObservation, machines, model, observations, type_name,
-    value_json,
+    ModelMachine, ModelMember, ModelObservation, machines, model, observations, parse_type_name,
+    type_name, value_json,
 };
 pub use resolve::{ResolutionEntry, resolve};
 pub use validate::{validate, validate_system};

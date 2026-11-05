@@ -323,7 +323,8 @@ fn standard_library_expressions_are_typed() {
 
 #[test]
 fn todo_program_types_against_the_standard_library() {
-    let std = standard_library();
+    let mut std = standard_library();
+    sibling(&mut std, "todo", "health");
     let path = repository().join("examples/todo/todo.ignite");
     let source = SourceFile::new("todo.ignite", std::fs::read_to_string(&path).unwrap());
     let program = ignite_syntax::parse(&source)
@@ -336,11 +337,15 @@ fn todo_program_types_against_the_standard_library() {
     assert_complete(&typed, &source, &program);
 }
 
-/// The terminal's sibling module `<name>.ignite` (`docs/slice.md` section
+/// The sibling module `examples/<example>/<name>.ignite` (`docs/slice.md` section
 /// 14.4), checked and typed against the standard library and the siblings
 /// typed before it, and added to both for the program.
-fn sibling(std: &mut common::Std, name: &str) -> (SourceFile, Program, TypedProgram) {
-    let path = repository().join(format!("examples/terminal/{name}.ignite"));
+fn sibling(
+    std: &mut common::Std,
+    example: &str,
+    name: &str,
+) -> (SourceFile, Program, TypedProgram) {
+    let path = repository().join(format!("examples/{example}/{name}.ignite"));
     let source = SourceFile::new(
         format!("{name}.ignite"),
         std::fs::read_to_string(&path).unwrap(),
@@ -351,7 +356,7 @@ fn sibling(std: &mut common::Std, name: &str) -> (SourceFile, Program, TypedProg
         .unwrap_or_else(|d| panic!("check failed:\n{}", source.render_all(&d)));
     let typed = type_module(&program, &symbols, &std.typed)
         .unwrap_or_else(|d| panic!("type failed:\n{}", source.render_all(&d)));
-    let module = format!("examples.terminal.{name}");
+    let module = format!("examples.{example}.{name}");
     assert_eq!(typed.module, module);
     std.typed.insert(module.clone(), typed.exports());
     std.modules.insert(module, symbols);
@@ -361,8 +366,8 @@ fn sibling(std: &mut common::Std, name: &str) -> (SourceFile, Program, TypedProg
 #[test]
 fn terminal_program_types_against_the_standard_library() {
     let mut std = standard_library();
-    let (source, program, typed) = sibling(&mut std, "commands");
-    sibling(&mut std, "command_schema");
+    let (source, program, typed) = sibling(&mut std, "terminal", "commands");
+    sibling(&mut std, "terminal", "command_schema");
     assert_complete(&typed, &source, &program);
 
     let command = Ty::Enum(qual("examples.terminal.commands", "Command"));

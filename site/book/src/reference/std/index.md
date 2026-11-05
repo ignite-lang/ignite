@@ -21,7 +21,7 @@ runtime know sockets and byte streams, not application protocols.
 | `std.option` | base | `import std.option.{unwrap_or, map}` | helpers on `Option`: `unwrap_or`, `map`, `and_then`, `ok_or`, ...; see [std.option and std.result](option-result.md) |
 | `std.result` | base | `import std.result.{map_err, ok}` | helpers on `Result`: `unwrap_or`, `map`, `map_err`, `ok`, ...; see [std.option and std.result](option-result.md) |
 | `std.json` | base | `import std.json.{Json, parse, encode}` | JSON values (RFC 8259), every number kept exactly: `encode`, `parse` and member accessors; see [std.json](json.md) |
-| `std.sli` | leaf | `import std.sli.{ProbeAttempt, meets}` | probe attempts, outcomes, windows, missing data and the target check; see [std.sli](sli.md) |
+| `std.sli` | leaf | `import std.sli.{ProbeAttempt, meets}` | the prompt probe's outcome and its predicates, samples and verdicts, windows, missing data and the target check; see [std.sli](sli.md) |
 | `std.time` | leaf | `import std.time.{month_start, zone_known}` | civil time for calendar windows in `UTC` and `Europe/Berlin`; see [std.time](time.md) |
 | `std.policy` | leaf | `import std.policy.{Restart, DrainRollout}` | restart and rollout policies and their backoff arithmetic; see [std.policy](policy.md) |
 | `std.console` | general | `import std.console.{Console, Reply}` | a line-oriented console application, independent of the protocol that carries it; see [std.console](console.md) |

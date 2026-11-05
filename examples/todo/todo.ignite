@@ -3,88 +3,334 @@ package examples.todo
 import std.json.*
 import std.protocol.http.*
 import std.option.unwrap_or
+import std.fs.{read_text_file, write_text_file, join_path}
+import std.text.{ends_with, strip_suffix}
+import std.contract.Availability
+import std.sli.rolling
+import std.deploy.{Deployment, localSocket, nativeProcess, scheduledProbeHost}
+import examples.todo.health.{HttpHealth, healthy}
 
-// A todo list served over HTTP/1.1 with JSON bodies, kept in memory:
+// A todo list served over HTTP/1.1 with JSON bodies:
 //   GET /todos            every todo, in id order
 //   POST /todos           {"title": "milk"} creates one; 201 with the todo
 //   GET /todos/{id}       one todo, or 404
 //   PATCH /todos/{id}     {"title": .., "done": ..}, either optional
 //   DELETE /todos/{id}    204, or 404
+//   GET /health           200 `ok` once the data is loaded
+//
+// Durable (`docs/slice.md` 22.4): the memory store `todos` is the authority
+// inside a process; every change is one atomic `update` or `upsert` that
+// also raises the todo's `version`, and the handler writes
+// `<shard>/<id>/<version>.json` under the directory `data` before it
+// answers, the shard `todos` for ids up to 65,536 and `todos-<k>` for each
+// later range of 65,536 ids (`shard_of`).
+// A failed write answers 500 `not stored`: the change is applied in memory
+// but not durable. A deleted todo is a tombstone file, so its id is never
+// given again. The first request of a process loads the newest version of
+// every todo from `data`; loads are idempotent and monotone, so concurrent
+// first requests may each load.
+//
+// Known limit (22.2): two processes over one `data` (the draining instance
+// of a rollout and its replacement) each give ids and versions from their
+// own memory, so a write the old instance acknowledges in the drain window
+// can be lost or hidden from the new one. Writes do not `fsync`: a SIGKILL
+// keeps every acknowledged change, a power loss need not.
 
 type Todo {
   id: Int
   title: Text
   done: Bool = false
+  version: Int = 1
+  deleted: Bool = false
+  deleted_by: Int = 0
 }
 
+// The state of the handler: the todos in memory, whether this process has
+// loaded them (under id 0; the store's counter gives each DELETE its
+// token, `deleted_by`, which only memory holds), and the directory that
+// holds their files.
+type Todos {
+  todos: Store<Todo>
+  loaded: Store<Bool>
+  data: Directory
+}
+
+// The body of a response: the three fields a client sees.
 fn to_json(todo: Todo) -> Json =
   Object([("id", Number(todo.id)), ("title", Str(todo.title)), ("done", Bool(todo.done))])
 
-fn list(todos: Store<Todo>) -> Response = Response.json(200, Array(todos.values().map(to_json)))
+// The content of a todo's file: every field.
+fn to_record(todo: Todo) -> Json = Object([
+  ("id", Number(todo.id)),
+  ("title", Str(todo.title)),
+  ("done", Bool(todo.done)),
+  ("version", Number(todo.version)),
+  ("deleted", Bool(todo.deleted))
+])
 
-fn create(todos: Store<Todo>, body: Text) -> Response = match parse(body) {
+fn from_record(value: Json) -> Option<Todo> = match (value.int("id"), value.text("title"), value.bool("done"), value.int("version"), value.bool("deleted")) {
+  (Some(id), Some(title), Some(done), Some(version), Some(deleted)) => Some(Todo { id, title, done, version, deleted })
+  _ => None
+}
+
+// ---- files ------------------------------------------------------------------
+
+// The ids one shard directory holds: `read_directory` lists at most 65,536
+// entries (`docs/slice.md` 21.4), and every id keeps its directory forever,
+// tombstones included.
+const SHARD_SIZE: Int = 65536
+
+// The shard of `id`: `todos` for ids 1 to 65,536, `todos-<k>` for the k-th
+// range of 65,536 ids after it. The root of `data` holds the shards, so it
+// lists one entry per 65,536 ids.
+fn shard_of(id: Int) -> Text = if id <= SHARD_SIZE { "todos" } else { "todos-{(id - 1) / SHARD_SIZE}" }
+
+// Whether the directory `name` at the root of `data` is a shard.
+fn is_shard(name: Text) -> Bool = name == "todos" || match name.strip_prefix("todos-") {
+  Some(digits) => Int.parse(digits) != None
+  None => false
+}
+
+fn todo_directory(id: Int) -> Text = join_path(shard_of(id), "{id}")
+
+fn version_file(version: Int) -> Text = "{version}.json"
+
+// The version a file name `<version>.json` names.
+fn version_of(name: Text) -> Option<Int> = match name.strip_suffix(".json") {
+  Some(digits) => Int.parse(digits)
+  None => None
+}
+
+// `todo` written as the file of its version, then the files of its older
+// versions removed; a failed removal is ignored, since a load takes the
+// newest version.
+fn save(state: Todos, todo: Todo) -> Result<Unit, IoError> {
+  let directory = todo_directory(todo.id)
+  state.data.create_directory(directory)?
+  write_text_file(state.data, join_path(directory, version_file(todo.version)), encode(to_record(todo)))?
+  let names = match state.data.read_directory(directory) {
+    Ok(names) => names
+    Err(_) => []
+  }
+  for name in names {
+    if older(name, todo.version) {
+      _ = state.data.remove(join_path(directory, name))
+    }
+  }
+  Ok(())
+}
+
+// Whether `name` is the file of a version before `version`.
+fn older(name: Text, version: Int) -> Bool = match version_of(name) {
+  Some(found) => found < version
+  None => false
+}
+
+// The newest version among the files of `directory` that parse.
+fn newest(state: Todos, directory: Text) -> Result<Option<Todo>, IoError> {
+  var found = None
+  for name in state.data.read_directory(directory)? {
+    if version_of(name) != None {
+      match read_record(state, join_path(directory, name)) {
+        Some(todo) => {
+          found = Some(keep_newer(found, todo))
+        }
+        None => {}
+      }
+    }
+  }
+  Ok(found)
+}
+
+// The todo in the file at `path`, `None` when it cannot be read or parsed.
+fn read_record(state: Todos, path: Text) -> Option<Todo> = match read_text_file(state.data, path) {
+  Ok(text) => match parse(text) {
+    Ok(value) => from_record(value)
+    Err(_) => None
+  }
+  Err(_) => None
+}
+
+// `todo` unless `held` is at least as new.
+fn keep_newer(held: Option<Todo>, todo: Todo) -> Todo = match held {
+  Some(old) => if old.version >= todo.version { old } else { todo }
+  None => todo
+}
+
+// Every todo on disk merged into memory, once per process: a todo in
+// memory that is newer than its file stays.
+fn load(state: Todos) -> Result<Unit, IoError> {
+  if state.loaded.get(0) == Some(true) {
+    return Ok(())
+  }
+  state.data.create_directory("todos")?
+  for entry in state.data.read_directory(".")? {
+    match entry.strip_suffix("/") {
+      Some(shard) => if is_shard(shard) {
+        load_shard(state, shard)?
+      }
+      None => {}
+    }
+  }
+  state.loaded.put(0, true)
+  Ok(())
+}
+
+// Every todo of the shard directory `shard` merged into memory.
+fn load_shard(state: Todos, shard: Text) -> Result<Unit, IoError> {
+  for entry in state.data.read_directory(shard)? {
+    match entry.strip_suffix("/") {
+      Some(name) => match newest(state, join_path(shard, name))? {
+        Some(todo) => {
+          _ = state.todos.upsert(todo.id, |held| keep_newer(held, todo))
+        }
+        None => {}
+      }
+      None => {}
+    }
+  }
+  Ok(())
+}
+
+// ---- requests ---------------------------------------------------------------
+
+// The response for a changed `todo`: `ok` once its file is written.
+fn stored(state: Todos, todo: Todo, ok: Response) -> Response = match save(state, todo) {
+  Ok(_) => ok
+  Err(_) => Response.plain(500, "not stored\n")
+}
+
+fn live(todo: Option<Todo>) -> Option<Todo> = match todo {
+  Some(found) => if found.deleted { None } else { Some(found) }
+  None => None
+}
+
+fn list(state: Todos) -> Response {
+  var shown = []
+  for todo in state.todos.values() {
+    if !todo.deleted {
+      shown.push(to_json(todo))
+    }
+  }
+  Response.json(200, Array(shown))
+}
+
+// A new id: the next of the store's counter that no todo holds, so that
+// ids continue after every id on disk, tombstones included.
+fn free_id(todos: Store<Todo>) -> Int {
+  var id = todos.next_id()
+  while todos.get(id) != None {
+    id = todos.next_id()
+  }
+  id
+}
+
+fn create(state: Todos, body: Text) -> Response = match parse(body) {
   Ok(value) => match value.text("title") {
     Some(title) => {
-      let todo = Todo { id = todos.next_id(), title, done = value.bool("done").unwrap_or(false) }
-      todos.put(todo.id, todo)
-      Response.json(201, to_json(todo))
+      let todo = Todo { id = free_id(state.todos), title, done = value.bool("done").unwrap_or(false) }
+      state.todos.put(todo.id, todo)
+      stored(state, todo, Response.json(201, to_json(todo)))
     }
     None => status_response(400)
   }
   Err(_) => status_response(400)
 }
 
-fn show(todos: Store<Todo>, id: Int) -> Response = match todos.get(id) {
+fn show(state: Todos, id: Int) -> Response = match live(state.todos.get(id)) {
   Some(todo) => Response.json(200, to_json(todo))
   None => status_response(404)
 }
 
 // The fields of `body` replace those of the stored todo in one atomic
 // `update`, so concurrent PATCHes of different fields both take effect.
-fn patch(todos: Store<Todo>, id: Int, body: Text) -> Response = match parse(body) {
+fn patch(state: Todos, id: Int, body: Text) -> Response = match parse(body) {
   Ok(value) => {
-    let changed = todos.update(id, |todo| Todo {
-      title = value.text("title").unwrap_or(todo.title)
-      done = value.bool("done").unwrap_or(todo.done)
-      ..todo
+    let changed = state.todos.update(id, |todo| if todo.deleted { todo } else {
+      Todo {
+        title = value.text("title").unwrap_or(todo.title)
+        done = value.bool("done").unwrap_or(todo.done)
+        version = todo.version + 1
+        ..todo
+      }
     })
-    match changed {
-      Some(todo) => Response.json(200, to_json(todo))
+    match live(changed) {
+      Some(todo) => stored(state, todo, Response.json(200, to_json(todo)))
       None => status_response(404)
     }
   }
-  Err(_) => status_response(if todos.get(id) == None { 404 } else { 400 })
+  Err(_) => status_response(if live(state.todos.get(id)) == None { 404 } else { 400 })
 }
 
-fn delete(todos: Store<Todo>, id: Int) -> Response = match todos.remove(id) {
-  Some(_) => status_response(204)
-  None => status_response(404)
+// A tombstone at the next version. Whether this request made it is
+// decided inside the one atomic `update`: the tombstone carries the
+// request's token, so of two concurrent DELETEs of one todo exactly one
+// answers 204 and the other, which found the tombstone, 404.
+fn delete(state: Todos, id: Int) -> Response {
+  let token = state.loaded.next_id()
+  match state.todos.update(id, |todo| if todo.deleted { todo } else { Todo { deleted = true, version = todo.version + 1, deleted_by = token, ..todo } }) {
+    Some(todo) => if todo.deleted_by == token { stored(state, todo, status_response(204)) } else { status_response(404) }
+    None => status_response(404)
+  }
 }
 
-fn handle(todos: Store<Todo>, request: Request) -> Response = match (request.method, request.segments()) {
-  ("GET", ["todos"]) => list(todos)
-  ("POST", ["todos"]) => create(todos, request.body)
+fn route(state: Todos, request: Request) -> Response = match (request.method, request.segments()) {
+  ("GET", ["health"]) => Response.plain(200, "ok\n")
+  ("GET", ["todos"]) => list(state)
+  ("POST", ["todos"]) => create(state, request.body)
   (_, ["todos"]) => method_not_allowed("GET, POST")
   (method, ["todos", id]) => match Int.parse(id) {
     None => status_response(404)
     Some(n) => match method {
-      "GET" => show(todos, n)
-      "PATCH" => patch(todos, n, request.body)
-      "DELETE" => delete(todos, n)
+      "GET" => show(state, n)
+      "PATCH" => patch(state, n, request.body)
+      "DELETE" => delete(state, n)
       _ => method_not_allowed("GET, PATCH, DELETE")
     }
   }
   _ => status_response(404)
 }
 
+// Every request loads first; a failed load answers 503.
+fn handle(state: Todos, request: Request) -> Response = match load(state) {
+  Ok(_) => route(state, request)
+  Err(error) => Response.plain(503, "loading failed: {error.message}\n")
+}
+
 system TodoService {
   resource ingress: TcpListener { address = "127.0.0.1", port = 8080 }
   resource todos: Store<Todo>
+  resource loaded: Store<Bool>
+  resource data: Directory { path = "todo-data", create = true }
 
   component server: HttpServer {
     listener = ingress
-    application = HttpApp { state = todos, handle }
+    application = HttpApp { state = Todos { todos = todos, loaded = loaded, data = data }, handle }
     executable = "todod"
+  }
+
+  component health: HttpHealth {
+    target = server
+    path = "/health"
+    interval = 10 seconds
+    timeout = 2 seconds
+  }
+
+  contract reachable: Availability {
+    signal = health.checks
+    good = healthy
+    target = 99%
+    window = rolling(5 minutes)
+    missing_data = "insufficient_evidence"
+  }
+}
+
+assembly local: Deployment {
+  system = TodoService
+  bindings = {
+    TodoService.ingress = localSocket()
+    TodoService.server = nativeProcess(includes = [])
+    TodoService.health = scheduledProbeHost()
   }
 }
 
@@ -93,15 +339,18 @@ system TodoService {
 test fn request(method: Text, path: Text, body: Text) -> Request =
   Request { method, path, query = "", version = "HTTP/1.1", headers = [], body }
 
+// A state over fresh stores and `data`.
+test fn state_over(data: Directory) -> Todos = Todos { todos = Store.new(), loaded = Store.new(), data }
+
 // The status and body of the response to `method path` with `body`.
-test fn answer(todos: Store<Todo>, method: Text, path: Text, body: Text) -> (Int, Text) {
-  let response = handle(todos, request(method, path, body))
+test fn answer(state: Todos, method: Text, path: Text, body: Text) -> (Int, Text) {
+  let response = handle(state, request(method, path, body))
   (response.status, response.body)
 }
 
 // The status of the response to `method path` with `body`.
-test fn status(todos: Store<Todo>, method: Text, path: Text, body: Text) -> Int =
-  answer(todos, method, path, body).0
+test fn status(state: Todos, method: Text, path: Text, body: Text) -> Int =
+  answer(state, method, path, body).0
 
 test "to_json" {
   let milk = Object([("id", Number(1)), ("title", Str("milk")), ("done", Bool(false))])
@@ -109,7 +358,7 @@ test "to_json" {
 }
 
 test "handle creates, lists, reads, updates and deletes" {
-  let todos = Store.new()
+  let todos = state_over(Directory.temporary()?)
   assert answer(todos, "GET", "/todos", "") == (200, "[]")
   assert answer(todos, "POST", "/todos", r#"{"title":"say \"hi\""}"#) == (201, r#"{"id":1,"title":"say \"hi\"","done":false}"#)
   assert answer(todos, "POST", "/todos/", r#"{"title":"eggs","done":true}"#) == (201, r#"{"id":2,"title":"eggs","done":true}"#)
@@ -124,7 +373,7 @@ test "handle creates, lists, reads, updates and deletes" {
 }
 
 test "handle answers 400, 404 and 405" {
-  let todos = Store.new()
+  let todos = state_over(Directory.temporary()?)
   assert status(todos, "POST", "/todos", r"{not json") == 400
   assert status(todos, "POST", "/todos", r#"{"done":true}"#) == 400
   assert status(todos, "POST", "/todos", r#"{"title":7}"#) == 400
@@ -143,4 +392,37 @@ test "handle answers 400, 404 and 405" {
   let post = handle(todos, request("POST", "/todos/1", ""))
   assert post.status == 405
   assert post.headers.at(1) == ("Allow", "GET, PATCH, DELETE")
+}
+
+test "a todo written is loaded by a fresh state" {
+  let data = Directory.temporary()?
+  let first = state_over(data)
+  assert status(first, "POST", "/todos", r#"{"title":"milk"}"#) == 201
+  assert status(first, "POST", "/todos", r#"{"title":"eggs"}"#) == 201
+  assert status(first, "PATCH", "/todos/2", r#"{"done":true}"#) == 200
+  assert status(first, "DELETE", "/todos/1", "") == 204
+  let second = state_over(data)
+  assert answer(second, "GET", "/todos", "") == (200, r#"[{"id":2,"title":"eggs","done":true}]"#)
+  assert status(second, "GET", "/todos/1", "") == 404
+  assert answer(second, "POST", "/todos", r#"{"title":"tea"}"#) == (201, r#"{"id":3,"title":"tea","done":false}"#)
+  assert data.read_directory("todos/2")? == ["2.json"]
+  assert answer(second, "GET", "/health", "") == (200, "ok\n")
+}
+
+test "ids past 65,536 go to the next shard and load from it" {
+  assert shard_of(1) == "todos"
+  assert shard_of(65536) == "todos"
+  assert shard_of(65537) == "todos-1"
+  assert todo_directory(131073) == "todos-2/131073"
+  assert is_shard("todos-12") && !is_shard("todos-") && !is_shard("other")
+  let data = Directory.temporary()?
+  data.create_directory("todos-1/65537")?
+  data.create_directory("other/1")?
+  write_text_file(data, "todos-1/65537/1.json", encode(to_record(Todo { id = 65537, title = "far" })))?
+  write_text_file(data, "other/1/1.json", encode(to_record(Todo { id = 1, title = "not a shard" })))?
+  let todos = state_over(data)
+  assert answer(todos, "GET", "/todos", "") == (200, r#"[{"id":65537,"title":"far","done":false}]"#)
+  assert answer(todos, "PATCH", "/todos/65537", r#"{"done":true}"#) == (200, r#"{"id":65537,"title":"far","done":true}"#)
+  assert data.read_directory("todos-1/65537")? == ["2.json"]
+  assert data.read_directory("todos")? == []
 }

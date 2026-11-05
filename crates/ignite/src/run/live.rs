@@ -10,7 +10,10 @@
 //! `readiness` edge to `M`, in machine-id order; a member without a
 //! `provisioning` listener gets a synthetic `Ready` right after `Started`.
 //! `AttemptDone` and `AttemptFailed` go to the scheduler that asked for
-//! the attempt, `Built`, `BuildFailed` and `Released` to the rollout
+//! the attempt; the probe's line is decoded first by the element type of
+//! the scheduler's signal (the model's `observations`, `docs/slice.md`
+//! 22.3), and a line that does not decode is `AttemptFailed` with
+//! `undecodable probe line: <reason>`. `Built`, `BuildFailed` and `Released` to the rollout
 //! machine that asked, `Timer` to its setter, `Control("rollout")` to
 //! `<member>.rollout` (`Control("rollout start_first")` for the control line
 //! `rollout <member> start_first`), `Control("stop")` to every `Supervise` and `Roll`
@@ -56,8 +59,8 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
-use ignite_eval::{CONTROL_MODULE, EdgeKind, Json, Model, Value, value_json};
-use ignite_types::{QualName, QuantityKind, Reference, Ty, TypedProgram};
+use ignite_eval::{EdgeKind, Json, Model, Value, value_json};
+use ignite_types::{QuantityKind, Reference, Ty, TypedProgram};
 
 use super::clock::{Manual, Real, parse_duration};
 use super::control::{Adapters, Observation};
@@ -70,7 +73,21 @@ pub type Builder = Arc<dyn Fn() -> Result<BTreeMap<String, PathBuf>, String> + S
 
 /// A host receives each record before its effect can be dispatched. Returning
 /// an error stops the live driver, including when durable host storage fails.
-pub type RecordSink = Box<dyn FnMut(&Record) -> io::Result<()> + Send>;
+pub type RecordSink = Box<dyn FnMut(&Record) -> io::Result<Admission> + Send>;
+
+/// A host's answer to one record (17.5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Admission {
+    /// The record's effect, if it has one, is dispatched.
+    Dispatch,
+    /// The host refuses the record's effect, with the reason: while a
+    /// recovery that no corrective resolves stands, the running revision
+    /// dispatches no further effect. The record stays journaled as the
+    /// effect's intent, nothing is dispatched for it, and the run goes on,
+    /// so the instances it supervises keep serving until `ignite recover`
+    /// stops them (22.9).
+    Refused(String),
+}
 
 /// What a run is given besides the model.
 pub struct Config {
@@ -254,8 +271,6 @@ struct Transitions {
 pub struct Live<'a, 'p> {
     core: Core<'a, 'p>,
     model: &'a Model,
-    types: &'a TypedProgram,
-    attempt_ty: Ty,
     config: Config,
     members: Members,
     journal: Journal,
@@ -287,28 +302,18 @@ const STOP_DEADLINE: Duration = Duration::from_secs(10);
 const AFTER_KILL: Duration = Duration::from_secs(2);
 
 impl<'a, 'p> Live<'a, 'p> {
-    /// A run over `core`, whose machines may carry a resumed state.
-    /// `types` is the typed program of `std.control`.
-    #[allow(clippy::too_many_arguments)]
+    /// A run over `core`, whose machines may carry a resumed state. The
+    /// core's evaluator holds the loaded modules, by which a probe's line
+    /// is decoded (22.3).
     pub fn new(
         core: Core<'a, 'p>,
         model: &'a Model,
-        types: &'a TypedProgram,
         config: Config,
         journal: Journal,
         adapters: Adapters,
         tx: Sender<Observation>,
         rx: Receiver<Observation>,
     ) -> Live<'a, 'p> {
-        let attempt_ty = types
-            .enum_variants(&QualName::new(CONTROL_MODULE, "EventKind"))
-            .and_then(|variants| {
-                variants
-                    .iter()
-                    .find(|(name, _)| name == "AttemptDone")
-                    .and_then(|(_, payload)| payload.get(1).cloned())
-            })
-            .unwrap_or_else(|| Ty::Record(QualName::new("std.sli", "ProbeAttempt")));
         let members = Members::of(model, &config.first_listeners);
         let manual = Manual {
             now: config.start_at,
@@ -316,8 +321,6 @@ impl<'a, 'p> Live<'a, 'p> {
         Live {
             core,
             model,
-            types,
-            attempt_ty,
             generation: config.generation,
             config,
             members,
@@ -518,9 +521,10 @@ impl<'a, 'p> Live<'a, 'p> {
         for record in records {
             let line = record.line();
             self.journal.append(&line, record.durable)?;
-            if let Some(sink) = &mut self.record_sink {
-                sink(&record)?;
-            }
+            let admission = match &mut self.record_sink {
+                Some(sink) => sink(&record)?,
+                None => Admission::Dispatch,
+            };
             if self.config.json {
                 let stdout = io::stdout();
                 let mut out = stdout.lock();
@@ -528,8 +532,12 @@ impl<'a, 'p> Live<'a, 'p> {
                 out.flush()?;
             }
             eprintln!("{}", record.human());
-            if let Some(dispatch) = record.dispatch {
-                self.dispatch(dispatch);
+            match (record.dispatch, admission) {
+                (Some(dispatch), Admission::Dispatch) => self.dispatch(dispatch),
+                (Some(_), Admission::Refused(reason)) => {
+                    eprintln!("effect not dispatched: {reason}");
+                }
+                (None, _) => {}
             }
         }
         Ok(())
@@ -880,11 +888,18 @@ impl<'a, 'p> Live<'a, 'p> {
             Observation::AttemptDone { member, id, line } => {
                 let scheduler = self.core.take_attempt(&member, id);
                 let fallback = self.core.machines_of(&member, "Schedule");
-                match Value::decode(&line, &self.attempt_ty, self.types) {
-                    Ok(attempt) => self.feed_one(
+                let decoded = match scheduler
+                    .or_else(|| fallback.first().copied())
+                    .and_then(|machine| self.core.signal_of(machine))
+                {
+                    Some(signal) => self.core.decode(&signal, &line).map(|_| ()),
+                    None => Ok(()),
+                };
+                match decoded {
+                    Ok(()) => self.feed_one(
                         scheduler,
                         fallback,
-                        kind("AttemptDone", vec![Value::Int(id), attempt]),
+                        kind("AttemptDone", vec![Value::Int(id), Value::Text(line)]),
                     ),
                     Err(error) => self.feed_one(
                         scheduler,
@@ -1601,7 +1616,7 @@ pub fn copy_into(bin: &Path, built: &BTreeMap<String, PathBuf>) -> io::Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ignite_eval::{Evaluator, Fuel};
+    use ignite_eval::{CONTROL_MODULE, Evaluator, Fuel};
     use std::sync::mpsc::channel;
 
     /// Seed recorded history through the real reducers, as replay does. Its
@@ -1668,7 +1683,7 @@ mod tests {
         };
         let (tx, rx) = channel();
         let adapters = Adapters::start(tx.clone()).unwrap();
-        let mut live = Live::new(core, &model, types, config, journal, adapters, tx, rx);
+        let mut live = Live::new(core, &model, config, journal, adapters, tx, rx);
         // This models the real-clock branch that already received an external
         // observation, then fires a due timer before delivering that message.
         let held = Observation::AttemptDone {

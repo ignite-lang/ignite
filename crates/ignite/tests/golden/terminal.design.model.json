@@ -333,7 +333,7 @@
       ],
       "executable": null,
       "id": "Terminal.customerAccess",
-      "kind": "std.contract.SLA",
+      "kind": "std.contract.SLA<std.sli.ProbeAttempt>",
       "outputs": {},
       "properties": {
         "consequence": {
@@ -344,7 +344,10 @@
           "variant": "Event"
         },
         "exclusions": [],
-        "good": "prompt_received_before_timeout",
+        "good": {
+          "fn": "std.sli.prompt_received_before_timeout",
+          "type": "Fn"
+        },
         "minimum_completeness": {
           "ppm": 900000,
           "type": "Ratio"
@@ -373,10 +376,13 @@
       ],
       "executable": null,
       "id": "Terminal.promptFast",
-      "kind": "std.contract.ThresholdCompliance",
+      "kind": "std.contract.ThresholdCompliance<std.sli.ProbeAttempt>",
       "outputs": {},
       "properties": {
-        "good": "prompt_received_within_threshold",
+        "good": {
+          "fn": "std.sli.prompt_received_within_threshold",
+          "type": "Fn"
+        },
         "minimum_completeness": {
           "ppm": 900000,
           "type": "Ratio"
@@ -413,10 +419,13 @@
       ],
       "executable": null,
       "id": "Terminal.reachable",
-      "kind": "std.contract.Availability",
+      "kind": "std.contract.Availability<std.sli.ProbeAttempt>",
       "outputs": {},
       "properties": {
-        "good": "prompt_received_before_timeout",
+        "good": {
+          "fn": "std.sli.prompt_received_before_timeout",
+          "type": "Fn"
+        },
         "minimum_completeness": {
           "ppm": 900000,
           "type": "Ratio"
@@ -536,7 +545,6 @@
                 "type": "Duration"
               },
               "fired": [],
-              "good": "prompt_received_before_timeout",
               "horizon": {
                 "type": "Option",
                 "variant": "None"
@@ -564,10 +572,6 @@
               "target": {
                 "ppm": 995000,
                 "type": "Ratio"
-              },
-              "threshold": {
-                "ns": 0,
-                "type": "Duration"
               },
               "window": {
                 "fields": [
@@ -609,7 +613,6 @@
                 "type": "Duration"
               },
               "fired": [],
-              "good": "prompt_received_within_threshold",
               "horizon": {
                 "type": "Option",
                 "variant": "None"
@@ -637,10 +640,6 @@
               "target": {
                 "ppm": 990000,
                 "type": "Ratio"
-              },
-              "threshold": {
-                "ns": 200000000,
-                "type": "Duration"
               },
               "window": {
                 "fields": [
@@ -676,6 +675,10 @@
               },
               "id": "Terminal.promptProbe.scheduler",
               "in_flight": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "in_flight_slot": {
                 "type": "Option",
                 "variant": "None"
               },
@@ -731,7 +734,6 @@
                 "type": "Duration"
               },
               "fired": [],
-              "good": "prompt_received_before_timeout",
               "horizon": {
                 "type": "Option",
                 "variant": "None"
@@ -759,10 +761,6 @@
               "target": {
                 "ppm": 999000,
                 "type": "Ratio"
-              },
-              "threshold": {
-                "ns": 0,
-                "type": "Duration"
               },
               "window": {
                 "fields": [
@@ -949,61 +947,61 @@
     }
   ],
   "sourceMap": {
-    "Terminal": "terminal.design.ignite:12:1",
-    "Terminal.client": "terminal.design.ignite:58:3",
-    "Terminal.client.commands": "terminal.design.ignite:60:16",
-    "Terminal.client.executable": "terminal.design.ignite:59:18",
-    "Terminal.console": "terminal.design.ignite:20:3",
-    "Terminal.console.command_schema": "terminal.design.ignite:24:22",
-    "Terminal.console.implementation": "terminal.design.ignite:21:22",
-    "Terminal.console.maximum_line": "terminal.design.ignite:23:20",
-    "Terminal.console.prompt": "terminal.design.ignite:22:14",
-    "Terminal.customerAccess": "terminal.design.ignite:98:3",
-    "Terminal.customerAccess.consequence": "terminal.design.ignite:104:19",
-    "Terminal.customerAccess.exclusions": "terminal.design.ignite:103:18",
-    "Terminal.customerAccess.good": "terminal.design.ignite:100:12",
-    "Terminal.customerAccess.minimum_completeness": "std/contract.ignite:97:33",
-    "Terminal.customerAccess.period": "terminal.design.ignite:102:14",
-    "Terminal.customerAccess.signal": "terminal.design.ignite:99:14",
-    "Terminal.customerAccess.target": "terminal.design.ignite:101:14",
-    "Terminal.ingress": "terminal.design.ignite:13:3",
-    "Terminal.ingress.address": "terminal.design.ignite:14:15",
-    "Terminal.ingress.backlog": "terminal.design.ignite:17:15",
-    "Terminal.ingress.exposure": "terminal.design.ignite:16:16",
-    "Terminal.ingress.port": "terminal.design.ignite:15:12",
-    "Terminal.promptFast": "terminal.design.ignite:89:3",
-    "Terminal.promptFast.good": "terminal.design.ignite:91:12",
-    "Terminal.promptFast.minimum_completeness": "std/contract.ignite:63:33",
-    "Terminal.promptFast.missing_data": "terminal.design.ignite:95:20",
-    "Terminal.promptFast.signal": "terminal.design.ignite:90:14",
-    "Terminal.promptFast.target": "terminal.design.ignite:93:14",
-    "Terminal.promptFast.threshold": "terminal.design.ignite:92:17",
-    "Terminal.promptFast.window": "terminal.design.ignite:94:14",
-    "Terminal.promptProbe": "terminal.design.ignite:73:3",
-    "Terminal.promptProbe.close_after_probe": "terminal.design.ignite:78:25",
-    "Terminal.promptProbe.executable": "terminal.design.ignite:73:3",
-    "Terminal.promptProbe.expected_prompt": "terminal.design.ignite:77:23",
-    "Terminal.promptProbe.interval": "terminal.design.ignite:75:16",
-    "Terminal.promptProbe.target": "terminal.design.ignite:74:14",
-    "Terminal.promptProbe.timeout": "terminal.design.ignite:76:15",
-    "Terminal.reachable": "terminal.design.ignite:81:3",
-    "Terminal.reachable.good": "terminal.design.ignite:83:12",
-    "Terminal.reachable.minimum_completeness": "std/contract.ignite:37:33",
-    "Terminal.reachable.missing_data": "terminal.design.ignite:86:20",
-    "Terminal.reachable.signal": "terminal.design.ignite:82:14",
-    "Terminal.reachable.target": "terminal.design.ignite:84:14",
-    "Terminal.reachable.window": "terminal.design.ignite:85:14",
-    "Terminal.server": "terminal.design.ignite:27:3",
-    "Terminal.server.application": "terminal.design.ignite:29:19",
-    "Terminal.server.executable": "terminal.design.ignite:30:18",
-    "Terminal.server.listener": "terminal.design.ignite:28:16",
-    "Terminal.server.protocol": "terminal.design.ignite:31:16",
-    "Terminal.server.recovery": "terminal.design.ignite:46:16",
-    "Terminal.server.rollout": "terminal.design.ignite:52:15",
-    "Terminal.server.sessions": "terminal.design.ignite:38:16",
-    "local": "terminal.design.ignite:108:1",
-    "local.bindings": "terminal.design.ignite:110:14",
-    "local.system": "terminal.design.ignite:109:12"
+    "Terminal": "terminal.design.ignite:13:1",
+    "Terminal.client": "terminal.design.ignite:59:3",
+    "Terminal.client.commands": "terminal.design.ignite:61:16",
+    "Terminal.client.executable": "terminal.design.ignite:60:18",
+    "Terminal.console": "terminal.design.ignite:21:3",
+    "Terminal.console.command_schema": "terminal.design.ignite:25:22",
+    "Terminal.console.implementation": "terminal.design.ignite:22:22",
+    "Terminal.console.maximum_line": "terminal.design.ignite:24:20",
+    "Terminal.console.prompt": "terminal.design.ignite:23:14",
+    "Terminal.customerAccess": "terminal.design.ignite:99:3",
+    "Terminal.customerAccess.consequence": "terminal.design.ignite:105:19",
+    "Terminal.customerAccess.exclusions": "terminal.design.ignite:104:18",
+    "Terminal.customerAccess.good": "terminal.design.ignite:101:12",
+    "Terminal.customerAccess.minimum_completeness": "std/contract.ignite:105:33",
+    "Terminal.customerAccess.period": "terminal.design.ignite:103:14",
+    "Terminal.customerAccess.signal": "terminal.design.ignite:100:14",
+    "Terminal.customerAccess.target": "terminal.design.ignite:102:14",
+    "Terminal.ingress": "terminal.design.ignite:14:3",
+    "Terminal.ingress.address": "terminal.design.ignite:15:15",
+    "Terminal.ingress.backlog": "terminal.design.ignite:18:15",
+    "Terminal.ingress.exposure": "terminal.design.ignite:17:16",
+    "Terminal.ingress.port": "terminal.design.ignite:16:12",
+    "Terminal.promptFast": "terminal.design.ignite:90:3",
+    "Terminal.promptFast.good": "terminal.design.ignite:92:12",
+    "Terminal.promptFast.minimum_completeness": "std/contract.ignite:70:33",
+    "Terminal.promptFast.missing_data": "terminal.design.ignite:96:20",
+    "Terminal.promptFast.signal": "terminal.design.ignite:91:14",
+    "Terminal.promptFast.target": "terminal.design.ignite:94:14",
+    "Terminal.promptFast.threshold": "terminal.design.ignite:93:17",
+    "Terminal.promptFast.window": "terminal.design.ignite:95:14",
+    "Terminal.promptProbe": "terminal.design.ignite:74:3",
+    "Terminal.promptProbe.close_after_probe": "terminal.design.ignite:79:25",
+    "Terminal.promptProbe.executable": "terminal.design.ignite:74:3",
+    "Terminal.promptProbe.expected_prompt": "terminal.design.ignite:78:23",
+    "Terminal.promptProbe.interval": "terminal.design.ignite:76:16",
+    "Terminal.promptProbe.target": "terminal.design.ignite:75:14",
+    "Terminal.promptProbe.timeout": "terminal.design.ignite:77:15",
+    "Terminal.reachable": "terminal.design.ignite:82:3",
+    "Terminal.reachable.good": "terminal.design.ignite:84:12",
+    "Terminal.reachable.minimum_completeness": "std/contract.ignite:43:33",
+    "Terminal.reachable.missing_data": "terminal.design.ignite:87:20",
+    "Terminal.reachable.signal": "terminal.design.ignite:83:14",
+    "Terminal.reachable.target": "terminal.design.ignite:85:14",
+    "Terminal.reachable.window": "terminal.design.ignite:86:14",
+    "Terminal.server": "terminal.design.ignite:28:3",
+    "Terminal.server.application": "terminal.design.ignite:30:19",
+    "Terminal.server.executable": "terminal.design.ignite:31:18",
+    "Terminal.server.listener": "terminal.design.ignite:29:16",
+    "Terminal.server.protocol": "terminal.design.ignite:32:16",
+    "Terminal.server.recovery": "terminal.design.ignite:47:16",
+    "Terminal.server.rollout": "terminal.design.ignite:53:15",
+    "Terminal.server.sessions": "terminal.design.ignite:39:16",
+    "local": "terminal.design.ignite:109:1",
+    "local.bindings": "terminal.design.ignite:111:14",
+    "local.system": "terminal.design.ignite:110:12"
   },
   "systemId": "Terminal"
 }

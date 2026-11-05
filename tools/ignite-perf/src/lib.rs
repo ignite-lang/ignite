@@ -3,6 +3,7 @@
 //! compiled program or a compiler crate.
 
 pub mod cli;
+pub mod cycle;
 pub mod json;
 pub mod perf;
 pub mod readiness;
@@ -13,6 +14,7 @@ pub mod readiness;
 pub const HARNESS_SOURCE: &[(&str, &str)] = &[
     ("Cargo.toml", include_str!("../Cargo.toml")),
     ("src/cli.rs", include_str!("cli.rs")),
+    ("src/cycle.rs", include_str!("cycle.rs")),
     ("src/json.rs", include_str!("json.rs")),
     ("src/lib.rs", include_str!("lib.rs")),
     ("src/main.rs", include_str!("main.rs")),

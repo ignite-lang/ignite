@@ -17,8 +17,9 @@ pub const CONTROLLER_ABI: &str = "ignite-local-host/0.1";
 pub const CODEGEN_REVISION: &str = "ignite-codegen/0.1.0-24";
 /// Increment when the evaluator's stepping of `std.control` reducers may
 /// change. With the digests of the standard-library inputs it forms a plan's
-/// reducer revision.
-pub const REDUCER_EVALUATOR: &str = "ignite-eval-reducers/0.1.0-1";
+/// reducer revision. `0.1.0-2`: the driver classifies emissions through
+/// `classify` and journals `ignite-journal/0.2` (`docs/slice.md` 22.3).
+pub const REDUCER_EVALUATOR: &str = "ignite-eval-reducers/0.1.0-2";
 /// Schema of [`Plan::actions`].
 pub const ACTIONS_SCHEMA: &str = "ignite-apply-actions/0.1";
 /// Read only by debug builds: lets one test binary play two compilers

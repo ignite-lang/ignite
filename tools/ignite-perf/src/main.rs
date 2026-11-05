@@ -21,6 +21,7 @@ fn main() {
         Mode::Warm(args) => ("warm", args),
         Mode::Programs(args) => ("programs", args),
         Mode::Cli(args) => ("cli", args),
+        Mode::ApplyCycle(args) => ("apply-cycle", args),
         Mode::All(args) => ("all", args),
         Mode::Summarize(args) => ("summarize", args),
     };

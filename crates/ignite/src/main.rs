@@ -11,6 +11,7 @@
 //! ignite host --state DIR
 //! ignite apply PLAN --state DIR
 //! ignite inspect --state DIR [--operation ID] [--json]
+//! ignite recover --state DIR --operation ID [--json]
 //! ignite explain <file.ignite> <path> [--assembly NAME] [--fuel N] [--std PATH]
 //! ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target llvm|rust] [--release] [--clock real|manual] [--epoch RFC3339] [--settle DURATION] [--port RESOURCE=PORT]... [--json] [--fresh] [--std PATH] [--fuel N] [--runtime PATH] [--target-dir DIR]
 //! ignite replay <file.ignite> [--assembly NAME] [--state DIR] [--std PATH] [--fuel N]
@@ -207,6 +208,20 @@ enum Commands {
         #[arg(long)]
         operation: Option<String>,
         /// Print compact JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Abandon an operation whose recovery no corrective plan resolves, stop
+    /// every owned instance and restart the committed revision
+    /// (`docs/slice.md` 22.9). Exit 0 once that revision is ready, 1 refused
+    /// or not ready, 2 the operation requires no recovery, 3 host failure.
+    Recover {
+        #[arg(long)]
+        state: PathBuf,
+        /// The operation the host holds as `recovery_required`.
+        #[arg(long)]
+        operation: String,
+        /// Print the host's answer as compact JSON.
         #[arg(long)]
         json: bool,
     },
@@ -768,6 +783,19 @@ fn run() {
                 let mut output = String::new();
                 status.write(&mut output, 0);
                 println!("{output}");
+            }
+            Ok(())
+        }
+        Commands::Recover {
+            state,
+            operation,
+            json,
+        } => {
+            let recovered = apply_result(ignite::apply::recover(&state, &operation));
+            if json {
+                println!("{}", recovered.compact());
+            } else {
+                println!("{}", ignite::apply::recovered_line(&recovered));
             }
             Ok(())
         }

@@ -1,0 +1,127 @@
+WAIT 20:15:34 free=92G floor=40G
+START 20:15:34 free=92G lane=1 load=8
+MODE smoke 20:15:34 load 8.92 free 92G
+{"label": "baseline", "unit": "smoke-compiler", "pair": "smoke", "seconds": 19.38340083, "exit": 0, "load_before": 8.91845703125}
+{"label": "baseline", "unit": "smoke-plan", "pair": "smoke-0", "seconds": 0.130716417, "exit": 0, "load_before": 9.79638671875}
+{"label": "baseline", "unit": "smoke-plan", "pair": "smoke-1", "seconds": 0.128522249, "exit": 0, "load_before": 9.79638671875}
+{"label": "baseline", "unit": "smoke-build", "pair": "smoke", "seconds": 4.5228905059999995, "exit": 0, "load_before": 9.79638671875}
+{"label": "candidate", "unit": "smoke-compiler", "pair": "smoke", "seconds": 21.910695618, "exit": 0, "load_before": 9.81298828125}
+{"label": "candidate", "unit": "smoke-plan", "pair": "smoke-0", "seconds": 0.163151876, "exit": 0, "load_before": 8.57275390625}
+{"label": "candidate", "unit": "smoke-plan", "pair": "smoke-1", "seconds": 0.163990938, "exit": 0, "load_before": 8.57275390625}
+{"label": "candidate", "unit": "smoke-build", "pair": "smoke", "seconds": 3.338491791, "exit": 0, "load_before": 8.57275390625}
+MODE_EXIT smoke=0 20:16:26 builds 982M
+MODE programs 20:16:26 load 8.53 free 91G
+{"label": "baseline", "unit": "todod-rust-dev", "pair": "1793906186857643948-programs-1", "seconds": 4.261793472, "exit": 0, "load_before": 8.52685546875}
+{"label": "candidate", "unit": "todod-rust-dev", "pair": "1793906186857643948-programs-1", "seconds": 4.353445796, "exit": 0, "load_before": 8.52685546875}
+{"label": "baseline", "unit": "runtime-dev", "pair": "1793906186857643948-programs-1", "seconds": 3.260280412, "exit": 0, "load_before": 8.244140625}
+{"label": "baseline", "unit": "todod-llvm-dev", "pair": "1793906186857643948-programs-1", "seconds": 0.464488108, "exit": 0, "load_before": 7.90380859375}
+{"label": "candidate", "unit": "runtime-dev", "pair": "1793906186857643948-programs-1", "seconds": 4.174713796, "exit": 0, "load_before": 7.90380859375}
+{"label": "candidate", "unit": "todod-llvm-dev", "pair": "1793906186857643948-programs-1", "seconds": 0.752016748, "exit": 0, "load_before": 7.4306640625}
+{"label": "baseline", "unit": "todod-rust-release", "pair": "1793906186857643948-programs-1", "seconds": 25.873057781, "exit": 0, "load_before": 7.4306640625}
+{"label": "candidate", "unit": "todod-rust-release", "pair": "1793906186857643948-programs-1", "seconds": 25.238285837, "exit": 0, "load_before": 7.33935546875}
+{"label": "baseline", "unit": "runtime-release", "pair": "1793906186857643948-programs-1", "seconds": 26.815818676, "exit": 0, "load_before": 6.23388671875}
+{"label": "baseline", "unit": "todod-llvm-release", "pair": "1793906186857643948-programs-1", "seconds": 0.965028693, "exit": 0, "load_before": 5.54052734375}
+{"label": "candidate", "unit": "runtime-release", "pair": "1793906186857643948-programs-1", "seconds": 30.978705047, "exit": 0, "load_before": 5.54052734375}
+{"label": "candidate", "unit": "todod-llvm-release", "pair": "1793906186857643948-programs-1", "seconds": 1.706376956, "exit": 0, "load_before": 6.88916015625}
+{"label": "baseline", "unit": "todod-rust-dev", "pair": "1793906186857643948-programs-2", "seconds": 30.640016932, "exit": 0, "load_before": 6.88916015625}
+{"label": "candidate", "unit": "todod-rust-dev", "pair": "1793906186857643948-programs-2", "seconds": 5.107255616, "exit": 0, "load_before": 5.5771484375}
+{"label": "baseline", "unit": "runtime-dev", "pair": "1793906186857643948-programs-2", "seconds": 0.021760089, "exit": 0, "load_before": 5.29052734375}
+{"label": "baseline", "unit": "todod-llvm-dev", "pair": "1793906186857643948-programs-2", "seconds": 0.499862635, "exit": 0, "load_before": 5.29052734375}
+{"label": "candidate", "unit": "runtime-dev", "pair": "1793906186857643948-programs-2", "seconds": 0.021471955, "exit": 0, "load_before": 5.29052734375}
+{"label": "candidate", "unit": "todod-llvm-dev", "pair": "1793906186857643948-programs-2", "seconds": 1.7048660450000002, "exit": 0, "load_before": 5.29052734375}
+{"label": "baseline", "unit": "todod-rust-release", "pair": "1793906186857643948-programs-2", "seconds": 9.787472232, "exit": 0, "load_before": 5.29052734375}
+{"label": "candidate", "unit": "todod-rust-release", "pair": "1793906186857643948-programs-2", "seconds": 9.451514839, "exit": 0, "load_before": 6.41162109375}
+{"label": "baseline", "unit": "runtime-release", "pair": "1793906186857643948-programs-2", "seconds": 0.025034811, "exit": 0, "load_before": 6.05322265625}
+{"label": "baseline", "unit": "todod-llvm-release", "pair": "1793906186857643948-programs-2", "seconds": 0.962008244, "exit": 0, "load_before": 6.05322265625}
+{"label": "candidate", "unit": "runtime-release", "pair": "1793906186857643948-programs-2", "seconds": 0.024482102, "exit": 0, "load_before": 6.05322265625}
+{"label": "candidate", "unit": "todod-llvm-release", "pair": "1793906186857643948-programs-2", "seconds": 1.254996016, "exit": 0, "load_before": 6.05322265625}
+{"label": "baseline", "unit": "todod-rust-dev", "pair": "1793906186857643948-programs-3", "seconds": 6.204732547, "exit": 0, "load_before": 6.05322265625}
+{"label": "candidate", "unit": "todod-rust-dev", "pair": "1793906186857643948-programs-3", "seconds": 7.916489858, "exit": 0, "load_before": 6.04443359375}
+{"label": "baseline", "unit": "runtime-dev", "pair": "1793906186857643948-programs-3", "seconds": 0.022896893, "exit": 0, "load_before": 5.88037109375}
+{"label": "baseline", "unit": "todod-llvm-dev", "pair": "1793906186857643948-programs-3", "seconds": 0.511660516, "exit": 0, "load_before": 5.88037109375}
+{"label": "candidate", "unit": "runtime-dev", "pair": "1793906186857643948-programs-3", "seconds": 0.022022213, "exit": 0, "load_before": 5.88037109375}
+{"label": "candidate", "unit": "todod-llvm-dev", "pair": "1793906186857643948-programs-3", "seconds": 0.732341265, "exit": 0, "load_before": 5.88037109375}
+{"label": "baseline", "unit": "todod-rust-release", "pair": "1793906186857643948-programs-3", "seconds": 10.828790324, "exit": 0, "load_before": 5.88037109375}
+{"label": "candidate", "unit": "todod-rust-release", "pair": "1793906186857643948-programs-3", "seconds": 8.312572589, "exit": 0, "load_before": 7.31689453125}
+{"label": "baseline", "unit": "runtime-release", "pair": "1793906186857643948-programs-3", "seconds": 0.021611681, "exit": 0, "load_before": 6.81103515625}
+{"label": "baseline", "unit": "todod-llvm-release", "pair": "1793906186857643948-programs-3", "seconds": 0.977457326, "exit": 0, "load_before": 6.81103515625}
+{"label": "candidate", "unit": "runtime-release", "pair": "1793906186857643948-programs-3", "seconds": 0.022329515, "exit": 0, "load_before": 6.81103515625}
+{"label": "candidate", "unit": "todod-llvm-release", "pair": "1793906186857643948-programs-3", "seconds": 1.454623827, "exit": 0, "load_before": 6.81103515625}
+MODE_EXIT programs=0 20:20:15 builds 1.8G
+MODE cli 20:20:15 load 6.83 free 88G
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-1", "seconds": 0.19094222, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-1", "seconds": 0.131973113, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-1", "seconds": 0.136618855, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-1", "seconds": 0.145734027, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-2", "seconds": 0.12775621, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-2", "seconds": 0.13636315, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-2", "seconds": 0.129743615, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-2", "seconds": 0.130327526, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-3", "seconds": 0.138423642, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-3", "seconds": 0.138682786, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-3", "seconds": 0.124555127, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-3", "seconds": 0.144428456, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-4", "seconds": 0.130186089, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-4", "seconds": 0.133697098, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-4", "seconds": 0.137692449, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-4", "seconds": 0.134672464, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-5", "seconds": 0.121768575, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-5", "seconds": 0.129111854, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-5", "seconds": 0.124315573, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-5", "seconds": 0.132347799, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-6", "seconds": 0.128403412, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-6", "seconds": 0.127415145, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-6", "seconds": 0.127656664, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-6", "seconds": 0.13012047, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-7", "seconds": 0.122856057, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-7", "seconds": 0.132434274, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-7", "seconds": 0.122132526, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-7", "seconds": 0.128842605, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-8", "seconds": 0.123798839, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-8", "seconds": 0.131007488, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-8", "seconds": 0.13321281, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-8", "seconds": 0.13745483, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-9", "seconds": 0.136703126, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-9", "seconds": 0.132128123, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-9", "seconds": 0.192127862, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-9", "seconds": 0.145306052, "exit": 0, "load_before": 7.08056640625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-10", "seconds": 0.130094447, "exit": 0, "load_before": 7.08056640625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-10", "seconds": 0.136190281, "exit": 0, "load_before": 7.634765625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-10", "seconds": 0.124409546, "exit": 0, "load_before": 7.634765625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-10", "seconds": 0.138517866, "exit": 0, "load_before": 7.634765625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-11", "seconds": 0.133875688, "exit": 0, "load_before": 7.634765625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-11", "seconds": 0.13663347, "exit": 0, "load_before": 7.634765625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-11", "seconds": 0.140767446, "exit": 0, "load_before": 7.634765625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-11", "seconds": 0.181392203, "exit": 0, "load_before": 7.634765625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-12", "seconds": 0.178651875, "exit": 0, "load_before": 7.634765625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-12", "seconds": 0.210498239, "exit": 0, "load_before": 7.634765625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-12", "seconds": 0.199961867, "exit": 0, "load_before": 7.634765625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-12", "seconds": 0.185052937, "exit": 0, "load_before": 7.634765625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-13", "seconds": 0.193677199, "exit": 0, "load_before": 7.634765625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-13", "seconds": 0.228811534, "exit": 0, "load_before": 7.634765625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-13", "seconds": 0.176635114, "exit": 0, "load_before": 7.634765625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-13", "seconds": 0.203384321, "exit": 0, "load_before": 7.634765625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-14", "seconds": 0.158837144, "exit": 0, "load_before": 7.634765625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-14", "seconds": 0.154667445, "exit": 0, "load_before": 7.634765625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-14", "seconds": 0.155252792, "exit": 0, "load_before": 7.634765625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-14", "seconds": 0.182758842, "exit": 0, "load_before": 7.634765625}
+{"label": "baseline", "unit": "check", "pair": "1793906416373475792-cli-15", "seconds": 0.174563803, "exit": 0, "load_before": 7.634765625}
+{"label": "candidate", "unit": "check", "pair": "1793906416373475792-cli-15", "seconds": 0.219457719, "exit": 0, "load_before": 7.634765625}
+{"label": "baseline", "unit": "plan", "pair": "1793906416373475792-cli-15", "seconds": 0.184905784, "exit": 0, "load_before": 7.634765625}
+{"label": "candidate", "unit": "plan", "pair": "1793906416373475792-cli-15", "seconds": 0.215268558, "exit": 0, "load_before": 7.634765625}
+MODE_EXIT cli=0 20:20:25 builds 1.8G
+MODE apply-cycle 20:20:25 load 7.63 free 88G
+{"label": "baseline", "unit": "apply-cycle-compiler", "pair": "1793906426407342988-apply-cycle-prepare", "seconds": 0.097554281, "exit": 0, "load_before": 8.224609375}
+{"label": "baseline", "unit": "runtime-dev", "pair": "1793906426407342988-apply-cycle-prepare", "seconds": 0.033241534, "exit": 0, "load_before": 8.224609375}
+{"label": "candidate", "unit": "apply-cycle-compiler", "pair": "1793906426407342988-apply-cycle-prepare", "seconds": 0.051861716, "exit": 0, "load_before": 8.224609375}
+{"label": "candidate", "unit": "runtime-dev", "pair": "1793906426407342988-apply-cycle-prepare", "seconds": 0.033525717, "exit": 0, "load_before": 8.224609375}
+{"label": "baseline", "unit": "apply-cycle-terminal-rust", "pair": "1793906426407342988-apply-cycle-setup", "seconds": 25.755013772, "exit": 0, "load_before": 8.224609375}
+{"label": "candidate", "unit": "apply-cycle-terminal-rust", "pair": "1793906426407342988-apply-cycle-setup", "seconds": 33.219973897, "exit": 0, "load_before": 7.3623046875}
+{"label": "baseline", "unit": "apply-cycle-terminal-rust", "pair": "1793906426407342988-apply-cycle-0", "seconds": 26.919157165, "exit": 0, "load_before": 11.73681640625}
+{"label": "candidate", "unit": "apply-cycle-terminal-rust", "pair": "1793906426407342988-apply-cycle-0", "seconds": 29.641766617000002, "exit": 0, "load_before": 12.94580078125}
+{"label": "baseline", "unit": "apply-cycle-terminal-rust", "pair": "1793906426407342988-apply-cycle-1", "seconds": 90.535999744, "exit": 0, "load_before": 13.60888671875}
+{"label": "candidate", "unit": "apply-cycle-terminal-rust", "pair": "1793906426407342988-apply-cycle-1", "seconds": 29.242315632, "exit": 0, "load_before": 14.18115234375}
+{"label": "baseline", "unit": "apply-cycle-terminal-rust", "pair": "1793906426407342988-apply-cycle-2", "seconds": 631.118452757, "exit": -9, "load_before": 14.64111328125}
+apply-cycle: sample 2 of baseline apply-cycle-terminal-rust failed; see logs/1793906426407342988-1793906426407342988-apply-cycle-2-baseline-apply-cycle-terminal-rust-plan.log
+MODE_EXIT apply-cycle=1 20:34:54 builds 1.8G
+EXIT=0 20:34:54 free=86G

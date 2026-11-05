@@ -1,0 +1,32 @@
+package fixture_e109_classify
+
+type Beat {
+  alive: Bool
+}
+
+type Blind {
+  name: Text
+}
+
+fn Blind.classify(self: Blind) -> Bool = true
+
+type Loud {
+  name: Text
+}
+
+fn Loud.classify(self: Loud, sample: Beat) -> Bool requires [stdout.write] {
+  _ = Stdout.write_all("classified".to_bytes())
+  sample.alive
+}
+
+type Fine {
+  name: Text
+}
+
+fn Fine.classify(self: Fine, sample: Beat) -> Bool = sample.alive
+
+system S {
+  component b: Blind { name = "b" }
+  component l: Loud { name = "l" }
+  component f: Fine { name = "f" }
+}

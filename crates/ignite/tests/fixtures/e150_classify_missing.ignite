@@ -1,0 +1,54 @@
+package fixture_e150
+
+import std.control.{Machine, Evaluator}
+import std.sli.{MissingData, rolling}
+
+// E150 (`docs/slice.md` 22.3, 22.10): a contract whose machine subscribes
+// to a signal must classify the signal's element type. `Watch` returns an
+// `Evaluate` machine over `S.p.beats` but declares no `Watch.classify`;
+// `Fine` declares one and passes.
+
+type Beat {
+  alive: Bool
+}
+
+type Pulse {
+  interval: Duration = 10 seconds
+  beats: Signal<Beat>
+}
+
+type Watch {
+  signal: Signal<Beat>
+}
+
+fn Watch.machine(self: Watch, id: Text) -> Machine = Machine.Evaluate(Evaluator {
+  id = "{id}.evaluator"
+  contract = id
+  signal = self.signal.to_text()
+  target = 99%
+  window = rolling(1 hour)
+  missing_data = MissingData.InsufficientEvidence
+  minimum_completeness = 90%
+})
+
+type Fine {
+  signal: Signal<Beat>
+}
+
+fn Fine.machine(self: Fine, id: Text) -> Machine = Machine.Evaluate(Evaluator {
+  id = "{id}.evaluator"
+  contract = id
+  signal = self.signal.to_text()
+  target = 99%
+  window = rolling(1 hour)
+  missing_data = MissingData.InsufficientEvidence
+  minimum_completeness = 90%
+})
+
+fn Fine.classify(self: Fine, sample: Beat) -> Bool = sample.alive
+
+system S {
+  component p: Pulse {}
+  contract c: Watch { signal = p.beats }
+  contract f: Fine { signal = p.beats }
+}

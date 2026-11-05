@@ -1,0 +1,44 @@
+== baseline llvm dev
+  2532 /1-baseline-llvm-dev/llvm/main_todod.ll
+  1743 /1-baseline-llvm-dev/llvm/program.ll
+ 12780 /1-baseline-llvm-dev/llvm/std.ll
+ 17055 total
+bin todod 7109664
+== baseline rust dev
+ 1700 /1-baseline-rust-dev/std/src/lib.rs
+  100 /1-baseline-rust-dev/src/lib.rs
+ 1800 total
+== baseline llvm release
+  2532 /1-baseline-llvm-release/llvm/main_todod.ll
+  1743 /1-baseline-llvm-release/llvm/program.ll
+ 12780 /1-baseline-llvm-release/llvm/std.ll
+ 17055 total
+bin todod 786856
+== baseline rust release
+ 1700 /1-baseline-rust-release/std/src/lib.rs
+  100 /1-baseline-rust-release/src/lib.rs
+ 1800 total
+== candidate llvm dev
+    278 /1-candidate-llvm-dev/llvm/main_health.ll
+   2605 /1-candidate-llvm-dev/llvm/main_todod.ll
+   5184 /1-candidate-llvm-dev/llvm/program.ll
+  14350 /1-candidate-llvm-dev/llvm/std.ll
+  22417 total
+bin health 6790488
+bin todod 7484088
+== candidate rust dev
+  2049 /1-candidate-rust-dev/std/src/lib.rs
+   463 /1-candidate-rust-dev/src/lib.rs
+  2512 total
+== candidate llvm release
+    278 /1-candidate-llvm-release/llvm/main_health.ll
+   2605 /1-candidate-llvm-release/llvm/main_todod.ll
+   5184 /1-candidate-llvm-release/llvm/program.ll
+  14350 /1-candidate-llvm-release/llvm/std.ll
+  22417 total
+bin health 637848
+bin todod 862088
+== candidate rust release
+  2049 /1-candidate-rust-release/std/src/lib.rs
+   463 /1-candidate-rust-release/src/lib.rs
+  2512 total

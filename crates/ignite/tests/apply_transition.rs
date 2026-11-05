@@ -23,6 +23,7 @@ import std.protocol.telnet.{TelnetServer, TelnetProfile, Telnet}
 import std.console.CommandConsole
 import std.cli.{Application, Command, Argument}
 import std.contract.{Availability, ThresholdCompliance, SLA}
+import std.sli.prompt_received_before_timeout
 import std.policy.{Restart, DrainRollout}
 import std.protocol.telnet.TelnetPrompt
 import std.deploy.{Deployment, localSocket, nativeProcess, workstationExecutable, scheduledProbeHost}
@@ -126,7 +127,7 @@ impl Revision {
 
   contract reachable: Availability {
     signal = promptProbe.attempts
-    good = "prompt_received_before_timeout"
+    good = prompt_received_before_timeout
     target = 99.9%
     window = rolling(30 days)
     missing_data = "insufficient_evidence"

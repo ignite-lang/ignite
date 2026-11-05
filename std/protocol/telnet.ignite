@@ -257,9 +257,10 @@ test "ends_with_bytes compares the suffix" {
 // A probe of a running Telnet server (design section 11.3), a component
 // with two entries for `ignite run` (`docs/slice.md` 16.8): `main` runs one
 // attempt as a short-lived process, and `machine` returns the scheduler
-// that dispatches one such process per slot. The sample it emits,
-// `ProbeAttempt`, and the outcome classification `satisfies` live in
-// `std.sli` (16.6).
+// that dispatches one such process per slot. Its outcome type,
+// `ProbeAttempt`, and the predicates a contract names in `good`
+// (`prompt_received_before_timeout`, `prompt_received_within_threshold`)
+// live in `std.sli` (16.6, `docs/slice.md` 22.3).
 //
 // Connect to the server every `interval`, wait up to `timeout` for
 // `expected_prompt`, and report each attempt on `attempts`. `executable`

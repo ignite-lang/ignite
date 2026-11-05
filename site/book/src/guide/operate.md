@@ -27,7 +27,7 @@ component promptProbe: TelnetPrompt {
 
 contract reachable: Availability {
   signal = promptProbe.attempts
-  good = "prompt_received_before_timeout"
+  good = prompt_received_before_timeout
   target = 99.9%
   window = rolling(30 days)
   missing_data = "insufficient_evidence"
@@ -101,14 +101,14 @@ ignite explain examples/terminal/terminal.design.ignite Terminal
 ```
 
 ```text
-Terminal: system (terminal.design.ignite:12:1)
+Terminal: system (terminal.design.ignite:13:1)
   component Terminal.client: std.cli.Application
   component Terminal.console: std.console.CommandConsole
-  contract Terminal.customerAccess: std.contract.SLA
+  contract Terminal.customerAccess: std.contract.SLA<std.sli.ProbeAttempt>
   resource Terminal.ingress: TcpListener
-  contract Terminal.promptFast: std.contract.ThresholdCompliance
+  contract Terminal.promptFast: std.contract.ThresholdCompliance<std.sli.ProbeAttempt>
   component Terminal.promptProbe: std.protocol.telnet.TelnetPrompt, executable promptProbe
-  contract Terminal.reachable: std.contract.Availability
+  contract Terminal.reachable: std.contract.Availability<std.sli.ProbeAttempt>
   component Terminal.server: std.protocol.telnet.TelnetServer, executable terminald
 assembly local: std.deploy.Deployment
 ```
@@ -118,9 +118,9 @@ evaluated properties, defaults marked, and what it observes:
 
 ```text
 $ ignite explain examples/terminal/terminal.design.ignite Terminal.reachable
-Terminal.reachable: contract std.contract.Availability (terminal.design.ignite:81:3)
+Terminal.reachable: contract std.contract.Availability<std.sli.ProbeAttempt> (terminal.design.ignite:82:3)
   signal = Terminal.promptProbe.attempts
-  good = "prompt_received_before_timeout"
+  good = std.sli.prompt_received_before_timeout
   target = 99.9%
   window = Rolling(30 days)
   missing_data = "insufficient_evidence"
@@ -136,7 +136,7 @@ evaluated to a `Backoff` value and the default `readiness_timeout` filled in:
 
 ```text
 $ ignite explain examples/terminal/terminal.design.ignite Terminal.server.recovery
-Terminal.server.recovery: property std.policy.Restart (terminal.design.ignite:46:16)
+Terminal.server.recovery: property std.policy.Restart (terminal.design.ignite:47:16)
   backoff = Exponential(100 ms, 10 seconds)
   maximum_attempts = 10
   interval = 5 minutes
@@ -147,7 +147,7 @@ An assembly shows where every member goes:
 
 ```text
 $ ignite explain examples/terminal/terminal.design.ignite local
-local: assembly std.deploy.Deployment of Terminal (terminal.design.ignite:108:1)
+local: assembly std.deploy.Deployment of Terminal (terminal.design.ignite:109:1)
   Terminal.client = WorkstationExecutable
   Terminal.console via Terminal.server = NativeProcess([Terminal.console])
   Terminal.ingress = LocalSocket

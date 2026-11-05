@@ -1,6 +1,145 @@
 {
-  "assembly": null,
+  "assembly": {
+    "defaults": [],
+    "id": "local",
+    "kind": "std.deploy.Deployment",
+    "properties": {
+      "bindings": {
+        "entries": [
+          [
+            {
+              "ref": "TodoService.health",
+              "type": "Ref"
+            },
+            {
+              "type": "std.deploy.Binding",
+              "variant": "ScheduledProbeHost"
+            }
+          ],
+          [
+            {
+              "ref": "TodoService.ingress",
+              "type": "Ref"
+            },
+            {
+              "type": "std.deploy.Binding",
+              "variant": "LocalSocket"
+            }
+          ],
+          [
+            {
+              "ref": "TodoService.server",
+              "type": "Ref"
+            },
+            {
+              "fields": [
+                []
+              ],
+              "type": "std.deploy.Binding",
+              "variant": "NativeProcess"
+            }
+          ]
+        ],
+        "type": "Map"
+      },
+      "system": {
+        "ref": "TodoService",
+        "type": "SystemRef"
+      }
+    },
+    "resolution": [
+      {
+        "binding": {
+          "fields": [
+            []
+          ],
+          "type": "std.deploy.Binding",
+          "variant": "NativeProcess"
+        },
+        "member": "TodoService.data",
+        "via": "TodoService.server"
+      },
+      {
+        "binding": {
+          "type": "std.deploy.Binding",
+          "variant": "ScheduledProbeHost"
+        },
+        "member": "TodoService.health",
+        "via": "TodoService.health"
+      },
+      {
+        "binding": {
+          "type": "std.deploy.Binding",
+          "variant": "LocalSocket"
+        },
+        "member": "TodoService.ingress",
+        "via": "TodoService.ingress"
+      },
+      {
+        "binding": {
+          "fields": [
+            []
+          ],
+          "type": "std.deploy.Binding",
+          "variant": "NativeProcess"
+        },
+        "member": "TodoService.loaded",
+        "via": "TodoService.server"
+      },
+      {
+        "binding": {
+          "fields": [
+            []
+          ],
+          "type": "std.deploy.Binding",
+          "variant": "NativeProcess"
+        },
+        "member": "TodoService.server",
+        "via": "TodoService.server"
+      },
+      {
+        "binding": {
+          "fields": [
+            []
+          ],
+          "type": "std.deploy.Binding",
+          "variant": "NativeProcess"
+        },
+        "member": "TodoService.todos",
+        "via": "TodoService.server"
+      }
+    ],
+    "system": "TodoService"
+  },
   "components": [
+    {
+      "declaration": "component",
+      "defaults": [
+        "executable"
+      ],
+      "executable": "health",
+      "id": "TodoService.health",
+      "kind": "examples.todo.health.HttpHealth",
+      "outputs": {
+        "checks": "examples.todo.health.HealthCheck"
+      },
+      "properties": {
+        "executable": "health",
+        "interval": {
+          "ns": 10000000000,
+          "type": "Duration"
+        },
+        "path": "/health",
+        "target": {
+          "ref": "TodoService.server",
+          "type": "Ref"
+        },
+        "timeout": {
+          "ns": 2000000000,
+          "type": "Duration"
+        }
+      }
+    },
     {
       "declaration": "component",
       "defaults": [
@@ -10,7 +149,7 @@
       ],
       "executable": "todod",
       "id": "TodoService.server",
-      "kind": "std.protocol.http.HttpServer<Store<examples.todo.Todo>>",
+      "kind": "std.protocol.http.HttpServer<examples.todo.Todos>",
       "outputs": {},
       "properties": {
         "application": {
@@ -20,8 +159,21 @@
               "type": "Fn"
             },
             "state": {
-              "ref": "TodoService.todos",
-              "type": "Ref"
+              "fields": {
+                "data": {
+                  "ref": "TodoService.data",
+                  "type": "Ref"
+                },
+                "loaded": {
+                  "ref": "TodoService.loaded",
+                  "type": "Ref"
+                },
+                "todos": {
+                  "ref": "TodoService.todos",
+                  "type": "Ref"
+                }
+              },
+              "type": "examples.todo.Todos"
             }
           },
           "type": "std.protocol.http.HttpApp"
@@ -97,8 +249,98 @@
       }
     }
   ],
-  "contracts": [],
+  "contracts": [
+    {
+      "declaration": "contract",
+      "defaults": [
+        "minimum_completeness"
+      ],
+      "executable": null,
+      "id": "TodoService.reachable",
+      "kind": "std.contract.Availability<examples.todo.health.HealthCheck>",
+      "outputs": {},
+      "properties": {
+        "good": {
+          "fn": "examples.todo.health.healthy",
+          "type": "Fn"
+        },
+        "minimum_completeness": {
+          "ppm": 900000,
+          "type": "Ratio"
+        },
+        "missing_data": "insufficient_evidence",
+        "signal": {
+          "ref": "TodoService.health.checks",
+          "type": "Signal"
+        },
+        "target": {
+          "ppm": 990000,
+          "type": "Ratio"
+        },
+        "window": {
+          "fields": [
+            {
+              "ns": 300000000000,
+              "type": "Duration"
+            }
+          ],
+          "type": "std.sli.Window",
+          "variant": "Rolling"
+        }
+      }
+    }
+  ],
   "edges": [
+    {
+      "from": "TodoService.health",
+      "kind": "readiness",
+      "to": "TodoService.server"
+    },
+    {
+      "from": "TodoService.health",
+      "kind": "references",
+      "to": "TodoService.server"
+    },
+    {
+      "from": "TodoService.ingress",
+      "kind": "provisioning",
+      "to": "TodoService.server"
+    },
+    {
+      "from": "TodoService.reachable",
+      "kind": "observes",
+      "to": "TodoService.health.checks"
+    },
+    {
+      "from": "TodoService.reachable",
+      "kind": "readiness",
+      "to": "TodoService.health"
+    },
+    {
+      "from": "TodoService.server",
+      "kind": "hosts",
+      "to": "TodoService.data"
+    },
+    {
+      "from": "TodoService.server",
+      "kind": "hosts",
+      "to": "TodoService.loaded"
+    },
+    {
+      "from": "TodoService.server",
+      "kind": "hosts",
+      "to": "TodoService.todos"
+    },
+    {
+      "from": "TodoService.server",
+      "kind": "recovery",
+      "to": "TodoService.server.supervisor"
+    },
+    {
+      "from": "TodoService.server",
+      "kind": "uses",
+      "to": "TodoService.data"
+    },
     {
       "from": "TodoService.server",
       "kind": "uses",
@@ -107,14 +349,296 @@
     {
       "from": "TodoService.server",
       "kind": "uses",
+      "to": "TodoService.loaded"
+    },
+    {
+      "from": "TodoService.server",
+      "kind": "uses",
       "to": "TodoService.todos"
     }
   ],
   "formatVersion": "ignite-model/0.1",
-  "machines": [],
-  "observations": [],
+  "machines": [
+    {
+      "id": "TodoService.health.scheduler",
+      "machine": {
+        "fields": [
+          {
+            "fields": {
+              "deadline_timer": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "id": "TodoService.health.scheduler",
+              "in_flight": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "in_flight_slot": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "interval": {
+                "ns": 10000000000,
+                "type": "Duration"
+              },
+              "member": "TodoService.health",
+              "next_id": 1,
+              "signal": "TodoService.health.checks",
+              "slot": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "slot_timer": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "target": "TodoService.server",
+              "target_ready": false,
+              "timeout": {
+                "ns": 2000000000,
+                "type": "Duration"
+              }
+            },
+            "type": "std.control.ProbeScheduler"
+          }
+        ],
+        "type": "std.control.Machine",
+        "variant": "Schedule"
+      },
+      "member": "TodoService.health",
+      "subscribes": []
+    },
+    {
+      "id": "TodoService.reachable.evaluator",
+      "machine": {
+        "fields": [
+          {
+            "fields": {
+              "buckets": [],
+              "consequence": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "contract": "TodoService.reachable",
+              "current": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "epoch": {
+                "ns": 0,
+                "type": "Duration"
+              },
+              "fired": [],
+              "horizon": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "id": "TodoService.reachable.evaluator",
+              "interval": {
+                "ns": 10000000000,
+                "type": "Duration"
+              },
+              "minimum_completeness": {
+                "ppm": 900000,
+                "type": "Ratio"
+              },
+              "missing_data": {
+                "type": "std.sli.MissingData",
+                "variant": "InsufficientEvidence"
+              },
+              "period_timer": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "signal": "TodoService.health.checks",
+              "sum_executed": 0,
+              "sum_good": 0,
+              "target": {
+                "ppm": 990000,
+                "type": "Ratio"
+              },
+              "window": {
+                "fields": [
+                  {
+                    "ns": 300000000000,
+                    "type": "Duration"
+                  }
+                ],
+                "type": "std.sli.Window",
+                "variant": "Rolling"
+              }
+            },
+            "type": "std.control.Evaluator"
+          }
+        ],
+        "type": "std.control.Machine",
+        "variant": "Evaluate"
+      },
+      "member": "TodoService.reachable",
+      "subscribes": [
+        "TodoService.health.checks"
+      ]
+    },
+    {
+      "disruption": "connections refused between listener close and rebind",
+      "id": "TodoService.server.rollout",
+      "machine": {
+        "fields": [
+          {
+            "fields": {
+              "deadline_timer": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "generation": 1,
+              "id": "TodoService.server.rollout",
+              "member": "TodoService.server",
+              "new_pid": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "old_pid": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "policy": {
+                "fields": {
+                  "deadline": {
+                    "ns": 120000000000,
+                    "type": "Duration"
+                  },
+                  "on_deadline": "disconnect_remaining"
+                },
+                "type": "std.policy.DrainRollout"
+              },
+              "released_at": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "start_first": false,
+              "state": {
+                "type": "std.control.RolloutState",
+                "variant": "Idle"
+              }
+            },
+            "type": "std.control.Rollout"
+          }
+        ],
+        "type": "std.control.Machine",
+        "variant": "Roll"
+      },
+      "member": "TodoService.server",
+      "subscribes": []
+    },
+    {
+      "id": "TodoService.server.supervisor",
+      "machine": {
+        "fields": [
+          {
+            "fields": {
+              "attempt": 0,
+              "failures": [],
+              "generation": 1,
+              "has_listener": true,
+              "id": "TodoService.server.supervisor",
+              "kill_requested": false,
+              "member": "TodoService.server",
+              "pid": {
+                "type": "Option",
+                "variant": "None"
+              },
+              "restart": {
+                "fields": {
+                  "backoff": {
+                    "fields": [
+                      {
+                        "ns": 100000000,
+                        "type": "Duration"
+                      },
+                      {
+                        "ns": 10000000000,
+                        "type": "Duration"
+                      }
+                    ],
+                    "type": "std.policy.Backoff",
+                    "variant": "Exponential"
+                  },
+                  "interval": {
+                    "ns": 300000000000,
+                    "type": "Duration"
+                  },
+                  "maximum_attempts": 10,
+                  "readiness_timeout": {
+                    "ns": 10000000000,
+                    "type": "Duration"
+                  }
+                },
+                "type": "std.policy.Restart"
+              },
+              "rollout": {
+                "fields": [
+                  {
+                    "fields": {
+                      "deadline": {
+                        "ns": 120000000000,
+                        "type": "Duration"
+                      },
+                      "on_deadline": "disconnect_remaining"
+                    },
+                    "type": "std.policy.DrainRollout"
+                  }
+                ],
+                "type": "Option",
+                "variant": "Some"
+              },
+              "state": {
+                "type": "std.control.SupervisorState",
+                "variant": "Stopped"
+              },
+              "timer": {
+                "type": "Option",
+                "variant": "None"
+              }
+            },
+            "type": "std.control.Supervisor"
+          }
+        ],
+        "type": "std.control.Machine",
+        "variant": "Supervise"
+      },
+      "member": "TodoService.server",
+      "subscribes": []
+    }
+  ],
+  "observations": [
+    {
+      "element": "examples.todo.health.HealthCheck",
+      "interval": {
+        "ns": 10000000000,
+        "type": "Duration"
+      },
+      "producer": "TodoService.health",
+      "ref": "TodoService.health.checks"
+    }
+  ],
   "policies": [],
   "resources": [
+    {
+      "declaration": "resource",
+      "defaults": [
+        "flag"
+      ],
+      "executable": null,
+      "id": "TodoService.data",
+      "kind": "Directory",
+      "outputs": {},
+      "properties": {
+        "create": true,
+        "flag": "",
+        "path": "todo-data"
+      }
+    },
     {
       "declaration": "resource",
       "defaults": [
@@ -139,6 +663,15 @@
       "declaration": "resource",
       "defaults": [],
       "executable": null,
+      "id": "TodoService.loaded",
+      "kind": "Store<Bool>",
+      "outputs": {},
+      "properties": {}
+    },
+    {
+      "declaration": "resource",
+      "defaults": [],
+      "executable": null,
       "id": "TodoService.todos",
       "kind": "Store<examples.todo.Todo>",
       "outputs": {},
@@ -146,20 +679,41 @@
     }
   ],
   "sourceMap": {
-    "TodoService": "todo.ignite:80:1",
-    "TodoService.ingress": "todo.ignite:81:3",
-    "TodoService.ingress.address": "todo.ignite:81:45",
-    "TodoService.ingress.backlog": "todo.ignite:81:3",
-    "TodoService.ingress.exposure": "todo.ignite:81:3",
-    "TodoService.ingress.port": "todo.ignite:81:65",
-    "TodoService.server": "todo.ignite:84:3",
-    "TodoService.server.application": "todo.ignite:86:19",
-    "TodoService.server.executable": "todo.ignite:87:18",
+    "TodoService": "todo.ignite:300:1",
+    "TodoService.data": "todo.ignite:304:3",
+    "TodoService.data.create": "todo.ignite:304:59",
+    "TodoService.data.flag": "todo.ignite:304:3",
+    "TodoService.data.path": "todo.ignite:304:37",
+    "TodoService.health": "todo.ignite:312:3",
+    "TodoService.health.executable": "todo.ignite:312:3",
+    "TodoService.health.interval": "todo.ignite:315:16",
+    "TodoService.health.path": "todo.ignite:314:12",
+    "TodoService.health.target": "todo.ignite:313:14",
+    "TodoService.health.timeout": "todo.ignite:316:15",
+    "TodoService.ingress": "todo.ignite:301:3",
+    "TodoService.ingress.address": "todo.ignite:301:45",
+    "TodoService.ingress.backlog": "todo.ignite:301:3",
+    "TodoService.ingress.exposure": "todo.ignite:301:3",
+    "TodoService.ingress.port": "todo.ignite:301:65",
+    "TodoService.loaded": "todo.ignite:303:3",
+    "TodoService.reachable": "todo.ignite:319:3",
+    "TodoService.reachable.good": "todo.ignite:321:12",
+    "TodoService.reachable.minimum_completeness": "std/contract.ignite:43:33",
+    "TodoService.reachable.missing_data": "todo.ignite:324:20",
+    "TodoService.reachable.signal": "todo.ignite:320:14",
+    "TodoService.reachable.target": "todo.ignite:322:14",
+    "TodoService.reachable.window": "todo.ignite:323:14",
+    "TodoService.server": "todo.ignite:306:3",
+    "TodoService.server.application": "todo.ignite:308:19",
+    "TodoService.server.executable": "todo.ignite:309:18",
     "TodoService.server.limits": "std/protocol/http.ignite:143:24",
-    "TodoService.server.listener": "todo.ignite:85:16",
+    "TodoService.server.listener": "todo.ignite:307:16",
     "TodoService.server.recovery": "std/protocol/http.ignite:144:23",
     "TodoService.server.rollout": "std/protocol/http.ignite:145:27",
-    "TodoService.todos": "todo.ignite:82:3"
+    "TodoService.todos": "todo.ignite:302:3",
+    "local": "todo.ignite:328:1",
+    "local.bindings": "todo.ignite:330:14",
+    "local.system": "todo.ignite:329:12"
   },
   "systemId": "TodoService"
 }

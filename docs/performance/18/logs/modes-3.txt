@@ -1,0 +1,6 @@
+WAIT 20:37:12 free=86G floor=40G
+START 20:37:12 free=86G lane=1 load=9
+MODE apply-cycle 20:37:12 load 9.82 free 86G
+Unowned source directory: /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s18w5u8/perf18/sources/candidate-661e55b428b4
+MODE_EXIT apply-cycle=1 20:37:13 builds 2.3G
+EXIT=0 20:37:22 free=86G
