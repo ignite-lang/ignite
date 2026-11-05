@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:file-system
 kind: story
-status: draft
+status: active
 title: Files under a root directory
 summary: Read, write, list, create directories and remove files under a root, never outside it
 relations:
@@ -15,7 +15,10 @@ scope:
   path: crates/ignite-rt/src/fs.rs
 - confidence: cited
   path: std/fs.ignite
-revision: 6
+revision: 8
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T05:11:07Z", actor: "human:timo", revision: 7}
+- {from: "proposed", to: "active", at: "2026-11-05T05:11:07Z", actor: "human:timo", revision: 8}
 ---
 # Story: file-system
 
