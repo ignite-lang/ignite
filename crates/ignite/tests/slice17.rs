@@ -179,11 +179,18 @@ impl Server {
 
     /// `GET path` on a new connection: the status and the body.
     fn get(&self, path: &str) -> (u16, String) {
+        self.send("GET", path, "")
+    }
+
+    /// `method path` with `body` on a new connection: the status and the
+    /// body of the reply.
+    fn send(&self, method: &str, path: &str, body: &str) -> (u16, String) {
         let mut stream = TcpStream::connect(("127.0.0.1", self.port)).expect("connect");
         stream.set_read_timeout(Some(TIMEOUT)).expect("timeout");
         write!(
             stream,
-            "GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+            "{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
         )
         .expect("write the request");
         let mut seen = Vec::new();
@@ -409,6 +416,7 @@ both_targets!(
     adversary_flag_forms,
     adversary_port_ref_root_not_utf8,
     adversary_directory_flag_errors,
+    studio_serves_through_its_state,
 );
 
 /// Adversary: a server started by a parent that left SIGCHLD ignored (a
@@ -840,4 +848,61 @@ fn adversary_directory_flag_errors(target: Target) {
             "{root:?}"
         );
     }
+}
+
+/// `studio.ignite` started on a free port with its root and tool given as
+/// flags, in a working directory of its own.
+fn studio_server(case: &str, root: &Path, target: Target) -> Server {
+    let studiod = executable("studio.ignite", "studiod", target);
+    Server::start(
+        Command::new(studiod)
+            .args(["--port", "0", "--root"])
+            .arg(root)
+            .args(["--tool", "/bin/sh"])
+            .current_dir(workdir(case, target)),
+    )
+}
+
+/// Row 24 (P3, 21.3): a handler with no `requires` writes, reads and
+/// confines files, runs the `--tool` setting through the launcher in the
+/// root, and draws random bytes, all through its state.
+fn studio_serves_through_its_state(target: Target) {
+    let root = tmp(format!("studio-root-{}", target_name(target)));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("create the root");
+    let server = studio_server("studio", &root, target);
+
+    assert_eq!(
+        server.send("POST", "/write", "a.ignite\nx"),
+        (204, String::new())
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("a.ignite")).expect("read a.ignite"),
+        "x"
+    );
+    assert_eq!(
+        server.send("POST", "/read", "a.ignite"),
+        (200, "x".to_string())
+    );
+    assert_eq!(
+        server.send("POST", "/read", "../x"),
+        (400, "path ../x: leaves its root".to_string())
+    );
+    assert_eq!(server.send("POST", "/run", ""), (200, "x".to_string()));
+
+    let token = |server: &Server| {
+        let (status, body) = server.get("/token");
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(body.len(), 64, "{body}");
+        assert!(
+            body.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+            "{body}"
+        );
+        body
+    };
+    let first = token(&server);
+    drop(server);
+    let again = studio_server("studio-again", &root, target);
+    assert_ne!(first, token(&again), "two launches drew the same token");
 }
