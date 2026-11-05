@@ -112,3 +112,19 @@ test "two draws differ" {
   }
   assert negative == "random_bytes: count must be in 0..=65536"
 }
+
+test "every count of the bound is drawn, a count past it refused" {
+  let entropy = Entropy.new()
+  assert entropy.random_bytes(1)?.len() == 1
+  assert entropy.random_bytes(65536)?.len() == 65536
+  let wide = match entropy.random_bytes(4294967301) {
+    Ok(_) => "drew"
+    Err(error) => error.message
+  }
+  assert wide == "random_bytes: count must be in 0..=65536"
+  let wrapped = match entropy.random_bytes(-4294967295) {
+    Ok(_) => "drew"
+    Err(error) => error.message
+  }
+  assert wrapped == "random_bytes: count must be in 0..=65536"
+}
