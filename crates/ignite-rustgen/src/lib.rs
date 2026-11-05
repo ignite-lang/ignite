@@ -2045,14 +2045,16 @@ impl<'a> Generator<'a> {
         args.iter()
             .zip(modified)
             .map(|(arg, modified)| {
-                let place = match self.borrowed_at(arg) {
-                    Some((list, _, _)) => Some(list),
-                    None => self.is_place(arg).then_some(*arg),
+                let root = if let Some((list, _, _)) = self.borrowed_at(arg) {
+                    place_root(list)
+                } else if self.is_place(arg) {
+                    place_root(arg)
+                } else if self.field_of_element(arg) {
+                    self.element_root(arg)
+                } else {
+                    None
                 };
-                if place
-                    .and_then(place_root)
-                    .is_some_and(|r| modified.contains(r))
-                {
+                if root.is_some_and(|r| modified.contains(r)) {
                     format!("&{}", self.value(arg))
                 } else {
                     self.ref_arg(arg)
@@ -2072,6 +2074,9 @@ impl<'a> Generator<'a> {
         }
         if let Some((list, index, site)) = self.borrowed_at(arg) {
             return self.checked_at_call(list, index, site);
+        }
+        if self.field_of_element(arg) {
+            return format!("&{}", self.element_field(arg));
         }
         let text = self.value(arg);
         borrow(arg, text)
@@ -2946,6 +2951,10 @@ impl<'a> Generator<'a> {
         if clone && self.is_place(expr) {
             return format!("{}.clone()", self.bare(expr));
         }
+        if self.field_of_element(expr) {
+            let place = self.element_field(expr);
+            return format!("{place}{}", self.element_clone(expr));
+        }
         match &expr.kind {
             ExprKind::Quantity { literal, unit } => self.quantity(expr, literal, unit),
             ExprKind::NamedArg { value, .. } => self.expr(value, clone),
@@ -3123,8 +3132,11 @@ impl<'a> Generator<'a> {
                 if let Some(chunked) = self.chunked_spine(expr) {
                     return chunked;
                 }
-                let left_text = self.operand(left);
-                let right_text = self.operand(right);
+                let (left_text, right_text) = if is_comparison(*op) {
+                    (self.compared(left, Some(right)), self.compared(right, None))
+                } else {
+                    (self.operand(left), self.operand(right))
+                };
                 match self.checked_op(expr, *op) {
                     Some((checked, site)) => {
                         format!("{checked}({left_text}, {right_text}, {site})")
@@ -3524,6 +3536,127 @@ impl<'a> Generator<'a> {
             "ignite_io::checked::at({list}, {index_text}, {})",
             self.site_args(site)
         )
+    }
+
+    /// The list and the index of `expr` when it reads an element through
+    /// `ignite_io::checked::at` (`l[i]`, `l.at(i)` with a failure site)
+    /// from a list that can be borrowed: a place, an element read or a
+    /// [`field_of_element`](Self::field_of_element).
+    fn element_read<'e>(&self, expr: &'e Expr) -> Option<(&'e Expr, &'e Expr)> {
+        let (list, index) = match &expr.kind {
+            ExprKind::Index { receiver, index } => (&**receiver, &**index),
+            ExprKind::Method { receiver, args, .. }
+                if args.len() == 1
+                    && matches!(self.callee(expr), Some(Callee::Builtin(Builtin::ListAt))) =>
+            {
+                (&**receiver, &args[0])
+            }
+            _ => return None,
+        };
+        self.types.and_then(|t| t.failure_site(expr))?;
+        (self.is_place(list) || self.element_read(list).is_some() || self.field_of_element(list))
+            .then_some((list, index))
+    }
+
+    /// Whether `expr` is a field (or tuple field) of an
+    /// [`element_read`](Self::element_read), directly or through further
+    /// fields (`l[i].f`, `l.at(i).f.g`, `l[i].f[j].g`): a place inside the
+    /// list, read through the `&T` that `checked::at` returns instead of a
+    /// copy of the whole element.
+    fn field_of_element(&self, expr: &Expr) -> bool {
+        match &expr.kind {
+            ExprKind::Field { receiver, .. } | ExprKind::TupleField { receiver, .. } => {
+                self.assoc_callee(expr).is_none()
+                    && (self.element_read(receiver).is_some() || self.field_of_element(receiver))
+            }
+            _ => false,
+        }
+    }
+
+    /// The local an [`element_read`](Self::element_read) or a
+    /// [`field_of_element`](Self::field_of_element) borrows from.
+    fn element_root<'e>(&self, expr: &'e Expr) -> Option<&'e str> {
+        if self.is_place(expr) {
+            return place_root(expr);
+        }
+        match &expr.kind {
+            ExprKind::Field { receiver, .. }
+            | ExprKind::TupleField { receiver, .. }
+            | ExprKind::Index { receiver, .. }
+            | ExprKind::Method { receiver, .. } => self.element_root(receiver),
+            _ => None,
+        }
+    }
+
+    /// An [`element_read`](Self::element_read) as a `&T` into its list:
+    /// `ignite_io::checked::at(list, index, site)`, the list borrowed, not
+    /// copied.
+    fn element_at(&mut self, expr: &Expr) -> String {
+        let (list, index) = self.element_read(expr).expect("an element read");
+        let site = self
+            .types
+            .and_then(|t| t.failure_site(expr))
+            .expect("a site");
+        let list_text = if self.is_place(list) {
+            self.ref_arg(list)
+        } else if self.element_read(list).is_some() {
+            self.element_at(list)
+        } else {
+            format!("&{}", self.element_field(list))
+        };
+        let index_text = self.value(index);
+        let index_text = self.deref_if_borrowed(index, index_text);
+        format!(
+            "ignite_io::checked::at({list_text}, {index_text}, {})",
+            self.site_args(site)
+        )
+    }
+
+    /// A [`field_of_element`](Self::field_of_element) as a Rust place
+    /// (`ignite_io::checked::at(&l, 0, ..).key`): reading it, borrowing
+    /// it or cloning it copies the field, never the element.
+    fn element_field(&mut self, expr: &Expr) -> String {
+        let (receiver, member) = match &expr.kind {
+            ExprKind::Field { receiver, name } => (&**receiver, ident(&name.name)),
+            ExprKind::TupleField { receiver, index } => (&**receiver, index.to_string()),
+            _ => unreachable!("a field of an element"),
+        };
+        let base = if self.element_read(receiver).is_some() {
+            self.element_at(receiver)
+        } else {
+            self.element_field(receiver)
+        };
+        let text = format!("{base}.{member}");
+        match &expr.kind {
+            ExprKind::Field { name, .. }
+                if self.is_boxed_field(self.type_of(receiver), &name.name) =>
+            {
+                format!("(*{text})")
+            }
+            _ => text,
+        }
+    }
+
+    /// An operand of a comparison: a
+    /// [`field_of_element`](Self::field_of_element) whose type is not
+    /// `Copy` compared in place (`==` and `<` take their operands by
+    /// reference) unless `later`, the operand evaluated after it while it
+    /// is borrowed, changes the list; anything else as
+    /// [`operand`](Self::operand) gives it.
+    fn compared(&mut self, expr: &Expr, later: Option<&Expr>) -> String {
+        if self.field_of_element(expr) && !self.element_clone(expr).is_empty() {
+            let mut changed = BTreeSet::new();
+            if let Some(later) = later {
+                mutated_in(later, self.types, &mut changed);
+            }
+            if self
+                .element_root(expr)
+                .is_none_or(|root| !changed.contains(root))
+            {
+                return self.element_field(expr);
+            }
+        }
+        self.operand(expr)
     }
 
     fn call(&mut self, expr: &Expr, callee: &Expr, args: &[Expr]) -> String {
@@ -4067,23 +4200,34 @@ impl<'a> Generator<'a> {
     }
 
     /// Whether `match scrutinee { arms }` can match a reference to its
-    /// scrutinee instead of a copy: the scrutinee is a place whose type is
-    /// known, lendable ([`lendable`]) and not `Copy` in Rust, and no arm
-    /// changes the variable the place is rooted at.
+    /// scrutinee instead of a copy: the scrutinee is a place or a
+    /// [`field_of_element`](Self::field_of_element) whose type is known,
+    /// lendable ([`lendable`]) and not `Copy` in Rust, and no arm changes
+    /// the variable the place is rooted at.
     fn match_by_ref(
         &self,
         scrutinee: &Expr,
         ty: Option<&Ty>,
         arms: &[ignite_syntax::ast::Arm],
     ) -> bool {
-        if !self.is_place(scrutinee) || !ty.is_some_and(|ty| lendable(ty) && !rust_copy(ty)) {
+        let root = if self.is_place(scrutinee) {
+            place_root(scrutinee)
+        } else if self.field_of_element(scrutinee) {
+            self.element_root(scrutinee)
+        } else {
+            None
+        };
+        let Some(root) = root else {
+            return false;
+        };
+        if !ty.is_some_and(|ty| lendable(ty) && !rust_copy(ty)) {
             return false;
         }
         let mut mutated = BTreeSet::new();
         for arm in arms {
             mutated_in(&arm.body, self.types, &mut mutated);
         }
-        place_root(scrutinee).is_some_and(|root| !mutated.contains(root))
+        !mutated.contains(root)
     }
 
     /// The bindings of a native `pattern` matched against a reference,
@@ -5001,8 +5145,10 @@ impl<'a> Generator<'a> {
             .structural_operand(left, right)
             .expect("a structural operand");
         let glue = self.glue_fn(Glue::Eq, ty);
-        let left = self.ref_arg(left);
-        let right = self.ref_arg(right);
+        let [left, right]: [String; 2] = self
+            .ref_args([left, right])
+            .try_into()
+            .expect("two operands");
         let negation = if op == BinaryOp::Ne { "!" } else { "" };
         format!("{negation}{glue}({left}, {right})")
     }
@@ -5493,6 +5639,14 @@ fn tuple_elements(ty: Option<&Ty>, count: usize) -> Vec<Option<Ty>> {
 
 fn binary_symbol(op: BinaryOp) -> &'static str {
     op.symbol()
+}
+
+/// `==`, `!=`, `<`, `>`, `<=`, `>=`: Rust takes both operands by reference.
+fn is_comparison(op: BinaryOp) -> bool {
+    matches!(
+        op,
+        BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Gt | BinaryOp::Le | BinaryOp::Ge
+    )
 }
 
 #[derive(Clone)]
