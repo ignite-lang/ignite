@@ -1,0 +1,340 @@
+// Language Server Protocol Specification 3.17, the base protocol and the server lifecycle, a
+// specification that is no RFC (docs/slice.md 19.19).
+// Quoted by hand from
+// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/
+// (918,678 bytes, read 2026-11-05), which is not vendored: `ignite rfc check` reports this
+// catalogue unchecked. The page numbers no sections; `section` names the heading, and its
+// anchor on the page is:
+//   base.header             #header-part
+//   base.content            #content-part
+//   base.request            #request-message
+//   base.response           #response-message
+//   base.notification       #notification-message
+//   base.dollar             #-notifications-and-requests
+//   base.cancel             #cancellation-support-arrow_right-arrow_left
+//   lifecycle.initialize    #initialize-request-leftwards_arrow_with_hook
+//   lifecycle.initialized   #initialized-notification-arrow_right
+//   lifecycle.shutdown      #shutdown-request-leftwards_arrow_with_hook
+//   lifecycle.exit          #exit-notification-arrow_right
+// One requirement per sentence with a word of 19.19's table, upper or lower case; the level
+// is that of its strongest word (19.4). Of the base protocol the prose and the doc comments
+// of its JSON structures are read; of the lifecycle the prose only, as the capabilities in
+// the initialize parameters and result belong to the features. Texts are verbatim with the
+// markup removed and whitespace collapsed. A party is `Client` or `Server` where the
+// sentence names one, else `Sender` or `Recipient` of the message it describes, else `Any`.
+// Left out, no word of the table: "at least one header is mandatory" (base.header), "This
+// is in line with the JSON-RPC protocol that requires that every request sends a response
+// back." (base.cancel), "The message can be picked by the server." (lifecycle.initialize).
+
+package std.rfc.language_server_3_17
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const LANGUAGE_SERVER_3_17: Spec = Spec {
+  id = "lsp-3.17"
+  title = "Language Server Protocol Specification - 3.17"
+  url = "https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/"
+  digest = "sha256:93afdf15adbaa7355cd00d0134de05331b8dcc9361ffdd11d3da0924cab20579"
+  requirements = [
+    RBASE_HEADER_1,
+    RBASE_CONTENT_1,
+    RBASE_CONTENT_2,
+    RBASE_REQUEST_1,
+    RBASE_RESPONSE_1,
+    RBASE_RESPONSE_2,
+    RBASE_RESPONSE_3,
+    RBASE_RESPONSE_4,
+    RBASE_RESPONSE_5,
+    RBASE_RESPONSE_6,
+    RBASE_RESPONSE_7,
+    RBASE_RESPONSE_8,
+    RBASE_RESPONSE_9,
+    RBASE_NOTIFICATION_1,
+    RBASE_DOLLAR_1,
+    RBASE_DOLLAR_2,
+    RBASE_CANCEL_1,
+    RBASE_CANCEL_2,
+    RLIFECYCLE_INITIALIZE_1,
+    RLIFECYCLE_INITIALIZE_2,
+    RLIFECYCLE_INITIALIZE_3,
+    RLIFECYCLE_INITIALIZE_4,
+    RLIFECYCLE_INITIALIZE_5,
+    RLIFECYCLE_INITIALIZE_6,
+    RLIFECYCLE_INITIALIZE_7,
+    RLIFECYCLE_INITIALIZED_1,
+    RLIFECYCLE_SHUTDOWN_1,
+    RLIFECYCLE_SHUTDOWN_2,
+    RLIFECYCLE_SHUTDOWN_3,
+    RLIFECYCLE_EXIT_1
+  ]
+}
+
+const RBASE_HEADER_1: Requirement = Requirement {
+  section = "base.header"
+  ordinal = 1
+  level = Required
+  party = Sender
+  source = Prose
+  text = "This header is required."
+}
+
+const RBASE_CONTENT_1: Requirement = Requirement {
+  section = "base.content"
+  ordinal = 1
+  level = Should
+  party = Recipient
+  source = Prose
+  text = "If a server or client receives a header with a different encoding than utf-8 it should respond with an error."
+}
+
+const RBASE_CONTENT_2: Requirement = Requirement {
+  section = "base.content"
+  ordinal = 2
+  level = Recommended
+  party = Recipient
+  source = Prose
+  text = "For backwards compatibility it is highly recommended that a client and a server treat the string utf8 as utf-8."
+}
+
+const RBASE_REQUEST_1: Requirement = Requirement {
+  section = "base.request"
+  ordinal = 1
+  level = Must
+  party = Recipient
+  source = Prose
+  text = "Every processed request must send a response back to the sender of the request."
+}
+
+const RBASE_RESPONSE_1: Requirement = Requirement {
+  section = "base.response"
+  ordinal = 1
+  level = Must
+  party = Recipient
+  source = Prose
+  text = "If a request doesn’t provide a result value the receiver of a request still needs to return a response message to conform to the JSON-RPC specification."
+}
+
+const RBASE_RESPONSE_2: Requirement = Requirement {
+  section = "base.response"
+  ordinal = 2
+  level = Should
+  party = Sender
+  source = Prose
+  text = "The result property of the ResponseMessage should be set to null in this case to signal a successful request."
+}
+
+const RBASE_RESPONSE_3: Requirement = Requirement {
+  section = "base.response"
+  ordinal = 3
+  level = Required
+  party = Sender
+  source = Prose
+  text = "This member is REQUIRED on success."
+}
+
+const RBASE_RESPONSE_4: Requirement = Requirement {
+  section = "base.response"
+  ordinal = 4
+  level = MustNot
+  party = Sender
+  source = Prose
+  text = "This member MUST NOT exist if there was an error invoking the method."
+}
+
+const RBASE_RESPONSE_5: Requirement = Requirement {
+  section = "base.response"
+  ordinal = 5
+  level = Should
+  party = Any
+  source = Prose
+  text = "No LSP error codes should be defined between the start and end range."
+}
+
+const RBASE_RESPONSE_6: Requirement = Requirement {
+  section = "base.response"
+  ordinal = 6
+  level = Should
+  party = Sender
+  source = Prose
+  text = "The error message should contain human readable information about why the request failed."
+}
+
+const RBASE_RESPONSE_7: Requirement = Requirement {
+  section = "base.response"
+  ordinal = 7
+  level = Should
+  party = Server
+  source = Prose
+  text = "This error code should only be used for requests that explicitly support being server cancellable."
+}
+
+const RBASE_RESPONSE_8: Requirement = Requirement {
+  section = "base.response"
+  ordinal = 8
+  level = ShouldNot
+  party = Server
+  source = Prose
+  text = "A server should NOT send this error code if it detects a content change in its unprocessed messages."
+}
+
+const RBASE_RESPONSE_9: Requirement = Requirement {
+  section = "base.response"
+  ordinal = 9
+  level = Should
+  party = Client
+  source = Prose
+  text = "If a client decides that a result is not of any use anymore the client should cancel the request."
+}
+
+const RBASE_NOTIFICATION_1: Requirement = Requirement {
+  section = "base.notification"
+  ordinal = 1
+  level = MustNot
+  party = Recipient
+  source = Prose
+  text = "A processed notification message must not send a response back."
+}
+
+const RBASE_DOLLAR_1: Requirement = Requirement {
+  section = "base.dollar"
+  ordinal = 1
+  level = May
+  party = Recipient
+  source = Prose
+  text = "If a server or client receives notifications starting with ‘$/’ it is free to ignore the notification."
+}
+
+const RBASE_DOLLAR_2: Requirement = Requirement {
+  section = "base.dollar"
+  ordinal = 2
+  level = Must
+  party = Recipient
+  source = Prose
+  text = "If a server or client receives a request starting with ‘$/’ it must error the request with error code MethodNotFound (e.g. -32601)."
+}
+
+const RBASE_CANCEL_1: Requirement = Requirement {
+  section = "base.cancel"
+  ordinal = 1
+  level = Must
+  party = Server
+  source = Prose
+  text = "A request that got canceled still needs to return from the server and send a response back."
+}
+
+const RBASE_CANCEL_2: Requirement = Requirement {
+  section = "base.cancel"
+  ordinal = 2
+  level = Should
+  party = Server
+  source = Prose
+  text = "If the request returns an error response on cancellation it is advised to set the error code to ErrorCodes.RequestCancelled."
+}
+
+const RLIFECYCLE_INITIALIZE_1: Requirement = Requirement {
+  section = "lifecycle.initialize"
+  ordinal = 1
+  level = Should
+  party = Server
+  source = Prose
+  text = "If the server receives a request or notification before the initialize request it should act as follows:"
+}
+
+const RLIFECYCLE_INITIALIZE_2: Requirement = Requirement {
+  section = "lifecycle.initialize"
+  ordinal = 2
+  level = Should
+  party = Server
+  source = Prose
+  text = "For a request the response should be an error with code: -32002."
+}
+
+const RLIFECYCLE_INITIALIZE_3: Requirement = Requirement {
+  section = "lifecycle.initialize"
+  ordinal = 3
+  level = Should
+  party = Server
+  source = Prose
+  text = "Notifications should be dropped, except for the exit notification."
+}
+
+const RLIFECYCLE_INITIALIZE_4: Requirement = Requirement {
+  section = "lifecycle.initialize"
+  ordinal = 4
+  level = MustNot
+  party = Client
+  source = Prose
+  text = "Until the server has responded to the initialize request with an InitializeResult, the client must not send any additional requests or notifications to the server."
+}
+
+const RLIFECYCLE_INITIALIZE_5: Requirement = Requirement {
+  section = "lifecycle.initialize"
+  ordinal = 5
+  level = MustNot
+  party = Server
+  source = Prose
+  text = "In addition the server is not allowed to send any requests or notifications to the client until it has responded with an InitializeResult, with the exception that during the initialize request the server is allowed to send the notifications window/showMessage, window/logMessage and telemetry/event as well as the window/showMessageRequest request to the client."
+}
+
+const RLIFECYCLE_INITIALIZE_6: Requirement = Requirement {
+  section = "lifecycle.initialize"
+  ordinal = 6
+  level = May
+  party = Server
+  source = Prose
+  text = "In case the client sets up a progress token in the initialize params (e.g. property workDoneToken) the server is also allowed to use that token (and only that token) using the $/progress notification sent from the server to the client."
+}
+
+const RLIFECYCLE_INITIALIZE_7: Requirement = Requirement {
+  section = "lifecycle.initialize"
+  ordinal = 7
+  level = May
+  party = Client
+  source = Prose
+  text = "The initialize request may only be sent once."
+}
+
+const RLIFECYCLE_INITIALIZED_1: Requirement = Requirement {
+  section = "lifecycle.initialized"
+  ordinal = 1
+  level = May
+  party = Client
+  source = Prose
+  text = "The initialized notification may only be sent once."
+}
+
+const RLIFECYCLE_SHUTDOWN_1: Requirement = Requirement {
+  section = "lifecycle.shutdown"
+  ordinal = 1
+  level = MustNot
+  party = Client
+  source = Prose
+  text = "Clients must not send any notifications other than exit or requests to a server to which they have sent a shutdown request."
+}
+
+const RLIFECYCLE_SHUTDOWN_2: Requirement = Requirement {
+  section = "lifecycle.shutdown"
+  ordinal = 2
+  level = Should
+  party = Client
+  source = Prose
+  text = "Clients should also wait with sending the exit notification until they have received a response from the shutdown request."
+}
+
+const RLIFECYCLE_SHUTDOWN_3: Requirement = Requirement {
+  section = "lifecycle.shutdown"
+  ordinal = 3
+  level = Should
+  party = Server
+  source = Prose
+  text = "If a server receives requests after a shutdown request those requests should error with InvalidRequest."
+}
+
+const RLIFECYCLE_EXIT_1: Requirement = Requirement {
+  section = "lifecycle.exit"
+  ordinal = 1
+  level = Should
+  party = Server
+  source = Prose
+  text = "The server should exit with success code 0 if the shutdown request has been received before; otherwise with error code 1."
+}
