@@ -539,3 +539,65 @@ fn an_altered_revision_journal_line_refuses_the_host() {
         damaged(seq, "revision journal differs", Some(&file)),
     );
 }
+
+/// Row 22 and 22.7 at the boundary record 0: a journal cut to nothing.
+/// `status.json` anchors record `n`, and a journal that does not exist
+/// holds no record `n`, exactly as an empty journal does (which is
+/// refused). The host must exit 3 naming the anchor, change no file, and
+/// offline `inspect` must report the journal as not intact; a host that
+/// starts instead begins a fresh history and overwrites `status.json`,
+/// the anchor that was the only evidence of the cut (D10).
+#[test]
+fn adversary_a_deleted_journal_under_an_anchored_status_refuses_the_host() {
+    let case = Case::new("deleted");
+    let mut host = Host::start(&case, "first", &case.a);
+    host.stop();
+    let status = Json::parse(&read(&case.state.join("status.json"))).unwrap();
+    let anchored = field(&status, &["journalAnchor", "record"])
+        .as_i64()
+        .expect("status.json anchors a record");
+    fs::remove_file(case.journal()).unwrap();
+    let before = case.files();
+
+    let stderr = case.root.join("deleted.stderr");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .args(["host", "--state", case.state_arg()])
+        .current_dir(&case.a)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(File::create(&stderr).unwrap())
+        .spawn()
+        .expect("start host");
+    let status = wait(&mut child, Duration::from_secs(20));
+    if status.is_none() {
+        let stdin = child.stdin.as_mut().unwrap();
+        let _ = writeln!(stdin, "stop");
+        let _ = stdin.flush();
+        if wait(&mut child, Duration::from_secs(20)).is_none() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+    let after = case.files();
+    assert_eq!(
+        status.and_then(|status| status.code()),
+        Some(3),
+        "a host started on a state whose journal is gone while status.json anchors record \
+         {anchored}; status.json rewritten: {}\nstderr: {}",
+        before.get(&case.state.join("status.json")) != after.get(&case.state.join("status.json")),
+        read(&stderr)
+    );
+    assert!(
+        read(&stderr).contains(&format!(
+            "error: host journal ends before record {anchored} that status.json anchors"
+        )),
+        "{}",
+        read(&stderr)
+    );
+    assert_eq!(after, before, "a refused host changes no file");
+    assert_reported(
+        &case,
+        "deleted-offline",
+        damaged(anchored, "shorter than status.json", None),
+    );
+}
