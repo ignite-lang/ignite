@@ -400,4 +400,31 @@ both_targets!(
     orphans_after_drain,
     orphans_after_second_sigterm,
     orphans_after_sigkill,
+    a_child_status_survives_an_ignored_sigchld,
 );
+
+/// Adversary: a server started by a parent that left SIGCHLD ignored (a
+/// wrapper's `trap '' CHLD`; the disposition survives exec). The kernel
+/// then reaps the server's children itself, so `waitid` and the reap see
+/// ECHILD; the child of row 13 must still report `ending 1 code 15`.
+fn a_child_status_survives_an_ignored_sigchld(target: Target) {
+    let maskd = executable("signal_mask.ignite", "maskd", target);
+    let server = Server::start(
+        Command::new("/bin/sh")
+            .args(["-c", "trap '' CHLD; exec \"$0\" --port 0"])
+            .arg(maskd)
+            .current_dir(workdir("sigchld", target)),
+    );
+    let status = std::fs::read_to_string(format!("/proc/{}/status", server.pid()))
+        .expect("the server's status");
+    let ignored = status
+        .lines()
+        .find_map(|line| line.strip_prefix("SigIgn:"))
+        .expect("a SigIgn line")
+        .trim()
+        .to_string();
+    let mask = u64::from_str_radix(&ignored, 16).expect("a hex mask");
+    assert_ne!(mask & (1 << 16), 0, "SIGCHLD is not ignored: {ignored}");
+    let (code, body) = server.get("/");
+    assert_eq!((code, body.as_str()), (200, "ending 1 code 15"));
+}

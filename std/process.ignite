@@ -178,4 +178,85 @@ test "the launcher refuses what it cannot run" {
   assert launcher.execute(Invocation { program = "true" })?.code == 0
 }
 
+test "adversary: a missing working directory is not a missing program" {
+  let message = refused(Launcher.new().execute(Invocation { program = "/bin/true", directory = "/nonexistent-ignite-17-dir" }))
+  assert message != "ok"
+  assert !message.starts_with("program not found"), message
+}
+
+test "adversary: a waited child keeps its id after its handle is reused" {
+  let launcher = Launcher.new()
+  let first = launcher.start(Invocation { program = "/bin/true" })?
+  let kept = first.id()
+  first.wait()?
+  var i = 0
+  while i < 8 {
+    let later = launcher.start(Invocation { program = "/bin/true" })?
+    later.wait()?
+    i = i + 1
+  }
+  let running = launcher.start(Invocation { program = "/bin/sh", arguments = ["-c", "sleep 0.3; exit 4"] })?
+  first.kill()?
+  assert refused(first.wait()) == "child already waited"
+  let exit = running.wait()?
+  assert exit.ending == 0
+  assert exit.code == 4
+  assert first.id() == kept, "id ".concat(first.id().to_text()).concat(" after reuse, was ").concat(kept.to_text())
+}
+
+test "adversary: output exactly at and one past the limit, both streams" {
+  let launcher = Launcher.new()
+  let at = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "head -c 1024 /dev/zero; head -c 1025 /dev/zero >&2"], output_limit = 1 KiB })?
+  assert at.stdout.len() == 1024
+  assert at.stderr.len() == 1024
+  assert at.dropped == 1
+  let both = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "head -c 2097152 /dev/zero & head -c 2097152 /dev/zero >&2; wait"], output_limit = 1 KiB })?
+  assert both.ending == 0
+  assert both.stdout.len() == 1024
+  assert both.stderr.len() == 1024
+  assert both.dropped == 2 * (2097152 - 1024)
+  let none = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "echo x; echo y >&2"], output_limit = 0 bytes })?
+  assert none.stdout.len() == 0
+  assert none.dropped == 4
+}
+
+test "adversary: kill after the end keeps the exit status" {
+  let launcher = Launcher.new()
+  let child = launcher.start(Invocation { program = "/bin/sh", arguments = ["-c", "exit 7"] })?
+  launcher.execute(Invocation { program = "/bin/sleep", arguments = ["0.3"] })?
+  child.kill()?
+  let exit = child.wait()?
+  assert exit.ending == 0
+  assert exit.code == 7
+}
+
+test "adversary: grandchildren do not hold the result" {
+  let launcher = Launcher.new()
+  let started = Clock.monotonic()
+  let escaped = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "setsid sleep 2 & echo started"] })?
+  assert Clock.monotonic() - started < 1 seconds
+  assert escaped.ending == 0
+  assert escaped.stdout == b"started\n"
+  let forked = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "sleep 30 & echo $!"] })?
+  assert Clock.monotonic() - started < 2 seconds
+  let pid = forked.stdout.to_text().trim()
+  assert Int.parse(pid) != None
+  let check = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "sleep 0.2; [ ! -d /proc/".concat(pid).concat(" ] || grep -q 'State:.*Z' /proc/").concat(pid).concat("/status && echo gone")] })?
+  assert check.stdout == b"gone\n"
+}
+
+test "adversary: environment entries, PATH and odd programs" {
+  let launcher = Launcher.new()
+  assert refused(launcher.execute(Invocation { program = "/bin/true", environment = ["NOVALUE"] })) == "environment entry NOVALUE: not NAME=value"
+  assert refused(launcher.execute(Invocation { program = "/bin/true", environment = ["=x"] })) == "environment entry =x: not NAME=value"
+  assert refused(launcher.execute(Invocation { program = "true", inherit_environment = false })) == "program not found: true"
+  assert refused(launcher.execute(Invocation { program = "true", environment = ["PATH=/nonexistent-ignite-17"] })) == "program not found: true"
+  assert refused(launcher.execute(Invocation { program = "" })).starts_with("program not found")
+  assert refused(launcher.execute(Invocation { program = "/bin" })) != "ok"
+  assert refused(launcher.execute(Invocation { program = "/etc/passwd" })) != "ok"
+  let env = launcher.execute(Invocation { program = "env", environment = ["PATH=/usr/bin:/bin", "A=1=2"], inherit_environment = false })?
+  assert env.stdout == b"A=1=2\nPATH=/usr/bin:/bin\n"
+  assert launcher.execute(Invocation { program = "/bin/true", timeout = 1000000000 seconds })?.code == 0
+}
+
 // ---- entropy tests ----
