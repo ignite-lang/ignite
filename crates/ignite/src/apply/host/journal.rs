@@ -277,7 +277,9 @@ impl History {
     }
 
     /// [`History::load`] with the damage as a value, for `inspect`; the
-    /// outer error is a failed read.
+    /// outer error is a failed read. A missing journal reads as an empty
+    /// one, so the anchor check still runs: a `status.json` that anchors a
+    /// record refuses it (row 22 at record 0).
     pub(super) fn scan(path: &Path) -> Result<Result<History, Damage>, Failure> {
         let mut history = History {
             state: None,
@@ -290,11 +292,10 @@ impl History {
             repairs: Vec::new(),
             copies: BTreeMap::new(),
         };
-        if !path.exists() {
-            return Ok(Ok(history));
-        }
         let mut bytes = Vec::new();
-        File::open(path)?.read_to_end(&mut bytes)?;
+        if path.exists() {
+            File::open(path)?.read_to_end(&mut bytes)?;
+        }
         let complete = bytes
             .iter()
             .rposition(|byte| *byte == b'\n')
