@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-05T10:26:38Z",
+  "actor": "human:timo",
+  "artifact": "story:lsp-types",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on feat/lsp-types 6a96086f5, run 2 under nice/ionice: exit 0, 629 s, 1519 passed, 0 failed, 10 ignored"
+  }
+}
