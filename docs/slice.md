@@ -4411,6 +4411,8 @@ one is kept beside it without replacing it.
   operation it carried before: `runtimeOperation` and the run's records name the committed
   revision's operation again, not the refused plan.
 
+Since slice 18 `ignite recover` (22.9) is the operator's way back to accepting plans.
+
 ### 17.6 Terminal walkthrough
 
 Before: no resources are owned and revision is zero. Keep the host terminal open:
