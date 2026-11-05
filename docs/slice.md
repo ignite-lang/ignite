@@ -8040,10 +8040,13 @@ slice adds:
   is split: a read-only verifier (chain, digests, anchor, revision journals; used by offline
   `inspect`) and the repair, which runs after the lock is held and appends `journalRepaired
   {"droppedBytes": n, "droppedDigest": "sha256:<hex of the bytes>", "previousDigest": <last good>}`
-  in place of the torn bytes (truncate to the last good record, append the repair record, one
-  sync), so a crash after the repair leaves the record and a crash before it leaves the torn
-  line to repair again. The host prints `ignite host: dropped a torn final journal record of <n>
-  bytes`, and `inspect` lists every such record in `journalRepairs` (row 20). Offline `inspect`
+  in place of the torn bytes in one atomic step (`Writer::repair`: the good records and the
+  repair record written to `host-journal.<pid>.writing` in the same directory and synced, renamed
+  over the journal, the directory synced), so a crash after the rename leaves the record and a
+  crash before it leaves the old journal, torn line included, to repair again; the good records
+  never stand without the repair record (unit test
+  `a_crash_during_the_repair_leaves_the_torn_journal`). The host prints `ignite host: dropped a
+  torn final journal record of <n> bytes`, and `inspect` lists every such record in `journalRepairs` (row 20). Offline `inspect`
   of a journal that is only torn reports `"intact": true, "pendingRepair": {"droppedBytes": n}`.
 - An altered record: `History::load` reports its 1-based line number, `host journal record <n>:
   digest mismatch` (or `: does not parse`, `: chain diverged`), exit 3, before anything is

@@ -16,7 +16,7 @@
 use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ignite_eval::Json;
 
@@ -47,6 +47,14 @@ pub(super) fn save_json(path: &Path, value: &Json) -> Result<(), Failure> {
 
 /// [`save_json`] of raw bytes.
 pub(super) fn save_bytes(path: &Path, bytes: &[u8]) -> Result<(), Failure> {
+    let temporary = write_temporary(path, bytes)?;
+    replace_with(&temporary, path)?;
+    Ok(())
+}
+
+/// The first half of [`save_bytes`]: `bytes` written and synced to the
+/// temporary beside `path`, which is returned; `path` is untouched.
+fn write_temporary(path: &Path, bytes: &[u8]) -> io::Result<PathBuf> {
     let temporary = path.with_extension(format!("{}.writing", std::process::id()));
     let mut file = OpenOptions::new()
         .create(true)
@@ -55,9 +63,14 @@ pub(super) fn save_bytes(path: &Path, bytes: &[u8]) -> Result<(), Failure> {
         .open(&temporary)?;
     file.write_all(bytes)?;
     file.sync_all()?;
-    std::fs::rename(&temporary, path)?;
-    File::open(path.parent().unwrap())?.sync_all()?;
-    Ok(())
+    Ok(temporary)
+}
+
+/// The second half of [`save_bytes`]: rename `temporary` over `path`, then
+/// sync the directory so the rename itself is durable.
+fn replace_with(temporary: &Path, path: &Path) -> io::Result<()> {
+    std::fs::rename(temporary, path)?;
+    File::open(path.parent().unwrap())?.sync_all()
 }
 
 /// An effect intent: a journaled `Spawn` of `member` whose `Started` or
@@ -572,6 +585,7 @@ pub(super) fn check_revisions(root: &Path, history: &History) -> Result<Option<D
 /// it: the number of its records (the `journalAnchor` of `status.json`) and
 /// its `journalRepaired` records.
 pub(super) struct Writer {
+    path: PathBuf,
     file: File,
     pub(super) records: u64,
     pub(super) repairs: Vec<Json>,
@@ -579,11 +593,27 @@ pub(super) struct Writer {
 
 impl Writer {
     /// Replace a torn final line of `history` by a `journalRepaired` record
-    /// (D9): truncate to the last complete record, append the record, one
-    /// sync. A crash before the sync leaves the torn line to repair again.
-    /// The repair's value, or `None` when nothing was torn. Takes the
-    /// history's records and repairs either way.
+    /// (D9) in one atomic step: the complete records and the repair record
+    /// are written to a temporary in the journal's directory and synced,
+    /// the temporary is renamed over the journal, the directory is synced,
+    /// and the journal is reopened for appending. The journal on disk is
+    /// therefore either the old one, torn line included, which the next
+    /// start repairs again, or the repaired one; never the good records
+    /// without the repair record. The repair's value, or `None` when
+    /// nothing was torn. Takes the history's records and repairs either
+    /// way.
     pub(super) fn repair(&mut self, history: &mut History) -> Result<Option<Json>, Failure> {
+        self.repair_until(history, false)
+    }
+
+    /// [`Writer::repair`]; `crash_after_temporary` stops it with an error
+    /// once the temporary is synced and before the rename, the crash the
+    /// unit test `a_crash_during_the_repair_leaves_the_torn_journal` takes.
+    fn repair_until(
+        &mut self,
+        history: &mut History,
+        crash_after_temporary: bool,
+    ) -> Result<Option<Json>, Failure> {
         self.records = history.records;
         let repaired = if history.torn.is_empty() {
             None
@@ -596,17 +626,26 @@ impl Writer {
                 ),
                 ("previousDigest", text(&history.last_digest)),
             ]);
-            self.file.set_len(history.length)?;
-            let digest = append_to(
-                &mut self.file,
-                &history.last_digest,
-                "journalRepaired",
-                &value,
-                false,
-            )?;
+            let mut bytes = Vec::new();
+            File::open(&self.path)?.read_to_end(&mut bytes)?;
+            let Some(complete) = bytes.get(..history.length as usize) else {
+                return Err(fail(
+                    3,
+                    "host journal: shorter than its loaded records while repairing",
+                ));
+            };
+            let (line, digest) = chained("journalRepaired", value.clone(), &history.last_digest);
+            let mut journal = complete.to_vec();
+            journal.extend_from_slice(line.as_bytes());
+            let temporary = write_temporary(&self.path, &journal)?;
+            if crash_after_temporary {
+                return Err(io::Error::other("injected crash before the journal rename").into());
+            }
+            replace_with(&temporary, &self.path)?;
+            self.file = OpenOptions::new().append(true).open(&self.path)?;
             history.last_digest = digest;
             history.records += 1;
-            history.length = self.file.metadata()?.len();
+            history.length = journal.len() as u64;
             history.torn.clear();
             history.repairs.push(value.clone());
             self.records = history.records;
@@ -626,6 +665,7 @@ pub(super) fn open(path: &Path) -> Result<Writer, Failure> {
         File::open(path.parent().unwrap())?.sync_all()?;
     }
     Ok(Writer {
+        path: path.to_path_buf(),
         file,
         records: 0,
         repairs: Vec::new(),
@@ -1048,6 +1088,64 @@ mod tests {
         assert_eq!(writer.repair(&mut reloaded).unwrap(), None);
         assert_eq!(writer.repairs.len(), 1);
         assert_eq!(std::fs::read(&path).unwrap(), after);
+    }
+
+    /// D9, 22.7: a host that dies during the repair, after the repaired
+    /// temporary is synced and before its rename, leaves the old journal
+    /// byte for byte, torn line included, and the next start repairs it
+    /// over the leftover temporary; the good records never stand without
+    /// the `journalRepaired` record.
+    #[test]
+    fn a_crash_during_the_repair_leaves_the_torn_journal() {
+        let path = scratch("repair-crash");
+        write(&path, &[("state", object([])), ("state", object([]))]);
+        let good = std::fs::read(&path).unwrap();
+        let torn = b"{\"kind\":\"sta";
+        let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+        file.write_all(torn).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let mut history = History::load(&path).unwrap();
+        let mut writer = open(&path).unwrap();
+        let error = writer
+            .repair_until(&mut history, true)
+            .expect_err("the injected crash stops the repair");
+        assert_eq!(error.reason, "injected crash before the journal rename");
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            before,
+            "the journal is untouched until the rename"
+        );
+        let leftover = path.with_extension(format!("{}.writing", std::process::id()));
+        assert!(leftover.exists(), "the temporary stays behind");
+        drop(writer);
+
+        let mut history = History::load(&path).unwrap();
+        assert_eq!(history.torn, torn);
+        assert_eq!(history.records, 2);
+        let mut writer = open(&path).unwrap();
+        let repaired = writer.repair(&mut history).unwrap().expect("a repair");
+        assert_eq!(repaired.get("droppedBytes"), Some(&Json::Int(12)));
+        assert!(!leftover.exists(), "the rename consumed the temporary");
+        let after = std::fs::read(&path).unwrap();
+        assert!(after.starts_with(&good), "the good records stay");
+        let reloaded = History::load(&path).unwrap();
+        assert!(reloaded.torn.is_empty());
+        assert_eq!(reloaded.records, 3);
+        assert_eq!(reloaded.repairs, vec![repaired]);
+        assert_eq!(reloaded.last_digest, history.last_digest);
+        append_to(
+            &mut writer.file,
+            &history.last_digest,
+            "state",
+            &object([]),
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            History::load(&path).unwrap().records,
+            4,
+            "appends after the repair go to the renamed journal"
+        );
     }
 
     /// A line that is no record, and a record chained to another digest,
