@@ -652,7 +652,19 @@ fn adversary_rich_bounds_lower_link_and_run() {
         ] {
             let symbol = ignite_llvm::instance_symbol(name, one);
             let body = function(program, &symbol);
-            assert!(!body.contains(other), "{symbol} calls {other}:\n{body}");
+            // `tcp_own`, `tcp_retain` and `tcp_release` take any handle (18.9).
+            let kind_calls: Vec<&str> = body
+                .lines()
+                .filter(|line| {
+                    !["own(", "retain(", "release("]
+                        .iter()
+                        .any(|entry| line.contains(&format!("@ignite_rt_tcp_{entry}")))
+                })
+                .collect();
+            assert!(
+                !kind_calls.iter().any(|line| line.contains(other)),
+                "{symbol} calls {other}:\n{body}"
+            );
         }
         let relay = function(
             program,
@@ -685,9 +697,11 @@ fn adversary_rich_bounds_lower_link_and_run() {
 
 /// Adversary (slice 14 U4): a `spawn` inside a bounded instance of a
 /// `stream.copy()` moves nothing, for either stream kind: the copy shares
-/// the handle its receiver holds (18.4), so neither the task nor the
-/// failed-spawn path of `hand<S>` releases it
-/// (`adversary_a_moved_copy_does_not_release_the_held_end` runs it).
+/// the handle its receiver holds (18.4), so `hand<S>` adds the task as an
+/// owner with `tcp_retain` and its failed-spawn path releases only that
+/// owner, and the task owns and releases only its own
+/// (`docs/llvm.md` section 4;
+/// `adversary_a_moved_copy_does_not_release_the_held_end` runs it).
 #[test]
 fn adversary_spawn_inside_a_bounded_instance_keeps_a_copied_end() {
     let generated = lower("bounds_adv");
@@ -695,9 +709,14 @@ fn adversary_spawn_inside_a_bounded_instance_keeps_a_copied_end() {
     for (ty, kind) in [(Ty::TcpStream, "TcpStream"), (Ty::PipeStream, "PipeStream")] {
         let symbol = ignite_llvm::instance_symbol("tests.bounds_adv.hand", &[ty]);
         let hand = function(program, &symbol);
-        assert!(
-            !hand.contains("call void @ignite_rt_tcp_release(i64 "),
-            "the failed-spawn path of {symbol} releases a copied end:\n{hand}"
+        assert_eq!(
+            (
+                hand.matches("call void @ignite_rt_tcp_retain(i64 ").count(),
+                hand.matches("call void @ignite_rt_tcp_release(i64 ")
+                    .count()
+            ),
+            (1, 1),
+            "the failed-spawn path of {symbol} releases more than the task's owner:\n{hand}"
         );
         let prefix = format!("define internal void @\"spawn.tests.bounds_adv.relay<{kind}>.");
         let thunk = program
@@ -706,9 +725,15 @@ fn adversary_spawn_inside_a_bounded_instance_keeps_a_copied_end() {
             .and_then(|l| l.split('"').nth(1))
             .unwrap_or_else(|| panic!("no spawn thunk of relay<{kind}>:\n{program}"));
         let thunk = function(program, thunk);
-        assert!(
-            !thunk.contains("call void @ignite_rt_tcp_own(i64 "),
-            "the copied {kind} of {symbol} is owned by its task:\n{thunk}"
+        assert_eq!(
+            (
+                thunk.matches("call void @ignite_rt_tcp_own(i64 ").count(),
+                thunk
+                    .matches("call void @ignite_rt_tcp_release(i64 ")
+                    .count()
+            ),
+            (1, 1),
+            "the task of {symbol} does not hold exactly its own owner of the copied {kind}:\n{thunk}"
         );
     }
 }
