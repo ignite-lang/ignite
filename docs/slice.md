@@ -8267,6 +8267,8 @@ in `AGENTS.md`'s gate-time section; raw records, logs and scripts under
 | Q3 | Should the new instance of a rollout wait for the old one's last write? | no in this slice (22.2); a durable store with cross-process locking is D4 C's |
 | Q4 | Does `ignite recover` need a confirmation flag? | no: it refuses whatever it cannot prove (row 26) and journals what it did |
 | Q5 | Should `healthy` also bound latency? | no: `ThresholdCompliance` with a two-argument predicate is the form for that; the example keeps one contract |
+| Q6 | Known gap: should the model pin the body of a `good` predicate? A `good` fn value is recorded by its name only (`crates/ignite-eval/src/model.rs:1677`), while `ignite replay` and a resumed `ignite run` call the current source's `classify` and through it the current body of `good` (`crates/ignite/src/run/engine.rs:345`). An edited body gives E127 at whichever record first classifies differently, not at the edit (W2 review finding, not reproduced). | not in this slice: recorded by the W2 review; a fix pins the body's digest in the model or journal |
+| Q7 | Known gap: should a signal's element decode with the types of every module it names? `decoder` picks the module of the first record or enum inside the element type (`crates/ignite/src/run/engine.rs:772`, used at `:320`), so the whole element is decoded against that module's types only, also a record or enum of another module inside it (W2 review finding, not reproduced). | not in this slice: recorded by the W2 review; a fix decodes against the program's merged types |
 
 ### 22.17 Resolution of the review
 
