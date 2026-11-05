@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-18-records
 kind: story
-status: active
+status: implemented
 title: Slice 18 records and close
 relations:
 - decomposes: epic:slice-18-one-service-operated
@@ -22,10 +22,11 @@ scope:
   path: docs/performance/18
 - confidence: cited
   path: docs/vision.md
-revision: 13
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T19:13:06Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"review_outcome":3}}}
 - {from: "proposed", to: "active", at: "2026-11-05T19:13:06Z", actor: "human:timo", revision: 13, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "active", to: "implemented", at: "2026-11-05T23:26:47Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 # Story: slice-18-records
 
