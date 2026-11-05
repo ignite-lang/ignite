@@ -1,7 +1,9 @@
 //! TCP: the handle table and the C ABI over `ignite_io::{TcpListener,
 //! TcpStream}`; the table also holds the pipe ends of `crate::pipe`. A
-//! handle names a slot of a process-wide table and stays valid until
-//! `tcp_release`. A table entry is a clone of the `ignite-io`
+//! handle names a slot of a process-wide table and stays valid until its
+//! last owner releases it: `register` gives it one owner, `tcp_retain` adds
+//! one (a task spawned with it), `tcp_release` drops one (`docs/llvm.md`
+//! section 4). A table entry is a clone of the `ignite-io`
 //! handle; the socket closes when the last operation that was already using
 //! it at release time ends. Locking, reads, writes and shutdown are
 //! `ignite-io`'s.
@@ -55,7 +57,52 @@ pub(crate) fn release_task_handles() {
         .try_with(|owned| std::mem::take(&mut *owned.borrow_mut()))
         .unwrap_or_default();
     for handle in owned {
-        ignite_rt_tcp_release(handle);
+        release_owner(handle, None);
+    }
+}
+
+/// `i64 own_mark()`: the number of handles the current task owns, for
+/// [`ignite_rt_own_release`]. A block of an LLVM program takes it before
+/// its first owned stream binding (`docs/llvm.md` section 4).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_own_mark() -> i64 {
+    OWNED
+        .try_with(|owned| owned.borrow().len() as i64)
+        .unwrap_or(0)
+}
+
+/// `void own_release(i64 mark)`: release every handle the current task
+/// registered with `tcp_own` since `own_mark` returned `mark` and still
+/// owns, newest first: the stream bindings of a block that is left.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_own_release(mark: i64) {
+    let mark = usize::try_from(mark).unwrap_or(0);
+    let above = OWNED
+        .try_with(|owned| {
+            let mut owned = owned.borrow_mut();
+            let at = mark.min(owned.len());
+            owned.split_off(at)
+        })
+        .unwrap_or_default();
+    for handle in above.into_iter().rev() {
+        release_owner(handle, None);
+    }
+}
+
+/// `void tcp_retain(i64 handle)`: add an owner to `handle` (a task it is
+/// spawned with, `docs/llvm.md` section 4), so it stays open until that
+/// owner releases it too. Nothing for a released or unknown handle.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_tcp_retain(handle: i64) {
+    let Some((index, generation)) = decode(handle) else {
+        return;
+    };
+    let Some(slot) = slot_at(index, false) else {
+        return;
+    };
+    let mut entry = lock(slot);
+    if entry.generation == generation && entry.handle.is_some() {
+        entry.owners += 1;
     }
 }
 
@@ -100,6 +147,9 @@ struct Entry {
     generation: u32,
     handle: Option<Handle>,
     waited: Vec<(u32, i64)>,
+    /// Owners of the handle (`tcp_retain` adds one); `tcp_release` drops
+    /// one and empties the slot when it drops the last.
+    owners: u32,
 }
 
 type Slot = Mutex<Entry>;
@@ -199,6 +249,7 @@ pub(crate) fn register(handle: Handle) -> i64 {
     let slot = slot_at(index, true).unwrap_or_else(|| crate::process::die("handle table full"));
     let mut entry = lock(slot);
     entry.handle = Some(handle);
+    entry.owners = 1;
     encode(index, entry.generation)
 }
 
@@ -370,9 +421,11 @@ pub extern "C" fn ignite_rt_tcp_close(handle: i64, err: *mut IgniteIoError) -> i
     status(closed, std::ptr::null_mut(), err)
 }
 
-/// `void tcp_release(i64 handle)`: drop any handle (a listener, a TCP stream
-/// or a pipe end) from the table. Later use of it is an error (exit code
-/// 1); releasing twice, or a handle that was never issued, does nothing.
+/// `void tcp_release(i64 handle)`: drop one owner of any handle (a
+/// listener, a TCP stream or a pipe end) and the current task's
+/// registration of it, if any. The last owner's release drops the handle
+/// from the table: later use of it is an error (exit code 1), and a
+/// release after it, or of a handle that was never issued, does nothing.
 /// Releasing the last handle of a pipe end delivers what it wrote and
 /// closes it.
 #[unsafe(no_mangle)]
@@ -398,8 +451,19 @@ pub(crate) fn waited_child_id(handle: i64) -> Option<i64> {
         .map(|(_, id)| *id)
 }
 
+/// Drop the current task's newest registration of `handle`, then one owner.
 fn release(handle: i64, waited_child: Option<i64>) {
-    let _ = OWNED.try_with(|owned| owned.borrow_mut().retain(|owned| *owned != handle));
+    let _ = OWNED.try_with(|owned| {
+        let mut owned = owned.borrow_mut();
+        if let Some(at) = owned.iter().rposition(|owned| *owned == handle) {
+            owned.remove(at);
+        }
+    });
+    release_owner(handle, waited_child);
+}
+
+/// Drop one owner of `handle`; the last empties its slot.
+fn release_owner(handle: i64, waited_child: Option<i64>) {
     let Some((index, generation)) = decode(handle) else {
         return;
     };
@@ -408,6 +472,10 @@ fn release(handle: i64, waited_child: Option<i64>) {
     };
     let mut entry = lock(slot);
     if entry.generation != generation || entry.handle.is_none() {
+        return;
+    }
+    if entry.owners > 1 {
+        entry.owners -= 1;
         return;
     }
     if let Some(id) = waited_child {
@@ -450,6 +518,44 @@ mod tests {
         assert_eq!(decode(0), None);
         assert_eq!(decode(-5), None);
         assert_eq!(decode(1 << 32), None);
+    }
+
+    #[test]
+    fn a_handle_stays_until_its_last_owner_releases_it() {
+        let listener = TcpListener::bind("127.0.0.1".to_string(), 0).unwrap();
+        let handle = register(Handle::Listener(listener));
+        ignite_rt_tcp_retain(handle);
+        ignite_rt_tcp_retain(handle);
+        ignite_rt_tcp_release(handle);
+        ignite_rt_tcp_release(handle);
+        assert!(lookup(handle).is_ok(), "released before its last owner");
+        ignite_rt_tcp_release(handle);
+        assert!(lookup(handle).is_err());
+        ignite_rt_tcp_retain(handle);
+        ignite_rt_tcp_release(handle);
+    }
+
+    #[test]
+    fn own_release_releases_the_handles_owned_since_the_mark() {
+        let listener = TcpListener::bind("127.0.0.1".to_string(), 0).unwrap();
+        let kept = register(Handle::Listener(listener.clone()));
+        ignite_rt_tcp_own(kept);
+        let mark = ignite_rt_own_mark();
+        let shared = register(Handle::Listener(listener.clone()));
+        ignite_rt_tcp_retain(shared);
+        ignite_rt_tcp_own(shared);
+        let single = register(Handle::Listener(listener));
+        ignite_rt_tcp_own(single);
+        assert_eq!(ignite_rt_own_mark(), mark + 2);
+        ignite_rt_own_release(mark);
+        assert_eq!(ignite_rt_own_mark(), mark);
+        assert!(lookup(single).is_err());
+        assert!(lookup(shared).is_ok(), "the retained owner remains");
+        assert!(lookup(kept).is_ok());
+        ignite_rt_tcp_release(shared);
+        ignite_rt_tcp_release(kept);
+        assert!(lookup(shared).is_err() && lookup(kept).is_err());
+        assert_eq!(ignite_rt_own_mark(), mark - 1);
     }
 
     #[test]

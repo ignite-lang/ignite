@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T18:18:35Z",
+  "actor": "human:timo",
+  "artifact": "story:rollout-drain-stuck",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on a94149f8d (PR 46): EXIT=0, 1773 passed, 0 failed, 11 ignored; rollout_repeat e2e green",
+    "reference": "https://github.com/ignite-lang/ignite/pull/46"
+  }
+}

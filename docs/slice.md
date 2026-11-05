@@ -2330,7 +2330,11 @@ differs from 14.1 to 14.11 or refines them:
     the same block bound to a fresh value and no later statement of the block mentions
     (`region::moved_to_task`): the task owns it (`tcp_own`) and releases it when its callee
     returns, or the parent releases it at once when no thread starts. Other stream
-    arguments stay the parent's (`docs/llvm.md` section 4, `docs/friction.md` row 30).
+    arguments stay the parent's (`docs/llvm.md` section 4, `docs/friction.md` row 30). Since
+    story `llvm-stream-ownership` (2026-11-05) a handle counts its owners: every stream
+    argument makes the task an owner (`tcp_retain` in the parent unless it moves), and a
+    block owns and releases the streams it creates and does not let escape (`docs/llvm.md`
+    section 4).
 20. Tests moved with the examples: `cli::check_design_file_is_silent` checks the design
     file; `syntax.rs` builds a copy of the golden with the test listener's port written
     into `Runner.port` (the golden lowers without a standard library, so it cannot name

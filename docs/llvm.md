@@ -391,22 +391,48 @@ position, even with no buffer.
   deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before the parent
   continues (`ignite_rt_spawn` blocks until then and returns 1).
 
-  A `TcpStream` or `PipeStream` argument moves to the task when it is a plain name that a
-  `let` earlier in the same block bound to a fresh value (a call, a method call other than
-  `copy()`, which shares its receiver's handle, `?` or `match`) and no later
-  statement of the block mentions (`region::moved_to_task`): the accept loop's `let stream
-  = self.listener.accept()?` followed by `spawn serve_with(stream, ..)`. The thunk registers
-  a moved stream with `tcp_own`, so a failure closes it, and releases it with `tcp_release`
-  when the callee returns, which closes the connection once the session is over and keeps
-  the handle table from holding one socket per finished connection. When no thread can
-  start, `ignite_rt_spawn` returns 0 without running the thunk and the parent releases the
-  moved streams at once, which closes that one connection; the substrate logs the failure
-  once per run of failures and the service keeps accepting. A stream that does not move
-  stays the parent's: `Telnet.connect` spawns `forward_input(stream)` on its parameter and
-  keeps reading the stream, and nothing releases it before the process exits (the Rust
-  target's `Arc` clones close it when the last one drops). Until slice 10 the accept loop
-  was generated and used a shallow `spawn_copy` without the handshake; the Ignite loop pays
-  the handshake per connection.
+  A stream lives as long as on the Rust target, where each task and binding holds a clone
+  of an `Arc` (story `llvm-stream-ownership`). Each handle-table entry counts its owners:
+  `tcp_accept`, `tcp_connect` and `pipe_pair` give a handle one, `tcp_retain` adds one,
+  `tcp_release` drops one and the last release drops the entry, which closes the socket or
+  pipe end. The owners are:
+  - a task, for every `TcpStream` or `PipeStream` argument it was spawned with. The thunk
+    registers it with `tcp_own`, so a failure releases it, and releases it with
+    `tcp_release` when the callee returns. The parent adds that owner with `tcp_retain`
+    before `ignite_rt_spawn`, so a task that hands its parameter on to a second task and
+    returns leaves the stream open for the second (`spawn hand_on(server)`, then `spawn
+    echo_once(stream)` inside `hand_on`; the review's M1 released it when `hand_on`
+    returned). When no thread can start, `ignite_rt_spawn` returns 0 without running the
+    thunk and the parent releases the task's owners at once; the substrate logs the failure
+    once per run of failures and the service keeps accepting.
+  - a block, for a stream binding it owns (`own::owned`): a `let` that creates the stream
+    (`let stream = listener.accept()?`, `TcpStream.connect(..)?`, `let (a, b) =
+    Pipe.pair()`) whose every later mention in the block keeps it inside the block: the
+    receiver of a builtin stream method other than `copy()`, an argument of `spawn`, or a
+    plain argument of a call whose result type cannot hold a stream (no record, enum, fn
+    value or type parameter in it). The block registers the binding with `tcp_own` after
+    an owner mark (`own_mark`, the length of the task's registration list) taken at its
+    first owned binding, and `own_release(mark)` releases every registration since the mark
+    when the block is left: at its end, before a `return` or the return of `?` (from the
+    outermost marked block), and before a `break` or `continue` (from the outermost marked
+    block inside the loop). A server that answers each connection on its accept task
+    without `spawn` closes it at the end of the iteration (the review's L1 kept one socket
+    per connection). A binding with any other mention (returned, stored in a field or a
+    list, captured, assigned, `copy()`) is not owned and, as before, is not released before
+    the process exits. A callee that keeps a stream it was passed beyond its return other
+    than through its result (in a `Store`) would see it closed; no std module or example
+    does.
+  - At a `spawn` that is the last mention of an owned binding, the block releases its owner
+    right after the start, so the task holds the last one: the accept loop's `spawn
+    Http.serve(stream, ..)` closes the connection when the session ends, and a pipe end
+    bound by `let (client, server) = Pipe.pair()` and spawned into a task that fails is
+    closed by the failure while the block still runs (story
+    `llvm-spawn-pattern-bound-streams`; the Rust target keeps the block's clone until the
+    block ends). A binding that is not owned but bound by name to a fresh value (a call, a
+    method call other than `copy()`, `?` or `match`) and not mentioned after the spawn
+    (`region::moved_to_task`) still passes its owner to the task without `tcp_retain`.
+  Until slice 10 the accept loop was generated and used a shallow `spawn_copy` without the
+  handshake; the Ignite loop pays the handshake per connection.
 - String literals are global constants copied into the arena where they are used as values.
 - A `Store<T>` keeps its values outside every arena, so they outlive the task and the loop
   region that put them. Five glue functions per element type do the moves:

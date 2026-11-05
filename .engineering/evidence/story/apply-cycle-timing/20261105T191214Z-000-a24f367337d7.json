@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T19:12:14Z",
+  "actor": "human:timo",
+  "artifact": "story:apply-cycle-timing",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on feat/slice18-one-service 59973965c (U6 + U7 merged, main 2b524c68b merged): EXIT=0, 1183 cargo passed, 0 failed, 11 ignored; inline 294 + 28 per target; slice18:: 8/8",
+    "reference": "https://github.com/ignite-lang/ignite/commit/59973965c"
+  }
+}

@@ -70,12 +70,15 @@ declare i32 @_setjmp(ptr) returns_twice
 declare void @"ignite_rt_fail_match"(ptr, i64, i64)
 declare void @"ignite_rt_guard_pop"()
 declare void @"ignite_rt_guard_push"(ptr)
+declare i64 @"ignite_rt_own_mark"()
+declare void @"ignite_rt_own_release"(i64)
 declare i32 @ignite_rt_pipe_close(i64, ptr)
 declare i32 @ignite_rt_pipe_read(i64, i64, ptr, ptr)
 declare i64 @ignite_rt_pipe_received_batches(i64)
 declare i32 @ignite_rt_pipe_set_idle_timeout(i64, i64, ptr)
 declare i32 @ignite_rt_pipe_write_all(i64, ptr, ptr)
 declare void @"ignite_rt_tcp_own"(i64)
+declare void @"ignite_rt_tcp_retain"(i64)
 
 define internal void @ignite.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) {
 entry:
@@ -351,7 +354,7 @@ entry:
   %t7 = alloca [8 x i8], align 8
   %t8 = alloca [32 x i8], align 8
   %t24 = alloca [8 x i8], align 8
-  %t27 = alloca [32 x i8], align 8
+  %t29 = alloca [32 x i8], align 8
   %t1 = call i64 @ignite.arena_mark(), !dbg !26
   br label %L2
 L2:
@@ -383,18 +386,24 @@ L19:
   %t22 = getelementptr inbounds i8, ptr %t6, i64 8, !dbg !28
   %t23 = load i64, ptr %t22, align 8, !dbg !28
   store i64 %t23, ptr %t24, align 8, !dbg !27
-  %t25 = load i64, ptr %t24, align 8, !dbg !30
-  %t26 = getelementptr inbounds i8, ptr %p0, i64 8, !dbg !31
-  store i64 %t25, ptr %t27, align 8, !dbg !29
-  %t28 = getelementptr inbounds i8, ptr %t27, i64 8, !dbg !29
-  call void @"copy.Text"(ptr %t28, ptr %t26), !dbg !29
-  %t29 = call i8 @ignite_rt_spawn(ptr @"spawn.tests.bounds.Echo.serve<TcpStream>.2", ptr %t27), !dbg !29
-  %t30 = icmp eq i8 %t29, 0, !dbg !29
-  br i1 %t30, label %L31, label %L32, !dbg !29
-L31:
-  call void @ignite_rt_tcp_release(i64 %t25), !dbg !29
-  br label %L32, !dbg !29
-L32:
+  %t25 = call i64 @ignite_rt_own_mark(), !dbg !27
+  %t26 = load i64, ptr %t24, align 8, !dbg !27
+  call void @ignite_rt_tcp_own(i64 %t26), !dbg !27
+  %t27 = load i64, ptr %t24, align 8, !dbg !30
+  %t28 = getelementptr inbounds i8, ptr %p0, i64 8, !dbg !31
+  store i64 %t27, ptr %t29, align 8, !dbg !29
+  %t30 = getelementptr inbounds i8, ptr %t29, i64 8, !dbg !29
+  call void @"copy.Text"(ptr %t30, ptr %t28), !dbg !29
+  call void @ignite_rt_tcp_retain(i64 %t27), !dbg !29
+  %t31 = call i8 @ignite_rt_spawn(ptr @"spawn.tests.bounds.Echo.serve<TcpStream>.2", ptr %t29), !dbg !29
+  %t32 = icmp eq i8 %t31, 0, !dbg !29
+  br i1 %t32, label %L33, label %L34, !dbg !29
+L33:
+  call void @ignite_rt_tcp_release(i64 %t27), !dbg !29
+  br label %L34, !dbg !29
+L34:
+  call void @ignite_rt_tcp_release(i64 %t27), !dbg !29
+  call void @ignite_rt_own_release(i64 %t25), !dbg !26
   br label %L3
 L3:
   call void @ignite.arena_release(i64 %t1), !dbg !26

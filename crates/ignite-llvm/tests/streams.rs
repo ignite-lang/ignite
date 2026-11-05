@@ -174,15 +174,23 @@ fn stream_instances(ir: &str) -> Vec<(String, &str)> {
         .collect()
 }
 
-/// The stream entries of the other kind that `text` calls. `tcp_own` and
-/// `tcp_release` take any handle (18.9), so they belong to neither kind.
+/// The stream entries of the other kind that `text` calls. `tcp_own`,
+/// `tcp_retain` and `tcp_release` take any handle (18.9), so they belong
+/// to neither kind.
 fn foreign_calls(text: &str, other: &str) -> Vec<String> {
     text.match_indices(other)
         .map(|(i, _)| {
             let rest = &text[i..];
             rest[..rest.find('(').unwrap_or(rest.len())].to_string()
         })
-        .filter(|call| call != "@ignite_rt_tcp_own" && call != "@ignite_rt_tcp_release")
+        .filter(|call| {
+            ![
+                "@ignite_rt_tcp_own",
+                "@ignite_rt_tcp_retain",
+                "@ignite_rt_tcp_release",
+            ]
+            .contains(&call.as_str())
+        })
         .collect()
 }
 

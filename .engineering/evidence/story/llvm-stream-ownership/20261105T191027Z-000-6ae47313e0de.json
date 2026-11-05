@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T19:10:27Z",
+  "actor": "human:timo",
+  "artifact": "story:llvm-stream-ownership",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 2f6b7c9f5 (PR 47): EXIT=0, 1144 cargo passed, 0 failed, 11 ignored; inline 289 + 28 per target; stream_ownership 3/3",
+    "reference": "https://github.com/ignite-lang/ignite/pull/47"
+  }
+}

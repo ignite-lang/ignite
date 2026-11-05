@@ -1,0 +1,100 @@
+package tests.streams
+
+// Run on both targets by tests/stream_ownership.rs. A stream lives as long
+// as the last task or binding that uses it (`docs/llvm.md` section 4): a
+// task that hands its stream on to a second task and returns leaves it open
+// (story llvm-stream-ownership, the review's probe3, over a pipe and over
+// TCP, where the accepted stream is a fresh `let` binding), and a pipe end
+// bound by a pattern in a helper and spawned into a task that fails is
+// closed by that failure (story llvm-spawn-pattern-bound-streams).
+
+import std.net.{ByteStream, Pipe, PipeStream}
+import std.io.IoError
+
+type IoResult<T> = Result<T, IoError>
+
+fn echo_once<S: ByteStream>(stream: S) -> IoResult<Unit> requires [stream.read, stream.write] {
+  match stream.read(4096)? {
+    Eof => Ok(())
+    Data(bytes) => {
+      stream.write_all(bytes)?
+      _ = stream.close()
+      Ok(())
+    }
+  }
+}
+
+fn hand_on<S: ByteStream>(stream: S) -> IoResult<Unit> requires [stream.read, stream.write] {
+  spawn echo_once(stream)
+  Ok(())
+}
+
+fn hand_on_twice<S: ByteStream>(stream: S) -> IoResult<Unit> requires [stream.read, stream.write] {
+  spawn hand_on(stream)
+  Ok(())
+}
+
+fn fails(stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
+  let values = [1, 2]
+  assert values.len() == 3
+  stream.write_all(b"never")?
+  Ok(())
+}
+
+// Waits about 50 ms: a pipe end with an idle timeout reads Eof.
+test fn pause() -> IoResult<Unit> {
+  let (a, b) = Pipe.pair()
+  a.set_idle_timeout(50)?
+  _ = a.read(1)?
+  _ = b.close()
+  Ok(())
+}
+
+test fn rest<S: ByteStream>(client: S) -> IoResult<Bytes> requires [client.read] {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test fn failing_pair() -> PipeStream {
+  let (client, server) = Pipe.pair()
+  spawn fails(server)
+  client
+}
+
+test "a stream handed on to a second task outlives the first task" {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  spawn hand_on(server)
+  pause()?
+  client.write_all(b"hi")?
+  assert rest(client)? == b"hi"
+}
+
+test "a stream handed on through two tasks outlives both" {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  spawn hand_on_twice(server)
+  pause()?
+  client.write_all(b"hi")?
+  assert rest(client)? == b"hi"
+}
+
+test "an accepted stream handed on to a second task outlives the first task" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  client.set_idle_timeout(5000)?
+  let server = listener.accept()?
+  spawn hand_on(server)
+  pause()?
+  client.write_all(b"hi")?
+  assert rest(client)? == b"hi"
+}
+
+test "a failing task closes a pattern-bound pipe end spawned from a helper" {
+  assert rest(failing_pair())? == b""
+}

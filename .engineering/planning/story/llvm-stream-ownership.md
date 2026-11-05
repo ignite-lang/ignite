@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:llvm-stream-ownership
 kind: story
-status: active
+status: implemented
 title: LLVM streams live as long as on the Rust target
 relations:
 - informed_by: story:llvm-spawn-pattern-bound-streams
@@ -10,15 +10,18 @@ scope:
 - confidence: cited
   path: crates/ignite-llvm/src/lower.rs
 - confidence: cited
+  path: crates/ignite-llvm/src/own.rs
+- confidence: cited
   path: crates/ignite-llvm/src/region.rs
 - confidence: cited
   path: crates/ignite-rt/src/net.rs
 - confidence: cited
   path: crates/ignite/src/apply/plan.rs
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T16:57:53Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-05T16:57:53Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-05T19:10:27Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: llvm-stream-ownership
 
