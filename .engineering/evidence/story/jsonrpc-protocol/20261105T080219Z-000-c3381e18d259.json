@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-05T08:02:19Z",
+  "actor": "human:timo",
+  "artifact": "story:jsonrpc-protocol",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on feat/jsonrpc 0b28ae4e: exit 0, 770 s, 1433 passed, 0 failed, 10 ignored"
+  }
+}

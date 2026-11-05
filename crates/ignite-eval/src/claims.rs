@@ -8,7 +8,7 @@
 //! The enums [`Level`], [`Party`] and [`Source`] mirror the std vocabulary
 //! `std.rfc` by variant name (`docs/layering.md`).
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use ignite_syntax::ast::{Decl, Expr, ExprKind, Ident, Path, Program, Span, StatusKind};
 use ignite_syntax::diagnostic::Diagnostic;
@@ -48,6 +48,55 @@ pub struct SpecClaim {
     /// `None` when `scope` has no `sections` (every section is in scope).
     pub sections: Option<Vec<String>>,
     pub rows: Vec<Row>,
+    /// The text id of a specification that is no RFC, e.g. `line-echo-1`;
+    /// empty for an RFC (19.19).
+    pub id: String,
+}
+
+impl SpecClaim {
+    /// The name the matrix and E092 give the spec: its text id, or
+    /// `rfc<n>` when it has none (19.10, 19.19).
+    pub fn label(&self) -> String {
+        label(&self.id, self.rfc)
+    }
+}
+
+/// [`SpecClaim::label`] of `id` and `rfc`.
+fn label(id: &str, rfc: i64) -> String {
+    if id.is_empty() {
+        format!("rfc{rfc}")
+    } else {
+        id.to_string()
+    }
+}
+
+/// How E091 and E092 name a spec: `RFC <n>`, or its text id.
+fn described(id: &str, rfc: i64) -> String {
+    if id.is_empty() {
+        format!("RFC {rfc}")
+    } else {
+        id.to_string()
+    }
+}
+
+/// E091 (19.19): a `Spec` whose `rfc` and `id` give no label of its own,
+/// with neither set, or with an id of an RFC's label form `rfc<digits>`.
+fn label_problem(constant: &str, rfc: i64, id: &str) -> Option<String> {
+    if rfc == 0 && id.is_empty() {
+        return Some(format!(
+            "spec `{constant}` has neither `rfc` nor `id`; an RFC sets `rfc`, a specification \
+             that is no RFC sets a text `id`"
+        ));
+    }
+    let digits = id.get(..3).is_some_and(|p| p.eq_ignore_ascii_case("rfc"))
+        && id.len() > 3
+        && id[3..].bytes().all(|b| b.is_ascii_digit());
+    digits.then(|| {
+        format!(
+            "spec `{constant}` has the id `{id}`, the label form of an RFC; an RFC sets `rfc`, \
+             and a text id is not `rfc<digits>`"
+        )
+    })
 }
 
 /// One requirement of a claimed spec.
@@ -295,6 +344,7 @@ struct Spec {
     url: String,
     digest: String,
     requirements: Vec<Requirement>,
+    id: String,
 }
 
 /// What a clause says about one requirement.
@@ -322,6 +372,9 @@ struct Builder<'e, 'p, 'm> {
     evaluator: &'e mut Evaluator<'p>,
     module: Module<'m>,
     specs: HashMap<QualName, Option<Spec>>,
+    /// Specs without a label of their own (E091, 19.19): E092 does not
+    /// name them.
+    unlabelled: HashSet<QualName>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -331,12 +384,14 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
             evaluator,
             module,
             specs: HashMap::new(),
+            unlabelled: HashSet::new(),
             diagnostics: Vec::new(),
         }
     }
 
     fn run(mut self) -> Result<Claims, Vec<Diagnostic>> {
         self.catalogue();
+        self.labels();
         let program = self.module.program;
         let types = self.module.types;
         let protocols: Vec<_> = program
@@ -526,6 +581,7 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
                     parties: parties.clone(),
                     sections: sections.clone(),
                     rows,
+                    id: spec.id.clone(),
                 });
             }
             claims.protocols.push(claim);
@@ -629,10 +685,84 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
 
     /// E092 at `path`: its spec is outside `protocol`'s claim, or outside
     /// every claim of the module when `protocol` is `None`.
+    /// E091, third trigger (19.19): every spec the checked module's
+    /// clauses name, in source order, has a label of its own. A spec of
+    /// another module with neither `rfc` nor `id`, or with an id `rfc<n>`,
+    /// is reported at the first reference to it (the checked module's own
+    /// spec by [`Self::catalogue`]); a second spec with a label already
+    /// taken is reported at its first reference. E092 names none of them.
+    fn labels(&mut self) {
+        let program = self.module.program;
+        let types = self.module.types;
+        let first = |path: &Path| path.segments.first().map(|s| s.span);
+        let mut references: Vec<Span> = Vec::new();
+        for decl in &program.decls {
+            match decl {
+                Decl::Fn(f) => references.extend(f.satisfies.iter().filter_map(first)),
+                Decl::Record(r) => {
+                    references.extend(r.satisfies.iter().filter_map(first));
+                    for field in &r.fields {
+                        references.extend(field.satisfies.iter().filter_map(first));
+                    }
+                }
+                Decl::Protocol(p) => {
+                    references.extend(p.conforms.iter().map(|entry| entry.span));
+                    for f in &p.fns {
+                        references.extend(f.satisfies.iter().filter_map(first));
+                    }
+                    references.extend(p.statuses.iter().filter_map(|s| first(&s.requirement)));
+                }
+                Decl::Test(t) => references.extend(t.verifies.iter().filter_map(first)),
+                _ => {}
+            }
+        }
+        let mut seen: HashSet<QualName> = HashSet::new();
+        let mut labels: Vec<(String, QualName)> = Vec::new();
+        for at in references {
+            let Some(q) = types.clause_constant(at).cloned() else {
+                continue;
+            };
+            if !seen.insert(q.clone()) {
+                continue;
+            }
+            let Some(spec) = self.spec(&q, at) else {
+                continue;
+            };
+            if let Some(message) = label_problem(&q.name, spec.rfc, &spec.id) {
+                if q.module != self.module.path {
+                    self.diagnostics.push(Diagnostic::new("E091", at, message));
+                }
+                self.unlabelled.insert(q);
+                continue;
+            }
+            let label = label(&spec.id, spec.rfc);
+            if let Some((_, other)) = labels.iter().find(|(l, _)| *l == label) {
+                let other = other.clone();
+                self.diagnostics.push(Diagnostic::new(
+                    "E091",
+                    at,
+                    format!(
+                        "specs `{}` and `{}` have one label `{label}`; a label names one \
+                         specification",
+                        other.name, q.name
+                    ),
+                ));
+                self.unlabelled.insert(other);
+                self.unlabelled.insert(q);
+                continue;
+            }
+            labels.push((label, q));
+        }
+    }
+
     fn foreign(&mut self, path: &Path, spec: &QualName, protocol: Option<&String>) {
+        if self.unlabelled.contains(spec) {
+            return;
+        }
+        // An RFC is `RFC <n>`; a specification that is no RFC, its id (19.19).
         let rfc = self
             .spec(spec, path.span)
-            .map_or_else(|| spec.name.clone(), |s| format!("RFC {}", s.rfc));
+            .map_or_else(|| spec.name.clone(), |s| described(&s.id, s.rfc));
         let whom = match protocol {
             Some(p) => format!("which `{p}` does not conform to"),
             None => "which no protocol of this module conforms to".to_string(),
@@ -696,6 +826,7 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
             url: text(&value, "url")?,
             digest: text(&value, "digest")?,
             requirements,
+            id: text(&value, "id").unwrap_or_default(),
         })
     }
 
@@ -714,13 +845,13 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
     fn catalogue(&mut self) {
         let program = self.module.program;
         let types = self.module.types;
-        let mut spec: Option<(&Ident, i64, Vec<&Ident>)> = None;
+        let mut spec: Option<(&Ident, i64, String, Vec<&Ident>)> = None;
         let mut requirements = Vec::new();
         for decl in &program.decls {
             let Decl::Const(c) = decl else { continue };
             match vocabulary(types.try_type_of(&c.value)) {
                 Some("Spec") => {
-                    if let Some((first, _, _)) = &spec {
+                    if let Some((first, _, _, _)) = &spec {
                         let message = format!(
                             "a module declares one `Spec` constant; `{}` is a second beside `{}`",
                             c.name.name, first.name
@@ -733,7 +864,12 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
                         continue;
                     };
                     let rfc = int(&value, "rfc").unwrap_or_default();
-                    spec = Some((&c.name, rfc, listed(&c.value)));
+                    let id = text(&value, "id").unwrap_or_default();
+                    if let Some(message) = label_problem(&c.name.name, rfc, &id) {
+                        self.diagnostics
+                            .push(Diagnostic::new("E091", c.name.span, message));
+                    }
+                    spec = Some((&c.name, rfc, id, listed(&c.value)));
                 }
                 Some("Requirement") => requirements.push(c),
                 _ => {}
@@ -759,7 +895,7 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
                      ordinal {}",
                     requirement.section, requirement.ordinal
                 ))
-            } else if let Some((spec_name, spec_rfc, listed)) = &spec {
+            } else if let Some((spec_name, spec_rfc, spec_id, listed)) = &spec {
                 let times = listed.iter().filter(|l| l.name == *name).count();
                 if times == 0 {
                     Some(format!(
@@ -773,8 +909,14 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
                     ))
                 } else if requirement.rfc != *spec_rfc {
                     Some(format!(
-                        "requirement `{name}` has rfc {}, and `{}` is RFC {spec_rfc}",
-                        requirement.rfc, spec_name.name
+                        "requirement `{name}` has rfc {}, and `{}` is {}",
+                        requirement.rfc,
+                        spec_name.name,
+                        if spec_id.is_empty() {
+                            format!("RFC {spec_rfc}")
+                        } else {
+                            format!("`{spec_id}`, which is no RFC")
+                        }
                     ))
                 } else {
                     None

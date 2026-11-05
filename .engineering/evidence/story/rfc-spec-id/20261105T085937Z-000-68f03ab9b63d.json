@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-05T08:59:37Z",
+  "actor": "human:timo",
+  "artifact": "story:rfc-spec-id",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on feat/rfc-spec-id 831b72d4, third run: exit 0, 453 s, 1448 passed, 0 failed, 10 ignored (runs 1-2 failed on the apply::host::recovery ETXTBSY race)"
+  }
+}

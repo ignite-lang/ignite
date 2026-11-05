@@ -1,0 +1,19 @@
+package std.rfc.text3
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const TEXT3: Spec = Spec {
+  id = "text-3.0"
+  title = "The fixture specification that is no RFC"
+  url = "https://example.invalid/text-3.0"
+  digest = "sha256:0003"
+  requirements = [R1_1]
+}
+
+const R1_1: Requirement = Requirement {
+  section = "1"
+  ordinal = 1
+  level = Must
+  source = Prose
+  text = "A peer MUST answer."
+}

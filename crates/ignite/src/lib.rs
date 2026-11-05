@@ -770,8 +770,19 @@ fn load_program_std(
     std: Option<&Path>,
     extra: &[&str],
 ) -> Result<(ParsedFile, StdLibrary), Error> {
+    load_program_text_std(file, None, std, extra)
+}
+
+/// [`load_program_std`] with the program's text `text` instead of the
+/// file's on disk when given.
+fn load_program_text_std(
+    file: &Path,
+    text: Option<String>,
+    std: Option<&Path>,
+    extra: &[&str],
+) -> Result<(ParsedFile, StdLibrary), Error> {
     let root = std_root(std)?;
-    let parsed = parse_program(file)?;
+    let parsed = parse_program_text(file, text)?;
     let mut roots: BTreeSet<String> = parsed.std_modules().collect();
     let has_assembly = parsed
         .program
@@ -906,7 +917,17 @@ impl ParsedFile {
 /// files `<name>.ignite` beside it whose `package` is `<program
 /// package>.<name>`; a program without a `package` has none.
 pub(crate) fn parse_program(file: &Path) -> Result<ParsedFile, Error> {
-    let source = read_source(file)?;
+    parse_program_text(file, None)
+}
+
+/// [`parse_program`] with the program's text `text` instead of the file's
+/// on disk (`ignite check --stdin-for`, `docs/slice.md` 1.1); the siblings
+/// are read from disk either way.
+fn parse_program_text(file: &Path, text: Option<String>) -> Result<ParsedFile, Error> {
+    let source = match text {
+        Some(text) => SourceFile::new(file.display().to_string(), text),
+        None => read_source(file)?,
+    };
     let program = parse(&source)?;
     let siblings = parse_siblings(file, &program)?;
     Ok(ParsedFile {
@@ -1095,6 +1116,49 @@ pub fn check(file: &Path) -> Result<(), Error> {
 /// [`default_std_path`]).
 pub fn check_with_std(file: &Path, std: Option<&Path>) -> Result<(), Error> {
     load(file, std)?.check()
+}
+
+/// [`check_with_std`] of the program text `text` as if it were the file at
+/// `file` (`ignite check --stdin-for`, `docs/slice.md` 1.1): diagnostics
+/// name `file`, its siblings and the standard library come from disk, and
+/// `file` is neither read nor written.
+pub fn check_text(file: &Path, text: String, std: Option<&Path>) -> Result<(), Error> {
+    let (parsed, library) = load_program_text_std(file, Some(text), std, EVAL_ROOTS)?;
+    let typed = type_parsed(parsed, &library)?;
+    Loaded { library, typed }.check()
+}
+
+/// The diagnostics of `ignite check --json` (`docs/slice.md` 1.1): one
+/// object per diagnostic, in the order of the text form, with `path`,
+/// `code`, `message` and the 1-based `line`, the 1-based `column` in
+/// characters and the byte `offset` of the span's `start` and `end`.
+pub fn diagnostics_json(source: &SourceFile, diagnostics: &[Diagnostic]) -> ignite_eval::Json {
+    use ignite_eval::Json;
+    let int = |n: usize| Json::Int(i64::try_from(n).unwrap_or(i64::MAX));
+    let position = |offset: usize| {
+        let (line, column) = source.line_col(offset);
+        Json::Object(BTreeMap::from([
+            ("line".to_string(), int(line)),
+            ("column".to_string(), int(column)),
+            ("offset".to_string(), int(offset)),
+        ]))
+    };
+    let mut sorted: Vec<&Diagnostic> = diagnostics.iter().collect();
+    sorted.sort_by_key(|d| (d.span.start, d.code));
+    Json::Array(
+        sorted
+            .into_iter()
+            .map(|d| {
+                Json::Object(BTreeMap::from([
+                    ("path".to_string(), Json::Str(source.path.clone())),
+                    ("code".to_string(), Json::Str(d.code.to_string())),
+                    ("message".to_string(), Json::Str(d.message.clone())),
+                    ("start".to_string(), position(d.span.start)),
+                    ("end".to_string(), position(d.span.end.max(d.span.start))),
+                ]))
+            })
+            .collect(),
+    )
 }
 
 /// A program read, parsed, checked and typed with the standard library and

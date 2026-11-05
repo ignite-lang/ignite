@@ -1,0 +1,34 @@
+package tests.e090
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+// A specification that is no RFC: a text id, no `rfc` (docs/slice.md 19.19).
+const LINE_ECHO_1: Spec = Spec {
+  id = "line-echo-1"
+  title = "A line echo that is no RFC"
+  url = "https://example.invalid/line-echo-1"
+  digest = "sha256:0001"
+  requirements = [R2_1, R2_2]
+}
+
+const R2_1: Requirement = Requirement {
+  section = "2"
+  ordinal = 1
+  level = Must
+  source = Prose
+  text = "A server MUST echo every line."
+}
+
+const R2_2: Requirement = Requirement {
+  section = "2"
+  ordinal = 2
+  level = Should
+  source = Prose
+  text = "A server SHOULD answer within a second."
+}
+
+protocol Echo conforms [LINE_ECHO_1] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}

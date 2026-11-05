@@ -84,6 +84,11 @@ fn build(
 
 /// `std.rfc` from the repository's `std/rfc.ignite`, then [`PROGRAM`].
 fn modules() -> Vec<Built> {
+    modules_of(PROGRAM)
+}
+
+/// `std.rfc`, then `program`, a module `tests.claims`.
+fn modules_of(program: &str) -> Vec<Built> {
     let std = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../std/rfc.ignite");
     let rfc = build(
         "std.rfc",
@@ -102,7 +107,7 @@ fn modules() -> Vec<Built> {
     let program = build(
         "tests.claims",
         "claims.ignite",
-        PROGRAM.to_string(),
+        program.to_string(),
         &symbols,
         &typed,
     );
@@ -189,4 +194,63 @@ fn limit_below_minimum_does_not_meet_it() {
             ),
         ]
     );
+}
+
+/// A specification that is no RFC (19.19): its `Spec` and requirements
+/// carry the text id and no `rfc`; the claim is labelled by the id.
+const TEXT_ID_PROGRAM: &str = r#"package tests.claims
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const LINE_ECHO_1: Spec = Spec {
+  id = "line-echo-1"
+  title = "A line echo that is no RFC"
+  url = "https://example.invalid/line-echo-1"
+  digest = "sha256:0001"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  section = "2"
+  ordinal = 1
+  level = Must
+  source = Prose
+  text = "A server MUST echo every line."
+}
+
+protocol Echo conforms [LINE_ECHO_1] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] satisfies [LINE_ECHO_1.R2_1] {
+    return stream.write_all(b"ok")
+  }
+}
+"#;
+
+#[test]
+fn a_spec_with_only_a_text_id_is_claimed_under_its_id() {
+    let built = modules_of(TEXT_ID_PROGRAM);
+    let claims = claims(&built);
+    let [protocol] = claims.protocols.as_slice() else {
+        panic!("one protocol: {claims:?}");
+    };
+    let [spec] = protocol.specs.as_slice() else {
+        panic!("one spec: {protocol:?}");
+    };
+    assert_eq!(spec.constant, "LINE_ECHO_1");
+    assert_eq!(spec.id, "line-echo-1");
+    assert_eq!(spec.rfc, 0);
+    assert_eq!(spec.label(), "line-echo-1");
+    let [row] = spec.rows.as_slice() else {
+        panic!("one row: {spec:?}");
+    };
+    assert_eq!(row.id, "R2_1");
+    assert!(matches!(&row.status, Status::Satisfied(s) if s[0].declaration == "Echo.serve"));
+}
+
+#[test]
+fn an_rfc_spec_is_labelled_by_its_number() {
+    let built = modules();
+    let claims = claims(&built);
+    let spec = &claims.protocols[0].specs[0];
+    assert_eq!(spec.id, "");
+    assert_eq!(spec.label(), "rfc7100");
 }

@@ -924,3 +924,105 @@ fn store_is_hosted_by_its_server() {
         .collect();
     assert_eq!(hosted, [("S.server", "S.counts")]);
 }
+
+/// A `Spec` with only the text id `id` and one MUST, `R1_1`, in package
+/// `package` (19.19).
+fn text_id_catalogue(package: &str, constant: &str, id: &str) -> String {
+    format!(
+        "package {package}\n\nimport std.rfc.{{Level, Party, Source, Requirement, Spec}}\n\nconst {constant}: Spec = Spec {{\n  id = \"{id}\"\n  title = \"A specification that is no RFC\"\n  url = \"https://example.invalid/{id}\"\n  digest = \"sha256:0004\"\n  requirements = [R1_1]\n}}\n\nconst R1_1: Requirement = Requirement {{\n  section = \"1\"\n  ordinal = 1\n  level = Must\n  source = Prose\n  text = \"A peer MUST answer.\"\n}}\n"
+    )
+}
+
+/// The labels of the claim lines `claim conformance of <P> to <label>: …`.
+fn claim_labels(stdout: &str) -> Vec<String> {
+    stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix("claim conformance of "))
+        .filter_map(|rest| rest.split_once(" to "))
+        .filter_map(|(_, rest)| rest.split_once(':'))
+        .map(|(label, _)| label.to_string())
+        .collect()
+}
+
+/// 19.19's label is the id, else `rfc<n>`. A text id `rfc1` beside RFC 1
+/// gives two blocks and two claim lines both labelled `rfc1`, one `yes` and
+/// one `no`, so a reader of the matrix cannot tell which claim holds.
+/// Either `ignite check` rejects the id or the two labels differ.
+#[test]
+fn adversary_a_text_id_cannot_take_an_rfc_label() {
+    let std = fixtures_dir().join("claims_std");
+    let main = format!(
+        "package advlabel\n\nimport std.rfc.rfc1.{{RFC1}}\nimport advlabel.cat.{{FAKE1}}\n\nprotocol Echo conforms [RFC1, FAKE1] {{\n  not_applicable RFC1.R1_1 \"x\"\n  not_applicable RFC1.R1_2 \"x\"\n  unsupported FAKE1.R1_1 \"not done\"\n\n{ADVERSARY_SERVE}}}\n"
+    );
+    let cat = text_id_catalogue("advlabel.cat", "FAKE1", "rfc1");
+    let dir = adversary_dir(
+        "adversary-claims-rfc-label",
+        &[("main.ignite", &main), ("cat.ignite", &cat)],
+    );
+    let std = std.to_str().unwrap();
+    let check = ignite_in(&dir, &["check", "main.ignite", "--std", std]);
+    if check.status.code() != Some(0) {
+        return;
+    }
+    let output = ignite_in(
+        &dir,
+        &["conformance", "main.ignite", "--std", std, "--out", "out"],
+    );
+    let labels = claim_labels(&text(&output.stdout));
+    assert_eq!(labels.len(), 2, "{}", text(&output.stdout));
+    assert_ne!(
+        labels[0],
+        labels[1],
+        "two specs share one label:\n{}",
+        text(&output.stdout)
+    );
+}
+
+/// Two specs with the same text id: the protocol conforms to `TEXT3`
+/// (`text-3.0`), a sibling's `DUP3` has the id `text-3.0` too. E092 then
+/// says `DUP3.R1_1` "belongs to text-3.0, which no protocol of this module
+/// conforms to", which is false of the label it prints.
+#[test]
+fn adversary_two_specs_with_one_text_id_are_told_apart() {
+    let std = fixtures_dir().join("claims_std");
+    let main = format!(
+        "package advdup\n\nimport std.rfc.text3.{{TEXT3}}\nimport advdup.cat.{{DUP3}}\n\nfn answer(x: Int) -> Int satisfies [TEXT3.R1_1, DUP3.R1_1] = x\n\nprotocol Echo conforms [TEXT3] {{\n{ADVERSARY_SERVE}}}\n"
+    );
+    let cat = text_id_catalogue("advdup.cat", "DUP3", "text-3.0");
+    let dir = adversary_dir(
+        "adversary-claims-duplicate-id",
+        &[("main.ignite", &main), ("cat.ignite", &cat)],
+    );
+    let output = ignite_in(
+        &dir,
+        &["check", "main.ignite", "--std", std.to_str().unwrap()],
+    );
+    let stderr = text(&output.stderr);
+    assert_ne!(output.status.code(), Some(0), "{stderr}");
+    assert!(
+        !stderr.contains("belongs to text-3.0, which no protocol of this module conforms to"),
+        "E092 calls text-3.0 unclaimed while `Echo` conforms to text-3.0:\n{stderr}"
+    );
+}
+
+/// A `Spec` that sets neither `rfc` nor `id` gets the label `rfc0`, which
+/// names no specification; 19.19 lists the E091 as not done. It is
+/// admitted silently and its matrix is printed under `rfc0`.
+#[test]
+fn adversary_a_spec_with_neither_rfc_nor_id_is_diagnosed() {
+    let main = format!(
+        "package advrfc0\n\nimport std.rfc.{{Level, Party, Source, Requirement, Spec}}\n\nconst NOID: Spec = Spec {{\n  title = \"neither rfc nor id\"\n  url = \"https://example.invalid/noid\"\n  digest = \"sha256:0009\"\n  requirements = [R1_1]\n}}\n\nconst R1_1: Requirement = Requirement {{\n  section = \"1\"\n  ordinal = 1\n  level = Must\n  source = Prose\n  text = \"A server MUST answer.\"\n}}\n\nprotocol Echo conforms [NOID] {{\n  unsupported NOID.R1_1 \"no\"\n\n{ADVERSARY_SERVE}}}\n"
+    );
+    let dir = adversary_dir("adversary-claims-rfc0", &[("main.ignite", &main)]);
+    let output = ignite_in(&dir, &["check", "main.ignite"]);
+    assert_ne!(
+        output.status.code(),
+        Some(0),
+        "a Spec with neither rfc nor id checked silently"
+    );
+    assert!(
+        text(&output.stderr).contains("E091"),
+        "{}",
+        text(&output.stderr)
+    );
+}

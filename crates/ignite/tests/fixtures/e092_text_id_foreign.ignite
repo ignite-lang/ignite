@@ -1,0 +1,13 @@
+// ignite check --std claims_std
+package tests.e092
+
+import std.rfc.rfc1.{RFC1}
+import std.rfc.text3.{TEXT3}
+
+fn answer(x: Int) -> Int satisfies [RFC1.R1_1, TEXT3.R1_1] = x
+
+protocol Echo conforms [RFC1] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}
