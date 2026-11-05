@@ -1,0 +1,53 @@
+// Adversary cases for slice 16 U3 (docs/slice.md 20.3.1, 20.3.2): a local is
+// the tail of an `if` branch or a `match` arm whose value is used, and is read
+// again afterwards (later in the block, or in the next loop iteration). The
+// tail is no move (the place is live after it), so the branch must copy it.
+// With copies, each fn returns what its test asserts.
+
+type State {
+  items: List<Int>
+  count: Int
+}
+
+fn fresh() -> State = State { items = [], count = 0 }
+
+fn branch_tail(c: Bool) -> Int {
+  let s = State { items = [1], count = 2 }
+  let t = if c { s } else { fresh() }
+  s.count + t.count
+}
+
+fn match_tail(o: Option<Int>) -> Int {
+  let s = State { items = [1], count = 2 }
+  let t = match o {
+    Some(_) => s
+    None => fresh()
+  }
+  s.count + t.count
+}
+
+fn branch_tail_in_loop() -> Int {
+  let s = State { items = [1], count = 2 }
+  var total = 0
+  var i = 0
+  while i < 3 {
+    let t = if i > 0 { s } else { fresh() }
+    total = total + t.count
+    i = i + 1
+  }
+  total
+}
+
+test "a local as a branch tail read later keeps its value" {
+  assert branch_tail(true) == 4
+  assert branch_tail(false) == 2
+}
+
+test "a local as a match arm read later keeps its value" {
+  assert match_tail(Some(1)) == 4
+  assert match_tail(None) == 2
+}
+
+test "a local as a branch tail in a loop keeps its value" {
+  assert branch_tail_in_loop() == 4
+}

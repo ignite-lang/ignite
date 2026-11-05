@@ -1,0 +1,18 @@
+check-todo | 0.067 | 0.127 | 1.94 | 15/0 | 9.5 to 9.9
+check-todo-std | 0.068 | 0.131 | 1.89 | 15/0 | 9.5 to 9.9
+studio-llvm-dev | | 0.498 | | 3 runs | 9.9 to 19.9
+studio-llvm-release | | 0.988 | | 3 runs | 12.0 to 17.8
+studio-rust-dev | | 5.113 | | 3 runs | 9.8 to 21.2
+studio-rust-release | | 7.057 | | 3 runs | 9.6 to 18.9
+terminald-llvm-dev | 0.568 | 0.596 | 1.03 | 3/0 | 9.9 to 21.3
+terminald-llvm-release | 0.926 | 0.895 | 1.05 | 3/0 | 9.3 to 17.8
+terminald-rust-dev | 3.915 | 5.866 | 1.50 | 2/1 | 9.5 to 17.8
+terminald-rust-release | 4.615 | 5.556 | 1.19 | 3/0 | 9.6 to 19.9
+test-fs-llvm-cold | | 0.361 | | 3 runs | 17.7 to 17.7
+test-fs-llvm-warm | | 0.100 | | 3 runs | 17.7 to 17.7
+test-fs-rust-cold | | 5.512 | | 3 runs | 15.0 to 17.2
+test-fs-rust-warm | | 0.109 | | 3 runs | 17.2 to 17.7
+test-process-llvm-cold | | 0.735 | | 3 runs | 22.5 to 22.5
+test-process-llvm-warm | | 0.430 | | 3 runs | 22.5 to 22.5
+test-process-rust-cold | | 8.981 | | 3 runs | 17.7 to 21.7
+test-process-rust-warm | | 0.746 | | 3 runs | 18.9 to 22.5

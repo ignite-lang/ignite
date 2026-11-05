@@ -7,7 +7,7 @@ fn main() {
         let port = ignite_io::args::port()?;
         let ingress = ignite_io::TcpListener::bind(String::from("127.0.0.1"), port.unwrap_or(7400))?;
         ignite_io::log(&format!("listening on 127.0.0.1:{}", ingress.local_port()));
-        let server = Server::<ignite_io::Store<i64>> { listener: ingress.clone(), application: App { state: counts.clone(), handle: (std::sync::Arc::new(|__a0: ignite_io::Store<i64>, __a1: String| respond(&__a0, &__a1)) as std::sync::Arc<dyn Fn(ignite_io::Store<i64>, String) -> String + Send + Sync>) }, executable: String::from("countersd") };
+        let server = Server::<ignite_io::Store<i64>> { listener: ingress.clone(), application: App { state: counts.clone(), handle: (std::sync::Arc::new(|__a0: ignite_io::Store<i64>, __a1: String| respond(__a0, &__a1)) as std::sync::Arc<dyn Fn(ignite_io::Store<i64>, String) -> String + Send + Sync>) }, executable: String::from("countersd") };
         Server__main(&server)
     }))
 }

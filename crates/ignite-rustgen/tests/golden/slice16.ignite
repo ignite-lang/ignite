@@ -1,0 +1,89 @@
+// Slice 16 on the Rust target (docs/slice.md 20.3.4, 20.4.2; 20.0 row 13):
+// a consumed parameter is declared by value and a place moves at its last
+// use; a read-only aggregate parameter stays a reference; a call of a call's
+// result is lowered as one.
+
+type State {
+  items: List<Int>
+  count: Int
+}
+
+fn fresh() -> State = State { items = [], count = 0 }
+
+fn step(state: State, x: Int) -> State {
+  var next = state
+  next.items.push(x)
+  next.count = next.count + 1
+  next
+}
+
+fn run(n: Int) -> State {
+  var s = fresh()
+  var i = 0
+  while i < n {
+    s = step(s, i)
+    i = i + 1
+  }
+  s
+}
+
+fn run_read_after() -> Int {
+  let s = fresh()
+  let t = step(s, 1)
+  t.count + s.count
+}
+
+fn total(state: State) -> Int = state.count + state.items.len()
+
+fn ufcs() -> State {
+  let s = fresh()
+  s.step(2)
+}
+
+protocol Counter {
+  fn serve(stream: TcpStream, application: State) -> Result<Unit, IoError> requires [stream.write] {
+    application.items.push(1)
+    stream.write_all(Int.to_text(application.items.len()).to_bytes())
+  }
+}
+
+fn served(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {
+  let s = fresh()
+  Counter.serve(stream, s)
+}
+
+type Out {
+  log: List<Int>
+}
+
+type Pair {
+  state: State
+  out: Out
+}
+
+fn publish(o: Out) -> Out {
+  var p = o
+  p.log.push(1)
+  p
+}
+
+fn advance(st: Pair) -> Pair = Pair { state = st.state, out = publish(st.out) }
+
+type Actor {
+  state: State
+  handle: fn(State, Int) -> State
+}
+
+fn run_actor(n: Int) -> Actor {
+  var a = Actor { state = fresh(), handle = step }
+  var i = 0
+  while i < n {
+    a.state = a.handle(a.state, i)
+    i = i + 1
+  }
+  a
+}
+
+fn adder(n: Int) -> fn(Int) -> Int = |x| x + n
+
+fn added() -> Int = adder(1)(2)

@@ -3,7 +3,7 @@ format: aep.planning-md/3
 id: story:store-api-gaps
 kind: story
 status: draft
-title: Store keyed by text, with atomic insert and conditional remove
+title: Store keyed by text, with conditional remove and a step that returns an outcome
 summary: 'Close ember''s Store gaps E1 to E4: non-Int keys, insert-or-update, conditional remove, update with an outcome'
 scope:
 - confidence: inferred
@@ -16,14 +16,15 @@ scope:
   path: crates/ignite-rustgen/src
 - confidence: inferred
   path: crates/ignite-types/src
-revision: 5
+revision: 8
 ---
 # Story: store-api-gaps
 
 ## Outcome
 
-`Store<T>` serves a server keyed by text: keys other than `Int`, an atomic insert-or-update, a
-conditional remove, and an update step that returns an outcome beside the new value.
+`Store<T>` serves a server keyed by text: keys other than `Int` (E1), a conditional remove (E3),
+and an update step that returns an outcome beside the new value (E4). E2, the atomic
+insert-or-update, is done (`story:store-atomic-upsert`, PR 19).
 
 ## Context
 
@@ -50,8 +51,8 @@ conditional remove, and an update step that returns an outcome beside the new va
 
 ## Acceptance
 
-- Each of E1 to E4 has an inline test on both targets that fails at `9578530` and passes after;
-  E2's test runs two tasks inserting the same new key and loses neither write.
+- Each of E1, E3 and E4 has an inline test on both targets that fails at `9578530` and passes
+  after; E2 keeps the `upsert` tests of PR 19.
 
 ## Out of Scope
 

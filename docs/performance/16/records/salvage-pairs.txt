@@ -1,0 +1,19 @@
+check-design | 0.089 | 0.120 | 1.32 | 15/0 | 8.7 to 8.8
+check-todo | 0.056 | 0.068 | 1.21 | 15/0 | 8.7 to 8.8
+moves-scale-llvm-200000 | | 0.016 | | 3 runs | 7.5 to 7.5
+moves-scale-llvm-50000 | | 0.013 | | 3 runs | 7.5 to 7.5
+moves-scale-llvm-cold | | 0.181 | | 3 runs | 7.5 to 7.5
+moves-scale-llvm-warm | | 0.017 | | 3 runs | 7.5 to 7.5
+moves-scale-rust-200000 | | 0.032 | | 3 runs | 7.5 to 7.6
+moves-scale-rust-50000 | | 0.028 | | 3 runs | 7.5 to 7.6
+moves-scale-rust-cold | | 3.345 | | 3 runs | 7.5 to 7.8
+moves-scale-rust-warm | | 0.031 | | 3 runs | 7.5 to 7.6
+plan-design | 0.090 | 0.121 | 1.34 | 15/0 | 8.7 to 8.8
+terminald-llvm-dev | 0.463 | 0.506 | 1.07 | 3/0 | 7.7 to 8.5
+terminald-llvm-release | 0.594 | 0.662 | 1.19 | 3/0 | 7.0 to 8.5
+terminald-rust-dev | 3.727 | 4.151 | 1.02 | 3/0 | 8.0 to 8.7
+terminald-rust-release | 4.092 | 3.955 | 1.00 | 3/0 | 7.6 to 9.2
+todod-llvm-dev | 0.412 | 0.519 | 1.16 | 3/0 | 6.7 to 9.0
+todod-llvm-release | 0.799 | 0.772 | 0.97 | 3/0 | 8.2 to 8.7
+todod-rust-dev | 4.362 | 4.402 | 1.18 | 3/0 | 7.0 to 8.8
+todod-rust-release | 4.890 | 4.613 | 0.91 | 3/0 | 6.7 to 9.4

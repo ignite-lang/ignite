@@ -550,6 +550,7 @@ fn decode(json: &Json, ty: &Ty, types: &TypedProgram, path: &str) -> Result<Valu
         )?)))),
         Ty::Fn(..) | Ty::EffectFn(..) => Ok(Value::Fn(qualified(&text_of(tagged("Fn")?, "fn")?))),
         Ty::TcpListener
+        | Ty::Capability(_)
         | Ty::TcpStream
         | Ty::PipeStream
         | Ty::IoError

@@ -1,0 +1,115 @@
+// docs/slice.md 20.0 row 22: one test per "holds" verdict of 20.1, taken
+// from probe p01, run on both targets by
+// `slice16::fixtures_pass_on_both_targets`.
+
+import std.option.*
+
+enum Tree { Leaf, Node(Int, Tree, Tree) }
+
+type Point {
+  x: Int
+  y: Int
+}
+
+fn Point.origin() -> Point = Point { x = 0, y = 0 }
+
+fn Point.sum(p: Point) -> Int = p.x + p.y
+
+fn sum(t: Tree) -> Int = match t {
+  Leaf => 0
+  Node(v, l, r) => v + sum(l) + sum(r)
+}
+
+fn digit(b: Byte) -> Int = match b {
+  b'0'..=b'9' => b.to_int() - 48
+  _ => -1
+}
+
+fn first_none(xs: List<Option<Int>>) -> Int {
+  var i = 0
+  loop {
+    let found = match xs[i] {
+      None => break
+      Some(_) => i
+    }
+    i = found + 1
+  }
+  i
+}
+
+test "unwrap_or and != on Option" {
+  let a: Option<Int> = Some(3)
+  let b: Option<Int> = None
+  assert a.unwrap_or(0) == 3
+  assert b.unwrap_or(7) == 7
+  assert a != None
+  assert b != Some(1)
+}
+
+test "a range pattern on Byte" {
+  assert digit(b'7') == 7
+  assert digit(b'0') == 0
+  assert digit(b'x') == -1
+}
+
+test "a raw text literal" {
+  let j = r#"{"a": "b\n"}"#
+  assert j.len() == 12
+  assert j.starts_with("{{\"a\"")
+}
+
+test "a raw byte literal" {
+  assert br"\x".len() == 2
+  assert br"\x" == b"\\x"
+}
+
+test "a unicode escape" {
+  assert "\u{41}\u{42}" == "AB"
+  assert "\u{e9}" == "é"
+}
+
+test "an interpolation holding a string literal" {
+  let n = 2
+  assert "<{"a" + "b"}:{n}>" == "<ab:2>"
+}
+
+test "tuple fields" {
+  let t = (1, "two", true)
+  assert t.0 == 1
+  assert t.1 == "two"
+  assert t.2
+}
+
+test "break as a match arm's value" {
+  assert first_none([Some(1), Some(2), None, Some(4)]) == 2
+  assert first_none([None]) == 0
+}
+
+test "a boxed recursive enum" {
+  let t = Node(1, Node(2, Leaf, Leaf), Node(3, Node(4, Leaf, Leaf), Leaf))
+  assert sum(t) == 10
+}
+
+test "map operations in key order" {
+  var m: Map<Text, Int> = Map.empty()
+  m.put("b", 2)
+  m.put("a", 1)
+  m.put("c", 3)
+  m.remove("c")
+  assert m.len() == 2
+  assert m.get("a") == Some(1)
+  assert m.contains("b")
+  assert m.keys() == ["a", "b"]
+  var seen = ""
+  for (k, v) in m {
+    seen = seen + k + v.to_text()
+  }
+  assert seen == "a1b2"
+}
+
+test "an associated fn" {
+  assert Point.origin() == Point { x = 0, y = 0 }
+  assert Point.sum(Point { x = 2, y = 3 }) == 5
+  let make = Point.origin
+  assert make().x == 0
+}

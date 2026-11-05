@@ -285,6 +285,99 @@ fn todo_example_model_matches_golden() {
     compare(&golden_dir().join("todo.model.json"), &model);
 }
 
+/// `docs/slice.md` 21.0 row 25: the four capability resources in the model,
+/// `Launcher`'s `maximum_children` as a default.
+#[test]
+fn studio_model_matches_golden() {
+    let fixture = fixtures_dir().join("slice17/studio.ignite");
+    let model = success(&ignite(&["plan", fixture.to_str().unwrap()]));
+    for resource in [
+        r#""id": "Studio.files""#,
+        r#""kind": "Directory""#,
+        r#""id": "Studio.tools""#,
+        r#""maximum_children": 16"#,
+        r#""id": "Studio.entropy""#,
+        r#""id": "Studio.tool""#,
+        r#""flag": "--tool""#,
+    ] {
+        assert!(model.contains(resource), "{resource} missing:\n{model}");
+    }
+    compare(&golden_dir().join("studio.model.json"), &model);
+}
+
+/// Slice 17: only a `TcpListener` provisions the executable that binds it
+/// (16.14). The studio's capability resources, among them `Studio.entropy`,
+/// which sorts before its listener `Studio.ingress`, are created by the
+/// process but provision nothing, so a reader of the first provisioning
+/// edge finds the listener.
+#[test]
+fn only_a_listener_provisions_its_executable() {
+    let fixture = fixtures_dir().join("slice17/studio_defaults.ignite");
+    let json = Json::parse(&success(&ignite(&["plan", fixture.to_str().unwrap()])));
+    let provisioning: Vec<(&str, &str)> = json.object()["edges"]
+        .array()
+        .iter()
+        .map(Json::object)
+        .filter(|edge| edge["kind"].string() == "provisioning")
+        .map(|edge| (edge["from"].string(), edge["to"].string()))
+        .collect();
+    assert_eq!(provisioning, [("Studio.ingress", "Studio.server")]);
+}
+
+/// `docs/slice.md` 15.6: a capability resource needs no binding. Under the
+/// standard `Deployment`, which binds only the studio's listener and
+/// server, `ignite check` is silent and the resolution hosts each of the
+/// four capabilities via `Studio.server`, with the server's binding.
+#[test]
+fn capability_resources_are_hosted_by_their_members_process() {
+    let fixture = fixtures_dir().join("slice17/studio_deployment.ignite");
+    let fixture = fixture.to_str().unwrap();
+    assert_eq!(success(&ignite(&["check", fixture])), "");
+    let json = Json::parse(&success(&ignite(&["plan", fixture])));
+    let resolution: Vec<(&str, &str, &str)> = json.object()["assembly"].object()["resolution"]
+        .array()
+        .iter()
+        .map(Json::object)
+        .map(|entry| {
+            (
+                entry["member"].string(),
+                entry["via"].string(),
+                entry["binding"].object()["variant"].string(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        resolution,
+        [
+            ("Studio.entropy", "Studio.server", "NativeProcess"),
+            ("Studio.files", "Studio.server", "NativeProcess"),
+            ("Studio.ingress", "Studio.ingress", "LocalSocket"),
+            ("Studio.server", "Studio.server", "NativeProcess"),
+            ("Studio.tool", "Studio.server", "NativeProcess"),
+            ("Studio.tools", "Studio.server", "NativeProcess"),
+        ]
+    );
+    let hosted: Vec<&str> = json.object()["edges"]
+        .array()
+        .iter()
+        .map(Json::object)
+        .filter(|edge| edge["kind"].string() == "hosts")
+        .map(|edge| {
+            assert_eq!(edge["from"].string(), "Studio.server");
+            edge["to"].string()
+        })
+        .collect();
+    assert_eq!(
+        hosted,
+        [
+            "Studio.entropy",
+            "Studio.files",
+            "Studio.tool",
+            "Studio.tools"
+        ]
+    );
+}
+
 #[test]
 fn explain_matches_the_goldens_of_15_8() {
     for (path, golden) in [

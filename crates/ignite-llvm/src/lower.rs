@@ -16,7 +16,7 @@ use ignite_syntax::ast::{
     BinaryOp, Block, BraceEntry, Decl, Expr, ExprKind, Ident, Pattern, PatternKind, Program, Stmt,
     StmtKind, UnaryOp,
 };
-use ignite_types::{BraceKind, Builtin, Callee, FnSig, QualName, Ty, TypedProgram};
+use ignite_types::{BraceKind, Builtin, Callee, Capability, FnSig, QualName, Ty, TypedProgram};
 
 use crate::ir::{Func, Generic, Glue, Instance, Module, global};
 use crate::layout::{
@@ -780,9 +780,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// UFCS call whose receiver is the first argument. `e` is the call
     /// expression, for named arguments (`docs/slice.md` section 14.2).
     ///
-    /// A borrowed aggregate goes to a parameter the callee only reads
+    /// A borrowed aggregate goes to a parameter the callee does not consume
     /// without a copy (`docs/llvm.md` section 3), unless a later argument
     /// modifies a variable: then it could change the place before the call.
+    /// A moved place ([`Lower::moved`]) is owned and goes to a consumed
+    /// parameter as its own pointer.
     fn call_with(&mut self, e: Option<&Expr>, symbol: &str, sig: &FnSig, args: &[&Expr]) -> Val {
         if let Some(perm) = e
             .and_then(|e| self.cx.types.named_args(e))
@@ -817,26 +819,37 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// receiver. The arguments are evaluated in source order into values,
     /// then passed in parameter order, so the reorder is invisible to their
     /// effects. The borrow shortcut is skipped: a copy of every aggregate is
-    /// correct whatever the order.
+    /// correct whatever the order. Each borrowed value is copied when it is
+    /// evaluated, as on the positional path: a later argument may move the
+    /// same place into a callee that changes it (`docs/slice.md` 20.3.5).
     fn call_named(&mut self, symbol: &str, sig: &FnSig, args: &[&Expr], perm: &[usize]) -> Val {
         let callee = self.function(symbol, &sig.params, &sig.ret);
         let offset = args.len() - perm.len();
+        let source = |i: usize| {
+            if i < offset {
+                i
+            } else {
+                offset + perm[i - offset]
+            }
+        };
+        let mut param_of = vec![None; args.len()];
+        for i in 0..sig.params.len() {
+            param_of[source(i)] = Some(i);
+        }
         let mut values = Vec::with_capacity(args.len());
-        for arg in args {
+        for (arg, param) in args.iter().zip(&param_of) {
             let v = self.expr(arg, true);
             if v == Val::Never {
                 return Val::Never;
             }
-            values.push(v);
+            values.push(match param {
+                Some(i) => self.owned(&sig.params[*i], v),
+                None => v,
+            });
         }
         let mut operands = Vec::with_capacity(sig.params.len());
         for (i, ty) in sig.params.iter().enumerate() {
-            let src = if i < offset {
-                i
-            } else {
-                offset + perm[i - offset]
-            };
-            operands.push(self.arg(ty, values[src].clone()));
+            operands.push(self.arg(ty, values[source(i)].clone()));
         }
         self.call(&callee, &sig.ret, operands)
     }
@@ -1210,7 +1223,21 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         if pending {
             self.nested -= 1;
         }
-        value
+        self.moved(e, value)
+    }
+
+    /// A place in a move position that is dead after it
+    /// (`TypedProgram::moves`, `docs/slice.md` 20.3.5) as an owned value:
+    /// every value position then takes it as it takes a temporary, passed
+    /// as the place's own pointer to an owned parameter or through a fn
+    /// value, or stored with a shallow `memcpy`, without `copy.` glue.
+    /// Nothing reads the place before it is reassigned or goes out of
+    /// scope, so the taker may change it in place.
+    fn moved(&self, e: &Expr, value: Val) -> Val {
+        match value {
+            Val::Ptr(p, false) if self.cx.types.moves(e) => Val::Ptr(p, true),
+            other => other,
+        }
     }
 
     fn expr_kind(&mut self, e: &Expr, want: bool) -> Val {
@@ -2152,14 +2179,25 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let index = layout.index(name).unwrap_or(index);
         let name = layout.variants[index].0.clone();
         let fields = layout.variants[index].1.clone();
+        // The payloads are stored once every one is evaluated, so each but
+        // the last borrowed one is copied when it is evaluated: a later
+        // payload may move the same place into a callee that changes it
+        // (`docs/slice.md` 20.3.5).
         if let Some(perm) = self.cx.types.named_args(e).map(<[usize]>::to_vec) {
+            let mut field_of = vec![None; args.len()];
+            for (field_i, &src) in perm.iter().enumerate().take(fields.len()) {
+                field_of[src] = Some(field_i);
+            }
             let mut evaluated = Vec::with_capacity(args.len());
-            for arg in args {
+            for (k, (arg, field)) in args.iter().zip(&field_of).enumerate() {
                 let v = self.expr(arg, true);
                 if v == Val::Never {
                     return Val::Never;
                 }
-                evaluated.push(v);
+                evaluated.push(match field {
+                    Some(f) if k + 1 < args.len() => self.owned(&fields[*f].0, v),
+                    _ => v,
+                });
             }
             let mut vals = Vec::new();
             for (field_i, (field_ty, _)) in fields.iter().enumerate() {
@@ -2170,13 +2208,19 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             return self.variant(&ty, &name, vals);
         }
         let mut vals = Vec::new();
-        for (arg, (field_ty, _)) in args.iter().zip(&fields) {
+        let count = args.len().min(fields.len());
+        for (k, (arg, (field_ty, _))) in args.iter().zip(&fields).enumerate() {
             let v = self.expr(arg, true);
             if v == Val::Never {
                 return Val::Never;
             }
             let have = self.ty(arg);
-            vals.push(self.coerce(field_ty, &have, v));
+            let v = self.coerce(field_ty, &have, v);
+            vals.push(if k + 1 < count {
+                self.owned(field_ty, v)
+            } else {
+                v
+            });
         }
         self.variant(&ty, &name, vals)
     }
@@ -2680,7 +2724,14 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             other => other,
         };
-        let r = self.expr(right, true);
+        // A literal compared with `==` or `!=` is read in place, not
+        // copied into the arena, so the comparison sees its bytes.
+        let r = match &right.kind {
+            ExprKind::Str(s) if matches!(op, BinaryOp::Eq | BinaryOp::Ne) => {
+                Val::Ptr(self.literal_ref(s.as_bytes()), false)
+            }
+            _ => self.expr(right, true),
+        };
         if l == Val::Never || r == Val::Never {
             return Val::Never;
         }
@@ -2705,11 +2756,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         }
         if ty == Ty::Text {
             let (a, b) = (self.ptr(&l), self.ptr(&r));
-            let eq = self
-                .f
-                .val(format!("call i8 @ignite_rt_text_eq(ptr {a}, ptr {b})"));
-            let pred = if op == BinaryOp::Ne { "eq" } else { "ne" };
-            return Val::Scalar(self.f.val(format!("icmp {pred} i8 {eq}, 0")));
+            let eq = crate::glue::text_eq(self.m, &mut self.f, &a, &b);
+            return Val::Scalar(if op == BinaryOp::Ne {
+                self.f.val(format!("xor i1 {eq}, true"))
+            } else {
+                eq
+            });
         }
         let r = self.coerce(&ty, &rty, r);
         let t = scalar_type(&ty).unwrap_or("i64");
@@ -3053,6 +3105,13 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 };
                 let p = self.ptr(v);
                 let len = self.list_len(&p);
+                if let Some(at) = items
+                    .iter()
+                    .position(|item| matches!(item.kind, PatternKind::Rest(_)))
+                {
+                    self.rest_list_pattern(items, at, &p, &len, ty, &element, fail);
+                    return;
+                }
                 let ok = self.f.val(format!("icmp eq i64 {len}, {}", items.len()));
                 self.branch_or_fail(&ok, fail);
                 if !items.is_empty() {
@@ -3065,7 +3124,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     }
                 }
             }
-            PatternKind::Wildcard => {}
+            PatternKind::Wildcard | PatternKind::Rest(None) => {}
+            PatternKind::Rest(Some(id)) => {
+                let owned = self.owned(ty, v.clone());
+                self.bind_value(&id.name, ty, owned, true);
+            }
             PatternKind::Int(n) => {
                 let x = self.scalar(v);
                 let (t, n) = match ty {
@@ -3078,10 +3141,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             PatternKind::Str(text) => {
                 let p = self.ptr(v);
                 let lit = self.literal_ref(text.as_bytes());
-                let eq = self
-                    .f
-                    .val(format!("call i8 @ignite_rt_text_eq(ptr {p}, ptr {lit})"));
-                let ok = self.f.val(format!("icmp ne i8 {eq}, 0"));
+                let ok = crate::glue::text_eq(self.m, &mut self.f, &p, &lit);
                 self.branch_or_fail(&ok, fail);
             }
             PatternKind::Binding(id) => {
@@ -3096,6 +3156,76 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let name = path.last().map(|i| i.name.as_str()).unwrap_or("");
                 self.variant_pattern(name, args, v, ty, fail);
             }
+        }
+    }
+
+    /// A list pattern whose element `at` is a rest (`docs/slice.md` 20.5):
+    /// `len >= k` for the `k` other elements, prefix element `i` at index
+    /// `i`, suffix element `j` of `s` at `len - s + j`; a `..name` binds a
+    /// copy of elements `at` to `len - s`, made after every element test.
+    #[allow(clippy::too_many_arguments)]
+    fn rest_list_pattern(
+        &mut self,
+        items: &[Pattern],
+        at: usize,
+        p: &str,
+        len: &str,
+        ty: &Ty,
+        element: &Ty,
+        fail: &str,
+    ) {
+        let fixed = items.len() - 1;
+        let suffix = fixed - at;
+        let ok = self.f.val(format!("icmp sge i64 {len}, {fixed}"));
+        self.branch_or_fail(&ok, fail);
+        let wild =
+            |item: &Pattern| matches!(item.kind, PatternKind::Wildcard | PatternKind::Rest(None));
+        if items.iter().all(wild) {
+            return;
+        }
+        let size = self.layout(element).size;
+        let data = self.f.val(format!("load ptr, ptr {p}, align 8"));
+        for (i, item) in items[..at].iter().enumerate() {
+            if wild(item) {
+                continue;
+            }
+            let place = self.gep(&data, size * i as u64);
+            let sub = self.part(element, place);
+            self.pattern(item, &sub, element, fail);
+        }
+        let named = matches!(items[at].kind, PatternKind::Rest(Some(_)));
+        let end = if suffix == 0 {
+            len.to_string()
+        } else {
+            self.f.val(format!("sub i64 {len}, {suffix}"))
+        };
+        if !items[at + 1..].iter().all(wild) {
+            let end_bytes = self.f.val(format!("mul i64 {end}, {size}"));
+            let tail = self.f.val(format!(
+                "getelementptr inbounds i8, ptr {data}, i64 {end_bytes}"
+            ));
+            for (j, item) in items[at + 1..].iter().enumerate() {
+                if wild(item) {
+                    continue;
+                }
+                let place = self.gep(&tail, size * j as u64);
+                let sub = self.part(element, place);
+                self.pattern(item, &sub, element, fail);
+            }
+        }
+        if named {
+            let start = self.gep(&data, size * at as u64);
+            let count = self.f.val(format!("sub i64 {end}, {at}"));
+            let view = self.temp(ty);
+            self.f
+                .ins(format!("store ptr {start}, ptr {view}, align 8"));
+            let lenp = self.gep(&view, 8);
+            self.f
+                .ins(format!("store i64 {count}, ptr {lenp}, align 8"));
+            let capp = self.gep(&view, 16);
+            self.f
+                .ins(format!("store i64 {count}, ptr {capp}, align 8"));
+            self.pattern(&items[at], &Val::Ptr(view, false), ty, fail);
         }
     }
 
@@ -3144,10 +3274,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let c = self.call(&callee, &cty, Vec::new());
         let ok = if *ty == Ty::Text {
             let (a, b) = (self.ptr(v), self.ptr(&c));
-            let eq = self
-                .f
-                .val(format!("call i8 @ignite_rt_text_eq(ptr {a}, ptr {b})"));
-            self.f.val(format!("icmp ne i8 {eq}, 0"))
+            crate::glue::text_eq(self.m, &mut self.f, &a, &b)
         } else {
             let c = self.coerce(ty, &cty, c);
             let t = scalar_type(ty).expect("a constant pattern on a scalar or Text");
@@ -3393,6 +3520,170 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         self.scalar(&v)
     }
 
+    /// A capability builtin (`docs/slice.md` 21.3 to 21.8): a call of its
+    /// runtime entry, declared on first use so a module without
+    /// capabilities keeps its text. A capability is an `i64` handle of the
+    /// runtime's table; `Invocation` and `ChildExit` cross as their record
+    /// layouts (`IgniteInvocation`, `IgniteChildExit`).
+    fn capability(&mut self, b: Builtin, receiver: Option<&Expr>, args: &[Expr]) -> Val {
+        use Builtin::*;
+        let ptr = || "ptr".to_string();
+        let i64 = || "i64".to_string();
+        let handle = |this: &mut Self| -> String {
+            let r = this.expr(receiver.expect("a method has a receiver"), true);
+            this.scalar(&r)
+        };
+        let child_exit = Ty::Record(QualName::new("std.process", "ChildExit"));
+        let texts = Ty::List(Box::new(Ty::Text));
+        match b {
+            DirectoryTemporary => {
+                self.m
+                    .declare("ignite_rt_directory_temporary", "i32", &[ptr(), ptr()]);
+                self.rt_result(
+                    "directory_temporary",
+                    &[],
+                    Ty::Capability(Capability::Directory),
+                )
+            }
+            DirectoryReadFile | DirectoryReadDirectory => {
+                let (entry, ok) = if b == DirectoryReadFile {
+                    ("directory_read_file", bytes())
+                } else {
+                    ("directory_read_directory", texts)
+                };
+                self.m.declare(
+                    &format!("ignite_rt_{entry}"),
+                    "i32",
+                    &[i64(), ptr(), ptr(), ptr()],
+                );
+                let d = handle(self);
+                let path = self.read_arg(&args[0]);
+                self.rt_result(entry, &[format!("i64 {d}"), format!("ptr {path}")], ok)
+            }
+            DirectoryWriteFile => {
+                self.m.declare(
+                    "ignite_rt_directory_write_file",
+                    "i32",
+                    &[i64(), ptr(), ptr(), ptr()],
+                );
+                let d = handle(self);
+                let path = self.read_arg(&args[0]);
+                let data = self.read_arg(&args[1]);
+                self.rt_result(
+                    "directory_write_file",
+                    &[
+                        format!("i64 {d}"),
+                        format!("ptr {path}"),
+                        format!("ptr {data}"),
+                    ],
+                    Ty::Unit,
+                )
+            }
+            DirectoryCreateDirectory | DirectoryRemove | DirectoryRemoveTree => {
+                let entry = match b {
+                    DirectoryCreateDirectory => "directory_create_directory",
+                    DirectoryRemove => "directory_remove",
+                    _ => "directory_remove_tree",
+                };
+                self.m
+                    .declare(&format!("ignite_rt_{entry}"), "i32", &[i64(), ptr(), ptr()]);
+                let d = handle(self);
+                let path = self.read_arg(&args[0]);
+                self.rt_result(
+                    entry,
+                    &[format!("i64 {d}"), format!("ptr {path}")],
+                    Ty::Unit,
+                )
+            }
+            DirectoryAbsolutePath => {
+                self.m.declare(
+                    "ignite_rt_directory_absolute_path",
+                    "i32",
+                    &[i64(), ptr(), ptr()],
+                );
+                let d = handle(self);
+                self.rt_result("directory_absolute_path", &[format!("i64 {d}")], Ty::Text)
+            }
+            LauncherNew => {
+                self.m.declare("ignite_rt_launcher_new", "i64", &[i64()]);
+                Val::Scalar(self.f.val(format!(
+                    "call i64 @ignite_rt_launcher_new(i64 {})",
+                    ignite_types::LAUNCHER_DEFAULT_MAXIMUM_CHILDREN
+                )))
+            }
+            LauncherStart | LauncherExecute => {
+                let (entry, ok) = if b == LauncherStart {
+                    ("launcher_start", Ty::Capability(Capability::ChildProcess))
+                } else {
+                    ("launcher_execute", child_exit)
+                };
+                self.m.declare(
+                    &format!("ignite_rt_{entry}"),
+                    "i32",
+                    &[i64(), ptr(), ptr(), ptr()],
+                );
+                let l = handle(self);
+                let invocation = self.read_arg(&args[0]);
+                self.rt_result(
+                    entry,
+                    &[format!("i64 {l}"), format!("ptr {invocation}")],
+                    ok,
+                )
+            }
+            ChildProcessId => {
+                self.m.declare("ignite_rt_child_id", "i64", &[i64()]);
+                let c = handle(self);
+                Val::Scalar(self.f.val(format!("call i64 @ignite_rt_child_id(i64 {c})")))
+            }
+            ChildProcessWait => {
+                self.m
+                    .declare("ignite_rt_child_wait", "i32", &[i64(), ptr(), ptr()]);
+                let c = handle(self);
+                self.rt_result("child_wait", &[format!("i64 {c}")], child_exit)
+            }
+            ChildProcessKill => {
+                self.m
+                    .declare("ignite_rt_child_kill", "i32", &[i64(), ptr()]);
+                let c = handle(self);
+                self.rt_result("child_kill", &[format!("i64 {c}")], Ty::Unit)
+            }
+            EntropyNew => {
+                self.m.declare("ignite_rt_entropy_new", "i64", &[]);
+                Val::Scalar(self.f.val("call i64 @ignite_rt_entropy_new()"))
+            }
+            EntropyRandomBytes => {
+                self.m.declare(
+                    "ignite_rt_entropy_random_bytes",
+                    "i32",
+                    &[i64(), i64(), ptr(), ptr()],
+                );
+                let e = handle(self);
+                let count = self.scalar_arg(&args[0]);
+                self.rt_result(
+                    "entropy_random_bytes",
+                    &[format!("i64 {e}"), format!("i64 {count}")],
+                    bytes(),
+                )
+            }
+            SettingOf => {
+                self.m
+                    .declare("ignite_rt_setting_of", "i64", &[ptr(), ptr()]);
+                let flag = self.read_arg(&args[0]);
+                let value = self.read_arg(&args[1]);
+                Val::Scalar(self.f.val(format!(
+                    "call i64 @ignite_rt_setting_of(ptr {flag}, ptr {value})"
+                )))
+            }
+            SettingValue => {
+                self.m
+                    .declare("ignite_rt_setting_value", "void", &[ptr(), i64()]);
+                let s = handle(self);
+                self.rt_out("setting_value", &Ty::Text, &[format!("i64 {s}")])
+            }
+            other => unreachable!("`{other:?}` is no capability builtin"),
+        }
+    }
+
     fn builtin(&mut self, e: &Expr, b: Builtin, receiver: Option<&Expr>, args: &[Expr]) -> Val {
         use Builtin::*;
         let recv = |this: &mut Self| -> Val {
@@ -3628,6 +3919,24 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             BytesEmpty | ListEmpty => self.empty_list(),
             StoreNew => unreachable!("`Store.new()` is lowered by `store_new`"),
+            DirectoryTemporary
+            | DirectoryReadFile
+            | DirectoryWriteFile
+            | DirectoryReadDirectory
+            | DirectoryCreateDirectory
+            | DirectoryRemove
+            | DirectoryRemoveTree
+            | DirectoryAbsolutePath
+            | LauncherNew
+            | LauncherStart
+            | LauncherExecute
+            | ChildProcessId
+            | ChildProcessWait
+            | ChildProcessKill
+            | EntropyNew
+            | EntropyRandomBytes
+            | SettingOf
+            | SettingValue => self.capability(b, receiver, args),
             ClockMonotonic => {
                 self.m.declare("ignite_rt_clock_monotonic", "i64", &[]);
                 Val::Scalar(self.f.val("call i64 @ignite_rt_clock_monotonic()"))

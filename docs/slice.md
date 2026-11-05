@@ -1,4 +1,4 @@
-# Ignite slices 1 to 15: language subset, standard library, substrate and lowering
+# Ignite slices 1 to 16: language subset, standard library, substrate and lowering
 
 Status: implementation contract for the compiler slice, 2026-11-01. It narrows
 `design.md` to what `examples/terminal/terminal.ignite` and `std/` need. Where the two
@@ -425,18 +425,22 @@ may come from:
   from; an assignment `x = e` (or `x.f = e`) adds the roots of `e` to those of `x`, whatever
   the control flow, so a `var` assigned from two parameters needs effects on both; `l.push(e)`
   and `l.append(e)` add the roots of `e` to those of the local `l`;
-- `e.f`, `e[i]`, `e.copy()`, `e.at(i)`, `e.slice(a, b)` and `e?` have the roots of `e`;
+- `e.f`, `e[i]`, `e.copy()`, `e.at(i)`, `e.slice(a, b)` and `e?` have the roots of `e`; so
+  do the container reads that return an element on a receiver `e` of declared type `Map`:
+  `e.get(k)`, `e.remove(k)` and `e.keys()` (since slice 17: a `requires []` fn could otherwise
+  use a `Setting` or `Launcher` held in a `Map`);
   `a.concat(b)` has those of `a` and `b`;
 - a tuple, list literal or record literal has the roots of its elements or field values;
 - `if`, `match` and a block have the roots of every value they may produce: the last
   expression of each branch, arm or block, with that branch's locals in scope;
 - the result of any call has the roots of each argument whose type can hold a substrate
-  handle (`TcpStream`, `TcpListener`, `Store`, `Stdin`, `Stdout`, directly or in a field,
+  handle (`TcpStream`, `TcpListener`, `Store`, `Stdin`, `Stdout`, and since slice 17
+  `Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting` (21.3); directly or in a field,
   payload, element or type argument; a type parameter or an unknown type may). This covers a
   user fn called by name or by UFCS (the receiver is an argument), pure or effectful,
   `requires []` included; a fn value or fn-typed field; a variant constructor (`Some(s)`); a
-  protocol role; and a `Store` method (receiver and arguments). A callee cannot launder a
-  parameter by returning it;
+  protocol role; and every `Store` method, `get`, `remove`, `values`, `update` and `upsert`
+  included (receiver and arguments). A callee cannot launder a parameter by returning it;
 - every other expression has no roots: literals, operators, the other builtin methods and the
   results of substrate operations. Such a value is owned by the function: a stream returned by
   `accept` or `TcpStream.connect` needs no effect for its own operations or for the calls it
@@ -472,15 +476,15 @@ Every generated file starts with
 | `Unit` (type) | `()` |
 | `List<T>` | `Vec<T>` |
 | `Option<T>`, `Result<T, E>` | same |
-| `fn(A, B) -> R` | `fn(A, B) -> R` |
+| `fn(A, B) -> R` | `std::sync::Arc<dyn Fn(A, B) -> R + Send + Sync>` (13.3) |
 | `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError` | `ignite_io::` same name |
 | record `type R { a: T }` | `#[derive(Clone, Debug)] pub struct R { pub a: T }` |
 | `enum E { A, B(T) }` | `#[derive(Clone, Debug)] pub enum E { A, B(T) }` |
-| `fn f(p: T) -> U` | `pub fn f(p: &T) -> U` (parameters, below) |
+| `fn f(p: T) -> U` | `pub fn f(p: &T) -> U`, or `pub fn f(p: T) -> U` when `f` consumes `p` (parameters, below) |
 | `fn f(...) requires [...]` | `pub fn f(...)` |
 | `type R<A> {..}`, `enum E<A> {..}`, `fn f<A>(..)`, a role `fn serve<A>(..)` | `pub struct R<A: Clone + Send + Sync + 'static>` and so on: every type parameter carries these bounds (11.1) |
 | `Store<T>` | `ignite_io::Store<T>` |
-| `fn(p: A) -> R requires [p.*]` | `fn(A) -> R` |
+| `fn(p: A) -> R requires [p.*]` | `std::sync::Arc<dyn Fn(A) -> R + Send + Sync>` |
 | `protocol P { fn serve ... fn connect ... }` | `pub struct P;` and `impl P { pub fn serve ... pub fn connect ... }` |
 | `P.serve(a, b)` | `P::serve(a, b)` |
 | `import std.a.b.{X, Y}` in a program | `use ignite_std::a::b::{X, Y};` |
@@ -520,7 +524,9 @@ The `spawn` arguments are evaluated (and cloned, ownership rule) before the task
 the spawning function keeps its own copies.
 
 **Ownership rule.** Rust moves what Ignite copies. A *place* (an identifier, or a place
-followed by `.field`) used in a value position is emitted with `.clone()`. Value positions:
+followed by `.field`) used in a value position is emitted with `.clone()`, except where
+`TypedProgram::moves` marks it (20.3): that place is dead after its move position, and it is
+emitted bare, so Rust moves it. Value positions:
 call and method arguments, `let`/`var` initializers, assignment right-hand sides, `match`
 scrutinees, `return` operands, list elements, record field values, `for` iterables, and
 operands of `await`, `?`, `!` and `-`. Non-value positions: the receiver of a method call or
@@ -528,18 +534,29 @@ field access, the left-hand side of an assignment, and operands of binary arithm
 comparison and logic operators. Every substrate handle implements `Clone` so this rule has
 no exceptions.
 
-**Parameters.** Every parameter of a fn (not of a protocol role, which a generated `main`
-calls with owned values) is a reference `p: &T`, so a call copies nothing: an argument that
-is a place is passed as `&place`, a parameter that is itself a reference as it is, any other
-argument as `&(value)`; `l.at(i)` on a place `l` passes the element borrowed from the list,
-`ignite_io::checked::at(&l, i, <site>)`, unless another argument of the call changes `l`. A
-parameter the body assigns or changes in place (`push`, `append`, `clear` on it or a field of
-it), and one of a `Copy` type (`Int`, `Byte`, `Bool`, `Unit`, fn types), is copied once on
-entry: `let mut p = p.clone();`. In the body a reference
-parameter is dereferenced as an operand of an operator, a condition or an index (`(*p)`), and
-copied where it is the result of a block, arm or branch. A fn of the module or an imported
-one used as a value is a closure that borrows for it, cast to the fn pointer type:
-`((|__a0: i64| f(&__a0)) as fn(i64) -> i64)`; `spawn f(a)` calls `f(&__spawn_0)`.
+**Parameters.** A parameter of a fn or associated fn that its fn consumes
+(`TypedProgram::consumed`, 20.3.3: changed in place on some path or moved on every path) is
+declared by value, `p: T`, or `mut p: T` when the body assigns or changes it in place, and
+has no entry copy. A protocol role's parameters are `mut name: T` by value, consumed or not
+(a generated `main` calls a role with owned values). Every other parameter is a reference
+`p: &T`, so a call copies nothing: an argument that is a place is passed as `&place`, a
+parameter that is itself a reference as it is, any other argument as `&(value)`; `l.at(i)`
+on a place `l` passes the element borrowed from the list, `ignite_io::checked::at(&l, i,
+<site>)`, unless another argument of the call changes `l`. Such a parameter of type `Int`,
+`Byte`, `Bool`, `Unit` or a fn type (an `Arc`, copied by a reference count) is copied once on entry: `let mut p = p.clone();`. An argument to a
+consumed parameter or to a role parameter is a value: a place that moves is emitted bare,
+any other place with `.clone()`, so `s = step(s, i)` passes `s` without a copy and `let t =
+step(s, 1); t.count + s.count` passes `s.clone()`. In the body a reference parameter is
+dereferenced as an operand of an operator, a condition or an index (`(*p)`), and copied
+where it is the result of a block, arm or branch. A fn of the module or an imported one used
+as a value is a closure in an `Arc` cast to the fn value type (13.3); it takes its arguments
+by value and passes each as its parameter is declared:
+`(std::sync::Arc::new(|__a0: i64| f(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send +
+Sync>)`, and `step(__a0, &__a1)` for a `step` that consumes its first parameter. The calls
+the generator writes itself follow the same rule: `spawn f(a)` calls `f(&__spawn_0)`, or
+`f(__spawn_0)` when `f` consumes the parameter; a generated `main` calls `K.main(&value)`,
+or `K.main(value)` when `K.main` consumes `self`; a `to_text` fn that shows a value in an
+`assert` or `?` report gets `&value`, or `value.clone()` when it consumes it.
 
 **Block values.** A block in *value position* emits its last statement, when it is an
 expression, without a trailing `;` so it becomes the block's value. Value positions: a
@@ -649,6 +666,10 @@ accept loop, connect and exit codes are Ignite in `std.protocol.telnet.TelnetSer
 `std.protocol.telnet.TelnetClient` and `std.protocol.http.HttpServer` (section 14.6), and
 the backends know no component kind by name.
 
+Slice 17 adds the resource kinds `Directory`, `Launcher`, `Entropy` and `Setting`, created by
+the generated `main` after the stores and before the listeners: section 21 (21.3, 21.8)
+supersedes this section where they differ.
+
 ```ignite
 system Terminal {
   resource ingress: TcpListener { address = "127.0.0.1", port = 2323 }
@@ -716,7 +737,9 @@ the component rules are E020 and E104 to E109 (section 14.11). A program with no
 produces a library crate with no executable.
 ### 6.2 Generated projects
 
-For `ignite build terminal.ignite --out DIR`:
+For `ignite build terminal.ignite --target rust --out DIR` (the default target until
+2026-11-05; since `story:llvm-default-target` a build without `--target` is the LLVM target of
+`docs/llvm.md`):
 
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
@@ -743,6 +766,10 @@ C ABI adapter `ignite-rt` (`docs/llvm.md` section 5).
 
 Slice 14 adds `Pipe`, `PipeStream`, `ByteStream` and the `ignite_rt_pipe_*` entries: 18.8 and
 18.9 supersede this section where they differ.
+
+Slice 17 adds files (`Directory`), child processes (`Launcher`, `ChildProcess`), random bytes
+(`Entropy`), launch arguments (`Setting`, `args::flag_from_args`) and the exit hooks: section 21
+supersedes this section where they differ.
 
 Slice 4: blocking. Sockets are `std::net`, standard input is one unbuffered `read(0)` per
 call, every task is an OS thread (`spawn`), and there is no event loop and no tokio. An
@@ -901,15 +928,16 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E032 | import cycle |
 | E049 | a binding inside an or-pattern |
 | E050 | two tests of one module with the same name (section 12.2) |
-| E051 | a test-only item used outside tests and test-only items, or imported (section 12.2), or `Store.new()` there (section 12.3), or `Pipe.pair()` there (section 18.4); a UFCS use is reported by the type checker |
+| E051 | a test-only item used outside tests and test-only items, or imported (section 12.2), or `Store.new()` there (section 12.3), or `Pipe.pair()` there (section 18.4), or since slice 17 `Directory.temporary()`, `Launcher.new()`, `Entropy.new()` or `Setting.of(..)` there (section 21.8); a UFCS use is reported by the type checker |
 | E053 | a test name that is empty or interpolated; reported by the parser (section 12.1) |
 | E041 | (slice 9) a name two glob imports provide, used without an explicit import (section 13.1 row 6) |
 | E054 | nesting deeper than 256 levels of brackets, type arguments, prefix operators or `return` (section 3); string literals nested deeper than 32 interpolations (section 13.1 row 1) |
 | E055 | a record that contains itself through fields and tuples alone, so a value would be infinite; recursion through an enum payload, `Option`, `Result` or `List` is allowed and boxed (section 13.4) |
-| E056 | a parameter of a fn, role, fn type or closure named like an ambient capability: `stdin`, `stdout`, `process`, `net` (section 13.11) |
+| E056 | a parameter of a fn, role, fn type or closure named like an ambient capability: `stdin`, `stdout`, `process`, `net`, since slice 17 also `clock` (section 13.11, 21.1 probe p1) |
 | E057 | a type parameter of a generic record, enum or alias that no field, payload or aliased type uses (section 13.11) |
 | E099 | (slice 14) a bound naming an interface other than `ByteStream` or more than one interface, or `ByteStream` in a type position (section 18.7) |
 | E091 | (slice 15) a catalogue constant, of type `std.rfc.Requirement` or `std.rfc.Spec`, whose value is not literal data (section 19.4); the consistency trigger is the evaluator's (below) |
+| E076 | (slice 16) a second `..` in a list pattern, or a `..name` that is not the last element (section 20.5); reported by the parser |
 
 Keywords are accepted as names in package and import paths, property names and
 record-literal field names.
@@ -972,6 +1000,35 @@ the wrong type), section 19.6.
 
 Fixtures: E091 (literal data) under `crates/ignite-check/tests/fixtures`; E090, E091
 (consistency) and E092 under `crates/ignite/tests/fixtures`, named as in section 19.12.
+
+Codes of slice 16 (section 20.7): E076 above. Changed meanings: E003 is no longer reported for a
+callee that is an expression (`not callable`); E040 also for a callee whose type is no fn type;
+E042 also for a call of an effectful fn-typed expression that is no name and that `ignite-check`
+gives no type (a call's result); E046 splits a list
+column by length and names the missing lengths as list patterns. Fixtures: `e076_rest` and
+`e001_rest_outside_list` under `crates/ignite-syntax/tests/fixtures`; `e040_not_callable`,
+`e043_expression_call_arity`, `e042_effectful_expression_callee`, `e040_rest_binding` and
+`e046_rest` under `crates/ignite-types/tests/fixtures`.
+
+Codes of slice 17 (section 21.9): from the type checker, E140 a `Text` literal path argument
+of a `Directory` method that is absolute, has a `..` component or a NUL, and E141 a flag of a
+`Setting` or `Directory` resource that another resource of the system also uses, or that is
+`--port` or `--ref`; from `ignite run` and `ignite plan --for-apply`, E142 a `Setting` without
+`default` in a member the run or the plan would start. Slice 17 also extends E104 (malformed
+`Directory`, `Launcher` and `Setting` properties), E047 (unknown properties of those kinds and
+`Entropy`), E020 (the resource kinds the text lists), E051 (the test-only constructors), E016
+and E042 (the capability methods, section 21.3) and E056 (`clock`, section 21.1). Fixtures:
+E140 and E141 under `crates/ignite-types/tests/fixtures`, E142 under
+`crates/ignite/tests/fixtures`, named as in section 21.9.
+
+Codes of slice 18 (section 22.10): from the check of the system model (`ignite-eval`), E150 a
+member whose machine subscribes to a signal and whose kind declares no `classify(self, sample)`
+hook over the signal's element type, and E151 a signal the assembly runs and a machine
+subscribes to whose element type is not an outcome type (no fn, handle, reference or signal,
+section 22.3). Slice 18 also drops the "unknown `good` outcome" text of E120 (an unknown
+predicate is E003) and extends E109 to the `classify` hook. Fixtures: `e150_classify_missing`
+and `e151_undecodable_element` under `crates/ignite/tests/fixtures`, `e109_classify_signature`
+under `crates/ignite-types/tests/fixtures`.
 
 Fixtures: E001 (including a keyword as a variable, fn and type name, beside
 `valid_keyword_fields`), E002, E053 and E054 under `crates/ignite-syntax/tests/fixtures`;
@@ -1732,6 +1789,10 @@ the arguments' roots plus the others (`Symbols::effect_sites` lists it).
 `std::sync::Arc<dyn Fn(P1, ..) -> R + Send + Sync>` (generics where cheaper and equivalent). A
 closure lowers to `Arc::new({ let c1 = c1.clone(); .. move |p1, ..| body })`, cloning each
 capture at creation. A named fn used as a value is wrapped the same way.
+A closure literal passed straight to `Store.update`, `Store.upsert` or `List.map`, which call
+it before they return, lowers to a plain `|p1, ..| body` that borrows its captures: no `Arc`,
+no clone per capture, and the same values, since no binding of the enclosing fn changes during
+the call.
 
 **LLVM target (N3).** A fn value is a pair `{ ptr code, ptr env }`. `code` takes `env` first,
 then the parameters. `env` points to a struct of the captures in `ClosureInfo.captures` order,
@@ -2562,12 +2623,23 @@ The design 6.2 envelope's `machines`, `observations`, `artifacts`, `stateSchema`
 
 | rule | diagnostic |
 |---|---|
-| every resource and component of the system is a `bindings` key or in exactly one binding's `includes` | E110 when neither |
+| every resource and component of the system is a `bindings` key, in exactly one binding's `includes`, or a capability resource hosted implicitly (below) | E110 when none of the three |
 | no member is both a key and included, or included by two bindings | E111 |
 | `admits(binding, member)` returns `Some(reason)` for a key | E112 with that reason |
 | a binding's `includes` equals the components its member embeds (`ExecutableInfo.embedded`, 14.14 item 12) | E113, naming the missing or extra member |
 | contracts and policies are never keys | E112 (`admits` is not consulted) |
 
+- Implicit hosting (slice 17, 21.3): a capability resource (`Directory`, `Launcher`, `Entropy`,
+  `Setting`) belongs to the process of the member that creates it and needs no binding. One
+  that is neither a key nor included is hosted by the first declared executable component
+  whose `ExecutableInfo.resources` name it (its embedded components' included), with that
+  component's binding and `via` (the component itself when it is a key, else the key that
+  includes it); its entry is `{"binding": <the server's binding>, "member": "Studio.entropy",
+  "via": "Studio.server"}` and the model gains a `hosts` edge from `via` to it. `admits` is
+  not consulted for it, and E113 does not count it (`includes` names components only). A
+  capability resource no hosted executable creates is E110. A capability resource may still
+  be a key; `admits` then decides as for any key (`std.deploy.Binding` admits none, E112).
+  `TcpListener` and `Store` resources keep needing a key or an `includes`.
 - `assembly.resolution` lists one entry per resource and component, sorted by member id:
   `{"binding": <value>, "member": "Terminal.console", "via": "Terminal.server"}`, where `via`
   is the key whose binding hosts the member (the member itself when it is a key).
@@ -3114,6 +3186,10 @@ Ports:
 - `--port Terminal.ingress=0` binds a free port.
 - The driver reads the port from the child's `listening on <address>:<port>` line (6.1) and
   pins it for every restart of that member.
+- A member's listener, the resource whose `--port RESOURCE=PORT`, pinned port and endpoint
+  the driver uses, is the first `TcpListener` its executable declares
+  (`ExecutableInfo.resources`), the one the generated `main` applies `--port` to on both
+  targets, not the first by resource id (slice 17).
 
 `WorkstationExecutable` members (A10):
 
@@ -3538,7 +3614,7 @@ Other rules:
 |---|---|
 | `machines` | array sorted by id: `{"id", "machine": <encoded initial Machine value>, "member", "subscribes": [refs], "disruption"?}` |
 | `observations` | array sorted by ref: `{"ref", "producer", "element": "<qualified type>", "interval"}` |
-| `edges.provisioning` | resource → the component that binds it (`Terminal.ingress` → `Terminal.server`) |
+| `edges.provisioning` | `TcpListener` resource → the component that binds it (`Terminal.ingress` → `Terminal.server`); no other resource kind provisions its component (a `Store`, the capabilities of 21.3; slice 17) |
 | `edges.readiness` | probe → its target; evaluator → its signal's producer; the routing of 16.8 reads it |
 | `edges.recovery` | member → its supervisor machine |
 
@@ -3894,6 +3970,12 @@ Work:
 1. Frontend: a program's build, `check`, `plan`, `explain`, `run` and `test` load, check and
    type only the std modules it reaches. The reached set is:
    - the modules its files import, transitively;
+   - the modules whose records a builtin signature names, for each type or static owner a
+     loaded file spells (since slice 17): `std.process` for `Launcher` and `ChildProcess`
+     (`ChildExit`, `Invocation`), `std.net` for `Endpoint` (`Endpoint.of`), derived from
+     `ignite_check::CAPABILITY_METHODS`, `BUILTIN_STATICS` and the signatures of
+     `ignite-types` (`ignite_types::builtin_std_modules`); `child.wait()` in a module that
+     imports nothing from `std.process` reaches it;
    - the modules the compiler itself calls into for that command: `std.deploy` for
      assembly resolution (15.6), the kinds' modules for `K.main`, the reducers' modules for
      `ignite run`.
@@ -4065,7 +4147,8 @@ under the existing parent-death rule. Neither promises workload survival during 
 Ordinary `plan` keeps its existing model JSON and options. `--for-apply` requires a live
 host and explicit output file; it obtains a consistent base revision and ownership snapshot,
 checks the source, and prepares immutable local artifacts without changing running resources.
-Target defaults to Rust; profile defaults to dev. LLVM runtime selection follows `build`.
+Target defaults to LLVM (Rust until 2026-11-05, `story:llvm-default-target`); profile defaults
+to dev. LLVM runtime selection follows `build`.
 `--fuel` still bounds planning evaluation. Artifact preparation may build; ordinary planning
 continues to generate no executables. No native build may occur after destructive cutover.
 
@@ -5721,7 +5804,7 @@ ignite conformance FILE [--target rust|llvm] [the build flags of `ignite test`]
 1. Load and check FILE as `ignite check` does. A diagnostic: print it as `ignite check` does,
    exit 2, no stdout.
 2. Read the claim model (19.7). No protocol of FILE conforms: one line on stderr, exit 2.
-3. If any row names a test, build FILE's test executable on the target (default `rust`)
+3. If any row names a test, build FILE's test executable on the target (default `llvm`)
    through `ignite::build_tests`, run it once without arguments, and read its stdout. Result
    lines are read after the `running N tests` line, one entry per test of FILE in the order
    the runner runs them (declaration order, 12.7), each matched against that test's exact
@@ -5968,7 +6051,7 @@ run`'s.
 | D5 | Only the RFCXML sources of RFC 9112 and RFC 9110 are vendored, unmodified, under `docs/rfc/`, with `docs/rfc/README.md` citing the IETF Trust Legal Provisions (19.9). RFC 854, 855 and 1143 are not vendored: their catalogues quote the sentences they need with page or section citations, their digest is recorded from the published text file as read on the import day, and `ignite rfc check` without SOURCE reports them `unchecked` | vendor all five; tests download | steering decision, 2026-11-03: the post-2008 RFCs are under the Trust's licence; the gate runs offline; `rfc check` of the imported catalogues needs their bytes (1.49 MB) |
 | D6 | `ignite rfc import FILE [--sections] [--package] [--url] [--out]` reads a local RFCXML v3 file with a hand-written reader (`crates/ignite/src/rfc/xml.rs`, no dependency, so the commit needs no "replaces" line). The digest is `sha256:<hex>` through the existing `sha2` dependency. Extraction as 19.8 | an XML crate | RFCXML uses a small subset of XML; no new dependency |
 | D7 | `std.rfc` and `std.rfc.*` are leaf by a prefix rule (19.11), in `docs/layering.md` and `layering.rs`; U1 adds it | one row per module | five catalogues now and more with every protocol; a prefix rule needs no edit per catalogue |
-| D8 | `ignite conformance FILE [--target rust\|llvm]`, default `rust`. It builds FILE's test executable on that target through `ignite::build_tests`, runs it once, and reads the result lines between `running N tests` and the first blank line. Output and verdicts as 19.10, with the claim line `claim conformance of <P> to rfc<n>: yes\|no (<g> gaps, <f> failures, <i> inconclusive)`. Exit 0 when every claim holds, 1 when one does not, 2 on a diagnostic, usage error or no conforming protocol, 3 on a test build or run failure or IO | run on all targets at once; JSON output | one target per run matches `ignite test --target`; rows 2, 3 and 36 run both and compare. JSON can be added later without changing the text |
+| D8 | `ignite conformance FILE [--target rust\|llvm]`, default `rust` (`llvm` since 2026-11-05, `story:llvm-default-target`). It builds FILE's test executable on that target through `ignite::build_tests`, runs it once, and reads the result lines between `running N tests` and the first blank line. Output and verdicts as 19.10, with the claim line `claim conformance of <P> to rfc<n>: yes\|no (<g> gaps, <f> failures, <i> inconclusive)`. Exit 0 when every claim holds, 1 when one does not, 2 on a diagnostic, usage error or no conforming protocol, 3 on a test build or run failure or IO | run on all targets at once; JSON output | one target per run matches `ignite test --target`; rows 2, 3 and 36 run both and compare. JSON can be added later without changing the text |
 | D9 | Seven units as 19.16, one per story, in five waves | merge importer and catalogues | the stories are already cut this way; their file scopes do not overlap within a wave |
 
 ### 19.16 Work split
@@ -6045,3 +6128,1990 @@ Each has a default, which the units follow unless the review changes it.
 | Q4 | X16: when `std/protocol/telnet.ignite` is split to meet the 400-line bound (19.14 item 14), and along which seam (codec, session, executable kinds) | not in slice 15. The slice that next changes Telnet beyond clauses proposes the split |
 
 Q3 (licence of vendoring the older RFCs) is closed by D5.
+
+## 20 Slice 16: language gaps (wave A)
+
+**Status: contract written 2026-11-04. The independent review (`docs/slice16-review.md`, 4
+blockers, 5 should-fix, 14 notes) is resolved in this text; its "Resolution" section maps each
+finding to the place that resolves it. Implemented 2026-11-04 to 2026-11-05 in units U1 to U6
+(20.10); every row of 20.0 has a dated row in `STATUS.md`.** The rows of 20.0 are
+required checks, not results.
+
+Sources:
+
+- `docs/vision.md` §4 row "A language gaps" and row "C actors P1 to P3" (which needs "A
+  (last-use moves), T1"), §4.1, §5, §6, §7 (T1, T2, T3, T4), invariants 3, 7, 8 and 9.
+- `docs/friction.md` rows 1, 2, 4, 7, 8, 9, 10, 12, 13, 15 and 17; `docs/actors.md` R1, §3.3
+  and the P1 and P4 rows; `docs/protocols.md` §5.2; `docs/syntax.md` P9 and R7; `docs/llvm.md`
+  §3, §3.1 and §4.
+- This file: sections 3, 6, 8, 13 (slice 9: 13.3 closures, 13.4 boxing, 13.7 ranges), 14.3
+  (`Map`), 14.8 (T1), and 19.0 to 19.18 (the structure this section follows).
+
+The base of the slice is commit `7ab3f7c`, the slice-15 branch head; it will be rebased onto the
+merge of slice 15 into `main`, and the before tree of 20.12 is then that merge. Everything in
+this section cites files and symbols, not lines (vision T3). Where `docs/syntax.md`,
+`docs/actors.md` or `docs/vision.md` disagree with this section, this section wins and records
+the point in 20.8.
+
+Most of the wave-A row holds already: slice 9 and slice 10 delivered it, and 20.1 cites the test
+for each item. The slice adds what is missing:
+
+- last-use moves (actors R1): a frontend analysis in `ignite-types` that marks the arguments,
+  initializers and results that may take a place's value without a copy, and the parameters a
+  callee consumes; both backends drop the copy there (20.3);
+- calls of fn-typed expressions, `adder(1)(2)`, `fs[i](x)`, `(|x: Int| x * 3)(2)` (20.4);
+- rest patterns in list patterns, `[_, _, ..]`, `[first, ..rest]`, `[.., last]`, as `docs/syntax.md`
+  P9 proposes them, with its code E076 (20.5);
+- a both-target fixture for every item that holds, and the records.
+
+### 20.0 Acceptance
+
+Every row is a required check. "Exit 0, silent" means exit status 0, empty stdout and empty
+stderr. A test name is `<file>::<test>` in its crate's single integration-test binary
+(`cargo test -p <crate> --test main <file>::<test>`). "Both targets" means `--target rust` and
+`--target llvm`. The fixtures named `slice16/…` are under `crates/ignite/tests/fixtures/slice16/`.
+`STATUS.md` gets one dated row per row of this table (row 27).
+
+| # | check | command | required observation | unit |
+|---|---|---|---|---|
+| 1 | the moves analysis marks R1's shape | `cargo test -p ignite-types --test main moves::a_var_passed_and_reassigned_moves` | the test types the source of `run` and `step` of 20.1's probe p07 (inline in the test) and collects every expression for which `TypedProgram::moves` is true, as (line, col). The list is exactly the `s` in `s = step(s, i)`, the `state` in `var next = state` and the `next` that is `step`'s result; `consumed(&Callee::Fn(step), 0)` is true, `consumed(&Callee::Fn(step), 1)` false | U1 |
+| 2 | a read after the move point keeps the copy | `moves::a_later_read_keeps_the_copy` | for each case of 20.3.2's list "no move" (a read later in the block, a read in the next loop iteration, another argument or the receiver of the same call mentioning an overlapping place, among them `take(s, if c { s = fresh(); 0 } else { 0 })`, a use inside the arms of a `match` whose scrutinee is rooted at the variable, a use in the body of a `for` whose iterable is rooted at it, an in-place change after the call) `moves` is false at the argument. With a local `s`, in `if c { consume(s) } else { s.count }` as a fn body's result, `moves` is true at `consume`'s argument. In `consume(t); if c { var t = a } else { var t = b }; t.count` (inner `t`s shadow) `moves` is false at `consume`'s argument | U1 |
+| 3 | positions and places | `moves::every_move_position_moves` and `moves::places_move_through_fields_only` | each move position of 20.3.1 with a dead place is marked; a receiver of a builtin method, a `match` scrutinee, a `for` iterable, an operator operand, a `spawn` argument, a closure capture and the initializer of a pattern `let` are not. `b.f` with `b.f` dead after is marked; `xs[0]`, a boxed field (13.4) and a place rooted at a pattern binding are not. Field paths are disjoint: in `a.state = a.handle(a.state, i)` the argument `a.state` is marked; in `Step { state = st.state, out = publish(st.out) }` with `st` dead after, `st.state` is marked; in `answer(state, reply, state.table.values())` `state` is not. No expression whose type is `Int`, `Byte`, `Bool`, `Unit`, a quantity, a handle type or a fn type is marked | U1 |
+| 4 | consumed parameters are a fixpoint | `moves::consumed_is_a_fixpoint` | in a module with `a(x)` calling `b(x)` at its last use, `b(y)` changing `y` in place and calling `a`, and `c(z)` only reading `z`: `a` and `b` consume their parameter, `c` does not. `d(m)` whose only change is `m.put(k, v)` consumes `m`; `e(p)` that passes `p.items` to a consumed parameter on every path consumes `p`. `pick(a, b, c) = if c { a } else { b }` consumes neither `a` nor `b` (each is moved on one path only, 20.3.3), and neither does `unwrap_or` in `std/option.ignite` consume `fallback`. A program fn whose last use of a local passes it to a std fn that consumes its parameter moves it; `ModuleTypes::consumed` of the std module lists that fn | U1 |
+| 5 | closure bodies are not entered | `moves::closure_bodies_never_move` | no expression inside a closure body is marked, and creating a closure that captures `s` counts as a read of `s` | U1 |
+| 6 | the checker accepts calls of fn-typed expressions | `cargo test -p ignite-check --test main fixtures::` | fixture `crates/ignite-check/tests/fixtures/valid_expression_calls` (`adder(1)(2)`, `fs[1](10)`, `(|x: Int| x * 3)(2)`, `(h.run)(2)`, `pick(true)(3)`): exit silent. `nope(1)(2)` in fixture `e003_unknown_variable` gives one E003 `unknown name \`nope\`` and no `not callable` | U2 |
+| 7 | the typer types them | `cargo test -p ignite-types --test main fixtures::` | fixture `valid_expression_calls` (the same source with a checked use of each result) is silent. `e040_not_callable`: `(1)(2)`, `xs[0](1)` with `xs: List<Int>` and `"a"(1)` give one E040 each, `type mismatch: this expression has type \`<T>\` and cannot be called`. `e043_expression_call_arity`: `adder(1)(2, 3)` gives one E043. `valid_expression_calls` also holds `hs[0](conn)` with `hs: List<fn(c: PipeStream) -> Int requires [c.write]>` and `(h.send)(conn)` with an effectful fn field, inside a fn that `requires [conn.write]`: silent, as `h.send(conn)` is today. `e042_effectful_expression_callee`: `pick_sender(true)(conn)`, with `pick_sender` returning that effectful fn type, gives one E042, the message of 20.7; the same fn without `conn.write` in `requires` gives the E042 and no E016. `e042_closure.expected` and `e017_closure.expected` are unchanged | U2 |
+| 8 | closures already hold, both targets | `cargo test -p ignite --test main slice16::closure_shapes_pass_on_both_targets` | `ignite test slice16/closures.ignite --target all` exits 0, every test passed on both targets, 0 failed. The fixture holds the closure tests of 20.1's probes p02, p08 and p04b: captures by copy, a var captured and then changed (the closure keeps the old value), a generic fn returning a closure that captures a `T`, a closure returning a closure, a closure in a record kept in a `Store`, a closure passed to a spawned task, a closure that writes through a captured `PipeStream` called through its `let` binding, and a record holding `handle: fn(S, M) -> S` stepped in a loop (the actors §5.1 shape) | U2 |
+| 9 | Rust: R1 is linear | `cargo test -p ignite-rustgen --test main slice16::state_threading_is_linear` | the test builds `slice16/moves_scale.ignite` once on the Rust target (dev profile) with the helpers `crates/ignite-rustgen/tests/slice9.rs` uses (`common::lower_tests` with the repository's `std/` and cargo), then runs the test executable twice, with the exact filters "50000 steps through a call" and "200000 steps through a call". Both pass. The time of each is the `finished in` figure of the runner's `test result:` line; the 200,000-step time is under 8 times the 50,000-step time (linear is about 4; p07's quadratic growth is about 20 per factor 4) | U3 |
+| 10 | LLVM: R1 is linear | `cargo test -p ignite --test main slice16::llvm_state_threading_is_linear` | the same as row 9 on the LLVM target (dev, `-O0`), through `ignite test slice16/moves_scale.ignite --target llvm <filter>`, each filter run twice and the second run's `finished in` figure taken | U4 |
+| 11 | Rust: moves keep value semantics | `cargo test -p ignite-rustgen --test main slice16::fixtures_pass` | with the same helpers as row 9, the Rust target builds `slice16/moves.ignite` and `slice16/calls.ignite` (both import std) with rustc without an error (in particular no E0382, E0505 or E0507) and every test of both passes | U3 |
+| 12 | LLVM: moves keep value semantics | `cargo test -p ignite --test main slice16::llvm_fixtures_pass` | `ignite test slice16/moves.ignite slice16/calls.ignite --target llvm`: exit 0, every test passed, built against the debug runtime that overwrites released memory with 0xDB (`docs/llvm.md` §4) | U4 |
+| 13 | Rust golden | `cargo test -p ignite-rustgen --test main golden::last_use_moves_and_expression_calls` | `crates/ignite-rustgen/tests/golden/slice16.ignite` lowers to exactly `slice16.rs`. In it `step` (which moves its parameter into `var next`, as p07's does) is declared `fn step(state: State, x: &i64) -> State`, the call in `run` is `step(s, &i)` with no `.clone()` on `s`, a read-only aggregate parameter stays `&T`, a call to a consumed parameter whose argument is read later passes `.clone()`, a role called with a moving argument receives it bare, and `adder(1)(2)` is a call of the call's result | U3 |
+| 14 | LLVM golden | `cargo test -p ignite-llvm --test main golden::last_use_moves_and_expression_calls` | `crates/ignite-llvm/tests/golden/slice16.ignite` (self-contained, no std, as the other LLVM goldens) lowers to exactly `slice16.program.ll`. The test also asserts on the text: in `run`, no `copy.` call lies between the loop head and the call of `step`, and the call passes the slot of `s` (the loop's release block keeps its `copy.State`, `docs/llvm.md` §4); in `run_read_after`, a `copy.State` call precedes the call of `step`; `read_only_parameters_are_borrowed` and `loops_release_their_region` still pass | U4 |
+| 15 | codegen revision | read `apply::plan::CODEGEN_REVISION` in `crates/ignite/src/apply/plan.rs` | after W3 one step past its value at the slice base, one step for U3 and U4 together (U4 does not edit `plan.rs`); after W4 one step further | U3, U5 |
+| 16 | rest pattern syntax | `cargo test -p ignite-syntax --test main fixtures::` (`fixtures::fixtures_match_expected_diagnostics`) | fixture `valid_rest_patterns` (`[..]`, `[_, _, ..]`, `[first, ..rest]`, `[.., last]`, `[a, .., z]`, `[[a, ..], ..]`, `[] \| [_, ..]` in one arm, a rest on `Bytes`) parses, silent. `e076_rest`: `[.., x, ..]`, `[..a, ..b]` and `[..init, last]` give one E076 each, with the two messages of 20.7. `e001_rest_outside_list`: `(a, ..)`, `Some(..)` and a bare `..` arm give one E001 `expected pattern, found \`..\`` each | U5 |
+| 17 | rest pattern types | `cargo test -p ignite-types --test main fixtures::` | `valid_rest_patterns` is silent, among it `[] => …`, `[_, ..] => …` (exhaustive on `List<Int>` and on `Bytes`) and `[first, ..rest]` passing `rest` where `List<Int>` is expected. `e040_rest_binding`: `rest` of a `List<Int>` passed where `Int` is expected, and `rest` of a `Bytes` where `List<Int>` is expected: one E040 each. `e046_rest`: `[] , [_, _, ..]` gives E046 `match does not cover \`[_]\``; `[x, ..]` alone gives `match does not cover \`[]\``; on `List<Bool>`, `[]`, `[_]`, `[_, _]`, `[_, true, ..]`, `[.., false, _]` gives `match does not cover \`[_, false, true, _]\`` (the case where prefix and suffix overlap below length P + S, 20.5); on `List<Bool>`, `[true]`, `[]`, `[_, _, ..]` gives `match does not cover \`[false]\``. `valid_rest_patterns` holds the same five `List<Bool>` arms plus `[_, _, _, _, ..]`, silent. `e046_patterns.expected`'s list case reads `match does not cover \`[_, _, ..]\`` (20.7); every other line of it is unchanged | U5 |
+| 18 | rest patterns run | `cargo test -p ignite-rustgen --test main slice16::fixtures_pass`, `cargo test -p ignite --test main slice16::llvm_fixtures_pass` | both now also build `slice16/rest.ignite` and every test passes: lengths 0 to 4 against `[]`, `[_]`, `[_, _, ..]`; `[first, ..rest]` binding a copy (pushing to a `var` bound to `rest` leaves the scrutinee unchanged); `[.., last]`; `[a, .., z]` on two and on three elements; nested rests; the rest on `Bytes`; protocols §5.2's `([_, _, ..], _, _)` inside a tuple | U5 |
+| 19 | rest goldens | `cargo test -p ignite-rustgen --test main golden::rest_patterns`, `cargo test -p ignite-llvm --test main golden::rest_patterns` | `rest.ignite` in each crate's `tests/golden/` lowers to exactly `rest.rs` and `rest.program.ll` | U5 |
+| 20 | the evaluator agrees on rest patterns | `cargo test -p ignite --test main eval::` | `eval_equivalence.ignite` gains a `rest_` family (at least four fns); `fixture_covers_every_family` lists it; `evaluator_agrees_with_the_rust_target` and `evaluator_agrees_with_the_llvm_target` pass | U5 |
+| 21 | every wave-A fixture on both targets through the CLI | `cargo test -p ignite --test main slice16::fixtures_pass_on_both_targets` | `ignite test` of `slice16/holds.ignite`, `calls.ignite`, `moves.ignite` and `rest.ignite`, each with `--target all`: exit 0, every test passed on both targets, 0 failed | U6 |
+| 22 | the items that hold | same, `holds.ignite` | the fixture holds one test per "holds" verdict of 20.1 (unwrap_or and `!=` on `Option`, a range pattern on `Byte`, raw text and raw byte literals, a `\u{..}` escape, an interpolation holding a string literal, tuple fields, `break` as a match arm's value, a boxed recursive enum, `Map` operations in key order, an associated fn), taken from probe p01 | U6 |
+| 23 | the evaluator agrees on calls and moves | `cargo test -p ignite --test main eval::` | `eval_equivalence.ignite` gains a `call_` family (expression callees, at least three fns) and a `move_` family (fns whose arguments move, with a read of the moved variable's old value through a copy made before, at least three fns); both agreement tests and `fixture_covers_every_family` pass | U6 |
+| 24 | the workspace | `cargo test --workspace` after each unit | passes. Golden changes in U3 and U4 only as 20.3.4 and 20.3.5 allow (a parameter's passing mode, a dropped copy at a move, a `.clone()` or `copy.` at a call to a consumed parameter, renumbered metadata); in U1, U2 and U6 no golden changes; in U5 only the rest goldens are new | every unit |
+| 25 | inline tests | `task test-ignite` | passes on both targets; the per-target count equals the base's plus the slice's std additions (none planned) | every unit |
+| 26 | end-to-end unchanged | `cargo test -p ignite --test main -- terminal:: todo:: failover:: slice9:: slice10_llvm::` | passes; `crates/ignite/tests/terminal.rs` and `todo.rs` unchanged against the base | U3, U4, U6 |
+| 27 | records and gate | `task gate` on the slice branch; read `STATUS.md`, `AGENTS.md`, `PLAN.md`, `docs/vision.md`, `docs/friction.md`, `docs/actors.md`, `docs/syntax.md` | exit 0. Every row of this table has a dated `STATUS.md` row naming its command. `AGENTS.md` has a "Slice 16" section with the merge gate's time, counts and exit, and its `crates/ignite-types/` layout row names the moves analysis. `PLAN.md` has a row 16 that says done. `docs/vision.md` §4.1 has a row "16" for wave A, and §5's rows of wave A say where each landed. The stale points of 20.8 are edited where 20.8 says, among them the title of this file. `docs/performance/16/` holds the records of 20.12 | U6 |
+
+### 20.1 Current state and verdicts (at `7ab3f7c`)
+
+Probes are `.ignite` files run with the worktree's `target/debug/ignite test FILE --target all`
+or `ignite check FILE` on 2026-11-03; their sources are folded into the fixtures of 20.0 (p01 into
+`holds.ignite`, p02, p04b and p08 into `closures.ignite`, p03 into `calls.ignite`, p06 into
+`rest.ignite`, p07 into `moves_scale.ignite`).
+
+| item (vision §4 row A) | verdict | evidence |
+|---|---|---|
+| closures capturing locals (`friction` 9, 13; actors P4) | holds; one gap in, two deferred | captures by copy on both targets: tests "closures capture by copy" and "store update with a closure is atomic" of `crates/ignite-rustgen/tests/slice9/features.ignite`, run by `slice9::slice9_features_pass` (Rust) and `slice9::rust_target_features_pass_on_llvm` in `crates/ignite/tests/slice9.rs` (LLVM); the closure in `patch` of `examples/todo/todo.ignite`, exercised by `crud_flow` in `crates/ignite/tests/todo.rs` on both targets. Probes p02, p08 and p04b (20.0 row 8's shapes) pass on both targets. Gaps: (a) a call whose callee is an expression of fn type is E003 `not callable` (p03: `adder(1)(2)`, `fs[1](10)`, `(|x: Int| x * 3)(2)`): **in** (20.4). (b) An unannotated closure parameter whose expected type holds a type parameter only the closure body decides, the shape of actors P4's `call(|r| Get(id, r))`, is E042 twice (p05: `cannot infer type parameter \`T\` of \`call\``, `cannot infer the type of closure parameter \`r\``); annotated, `call(\|r: Reply<Text>\| Get(id, r))` passes (p05b): **deferred** (20.13). (c) A closure that captures a capability and uses it (`\|t\| s.write_all(..)`) passed where a fn type is expected is E017 (p04: `effectful closure (requires [s.write]) where the pure fn type … is expected`); called through its `let` binding it passes (p04b): **deferred**, E017 stays the rule (20.4.3) |
+| `Option.unwrap_or`, `!=` on `Option` (7) | holds | std/option.ignite test "unwrap_or gives the value or the fallback" (`task test-ignite`, both targets); `!= None` in `contains` of `std/text.ignite`; p01 |
+| rest patterns `..` (protocols §5.2) | missing; **in** | p06: `[_, _, ..] => "many"` is E001 `expected pattern, found \`..\``. A list column is covered only by `_` or a binding: p09's `[] => 0, [x] => x` is E046 `match on \`List<Int>\` does not cover every value; add a \`_\` arm or a binding arm` (`crates/ignite-types/src/exhaustive.rs`) |
+| ranges in patterns (8) | holds | test "range patterns" of `slice9/features.ignite` (both targets as above); fixture `e046_ranges` of `crates/ignite-types/tests/fixtures`; p01 |
+| raw strings (2; also 1 and 12, vision §5) | holds | the std/json.ignite tests "encode and parse round trip" and "the accessors read members of the right kind" (`task test-ignite`, both targets); p01 (`r#"…"#`, `br"…"`) |
+| tuple field access `.0` (10) | holds | test "record update and tuple fields" of `slice9/features.ignite`; p01 |
+| `break` as an expression (4) | holds | test "break and continue expressions" of `slice9/features.ignite`; p01 (`None => break` as a `match` arm inside `let`) |
+| recursive enums by boxing (15) | holds | test "boxed recursion" of `slice9/features.ignite`; section 13.4; p01 |
+| static fns on records (17, vision §5) | holds | test "associated fns" of `slice9/features.ignite`; section 13.8 |
+| `Map<K, V>` (design §3.3) | holds | tests "map literal and lookups", "map mutation has value semantics", "for over a map visits pairs in key order", "maps compare structurally" of `crates/ignite-rustgen/tests/slice10/features.ignite`, run by the rustgen `slice10` tests (Rust) and `crates/ignite/tests/slice10_llvm.rs` (LLVM); section 14.3; p01 |
+| last-use moves (actors R1) | missing; **in** | p07, state threaded through a call, `s = step(s, i)` with `step` pushing to `state.items`: Rust 0.04 s for 10,000 steps and 0.84 s for 40,000; LLVM 0.36 s and 7.40 s. Four times the steps cost about 21 times the time on both targets: every step copies the whole state. The same loop with the push inline takes 0.01 s for 40,000 steps. Rust parameters are `&T`, copied on entry when the body changes them (section 6, `mutated_names` in `crates/ignite-rustgen/src/lib.rs`); LLVM passes a fresh copy to a parameter the body modifies (`docs/llvm.md` §3, `region::modified` in `crates/ignite-llvm/src/region.rs`) |
+| T1 failure rule (vision §7) | holds | section 14.8; `failover::a_failing_session_does_not_end_the_service` (`crates/ignite/tests/failover.rs`), `slice10::crashd_survives_failing_handlers` (`crates/ignite-rustgen/tests/slice10.rs`) |
+
+Facts the design relies on:
+
+| fact | where |
+|---|---|
+| A call's callee is any postfix expression in the grammar; `ignite-check` reports E003 `not callable` for every callee that is no name and no path head, and `ignite-types` records `Callee::Local` only for a name | `call` in `crates/ignite-check/src/lib.rs` (its `ExprKind::Field` arm without a path head and its `_` arm); the `ExprKind::Name` branch of the call typing in `crates/ignite-types/src/typer.rs` (grep `Callee::Local`) |
+| `ignite-check` already gives a declared type to a name, a field, a method result, `?`, a tuple field, a closure and an index of a `List` or `Bytes` (not to a call's result), and reads an effectful fn type's effects from it; so `h.send(conn)` with an effectful fn field, and `let f = hs[0]; f(conn)`, check today | `static_type`, `fn_value_effects` in `crates/ignite-check/src/lib.rs` |
+| Rust parameters: a protocol role's are `mut name: T` by value; every other parameter is `&T` (scalars too), cloned on entry when the body changes it or its type is Copy; a role argument is passed as a value (a place with `.clone()`) | `function_line`, `args` in `crates/ignite-rustgen/src/lib.rs`; section 6 |
+| The in-place changes that make a parameter owned today: on LLVM `region::mutates` (`push`, `append`, `clear`, `Map.put`, `Map.remove`, the `Store` mutators, assignments); on Rust `mutated_names` with `mutates_receiver` (`push`, `append`, `clear`, `Map.put`, `Map.remove`, assignments) | `crates/ignite-llvm/src/region.rs`, `crates/ignite-rustgen/src/lib.rs` |
+| The backends and the evaluator already lower a `Callee::Local` call by evaluating the callee as an expression | the `_` arm of `call` in `crates/ignite-rustgen/src/lib.rs`; the `Some(Callee::Local)` arms in `crates/ignite-llvm/src/lower.rs` and `call_expr` in `crates/ignite-eval/src/eval.rs` |
+| The typer's effect pass maps an effectful fn type's `requires` onto a call's arguments for any `Callee::Local` callee; an effectful operation at a span `ignite-check` did not record as an effect site is E042 | `Callee::Local` arm in `crates/ignite-types/src/typer/effects.rs`; `effect_site` in `typer.rs` |
+| A closure parameter takes its type from an annotation or from the expected fn type; a type that still holds a type variable is E042 | `closure` in `typer.rs` |
+| Pattern grammar: `'[' (pattern (',' pattern)*)? ']'` matches a list (or `Bytes`) of exactly that length | section 3; `PatternKind::List` in `crates/ignite-syntax/src/ast.rs` |
+| `PatternKind::List` is matched in `ignite-syntax` (parser), `ignite-check`, `ignite-types` (`typer.rs`), `ignite-eval`, `ignite-rustgen` and `ignite-llvm` (`lower.rs`, `region.rs` `pattern_binds`); `exhaustive.rs` has no list arm, so a list pattern falls to its catch-all rule | grep `PatternKind::List` |
+| Fn values: Rust `Arc<dyn Fn(..) -> R + Send + Sync>`; LLVM `{ ptr code, ptr env }`, environment block in the arena, captures copied at creation, glue ops 0 to 2 | section 13.3; `docs/llvm.md` §3.1 |
+| A call through a fn value passes copies on LLVM, owned values on Rust | `docs/llvm.md` §3; `fn_value` in `crates/ignite-rustgen/src/lib.rs` |
+| `ModuleTypes` derives `Default`; a new query field needs a line in `query_snapshot` | `ModuleTypes`, `query_snapshot` in `crates/ignite-types/src/lib.rs` |
+| `CODEGEN_REVISION` is `ignite-codegen/0.1.0-4` at `7ab3f7c` | `crates/ignite/src/apply/plan.rs` |
+| E076 is free: `docs/syntax.md` §8.3 proposes it for P9 inside T4's range E070 to E079 for that proposal; no code uses it | `docs/syntax.md` §8.3; grep of `crates/` and `docs/slice.md` |
+| The test runner's default timeout is 60 s | `DEFAULT_TIMEOUT` in `crates/ignite-io/src/test.rs` |
+
+### 20.2 Scope and non-goals
+
+In scope: last-use moves (20.3), calls of fn-typed expressions (20.4), rest patterns in list
+patterns (20.5), both-target fixtures for every item that holds, and the records.
+
+Not in scope (20.13 gives the reasons): effectful closures passed as fn values; inferring a
+closure parameter from the closure body; capture by move; moves of pattern bindings, `for`
+elements, closure parameters and anything inside a closure body; rest patterns in tuples and
+variant payloads; the open rows of `docs/friction.md` that are not on the wave-A row; a
+persistent `Table` (actors R1 "Open").
+
+### 20.3 Last-use moves (D1, D2, D3)
+
+A move is an optimisation that must change no observable value: a program means the same with
+and without it, and the evaluator, which copies by construction, stays the reference (row 23).
+The analysis runs once in `ignite-types`, after typing a module, in a new module
+`crates/ignite-types/src/moves.rs`; both backends read its result through `TypedProgram`
+(20.6). It reports no diagnostic.
+
+#### 20.3.1 Tracked variables, move positions and places
+
+Tracked variables: a single-name `let` or `var` binding, and a parameter of a fn, an associated
+fn or a protocol role, whose type is an aggregate or a type parameter: not `Int`, `Byte`, `Bool`,
+`Unit`, a quantity, a handle type (invariant 3) or a fn type (copying a fn value is a reference
+count on Rust; on LLVM its environment copy is left for later, 20.13). Each binding is its own
+variable: a shadowing `let` or `var` starts a new one and neither reads nor reassigns the outer
+one; the analysis works on resolved bindings, not on names. Pattern bindings, `for` elements and
+closure parameters are not tracked.
+
+Move positions, where an aggregate value is taken:
+
+- an argument of a direct call (a named fn, an associated fn, a role, or a UFCS call of a user
+  fn, whose receiver is argument 0) to a parameter the callee consumes (20.3.3);
+- an argument of a call through a fn value;
+- the element argument of the builtins `push` and `put`;
+- the initializer of a single-name `let` or `var`, and the right side of an assignment (not the
+  initializer of a pattern `let`, whose bindings point into it on LLVM);
+- the operand of `return`, and the result expression of a fn body or of a block whose value is
+  used;
+- a list element, a record literal's field value, the base of a record update, a variant,
+  `Some`, `Ok` or `Err` payload, a tuple element.
+
+Not move positions: a receiver of a builtin method, a `match` scrutinee, a `for` iterable, an
+operator operand (also `==` and `+` on `Text`), a `spawn` argument, an `assert` operand, a
+closure capture.
+
+A place in a move position moves when it is a tracked variable `v` or a field chain `v.f.g`
+rooted at one, and that place is dead after the position (20.3.2). A chain through an index
+(`v[i]`), through a boxed field or payload (section 13.4), or rooted at an untracked binding never
+moves.
+
+#### 20.3.2 Liveness
+
+Liveness is per place: a tracked variable `v` or a field path `v.f.g` rooted at it. Two places
+overlap when one is a prefix of the other (`v` and `v.f`, `v.f` and `v.f.g`); `v.f` and `v.g`
+do not. A place is dead after a position when no path from the position mentions an overlapping
+place before that place, or a prefix of it, is reassigned as a whole (`v.f = e` kills `v.f`;
+`v = e` kills every place of `v`) or the fn exits. Evaluation order is section 6's: arguments
+left to right, record fields in source order, then the base. Paths follow `if`, `match` arms,
+loops with their back-edges, `break`, `continue`, `return` and `?`. A mention is any read of an
+overlapping place, an in-place change through one (`v.items.push(x)`, `v.f = e` for a longer
+`v.f.g`), and the creation of a closure that captures `v`.
+
+No move, even when the rule above would allow one:
+
+- inside the arms of a `match` whose scrutinee is a place overlapping the moved one, and inside
+  the body of a `for` whose iterable overlaps it: on LLVM their pattern bindings point into it
+  (`docs/llvm.md` §4), on Rust they borrow it;
+- at an argument when another argument of the same call or of an enclosing call, the receiver
+  of an enclosing builtin, the left operand of an enclosing operator or the receiver of an
+  enclosing index mentions an overlapping place at all: a read, an in-place change, or an
+  assignment to it or to a place rooted at it. A borrowed parameter or an operand read in place
+  would see the moved value change (`f(s, s)`, `f(s.count, s)`, `look(s, wipe(s))`,
+  `s.items.at(wipe(s))`, `s == bump(s)`, `s.items == bump(s).items`, `xs[reset(xs)]`), and on
+  LLVM a later argument that assigns `s` would overwrite the slot the callee owns
+  (`take(s, if c { s = fresh(); 0 } else { 0 })`). For an enclosing call, operator or index the
+  operands that count are those evaluated before the one the move is in and read in place after
+  it ran: a borrowed argument, a builtin or borrowed UFCS receiver, the receiver of a fn-field
+  call, the left operand of a binary operator when it is an aggregate (an `Int`, `Bool` or
+  other scalar left operand is a value once evaluated, and `&&` and `||` branch on theirs before
+  the right one runs), the receiver of an index. An argument of an enclosing call in a move
+  position is a value once evaluated (moved or copied, 20.3.5), and a later one is kept by
+  liveness;
+- anywhere inside a closure body (the analysis does not enter closure bodies).
+
+Examples. R1's shape: in `while i < n { s = step(s, i); i = i + 1 }` the `s` argument moves,
+because `s` is reassigned before any mention. In `let t = step(s, 1); t.count + s.count` it does
+not. A handle loop's `a.state = a.handle(a.state, i)` moves `a.state`: the receiver path
+`a.handle` does not overlap it, and `a.state` is reassigned after the call. A
+`Step { state = st.state, out = publish(st.out) }` with `st` dead after moves `st.state`, and
+`st.out` too when `publish` consumes its parameter.
+`answer(state, reply, state.table.values())` does not move `state` (another argument mentions
+`state.table`); `let values = state.table.values(); answer(state, reply, values)` does.
+
+#### 20.3.3 Consumed parameters
+
+A parameter `p` is consumed when either holds:
+
+- its fn changes it in place on some path: an assignment to `p` or a place rooted at it, or a
+  `push`, `append`, `clear` (`List`, `Bytes`), `put` or `remove` (`Map`) through a place rooted
+  at it. This set is the union of what `region::mutates` (LLVM) and `mutates_receiver` with
+  `mutated_names` (Rust) count today, which the analysis replaces; `consumed` must be a superset
+  of both, so that no parameter the backends own today becomes borrowed;
+- its fn moves `p` or a place rooted at it (`p.items`) on every path that reaches a `return`, a
+  `?` exit or the end of the body (any move position of 20.3.1, including passing it on to a
+  consumed parameter and returning it).
+
+A place rooted at a parameter that is not consumed never moves; it is copied where it is taken,
+as today (`pick(a, b, c) = if c { a } else { b }` copies the one it returns). The set is the least
+fixpoint over each module's fns, computed in import order, so a std fn's set is known before the
+program's. Generic fns have one set per declaration, not per instance. A protocol role's set is
+its declaration's.
+
+Copy count: a parameter consumed by an in-place change was owned before, and its caller passed or
+its entry made one copy, as now. A parameter consumed by a move was copied at the move point on
+every path before; now the caller copies once, or not at all when its argument moves. So no
+call makes more copies than before.
+
+#### 20.3.4 Rust target (U3)
+
+- A consumed parameter is declared by value, `p: T`, or `mut p: T` when the body changes it; the
+  entry copy of section 6 disappears for it. Every other parameter keeps today's form: `&T`,
+  scalars and fn types included (`x: &i64`, cloned on entry when Copy), and a role's parameters
+  stay `mut name: T` by value whether consumed or not.
+- A moving place is emitted bare, without `.clone()` or `&`, to a consumed parameter, to any
+  role parameter and through a fn value. A non-moving argument to a consumed parameter is
+  emitted as a value (a place with `.clone()`).
+- Every call site the backend writes itself follows the same rule: the generated mains' calls of
+  `K.main`, the test runner's calls, `spawn`'s `__spawn_N` (passed by value to a consumed
+  parameter, `&__spawn_N` otherwise), and a named fn wrapped as a fn value (the wrapper passes its
+  owned argument by value to a consumed parameter).
+- rustc must accept every program the checker accepts (vision X23): a move the analysis allows
+  is one rustc's move check allows. Rows 11 and 26 check it on the fixtures, the examples and
+  the end-to-end programs.
+- Section 6's sentence on parameters gets the consumed rule; its `fn(A, B) -> R` row, the "fn
+  types" among the Copy parameters cloned on entry and the `as fn(i64) -> i64` wrapper get 13.3's
+  `Arc<dyn Fn>` (20.8 item 4).
+
+#### 20.3.5 LLVM target (U4)
+
+- A parameter is owned exactly when it is consumed, borrowed otherwise (today: owned when
+  modified, `region::modified`).
+- A moving argument passes the place's own pointer to the owned parameter, with no `copy.` call;
+  ownership passes to the callee, which may change the value in place. A non-moving argument to
+  an owned parameter is a fresh copy, as today.
+- A non-moving operand in a move position is copied when it is evaluated, before the next
+  operand runs, in every form that evaluates several: positional and named arguments, variant
+  payloads, list, tuple and record literal elements, record update fields. 20.3.2 relies on it:
+  a later operand may move the same place into a callee that changes it in place
+  (`weigh(first = s, second = bump_count(s))`, `Both(s, bump_count(s))`).
+- A moving `let`/`var` initializer, assignment, field value, element or payload takes the value
+  with a shallow `memcpy` of its representation, without `copy.` glue.
+- The result slot never aliases a moved variable: `s = step(s, i)` writes the result to a
+  temporary slot and then moves it into `s`.
+- Loop regions keep their rule: a moved variable that the loop reassigns is a carried variable
+  (`docs/llvm.md` §4), and a moved argument lies below every mark the callee takes, as a borrowed
+  one does. `slice16/moves.ignite` (U1) grows a moved state past 64 KiB inside a loop, so
+  releases happen, and row 12 runs it under the debug runtime.
+- The call sites the backend writes itself (the `spawn` thunk, the fn-value thunk, the
+  `store_update` thunk, the generated mains) pass fresh copies today, which is correct for an
+  owned parameter; they need no change.
+- `docs/llvm.md` §3's borrowed/owned sentence and §4's soundness sentence ("Callee arguments are
+  fresh copies or the caller's places") get the consumed rule and the moved place.
+
+#### 20.3.6 The evaluator
+
+Unchanged. `ignite-eval` copies values by construction and reads neither `moves` nor
+`consumed`.
+
+### 20.4 Closures and calls of fn-typed expressions (D4, D5)
+
+#### 20.4.1 What holds, as the contract
+
+Section 13.3 stays the rule: a closure captures by copy at creation; its type is a fn type; it
+lowers on Rust to `Arc<dyn Fn(..) -> R + Send + Sync>` and on LLVM to `{ ptr code, ptr env }`
+with the environment block of `docs/llvm.md` §3.1 (glue word first, captures in
+`ClosureInfo.captures` order with C layout, null for no captures). Row 8 pins the shapes wave C
+uses. No change to either lowering in this slice.
+
+#### 20.4.2 Calls of fn-typed expressions
+
+Grammar: unchanged (a call's callee is a postfix expression, section 3).
+
+- `ignite-check` resolves the names inside a callee expression and no longer reports E003 `not
+  callable`; a name callee keeps its rules (an unknown name is E003, a constant callee is E003
+  `constant … is not callable; bind it first`).
+- `ignite-types` types the callee. When its type is `fn(..) -> R` or an effectful fn type, the
+  call is a `Callee::Local` call: arguments checked against the parameter types (E040, E043 on
+  arity), result `R`. Any other type is E040 (20.7).
+- Effects: in its non-name arms, `ignite-check`'s `call` uses `static_type(callee)` and
+  `fn_value_effects` as its `Name` branch does, charges the effects (E016 when `requires` lacks
+  them) and records the effect site. So `hs[0](conn)` and `(h.send)(conn)` check as `h.send(conn)`
+  does today. Only when `static_type` gives no type (a call's result, `pick_sender(true)(conn)`)
+  and the typer finds an effectful fn type is the call E042 (20.7), through the existing
+  effect-site rule. Binding it first (`let f: fn(c: PipeStream) -> Int requires [c.write] =
+  pick_sender(true)`, then `f(conn)`) is the way out.
+- Evaluation order: the callee first, then the arguments left to right (as `docs/llvm.md` §3.1
+  says for fn values).
+- Lowering: the existing `Callee::Local` arms (20.1 facts); U3 and U4 check them with
+  `calls.ignite` and fix what fails.
+
+#### 20.4.3 Effects of a captured capability
+
+Unchanged: the effects a closure body performs on captures are charged where the closure is
+created (section 13.3, E016), and the closure is effectful. A fn type's `requires` names only its
+own parameters (`fn(n: Int) -> Int requires [n.read]`), so no fn type can describe an effect on
+a capture; passing such a closure where a fn type is expected is E017 (fixture `e017_closure`).
+Calling it through its `let` binding, or passing the capability as a parameter of an effectful
+fn type, works today (p04b, row 8). Wave C does not need more: actors P1 says "No closures", and
+`call(fn)` is P4 (20.13).
+
+### 20.5 Rest patterns (D6)
+
+`docs/syntax.md` P9 and R7 as written, contracted here (vision T2).
+
+Grammar (section 3's `pattern`, one alternative replaced):
+
+```
+pattern  += '[' (elem (',' elem)*)? ']'
+elem     := pattern | '..' ident?
+```
+
+with at most one `..` per list pattern, and `..name` only as the last element. A second `..`, or a
+`..name` that is not last, is E076, reported by the parser. `..` outside the brackets of a list
+pattern stays E001 `expected pattern, found \`..\``. A list pattern in a `let` stays refutable
+(E001), with or without a rest.
+
+AST (add-only): `PatternKind::Rest(Option<Ident>)`, which appears only as an element of
+`PatternKind::List`.
+
+Typing: on a `List<T>` scrutinee the elements are `T` and `..name` binds `List<T>`; on `Bytes`
+they are `Byte` and `..name` binds `Bytes`. A rest binding is an ordinary pattern binding (E049
+in an or-pattern applies; it is immutable, section 13.11's E006 rules apply).
+
+Exhaustiveness (E046): a list column is split by length, as rustc splits slice patterns. Let `m`
+be the largest element count of an exact pattern, and `P` and `S` the largest prefix and the
+largest suffix (elements before and after the `..`) over the column's rest patterns. Every length
+`L` from `0` to `max(m, P + S - 1)` is checked on its own, and one representative length
+`max(m + 1, P + S)` stands for every longer length (from `P + S` on, no rest pattern's prefix
+and suffix share a position, so all longer lengths behave alike). At a length `L` an exact pattern
+of `L` elements applies, and a rest pattern with `p + s <= L` applies with its prefix at
+positions `0` to `p - 1`, its suffix at `L - s` to `L - 1` and `_` in between; the `L` element
+columns are then checked as a tuple's. A value missing at a checked length is printed as that
+length's list pattern, element by element, with `_` for an unconstrained position (`[_]`,
+`[false]`, `[_, true]`), in the order of the lengths and then of the element witnesses. A
+value missing at the representative length `R` stands for every length from `R` on, so it is
+printed as rustc prints a slice witness: its first `R - S` elements, `..`, then its last `S`
+(`[None, ..]`, `[.., false]`, `[true, .., false]`, `[_, false, .., true, _]`, `[_, _, ..]`);
+adding the printed pattern as an arm covers every length it names. This also applies to list
+columns without a rest, so p09's `[] , [x]` now reads `match does not cover \`[_, _, ..]\`` (20.7).
+
+Lowering, both targets and the evaluator: an exact pattern tests `len == n`, a rest pattern
+`len >= k`; prefix element `i` is index `i`, suffix element `j` of `s` is index `len - s + j`; a
+rest binding is a copy of elements `p` to `len - s`, as `List<T>` or `Bytes`, where `p` is the
+prefix length. Rust may use a slice pattern (`[a, rest @ .., z]`, with `rest.to_vec()`) or the
+explicit tests. The copy is a value position of section 6.
+
+### 20.6 Typed API (add-only)
+
+In `crates/ignite-types/src/lib.rs`:
+
+```rust
+impl TypedProgram {
+    /// Whether `expr`, a place in a move position, takes its value without a copy
+    /// (`docs/slice.md` 20.3). False for every other expression.
+    pub fn moves(&self, expr: &Expr) -> bool;
+    /// Whether the callee consumes its parameter `index` (UFCS receiver = 0). Defined for a
+    /// declared fn, associated fn or role; false for every other callee (a variant, a builtin,
+    /// `Callee::Local`, `Callee::FieldFn`, `Callee::Const`).
+    pub fn consumed(&self, callee: &Callee, index: usize) -> bool;
+}
+pub struct ModuleTypes {
+    // …existing fields…
+    /// Consumed parameters per fn, associated fn (`Owner.name`) and role (`Protocol.role`).
+    pub consumed: BTreeMap<String, Vec<bool>>,
+}
+```
+
+Both struct literals of `ModuleTypes` end in `..Default::default()`, so the field is add-only.
+`query_snapshot` copies it: `TypedProgram::consumed` answers for a callee of an imported module
+from that module's snapshot, so a backend asks it about a std fn the program calls. In `crates/ignite-syntax/src/ast.rs`:
+`PatternKind::Rest(Option<Ident>)`. Nothing is renamed.
+
+### 20.7 Diagnostics
+
+New code, in section 8's syntax-stage table:
+
+| code | meaning |
+|---|---|
+| E076 | a second `..` in a list pattern (`a list pattern has at most one \`..\``), or a `..name` that is not the last element (`\`..name\` must be the last element of a list pattern`); reported by the parser |
+
+E076 is the code `docs/syntax.md` §8.3 proposes, in T4's range E070 to E079 for that proposal,
+taken over with P9 (D6); slice 16 adds no range.
+
+Changed meanings:
+
+- E003: no longer for a callee that is an expression (`not callable`); a name callee keeps its
+  rules.
+- E040: also a callee whose type is no fn type: `type mismatch: this expression has type \`<T>\`
+  and cannot be called`; a name callee keeps `\`<name>\` has type \`<T>\` and cannot be called`.
+- E042: also a call of an effectful fn-typed expression that is no name and to which
+  `ignite-check`'s `static_type` gives no type (20.4.2): `cannot check the effects of a call of
+  this expression; bind it first with its type: \`let f: <fn type> = …\``.
+- E046: list columns are split by length (20.5); the witness of a list column is a list pattern,
+  and `match on \`List<…>\` does not cover every value; add a \`_\` arm or a binding arm` no
+  longer appears for lists.
+
+Fixtures: as in rows 6, 7, 16 and 17.
+
+### 20.8 Stale points
+
+| # | where | stale text | resolution, by whom |
+|---|---|---|---|
+| 1 | `epic:slice-16-language-gaps`, acceptance | "`examples/todo` `patch` uses a closure (friction 9 closed)" | holds since slice 9 (20.1). The steering session updates the epic; U0 does not edit the store |
+| 2 | `docs/vision.md` §4.1, row "15+" | lists "B (P2 on), C, D, E, G, H", which skips A although C needs it | U6 adds a row "16 \| A language gaps" before it |
+| 3 | `docs/vision.md` §4 row A and §5 | the wave-A items read as open | U6 marks each with the slice that landed it (20.1) |
+| 4 | section 6, lowering table | `fn(A, B) -> R` lowers to `fn(A, B) -> R` | 13.3's `Arc<dyn Fn(..) -> R + Send + Sync>`; U3 edits it with the parameter rule (20.3.4) |
+| 5 | `docs/actors.md` R1 | "P1 adds last-use moves in the generators"; "The LLVM target already passes borrowed parameters without a copy" | slice 16 adds them (20.3); a borrowed parameter is not the case R1 needs (the callee changes the state). U6 edits R1 with what moves and what still copies: `s = handle(s, m)`, `a.state = a.handle(a.state, m)` and `Step { state = st.state, … }` move; an argument beside another argument that mentions the state (`answer(state, reply, state.table.values())`) copies, and binding that argument first moves (20.3.2) |
+| 6 | `docs/actors.md` §3.3 | "T3 found that a Ignite fn value cannot capture locals. Once closures land (P4)" | closures capture since slice 9 (13.3); what P4 still needs is 20.13 items 1 and 2. U6 edits it |
+| 7 | `docs/syntax.md` P9, §8.3 | P9 proposed, E076 proposed | contracted by 20.5 and 20.7; U6 marks P9 "contracted, `docs/slice.md` 20.5" |
+| 8 | `docs/llvm.md` §3, §4 | borrowed iff not modified; callee arguments are fresh copies or the caller's places | U4 (20.3.5) |
+| 9 | `docs/friction.md` | no row for `assert` as a match arm body (`Some(h) => assert …` is E001; braces work) | U6 adds a row, open (20.13) |
+| 10 | title of this file | "slices 1 to 15" | U6 makes it "slices 1 to 16" (vision X15) |
+| 11 | section 6, parameters | "fn types" among the Copy parameters cloned on entry; the `as fn(i64) -> i64` wrapper | U3, with item 4 (20.3.4) |
+
+### 20.9 Decisions
+
+| # | decision | alternative | why |
+|---|---|---|---|
+| D1 | One frontend analysis in `ignite-types`, read by both backends through `TypedProgram::moves` and `consumed` (20.6) | an analysis per backend, as `mutated_names` (Rust) and `region::modified` (LLVM) are today | both targets must agree on which parameter is owned, because a std fn's mode is part of every caller's code; one analysis is one rule to review and test (rows 1 to 5) |
+| D2 | Moves are conservative (20.3.2): tracked single-name bindings and parameters only, resolved per binding; liveness per field path, so disjoint fields move independently; no indexes or boxes; no move inside closure bodies, inside `match` arms or `for` bodies over an overlapping place, or beside another argument that mentions an overlapping place | Rust-like full ownership with moves of pattern bindings and partial moves through indexes; liveness per variable only | R1's shapes (a variable or a field reassigned from a call, a record built from a dead record's fields, 20.3.2's examples) need field paths and nothing more; every excluded case is one where a backend aliases (LLVM pattern bindings point into the scrutinee, a later argument overwrites the moved slot) or rustc's borrow check differs. Widening is additive (20.13) |
+| D3 | A parameter is consumed when changed in place on some path or moved on every path; the set is a per-module least fixpoint in import order; no new diagnostic | an annotation on parameters (`own p: T`); consumed when moved on any path | no new keyword (invariant 6); moved-on-every-path keeps the copy count from rising (20.3.3), where moved-on-any-path would copy `unwrap_or`'s `fallback` at every call |
+| D4 | Calls of fn-typed expressions are in. Their effects are charged by `ignite-check` from `static_type` where it gives a type, as for a name; E042 only where it gives none | E042 for every effectful non-name callee | `static_type` already types fields and indexes, so `(h.send)(conn)` must check as `h.send(conn)` does; only a call's result is left without a type, and binding it with a type is the way out |
+| D5 | Closures keep section 13.3; effectful closures as fn values (E017) and body-directed inference of closure parameters are deferred (20.13) | effects on captures in fn types; inference variables for closure parameters | actors P1 to P3 use no closures; P4's `call` works with an annotated parameter (p05b); either change is a type-system extension larger than the rest of the slice |
+| D6 | Rest patterns as `docs/syntax.md` P9 and R7, with its code E076 | `..name` anywhere, a new code in a slice-16 range | the proposal is what protocols §5.2 asked for and its code is reserved by T4 for it; one fewer deviation to record |
+| D7 | Seven units in five waves (20.10) | one unit per backend for each feature | the moves analysis and the expression callees share no file; the two backends share no file; rest patterns touch every crate and so get their own wave |
+
+### 20.10 Work split
+
+| unit | story | owns | depends on | first failing test | rows |
+|---|---|---|---|---|---|
+| U0 | `story:slice-16-contract` | this section, the section-8 rows, `docs/slice16-review.md` | — | — | — |
+| U1 | `story:slice-16-moves-analysis` | `crates/ignite-types/src/moves.rs`; in `crates/ignite-types/src/lib.rs` the `moves` and `consumed` accessors, `ModuleTypes::consumed`, its `query_snapshot` line and the call of the analysis after typing; `crates/ignite-types/tests/moves.rs` and its `mod moves;` line; `slice16/moves.ignite` (with a moved state grown past 64 KiB inside a loop, 20.3.5, and the shapes of 20.3.2's examples), `slice16/moves_scale.ignite` | U0 | `moves::a_var_passed_and_reassigned_moves` | 1 to 5 |
+| U2 | `story:slice-16-expression-calls` | in `crates/ignite-check/src/lib.rs` the non-name arms of `call` (with `static_type` and `fn_value_effects`); in `crates/ignite-types/src/typer.rs` the call typing of an expression callee; fixtures `valid_expression_calls` (check and types), `e003_unknown_variable` (the added case), `e040_not_callable`, `e043_expression_call_arity`, `e042_effectful_expression_callee`; `crates/ignite/tests/slice16.rs` with row 8's test, its `mod slice16;` line; `slice16/closures.ignite`, `slice16/calls.ignite` | U0 | `fixtures::fixtures_match_expected` (ignite-check) on `valid_expression_calls` | 6 to 8 |
+| U3 | `story:slice-16-rust-moves` | `crates/ignite-rustgen/src/lib.rs` (consumed parameters, bare moves, the backend's own call sites, expression calls if `calls.ignite` fails); `crates/ignite-rustgen/tests/slice16.rs` and its `mod` line; `crates/ignite-rustgen/tests/golden/slice16.{ignite,rs}` and the test of row 13; existing rustgen goldens as row 24 allows; `CODEGEN_REVISION`; section 6's parameter sentence and `fn` row | U1, U2 | `golden::last_use_moves_and_expression_calls` (rustgen) | 9, 11, 13, 15 |
+| U4 | `story:slice-16-llvm-moves` | `crates/ignite-llvm/src/` (owned iff consumed, moved places, result slots, expression calls if `calls.ignite` fails); rows 10 and 12 appended to `crates/ignite/tests/slice16.rs`; `crates/ignite-llvm/tests/golden/slice16.{ignite,program.ll}` and the test of row 14; existing LLVM goldens as row 24 allows; `docs/llvm.md` §3 and §4 | U1, U2 | `golden::last_use_moves_and_expression_calls` (ignite-llvm) | 10, 12, 14 |
+| U5 | `story:slice-16-rest-patterns` | `PatternKind::Rest` and its arms in every crate (`ignite-syntax` parser and AST, `ignite-check`, `ignite-types` `typer.rs`, `exhaustive.rs` with its new list arm, `moves.rs`, `ignite-eval`, `ignite-rustgen`, `ignite-llvm` `lower.rs` and `region.rs`); fixtures of rows 16 and 17 and the list line of `e046_patterns.expected`; `slice16/rest.ignite` added to `slice16::fixtures_pass` (rustgen) and `slice16::llvm_fixtures_pass` (`crates/ignite/tests/slice16.rs`); the rest goldens of row 19; the `rest_` family in `crates/ignite/tests/fixtures/eval_equivalence.ignite` and its line in `fixture_covers_every_family`; `CODEGEN_REVISION` | U3, U4 | `fixtures::fixtures_match_expected_diagnostics` (ignite-syntax) on `valid_rest_patterns` | 16 to 20 |
+| U6 | `story:slice-16-records` | `slice16/holds.ignite`; row 21's test appended to `crates/ignite/tests/slice16.rs`; the `call_` and `move_` families of `eval_equivalence.ignite`; `STATUS.md`, `AGENTS.md`, `PLAN.md`, `docs/vision.md` §4, §4.1 and §5, `docs/friction.md`, `docs/actors.md` R1 and §3.3, `docs/syntax.md` P9, the title of `docs/slice.md`; `docs/performance/16/` | U5 | `slice16::fixtures_pass_on_both_targets` | 21 to 23, 27 |
+
+Rows 24 and 25 belong to every unit; row 26 to U3, U4 and U6.
+
+Order: W1 U0; W2 U1 and U2; W3 U3 and U4; W4 U5; W5 U6.
+
+Shared files:
+
+- W2: U1 and U2 are both in `crates/ignite-types/`. U1 owns `moves.rs`, `lib.rs` and
+  `tests/main.rs`; U2 owns `typer.rs` and adds fixture files only. Neither edits the other's
+  file. U1 adds fixture files under `crates/ignite/tests/fixtures/slice16/`; U2 adds others there
+  and owns `crates/ignite/tests/slice16.rs` and `crates/ignite/tests/main.rs`.
+- W3: U3 owns `crates/ignite-rustgen/` and `crates/ignite/src/apply/plan.rs`; U4 owns
+  `crates/ignite-llvm/`, `docs/llvm.md` and the appends to `crates/ignite/tests/slice16.rs`
+  (U2's file, merged in W2). Both read the W2 fixtures and edit none.
+- W4: U5 is alone; it edits files of every earlier unit after they merged.
+- W5: U6 appends to `crates/ignite/tests/slice16.rs` and `eval_equivalence.ignite` after U2, U4
+  and U5 merged.
+
+Rules: one integration-test binary per crate (`AGENTS.md`), so every new test file is a `mod`
+line in its crate's `tests/main.rs`. Each unit's commit names the rows of 20.0 it makes pass.
+The story ids above are the contract's names; the steering session creates or updates the
+stories, U0 does not edit the store.
+
+### 20.11 Placeholder arms
+
+- After U1 (W2), `moves` and `consumed` exist and no backend reads them: no behaviour or golden
+  changes.
+- After U2 (W2), expression callees type as `Callee::Local`; the backends' existing arms lower
+  them (20.1 facts). No existing test has an expression callee, so the workspace stays green
+  even if a backend fails on `calls.ignite`; rows 11 and 12 are where U3 and U4 find out.
+- U5 adds `PatternKind::Rest` and every match arm over it in one unit, so no crate sees the
+  variant without its arm.
+
+### 20.12 Gate time
+
+Method of 18.18 and 19.17 (section 15.1), through `tools/ignite-perf` (modes `cold`, `warm`,
+`programs`, `cli`; records `ignite-performance/1`). "Before" is a `git archive` copy of the slice
+base after the rebase (the slice-15 merge), "after" the closed tree, each with its own
+`CARGO_TARGET_DIR`. One cold gate per tree, then three interleaved warm passes. A pair whose two
+1-minute loads differ by more than 5 is dropped. Report the medians of the pair ratios next to the
+absolute times.
+
+Units: those of 18.18, plus:
+
+- `ignite check examples/terminal/terminal.design.ignite` and `ignite check
+  examples/todo/todo.ignite` (15 pairs each): the moves analysis runs on every program and on the
+  std modules it reaches;
+- the program builds of `todod` and `terminald`, both targets, dev and release (3 pairs): fewer
+  copies, changed parameter modes;
+- `ignite test slice16/moves_scale.ignite`, per target, cold and warm (after only), with the run
+  times of its two tests.
+
+Expected causes, to be measured or labelled inferred: the analysis's cost in the frontend
+(linear in the fn bodies, with one fixpoint per loop and per module); smaller generated code
+where clones disappear.
+
+A unit that rises over 10 % gets a measured cause, or the record labels the cause inferred. No
+baseline moves. The apply suites stay the slice-13 exception.
+
+Records: a "Slice 16" paragraph in `AGENTS.md`'s gate-time section; raw logs and records under
+`docs/performance/16/`.
+
+### 20.13 Deferred
+
+| # | item | why | where it goes |
+|---|---|---|---|
+| 1 | an effectful closure (one that uses a captured capability) passed as a fn value; E017 stays | no fn type can name an effect on a capture (20.4.3); wave C P1 to P3 pass no closures | actors P4, or the slice that adds effect polymorphism |
+| 2 | inferring an unannotated closure parameter from the closure body (p05) | an annotation works (p05b); needs inference variables the typer does not have | actors P4 |
+| 3 | capture by move (a closure taking a dead variable without a copy) | a capture copies once per closure creation, not per loop step; not on R1's path | later, with measurements |
+| 4 | moves of pattern bindings, `for` elements, closure parameters, fn-typed variables, inside closure bodies, at `spawn` arguments and operator operands (`a + b` on `Text`), and beside another argument that only reads an overlapping place (`answer(state, reply, state.table.values())`; binding the argument first moves) | D2; each needs its own aliasing argument on LLVM | additive, when a measurement asks for one |
+| 5 | rest patterns in tuples (`(a, ..)`) and variant payloads | P9 covers lists; protocols §5.2's shape is a list rest inside a tuple, which row 18 covers | `docs/syntax.md`, unscheduled |
+| 6 | `docs/friction.md` open rows (19 `for` patterns, 20 match guards, 22, 23, 24, 38, 41 and the others not on the wave-A row) | not on vision §4 row A | their own proposals (`docs/syntax.md` P4, P5) |
+| 7 | `assert` as a match arm body (20.8 item 9) | found while probing; braces work | friction row by U6 |
+| 8 | a persistent `Table` (actors R1 "Open") | a data-structure question of wave C, not a language gap | actors P1 |
+
+### 20.14 Open questions
+
+Each has a default, which the units follow unless the review changes it.
+
+| # | question | default |
+|---|---|---|
+| Q1 | actors R1 says "Measure on the 1600-POST test", which exists only once actors P1 lands | rows 9 and 10 stand in for it; actors P1 measures R1 on its own acceptance test |
+| Q2 | the rebase onto the slice-15 merge changes the base values this section quotes (`CODEGEN_REVISION`, test counts) | rows 15 and 25 are relative to the base; U3 and U5 read the value at their wave's base |
+| Q3 | whether a copy the analysis keeps in a loop (a read after the call) should be reported to the user | no diagnostic in this slice (D3); a later lint can use `moves` |
+
+## 21 Slice 17: processes, files, arguments and random bytes (playground substrate)
+
+**Status: contract written 2026-11-04. The independent review (`docs/slice17-review.md`, 37
+findings) is resolved in this text; 21.17 maps each finding to its resolution. Implemented
+2026-11-05 on `feat/slice17-processes-files`, units U1 to U6; the standing of each row of 21.0
+is in `STATUS.md`, the stale points of the contract found during the slice in 21.18.** The
+rows of 21.0 are required checks, not results.
+
+Sections 19 (slice 15) and 20 (slice 16) are on `main` (slice 16 merged in PR 30 before this
+slice started). This section is numbered 21 so that no merge order renumbers it.
+
+Sources:
+
+- the planning store at `7dcb08e`: `epic:playground-substrate`, `story:process-spawn` (gap P1),
+  `story:file-system` (P2), `story:program-arguments` (P8), `story:random-bytes` (P7), and the
+  constraint P3 that the first two stories carry;
+- `docs/design.md` §3.5 (effect interfaces for files, processes and the clock), §8.6 (IO is a
+  runtime interface), §8.7 (handles across the ABI), §8.8 (process isolation), §9.3 (effects of
+  toolchain builds);
+- `docs/vision.md` §3 invariants 3 (handles are types), 4 (authority is passed, never ambient),
+  5 (nothing lost silently, bounded queues), 7 (both targets), 8 (a fixture per code) and 9
+  (compile-time budget); §6 and §7 (T2, T3, T4);
+- this file: sections 5 and 5.1 (effects), 6.1 (system lowering), 7 (substrate), 8, 12.3
+  (test-only constructors), 14.4 to 14.6 (resources and kinds), 15.5 (the model), 16.3 and 16.9
+  (`ignite run`, `--ref`), 17 (`ignite apply`), 18 (the form this section follows);
+  `docs/layering.md`; `docs/llvm.md` §4 (handle lifetime).
+
+The base of the slice is commit `651be04c` (`main` when U1 started, with slice 16, release
+`v0.5.0` and the LLVM default target of PR 32). `main` moved after it by planning-store commits
+only, and U6 merged it, so the merge base at the close is `99647132`, whose code is the same as
+`651be04c`'s. Every `git diff` in 21.0 and the before tree of 21.14 are taken from that base.
+The contract was written against `c539392`, an older `main`; the probes of 21.1 ran there.
+Code is cited by symbol (T3).
+
+Since PR 32 (2026-11-05, before U1) LLVM is the default target of the CLI and of
+`BuildOptions::default`. A command in this section without `--target` builds with LLVM and,
+for `ignite build`, `ignite run` and `ignite plan --for-apply`, needs the runtime archive
+(`--runtime`, or `libignite_rt.a` beside the driver; since PR 33, merged into this slice at its
+close, else the archive the driver carries, `docs/llvm.md` section 1); the end-to-end tests pass
+the target and the runtime explicitly. Where a row below names one target, it names it.
+
+Out of this slice by the steering session's word: `story:http-server-responses` (gaps P4 to
+P6), which follows the HTTP RFC gaps story.
+
+The slice adds four capabilities, each a handle type that a system declares as a resource and
+passes to the code that uses it:
+
+- `Directory`: a root directory; read, write, list, create and remove files and directories
+  under it, never outside it;
+- `Launcher`: start child processes with arguments, a working directory, an environment, a
+  timeout and bounded captured output; wait for them and kill them;
+- `Entropy`: random bytes from the operating system;
+- `Setting`: one command-line argument of the executable, such as `--tool PATH`.
+
+### 21.0 Acceptance
+
+`both` in the command column means the test runs on the Rust and the LLVM target
+(`ignite test FILE --target all`, or a `crates/ignite` end-to-end test that builds with both).
+Fixture paths without a directory are under `crates/ignite/tests/fixtures/slice17/`.
+
+| # | check | command | exact required observation | unit |
+|---|---|---|---|---|
+| 1 | files round trip | `ignite test std/fs.ignite --target all` | the test "a file written is read back, listed, nested and removed" passes on both targets: it writes 256 bytes holding every byte value to `a.bin` in `Directory.temporary()`, reads them back equal, `read_directory("")` is `["a.bin"]`, after `create_directory("sub/deeper")` it is `["a.bin", "sub/"]`, after `remove("a.bin")` and `remove_tree("sub")` it is `[]` | U2 |
+| 2 | lexical confinement | same file | the test "paths that leave the root are refused" passes on both targets: for each of `../x`, `a/../../x`, `/etc/passwd` and `a\0b`, taken from a `List<Text>` so that E140 (literals only) does not apply, each of the six `Directory` operations of 21.4 that take a path returns `Err` whose message is `path <p>: leaves its root`, `path <p>: absolute` or `path <p>: contains NUL`; the parent of the root holds no entry named `x` afterwards; `read_file("")` returns `Err` starting `path : ` | U2 |
+| 3 | symlinks out, non-regular files | `cargo test -p ignite-io --lib fs::` | `fs::symlinks_out_are_refused` passes: a root holding `out -> <a sibling directory with secret>` and `f -> <a file outside>` refuses `read_file("out/secret")`, `write_file("out/new", ..)`, `read_directory("out")`, `create_directory("out/d")`, `read_file("f")` and `write_file("f", ..)` with the message `path <p>: symbolic link <component>`; the outside directory's listing and the outside file's bytes are unchanged; `remove("f")` removes the link and leaves the outside file. `fs::a_fifo_is_not_read` passes: `read_file` of a FIFO in the root returns `Err` `path <p>: not a regular file` within 1 s, with no writer on the FIFO | U2 |
+| 4 | symlink race | same | `fs::a_swapped_component_never_escapes` passes: one thread exchanges `d` (a directory holding `inner`) with `e` (a symlink to an outside directory holding `inner`) by `renameat2(RENAME_EXCHANGE)`, 10,000 times; 10,000 `read_file("d/inner")` calls on another thread each return the inside bytes or an `Err`, never the outside bytes, and every `Err` whose cause was the link reads `path d/inner: symbolic link d` | U2 |
+| 5 | atomic replace | same | `fs::write_replaces_atomically` passes: 1,000 alternating `write_file` calls of a 64 KiB A-file and a 64 KiB B-file race 1,000 `read_file` calls, every read is all A or all B, and the directory lists only the file afterwards (no temporary left) | U2 |
+| 6 | tree removal | `ignite test std/fs.ignite --target all` | "remove_tree removes links, not their targets" passes on both targets: a tree with nested files and a link to a directory outside the root (made by `Launcher.new()` running `/bin/ln -s` as `tree/out`); before the removal `read_directory("tree/out")` returns `Err` `path tree/out: symbolic link tree/out`; the tree is removed and the outside directory keeps its files; `remove_tree("")` returns `Err` `path : the root itself` and `remove_tree(".")` returns `Err` `path .: the root itself` (`<p>` is the path as given) | U2 |
+| 7 | read and size bounds | same | "a file over the read bound is refused" passes: a file of 16 MiB + 1 byte, written by `write_file`, makes `read_file` return `Err` whose message contains `larger than 16 MiB`; a file of exactly 16 MiB is read. `fs::bounds_hold` (`cargo test -p ignite-io --lib`): a directory of 65,537 entries makes `read_directory` return `Err` `path <p>: more than 65536 entries`; a chain of 257 nested directories makes `remove_tree` return `Err` `path <p>: deeper than 256 levels` and removes nothing | U2 |
+| 8 | file effects checked | `cargo test -p ignite-check --test main fixtures::` | fixture `e016_directory_effect` (`fn save(files: Directory) -> Result<Unit, IoError> requires [files.read]` calling `files.write_file`) gives exactly ``missing effect `files.write` for `files.write_file`; add it to the `requires` of `save` ``; `valid_capabilities` (each capability method called with its effect declared, receivers bound without annotation from the four test-only constructors and from `start`, 21.3) is silent | U1 |
+| 9 | process output and status | `ignite test std/process.ignite --target all` | "a child's output and status are captured" passes on both targets: `Launcher.new().execute(Invocation { program = "/bin/sh", arguments = ["-c", "echo out; echo err >&2; exit 3"] })` gives `ending == 0`, `code == 3`, `stdout == "out\n"`, `stderr == "err\n"`, `dropped == 0`, and `outcome(exit)` matches `ExitCode(3)` | U3 |
+| 10 | timeout kills the group | same | "a child over its timeout is killed with its group" passes on both targets: `/bin/sh -c "echo $$; sleep 30 & sleep 30"` with `timeout = 200 milliseconds` returns `TimedOut` (`ending == 2`, `code == -1`) within 3 s of the start with the shell's pid as `stdout`, and a follow-up `execute` of `/bin/sh -c "ps -o stat= -g <that pid> \| grep -v Z \|\| echo gone"` prints `gone` (the backgrounded grandchild died with the group; a zombie counts as gone) | U3 |
+| 11 | kill | same | "a started child is killed" passes on both targets: `start` of `/bin/sleep 30`, then `kill()` returns `Ok`, `wait()` returns `Killed` (`ending == 3`) within 1 s; then a second `wait()` returns `Err` `child already waited` and `kill()` returns `Ok` | U3 |
+| 12 | bounded output | same | "output past the limit is counted, not kept" passes on both targets: a child writing 2 MiB to stdout with `output_limit = 1 KiB` exits 0, `stdout.len() == 1024`, `dropped == 2097152 - 1024`, and the call returns (no deadlock on the full pipe); `output_limit = 17 MiB` returns `Err` `output_limit must be at most 16 MiB` | U3 |
+| 13 | SIGTERM reaches a child of a drained server | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::a_child_of_a_server_gets_sigterm`: the fixture `signal_mask.ignite`, an `HttpServer` whose handler executes `/bin/sh -c "kill -TERM $$; sleep 5"`, answers `GET /` with `ending 1 code 15` within 2 s | U3 |
+| 14 | no inherited descriptors | same | `slice17::{rust,llvm}::a_child_inherits_no_descriptors`: the test starts the server with a descriptor 5 open without close-on-exec; the same fixture's `GET /fds` executes `/bin/ls /proc/self/fd` and the body lists exactly `0`, `1`, `2` and `3` (the last is the directory `ls` reads; descriptor 5, the listener, the accepted connection, the root directory and `/dev/urandom` are absent; the fixture declares a `Directory` and an `Entropy` so they exist) | U3 |
+| 15 | process effects checked | `cargo test -p ignite-check --test main fixtures::` | fixture `e016_launcher_effect` (`fn build(tools: Launcher) -> Result<ChildExit, IoError> requires []` calling `tools.execute`) gives exactly ``missing effect `tools.launch` for `tools.execute`; add it to the `requires` of `build` ``; `e016_child_effect` (`fn stop(child: ChildProcess) -> Result<Unit, IoError> requires []` calling `child.kill()`) gives exactly ``missing effect `child.kill` for `child.kill`; add it to the `requires` of `stop` `` | U1 |
+| 16 | child bound and refusals | `ignite test std/process.ignite --target all` | "the launcher refuses what it cannot run" passes on both targets: with `Launcher.new()` (bound 16) the 17th `start` of `/bin/sleep 30` returns `Err` `too many children (16)`, and after `kill` and `wait` of one of the 16 a further `start` succeeds; `program = "nosuch-ignite-17"` returns `Err` starting `program not found`; `program = "bin/sh"` returns `Err` `program bin/sh: a relative path with /`; `timeout = 0 seconds` returns `Err` `timeout must be positive`; `directory = "rel"` returns `Err` `directory rel: not absolute` | U3 |
+| 17 | children end with the program | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::live_children_die_with_the_program`: the fixture `orphans.ignite` starts `/bin/sleep 30`, prints `child.id()` and returns from `main`; within 1 s of the program's exit the pid is absent or a zombie (`/proc/<pid>/stat` state `Z`). The same holds after one SIGTERM to a drained server (`orphans_after_drain`), after a second SIGTERM during the drain (`orphans_after_second_sigterm`), and for the direct child after SIGKILL of the server (`orphans_after_sigkill`, through `PR_SET_PDEATHSIG`) | U3 |
+| 18 | arguments | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::settings_read_their_flags`: the fixture `arguments.ignite` (a kind declared in the fixture whose `main` prints its state; resources `Setting { flag = "--tool" }`, `Setting { flag = "--mode", default = "fast" }`, `Directory { path = "missing", flag = "--root" }`, a `TcpListener`; `main` also prints `Endpoint.of` of a `Ref`), started as `<exe> --root DIR --tool /bin/true --port 0 --ref Arguments.peer=127.0.0.1:9` (a `Ref` resolves by its path `<System>.<member>`, 16.9), prints `tool /bin/true`, `mode fast`, `root <DIR canonical>`, `listening 127.0.0.1:<port>` and `peer 127.0.0.1:9`; with `--mode=slow` it prints `mode slow`; without `--tool` it exits 2 with stderr `error: --tool: required argument missing` and binds no port; with `--mode --tool /bin/true` it exits 2 with stderr `error: --mode needs a value` | U4 |
+| 19 | property checks | `cargo test -p ignite-types --test main fixtures::` | fixtures `e104_setting_flag` (`flag = "tool"`), `e104_directory_path` (`path = ""`), `e104_launcher_bound` (`maximum_children = 0`) each give exactly one E104 with the texts of 21.9; `e141_flag_collision` (two resources with `flag = "--root"`, a third with `flag = "--port"`) gives exactly two E141; `fixtures::every_type_code_has_a_fixture` lists E140 and E141 | U1 |
+| 20 | random bytes | `ignite test std/process.ignite --target all` | "two draws differ" passes on both targets: `Entropy.new()` gives two `random_bytes(32)` results of length 32 each that differ; `random_bytes(65537)` and `random_bytes(-1)` return `Err` `random_bytes: count must be in 0..=65536`; `random_bytes(0)` is empty | U5 |
+| 21 | random effect checked | `cargo test -p ignite-check --test main fixtures::` | fixture `e016_entropy_effect` (`fn token(entropy: Entropy) -> Result<Bytes, IoError> requires []` calling `entropy.random_bytes(32)`) gives exactly ``missing effect `entropy.draw` for `entropy.random_bytes`; add it to the `requires` of `token` `` | U1 |
+| 22 | P3: a handler uses the capabilities through its state, check | `ignite check crates/ignite/tests/fixtures/slice17/studio.ignite` | silent, exit 0. `studio.ignite` is a `system Studio` with `resource files: Directory { path = "workspace", create = true, flag = "--root" }`, `resource tools: Launcher`, `resource entropy: Entropy`, `resource tool: Setting { flag = "--tool" }`, an `HttpServer` with `application = HttpApp { state = Bench { files = files, tools = tools, entropy = entropy, tool = tool }, handle }`, and a handler with no `requires` that uses all four through `state` | U1 |
+| 23 | P3: capabilities reached ambiently are refused | `cargo test -p ignite-check --test main fixtures::` and `cargo test -p ignite-types --test main fixtures::` | fixture `e051_capability_outside_state` (ignite-check): a handler that calls `Entropy.new()` and `Directory.temporary()` gives exactly two E051; no other way to name a capability exists outside a resource (21.3). Fixture `e017_ambient_in_handler` (ignite-types; it declares an `HttpApp`-shaped record locally, because the fixture standard library has no `std/protocol`): a handler calling `Clock.monotonic()` gives exactly one E017, as probe p2 | U1 |
+| 24 | P3: the handler runs on both targets | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::studio_serves_through_its_state`: `studio.ignite` built and started with `--port 0 --root <tmp> --tool /bin/sh`; `POST /write` with body `a.ignite\nx` answers 204 and `<tmp>/a.ignite` holds `x`; `POST /read` with body `a.ignite` answers 200 `x`; `POST /read` with body `../x` answers 400 with the body `path ../x: leaves its root`; `POST /run` (the handler executes `state.tool.value()` with `-c "cat a.ignite"` in `state.files.absolute_path()`) answers 200 `x`; `GET /token` answers 64 lowercase hex digits, and a second launch answers a different token | U6 |
+| 25 | the model lists the capabilities | `cargo test -p ignite --test main plan::` | `plan::studio_model_matches_golden`: `ignite plan studio.ignite` equals `crates/ignite/tests/golden/studio.model.json`, whose `resources` hold `{"id":"Studio.files","kind":"Directory","properties":{"create":true,"flag":"--root","path":"workspace"}}`, `Studio.tools` with `{"maximum_children":16}`, `Studio.entropy` with `{}` and `Studio.tool` with `{"flag":"--tool"}` | U1 |
+| 26 | `ignite run` and `plan --for-apply` refuse an unset setting | `cargo test -p ignite --test main run::` and `apply::` | `run::a_setting_without_default_is_e142`: `ignite run e142_setting_without_default.ignite` exits 2 with exactly one `E142` naming the setting; `apply::plan_refuses_a_setting_without_default`: `ignite plan e142_setting_without_default.ignite --for-apply --state <tmp> --out <tmp>/p` exits 2 with the same diagnostic, reported before the host is contacted (no `ignite host` runs); `run::studio_defaults_runs`: `studio_defaults.ignite` (`default = "/bin/sh"`) run with `--target llvm` and the test runtime in a temporary working directory starts, `status` shows `Studio.server` running, `stop` exits 0, and the repository gains no file | U4 |
+| 27 | path literals checked | `cargo test -p ignite-types --test main fixtures::` | fixture `e140_path_leaves_root`: `files.read_file("../x")`, `files.write_file("/etc/x", ..)` and `files.read_directory("a/../..")` give exactly three E140; `files.read_file(name)` with a variable and `files.read_file("a/b")` give none | U1 |
+| 28 | layering | `cargo test -p ignite-check --test main layering::` | passes with rows for `std.fs` and `std.process` in `docs/layering.md` and in the test's table, both in the base layer | U1 |
+| 29 | no new dependency | `cargo tree -p ignite-io -e normal --prefix none \| sort -u` and `cargo tree -p ignite-io -e features` | the first lists the same crate set as at the base; the second shows `nix` with the added features `dir` and `poll` (the latter now outside `runner` too), recorded in the commit message that adds them | U1 |
+| 30 | names stay free | `ignite check` of every `std/` and `examples/` file; `cargo test -p ignite-check --test main fixtures::` | silent; `std/cli.ignite` still declares `Command` and `Argument`; the fixtures that declare a fn `start` (`valid_protocol`, `e013_spawn_not_effectful_call`) give their expected output unchanged; no existing `.expected` file newly mentions `value`, `wait`, `kill` or `execute` | every unit |
+| 31 | the old resource error | `git diff --stat 651be04c -- '*.expected'` at U1's merge | only files whose E020 text "expected `TcpListener` or `Store`" became the new text of 21.9, and the new fixtures, appear | U1 |
+| 32 | codegen revision | `git diff 651be04c -- crates/ignite/src/apply/plan.rs`; `cargo test -p ignite --test main apply_admission::` | `CODEGEN_REVISION` differs from the base, bumped by U1 and again by U4: `ignite-codegen/0.1.0-16` at `651be04c` (`0.1.0-2` at `c539392`; slice 16 and PRs 27 to 29 stepped it in between), `-17` after U1, `-18` after U4; the admission tests pass | U1, U4 |
+| 33 | gate | `task gate` | exit 0 on the slice branch at the close | every unit |
+| 34 | gate time | 21.14 | the records of 21.14 exist under `docs/performance/17/` and in `AGENTS.md` | U6 |
+| 35 | no laundering through a parameter named `clock` | `cargo test -p ignite-check --test main fixtures::` | fixture `e056_clock_parameter` (probe p1) gives exactly one `E056` at the parameter `clock`; `AMBIENT_HEADS` holds `clock` | U1 |
+| 36 | generator goldens | `cargo test -p ignite-rustgen --test main golden::` and `cargo test -p ignite-llvm --test main golden::` | `golden::capabilities` on each backend: `crates/ignite-rustgen/tests/golden/capabilities.{ignite,rs}` and `crates/ignite-llvm/tests/golden/capabilities.{ignite,program.ll}` (the four resources, a flag read in the generated `main`, one call of each method) match, and the Rust output builds with cargo and the LLVM output compiles with clang | U1 |
+
+### 21.1 Current state and verdicts (at `c539392`)
+
+Probes, run 2026-11-04 with `target/debug/ignite check` built from the base (`cargo build -p
+ignite`, exit 0):
+
+- p1, `fn helper(clock: Int) -> Duration requires [clock.read] = Clock.monotonic()` called from
+  `fn outer() -> Duration requires [] = helper(1)`: silent, exit 0. A parameter named `clock`
+  absorbs the ambient `clock.read`, so `outer` reads the clock while declaring nothing. A
+  handler can launder an ambient effect this way past `requires [state.*]`, which breaks P3;
+  U1 closes it (row 35).
+- p2, an `HttpServer` handler over `Store<Int>` that calls `Clock.monotonic()`: exactly one
+  ``E017 effectful function `handle` does not fit `fn(state: Store<Int>, request: Request) ->
+  Response requires [state.*]`: its effect `clock.read` is not covered by the type's
+  `requires` ``, exit 1.
+- p3, `resource files: Directory { path = "workspace" }` and `resource tools: Launcher`: two
+  ``E020 unsupported resource kind `Directory`; expected `TcpListener` or `Store` `` (and the same
+  for `Launcher`), exit 1.
+- p4, one state record built from two `Store` resources, `HttpApp { state = Both { counts =
+  counts, names = names }, handle }`, the handler using both through `state`: silent, exit 0.
+  A state record composes several capabilities today.
+
+| fact | where | verdict |
+|---|---|---|
+| F1 the substrate reads only `--port` and `--ref` | `ignite_io::args::port_from_args`, `endpoint_from_args` | `Setting` adds flags beside them; both keep their meaning (row 18) |
+| F2 no file, process or random operation exists in a builtin table | `BUILTIN_STATICS`, `BUILTIN_METHODS` in `crates/ignite-check/src/lib.rs`; `crates/ignite-types/src/builtins.rs` | all four capabilities are new |
+| F3 the resource kinds are `TcpListener` and `Store` | `resource` in `crates/ignite-types/src/typer/system.rs`, `lower_resources` in `crates/ignite-rustgen/src/lib.rs` | four kinds added; the E020 text changes (row 31) |
+| F4 a handler may act only on its state | `HttpApp` in `std/protocol/http.ignite` (`requires [state.*]`); probe p2 | capabilities are values in the state, not statics (21.3) |
+| F5 `Store` methods are effectful by the receiver's declared type, other substrate methods by name | `store_op` and `store_effect`; `EFFECTFUL_METHODS` and `method_effect` | the new methods follow `store_op`: a by-name table would capture user fns named like them, such as `start` (fixtures `valid_protocol`, `e013_spawn_not_effectful_call`), `value`, `wait`, `kill`, `execute`; a receiver bound without annotation needs `static_type` arms (21.3, R4) |
+| F6 the ambient heads are `stdin`, `stdout`, `process`, `net` | `AMBIENT_HEADS` | `clock` is missing (probe p1): U1 adds it, so a parameter named `clock` is E056 (row 35); the capabilities add no head, they are not ambient |
+| F7 `ignite run` starts an executable without a working directory of its own | `spawn` in `crates/ignite/src/run/process.rs` | a relative `Directory.path` resolves against `ignite run`'s working directory (21.6) |
+| F8 the drain blocks SIGTERM in the main thread and in every thread it starts | `ignite_io::drain::install` | a child must start with an empty signal mask. Resolved by U3: Rust's `Command` keeps the mask of the thread that forks (row 13 failed without the hook), so the `pre_exec` hook of 21.5 empties it |
+| F9 sockets are opened close-on-exec by Rust's `std::net` | `ignite_io::net` | covers only what the runtime opens; a descriptor the server inherited without close-on-exec would pass to a child, so the child closes every descriptor from 3 up (21.5, row 14) |
+| F10 on LLVM a handle lives until the process exits unless a `spawn` moved it | `docs/llvm.md` §4 | `wait` frees a child's slot and the adapter answers a released child handle as Rust does (21.5); `execute` allocates none |
+| F11 `nix` 0.31: the workspace enables `term` and `fs`, `ignite-io` adds `signal` (which implies `process`) and `poll` under `runner` | root `Cargo.toml`, `crates/ignite-io/Cargo.toml` | `openat`, `fstatat`, `unlinkat`, `mkdirat`, `renameat2` and `killpg` are on already; U1 adds `dir` (for `Dir`) and `poll` outside `runner` (row 29) |
+| F12 the test runner already captures a child's output with `poll` and kills it at a deadline | `run_child`, `drain_output` in `crates/ignite-io/src/test.rs` | the watcher of 21.5 is the same loop, moved into `ignite_io::child` and shared; the runner keeps its own process-group behaviour (the watcher takes the group as a parameter), so Ctrl-C still reaches test children |
+| F13 the model encodes a resource as `{"id","kind","properties"}` | the resource arm of the model in `crates/ignite-eval/src/eval.rs` | no format change; the new kinds appear with their properties (row 25) |
+| F14 names in use: `Command`, `Argument` (`std.cli`), `Exited`, `Signalled` (variants of `std.control`'s `Event`), `write_text` (`std.protocol.telnet`) | those modules | the new names avoid them: `Invocation`, `ChildExit`, `Ending` with `ExitCode`, `BySignal`, `TimedOut`, `Killed`, `read_text_file`, `write_text_file` |
+| F15 E140 to E149 are unused on `main` and on `feat/slice16-language-gaps`; T4 ends at E139 | section 8; `docs/vision.md` §7 T4 | this slice takes E140 to E149 (stale point S1) |
+
+The facts above are as found at `c539392`; how each stands at the close is in 21.18.
+
+### 21.2 Scope and non-goals
+
+In scope: the four capability types and their resource kinds, their effects, their methods on
+both targets over one implementation in `crates/ignite-io`, the std modules `std.fs` and
+`std.process`, the test-only constructors, the model entries, `ignite run`'s handling of
+settings, and the P3 end-to-end row.
+
+Not in scope:
+
+- sandboxing a child: a child process is not confined to any `Directory`; the launcher is the
+  authority to run programs (design §8.8 leaves isolation to a later slice);
+- shells, pipes between children, a pty, writing to a child's stdin (stdin is the null device),
+  streaming a child's output while it runs;
+- file watching, permissions and modes, memory-mapped files, file handles for partial reads,
+  symlinks that stay inside the root (they are refused, 21.4), renaming;
+- seeded or deterministic random generators;
+- an argument-parsing library beyond `Setting` (the stories exclude it; `std.cli` keeps its
+  declarations);
+- passing setting values from `ignite run` or `ignite apply` (21.15);
+- `story:http-server-responses` (P4 to P6);
+- killing grandchildren when the program dies without an orderly exit (SIGKILL, a crash):
+  direct children are killed (21.5), grandchildren are 21.15's;
+- platforms other than Linux; the code uses POSIX calls, but no row runs elsewhere.
+
+### 21.3 Capabilities are values (P3)
+
+A capability is obtained in exactly two ways:
+
+1. A system declares it as a resource, and the generated `main` creates it before the kind's
+   `main` runs, as it creates a `Store` and binds a `TcpListener` (section 6.1). A component
+   receives it through a property, typically the `state` of an `HttpApp`.
+2. A test or test-only item creates one with a test-only constructor: `Directory.temporary()`,
+   `Launcher.new()`, `Entropy.new()`, `Setting.of(flag, value)`. Anywhere else these are E051.
+
+A capability resource needs no deployment binding: it belongs to the process of the member
+that creates it, and an assembly's resolution hosts it there implicitly (15.6), so the studio
+below resolves under the standard `Deployment` with bindings for `Studio.ingress` and
+`Studio.server` only. A capability resource provisions nothing: only a `TcpListener` has a
+`provisioning` edge (16.14).
+
+There is no static that yields a capability outside tests, and no new ambient head: `process`
+stays the head of `process.exit` and `process.args` only. A handler of an `HttpApp<S>` can use a
+capability only if `S` holds it, so `requires [state.*]` covers every effect it uses (probe p2
+shows that an ambient effect there is E017).
+
+```ignite
+type Bench {
+  files: Directory
+  tools: Launcher
+  entropy: Entropy
+  tool: Setting
+}
+
+fn handle(state: Bench, request: Request) -> Response = ...
+
+system Studio {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 8095 }
+  resource files: Directory { path = "workspace", create = true, flag = "--root" }
+  resource tools: Launcher
+  resource entropy: Entropy
+  resource tool: Setting { flag = "--tool" }
+
+  component server: HttpServer {
+    listener = ingress
+    application = HttpApp { state = Bench { files = files, tools = tools, entropy = entropy, tool = tool }, handle }
+    executable = "studiod"
+  }
+}
+```
+
+Effects. Each method needs `<root>.<op>` on each root of its receiver (section 5.1), checked by
+the receiver's declared type as `Store` methods are (F5):
+
+| type | method | op |
+|---|---|---|
+| `Directory` | `read_file`, `read_directory` | `read` |
+| `Directory` | `write_file`, `create_directory`, `remove`, `remove_tree` | `write` |
+| `Directory` | `absolute_path` | `read` |
+| `Launcher` | `start`, `execute` | `launch` |
+| `ChildProcess` | `wait` | `wait` |
+| `ChildProcess` | `id` | none (pure; a `ChildProcess` exists only at run time) |
+| `ChildProcess` | `kill` | `kill` |
+| `Entropy` | `random_bytes` | `draw` |
+| `Setting` | `value` | `argument` |
+
+- The op is `launch`, not `spawn`, because `spawn` is a keyword.
+- The ops differ per kind (`read`, `write`, `launch`, `draw`, `argument`), so `requires
+  [b.read]` on a record holding a `Directory`, an `Entropy` and a `Setting` grants only the
+  directory's reads; `b.*` grants all.
+- `Setting.value` and `Directory.absolute_path` are effectful although their values are fixed
+  at launch: that keeps them out of compile-time evaluation (a property expression must be pure,
+  E116; design §3.5), and keeps reading a launch argument a tracked authority, as
+  `Endpoint.of`'s `process.args` is.
+- A `ChildProcess` returned by `start` has no roots (vision §6 L4: authority over a listener is
+  authority over its connections), so the function that started it waits for and kills it
+  without further `requires`. A `ChildProcess` received as a parameter needs `p.wait` and
+  `p.kill`.
+- All five types are handles (`can_hold_handle`), so a record holding one carries roots, and a
+  closure that captures one is charged where it is created (section 13.3).
+- `ignite-check`'s `static_type` knows the result types of the four test-only constructors
+  (also through `?`) and of `start` on a receiver it knows as `Launcher` (also through `?`), so
+  `let files = Directory.temporary()?`, `Launcher.new().execute(..)` and `let child =
+  tools.start(..)?` need no annotation. Any other receiver whose type `ignite-check` cannot see
+  is E042, as for `Store` (section 11.7).
+
+Concurrency: every capability may be used by several tasks at once. On the Rust target each is
+a cheap clone of an `Arc`; on LLVM each is an `i64` handle into the runtime's table, and the
+substrate object behind it is shared.
+
+### 21.4 Files (`Directory`, `std.fs`)
+
+Resource kind `Directory`:
+
+| property | type | default | meaning |
+|---|---|---|---|
+| `path` | `Text` | required (E104) | the root; relative to the executable's working directory at launch |
+| `create` | `Bool` | `false` | create the root and its parents at launch when it is missing |
+| `flag` | `Text` | `""` | a command-line flag whose value replaces `path` at launch, for example `"--root"` (21.6) |
+
+At launch the generated `main` resolves the path (flag value first, else `path`), creates it if
+`create` is true, opens it with `O_DIRECTORY | O_CLOEXEC` and keeps that descriptor for the
+process's life. A missing root, a root that is no directory, or a failing open ends the program
+with exit status 2 and the line `error: directory <path>: <reason>` on stderr (the form of
+`ignite_io::run`), before any listener is bound. Every operation resolves relative to the kept
+descriptor, so renaming the root's path later moves nothing.
+
+Methods. Each returns `Result<_, IoError>`, and the result column names the `Ok` type.
+`std.fs` and `std.process` declare no `IoResult` alias: `std.protocol.http` and
+`std.protocol.telnet` each declare one, and a name two glob imports provide is E041 at use.
+
+| method | result | behaviour |
+|---|---|---|
+| `read_file(path)` | `Bytes` | the file's bytes. The last component is opened with `O_NONBLOCK`, checked with `fstat` and refused unless it is a regular file (`path <p>: not a regular file`, so a FIFO cannot block the task), then read; a file larger than 16 MiB is the error `path <p>: larger than 16 MiB` |
+| `write_file(path, data: Bytes)` | `Unit` | creates or replaces the file atomically: writes a temporary `.ignite-<pid>-<n>` in the same directory with `O_CREAT \| O_EXCL \| O_NOFOLLOW` (its name does not grow with the target's, so every name the OS takes, up to `NAME_MAX`, is written), then renames it over the target; a replaced regular file keeps its permission bits (`mode & 0o777`, given to the temporary with `fchmod` before the rename), a new file is created with mode 0644 under the process's umask; no `fsync` (durability is not promised); the parent must exist |
+| `read_directory(path)` | `List<Text>` | the entries' names in byte order, without `.` and `..`; a directory's name ends with `/`; a symlink is listed by its name without following it; more than 65,536 entries is the error `path <p>: more than 65536 entries`; this bound is the listing's only. An entry whose name is not UTF-8 has no `Text` that names it back, so it is neither dropped nor listed under another name: the listing is the error `path <p>: entry <name> is not UTF-8`, `<name>` its bytes as Rust's `escape_ascii` writes them (`a\xff`); `remove_tree` of a directory above it removes it |
+| `create_directory(path)` | `Unit` | creates the directory and its missing parents; an existing directory is `Ok` |
+| `remove(path)` | `Unit` | removes a file, a symlink (not its target) or an empty directory; a missing entry is an error |
+| `remove_tree(path)` | `Unit` | removes a directory and everything under it without following any symlink, iteratively, by the raw names the OS lists (a name that is not UTF-8 is removed with the rest) and with no bound on the entries of a directory; a missing entry is an error; a tree deeper than 256 levels is the error `path <p>: deeper than 256 levels`, found before anything is removed; the root itself (`""`, `.`) is the error `path <p>: the root itself`, where `<p>` is the path as given |
+| `absolute_path()` | `Text` | the root's canonical absolute path as resolved at launch; needs `read` (21.3) |
+
+Paths are `Text`, relative, separated by `/`. Empty components and `.` are skipped, so `""` and
+`.` name the root (which `read_directory` and `create_directory` accept and `read_file` refuses
+as a directory). Refused before any IO, as error values (row 2):
+
+- an absolute path (`/` first): `path <p>: absolute`;
+- a `..` component anywhere: `path <p>: leaves its root`;
+- a NUL byte: `path <p>: contains NUL`.
+
+Symlinks. Resolution walks the components from the root descriptor with `openat(...,
+O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC)` for each directory and `O_NOFOLLOW` for the last
+component. A symlink at any component is the error `path <p>: symbolic link <component>`, where
+`<component>` is the path up to and including the link,
+except that `remove` and `remove_tree` remove a link that is the last component (or lies inside
+the tree) as a link. Because no step follows a link and each step opens relative to the
+descriptor of the one before, a component swapped for a link between steps is caught at the step
+that opens it (row 4). The kernel reports such an open as `ELOOP` or `ENOTDIR`; the substrate
+then checks the component with `fstatat(.., AT_SYMLINK_NOFOLLOW)` and reports `symbolic link
+<component>` when it is a link, else the OS reason. A walk that loses a race (the component is
+missing for an instant) is an ordinary `Err`; it never reaches outside the root. Symlinks that
+stay inside the root are refused too; following them is 21.15's.
+
+Errors from the operating system are `IoError` values whose message is `path <p>: <reason>` with
+the OS reason text.
+
+`std.fs` (new file `std/fs.ignite`, base layer, a substrate module beside `std.net`) declares
+the doc comments of the builtins and:
+
+- `fn read_text_file(files: Directory, path: Text) -> Result<Text, IoError> requires [files.read]`
+  (invalid UTF-8 is an error naming the path);
+- `fn write_text_file(files: Directory, path: Text, text: Text) -> Result<Unit, IoError> requires
+  [files.write]`;
+- `fn join_path(left: Text, right: Text) -> Text` (one `/` between non-empty parts).
+
+### 21.5 Processes (`Launcher`, `ChildProcess`, `std.process`)
+
+Resource kind `Launcher`:
+
+| property | type | default | meaning |
+|---|---|---|---|
+| `maximum_children` | `Int` | `16` | the most children started and not yet waited, at once; `1..=1024` (E104) |
+
+`std.process` (new file `std/process.ignite`, base layer, a substrate module) declares the
+records that cross the ABI, as `Endpoint` does (section 16.13):
+
+```ignite
+type Invocation {
+  program: Text
+  arguments: List<Text> = []
+  directory: Text = ""
+  environment: List<Text> = []
+  inherit_environment: Bool = true
+  timeout: Duration = 30 seconds
+  output_limit: ByteSize = 1 MiB
+}
+
+type ChildExit {
+  ending: Int
+  code: Int
+  stdout: Bytes
+  stderr: Bytes
+  dropped: Int
+}
+
+enum Ending { ExitCode(Int), BySignal(Int), TimedOut, Killed }
+
+fn outcome(exit: ChildExit) -> Ending
+fn succeeded(exit: ChildExit) -> Bool
+```
+
+- `program`: a bare name, looked up in the `PATH` of the child's environment, or an absolute
+  path. A relative path containing `/` is the error `program <p>: a relative path with /`; a
+  name not found is `program not found: <p>`.
+- `arguments`: passed as they are; no shell.
+- `directory`: `""` keeps the program's own working directory; otherwise an absolute path
+  (`directory <d>: not absolute`). `Directory.absolute_path()` gives one. It is checked before
+  the child starts: one that does not exist, is no directory or cannot be entered is the error
+  `directory <d>: <reason>` (the OS reason, such as `No such file or directory`), never
+  `program not found`. `program not found: <p>` means only that the program's path does not
+  exist; any other failure to start is `program <p>: <reason>`.
+- `environment`: entries `NAME=value`, applied over the inherited environment, or over an empty
+  one when `inherit_environment` is false. An entry without `=` or with an empty name is an
+  error. The default `true` hands the server's whole environment, secrets included, to every
+  child; a caller that runs untrusted programs sets it to false and passes `PATH` and what else
+  the child needs (design §9.3 asks that effects name what a build reaches).
+- `timeout`: positive (`timeout must be positive`). On expiry the child's process group gets
+  SIGKILL and the result is `TimedOut`.
+- `output_limit`: per stream, at most 16 MiB (`output_limit must be at most 16 MiB`). Output
+  past it is read and discarded and counted in `dropped` (both streams together), so a child
+  that writes a lot never blocks on a full pipe.
+- `ChildExit.ending`: 0 exited (`code` is the exit status), 1 signalled (`code` is the signal
+  number), 2 timed out, 3 killed (`code` -1 for both). `outcome(exit)` maps it to `Ending`; a
+  fn named `ending` would shadow the field in a UFCS call.
+
+Methods:
+
+| method | result | behaviour |
+|---|---|---|
+| `launcher.execute(invocation)` | `Result<ChildExit, IoError>` | starts the child and waits for it on the calling task |
+| `launcher.start(invocation)` | `Result<ChildProcess, IoError>` | starts the child and returns at once |
+| `child.id()` | `Int` | the child's process id, which is also its process group id; pure |
+| `child.wait()` | `Result<ChildExit, IoError>` | waits for the end; a second `wait` is the error `child already waited` |
+| `child.kill()` | `Result<Unit, IoError>` | sends SIGKILL to the child's group while the child is unreaped; `Ok` and nothing sent once it was reaped; the result of a later `wait` is `Killed` unless it had already ended |
+
+The substrate (`ignite_io::child`):
+
+- Every child is started by its own watcher thread (named `child`), also for `execute`, so that
+  `PR_SET_PDEATHSIG` (which fires when the starting thread ends) lives as long as the watcher.
+- The child starts with `Command` (Rust std), stdin the null device, stdout and stderr pipes,
+  its own process group (`process_group(0)`) and an empty signal mask. Rust's `Command`
+  resets SIGPIPE but keeps the signal mask of the thread that forks, which blocks SIGTERM (16.13;
+  row 13 failed without the hook), so a `pre_exec` hook empties the mask; other dispositions the
+  server inherited as ignored stay ignored. The same hook sets `PR_SET_PDEATHSIG` to SIGKILL
+  (and exits at once if the parent already died), and marks every descriptor from 3 up
+  close-on-exec with `close_range` (row 14), so a descriptor the server inherited without
+  close-on-exec does not reach the child either.
+- SIGCHLD is reset to its default action at program start on both targets (`drain::install`,
+  which `ignite_io::run` and the runtime's `init` call) and before the first spawn (the test
+  runner). A SIGCHLD inherited as ignored (a parent's `trap '' CHLD` survives exec) makes the
+  kernel reap every child itself, so no status could be read. Children therefore start with
+  SIGCHLD at its default too. Should a child still be reaped by someone else (`waitid` fails
+  with ECHILD), it counts as ended with `ending 1 code -1`, and nothing signals its pid or
+  group again, since either may be reused.
+- The watcher reads both pipes with `poll`, enforces the deadline, waits for the child's end
+  with `waitid(WEXITED | WNOWAIT)` (the child stays a zombie, so its pid and group id cannot be
+  reused), sends SIGKILL to the group, reaps the child, then reads the pipes until end of file
+  or 100 ms, whichever comes first. A grandchild that left the group and holds a pipe open
+  therefore delays the result by at most 100 ms. `kill` sends to the group only while the child
+  is unreaped, under the same lock as the reaping, so it never reaches a reused group id.
+- A child counts against `maximum_children` from `start` until its `wait` returns (`execute`
+  waits itself). An unwaited child keeps counting until the process exits, on both targets, so
+  a program that starts and never waits runs into `too many children (<n>)` instead of growing.
+  Nothing waits for a free slot.
+- When the program ends in order (`main` returns, `Process.exit`, a fatal `?` report, the end of
+  a SIGTERM drain, or a second SIGTERM during the drain), every live child's group gets SIGKILL
+  before the process exits, through the exit hooks of `ignite_io` (21.12). When the program is
+  killed (SIGKILL, a crash), `PR_SET_PDEATHSIG` kills each direct child; its grandchildren are
+  not reached (21.15). Row 17.
+- LLVM: `start` allocates a table slot and `wait` frees it, so a waited child leaks no slot;
+  `execute` allocates none. The `ignite-rt` adapter answers a released `Child` handle (its
+  generation tells released from never-allocated) as Rust answers a waited child: `wait` is
+  `Err` `child already waited`, `kill` is `Ok`, `id` returns the id kept in the released entry
+  (row 11). The entry keeps the id by the handle's generation, so a waited handle answers its
+  id after a later handle reused the slot, as the Rust target does; that is 16 bytes per waited
+  child until the process exits. An unwaited child keeps its slot and its output, up to twice `output_limit`, until
+  the process exits; `maximum_children` bounds how many (21.15).
+
+### 21.6 Arguments (`Setting`)
+
+Resource kind `Setting`:
+
+| property | type | default | meaning |
+|---|---|---|---|
+| `flag` | `Text` | required (E104) | the flag, `--` followed by `[a-z0-9-]+` |
+| `default` | `Text` | absent | the value when the flag is not given; absent makes the flag required at launch |
+
+- The generated `main` reads each setting's flag, and each `Directory`'s `flag`, from the
+  process arguments before it binds a listener, by the rule of `--port` (`args::port_from_args`):
+  the first `--flag V` or `--flag=V` wins; arguments it does not know are ignored, so `--port`
+  and `--ref` keep their meaning and the same argument list serves all. A value after `--flag`
+  that itself starts with `--` is no value: `--mode --tool /x` is `--mode needs a value`.
+  `--flag=V` takes `V` as it is, also when it is empty or starts with `--`.
+- Arguments are read as the bytes the OS gave, on both targets (`args_os` on Rust, `argv` kept
+  as bytes by `ignite-rt`'s `init` on LLVM); nothing is decoded lossily. A value that is not
+  UTF-8 has no `Text`, so the read that asks for it refuses it: `error: <flag>: value <bytes>
+  is not UTF-8`, exit status 2, `<bytes>` as Rust's `escape_ascii` writes them (`/bin/\xff`),
+  as 21.4 names an entry. This holds for `--port`, `--ref` (each binding is read) and every
+  setting and directory flag. An argument that is not UTF-8 and that no read asks for is
+  ignored, like any other argument a read does not know. (As landed, U4:
+  `ignite_io::args::{flag,port,endpoint}_from_os_args`; before U4 the Rust target panicked in
+  `std::env::args` on any such argument and the LLVM target replaced its bytes with U+FFFD.)
+- A required flag that is absent ends the program with exit status 2 and `error: <flag>:
+  required argument missing` on stderr; a flag without a value, exit status 2 and `error:
+  <flag> needs a value`, as `--port` does (the `error: ` prefix is `ignite_io::run`'s).
+- `setting.value()` returns the value as `Text` and needs `<root>.argument` (21.3).
+- Flags are unique per system and differ from `--port` and `--ref` (E141).
+- A `default` is part of the declaration and so of the model `ignite plan` prints; a secret
+  belongs in a flag given at launch, not in a `default`.
+
+`ignite run` and `ignite apply` pass no setting values in this slice. They start an executable
+with its own arguments (`--port`, `--ref`), so a setting takes its `default` and a `Directory`
+its `path`. A relative `path` resolves against the executable's working directory: under
+`ignite run` the run's (F7), under `ignite apply` the `ignite host`'s, which a saved plan does
+not record (21.16 Q2). A system that `ignite run` or `ignite plan --for-apply` would start with a
+`Setting` without `default` is E142 before anything starts and before the host is contacted
+(row 26): the alternative, a member that exits 2 at every restart until its policy gives up,
+reports the same mistake late.
+
+The model (section 15.5) is unchanged in format: each resource appears as `{"id", "kind",
+"properties"}` with its declared and defaulted properties (`default` only when given), as
+row 25 fixes.
+
+### 21.7 Random bytes (`Entropy`)
+
+Resource kind `Entropy`, no properties (E047 for any). At launch the generated `main` opens
+`/dev/urandom` with `O_CLOEXEC` once; `entropy.random_bytes(count)` (op `draw`) reads `count`
+bytes from it, `0..=65536`, else the error `random_bytes: count must be in 0..=65536`.
+`/dev/urandom` gives cryptographically secure bytes once the kernel's pool is initialised,
+which on Linux happens during boot; no new dependency (`getrandom`) is needed for that.
+
+### 21.8 Typed API (add-only)
+
+Builtin types (in `ignite-check`'s builtin type list and `ignite-types`' `Ty`): `Directory`,
+`Launcher`, `ChildProcess`, `Entropy`, `Setting`. Declaring a type of one of these names is E004.
+
+Builtin statics, all test-only (E051 outside tests and test-only items):
+
+| static | type |
+|---|---|
+| `Directory.temporary()` | `Result<Directory, IoError>`: a new empty directory inside the per-test scratch directory that the test runner creates before it starts the test child and removes with its contents after it reaped the child, so a test killed at its timeout leaves nothing; the scratch directory lies under `std::env::temp_dir()`, and its path reaches the child in the environment variable `IGNITE_TEST_SCRATCH` |
+| `Launcher.new()` | `Launcher` with `maximum_children = 16` |
+| `Entropy.new()` | `Entropy` |
+| `Setting.of(flag: Text, value: Text)` | `Setting` |
+
+Builtin methods: those of 21.3, with the signatures of 21.4 to 21.7. They dispatch on the
+receiver's type and are not in `BUILTIN_METHODS` (D3): `ignite-check` finds them by the
+receiver's declared type in `CAPABILITY_METHODS` (type, method, effect operation), and
+`ignite-types` types them by the receiver's type; none is added to `EFFECTFUL_METHODS`. The
+std modules their signatures name are loaded with any file that names the type (16.22).
+
+Resource kinds: `Directory`, `Launcher`, `Entropy`, `Setting`, beside `TcpListener` and
+`Store`. The generated `main`'s order becomes: `run`; stores; settings and directory flags read
+from the arguments; directories; launchers; entropy; bind listeners (with `--port`); build the
+values; call `K.main`.
+
+`ignite-io` (new public modules): `fs` (`Directory`), `child` (`Launcher`, `ChildProcess`,
+`Invocation`, `ChildExit`), `entropy` (`Entropy`), and in `args` the function
+`flag_from_args(args, flag) -> Result<Option<String>, IoError>`; in `lib.rs` an exit-hook
+registry, `at_exit(hook: fn())`, whose hooks `exit`, the end of `run`, the end of a drain and
+the second-SIGTERM path call once before the process ends. `ignite-rt`: the files `fs.rs`,
+`child.rs`, `entropy.rs`, the `Handle` variants `Directory`, `Launcher`, `Child`, `Entropy`,
+`Setting`, `repr(C)` records `IgniteInvocation` and `IgniteChildExit` beside `IgniteEndpoint`,
+and `ignite_rt_args_flag` beside `ignite_rt_args_port` in `process.rs`. Public APIs of the
+compiler crates only gain items.
+
+### 21.9 Diagnostics
+
+New codes (section 8 gets a "Codes of slice 17" paragraph):
+
+| code | stage | meaning | fixture |
+|---|---|---|---|
+| E140 | type checker | a `Text` literal path argument of a `Directory` method that is absolute, has a `..` component or a NUL; the run-time check stays (row 2) | `e140_path_leaves_root` (ignite-types) |
+| E141 | type checker | a flag of a `Setting` or `Directory` that another resource of the system also uses, or that is `--port` or `--ref` | `e141_flag_collision` (ignite-types) |
+| E142 | `ignite run`, `ignite plan --for-apply` (before the host is contacted) | a `Setting` without `default` in a member the run or the plan would start | `e142_setting_without_default` (crates/ignite) |
+
+Changed codes:
+
+- E104 gains three texts: `` `path` of `Directory` must be a non-empty text without NUL``,
+  `` `maximum_children` of `Launcher` must be in 1..=1024, got <n>``, `` `flag` must be `--`
+  followed by lowercase letters, digits or `-`, got <text>`` (for `Setting` and `Directory`);
+  and the required-field text for `Directory.path` and `Setting.flag`. A property that is not a
+  literal where a literal is needed (`flag`, `path`, `default`, `maximum_children`) is E104 with
+  `` `<p>` of `<Kind>` must be a literal``.
+- E047 for an unknown property of the new kinds, listing the kind's properties.
+- E020's resource text becomes ``unsupported resource kind `X`; expected `TcpListener`,
+  `Store`, `Directory`, `Launcher`, `Entropy` or `Setting` `` in the type checker and in
+  `lower_resources`.
+- E051 covers the four test-only statics of 21.8.
+- E016 and E042 cover the new methods as section 5.1 and 11.7 define them, with the existing
+  text ``missing effect `<root>.<op>` for `<receiver>.<method>`; add it to the `requires` of
+  `<fn>` `` (rows 8, 15, 21).
+- E056 also names `clock` (row 35).
+- `every_checker_code_has_a_fixture` and `every_type_code_has_a_fixture` list the new and
+  extended codes; the `crates/ignite` fixture list gains E142.
+
+### 21.10 Stale points
+
+| # | where | stale text | resolution, by whom |
+|---|---|---|---|
+| S1 | `docs/vision.md` §7 T4 | the ranges end at "E130 to E139: slice 13 (F4)" | add "E140 to E149: slice 17 (playground substrate)"; U6 |
+| S2 | `docs/layering.md` and `layering::` | no rows for `std.fs`, `std.process` | add both to the base layer with `std.net`; U1 |
+| S3 | section 7 (substrate) and section 6.1 (system lowering) | list only TCP, pipes, stdin, stdout, process exit and arguments, and only `TcpListener` and `Store` | one forward line each to 21; U1 |
+| S4 | `AGENTS.md` layout table | no `std/fs.ignite`, `std/process.ignite`; the `crates/ignite-io` row omits files, children and entropy | rows; U6 |
+| S5 | `std/net.ignite` doc comment listing the substrate builtins | lists only the network builtins | unchanged; the new builtins are documented in `std/fs.ignite` and `std/process.ignite` (`Entropy`, `Setting` in `std/process.ignite`); U1 |
+| S6 | the E020 text in fixtures and tests (row 31) | "expected `TcpListener` or `Store`" | the new text; U1 |
+| S7 | `docs/design.md` §3.5 | effect interfaces for files and processes as ambient interfaces | unchanged (design is direction, T2); this section is the contract, and the difference is recorded in `docs/vision.md` §6 as a new X-row by U6 |
+| S8 | `docs/vision.md` §3 invariant 3 | enumerates the handle types (`TcpStream`, `PipeStream`, `TcpListener`, `Store<T>`, …) | add `Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`; U6 |
+| S9 | section 5.1, the roots rule | lists `TcpStream`, `TcpListener`, `Store`, `Stdin`, `Stdout` as handle types | add the five; U1 |
+| S10 | `feat/slice16-language-gaps` 20.3.1, the move analysis' handle predicate | "a handle type (invariant 3)" without the five, which would be moved as aggregates | whichever of slice 16 and slice 17 merges second adds the five to that predicate and a move test for one of them; that unit's commit names S10 |
+| S11 | `docs/vision.md` §3, the L0 substrate row | no files, children or entropy | add them; U6 |
+
+### 21.11 Decisions
+
+| # | decision | alternative | why |
+|---|---|---|---|
+| D1 | capabilities are resource handles passed in values | ambient statics with effects such as `fs.write` | P3: a handler may act only on its state; vision invariant 4 |
+| D2 | four kinds, one per authority, each with its own op names | one `Host` capability with all four | a handler that only reads files should not be able to run programs; the state record composes them (probe p4), and distinct ops keep `requires [b.read]` from granting more than reads (21.3) |
+| D3 | effects checked by the receiver's declared type, with `static_type` arms for the constructors and `start` | by method name in `EFFECTFUL_METHODS` | a by-name table would capture user fns named `start`, `value`, `wait`, `kill` or `execute` (F5); the arms spare tests the annotations `Store` needs |
+| D4 | confinement by an `openat` walk with `O_NOFOLLOW`, every symlink refused | `openat2` with `RESOLVE_BENEATH` (follows inside links); `canonicalize` and a prefix check | the walk needs no kernel 5.6 feature; the prefix check races (row 4); inside links are rare in a workspace |
+| D5 | no `Directory.subdirectory` (attenuation) in this slice | `open(path) -> Directory` sharing the receiver's roots | on LLVM every call would hold a table slot until exit (F10), unbounded in a handler; relative paths cover the playground |
+| D6 | `execute` beside `start` | only `start` and `wait` | `execute` allocates no LLVM slot and is what a run button does |
+| D7 | one watcher thread per child, which also starts it | one shared reaper thread with `poll` over every pipe | the test runner's loop already works per child (F12); `PR_SET_PDEATHSIG` needs the starting thread to live as long as the child; `maximum_children` bounds the threads |
+| D8 | environment as `List<Text>` of `NAME=value` | `Map<Text, Text>` | `List<Text>` already crosses the ABI (`texts` in `ignite-rt`); a map does not |
+| D9 | `ChildExit.ending: Int` and the enum `Ending` beside it | the enum in the record | an enum with payload does not cross the ABI today; `Endpoint`-style records do |
+| D10 | `Setting` as the name, a resource kind and not a parser | `Flag`, `Argument`; extending `std.cli` | `Argument` is a `std.cli` type; `Flag` is design §3.6's future CLI vocabulary; the story excludes a parsing library, and one flag per resource is none (21.16 Q6) |
+| D11 | settings and the directory flag are read once at launch | a `process.args` static readable anywhere | P3, and a misconfigured server fails before it binds a port (row 18) |
+| D12 | `ignite run` passes no setting values; E142 for a setting without default | `--setting member.flag=value` on `ignite run` | the playground starts its server directly; the flag syntax for `run` and the saved-plan identity of the values deserve their own decision (21.16 Q1) |
+| D13 | `/dev/urandom`, no new dependency | the `getrandom` crate | one file read; AGENTS.md asks a line for every new dependency, and none is needed |
+| D14 | E104 for malformed property values, new E141 for collisions | a new code for every property rule | E104 already carries property texts (the loopback rule of 14.11); a collision is a system rule, like E105 |
+| D15 | a frontend unit U1 before the four behaviour units | each story adds its own frontend | the four touch the same tables in `ignite-check`, `ignite-types`, `ignite-eval` and both backends; one owner avoids four-way conflicts, as 16.18 to 16.20's skeleton did |
+| D16 | a `pre_exec` hook with `close_range` and `PR_SET_PDEATHSIG`, the second `unsafe` block of `ignite-io` (the first is `net.rs`'s `shutdown`) | close-on-exec only; no death signal | close-on-exec cannot cover descriptors the server inherited (R10); without the death signal a killed server leaves children unbounded (R11) |
+| D17 | a child counts against `maximum_children` until waited, on both targets | until reaped | an unwaited child keeps an LLVM slot; counting it bounds the slots (invariant 5) and keeps both targets alike |
+| D18 | `clock` becomes an ambient head (E056) in this slice | defer the finding of probe p1 | it is the P3 hole this slice exists to respect, a one-line change, and no parameter named `clock` exists |
+
+### 21.12 Work split
+
+| unit | story | owns | depends on | first failing test | rows |
+|---|---|---|---|---|---|
+| U0 | `story:slice-17-contract` | this section, the section-8 rows, `docs/slice17-review.md` | — | — | — |
+| U1 | `story:slice-17-frontend` | in `crates/ignite-check/src/lib.rs` the builtin types, statics, methods and effects, `can_hold_handle`, the `static_type` arms of 21.3, `clock` in `AMBIENT_HEADS`; in `crates/ignite-types/src/` the `Ty` variants (`lib.rs`), `builtins.rs`, `typer.rs` (`effect_site`, E140), `typer/effects.rs`, `typer/system.rs` (kinds, E104, E141); `crates/ignite-eval/src/{eval,value}.rs` (the model arm and builtin values); `std/fs.ignite` and `std/process.ignite` with records, helpers, builtin doc comments and the line `// ---- entropy tests ----`; `SUBSTRATE_MODULES`, `docs/layering.md`, `layering::`; resource, flag and method lowering in `crates/ignite-rustgen` and in `crates/ignite-llvm` (`lower.rs`, `region.rs`, `layout.rs`, `glue.rs` as needed), calling the substrate; skeleton modules `ignite_io::{fs,child,entropy}`, `args::flag_from_args`, the `at_exit` registry in `crates/ignite-io/src/lib.rs` called by `exit`, `run` and `drain.rs`, the per-test scratch directory in `crates/ignite-io/src/test.rs` (created before, removed after each test child); `crates/ignite-rt/src/{fs,child,entropy}.rs`, the `Handle` variants in `net.rs`, `ignite_rt_args_flag` in `process.rs`; the `nix` features `dir` and `poll`; every operation a placeholder arm (21.13); the fixtures of rows 8, 15, 19, 21 to 23, 27, 35; `studio.ignite` and the golden of row 25; the goldens of row 36; `CODEGEN_REVISION`; the forward lines and lists of S3 and S9 | U0 | `fixtures::fixtures_match_expected` (ignite-check) on `e016_directory_effect` | 8, 15, 19, 21 to 23, 25, 27 to 29, 31, 32, 35, 36 |
+| U2 | `story:file-system` | `crates/ignite-io/src/fs.rs` and its unit tests (`Directory.temporary()` inside the scratch directory), `crates/ignite-rt/src/fs.rs`, the tests in `std/fs.ignite` | U1 | `fs::symlinks_out_are_refused` | 1 to 7 |
+| U3 | `story:process-spawn` | `crates/ignite-io/src/child.rs` (the watcher, its `pre_exec` hook, its `at_exit` hook killing live groups); in `crates/ignite-io/src/test.rs` only `run_child` and `drain_output`, moved onto the watcher with the runner's process-group behaviour kept; `crates/ignite-rt/src/child.rs`; the process tests in `std/process.ignite` above the entropy line; fixtures `signal_mask.ignite`, `orphans.ignite` and their tests in `crates/ignite/tests/slice17.rs` (the file and its `mod` line) | U1 | the test "a child's output and status are captured" in `std/process.ignite` | 9 to 14, 16, 17 |
+| U4 | `story:program-arguments` | `args::flag_from_args` in `crates/ignite-io/src/lib.rs` (the `args` module only), `ignite_rt_args_flag`'s body, the setting and directory-flag reads in both backends' generated `main` (U1 wrote the lowering, U4 completes what row 18 needs) and `CODEGEN_REVISION` if it changes generation; fixture `arguments.ignite` and its tests appended to `slice17.rs`; E142 in `crates/ignite/src/run/` and `crates/ignite/src/apply/plan.rs` with fixtures `e142_setting_without_default.ignite`, `studio_defaults.ignite` and the `run::` and `apply::` tests of row 26 | U1, U3 (for `slice17.rs`) | `slice17::rust::settings_read_their_flags` | 18, 26, 32 |
+| U5 | `story:random-bytes` | `crates/ignite-io/src/entropy.rs`, `crates/ignite-rt/src/entropy.rs`, the entropy test in `std/process.ignite` below the entropy line | U1 | the test "two draws differ" | 20 |
+| U6 | `story:slice-17-records` | row 24's test appended to `slice17.rs`; `STATUS.md`, `AGENTS.md`, `PLAN.md`, `docs/vision.md` §3 (S8, S11), §4.1, §6 (S7) and §7 T4 (S1); `docs/performance/17/` | U2 to U5 | `slice17::rust::studio_serves_through_its_state` | 24, 34 |
+
+Rows 30 and 33 belong to every unit.
+
+Order: W1 U0; W2 U1; W3 U2, U3 and U5; W4 U4; W5 U6.
+
+Shared files:
+
+- W3: U2, U3 and U5 each own their own files in `crates/ignite-io/src/` and
+  `crates/ignite-rt/src/`, which U1 created. `lib.rs` of both crates, `drain.rs`, `net.rs`,
+  `process.rs` (rt) and `Cargo.toml` are U1's, and no W3 unit edits them: the exit kill goes
+  through `at_exit`, the test scratch through U1's runner change. U3 alone edits `test.rs` in
+  W3, and only `run_child` and `drain_output`. U2 adds tests to `std/fs.ignite`; U3 and U5 add
+  tests to `std/process.ignite`, U3 above the line `// ---- entropy tests ----`, U5 below it.
+- W4: U4 edits the `args` module of `crates/ignite-io/src/lib.rs`,
+  `crates/ignite-rt/src/process.rs`, `crates/ignite/src/run/` and `apply/plan.rs` alone, and
+  appends to `slice17.rs` after U3 merged.
+- W5: U6 appends to `slice17.rs` after U4.
+
+Rules: one integration-test binary per crate (`AGENTS.md`), so `slice17.rs` is a `mod` line in
+`crates/ignite/tests/main.rs`. Each unit's commit names the rows of 21.0 it makes pass. The story
+ids above are the contract's names; `story:slice-17-frontend`, `story:slice-17-contract` and
+`story:slice-17-records` are new; the steering session creates or updates the stories, U0 does
+not edit the store. Stale point S10 belongs to whichever of slices 16 and 17 merges second.
+
+### 21.13 Placeholder arms
+
+After U1 every new operation exists end to end and fails at run time with one of:
+
+- `unimplemented!("slice 17: Directory.<method>")` and `unimplemented!("slice 17:
+  Directory.temporary")` in `ignite_io::fs`;
+- `unimplemented!("slice 17: Launcher.<method>")`, `unimplemented!("slice 17:
+  ChildProcess.<method>")` in `ignite_io::child`;
+- `unimplemented!("slice 17: Entropy.random_bytes")` in `ignite_io::entropy`;
+- `unimplemented!("slice 17: args::flag_from_args")` in `ignite_io::args`.
+
+The `ignite-rt` adapters of U1 call these and contain no placeholder of their own. No existing
+program declares the new resources, so the workspace stays green after U1; rows 22, 25 and the
+fixtures check without running anything. `studio.ignite` builds on both targets after U1
+(checked by U1 with `ignite build`, not run).
+
+### 21.14 Gate time
+
+Method of 18.18 (section 15.1), through `tools/ignite-perf` (modes `cold`, `warm`, `programs`,
+`cli`). "Before" is a `git archive` copy of the slice base, "after" the closed tree, each with its
+own `CARGO_TARGET_DIR`. One cold gate per tree, then three interleaved warm passes. A pair whose
+two 1-minute loads differ by more than 5 is dropped. Report the medians of the pair ratios next
+to the absolute times.
+
+Units: those of 18.18, plus `ignite test std/fs.ignite` and `ignite test std/process.ignite`
+per target, cold and warm (after only), and the build of `studio.ignite`, both targets, dev and
+release (after only). A unit that rises over 10 % gets a measured cause or the record labels the
+cause inferred. No baseline moves. The apply suites stay the slice-13 exception.
+
+Records: a "Slice 17" paragraph in `AGENTS.md`'s gate-time section; raw logs and scripts under
+`docs/performance/17/`.
+
+
+### 21.15 Deferred
+
+- Symlinks that stay inside the root; `Directory.subdirectory` (attenuation, D5); renaming;
+  permissions.
+- Writing to a child's stdin, streaming output, pipes between children.
+- Killing grandchildren when the program dies without an orderly exit: `PR_SET_PDEATHSIG`
+  reaches only direct children (21.5); a cgroup or a child subreaper would reach the rest.
+- Resetting signal dispositions that the server inherited as ignored, beyond what Rust's
+  `Command` resets (21.5).
+- Releasing an unwaited `ChildProcess` slot on LLVM before exit (F10); `maximum_children`
+  bounds it meanwhile (D17).
+- Setting values through `ignite run` and `ignite apply` (D12).
+
+### 21.16 Open questions
+
+Each has a default the units follow unless the steering session says otherwise.
+
+| # | question | default |
+|---|---|---|
+| Q1 | How does `ignite run` pass a setting's value? | not in this slice; E142 when a started member has a setting without default |
+| Q2 | What is a relative `Directory.path` relative to? | the executable's working directory: `ignite run`'s under `run` (F7), `ignite host`'s under `apply`, which the saved plan does not record; a declaration meant for `apply` uses an absolute `path` |
+| Q3 | Is 16 MiB the right read bound, and fixed? | fixed 16 MiB, as the other bounds of 21.4 and 21.5; a property later if a consumer needs more |
+| Q4 | Should `Setting` values be redacted? | the journal records no argument values; the model prints a `default`, so a secret is passed at launch and never written as a `default` (21.6) |
+| Q5 | Does a `Directory` root need `create = true` by default? | no: a missing root is a launch error unless the declaration asks for creation |
+| Q6 | Is `Setting` inside `story:program-arguments`, whose out-of-scope line excludes "an argument-parsing library beyond what `std.cli` declares"? | yes: one flag per resource read by the generated `main` is no parsing library (D10); the steering session confirms when it updates the story |
+| Q7 | Should `inherit_environment` default to false? | no: the playground's children (`ignite`, `cargo`) need `PATH` and `HOME`; the risk is documented in 21.5 |
+
+### 21.17 Resolution of the review
+
+`docs/slice17-review.md` (37 findings at `212d2eb`) is resolved in this text as follows.
+
+| finding | resolution |
+|---|---|
+| R1 (blocker) | rows 8, 15, 21 quote the existing E016 text; 21.9 states it |
+| R2 (blocker) | `child.id()` added (21.5, pure); row 17 prints it |
+| R3 (blocker) | the `ignite-rt` adapter answers a released `Child` handle as Rust answers a waited child (21.5); row 11 adds `kill` after `wait` |
+| R4 (blocker) | `static_type` arms for the four constructors and `start` (21.3, D3, U1) |
+| R5 | `absolute_path` needs `read` (21.3, 21.4) |
+| R6 | U1 owns `lib.rs`, `drain.rs`, the `at_exit` registry, the runner's scratch directory and `ignite_rt_args_flag`'s declaration; U3 edits only `run_child` and `drain_output` in `test.rs`; U4's `args` edit is stated (21.12) |
+| R7 | F11 and row 29 corrected: `fs` and `process` are on already, U1 adds `dir` and `poll`, observed with `cargo tree -e features` |
+| R8 | row 23 runs both crates' fixtures; `e017_ambient_in_handler` declares its `HttpApp`-shaped record |
+| R9 | stale points S8, S9, S10 |
+| R10 | `close_range` from 3 in `pre_exec` (21.5, D16); row 14 leaks a descriptor 5 on purpose |
+| R11 | the second-SIGTERM path runs the exit hooks; `PR_SET_PDEATHSIG` from the watcher thread (21.5, D7, D16); row 17 gains both cases; grandchildren deferred (21.15) |
+| R12 | a child counts until waited, on both targets (21.5, D17); row 16 checks the slot comes back after `wait` |
+| R13 | `read_file` refuses non-regular files via `O_NONBLOCK` and `fstat` (21.4); row 3 adds a FIFO |
+| R14 | `waitid(WNOWAIT)`, then `killpg`, then reap; `kill` sends only while unreaped (21.5) |
+| R15 | row 4 uses `renameat2(RENAME_EXCHANGE)` and allows any `Err`; 21.4 maps `ELOOP` and `ENOTDIR` |
+| R16 | row 36 (goldens on both backends); row 19 checks the code list; 21.9 names the lists |
+| R17 | row 26 uses `e142_setting_without_default` and adds `plan --for-apply` |
+| R18 | F5, D3 and row 30 name the real collisions (`start`, `value`, `wait`, `kill`, `execute`) |
+| R19 | 21.3 cites vision §6 L4 |
+| R20 | rows 18 and 21.4, 21.6 give the `error: ` prefix |
+| R21 | `<p>` is the path as given; row 6 expects both forms |
+| R22 | the fixture fns of rows 8, 15, 21 declare `requires` |
+| R23 | stale point S11 |
+| R24 | 21.6 and Q2 name `ignite host`'s working directory under `apply` |
+| R25 | a value starting with `--` is no value (21.6, row 18) |
+| R26 | bounds: `output_limit` at most 16 MiB, 65,536 directory entries, 256 levels for `remove_tree` (21.4, 21.5; rows 7, 12) |
+| R27 | row 26 runs in a temporary working directory |
+| R28 | the runner keeps its process-group behaviour (F12, U3) |
+| R29 | `Directory.temporary()` lives in a runner-owned per-test scratch directory (21.8) |
+| R30 | 21.5 says what `Command` resets; the rest is deferred (21.15) |
+| R31 | rows 10 and 17 count a zombie as gone |
+| R32 | U1's list completed; U4 bumps `CODEGEN_REVISION` if it changes generation; row 32 runs `apply_admission::` |
+| R33 | row 31 reads `git diff --stat` |
+| R34 | 21.5 documents the inherited environment, 21.6 the printed `default`; Q4, Q7 |
+| R35 | row 6 makes an outside link with `Launcher` and checks on both targets that a read through it is refused and that removal leaves the target |
+| R36 | distinct ops `draw` and `argument` (21.3, D2) |
+| R37 | Q6 |
+
+### 21.18 The close (U6)
+
+Row 24 is `slice17::{rust,llvm}::studio_serves_through_its_state` in `crates/ignite/tests/slice17.rs`.
+It passed on its first run: U2 to U5 had landed what it needs. A mutation (`--tool /bin/true`)
+fails it on both targets at `POST /run` with `(200, "")`.
+
+Stale points of this section, found during the slice and fixed at the close:
+
+- the opening said sections 19 and 20 were not on `main`; both are;
+- the base was `c539392`; the slice started at `651be04c`, and the merge base at the close is
+  `99647132` (planning-store commits only after `651be04c`); rows 31 and 32 diff against
+  `651be04c`, and row 32 names the revisions (`0.1.0-16` at the base, `-17` after U1, `-18`
+  after U4);
+- LLVM became the default target before U1 (PR 32): a paragraph after the base says what a
+  command without `--target` builds, and row 26 names the target of `run::studio_defaults_runs`;
+- row 18 passed `--ref peer=127.0.0.1:9`; a `Ref` resolves by its path `<System>.<member>`
+  (16.9), so the test passes `--ref Arguments.peer=127.0.0.1:9`, and the row now says so.
+
+The facts of 21.1 at the close:
+
+| fact | at the close |
+|---|---|
+| F1 | holds: `--port` and `--ref` keep their meaning beside the settings (row 18) |
+| F2, F3 | resolved by U1: the four capabilities are builtin types with `CAPABILITY_METHODS`; E020 names the six kinds (row 31) |
+| F4 | holds; the handler of row 24 reaches the capabilities only through `state` |
+| F5 | resolved by U1 as D3: `CAPABILITY_METHODS` by receiver type, nothing added to `EFFECTFUL_METHODS` (row 30) |
+| F6 | resolved by U1: `clock` is in `AMBIENT_HEADS` (row 35) |
+| F7 | confirmed by U4: `run::studio_defaults_runs` finds the relative root `workspace` in the run's working directory |
+| F8 | resolved by U3 (row 13), as stated in 21.1 |
+| F9 | resolved by U3: the child closes every descriptor from 3 up (row 14) |
+| F10 | resolved by U3: `wait` releases the child's slot, and a released child handle answers as a waited child on both targets (row 11) |
+| F11 | resolved by U1: `ignite-io` enables `signal`, `dir` and `poll` (row 29) |
+| F12 | resolved by U3: `ignite_io::child::watch` is the watcher of `Launcher` and of the test runner's `run_child` |
+| F13 | holds: the new kinds appear in the model unchanged in format (row 25) |
+| F14 | holds: the names of F14 stay free (row 30) |
+| F15 | resolved: E140 to E142 are taken; `docs/vision.md` §7 T4 reserves E140 to E149 for slice 17 (S1) |
+
+One gap found during the slice and closed by U6: the standard `HttpServer<S>` had no `machine`
+hook (16.16), so a system that used it directly under the standard `Deployment` with
+`nativeProcess` was E129, and the studio fixtures of row 26 and of the hosting rule (15.6) wrapped
+it in a kind of their own. `HttpServer` now has `recovery: Restart` and `rollout: DrainRollout`
+(both defaulted), `HttpServer.machine` as `TelnetServer.machine` and `HttpServer.validate` (E120:
+`limits.head` at least 1 byte, `limits.idle_timeout` and `limits.drain_timeout` positive).
+`studio_deployment.ignite` uses `HttpServer` directly, and
+`run::studio_under_the_standard_deployment_runs` runs it under `ignite run` with its supervisor
+`Running`. The model of every `HttpServer` member gains the two defaulted properties
+(`todo.model.json`, `studio.model.json`). `studio_defaults.ignite` keeps its own kind: its
+placement is not `std.deploy`'s.
+
+## 22 Slice 18: one service operated end to end (F5)
+
+**Status: contract written 2026-11-05. The independent review (`docs/slice18-review.md`) found 4
+blockers, 6 majors and 18 minors; all are resolved in this text, and 22.17 maps each finding to
+its resolution. Implementation has not started.** The rows of 22.0 are required checks, not results.
+
+This section is numbered 22 and follows section 21 (slice 17, merged into `main` as PR 34,
+`421742b3`); no line of section 21 changes here.
+
+Sources:
+
+- the planning store at `c4e24bc`: `epic:slice-18-one-service-operated`,
+  `story:slice-18-contract`, `story:apply-recovery-way-out`;
+- `docs/research/review-2026-11-04.md`: findings R2, R10, R11, R13, priorities 1, 2 and 4, and
+  Timo's correction in its section 2 (the LLVM target is the fast-build path and the target the
+  service is operated on);
+- this file: 15.4 and 15.5 (the model and its encoding), 16.5 to 16.10 (journal, reducers,
+  probes, signals, contract evaluation), 16.16 and 16.17 (hooks and their checks), 17 (`ignite apply`), 21.3 to 21.6
+  (`Directory`, capability resources, settings); `docs/vision.md` §3 invariants 5, 6, 7 and 9,
+  §7 T4.
+
+Base: `c19ab173`, the head of `feat/slice17-processes-files` when this contract was written; rebased onto `f3abeb20` (slice 17's U6 close, 21.18), whose `HttpServer` changes are cited at that commit (F8, 22.5, row 9).
+Every code citation below was read at that commit, nothing was built or run (the contract is
+documents only). Once slice 17 merges, the base becomes the merge of slice 17 into `main`; every
+`git diff` of 22.0 and the before tree of 22.15 are taken from it.
+
+The slice makes one real HTTP service, the todo example, an operated system: its data lives in
+a `Directory` (21.4) and survives a SIGKILL and an `ignite apply` rollout; an HTTP health probe
+kind and its outcome type are declared in `examples/todo/`, and an `Availability` contract over
+them is evaluated by the existing reducers through a typed predicate; `ignite apply` gets fault
+rows on that service and a way out of a recovery no corrective resolves; the build and the
+edit-build-restart cycle are timed on both targets.
+
+### 22.0 Acceptance
+
+`both` means the test runs on the Rust and the LLVM target. Fixture paths without a directory
+are under `crates/ignite/tests/fixtures/`. "Temporary working directory" means a directory under
+the test's own scratch directory that the test passes as `current_dir` to every process it
+starts, so that the relative `Directory` path of 22.4 never resolves inside the repository.
+
+| # | check | command | exact required observation | unit |
+|---|---|---|---|---|
+| 1 | the Telnet outcomes are predicates | `ignite test std/sli.ignite --target all` | the test "the prompt outcomes are predicates" passes on both targets: for `fast = ProbeAttempt { received = true, latency = 50 ms }`, `slow = { received = true, latency = 900 ms }`, `missed = { received = false, latency = 2 seconds }`: `prompt_received_before_timeout` is true, true, false; `prompt_received_within_threshold(_, 200 ms)` is true, false, false; `prompt_received_within_threshold(slow, 900 ms)` is true. `std/sli.ignite` declares no fn `satisfies` and no fn `known_outcome` | U1 |
+| 2 | the design file keeps both outcomes | `ignite check examples/terminal/terminal.design.ignite`; `cargo test -p ignite --test main plan::` | silent, exit 0, with `good = prompt_received_before_timeout` (contracts `reachable`, `customerAccess`) and `good = prompt_received_within_threshold` (`promptFast`); `plan::design_model_is_byte_identical_across_processes_and_directories` passes against `crates/ignite/tests/golden/terminal.design.model.json`, whose three contracts carry `"good": {"fn": "std.sli.prompt_received_before_timeout", "type": "Fn"}` (resp. `…within_threshold`), and the explain golden `terminal.design.explain.Terminal.reachable.txt` names the same fn | U1 |
+| 3 | the classify hook is required | `cargo test -p ignite --test main plan::fixtures_match_expected` | `e150_classify_missing.ignite` (a probe kind and a contract kind declared in the fixture; the contract's `machine` returns `Evaluate` and its kind declares no `classify`) gives exactly one E150: ``contract `S.c` of kind `fixture_e150.Watch` subscribes to `S.p.beats` of `fixture_e150.Beat` but declares no `fn Watch.classify(self: Watch, sample: fixture_e150.Beat) -> Bool` ``; the filter of the test includes `e15` | U1 |
+| 4 | the element type must be an outcome | same | `e151_undecodable_element.ignite` (a probe kind with `beats: Signal<fn() -> Int>`, run by the assembly, and a contract whose machine subscribes to it) gives exactly one E151: ``signal `S.p.beats` carries `fn() -> Int`; a probe outcome holds no fn, handle, reference or signal`` | U1 |
+| 5 | the run of the terminal is unchanged | `cargo test -p ignite --test main run::` | every `run::` test passes; `run::terminal_runs_under_ignite_run{,_on_the_llvm_target}` publish `Compliant` standings for `Terminal.reachable` as before; the journal header's `formatVersion` is `ignite-journal/0.2`; every `signal` record's `value` is a `std.sli.Sample` and every `Emitted` event a `std.sli.Verdict` | U1 |
+| 6 | an old journal is refused | `cargo test -p ignite --test main run::e126_journal_mismatch` | the fixture's journal carries `formatVersion` `ignite-journal/0.1` (it does already, `crates/ignite/tests/run.rs:1010` to `:1029`); after the bump `ignite run` and, newly in the test, `ignite replay` exit 2 with exactly one E126 of the existing version text (``the journal has formatVersion `ignite-journal/0.1`, this driver writes `ignite-journal/0.2` ``, `crates/ignite/src/lib.rs:1459` to `:1475`); the fixture's `.expected` changes from the model text to that text | U1 |
+| 7 | reducers agree | `cargo test -p ignite --test main control_trace::` | `control_trace::reducers_agree_across_the_evaluator_and_both_targets` passes with the fixture's emissions written as `Sample` and its evaluator events as `Verdict` | U1 |
+| 8 | no general layer names the probe | `git grep -n -e HttpHealth -e HealthCheck -e 'examples\.todo\.health' -- 'crates/*/src' std 'tools/*/src'` | prints nothing, exit 1. Tests and goldens under `crates/*/tests` may name the example (row 11's golden does); the epic's "no file under `crates/`" means the general layers, and the steering session rewords the epic line to match | every unit |
+| 9 | the todo checks | `ignite check examples/todo/todo.ignite` | silent, exit 0, with its server bound by `nativeProcess` (the `HttpServer.machine` hook landed in slice 17, 21.18; `std/protocol/http.ignite:144`, `:145`, `:160` to `:169` at `f3abeb20`) | U4 |
+| 10 | a store is hosted by its creator | `cargo test -p ignite --test main -- plan::fixtures_match_expected plan::store_is_hosted_by_its_server` | `store_is_hosted_by_its_server`: `ignite plan store_hosted.ignite` (a `TcpListener`, a `Store<Int>` and an `HttpServer` over it; bindings for the listener and the server only) exits 0 and its `edges` hold `{"from": "S.server", "kind": "hosts", "to": "S.counts"}`; `e110_unbound_member` keeps its expected output | U2 |
+| 11 | the todo model | `cargo test -p ignite --test main plan::todo_example_model_matches_golden` | passes against `crates/ignite/tests/golden/todo.model.json`, whose `machines` are exactly `TodoService.health.scheduler`, `TodoService.reachable.evaluator`, `TodoService.server.rollout`, `TodoService.server.supervisor`; whose `observations` hold `{"element": "examples.todo.health.HealthCheck", "interval": {"ns": 10000000000, "type": "Duration"}, "producer": "TodoService.health", "ref": "TodoService.health.checks"}`; and whose `edges` hold `hosts` edges from `TodoService.server` to `TodoService.data`, `TodoService.loaded` and `TodoService.todos` | U4 |
+| 12 | data survives SIGKILL | `cargo test -p ignite --test main todo::` | `todo::{rust,llvm}::todos_survive_sigkill`: `todod --port 0` in a temporary working directory; `POST` titles `a`, `b`, `c` (ids 1, 2, 3), `DELETE /todos/1`, `PATCH /todos/2 {"done":true}`; SIGKILL; a new `todod` in the same directory answers `GET /todos` with exactly `[{"id":2,"title":"b","done":true},{"id":3,"title":"c","done":false}]`, `GET /todos/1` with 404, and the next `POST` with id 4; afterwards `todo-data/todos/` lists exactly `1/`, `2/`, `3/`, `4/`, and `todo-data/todos/2/` lists exactly `2.json` | U4 |
+| 13 | concurrency kept | same | `todo::{rust,llvm}::{concurrent_posts,concurrent_patches}` pass unchanged in a temporary working directory each; after `concurrent_posts`, a SIGKILL and a restart in the same directory, `GET /todos` lists 1,600 todos | U4 |
+| 14 | inline tests of the todo | `ignite test examples/todo/todo.ignite --target all` | the existing tests "to_json", "handle creates, lists, reads, updates and deletes" and "handle answers 400, 404 and 405" pass on both targets with the same assertions (their helpers `answer` and `status` take the state record, and their `Store.new()` stores become the state record of 22.4 built with `Directory.temporary()`); the new test "a todo written is loaded by a fresh state" passes: a todo created through one state record is listed through a second record over the same directory with fresh stores | U4 |
+| 15 | the probe kind | `ignite test examples/todo/health.ignite --target all` | the test "a check line is the model encoding" passes on both targets: `encode_check(HealthCheck { answered = true, status = 200, latency = 12 ms })` equals `{"fields":{"answered":true,"latency":{"ns":12000000,"type":"Duration"},"status":200},"type":"examples.todo.health.HealthCheck"}` plus `\n`; `healthy` holds for it and not for `status = 503` or `answered = false` | U4 |
+| 16 | the contract reaches each status | `cargo test -p ignite --test main slice18::` | `slice18::{rust,llvm}::todo_contract_reaches_every_status`: `ignite run <copy>/todo.ignite --clock manual --target <t> --port TodoService.ingress=<free>` in a temporary working directory; the test advances the clock by `10 seconds` per slot and waits for each attempt's `signal` record (or its `AttemptFailed` event) before the next advance. Phases: 3 good slots; 4 slots with the run's copied probe executable (`<state>/bin/<generation>/health`) replaced by a script that exits 1, so the attempts fail and emit nothing while `expected` grows; the executable restored and 31 good slots, so the gap leaves the 5-minute window; then SIGSTOP of `todod` and 3 slots past their timeouts; then SIGCONT before `stop`. The statuses of the `standing` records of `TodoService.reachable`, consecutive repeats collapsed, are exactly `Compliant`, `InsufficientEvidence`, `Compliant`, `Violated` (an evaluator publishes only at an emission, and the first emission has `expected` 1, `std/control.ignite:631` to `:645`, `:793` to `:844`) | U6 |
+| 17 | durable across SIGKILL and a rollout, LLVM | same | `slice18::llvm::todo_survives_sigkill_and_a_rollout`: `ignite host` in a temporary working directory; plan and apply the todo copy (`--target llvm`), exit 0; `POST /todos {"title":"milk"}` answers 201 id 1; SIGKILL of the `TodoService.server` pid that `ignite inspect --json` reports; within 10 s inspect reports another pid ready; `GET /todos` is `[{"id":1,"title":"milk","done":false}]`; the copy's health body `ok\n` is changed to `ok 2\n`, replanned and applied, exit 0, with the action `replace` for `TodoService.server`; `GET /health` answers `ok 2\n` and `GET /todos` is the same list | U6 |
+| 18 | R11: host killed after an effect, before its receipt | same | `slice18::llvm::a_host_killed_after_dispatch_never_reports_an_unobserved_start`: the rollout of row 17 with the host started under `IGNITE_DEBUG_HOST_FAULT=after_dispatch`; the host dies; the restarted host's inspect reports the operation either `completed` with a `Ready` record in the host journal for the pid it names, or `recovery_required` with reason `outcome_unknown`; in neither case is more than one process running `revisions/*/…/todod`, and the host journal holds no two `Started` records of `TodoService.server` with one generation; `GET /todos` lists `milk` once the operation is `completed` (after a retry of the same plan if it was resumed) | U6 |
+| 19 | R11: a plan saved before a source change | same | `slice18::llvm::a_plan_saved_before_a_source_change_is_refused`: plan saved, then a response text of the copy changed; `ignite apply` exits 2 with a reason naming the changed source file; the `TodoService.server` pid in inspect is unchanged, no `transition` record follows the refusal, `GET /todos` lists `milk` | U6 |
+| 20 | R11: a torn last record | same | `slice18::llvm::a_torn_last_journal_record_is_dropped_and_recorded`: host stopped with `stop`; the bytes `{"kind":"sta` appended to `host-journal.jsonl`; the next `ignite host` prints `ignite host: dropped a torn final journal record of 12 bytes` on stderr, its journal's first new record is `journalRepaired` with `{"droppedBytes": 12, "droppedDigest": "sha256:…"}` (the digest of the 12 bytes), `ignite inspect --json` holds `journalRepairs` with that entry, and the committed revision serves `GET /todos` with `milk` | U3 (unit test), U6 (row) |
+| 21 | R11: an altered last record | same | `slice18::llvm::an_altered_last_journal_record_refuses_the_host`: host stopped; one byte inside the last record's `value` changed (the line stays valid JSON); `ignite host` exits 3 with stderr ``error: host journal record <n>: digest mismatch``, starts no process, and leaves every file of the state byte-identical; `ignite inspect --json` exits 0 with `"online": false`, `"journal": {"intact": false, "record": <n>, "reason": "digest mismatch"}` and `"nextAction": "restore host-journal.jsonl or move the state aside; the host does not start on a damaged journal"` | U3 (unit test), U6 (row) |
+| 22 | R11: the last records cut at a line boundary | same | `slice18::llvm::a_journal_cut_before_its_last_state_record_refuses_the_host`: host stopped; the journal truncated to the end of the line before its last `state` record; `ignite host` exits 3 with ``error: host journal ends before record <n> that status.json anchors``; inspect reports `"journal": {"intact": false, "record": <n>, "reason": "shorter than status.json"}` and the `nextAction` of row 21 | U3 (unit test), U6 (row) |
+| 23 | a revision journal that differs from the host's copy | `cargo test -p ignite --test main apply_integrity::` | `apply_integrity::an_altered_revision_journal_line_refuses_the_host`: after a committed apply of the terminal design (Rust), one byte of the last record of `revisions/<r>/journal.jsonl` that has a `revisionRecord` copy in the host journal is changed; `ignite host` exits 3 with ``error: revisions/<r>/journal.jsonl record <seq>: differs from the host journal``; inspect reports `"journal": {"intact": false, "record": <seq>, "reason": "revision journal differs", "file": "revisions/<r>/journal.jsonl"}` | U3 |
+| 24 | journal integrity, unit level | `cargo test -p ignite --lib apply::host::journal::` | `a_torn_final_line_is_dropped_and_repaired` (row 20's bytes give `journalRepaired`), `an_altered_record_names_its_index` (`History::load` fails with `host journal record 3: digest mismatch` for an altered third record), `a_journal_shorter_than_its_anchor_is_refused`, `a_missing_anchor_is_accepted` (a state with no `status.json`, or one without `journalAnchor`, loads as today) pass | U3 |
+| 25 | a way out of a non-resolvable recovery | `cargo test -p ignite --test main apply_way_out::` | `apply_way_out::{rust,llvm}_operator_recover_returns_the_host_to_accepting_plans`: a host driven into the state of 22.9 (a committed revision, a failed operation `gave_up`, and a later reason no corrective resolves); `ignite apply <corrective>` exits 2 with `host has an active or unresolved operation` (`crates/ignite/src/apply/host/admission.rs:279` to `:281`) and a retry of the failed plan exits 1 with `operation requires recovery; inspect its durable status` (`:244` to `:249`); `ignite recover --state S --operation <id>` exits 0 and prints `recovered <id>: stopped <n> instances; committed revision <r> restarted`; the host journal holds one `operatorRecovered` record naming the operation, the stopped pids and `"by": "ignite recover"`, and between the `recoverStarted` record and the fresh start no `Started` record of any member; inspect reports `recovery` null, the operation's receipt `state` `abandoned` with its reasons kept, and the committed revision ready; a retry of the abandoned plan exits 2 with `operation <id> was abandoned by ignite recover; prepare a new plan`; a new plan applies with exit 0 and `completed` | U5 |
+| 26 | recover refuses what it cannot prove | same | `apply_way_out::recover_refuses_an_unaccounted_process`: as row 25 with a process running an executable under `<state>/revisions/` that no ownership record names; `ignite recover` exits 1 with `recovery refused: unaccounted process <pid> runs <path>`, signals nothing (the process is alive afterwards), and journals nothing; `ignite recover` of an operation that is not `recovery_required` exits 2 with `operation <id> requires no recovery` | U5 |
+| 27 | the build is a fraction of rustc's | 22.15, `ignite-perf programs` | the records of 22.15 exist; in the after tree the median dev build of `todod` alone (`ignite build` builds `health` too; the unit times the two executables separately) on LLVM is at most 0.15 of the median on Rust in the same passes (the 12b rows give 0.309 / 3.998 = 0.077) | U8 |
+| 28 | the edit-build-restart cycle | 22.15, `ignite-perf apply-cycle` | records exist for the todo (after tree, both targets) and the terminal design (both trees, both targets); in the after tree the todo cycle's median on LLVM is below its median on Rust | U7 (mode), U8 (records) |
+| 29 | the code lists | `cargo test -p ignite --test main plan::fixtures_match_expected`; section 8 | section 8 has a "Codes of slice 18" paragraph naming E150 and E151 with their fixtures; both fixtures exist and match | U0 (paragraph), U1 (fixtures) |
+| 30 | reducer and evaluator revisions | `git diff <base> -- crates/ignite/src/apply/plan.rs`; `cargo test -p ignite --test main apply_recovery::a_changed_reducer_revision_starts_the_host_without_driving_and_asks_to_replan` | `REDUCER_EVALUATOR` differs from the base (U1); the test passes; `CODEGEN_REVISION` is unchanged unless a unit changes generation, which that unit's commit then says | U1 |
+| 31 | gate | `task gate` | exit 0 on the slice branch at the close | every unit |
+| 32 | gate time | `ls docs/performance/18/`; `grep -n "^Slice 18" AGENTS.md` | the directory holds the raw records, logs and scripts of every unit of 22.15; `AGENTS.md`'s gate-time section has one paragraph starting `Slice 18` that names the gate's head, exit, cargo passed/failed/ignored counts and inline counts per target | U8 |
+| 33 | the host keeps its working directory | `cargo test -p ignite --test main apply_integrity::a_host_started_elsewhere_is_refused` | a host started once in directory A writes `<state>/workdir` (A, canonical); stopped and started from directory B it exits 2 with ``error: state <S> is hosted from <A>; start ignite host there``, starts no process and changes no file; started from A again it runs. A state without `workdir` (written before the slice) gets one at its next start | U3 |
+| 34 | `classify` is a checked hook | `cargo test -p ignite-types --test main fixtures::` | fixture `e109_classify_signature` (a contract kind whose `classify` takes no `sample`, and one whose `classify` declares `requires [stdout.write]`) gives exactly two E109 | U1 |
+
+### 22.1 Current state and verdicts (at `c19ab173`)
+
+Read, not run: every fact below was read in the cited code; a statement marked "inferred" was
+not.
+
+| fact | where | verdict |
+|---|---|---|
+| F1 a contract's `good` is a `Text` matched against two Telnet outcomes; any other text holds for no attempt and `validate` refuses it (E120) | `std/sli.ignite:22` (`satisfies`), `:30` (`known_outcome`); `std/contract.ignite:33`, `:132` | R2 holds. `good` becomes `fn(T) -> Bool` (22.3, D1) |
+| F2 the reducers carry `ProbeAttempt` in `AttemptDone`, `Emitted` and `Emit`, and the scheduler builds the timeout sample itself | `std/control.ignite:63`, `:66`, `:88`, `:519` | a probe whose outcome is another type cannot pass through them; the payloads become `std.sli.Sample` and `Verdict` (22.3) |
+| F3 the evaluator classifies with `satisfies` and derives the slot from the sample's latency | `std/control.ignite:639`, `:626` | the classification moves to the driver's routing; the slot comes from the scheduler (22.3, D14) |
+| F4 the driver decodes a probe's line by the payload type of `EventKind.AttemptDone`, not by the signal's element type | `crates/ignite/src/run/live.rs:303` to `:311`, `:883` | the doc comment of `crates/ignite/src/run/probe.rs:4` ("decodes it by the signal's element type") and the review's R5 verdict are true only because the one element type is `ProbeAttempt`; U1 makes them true (22.3) |
+| F5 the model already records each signal's element type | `ModelObservation::element`, `crates/ignite-eval/src/model.rs:233` to `:241` | the driver reads it (22.3) |
+| F6 the driver routes an emission to every alive subscriber unchanged | `Core`, the `Emit` arm, `crates/ignite/src/run/engine.rs:565` to `:581` | the classification point (22.3) |
+| F7 the machine set is closed | `std/control.ignite:24` to `:33` (O39) | kept (out of scope, R4); the probe kind returns `Schedule`, the contract `Evaluate` |
+| F8 `HttpServer<S>` has `recovery`, `rollout`, `machine` and `validate` since slice 17's close (21.18), so a `nativeProcess` binding of it is no longer E129 | `std/protocol/http.ignite:144` to `:169` at `f3abeb20`; `std/deploy.ignite:97` to `:100` | nothing left for this slice; at `c19ab173` the hook was missing (`:137` to `:149`) |
+| F9 the todo example keeps its data in a `Store<Todo>` in memory and declares no assembly | `examples/todo/todo.ignite:80` to `:89` | R10 holds; 22.4 |
+| F10 only a capability resource is hosted implicitly; `admits` hosts a resource only when it is a `TcpListener` | `implicit_host`, `crates/ignite-eval/src/resolve.rs:341` to `:370`; `admits`, `std/deploy.ignite:52` to `:77` | inferred: an assembly of the todo with its `Store` resource is E110 today; U2 hosts a `Store` as a capability (22.5, D6) |
+| F11 replacing a member whose kind starts with `Store<` is an unsupported migration; an implementation-only change gives `replace` only to members with an artifact | `stateful_kind`, `crates/ignite/src/apply/plan.rs:930`; `annotate`, `:551` to `:556`, `:620` to `:630` | inferred from the code: a changed todo build replaces `TodoService.server` and leaves `TodoService.todos` `unchanged`; row 17 checks it |
+| F12 `write_file` replaces atomically by rename, without `fsync` | 21.4 | a SIGKILL of `todod` keeps every file whose write returned (the page cache outlives the process; inferred from POSIX, row 12 checks); a power loss is not covered (22.2) |
+| F13 the host journal is a SHA-256 digest chain per record; a final line without `\n` is dropped silently; a broken chain or digest stops the host with exit 3 | `chained`, `crates/ignite/src/apply/host/journal.rs:129` to `:141`; `History::load`, `:199` to `:233`; `host::run`, `crates/ignite/src/apply/host/mod.rs:86` | a checksum exists; what is missing is a record of the drop, an index in the error, an anchor against a cut at a line boundary, and an offline report (22.7) |
+| F14 offline `ignite inspect` reads `status.json` only | `inspect`, `crates/ignite/src/apply/mod.rs:391` to `:424` | it reports a damaged journal as a healthy snapshot; 22.7 |
+| F15 every run record the host acknowledges is copied into the host journal as `revisionRecord`; a retained revision replays its own `journal.jsonl` at start | `Host::record`, `crates/ignite/src/apply/host/controller.rs:1316` to `:1328`; `crates/ignite/src/apply/revision.rs:118` to `:130` | the copy is the checksum of the revision journal (22.7); inferred: every record of a revision journal but an unacknowledged tail has a copy, row 23 checks |
+| F16 a corrective is admitted only for `gave_up` and `listener_unavailable`; under any other later reason every apply is refused: a corrective with exit 2 `host has an active or unresolved operation`, a retry of the failed plan with exit 1 `operation requires recovery` | `resolvable`, `crates/ignite/src/apply/host/controller.rs:142` to `:147`, `correctable`, `:410` to `:426`; `crates/ignite/src/apply/host/admission.rs:244` to `:249`, `:279` to `:281`; 17.5 "Precedence" | `story:apply-recovery-way-out` holds; U5 (22.9) |
+| F17 crash points exist after intent, before and after dispatch and mid-transition | `IGNITE_DEBUG_HOST_FAULT`, `crates/ignite/src/run/process.rs:95` to `:125`, `:278`; `crates/ignite/src/apply/host/journal.rs:176` to `:182` | row 18 reuses `after_dispatch`; no new crash point |
+| F18 the apply tests start the host with the repository as working directory, and `todo.rs` starts `todod` without one | `crates/ignite/tests/apply_recovery.rs:73`, `apply_host.rs:99`; `crates/ignite/tests/todo.rs:88` to `:95` | a relative `Directory` would land in the repository; every slice-18 test passes a temporary working directory (22.0) |
+| F19 E150 to E159 are unused; T4 ends at slice 13 on `main` and slice 17 takes E140 to E149 | section 8, 21.9; `docs/vision.md:250` | this slice takes E150 to E159 (S1) |
+
+### 22.2 Scope and non-goals
+
+In scope: typed probe outcomes and contract predicates (R2, R13's measurement), supervision of
+`HttpServer`, the durable todo with its HTTP probe kind and contract, the fault rows of R11 on
+that service, journal integrity reporting, the operator way out of a non-resolvable recovery,
+and the timing of builds and of the apply cycle.
+
+Not in scope:
+
+- more than one host, fencing, distributed authority (R8);
+- user-defined machines (R4) and a new protocol (R13's other parts); the probe writes its HTTP
+  request by hand (D13);
+- binding executables written in other languages (R12);
+- durability against power loss or a kernel crash: `Directory.write_file` does not `fsync`
+  (21.4); a durable store in the substrate (D4 C) is a later slice;
+- a schema migration of the todo files; the format of 22.4 is `version 1`;
+- consistency between two processes of the todo: during an occupied-listener rollout the
+  draining instance may still answer a request on an open keep-alive connection after the new
+  instance has loaded (16.12). Each process allocates ids and versions from its own memory
+  store, so the two can write the same `todos/<id>/<version>.json`, and `write_file` replaces
+  (21.4): an acknowledged write in the drain window can be lost or hidden from the new instance.
+  This is a known limit, stated here, in the todo's header comment and in `AGENTS.md` (S9, S10);
+  rows 17 and 18 create their todo before the rollout and send no request on the old instance
+  after it; a store shared across processes is D4 C's (22.16 Q3);
+- the todo's apply cycle before the slice: the todo cannot be applied at the base (F9, F10; at the slice-17 base before 21.18 also F8),
+  so its cycle is timed after only and the terminal design's on both trees (D12). The epic asks
+  for a todo before; the steering session records this deviation in the epic;
+- changing the default fuel, the closed machine set or the `ignite run` command surface.
+
+### 22.3 Typed outcomes: `good` is a predicate (D1)
+
+A probe kind declares its outcome type `O` as the element type of a `Signal<O>` output, prints
+one line per attempt, the 15.4 encoding of an `O`, and returns `Machine.Schedule` from its
+`machine` hook, as `TelnetPrompt` does. A contract names a predicate over `O`:
+
+```ignite
+type Availability<T> {
+  signal: Signal<T>
+  good: fn(T) -> Bool
+  target: Ratio
+  window: Window
+  missing_data: Text = "insufficient_evidence"
+  minimum_completeness: Ratio = 90%
+}
+
+fn Availability.classify<T>(self: Availability<T>, sample: T) -> Bool = self.good(sample)
+```
+
+- `std.contract`'s three kinds become generic in `T`: `Availability<T>` and `SLA<T>` with
+  `good: fn(T) -> Bool`, `ThresholdCompliance<T>` with `good: fn(T, Duration) -> Bool` and
+  `classify` = `self.good(sample, self.threshold)`. `T` is inferred from `signal` and `good`, as
+  `S` of `HttpServer<S>` is from its application (the todo declares `HttpServer` without type
+  arguments, `examples/todo/todo.ignite:84`); a predicate over another type is E040.
+- A predicate is a named top-level fn: the model encodes it as `{"fn": "<qualified name>",
+  "type": "Fn"}` (15.4); a closure there is E118 as today.
+- `std.sli` keeps `ProbeAttempt` and declares the two Telnet outcomes as predicates with their
+  old names: `fn prompt_received_before_timeout(attempt: ProbeAttempt) -> Bool =
+  attempt.received` and `fn prompt_received_within_threshold(attempt: ProbeAttempt, threshold:
+  Duration) -> Bool = attempt.received && attempt.latency <= threshold`. `satisfies` and
+  `known_outcome` are removed; `reasons` in `std/contract.ignite` drops its `good` check, because
+  an unknown name is now a name-resolution error (E003) at check time.
+- Declarations change from text to name: `good = "prompt_received_before_timeout"` becomes
+  `good = prompt_received_before_timeout` (D2).
+
+`std.sli` gains the two records the reducers carry instead of `ProbeAttempt`:
+
+```ignite
+// One attempt as a scheduler emits it: the slot it was dispatched for and the
+// probe's printed line, `None` when the attempt timed out.
+type Sample {
+  slot: Duration
+  line: Option<Text>
+}
+
+// One emission as an evaluator receives it: the slot and whether its contract's
+// `classify` held for the decoded line (`false` for `line = None`).
+type Verdict {
+  slot: Duration
+  good: Bool
+}
+```
+
+`std.control` changes (the reducer interface, 16.6):
+
+- `EventKind.AttemptDone(Int, Text)`: the probe's line. The driver still decodes it at once with
+  the element type of the scheduler's `signal` (the model observation whose `ref` is that field,
+  so a probe kind with several `Signal` outputs is decoded by the one it schedules) and turns an undecodable line into `AttemptFailed` with
+  `undecodable probe line: <reason>` (`live.rs:883` to `:899`), so the line a reducer sees
+  always decodes.
+- `ProbeScheduler` gains `in_flight_slot: Option<Duration>`; `AttemptDone` emits
+  `Emit(signal, Sample { slot = <in_flight_slot>, line = Some(line) })`, the deadline emits
+  `Sample { slot, line = None }` (today `ProbeAttempt { received = false, latency = timeout }`,
+  `:519`). `AttemptFailed` still emits nothing (missing evidence).
+- `Effect.Emit(Text, Sample)`, `EventKind.Emitted(Text, Verdict)`.
+- `Evaluator` loses `good` and `threshold`; `emission` counts `verdict.good` in the bucket of
+  `verdict.slot` (D14: the dispatched slot, not `at - latency`).
+- `std.control` imports `Sample` and `Verdict` from `std.sli` and no longer `ProbeAttempt` or
+  `satisfies`.
+
+The driver (`crates/ignite/src/run/`, and its callers in `crates/ignite/src/lib.rs` and
+`crates/ignite/src/apply/revision.rs`):
+
+- Today the driver gets one `TypedProgram`, that of `std.control`: `ignite run` takes
+  `modules.get(CONTROL_MODULE).types` (`crates/ignite/src/lib.rs:1579` to `:1591`) and passes
+  it to `Live::new` and `replay::replay` (`:1613`, `:1659` to `:1668`), as `ignite replay`
+  (`:1726` to `:1733`) and the apply revision (`crates/ignite/src/apply/revision.rs:111` to
+  `:115`, `:129`, `:186`) do. `Value::decode` finds only records of that module or of a module
+  it was typed against (`TypedProgram::record_fields`, `crates/ignite-types/src/lib.rs:1440` to
+  `:1448`), so a `HealthCheck` line would not decode. The Telnet case works only because
+  `std.sli` is an import of `std.control`.
+- After U1, `Live::new`, `Core` and `replay::replay` also receive the loaded modules
+  (`Loaded::modules()`), and decoding a line looks up the typed program of the element type's
+  module by the qualified name in the observation's `element` (F5), not `AttemptDone`'s payload
+  (F4). The element text is parsed into a `Ty` by the type printer's grammar (15.4); the outcome
+  rule of E151 keeps it to the types that grammar names.
+- At the `Emit` arm of `Core` (F6), for each alive subscriber, the driver builds the `Verdict`:
+  for `line = Some(l)` it decodes `l` with the signal's element type and calls the subscriber
+  member's hook `K.classify(contract, sample)` through the evaluator, with the step's fuel; for
+  `None`, `good = false` without a call. The `signal` record keeps the `Sample`; each subscriber's
+  `Emitted` event carries its own `Verdict`. A `classify` that fails (fuel, a run-time error) is
+  E128 of that machine, as a failing reducer step is.
+- Replay re-derives each `Verdict` from the journaled `Sample` and the model (16.15); a
+  journaled `Emitted` that differs is E127, as today.
+- `JOURNAL_VERSION` (`crates/ignite/src/run/engine.rs:26`) becomes `ignite-journal/0.2`: a
+  journal of 0.1 is E126 through `check_header`'s existing version text (row 6, D3). `REDUCER_EVALUATOR`
+  (`crates/ignite/src/apply/plan.rs:21`) changes, so a host whose committed revision was planned
+  before the slice reports `reducer_revision_changed` and asks to replan (17.5 D2).
+- The hook names the driver knows become `machine`, `validate` and `classify` (vision invariant
+  6 lists hooks by name; U1 updates its line).
+
+Check-time rules (in `ignite-eval`, beside E129):
+
+- E150: a member whose machine subscribes to a signal, and whose kind declares no `classify`
+  hook with `self` and one parameter of the signal's element type returning `Bool` (row 3).
+- E151: a signal that the assembly runs (its producer's binding has entries, `std.deploy.entries`,
+  as E121 and E129 decide; the compiler names no binding variant, 16.17) and that a member with
+  a machine subscribes to (`ModelMachine::subscribes`, `crates/ignite-eval/src/model.rs:349` to
+  `:375`), whose element type is not an outcome type. An outcome type is `Bool`, `Int`,
+  `Text`, `Byte`, a quantity (`Duration`, `ByteSize`, `Ratio`), or a `List`, `Option`, tuple,
+  record or enum of outcome types. This is a policy, not a claim about decoding:
+  `Value::decode` also reads fn, `Ref` and `Signal` values (`crates/ignite-eval/src/value.rs:520`
+  to `:551`), but a probe outcome holds none of them (row 4).
+- E109 also checks `classify`: `fn K.classify(self: K, sample: T) -> Bool`, pure, through
+  `hook_signature` (`crates/ignite-types/src/typer/system.rs:1662` to `:1673`); row 34.
+
+### 22.4 The durable todo (D4, D7)
+
+`examples/todo/todo.ignite` declares:
+
+```ignite
+type Todo {
+  id: Int
+  title: Text
+  done: Bool = false
+  version: Int = 1
+  deleted: Bool = false
+}
+
+type Todos {
+  todos: Store<Todo>
+  loaded: Store<Bool>
+  data: Directory
+}
+
+system TodoService {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 8080 }
+  resource todos: Store<Todo>
+  resource loaded: Store<Bool>
+  resource data: Directory { path = "todo-data", create = true }
+
+  component server: HttpServer {
+    listener = ingress
+    application = HttpApp { state = Todos { todos = todos, loaded = loaded, data = data }, handle }
+    executable = "todod"
+  }
+
+  component health: HttpHealth {
+    target = server
+    path = "/health"
+    interval = 10 seconds
+    timeout = 2 seconds
+  }
+
+  contract reachable: Availability {
+    signal = health.checks
+    good = healthy
+    target = 99%
+    window = rolling(5 minutes)
+    missing_data = "insufficient_evidence"
+  }
+}
+
+assembly local: Deployment {
+  system = TodoService
+  bindings = {
+    TodoService.ingress = localSocket()
+    TodoService.server = nativeProcess(includes = [])
+    TodoService.health = scheduledProbeHost()
+  }
+}
+```
+
+`HttpHealth`, `HealthCheck` and `healthy` are imported from the sibling module
+`examples.todo.health` (22.6). The window is five minutes so that row 16 reaches `Compliant`
+within a test (31 slots of 10 s); the values are the example's, not a recommendation.
+
+Files, under the root of `data` (the working directory of `todod`, of `ignite run` or of
+`ignite host`, 21.6 and 21.16 Q2; D7). Under `apply` that working directory is recorded: the
+host writes `<state>/workdir` at its first start and refuses to start from another directory
+(exit 2, row 33, U3), so a host restarted elsewhere cannot silently open an empty `todo-data`.
+This settles 21.16 Q2's open end for `apply` without changing 21.4's resolution rule.
+
+- `todos/<id>/<version>.json`: the `to_record` JSON of the todo at that version, an object with
+  `id`, `title`, `done`, `version` and `deleted`, written with `write_file` (atomic replace,
+  21.4). The HTTP bodies keep the three fields of `to_json` (`examples/todo/todo.ignite:20`), so
+  every existing response and test is unchanged.
+- A deleted todo is a file whose `deleted` is true at the next version (a tombstone); its id is
+  never reused.
+
+Behaviour:
+
+- The memory `Store<Todo>` is the authority inside a process; every change goes through one
+  atomic `update` or `upsert` that also increments `version` (`f` stays pure, 11.3), and the
+  handler then creates `todos/<id>` (`create_directory`; `write_file` needs its parent, 21.4)
+  and writes the returned value's file before it answers. A failed write answers 500 with the
+  body `not stored\n`; 500 means "not durable", not "not applied": the memory value stays, and a
+  later successful write of that id persists it. After the write, files of that id with a lower version are
+  removed; a failed removal is ignored (the next load takes the highest version).
+- Load: each request first checks `loaded.get(0)`; while it is not `Some(true)`, the request
+  loads: `create_directory("todos")`, then for each `<id>/` the highest `<version>.json` that
+  parses, merged with `todos.upsert(id, |held| keep the higher version)`, then
+  `loaded.put(0, true)`. Loads are idempotent and monotone, so concurrent first requests may each
+  load and no load overwrites a newer change. `GET /health` loads too, then answers 200
+  `ok\n`; a failed load answers 503 `loading failed: <reason>\n`.
+- `POST /todos` takes `todos.next_id()` until `todos.get(id)` is `None` (after the load every id
+  on disk, tombstones included, is in memory), so ids continue after a restart (row 12).
+- `GET` and the listing skip tombstones; `PATCH` and `DELETE` of a tombstone answer 404.
+- The tests of `todo.ignite` build the state record with `Store.new()` twice and
+  `Directory.temporary()?` (21.8).
+
+### 22.5 `HttpServer` under `ignite run` and `ignite apply` (D5, D6)
+
+- `std/protocol/http.ignite`: nothing to do. Slice 17 (21.18) gave `HttpServer<S>` `recovery`,
+  `rollout`, `machine` and `validate` (`std/protocol/http.ignite:144` to `:169` at `f3abeb20`),
+  and updated `todo.model.json` and `studio.model.json` itself.
+- `crates/ignite-eval/src/resolve.rs`: `implicit_host` also hosts a resource of kind
+  `Store<T>` (F10): by the process of the first declared executable component that creates it.
+  A `Store` still provisions nothing (16.14). `admits` is unchanged.
+
+### 22.6 The HTTP probe kind (`examples/todo/health.ignite`)
+
+The module `examples.todo.health` declares, and nothing under `crates/`, `std/` or `tools/`
+names (row 8):
+
+```ignite
+type HealthCheck {
+  answered: Bool
+  status: Int
+  latency: Duration
+}
+
+fn healthy(check: HealthCheck) -> Bool = check.answered && check.status == 200
+
+type HttpHealth {
+  target: Ref
+  path: Text = "/health"
+  interval: Duration = 10 seconds
+  timeout: Duration = 2 seconds
+  checks: Signal<HealthCheck>
+  executable: Text
+}
+```
+
+- `HttpHealth.main`: `Endpoint.of(self.target)?`, connect, set the idle timeout to `timeout`,
+  write `GET <path> HTTP/1.1\r\nHost: <address>\r\nConnection: close\r\n\r\n`, read until the
+  first `\r\n`, take the status from `HTTP/1.1 <code> …`, print `encode_check(check)`. A refused
+  connection, a read past the timeout or a status line that does not parse is `answered = false,
+  status = 0`; exit 0. No `--ref` binding exits 1, as `TelnetPrompt.main` (16.9).
+- `HttpHealth.machine`: `Machine.Schedule(ProbeScheduler { id = "{id}.scheduler", member = id,
+  target = self.target.to_text(), signal = self.checks.to_text(), interval, timeout })`.
+- `HttpHealth.validate`: `path` starts with `/` and has no space.
+- `encode_check` writes the 15.4 encoding, keys in byte order (row 15).
+- `target` is the kind-erased `Ref` (`Ty::Ref(None)`, 14.10), not `Ref<HttpServer<Todos>>`:
+  `examples.todo` imports the probe, so `health.ignite` must not import `examples.todo` back
+  for `Todos` (E032). E122 still checks that the ref resolves to exactly one listener (16.9).
+  `health.ignite` imports general std modules only (`std.net`, `std.control`, `std.sli`,
+  `std.text`, the `IoError` result type), never `examples.todo`. `Endpoint.of` takes the
+  kind-erased `Ref` (`("Endpoint", "of") => sig(EndpointOf, vec![Ty::Ref(None)], …)`,
+  `crates/ignite-types/src/builtins.rs:297`), and E122 matches any `Ty::Ref(_)`
+  (`crates/ignite-eval/src/validate.rs:509`).
+
+### 22.7 Journal integrity (D8 to D10)
+
+The host journal's digest chain (F13) is the checksum: a record whose bytes changed fails its
+digest, a removed or reordered record breaks the chain. No length frame is added (D8). This
+slice adds:
+
+- A torn final line (bytes after the last `\n`) is still dropped, because every record is synced
+  before the host acts on it (17.5), so a torn line is a write the host never acted on. Today
+  `History::load` truncates and syncs at once (`journal.rs:208` to `:211`). After U3 the load
+  is split: a read-only verifier (chain, digests, anchor, revision journals; used by offline
+  `inspect`) and the repair, which runs after the lock is held and appends `journalRepaired
+  {"droppedBytes": n, "droppedDigest": "sha256:<hex of the bytes>", "previousDigest": <last good>}`
+  in place of the torn bytes (truncate to the last good record, append the repair record, one
+  sync), so a crash after the repair leaves the record and a crash before it leaves the torn
+  line to repair again. The host prints `ignite host: dropped a torn final journal record of <n>
+  bytes`, and `inspect` lists every such record in `journalRepairs` (row 20). Offline `inspect`
+  of a journal that is only torn reports `"intact": true, "pendingRepair": {"droppedBytes": n}`.
+- An altered record: `History::load` reports its 1-based line number, `host journal record <n>:
+  digest mismatch` (or `: does not parse`, `: chain diverged`), exit 3, before anything is
+  written (row 21). The host does not truncate or rewrite the journal (D10).
+- A cut at a line boundary: `persist` writes `journalAnchor: {"record": n, "digest": "<digest>"}`
+  of the `state` record it just appended into `status.json`. At start, a `status.json` whose
+  anchor names a record the journal does not hold with that digest is ``host journal ends before
+  record <n> that status.json anchors``, exit 3 (row 22). A cut after the anchored record is not
+  detectable and is reconciled as a crash after that record (17.5). A `status.json` without
+  `journalAnchor` (written before the slice) is accepted.
+- A revision journal (F15): at start, before a retained revision is replayed, every record of
+  `revisions/<r>/journal.jsonl` that has a `revisionRecord` copy must equal it: the host
+  journal keeps the parsed record (`("record", record.clone())`, `controller.rs:1316` to
+  `:1328`), so the check is that the copy's compact encoding equals the line. Records after the
+  last copy (written, never acknowledged) are kept as today. A difference is
+  ``revisions/<r>/journal.jsonl record <seq>: differs from the host journal``, exit 3 (row 23).
+  The check runs in `host/mod.rs` before `verify_history` (`recovery.rs:218` to `:283`), so U3
+  does not touch `recovery.rs`.
+- Offline `inspect` (F14) verifies the chain, the anchor and the revision journals read-only and
+  adds `journal: {"intact": bool, "record"?, "reason"?, "file"?}`; when `intact` is false its
+  `nextAction` is the text of row 21. Online `inspect` reports `{"intact": true}` and
+  `journalRepairs`.
+
+### 22.8 Fault matrix (R11)
+
+| R11 case | 17.7 row covering it on the terminal | slice 18 row on the todo | outcome required |
+|---|---|---|---|
+| interrupted deployment (crash after intent, before dispatch, mid-transition) | 11 | none new | covered; unchanged |
+| lost acknowledgement: host killed after an effect, before its receipt | 11 (`after_dispatch` in `crash_after_intent`, `apply_recovery.rs:472`) | 18 | `completed` only over an observed `Ready`, else `outcome_unknown`; one instance |
+| client disconnect | 10 | none new | covered |
+| stale plan: saved before a source change | 5 (changed source of `apply::{rust,llvm}_saved_apply_…`) | 19 | refused, exit 2, nothing changes |
+| stale base, wrong state | 5 | none new | covered |
+| corrupted journal: torn last record | none end to end (unit test `a_torn_final_line_is_dropped_and_the_chain_continues`) | 20 | dropped and recorded |
+| corrupted journal: altered record | first record only (`apply::tampered_host_history_is_rejected_before_startup`, `apply.rs:756`) | 21, 23 | refused, exit 3, reported offline |
+| corrupted journal: cut at a line boundary | none | 22 | refused when the anchor shows it |
+| uncertain external effect | 12 (unaccounted generation process) | none new | covered |
+| a recovery no corrective resolves | none (`story:apply-recovery-way-out`) | 25, 26 | `ignite recover` |
+
+Rows 17 to 22 run on LLVM only: the target is the slice's service target (review section 2),
+and the 17.7 twins already run the host on both.
+
+### 22.9 Operator recovery (`ignite recover`, D11)
+
+`story:apply-recovery-way-out` is folded in as U5: R11 asks that the controller never repeat an
+unsafe operation, and a host that refuses every apply forever leaves the operator only the
+unsafe way of deleting the state.
+
+```
+ignite recover --state DIR --operation ID [--json]
+```
+
+- Sent over the control socket as operation `recover` (`ignite-host-control/0.1`, 17.2). The
+  host accepts it only for the active operation when it is `recovery_required` and admission
+  refuses a corrective for it (F16); otherwise exit 2 `operation <id> requires no recovery`.
+- The host scans as at start (17.5): an unaccounted process under `<state>/revisions/` refuses
+  with exit 1 and its pid and path, nothing signalled, nothing journaled (row 26).
+- Otherwise, in this order: journal `recoverStarted {"operationId"}`; stop the run driver of
+  every revision, as the host's `stop` does (`crates/ignite/src/apply/host/mod.rs:174`), so no
+  supervisor sees the exits and restarts anything; drain and stop every owned and retiring
+  instance of the failed and the committed revision through their pidfds (start time
+  re-checked) and wait until each ended; journal `operatorRecovered {"operationId", "by":
+  "ignite recover", "stopped": [pids], "laterReasons": [...]}`; set the operation's receipt
+  `state` to `abandoned` (its `reason` and `laterReasons` kept); clear `recovery`; start the
+  committed revision afresh as a host start does after reconciliation, which recopies its
+  artifacts (`copy_into`, `crates/ignite/src/run/live.rs:1587` to `:1599`). Exit 0 once that
+  revision is ready; exit 1 if it is not ready within its readiness timeout, with the reason.
+  Between `recoverStarted` and the fresh start the host journal holds no `Started` record
+  (row 25).
+- `abandoned` is a new receipt state beside those of 17: a retry of an abandoned plan exits 2
+  with `operation <id> was abandoned by ignite recover; prepare a new plan`, and `apply`
+  prints `operation <id> is abandoned` (`crates/ignite/src/apply/mod.rs:369` to `:384`).
+- `recover` is repeatable. A host killed between `recoverStarted` and `operatorRecovered`
+  restarts with the operation still `recovery_required` and its instances ended, reconciles as
+  after any crash (17.5), and a second `ignite recover` completes it.
+- The state row 25 drives (on the terminal design): commit revision 1; apply revision 2 whose
+  server exits at once, so the supervisor gives up (`gave_up`); then replace the run's copy of
+  revision 1's executable, `revisions/<r>/bin/<generation>/terminald` (not the plan artifact,
+  which the fresh start of `recover` copies over it again), with other bytes and SIGKILL its
+  process, so the supervisor's restart finds "ready process artifact differs from the admitted
+  desired artifact" (`crates/ignite/src/apply/host/controller.rs:1506` to `:1541`), a later
+  reason no corrective resolves. Inferred from the code: the unit's first test confirms the
+  path; if the restart refuses before `Ready`, the reason is the failed start of 17.5, which is
+  also non-resolvable.
+- 17.5 gains one line after "Precedence of recovery reasons": "Since slice 18 `ignite recover`
+  (22.9) is the operator's way back to accepting plans."
+
+### 22.10 Diagnostics
+
+Section 8 gets a "Codes of slice 18" paragraph:
+
+| code | stage | meaning | fixture |
+|---|---|---|---|
+| E150 | check (`ignite-eval`) | a member whose machine subscribes to a signal and whose kind declares no `classify(self, sample: <element type>) -> Bool` | `e150_classify_missing` |
+| E151 | check (`ignite-eval`) | a signal the assembly runs and a machine subscribes to, whose element type is not an outcome type (22.3) | `e151_undecodable_element` |
+
+Changed: E120 loses the text "unknown good outcome" (an unknown predicate is E003); E109 also
+checks `classify` (fixture `e109_classify_signature`, row 34); E126 is unchanged, and the
+version bump makes `e126_journal_mismatch` hit its existing version branch (row 6).
+`fixtures_match_expected` (`crates/ignite/tests/plan.rs:431`) includes `e15`. Exit codes of `ignite host`, `inspect` and
+`recover` are those of 17.1; no new code for them.
+
+### 22.11 Stale points
+
+| # | where | stale text | resolution, by whom |
+|---|---|---|---|
+| S1 | `docs/vision.md` §7 T4 | ends at slice 13 (slice 17 adds E140 to E149) | add "E150 to E159: slice 18 (F5)"; U8 |
+| S2 | 16.6, 16.8, 16.9, 16.10 | `ProbeAttempt` as the reducers' payload, `satisfies`, the latency-derived slot | one forward line each to 22.3; U1 |
+| S3 | 16.17 table, E120 row | "an unknown `good` outcome" | forward line to 22.10; U1 |
+| S4 | `crates/ignite/src/run/probe.rs:4`, `live.rs` doc comments | decode "by the signal's element type" (F4) | true after U1; the comments name `observations`; U1 |
+| S5 | `site/book/src/{design/contracts.md,design/index.md,design/intent.md,guide/operate.md,reference/std/contract.md,reference/std/sli.md,reference/std/control.md,reference/std/index.md,reference/std/telnet.md}`, `site/index.html`, the doc comment at `crates/ignite/src/lib.rs:755` | `good = "…"`, `satisfies`, the `ProbeAttempt` payloads of `AttemptDone`, `Emitted` and `Emit` | the predicate form; `site::` passes; U1 |
+| S6 | `docs/design.md` §11.3 | `good = "prompt_received_before_timeout"` | unchanged (direction, T2); an X-row in `docs/vision.md` §6; U8 |
+| S7 | `docs/layering.md` | outcome names in the `std.sli` row | updated; U1 (`std.sli`) |
+| S8 | 17.5 | no path beyond `inspect` | the line of 22.9; U5 |
+| S9 | `examples/todo/todo.ignite:7` | "kept in memory" | the comment of 22.4, including the drain-window limit of 22.2; U4 |
+| S10 | `AGENTS.md` layout and commands | no `ignite recover`, `examples/todo/health.ignite`, durable todo, `Sample`/`Verdict` | rows; U8 |
+| S11 | README and `site/` wording (review R6) | any sentence that says a check or a build proves a contract holds at run time | deferred: no sentence of the epic asks for it (scope critic, 2026-11-05); a later slice rewords it to "states and measures" |
+| S12 | `docs/vision.md` §3 invariant 6 | the hook names `machine` and `validate` | add `classify`; U8 |
+
+### 22.12 Decisions
+
+Each has a default the units follow unless the steering session says otherwise.
+
+| # | decision | options | default and why |
+|---|---|---|---|
+| D1 | how a probe kind outside `std/` names its outcome type, and how `good` becomes typed | A: generic contract kinds with `good: fn(T) -> Bool`, a `classify` hook, the driver decodes by the signal's element type and classifies at routing; B: the probe prints the names of the predicates that hold, `good` stays `Text`; C: a builtin `Signal<T>.decode(Text) -> Option<T>` and a closure in `Evaluator`; D: a closed outcome per probe kind in `std` | A: the predicate is checked against the probe's type at compile time, the reducers stay non-generic (O39) and need no decode in Ignite; B keeps `good` untyped; C needs a decode on both backends for code only the evaluator runs; D breaks row 8 |
+| D2 | the Telnet outcomes | A: two named predicates with the old names, declarations lose their quotes; B: keep `Text` beside `fn` | A: a field has one type; the names and meanings stay |
+| D3 | old run journals | A: `ignite-journal/0.2`, a 0.1 journal is E126; B: keep 0.1 | A: the payloads changed; reading 0.1 as 0.2 would be E127 at an arbitrary record instead of a clear refusal |
+| D4 | where the todo's data lives | A: memory store as authority, one file per todo version, lazy monotone load; B: a todo-owned server kind that loads in `main`; C: a durable `Store` in the substrate | A: no new substrate code, no std field of fn type with a default, correct under concurrent requests (row 13); C needs a per-type encoding on both backends, later |
+| D5 | supervising an HTTP service | settled by slice 17 (21.18): `std`'s `HttpServer` has `recovery`, `rollout` and `machine` | — |
+| D6 | hosting a `Store` resource | A: implicitly, as a capability (21.3); B: a new binding `processState()` | A: a store lives in its creator's process; B adds vocabulary that says nothing new |
+| D7 | the data directory's path | A: relative `todo-data`, `create = true`, against the working directory of the process that starts `todod`; B: absolute; C: a `flag` | A, with the host recording its working directory (`<state>/workdir`, row 33) so that a host started elsewhere is refused instead of opening an empty directory: B is not portable and C is not passed by `run` or `apply` (21.16 Q1) |
+| D8 | detecting a corrupt record | A: the existing SHA-256 chain, plus a `status.json` anchor; B: a length frame per record (format 0.2); C: both | A: the chain already detects any changed byte; a length frame adds nothing the newline does not, and neither detects a cut at a boundary, which the anchor does for `state` records |
+| D9 | a torn last record | A: drop it and journal `journalRepaired`; B: refuse to start | A: a torn record was never synced, so the host never acted on it; the record makes the drop visible |
+| D10 | an altered record or a detected cut | A: refuse to start, exit 3, report offline; B: truncate to the last good record and continue | A: B could drop a synced acceptance and start the operation a second time |
+| D11 | the way out of a non-resolvable recovery | A: `ignite recover` stops all owned instances and restarts the committed revision; B: move the state aside; C: admit a corrective with `--force` | A: it keeps history and ownership and proves every instance ended before anything starts; C would act on the premise 17.5 says no longer holds |
+| D12 | the "before" of the apply cycle | A: the terminal design on both trees, the todo after only; B: no before | A: the todo cannot be applied at the base (F8, F9, F10) |
+| D13 | the probe's HTTP request | A: written by hand in the example; B: a client role in `std.protocol.http` | A: a client role is a protocol change outside the slice (R13) |
+| D14 | the slot of an emission | A: carried in `Sample` from the scheduler; B: `at - latency` | A: the outcome type need not have a latency |
+
+### 22.13 Work split
+
+| unit | story | owns | depends on | first failing test | rows |
+|---|---|---|---|---|---|
+| U0 | `story:slice-18-contract` | this section, the section-8 paragraph, `docs/slice18-review.md` | — | — | — |
+| U1 | `story:typed-probe-outcomes` | `std/sli.ignite`, `std/control.ignite`, `std/contract.ignite`, the doc comments of `std/protocol/telnet.ignite`; `crates/ignite/src/run/{engine,live,probe,replay}.rs`; the driver call sites in `crates/ignite/src/lib.rs` (`run`, `replay`, the doc comment at `:755`) and `crates/ignite/src/apply/revision.rs` (the loaded modules, 22.3); `hook_signature` in `crates/ignite-types/src/typer/system.rs` and fixture `e109_classify_signature` (row 34); the fixture `e126_journal_mismatch` and its test in `run.rs` (row 6); `crates/ignite-eval/src/{model,validate}.rs` (E150, E151, `classify` discovery); `REDUCER_EVALUATOR` in `crates/ignite/src/apply/plan.rs`; `examples/terminal/terminal.design.ignite`; the goldens `terminal.design.model.json` and `terminal.design.explain.Terminal.reachable.txt`; the contract declarations in `crates/ignite/tests/apply_transition.rs` and `fixtures/control_trace.ignite`; the readers of a signal's `received` in `crates/ignite/tests/run.rs` and `tools/ignite-perf/src/readiness.rs`; fixtures `e150_*`, `e151_*`, the `e15` filter in `plan.rs`; S2 to S5, S7 (`std.sli`) | U0 | the test "the prompt outcomes are predicates" in `std/sli.ignite` | 1 to 7, 29, 30, 34 |
+| U2 | `story:store-hosted` | `implicit_host` in `crates/ignite-eval/src/resolve.rs`; fixture `store_hosted.ignite` and `plan::store_is_hosted_by_its_server` appended to `crates/ignite/tests/plan.rs` | U0 | `plan::store_is_hosted_by_its_server` | 10 |
+| U3 | `story:host-journal-integrity` | `crates/ignite/src/apply/host/journal.rs` (repair record, anchor, line numbers, revision-journal check, unit tests), `crates/ignite/src/apply/host/mod.rs` (start: the repair, the revision-journal check before `verify_history`, the `workdir` record of row 33), `inspect` and `describe` in `crates/ignite/src/apply/mod.rs`; `crates/ignite/tests/apply_integrity.rs` and its `mod` line | U0 | `apply::host::journal::tests::an_altered_record_names_its_index` | 23, 24, 33; unit level of 20 to 22 |
+| U4 | `story:durable-todo-service` | `examples/todo/todo.ignite`, `examples/todo/health.ignite`; `crates/ignite/tests/todo.rs`; the golden `todo.model.json`; S9 | U1, U2, slice 17 | `todo::rust::todos_survive_sigkill` | 9 (check), 11 to 15 |
+| U5 | `story:apply-recovery-way-out` | `ignite recover` in `crates/ignite/src/main.rs`; the client `recover` in `crates/ignite/src/apply/mod.rs`; the `recover` operation in `crates/ignite/src/apply/host/{transport,admission,controller,recovery}.rs`; `crates/ignite/tests/apply_way_out.rs` and its `mod` line; the 17.5 line (S8) | U3 | `apply_way_out::rust_operator_recover_returns_the_host_to_accepting_plans` | 25, 26 |
+| U6 | `story:slice-18-fault-matrix` | `crates/ignite/tests/slice18.rs` and its `mod` line; helpers it needs in `crates/ignite/tests/common/apply.rs` (added, none changed) | U4, U5 | `slice18::llvm::todo_survives_sigkill_and_a_rollout` | 16 to 22 |
+| U7 | `story:apply-cycle-timing` | mode `apply-cycle` in `tools/ignite-perf/src/` (22.15) and its `self-check` case | U4 | `ignite-perf self-check` naming `apply-cycle` | 28 (mode) |
+| U8 | `story:slice-18-records` | `docs/performance/18/`, `AGENTS.md`, `STATUS.md`, `PLAN.md`, `docs/vision.md` (S1, S6, S12), README and `site/` wording (S10) | U6, U7 | — (records) | 27, 28, 32 |
+
+Rows 8 and 31 belong to every unit.
+
+Order: W1 U0; W2 U1, U2, U3; W3 U4, U5; W4 U6, U7; W5 U8.
+
+Shared files:
+
+- W2: U1 and U2 both touch `ignite-eval`, in different files (`model.rs`, `validate.rs` against
+  `resolve.rs`); U1 alone edits `crates/ignite/tests/plan.rs`'s filter, U2 appends one test to
+  the end of that file (merge order U1 then U2, or a trivial append conflict). U3 edits
+  `crates/ignite/src/apply/host/{journal,mod}.rs`, `apply/mod.rs` and
+  `crates/ignite/tests/main.rs` (one `mod` line); U1 edits `apply/plan.rs` and
+  `apply/revision.rs`, which U3 does not touch. U1 edits the contract declaration in
+  `apply_transition.rs`, the readers and the E126 test in `run.rs`, `crates/ignite/src/lib.rs`
+  and the design goldens; U2 and U3 touch no golden.
+- W3: U4 owns `examples/todo/` and `todo.rs`, and rewrites `todo.model.json`;
+  U5 owns `apply/host/{transport,admission,
+  controller,recovery}.rs`, `apply/mod.rs` (after U3 merged), `main.rs` (CLI) and its test
+  file. No file is shared.
+- W4: U6 owns `slice18.rs` and appends to `common/apply.rs`; U7 owns `tools/ignite-perf/`.
+  Only U6 adds a `mod` line to `crates/ignite/tests/main.rs` in W4; in W3 only U5 does, in W2
+  only U3.
+
+Rules: one integration-test binary per crate (`AGENTS.md`). Each unit's commit names the rows of
+22.0 it makes pass. The story ids above are the contract's names; all but
+`story:slice-18-contract` and `story:apply-recovery-way-out` are new, and the steering session
+creates them; U0 does not edit the store.
+
+### 22.14 Placeholder arms
+
+None: U1 changes the reducers and the driver together, and every other unit adds behaviour
+behind tests that fail first. Between U1 and U4 no system in the repository has a probe kind
+outside `std/`; rows 1 to 7 hold with the Telnet probe alone.
+
+### 22.15 Gate time and build time
+
+Method of 21.14 (18.18, section 15.1) through `tools/ignite-perf`. "Before" is a `git archive`
+copy of the slice base, "after" the closed tree, each with its own `CARGO_TARGET_DIR`. One cold
+gate per tree, then three interleaved warm passes; a pair whose two 1-minute loads differ by more
+than 5 is dropped; medians of pair ratios beside absolute medians.
+
+Units: those of 18.18, plus:
+
+- `todod` and `health` builds, per target and profile, fresh `--out` and `--target-dir`,
+  `SCCACHE_RECACHE=1` (mode `programs`; `health` after only), and the ratio LLVM dev / Rust dev
+  of `todod` in each tree (row 27).
+- The apply cycle (new mode `apply-cycle`, U7): in a temporary working directory, `ignite host`
+  running and revision 1 of the system applied; then per sample: change one response literal of
+  the server (for the todo the `/health` body, for the terminal one command's reply), `ignite plan
+  --for-apply --target <t>` (which builds the artifact), `ignite apply`, until the replaced server
+  answers the new text. Recorded split: plan (build included), apply until `completed`, first
+  answer. Per target, 5 samples per tree after one discarded warm-up; units `apply-cycle-
+  terminal-<target>` (both trees) and `apply-cycle-todo-<target>` (after only, D12).
+
+A unit that rises over 10 % gets a measured cause or the record labels the cause inferred. No
+baseline moves. The apply suites stay the slice-13 exception. Records: a "Slice 18" paragraph
+in `AGENTS.md`'s gate-time section; raw records, logs and scripts under
+`docs/performance/18/`.
+
+### 22.16 Open questions
+
+| # | question | default |
+|---|---|---|
+| Q1 | Is `rolling(5 minutes)` the window the example should carry? | yes for the example, so that row 16 runs in a test; a real deployment declares its own |
+| Q2 | Should old `ignite-journal/0.1` journals be converted? | no: `--fresh` (16.3) starts a new journal; history stays readable as a file |
+| Q3 | Should the new instance of a rollout wait for the old one's last write? | no in this slice (22.2); a durable store with cross-process locking is D4 C's |
+| Q4 | Does `ignite recover` need a confirmation flag? | no: it refuses whatever it cannot prove (row 26) and journals what it did |
+| Q5 | Should `healthy` also bound latency? | no: `ThresholdCompliance` with a two-argument predicate is the form for that; the example keeps one contract |
+
+### 22.17 Resolution of the review
+
+`docs/slice18-review.md` (28 findings at the contract's first draft) is resolved in this text as
+follows.
+
+| finding | resolution |
+|---|---|
+| R1 (blocker) | row 8 greps `crates/*/src`, `std` and `tools/*/src` only; tests and goldens may name the example; the epic line is reworded by the steering session |
+| R2 (blocker) | row 16 forces failed attempts between good ones and requires `Compliant`, `InsufficientEvidence`, `Compliant`, `Violated` |
+| R3 (blocker) | row 25 expects exit 2 `host has an active or unresolved operation` for the corrective and exit 1 for a retry; F16 corrected |
+| R4 (blocker) | 22.3 states the single `std.control` typed program and decodes with the loaded modules by the element's module; `crates/ignite/src/lib.rs` and `apply/revision.rs` are U1's |
+| R5 | 22.9 stops every run driver before signalling; `recoverStarted` record; row 25 asserts no `Started` in between |
+| R6 | 22.2 states the drain-window loss plainly (S9, S10); rows 17 and 18 avoid it; Q3 |
+| R7 | the host records `<state>/workdir` and refuses another (row 33, U3, D7) |
+| R8 | E151 is an outcome-type policy, the decoder's set cited (22.3, 22.10, section 8) |
+| R9 | E151 uses `entries` and the subscriber rule, no binding variant name |
+| R10 | void after the rebase onto `f3abeb20`: slice 17 added the `HttpServer` fields and updated both goldens itself (21.18); U2 now owns only Store hosting |
+| R11 | `abandoned` declared with its retry answer (22.9); row 25 asserts it |
+| R12 | status line names the counts and this table |
+| R13 | sources cite 16.16 and 16.17 |
+| R14 | row 10's command uses `--` |
+| R15 | 22.6 cites `builtins.rs:297` and `validate.rs:509`; fallback dropped; imports are general std modules |
+| R16 | E109 covers `classify` (row 34, U1) |
+| R17 | 22.7 splits a read-only verifier from the repair; repair order and offline `pendingRepair` stated |
+| R18 | the check compares the compact encoding; it runs in `host/mod.rs` before `verify_history` |
+| R19 | E126 unchanged; row 6 names the existing text and adds `replay`; fixture and test are U1's |
+| R20 | S5 lists the missed pages and the `lib.rs:755` comment |
+| R21 | row 16 names `<copy>/todo.ignite` and SIGCONT before `stop` |
+| R22 | row 14 says "with the same assertions" |
+| R23 | row 27 times `todod` alone, `health` separately |
+| R24 | 22.9 names `revisions/<r>/bin/<generation>/terminald` and cites `copy_into` |
+| R25 | decoding uses the observation of the scheduler's `signal`; the element text parses by the type printer's grammar within E151's set |
+| R26 | 22.4 creates `todos/<id>` before writing; 500 means "not durable" |
+| R27 | 22.2 records the D12 deviation for the steering session to carry into the epic |
+| R28 | 22.9 states that `recover` is repeatable and how a crash in it reconciles |

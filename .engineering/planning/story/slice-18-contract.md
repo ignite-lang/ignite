@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-18-contract
 kind: story
-status: draft
+status: active
 title: 'Slice 18 contract: docs/slice.md section 22'
 summary: The reviewed contract for one service operated end to end
 relations:
@@ -13,7 +13,10 @@ scope:
   path: docs/slice.md
 - confidence: cited
   path: docs/slice18-review.md
-revision: 2
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T08:56:51Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-05T08:56:51Z", actor: "human:timo", revision: 4}
 ---
 # Story: slice-18-contract
 
@@ -35,9 +38,13 @@ parallel.
 
 ## Acceptance
 
-- Section 22 has an acceptance table with a command and an exact result per row, units whose owned
-  files do not overlap within a wave, decisions with options, and its diagnostic codes in section 8;
-  an independent review is committed as `docs/slice18-review.md` and its blockers are folded.
+- Section 22 has an acceptance table (22.0) with a command and an exact result per row.
+- Its work split (22.13) gives each unit owned files; every file two units of one wave share is
+  named with its merge order (W2: `crates/ignite/tests/plan.rs`, U1 then U2).
+- Its decisions (22.12) each list lettered options and a default.
+- Its new diagnostic codes are in section 8.
+- An independent review is committed as `docs/slice18-review.md`, and 22.17 maps each of its
+  blockers to the change that folds it.
 
 ## Out of Scope
 

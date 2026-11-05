@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T00:44:17Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-16-rust-moves",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 93881c7e: 999 passed, 0 failed, 10 ignored; 211 inline per target",
+    "reference": "https://github.com/ignite-lang/ignite/commit/93881c7e"
+  }
+}

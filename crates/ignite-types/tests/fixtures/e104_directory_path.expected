@@ -1,0 +1,1 @@
+e104_directory_path.ignite:2:38: error[E104]: `path` of `Directory` must be a non-empty text without NUL

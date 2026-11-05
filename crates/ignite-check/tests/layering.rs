@@ -50,6 +50,8 @@ impl fmt::Display for Layer {
 const LAYERS: &[(&str, Layer)] = &[
     ("std.io", Layer::Base),
     ("std.net", Layer::Base),
+    ("std.fs", Layer::Base),
+    ("std.process", Layer::Base),
     ("std.option", Layer::Base),
     ("std.result", Layer::Base),
     ("std.text", Layer::Base),

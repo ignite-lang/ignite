@@ -221,7 +221,7 @@ fn position_ptr(f: &mut Func, base: &str, position: &Position) -> String {
 
 /// `i1 eq.<T>(ptr a, ptr b)`: structural equality (`docs/slice.md`
 /// sections 12.5 and 13.5). Lists and text compare their lengths, then
-/// element by element (text and bytes in one runtime call); records and
+/// element by element (text and bytes through `ignite.text_eq`); records and
 /// tuples field by field; enums, `Option`, `Result` and `Input` their
 /// tags, then the payload of the variant both hold; a boxed position
 /// compares the values it points to.
@@ -236,8 +236,7 @@ fn eq_function(module: &mut Module<'_>, ty: &Ty) -> String {
     };
     match ty {
         _ if bytes => {
-            let same = f.val("call i8 @ignite_rt_text_eq(ptr %a, ptr %b)");
-            let same = f.val(format!("icmp ne i8 {same}, 0"));
+            let same = text_eq(module, &mut f, "%a", "%b");
             require(&mut f, &same, &differ);
         }
         Ty::List(_) | Ty::Map(..) => {
@@ -964,6 +963,41 @@ entry:
 }
 "#;
 
+/// `i1 ignite.text_eq(ptr a, ptr b)`: whether the `Text` or `Bytes` at `a`
+/// and `b` hold the same bytes. Inlined, so a comparison with a literal
+/// becomes a length check and a `memcmp` of constant size, which LLVM
+/// expands into a few loads; `memcmp` is not called for empty values,
+/// whose pointer may be null.
+const TEXT_EQ: &str = r#"define internal i1 @ignite.text_eq(ptr %a, ptr %b) alwaysinline {
+entry:
+  %lenpa = getelementptr inbounds i8, ptr %a, i64 8
+  %lena = load i64, ptr %lenpa, align 8
+  %lenpb = getelementptr inbounds i8, ptr %b, i64 8
+  %lenb = load i64, ptr %lenpb, align 8
+  %same = icmp eq i64 %lena, %lenb
+  %some = icmp sgt i64 %lena, 0
+  %both = and i1 %same, %some
+  br i1 %both, label %bytes, label %done
+bytes:
+  %da = load ptr, ptr %a, align 8
+  %db = load ptr, ptr %b, align 8
+  %order = call i32 @memcmp(ptr %da, ptr %db, i64 %lena)
+  %equal = icmp eq i32 %order, 0
+  br label %done
+done:
+  %eq = phi i1 [ %same, %entry ], [ %equal, %bytes ]
+  ret i1 %eq
+}
+"#;
+
+/// Whether the `Text` or `Bytes` at `a` and `b` are equal, through
+/// [`TEXT_EQ`].
+pub(crate) fn text_eq(module: &mut Module<'_>, f: &mut Func, a: &str, b: &str) -> String {
+    module.declare_raw("memcmp", "declare i32 @memcmp(ptr, ptr, i64)");
+    module.helper("ignite.text_eq", TEXT_EQ);
+    f.val(format!("call i1 @ignite.text_eq(ptr {a}, ptr {b})"))
+}
+
 /// `void ignite.append_text(ptr list, ptr text)`: append the bytes of the
 /// `Text` at `text`.
 const APPEND_TEXT: &str = r#"define internal void @ignite.append_text(ptr %list, ptr %text) noinline {
@@ -1183,6 +1217,7 @@ fn debug_function(module: &mut Module<'_>, ty: &Ty) -> String {
         Ty::PipeStream => append_literal(module, &mut f, buf, "<PipeStream>"),
         Ty::TcpListener => append_literal(module, &mut f, buf, "<TcpListener>"),
         Ty::Store(_) => append_literal(module, &mut f, buf, "<Store>"),
+        Ty::Capability(kind) => append_literal(module, &mut f, buf, &format!("<{}>", kind.name())),
         Ty::Param(name) => append_literal(module, &mut f, buf, &format!("<{name}>")),
     }
     f.finish("ret void")

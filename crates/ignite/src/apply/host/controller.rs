@@ -1598,3 +1598,28 @@ impl Host {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The model `ignite plan` prints for the studio of row 26, whose
+    /// capability resource `Studio.entropy` sorts before its listener.
+    fn studio_model() -> Json {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/slice17/studio_defaults.ignite");
+        let loaded = crate::load_for(&file, None, crate::RUN_ROOTS).expect("the studio loads");
+        let model = loaded
+            .model(&crate::PlanOptions::default())
+            .expect("the studio models");
+        Json::parse(&model.to_json()).expect("the model is JSON")
+    }
+
+    #[test]
+    fn listener_of_reads_the_listener_and_not_a_capability() {
+        assert_eq!(
+            listener_of(&studio_model(), "Studio.server"),
+            Some(("127.0.0.1".to_string(), 8095))
+        );
+    }
+}

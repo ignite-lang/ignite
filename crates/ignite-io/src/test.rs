@@ -12,16 +12,11 @@
 //! are printed in the order of `tests`, each once it and every test before
 //! it have finished, so the output does not depend on scheduling.
 
-use std::io::{ErrorKind, Read, Write};
-use std::os::fd::AsFd;
-use std::process::{Command, ExitStatus, Stdio};
+use std::io::Write;
+use std::process::{Command, ExitStatus};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
-
-use nix::errno::Errno;
-use nix::fcntl::{FcntlArg, OFlag, fcntl};
-use nix::poll::{PollFd, PollFlags, poll};
 
 use crate::FAILURE_EXIT_CODE;
 
@@ -31,9 +26,6 @@ pub const USAGE_EXIT_CODE: i32 = 2;
 
 /// Default per-test timeout in seconds.
 pub const DEFAULT_TIMEOUT: u64 = 60;
-
-/// How often a running child is polled for its exit.
-const POLL: Duration = Duration::from_millis(5);
 
 /// One test of a test executable: its full name (`<module>/<name>`) and
 /// its body.
@@ -243,7 +235,9 @@ fn run_tests(tests: &[Test<'_>], arguments: &Arguments) -> i32 {
                     let Some(name) = selected.get(index) else {
                         break;
                     };
-                    let outcome = run_child(exe, name, arguments.timeout);
+                    let scratch = Scratch::create(index);
+                    let outcome = run_child(exe, name, arguments.timeout, &scratch.path);
+                    drop(scratch);
                     if sender.send((index, outcome)).is_err() {
                         break;
                     }
@@ -320,110 +314,74 @@ fn count(n: usize) -> String {
     }
 }
 
-/// Run `<exe> --run-one <name>` with its output captured; kill it after
-/// `timeout` seconds.
-fn run_child(exe: &std::path::Path, name: &str, timeout: u64) -> Outcome {
-    let spawned = Command::new(exe)
+/// The environment variable that names a test child's scratch directory
+/// (`docs/slice.md` 21.8), where `Directory.temporary()` makes its roots.
+pub const SCRATCH_VARIABLE: &str = "IGNITE_TEST_SCRATCH";
+
+/// The scratch directory of one test child: created under
+/// `std::env::temp_dir()` before the child starts, removed with its
+/// contents when dropped, after the runner reaped the child, so a test
+/// killed at its timeout leaves nothing.
+struct Scratch {
+    path: std::path::PathBuf,
+}
+
+impl Scratch {
+    /// `<temp>/ignite-test-<runner pid>-<index>`, empty. A directory left
+    /// by an earlier runner with the same pid is emptied first.
+    fn create(index: usize) -> Scratch {
+        let path = std::env::temp_dir().join(format!("ignite-test-{}-{index}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        let _ = std::fs::create_dir_all(&path);
+        Scratch { path }
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
+/// Run `<exe> --run-one <name>` with its output captured and `scratch` as
+/// its [`SCRATCH_VARIABLE`]; kill it after `timeout` seconds. The child is
+/// watched by [`crate::child::watch`] on the calling pool thread and stays
+/// in the runner's process group, so Ctrl-C at the terminal reaches it.
+fn run_child(
+    exe: &std::path::Path,
+    name: &str,
+    timeout: u64,
+    scratch: &std::path::Path,
+) -> Outcome {
+    let mut command = Command::new(exe);
+    command
         .arg("--run-one")
         .arg(name)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn();
-    let mut child = match spawned {
-        Ok(child) => child,
-        Err(error) => {
-            return Outcome {
-                verdict: Verdict::Exited(-1),
-                stdout: Vec::new(),
-                stderr: format!("cannot start {}: {error}\n", exe.display()).into_bytes(),
-            };
-        }
-    };
-    let mut stdout = child.stdout.take().expect("piped child stdout");
-    let mut stderr = child.stderr.take().expect("piped child stderr");
-    if let Err(error) = nonblocking(&stdout).and_then(|()| nonblocking(&stderr)) {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Outcome {
+        .env(SCRATCH_VARIABLE, scratch);
+    let watched = crate::child::Watched::new(false);
+    let finished = crate::child::watch(
+        command,
+        &watched,
+        Duration::from_secs(timeout),
+        usize::MAX,
+        |_| {},
+    );
+    match finished {
+        Ok(finished) => Outcome {
+            verdict: match finished.status {
+                _ if finished.timed_out => Verdict::TimedOut(timeout),
+                Some(status) => Verdict::of(status),
+                None => Verdict::Exited(-1),
+            },
+            stdout: finished.stdout,
+            stderr: finished.stderr,
+        },
+        Err(error) => Outcome {
             verdict: Verdict::Exited(-1),
             stdout: Vec::new(),
-            stderr: format!("cannot capture child output: {error}\n").into_bytes(),
-        };
+            stderr: format!("cannot start {}: {error}\n", exe.display()).into_bytes(),
+        },
     }
-    let mut captured_out = Vec::new();
-    let mut captured_err = Vec::new();
-    let (mut out_open, mut err_open) = (true, true);
-    let deadline = Instant::now() + Duration::from_secs(timeout);
-    let verdict = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Verdict::of(status),
-            Ok(None) if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break Verdict::TimedOut(timeout);
-            }
-            Ok(None) => {}
-            Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break Verdict::Exited(-1);
-            }
-        }
-        // Bound each drain so a continuously writing child cannot starve the
-        // other stream or postpone its deadline. EOF removes a pipe from poll.
-        if out_open {
-            out_open = drain_output(&mut stdout, &mut captured_out);
-        }
-        if err_open {
-            err_open = drain_output(&mut stderr, &mut captured_err);
-        }
-        let mut pipes = Vec::with_capacity(2);
-        if out_open {
-            pipes.push(PollFd::new(stdout.as_fd(), PollFlags::POLLIN));
-        }
-        if err_open {
-            pipes.push(PollFd::new(stderr.as_fd(), PollFlags::POLLIN));
-        }
-        let wait = deadline.saturating_duration_since(Instant::now()).min(POLL);
-        let millis = wait.as_millis().clamp(1, POLL.as_millis()) as u16;
-        if let Err(error) = poll(&mut pipes, millis)
-            && error != Errno::EINTR
-        {
-            let _ = child.kill();
-            let _ = child.wait();
-            break Verdict::Exited(-1);
-        }
-    };
-    // Once the child has exited, all of its output is already buffered. A
-    // nonblocking drain captures the remaining bytes without extra threads.
-    let _ = stdout.read_to_end(&mut captured_out);
-    let _ = stderr.read_to_end(&mut captured_err);
-    Outcome {
-        verdict,
-        stdout: captured_out,
-        stderr: captured_err,
-    }
-}
-
-fn nonblocking(stream: &impl AsFd) -> nix::Result<()> {
-    let flags = OFlag::from_bits_truncate(fcntl(stream, FcntlArg::F_GETFL)?);
-    fcntl(stream, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK)).map(|_| ())
-}
-
-/// Read at most 64 KiB per turn, preserving fairness and timeout checks.
-fn drain_output(stream: &mut impl Read, captured: &mut Vec<u8>) -> bool {
-    let mut buffer = [0; 8192];
-    for _ in 0..8 {
-        match stream.read(&mut buffer) {
-            Ok(0) => return false,
-            Ok(n) => captured.extend_from_slice(&buffer[..n]),
-            Err(error) if error.kind() == ErrorKind::WouldBlock => break,
-            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
-            Err(_) => return false,
-        }
-    }
-    true
 }
 
 #[cfg(test)]
@@ -471,5 +429,20 @@ mod tests {
         assert_eq!(Verdict::Exited(3).word(), "FAILED (exited with code 3)");
         assert_eq!(Verdict::TimedOut(1).word(), "FAILED (timed out after 1 s)");
         assert_eq!(Verdict::Signal(9).word(), "FAILED (killed by signal 9)");
+    }
+
+    /// `docs/slice.md` 21.8: a test child's scratch directory exists and
+    /// is empty before the child starts and is gone, with its contents,
+    /// once the runner drops it after reaping the child.
+    #[test]
+    fn scratch_is_created_empty_and_removed_with_its_contents() {
+        let scratch = super::Scratch::create(usize::MAX);
+        let path = scratch.path.clone();
+        assert!(path.starts_with(std::env::temp_dir()));
+        assert_eq!(std::fs::read_dir(&path).unwrap().count(), 0);
+        std::fs::create_dir_all(path.join("a/b")).unwrap();
+        std::fs::write(path.join("a/b/c"), b"x").unwrap();
+        drop(scratch);
+        assert!(!path.exists());
     }
 }

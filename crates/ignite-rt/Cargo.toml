@@ -11,7 +11,7 @@ crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 ignite-io.workspace = true
-nix = { workspace = true, features = ["signal"] }
+nix = { workspace = true, features = ["signal", "mman"] }
 
 [features]
 runner = ["ignite-io/runner"]

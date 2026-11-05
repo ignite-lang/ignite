@@ -1,0 +1,4 @@
+e016_expression_call.ignite:6:10: error[E016]: missing effect `conn.write` for `fn value`; add it to the `requires` of `via_index`
+e016_expression_call.ignite:10:10: error[E016]: missing effect `conn.write` for `send`; add it to the `requires` of `via_field`
+e016_expression_call.ignite:14:10: error[E016]: missing effect `stdout.write` for `fn value`; add it to the `requires` of `ambient`
+e016_expression_call.ignite:22:10: error[E016]: missing effect `conn.write` for `inferred`; add it to the `requires` of `caller`

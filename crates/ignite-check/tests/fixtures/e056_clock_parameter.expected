@@ -1,0 +1,1 @@
+e056_clock_parameter.ignite:1:11: error[E056]: parameter `clock` is named like the ambient capability `clock`; rename it

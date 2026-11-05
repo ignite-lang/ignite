@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T05:09:03Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-17-frontend",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 39009e0f: end-to-end 346 passed, 0 failed; 214 inline per target",
+    "reference": "https://github.com/ignite-lang/ignite/commit/39009e0f"
+  }
+}

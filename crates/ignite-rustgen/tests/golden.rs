@@ -31,6 +31,9 @@ const TYPED: &[&str] = &[
     "modules",
     "targets",
     "bounds",
+    "slice16",
+    "rest",
+    "capabilities",
 ];
 
 fn lower(stem: &str, std_root: &Path) -> (GeneratedProject, GeneratedProject) {
@@ -235,7 +238,7 @@ fn executable_components() {
         "let banner = Banner {",
         "let server = Greeter {",
         "executable: String::from(\"greeterd\")",
-        "(&server) }))",
+        "Greeter__main(server) }))",
     ] {
         assert!(main.contains(expected), "missing `{expected}` in\n{main}");
     }
@@ -262,9 +265,9 @@ fn generics_stores_and_builtins() {
         "impl<T: Clone + Send + Sync + 'static> Labelled<T>",
         "label: Labelled::<i64>::default_label()",
         "pub handle: std::sync::Arc<dyn Fn(S, String) -> String + Send + Sync>,",
-        "pub fn swap<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static>(p: &Pair<A, B>) -> Pair<B, A>",
+        "pub fn swap<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static>(p: Pair<A, B>) -> Pair<B, A>",
         "pub fn serve<S: Clone + Send + Sync + 'static>(mut stream: ignite_io::TcpStream, mut app: App<S>)",
-        "let id: std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync> = (std::sync::Arc::new(|__a0: i64| identity::<i64>(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>);",
+        "let id: std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync> = (std::sync::Arc::new(|__a0: i64| identity::<i64>(__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>);",
         "counts.values().iter().cloned().map(&*(std::sync::Arc::new(|__a0: i64| show(&__a0)) as std::sync::Arc<dyn Fn(i64) -> String + Send + Sync>)).collect::<Vec<_>>()",
         "counts.update(id.clone(), &*(std::sync::Arc::new(|__a0: i64| bump(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>))",
         "Some(rest) => ignite_io::parse_int(&rest),",
@@ -280,7 +283,7 @@ fn generics_stores_and_builtins() {
         .expect(&main);
     let bind = main.find("TcpListener::bind").expect(&main);
     let server = main
-        .find("let server = Server::<ignite_io::Store<i64>> { listener: ingress.clone(), application: App { state: counts.clone(), handle: (std::sync::Arc::new(|__a0: ignite_io::Store<i64>, __a1: String| respond(&__a0, &__a1)) as std::sync::Arc<dyn Fn(ignite_io::Store<i64>, String) -> String + Send + Sync>) }, executable: String::from(\"countersd\") };")
+        .find("let server = Server::<ignite_io::Store<i64>> { listener: ingress.clone(), application: App { state: counts.clone(), handle: (std::sync::Arc::new(|__a0: ignite_io::Store<i64>, __a1: String| respond(__a0, &__a1)) as std::sync::Arc<dyn Fn(ignite_io::Store<i64>, String) -> String + Send + Sync>) }, executable: String::from(\"countersd\") };")
         .expect(&main);
     let call = main.find("Server__main(&server)").expect(&main);
     assert!(store < bind && bind < server && server < call, "{main}");
@@ -314,8 +317,56 @@ fn element_reads_copy_only_non_copy_elements() {
     );
 }
 
-/// Read-only parameters that are not `Copy` are references; a parameter
-/// the body changes, and one of a `Copy` type, is copied once on entry.
+/// A field of a list element is read through the `&T` that
+/// `ignite_io::checked::at` returns: passed by reference and compared in
+/// place, matched by reference, copied alone where a value is needed,
+/// never after a copy of the whole element. An argument whose list a
+/// later argument changes is copied before that argument runs.
+#[test]
+fn fields_of_elements_borrow_the_element() {
+    let project = common::generate_source(
+        "type E { key: Bytes, n: Int, name: Text }\n\
+         type B { items: List<E> }\n\
+         fn size(b: Bytes) -> Int = b.len()\n\
+         fn both(a: Bytes, n: Int) -> Int = a.len() + n\n\
+         fn by_ref(es: List<E>) -> Int = size(es[0].key)\n\
+         fn key(es: List<E>) -> Bytes = es.at(0).key\n\
+         fn same(es: List<E>) -> Bool { let s = es[0].key == es[1].key\n s }\n\
+         fn count(es: List<E>) -> Int = es[0].n\n\
+         fn nested(bs: List<B>) -> Int = size(bs[0].items.at(1).key)\n\
+         fn later() -> Int { var es = [E { key = b\"a\", n = 1, name = \"a\" }]\n both(es[0].key, if true { es = []\n 1 } else { 2 }) }\n\
+         fn named(es: List<E>) -> Bool = es[0].name == es.at(1).name\n\
+         fn kind(es: List<E>) -> Int = match es[0].name { \"a\" => 1\n _ => 2 }\n",
+        &common::golden_std(),
+    )
+    .unwrap();
+    let lib = norm(&project.lib_rs);
+    for expected in [
+        "size(&ignite_io::checked::at(es, 0, \"test.ignite\", 5, 38).key)",
+        "ignite_io::checked::at(es, 0, \"test.ignite\", 6, 32).key.clone()",
+        "(&ignite_io::checked::at(es, 0, \"test.ignite\", 7, 40).key, &ignite_io::checked::at(es, 1, \"test.ignite\", 7, 53).key);",
+        "ignite_io::checked::at(es, 0, \"test.ignite\", 9, 32).n",
+        "size(&ignite_io::checked::at(&ignite_io::checked::at(bs, 0, \"test.ignite\", 10, 38).items, 1, \"test.ignite\", 10, 38).key)",
+        "both(&ignite_io::checked::at(&es, 0, \"test.ignite\", 12, 7).key.clone(), &(if true {",
+        "match &ignite_io::checked::at(es, 0, \"test.ignite\", 15, 37).name {",
+        "ignite_io::checked::at(es, 0, \"test.ignite\", 14, 33).name == ignite_io::checked::at(es, 1, \"test.ignite\", 14, 47).name",
+    ] {
+        assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
+    }
+    for copy in [
+        ".clone().key",
+        ".clone().n",
+        ".clone().items",
+        ".clone().name",
+    ] {
+        assert!(!lib.contains(copy), "`{copy}` in\n{lib}");
+    }
+}
+
+/// Read-only parameters that are not `Copy` are references, and one of a
+/// `Copy` type is copied once on entry; a parameter the body changes or
+/// returns is consumed (`docs/slice.md` 20.3.3) and declared by value,
+/// with no entry copy.
 #[test]
 fn parameters_are_borrowed_unless_changed() {
     let project = common::generate_source(
@@ -331,8 +382,8 @@ fn parameters_are_borrowed_unless_changed() {
     for expected in [
         "pub fn count(text: &String, at: &i64) -> i64 { let mut at = at.clone();",
         "pub fn same(a: &String, b: &String) -> bool { (*a) == (*b) }",
-        "pub fn grow(items: &Vec<i64>) -> Vec<i64> { let mut items = items.clone(); items.push(1); items }",
-        "pub fn keep(text: &String) -> String { text.clone() }",
+        "pub fn grow(mut items: Vec<i64>) -> Vec<i64> { items.push(1); items }",
+        "pub fn keep(text: String) -> String { text }",
         "ignite_io::checked::add(count(text, &2), count(&String::from(\"x\"), &1), \"test.ignite\", 6, 30)",
     ] {
         assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
@@ -398,6 +449,150 @@ fn target_bugs_of_slice_11b() {
     }
 }
 
+/// Slice 16 (`docs/slice.md` 20.3.4, 20.0 row 13): a parameter the moves
+/// analysis marks consumed is declared by value and the entry copy is gone;
+/// a place that moves is passed bare to it, to a role and through a fn
+/// value; a place read later is passed as `.clone()`; a read-only aggregate
+/// parameter stays `&T`; a named fn wrapped as a fn value passes its owned
+/// argument on by value; `adder(1)(2)` calls the call's result.
+#[test]
+fn last_use_moves_and_expression_calls() {
+    let (project, _) = lower("slice16", &common::golden_std());
+    let lib = norm(&project.lib_rs);
+    for expected in [
+        "pub fn step(state: State, x: &i64) -> State { let mut x = x.clone(); let mut next = state;",
+        "s = step(s, &i);",
+        "pub fn total(state: &State) -> i64",
+        "let t = step(s.clone(), &1);",
+        "pub fn ufcs() -> State { let s = fresh(); step(s, &2) }",
+        "pub fn serve(mut stream: ignite_io::TcpStream, mut application: State) -> Result<(), ignite_io::IoError> { application.items.push(1);",
+        "let s = fresh(); Counter::serve(stream.clone(), s) }",
+        "pub fn publish(o: Out) -> Out { let mut p = o;",
+        "pub fn advance(st: Pair) -> Pair { Pair { state: st.state, out: publish(st.out) } }",
+        "a.state = (a.handle)(a.state, i.clone());",
+        "step(__a0, &__a1)",
+        "pub fn added() -> i64 { adder(&1)(2) }",
+    ] {
+        assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
+    }
+    for unexpected in [
+        "step(s.clone(), &i)",
+        "let mut state = state.clone()",
+        "a.state.clone()",
+    ] {
+        assert!(!lib.contains(unexpected), "`{unexpected}` in\n{lib}");
+    }
+    check_program("slice16", &common::golden_std(), false);
+}
+
+/// Row 19 of `docs/slice.md` 20.0: rest patterns (20.5) lower to a length
+/// test `len >= k`, suffix elements indexed from the end, and a rest
+/// binding that is an owned copy of the elements between, on a list and on
+/// `Bytes`. `rest.ignite` is a copy of the LLVM golden program.
+#[test]
+fn rest_patterns() {
+    let (project, _) = lower("rest", &common::golden_std());
+    let lib = norm(&project.lib_rs);
+    for expected in [
+        "__m if (__m.len() == 1) => 1, __m if (__m.len() >= 2) => 2,",
+        "__m if (__m.len() >= 1) => { let rest = __m[1..].to_vec();",
+        "__m if (__m.len() >= 2) => { let a = ((&__m[0])).clone(); let z = ((&__m[__m.len() - 1])).clone();",
+        "(*__p11 == 255) }) => { let rest = __m[2..].to_vec();",
+        ".len() >= 2) } => 400,",
+    ] {
+        assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
+    }
+    let copy = std::fs::read_to_string(golden_dir().join("rest.ignite")).unwrap();
+    let original = std::fs::read_to_string(
+        common::workspace().join("crates/ignite-llvm/tests/golden/rest.ignite"),
+    )
+    .unwrap();
+    assert_eq!(
+        copy, original,
+        "tests/golden/rest.ignite is a copy of the LLVM golden program"
+    );
+    check_program("rest", &common::golden_std(), false);
+}
+
+/// Row 36 of `docs/slice.md` 21.0: the four capability resources are
+/// created after the stores in the order of 21.8 (settings, directories,
+/// launchers, entropy), `--tool` and `--root` are read in the generated
+/// main, every method lowers to its `ignite_io` call, and the project
+/// builds with cargo. `capabilities.ignite` is a copy of the LLVM golden
+/// program.
+#[test]
+fn capabilities() {
+    let project = check_program("capabilities", &common::repository_std(), false);
+    assert_eq!(executable_names(&project), ["bench"]);
+    let main = norm(&project.executables[0].source);
+    let order = [
+        "ignite_io::Setting::launch(\"--tool\", Some(\"/bin/sh\"))?",
+        "ignite_io::Directory::launch(\"workspace\", true, \"--root\")?",
+        "ignite_io::Launcher::with_maximum(4)",
+        "ignite_io::Entropy::open()?",
+        "let bench = Bench {",
+    ];
+    let mut at = 0;
+    for expected in order {
+        let found = main[at..]
+            .find(expected)
+            .unwrap_or_else(|| panic!("missing `{expected}` after offset {at} in\n{main}"));
+        at += found + expected.len();
+    }
+    let lib = norm(&project.lib_rs);
+    for call in [
+        ".read_file(",
+        ".write_file(",
+        ".read_directory(",
+        ".create_directory(",
+        ".remove(",
+        ".remove_tree(",
+        ".absolute_path()",
+        ".execute(",
+        ".start(",
+        ".id()",
+        ".kill()",
+        ".wait()",
+        ".random_bytes(",
+        ".value()",
+    ] {
+        assert!(lib.contains(call), "no `{call}` in\n{lib}");
+    }
+    let copy = std::fs::read_to_string(golden_dir().join("capabilities.ignite")).unwrap();
+    let original = std::fs::read_to_string(
+        common::workspace().join("crates/ignite-llvm/tests/golden/capabilities.ignite"),
+    )
+    .unwrap();
+    assert_eq!(
+        copy, original,
+        "tests/golden/capabilities.ignite is a copy of the LLVM golden program"
+    );
+
+    let substrate = common::workspace().join("crates/ignite-io");
+    let (project, std) = common::lower_typed(
+        &golden_dir().join("capabilities.ignite"),
+        &common::repository_std(),
+        &substrate,
+    );
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| common::workspace().join("target"));
+    let out = target.join("ignite-rustgen-test").join("capabilities");
+    ignite_rustgen::write_project(&project, &out).unwrap();
+    ignite_rustgen::write_project(&std, &out.join("std")).unwrap();
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let status = std::process::Command::new(cargo)
+        .arg("build")
+        .arg("--manifest-path")
+        .arg(out.join("Cargo.toml"))
+        .arg("--target-dir")
+        .arg(&target)
+        .env("CARGO_INCREMENTAL", "0")
+        .status()
+        .unwrap();
+    assert!(status.success(), "cargo build of {} failed", out.display());
+}
+
 #[test]
 fn syntax_copy_is_current() {
     let copy = std::fs::read_to_string(golden_dir().join("syntax.ignite")).unwrap();
@@ -459,7 +654,7 @@ fn bounded_streams() {
     for expected in [
         "pub fn relay<S: ignite_io::ByteStream + Clone + Send + Sync + 'static>(stream: &S) -> IoResult<()>",
         "pub fn serve<S: ignite_io::ByteStream + Clone + Send + Sync + 'static>(mut stream: S, mut limit: i64)",
-        "pub fn identity<T: Clone + Send + Sync + 'static>(value: &T) -> T",
+        "pub fn identity<T: Clone + Send + Sync + 'static>(value: T) -> T",
         "<S as ignite_io::ByteStream>::read(&stream, 16)",
         "<S as ignite_io::ByteStream>::set_idle_timeout(&stream, limit.clone())",
         "<S as ignite_io::ByteStream>::close(&stream)",

@@ -1,0 +1,1 @@
+e104_setting_flag.ignite:2:35: error[E104]: `flag` must be `--` followed by lowercase letters, digits or `-`, got tool

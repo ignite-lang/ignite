@@ -1,0 +1,189 @@
+import std.net.{Pipe, PipeStream}
+
+type IoResult<T> = Result<T, IoError>
+
+type Handler {
+  name: Text
+  run: fn(Int) -> Int
+}
+
+type Stored {
+  run: fn(Int) -> Int
+}
+
+type Counter {
+  total: Int
+  seen: List<Int>
+}
+
+type Actor<S, M> {
+  state: S
+  handle: fn(S, M) -> S
+}
+
+fn adder(n: Int) -> fn(Int) -> Int = |x| x + n
+
+fn twice<T>(f: fn(T) -> T, x: T) -> T = f(f(x))
+
+fn compose(f: fn(Int) -> Int, g: fn(Int) -> Int) -> fn(Int) -> Int = |x| g(f(x))
+
+fn always<T>(v: T) -> fn(Int) -> T = |_x| v
+
+fn curry(a: Int) -> fn(Int) -> fn(Int) -> Int = |b| |c| a + b + c
+
+fn send(s: PipeStream, f: fn(Int) -> Text, n: Int) -> IoResult<Unit> requires [s.write] =
+  s.write_all(f(n).to_bytes())
+
+fn greet(s: PipeStream) -> IoResult<Unit> requires [s.write] {
+  let say = |t: Text| s.write_all(t.to_bytes())
+  say("hi")?
+  say("!")
+}
+
+fn bump(s: Counter, m: Int) -> Counter {
+  var next = s
+  next.total = next.total + m
+  next.seen.push(m)
+  next
+}
+
+fn run_actor(n: Int) -> Actor<Counter, Int> {
+  var a: Actor<Counter, Int> = Actor { state = Counter { total = 0, seen = [] }, handle = bump }
+  var i = 0
+  while i < n {
+    a.state = a.handle(a.state, i)
+    i = i + 1
+  }
+  a
+}
+
+test "a closure captures a local by copy" {
+  var base = 10
+  let f = |x: Int| x + base
+  base = 100
+  assert f(1) == 11
+  assert base == 100
+}
+
+test "a closure returned from a fn keeps its capture" {
+  let add5 = adder(5)
+  assert add5(1) == 6
+}
+
+test "closures in a record field and a list" {
+  let k = 3
+  let h = Handler { name = "times", run = |x| x * k }
+  assert h.run(2) == 6
+  var fs: List<fn(Int) -> Int> = []
+  var i = 0
+  while i < 3 {
+    let j = i
+    fs.push(|x| x + j)
+    i = i + 1
+  }
+  let f0 = fs[0]
+  assert f0(10) == 10
+  let f2 = fs[2]
+  assert f2(10) == 12
+}
+
+test "a closure captures a closure" {
+  let inc = adder(1)
+  let dbl = |x: Int| x * 2
+  let both = compose(inc, dbl)
+  assert both(3) == 8
+  let outer = |x: Int| inc(x) + 1
+  assert outer(1) == 3
+}
+
+test "a closure through a generic fn and map" {
+  let suffix = "!"
+  assert twice(|t| t + suffix, "a") == "a!!"
+  let names = ["x", "y"]
+  let prefix = "n-"
+  assert names.map(|n| prefix + n) == ["n-x", "n-y"]
+}
+
+test "a closure capturing a text survives many loop rounds" {
+  var fs: List<fn(Text) -> Text> = []
+  var i = 0
+  while i < 2000 {
+    let tag = "t" + i.to_text()
+    fs.push(|s| s + tag)
+    i = i + 1
+  }
+  let fl = fs[1999]
+  assert fl("x") == "xt1999"
+  let ff = fs[0]
+  assert ff("x") == "xt0"
+}
+
+test "a generic closure captures a T" {
+  let f = always("v")
+  assert f(1) == "v"
+  let g = always([1, 2])
+  assert g(0) == [1, 2]
+}
+
+test "a closure returns a closure that captures both levels" {
+  let f = curry(1)
+  let g = f(10)
+  assert g(100) == 111
+}
+
+test "a var captured and then changed in place" {
+  var xs = [1]
+  let n = || xs.len()
+  xs.push(2)
+  assert n() == 1
+  assert xs.len() == 2
+}
+
+test "a closure in a store" {
+  let k = 4
+  let store: Store<Stored> = Store.new()
+  let id = store.next_id()
+  store.put(id, Stored { run = |x| x * k })
+  match store.get(id) {
+    Some(h) => { assert h.run(2) == 8 }
+    None => { assert false }
+  }
+}
+
+test "a closure handed to a spawned task" {
+  let (a, b) = Pipe.pair()
+  let unit = "ms"
+  spawn send(a, |n| n.to_text() + unit, 5)
+  var out = Bytes.empty()
+  loop {
+    match b.read(64)? {
+      Eof => break
+      Data(bytes) => {
+        out.append(bytes)
+        if out.len() >= 3 { break }
+      }
+    }
+  }
+  assert out.to_text() == "5ms"
+}
+
+test "a closure writes through a captured stream" {
+  let (a, b) = Pipe.pair()
+  greet(a)?
+  a.close()
+  var out = Bytes.empty()
+  loop {
+    match b.read(64)? {
+      Eof => break
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  assert out.to_text() == "hi!"
+}
+
+test "a record holding a handle stepped in a loop" {
+  let a = run_actor(100)
+  assert a.state.total == 4950
+  assert a.state.seen.len() == 100
+  assert a.state.seen[99] == 99
+}

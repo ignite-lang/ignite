@@ -1,0 +1,3 @@
+fn token(entropy: Entropy) -> Result<Bytes, IoError> requires [] {
+  return entropy.random_bytes(32)
+}

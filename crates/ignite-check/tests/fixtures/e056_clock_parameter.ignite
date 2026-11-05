@@ -1,0 +1,3 @@
+fn helper(clock: Int) -> Duration requires [clock.read] = Clock.monotonic()
+
+fn outer() -> Duration requires [] = helper(1)

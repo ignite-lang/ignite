@@ -4,7 +4,7 @@
 use crate::{IgniteList, bytes, get, put};
 
 /// The `Text` elements of the `List<Text>` at `list`.
-fn texts<'a>(list: *const IgniteList) -> &'a [IgniteList] {
+pub(crate) fn texts<'a>(list: *const IgniteList) -> &'a [IgniteList] {
     match get(list) {
         Some(list) if !list.ptr.is_null() && list.len > 0 => {
             // SAFETY: a `List<Text>` argument holds `len` aligned `Text`s.

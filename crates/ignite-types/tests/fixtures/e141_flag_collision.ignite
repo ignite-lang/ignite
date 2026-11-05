@@ -1,0 +1,5 @@
+system S {
+  resource files: Directory { path = "a", flag = "--root" }
+  resource other: Setting { flag = "--root" }
+  resource listen: Setting { flag = "--port" }
+}

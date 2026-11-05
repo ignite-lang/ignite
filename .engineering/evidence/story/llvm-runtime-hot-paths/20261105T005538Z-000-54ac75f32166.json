@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T00:55:38Z",
+  "actor": "human:timo",
+  "artifact": "story:llvm-runtime-hot-paths",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate",
+    "reference": "https://github.com/ignite-lang/ignite/pull/29"
+  }
+}

@@ -1,0 +1,178 @@
+package fixtures.text_eq
+
+// Text and Bytes equality against literals, run by `ignite test` on both
+// targets in debug and release
+// (crates/ignite/tests/ignite_test.rs `text_equality_against_literals`).
+// The LLVM target compares a length, then the bytes, inline.
+
+const PING: Text = "ping"
+
+fn arity(name: Text) -> Int = match name {
+  "" => -1
+  "ping" => 1
+  "echo" => 2
+  "quit" => 3
+  "command" => 4
+  "config" => 5
+  "get" => 6
+  "set" => 7
+  "setnx" => 8
+  "getset" => 9
+  "getdel" => 10
+  "a command name longer than thirty-two bytes" => 11
+  "grüße" => 12
+  "x" | "y" => 13
+  _ => 0
+}
+
+fn pair(a: Text, b: Text) -> Int = match (a, b) {
+  ("set", "get") => 1
+  ("set", _) => 2
+  (_, "") => 3
+  _ => 0
+}
+
+fn constant(name: Text) -> Int = match name {
+  PING => 1
+  _ => 0
+}
+
+// The bytes of `text` as a Text that is not a literal: copied out of the
+// middle of a larger buffer, so its data pointer is not the literal's.
+fn fresh(text: Text) -> Text {
+  let padded = ("<" + text + ">").to_bytes()
+  padded.slice(1, padded.len() - 1).to_text()
+}
+
+test "match on literals" {
+  assert arity(fresh("ping")) == 1
+  assert arity(fresh("echo")) == 2
+  assert arity(fresh("quit")) == 3
+  assert arity(fresh("command")) == 4
+  assert arity(fresh("config")) == 5
+  assert arity(fresh("get")) == 6
+  assert arity(fresh("set")) == 7
+  assert arity(fresh("setnx")) == 8
+  assert arity(fresh("getset")) == 9
+  assert arity(fresh("getdel")) == 10
+  assert arity(fresh("a command name longer than thirty-two bytes")) == 11
+  assert arity(fresh("x")) == 13
+  assert arity(fresh("y")) == 13
+}
+
+test "match on literals: same length, other bytes" {
+  assert arity(fresh("pong")) == 0
+  assert arity(fresh("Ping")) == 0
+  assert arity(fresh("pinG")) == 0
+  assert arity(fresh("setny")) == 0
+  assert arity(fresh("getsex")) == 0
+  assert arity(fresh("a command name longer than thirty-two byteS")) == 0
+  assert arity(fresh("A command name longer than thirty-two bytes")) == 0
+  assert arity(fresh("z")) == 0
+}
+
+test "match on literals: shorter and longer than the value" {
+  assert arity(fresh("se")) == 0
+  assert arity(fresh("s")) == 0
+  assert arity(fresh("settle")) == 0
+  assert arity(fresh("setnxx")) == 0
+  assert arity(fresh("pin")) == 0
+  assert arity(fresh("pings")) == 0
+  assert arity(fresh("a command name longer than thirty-two byte")) == 0
+  assert arity(fresh("a command name longer than thirty-two bytes!")) == 0
+}
+
+test "match on literals: empty text" {
+  assert arity("") == -1
+  assert arity(fresh("")) == -1
+  assert pair(fresh("a"), "") == 3
+  assert pair(fresh("a"), fresh("")) == 3
+  assert pair(fresh("set"), fresh("")) == 2
+}
+
+test "match on literals: non-ASCII" {
+  assert arity(fresh("grüße")) == 12
+  assert arity(fresh("grüsse")) == 0
+  assert arity(fresh("grüß")) == 0
+  assert arity(fresh("grüßen")) == 0
+  assert arity(fresh("grÜße")) == 0
+  assert "grüße".len() == "grüsse".len()
+}
+
+test "match on literals: nested and constant" {
+  assert pair(fresh("set"), fresh("get")) == 1
+  assert pair(fresh("set"), fresh("got")) == 2
+  assert pair(fresh("sat"), fresh("get")) == 0
+  assert constant(fresh("ping")) == 1
+  assert constant(fresh("pinG")) == 0
+  assert constant(fresh("pin")) == 0
+  assert constant(fresh("")) == 0
+}
+
+// `==` and `!=` in an expression, not the operands an `assert` shows.
+fn is_set(x: Text) -> Bool = x == "set"
+
+fn set_is(x: Text) -> Bool = "set" == x
+
+fn not_set(x: Text) -> Bool = x != "set"
+
+fn is_empty_text(x: Text) -> Bool = x == ""
+
+fn not_empty_text(x: Text) -> Bool = x != ""
+
+fn is_greeting(x: Text) -> Bool = x == "grüße"
+
+fn is_long(x: Text) -> Bool = x == "a command name longer than thirty-two bytes"
+
+fn not_long(x: Text) -> Bool = x != "a command name longer than thirty-two bytes"
+
+test "== and != with a literal" {
+  assert is_set(fresh("set"))
+  assert set_is(fresh("set"))
+  assert !not_set(fresh("set"))
+  assert !is_set(fresh("get"))
+  assert !is_set(fresh("se"))
+  assert !is_set(fresh("sett"))
+  assert !is_set(fresh(""))
+  assert not_set(fresh("get"))
+  assert not_set(fresh("se"))
+  assert not_set(fresh("sett"))
+  assert not_set(fresh(""))
+  assert !set_is(fresh("sat"))
+  assert is_empty_text(fresh(""))
+  assert is_empty_text("")
+  assert !is_empty_text(fresh("a"))
+  assert !not_empty_text(fresh(""))
+  assert not_empty_text(fresh("a"))
+  assert is_greeting(fresh("grüße"))
+  assert !is_greeting(fresh("grüsse"))
+  assert !is_greeting(fresh("grüß"))
+  assert is_long(fresh("a command name longer than thirty-two bytes"))
+  assert !is_long(fresh("a command name longer than thirty-two byteS"))
+  assert !is_long(fresh("a command name longer than thirty-two byte"))
+  assert !not_long(fresh("a command name longer than thirty-two bytes"))
+  assert not_long(fresh("a command name longer than thirty-two bytes!"))
+  assert fresh("set") == "set"
+  assert fresh("set") != "sett"
+}
+
+fn is_get(x: Bytes) -> Bool = x == b"get"
+
+test "Bytes equality" {
+  assert is_get(fresh("get").to_bytes())
+  assert !is_get(fresh("got").to_bytes())
+  assert !is_get(fresh("ge").to_bytes())
+  assert !is_get(fresh("gets").to_bytes())
+  assert !is_get(Bytes.empty())
+  assert fresh("abc").to_bytes() == b"abc"
+  assert fresh("abc").to_bytes() != b"abd"
+  assert fresh("abc").to_bytes() != b"ab"
+  assert fresh("ab").to_bytes() != b"abc"
+  assert fresh("").to_bytes() == b""
+  assert Bytes.empty() == b""
+  assert b"" != b"a"
+  assert fresh("grüße").to_bytes() == "grüße".to_bytes()
+  assert fresh("grüsse").to_bytes() != "grüße".to_bytes()
+  assert [b"get", fresh("set").to_bytes()] == [b"get", b"set"]
+  assert [b"get", fresh("set").to_bytes()] != [b"get", b"sex"]
+}

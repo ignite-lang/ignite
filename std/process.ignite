@@ -1,0 +1,298 @@
+package std.process
+
+// Child processes, random bytes and launch arguments (`docs/slice.md` 21.5
+// to 21.7). The module is also the substrate's capabilities `Launcher`,
+// `ChildProcess`, `Entropy` and `Setting`, handles a system declares as
+// resources (all but `ChildProcess`) and passes in values (21.3):
+//
+//   resource tools: Launcher { maximum_children = 16 }
+//   resource entropy: Entropy
+//   resource tool: Setting { flag = "--tool", default = "/bin/sh" }
+//
+// Builtins of the substrate (effects on the receiver's roots, 21.3):
+//
+//   launcher.execute(invocation) -> Result<ChildExit, IoError>     effect launch; waits on the calling task
+//   launcher.start(invocation) -> Result<ChildProcess, IoError>    effect launch; returns at once
+//   child.id() -> Int                                              pure; the process and group id
+//   child.wait() -> Result<ChildExit, IoError>                     effect wait; once
+//   child.kill() -> Result<Unit, IoError>                          effect kill; SIGKILL to the group
+//   entropy.random_bytes(count: Int) -> Result<Bytes, IoError>     effect draw; count in 0..=65536
+//   setting.value() -> Text                                        effect argument
+//
+// A `ChildProcess` that `start` returned has no roots, so the fn that
+// started it waits for and kills it without further `requires`. Tests make
+// capabilities with the test-only `Launcher.new()` (`maximum_children`
+// 16), `Entropy.new()` and `Setting.of(flag, value)`.
+
+// What `Launcher.execute` and `Launcher.start` run: `program` is a bare name
+// looked up in the child's `PATH` or an absolute path; `arguments` are
+// passed as they are, no shell; `directory` is `""` (the program's own) or
+// absolute; `environment` entries `NAME=value` apply over the inherited
+// environment, or over an empty one when `inherit_environment` is false;
+// on `timeout` the child's group is killed; output past `output_limit` per
+// stream (at most 16 MiB) is counted in `dropped`, not kept.
+type Invocation {
+  program: Text
+  arguments: List<Text> = []
+  directory: Text = ""
+  environment: List<Text> = []
+  inherit_environment: Bool = true
+  timeout: Duration = 30 seconds
+  output_limit: ByteSize = 1 MiB
+}
+
+// How a child ended: `ending` 0 exited (`code` the status), 1 signalled
+// (`code` the signal), 2 timed out, 3 killed (`code` -1 for both);
+// `outcome` gives it as an `Ending`.
+type ChildExit {
+  ending: Int
+  code: Int
+  stdout: Bytes
+  stderr: Bytes
+  dropped: Int
+}
+
+enum Ending {
+  ExitCode(Int)
+  BySignal(Int)
+  TimedOut
+  Killed
+}
+
+// The ending of `exit` as an `Ending`.
+fn outcome(exit: ChildExit) -> Ending = match exit.ending {
+  0 => ExitCode(exit.code)
+  1 => BySignal(exit.code)
+  2 => TimedOut
+  _ => Killed
+}
+
+// Whether the child exited with status 0.
+fn succeeded(exit: ChildExit) -> Bool = exit.ending == 0 && exit.code == 0
+
+test "outcome maps each ending" {
+  let empty = Bytes.empty()
+  let exited = ChildExit { ending = 0, code = 3, stdout = empty, stderr = empty, dropped = 0 }
+  assert outcome(exited) == ExitCode(3)
+  assert !succeeded(exited)
+  assert succeeded(ChildExit { ending = 0, code = 0, stdout = empty, stderr = empty, dropped = 0 })
+  assert outcome(ChildExit { ending = 1, code = 15, stdout = empty, stderr = empty, dropped = 0 }) == BySignal(15)
+  assert outcome(ChildExit { ending = 2, code = -1, stdout = empty, stderr = empty, dropped = 0 }) == TimedOut
+  assert outcome(ChildExit { ending = 3, code = -1, stdout = empty, stderr = empty, dropped = 0 }) == Killed
+  assert !succeeded(ChildExit { ending = 1, code = 0, stdout = empty, stderr = empty, dropped = 0 })
+}
+
+test "an invocation's defaults" {
+  let invocation = Invocation { program = "/bin/true" }
+  assert invocation.arguments.is_empty()
+  assert invocation.directory == ""
+  assert invocation.inherit_environment
+  assert invocation.timeout == 30 seconds
+  assert invocation.output_limit == 1 MiB
+}
+
+test "a child's output and status are captured" {
+  let exit = Launcher.new().execute(Invocation { program = "/bin/sh", arguments = ["-c", "echo out; echo err >&2; exit 3"] })?
+  assert exit.ending == 0
+  assert exit.code == 3
+  assert exit.stdout == b"out\n"
+  assert exit.stderr == b"err\n"
+  assert exit.dropped == 0
+  assert outcome(exit) == ExitCode(3)
+}
+
+// The message of a refused operation, `ok` when it succeeded.
+test fn refused<T>(result: Result<T, IoError>) -> Text = match result {
+  Ok(_) => "ok"
+  Err(error) => error.message
+}
+
+// `/bin/sleep 30`, the child the tests below kill.
+test fn sleeper() -> Invocation = Invocation { program = "/bin/sleep", arguments = ["30"] }
+
+test "a child over its timeout is killed with its group" {
+  let launcher = Launcher.new()
+  let started = Clock.monotonic()
+  let exit = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "echo $$; sleep 30 & sleep 30"], timeout = 200 ms })?
+  assert Clock.monotonic() - started < 3 seconds
+  assert exit.ending == 2
+  assert exit.code == -1
+  assert outcome(exit) == TimedOut
+  let pid = exit.stdout.to_text().trim()
+  assert Int.parse(pid) != None
+  let check = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "ps -o stat= -g ".concat(pid).concat(" | grep -v Z || echo gone")] })?
+  assert check.stdout == b"gone\n"
+  // `ps -g` selects by session; count the group's live members, zombies not:
+  let group = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "ps -e -o pgid=,stat= | awk -v g=".concat(pid).concat(" '$1 == g && $2 !~ /^Z/ {{ n++ }} END {{ print n + 0 }}'")] })?
+  assert group.stdout == b"0\n"
+}
+
+test "a started child is killed" {
+  let child = Launcher.new().start(sleeper())?
+  assert child.id() > 0
+  let started = Clock.monotonic()
+  child.kill()?
+  let exit = child.wait()?
+  assert Clock.monotonic() - started < 1 seconds
+  assert exit.ending == 3
+  assert outcome(exit) == Killed
+  assert refused(child.wait()) == "child already waited"
+  assert refused(child.kill()) == "ok"
+}
+
+test "output past the limit is counted, not kept" {
+  let launcher = Launcher.new()
+  let exit = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "head -c 2097152 /dev/zero"], output_limit = 1 KiB })?
+  assert exit.ending == 0
+  assert exit.code == 0
+  assert exit.stdout.len() == 1024
+  assert exit.dropped == 2097152 - 1024
+  assert refused(launcher.execute(Invocation { program = "/bin/true", output_limit = 17 MiB })) == "output_limit must be at most 16 MiB"
+}
+
+test "the launcher refuses what it cannot run" {
+  let launcher = Launcher.new()
+  var children: List<ChildProcess> = []
+  while children.len() < 16 {
+    children.push(launcher.start(sleeper())?)
+  }
+  assert refused(launcher.start(sleeper())) == "too many children (16)"
+  let first: ChildProcess = children.at(0)
+  first.kill()?
+  assert first.wait()?.ending == 3
+  let replacement = launcher.start(sleeper())?
+  assert refused(launcher.start(sleeper())) == "too many children (16)"
+  replacement.kill()?
+  replacement.wait()?
+  var i = 1
+  while i < children.len() {
+    let child: ChildProcess = children.at(i)
+    child.kill()?
+    child.wait()?
+    i = i + 1
+  }
+  assert refused(launcher.execute(Invocation { program = "nosuch-ignite-17" })).starts_with("program not found")
+  assert refused(launcher.execute(Invocation { program = "bin/sh" })) == "program bin/sh: a relative path with /"
+  assert refused(launcher.execute(Invocation { program = "/bin/true", timeout = 0 seconds })) == "timeout must be positive"
+  assert refused(launcher.execute(Invocation { program = "/bin/true", directory = "rel" })) == "directory rel: not absolute"
+  assert launcher.execute(Invocation { program = "true" })?.code == 0
+}
+
+test "adversary: a missing working directory is not a missing program" {
+  let message = refused(Launcher.new().execute(Invocation { program = "/bin/true", directory = "/nonexistent-ignite-17-dir" }))
+  assert message != "ok"
+  assert !message.starts_with("program not found"), message
+}
+
+test "adversary: a waited child keeps its id after its handle is reused" {
+  let launcher = Launcher.new()
+  let first = launcher.start(Invocation { program = "/bin/true" })?
+  let kept = first.id()
+  first.wait()?
+  var i = 0
+  while i < 8 {
+    let later = launcher.start(Invocation { program = "/bin/true" })?
+    later.wait()?
+    i = i + 1
+  }
+  let running = launcher.start(Invocation { program = "/bin/sh", arguments = ["-c", "sleep 0.3; exit 4"] })?
+  first.kill()?
+  assert refused(first.wait()) == "child already waited"
+  let exit = running.wait()?
+  assert exit.ending == 0
+  assert exit.code == 4
+  assert first.id() == kept, "id ".concat(first.id().to_text()).concat(" after reuse, was ").concat(kept.to_text())
+}
+
+test "adversary: output exactly at and one past the limit, both streams" {
+  let launcher = Launcher.new()
+  let at = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "head -c 1024 /dev/zero; head -c 1025 /dev/zero >&2"], output_limit = 1 KiB })?
+  assert at.stdout.len() == 1024
+  assert at.stderr.len() == 1024
+  assert at.dropped == 1
+  let both = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "head -c 2097152 /dev/zero & head -c 2097152 /dev/zero >&2; wait"], output_limit = 1 KiB })?
+  assert both.ending == 0
+  assert both.stdout.len() == 1024
+  assert both.stderr.len() == 1024
+  assert both.dropped == 2 * (2097152 - 1024)
+  let none = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "echo x; echo y >&2"], output_limit = 0 bytes })?
+  assert none.stdout.len() == 0
+  assert none.dropped == 4
+}
+
+test "adversary: kill after the end keeps the exit status" {
+  let launcher = Launcher.new()
+  let child = launcher.start(Invocation { program = "/bin/sh", arguments = ["-c", "exit 7"] })?
+  launcher.execute(Invocation { program = "/bin/sleep", arguments = ["0.3"] })?
+  child.kill()?
+  let exit = child.wait()?
+  assert exit.ending == 0
+  assert exit.code == 7
+}
+
+test "adversary: grandchildren do not hold the result" {
+  let launcher = Launcher.new()
+  let started = Clock.monotonic()
+  let escaped = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "setsid sleep 2 & echo started"] })?
+  assert Clock.monotonic() - started < 1 seconds
+  assert escaped.ending == 0
+  assert escaped.stdout == b"started\n"
+  let forked = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "sleep 30 & echo $!"] })?
+  assert Clock.monotonic() - started < 2 seconds
+  let pid = forked.stdout.to_text().trim()
+  assert Int.parse(pid) != None
+  let check = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "sleep 0.2; [ ! -d /proc/".concat(pid).concat(" ] || grep -q 'State:.*Z' /proc/").concat(pid).concat("/status && echo gone")] })?
+  assert check.stdout == b"gone\n"
+}
+
+test "adversary: environment entries, PATH and odd programs" {
+  let launcher = Launcher.new()
+  assert refused(launcher.execute(Invocation { program = "/bin/true", environment = ["NOVALUE"] })) == "environment entry NOVALUE: not NAME=value"
+  assert refused(launcher.execute(Invocation { program = "/bin/true", environment = ["=x"] })) == "environment entry =x: not NAME=value"
+  assert refused(launcher.execute(Invocation { program = "true", inherit_environment = false })) == "program not found: true"
+  assert refused(launcher.execute(Invocation { program = "true", environment = ["PATH=/nonexistent-ignite-17"] })) == "program not found: true"
+  assert refused(launcher.execute(Invocation { program = "" })).starts_with("program not found")
+  assert refused(launcher.execute(Invocation { program = "/bin" })) != "ok"
+  assert refused(launcher.execute(Invocation { program = "/etc/passwd" })) != "ok"
+  let env = launcher.execute(Invocation { program = "env", environment = ["PATH=/usr/bin:/bin", "A=1=2"], inherit_environment = false })?
+  assert env.stdout == b"A=1=2\nPATH=/usr/bin:/bin\n"
+  assert launcher.execute(Invocation { program = "/bin/true", timeout = 1000000000 seconds })?.code == 0
+}
+
+// ---- entropy tests ----
+
+test "two draws differ" {
+  let entropy = Entropy.new()
+  let first = entropy.random_bytes(32)?
+  let second = entropy.random_bytes(32)?
+  assert first.len() == 32
+  assert second.len() == 32
+  assert first != second
+  assert entropy.random_bytes(0)?.len() == 0
+  let too_many = match entropy.random_bytes(65537) {
+    Ok(_) => ""
+    Err(error) => error.message
+  }
+  assert too_many == "random_bytes: count must be in 0..=65536"
+  let negative = match entropy.random_bytes(-1) {
+    Ok(_) => ""
+    Err(error) => error.message
+  }
+  assert negative == "random_bytes: count must be in 0..=65536"
+}
+
+test "every count of the bound is drawn, a count past it refused" {
+  let entropy = Entropy.new()
+  assert entropy.random_bytes(1)?.len() == 1
+  assert entropy.random_bytes(65536)?.len() == 65536
+  let wide = match entropy.random_bytes(4294967301) {
+    Ok(_) => "drew"
+    Err(error) => error.message
+  }
+  assert wide == "random_bytes: count must be in 0..=65536"
+  let wrapped = match entropy.random_bytes(-4294967295) {
+    Ok(_) => "drew"
+    Err(error) => error.message
+  }
+  assert wrapped == "random_bytes: count must be in 0..=65536"
+}

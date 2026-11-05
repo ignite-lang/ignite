@@ -1,0 +1,12 @@
+// A module that only waits for children it is handed: it names nothing of
+// `std.process`, so nothing imports `ChildExit`, the `Ok` type of
+// `ChildProcess.wait` (`docs/slice.md` 21.5).
+
+fn reap(child: ChildProcess) -> Result<Unit, IoError> requires [child.wait] {
+  child.wait()?
+  return Ok(())
+}
+
+test "a module that waits for a child builds" {
+  assert 1 == 1
+}

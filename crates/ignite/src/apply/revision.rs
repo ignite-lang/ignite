@@ -178,6 +178,7 @@ pub(super) fn run(
         ports: BTreeMap::new(),
         declared,
         executables,
+        first_listeners: crate::run::live::first_listeners(loaded.types()),
         generation,
         start_at: 0,
         builder,
