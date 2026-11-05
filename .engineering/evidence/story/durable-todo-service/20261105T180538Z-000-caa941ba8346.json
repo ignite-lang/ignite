@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T18:05:38Z",
+  "actor": "human:timo",
+  "artifact": "story:durable-todo-service",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on feat/slice18-one-service e6dbb8f72 (W3 merged, adversary J1-J4 fixed, main merged): EXIT=0, crates/ignite 428 passed 0 failed 9 ignored, 291 inline per target",
+    "reference": "https://github.com/ignite-lang/ignite/commit/e6dbb8f72"
+  }
+}
