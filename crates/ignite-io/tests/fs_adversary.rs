@@ -71,7 +71,7 @@ fn remove_tree_removes_a_name_that_is_not_utf8() {
 /// the listing is refused with the name's bytes escaped, and the entry is
 /// left as it was.
 #[test]
-fn a_listed_name_that_is_not_utf8_can_be_removed() {
+fn a_listed_name_that_is_not_utf8_is_refused_and_left_in_place() {
     let scratch = Scratch::new("non-utf8-list");
     std::fs::write(scratch.root().join(OsStr::from_bytes(b"a\xff")), b"x").unwrap();
     let d = scratch.directory();

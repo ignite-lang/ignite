@@ -1,5 +1,7 @@
 package std.fs
 
+import std.process.{Invocation}
+
 // Files under a root directory (`docs/slice.md` 21.4). The module is also
 // the substrate's capability `Directory`, a handle a system declares as a
 // resource and passes in values (21.3):
@@ -136,4 +138,23 @@ test "a legal 250-byte name is written" {
   }
   assert refusal(files.write_file(name, b"x")) == "ok"
   assert files.read_file(name)? == b"x"
+}
+
+test "remove_tree removes links, not their targets" {
+  let files = Directory.temporary()?
+  let outside = Directory.temporary()?
+  outside.write_file("kept", b"k")?
+  files.create_directory("tree/a/b")?
+  files.write_file("tree/a/b/f", b"f")?
+  files.write_file("tree/g", b"g")?
+  let link = join_path(files.absolute_path()?, "tree/out")
+  let made = Launcher.new().execute(Invocation { program = "/bin/ln", arguments = ["-s", outside.absolute_path()?, link] })?
+  assert made.ending == 0 && made.code == 0
+  assert refusal(files.read_directory("tree/out")) == "path tree/out: symbolic link tree/out"
+  assert files.read_directory("tree")? == ["a/", "g", "out"]
+  files.remove_tree("tree")?
+  assert files.read_directory("")?.is_empty()
+  assert outside.read_directory("")? == ["kept"]
+  assert refusal(files.remove_tree("")) == "path : the root itself"
+  assert refusal(files.remove_tree(".")) == "path .: the root itself"
 }
