@@ -2680,7 +2680,14 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             other => other,
         };
-        let r = self.expr(right, true);
+        // A literal compared with `==` or `!=` is read in place, not
+        // copied into the arena, so the comparison sees its bytes.
+        let r = match &right.kind {
+            ExprKind::Str(s) if matches!(op, BinaryOp::Eq | BinaryOp::Ne) => {
+                Val::Ptr(self.literal_ref(s.as_bytes()), false)
+            }
+            _ => self.expr(right, true),
+        };
         if l == Val::Never || r == Val::Never {
             return Val::Never;
         }
@@ -2705,11 +2712,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         }
         if ty == Ty::Text {
             let (a, b) = (self.ptr(&l), self.ptr(&r));
-            let eq = self
-                .f
-                .val(format!("call i8 @ignite_rt_text_eq(ptr {a}, ptr {b})"));
-            let pred = if op == BinaryOp::Ne { "eq" } else { "ne" };
-            return Val::Scalar(self.f.val(format!("icmp {pred} i8 {eq}, 0")));
+            let eq = crate::glue::text_eq(self.m, &mut self.f, &a, &b);
+            return Val::Scalar(if op == BinaryOp::Ne {
+                self.f.val(format!("xor i1 {eq}, true"))
+            } else {
+                eq
+            });
         }
         let r = self.coerce(&ty, &rty, r);
         let t = scalar_type(&ty).unwrap_or("i64");
@@ -3078,10 +3086,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             PatternKind::Str(text) => {
                 let p = self.ptr(v);
                 let lit = self.literal_ref(text.as_bytes());
-                let eq = self
-                    .f
-                    .val(format!("call i8 @ignite_rt_text_eq(ptr {p}, ptr {lit})"));
-                let ok = self.f.val(format!("icmp ne i8 {eq}, 0"));
+                let ok = crate::glue::text_eq(self.m, &mut self.f, &p, &lit);
                 self.branch_or_fail(&ok, fail);
             }
             PatternKind::Binding(id) => {
@@ -3144,10 +3149,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let c = self.call(&callee, &cty, Vec::new());
         let ok = if *ty == Ty::Text {
             let (a, b) = (self.ptr(v), self.ptr(&c));
-            let eq = self
-                .f
-                .val(format!("call i8 @ignite_rt_text_eq(ptr {a}, ptr {b})"));
-            self.f.val(format!("icmp ne i8 {eq}, 0"))
+            crate::glue::text_eq(self.m, &mut self.f, &a, &b)
         } else {
             let c = self.coerce(ty, &cty, c);
             let t = scalar_type(ty).expect("a constant pattern on a scalar or Text");
