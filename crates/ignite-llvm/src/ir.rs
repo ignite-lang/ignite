@@ -140,6 +140,10 @@ pub enum Glue {
     /// `ptr store_update.<T>(ptr f, ptr old)`: the heap copy of `f` applied
     /// to a copy of the heap value `old` (`Store.update`).
     Update,
+    /// `ptr store_upsert.<T>(ptr f, ptr old)`: the heap copy of `f` applied
+    /// to `None` when `old` is null, else to `Some` of a copy of the heap
+    /// value `old` (`Store.upsert`).
+    Upsert,
     /// `i1 eq.<T>(ptr a, ptr b)`: structural equality of the values at `a`
     /// and `b` (`==`, `!=`, `assert a == b`; `docs/slice.md` sections 12.5
     /// and 13.5).
@@ -160,6 +164,7 @@ impl Glue {
             Glue::FromHeap => "copy_from_heap",
             Glue::FreeHeap => "free_heap",
             Glue::Update => "store_update",
+            Glue::Upsert => "store_upsert",
             Glue::Eq => "eq",
             Glue::Debug => "debug",
         }
@@ -216,6 +221,16 @@ pub struct Module<'e> {
     /// The symbols the module is emitted for ([`Module::set_roots`]);
     /// `None` keeps every function.
     roots: Option<BTreeSet<String>>,
+    /// The symbols of the module's constants ([`Module::mark_const`]): a
+    /// constant is emitted only when something kept names it
+    /// (`docs/slice.md` 19.13).
+    consts: BTreeSet<String>,
+    /// Symbols named from outside the module ([`Module::add_const_roots`]):
+    /// the constants among them are kept without roots too.
+    const_roots: BTreeSet<String>,
+    /// `!N` of the debug nodes of dropped constants, left out of the
+    /// output.
+    dropped_nodes: BTreeSet<usize>,
 }
 
 /// The target an IR module is pinned to (`docs/llvm.md` section 1): its
@@ -302,6 +317,9 @@ impl<'e> Module<'e> {
                 ..Debug::default()
             },
             roots: None,
+            consts: BTreeSet::new(),
+            const_roots: BTreeSet::new(),
+            dropped_nodes: BTreeSet::new(),
         }
     }
 
@@ -315,14 +333,32 @@ impl<'e> Module<'e> {
         self.roots = Some(roots);
     }
 
-    /// Drop every function no root, global or kept function names.
+    /// Record `symbol`, defined with [`Module::define`], as a constant: it
+    /// is emitted only when a kept function, a global, a root or a symbol
+    /// of [`Module::add_const_roots`] names it, and a dropped constant
+    /// leaves neither its strings nor its debug nodes behind
+    /// (`docs/slice.md` 19.13).
+    pub fn mark_const(&mut self, symbol: &str) {
+        self.consts.insert(symbol.to_string());
+    }
+
+    /// Symbols another module names (the mains of a build): the constants
+    /// among them are kept in a module without roots.
+    pub fn add_const_roots(&mut self, symbols: BTreeSet<String>) {
+        self.const_roots.extend(symbols);
+    }
+
+    /// Drop every function no root, global or kept function names; without
+    /// roots, drop only the constants nothing kept names. A string only a
+    /// dropped constant names is dropped with it, and so are the constant's
+    /// `DISubprogram` and `DILocation`s.
     fn prune(&mut self) {
-        let Some(roots) = &self.roots else {
+        if self.roots.is_none() && self.consts.is_empty() {
             return;
-        };
+        }
         // The graph lives only while function text is immutable. Borrow the
         // symbol slices instead of allocating a name for every IR reference.
-        let kept = {
+        let (kept, dropped_strings, dropped_scopes) = {
             let functions: Vec<(&str, BTreeSet<&str>)> = self
                 .functions
                 .iter()
@@ -333,13 +369,25 @@ impl<'e> Module<'e> {
                 .enumerate()
                 .map(|(i, (symbol, _))| (*symbol, i))
                 .collect();
-            let mut pending: Vec<&str> = roots.iter().map(String::as_str).collect();
+            let mut kept = vec![false; functions.len()];
+            let mut pending: Vec<&str> = Vec::new();
+            match &self.roots {
+                Some(roots) => pending.extend(roots.iter().map(String::as_str)),
+                None => {
+                    for (i, (symbol, refs)) in functions.iter().enumerate() {
+                        if !self.consts.contains(*symbol) {
+                            kept[i] = true;
+                            pending.extend(refs.iter().copied());
+                        }
+                    }
+                }
+            }
+            pending.extend(self.const_roots.iter().map(String::as_str));
             let mut global_refs = BTreeSet::new();
             for global in &self.globals {
                 global_refs.extend(symbol_slices(global));
             }
             pending.extend(global_refs.iter().copied());
-            let mut kept = vec![false; functions.len()];
             while let Some(symbol) = pending.pop() {
                 let Some(&i) = index.get(symbol) else {
                     continue;
@@ -350,7 +398,23 @@ impl<'e> Module<'e> {
                 kept[i] = true;
                 pending.extend(functions[i].1.iter().copied());
             }
-            kept
+            let dropped_const = |i: usize| !kept[i] && self.consts.contains(functions[i].0);
+            let mut used = global_refs;
+            let mut candidates = BTreeSet::new();
+            let mut scopes = BTreeSet::new();
+            for (i, (_, refs)) in functions.iter().enumerate() {
+                if dropped_const(i) {
+                    candidates.extend(refs.iter().copied());
+                    scopes.extend(subprogram_of(&self.functions[i]));
+                } else {
+                    used.extend(refs.iter().copied());
+                }
+            }
+            let strings: BTreeSet<String> = candidates
+                .difference(&used)
+                .map(|symbol| format!("@{symbol}"))
+                .collect();
+            (kept, strings, scopes)
         };
         let mut i = 0;
         self.functions.retain(|_| {
@@ -358,6 +422,21 @@ impl<'e> Module<'e> {
             i += 1;
             keep
         });
+        self.strings
+            .retain(|_, name| !dropped_strings.contains(name));
+        let suffixes: Vec<String> = dropped_scopes
+            .iter()
+            .map(|scope| format!(", scope: !{scope})"))
+            .collect();
+        for (n, node) in self.debug.nodes.iter().enumerate() {
+            let located = node.starts_with("!DILocation(")
+                && suffixes
+                    .iter()
+                    .any(|suffix| node.ends_with(suffix.as_str()));
+            if dropped_scopes.contains(&n) || located {
+                self.dropped_nodes.insert(n);
+            }
+        }
     }
 
     /// Pin the module to `target`: its first lines name the triple and
@@ -648,7 +727,9 @@ impl<'e> Module<'e> {
             let _ = writeln!(out, "\n!llvm.dbg.cu = !{{!{cu}}}");
             let _ = writeln!(out, "!llvm.module.flags = !{{!{count}, !{}}}", count + 1);
             for (i, node) in self.debug.nodes.iter().enumerate() {
-                let _ = writeln!(out, "!{i} = {node}");
+                if !self.dropped_nodes.contains(&i) {
+                    let _ = writeln!(out, "!{i} = {node}");
+                }
             }
             let _ = writeln!(out, "!{count} = !{{i32 7, !\"Dwarf Version\", i32 5}}");
             let _ = writeln!(
@@ -659,6 +740,15 @@ impl<'e> Module<'e> {
         }
         out
     }
+}
+
+/// The `!N` of the `DISubprogram` a function definition text names on its
+/// `define` line (`!dbg !N`), when it has one.
+fn subprogram_of(text: &str) -> Option<usize> {
+    let header = text.lines().next()?;
+    let (_, rest) = header.rsplit_once(" !dbg !")?;
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
 }
 
 /// The symbol a function definition text defines: the first `@name` of its

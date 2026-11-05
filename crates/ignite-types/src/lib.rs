@@ -72,6 +72,7 @@
 
 mod builtins;
 mod exhaustive;
+mod moves;
 mod typer;
 
 mod address;
@@ -548,6 +549,9 @@ pub enum Builtin {
     StoreValues,
     /// `s.update(id, f: fn(T) -> T) -> Option<T>`.
     StoreUpdate,
+    /// `s.upsert(id, f: fn(Option<T>) -> T) -> T`: `f` of the current value or
+    /// `None`, stored and returned, atomically.
+    StoreUpsert,
     /// `Store.new() -> Store<T>`, `T` from the expected type; tests and
     /// test-only items only (`docs/slice.md` section 12.3).
     StoreNew,
@@ -674,12 +678,16 @@ pub struct ModuleTypes {
     /// roles (key: `Protocol.role`): parameter to interface
     /// (`docs/slice.md` 18.13). Absent for a fn without bounds.
     pub bounds: BTreeMap<String, BTreeMap<String, String>>,
+    /// Consumed parameters per fn, associated fn (`Owner.name`) and role
+    /// (`Protocol.role`), one entry per parameter (`docs/slice.md` 20.3.3).
+    pub consumed: BTreeMap<String, Vec<bool>>,
 }
 
 impl ModuleTypes {
     /// Owned metadata for the public queries on `TypedProgram`, after typing.
     /// Keep every record/enum shape, default, generic parameter list and
-    /// bound ([`TypedProgram::bound`]).
+    /// bound ([`TypedProgram::bound`]), and the consumed parameters
+    /// ([`TypedProgram::consumed`]).
     /// Function/constant signatures, protocols, aliases, constant values and
     /// parameter names are needed while typing, but no retained query reads
     /// them. A new query that needs one must extend this snapshot and the
@@ -691,6 +699,7 @@ impl ModuleTypes {
             defaults: self.defaults.clone(),
             generics: self.generics.clone(),
             bounds: self.bounds.clone(),
+            consumed: self.consumed.clone(),
             ..ModuleTypes::default()
         }
     }
@@ -1198,6 +1207,9 @@ pub struct TypedProgram {
     bindings: HashMap<Span, Ty>,
     /// Constant patterns, keyed by pattern address.
     pattern_consts: AddressMap<QualName>,
+    /// The constant each `conforms` entry and requirement reference names,
+    /// by the span of the reference (`docs/slice.md` 19.6).
+    clause_consts: HashMap<Span, QualName>,
     /// Resolved type expressions, keyed by `Type` address.
     type_exprs: AddressMap<Ty>,
     exports: ModuleTypes,
@@ -1240,6 +1252,9 @@ pub struct TypedProgram {
     /// Effect sets of property expressions, constant values and field
     /// defaults and their sub-expressions, keyed by expression address.
     effects: AddressMap<EffectSet>,
+    /// Places in move positions that take their value, by expression
+    /// address (`docs/slice.md` 20.3).
+    moves: AddressMap<()>,
 }
 
 fn key(expr: &Expr) -> usize {
@@ -1264,6 +1279,15 @@ impl TypedProgram {
     pub fn pattern_const(&self, pattern: &Pattern) -> Option<&QualName> {
         self.pattern_consts
             .get(&(pattern as *const Pattern as usize))
+    }
+
+    /// The constant a clause name resolves to (`docs/slice.md` 19.6), by
+    /// the span of the reference: a `conforms` entry and the first segment
+    /// of a requirement reference give the `Spec` constant
+    /// (`std.rfc.rfc9112.RFC9112`), the whole reference `Spec.Id` gives the
+    /// `Requirement` constant (`std.rfc.rfc9112.R7_1_2`).
+    pub fn clause_constant(&self, span: Span) -> Option<&QualName> {
+        self.clause_consts.get(&span)
     }
 
     /// The type of a `let`/`var`/`for`/pattern binding, by the span of its name.
@@ -1496,6 +1520,32 @@ impl TypedProgram {
     /// typed program's property expressions all have empty sets.
     pub fn effects(&self, expr: &Expr) -> Option<&EffectSet> {
         self.effects.get(&key(expr))
+    }
+
+    /// Whether `expr`, a place in a move position, takes its value without a copy
+    /// (`docs/slice.md` 20.3). False for every other expression.
+    pub fn moves(&self, expr: &Expr) -> bool {
+        self.moves.contains_key(&key(expr))
+    }
+
+    /// Whether the callee consumes its parameter `index` (UFCS receiver = 0). Defined for a
+    /// declared fn, associated fn or role of this module or a module it was typed against;
+    /// false for every other callee (a variant, a builtin, `Callee::Local`,
+    /// `Callee::FieldFn`, `Callee::Const`).
+    pub fn consumed(&self, callee: &Callee, index: usize) -> bool {
+        let (module, name) = match callee {
+            Callee::Fn(q) => (&q.module, q.name.clone()),
+            Callee::Role { protocol, role } => {
+                (&protocol.module, format!("{}.{role}", protocol.name))
+            }
+            _ => return false,
+        };
+        self.modules
+            .get(module)
+            .and_then(|m| m.consumed.get(&name))
+            .and_then(|params| params.get(index))
+            .copied()
+            .unwrap_or(false)
     }
 
     /// Index and payload types of variant `name` of a value of type `ty`
@@ -1731,12 +1781,13 @@ pub fn type_module(
         .map(|(path, types)| (path.clone(), types.query_snapshot()))
         .collect();
     all.insert(typed.module.clone(), typed.exports.query_snapshot());
-    Ok(TypedProgram {
+    let mut program_types = TypedProgram {
         module: typed.module,
         types: typed.types,
         callees: typed.callees,
         bindings: typed.bindings,
         pattern_consts: typed.pattern_consts,
+        clause_consts: typed.clause_consts,
         type_exprs: typed.type_exprs,
         exports: typed.exports,
         modules: all,
@@ -1757,5 +1808,13 @@ pub fn type_module(
         systems: typed.system.systems,
         assemblies: typed.system.assemblies,
         effects: typed.system.effects,
-    })
+        moves: AddressMap::default(),
+    };
+    let found = moves::analyse(program, &program_types, modules);
+    program_types.moves = found.moves;
+    if let Some(own) = program_types.modules.get_mut(&program_types.module) {
+        own.consumed = found.consumed.clone();
+    }
+    program_types.exports.consumed = found.consumed;
+    Ok(program_types)
 }

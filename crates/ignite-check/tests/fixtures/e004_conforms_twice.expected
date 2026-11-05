@@ -1,0 +1,1 @@
+e004_conforms_twice.ignite:3:31: error[E004]: duplicate spec `RFC1` in `conforms` of protocol `Echo`

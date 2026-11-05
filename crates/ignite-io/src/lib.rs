@@ -27,7 +27,7 @@ pub use net::{
 };
 pub use stdio::{Stdin, Stdout};
 pub use store::Store;
-pub use task::{LINGER, spawn, try_spawn};
+pub use task::{LINGER, released_memory, spawn, try_spawn};
 
 /// An IO failure, carrying the operating system's message and the exit
 /// status [`run`] returns when `main` ends with it.
@@ -99,21 +99,55 @@ pub struct Process;
 /// Largest buffer a single read allocates.
 const MAX_READ: usize = 1024 * 1024;
 
-/// A read buffer of `maximum` bytes, clamped to `1..=1 MiB`.
-fn read_buffer(maximum: i64) -> Vec<u8> {
+/// Largest read that goes through the thread's kept read buffer.
+const READ_KEEP: usize = 64 * 1024;
+
+thread_local! {
+    /// The thread's read buffer, zeroed as it grows and reused by every
+    /// read of up to [`READ_KEEP`] bytes.
+    static READ_SCRATCH: std::cell::Cell<Vec<u8>> = const { std::cell::Cell::new(Vec::new()) };
+}
+
+/// One read by `read_into` of up to `maximum` bytes (clamped to
+/// `1..=1 MiB`): `Input::Data` of exactly the bytes read, or `Input::Eof`
+/// for zero.
+///
+/// A read of up to [`READ_KEEP`] bytes goes into the thread's kept buffer
+/// and the bytes are copied out, so a short read does not allocate and
+/// zero a buffer of `maximum` bytes each time (`vec![0; 65536]` was a
+/// `memset` of 64 KiB per read, 16 % of a key-value server's user time
+/// at one client). The buffer is taken out of the thread-local while
+/// `read_into` runs, so a nested read uses a fresh one. A larger read
+/// allocates its own buffer, as the allocator hands out large zeroed
+/// blocks as fresh pages without writing them.
+fn read_input(
+    maximum: i64,
+    read_into: impl FnOnce(&mut [u8]) -> Result<usize, IoError>,
+) -> Result<Input, IoError> {
     let size = usize::try_from(maximum.max(1))
         .unwrap_or(MAX_READ)
         .min(MAX_READ);
-    vec![0u8; size]
-}
-
-/// `Input::Data` of the first `count` bytes, or `Input::Eof` for zero.
-fn input(mut buffer: Vec<u8>, count: usize) -> Input {
-    if count == 0 {
-        return Input::Eof;
+    if size > READ_KEEP {
+        let mut buffer = vec![0u8; size];
+        let count = read_into(&mut buffer)?;
+        if count == 0 {
+            return Ok(Input::Eof);
+        }
+        buffer.truncate(count);
+        return Ok(Input::Data(buffer));
     }
-    buffer.truncate(count);
-    Input::Data(buffer)
+    let mut buffer = READ_SCRATCH
+        .try_with(std::cell::Cell::take)
+        .unwrap_or_default();
+    if buffer.len() < size {
+        buffer.resize(size, 0);
+    }
+    let read = read_into(&mut buffer[..size]).map(|count| match count {
+        0 => Input::Eof,
+        count => Input::Data(buffer[..count].to_vec()),
+    });
+    let _ = READ_SCRATCH.try_with(|scratch| scratch.set(buffer));
+    read
 }
 
 /// `"{address}:{port}"`, or an error when `port` is outside `0..=65535`.
@@ -561,6 +595,85 @@ mod tests {
         assert_eq!(run(|| Ok(())), 0);
     }
 
+    /// `read_input`: the data is exactly the bytes read, whatever the
+    /// maximum; zero bytes is `Eof`; an error passes through; `maximum` is
+    /// clamped; a nested read gets its own buffer; the thread keeps a
+    /// buffer of `READ_KEEP` bytes, and a larger read does not grow it.
+    #[test]
+    fn a_read_returns_exactly_the_bytes_read() {
+        let read = read_input(65536, |buffer| {
+            assert_eq!(buffer.len(), 65536);
+            buffer[..3].copy_from_slice(b"abc");
+            Ok(3)
+        });
+        let Ok(Input::Data(data)) = read else {
+            panic!("{read:?}")
+        };
+        assert_eq!(data, b"abc");
+        assert!(data.capacity() < 65536, "{}", data.capacity());
+        assert_eq!(read_input(16, |_| Ok(0)), Ok(Input::Eof));
+        assert_eq!(
+            read_input(16, |_| Err(IoError::new("reset"))),
+            Err(IoError::new("reset"))
+        );
+        let one = |buffer: &mut [u8]| {
+            buffer[0] = b'q';
+            Ok(1)
+        };
+        let tiny = read_input(0, |buffer| {
+            assert_eq!(buffer.len(), 1);
+            one(buffer)
+        });
+        assert_eq!(tiny, Ok(Input::Data(b"q".to_vec())));
+        let kept = || {
+            READ_SCRATCH.with(|scratch| {
+                let buffer = scratch.take();
+                let len = buffer.len();
+                scratch.set(buffer);
+                len
+            })
+        };
+        assert_eq!(kept(), 65536, "the 64 KiB buffer is kept");
+        let huge = read_input(i64::MAX, |buffer| {
+            assert_eq!(buffer.len(), MAX_READ);
+            one(buffer)
+        });
+        assert_eq!(huge, Ok(Input::Data(b"q".to_vec())));
+        assert_eq!(kept(), 65536, "a 1 MiB read does not grow the kept buffer");
+        let empty = read_input(65537, |_| Ok(0));
+        assert_eq!(empty, Ok(Input::Eof));
+        let outer = read_input(8, |buffer| {
+            buffer[..2].copy_from_slice(b"xy");
+            let inner = read_input(8, |inner| {
+                inner[..1].copy_from_slice(b"z");
+                Ok(1)
+            });
+            assert_eq!(inner, Ok(Input::Data(b"z".to_vec())));
+            Ok(2)
+        });
+        assert_eq!(outer, Ok(Input::Data(b"xy".to_vec())));
+    }
+
+    /// A read that panics while it holds the kept buffer leaves the
+    /// thread's next read working, and the bytes returned are a copy: a
+    /// later read into the buffer does not change them.
+    #[test]
+    fn a_read_after_a_panicking_read_works_and_data_is_a_copy() {
+        let panicked = std::panic::catch_unwind(|| read_input(8, |_| panic!("inside the read")));
+        assert!(panicked.is_err());
+        let first = read_input(8, |buffer| {
+            buffer[..2].copy_from_slice(b"ok");
+            Ok(2)
+        });
+        assert_eq!(first, Ok(Input::Data(b"ok".to_vec())));
+        let second = read_input(8, |buffer| {
+            buffer[..2].copy_from_slice(b"no");
+            Ok(2)
+        });
+        assert_eq!(second, Ok(Input::Data(b"no".to_vec())));
+        assert_eq!(first, Ok(Input::Data(b"ok".to_vec())));
+    }
+
     #[test]
     fn port_outside_range_is_error() {
         let error = socket_address("bind", "127.0.0.1", 70000).unwrap_err();
@@ -623,3 +736,105 @@ mod pipe;
 mod stream;
 pub use pipe::{PIPE_CAPACITY, Pipe, PipeStream};
 pub use stream::ByteStream;
+
+/// `Int.parse(text)` of both targets: the value of decimal digits with an
+/// optional leading `-`; `None` for anything else (a `+`, spaces, no
+/// digits, overflow, bytes that are not UTF-8). Takes the bytes of a
+/// `Text` or of `Bytes`, so `Int.parse(bytes.to_text())` needs no `Text`:
+/// a lossy decode of bytes that are not UTF-8 holds U+FFFD, which never
+/// parses either. Reads the bytes directly, with no UTF-8 pass: every byte
+/// that is not an ASCII digit (or the leading `-`) rejects, and every byte
+/// of a multi-byte sequence is one. Accumulates towards the sign, so
+/// `i64::MIN` parses.
+pub fn parse_int(text: impl AsRef<[u8]>) -> Option<i64> {
+    let text = text.as_ref();
+    let (negative, digits) = match text.split_first() {
+        Some((b'-', rest)) => (true, rest),
+        _ => (false, text),
+    };
+    if digits.is_empty() {
+        return None;
+    }
+    let mut value: i64 = 0;
+    for &byte in digits {
+        let digit = byte.wrapping_sub(b'0');
+        if digit > 9 {
+            return None;
+        }
+        value = value.checked_mul(10)?;
+        value = if negative {
+            value.checked_sub(i64::from(digit))?
+        } else {
+            value.checked_add(i64::from(digit))?
+        };
+    }
+    Some(value)
+}
+
+#[cfg(test)]
+mod parse_int_tests {
+    use super::parse_int;
+
+    #[test]
+    fn parse_int_takes_decimal_digits_and_a_leading_minus_only() {
+        assert_eq!(parse_int("42"), Some(42));
+        assert_eq!(parse_int(b"-7".as_slice()), Some(-7));
+        assert_eq!(parse_int("-9223372036854775808"), Some(i64::MIN));
+        for bad in ["+1", "", "-", " 1", "1 ", "1x", "9223372036854775808"] {
+            assert_eq!(parse_int(bad), None, "{bad:?}");
+        }
+        assert_eq!(parse_int(vec![b'1', 0xff]), None);
+        assert_eq!(
+            parse_int(String::from_utf8_lossy(&[b'1', 0xff]).as_bytes()),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_int_matches_i64_from_str_without_plus() {
+        for text in [
+            "0",
+            "-0",
+            "7",
+            "-7",
+            "007",
+            "-007",
+            "00000000000000000000000000042",
+            "42",
+            "-42",
+            "9223372036854775807",
+            "-9223372036854775808",
+            "9223372036854775808",
+            "-9223372036854775809",
+            "99999999999999999999",
+            "",
+            "-",
+            "+",
+            "+1",
+            "+-1",
+            "1-",
+            "--1",
+            " 1",
+            "1 ",
+            "1a",
+            "a1",
+            "1\0",
+            "\u{0}1",
+            "1_000",
+            "0x10",
+            "\u{663}",
+            "\u{ff11}",
+            "1\u{fffd}",
+        ] {
+            let expected = if text.starts_with('+') {
+                None
+            } else {
+                text.parse::<i64>().ok()
+            };
+            assert_eq!(parse_int(text), expected, "{text:?}");
+        }
+        for bad in [&b"1\xff"[..], b"\xff1", b"-\x80", b"\xc0\xb1"] {
+            assert_eq!(parse_int(bad), None, "{bad:?}");
+        }
+    }
+}

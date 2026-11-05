@@ -3,16 +3,19 @@
 //! ```text
 //! ignite check <file.ignite> [--std PATH]
 //! ignite emit <file.ignite> [--substrate PATH] [--std PATH]
-//! ignite build <file.ignite> [--target rust|llvm] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE]
-//! ignite test <file.ignite>… [FILTER] [--target rust|llvm|all] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE]
+//! ignite build <file.ignite> [--target llvm|rust] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE]
+//! ignite test <file.ignite>… [FILTER] [--target llvm|rust|all] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE]
 //! ignite plan <file.ignite> [--assembly NAME] [--out FILE] [--fuel N] [--std PATH]
-//! ignite plan <file.ignite> --for-apply --state DIR --out PLAN [--assembly NAME] [--target rust|llvm] [--release] [--std PATH] [--runtime FILE] [--fuel N]
+//! ignite plan <file.ignite> --for-apply --state DIR --out PLAN [--assembly NAME] [--target llvm|rust] [--release] [--std PATH] [--runtime FILE] [--fuel N]
 //! ignite host --state DIR
 //! ignite apply PLAN --state DIR
 //! ignite inspect --state DIR [--operation ID] [--json]
 //! ignite explain <file.ignite> <path> [--assembly NAME] [--fuel N] [--std PATH]
-//! ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target rust|llvm] [--release] [--clock real|manual] [--epoch RFC3339] [--settle DURATION] [--port RESOURCE=PORT]... [--json] [--fresh] [--std PATH] [--fuel N] [--runtime PATH] [--target-dir DIR]
+//! ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target llvm|rust] [--release] [--clock real|manual] [--epoch RFC3339] [--settle DURATION] [--port RESOURCE=PORT]... [--json] [--fresh] [--std PATH] [--fuel N] [--runtime PATH] [--target-dir DIR]
 //! ignite replay <file.ignite> [--assembly NAME] [--state DIR] [--std PATH] [--fuel N]
+//! ignite rfc import FILE [--sections LIST] [--package NAME] [--url URL] [--out FILE]
+//! ignite rfc check CATALOGUE [SOURCE]
+//! ignite conformance <file.ignite> [--target llvm|rust] [--std DIR] [--out DIR] [--clang PATH] [--runtime PATH] [--target-dir DIR] [--release] [--triple TRIPLE]
 //! ```
 //!
 //! `--std` is the standard-library root (default: the repository's `std/`
@@ -26,7 +29,11 @@
 //! `ignite explain` prints the explanation of one path (section 15.8).
 //! `ignite run` exits with the run's status (section 16.3: 0 a requested
 //! stop, 1 a machine gave up or failed), 2 for a diagnostic before the
-//! start; `ignite replay` prints the final standings.
+//! start; `ignite replay` prints the final standings. `ignite rfc import` and
+//! `ignite rfc check` have their own statuses (section 19.8). `ignite
+//! conformance` prints the conformance matrix (section 19.10) and exits 0
+//! when every claim holds, 1 when one does not, 2 for a diagnostic or a file
+//! without a conforming protocol, 3 when the test build or run fails.
 
 use std::path::PathBuf;
 
@@ -62,12 +69,12 @@ enum Commands {
         #[arg(long)]
         std: Option<PathBuf>,
     },
-    /// Build the program: generated Rust with cargo (`--target rust`) or LLVM IR with clang
-    /// (`--target llvm`).
+    /// Build the program: LLVM IR with clang (`--target llvm`, the default) or generated Rust
+    /// with cargo (`--target rust`).
     Build {
         file: PathBuf,
-        /// `rust` (default) or `llvm`.
-        #[arg(long, value_enum, default_value = "rust")]
+        /// `llvm` (default) or `rust`.
+        #[arg(long, value_enum, default_value = "llvm")]
         target: TargetArg,
         /// clang for `--target llvm` (default `clang` on `PATH`).
         #[arg(long)]
@@ -99,8 +106,8 @@ enum Commands {
         /// `FILE.ignite…` and at most one `FILTER`.
         #[arg(required = true)]
         args: Vec<String>,
-        /// `rust` (default), `llvm`, or `all` supported targets with shared preparation.
-        #[arg(long, value_enum, default_value = "rust")]
+        /// `llvm` (default), `rust`, or `all` supported targets with shared preparation.
+        #[arg(long, value_enum, default_value = "llvm")]
         target: TestTargetArg,
         /// Root of the standard library.
         #[arg(long)]
@@ -158,7 +165,7 @@ enum Commands {
         #[arg(long)]
         std: Option<PathBuf>,
         /// Native target for an apply plan.
-        #[arg(long, value_enum, default_value = "rust", requires = "for_apply")]
+        #[arg(long, value_enum, default_value = "llvm", requires = "for_apply")]
         target: TargetArg,
         /// Build apply artifacts with optimizations.
         #[arg(long, requires = "for_apply")]
@@ -224,7 +231,7 @@ enum Commands {
         /// Build directory (default: `<state>/build/`).
         #[arg(long)]
         build: Option<PathBuf>,
-        #[arg(long, value_enum, default_value_t = TargetArg::Rust)]
+        #[arg(long, value_enum, default_value_t = TargetArg::Llvm)]
         target: TargetArg,
         /// Build the members with optimizations.
         #[arg(long)]
@@ -249,7 +256,8 @@ enum Commands {
         /// Root of the standard library.
         #[arg(long)]
         std: Option<PathBuf>,
-        /// Fuel limit per property expression and reducer step (default 1,000,000 units).
+        /// Fuel limit per reducer step (default 1,000,000 units); the plan inside `run` keeps the
+        /// default fuel.
         #[arg(long)]
         fuel: Option<u64>,
         /// Runtime archive `libignite_rt.a` of the LLVM target.
@@ -272,10 +280,114 @@ enum Commands {
         /// Root of the standard library.
         #[arg(long)]
         std: Option<PathBuf>,
-        /// Fuel limit per reducer step (default 1,000,000 units).
+        /// Fuel limit per reducer step (default 1,000,000 units); the plan inside `replay` keeps
+        /// the default fuel.
         #[arg(long)]
         fuel: Option<u64>,
     },
+    /// Import a local RFCXML file as a catalogue module, or check a catalogue's digest
+    /// against its source (`docs/slice.md` section 19.8).
+    Rfc {
+        #[command(subcommand)]
+        command: RfcCommand,
+    },
+    /// Print the conformance matrix of a file's protocols, running the verifying tests on one
+    /// target (`docs/slice.md` section 19.10). Exit 0 every claim holds, 1 one does not,
+    /// 2 a diagnostic or no conforming protocol, 3 a test build or run failure.
+    Conformance {
+        file: PathBuf,
+        /// `llvm` (default) or `rust`.
+        #[arg(long, value_enum, default_value = "llvm")]
+        target: TargetArg,
+        /// Root of the standard library.
+        #[arg(long)]
+        std: Option<PathBuf>,
+        /// Root of the test builds (default `target/ignite-test`).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// clang for `--target llvm`.
+        #[arg(long)]
+        clang: Option<PathBuf>,
+        /// LLVM runtime archive with the test runner for `--target llvm`.
+        #[arg(long)]
+        runtime: Option<PathBuf>,
+        /// Cargo target directory for `--target rust`.
+        #[arg(long)]
+        target_dir: Option<PathBuf>,
+        /// Build the tests with the release profile.
+        #[arg(long)]
+        release: bool,
+        /// Target triple for `--target llvm`, passed to clang.
+        #[arg(long)]
+        triple: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum RfcCommand {
+    /// Write the catalogue module of an RFCXML v3 file. Exit 0 written, 2 usage error or
+    /// malformed XML, 3 a file could not be read or written.
+    Import {
+        file: PathBuf,
+        /// Comma-separated section numbers to keep (default: every section).
+        #[arg(long)]
+        sections: Option<String>,
+        /// Package of the module (default `std.rfc.rfc<number>`).
+        #[arg(long)]
+        package: Option<String>,
+        /// URL of the `Spec` (default the root's first `<link rel="alternate">`).
+        #[arg(long)]
+        url: Option<String>,
+        /// Write the module to this file instead of stdout (overwriting it).
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Compare a catalogue's digest with its source's. Exit 0 equal or no SOURCE
+    /// (`unchecked`), 1 different, 2 no single `Spec` with a literal digest, 3 unreadable.
+    Check {
+        catalogue: PathBuf,
+        source: Option<PathBuf>,
+    },
+}
+
+fn rfc(command: RfcCommand) -> i32 {
+    let result = match command {
+        RfcCommand::Import {
+            file,
+            sections,
+            package,
+            url,
+            out,
+        } => {
+            let options = ignite::rfc::ImportOptions {
+                sections,
+                package,
+                url,
+            };
+            ignite::rfc::import(&file, &options).and_then(|module| match out {
+                Some(out) => std::fs::write(&out, module)
+                    .map_err(|error| ignite::rfc::Error::Io { path: out, error }),
+                None => {
+                    print!("{module}");
+                    Ok(())
+                }
+            })
+        }
+        RfcCommand::Check { catalogue, source } => {
+            ignite::rfc::check(&catalogue, source.as_deref()).map(|checked| {
+                if checked == ignite::rfc::Checked::Unchecked {
+                    println!("{}: unchecked", catalogue.display());
+                }
+            })
+        }
+    };
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("{error}");
+            error.exit_status()
+        }
+    }
 }
 
 /// Exit status of `ignite test` for diagnostics and invalid arguments.
@@ -356,6 +468,49 @@ impl TestTargetArg {
 
 fn run() {
     let cli = Cli::parse();
+    if let Commands::Rfc { command } = cli.command {
+        std::process::exit(rfc(command));
+    }
+    if let Commands::Conformance {
+        file,
+        target,
+        std,
+        out,
+        clang,
+        runtime,
+        target_dir,
+        release,
+        triple,
+    } = cli.command
+    {
+        let options = ignite::TestOptions {
+            build: ignite::BuildOptions {
+                target: target.into(),
+                clang,
+                runtime,
+                out,
+                target_dir,
+                std,
+                release,
+                triple,
+                ..ignite::BuildOptions::default()
+            },
+            runner: Vec::new(),
+        };
+        match ignite::conformance::run(&file, &options) {
+            Ok(status) => std::process::exit(status),
+            Err(error) => {
+                match &error {
+                    ignite::Error::Diagnostics { .. } => eprintln!("{error}"),
+                    _ => eprintln!("error: {error}"),
+                }
+                std::process::exit(match error {
+                    ignite::Error::Diagnostics { .. } => ignite::conformance::DIAGNOSTIC,
+                    _ => ignite::conformance::FAILURE,
+                });
+            }
+        }
+    }
     if let Commands::Test {
         args,
         target,
@@ -494,7 +649,12 @@ fn run() {
         }
     }
     let result = match cli.command {
-        Commands::Test { .. } | Commands::Run { .. } => unreachable!("handled above"),
+        Commands::Test { .. }
+        | Commands::Run { .. }
+        | Commands::Rfc { .. }
+        | Commands::Conformance { .. } => {
+            unreachable!("handled above")
+        }
         Commands::Check { file, std } => ignite::check_with_std(&file, std.as_deref()),
         Commands::Emit {
             file,

@@ -1,0 +1,23 @@
+// ignite check --std claims_std
+package tests.e092
+
+import std.rfc.rfc1.{RFC1}
+import std.rfc.rfc2.{RFC2}
+
+fn answer(x: Int) -> Int satisfies [RFC1.R1_1] = x
+
+protocol Echo conforms [RFC1] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+
+  unsupported RFC2.R1_1 "the server never asks"
+}
+
+protocol Other conforms [RFC2] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"no")
+  }
+
+  not_applicable RFC2.R1_1 "the server never asks"
+}

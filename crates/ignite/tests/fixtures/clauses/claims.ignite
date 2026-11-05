@@ -1,0 +1,113 @@
+package tests.claims
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7000: Spec = Spec {
+  rfc = 7000
+  title = "A line echo for the clause fixture"
+  url = "https://example.invalid/rfc7000"
+  digest = "sha256:7000"
+  requirements = [R2_1, R2_2, R2_3, R2_4, R3_1, R3_2, R4_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7000
+  section = "2"
+  ordinal = 1
+  level = Must
+  party = Server
+  text = "A server MUST echo every line it reads."
+}
+
+const R2_2: Requirement = Requirement {
+  rfc = 7000
+  section = "2"
+  ordinal = 2
+  level = MustNot
+  party = Server
+  text = "A server MUST NOT add bytes to a line it echoes."
+}
+
+const R2_3: Requirement = Requirement {
+  rfc = 7000
+  section = "2"
+  ordinal = 3
+  level = Must
+  party = Server
+  minimum = Some(64)
+  text = "A server MUST accept lines of at least 64 bytes."
+}
+
+const R2_4: Requirement = Requirement {
+  rfc = 7000
+  section = "2"
+  ordinal = 4
+  level = Should
+  party = Server
+  text = "A server SHOULD answer within a second."
+}
+
+const R3_1: Requirement = Requirement {
+  rfc = 7000
+  section = "3"
+  ordinal = 1
+  level = Shall
+  party = Server
+  text = "A server SHALL close the session on QUIT."
+}
+
+const R3_2: Requirement = Requirement {
+  rfc = 7000
+  section = "3"
+  ordinal = 2
+  level = Required
+  party = Any
+  source = Prose
+  text = "An implementation is required to log every session."
+}
+
+const R4_1: Requirement = Requirement {
+  rfc = 7000
+  section = "4"
+  ordinal = 1
+  level = Must
+  party = Proxy
+  text = "A proxy MUST forward every line."
+}
+
+type EchoLimits {
+  line_bytes: Int = 64 satisfies [RFC7000.R2_3]
+}
+
+type Line satisfies [RFC7000.R2_1] {
+  text: Text
+}
+
+fn echo(line: Line) -> Text satisfies [RFC7000.R2_2] = line.text
+
+protocol Echo conforms [RFC7000] scope { parties = [Server, Any], sections = ["2", "3"] } {
+  fn serve(stream: TcpStream, limits: EchoLimits, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.read, stream.write] satisfies [RFC7000.R2_1] {
+    let input = (stream.read(limits.line_bytes))?
+    match input {
+      Data(bytes) => {
+        let reply = application(echo(Line { text = bytes.to_text() }))
+        (stream.write_all(reply.to_bytes()))?
+      }
+      Eof => {}
+    }
+    return Ok(Unit)
+  }
+
+  unsupported RFC7000.R3_1 "a session ends only at the end of its input"
+  not_applicable RFC7000.R3_2 "the fixture keeps no log"
+}
+
+test "a line is echoed as it was read" verifies [RFC7000.R2_1, RFC7000.R2_2] {
+  assert echo(Line { text = "hi" }) == "hi"
+  assert echo(Line { text = "" }) == ""
+}
+
+test "the line limit admits 64 bytes" verifies [RFC7000.R2_3] {
+  let limits = EchoLimits {}
+  assert limits.line_bytes == 64
+}

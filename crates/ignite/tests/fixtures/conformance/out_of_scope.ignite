@@ -1,0 +1,26 @@
+package tests.conformance.out_of_scope
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7107: Spec = Spec {
+  rfc = 7107
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7107"
+  digest = "sha256:7107"
+  requirements = [R4_1]
+}
+
+const R4_1: Requirement = Requirement {
+  rfc = 7107
+  section = "4"
+  ordinal = 1
+  level = Must
+  party = Proxy
+  text = "A proxy MUST forward every line."
+}
+
+protocol Echo conforms [RFC7107] scope { parties = [Server, Any], sections = ["2", "3.1"] } {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}

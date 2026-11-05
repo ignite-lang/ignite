@@ -7,16 +7,19 @@ title: Start and supervise child processes
 summary: Spawn a child with arguments, directory and timeout, capture stdout, stderr and status, kill it
 relations:
 - decomposes: epic:playground-substrate
+- depends_on: story:slice-17-frontend
 scope:
-- confidence: inferred
-  path: crates/ignite-check/src
-- confidence: inferred
-  path: crates/ignite-io/src
-- confidence: inferred
-  path: crates/ignite-rt/src
-- confidence: inferred
-  path: std
-revision: 4
+- confidence: cited
+  path: crates/ignite-io/src/child.rs
+- confidence: cited
+  path: crates/ignite-io/src/test.rs
+- confidence: cited
+  path: crates/ignite-rt/src/child.rs
+- confidence: cited
+  path: crates/ignite/tests/slice17.rs
+- confidence: cited
+  path: std/process.ignite
+revision: 6
 ---
 # Story: process-spawn
 
@@ -32,6 +35,7 @@ captures its stdout, stderr and exit status, and can kill it, on both targets.
 - Substrate in `crates/ignite-io` (one implementation, both targets; `crates/ignite-rt` adapts it
   over the C ABI), a std module over it, and a new effect the checker tracks.
 - Constraint P3 (playground session, 2026-11-04): an `HttpApp` handler may use effects only on its state (`std/protocol/http.ignite:50`; `Clock.monotonic()` in a handler is E017, also in a task it spawns), so this capability arrives as a handle passed in the state, as `Store` does, not as an ambient static.
+- Contract: `docs/slice.md` section 21 on `feat/slice17-processes-files`, unit U3 of 21.12, rows 9 to 14, 16 and 17 of 21.0; first failing test "a child's output and status are captured" in `std/process.ignite`; after `story:slice-17-frontend`.
 
 ## Acceptance
 

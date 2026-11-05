@@ -1,0 +1,16 @@
+// `upsert`'s `f` is a `fn(Option<T>) -> T`: it gets the current value or
+// `None`, so an `f` written for `update`'s `fn(T) -> T` does not fit.
+fn bump(s: Store<Int>) -> Int requires [s.write] {
+  s.upsert(1, |v: Int| v + 1)
+}
+
+fn wrong_result(s: Store<Int>) -> Int requires [s.write] {
+  s.upsert(1, |v| v)
+}
+
+fn fits(s: Store<Int>) -> Int requires [s.write] {
+  s.upsert(1, |v| match v {
+    Some(n) => n + 1
+    None => 1
+  })
+}

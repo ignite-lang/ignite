@@ -7,16 +7,13 @@ title: Secure random bytes
 summary: Obtain OS random bytes through a tracked effect, for per-launch tokens
 relations:
 - decomposes: epic:playground-substrate
+- depends_on: story:slice-17-frontend
 scope:
-- confidence: inferred
-  path: crates/ignite-check/src
-- confidence: inferred
-  path: crates/ignite-io/src
-- confidence: inferred
-  path: crates/ignite-rt/src
-- confidence: inferred
-  path: std
-revision: 2
+- confidence: cited
+  path: crates/ignite-io/src/entropy.rs
+- confidence: cited
+  path: crates/ignite-rt/src/entropy.rs
+revision: 4
 ---
 # Story: random-bytes
 
@@ -31,6 +28,7 @@ per-launch token.
   (`crates/ignite-check/src/lib.rs:128-147` lists the effects).
 - Under `epic:playground-substrate`; a new effect, its source in `crates/ignite-io` (the OS
   generator), passed to handlers as a value (P3).
+- Contract: `docs/slice.md` section 21 on `feat/slice17-processes-files`, unit U5 of 21.12, row 20 of 21.0 (the `Entropy` handle); first failing test "two draws differ"; after `story:slice-17-frontend`.
 
 ## Acceptance
 

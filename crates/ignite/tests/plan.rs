@@ -329,7 +329,8 @@ fn explain_unknown_path_is_e119() {
     }
 }
 
-/// Every `tests/fixtures/e11*.ignite` run through `ignite check` (or the
+/// Every `tests/fixtures/e11*.ignite`, `e12*` and `e090` to `e092` (the
+/// claim model, `docs/slice.md` 19.12) run through `ignite check` (or the
 /// subcommand its first line names, `// ignite plan` or `// ignite explain
 /// <path>`, the file name inserted after the subcommand) from the fixtures
 /// directory; stderr must equal the `.expected` file beside it.
@@ -340,7 +341,9 @@ fn fixtures_match_expected() {
         .map(|entry| entry.unwrap().path())
         .filter(|path| {
             let name = path.file_name().unwrap().to_string_lossy();
-            (name.starts_with("e11") || name.starts_with("e12"))
+            (name.starts_with("e11")
+                || name.starts_with("e12")
+                || ["e090", "e091", "e092"].contains(&name.get(..4).unwrap_or("")))
                 && name.ends_with(".ignite")
                 && !["e125", "e126", "e127", "e128"].contains(&&name[..4])
         })
@@ -375,6 +378,28 @@ fn fixtures_match_expected() {
         );
         compare(&fixture.with_extension("expected"), &stderr);
     }
+}
+
+/// The E092 fixtures run against `fixtures/claims_std/`, whose vocabulary
+/// must stay the real one (`docs/slice.md` 19.12, row 40 of 19.0).
+#[test]
+fn claims_std_vocabulary_is_std_rfc() {
+    let copy = std::fs::read(fixtures_dir().join("claims_std/rfc.ignite")).unwrap();
+    let real = std::fs::read(workspace().join("std/rfc.ignite")).unwrap();
+    assert!(
+        copy == real,
+        "crates/ignite/tests/fixtures/claims_std/rfc.ignite differs from std/rfc.ignite"
+    );
+}
+
+/// The protocol of `e090_missing_status` with a status on every
+/// requirement checks silently (row 41 of 19.0).
+#[test]
+fn complete_claim_fixture_is_silent() {
+    let output = ignite_in(&fixtures_dir(), &["check", "claim_ok_complete.ignite"]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert!(output.stdout.is_empty(), "{}", text(&output.stdout));
+    assert!(output.stderr.is_empty(), "{}", text(&output.stderr));
 }
 
 #[test]
@@ -687,4 +712,80 @@ impl Parser<'_> {
             }
         }
     }
+}
+
+/// A fresh directory under the test target for an adversary program and
+/// its sibling modules (`docs/slice.md` 14.4).
+fn adversary_dir(name: &str, files: &[(&str, &str)]) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (file, text) in files {
+        std::fs::write(dir.join(file), text).unwrap();
+    }
+    dir
+}
+
+const ADVERSARY_SERVE: &str = "  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {\n    return stream.write_all(b\"ok\")\n  }\n";
+
+/// 19.7: the claim model reads "the values of the catalogue constants its
+/// protocols name", here a catalogue in a sibling module: its MUST with no
+/// status is one E090. The E091 second trigger runs "for the constants
+/// declared in the checked file only", so the sibling's misnamed
+/// requirement is reported only when the sibling is the checked file.
+#[test]
+fn adversary_catalogue_in_a_sibling_module_is_claimed() {
+    let catalogue = "package advsib.cat\n\nimport std.rfc.{Level, Party, Source, Requirement, Spec}\n\nconst RFC7300: Spec = Spec {\n  rfc = 7300\n  title = \"A sibling catalogue\"\n  url = \"https://example.invalid/rfc7300\"\n  digest = \"sha256:7300\"\n  requirements = [R1_1, R1_9]\n}\n\nconst R1_1: Requirement = Requirement {\n  rfc = 7300\n  section = \"1\"\n  ordinal = 1\n  level = Must\n  text = \"A server MUST answer.\"\n}\n\nconst R1_9: Requirement = Requirement {\n  rfc = 7300\n  section = \"1\"\n  ordinal = 2\n  level = Should\n  text = \"Misnamed: its id is R1_2.\"\n}\n";
+    let main = format!(
+        "package advsib\n\nimport advsib.cat.{{RFC7300}}\n\nprotocol Echo conforms [RFC7300] {{\n{ADVERSARY_SERVE}}}\n"
+    );
+    let dir = adversary_dir(
+        "adversary-claims-sibling",
+        &[("main.ignite", &main), ("cat.ignite", catalogue)],
+    );
+    let output = ignite_in(&dir, &["check", "main.ignite"]);
+    assert_eq!(output.status.code(), Some(1), "{}", text(&output.stderr));
+    assert_eq!(
+        text(&output.stderr),
+        "main.ignite:5:25: error[E090]: requirement `RFC7300.R1_1` (MUST, section 1) is in scope of `Echo` and has no status; add `satisfies`, `unsupported` or `not_applicable`\n"
+    );
+    let output = ignite_in(&dir, &["check", "cat.ignite"]);
+    assert_eq!(output.status.code(), Some(1), "{}", text(&output.stderr));
+    assert!(
+        text(&output.stderr).contains("error[E091]: requirement `R1_9` must be named `R1_2`"),
+        "{}",
+        text(&output.stderr)
+    );
+}
+
+/// Imports are not re-exported (`docs/slice.md` section 4): a spec that a
+/// sibling only imports is no name of that sibling. Whatever the frontend
+/// does with it, a protocol conforming to it must not check silently
+/// while its MUST requirement `RFC1.R1_1` has no status (19.7).
+#[test]
+fn adversary_spec_imported_through_a_sibling_is_no_silent_claim() {
+    let std = fixtures_dir().join("claims_std");
+    let main = format!(
+        "package advre\n\nimport advre.cat.{{RFC1}}\n\nprotocol Echo conforms [RFC1] {{\n{ADVERSARY_SERVE}}}\n"
+    );
+    let dir = adversary_dir(
+        "adversary-claims-reexport",
+        &[
+            ("main.ignite", &main),
+            (
+                "cat.ignite",
+                "package advre.cat\n\nimport std.rfc.rfc1.{RFC1}\n\nfn unused() -> Int = 1\n",
+            ),
+        ],
+    );
+    let output = ignite_in(
+        &dir,
+        &["check", "main.ignite", "--std", std.to_str().unwrap()],
+    );
+    assert_ne!(
+        output.status.code(),
+        Some(0),
+        "a conforming protocol with an unclassified MUST checked silently"
+    );
+    assert!(!output.stderr.is_empty());
 }

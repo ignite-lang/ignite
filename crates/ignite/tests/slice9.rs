@@ -163,6 +163,47 @@ fn rust_target_features_pass_on_llvm() {
     assert_passes(&file, "features", &["llvm"]);
 }
 
+/// `for` over a list place by reference on the Rust target (`docs/slice.md`
+/// section 6): every body that may or may not borrow gives the same
+/// answers on both targets.
+#[test]
+fn for_over_a_list_agrees_on_both_targets() {
+    let file = workspace().join("crates/ignite/tests/fixtures/slice9/for_borrow.ignite");
+    assert_passes(&file, "for_borrow", &TARGETS);
+}
+
+/// `match` on a place by reference on the Rust target (`docs/slice.md`
+/// section 6): bindings moved out of arms, nested patterns, guards, loops
+/// over the matched list, Store reads and arms that change the place give
+/// the same answers on both targets.
+#[test]
+fn match_on_a_place_agrees_on_both_targets() {
+    let file = workspace().join("crates/ignite/tests/fixtures/slice9/match_borrow.ignite");
+    assert_passes(&file, "match_borrow", &TARGETS);
+}
+
+/// Arguments borrowed on the Rust target (`docs/slice.md` section 6):
+/// interpolation parts that are calls, temporaries and fields, a variable
+/// changed later in the same expression, `at` on a temporary list and on a
+/// place, and `append` of the receiver itself give the same answers on both
+/// targets.
+#[test]
+fn borrowed_arguments_agree_on_both_targets() {
+    let file = workspace().join("crates/ignite/tests/fixtures/slice9/borrow_args.ignite");
+    assert_passes(&file, "borrow_args", &TARGETS);
+}
+
+/// A closure literal passed to `Store.update`, `Store.upsert` or `List.map`
+/// is a plain closure borrowing its captures on the Rust target
+/// (`docs/slice.md` section 13.3): captures read, copied into the result,
+/// shadowed and rebound after the call, nested closures, and a stored
+/// closure beside a passed one, give the same answers on both targets.
+#[test]
+fn passed_closures_agree_on_both_targets() {
+    let file = workspace().join("crates/ignite/tests/fixtures/slice9/closures_passed.ignite");
+    assert_passes(&file, "closures_passed", &TARGETS);
+}
+
 /// The report without the time of the summary line.
 fn without_time(report: &str) -> String {
     report

@@ -1,0 +1,129 @@
+package fixtures.store
+
+// `Store<T>` under `ignite test` on both targets (crates/ignite/tests/ignite_test.rs):
+// a failure inside `update`'s `f`, which runs under the store's lock, ends
+// its task with its report and leaves the store usable.
+
+fn overflow(s: Store<Int>, done: PipeStream) -> Result<Unit, IoError> requires [s.write, done.write] {
+  _ = s.update(1, |v| v + 1)
+  done.write_all(b"not failed")?
+  Ok(())
+}
+
+test fn end(stream: PipeStream) -> PipeStream = stream
+
+// The read end of a pipe whose write end only the task `overflow` holds:
+// it reads the end of the stream once the task has ended. The write end is
+// bound by a call, not by the pattern, so that the LLVM target moves it to
+// the task (`docs/llvm.md` section 4) and a failure of the task closes it.
+test fn start_overflow(s: Store<Int>) -> PipeStream requires [s.write] {
+  let (a, write) = Pipe.pair()
+  let b = end(write)
+  spawn overflow(s, b)
+  a
+}
+
+test "an overflow in update in a task leaves the store usable" {
+  let s: Store<Int> = Store.new()
+  s.put(1, 9223372036854775807)
+  let a = start_overflow(s)
+  match a.read(16)? {
+    Eof => {}
+    Data(_) => {
+      assert false, "the update did not fail"
+    }
+  }
+  assert s.get(1) == Some(9223372036854775807)
+  s.put(2, 5)
+  assert s.update(2, |v| v * 2) == Some(10)
+}
+
+test "an overflow in update ends its test" {
+  let s: Store<Int> = Store.new()
+  s.put(1, 9223372036854775807)
+  _ = s.update(1, |v| v + 1)
+}
+
+// `upsert` (`docs/slice.md` 11.3): `f` sees the current value or `None`
+// under the store's lock, so tasks that insert one new id lose no write.
+
+fn count(value: Option<Int>) -> Int = match value {
+  Some(n) => n + 1
+  None => 1
+}
+
+fn increment(s: Store<Int>, times: Int, done: PipeStream) -> Result<Unit, IoError> requires [s.write, done.write] {
+  var i = 0
+  while i < times {
+    _ = s.upsert(7, count)
+    i = i + 1
+  }
+  done.write_all(b"x")
+}
+
+test "upsert inserts on an empty id and replaces a held value" {
+  let s: Store<Text> = Store.new()
+  assert s.upsert(1, |v| match v {
+    Some(t) => t + "b"
+    None => "a"
+  }) == "a"
+  assert s.upsert(1, |v| match v {
+    Some(t) => t + "b"
+    None => "a"
+  }) == "ab"
+  assert s.get(1) == Some("ab")
+  assert s.values() == ["ab"]
+}
+
+test "upsert from 8 tasks on one new id keeps every write" {
+  let s: Store<Int> = Store.new()
+  let (a, b) = Pipe.pair()
+  var started = 0
+  while started < 8 {
+    spawn increment(s, 500, b)
+    started = started + 1
+  }
+  var ended = 0
+  while ended < 8 {
+    match a.read(16)? {
+      Data(bytes) => {
+        ended = ended + bytes.len()
+      }
+      Eof => {
+        assert false, "the pipe closed after {ended} tasks"
+      }
+    }
+  }
+  assert s.get(7) == Some(4000)
+}
+
+fn overflow_upsert(s: Store<Int>, done: PipeStream) -> Result<Unit, IoError> requires [s.write, done.write] {
+  _ = s.upsert(1, |v| match v {
+    Some(n) => n + 1
+    None => 0
+  })
+  done.write_all(b"not failed")?
+  Ok(())
+}
+
+// As `start_overflow`, for `upsert`.
+test fn start_overflow_upsert(s: Store<Int>) -> PipeStream requires [s.write] {
+  let (a, write) = Pipe.pair()
+  let b = end(write)
+  spawn overflow_upsert(s, b)
+  a
+}
+
+test "an overflow in upsert in a task leaves the store usable" {
+  let s: Store<Int> = Store.new()
+  s.put(1, 9223372036854775807)
+  let a = start_overflow_upsert(s)
+  match a.read(16)? {
+    Eof => {}
+    Data(_) => {
+      assert false, "the upsert did not overflow"
+    }
+  }
+  assert s.get(1) == Some(9223372036854775807)
+  assert s.upsert(2, count) == 1
+}

@@ -422,7 +422,7 @@ fn bench() {
         let target_dir = root.join(format!("rust-{profile}-target"));
         let mut build = uncached(ignite);
         build
-            .arg("build")
+            .args(["build", "--target", "rust"])
             .arg(&source)
             .arg("--out")
             .arg(&out)

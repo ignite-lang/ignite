@@ -183,6 +183,10 @@ pub struct TestDecl {
     pub name: Ident,
     pub body: Block,
     pub span: Span,
+    /// `test "name" verifies [Spec.Id, ..] { .. }`: the requirements the
+    /// test is evidence for, each a [`Path`] of two segments
+    /// (`docs/slice.md` 19.5); empty without the clause.
+    pub verifies: Vec<Path>,
 }
 
 /// `const NAME: Type = value` (`docs/slice.md` section 4.3).
@@ -213,6 +217,54 @@ pub struct ProtocolDecl {
     pub name: Ident,
     pub fns: Vec<FnDecl>,
     pub span: Span,
+    /// `protocol P conforms [RFC9112, ..]`: the names of the `Spec`
+    /// constants the protocol claims (`docs/slice.md` 19.5); empty
+    /// without the clause.
+    pub conforms: Vec<Ident>,
+    /// `scope { parties = [..], sections = [..] }` after `conforms`.
+    pub scope: Option<Scope>,
+    /// The `unsupported` and `not_applicable` members of the body, in
+    /// source order.
+    pub statuses: Vec<StatusDecl>,
+}
+
+/// `scope { parties = [Server, Any], sections = ["2", "3.1"] }`: what a
+/// `conforms` claim covers (`docs/slice.md` 19.5). An absent item admits
+/// everything.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Scope {
+    pub parties: Option<Vec<Ident>>,
+    /// Each section as written, with the span of its string literal.
+    pub sections: Option<Vec<(String, Span)>>,
+    pub span: Span,
+}
+
+/// `unsupported Spec.Id "reason"` or `not_applicable Spec.Id "reason"`, a
+/// member of a protocol body (`docs/slice.md` 19.5).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StatusDecl {
+    pub kind: StatusKind,
+    /// A path of two segments: the `Spec` constant and the requirement.
+    pub requirement: Path,
+    /// The reason, a non-empty Text literal without interpolation.
+    pub reason: String,
+    pub span: Span,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StatusKind {
+    Unsupported,
+    NotApplicable,
+}
+
+impl StatusKind {
+    /// The clause word: `unsupported` or `not_applicable`.
+    pub fn word(self) -> &'static str {
+        match self {
+            StatusKind::Unsupported => "unsupported",
+            StatusKind::NotApplicable => "not_applicable",
+        }
+    }
 }
 
 impl ProtocolDecl {
@@ -231,6 +283,9 @@ pub struct RecordDecl {
     pub type_params: Vec<Ident>,
     /// `test type`: visible only to tests and other test-only items.
     pub test_only: bool,
+    /// `type Name satisfies [Spec.Id, ..] { .. }` (`docs/slice.md` 19.5);
+    /// empty without the clause.
+    pub satisfies: Vec<Path>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -240,6 +295,9 @@ pub struct Field {
     /// `field: Type = value`: used when a record literal omits the field.
     pub default: Option<Expr>,
     pub span: Span,
+    /// `field: Type = value satisfies [Spec.Id, ..]` (`docs/slice.md`
+    /// 19.5); empty without the clause.
+    pub satisfies: Vec<Path>,
 }
 
 /// `enum Name { A, B(T, U) }`
@@ -283,6 +341,10 @@ pub struct FnDecl {
     /// `fn relay<S: ByteStream>(..)`: one entry per bounded type parameter,
     /// in the order of `type_params` (`docs/slice.md` 18.3).
     pub bounds: Vec<Bound>,
+    /// `.. requires [..] satisfies [Spec.Id, ..] { .. }`: the requirements
+    /// the fn or role implements (`docs/slice.md` 19.5); empty without the
+    /// clause.
+    pub satisfies: Vec<Path>,
 }
 
 /// `S: A + B` in the type parameters of a fn or role: the parameter and
@@ -727,8 +789,14 @@ pub enum PatternKind {
     Or(Vec<Pattern>),
     /// `(p, q)`
     Tuple(Vec<Pattern>),
-    /// `[p, q]`: a list of exactly that length.
+    /// `[p, q]`: a list of exactly that length; with a [`PatternKind::Rest`]
+    /// element, a list of at least the other elements' count
+    /// (`docs/slice.md` 20.5).
     List(Vec<Pattern>),
+    /// `..` or `..name`, only as an element of [`PatternKind::List`], at
+    /// most one per list and `..name` only last (E076): the elements
+    /// between the prefix and the suffix, bound as a `List<T>` or `Bytes`.
+    Rest(Option<Ident>),
     /// A lowercase identifier with no payload binds the value.
     Binding(Ident),
     /// `Variant`, `Variant(p, q)`, or `Enum.Variant(...)`: an uppercase

@@ -1,0 +1,7 @@
+e091_non_literal_catalogue.ignite:9:13: error[E091]: catalogue constant `R2_1_1` must be literal data, found a call
+e091_non_literal_catalogue.ignite:20:10: error[E091]: catalogue constant `R2_1_2` must be literal data, found an interpolated text
+e091_non_literal_catalogue.ignite:23:24: error[E091]: catalogue constant `A` must be literal data, found the name `R2_1_1`
+e091_non_literal_catalogue.ignite:29:11: error[E091]: catalogue constant `R2_1_3` must be literal data, found an `if`
+e091_non_literal_catalogue.ignite:38:18: error[E091]: catalogue constant `R2_1_4` must be literal data, found the name `LIMIT`
+e091_non_literal_catalogue.ignite:47:27: error[E091]: catalogue constant `RFC9` must be literal data, found `LIMIT`, which is no `Requirement` constant of this module
+e091_non_literal_catalogue.ignite:55:18: error[E091]: catalogue constant `RFC10` must be literal data, found a list built with `+`

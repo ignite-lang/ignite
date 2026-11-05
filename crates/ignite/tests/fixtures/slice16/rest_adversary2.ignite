@@ -1,0 +1,198 @@
+type Queue {
+  items: List<Text>
+  out: Text
+}
+
+fn drain(q: Queue) -> Queue {
+  var s = q
+  loop {
+    match s.items {
+      [x, ..rest] => {
+        s.items = rest
+        s.out = s.out + x
+      }
+      [] => break
+    }
+  }
+  s
+}
+
+fn make() -> List<Text> = ["m", "n", "o"]
+
+fn temp_rest() -> List<Text> {
+  return match make() {
+    [_, ..rest] => rest
+    [] => []
+  }
+}
+
+fn two_rests(xss: List<List<Text>>) -> (List<Text>, Int) {
+  return match xss {
+    [[_, ..inner], ..outer] => (inner, outer.len())
+    _ => ([], 0 - 1)
+  }
+}
+
+fn shadow(xs: List<Int>) -> (List<Int>, List<Int>) {
+  let rest = [0]
+  let got = match xs {
+    [_, ..rest] => rest
+    [] => []
+  }
+  (rest, got)
+}
+
+fn four(xs: List<Text>) -> Text {
+  return match xs {
+    [a, b, .., y, z] => a + b + y + z
+    _ => "short"
+  }
+}
+
+fn bool_rest(xs: List<Bool>) -> List<Bool> {
+  return match xs {
+    [true, ..rest] => rest
+    _ => []
+  }
+}
+
+fn pair_rest(xs: List<(Int, Int)>) -> (Int, List<(Int, Int)>) {
+  return match xs {
+    [(a, b), ..rest] => (a + b, rest)
+    [] => (0, [])
+  }
+}
+
+fn option_rest(xs: List<Option<Int>>) -> List<Option<Int>> {
+  return match xs {
+    [Some(_), ..rest] => rest
+    _ => []
+  }
+}
+
+fn fn_rest(fs: List<fn(Int) -> Int>) -> Int {
+  return match fs {
+    [f, ..rest] => {
+      var total = f(1)
+      for g in rest {
+        total = total + g(1)
+      }
+      total
+    }
+    [] => 0
+  }
+}
+
+fn map_rest(ms: List<Map<Text, Int>>) -> List<Map<Text, Int>> {
+  return match ms {
+    [_, ..rest] => rest
+    [] => []
+  }
+}
+
+fn first_or_break(xss: List<List<Int>>) -> Int {
+  var total = 0
+  for xs in xss {
+    match xs {
+      [] => continue
+      [x, ..rest] => {
+        if x < 0 {
+          break
+        }
+        total = total + x + rest.len()
+      }
+    }
+  }
+  total
+}
+
+fn returns_early(xs: List<Text>) -> Text {
+  match xs {
+    [a, ..rest] => {
+      if rest.len() > 1 {
+        return a + "!"
+      }
+    }
+    [] => {}
+  }
+  return "end"
+}
+
+fn unit_rest(xs: List<Unit>) -> Int {
+  return match xs {
+    [_, ..rest] => rest.len()
+    [] => 0 - 1
+  }
+}
+
+test "a rest assigned to the field it was matched from" {
+  let q = drain(Queue { items = ["ab", "cd", "ef"], out = "" })
+  assert q.out == "abcdef"
+  assert q.items == []
+}
+
+test "a rest of a temporary" {
+  assert temp_rest() == ["n", "o"]
+}
+
+test "two named rests in one pattern" {
+  let (inner, n) = two_rests([["a", "b", "c"], ["d"], ["e"]])
+  assert inner == ["b", "c"]
+  assert n == 2
+  let (inner2, n2) = two_rests([["a"]])
+  assert inner2 == []
+  assert n2 == 0
+}
+
+test "a rest binding shadows a local" {
+  let (outer, got) = shadow([1, 2, 3])
+  assert outer == [0]
+  assert got == [2, 3]
+}
+
+test "two before and two after the rest" {
+  assert four(["a", "b", "c", "d"]) == "abcd"
+  assert four(["a", "b", "x", "c", "d"]) == "abcd"
+  assert four(["a", "b", "c"]) == "short"
+}
+
+test "rests of bools, tuples and options" {
+  assert bool_rest([true, false, true]) == [false, true]
+  assert bool_rest([false, true]) == []
+  let (s, r) = pair_rest([(1, 2), (3, 4), (5, 6)])
+  assert s == 3
+  assert r == [(3, 4), (5, 6)]
+  assert option_rest([Some(1), None, Some(3)]) == [None, Some(3)]
+}
+
+test "a rest of fn values" {
+  let fs: List<fn(Int) -> Int> = [|x| x + 1, |x| x * 10, |x| x - 5]
+  assert fn_rest(fs) == 2 + 10 + 0 - 4
+}
+
+test "a rest of maps" {
+  var a: Map<Text, Int> = Map.empty()
+  a.put("a", 1)
+  var b: Map<Text, Int> = Map.empty()
+  b.put("b", 2)
+  let ms = [a, b]
+  var after = map_rest(ms)
+  after[0].put("c", 3)
+  assert after[0].len() == 2
+  assert ms[1].len() == 1
+}
+
+test "a rest arm that continues or breaks" {
+  assert first_or_break([[1, 2, 3], [], [4], [0 - 1, 9], [100]]) == 1 + 2 + 4
+}
+
+test "a rest arm that returns early" {
+  assert returns_early(["a", "b", "c"]) == "a!"
+  assert returns_early(["a", "b"]) == "end"
+  assert returns_early([]) == "end"
+}
+
+test "a rest of units" {
+  assert unit_rest([(), (), ()]) == 2
+  assert unit_rest([]) == 0 - 1
+}

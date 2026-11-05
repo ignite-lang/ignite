@@ -1,4 +1,4 @@
-#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 use ignite_std::text::{Handler, Mode, shout};
 use ignite_std::protocol::line::Line;
 use ignite_std::net::Endpoint;
@@ -8,15 +8,15 @@ pub fn quiet(line: &String) -> String {
 }
 
 pub fn pick(mode: &Mode) -> std::sync::Arc<dyn Fn(String) -> String + Send + Sync> {
-    match mode.clone() {
+    match mode {
         Mode::Loud => (std::sync::Arc::new(|__a0: String| shout(&__a0)) as std::sync::Arc<dyn Fn(String) -> String + Send + Sync>),
         Mode::Quiet => (std::sync::Arc::new(|__a0: String| quiet(&__a0)) as std::sync::Arc<dyn Fn(String) -> String + Send + Sync>),
     }
 }
 
-pub fn apply_twice(f: &std::sync::Arc<dyn Fn(String) -> String + Send + Sync>, line: &String) -> String {
+pub fn apply_twice(f: &std::sync::Arc<dyn Fn(String) -> String + Send + Sync>, line: String) -> String {
     let mut f = f.clone();
-    return f(f(line.clone()));
+    return f(f(line));
 }
 
 pub fn relay(stream: &ignite_io::TcpStream, handler: &Handler) -> Result<(), ignite_io::IoError> {
@@ -55,7 +55,7 @@ pub struct Echo {
 #[allow(non_snake_case)]
 pub fn Echo__main(self_: &Echo) -> Result<(), ignite_io::IoError> {
     let stream = match ignite_io::TcpStream::connect(self_.target.address.clone(), self_.target.port.clone()) {
-        Ok(stream) => stream,
+        Ok(stream) => stream.clone(),
         Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
     };
     match Line::connect(stream.clone()) {

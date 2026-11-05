@@ -1,4 +1,4 @@
-#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 
 #[derive(Clone)]
 pub enum Shape {
@@ -14,16 +14,16 @@ pub struct Labelled {
 }
 
 pub fn area(shape: &Shape) -> i64 {
-    match shape.clone() {
-        Shape::Circle(r) => ignite_io::checked::mul((ignite_io::checked::mul(3, r, "crates/ignite-rustgen/tests/golden/shapes.ignite", 16, 18)), r, "crates/ignite-rustgen/tests/golden/shapes.ignite", 16, 18),
-        Shape::Rect(w, h) => ignite_io::checked::mul(w, h, "crates/ignite-rustgen/tests/golden/shapes.ignite", 17, 19),
+    match shape {
+        Shape::Circle(r) => { let r = (r).clone(); ignite_io::checked::mul((ignite_io::checked::mul(3, r, "crates/ignite-rustgen/tests/golden/shapes.ignite", 16, 18)), r, "crates/ignite-rustgen/tests/golden/shapes.ignite", 16, 18) },
+        Shape::Rect(w, h) => { let w = (w).clone(); let h = (h).clone(); ignite_io::checked::mul(w, h, "crates/ignite-rustgen/tests/golden/shapes.ignite", 17, 19) },
         Shape::Empty => 0,
     }
 }
 
 pub fn describe(item: &Labelled) -> String {
     let size = area(&item.shape);
-    match item.shape.clone() {
+    match &item.shape {
         Shape::Empty => format!("{}{}", item.label, String::from(" is empty")),
         _ => format!("{}{}", format!("{}{}", item.label, String::from(": ")), size.clone().to_string()),
     }
@@ -34,14 +34,14 @@ pub fn unit_square() -> Labelled {
 }
 
 pub fn largest(items: &Vec<Labelled>) -> Option<Labelled> {
-    let mut best = None;
+    let mut best: Option<Labelled> = None;
     let mut best_area = ignite_io::checked::sub(0, 1, "crates/ignite-rustgen/tests/golden/shapes.ignite", 36, 19);
-    for item in (items.clone()) {
+    for item in (items).iter() {
         let a = area(&item.shape);
         if a > best_area {
             best_area = a.clone();
             best = Some(item.clone());
         };
     }
-    return best.clone();
+    return best;
 }

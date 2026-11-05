@@ -1,0 +1,3 @@
+e076_rest.ignite:5:13: error[E076]: a list pattern has at most one `..`
+e076_rest.ignite:12:11: error[E076]: a list pattern has at most one `..`
+e076_rest.ignite:19:6: error[E076]: `..name` must be the last element of a list pattern

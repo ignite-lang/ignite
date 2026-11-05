@@ -25,7 +25,7 @@ fn mutates(builtin: Builtin) -> bool {
     use Builtin::*;
     match builtin {
         ListPush | ListAppend | ListClear | MapPut | MapRemove | StoreNextId | StorePut
-        | StoreRemove | StoreUpdate => true,
+        | StoreRemove | StoreUpdate | StoreUpsert => true,
         MapEmpty
         | MapGet
         | MapKeys
@@ -342,6 +342,7 @@ fn stmt_mentions(stmt: &Stmt, name: &str) -> bool {
 fn pattern_binds(pattern: &Pattern, name: &str) -> bool {
     match &pattern.kind {
         PatternKind::Binding(id) => id.name == name,
+        PatternKind::Rest(id) => id.as_ref().is_some_and(|id| id.name == name),
         PatternKind::Or(items)
         | PatternKind::Tuple(items)
         | PatternKind::List(items)

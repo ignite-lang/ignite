@@ -59,6 +59,367 @@ test "slice takes byte offsets" {
   assert slice("é", 0, 1) == "\u{FFFD}"
 }
 
+test "Int.parse reads the text of bytes and of a slice of them" {
+  let data = b"x-42y+7"
+  assert Int.parse(data.slice(1, 4).to_text()) == Some(-42)
+  assert Int.parse(data.slice(5, 7).to_text()) == None
+  assert Int.parse(data.slice(1, 2).to_text()) == None
+  assert Int.parse(data.slice(4, 4).to_text()) == None
+  assert Int.parse(b"9223372036854775807".to_text()) == Some(9223372036854775807)
+  assert Int.parse(b"9223372036854775808".to_text()) == None
+  assert Int.parse(Bytes.of([b'1', 0xFF]).to_text()) == None
+  assert Int.parse(Bytes.of([b'1', 0xFF]).slice(0, 1).to_text()) == Some(1)
+}
+
+// The forms of `Int.parse` the generators lower apart, each against `want`:
+// the text itself, a text variable, the bytes of the text, a slice and a
+// slice of a slice of padded bytes. Empty when every form gives `want`.
+test fn parse_forms(text: Text, want: Option<Int>) -> Text {
+  var wrong = ""
+  if Int.parse(text) != want {
+    wrong = wrong.concat(" text")
+  }
+  let copy = text.to_text()
+  if Int.parse(copy) != want {
+    wrong = wrong.concat(" variable")
+  }
+  if Int.parse(text.to_bytes().to_text()) != want {
+    wrong = wrong.concat(" bytes")
+  }
+  let padded = "[".concat(text).concat("]").to_bytes()
+  if Int.parse(padded.slice(1, text.len() + 1).to_text()) != want {
+    wrong = wrong.concat(" slice")
+  }
+  if Int.parse(padded.slice(0, text.len() + 1).slice(1, text.len() + 1).to_text()) != want {
+    wrong = wrong.concat(" slice of a slice")
+  }
+  if padded.slice(1, text.len() + 1).to_text() != text {
+    wrong = wrong.concat(" slice text")
+  }
+  wrong
+}
+
+test "Int.parse reads decimal digits with an optional leading minus in every form" {
+  assert parse_forms("0", Some(0)) == ""
+  assert parse_forms("-0", Some(0)) == ""
+  assert parse_forms("42", Some(42)) == ""
+  assert parse_forms("-42", Some(-42)) == ""
+  assert parse_forms("007", Some(7)) == ""
+  assert parse_forms("-007", Some(-7)) == ""
+  assert parse_forms("00000000000000000000009223372036854775807", Some(9223372036854775807)) == ""
+  assert parse_forms("9223372036854775807", Some(9223372036854775807)) == ""
+  assert parse_forms("-9223372036854775807", Some(-9223372036854775807)) == ""
+  assert parse_forms("-9223372036854775808", Some(-9223372036854775807 - 1)) == ""
+  assert parse_forms("9223372036854775808", None) == ""
+  assert parse_forms("-9223372036854775809", None) == ""
+  assert parse_forms("99999999999999999999", None) == ""
+  assert parse_forms("+7", None) == ""
+  assert parse_forms("+0", None) == ""
+  assert parse_forms("+", None) == ""
+  assert parse_forms("-", None) == ""
+  assert parse_forms("--1", None) == ""
+  assert parse_forms("-+1", None) == ""
+  assert parse_forms("", None) == ""
+  assert parse_forms(" 1", None) == ""
+  assert parse_forms("1 ", None) == ""
+  assert parse_forms("\t1", None) == ""
+  assert parse_forms("1\n", None) == ""
+  assert parse_forms("- 1", None) == ""
+  assert parse_forms("1_000", None) == ""
+  assert parse_forms("1.0", None) == ""
+  assert parse_forms("0x10", None) == ""
+  assert parse_forms("1e3", None) == ""
+  assert parse_forms("\u{0661}", None) == ""
+  assert parse_forms("\u{FF11}", None) == ""
+  assert parse_forms("1\u{FFFD}", None) == ""
+  assert parse_forms("\u{00A0}1", None) == ""
+}
+
+test "Int.parse of bytes that are not UTF-8 is None" {
+  assert Int.parse(Bytes.of([0xFF, b'1']).to_text()) == None
+  assert Int.parse(Bytes.of([b'-', 0xC3]).to_text()) == None
+  assert Int.parse(Bytes.of([0xC0, 0xB1]).to_text()) == None
+  assert Int.parse(Bytes.of([b'1', 0]).to_text()) == None
+  assert Int.parse(Bytes.of([0xE2, 0x82]).slice(0, 2).to_text()) == None
+  let broken = Bytes.of([b'7', 0xFF])
+  let text = broken.to_text()
+  assert Int.parse(text) == None
+  assert Int.parse(broken.to_text()) == None
+  assert Int.parse(broken.slice(0, 1).to_text()) == Some(7)
+  assert broken == Bytes.of([b'7', 0xFF])
+  assert Int.parse(Bytes.of([b'1', 0, b'2']).to_text()) == None
+  assert Int.parse(Bytes.of([0, b'1']).to_text()) == None
+  assert Int.parse(Bytes.of([b'-', 0]).to_text()) == None
+}
+
+test "Int.to_text is decimal with a minus for negatives" {
+  let max = 9223372036854775807
+  let min = -9223372036854775807 - 1
+  assert max.to_text() == "9223372036854775807"
+  assert min.to_text() == "-9223372036854775808"
+  assert (min + 1).to_text() == "-9223372036854775807"
+  assert 0.to_text() == "0"
+  assert (-1).to_text() == "-1"
+  assert (-10).to_text() == "-10"
+  assert (-42).to_text() == "-42"
+  assert 1000000.to_text() == "1000000"
+  assert Int.parse(min.to_text()) == Some(min)
+  assert Int.parse(max.to_text()) == Some(max)
+  assert Int.parse((-0).to_text()) == Some(0)
+}
+
+test "Bytes.to_text keeps UTF-8 and turns invalid sequences into U+FFFD" {
+  assert b"GET key".to_text() == "GET key"
+  assert Bytes.of([]).to_text() == ""
+  assert Bytes.of([0, 0x7F]).to_text() == "\u{0}\u{7F}"
+  assert Bytes.of([0xC3, 0xA4, 0xE2, 0x82, 0xAC]).to_text() == "\u{E4}\u{20AC}"
+  assert Bytes.of([b'a', b'b', 0xC3, 0xA4, 0x7F, 0xE2, 0x82]).to_text() == "ab\u{E4}\u{7F}\u{FFFD}"
+  assert Bytes.of([b'o', b'k', 0xFF, 0xFE, b'!']).to_text() == "ok\u{FFFD}\u{FFFD}!"
+  assert Bytes.of([0x80]).to_text() == "\u{FFFD}"
+  assert Bytes.of([0xC0, 0xB1]).to_text() == "\u{FFFD}\u{FFFD}"
+  assert Bytes.of([0xED, 0xA0, 0x80]).to_text() == "\u{FFFD}\u{FFFD}\u{FFFD}"
+  assert Bytes.of([0xF0, 0x9F, 0x98, 0x80, b'x']).to_text() == "\u{1F600}x"
+  assert Bytes.of([0xF0, 0x9F, 0x98, b'x']).to_text() == "\u{FFFD}x"
+  var bytes = b"ab"
+  let text = bytes.to_text()
+  bytes.push(b'c')
+  assert text == "ab" && bytes.to_text() == "abc"
+  var kept = ""
+  var last = ""
+  var i = 0
+  while i < 2000 {
+    let line = i.to_text().to_bytes()
+    last = line.to_text()
+    if i % 500 == 0 {
+      kept = kept.concat(last).concat(",")
+    }
+    i = i + 1
+  }
+  assert kept == "0,500,1000,1500," && last == "1999"
+}
+
+test type ParseHolder {
+  raw: Bytes
+  label: Text
+}
+
+test fn parse_digits(n: Int) -> Bytes = n.to_text().to_bytes()
+
+test fn parse_part(bytes: Bytes, from: Int, to: Int) -> Option<Int> = Int.parse(bytes.slice(from, to).to_text())
+
+test fn parse_bytes(bytes: Bytes) -> Option<Int> = Int.parse(bytes.to_text())
+
+test "Int.parse reads bytes from any receiver and leaves them as they were" {
+  let text = "42"
+  assert Int.parse(text) == Some(42)
+  assert text == "42"
+  assert Int.parse(text) == Some(42)
+  var bytes = b"17"
+  assert Int.parse(bytes.to_text()) == Some(17)
+  let before = bytes
+  bytes.push(b'0')
+  assert Int.parse(bytes.to_text()) == Some(170)
+  assert Int.parse(bytes.slice(1, 3).to_text()) == Some(70)
+  assert Int.parse(before.to_text()) == Some(17)
+  assert bytes == b"170" && before == b"17"
+  assert Int.parse(parse_digits(-12).to_text()) == Some(-12)
+  assert Int.parse(parse_digits(345).slice(1, 3).to_text()) == Some(45)
+  assert Int.parse(parse_digits(345).slice(0, 3).slice(2, 3).to_text()) == Some(5)
+  let holder = ParseHolder { raw = b"x99", label = "-5" }
+  assert Int.parse(holder.raw.to_text()) == None
+  assert Int.parse(holder.raw.slice(1, 3).to_text()) == Some(99)
+  assert Int.parse(holder.label) == Some(-5)
+  assert holder.raw == b"x99" && holder.label == "-5"
+  let parts = [b"1", b"-22", b"x3"]
+  assert Int.parse(parts[1].to_text()) == Some(-22)
+  assert Int.parse(parts.at(1).to_text()) == Some(-22)
+  assert Int.parse(parts[2].slice(1, 2).to_text()) == Some(3)
+  assert Int.parse(parts.at(parts.len() - 1).slice(1, parts[2].len()).to_text()) == Some(3)
+  assert parts.map(parse_bytes) == [Some(1), Some(-22), None]
+  assert parts.map(|b| Int.parse(b.slice(0, 1).to_text())) == [Some(1), None, None]
+  assert parse_part(b"a123b", 1, 4) == Some(123)
+  assert parse_part(holder.raw, 1, 3) == Some(99)
+  assert parts == [b"1", b"-22", b"x3"]
+  let holders: Store<ParseHolder> = Store.new()
+  holders.put(1, holder)
+  assert Int.parse(holders.get(1).map(|h| h.raw).unwrap_or(b"").slice(1, 3).to_text()) == Some(99)
+  assert match holders.get(1) {
+    Some(h) => Int.parse(h.raw.slice(1, 3).to_text()) == Some(99) && Int.parse(h.label) == Some(-5)
+    None => false
+  }
+  let raws: Store<Bytes> = Store.new()
+  raws.put(7, b"-64")
+  assert Int.parse(raws.get(7).unwrap_or(b"").to_text()) == Some(-64)
+  assert Int.parse(raws.get(8).unwrap_or(b"").to_text()) == None
+  assert raws.get(7) == Some(b"-64")
+}
+
+test "to_text and Int.parse of nested, empty and final slices" {
+  let data = b"12|-34|56"
+  assert parse_part(data, 0, 2) == Some(12)
+  assert parse_part(data, 7, 9) == Some(56)
+  assert parse_part(data, 9, 9) == None
+  assert parse_part(data, 0, 0) == None
+  assert data.slice(9, 9).to_text() == ""
+  assert data.slice(0, 0).to_text() == ""
+  assert data.slice(7, 9).to_text() == "56"
+  assert data.slice(0, 9).to_text() == "12|-34|56"
+  assert Int.parse(data.slice(0, 9).slice(3, 6).to_text()) == Some(-34)
+  assert Int.parse(data.slice(3, 9).slice(1, 3).slice(1, 2).to_text()) == Some(4)
+  assert Int.parse(data.slice(3, 9).slice(4, 6).slice(0, 2).to_text()) == Some(56)
+  assert Int.parse(data.slice(0, 9).slice(9, 9).slice(0, 0).to_text()) == None
+  assert data.slice(3, 9).slice(4, 6).to_text() == "56"
+  assert data.slice(3, 9).slice(6, 6).to_text() == ""
+  assert Int.parse(parse_digits(-123).slice(0, 4).slice(1, 4).to_text()) == Some(123)
+  let inner = data.slice(3, 9).slice(1, 3)
+  assert inner == b"34"
+  assert data == b"12|-34|56"
+}
+
+test "a later bound that changes the bytes leaves the slice before it as it was" {
+  var data = b"12345"
+  let n = Int.parse(data.slice(0, 4).slice(1, if data.len() > 0 {
+    data = b"99999"
+    3
+  } else {
+    3
+  }).to_text())
+  assert n == Some(23)
+  assert data == b"99999"
+  var more = b"12345"
+  let t = more.slice(0, 4).slice(1, if more.len() > 0 {
+    more.clear()
+    more.append(b"9999")
+    3
+  } else {
+    3
+  }).to_text()
+  assert t == "23"
+  assert more == b"9999"
+  var once = b"12345"
+  let m = Int.parse(once.slice(1, if once.len() > 0 {
+    once = b"99999"
+    3
+  } else {
+    3
+  }).to_text())
+  assert m == Some(23)
+  var last = b"12345"
+  let u = last.slice(1, if last.len() > 0 {
+    last.clear()
+    last.append(b"9999")
+    3
+  } else {
+    3
+  }).to_text()
+  assert u == "23"
+  assert once == b"99999" && last == b"9999"
+}
+
+test type SliceKeeper {
+  raw: Bytes
+}
+
+test fn keep_slice(raw: Bytes) -> SliceKeeper = SliceKeeper { raw = raw }
+
+test "a start bound, both bounds or a bound in a loop that change the receiver" {
+  var data = b"12345"
+  let t = data.slice(if data.len() > 0 {
+    data = b"99999"
+    1
+  } else {
+    1
+  }, 3).to_text()
+  assert t == "23"
+  var both = b"12345"
+  let b = both.slice(if both.len() > 0 {
+    both.push(b'6')
+    1
+  } else {
+    1
+  }, if both.len() > 5 {
+    both = b"x"
+    3
+  } else {
+    4
+  }).to_text()
+  assert b == "23" && both == b"x"
+  var outer = b"12345"
+  let z = outer.slice(0, 4).slice(1, if outer.len() > 0 {
+    outer = b"99999"
+    3
+  } else {
+    3
+  })
+  assert z == b"23" && outer == b"99999"
+  var holder = SliceKeeper { raw = b"12345" }
+  let h = holder.raw.slice(1, if holder.raw.len() > 0 {
+    holder = SliceKeeper { raw = b"99999" }
+    3
+  } else {
+    3
+  }).to_text()
+  assert h == "23"
+  var names = ["a", "b", "c"]
+  let s = names.slice(0, if names.len() > 0 {
+    names.push("d")
+    2
+  } else {
+    2
+  })
+  assert s == ["a", "b"] && names.len() == 4
+  var grown = b"1234"
+  var out = ""
+  var i = 0
+  while i < 3 {
+    out = out.concat(grown.slice(0, if i >= 0 {
+      grown.push(b'1')
+      2
+    } else {
+      2
+    }).to_text())
+    i = i + 1
+  }
+  assert out == "121212" && grown.len() == 7
+  let fill = b"12345"
+  let filled = fill.slice(1, if fill.len() > 0 {
+    var junk = b""
+    var n = 0
+    while n < 20000 {
+      junk.push(b'x')
+      n = n + 1
+    }
+    junk.len() - 19997
+  } else {
+    3
+  }).to_text()
+  assert filled == "23"
+}
+
+test "a slice that is kept, stored or put does not see later changes of its receiver" {
+  var data = b"12345"
+  let v = data.slice(1, 3)
+  let w = data.slice(0, 4).slice(1, 3)
+  let k = keep_slice(data.slice(1, 3))
+  let raws: Store<Bytes> = Store.new()
+  raws.put(1, data.slice(1, 3))
+  raws.put(2, data.slice(0, 4).slice(2, 4))
+  data.push(b'6')
+  data = b"99999"
+  data.clear()
+  assert v == b"23" && w == b"23" && k.raw == b"23"
+  assert raws.get(1) == Some(b"23") && raws.get(2) == Some(b"34")
+  let got = raws.get(1).unwrap_or(b"").slice(0, 1)
+  raws.put(1, b"99")
+  assert got == b"2"
+  assert Int.parse(raws.get(2).unwrap_or(b"").slice(0, 2).to_text()) == Some(34)
+  var x = b"12345"
+  var y = x.slice(1, 3)
+  y.push(b'9')
+  x.clear()
+  assert y == b"239"
+}
+
 // Whether `needle` occurs in `bytes` at offset `at`.
 fn bytes_match_at(bytes: Bytes, needle: Bytes, at: Int) -> Bool {
   if at < 0 || at + needle.len() > bytes.len() {
@@ -236,11 +597,25 @@ test "trim_start and trim_end drop ASCII whitespace" {
   assert trim_start("\n€") == "€"
 }
 
-// ASCII letters in lower case; every other byte unchanged.
-fn to_lower(text: Text) -> Text = text.to_bytes().map(|b| if b >= b'A' && b <= b'Z' { b + 32 } else { b }).to_text()
+// ASCII letters in lower case; every other byte unchanged. A loop and
+// not `map` with a closure: on the Rust target short text (command and
+// header names) takes one allocation fewer.
+fn to_lower(text: Text) -> Text {
+  var out = Bytes.empty()
+  for b in text.to_bytes() {
+    out.push(if b >= b'A' && b <= b'Z' { b + 32 } else { b })
+  }
+  out.to_text()
+}
 
 // ASCII letters in upper case; every other byte unchanged.
-fn to_upper(text: Text) -> Text = text.to_bytes().map(|b| if b >= b'a' && b <= b'z' { b - 32 } else { b }).to_text()
+fn to_upper(text: Text) -> Text {
+  var out = Bytes.empty()
+  for b in text.to_bytes() {
+    out.push(if b >= b'a' && b <= b'z' { b - 32 } else { b })
+  }
+  out.to_text()
+}
 
 // Equal after ASCII case folding: header names, `Content-Length` and
 // `content-length`.
@@ -257,6 +632,61 @@ test "case mapping is ASCII only" {
   assert !equals_ignore_case("a", "b")
   assert !equals_ignore_case("Ä", "ä")
   assert equals_ignore_case("", "")
+}
+
+test "case mapping leaves bytes outside ASCII letters as they were" {
+  let upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  let lower = "abcdefghijklmnopqrstuvwxyz"
+  assert upper.to_lower() == lower && lower.to_upper() == upper
+  assert upper.to_upper() == upper && lower.to_lower() == lower
+  assert upper == "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  assert to_lower("ÉÀÖẞ ß ǅ Σ ﬀ 😀 \u{0}\u{7F}\t") == "ÉÀÖẞ ß ǅ Σ ﬀ 😀 \u{0}\u{7F}\t"
+  assert to_upper("éàöß ẞ ǆ σ ﬀ 😀 \u{0}\u{7F}\t") == "éàöß ẞ ǆ σ ﬀ 😀 \u{0}\u{7F}\t"
+  assert to_lower("ÄbC é") == "Äbc é" && to_upper("äBc é") == "äBC é"
+  assert to_lower("x\u{FFFD}Y") == "x\u{FFFD}y"
+  assert Bytes.of([0xFF, b'A', 0xC3]).to_text().to_lower() == "\u{FFFD}a\u{FFFD}"
+  assert to_lower("A".concat("B")) == "ab" && to_upper("a" + "b") == "AB"
+  assert to_lower(to_upper("MiXeD")) == "mixed"
+  var long = ""
+  var i = 0
+  while i < 100 {
+    long = long.concat("aB")
+    i = i + 1
+  }
+  assert to_upper(long).len() == 200 && to_lower(long) == to_lower(to_upper(long))
+  assert long.slice(0, 4) == "aBaB"
+}
+
+test "to_bytes of a text leaves every other owner of the text as it was" {
+  let t = "ab"
+  let b = t.to_bytes()
+  assert b == b"ab" && t == "ab"
+  assert t.to_bytes() == b"ab" && t.len() == 2
+  var v = " x "
+  assert v.trim().to_bytes() == b"x" && v == " x "
+  assert v.concat("y").to_bytes() == b" x y" && v == " x "
+  assert (v + "z").to_bytes() == b" x z" && v == " x "
+  let n = 42
+  assert "{n}-{v}".to_bytes() == b"42- x " && v == " x "
+  assert n.to_text().to_bytes() == b"42"
+  assert true.to_text().to_bytes() == b"true"
+  assert b'a'.to_text().to_bytes().to_text() == b'a'.to_text()
+  var all = Bytes.empty()
+  var k = 0
+  while k < 3 {
+    all.append("{k},".to_bytes())
+    all.append(v.to_bytes())
+    all.append(v.trim().to_bytes())
+    k = k + 1
+  }
+  assert all == b"0, x x1, x x2, x x" && v == " x "
+  for w in ["a", "b"] {
+    all.append(w.to_bytes())
+    all.append(w.concat("!").to_bytes())
+  }
+  assert all.slice(all.len() - 6, all.len()) == b"aa!bb!"
+  v = v.trim()
+  assert v.to_bytes() == b"x" && t == "ab"
 }
 
 // The lines of `text`, split at LF with a CR before it dropped. A final

@@ -12,8 +12,10 @@
 //!
 //! Cloning a `HeapValue` is `copy_to_heap`, dropping it `free_heap`, so the
 //! store's value semantics (a `get` returns a copy, a `put` stores one) and
-//! its locking are `ignite-io`'s. Results are copied into the calling task's
-//! arena before the heap copy the store handed out is dropped.
+//! its locking are `ignite-io`'s. Reads (`get`, `values`, the result of
+//! `update`) use the store's borrowing forms and copy the stored heap value
+//! straight into the calling task's arena under the lock: one copy per
+//! value, no heap copy in between.
 
 use ignite_io::Store;
 
@@ -29,6 +31,11 @@ pub type FreeHeap = extern "C" fn(*mut u8);
 /// `update` calling the Ignite fn `f` on a copy of the heap value `old` and
 /// returning a heap copy of its result.
 pub type UpdateThunk = extern "C" fn(*const u8, *const u8) -> *mut u8;
+/// `store_upsert.<T>(ptr f, ptr old) -> ptr`: the generated thunk of
+/// `upsert` calling the Ignite fn `f` on `None` when `old` is null, else on
+/// `Some` of a copy of the heap value `old`, and returning a heap copy of
+/// its result.
+pub type UpsertThunk = extern "C" fn(*const u8, *const u8) -> *mut u8;
 
 /// The glue and layout of one element type.
 #[derive(Clone, Copy)]
@@ -50,7 +57,8 @@ struct HeapValue {
 // glue only reads it (clone) or frees it (drop), and the store's lock
 // orders every access.
 unsafe impl Send for HeapValue {}
-// SAFETY: as for `Send`; `&HeapValue` only allows a clone, which reads.
+// SAFETY: as for `Send`; `&HeapValue` only allows a clone or a copy into an
+// arena, which both read.
 unsafe impl Sync for HeapValue {}
 
 impl Clone for HeapValue {
@@ -137,13 +145,8 @@ pub extern "C" fn ignite_rt_store_put(handle: *const RtStore, id: i64, value: *c
 /// `out`, or 0 when there is none.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_get(handle: *const RtStore, id: i64, out: *mut u8) -> i8 {
-    match store(handle).store.get(id) {
-        Some(value) => {
-            value.copy_out(out);
-            1
-        }
-        None => 0,
-    }
+    let found = store(handle).store.read(id, |value| value.copy_out(out));
+    i8::from(found.is_some())
 }
 
 /// `i8 store_remove(ptr store, i64 id, ptr out)`: 1 and the removed value
@@ -164,26 +167,28 @@ pub extern "C" fn ignite_rt_store_remove(handle: *const RtStore, id: i64, out: *
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_values(handle: *const RtStore, out: *mut IgniteList) {
     let s = store(handle);
-    let values = s.store.values();
     let size = s.glue.size;
-    let buffer = arena::alloc(size * values.len(), s.glue.align);
-    for (i, value) in values.iter().enumerate() {
-        value.copy_out(buffer.wrapping_add(i * size));
-    }
-    put(
-        out,
+    let list = s.store.read_values(|values| {
+        let len = values.len();
+        let buffer = arena::alloc(size * len, s.glue.align);
+        for (i, value) in values.enumerate() {
+            value.copy_out(buffer.wrapping_add(i * size));
+        }
         IgniteList {
             ptr: buffer,
-            len: values.len() as i64,
-            cap: values.len() as i64,
-        },
-    );
+            len: len as i64,
+            cap: len as i64,
+        }
+    });
+    put(out, list);
 }
 
 /// `i8 store_update(ptr store, i64 id, ptr f, ptr thunk, ptr out)`: under
 /// the store's lock, replace the value under `id` by `thunk(f, value)`; 1
 /// and a copy of the new value in `out`, or 0 (and `f` not called) when
-/// there is none.
+/// there is none. A null from the thunk is a failure of `f` its callback
+/// guard stopped (`crate::fail`): the old value stays, the lock is
+/// released, then the task ends with the failure's report.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_store_update(
     handle: *const RtStore,
@@ -193,16 +198,46 @@ pub extern "C" fn ignite_rt_store_update(
     out: *mut u8,
 ) -> i8 {
     let s = store(handle);
-    let updated = s.store.update(id, |old| HeapValue {
-        ptr: thunk(f, old.ptr),
-        glue: s.glue,
-    });
+    let updated = s.store.try_replace_with(
+        id,
+        |old| match thunk(f, old.ptr) {
+            ptr if ptr.is_null() => Err(()),
+            ptr => Ok(HeapValue { ptr, glue: s.glue }),
+        },
+        |new| new.copy_out(out),
+    );
     match updated {
-        Some(value) => {
-            value.copy_out(out);
-            1
-        }
+        Some(Ok(())) => 1,
+        Some(Err(())) => crate::fail::resume(),
         None => 0,
+    }
+}
+
+/// `void store_upsert(ptr store, i64 id, ptr f, ptr thunk, ptr out)`: under
+/// the store's lock, store `thunk(f, value)` under `id`, the thunk getting
+/// the stored heap value or null when `id` holds nothing, and copy the
+/// stored value to `out`. A null from the thunk is a failure of `f` its
+/// callback guard stopped, as for [`ignite_rt_store_update`]: the store is
+/// unchanged, the lock is released, then the task ends with the report.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_store_upsert(
+    handle: *const RtStore,
+    id: i64,
+    f: *const u8,
+    thunk: UpsertThunk,
+    out: *mut u8,
+) {
+    let s = store(handle);
+    let stored = s.store.upsert_with(
+        id,
+        |old| match thunk(f, old.map_or(std::ptr::null(), |old| old.ptr)) {
+            ptr if ptr.is_null() => Err(()),
+            ptr => Ok(HeapValue { ptr, glue: s.glue }),
+        },
+        |new| new.copy_out(out),
+    );
+    if stored.is_err() {
+        crate::fail::resume()
     }
 }
 
@@ -213,9 +248,11 @@ mod tests {
     use super::*;
 
     static LIVE: AtomicI64 = AtomicI64::new(0);
+    static HEAP_COPIES: AtomicI64 = AtomicI64::new(0);
 
     extern "C" fn to_heap(value: *const u8) -> *mut u8 {
         LIVE.fetch_add(1, Ordering::SeqCst);
+        HEAP_COPIES.fetch_add(1, Ordering::SeqCst);
         // SAFETY: the tests store `i64`s.
         Box::into_raw(Box::new(unsafe { value.cast::<i64>().read() })).cast()
     }
@@ -272,5 +309,55 @@ mod tests {
         assert_eq!(out, 7);
         assert_eq!(ignite_rt_store_remove(s, 1, (&raw mut out).cast()), 0);
         assert_eq!(LIVE.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            HEAP_COPIES.load(Ordering::SeqCst),
+            3,
+            "two puts and the result of one update; reads make no heap copy"
+        );
+    }
+
+    /// Heap copies alive in [`upsert_inserts_then_replaces`], counted apart
+    /// from [`LIVE`] so that the two tests may run at once.
+    static UPSERT_LIVE: AtomicI64 = AtomicI64::new(0);
+
+    extern "C" fn upsert_to_heap(value: *const u8) -> *mut u8 {
+        UPSERT_LIVE.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: the test stores `i64`s.
+        Box::into_raw(Box::new(unsafe { value.cast::<i64>().read() })).cast()
+    }
+
+    extern "C" fn upsert_free(heap: *mut u8) {
+        UPSERT_LIVE.fetch_sub(1, Ordering::SeqCst);
+        // SAFETY: made by `upsert_to_heap`.
+        drop(unsafe { Box::from_raw(heap.cast::<i64>()) });
+    }
+
+    /// `old + 1`, or 1 for a null `old`.
+    extern "C" fn count(_f: *const u8, old: *const u8) -> *mut u8 {
+        let next = if old.is_null() {
+            1
+        } else {
+            // SAFETY: a non-null `old` is a stored `i64`.
+            let old = unsafe { old.cast::<i64>().read() };
+            old + 1
+        };
+        upsert_to_heap((&raw const next).cast())
+    }
+
+    #[test]
+    fn upsert_inserts_then_replaces() {
+        let s = ignite_rt_store_new(upsert_to_heap, from_heap, upsert_free, 8, 8);
+        let mut out: i64 = 0;
+        ignite_rt_store_upsert(s, 4, std::ptr::null(), count, (&raw mut out).cast());
+        assert_eq!(out, 1, "a null old for an empty id");
+        ignite_rt_store_upsert(s, 4, std::ptr::null(), count, (&raw mut out).cast());
+        assert_eq!(out, 2);
+        assert_eq!(ignite_rt_store_get(s, 4, (&raw mut out).cast()), 1);
+        assert_eq!(out, 2);
+        assert_eq!(
+            UPSERT_LIVE.load(Ordering::SeqCst),
+            1,
+            "the replaced copy was freed"
+        );
     }
 }

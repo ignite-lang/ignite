@@ -27,7 +27,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, Weak};
 use std::time::Duration;
 
-use crate::{Input, IoError, input, read_buffer, socket_address};
+use crate::{Input, IoError, read_input, socket_address};
 
 /// Bytes a send buffer holds before `write_all` sends it at once.
 pub const SEND_BUFFER: usize = 64 * 1024;
@@ -350,9 +350,7 @@ impl TcpStream {
     /// `maximum` is clamped to `1..=1 MiB`. Flushes the current task's
     /// writes first, then holds only the read lock.
     pub fn read(&self, maximum: i64) -> Result<Input, IoError> {
-        let mut buffer = read_buffer(maximum);
-        let count = self.read_into(&mut buffer)?;
-        Ok(input(buffer, count))
+        read_input(maximum, |buffer| self.read_into(buffer))
     }
 
     /// One read into `buffer`, as [`TcpStream::read`]: the number of bytes

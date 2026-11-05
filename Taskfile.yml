@@ -58,9 +58,9 @@ tasks:
       - task: test
 
   compile:
-    desc: Compile the terminal example with ignite into target/ignite/terminal
+    desc: Compile the terminal example with ignite --target rust into target/ignite/terminal
     cmds:
-      - cargo run -q -p ignite -- build {{.EXAMPLE}} --out {{.OUT}} --target-dir target
+      - cargo run -q -p ignite -- build {{.EXAMPLE}} --target rust --out {{.OUT}} --target-dir target
 
   compile-llvm:
     desc: Compile the terminal example with ignite --target llvm into target/ignite-llvm/terminal
@@ -72,9 +72,9 @@ tasks:
       - cargo run -q -p ignite -- build {{.EXAMPLE}} --target llvm --out {{.OUT_LLVM}} --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a
 
   compile-todo:
-    desc: Compile the todo example with ignite into target/ignite/todo
+    desc: Compile the todo example with ignite --target rust into target/ignite/todo
     cmds:
-      - cargo run -q -p ignite -- build {{.TODO}} --out {{.TODO_OUT}} --target-dir target
+      - cargo run -q -p ignite -- build {{.TODO}} --target rust --out {{.TODO_OUT}} --target-dir target
 
   compile-todo-llvm:
     desc: Compile the todo example with ignite --target llvm into target/ignite-llvm/todo
@@ -103,7 +103,7 @@ tasks:
     cmds:
       - cargo build -q --release -p ignite-rt -p ignite-load
       - cargo build -q -p ignite
-      - target/debug/ignite build {{.EXAMPLE}} --release --out target/bench/rust --target-dir target/bench/rust-target
+      - target/debug/ignite build {{.EXAMPLE}} --target rust --release --out target/bench/rust --target-dir target/bench/rust-target
       - target/debug/ignite build {{.EXAMPLE}} --target llvm --release --runtime target/release/libignite_rt.a --out target/bench/llvm
       - target/release/ignite-load matrix --server rust=target/bench/rust-target/release/terminald --server llvm=target/bench/llvm/bin/terminald --runs {{.RUNS | default "3"}} {{if .CELLS}}--cells {{.CELLS}}{{end}} --out target/bench/throughput.jsonl
 
@@ -122,3 +122,17 @@ tasks:
     cmds:
       - task: '{{if eq .TARGET "llvm"}}compile-llvm{{else}}compile{{end}}'
       - '{{.BIN}}/tn --port {{.PORT | default "2323"}}'
+
+  site:
+    desc: Build the website into target/site, the landing page at the root and the book under book/
+    cmds:
+      - mkdir -p target/site
+      - cp -R site/index.html site/assets target/site/
+      - mdbook build site/book --dest-dir target/site/book
+      - cp target/site/book/404.html target/site/404.html
+
+  site-serve:
+    desc: Build the website and serve target/site on http://127.0.0.1:8765/
+    cmds:
+      - task: site
+      - miniserve --index index.html -p 8765 target/site

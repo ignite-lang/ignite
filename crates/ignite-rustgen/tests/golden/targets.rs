@@ -1,4 +1,4 @@
-#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Color {
@@ -19,7 +19,7 @@ pub struct Holder {
 }
 
 pub fn describe(e: &ignite_io::Exposure) -> String {
-    match e.clone() {
+    match e {
         ignite_io::Exposure::Loopback => String::from("loopback"),
         ignite_io::Exposure::Private => String::from("private"),
         ignite_io::Exposure::Public => String::from("public"),

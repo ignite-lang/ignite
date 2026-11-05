@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-04T04:05:01Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-13-recovery-gaps",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on d7593e34: exit 0, 936 cargo passed, 0 failed, 13 ignored; 199 inline per target",
+    "reference": "https://github.com/ignite-lang/ignite/pull/13"
+  }
+}

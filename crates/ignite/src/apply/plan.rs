@@ -14,7 +14,7 @@ pub const FORMAT: &str = "ignite-apply-plan/0.1";
 pub const CONTROLLER_ABI: &str = "ignite-local-host/0.1";
 /// Increment when compiler/backend generation semantics change. The admitted
 /// compiler bytes are a separate raw input, so a rebuild never changes a plan.
-pub const CODEGEN_REVISION: &str = "ignite-codegen/0.1.0-2";
+pub const CODEGEN_REVISION: &str = "ignite-codegen/0.1.0-16";
 /// Increment when the evaluator's stepping of `std.control` reducers may
 /// change. With the digests of the standard-library inputs it forms a plan's
 /// reducer revision.
@@ -1272,12 +1272,14 @@ pub fn prepare(
         }
     }
     let runtime = if build_options.target == crate::Target::Llvm {
-        let path = canonical(
-            &build_options
-                .runtime
-                .clone()
-                .unwrap_or_else(crate::default_runtime_path),
-        )?;
+        let runtime = build_options
+            .runtime
+            .clone()
+            .unwrap_or_else(crate::default_runtime_path);
+        if !runtime.is_file() {
+            return Err(crate::llvm_build::missing_runtime(runtime));
+        }
+        let path = canonical(&runtime)?;
         kinds.insert(path.clone(), InputKind::Runtime);
         match on_path("clang") {
             Some(clang) => {

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-16-llvm-moves
 kind: story
-status: draft
+status: implemented
 title: LLVM target moves at last use
 summary: Own a parameter iff consumed, move places at last use and lower expression calls on the LLVM target
 relations:
@@ -18,7 +18,11 @@ scope:
   path: crates/ignite/tests/slice16.rs
 - confidence: cited
   path: docs/llvm.md
-revision: 4
+revision: 8
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-04T07:03:30Z", actor: "human:timo", revision: 5}
+- {from: "proposed", to: "active", at: "2026-11-04T07:03:30Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-05T00:57:41Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: slice-16-llvm-moves
 
@@ -32,6 +36,9 @@ and lowers expression calls where `calls.ignite` needs it (20.11), with the same
 - Contract: `docs/slice.md` section 20 on `feat/slice16-language-gaps`, unit U4 of 20.10, rows 10,
   12 and 14 of 20.0; reads `moves` and `consumed` from U1 and the call typing of U2.
 - First failing test: `golden::last_use_moves_and_expression_calls` (ignite-llvm).
+- Field targets from the playground session (2026-11-04, callgrind of the ember server on LLVM,
+  after round 11): `List<Byte>` copies of `entries` 144,030, the argument list 34,018,
+  `parse_array` pushes 22,010. Which of them a last-use move removes is not measured.
 
 ## Acceptance
 

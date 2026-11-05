@@ -141,6 +141,10 @@ fn store_method(item: &Ty, name: &str) -> Option<Sig> {
             let f = Ty::Fn(vec![item.clone()], Box::new(item.clone()));
             sig(StoreUpdate, vec![Ty::Int, f], option)
         }
+        "upsert" => {
+            let f = Ty::Fn(vec![option], Box::new(item.clone()));
+            sig(StoreUpsert, vec![Ty::Int, f], item.clone())
+        }
         _ => None,
     }
 }

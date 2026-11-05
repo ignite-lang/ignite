@@ -1,0 +1,1585 @@
+//! `ignite rfc import` and `ignite rfc check` (`docs/slice.md` 19.8, rows 19 to 23 of
+//! 19.0) over the hand-written RFCXML fixture `fixtures/rfc/sample.xml`, whose imported
+//! module is the golden `fixtures/rfc/sample.ignite`; and the committed catalogues of
+//! `std/rfc/` against their sources (19.4, 19.9, rows 25 to 30).
+
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+
+use sha2::{Digest, Sha256};
+
+/// The source path as the golden's header records it, relative to the repository root.
+const SAMPLE: &str = "crates/ignite/tests/fixtures/rfc/sample.xml";
+const GOLDEN: &str = "crates/ignite/tests/fixtures/rfc/sample.ignite";
+
+fn repository() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn fixtures() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rfc")
+}
+
+fn scratch(name: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("rfc")
+        .join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn text(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+fn ignite(dir: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("run ignite")
+}
+
+fn golden() -> String {
+    std::fs::read_to_string(repository().join(GOLDEN)).unwrap()
+}
+
+/// The import of the fixture with `flags`, run from the repository root: stdout, after
+/// asserting exit 0 and an empty stderr.
+fn import(flags: &[&str]) -> String {
+    let mut args = vec!["rfc", "import", SAMPLE];
+    args.extend(flags);
+    let output = ignite(&repository(), &args);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stderr), "");
+    text(&output.stdout)
+}
+
+/// Each `Requirement` constant of a module text: its id and its whole declaration.
+fn requirements(module: &str) -> Vec<(String, String)> {
+    let mut found = Vec::new();
+    let mut rest = module;
+    while let Some(start) = rest.find("\nconst R") {
+        let decl = &rest[start + 1..];
+        let end = decl.find("\n}\n").map_or(decl.len(), |end| end + 3);
+        let decl = &decl[..end];
+        if let Some(head) = decl.strip_prefix("const ")
+            && let Some((id, _)) = head.split_once(": Requirement = Requirement {")
+        {
+            found.push((id.to_string(), decl.to_string()));
+        }
+        rest = &rest[start + 1 + end..];
+    }
+    found
+}
+
+fn digest(bytes: &[u8]) -> String {
+    format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+#[test]
+fn import_writes_the_golden_twice() {
+    let dir = scratch("twice");
+    let out = dir.join("sample.ignite");
+    let out_arg = out.to_str().unwrap();
+    for run in 1..=2 {
+        let output = ignite(
+            &repository(),
+            &[
+                "rfc",
+                "import",
+                SAMPLE,
+                "--package",
+                "tests.rfc.sample",
+                "--out",
+                out_arg,
+            ],
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "run {run}: {}",
+            text(&output.stderr)
+        );
+        assert_eq!(text(&output.stdout), "", "run {run}");
+        assert_eq!(text(&output.stderr), "", "run {run}");
+        assert_eq!(
+            std::fs::read_to_string(&out).unwrap(),
+            golden(),
+            "run {run}"
+        );
+    }
+    assert_eq!(import(&["--package", "tests.rfc.sample"]), golden());
+}
+
+#[test]
+fn imported_golden_checks_silently() {
+    let output = ignite(&repository(), &["check", GOLDEN]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "");
+    assert_eq!(text(&output.stderr), "");
+}
+
+#[test]
+fn lowercase_must_is_no_requirement() {
+    let source = std::fs::read_to_string(repository().join(SAMPLE)).unwrap();
+    assert!(source.contains("An implementation must keep this lowercase word as prose."));
+    let module = import(&[]);
+    assert!(!module.contains("lowercase"), "{module}");
+    assert!(!module.contains("A client must not care how."), "{module}");
+    assert!(
+        requirements(&module)
+            .iter()
+            .all(|(_, decl)| !decl.contains(" must ")),
+        "{module}"
+    );
+}
+
+#[test]
+fn marked_must_is_one_requirement() {
+    let module = import(&[]);
+    let sentence = "A server MUST echo every line, and it SHOULD do so at once.";
+    let holding: Vec<_> = requirements(&module)
+        .into_iter()
+        .filter(|(_, decl)| decl.contains(sentence))
+        .collect();
+    assert_eq!(holding.len(), 1, "{module}");
+    let (id, decl) = &holding[0];
+    assert_eq!(id, "R2_1_1");
+    assert!(decl.contains("\n  level = Must\n"), "{decl}");
+    assert!(decl.contains("\n  party = Server\n"), "{decl}");
+    assert!(
+        decl.contains(&format!("\n  text = \"{sentence}\"\n")),
+        "{decl}"
+    );
+}
+
+#[test]
+fn sections_filter_keeps_ordinals() {
+    let all = import(&[]);
+    let filtered = import(&["--sections", "2"]);
+    assert!(
+        filtered.starts_with(&format!(
+            "// RFC 7001: A Line Echo & Its Keywords\n// ignite rfc import {SAMPLE} --sections 2\n"
+        )),
+        "{filtered}"
+    );
+    assert!(
+        filtered.contains("\npackage std.rfc.rfc7001\n"),
+        "{filtered}"
+    );
+    let kept: Vec<(String, String)> = requirements(&all)
+        .into_iter()
+        .filter(|(_, decl)| decl.contains("\n  section = \"2."))
+        .collect();
+    let ids: Vec<&str> = kept.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(
+        ids,
+        [
+            "R2_1_1", "R2_1_2", "R2_1_3", "R2_1_4", "R2_2_1", "R2_2_2", "R2_2_3"
+        ]
+    );
+    assert_eq!(requirements(&filtered), kept, "{filtered}");
+    let listed: String = ids.iter().map(|id| format!("    {id},\n")).collect();
+    let listed = format!(
+        "  requirements = [\n{}\n  ]\n",
+        listed.trim_end_matches(",\n")
+    );
+    assert!(filtered.contains(&listed), "{filtered}");
+    assert!(!filtered.contains("R3_"), "{filtered}");
+    assert!(!filtered.contains("R1_1"), "{filtered}");
+}
+
+#[test]
+fn check_matches_the_source() {
+    let output = ignite(
+        &fixtures(),
+        &["rfc", "check", "sample.ignite", "sample.xml"],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "");
+    assert_eq!(text(&output.stderr), "");
+}
+
+#[test]
+fn check_names_the_catalogue_when_a_byte_changes() {
+    let dir = scratch("changed");
+    let mut bytes = std::fs::read(fixtures().join("sample.xml")).unwrap();
+    let recorded = digest(&bytes);
+    assert!(golden().contains(&format!("  digest = \"{recorded}\"\n")));
+    let at = bytes.len() / 2;
+    bytes[at] ^= 0x01;
+    let changed = dir.join("sample.xml");
+    std::fs::write(&changed, &bytes).unwrap();
+    let actual = digest(&bytes);
+    let output = ignite(
+        &fixtures(),
+        &["rfc", "check", "sample.ignite", changed.to_str().unwrap()],
+    );
+    let stderr = text(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    assert_eq!(text(&output.stdout), "");
+    assert_eq!(stderr.lines().count(), 1, "{stderr}");
+    assert!(stderr.starts_with("sample.ignite: "), "{stderr}");
+    assert!(stderr.contains(&recorded), "{stderr}");
+    assert!(stderr.contains(&actual), "{stderr}");
+}
+
+#[test]
+fn check_without_source_is_unchecked() {
+    let output = ignite(&fixtures(), &["rfc", "check", "sample.ignite"]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "sample.ignite: unchecked\n");
+    assert_eq!(text(&output.stderr), "");
+}
+
+#[test]
+fn malformed_xml_is_exit_2() {
+    let dir = scratch("malformed");
+    let cases = [
+        (
+            "unclosed.xml",
+            "<rfc number=\"1\">\n  <middle>\n    <t>text</t>\n</rfc>\n",
+            "2:3",
+        ),
+        (
+            "entity.xml",
+            "<rfc number=\"1\">\n  <middle><t>a&nbsp;b</t></middle>\n</rfc>\n",
+            "2:15",
+        ),
+        (
+            "subset.xml",
+            "<?xml version=\"1.0\"?>\n<!DOCTYPE rfc [\n  <!ENTITY x \"y\">\n]>\n<rfc number=\"1\"/>\n",
+            "2:15",
+        ),
+    ];
+    for (name, source, position) in cases {
+        let path = dir.join(name);
+        std::fs::write(&path, source).unwrap();
+        let path = path.to_str().unwrap();
+        let output = ignite(&dir, &["rfc", "import", path]);
+        let stderr = text(&output.stderr);
+        assert_eq!(output.status.code(), Some(2), "{name}: {stderr}");
+        assert_eq!(text(&output.stdout), "", "{name}");
+        assert_eq!(stderr.lines().count(), 1, "{name}: {stderr}");
+        let prefix = format!("{path}:{position}: ");
+        assert!(stderr.starts_with(&prefix), "{name}: {stderr}");
+        assert!(stderr.trim_end().len() > prefix.len(), "{name}: {stderr}");
+    }
+}
+
+#[test]
+fn missing_file_is_exit_3() {
+    let dir = scratch("missing");
+    let output = ignite(&dir, &["rfc", "import", "absent.xml"]);
+    assert_eq!(output.status.code(), Some(3), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "");
+    let output = ignite(&dir, &["rfc", "check", "absent.ignite"]);
+    assert_eq!(output.status.code(), Some(3), "{}", text(&output.stderr));
+    let catalogue = fixtures().join("sample.ignite");
+    let output = ignite(
+        &dir,
+        &["rfc", "check", catalogue.to_str().unwrap(), "absent.xml"],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", text(&output.stderr));
+    let output = ignite(
+        &repository(),
+        &[
+            "rfc",
+            "import",
+            SAMPLE,
+            "--out",
+            dir.join("no/such/dir/out.ignite").to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", text(&output.stderr));
+}
+
+#[test]
+fn root_without_number_and_catalogue_without_spec_are_exit_2() {
+    let dir = scratch("usage");
+    let root = dir.join("root.xml");
+    std::fs::write(&root, "<rfc version=\"3\">\n</rfc>\n").unwrap();
+    let output = ignite(&dir, &["rfc", "import", root.to_str().unwrap()]);
+    let stderr = text(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(
+        stderr.starts_with(&format!("{}:1:1: ", root.display())),
+        "{stderr}"
+    );
+    let catalogue = dir.join("none.ignite");
+    std::fs::write(&catalogue, "package none\n\nconst X: Int = 1\n").unwrap();
+    let output = ignite(&dir, &["rfc", "check", catalogue.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(2), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "");
+    let output = ignite(&repository(), &["rfc", "import", "--sections", ",", SAMPLE]);
+    assert_eq!(output.status.code(), Some(2), "{}", text(&output.stderr));
+}
+
+// Adversary cases for U3 (`docs/slice.md` 19.8, 19.9). Each drives the importer from the
+// contract's text over a small hand-written fixture `fixtures/rfc/adversary_*.xml` or a
+// source written into a scratch directory.
+
+/// The import of the fixture `fixtures/rfc/<name>` with `flags`, run from the repository
+/// root: stdout, after asserting exit 0 and an empty stderr.
+fn adversary_import(name: &str, flags: &[&str]) -> String {
+    let source = format!("crates/ignite/tests/fixtures/rfc/{name}");
+    let mut args = vec!["rfc", "import", source.as_str()];
+    args.extend(flags);
+    let output = ignite(&repository(), &args);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stderr), "");
+    text(&output.stdout)
+}
+
+/// The declaration `ignite rfc import` writes for one requirement (19.8, "Output" item 4);
+/// `text` is the Text literal as written, quotes included.
+fn requirement(
+    rfc: u32,
+    id: &str,
+    section: &str,
+    ordinal: usize,
+    level: &str,
+    party: &str,
+    text: &str,
+) -> (String, String) {
+    (
+        id.to_string(),
+        format!(
+            "const {id}: Requirement = Requirement {{\n  rfc = {rfc}\n  section = \"{section}\"\n  ordinal = {ordinal}\n  level = {level}\n  party = {party}\n  text = {text}\n}}\n"
+        ),
+    )
+}
+
+/// `ignite rfc import` of `source` written to `dir/name`, run in `dir`.
+fn import_source(dir: &Path, name: &str, source: &[u8], flags: &[&str]) -> Output {
+    std::fs::write(dir.join(name), source).unwrap();
+    let mut args = vec!["rfc", "import", name];
+    args.extend(flags);
+    ignite(dir, &args)
+}
+
+/// 19.8 "Reader": the five predefined entities and numeric references are decoded once
+/// (`&amp;amp;` is the text `&amp;`); comments, processing instructions and CDATA sections
+/// inside a paragraph are skipped; attributes may be single-quoted; a DOCTYPE literal may
+/// hold `[`. "Extraction" 3: marks inside `<em>` and inside an `<xref>` with content count.
+#[test]
+fn adversary_reader_decodes_entities_once_and_skips_markup() {
+    let module = adversary_import("adversary_markup.xml", &[]);
+    assert!(
+        module.starts_with("// RFC 7002: Markup &amp; Entities\n"),
+        "{module}"
+    );
+    assert!(
+        module.contains("\n  title = \"Markup &amp; Entities\"\n"),
+        "{module}"
+    );
+    assert!(
+        module.contains("\n  url = \"https://example.invalid/rfc7002\"\n"),
+        "{module}"
+    );
+    assert_eq!(
+        requirements(&module),
+        [
+            requirement(
+                7002,
+                "R1_1",
+                "1",
+                1,
+                "Must",
+                "Server",
+                "\"A server MUST keep &amp; as written, decode ABC and <x> once.\""
+            ),
+            requirement(
+                7002,
+                "R1_2",
+                "1",
+                2,
+                "MustNot",
+                "Client",
+                "\"A client MUST NOT see [say \\\"R\\\"] as 'data'.\""
+            ),
+            requirement(
+                7002,
+                "R1_3",
+                "1",
+                3,
+                "MustNot",
+                "Sender",
+                "\"A sender MUST NOT split, and a proxy SHALL wait.\""
+            ),
+            requirement(
+                7002,
+                "R1_4",
+                "1",
+                4,
+                "May",
+                "Server",
+                "\"See a server MAY retry.\""
+            ),
+        ],
+        "{module}"
+    );
+}
+
+/// 19.8 "Reader": "the five predefined entities and numeric character references"; "Any
+/// other entity ... is an error", exit 2, one line. XML's CharRef is `&#` digits `;` or
+/// `&#x` hex digits `;`: a sign is no part of it.
+#[test]
+fn adversary_signed_character_reference_is_malformed() {
+    let dir = scratch("adversary-signed");
+    for (name, source) in [
+        ("decimal.xml", "<rfc number=\"1\">A&#+66;C</rfc>\n"),
+        ("hex.xml", "<rfc number=\"1\">A&#x+42;C</rfc>\n"),
+    ] {
+        let output = import_source(&dir, name, source.as_bytes(), &["--url", "u"]);
+        let stderr = text(&output.stderr);
+        assert_eq!(output.status.code(), Some(2), "{name}: {stderr}");
+        assert_eq!(text(&output.stdout), "", "{name}");
+        assert_eq!(stderr.lines().count(), 1, "{name}: {stderr}");
+        assert!(
+            stderr.starts_with(&format!("{name}:1:18: ")),
+            "{name}: {stderr}"
+        );
+    }
+}
+
+/// 19.8 "Reader": "The error is `<file>:<line>:<col>: <message>` on stderr, exit 2"; row 23:
+/// "one line `<file>:<line>:<col>: <message>`". An unescaped `&` in prose whose next `;` is
+/// on a later line must still give one line.
+#[test]
+fn adversary_entity_error_is_one_line() {
+    let dir = scratch("adversary-entity-line");
+    let source = "<rfc number=\"1\">Tom & Jerry\nsay; hi</rfc>\n";
+    let output = import_source(&dir, "amp.xml", source.as_bytes(), &["--url", "u"]);
+    let stderr = text(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert_eq!(text(&output.stdout), "");
+    assert!(stderr.starts_with("amp.xml:1:21: "), "{stderr}");
+    assert_eq!(stderr.lines().count(), 1, "{stderr}");
+}
+
+/// 19.8 "Extraction" 3: a block's text is its character data with the markup removed, an
+/// `<xref>` or `<eref>` with content rendered as the content, and then "Runs of whitespace
+/// become one space". Whitespace at the edge of an element's content is still whitespace of
+/// the block, so words on either side stay apart.
+#[test]
+fn adversary_inline_element_content_keeps_its_spaces() {
+    let dir = scratch("adversary-inline-space");
+    let source = "<rfc number=\"7006\">\n  <link rel=\"alternate\" href=\"u\"/>\n  <middle>\n    <section pn=\"section-1\">\n      <t pn=\"section-1-1\">A server <bcp14>MUST</bcp14> read<xref target=\"s\"> Section 3 </xref>and<eref target=\"u\"> the notes </eref>now.</t>\n    </section>\n  </middle>\n</rfc>\n";
+    let output = import_source(&dir, "space.xml", source.as_bytes(), &[]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    let module = text(&output.stdout);
+    assert_eq!(
+        requirements(&module),
+        [requirement(
+            7006,
+            "R1_1",
+            "1",
+            1,
+            "Must",
+            "Server",
+            "\"A server MUST read Section 3 and the notes now.\""
+        )],
+        "{module}"
+    );
+}
+
+/// 19.8 "Extraction" 2, 5 and 7: every keyword's level, the first mark's keyword for a
+/// sentence with two, no requirement from lowercase keywords, the last party word before
+/// the first mark (not after it), a `<th>` block, and no requirement from a `<dt>`.
+#[test]
+fn adversary_every_keyword_gives_its_level_and_party() {
+    let module = adversary_import("adversary_levels.xml", &[]);
+    let found = requirements(&module);
+    let expected = [
+        (
+            "R1_1",
+            "1",
+            1,
+            "ShallNot",
+            "Sender",
+            "The sender SHALL NOT wait.",
+        ),
+        (
+            "R1_2",
+            "1",
+            2,
+            "ShouldNot",
+            "Server",
+            "Clients and servers SHOULD NOT retry.",
+        ),
+        (
+            "R1_3",
+            "1",
+            3,
+            "NotRecommended",
+            "Any",
+            "Echoing is NOT RECOMMENDED for caches.",
+        ),
+        (
+            "R1_4",
+            "1",
+            4,
+            "Recommended",
+            "Any",
+            "Caching is RECOMMENDED.",
+        ),
+        (
+            "R1_5",
+            "1",
+            5,
+            "Required",
+            "Client",
+            "A user agent is REQUIRED to stop.",
+        ),
+        ("R1_6", "1", 6, "Optional", "Any", "A reply is OPTIONAL."),
+        ("R1_7", "1", 7, "May", "Any", "It MAY be sent by a server."),
+        (
+            "R1_8",
+            "1",
+            8,
+            "Should",
+            "Proxy",
+            "A gateway SHOULD log it and MUST drop it.",
+        ),
+        (
+            "R2_1",
+            "2",
+            1,
+            "Must",
+            "Recipient",
+            "A recipient MUST read the head.",
+        ),
+    ]
+    .map(|(id, section, ordinal, level, party, sentence)| {
+        requirement(
+            7003,
+            id,
+            section,
+            ordinal,
+            level,
+            party,
+            &format!("\"{sentence}\""),
+        )
+    });
+    assert_eq!(found, expected, "{module}");
+    assert!(!module.contains("lowercase"), "{module}");
+    assert!(!module.contains("never see this term"), "{module}");
+}
+
+/// 19.8 "Extraction" 1 and 6 and "--sections": the innermost section's `pn`, ordinals per
+/// section over the whole file, blocks after a subsection back in their own section; a
+/// requirement is kept when its section equals an entry or starts with it followed by `.`,
+/// so `2` keeps neither `20` nor anything outside 2, and overlapping entries keep each
+/// requirement once.
+#[test]
+fn adversary_nested_and_overlapping_sections() {
+    let all = adversary_import("adversary_sections.xml", &[]);
+    let words = ["one", "two", "three", "four", "five", "six", "seven"];
+    let places = [
+        ("R2_1", "2", 1),
+        ("R2_1_1", "2.1", 1),
+        ("R2_1_1_1", "2.1.1", 1),
+        ("R2_1_2", "2.1", 2),
+        ("R2_2", "2", 2),
+        ("R20_1", "20", 1),
+        ("R3_1", "3", 1),
+    ];
+    let expected: Vec<_> = places
+        .iter()
+        .zip(words)
+        .map(|(&(id, section, ordinal), word)| {
+            requirement(
+                7004,
+                id,
+                section,
+                ordinal,
+                "Must",
+                "Server",
+                &format!("\"A server MUST do {word}.\""),
+            )
+        })
+        .collect();
+    assert_eq!(requirements(&all), expected, "{all}");
+    let two = adversary_import("adversary_sections.xml", &["--sections", "2"]);
+    assert_eq!(requirements(&two), expected[..5], "{two}");
+    let overlapping = adversary_import("adversary_sections.xml", &["--sections", "2.1,2,2.1.1"]);
+    assert_eq!(requirements(&overlapping), expected[..5], "{overlapping}");
+    let picked = adversary_import("adversary_sections.xml", &["--sections", "2.1.1,20"]);
+    assert_eq!(
+        requirements(&picked),
+        [expected[2].clone(), expected[5].clone()],
+        "{picked}"
+    );
+    assert!(
+        picked.contains("  requirements = [\n    R2_1_1_1,\n    R20_1\n  ]\n"),
+        "{picked}"
+    );
+}
+
+/// 19.8 "Output is deterministic" and "Digest": a CRLF copy of the sample imports twice to
+/// identical bytes, to the same module as the LF original except the digest line, and the
+/// digest is the sha256 of the CRLF bytes as they are on disk.
+#[test]
+fn adversary_crlf_source_imports_the_same_module() {
+    let lf = std::fs::read_to_string(fixtures().join("sample.xml")).unwrap();
+    assert!(!lf.contains('\r'));
+    let crlf = lf.replace('\n', "\r\n");
+    let lf_dir = scratch("adversary-lf");
+    let crlf_dir = scratch("adversary-crlf");
+    let flags = ["--package", "tests.rfc.sample"];
+    let lf_out = import_source(&lf_dir, "sample.xml", lf.as_bytes(), &flags);
+    assert_eq!(lf_out.status.code(), Some(0), "{}", text(&lf_out.stderr));
+    let mut modules = Vec::new();
+    for run in 1..=2 {
+        let output = import_source(&crlf_dir, "sample.xml", crlf.as_bytes(), &flags);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "run {run}: {}",
+            text(&output.stderr)
+        );
+        assert_eq!(text(&output.stderr), "", "run {run}");
+        modules.push(output.stdout);
+    }
+    assert_eq!(modules[0], modules[1]);
+    let crlf_module = text(&modules[0]);
+    let lf_module = text(&lf_out.stdout);
+    let crlf_digest = format!("  digest = \"{}\"\n", digest(crlf.as_bytes()));
+    let lf_digest = format!("  digest = \"{}\"\n", digest(lf.as_bytes()));
+    assert!(crlf_module.contains(&crlf_digest), "{crlf_module}");
+    assert!(lf_module.contains(&lf_digest), "{lf_module}");
+    assert_eq!(crlf_module.replace(&crlf_digest, &lf_digest), lf_module);
+}
+
+/// 19.8 "Output": "Texts escape `\` as `\\`, `"` as `\"`, `{` as `{{` and `}` as `}}`";
+/// a title, a URL and a text full of them, non-ASCII and C1/DEL control characters, write a
+/// module that `ignite check` passes silently.
+#[test]
+fn adversary_escaped_output_checks_silently() {
+    let module = adversary_import("adversary_escapes.xml", &["--package", "tests.rfc.escapes"]);
+    assert!(
+        module.contains("\n  title = \"Esc {{a}} \\\"b\\\" \\\\c\"\n"),
+        "{module}"
+    );
+    assert!(
+        module.contains("\n  url = \"https://example.invalid/rfc7005?a=\\\"b\\\"&c={{d}}\"\n"),
+        "{module}"
+    );
+    assert_eq!(
+        requirements(&module),
+        [requirement(
+            7005,
+            "R1_1",
+            "1",
+            1,
+            "Must",
+            "Server",
+            "\"A server MUST keep \\\\ and \\\\\\\\ and \\\"q\\\" and {{x}} and {{{{y}}}} and }}}} and caf\u{e9} \u{65e5}\u{672c} and \\u{80}\\u{9f}\\u{7f} as data.\""
+        )],
+        "{module}"
+    );
+    let dir = scratch("adversary-escapes");
+    let path = dir.join("escapes.ignite");
+    std::fs::write(&path, &module).unwrap();
+    let output = ignite(&repository(), &["check", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "");
+    assert_eq!(text(&output.stderr), "");
+}
+
+/// 19.8 "Output" item 3 with no requirement left (`--sections` matching nothing): the
+/// module still checks silently.
+#[test]
+fn adversary_empty_selection_checks_silently() {
+    let module = adversary_import(
+        "adversary_levels.xml",
+        &["--sections", "9", "--package", "tests.rfc.empty"],
+    );
+    assert!(requirements(&module).is_empty(), "{module}");
+    assert!(module.contains("\n  requirements = []\n"), "{module}");
+    let dir = scratch("adversary-empty");
+    let path = dir.join("empty.ignite");
+    std::fs::write(&path, &module).unwrap();
+    let output = ignite(&repository(), &["check", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stderr), "");
+}
+
+/// 19.8 "`rfc check`": it compares only the single `Spec`'s `digest` with the digest of
+/// SOURCE's bytes, for any source file. A hand-edited text or list keeps exit 0; a wrong
+/// digest is exit 1 and one line naming the catalogue and both digests; no SOURCE is
+/// `unchecked`; two `Spec` constants or a `Spec` without `digest` are exit 2.
+#[test]
+fn adversary_check_reads_only_the_digest() {
+    let dir = scratch("adversary-check");
+    std::fs::copy(fixtures().join("sample.xml"), dir.join("sample.xml")).unwrap();
+    let golden = golden();
+    let sentence = "A server MUST echo every line, and it SHOULD do so at once.";
+    assert!(golden.contains(sentence));
+    assert!(golden.contains("    R2_1_2,\n"));
+    let edited = golden
+        .replace(sentence, "Edited by hand.")
+        .replacen("    R2_1_2,\n", "", 1);
+    std::fs::write(dir.join("edited.ignite"), &edited).unwrap();
+    let output = ignite(&dir, &["rfc", "check", "edited.ignite", "sample.xml"]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "");
+    assert_eq!(text(&output.stderr), "");
+    let output = ignite(&dir, &["rfc", "check", "edited.ignite"]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "edited.ignite: unchecked\n");
+    assert_eq!(text(&output.stderr), "");
+
+    let recorded = digest(&std::fs::read(dir.join("sample.xml")).unwrap());
+    let wrong = format!("sha256:{}", "0".repeat(64));
+    std::fs::write(dir.join("wrong.ignite"), golden.replace(&recorded, &wrong)).unwrap();
+    let output = ignite(&dir, &["rfc", "check", "wrong.ignite", "sample.xml"]);
+    let stderr = text(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    assert_eq!(text(&output.stdout), "");
+    assert_eq!(stderr.lines().count(), 1, "{stderr}");
+    assert!(stderr.contains("wrong.ignite"), "{stderr}");
+    assert!(stderr.contains(&wrong), "{stderr}");
+    assert!(stderr.contains(&recorded), "{stderr}");
+
+    let notes = b"plain text\r\nof an old RFC\r\n";
+    std::fs::write(dir.join("rfc1.txt"), notes).unwrap();
+    std::fs::write(
+        dir.join("prose.ignite"),
+        golden.replace(&recorded, &digest(notes)),
+    )
+    .unwrap();
+    let output = ignite(&dir, &["rfc", "check", "prose.ignite", "rfc1.txt"]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stderr), "");
+
+    let second = format!(
+        "{golden}\nconst RFC7002: Spec = Spec {{\n  rfc = 7002\n  title = \"t\"\n  url = \"u\"\n  digest = \"{recorded}\"\n  requirements = []\n}}\n"
+    );
+    std::fs::write(dir.join("two.ignite"), second).unwrap();
+    let output = ignite(&dir, &["rfc", "check", "two.ignite", "sample.xml"]);
+    assert_eq!(output.status.code(), Some(2), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "");
+
+    let line = format!("  digest = \"{recorded}\"\n");
+    assert!(golden.contains(&line));
+    std::fs::write(dir.join("nodigest.ignite"), golden.replace(&line, "")).unwrap();
+    let output = ignite(&dir, &["rfc", "check", "nodigest.ignite"]);
+    assert_eq!(output.status.code(), Some(2), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), "");
+}
+
+/// 19.8 "Reader": "a file over 16 MiB is an error", `<file>:<line>:<col>: <message>`, exit 2;
+/// a file of exactly 16 MiB is read.
+#[test]
+fn adversary_size_limit_is_sixteen_mib() {
+    const LIMIT: usize = 16 << 20;
+    let dir = scratch("adversary-size");
+    let head = "<rfc number=\"1\">\n<!--";
+    let tail = "-->\n</rfc>\n";
+    let source = |size: usize| {
+        let mut bytes = head.as_bytes().to_vec();
+        bytes.resize(size - tail.len(), b'x');
+        bytes.extend_from_slice(tail.as_bytes());
+        assert_eq!(bytes.len(), size);
+        bytes
+    };
+    let output = import_source(&dir, "limit.xml", &source(LIMIT), &["--url", "u"]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert!(
+        text(&output.stdout).contains("\n  requirements = []\n"),
+        "{}",
+        text(&output.stdout)
+    );
+    let output = import_source(&dir, "over.xml", &source(LIMIT + 1), &["--url", "u"]);
+    let stderr = text(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert_eq!(text(&output.stdout), "");
+    assert_eq!(stderr.lines().count(), 1, "{stderr}");
+    assert!(stderr.starts_with("over.xml:1:1: "), "{stderr}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// 19.8: "Exit 0 when the module is written; 2 on a usage error". A `--package` that is no
+/// package name writes a module whose first declaration does not parse; it should be a
+/// usage error instead. Outside the letter of 19.8, which does not list `--package` values.
+#[test]
+fn adversary_invalid_package_is_a_usage_error() {
+    let output = ignite(
+        &repository(),
+        &["rfc", "import", SAMPLE, "--package", "not a package"],
+    );
+    let module = text(&output.stdout);
+    assert_eq!(output.status.code(), Some(2), "{module}");
+    assert_eq!(module, "");
+}
+
+/// The 16 MiB bound of 19.8 bounds the work: a 2.4 MB block of 100,000 marks and 100,000
+/// sentences without one imports in well under 20 s. Extraction matches every mark of a
+/// block against every sentence, which is quadratic in the block.
+#[test]
+fn adversary_import_time_is_linear_in_the_block() {
+    let dir = scratch("adversary-quadratic");
+    let mut source = String::from(
+        "<rfc number=\"7007\">\n<middle>\n<section pn=\"section-1\">\n<t pn=\"section-1-1\">A",
+    );
+    for _ in 0..100_000 {
+        source.push_str(" <bcp14>MAY</bcp14>");
+    }
+    source.push('.');
+    for _ in 0..100_000 {
+        source.push_str(" B c.");
+    }
+    source.push_str("</t>\n</section>\n</middle>\n</rfc>\n");
+    let start = std::time::Instant::now();
+    let output = import_source(&dir, "many.xml", source.as_bytes(), &["--url", "u"]);
+    let elapsed = start.elapsed();
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert_eq!(requirements(&text(&output.stdout)).len(), 1);
+    assert!(
+        elapsed < std::time::Duration::from_secs(20),
+        "import took {elapsed:?}"
+    );
+}
+
+// The committed catalogues of `std/rfc/` (19.4, 19.9, D4, D5; rows 25 to 30 of 19.0).
+
+/// The five catalogues, as `std/rfc/<name>.ignite`.
+const CATALOGUES: [&str; 5] = ["rfc854", "rfc855", "rfc1143", "rfc9112", "rfc9110"];
+
+/// The catalogues `ignite rfc import` writes, with their vendored sources (D5).
+const IMPORTED: [(&str, &str); 2] = [
+    ("std/rfc/rfc9112.ignite", "docs/rfc/rfc9112.xml"),
+    ("std/rfc/rfc9110.ignite", "docs/rfc/rfc9110.xml"),
+];
+
+/// The prose catalogues and the sha256 of each published text file (19.9).
+const PROSE: [(&str, &str); 3] = [
+    (
+        "rfc854",
+        "sha256:f9cb6d4a7d7a67e5a1ac5ae3c2962b1183fb26119632a1617f3c8379820dfb10",
+    ),
+    (
+        "rfc855",
+        "sha256:c8c4744c9fa7650c0ae78d140f560b26e26b2935391e1ff624476c5fdbf4e03a",
+    ),
+    (
+        "rfc1143",
+        "sha256:4d2ef5878b0b88742c860fc777d6d91ad61580633fe277eae06410a6eee04bdf",
+    ),
+];
+
+/// D4's RFC 9110 server subset.
+const RFC9110_SUBSET: [&str; 9] = [
+    "5", "6", "7.2", "9.1", "9.2", "9.3.1", "9.3.2", "9.3.3", "9.3.5",
+];
+
+fn catalogue(name: &str) -> String {
+    std::fs::read_to_string(repository().join("std/rfc").join(format!("{name}.ignite")))
+        .unwrap_or_else(|error| panic!("std/rfc/{name}.ignite: {error}"))
+}
+
+/// The value of `field` in one constant's declaration as the catalogues write it, one field
+/// per line.
+fn field<'a>(decl: &'a str, field: &str) -> Option<&'a str> {
+    let marker = format!("\n  {field} = ");
+    let start = decl.find(&marker)? + marker.len();
+    let rest = &decl[start..];
+    Some(&rest[..rest.find('\n').unwrap_or(rest.len())])
+}
+
+/// The text a Text literal without interpolation denotes (19.8's escapes).
+fn unescape(literal: &str) -> String {
+    let inner = literal
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+        .unwrap_or_else(|| panic!("not a Text literal: {literal}"));
+    let mut out = String::new();
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => out.push(chars.next().expect("escape at the end")),
+            '{' | '}' => {
+                assert_eq!(chars.next(), Some(c), "a lone brace in {literal}");
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// The names the module's `Spec` lists in `requirements`, in order.
+fn listed(module: &str) -> Vec<String> {
+    let start = module
+        .find("\n  requirements = [\n")
+        .expect("a requirements list")
+        + "\n  requirements = [\n".len();
+    let end = start + module[start..].find("\n  ]\n").expect("the list's end");
+    module[start..end]
+        .lines()
+        .map(|line| line.trim().trim_end_matches(',').to_string())
+        .collect()
+}
+
+/// The levels the word table of 19.4 gives the words of a sentence, in order.
+fn word_levels(text: &str) -> Vec<&'static str> {
+    let words: Vec<String> = text
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .filter(|word| !word.is_empty())
+        .map(|word| word.to_ascii_lowercase())
+        .collect();
+    let mut found = Vec::new();
+    let mut at = 0;
+    while at < words.len() {
+        let next = words.get(at + 1).map(String::as_str);
+        let (level, width) = match (words[at].as_str(), next) {
+            ("must", Some("not" | "never")) => ("MustNot", 2),
+            ("must", _) => ("Must", 1),
+            ("should", Some("not")) => ("ShouldNot", 2),
+            ("should", _) => ("Should", 1),
+            ("required", _) => ("Required", 1),
+            ("necessary", _) => ("Must", 1),
+            ("need", Some("be")) => ("Must", 2),
+            ("desirable", _) => ("Should", 1),
+            ("may", _) => ("May", 1),
+            _ => {
+                at += 1;
+                continue;
+            }
+        };
+        found.push(level);
+        at += width;
+    }
+    found
+}
+
+/// The level class of 19.3, strongest first.
+fn class(level: &str) -> u8 {
+    match level {
+        "Must" | "MustNot" | "Required" | "Shall" | "ShallNot" => 0,
+        "Should" | "ShouldNot" | "Recommended" | "NotRecommended" => 1,
+        "May" | "Optional" => 2,
+        other => panic!("no level `{other}`"),
+    }
+}
+
+/// Whether `section` is `entry` or below it (19.5's `sections` rule).
+fn within(section: &str, entry: &str) -> bool {
+    section == entry || section.starts_with(&format!("{entry}."))
+}
+
+/// The `section` of each requirement of a module.
+fn sections(module: &str) -> Vec<(String, String)> {
+    requirements(module)
+        .into_iter()
+        .map(|(id, decl)| {
+            let section = unescape(field(&decl, "section").expect("a section"));
+            (id, section)
+        })
+        .collect()
+}
+
+#[test]
+fn committed_catalogues_check_silently() {
+    for name in CATALOGUES {
+        let path = format!("std/rfc/{name}.ignite");
+        let output = ignite(&repository(), &["check", &path]);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{path}: {}",
+            text(&output.stderr)
+        );
+        assert_eq!(text(&output.stdout), "", "{path}");
+        assert_eq!(text(&output.stderr), "", "{path}");
+    }
+}
+
+#[test]
+fn committed_catalogues_match_their_sources() {
+    for (catalogue, source) in IMPORTED {
+        let output = ignite(&repository(), &["rfc", "check", catalogue, source]);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{catalogue}: {}",
+            text(&output.stderr)
+        );
+        assert_eq!(text(&output.stdout), "", "{catalogue}");
+        assert_eq!(text(&output.stderr), "", "{catalogue}");
+    }
+    for (name, digest) in PROSE {
+        let path = format!("std/rfc/{name}.ignite");
+        let output = ignite(&repository(), &["rfc", "check", &path]);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{path}: {}",
+            text(&output.stderr)
+        );
+        assert_eq!(text(&output.stdout), format!("{path}: unchecked\n"));
+        assert_eq!(text(&output.stderr), "", "{path}");
+        assert_eq!(
+            field(&catalogue(name), "digest"),
+            Some(format!("\"{digest}\"").as_str()),
+            "{path}"
+        );
+    }
+}
+
+#[test]
+fn prose_catalogues_quote_their_rfcs() {
+    let rfc855 = [
+        (
+            "RP1_1",
+            "Should",
+            "Any",
+            "Nevertheless, it is envisioned that options which prove to be generally useful will eventually be supported by many hosts; therefore it is desirable that options should be carefully documented and well publicized.",
+        ),
+        (
+            "RP1_2",
+            "Must",
+            "Any",
+            "In addition, it is necessary to insure that a single option code is not used for several different options.",
+        ),
+        (
+            "RP1_3",
+            "Required",
+            "Any",
+            "The individual responsible for assignment of option codes may waive the requirement for complete documentation for some cases of experimentation, but in general documentation will be required prior to code assignment.",
+        ),
+        (
+            "RP1_4",
+            "May",
+            "Any",
+            "Options will be publicized by publishing their documentation as RFCs; inventors of options may, of course, publicize them in other ways as well.",
+        ),
+        (
+            "RP1_5",
+            "Should",
+            "Any",
+            "Documentation of options should contain at least the following sections:",
+        ),
+        (
+            "RP1_6",
+            "Should",
+            "Any",
+            "The meaning of each possible TELNET command relevant to this option should be described.",
+        ),
+        (
+            "RP2_1",
+            "Must",
+            "Any",
+            "The default assumptions for hosts which do not implement, or use, the option must be described.",
+        ),
+        (
+            "RP2_2",
+            "Should",
+            "Any",
+            "Therefore, a more complete description should be furnished in most cases.",
+        ),
+        (
+            "RP2_3",
+            "May",
+            "Recipient",
+            "On the other hand, the receiver may locate the end of a parameter string by searching for the SE command (i.e., the string IAC SE), even if the receiver is unable to parse the parameters.",
+        ),
+        (
+            "RP2_4",
+            "May",
+            "Any",
+            "Of course, either party may refuse to pursue further subnegotiation at any time by sending a WON'T or DON'T to the other party.",
+        ),
+        (
+            "RP3_1",
+            "Must",
+            "Any",
+            "Designers of options requiring \"subnegotiation\" must take great care to avoid unending loops in the subnegotiation process.",
+        ),
+        (
+            "RP3_2",
+            "Must",
+            "Sender",
+            "Finally, if parameters in an option \"subnegotiation\" include a byte with a value of 255, it is necessary to double this byte in accordance the general TELNET rules.",
+        ),
+    ];
+    let module = catalogue("rfc855");
+    let found: Vec<(String, String, String, String)> = requirements(&module)
+        .into_iter()
+        .map(|(id, decl)| {
+            (
+                id,
+                field(&decl, "level").unwrap_or_default().to_string(),
+                field(&decl, "party").unwrap_or_default().to_string(),
+                unescape(field(&decl, "text").expect("a text")),
+            )
+        })
+        .collect();
+    let expected: Vec<(String, String, String, String)> = rfc855
+        .iter()
+        .map(|(id, level, party, text)| {
+            (
+                id.to_string(),
+                level.to_string(),
+                party.to_string(),
+                text.to_string(),
+            )
+        })
+        .collect();
+    assert_eq!(found, expected);
+
+    let rfc854 = catalogue("rfc854");
+    let (_, decl) = requirements(&rfc854)
+        .into_iter()
+        .find(|(id, _)| id == "RP14_1")
+        .expect("RFC854.RP14_1");
+    assert_eq!(field(&decl, "source"), Some("Prose"), "{decl}");
+    assert_eq!(field(&decl, "level"), Some("Must"), "{decl}");
+    assert_eq!(field(&decl, "party"), Some("Any"), "{decl}");
+    assert!(
+        unescape(field(&decl, "text").unwrap())
+            .contains("only the IAC need be doubled to be sent as data"),
+        "{decl}"
+    );
+
+    for (name, _) in PROSE {
+        let module = catalogue(name);
+        let rfc = name.strip_prefix("rfc").unwrap();
+        let found = requirements(&module);
+        assert!(!found.is_empty(), "{name}");
+        let ids: Vec<String> = found.iter().map(|(id, _)| id.clone()).collect();
+        assert_eq!(
+            listed(&module),
+            ids,
+            "{name}: the Spec lists every requirement once, in order"
+        );
+        let mut ordinals: Vec<(String, i64)> = Vec::new();
+        for (id, decl) in &found {
+            assert_eq!(field(decl, "rfc"), Some(rfc), "{name}.{id}");
+            assert_eq!(field(decl, "source"), Some("Prose"), "{name}.{id}");
+            let section = unescape(field(decl, "section").expect("a section"));
+            let ordinal: i64 = field(decl, "ordinal").unwrap().parse().unwrap();
+            let previous = ordinals
+                .iter()
+                .rev()
+                .find(|(at, _)| *at == section)
+                .map_or(0, |(_, ordinal)| *ordinal);
+            assert_eq!(
+                ordinal,
+                previous + 1,
+                "{name}.{id}: ordinals count per section"
+            );
+            ordinals.push((section.clone(), ordinal));
+            assert_eq!(
+                *id,
+                format!("R{}_{ordinal}", section.replace('.', "_").to_uppercase()),
+                "{name}: the id of section {section}, ordinal {ordinal}"
+            );
+            if name == "rfc1143" {
+                assert!(
+                    section.chars().all(|c| c.is_ascii_digit() || c == '.'),
+                    "{name}.{id}: RFC 1143 numbers its sections"
+                );
+            } else {
+                assert!(
+                    section.starts_with('p') && section[1..].parse::<u32>().is_ok(),
+                    "{name}.{id}: RFC {rfc} numbers no sections, `section` is the page"
+                );
+            }
+            let level = field(decl, "level").expect("a level");
+            let text = unescape(field(decl, "text").expect("a text"));
+            let words = word_levels(&text);
+            let strongest = words.iter().map(|level| class(level)).min();
+            let allowed: Vec<&str> = words
+                .iter()
+                .copied()
+                .filter(|word| Some(class(word)) == strongest)
+                .collect();
+            assert!(
+                allowed.contains(&level),
+                "{name}.{id}: level {level}, but the word table gives {allowed:?} for {text:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn rfc9112_holds_sections_2_to_9() {
+    let module = catalogue("rfc9112");
+    let found = sections(&module);
+    assert!(!found.is_empty());
+    for (id, section) in &found {
+        let top: u32 = section.split('.').next().unwrap().parse().unwrap();
+        assert!((2..=9).contains(&top), "{id}: section {section}");
+    }
+    for top in 2..=9 {
+        assert!(
+            found
+                .iter()
+                .any(|(_, section)| within(section, &top.to_string())),
+            "no requirement from section {top}"
+        );
+    }
+    let expected = [
+        (
+            "R7_1_2",
+            "A recipient MUST be able to parse and decode the chunked transfer coding.",
+        ),
+        (
+            "R3_2_6",
+            "A server MUST respond with a 400 (Bad Request) status code to any HTTP/1.1 request message that lacks a Host header field and to any request message that contains more than one Host header field line or a Host header field with an invalid field value.",
+        ),
+    ];
+    for (id, sentence) in expected {
+        let (_, decl) = requirements(&module)
+            .into_iter()
+            .find(|(found, _)| found == id)
+            .unwrap_or_else(|| panic!("RFC9112.{id}"));
+        assert_eq!(field(&decl, "level"), Some("Must"), "{decl}");
+        assert_eq!(unescape(field(&decl, "text").unwrap()), sentence, "{decl}");
+    }
+}
+
+#[test]
+fn rfc9110_holds_exactly_the_server_subset() {
+    let module = catalogue("rfc9110");
+    let found = sections(&module);
+    for (id, section) in &found {
+        assert!(
+            RFC9110_SUBSET.iter().any(|entry| within(section, entry)),
+            "{id}: section {section} is outside D4's subset"
+        );
+    }
+    let output = ignite(&repository(), &["rfc", "import", "docs/rfc/rfc9110.xml"]);
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    let whole = sections(&text(&output.stdout));
+    for entry in RFC9110_SUBSET {
+        if whole.iter().any(|(_, section)| within(section, entry)) {
+            assert!(
+                found.iter().any(|(_, section)| within(section, entry)),
+                "section {entry} has a BCP 14 mark and no requirement"
+            );
+        }
+    }
+    let kept: Vec<&String> = whole
+        .iter()
+        .filter(|(_, section)| RFC9110_SUBSET.iter().any(|entry| within(section, entry)))
+        .map(|(id, _)| id)
+        .collect();
+    let ids: Vec<&String> = found.iter().map(|(id, _)| id).collect();
+    assert_eq!(ids, kept);
+}
+
+#[test]
+fn reimport_changes_only_party_lines() {
+    for (catalogue, _) in IMPORTED {
+        let committed = std::fs::read_to_string(repository().join(catalogue)).unwrap();
+        let command = committed
+            .lines()
+            .nth(1)
+            .and_then(|line| line.strip_prefix("// ignite rfc import "))
+            .unwrap_or_else(|| panic!("{catalogue}: no import command in its header"));
+        assert!(
+            !command.contains(['\'', '"', '\\']),
+            "{catalogue}: {command}"
+        );
+        let mut args = vec!["rfc", "import"];
+        args.extend(command.split(' '));
+        let output = ignite(&repository(), &args);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{catalogue}: {}",
+            text(&output.stderr)
+        );
+        let imported = text(&output.stdout);
+        assert_eq!(
+            imported.lines().count(),
+            committed.lines().count(),
+            "{catalogue}"
+        );
+        assert_eq!(imported.ends_with('\n'), committed.ends_with('\n'));
+        for (number, (fresh, kept)) in imported.lines().zip(committed.lines()).enumerate() {
+            if fresh != kept {
+                assert!(
+                    fresh.starts_with("  party = ") && kept.starts_with("  party = "),
+                    "{catalogue}:{}: the review changed more than a party:\n-{fresh}\n+{kept}",
+                    number + 1
+                );
+            }
+        }
+    }
+}
+
+// Adversary cases for U4 (slice 15, `docs/slice.md` 19.4, 19.9, rows 25 to 30).
+
+/// Sentences of RFC 854 that hold a word of 19.4's table and say what an implementation or
+/// an option designer must, should or may do, with the page each starts on and the level the
+/// table gives. Each reads like a sentence the catalogue does hold: three say "not required"
+/// as `RP7_1` does, one "is to have required meaning", one "must be done", one is addressed
+/// to option designers with "should not" as `RP3_4` is with "should never".
+const RFC854_UNCATALOGUED: [(&str, &str, &str); 7] = [
+    (
+        "p3",
+        "ShouldNot",
+        "Option designers should not feel constrained by the somewhat limited syntax available for option negotiation.",
+    ),
+    (
+        "p4",
+        "Required",
+        "It is hoped, but not absolutely required, that options will further this intent.",
+    ),
+    (
+        "p4",
+        "Required",
+        "\"Echoes\" will not be expected to traverse the network (although options exist to enable a \"remote\" echoing mode of operation, no host is required to implement this option).",
+    ),
+    (
+        "p6",
+        "Required",
+        "Finally, for terminal-to-terminal communication, GAs may be required in neither, one, or both directions.",
+    ),
+    (
+        "p11",
+        "Required",
+        "In addition, the following codes shall have defined, but not required, effects on the NVT printer.",
+    ),
+    (
+        "p12",
+        "Required",
+        "The pair DM-Urgent is to have required meaning as defined previously.",
+    ),
+    (
+        "p13",
+        "Must",
+        "The spirit of these \"extra\" keys, and also the printer format effectors, is that they should represent a natural extension of the mapping that already must be done from \"NVT\" into \"local\".",
+    ),
+];
+
+fn collapse(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// A plain-text RFC with its page headers and footers removed and its whitespace collapsed,
+/// with the page and the last numbered section heading of each word.
+struct PlainText {
+    text: String,
+    starts: Vec<usize>,
+    pages: Vec<u32>,
+    sections: Vec<String>,
+}
+
+impl PlainText {
+    fn read(raw: &str, rfc: &str) -> PlainText {
+        let header = format!("RFC {rfc} ");
+        let mut out = PlainText {
+            text: String::new(),
+            starts: Vec::new(),
+            pages: Vec::new(),
+            sections: Vec::new(),
+        };
+        let mut page = 1;
+        let mut section = String::new();
+        for line in raw.lines() {
+            let line = line.trim_start_matches('\u{c}');
+            if line.contains("[Page ") && line.trim_end().ends_with(']') {
+                page += 1;
+                continue;
+            }
+            if line.starts_with(&header) {
+                continue;
+            }
+            if let Some((number, _)) = line.split_once(". ")
+                && !number.is_empty()
+                && number.chars().all(|c| c.is_ascii_digit())
+            {
+                section = number.to_string();
+            }
+            for word in line.split_whitespace() {
+                if !out.text.is_empty() {
+                    out.text.push(' ');
+                }
+                out.starts.push(out.text.len());
+                out.pages.push(page);
+                out.sections.push(section.clone());
+                out.text.push_str(word);
+            }
+        }
+        out
+    }
+
+    /// The word index at which `sentence` first starts, if it occurs.
+    fn find(&self, sentence: &str) -> Option<usize> {
+        let at = self.text.find(&collapse(sentence))?;
+        Some(self.starts.partition_point(|start| *start <= at) - 1)
+    }
+}
+
+/// Adversary (19.4, 19.9, D5, row 27): every `text` of the three prose catalogues is in its
+/// published text file, whitespace aside; `section` is the page on which the sentence starts
+/// (RFC 854, 855) or its numbered section (RFC 1143); declaration order is document order. The
+/// sources are not vendored (D5), so the case reads them from `IGNITE_RFC_TEXT_DIR`
+/// (`rfc854.txt`, `rfc855.txt`, `rfc1143.txt`, each checked against the catalogue's digest)
+/// and fails when that is unset. It also checks the quotations of
+/// [`RFC854_UNCATALOGUED`] against the same file.
+#[test]
+#[ignore = "adversary: run with --ignored and IGNITE_RFC_TEXT_DIR set to the unvendored text files of 19.9"]
+fn adversary_prose_texts_are_verbatim_on_their_cited_pages() {
+    let dir = std::env::var_os("IGNITE_RFC_TEXT_DIR")
+        .map(PathBuf::from)
+        .expect("IGNITE_RFC_TEXT_DIR names a directory with rfc854.txt, rfc855.txt, rfc1143.txt");
+    let mut problems = Vec::new();
+    for (name, digest_19_9) in PROSE {
+        let rfc = name.strip_prefix("rfc").unwrap();
+        let bytes = std::fs::read(dir.join(format!("{name}.txt"))).unwrap();
+        assert_eq!(digest(&bytes), digest_19_9, "{name}.txt is not 19.9's file");
+        let source = PlainText::read(&String::from_utf8(bytes).unwrap(), rfc);
+        let mut previous: Option<(String, usize)> = None;
+        for (id, decl) in requirements(&catalogue(name)) {
+            let section = unescape(field(&decl, "section").unwrap());
+            let text = unescape(field(&decl, "text").unwrap());
+            let Some(word) = source.find(&text) else {
+                problems.push(format!("{name}.{id}: not verbatim in {name}.txt: {text:?}"));
+                continue;
+            };
+            let cited = if name == "rfc1143" {
+                source.sections[word].clone()
+            } else {
+                format!("p{}", source.pages[word])
+            };
+            if section != cited {
+                problems.push(format!(
+                    "{name}.{id}: section {section:?}, but the sentence starts in {cited:?}"
+                ));
+            }
+            if let Some((before, at)) = &previous
+                && *at >= word
+            {
+                problems.push(format!("{name}.{id}: comes before {before} in {name}.txt"));
+            }
+            previous = Some((id, word));
+        }
+        if name == "rfc854" {
+            for (page, _, sentence) in RFC854_UNCATALOGUED {
+                match source.find(sentence) {
+                    Some(word) if format!("p{}", source.pages[word]) == page => {}
+                    found => problems.push(format!(
+                        "adversary quotation {sentence:?} at {page}: found at {:?}",
+                        found.map(|word| source.pages[word])
+                    )),
+                }
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// Adversary (19.4 "Level words" and the RFC 855 rule it applies to RFC 854; row 27): each
+/// sentence of [`RFC854_UNCATALOGUED`] holds a word of the table and says what an
+/// implementation or an option designer must, should or may do, as the catalogued `RP7_1`
+/// ("standard, but not required, meanings") does, so `rfc854.ignite` holds it at the level
+/// the table gives, on its page.
+#[test]
+fn adversary_rfc854_holds_every_sentence_the_word_table_classifies() {
+    let module = catalogue("rfc854");
+    let held: Vec<(String, String, String)> = requirements(&module)
+        .into_iter()
+        .map(|(_, decl)| {
+            (
+                unescape(field(&decl, "section").unwrap()),
+                field(&decl, "level").unwrap().to_string(),
+                collapse(&unescape(field(&decl, "text").unwrap())),
+            )
+        })
+        .collect();
+    let mut missing = Vec::new();
+    for (page, level, sentence) in RFC854_UNCATALOGUED {
+        assert!(
+            word_levels(sentence).contains(&level),
+            "the table gives {level} for {sentence:?}"
+        );
+        let entry = (page.to_string(), level.to_string(), collapse(sentence));
+        if !held.contains(&entry) {
+            missing.push(format!("{page} {level}: {sentence:?}"));
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "rfc854.ignite has no requirement for:\n{}",
+        missing.join("\n")
+    );
+}
+
+/// A program that reads the five committed catalogues, field by field, in a test.
+const CATALOGUE_READER: &str = r#"package tests.catalogues
+
+import std.rfc.rfc854.{RFC854, RP14_1}
+import std.rfc.rfc855.{RFC855, RP3_1}
+import std.rfc.rfc1143.RFC1143
+import std.rfc.rfc9112.{RFC9112, R7_1_2}
+import std.rfc.rfc9110.RFC9110
+
+test "the committed catalogues read the same on every target" {
+  assert RFC854.requirements.len() == 47
+  assert RFC855.requirements.len() == 12
+  assert RFC1143.requirements.len() == 27
+  assert RFC9112.requirements.len() == 131
+  assert RFC9110.requirements.len() == 73
+  assert RFC855.url == "https://www.rfc-editor.org/rfc/rfc855"
+  assert RFC9112.url == "https://dx.doi.org/10.17487/rfc9112"
+  assert RFC9112.digest == "sha256:ce82219c272374005115c909244a79e587687df3858edca4112b8563c02ccf19"
+  assert RFC855.requirements[10].text == RP3_1.text
+  assert RP3_1.text == "Designers of options requiring \"subnegotiation\" must take great care to avoid unending loops in the subnegotiation process."
+  assert RP14_1.section == "p14"
+  assert RP14_1.ordinal == 1
+  assert RFC854.requirements[45].text == RP14_1.text
+  assert R7_1_2.text == "A recipient MUST be able to parse and decode the chunked transfer coding."
+  assert RFC1143.requirements[24].section == "7"
+}
+"#;
+
+/// Adversary (19.2 "A constant of any type compiles on both targets", 19.13, rows 25 and 38):
+/// U4 ran the catalogues through the Rust target only. A program importing all five reads
+/// their counts, URLs, a digest and escaped texts identically with `--target all`.
+#[test]
+fn adversary_committed_catalogues_read_the_same_on_both_targets() {
+    let dir = scratch("adversary-catalogue-reader");
+    std::fs::write(dir.join("reader.ignite"), CATALOGUE_READER).unwrap();
+    let check = ignite(&dir, &["check", "reader.ignite"]);
+    assert_eq!(check.status.code(), Some(0), "{}", text(&check.stderr));
+    assert_eq!(text(&check.stderr), "");
+    let runner = crate::common::runner_archive();
+    let test = ignite(
+        &dir,
+        &[
+            "test",
+            "reader.ignite",
+            "--target",
+            "all",
+            "--out",
+            "test-out",
+            "--target-dir",
+            "cargo",
+            "--runtime",
+            runner.to_str().expect("runner path"),
+        ],
+    );
+    let stdout = text(&test.stdout);
+    assert_eq!(
+        test.status.code(),
+        Some(0),
+        "stdout: {stdout}\nstderr: {}",
+        text(&test.stderr)
+    );
+    assert_eq!(
+        stdout
+            .matches("test result: ok. 1 passed; 0 failed;")
+            .count(),
+        2,
+        "{stdout}"
+    );
+}

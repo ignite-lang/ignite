@@ -1,0 +1,2 @@
+e090_two_statuses.ignite:44:3: error[E090]: requirement `RFC7002.R2_1` has two statuses in `Echo`: satisfied by `echo`, `Echo.serve` and unsupported
+e090_two_statuses.ignite:46:3: error[E090]: requirement `RFC7002.R2_2` has two statuses in `Echo`: unsupported and not_applicable

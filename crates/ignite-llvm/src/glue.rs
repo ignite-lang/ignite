@@ -128,6 +128,7 @@ pub fn function(module: &mut Module<'_>, kind: Glue, ty: &Ty) -> String {
         Glue::FromHeap => from_heap(module, ty),
         Glue::FreeHeap => free_heap(module, ty),
         Glue::Update => update_thunk(module, ty),
+        Glue::Upsert => upsert_thunk(module, ty),
         Glue::Eq => eq_function(module, ty),
         Glue::Debug => debug_function(module, ty),
     }
@@ -220,7 +221,7 @@ fn position_ptr(f: &mut Func, base: &str, position: &Position) -> String {
 
 /// `i1 eq.<T>(ptr a, ptr b)`: structural equality (`docs/slice.md`
 /// sections 12.5 and 13.5). Lists and text compare their lengths, then
-/// element by element (text and bytes in one runtime call); records and
+/// element by element (text and bytes through `ignite.text_eq`); records and
 /// tuples field by field; enums, `Option`, `Result` and `Input` their
 /// tags, then the payload of the variant both hold; a boxed position
 /// compares the values it points to.
@@ -235,8 +236,7 @@ fn eq_function(module: &mut Module<'_>, ty: &Ty) -> String {
     };
     match ty {
         _ if bytes => {
-            let same = f.val("call i8 @ignite_rt_text_eq(ptr %a, ptr %b)");
-            let same = f.val(format!("icmp ne i8 {same}, 0"));
+            let same = text_eq(module, &mut f, "%a", "%b");
             require(&mut f, &same, &differ);
         }
         Ty::List(_) | Ty::Map(..) => {
@@ -761,16 +761,19 @@ fn free_heap(module: &mut Module<'_>, ty: &Ty) -> String {
 /// a `fn(T) -> T` (`docs/llvm.md` section 3: its code takes the
 /// environment first, then an aggregate result through a pointer, then an
 /// aggregate argument by pointer to a copy), on an arena copy of the heap
-/// value `old`, and return a heap copy of the result.
+/// value `old`, and return a heap copy of the result. The runtime calls it
+/// under the store's lock, so a failure inside `f` must not jump past the
+/// runtime's frames: the thunk registers a callback guard behind a
+/// `setjmp` (`crates/ignite-rt/src/fail.rs`) and returns null when `f`
+/// failed; the runtime releases the lock and ends the task.
 fn update_thunk(module: &mut Module<'_>, ty: &Ty) -> String {
     let env = module.env;
     let mut f = header(Glue::Update, ty, "ptr", "ptr %f, ptr %old");
     let layout = env.layout(ty);
     let to_heap = module.glue_of(Glue::ToHeap, ty);
+    guard_callback(module, &mut f);
     let result = f.alloca(layout);
-    let code = f.val("load ptr, ptr %f, align 8");
-    let at = f.val("getelementptr inbounds i8, ptr %f, i64 8");
-    let fenv = f.val(format!("load ptr, ptr {at}, align 8"));
+    let (code, fenv) = fn_value_parts(&mut f);
     if is_aggregate(ty) {
         let arg = f.alloca(layout);
         let from = module.glue_of(Glue::FromHeap, ty);
@@ -796,9 +799,96 @@ fn update_thunk(module: &mut Module<'_>, ty: &Ty) -> String {
     } else {
         f.ins(format!("call void {code}(ptr {fenv})"));
     }
+    f.ins("call void @ignite_rt_guard_pop()");
     let heap = f.val(format!("call ptr {to_heap}(ptr {result})"));
     f.term(format!("ret ptr {heap}"));
     f.finish("unreachable")
+}
+
+/// `ptr store_upsert.<T>(ptr f, ptr old)`: call the Ignite fn value at `f`,
+/// a `fn(Option<T>) -> T`, on `None` when `old` is null and otherwise on
+/// `Some` of an arena copy of the heap value `old`, and return a heap copy
+/// of the result; null when `f` failed, behind the same callback guard as
+/// [`update_thunk`].
+fn upsert_thunk(module: &mut Module<'_>, ty: &Ty) -> String {
+    let env = module.env;
+    let mut f = header(Glue::Upsert, ty, "ptr", "ptr %f, ptr %old");
+    let layout = env.layout(ty);
+    let option = Ty::Option(Box::new(ty.clone()));
+    let enum_layout = env.enum_layout(&option);
+    let some = enum_layout.index("Some").expect("Option has Some");
+    let none = enum_layout.index("None").expect("Option has None");
+    let payload = enum_layout.variants[some].1[0].1;
+    let to_heap = module.glue_of(Glue::ToHeap, ty);
+    let from = module.glue_of(Glue::FromHeap, ty);
+    guard_callback(module, &mut f);
+    let result = f.alloca(layout);
+    let arg = f.alloca(enum_layout.layout);
+    let (code, fenv) = fn_value_parts(&mut f);
+    let absent = f.val("icmp eq ptr %old, null");
+    let (empty, held, call) = (f.label(), f.label(), f.label());
+    f.cond_br(&absent, &empty, &held);
+    f.place(&empty);
+    f.ins(format!("store i32 {none}, ptr {arg}, align 4"));
+    f.br(&call);
+    f.place(&held);
+    f.ins(format!("store i32 {some}, ptr {arg}, align 4"));
+    let at = f.val(format!(
+        "getelementptr inbounds i8, ptr {arg}, i64 {payload}"
+    ));
+    f.ins(format!("call void {from}(ptr {at}, ptr %old)"));
+    f.br(&call);
+    f.place(&call);
+    if is_aggregate(ty) {
+        f.ins(format!(
+            "call void {code}(ptr {fenv}, ptr {result}, ptr {arg})"
+        ));
+    } else if let (Some(t), Some(mt)) = (scalar_type(ty), memory_type(ty)) {
+        let align = layout.align;
+        let r = f.val(format!("call {t} {code}(ptr {fenv}, ptr {arg})"));
+        let r = if *ty == Ty::Bool {
+            f.val(format!("zext i1 {r} to i8"))
+        } else {
+            r
+        };
+        f.ins(format!("store {mt} {r}, ptr {result}, align {align}"));
+    } else {
+        f.ins(format!("call void {code}(ptr {fenv}, ptr {arg})"));
+    }
+    f.ins("call void @ignite_rt_guard_pop()");
+    let heap = f.val(format!("call ptr {to_heap}(ptr {result})"));
+    f.term(format!("ret ptr {heap}"));
+    f.finish("unreachable")
+}
+
+/// The start of a store callback thunk: `_setjmp` into a jump buffer and
+/// `ignite_rt_guard_callback` of it; the second return of `_setjmp` (a
+/// failure inside the callback, `crates/ignite-rt/src/fail.rs`) returns
+/// null. Emission continues in the block of the first return.
+fn guard_callback(module: &mut Module<'_>, f: &mut Func) {
+    module.declare_raw("_setjmp", "declare i32 @_setjmp(ptr) returns_twice");
+    module.declare("ignite_rt_guard_callback", "void", &["ptr".into()]);
+    module.declare("ignite_rt_guard_pop", "void", &[]);
+    let jb = f.alloca(crate::layout::Layout {
+        size: 256,
+        align: 16,
+    });
+    let landed = f.val(format!("call i32 @_setjmp(ptr {jb})"));
+    let fresh = f.val(format!("icmp eq i32 {landed}, 0"));
+    let (run, failed) = (f.label(), f.label());
+    f.cond_br(&fresh, &run, &failed);
+    f.place(&failed);
+    f.term("ret ptr null");
+    f.place(&run);
+    f.ins(format!("call void @ignite_rt_guard_callback(ptr {jb})"));
+}
+
+/// The code and environment pointers of the fn value at `%f`.
+fn fn_value_parts(f: &mut Func) -> (String, String) {
+    let code = f.val("load ptr, ptr %f, align 8");
+    let at = f.val("getelementptr inbounds i8, ptr %f, i64 8");
+    let fenv = f.val(format!("load ptr, ptr {at}, align 8"));
+    (code, fenv)
 }
 
 /// `ptr envglue.<closure>(i32 op, ptr env)` of one closure, whose
@@ -872,6 +962,41 @@ entry:
   ret void
 }
 "#;
+
+/// `i1 ignite.text_eq(ptr a, ptr b)`: whether the `Text` or `Bytes` at `a`
+/// and `b` hold the same bytes. Inlined, so a comparison with a literal
+/// becomes a length check and a `memcmp` of constant size, which LLVM
+/// expands into a few loads; `memcmp` is not called for empty values,
+/// whose pointer may be null.
+const TEXT_EQ: &str = r#"define internal i1 @ignite.text_eq(ptr %a, ptr %b) alwaysinline {
+entry:
+  %lenpa = getelementptr inbounds i8, ptr %a, i64 8
+  %lena = load i64, ptr %lenpa, align 8
+  %lenpb = getelementptr inbounds i8, ptr %b, i64 8
+  %lenb = load i64, ptr %lenpb, align 8
+  %same = icmp eq i64 %lena, %lenb
+  %some = icmp sgt i64 %lena, 0
+  %both = and i1 %same, %some
+  br i1 %both, label %bytes, label %done
+bytes:
+  %da = load ptr, ptr %a, align 8
+  %db = load ptr, ptr %b, align 8
+  %order = call i32 @memcmp(ptr %da, ptr %db, i64 %lena)
+  %equal = icmp eq i32 %order, 0
+  br label %done
+done:
+  %eq = phi i1 [ %same, %entry ], [ %equal, %bytes ]
+  ret i1 %eq
+}
+"#;
+
+/// Whether the `Text` or `Bytes` at `a` and `b` are equal, through
+/// [`TEXT_EQ`].
+pub(crate) fn text_eq(module: &mut Module<'_>, f: &mut Func, a: &str, b: &str) -> String {
+    module.declare_raw("memcmp", "declare i32 @memcmp(ptr, ptr, i64)");
+    module.helper("ignite.text_eq", TEXT_EQ);
+    f.val(format!("call i1 @ignite.text_eq(ptr {a}, ptr {b})"))
+}
 
 /// `void ignite.append_text(ptr list, ptr text)`: append the bytes of the
 /// `Text` at `text`.

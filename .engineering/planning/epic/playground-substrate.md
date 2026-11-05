@@ -2,10 +2,13 @@
 format: aep.planning-md/3
 id: epic:playground-substrate
 kind: epic
-status: draft
+status: active
 title: Processes and files for Ignite programs
 summary: Start child processes and read and write files under a root, so an Ignite server can host the playground
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-04T01:57:17Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-04T01:57:17Z", actor: "human:timo", revision: 3}
 ---
 # Epic: playground-substrate
 

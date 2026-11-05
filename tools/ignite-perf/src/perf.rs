@@ -523,7 +523,9 @@ pub fn closure_eligible(
 
 /// Export `commit`'s tree into a new directory, as `git archive` and a `data`-filtered extract
 /// did: regular files with modes 0644 or 0755 and the commit time as mtime; a symlink, a path
-/// leaving the tree, or a `.gitattributes` (whose export rules this does not apply) is refused.
+/// leaving the tree, or a `.gitattributes` with an `export-ignore` or `export-subst` rule (which
+/// this does not apply) is refused. A `.gitattributes` without export rules is exported as a
+/// file, as `git archive` does.
 pub fn safe_export(repo: &Path, commit: &str, destination: &Path) -> R<()> {
     let listing = git(
         repo,
@@ -547,10 +549,14 @@ pub fn safe_export(repo: &Path, commit: &str, destination: &Path) -> R<()> {
             !unsafe_path,
             format!("Unsupported source archive member: {name}"),
         )?;
-        ensure(
-            path.file_name() != Some(".gitattributes".as_ref()),
-            format!("Unsupported source archive member: {name} (export attributes)"),
-        )?;
+        if path.file_name() == Some(".gitattributes".as_ref()) {
+            let object = object.unwrap_or_default();
+            let rules = git(repo, &["cat-file", "blob", object], None, &[])?;
+            ensure(
+                !rules.contains("export-ignore") && !rules.contains("export-subst"),
+                format!("Unsupported source archive member: {name} (export attributes)"),
+            )?;
+        }
         match (kind, object) {
             (Some("blob"), Some(object)) => {
                 blobs.push((name.to_string(), object.to_string(), mode == Some("100755")))
@@ -1581,6 +1587,8 @@ impl Harness {
                 &compiler,
                 "build",
                 "examples/todo/todo.ignite",
+                "--target",
+                "rust",
                 "--out",
                 &path_str(&output.join("program")),
                 "--target-dir",
@@ -1749,7 +1757,7 @@ impl Harness {
                             command.push("--release".into());
                         }
                         if target == "rust" {
-                            command.push("--target-dir".into());
+                            command.extend(words(&["--target", "rust", "--target-dir"]));
                             command.push(format!("{}-cargo", path_str(&output)));
                         } else {
                             let dir = if profile == "release" {

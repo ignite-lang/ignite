@@ -26,10 +26,23 @@
 //!
 //! Every block is allocated zeroed, so arena memory is always initialized
 //! and a read can go straight into it.
+//!
+//! Chunks come from the kernel (`mmap`), not from `malloc`, and a chunk
+//! that is not kept for reuse goes back with `munmap`. In a `malloc` heap a
+//! freed chunk stays resident until `malloc_trim` (`ignite_io::released_memory`,
+//! at most once per second), and a live chunk pins the freed memory below
+//! it: ember's `FLUSHDB` copies every stored value into its task's arena,
+//! and the 10 MB of chunks it frees at `task_end` stayed in the process's
+//! RSS until the next trim (2026-11-04). Large blocks still come from
+//! `malloc`: a block per allocation from `mmap` would be a system call each.
 
 use std::alloc::Layout;
 use std::cell::{RefCell, UnsafeCell};
+use std::ffi::c_void;
+use std::num::NonZeroUsize;
 use std::ptr::NonNull;
+
+use nix::sys::mman::{MapFlags, ProtFlags, mmap_anonymous, munmap};
 
 /// Size of an ordinary chunk.
 const CHUNK: usize = 64 * 1024;
@@ -42,6 +55,10 @@ const LARGE: usize = CHUNK / 4;
 const SPARE: usize = 16;
 /// Chunks the task arena keeps for the next task on the same thread.
 const SPARE_AFTER_TASK: usize = 1;
+/// Bytes of large blocks (`malloc`) a task's arenas must hold at
+/// `task_end` for the worker to return the freed heap pages to the kernel
+/// (`ignite_io::released_memory`); chunks go back by `munmap` themselves.
+const RELEASED_AT_TASK_END: usize = 1024 * 1024;
 /// Bytes a loop allocates above its mark before a release is due, at
 /// least (`ignite_rt_arena_due`).
 const DUE: u64 = 64 * 1024;
@@ -79,7 +96,34 @@ struct Block {
 struct Arena {
     blocks: Vec<Block>,
     spare: Vec<NonNull<u8>>,
+    /// Bytes held from the kernel and from `malloc`, spare chunks included.
     reserved: usize,
+    /// The part of `reserved` held in large blocks from `malloc`.
+    heap: usize,
+}
+
+/// A zeroed chunk of `CHUNK` bytes from the kernel.
+fn chunk_new() -> Result<NonNull<u8>, String> {
+    let length = NonZeroUsize::new(CHUNK).expect("CHUNK is not zero");
+    // SAFETY: a new private anonymous mapping aliases no memory; it is
+    // page-aligned and zero-filled.
+    unsafe {
+        mmap_anonymous(
+            None,
+            length,
+            ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+            MapFlags::MAP_PRIVATE,
+        )
+    }
+    .map(NonNull::cast)
+    .map_err(|error| format!("allocation of {CHUNK} bytes failed: {error}"))
+}
+
+/// Give a chunk from [`chunk_new`] back to the kernel.
+fn chunk_drop(pointer: NonNull<u8>) {
+    // SAFETY: a mapping of `CHUNK` bytes made by `chunk_new` that nothing
+    // uses any more. A failure would leave it mapped, which only leaks.
+    let _ = unsafe { munmap(pointer.cast::<c_void>(), CHUNK) };
 }
 
 impl Arena {
@@ -88,6 +132,7 @@ impl Arena {
             blocks: Vec::new(),
             spare: Vec::new(),
             reserved: 0,
+            heap: 0,
         }
     }
 
@@ -137,11 +182,17 @@ impl Arena {
         let reused = if chunk { self.spare.pop() } else { None };
         let pointer = match reused {
             Some(pointer) => pointer,
+            None if chunk => {
+                let pointer = chunk_new()?;
+                self.reserved += CHUNK;
+                pointer
+            }
             None => {
                 // SAFETY: `layout` has a non-zero size.
                 let pointer = NonNull::new(unsafe { std::alloc::alloc_zeroed(layout) })
                     .ok_or_else(|| format!("allocation of {} bytes failed", layout.size()))?;
                 self.reserved += layout.size();
+                self.heap += layout.size();
                 pointer
             }
         };
@@ -195,8 +246,12 @@ impl Arena {
     fn free(&mut self, block: Block) {
         if block.chunk && self.spare.len() < SPARE {
             self.spare.push(block.pointer);
+        } else if block.chunk {
+            self.reserved -= CHUNK;
+            chunk_drop(block.pointer);
         } else {
             self.reserved -= block.layout.size();
+            self.heap -= block.layout.size();
             // SAFETY: allocated in `Arena::push` with this layout.
             unsafe { std::alloc::dealloc(block.pointer.as_ptr(), block.layout) };
         }
@@ -228,12 +283,10 @@ impl Arena {
     /// Free everything, keeping at most `keep` chunks for reuse.
     fn clear(&mut self, keep: usize) {
         self.release(0);
-        let chunk = Self::chunk_layout();
         while self.spare.len() > keep {
             let pointer = self.spare.pop().expect("a spare chunk");
             self.reserved -= CHUNK;
-            // SAFETY: a chunk allocated in `Arena::push`.
-            unsafe { std::alloc::dealloc(pointer.as_ptr(), chunk) };
+            chunk_drop(pointer);
         }
     }
 }
@@ -251,13 +304,15 @@ fn poison(base: *mut u8, from: usize, to: usize) {
 impl Drop for Arena {
     fn drop(&mut self) {
         for block in self.blocks.drain(..) {
-            // SAFETY: allocated in `Arena::push` with this layout.
-            unsafe { std::alloc::dealloc(block.pointer.as_ptr(), block.layout) };
+            if block.chunk {
+                chunk_drop(block.pointer);
+            } else {
+                // SAFETY: allocated in `Arena::push` with this layout.
+                unsafe { std::alloc::dealloc(block.pointer.as_ptr(), block.layout) };
+            }
         }
-        let chunk = Self::chunk_layout();
         for pointer in self.spare.drain(..) {
-            // SAFETY: a chunk allocated in `Arena::push`.
-            unsafe { std::alloc::dealloc(pointer.as_ptr(), chunk) };
+            chunk_drop(pointer);
         }
     }
 }
@@ -421,10 +476,15 @@ pub extern "C" fn ignite_rt_arena_scratch_clear() {
 
 /// `void task_end()`: free the current task's arenas. Every pointer they
 /// handed out is invalid afterwards; later allocations start new arenas.
-/// The thread keeps one chunk for the next task it runs.
+/// The thread keeps one chunk for the next task it runs; the other chunks
+/// go back to the kernel at once. Arenas that held more than 1 MiB in large
+/// blocks mark the memory released, so the worker trims the heap.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_task_end() {
     let _ = with_task(|task| {
+        if task.arena.heap + task.scratch.heap > RELEASED_AT_TASK_END {
+            ignite_io::released_memory();
+        }
         task.in_scratch = false;
         task.arena.clear(SPARE_AFTER_TASK);
         task.scratch.clear(0);
@@ -485,6 +545,33 @@ mod tests {
         let pointer = ignite_rt_alloc(16, 8);
         assert!(!pointer.is_null());
         assert_eq!(arena_reserved(), CHUNK);
+        ignite_rt_task_end();
+    }
+
+    /// Chunks are mappings of their own (page-aligned, not counted as
+    /// `malloc` memory); large blocks are `malloc`'s. `task_end` gives all
+    /// but one chunk back.
+    #[test]
+    fn chunks_come_from_the_kernel_and_large_blocks_from_malloc() {
+        let heap = || with_task(|task| task.arena.heap + task.scratch.heap).unwrap();
+        for _ in 0..40 {
+            let pointer = ignite_rt_alloc(LARGE as i64, 8);
+            // SAFETY: a fresh block of `LARGE` bytes.
+            unsafe { std::ptr::write_bytes(pointer, 5, LARGE) };
+            // SAFETY: this thread's state.
+            let base = unsafe { (*ignite_rt_arena_state()).base };
+            assert_eq!(base as usize % 4096, 0, "a chunk is a mapping of its own");
+        }
+        assert_eq!(heap(), 0);
+        assert!(arena_reserved() >= 10 * CHUNK);
+        ignite_rt_alloc(1 << 20, 8);
+        assert!(heap() >= 1 << 20);
+        ignite_rt_task_end();
+        assert_eq!(heap(), 0);
+        assert_eq!(arena_reserved(), CHUNK);
+        let reused = ignite_rt_alloc(64, 8);
+        // SAFETY: 64 fresh bytes in the kept chunk.
+        unsafe { std::ptr::write_bytes(reused, 1, 64) };
         ignite_rt_task_end();
     }
 

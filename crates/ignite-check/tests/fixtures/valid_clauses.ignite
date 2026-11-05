@@ -1,0 +1,45 @@
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+import std.rfc.rfc1.{RFC1}
+
+const RFC7: Spec = Spec {
+  rfc = 7
+  title = "A local " + "specification"
+  url = "https://example.invalid/rfc7"
+  digest = "sha256:0007"
+  requirements = [R1_1, R1_2]
+}
+
+const R1_1: Requirement = Requirement {
+  rfc = 7
+  section = "1"
+  ordinal = 1
+  level = Level.MustNot
+  party = Party.Sender
+  source = Source.Prose
+  minimum = Some(-1)
+  text = "A sender must not lie."
+}
+
+const R1_2: Requirement = Requirement { rfc = 7, section = "1", ordinal = 2, level = May, minimum = None, text = "may" }
+
+protocol Echo conforms [RFC1, RFC7] scope { parties = [Server, Any], sections = ["2"] } {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] satisfies [RFC1.R2_1] {
+    return stream.write_all(b"ok")
+  }
+
+  unsupported RFC1.R2_2 "the client waits for nobody"
+  not_applicable RFC7.R1_1 "nothing is sent"
+}
+
+type Limits satisfies [RFC7.R1_2] {
+  head: Int = 8000 satisfies [RFC1.R2_2]
+  body: Int
+}
+
+fn answer(x: Int) -> Int satisfies [RFC1.R3_1, RFC7.R1_2] = x
+
+fn satisfies(scope: Int) -> Int = scope + 1
+
+test "the answer verifies" verifies [RFC1.R2_1, RFC7.R1_2] {
+  assert answer(satisfies(1)) == 2
+}

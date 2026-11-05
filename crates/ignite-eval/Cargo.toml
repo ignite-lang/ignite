@@ -15,6 +15,9 @@ bench = false
 ignite-syntax.workspace = true
 ignite-types.workspace = true
 
+[dev-dependencies]
+ignite-check.workspace = true
+
 [[test]]
 name = "main"
 path = "tests/main.rs"

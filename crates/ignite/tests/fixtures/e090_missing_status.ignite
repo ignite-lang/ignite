@@ -1,0 +1,73 @@
+package tests.e090
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7001: Spec = Spec {
+  rfc = 7001
+  title = "A line echo with five MUST-class rules"
+  url = "https://example.invalid/rfc7001"
+  digest = "sha256:7001"
+  requirements = [R2_1, R2_2, R2_3, R2_4, R2_5, R2_6, R2_7]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7001
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+const R2_2: Requirement = Requirement {
+  rfc = 7001
+  section = "2"
+  ordinal = 2
+  level = MustNot
+  text = "A server MUST NOT add bytes to a line."
+}
+
+const R2_3: Requirement = Requirement {
+  rfc = 7001
+  section = "2"
+  ordinal = 3
+  level = Required
+  text = "A line end is REQUIRED."
+}
+
+const R2_4: Requirement = Requirement {
+  rfc = 7001
+  section = "2"
+  ordinal = 4
+  level = Shall
+  text = "A server SHALL close on QUIT."
+}
+
+const R2_5: Requirement = Requirement {
+  rfc = 7001
+  section = "2"
+  ordinal = 5
+  level = ShallNot
+  text = "A server SHALL NOT close before QUIT."
+}
+
+const R2_6: Requirement = Requirement {
+  rfc = 7001
+  section = "2"
+  ordinal = 6
+  level = Should
+  text = "A server SHOULD answer within a second."
+}
+
+const R2_7: Requirement = Requirement {
+  rfc = 7001
+  section = "2"
+  ordinal = 7
+  level = May
+  text = "A server MAY greet."
+}
+
+protocol Echo conforms [RFC7001] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}

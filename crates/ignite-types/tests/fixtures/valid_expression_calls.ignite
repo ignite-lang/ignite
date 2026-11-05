@@ -1,0 +1,36 @@
+type Handler {
+  run: fn(Int) -> Int
+}
+
+type Sender {
+  send: fn(c: PipeStream) -> Int requires [c.write]
+}
+
+fn adder(n: Int) -> fn(Int) -> Int = |x: Int| x + n
+
+fn twice(x: Int) -> Int = x * 2
+
+fn negate(x: Int) -> Int = 0 - x
+
+fn pick(first: Bool) -> fn(Int) -> Int = if first { twice } else { negate }
+
+fn pure_calls() -> Int {
+  let fs: List<fn(Int) -> Int> = [twice, negate]
+  let h = Handler { run = twice }
+  let a: Int = adder(1)(2)
+  let b: Int = fs[1](10)
+  let c: Int = (|x: Int| x * 3)(2)
+  let d: Int = (h.run)(2)
+  let e: Int = pick(true)(3)
+  return a + b + c + d + e
+}
+
+fn effectful_calls(
+  conn: PipeStream,
+  hs: List<fn(c: PipeStream) -> Int requires [c.write]>,
+  h: Sender
+) -> Int requires [conn.write] {
+  let a: Int = hs[0](conn)
+  let b: Int = (h.send)(conn)
+  return a + b
+}

@@ -1,4 +1,4 @@
-#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 
 pub mod apply {
     use crate::modes::{level, pick};
@@ -21,9 +21,9 @@ pub mod modes {
     }
 
     pub fn level(mode: &Mode) -> i64 {
-        match mode.clone() {
+        match mode {
             Mode::Loud => 10,
-            Mode::Quiet(n) => n,
+            Mode::Quiet(n) => { let n = (n).clone(); n },
         }
     }
 

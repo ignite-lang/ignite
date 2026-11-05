@@ -85,6 +85,8 @@ use ignite_syntax::ast::{
 };
 use ignite_syntax::diagnostic::Diagnostic;
 
+mod clauses;
+
 /// Builtin enums and their variants, in scope in every program.
 pub const BUILTIN_ENUMS: &[(&str, &[&str])] = &[
     ("Option", &["Some", "None"]),
@@ -324,7 +326,7 @@ pub fn method_effect(method: &str) -> Option<&'static str> {
 pub fn store_effect(method: &str) -> Option<&'static str> {
     match method {
         "get" | "values" => Some("read"),
-        "next_id" | "put" | "remove" | "update" => Some("write"),
+        "next_id" | "put" | "remove" | "update" | "upsert" => Some("write"),
         _ => None,
     }
 }
@@ -481,6 +483,8 @@ pub fn check_module(program: &Program, modules: &Modules) -> Result<Symbols, Vec
         }
         checker.diagnostics.truncate(collected);
     }
+    checker.clauses(program, modules);
+    checker.catalogue_literals(program, modules);
     if checker.diagnostics.is_empty() {
         Ok(checker.symbols)
     } else {
@@ -2802,6 +2806,7 @@ impl Checker {
                     "values" if receiver.name.name == "Store" => {
                         named("List", receiver.args.clone())
                     }
+                    "upsert" if receiver.name.name == "Store" => receiver.args.first()?.clone(),
                     _ => return None,
                 }
             }
@@ -3165,21 +3170,31 @@ impl Checker {
             }
             ExprKind::Field { receiver, name } => match self.path_head(receiver) {
                 Some(ty) => self.path_call(expr, ty, name, args),
-                None => {
-                    self.expr(receiver);
-                    for arg in args {
-                        self.expr(arg);
-                    }
-                    self.error("E003", callee.span, "not callable".to_string());
-                }
+                None => self.expression_call(expr, callee, &name.name, args),
             },
-            _ => {
-                self.expr(callee);
-                for arg in args {
-                    self.expr(arg);
-                }
-                self.error("E003", callee.span, "not callable".to_string());
-            }
+            _ => self.expression_call(expr, callee, "fn value", args),
+        }
+    }
+
+    /// `e(args)` whose callee is an expression, not a name or a path
+    /// (`adder(1)(2)`, `fs[1](10)`, `(h.send)(conn)`; `docs/slice.md`
+    /// 20.4.2): the callee's names are resolved, and when `static_type`
+    /// gives it an effectful fn type the effects are charged and the call is
+    /// an effect site, as for a local of that type. Whether the callee is a
+    /// fn at all is the type checker's (E040, and E042 for an effectful
+    /// callee without a declared type).
+    fn expression_call(&mut self, expr: &Expr, callee: &Expr, what: &str, args: &[Expr]) {
+        self.expr(callee);
+        for arg in args {
+            self.expr(arg);
+        }
+        let all: Vec<&Expr> = args.iter().collect();
+        if let Some(needed) = self
+            .static_type(callee)
+            .and_then(|ty| self.fn_value_effects(&ty, &all))
+        {
+            self.effectful_op(needed, expr.span, what);
+            self.symbols.effect_sites.insert(expr.span);
         }
     }
 
@@ -3337,6 +3352,8 @@ impl Checker {
                 self.test_only_use(name)
             }
             PatternKind::Binding(name) => self.bind_rooted(name, binding, roots.clone()),
+            PatternKind::Rest(Some(name)) => self.bind_rooted(name, binding, roots.clone()),
+            PatternKind::Rest(None) => {}
             PatternKind::Range { start, end } => {
                 self.pattern(start, roots, binding);
                 self.pattern(end, roots, binding);
@@ -3724,7 +3741,7 @@ fn builtin_applies(ty: &Type, method: &str) -> bool {
         }
         "Store" => matches!(
             method,
-            "next_id" | "get" | "put" | "remove" | "values" | "update"
+            "next_id" | "get" | "put" | "remove" | "values" | "update" | "upsert"
         ),
         "TcpListener" => matches!(method, "accept" | "local_port"),
         "TcpStream" => is_stream_method(method),
@@ -3745,6 +3762,7 @@ fn builtin_applies(ty: &Type, method: &str) -> bool {
 fn first_binding(pattern: &Pattern) -> Option<&Ident> {
     match &pattern.kind {
         PatternKind::Binding(name) => Some(name),
+        PatternKind::Rest(name) => name.as_ref(),
         PatternKind::Tuple(items) | PatternKind::List(items) | PatternKind::Or(items) => {
             items.iter().find_map(first_binding)
         }
@@ -3849,6 +3867,7 @@ mod tests {
 
     fn func(n: &str, params: &[&str], effectful: bool, stmts: Vec<Stmt>) -> Decl {
         Decl::Fn(FnDecl {
+            satisfies: Vec::new(),
             name: id(n),
             params: params
                 .iter()

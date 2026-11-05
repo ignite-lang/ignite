@@ -1,0 +1,7 @@
+e046_rest_adversary.ignite:2:10: error[E046]: match does not cover `[_]`
+e046_rest_adversary.ignite:10:10: error[E046]: match does not cover `[None, ..]`
+e046_rest_adversary.ignite:17:10: error[E046]: match does not cover `[[], ..]`
+e046_rest_adversary.ignite:24:10: error[E046]: match does not cover `[.., false]`
+e046_rest_adversary.ignite:31:10: error[E046]: match does not cover `[true]`, `[true, .., false]`
+e046_rest_adversary.ignite:39:10: error[E046]: match does not cover `[_, _, _, ..]`
+e046_rest_adversary.ignite:47:10: error[E046]: match does not cover `([_, ..], false)`

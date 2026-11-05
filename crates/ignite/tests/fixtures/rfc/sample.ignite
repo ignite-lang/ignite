@@ -1,0 +1,136 @@
+// RFC 7001: A Line Echo & Its Keywords
+// ignite rfc import crates/ignite/tests/fixtures/rfc/sample.xml --package tests.rfc.sample
+// Every party is guessed from its sentence; review each `party` line.
+
+package tests.rfc.sample
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7001: Spec = Spec {
+  rfc = 7001
+  title = "A Line Echo & Its Keywords"
+  url = "https://example.invalid/rfc7001"
+  digest = "sha256:7008809d691717f813a720165741a1f3b2348bb6991ffc9152ff6f8c9a4dc3a2"
+  requirements = [
+    R1_1,
+    R2_1_1,
+    R2_1_2,
+    R2_1_3,
+    R2_1_4,
+    R2_2_1,
+    R2_2_2,
+    R2_2_3,
+    R3_1,
+    R3_2,
+    R3_3,
+    R3_4
+  ]
+}
+
+const R1_1: Requirement = Requirement {
+  rfc = 7001
+  section = "1"
+  ordinal = 1
+  level = Must
+  party = Any
+  text = "The key word \"MUST\" is to be interpreted as described in [RFC7000]."
+}
+
+const R2_1_1: Requirement = Requirement {
+  rfc = 7001
+  section = "2.1"
+  ordinal = 1
+  level = Must
+  party = Server
+  text = "A server MUST echo every line, and it SHOULD do so at once."
+}
+
+const R2_1_2: Requirement = Requirement {
+  rfc = 7001
+  section = "2.1"
+  ordinal = 2
+  level = MustNot
+  party = Recipient
+  text = "A recipient MUST NOT treat a bare CR as the end of a line (Section 2.1 of [RFC7000])."
+}
+
+const R2_1_3: Requirement = Requirement {
+  rfc = 7001
+  section = "2.1"
+  ordinal = 3
+  level = NotRecommended
+  party = Any
+  text = "Echoing a line twice is NOT RECOMMENDED; see Section 3."
+}
+
+const R2_1_4: Requirement = Requirement {
+  rfc = 7001
+  section = "2.1"
+  ordinal = 4
+  level = Should
+  party = Recipient
+  text = "A recipient SHOULD treat a lone <LF> as data, not as an end."
+}
+
+const R2_2_1: Requirement = Requirement {
+  rfc = 7001
+  section = "2.2"
+  ordinal = 1
+  level = May
+  party = Sender
+  text = "A sender MAY send an empty line, as [RFC7000], Section 3 allows."
+}
+
+const R2_2_2: Requirement = Requirement {
+  rfc = 7001
+  section = "2.2"
+  ordinal = 2
+  level = Shall
+  party = Proxy
+  text = "A proxy SHALL forward a line's \"{{braces}}\" and back\\slashes as data—unchanged—in order."
+}
+
+const R2_2_3: Requirement = Requirement {
+  rfc = 7001
+  section = "2.2"
+  ordinal = 3
+  level = Required
+  party = Proxy
+  text = "An intermediary is REQUIRED to keep the order of lines; see https://example.invalid/order and the notes."
+}
+
+const R3_1: Requirement = Requirement {
+  rfc = 7001
+  section = "3"
+  ordinal = 1
+  level = Must
+  party = Server
+  text = "A user agent that talks to an origin server MUST wait for the echo."
+}
+
+const R3_2: Requirement = Requirement {
+  rfc = 7001
+  section = "3"
+  ordinal = 2
+  level = Optional
+  party = Any
+  text = "Is a reply OPTIONAL?"
+}
+
+const R3_3: Requirement = Requirement {
+  rfc = 7001
+  section = "3"
+  ordinal = 3
+  level = Should
+  party = Client
+  text = "The client's (own) timer SHOULD run."
+}
+
+const R3_4: Requirement = Requirement {
+  rfc = 7001
+  section = "3"
+  ordinal = 4
+  level = ShouldNot
+  party = Proxy
+  text = "Caches SHOULD NOT store an echo."
+}

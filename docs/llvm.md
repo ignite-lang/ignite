@@ -7,7 +7,8 @@ Direction (Timo, 2026-11-01): an LLVM target that bypasses Rust code generation.
 emits LLVM IR text; clang compiles and links it. The substrate is the Rust crate `ignite-io`,
 the same one the Rust target calls, behind the C ABI adapter `ignite-rt`, prebuilt as the
 static library `libignite_rt.a`. Building a program
-for this target never runs cargo or rustc. The Rust target stays and stays the default.
+for this target never runs cargo or rustc. Since 2026-11-05 it is the default `--target`
+(D2 B, `story:llvm-default-target`); the Rust target stays as the differential check.
 
 ## 1 Pipeline
 
@@ -92,7 +93,8 @@ the same path is not noticed; delete `DIR/llvm`.
 `libignite_rt.a` in the directory of the running executable, which `cargo build -p ignite-rt`
 writes next to `target/<profile>/ignite`; (2) `libignite_rt.a` in that directory's parent, for
 a driver running in a test binary in `target/<profile>/deps`. When neither exists the error
-(exit 3) names the first. Tests pass `--runtime` with the newest `deps/libignite_rt-*.a`,
+(exit 3) names the first and the fix: `cargo build -p ignite-rt --features runner` and
+`--runtime`, or `--target rust`. Tests pass `--runtime` with the newest `deps/libignite_rt-*.a`,
 because a test build does not refresh the top-level copy. `task bench` prints sizes, build
 times and startup time of both targets.
 
@@ -194,16 +196,21 @@ takes or returns Ignite values):
 
 - Scalars (`Int`, `Bool`, `Byte`, handles, `Store` pointers) by value.
 - Aggregates (`Text`, lists, records, tuples, enums, `IoError`, fn values) by pointer. A parameter is
-  borrowed when the function's body never modifies it (by the rule of section 4's carried
-  variables: no assignment to it or a field of it, no `push`, `append` or `clear` through a
-  place rooted at it; matched by name). Otherwise the callee owns it and may change it in
-  place. A direct call (a named function, method or role) passes a place to a borrowed
+  owned exactly when its function consumes it (`TypedProgram::consumed`, `docs/slice.md`
+  20.3.3: the body changes it in place on some path, or moves it or a place rooted at it on
+  every path to an exit), and borrowed otherwise. The consumed set contains every parameter
+  the body modifies by the rule of section 4's carried variables (an assignment to it or a
+  field of it, a `push`, `append` or `clear` through a place rooted at it; matched by name),
+  which owned a parameter until slice 16. The callee may change an owned parameter in place
+  and move it. A direct call (a named function, method or role) passes a place to a borrowed
   parameter as the place's own pointer, with no copy. The exception is a later argument
-  that modifies a variable, because it could change the place before the call. Every
-  other aggregate argument is a fresh copy (section 4). A call through a fn pointer
-  always passes copies, which is correct for both kinds of parameter. A borrowed
-  parameter reads the caller's memory, which stays valid for the whole call: no callee
-  releases below its own loops' marks.
+  that modifies a variable, because it could change the place before the call. An argument
+  that moves (`TypedProgram::moves`, `docs/slice.md` 20.3.5) passes the place's own pointer
+  to the owned parameter, with no copy: the place is dead after the call, so ownership of
+  its memory passes to the callee. Every other aggregate argument is a fresh copy (section
+  4). A call through a fn pointer passes copies, or the moved place, which is correct for
+  both kinds of parameter. A borrowed parameter reads the caller's memory, which stays
+  valid for the whole call: no callee releases below its own loops' marks.
 - An aggregate result is written to a pointer passed as the first argument (plain `ptr`, no LLVM `sret` attribute).
 - Symbol names: `"<module>.<name>"` (`"std.protocol.telnet.decode"`), roles
   `"<module>.<Protocol>.<role>"`, constants `"<module>.<NAME>"` and field defaults
@@ -259,15 +266,24 @@ position, even with no buffer.
 
 - Value semantics as in the Rust target: in every value position of the ownership rule
   (`docs/slice.md` section 6) a place is deep-copied. The generator emits one copy function
-  per aggregate type (`"copy.<mangled type>"`). A place in a position that only reads it
-  is not copied:
+  per aggregate type (`"copy.<mangled type>"`). A place in a move position that is dead
+  after it (`TypedProgram::moves`, `docs/slice.md` 20.3) is not copied but moved: an
+  argument passes the place's pointer to the owned parameter (section 3), and a `let` or
+  `var` initializer, an assignment, a field value, a list element, a payload, a returned
+  value or a block's result takes it with a shallow `memcpy` of its representation. The
+  result of a call is always written to a fresh temporary, so `s = step(s, i)` moves `s`
+  into the call and then the temporary into `s`; the result slot never aliases the moved
+  place. A place in a position that only reads it is not copied:
   - an argument to a borrowed parameter (section 3);
   - the scrutinee of a `match` whose arms do not modify the place's root variable;
   - the list of a `for` whose body does not modify the list's root variable;
   - the receiver of `to_bytes`: the result is the receiver itself, owned or borrowed as the
     receiver is;
   - the argument of `append` when the element type holds no buffer: its elements are
-    copied by the `memcpy` that appends them.
+    copied by the `memcpy` that appends them;
+  - a `slice` that `to_text` or `Int.parse(bytes.to_text())` reads, and the `slice`
+    receiver of a `slice` whose bounds modify no variable: a view, a list header with
+    the address of the first element and the length, pointing into the receiver.
 
   `push`, `append` and `clear` on a receiver that is not a place rooted at a variable
   (`region::root` is `None`, such as `f().push(x)`) work on an owned copy. A `var` bound
@@ -311,7 +327,10 @@ position, even with no buffer.
   frees everything allocated after the mark. When the mark is inside the last chunk, this
   resets the cursor inline; otherwise it calls `ignite_rt_arena_release`. Released chunks
   are kept for reuse, up to 16 per arena; larger blocks and further chunks go back to the
-  system allocator (both measured equal on the memory test). Each task also has a scratch
+  system allocator (both measured equal on the memory test). Chunks are anonymous
+  mappings of their own (`mmap`, given back with `munmap`), not `malloc` blocks, so a freed
+  chunk leaves the RSS at once instead of waiting for the next heap trim, and a live chunk
+  pins no freed heap memory below it; large blocks come from `malloc`. Each task also has a scratch
   arena, which allocations use while `ignite_rt_arena_scratch(1)` is on. The runtime moves
   the bump state between the two arenas.
 - Loop regions. Every `while`, `loop` and `for` takes a mark at its entry (for `for`, after
@@ -337,8 +356,12 @@ position, even with no buffer.
   semantics) and nothing outside the carried variables that survives a back-edge points
   above the mark. Block-local bindings die with the iteration. Pattern bindings point into a
   scrutinee that was copied before the loop or that lives below the mark. The `for` list is
-  evaluated before the mark. Callee arguments are fresh copies or the caller's places, and
-  both lie below every mark the callee takes. A loop inside an expression that holds a partial value (an
+  evaluated before the mark. Callee arguments are fresh copies, the caller's places
+  (borrowed) or the caller's moved places (owned), and all three lie below every mark the
+  callee takes. A moved place is dead until it is reassigned, so a callee that changes it
+  in place, or a release that copies a carried variable the loop moved and then reassigns,
+  never shows a changed value to a later read. A moved variable that the loop reassigns is
+  a carried variable like any other. A loop inside an expression that holds a partial value (an
   operand, an argument, a field, a receiver) gets no region, because that value could
   point into memory a release frees. The copies go through the scratch arena, not to a
   second mark above the first: a copy above a second mark is freed by the release to the
@@ -350,6 +373,15 @@ position, even with no buffer.
 - A task is the process's main thread, or a task `ignite_io::try_spawn` started for a
   `spawn`. It reuses idle threads (`docs/slice.md` section 7). A task's arena is freed when
   it ends (`task_end`), except for one chunk that the thread keeps for its next task.
+  A task whose arenas held more than 1 MiB of large blocks at `task_end` calls `ignite_io::released_memory`,
+  as a `Store` does when it drops a value, and the substrate returns the free heap pages
+  with glibc's `malloc_trim(0)` when a later task or an idle thread ends (`docs/slice.md`
+  section 7). Without it glibc keeps the freed pages in the arena of every thread that
+  allocated them: the ember example's churn (10 rounds of 10 MB SET then FLUSHDB) held
+  about 100 MiB RSS on 10 MB of keys (2026-11-04). The chunks a task frees go back to the
+  kernel without a trim: ember's `FLUSHDB` (`db.values()` copies the keyspace into the
+  arena) left 10 MB of freed chunks resident until the next trim while chunks were
+  `malloc` blocks (2026-11-04).
   `spawn` hands the new task a pointer to the arguments in the parent's memory. The task
   deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before the parent
   continues (`ignite_rt_spawn` blocks until then and returns 1).
@@ -381,7 +413,19 @@ position, even with no buffer.
   pointer to the fn value `f` and the thunk `ptr "store_update.<T>"(ptr f, ptr old)`, which
   copies `old` into the arena, calls `f` (code and env, section 3.1) on it and returns the result copied to the heap. The runtime calls the thunk
   under the store's lock, so `update` is atomic; the arena memory the thunk allocates
-  belongs to the calling task and is released by its loop regions as usual.
+  belongs to the calling task and is released by its loop regions as usual. `get`,
+  `values` and `update`'s result copy from the stored heap value into the arena under the
+  lock (`ignite_io::Store`'s `read`, `read_values`, `replace_with`), so each value is
+  copied once; the thunk reads `old` in place (it does not copy it to the heap first). The
+  thunk calls `_setjmp` and registers its jump buffer with `ignite_rt_guard_callback`
+  before it calls `f`, and `ignite_rt_guard_pop` after: a failure inside `f` keeps its
+  report and jumps back to the thunk, which returns null, instead of jumping past the
+  runtime frame that holds the store's lock. `store_update` then keeps the old value,
+  releases the lock and ends the task with the kept report as below. `upsert(id, f)` passes
+  the thunk `ptr "store_upsert.<T>"(ptr f, ptr old)` the same way; `old` is null when `id`
+  holds nothing, and the thunk builds `None` or `Some` of an arena copy of `old` for `f`.
+  `store_upsert` stores the result under `id` and copies it to the call's result, the
+  callback guard as for `update`.
 - Failure containment (`docs/slice.md` section 14.8, `vision.md` T1). A failed
   `assert`, a `?` on `Err` or `None` in a test, an integer overflow or division by zero,
   an index or `slice` out of range and a `match` with no arm each end the task that ran
@@ -464,7 +508,7 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `i32 stdin_set_raw(i8 on, IoError* err)` | same termios rules as `docs/slice.md` section 7 |
 | `i32 stdout_write_all(List* bytes, IoError* err)` | write and flush |
 | `void io_error_new(IoError* out, Text* message)` | exit code 1 |
-| `void text_from_bytes_lossy(Text* out, List* bytes)` | |
+| `void text_from_bytes_lossy(Text* out, List* bytes)` | invalid UTF-8 sequences become U+FFFD; ASCII is copied without the decoder |
 | `void text_trim(Text* out, Text* text)` | Unicode whitespace, as Rust `str::trim` |
 | `void text_concat(Text* out, Text* a, Text* b)` | |
 | `i8 text_eq(Text* a, Text* b)` | |
@@ -472,7 +516,7 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `i8 text_starts_with(Text* text, Text* prefix)` | |
 | `void text_join(Text* out, List* texts, Text* separator)` | |
 | `void int_to_text(Text* out, i64 value)` | |
-| `i8 int_parse(Text* text, i64* out)` | 1 and `out` when `text` is a decimal `i64` with an optional leading `-` (Rust `str::parse`; a leading `+` is rejected), else 0 |
+| `i8 int_parse(Text* text, i64* out)` | 1 and `out` when `text` is a decimal `i64` with an optional leading `-` (`ignite_io::parse_int`: what Rust `str::parse` accepts less a leading `+`, read from the bytes without a UTF-8 pass), else 0; `text` may be the `List` of a `Bytes`, as `Int.parse(b.to_text())` passes `b` |
 | `i32 tcp_set_idle_timeout(i64 stream, i64 ms, IoError* err)` | a read that waits longer than `ms` returns `Eof`; 0 or less removes the timeout (`ignite_io::TcpStream::set_idle_timeout`) |
 | `ptr store_new(ptr to_heap, ptr from_heap, ptr free_heap, i64 size, i64 align)` | a `ignite_io::Store` of heap copies of `size`-byte values; the three functions are the element type's glue (section 4); never freed |
 | `i64 store_next_id(ptr store)` | |
@@ -480,7 +524,8 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `i8 store_get(ptr store, i64 id, ptr out)` | 1 and a copy in the task's arena at `out`, or 0 |
 | `i8 store_remove(ptr store, i64 id, ptr out)` | as `get`, and removes the entry |
 | `void store_values(ptr store, List* out)` | copies of every value, in ascending id order |
-| `i8 store_update(ptr store, i64 id, ptr f, ptr thunk, ptr out)` | 0 when `id` holds nothing (`f` is not called); otherwise replaces the value by `thunk(f, old)` under the store's lock, 1 and a copy of the new value at `out` |
+| `i8 store_update(ptr store, i64 id, ptr f, ptr thunk, ptr out)` | 0 when `id` holds nothing (`f` is not called); otherwise replaces the value by `thunk(f, old)` under the store's lock, 1 and a copy of the new value at `out`; a null from the thunk (a failure of `f` its callback guard stopped) keeps the old value, releases the lock and ends the task with the failure's report |
+| `void store_upsert(ptr store, i64 id, ptr f, ptr thunk, ptr out)` | under the store's lock stores `thunk(f, old)` under `id`, `old` null when `id` holds nothing, and copies the stored value to `out`; a null from the thunk leaves the store unchanged, releases the lock and ends the task with the failure's report; declared only in a module that calls it |
 | `void assert_failed(Text* cond, Text* message, Text* left, Text* right, Text* at)` | ends the task with `ignite_io::assert_report` (section 4: `error: <report>` and exit 101 on the main task or a test; `task ended with error: <report>` and a `longjmp` to the task wrapper in a spawned task). `message` is null without a message; `left` and `right` are null unless the condition is `a == b` or `a != b` |
 | `void try_failed(Text* error, Text* at)` | ends the task with `ignite_io::try_report`: `? failed at <at>: Err(<error>)` (`error` not null) or `? failed at <at>: None` (section 4) |
 | `void fail_arith(Text* op, Text* file, i64 line, i64 col, i64 left, i64 right)` | ends the task: `<op> failed at <file>:<line>:<col>: <left> <op> <right>` (section 4); `op` is `+`, `-`, `*`, `/` or `%`; `Byte` operands are widened to `i64` |
@@ -489,7 +534,8 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `void fail_slice(Text* file, i64 line, i64 col, i64 from, i64 to, i64 len)` | ends the task: `slice failed at <file>:<line>:<col>: slice <from>..<to> out of range for length <len>` |
 | `void fail_match(Text* file, i64 line, i64 col)` | ends the task: `match failed at <file>:<line>:<col>: no arm matched` |
 | `void guard_push(ptr jb)` | register the `jmp_buf` a task-entry wrapper just passed to `_setjmp` (section 4); a thread-local stack, innermost last |
-| `void guard_pop()` | drop the innermost `jmp_buf` after the task body returned without failing |
+| `void guard_callback(ptr jb)` | register the `jmp_buf` a runtime callback (`store_update.<T>`, `store_upsert.<T>`) just passed to `_setjmp`: a failure whose innermost guard it is keeps its report and jumps back to it (section 4) |
+| `void guard_pop()` | drop the innermost `jmp_buf` after the task body or callback returned without failing |
 | `void tcp_own(i64 stream)` | mark `stream` (a TCP stream or a pipe end) as owned by the current task: a failure of the task releases it (section 4) |
 | `i32 text_cmp(Text* a, Text* b)` | -1, 0 or 1: bytewise order of the UTF-8, the key order of `Map<Text, V>` (section 3) |
 | `void quantity_debug(Text* out, i32 kind, i64 value)` | the debug text of a quantity, `kind` 0 `Duration`, 1 `ByteSize`, 2 `Ratio` (`ignite_io::quantity_debug`) |

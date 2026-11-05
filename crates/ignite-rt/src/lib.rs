@@ -39,8 +39,8 @@ pub use arena::{
 pub use clock::ignite_rt_clock_monotonic;
 pub use fail::{
     ignite_rt_assert_failed, ignite_rt_fail_arith, ignite_rt_fail_index, ignite_rt_fail_match,
-    ignite_rt_fail_neg, ignite_rt_fail_slice, ignite_rt_guard_pop, ignite_rt_guard_push,
-    ignite_rt_try_failed,
+    ignite_rt_fail_neg, ignite_rt_fail_slice, ignite_rt_guard_callback, ignite_rt_guard_pop,
+    ignite_rt_guard_push, ignite_rt_try_failed,
 };
 pub use net::{
     ignite_rt_tcp_accept, ignite_rt_tcp_bind, ignite_rt_tcp_close, ignite_rt_tcp_connect,
@@ -56,9 +56,9 @@ pub use stdio::{
     ignite_rt_stdout_write_all,
 };
 pub use store::{
-    FreeHeap, FromHeap, RtStore, ToHeap, UpdateThunk, ignite_rt_store_get, ignite_rt_store_new,
-    ignite_rt_store_next_id, ignite_rt_store_put, ignite_rt_store_remove, ignite_rt_store_update,
-    ignite_rt_store_values,
+    FreeHeap, FromHeap, RtStore, ToHeap, UpdateThunk, UpsertThunk, ignite_rt_store_get,
+    ignite_rt_store_new, ignite_rt_store_next_id, ignite_rt_store_put, ignite_rt_store_remove,
+    ignite_rt_store_update, ignite_rt_store_upsert, ignite_rt_store_values,
 };
 pub use task::{TaskFn, ignite_rt_spawn, ignite_rt_spawn_ready};
 pub use text::{

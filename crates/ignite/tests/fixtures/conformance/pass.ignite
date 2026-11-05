@@ -1,0 +1,31 @@
+package tests.conformance.pass
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7101: Spec = Spec {
+  rfc = 7101
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7101"
+  digest = "sha256:7101"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7101
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+fn echo(line: Text) -> Text satisfies [RFC7101.R2_1] = line
+
+protocol Echo conforms [RFC7101] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}
+
+test "a line is echoed" verifies [RFC7101.R2_1] {
+  assert echo("hi") == "hi"
+}

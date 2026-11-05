@@ -1,4 +1,4 @@
-#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 use ignite_std::net::Endpoint;
 
 pub struct Exiting;
@@ -32,7 +32,7 @@ pub struct Exiter {
 #[allow(non_snake_case)]
 pub fn Exiter__main(self_: &Exiter) -> Result<(), ignite_io::IoError> {
     let stream = match ignite_io::TcpStream::connect(self_.target.address.clone(), self_.target.port.clone()) {
-        Ok(stream) => stream,
+        Ok(stream) => stream.clone(),
         Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
     };
     match Exiting::connect(stream.clone()) {

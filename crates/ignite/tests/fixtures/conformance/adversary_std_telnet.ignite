@@ -1,0 +1,64 @@
+package tests.conformance.adversary_std_telnet
+
+import std.net.{Pipe, PipeStream}
+import std.io.IoError
+import std.console.{Console, Reply, Action}
+import std.protocol.telnet.{Telnet, SessionLimits}
+
+// U6's adversary: `Telnet.serve` sends every reply line and every prompt
+// as NVT data (RFC 854 p11, RP11_3: "the sequence \"CR NUL\" must be used
+// where a carriage return alone is actually desired; and the CR character
+// must be avoided in other contexts"; p14, RP14_1, IAC doubled). The
+// prompt after a reply goes through `answer_line`, not `session`, so the
+// console continues once before it closes.
+
+type IoResult<T> = Result<T, IoError>
+
+const IAC: Byte = 255
+
+// Everything `client` reads until the end of the stream.
+test fn rest(client: PipeStream) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+// The byte 255 as text: the strongest attempt a console has to send IAC.
+test fn iac_text() -> Text {
+  var raw = Bytes.empty()
+  raw.push(IAC)
+  raw.to_text()
+}
+
+// A console whose replies hold a bare CR, a bare LF and what text makes of
+// the byte 255, and that closes on `bye` with one more bare CR.
+test fn odd(line: Text) -> Reply = if line == "bye" {
+  Reply { lines = ["b\ry"], action = Close }
+} else {
+  Reply { lines = ["a\rb", "c\nd", "\u{ff}", iac_text()] }
+}
+
+test "adversary: replies and the prompt after a reply are NVT data" {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  spawn Telnet.serve(server, SessionLimits {}, Console { prompt = "\r>\n", respond = odd, maximum_line = 64 })
+  client.write_all(b"hi\r\nbye\r\n")?
+  let out = rest(client)?
+  var expected = b"\r\0>\r\n"
+  expected.append(b"a\r\0b\r\n")
+  expected.append(b"c\r\nd\r\n")
+  expected.append([0xC3, 0xBF])
+  expected.append(b"\r\n")
+  expected.append([0xEF, 0xBF, 0xBD])
+  expected.append(b"\r\n")
+  expected.append(b"\r\0>\r\n")
+  expected.append(b"b\r\0y\r\n")
+  assert out == expected
+  for b in out {
+    assert b != IAC
+  }
+}

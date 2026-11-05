@@ -1,0 +1,3 @@
+rfc7103 Line Echo, protocol Echo, parties all, sections all
+R2_1  2  MUST  unsupported  "lines are answered with ok"  gap
+claim conformance of Echo to rfc7103: no (1 gaps, 0 failures, 0 inconclusive)

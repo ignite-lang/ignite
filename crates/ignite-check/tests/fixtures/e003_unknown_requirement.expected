@@ -1,0 +1,5 @@
+e003_unknown_requirement.ignite:3:31: error[E003]: unknown name `RFC404`
+e003_unknown_requirement.ignite:4:127: error[E003]: `RFC1` has no requirement `R9_9_9`
+e003_unknown_requirement.ignite:8:15: error[E003]: unknown name `RFC404`
+e003_unknown_requirement.ignite:11:53: error[E003]: `RFC1` has no requirement `R2_9`
+e003_unknown_requirement.ignite:13:24: error[E003]: unknown name `LOCAL`

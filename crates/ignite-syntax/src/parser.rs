@@ -38,7 +38,8 @@ use crate::ast::{
     AliasDecl, Arm, AssemblyDecl, BinaryOp, Block, Bound, BraceEntry, Closure, ClosureParam,
     ComponentDecl, ConstDecl, Decl, EnumDecl, Expr, ExprKind, Field, FieldInit, FnDecl, Ident,
     Import, Param, Path, Pattern, PatternKind, Place, Program, ProtocolDecl, RecordDecl,
-    ResourceDecl, Span, Stmt, StmtKind, SystemDecl, TestDecl, Type, UnaryOp, Variant,
+    ResourceDecl, Scope, Span, StatusDecl, StatusKind, Stmt, StmtKind, SystemDecl, TestDecl, Type,
+    UnaryOp, Variant,
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{TemplatePart, Token, TokenKind};
@@ -634,15 +635,7 @@ impl<'t> Parser<'t> {
                         "a test name cannot be empty; describe what the test checks".to_string(),
                     );
                 }
-                let body = self.block()?;
-                Ok(Decl::Test(TestDecl {
-                    name: Ident {
-                        name: text.clone(),
-                        span,
-                    },
-                    body,
-                    span: self.span_from(keyword.start),
-                }))
+                self.test_rest(keyword, text.clone(), span)
             }
             TokenKind::Template(_) => {
                 let span = self.bump().span;
@@ -651,20 +644,98 @@ impl<'t> Parser<'t> {
                     span,
                     "a test name cannot be interpolated; write a plain string literal".to_string(),
                 );
-                let body = self.block()?;
-                Ok(Decl::Test(TestDecl {
-                    name: Ident {
-                        name: String::new(),
-                        span,
-                    },
-                    body,
-                    span: self.span_from(keyword.start),
-                }))
+                self.test_rest(keyword, String::new(), span)
             }
             _ => Err(self.expected(
                 "a test name (a string literal), or `fn`, `type`, `enum` or `const` after `test`",
             )),
         }
+    }
+
+    /// A test after its name: `verifies? block` (`docs/slice.md` 19.5).
+    fn test_rest(&mut self, keyword: Span, name: String, span: Span) -> PResult<Decl> {
+        let verifies = if self.at_word("verifies") {
+            self.clause_refs("verifies")?
+        } else {
+            Vec::new()
+        };
+        let body = self.block()?;
+        if self.at_word("verifies") {
+            let span = self.peek_token().span;
+            self.report(
+                "E001",
+                span,
+                "`verifies` goes between the test's name and its block".to_string(),
+            );
+            return Err(Fail);
+        }
+        Ok(Decl::Test(TestDecl {
+            name: Ident { name, span },
+            body,
+            span: self.span_from(keyword.start),
+            verifies,
+        }))
+    }
+
+    /// Whether the next token is the identifier `word`: the clause words
+    /// of `docs/slice.md` 19.5 are identifiers, not keywords.
+    fn at_word(&self, word: &str) -> bool {
+        matches!(self.peek(), TokenKind::Ident(name) if name == word)
+    }
+
+    // satisfies := 'satisfies' '[' reqref (',' reqref)* ','? ']'
+    // verifies  := 'verifies' '[' reqref (',' reqref)* ','? ']'
+
+    /// The clause `word [Spec.Id, ..]` at the clause word.
+    fn clause_refs(&mut self, word: &str) -> PResult<Vec<Path>> {
+        self.bump();
+        if !self.at(&TokenKind::LBracket) {
+            return Err(self.expected(&format!("`[` after `{word}`")));
+        }
+        self.open(&TokenKind::LBracket, true)?;
+        let mut refs = vec![self.reqref()?];
+        while self.eat(&TokenKind::Comma) {
+            if self.at(&TokenKind::RBracket) {
+                break;
+            }
+            refs.push(self.reqref()?);
+        }
+        self.close(&TokenKind::RBracket)?;
+        Ok(refs)
+    }
+
+    // reqref := ident '.' ident
+
+    /// A requirement reference `Spec.Id`: a path of exactly two segments.
+    fn reqref(&mut self) -> PResult<Path> {
+        let spec = self.ident()?;
+        let start = spec.span.start;
+        if !self.at(&TokenKind::Dot) {
+            self.report(
+                "E001",
+                spec.span,
+                format!(
+                    "a requirement reference is `Spec.Id`; `{}` alone names no requirement",
+                    spec.name
+                ),
+            );
+            return Err(Fail);
+        }
+        self.bump();
+        let id = self.ident()?;
+        if self.at(&TokenKind::Dot) {
+            let span = self.span_from(start);
+            self.report(
+                "E001",
+                span,
+                "a requirement reference has two segments, `Spec.Id`".to_string(),
+            );
+            return Err(Fail);
+        }
+        Ok(Path {
+            segments: vec![spec, id],
+            span: self.span_from(start),
+        })
     }
 
     fn path(&mut self) -> PResult<Path> {
@@ -749,8 +820,8 @@ impl<'t> Parser<'t> {
         Ok(items)
     }
 
-    // record := 'type' ident '{' (field sep)* field? '}'
-    // field  := ident ':' type ('=' expr)?
+    // record := 'type' ident tparams? satisfies? '{' (field sep)* field? '}'
+    // field  := ident ':' type ('=' expr)? satisfies?
     // alias  := 'type' ident ('<' ident (',' ident)* '>')? '=' type
 
     fn type_decl(&mut self) -> PResult<Decl> {
@@ -769,6 +840,11 @@ impl<'t> Parser<'t> {
                 span: self.span_from(start),
             }));
         }
+        let satisfies = if self.at_word("satisfies") {
+            self.clause_refs("satisfies")?
+        } else {
+            Vec::new()
+        };
         let fields = self.braced_list(|p| {
             let name = p.name_or_keyword()?;
             p.expect(&TokenKind::Colon)?;
@@ -779,17 +855,25 @@ impl<'t> Parser<'t> {
             } else {
                 None
             };
+            let span = p.span_from(name.span.start);
+            let satisfies = if p.at_word("satisfies") {
+                p.clause_refs("satisfies")?
+            } else {
+                Vec::new()
+            };
             Ok(Field {
-                span: p.span_from(name.span.start),
+                span,
                 name,
                 ty,
                 default,
+                satisfies,
             })
         })?;
         Ok(Decl::Record(RecordDecl {
             name,
             fields,
             span: self.span_from(start),
+            satisfies,
             type_params,
             test_only: false,
         }))
@@ -1045,28 +1129,38 @@ impl<'t> Parser<'t> {
         })
     }
 
-    // protocol := 'protocol' ident '{' NL* (fn NL*)* '}'
+    // protocol := 'protocol' ident conforms? '{' NL* ((fn | status) NL*)* '}'
 
     fn protocol(&mut self) -> PResult<ProtocolDecl> {
         let start = self.expect(&TokenKind::KwProtocol)?.span.start;
         let name = self.ident()?;
+        let (conforms, scope) = match self.protocol_header() {
+            Ok(header) => header,
+            Err(fail) => {
+                self.skip_protocol_body();
+                return Err(fail);
+            }
+        };
         let open = self.peek_index();
         self.open(&TokenKind::LBrace, false)?;
         self.skip_newlines();
         let mut fns = Vec::new();
+        let mut statuses = Vec::new();
         loop {
             let member = match self.at_close_brace() {
                 Ok(true) => break,
-                Ok(false) if self.at(&TokenKind::KwFn) => self.fn_decl(),
-                Ok(false) => Err(self.expected("`fn` or `}` in a protocol")),
+                Ok(false) if self.at(&TokenKind::KwFn) => self.fn_decl().map(|f| fns.push(f)),
+                Ok(false) if self.at_word("unsupported") || self.at_word("not_applicable") => {
+                    self.status().map(|s| statuses.push(s))
+                }
+                Ok(false) => {
+                    Err(self.expected("`fn`, `unsupported`, `not_applicable` or `}` in a protocol"))
+                }
                 Err(fail) => Err(fail),
             };
-            match member {
-                Ok(f) => fns.push(f),
-                Err(fail) => {
-                    self.skip_past_matching_brace(open);
-                    return Err(fail);
-                }
+            if let Err(fail) = member {
+                self.skip_past_matching_brace(open);
+                return Err(fail);
             }
             self.skip_newlines();
         }
@@ -1075,10 +1169,231 @@ impl<'t> Parser<'t> {
             name,
             fns,
             span: self.span_from(start),
+            conforms,
+            scope,
+            statuses,
         })
     }
 
-    // fn := 'fn' ident ('.' ident)? '(' (param (',' param)*)? ')' ('->' type)? requires? block
+    // conforms   := 'conforms' '[' ident (',' ident)* ','? ']' scope?
+
+    /// The clauses between a protocol's name and its body.
+    fn protocol_header(&mut self) -> PResult<(Vec<Ident>, Option<Scope>)> {
+        if self.at_word("scope") {
+            let span = self.peek_token().span;
+            self.report(
+                "E001",
+                span,
+                "`scope` follows `conforms [..]`; a protocol without `conforms` has no scope"
+                    .to_string(),
+            );
+            return Err(Fail);
+        }
+        if !self.at_word("conforms") {
+            return Ok((Vec::new(), None));
+        }
+        self.bump();
+        if !self.at(&TokenKind::LBracket) {
+            return Err(self.expected("`[` after `conforms`"));
+        }
+        self.open(&TokenKind::LBracket, true)?;
+        let mut conforms = Vec::new();
+        loop {
+            let spec = self.ident()?;
+            if self.at(&TokenKind::Dot) {
+                self.report(
+                    "E001",
+                    spec.span,
+                    format!(
+                        "a `conforms` entry is the name of a `Spec` constant; import the constant instead of qualifying it with `{}.`",
+                        spec.name
+                    ),
+                );
+                return Err(Fail);
+            }
+            conforms.push(spec);
+            if !self.eat(&TokenKind::Comma) || self.at(&TokenKind::RBracket) {
+                break;
+            }
+        }
+        self.close(&TokenKind::RBracket)?;
+        let scope = if self.at_word("scope") {
+            Some(self.scope()?)
+        } else {
+            None
+        };
+        Ok((conforms, scope))
+    }
+
+    // scope      := 'scope' '{' (scope_item sep)* scope_item? '}'
+    // scope_item := 'parties' '=' '[' (ident (',' ident)* ','?)? ']'
+    //             | 'sections' '=' '[' (STRING (',' STRING)* ','?)? ']'
+
+    fn scope(&mut self) -> PResult<Scope> {
+        let start = self.bump().span.start;
+        if !self.at(&TokenKind::LBrace) {
+            return Err(self.expected("`{` after `scope`"));
+        }
+        let mut parties: Option<Vec<Ident>> = None;
+        let mut sections: Option<Vec<(String, Span)>> = None;
+        self.braced_list(|p| {
+            let item = p.ident()?;
+            let twice = match item.name.as_str() {
+                "parties" => parties.is_some(),
+                "sections" => sections.is_some(),
+                _ => {
+                    p.report(
+                        "E001",
+                        item.span,
+                        format!(
+                            "expected `parties` or `sections` in `scope`, found `{}`",
+                            item.name
+                        ),
+                    );
+                    return Err(Fail);
+                }
+            };
+            if twice {
+                p.report(
+                    "E001",
+                    item.span,
+                    format!("`{}` is given twice in `scope`", item.name),
+                );
+                return Err(Fail);
+            }
+            p.expect(&TokenKind::Assign)?;
+            p.open(&TokenKind::LBracket, true)?;
+            if item.name == "parties" {
+                let mut list = Vec::new();
+                while !p.at(&TokenKind::RBracket) {
+                    list.push(p.ident()?);
+                    if !p.eat(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                parties = Some(list);
+            } else {
+                let mut list = Vec::new();
+                while !p.at(&TokenKind::RBracket) {
+                    let token = p.peek_token();
+                    match &token.kind {
+                        TokenKind::Str(text) => {
+                            p.bump();
+                            list.push((text.clone(), token.span));
+                        }
+                        TokenKind::Template(_) => {
+                            p.report(
+                                "E001",
+                                token.span,
+                                "a section is a string literal without interpolation".to_string(),
+                            );
+                            return Err(Fail);
+                        }
+                        _ => return Err(p.expected("a section (a string literal)")),
+                    }
+                    if !p.eat(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                sections = Some(list);
+            }
+            p.close(&TokenKind::RBracket)?;
+            Ok(())
+        })?;
+        Ok(Scope {
+            parties,
+            sections,
+            span: self.span_from(start),
+        })
+    }
+
+    // status := ('unsupported' | 'not_applicable') reqref STRING
+
+    fn status(&mut self) -> PResult<StatusDecl> {
+        let token = self.bump();
+        let start = token.span.start;
+        let kind = match &token.kind {
+            TokenKind::Ident(word) if word == "unsupported" => StatusKind::Unsupported,
+            _ => StatusKind::NotApplicable,
+        };
+        let requirement = self.reqref()?;
+        let token = self.peek_token();
+        let reason = match &token.kind {
+            TokenKind::Str(text) if !text.is_empty() => {
+                self.bump();
+                text.clone()
+            }
+            TokenKind::Str(_) => {
+                self.report(
+                    "E001",
+                    token.span,
+                    format!("the reason of `{}` cannot be empty", kind.word()),
+                );
+                return Err(Fail);
+            }
+            TokenKind::Template(_) => {
+                self.report(
+                    "E001",
+                    token.span,
+                    format!(
+                        "the reason of `{}` is a string literal without interpolation",
+                        kind.word()
+                    ),
+                );
+                return Err(Fail);
+            }
+            _ => {
+                return Err(self.expected(&format!(
+                    "a reason (a string literal) after `{} {}`",
+                    kind.word(),
+                    requirement.dotted()
+                )));
+            }
+        };
+        Ok(StatusDecl {
+            kind,
+            requirement,
+            reason,
+            span: self.span_from(start),
+        })
+    }
+
+    /// After an error in a protocol's header: move past its body, so that
+    /// recovery does not resume at the body's `fn` lines. The body is the
+    /// first `{` outside brackets that does not follow `scope`; a line
+    /// break outside brackets ends the search.
+    fn skip_protocol_body(&mut self) {
+        let mut depth = self.modes.len();
+        let mut i = self.pos;
+        while i < self.tokens.len() {
+            match &self.tokens[i].kind {
+                TokenKind::Eof => break,
+                TokenKind::LBrace if depth == 0 => {
+                    let after_scope = self.tokens[..i]
+                        .iter()
+                        .rev()
+                        .find(|t| t.kind != TokenKind::Newline)
+                        .is_some_and(|t| matches!(&t.kind, TokenKind::Ident(w) if w == "scope"));
+                    if !after_scope {
+                        self.skip_past_matching_brace(i);
+                        return;
+                    }
+                    depth += 1;
+                }
+                TokenKind::LBrace | TokenKind::LBracket | TokenKind::LParen => depth += 1,
+                TokenKind::RBrace | TokenKind::RBracket | TokenKind::RParen => {
+                    depth = depth.saturating_sub(1);
+                }
+                TokenKind::Newline if depth == 0 => break,
+                _ => {}
+            }
+            i += 1;
+        }
+        self.pos = i;
+        self.reset_nesting();
+    }
+
+    // fn := 'fn' ident ('.' ident)? tparams? '(' (param (',' param)*)? ')' ('->' type)? requires? satisfies? (block | '=' expr)
 
     fn fn_decl(&mut self) -> PResult<FnDecl> {
         let start = self.expect(&TokenKind::KwFn)?.span.start;
@@ -1118,6 +1433,11 @@ impl<'t> Parser<'t> {
         } else {
             None
         };
+        let satisfies = if self.at_word("satisfies") {
+            self.clause_refs("satisfies")?
+        } else {
+            Vec::new()
+        };
         let body = if self.eat(&TokenKind::Assign) {
             self.skip_newlines();
             let value = self.expr()?;
@@ -1143,6 +1463,7 @@ impl<'t> Parser<'t> {
             test_only: false,
             owner,
             bounds,
+            satisfies,
         })
     }
 
@@ -2208,6 +2529,57 @@ impl<'t> Parser<'t> {
         Ok((items, comma))
     }
 
+    /// `'[' (elem (',' elem)*)? ']'` with `elem := pattern | '..' ident?`
+    /// (`docs/slice.md` 20.5). A second `..`, or a `..name` that is not
+    /// last, is E076; the list is still returned.
+    fn list_pattern_items(&mut self) -> PResult<Vec<Pattern>> {
+        self.open(&TokenKind::LBracket, true)?;
+        let mut items = Vec::new();
+        while !self.at(&TokenKind::RBracket) {
+            if self.at(&TokenKind::DotDot) {
+                let start = self.bump().span.start;
+                let name = if matches!(self.peek_token().kind, TokenKind::Ident(_)) {
+                    Some(self.ident()?)
+                } else {
+                    None
+                };
+                items.push(Pattern {
+                    kind: PatternKind::Rest(name),
+                    span: self.span_from(start),
+                });
+            } else {
+                items.push(self.pattern()?);
+            }
+            if !self.eat(&TokenKind::Comma) {
+                break;
+            }
+        }
+        self.close(&TokenKind::RBracket)?;
+        let rests: Vec<&Pattern> = items
+            .iter()
+            .filter(|item| matches!(item.kind, PatternKind::Rest(_)))
+            .collect();
+        if let Some(second) = rests.get(1) {
+            let span = second.span;
+            self.report(
+                "E076",
+                span,
+                "a list pattern has at most one `..`".to_string(),
+            );
+        } else if let Some(named) = items[..items.len().saturating_sub(1)]
+            .iter()
+            .find(|item| matches!(item.kind, PatternKind::Rest(Some(_))))
+        {
+            let span = named.span;
+            self.report(
+                "E076",
+                span,
+                "`..name` must be the last element of a list pattern".to_string(),
+            );
+        }
+        Ok(items)
+    }
+
     /// One alternative, or `start..=end` between two bounds. The checker
     /// and typer decide what a bound may be (`docs/slice.md` section 13.7).
     fn pattern_alternative(&mut self) -> PResult<Pattern> {
@@ -2257,10 +2629,7 @@ impl<'t> Parser<'t> {
                 }
                 PatternKind::Tuple(items)
             }
-            TokenKind::LBracket => {
-                let (items, _) = self.pattern_list(TokenKind::LBracket, TokenKind::RBracket)?;
-                PatternKind::List(items)
-            }
+            TokenKind::LBracket => PatternKind::List(self.list_pattern_items()?),
             TokenKind::Int(i64::MIN) => return Err(self.int_too_large(token)),
             TokenKind::Int(value) => {
                 self.bump();

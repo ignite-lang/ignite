@@ -1,0 +1,115 @@
+package tests.conformance.adversary_std_http
+
+import std.net.{ByteStream, Pipe, PipeStream}
+import std.io.IoError
+import std.text.*
+import std.protocol.http.{Http, HttpApp, HttpLimits, Request, Response}
+
+// U6's adversary: requirements `std/protocol/http.ignite` claims as
+// satisfied or not applicable, driven through `Http.serve` over a pipe.
+// Each test names the requirement and quotes the RFC sentence it reads.
+
+type IoResult<T> = Result<T, IoError>
+
+test fn connected() -> IoResult<(PipeStream, PipeStream)> {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  server.set_idle_timeout(5000)?
+  Ok((client, server))
+}
+
+test fn read_all(client: PipeStream) -> IoResult<Text> {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out.to_text())
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+// The header `x` of the request, or "".
+test fn header_x(request: Request) -> Text {
+  var value = ""
+  for header in request.headers {
+    if header.0 == "x" {
+      value = header.1
+    }
+  }
+  value
+}
+
+// A handler whose response headers depend on the path; the body is the
+// path, then the byte length of header `x` after a space.
+test fn handler(state: Unit, request: Request) -> Response {
+  let body = "{request.path} {header_x(request).to_bytes().len()}"
+  if request.path.starts_with("/close") {
+    return Response { status = 200, headers = [("Connection", "close")], body }
+  }
+  if request.path.starts_with("/gzip") {
+    return Response { status = 200, headers = [("Transfer-Encoding", "gzip")], body }
+  }
+  Response.plain(200, body)
+}
+
+// Everything the server sends for `input`, the client's write half closed
+// after it, so the server ends at the latest on end of input.
+test fn served(input: Bytes) -> IoResult<Text> {
+  let (client, server) = connected()?
+  spawn Http.serve(server, HttpLimits {}, HttpApp { state = (), handle = handler })
+  client.write_all(input)?
+  _ = client.close()
+  read_all(client)
+}
+
+// RFC9112.R6_3_4 and R6_3_5, claimed satisfied by `next_request` and
+// `parse_length`: "If a message is received without Transfer-Encoding and
+// with an invalid Content-Length header field, then the message framing is
+// invalid and the recipient MUST treat it as an unrecoverable error" and
+// "the server MUST respond with a 400 (Bad Request) status code and then
+// close the connection". Content-Length = 1*DIGIT, and OWS is SP or HTAB
+// only (RFC 9110 5.6.3), so a no-break space (U+00A0), a next line
+// (U+0085) or an ideographic space (U+3000) beside the digits makes the
+// value invalid.
+test "adversary: a Content-Length beside a Unicode space is 400" {
+  for space in ["\u{a0}", "\u{85}", "\u{3000}"] {
+    let input = "POST /n HTTP/1.1\r\nContent-Length: 3{space}\r\n\r\nabc".to_bytes()
+    let out = served(input)?
+    assert out.starts_with("HTTP/1.1 400 Bad Request\r\n")
+  }
+}
+
+// RFC9112.R9_6_6 and R9_6_7, claimed satisfied by `reject` and `session`:
+// "A server that sends a \"close\" connection option MUST initiate closure
+// of the connection (see below) after it sends the response containing the
+// \"close\" connection option." and "The server MUST NOT process any
+// further requests received on that connection."
+test "adversary: a response with the close option ends the connection" {
+  let out = served(b"GET /close HTTP/1.1\r\n\r\nGET /second HTTP/1.1\r\n\r\n")?
+  assert out.contains("Connection: close\r\n")
+  assert !out.contains("/second")
+}
+
+// RFC9112.R6_1_4, marked not_applicable "Http applies no transfer coding:
+// every response is framed by Content-Length": "If any transfer coding
+// other than chunked is applied to a response's content, the sender MUST
+// either apply chunked as the final transfer coding or terminate the
+// message by closing the connection." A response with Transfer-Encoding is
+// not framed by its Content-Length (RFC 9112 6.3: Transfer-Encoding
+// overrides it).
+test "adversary: a response with a transfer coding other than chunked ends the connection" {
+  let out = served(b"GET /gzip HTTP/1.1\r\n\r\nGET /second HTTP/1.1\r\n\r\n")?
+  assert !(out.contains("Transfer-Encoding: gzip\r\n") && out.contains("/second"))
+}
+
+// RFC9112.R2_2_1, claimed satisfied by `parse_head` and `read_head`: "A
+// recipient MUST parse an HTTP message as a sequence of octets in an
+// encoding that is a superset of US-ASCII". The obs-text octet 0xE9 in a
+// field value is one octet; the application sees its byte length.
+test "adversary: an obs-text octet reaches the application as one octet" {
+  var input = b"GET /octet HTTP/1.1\r\nX: "
+  input.append([0xE9])
+  input.append(b"\r\nConnection: close\r\n\r\n")
+  let out = served(input)?
+  assert out.ends_with("/octet 1")
+}

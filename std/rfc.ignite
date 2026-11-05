@@ -1,0 +1,30 @@
+package std.rfc
+
+// The requirement keywords of BCP 14 (RFC 2119, RFC 8174).
+enum Level { Must, MustNot, Required, Shall, ShallNot, Should, ShouldNot, Recommended,
+  NotRecommended, May, Optional }
+
+// Whom a requirement addresses.
+enum Party { Any, Sender, Recipient, Client, Server, Proxy }
+
+// Bcp14: extracted from a <bcp14> mark; Prose: written by hand from an RFC that predates BCP 14.
+enum Source { Bcp14, Prose }
+
+type Requirement {
+  rfc: Int
+  section: Text
+  ordinal: Int
+  level: Level
+  party: Party = Any
+  source: Source = Bcp14
+  minimum: Option<Int> = None
+  text: Text
+}
+
+type Spec {
+  rfc: Int
+  title: Text
+  url: Text
+  digest: Text
+  requirements: List<Requirement>
+}

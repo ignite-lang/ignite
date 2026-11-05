@@ -16,9 +16,24 @@
 //! Reuse keeps a thread's thread-locals across tasks. Every task ends with
 //! [`crate::flush`], so the substrate's pending writes are empty in between;
 //! the LLVM runtime ends every task with `task_end`, which resets the arena.
+//!
+//! Freed memory. glibc keeps freed heap pages mapped, in one allocator
+//! arena per thread that allocated them, so a process whose tasks run on
+//! many threads keeps the high-water mark of every thread's arena. A
+//! `Store` that drops values and an LLVM task whose arena grew past 1 MiB
+//! call [`released_memory`]; the worker of the next task that ends then
+//! calls `malloc_trim(0)`, which returns the free pages of every arena to
+//! the kernel. A task that freed nothing pays one atomic load.
+//!
+//! The trim walks every free chunk of every arena, holding each arena's
+//! lock in turn: on a fragmented heap of 1 to 2 GiB it took 68 to 138 ms,
+//! and 12 to 25 ms again when nothing was left to return (glibc 2.44,
+//! 2026-11-04). So one worker trims at a time, a task's end trims at most
+//! once per [`TRIM_INTERVAL`], and a worker that ends after lingering
+//! trims what is still marked, so the last release is not left behind.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::thread::Thread;
 use std::time::{Duration, Instant};
 
@@ -116,6 +131,72 @@ where
     }
 }
 
+/// The shortest time from one trim to the next trim at a task's end.
+const TRIM_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Memory went back to the allocator since the last trim.
+static RELEASED: AtomicBool = AtomicBool::new(false);
+
+/// When the last trim ended; held by the worker that trims.
+static LAST_TRIM: Mutex<Option<Instant>> = Mutex::new(None);
+
+#[cfg(test)]
+thread_local! {
+    /// Calls of [`released_memory`] on this thread, for tests.
+    pub(crate) static RELEASES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Note that the current task gave a noticeable amount of memory back to
+/// the allocator: a `Store` dropped values, or a task arena was freed. A
+/// later task's end, or the end of a thread that lingered, returns the
+/// free heap pages to the kernel.
+pub fn released_memory() {
+    #[cfg(test)]
+    RELEASES.with(|n| n.set(n.get() + 1));
+    if !RELEASED.load(Ordering::Relaxed) {
+        RELEASED.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Trim the heap and clear `released` when it is set, no other worker
+/// holds `last`, and the last trim ended at least `interval` ago; whether
+/// it trimmed. A trim that is not due leaves `released` set.
+fn trim_if_released(
+    released: &AtomicBool,
+    last: &Mutex<Option<Instant>>,
+    interval: Duration,
+) -> bool {
+    if !released.load(Ordering::Relaxed) {
+        return false;
+    }
+    let mut last = match last.try_lock() {
+        Ok(last) => last,
+        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(TryLockError::WouldBlock) => return false,
+    };
+    if last.is_some_and(|at| at.elapsed() < interval) {
+        return false;
+    }
+    if !released.swap(false, Ordering::Relaxed) {
+        return false;
+    }
+    trim_heap();
+    *last = Some(Instant::now());
+    true
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn trim_heap() {
+    unsafe extern "C" {
+        fn malloc_trim(pad: usize) -> i32;
+    }
+    // SAFETY: glibc's `malloc_trim` takes no pointer and is thread-safe.
+    unsafe { malloc_trim(0) };
+}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+fn trim_heap() {}
+
 /// A thread failed to start since the last one that started.
 static FAILING: AtomicBool = AtomicBool::new(false);
 
@@ -131,6 +212,7 @@ fn work(mut job: Job) {
         }
         crate::flush();
         task_ended();
+        trim_if_released(&RELEASED, &LAST_TRIM, TRIM_INTERVAL);
         lock(&IDLE).push(Arc::clone(&me));
         let deadline = Instant::now() + LINGER;
         job = loop {
@@ -145,6 +227,8 @@ fn work(mut job: Job) {
             let mut idle = lock(&IDLE);
             if let Some(at) = idle.iter().position(|other| Arc::ptr_eq(other, &me)) {
                 idle.remove(at);
+                drop(idle);
+                trim_if_released(&RELEASED, &LAST_TRIM, Duration::ZERO);
                 return;
             }
             drop(idle);
@@ -172,6 +256,33 @@ mod tests {
         a_failed_task_leaves_its_worker_to_the_next();
         every_task_runs_once_under_contention();
         the_drain_waits_for_every_live_task();
+    }
+
+    #[test]
+    fn a_trim_runs_once_per_release_and_interval() {
+        let released = AtomicBool::new(false);
+        let last = Mutex::new(None);
+        let hour = Duration::from_secs(3600);
+        assert!(!trim_if_released(&released, &last, hour));
+        released.store(true, Ordering::Relaxed);
+        assert!(trim_if_released(&released, &last, hour));
+        assert!(!released.load(Ordering::Relaxed));
+        assert!(!trim_if_released(&released, &last, Duration::ZERO));
+
+        released.store(true, Ordering::Relaxed);
+        assert!(!trim_if_released(&released, &last, hour), "not due");
+        assert!(
+            released.load(Ordering::Relaxed),
+            "a trim not due keeps the mark"
+        );
+        let held = last.lock().unwrap();
+        assert!(
+            !trim_if_released(&released, &last, Duration::ZERO),
+            "another worker trims"
+        );
+        drop(held);
+        assert!(trim_if_released(&released, &last, Duration::ZERO));
+        assert!(!released.load(Ordering::Relaxed));
     }
 
     /// `wait_for_tasks` (the drain, 16.13) returns once the last task
@@ -223,17 +334,57 @@ mod tests {
             );
         });
         let a = finished.recv().unwrap();
-        let mut reused = false;
+        assert!(reaches(a), "no task ran on the failed task's thread");
+    }
+
+    /// How many spawns pop the idle worker on thread `id`, once it pushed
+    /// itself onto [`IDLE`], waiting at most 5 s for that: the stack is
+    /// LIFO, and under load a worker of another test can sit above it.
+    fn depth_of_idle(id: std::thread::ThreadId) -> Option<usize> {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            {
+                let idle = lock(&IDLE);
+                if let Some(at) = idle.iter().position(|w| w.thread.id() == id) {
+                    return Some(idle.len() - at);
+                }
+            }
+            if Instant::now() >= deadline {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    /// Whether a task runs on thread `id` again: each attempt waits until
+    /// its worker is idle, then holds as many tasks at once as the workers
+    /// at and above it, so every one of them takes a task. An attempt
+    /// misses only when another worker went idle in between.
+    fn reaches(id: std::thread::ThreadId) -> bool {
         for _ in 0..50 {
-            std::thread::sleep(Duration::from_millis(10));
-            let next = done.clone();
-            spawn(move || next.send(std::thread::current().id()).unwrap());
-            if finished.recv().unwrap() == a {
-                reused = true;
-                break;
+            let Some(depth) = depth_of_idle(id) else {
+                return false;
+            };
+            let (release, held) = channel::<()>();
+            let held = Arc::new(Mutex::new(held));
+            let (done, ran) = channel();
+            for _ in 0..depth {
+                let held = Arc::clone(&held);
+                let done = done.clone();
+                spawn(move || {
+                    done.send(std::thread::current().id()).unwrap();
+                    lock(&held).recv().unwrap();
+                });
+            }
+            let ids: Vec<_> = (0..depth).map(|_| ran.recv().unwrap()).collect();
+            for _ in 0..depth {
+                release.send(()).unwrap();
+            }
+            if ids.contains(&id) {
+                return true;
             }
         }
-        assert!(reused, "no task ran on the failed task's thread");
+        false
     }
 
     fn a_finished_worker_runs_the_next_task() {
@@ -241,17 +392,7 @@ mod tests {
         let first = done.clone();
         spawn(move || first.send(std::thread::current().id()).unwrap());
         let a = finished.recv().unwrap();
-        let mut reused = false;
-        for _ in 0..50 {
-            std::thread::sleep(Duration::from_millis(10));
-            let next = done.clone();
-            spawn(move || next.send(std::thread::current().id()).unwrap());
-            if finished.recv().unwrap() == a {
-                reused = true;
-                break;
-            }
-        }
-        assert!(reused, "no task ran on the first task's thread");
+        assert!(reaches(a), "no task ran on the first task's thread");
     }
 
     fn every_task_runs_once_under_contention() {

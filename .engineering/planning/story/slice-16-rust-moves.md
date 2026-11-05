@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-16-rust-moves
 kind: story
-status: draft
+status: implemented
 title: Rust target moves at last use
 summary: Pass consumed parameters by value and move at last use on the Rust target, and lower expression calls
 relations:
@@ -18,7 +18,11 @@ scope:
   path: crates/ignite/src/apply/plan.rs
 - confidence: cited
   path: docs/slice.md
-revision: 4
+revision: 8
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-04T07:03:30Z", actor: "human:timo", revision: 6}
+- {from: "proposed", to: "active", at: "2026-11-04T07:03:30Z", actor: "human:timo", revision: 7}
+- {from: "active", to: "implemented", at: "2026-11-05T00:57:41Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: slice-16-rust-moves
 
@@ -37,6 +41,14 @@ quadratic copy of probe p07 becomes linear; expression calls are lowered where `
   `tests/golden.rs` and `CODEGEN_REVISION`. It lands on `main` first (release v0.4.1), and the
   slice branch merges `main` before W3 starts, so this unit starts from its result.
 - Also edits section 6 of `docs/slice.md` (the parameter sentence and the `fn` row).
+- Field targets from the playground session's round 9 (2026-11-04, tree `ignite-opt9-io-copies`,
+  base `88cae227`), whose ad-hoc last-use moves in rustgen were not landed so that the compiler
+  keeps the one move rule of 20.3: `write_all(&stream, out.clone())` becomes `out` at its last
+  use, and the other move sites of that diff (`last_use`, `owned_args`). Its whole round, moves
+  and borrows, took ember's `.clone()` count from 148 to 119 and Rust-target heap allocations
+  from 564,409 to 514,375; `Parsed::Command(args.clone(), ..)` and
+  `next.entries.push(entry.clone())` are 4.3 % and 3.2 % of allocations
+  (`story:rustgen-redundant-clones`).
 
 ## Acceptance
 

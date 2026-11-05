@@ -1,4 +1,4 @@
-#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 use ignite_std::text::{Mode, SUFFIX, shout};
 
 #[allow(non_snake_case)]
@@ -36,14 +36,14 @@ pub fn judge(size: &i64) -> Verdict {
 }
 
 pub fn describe(verdict: &Verdict, mode: &Mode) -> String {
-    match verdict.clone() {
-        Verdict::Accept(room) => {
-            match mode.clone() {
+    match verdict {
+        Verdict::Accept(room) => { let room = (room).clone(); {
+            match mode {
                 Mode::Loud => shout(&GREETING()),
                 Mode::Quiet => room.clone().to_string(),
             }
-        },
-        Verdict::Reject(reason) => reason,
+        } },
+        Verdict::Reject(reason) => reason.clone(),
     }
 }
 

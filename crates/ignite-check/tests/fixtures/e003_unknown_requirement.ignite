@@ -1,0 +1,15 @@
+import std.rfc.rfc1.{RFC1}
+
+protocol Echo conforms [RFC1, RFC404] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] satisfies [RFC1.R9_9_9] {
+    return stream.write_all(b"ok")
+  }
+
+  unsupported RFC404.R2_1 "no such spec"
+}
+
+fn answer(x: Int) -> Int satisfies [RFC1.R2_1, RFC1.R2_9] = x
+
+test "local" verifies [LOCAL.R1_1] {
+  assert answer(1) == 1
+}

@@ -97,6 +97,7 @@ fn source() -> PathBuf {
 fn build(target: Target) -> PathBuf {
     let options = match target {
         Target::Rust => ignite::BuildOptions {
+            target: Target::Rust,
             out: Some(tmp("syntax-rust")),
             target_dir: Some(tmp("syntax-rust-target")),
             ..Default::default()

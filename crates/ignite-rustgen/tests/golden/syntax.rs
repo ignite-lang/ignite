@@ -1,4 +1,4 @@
-#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 
 pub type IoResult<T> = Result<T, ignite_io::IoError>;
 
@@ -65,7 +65,7 @@ pub fn lowest() -> i64 {
 }
 
 pub fn shout(t: &String) -> String {
-    format!("{}{}", t, String::from("!"))
+    format!("{}!", t)
 }
 
 pub fn twice(x: &i64) -> i64 {
@@ -77,7 +77,7 @@ pub fn lower_case(n: &i64) -> String {
     let mut n = n.clone();
     match n.clone() {
         __m if (*(&__m) == lowest()) => String::from("lowest"),
-        other => format!("{}{}", String::from("other "), other.to_string()),
+        other => format!("other {}", other),
     }
 }
 
@@ -96,18 +96,18 @@ pub fn describe(n: &i64) -> String {
 }
 
 pub fn classify(words: &Vec<String>) -> String {
-    match words.clone() {
-        __m if ((&__m).len() == 0) => String::from("none"),
-        __m if ((&__m).len() == 1) => { let w = ((&(&__m)[0])).clone(); format!("{}{}", String::from("one "), w) },
-        __m if ((&__m).len() == 2 && { let __p2 = &(&__m)[0]; (*__p2 == QUIT()) }) => String::from("quit with argument"),
-        __m if ((&__m).len() == 2) => { let a = ((&(&__m)[0])).clone(); let b = ((&(&__m)[1])).clone(); format!("{}{}{}", String::from("two "), a, b) },
+    match words {
+        __m if (__m.len() == 0) => String::from("none"),
+        __m if (__m.len() == 1) => { let w = ((&__m[0])).clone(); format!("one {}", w) },
+        __m if (__m.len() == 2 && { let __p2 = &__m[0]; (*__p2 == QUIT()) }) => String::from("quit with argument"),
+        __m if (__m.len() == 2) => { let a = ((&__m[0])).clone(); let b = ((&__m[1])).clone(); format!("two {}{}", a, b) },
         _ => String::from("many"),
     }
 }
 
 pub fn nested(v: &Option<(bool, Vec<i64>)>) -> String {
-    match v.clone() {
-        __m if (match (&__m) { Some(__p6) => { let (__p7, __p8) = __p6; (*__p7 == true) && (__p8.len() == 2) }, _ => false }) => { let x = ((&(&(match (&__m) { Some(__x) => __x, _ => unreachable!() }).1)[0])).clone(); let y = ((&(&(match (&__m) { Some(__x) => __x, _ => unreachable!() }).1)[1])).clone(); format!("{}{}{}{}", String::from("pair "), x.to_string(), String::from(" "), y.to_string()) },
+    match v {
+        __m if (match __m { Some(__p6) => { let (__p7, __p8) = __p6; (*__p7 == true) && (__p8.len() == 2) }, _ => false }) => { let x = ((&(&(match __m { Some(__x) => __x, _ => unreachable!() }).1)[0])).clone(); let y = ((&(&(match __m { Some(__x) => __x, _ => unreachable!() }).1)[1])).clone(); format!("pair {} {}", x, y) },
         Some((false, _)) | None => String::from("off or none"),
         Some((true, _)) => String::from("other"),
         #[allow(unreachable_patterns)]
@@ -116,8 +116,8 @@ pub fn nested(v: &Option<(bool, Vec<i64>)>) -> String {
 }
 
 pub fn vowel(w: &String) -> bool {
-    match w.clone() {
-        __m if ((*(&__m) == "a") || (*(&__m) == "e") || (*(&__m) == "i") || (*(&__m) == "o") || (*(&__m) == "u")) => true,
+    match w {
+        __m if ((*__m == "a") || (*__m == "e") || (*__m == "i") || (*__m == "o") || (*__m == "u")) => true,
         _ => false,
     }
 }
@@ -169,8 +169,8 @@ pub struct Syntax;
 impl Syntax {
     pub fn connect(mut stream: ignite_io::TcpStream) -> Result<(), ignite_io::IoError> {
         let (word, number) = swap(&(7, String::from("seven")));
-        (show(&(format!("{}{}{}", word.clone(), String::from(" "), number.to_string()))))?;
-        (show(&(format!("{}{}{}{}{}", describe(&0), String::from(" "), describe(&41), String::from(" "), describe(&9)))))?;
+        (show(&(format!("{} {}", word, number))))?;
+        (show(&(format!("{} {} {}", describe(&0), describe(&41), describe(&9)))))?;
         (show(&classify(&vec![])))?;
         (show(&classify(&vec![String::from("x")])))?;
         (show(&classify(&vec![String::from("quit"), String::from("now")])))?;
@@ -182,47 +182,47 @@ impl Syntax {
         (show(&nested(&Some((true, vec![3])))))?;
         let e = vowel(&String::from("e"));
         let x = vowel(&String::from("x"));
-        (show(&(format!("{}{}{}", e.to_string(), String::from(" "), x.to_string()))))?;
+        (show(&(format!("{} {}", e, x))))?;
         (show(&first_positive(&vec![ignite_io::checked::neg(1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 130, 26), 0, 5, 6]).to_string()))?;
         (show(&(format!("{}{}{}", sign(&0), sign(&3), sign(&(ignite_io::checked::neg(3, "crates/ignite-rustgen/tests/golden/syntax.ignite", 131, 35)))))))?;
-        (show(&count_spaces(&String::from("a b c ").clone().into_bytes()).to_string()))?;
+        (show(&count_spaces(&String::from("a b c ").into_bytes()).to_string()))?;
         let n = 21;
         (show(&twice(&n).to_string()))?;
         (show(&shout(&String::from("hey"))))?;
         let h = Handler { name: String::from("h"), respond: (std::sync::Arc::new(|__a0: String| shout(&__a0)) as std::sync::Arc<dyn Fn(String) -> String + Send + Sync>) };
-        (show(&(h.respond)(h.name.clone())))?;
+        (show(&(h.respond)(h.name)))?;
         let r = Reply { lines: vec![String::from("l")], action: Reply::default_action(), code: Reply::default_code() };
-        (show(&(format!("{}{}", String::from("code "), r.code.to_string()))))?;
-        match r.action.clone() {
+        (show(&(format!("code {}", r.code))))?;
+        match &r.action {
             Action::Continue => (show(&String::from("continue")))?,
             Action::Close => (show(&String::from("close")))?,
         };
         let flag = true;
         let space = SPACE();
-        (show(&(format!("{}{}{}{}{}", flag.to_string(), String::from(" "), space.to_string(), String::from(" "), String::from("t").clone()))))?;
+        (show(&(format!("{} {} {}", flag, space, String::from("t")))))?;
         let mut pair = (0, String::from(""));
         let mut i = 0;
         while i < 3000 {
             let (count, text) = pair.clone();
-            pair = (ignite_io::checked::add(count, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 151, 15), format!("{}{}", text, String::from("x")));
+            pair = (ignite_io::checked::add(count, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 151, 15), format!("{}x", text));
             i = ignite_io::checked::add(i, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 152, 11);
         }
         let (count, text) = pair.clone();
         let size = (text.len() as i64);
-        (show(&(format!("{}{}{}", count.to_string(), String::from(" "), size.to_string()))))?;
+        (show(&(format!("{} {}", count, size))))?;
         let spare = (1, String::from("a"));
         let (mut p, mut q) = spare.clone();
         p = ignite_io::checked::add(p, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 159, 9);
-        q = format!("{}{}", q, String::from("b"));
-        (show(&(format!("{}{}", p.to_string(), q.clone()))))?;
+        q = format!("{}b", q);
+        (show(&(format!("{}{}", p, q))))?;
         let _ = twice(&1);
         let _ = twice(&2);
         let light: Light = Light::Off;
-        match light.clone() {
+        match &light {
             Light::Off => (show(&String::from("light off")))?,
             Light::On => (show(&String::from("light on")))?,
         };
-        (show(&(format!("{}{}{}", lower_case(&3), String::from(" "), lower_case(&4)))))?;
+        (show(&(format!("{} {}", lower_case(&3), lower_case(&4)))))?;
         Ok(())
     }
 }
@@ -236,7 +236,7 @@ pub struct Runner {
 #[allow(non_snake_case)]
 pub fn Runner__main(self_: &Runner) -> Result<(), ignite_io::IoError> {
     let stream = match ignite_io::TcpStream::connect(self_.address.clone(), self_.port.clone()) {
-        Ok(stream) => stream,
+        Ok(stream) => stream.clone(),
         Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
     };
     match Syntax::connect(stream.clone()) {

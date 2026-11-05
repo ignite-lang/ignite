@@ -1164,15 +1164,27 @@ impl Model {
     /// property of every system and assembly of `program` is evaluated,
     /// and every assembly whose `system` names a system of the program is
     /// resolved; E110 to E113, E115, E117 and E118 as `model` reports them,
-    /// never E114.
+    /// never E114. First, for any program, the claim model of its
+    /// protocols (`docs/slice.md` 19.7): E090, E092 and E091's second
+    /// trigger, from [`crate::Claims::of`].
     pub fn check(
         evaluator: &mut Evaluator<'_>,
         program: &TypedProgram,
     ) -> Result<(), Vec<Diagnostic>> {
+        let mut claims = match evaluator.modules().get(&program.module) {
+            Some(module) => crate::Claims::of(evaluator, *module)
+                .err()
+                .unwrap_or_default(),
+            None => Vec::new(),
+        };
         if program.systems().is_empty() && program.assemblies().is_empty() {
-            return Ok(());
+            return if claims.is_empty() {
+                Ok(())
+            } else {
+                Err(claims)
+            };
         }
-        evaluator.with_stack(|evaluator| {
+        let checked = evaluator.with_stack(|evaluator| {
             let mut builder = Builder::new(evaluator, program);
             for system in program.systems() {
                 builder.system(program, system);
@@ -1184,12 +1196,14 @@ impl Model {
                     .and_then(|name| program.systems().iter().find(|s| s.name == name));
                 builder.assembly(program, assembly, system);
             }
-            if builder.diagnostics.is_empty() {
-                Ok(())
-            } else {
-                Err(builder.diagnostics)
-            }
-        })
+            builder.diagnostics
+        });
+        claims.extend(checked);
+        if claims.is_empty() {
+            Ok(())
+        } else {
+            Err(claims)
+        }
     }
 
     /// The members with declaration `declaration`, in id order.

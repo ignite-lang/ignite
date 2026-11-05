@@ -13,7 +13,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub mod apply;
+pub mod conformance;
 mod llvm_build;
+pub mod rfc;
 pub mod run;
 mod test_build;
 
@@ -28,14 +30,15 @@ use ignite_syntax::ast::{Import, Program, Span};
 use ignite_syntax::diagnostic::Diagnostic;
 use ignite_types::{TypedModules, TypedProgram};
 
-/// What `ignite build` compiles to.
+/// What `ignite build` compiles to. The default is LLVM (`docs/vision.md`
+/// section 8, D2 B); the Rust target stays as the differential check.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Target {
     /// Generated Rust projects built with cargo (`docs/slice.md` 6.2).
-    #[default]
     Rust,
     /// LLVM IR compiled and linked by clang with `libignite_rt.a`
     /// (`docs/llvm.md` section 1). Runs neither cargo nor rustc.
+    #[default]
     Llvm,
 }
 
@@ -80,7 +83,7 @@ pub struct BuildOptions {
 impl Default for BuildOptions {
     fn default() -> BuildOptions {
         BuildOptions {
-            target: Target::Rust,
+            target: Target::Llvm,
             clang: None,
             runtime: None,
             out: None,
@@ -146,8 +149,9 @@ pub struct RunOptions {
     pub fresh: bool,
     /// Root of the standard library. Default: [`default_std_path`].
     pub std: Option<PathBuf>,
-    /// `--fuel N`: the fuel limit per property expression and per reducer
-    /// step (15.3, 16.6); default `ignite_eval::Fuel::DEFAULT_LIMIT`.
+    /// `--fuel N`: the fuel limit per reducer step (16.6); default
+    /// `ignite_eval::Fuel::DEFAULT_LIMIT`. The plan inside `run` keeps the
+    /// default fuel per property expression (15.3).
     pub fuel: Option<u64>,
     /// `--runtime PATH`: the runtime archive of the LLVM target. Default:
     /// [`default_runtime_path`].
@@ -1588,7 +1592,7 @@ pub fn run(file: &Path, options: &RunOptions) -> Result<i32, Error> {
         }
     }
     for member in &declared {
-        eprintln!("ignite run: {member}: declared, not buildable in slice 12");
+        eprintln!("ignite run: {member}: declared, not buildable: its kind has no main");
     }
     let (tx, rx) = std::sync::mpsc::channel();
     let adapters = run::control::Adapters::start(tx.clone()).map_err(io_error(&state))?;

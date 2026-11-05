@@ -1,4 +1,4 @@
-#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 
 pub fn add(a: &i64, b: &i64) -> i64 {
     let mut a = a.clone();
@@ -44,11 +44,11 @@ pub fn sign(x: &i64) -> i64 {
 
 pub fn countdown(n: &i64) -> Vec<i64> {
     let mut n = n.clone();
-    let mut out = Vec::new();
+    let mut out: Vec<i64> = Vec::new();
     let mut i = n.clone();
     while i > 0 {
         out.push(i.clone());
         i = ignite_io::checked::sub(i, 1, "crates/ignite-rustgen/tests/golden/pure.ignite", 34, 9);
     }
-    return out.clone();
+    return out;
 }

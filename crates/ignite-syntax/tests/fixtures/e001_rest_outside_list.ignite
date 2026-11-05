@@ -1,0 +1,20 @@
+package fixtures.rest
+
+fn tuple(t: (Int, Int)) -> Int {
+  return match t {
+    (a, ..) => a
+  }
+}
+
+fn variant(o: Option<Int>) -> Int {
+  return match o {
+    Some(..) => 1
+    None => 0
+  }
+}
+
+fn bare(xs: List<Int>) -> Int {
+  return match xs {
+    .. => 0
+  }
+}

@@ -1,0 +1,105 @@
+import std.net.{Pipe, PipeStream}
+
+type IoResult<T> = Result<T, IoError>
+
+type IntFn = fn(Int) -> Int
+
+type IntFn2 = fn(Int, Int) -> Int
+
+fn double(x: Int) -> Int = x * 2
+
+fn sum2(a: Int, b: Int) -> Int = a + b
+
+fn tag(s: PipeStream, t: Text) -> IntFn requires [s.write] {
+  let r = s.write_all(t.to_bytes())
+  double
+}
+
+fn tag2(s: PipeStream, t: Text) -> IntFn2 requires [s.write] {
+  let r = s.write_all(t.to_bytes())
+  sum2
+}
+
+fn arg(s: PipeStream, t: Text, n: Int) -> Int requires [s.write] {
+  let r = s.write_all(t.to_bytes())
+  n
+}
+
+fn drain(b: PipeStream) -> IoResult<Text> requires [b.read] {
+  var out = Bytes.empty()
+  loop {
+    match b.read(64)? {
+      Eof => break
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out.to_text())
+}
+
+fn called_before_push() -> Int {
+  var fs = []
+  let n = if fs.len() > 0 { fs[0](1) } else { 0 }
+  fs.push(double)
+  n
+}
+
+fn bound_before_push() -> Int {
+  var fs = []
+  let n = if fs.len() > 0 {
+    let f = fs[0]
+    f(1)
+  } else {
+    0
+  }
+  fs.push(double)
+  n
+}
+
+fn map_before_put() -> Int {
+  var m = Map.empty()
+  let n = match m.get(1) {
+    Some(f) => f(1)
+    None => 0
+  }
+  m.put(1, double)
+  n
+}
+
+fn none_before_set() -> Int {
+  var o = None
+  let n = match o {
+    Some(f) => f(1)
+    None => 0
+  }
+  o = Some(double)
+  n
+}
+
+test "the callee is evaluated before the arguments" {
+  let (a, b) = Pipe.pair()
+  let fs = [double, double]
+  let x = tag(a, "F")(arg(a, "1", 1))
+  let y = tag2(a, "G")(arg(a, "2", 2), arg(a, "3", 3))
+  let z = fs[arg(a, "I", 1)](arg(a, "4", 4))
+  a.close()
+  assert x == 2
+  assert y == 5
+  assert z == 8
+  assert drain(b)? == "F1G23I4"
+}
+
+test "an indexed callee whose list a later push decides" {
+  assert called_before_push() == 0
+}
+
+test "a fn value bound from a list a later push decides" {
+  assert bound_before_push() == 0
+}
+
+test "a fn value from a map a later put decides" {
+  assert map_before_put() == 0
+}
+
+test "a fn value from an option a later assignment decides" {
+  assert none_before_set() == 0
+}

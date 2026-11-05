@@ -1,4 +1,4 @@
-# Ignite slices 1 to 14: language subset, standard library, substrate and lowering
+# Ignite slices 1 to 16: language subset, standard library, substrate and lowering
 
 Status: implementation contract for the compiler slice, 2026-11-01. It narrows
 `design.md` to what `examples/terminal/terminal.ignite` and `std/` need. Where the two
@@ -446,15 +446,15 @@ Every generated file starts with
 | `Unit` (type) | `()` |
 | `List<T>` | `Vec<T>` |
 | `Option<T>`, `Result<T, E>` | same |
-| `fn(A, B) -> R` | `fn(A, B) -> R` |
+| `fn(A, B) -> R` | `std::sync::Arc<dyn Fn(A, B) -> R + Send + Sync>` (13.3) |
 | `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError` | `ignite_io::` same name |
 | record `type R { a: T }` | `#[derive(Clone, Debug)] pub struct R { pub a: T }` |
 | `enum E { A, B(T) }` | `#[derive(Clone, Debug)] pub enum E { A, B(T) }` |
-| `fn f(p: T) -> U` | `pub fn f(p: &T) -> U` (parameters, below) |
+| `fn f(p: T) -> U` | `pub fn f(p: &T) -> U`, or `pub fn f(p: T) -> U` when `f` consumes `p` (parameters, below) |
 | `fn f(...) requires [...]` | `pub fn f(...)` |
 | `type R<A> {..}`, `enum E<A> {..}`, `fn f<A>(..)`, a role `fn serve<A>(..)` | `pub struct R<A: Clone + Send + Sync + 'static>` and so on: every type parameter carries these bounds (11.1) |
 | `Store<T>` | `ignite_io::Store<T>` |
-| `fn(p: A) -> R requires [p.*]` | `fn(A) -> R` |
+| `fn(p: A) -> R requires [p.*]` | `std::sync::Arc<dyn Fn(A) -> R + Send + Sync>` |
 | `protocol P { fn serve ... fn connect ... }` | `pub struct P;` and `impl P { pub fn serve ... pub fn connect ... }` |
 | `P.serve(a, b)` | `P::serve(a, b)` |
 | `import std.a.b.{X, Y}` in a program | `use ignite_std::a::b::{X, Y};` |
@@ -476,7 +476,7 @@ Every generated file starts with
 | `if c { a } else { b }` | same |
 | `while`, `loop`, `for x in e`, `break`, `continue`, `return` | same |
 | `a + b` etc. | same on numbers |
-| `a + b + c` on `Text` | `format!("{}{}{}", a, b, c)` (one call per left-folded chain) |
+| `a + b + c` on `Text` | `format!("{}{}{}", a, b, c)` (one call per left-folded chain); `format!` borrows each part, a literal part is inlined into the template with its braces doubled, and a part `x.to_text()` of Text, Int, Byte or Bool (each `{x}` of an interpolation) passes `x` |
 | `a == b` | same |
 | `(a, b)`, type `(A, B)` | `(a, b)`, `(A, B)` |
 | `()` | `()` |
@@ -494,7 +494,9 @@ The `spawn` arguments are evaluated (and cloned, ownership rule) before the task
 the spawning function keeps its own copies.
 
 **Ownership rule.** Rust moves what Ignite copies. A *place* (an identifier, or a place
-followed by `.field`) used in a value position is emitted with `.clone()`. Value positions:
+followed by `.field`) used in a value position is emitted with `.clone()`, except where
+`TypedProgram::moves` marks it (20.3): that place is dead after its move position, and it is
+emitted bare, so Rust moves it. Value positions:
 call and method arguments, `let`/`var` initializers, assignment right-hand sides, `match`
 scrutinees, `return` operands, list elements, record field values, `for` iterables, and
 operands of `await`, `?`, `!` and `-`. Non-value positions: the receiver of a method call or
@@ -502,16 +504,29 @@ field access, the left-hand side of an assignment, and operands of binary arithm
 comparison and logic operators. Every substrate handle implements `Clone` so this rule has
 no exceptions.
 
-**Parameters.** Every parameter of a fn (not of a protocol role, which a generated `main`
-calls with owned values) is a reference `p: &T`, so a call copies nothing: an argument that
-is a place is passed as `&place`, a parameter that is itself a reference as it is, any other
-argument as `&(value)`. A parameter the body assigns or changes in place (`push`, `append`,
-`clear` on it or a field of it), and one of a `Copy` type (`Int`, `Byte`, `Bool`, `Unit`, fn
-types), is copied once on entry: `let mut p = p.clone();`. In the body a reference
-parameter is dereferenced as an operand of an operator, a condition or an index (`(*p)`), and
-copied where it is the result of a block, arm or branch. A fn of the module or an imported
-one used as a value is a closure that borrows for it, cast to the fn pointer type:
-`((|__a0: i64| f(&__a0)) as fn(i64) -> i64)`; `spawn f(a)` calls `f(&__spawn_0)`.
+**Parameters.** A parameter of a fn or associated fn that its fn consumes
+(`TypedProgram::consumed`, 20.3.3: changed in place on some path or moved on every path) is
+declared by value, `p: T`, or `mut p: T` when the body assigns or changes it in place, and
+has no entry copy. A protocol role's parameters are `mut name: T` by value, consumed or not
+(a generated `main` calls a role with owned values). Every other parameter is a reference
+`p: &T`, so a call copies nothing: an argument that is a place is passed as `&place`, a
+parameter that is itself a reference as it is, any other argument as `&(value)`; `l.at(i)`
+on a place `l` passes the element borrowed from the list, `ignite_io::checked::at(&l, i,
+<site>)`, unless another argument of the call changes `l`. Such a parameter of type `Int`,
+`Byte`, `Bool`, `Unit` or a fn type (an `Arc`, copied by a reference count) is copied once on entry: `let mut p = p.clone();`. An argument to a
+consumed parameter or to a role parameter is a value: a place that moves is emitted bare,
+any other place with `.clone()`, so `s = step(s, i)` passes `s` without a copy and `let t =
+step(s, 1); t.count + s.count` passes `s.clone()`. In the body a reference parameter is
+dereferenced as an operand of an operator, a condition or an index (`(*p)`), and copied
+where it is the result of a block, arm or branch. A fn of the module or an imported one used
+as a value is a closure in an `Arc` cast to the fn value type (13.3); it takes its arguments
+by value and passes each as its parameter is declared:
+`(std::sync::Arc::new(|__a0: i64| f(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send +
+Sync>)`, and `step(__a0, &__a1)` for a `step` that consumes its first parameter. The calls
+the generator writes itself follow the same rule: `spawn f(a)` calls `f(&__spawn_0)`, or
+`f(__spawn_0)` when `f` consumes the parameter; a generated `main` calls `K.main(&value)`,
+or `K.main(value)` when `K.main` consumes `self`; a `to_text` fn that shows a value in an
+`assert` or `?` report gets `&value`, or `value.clone()` when it consumes it.
 
 **Block values.** A block in *value position* emits its last statement, when it is an
 expression, without a trailing `;` so it becomes the block's value. Value positions: a
@@ -521,6 +536,22 @@ a function whose declared return type is present and not `Unit`. Every other blo
 with no return type or `Unit`) ends every statement with `;`. An `if` is in value position
 when it is a `let`/`var` initializer, a `return` operand, an argument, an arm body, or the
 last statement of a value-position block.
+
+**`for` over a list.** An exception to the ownership rule, when the types are known: a `for`
+whose iterable is a place of type `List<T>`, `T` being `Text`, a list, map, `Option`,
+`Result`, tuple, record or enum, and whose body neither assigns nor changes in place the
+element or the variable the place is rooted at, iterates `(place).iter()` and copies no list.
+In the body the element is a reference, read like a reference parameter. Every other `for`
+copies its iterable.
+
+**`match` on a place.** The same exception for a scrutinee, when the types are known: a
+`match` whose scrutinee is a place of one of those types, not `Copy` in Rust (an `Option`,
+`Result` or tuple of `Int`, `Byte`, `Bool` or `Unit` is), and none of whose arms assigns or
+changes in place the variable the place is rooted at, matches `&place` (a reference parameter
+as it is) and copies no scrutinee. A binding of one of those types that is not `Copy` is a
+reference in its arm, read like a reference parameter; any other binding is copied at the
+start of its arm (`{ let n = (n).clone(); .. }`). An arm whose pattern becomes a guard binds
+`__m` to the reference. Every other `match` copies its scrutinee.
 
 **Builtin methods** are lowered by name; the receiver type is not known, so each name has one
 meaning. The generator emits exactly the Rust on the right.
@@ -533,18 +564,20 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.starts_with(p)` | `t.starts_with(&p)` | |
 | `t.strip_prefix(p)` | `t.strip_prefix(&p).map(\|s\| s.to_string())` | |
 | `t.concat(u)` | `format!("{}{}", t, u)` | |
-| `t.to_bytes()` | `t.clone().into_bytes()` | |
+| `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | |
 | `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
+| `b.slice(i, j).to_text()` | `String::from_utf8_lossy(ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
 | `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List |
 | `b.to_int()` | `(b as i64)` | Byte |
 | `i.to_byte()` | `u8::try_from(i).ok()` | Int |
-| `Int.parse(t)` | `Some(t).filter(\|t: &String\| !t.starts_with('+')).and_then(\|t\| t.parse::<i64>().ok())` | static |
-| `s.next_id()`, `s.get(id)`, `s.put(id, v)`, `s.remove(id)`, `s.values()`, `s.update(id, f)` | the same `ignite_io::Store` method | Store |
+| `Int.parse(t)` | `ignite_io::parse_int(&t)`: decimal digits with an optional leading `-`, `None` for a leading `+` and for anything `str::parse::<i64>` rejects; the LLVM runtime's `int_parse` calls the same function | static |
+| `Int.parse(b.to_text())`, `Int.parse(b.slice(i, j).to_text())` | `ignite_io::parse_int(&b)`, `ignite_io::parse_int(ignite_io::checked::slice_ref(&b, i, j, <site>))`: no `Text` is built; bytes that are not UTF-8 give `None`, as their lossy text does. The LLVM target passes `b` (or the slice) to `int_parse` without `text_from_bytes_lossy` | static |
+| `s.next_id()`, `s.get(id)`, `s.put(id, v)`, `s.remove(id)`, `s.values()`, `s.update(id, f)`, `s.upsert(id, f)` | the same `ignite_io::Store` method | Store |
 | `s.set_idle_timeout(ms)` | `s.set_idle_timeout(ms)` | TcpStream |
 | `b.slice(i, j)` | `b[(i) as usize..(j) as usize].to_vec()` | |
 | `b.push(x)` | `b.push(x)` | Bytes, List |
-| `b.append(c)` | `b.extend_from_slice(&c)` | Bytes |
+| `b.append(c)` | `b.extend_from_slice(&c)`, `c` borrowed; `&c.clone()` when `c` is rooted at the variable of `b` | Bytes, List |
 | `b.clear()` | `b.clear()` | |
 | `l.join(sep)` | `l.join(&sep)` | List<Text> |
 | `x.copy()` | `x.clone()` | |
@@ -670,7 +703,9 @@ the component rules are E020 and E104 to E109 (section 14.11). A program with no
 produces a library crate with no executable.
 ### 6.2 Generated projects
 
-For `ignite build terminal.ignite --out DIR`:
+For `ignite build terminal.ignite --target rust --out DIR` (the default target until
+2026-11-05; since `story:llvm-default-target` a build without `--target` is the LLVM target of
+`docs/llvm.md`):
 
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
@@ -761,6 +796,7 @@ pub fn run<F>(main: F) -> i32 where F: FnOnce() -> Result<(), IoError>;  // main
 pub fn spawn<F>(task: F) where F: FnOnce() + Send + 'static;             // an idle thread or a new one; returns at once; never panics
 pub fn try_spawn<F>(task: F) -> Result<(), IoError> where F: FnOnce() + Send + 'static; // spawn, Err when no thread can start
 pub const LINGER: Duration;                                              // 1 s: how long a thread without a task waits for one
+pub fn released_memory();                                                // mark freed heap memory for the next trim (Tasks, below)
 pub fn log(line: &str);                                                  // the line and a newline to stderr in one write
 pub fn exit(code: i32) -> !;                                             // restores the terminal mode, flushes stdout, exits the process
 pub mod args {
@@ -790,6 +826,13 @@ The substrate's pending writes are always empty between tasks, because each task
 with a flush. When the operating system cannot start a thread, the task is dropped without
 running (a task that owns a stream closes it), the first such failure after a successful
 start is logged as `cannot start a task: <reason>`, and the process continues.
+
+**Freed memory.** A `Store` that replaces or removes a value, and an LLVM task whose arenas
+held more than 1 MiB at its end, call `released_memory`. On Linux with glibc the substrate
+then calls `malloc_trim(0)` after a task ends, at most once a second and on one thread at a
+time, and when a thread that lingered without a task ends; on other targets it does
+nothing. The trim runs after the task's flush and after the task stops counting as live,
+so neither its writes nor the drain (16.13) wait for it.
 
 **Accept.** `accept` retries a failure that passes with time: out of descriptors
 (`EMFILE`, `ENFILE`), buffers (`ENOBUFS`) or memory, or a connection aborted before it
@@ -855,6 +898,8 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E056 | a parameter of a fn, role, fn type or closure named like an ambient capability: `stdin`, `stdout`, `process`, `net`, since slice 17 also `clock` (section 13.11, 21.1 probe p1) |
 | E057 | a type parameter of a generic record, enum or alias that no field, payload or aliased type uses (section 13.11) |
 | E099 | (slice 14) a bound naming an interface other than `ByteStream` or more than one interface, or `ByteStream` in a type position (section 18.7) |
+| E091 | (slice 15) a catalogue constant, of type `std.rfc.Requirement` or `std.rfc.Spec`, whose value is not literal data (section 19.4); the consistency trigger is the evaluator's (below) |
+| E076 | (slice 16) a second `..` in a list pattern, or a `..name` that is not the last element (section 20.5); reported by the parser |
 
 Keywords are accepted as names in package and import paths, property names and
 record-literal field names.
@@ -904,6 +949,28 @@ member whose kind lacks the entry its host needs; from `ignite run` and `ignite 
 E125 nothing to run, E126 journal of another model or format, or a held lock, E127 journal
 that does not replay (first diverging `seq`), E128 reducer failure at run time (14.8 report
 text). Fixtures: all under `crates/ignite/tests/fixtures`, named as in section 16.17.
+
+Codes of slice 15 (section 19.12). Clauses also give E001 (malformed clause), E003 (unknown
+spec or requirement), E004 (a spec named twice in `conforms`) and E040 (a clause argument of
+the wrong type), section 19.6.
+
+| code | meaning |
+|---|---|
+| E090 | a MUST-class requirement in scope of a conforming protocol with no status, or a requirement with two statuses (two messages); from `ignite-eval`, through `ignite check` and `ignite conformance` (section 19.7) |
+| E091 | a catalogue constant that is not literal data, from `ignite-check`; an inconsistent catalogue in the checked file (an ordinal under 1, a name that is not the id, a requirement not listed once in the `Spec`, a foreign `rfc`, two `Spec` constants), from `ignite-eval` (section 19.4) |
+| E092 | a `satisfies`, `verifies` or status naming a requirement of a spec that its protocol, or no protocol of its module, conforms to; from `ignite-eval` (section 19.7) |
+
+Fixtures: E091 (literal data) under `crates/ignite-check/tests/fixtures`; E090, E091
+(consistency) and E092 under `crates/ignite/tests/fixtures`, named as in section 19.12.
+
+Codes of slice 16 (section 20.7): E076 above. Changed meanings: E003 is no longer reported for a
+callee that is an expression (`not callable`); E040 also for a callee whose type is no fn type;
+E042 also for a call of an effectful fn-typed expression that is no name and that `ignite-check`
+gives no type (a call's result); E046 splits a list
+column by length and names the missing lengths as list patterns. Fixtures: `e076_rest` and
+`e001_rest_outside_list` under `crates/ignite-syntax/tests/fixtures`; `e040_not_callable`,
+`e043_expression_call_arity`, `e042_effectful_expression_callee`, `e040_rest_binding` and
+`e046_rest` under `crates/ignite-types/tests/fixtures`.
 
 Codes of slice 17 (section 21.9): from the type checker, E140 a `Text` literal path argument
 of a `Directory` method that is absolute, has a `..` component or a NUL, and E141 a flag of a
@@ -1151,6 +1218,7 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
 | `s.remove(id)` | `Option<T>` (the removed value) | `s.write` |
 | `s.values()` | `List<T>` in ascending id order | `s.read` |
 | `s.update(id, f: fn(T) -> T)` | `Option<T>` (the new value), atomic, `f` pure | `s.write` |
+| `s.upsert(id, f: fn(Option<T>) -> T)` | `T` (the stored value): `f` of the current value, `None` when `id` holds nothing, atomic, `f` pure | `s.write` |
 
 - Value semantics: `get`/`values` return copies; `put` stores a copy.
 - One implementation in `ignite-io`: `Store<T: Clone + Send>` over
@@ -1158,6 +1226,17 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
   directly. `ignite-rt` exposes `ignite_rt_store_*` over a `Store<HeapValue>`, where
   `HeapValue` is a pointer to a malloc'd deep copy made and freed by generator glue
   (`copy_to_heap.<T>`, `copy_from_heap.<T>`, `free_heap.<T>`), passed to `store_new`.
+  `get`, `values` and `update`'s result use the store's borrowing reads (`read`,
+  `read_values`, `replace_with`): `copy_from_heap` copies the stored value straight into the
+  calling task's arena under the lock, so a read makes one copy and frees nothing. `update`'s
+  thunk `store_update.<T>` runs under the lock behind a callback guard: a failure inside `f`
+  (14.8) leaves the old value, the lock is released, then the task ends with the failure's
+  report, as on the Rust target, where the failure unwinds through `ignite_io::Store`.
+- `upsert` is the atomic insert-or-update: two tasks that upsert one absent id lose neither
+  write, where `update` (which answers `None` for it) followed by `put` can. `ignite_io`'s
+  `upsert` is `upsert_with` over a clone of the stored value; `ignite_rt_store_upsert` calls
+  the thunk `store_upsert.<T>(f, old)` under the lock with the stored heap value, or null for an
+  absent id, which the thunk passes to `f` as `None`. The thunk has `update`'s callback guard.
 - Created as a system resource (11.4). `Store.new()` creates one in tests and test-only items
   only (section 12.3).
 
@@ -1663,6 +1742,10 @@ the arguments' roots plus the others (`Symbols::effect_sites` lists it).
 `std::sync::Arc<dyn Fn(P1, ..) -> R + Send + Sync>` (generics where cheaper and equivalent). A
 closure lowers to `Arc::new({ let c1 = c1.clone(); .. move |p1, ..| body })`, cloning each
 capture at creation. A named fn used as a value is wrapped the same way.
+A closure literal passed straight to `Store.update`, `Store.upsert` or `List.map`, which call
+it before they return, lowers to a plain `|p1, ..| body` that borrows its captures: no `Arc`,
+no clone per capture, and the same values, since no binding of the enclosing fn changes during
+the call.
 
 **LLVM target (N3).** A fn value is a pair `{ ptr code, ptr env }`. `code` takes `env` first,
 then the parameters. `env` points to a struct of the captures in `ClosureInfo.captures` order,
@@ -2354,8 +2437,9 @@ rewrite is preventive.
 - Semantics are those of the targets: T6 overflow, 14.8 failures, 14.3 map order, 14.1
   quantity arithmetic and debug text, slice-9 structural `==`.
 - Fuel (O14): one unit per expression evaluated, per loop iteration and per call. The limit is
-  1,000,000 units per property expression, and `--fuel N` on `check`, `plan` and `explain`
-  changes it. A value larger than 1,000,000 nodes (list items, map entries, record fields,
+  1,000,000 units per property expression, and `--fuel N` on `plan` and `explain` changes it;
+  `check` always uses the default, and `--fuel N` on `run` and `replay` bounds the reducer
+  steps only (16.3). A value larger than 1,000,000 nodes (list items, map entries, record fields,
   counted recursively) also stops the evaluation. Either is E115 at the property expression,
   naming the limit and the fn that was running.
 - A failure during evaluation (`assert`, overflow, index, `match`, `?` on `Err`, `slice`) is
@@ -3048,9 +3132,10 @@ Ports:
 `WorkstationExecutable` members (A10):
 
 - A member whose kind has `main` is built, not started, and the run prints its path.
-- A member whose kind has no `main` is listed as "declared, not buildable in slice 12" in
-  the `status` output and in the journal's first `segment`. This is not E129. The design
-  file's `client: Application` is such a member.
+- A member whose kind has no `main` is listed as "declared, not buildable" with the reason
+  "its kind has no main" in the `status` output and on stderr, and in the `declared` field of
+  the journal's first `segment`. This is not E129. The design file's `client: Application`
+  is such a member.
 
 Control input, one command per line on stdin:
 
@@ -3994,7 +4079,8 @@ under the existing parent-death rule. Neither promises workload survival during 
 Ordinary `plan` keeps its existing model JSON and options. `--for-apply` requires a live
 host and explicit output file; it obtains a consistent base revision and ownership snapshot,
 checks the source, and prepares immutable local artifacts without changing running resources.
-Target defaults to Rust; profile defaults to dev. LLVM runtime selection follows `build`.
+Target defaults to LLVM (Rust until 2026-11-05, `story:llvm-default-target`); profile defaults
+to dev. LLVM runtime selection follows `build`.
 `--fuel` still bounds planning evaluation. Artifact preparation may build; ordinary planning
 continues to generate no executables. No native build may occur after destructive cutover.
 
@@ -4042,7 +4128,8 @@ that is not one is exit 3 and is never replaced, and a missing identity on a sta
 `host-journal.jsonl` or `status.json` is exit 3 with nothing written. An apply of a plan with neither a receipt
 nor `plans/<id>.json` is exit 2. `inspect` adds `host` (PID and start time), `currentOperation`,
 `actionProgress` (per member action of the desired plan: `done`, `pending` or `blocked`),
-`readiness` (expected and ready machines, `converged`) and `nextAction`; offline it sets
+`readiness` (expected and ready machines, `converged`) and `nextAction`, which asks for a
+corrective plan only while admission takes one; offline it sets
 `online` false, `host` null, `health` and `readiness` to `unknown: host offline`, and renames
 every `ready` flag at any depth, `retiringInstances` included, to `lastRecordedReady`.
 
@@ -4203,16 +4290,40 @@ a name no earlier host of the state used, and `revisions/` and the state root ar
 is created; a temporary that a crash left behind never blocks the next write. Decision D2: a revision whose reducer revision
 differs from the host's is neither re-stepped nor driven; the snapshot's `history` lists each
 revision state with `restepped`, and `recovery` is `recovery_required`, `reducer_revision_changed`,
-next action "replan and apply", without blocking an apply; the next commit clears it. Debug
+next action "replan and apply", without blocking an apply; the next commit clears it. A start
+before that commit keeps a report that names an operation other than the committed one, which no
+start examines again, and finds the report of a committed revision still not driven again. Debug
 builds read `IGNITE_DEBUG_HOST_FAULT` (`after_intent`, `before_dispatch`, `after_dispatch`,
 `mid_transition` crash the host with SIGKILL there; `sync_intent`, `sync_effect` fail that
 sync) and `IGNITE_DEBUG_HOST_REDUCER_REVISION` (the reducer revision the host claims); release
-builds read neither. Known gaps:
+builds read neither.
 
-- A `foreign_listener` block of the committed revision replaces a `reducer_revision_changed`
-  report in `recovery`; the not-driven operation's receipt keeps the reason.
-- A reducer failure of the committed revision's run while a `gave_up` is unresolved makes the
-  committed revision the active operation, replacing that recovery reason.
+Precedence of recovery reasons: the first reason recorded stands as the reported one, and a later
+one is kept beside it without replacing it.
+
+- While an unresolved recovery holds, a later failure (a reducer failure of the committed
+  revision's run, that run's controller ending, a process that failed to start, a ready artifact
+  that differs), whichever operation the run's records carry, leaves the active operation,
+  `recoveryReason` and the receipt's `reason` as they were; it is kept in that receipt's
+  `laterReasons` (`operationId`, `reason`). A later reason that a corrective plan does not resolve
+  (any but `gave_up` and `listener_unavailable`) still governs what the host does, because the
+  corrective's premise, the committed revision's instances as they were, no longer holds: the
+  receipt's next action becomes "inspect retained ownership and journal before recovery", the
+  running revision dispatches no further effect, no corrective is admitted and no start resumes
+  the committed revision. Keeping the first reason never weakens what the later one blocks. While
+  the unresolved recovery is the committed revision's own (its receipt stays `completed`, and its
+  reason is never resolvable), nothing is kept beside it.
+- In `recovery` the first entry recorded stands; a later one is kept in `recovery.laterReasons`
+  with its own `reason`, `planId`, `nextAction`, `blocking` and `evidence`, and a later block makes
+  `recovery.blocking` true. A `foreign_listener` block of the committed revision found after the
+  `reducer_revision_changed` report of a not-driven operation therefore leaves `recovery.reason`
+  and `recoveryReason` at `reducer_revision_changed`, refuses every apply but a retry, and changes
+  neither the active operation nor the host's recovery reason. Lifting the block keeps the report,
+  no longer blocking, until the next commit; a block found again at the lift or the next start
+  goes beside it again.
+- A transition abandoned before the running revision realizes its plan gives the run back the
+  operation it carried before: `runtimeOperation` and the run's records name the committed
+  revision's operation again, not the refused plan.
 
 ### 17.6 Terminal walkthrough
 
@@ -4366,7 +4477,7 @@ The slice adds:
 | 14 | Generators on a bounded fixture | `cargo test -p ignite-rustgen --test main golden::bounded_streams` and `cargo test -p ignite-llvm --test main golden::bounded_streams` | the goldens of 18.10 and 18.11 match. The generated Rust builds with cargo, and the IR compiles with clang, as the existing compile checks of each crate do | U3, U4 |
 | 15 | No new dependency | `git diff 340f782 -- Cargo.lock` and every `Cargo.toml` | `Cargo.lock` gains no `[[package]]`, and no `Cargo.toml` gains a dependency line | all |
 | 16 | Goldens move only as named | `cargo test -p ignite --test main -- plan:: eval::` | `terminal.model.json`, `terminal.design.model.json`, `todo.model.json` and the explain goldens differ from `340f782` in these ways only: (a) source positions inside `std/protocol/*.ignite`; (b) the field `maximum_subnegotiation` of the server's `sessions`; (c) the property `limits` of the todo server, in its three places: `defaults`, a `sources` entry pointing into `std/protocol/http.ignite`, and `properties` | U5 |
-| 17 | Codegen revision | `grep -n 'ignite-codegen/0.1.0-2' crates/ignite/src/apply/plan.rs`, and `cargo test -p ignite --test main apply_admission::` | one match, on `CODEGEN_REVISION`; the admission tests that read `CODEGEN_REVISION` pass | U3 |
+| 17 | Codegen revision | `grep -n 'CODEGEN_REVISION: &str' crates/ignite/src/apply/plan.rs`, and `cargo test -p ignite --test main apply_admission::` | one match. At the slice-14 close its value is `ignite-codegen/0.1.0-2`; slice 15 bumps it further (`0.1.0-3` for the type-parameter shadowing fix, 19.16), so a later tree checks only that the value is past `0.1.0-1`. The admission tests that read `CODEGEN_REVISION` pass | U3 |
 | 18 | Gate | `task gate` | exit 0; the measurements of 18.18 are recorded in `AGENTS.md` | U5 |
 
 ### 18.1 Scope and non-goals
@@ -5074,6 +5185,1429 @@ Records:
 ### 18.19 Open questions
 
 None. Every conflict between the sources had a default, recorded in 18.14 and 18.15.
+
+## 19 Slice 15: RFC catalogues and the conformance matrix (protocols P2)
+
+**Status: contract written 2026-11-03. The independent review (`docs/slice15-review.md`, 2
+blockers, 10 should-fix, 17 notes) is resolved in this text; its "Resolution" section maps
+each finding to the place that resolves it. Implementation has not started.** The rows of
+19.0 are required checks, not results.
+
+Sources:
+
+- `docs/protocols.md` §3.1 to §3.3, §3.7, §6.1, §7 row P2 and §8 (Q4).
+- `docs/vision.md` §4 row "G protocols P2 to P5", §6, §7 (T2, T3, T4), invariants 3, 5 and 9.
+- This file: sections 3, 4.2, 4.3, 8, 12.1, 12.7, 15 (the evaluator), 18.0 to 18.19 (the
+  structure this section follows). Also `docs/layering.md`.
+- The RFC texts: RFC 854, 855, 1143 (plain text) and RFC 9110, 9112 (RFCXML v3, prepped), read
+  from the RFC Editor on 2026-11-03; digests in 19.9. Only the two RFCXML files are vendored
+  (D5).
+
+The base of the slice is commit `296f849` (`main`). The before tree of 19.17 is taken from it.
+Everything in this section cites files and symbols, not lines (vision T3). If `main` moves
+before the slice closes, the base becomes the merge base of the slice branch and `main` at the
+close.
+
+By T2, the P2 row of `protocols.md` becomes a contract here. Where `protocols.md` disagrees
+with the code or with a decision of 19.15, this section wins and records the point in 19.14.
+
+For protocols, fns, records, fields and tests, this section extends the grammar of section 3
+by the clauses of 19.5. Clauses are declarations about the code, not code: no backend reads
+them.
+
+The slice adds:
+
+- the vocabulary module `std.rfc` (`Level`, `Party`, `Source`, `Requirement`, `Spec`);
+- five catalogue modules, `std.rfc.rfc854`, `rfc855`, `rfc1143`, `rfc9112` and `rfc9110`, whose
+  constants are literal data;
+- the six clauses `conforms`, `scope`, `satisfies`, `verifies`, `unsupported` and
+  `not_applicable`, contextual words, not keywords;
+- the claim model in `ignite-eval`, and E090, E091 and E092;
+- `ignite rfc import` and `ignite rfc check`, with a hand-written XML reader;
+- `ignite conformance FILE [--target rust|llvm]`;
+- dropping unreferenced constants in `ignite-llvm`, so that an unreferenced constant leaves no
+  text or debug entry (19.13, D2);
+- the claims of `Telnet` (RFC 854, RFC 855) and `Http` (RFC 9112, RFC 9110 server subset).
+
+### 19.0 Acceptance
+
+Every row is a required check. "Exit 0, silent" means exit status 0, empty stdout and empty
+stderr. A test name is `<file>::<test>` in its crate's single integration-test binary
+(`cargo test -p <crate> --test main <file>::<test>`). Rows 1 to 3 are the three acceptance tests
+of the `protocols.md` P2 row. `STATUS.md` gets one dated row per row of this table (row 7).
+
+| # | check | command | required observation | unit |
+|---|---|---|---|---|
+| 1 | P2 test 1: removing one `satisfies` from a MUST is E090 | `cargo test -p ignite --test main conformance::removing_a_satisfies_from_a_must_is_e090` | The test copies `std/` into a fresh directory under `target/`. Unchanged, `ignite check --std <copy> <copy>/protocol/telnet.ignite` exits 0, silent. The test then removes `RFC854.RP14_1` (the IAC-doubling rule, 19.4) from every `satisfies` clause of the copy, deleting a clause it leaves empty. `ignite check` of the copy then exits 1, and stderr is exactly one line, `…/protocol/telnet.ignite:<line>:<col>: error[E090]: …`, naming `RFC854.RP14_1` | U6 |
+| 2 | P2 test 2: the HTTP matrix lists the §7.1 and §3.2 gaps and claims nothing | `cargo test -p ignite --test main conformance::http_matrix_lists_the_chunked_and_host_gaps` | The test runs `ignite conformance std/protocol/http.ignite --target rust`, then the same with `--target llvm`. The `rfc9112` block holds the row of `R7_1_2` (§7.1, "A recipient MUST be able to parse and decode the chunked transfer coding.") and the row of `R3_2_6` (§3.2, "A server MUST respond with a 400 (Bad Request) status code to any HTTP/1.1 request message that lacks a Host header field and to any request message that contains more than one Host header field line or a Host header field with an invalid field value."). Each row has level `MUST`, status `unsupported` and verdict `gap`. The rows of `R2_2_1` (§2.2, `MUST`), `R6_1_2` (§6.1, `MUST NOT`) and `R6_1_4` (§6.1, `MUST`) are `unsupported` and `gap` too (19.14 item 17). The block ends with `claim conformance of Http to rfc9112: no (15 gaps, 0 failures, 0 inconclusive)`, and stdout holds `claim conformance of Http to rfc9110: no (9 gaps, 0 failures, 0 inconclusive)` (19.10). Exit 1. Both targets print byte-identical stdout | U6 |
+| 3 | P2 test 3: the Telnet matrix claims RFC 854 for an NVT that refuses every option | `cargo test -p ignite --test main conformance::telnet_matrix_claims_rfc854_for_an_nvt_that_refuses_every_option` | P2 test 3 is not met in this slice (19.14 item 16); the test keeps its name. `ignite conformance std/protocol/telnet.ignite`, once per target. Stdout holds `claim conformance of Telnet to rfc854: no (4 gaps, 0 failures, 0 inconclusive)` and `claim conformance of Telnet to rfc855: yes (0 gaps, 0 failures, 0 inconclusive)`. In the `rfc854` block the rows `RP5_3`, `RP5_4`, `RP10_2` and `RP12_4` each print status `unsupported`, their reason from `telnet.ignite` in double quotes as evidence, and verdict `gap`; they are the only rows whose verdict is `gap`. The RFC 855 option-negotiation rows `RFC855.RP2_3` (a receiver may find the end of a subnegotiation by IAC SE) and `RFC855.RP2_4` (either party may refuse by sending WON'T or DON'T) each print verdict `pass`. The evidence of each of the two rows names `decode_within`, the fn that answers `DO` with `WONT` and `WILL` with `DONT`, and names both tests, "a subnegotiation is skipped up to IAC SE" and "DO is answered WONT and WILL is answered DONT", as passed. Exit 1, since the RFC 854 claim does not hold. Both targets print byte-identical stdout | U6 |
+| 4 | the std protocol modules carry complete claims | `cargo test -p ignite --test main conformance::std_protocol_modules_check_silently` | `ignite check std/protocol/telnet.ignite` and `ignite check std/protocol/http.ignite` each exit 0, silent | U6 |
+| 5 | catalogues do not reach compiled programs | `cargo test -p ignite --test main conformance::emitted_programs_carry_no_catalogue` | For `examples/todo/todo.ignite` and `examples/terminal/terminal.ignite`: the stdout of `ignite emit` (the Rust target; `ignite emit` has no `--target`) and every `.ll` file that `ignite build --target llvm` writes (`std.ll`, `program.ll`, `main_<executable>.ll`) contain none of the five `Spec` digests of 19.9 and not the text "parse and decode the chunked transfer coding" | U6 |
+| 6 | inline tests | `target/debug/ignite test std/protocol/telnet.ignite --target all`; the same for `http.ignite` | at least 37 passed per target for Telnet, at least 41 for HTTP, 0 failed | U6 |
+| 7 | records and gate | `task gate` on the slice branch; read `STATUS.md`, `AGENTS.md`, `PLAN.md`, `docs/vision.md` | exit 0. Every row of this table has a dated `STATUS.md` row that names its command and says pass. `AGENTS.md` has: a "Slice 15" section with the merge gate's time, counts and exit; layout rows for `std/rfc.ignite`, `std/rfc/`, `docs/rfc/` and `crates/ignite/src/rfc/`; the commands `ignite rfc import`, `ignite rfc check` and `ignite conformance` in the commands table and in the `crates/ignite/` layout row. `PLAN.md` row 15 says done. `docs/vision.md` §4.1's row "15+" states that slice 15 is G's P2. `docs/performance/15/` holds the records of 19.17 | U6 |
+| 8 | the vocabulary checks | `target/debug/ignite check std/rfc.ignite`; `cargo test -p ignite-check --test main terminal::standard_library_checks_in_import_order` | exit 0, silent; the test passes with `std.rfc` among the modules | U1 |
+| 9 | E091, first trigger: a catalogue constant that is not literal data | `cargo test -p ignite-check --test main fixtures::` | fixture `crates/ignite-check/tests/fixtures/e091_non_literal_catalogue` reports exactly its `.expected`: one E091 for each case of 19.4 (a call, an interpolated text, a name of a constant that is no `Requirement`, an alias `const A: Requirement = R2_1_1`, a list built with `+`). `every_checker_code_has_a_fixture` lists `e091`. The fixture std of `crates/ignite-check/tests/fixtures/` gains `std/rfc.ignite` and one catalogue, and the module list `fixtures.rs` asserts gains them | U1 |
+| 10 | clause syntax | `cargo test -p ignite-syntax --test main fixtures::` | fixture `valid_clauses` parses, silent; fixture `e001_malformed_clause` reports one E001 per case: `satisfies` without `[`, a status without a reason, `scope` before `conforms`, a `verifies` after a test's block, a requirement reference with one segment, a `conforms` entry with two segments. `e001_protocol_member.expected` gets the new message for a protocol member that is no `fn`, status or `}` | U1 |
+| 11 | clause names resolve and type | `cargo test -p ignite-check --test main fixtures::`; `cargo test -p ignite-types --test main fixtures::` | fixtures `e003_unknown_requirement` (E003, unknown requirement in a known spec; unknown spec), `e004_conforms_twice` (E004), and in `ignite-types` `e040_conforms_not_a_spec` (E040, `conforms` naming a constant of another type; E040, a `scope` party that is no `Party`) report exactly their `.expected`. Each crate has its own `valid_clauses` fixture, silent. The fixture std of `crates/ignite-types/tests/fixtures/` gains `std/rfc.ignite` and one catalogue, and its asserted module list gains them | U1 |
+| 12 | a clause-bearing program checks and tests, and its clauses change no emitted byte | `cargo test -p ignite --test main clauses::` | `clauses::clause_fixture_checks_silently`: `ignite check` of `crates/ignite/tests/fixtures/clauses/claims.ignite` exits 0, silent. The fixture holds its own catalogue (one `Spec`, its requirements), a protocol with `conforms`, `scope`, `unsupported` and `not_applicable`, `satisfies` on a fn, a type and a limits-record field, and a test with `verifies`, with a status for every MUST-class requirement in scope, so it stays silent after U2. `clauses::clause_fixture_tests_pass_on_both_targets`: `ignite test` of it passes with `--target rust` and with `--target llvm`. `clauses::clauses_emit_nothing_on_either_target`: the test copies the fixture to `claims.ignite` in a fresh directory under `target/` and, with that directory as the current directory, runs `ignite emit claims.ignite` and `ignite build --target llvm claims.ignite --out out`. It then overwrites `claims.ignite` with the blanked copy, in which every character of every clause except a newline is a space, so that every remaining token keeps its line and column, and runs both commands again with the same arguments. `ignite emit`'s stdout and each `.ll` file under `out` are byte-identical between the two runs | U1 |
+| 13 | the layer of `std.rfc` | `cargo test -p ignite-check --test main layering::` | passes with the prefix rule of 19.11; `docs/layering.md` and `LAYERS` agree | U1 |
+| 14 | E090, missing status | `cargo test -p ignite --test main plan::fixtures_match_expected` | `e090_missing_status.ignite`: a protocol conforming to a fixture catalogue with one requirement at each of MUST, MUST NOT, REQUIRED, SHALL and SHALL NOT, and no status: exit 1, five E090 as its `.expected` says. `e090_scope.ignite`, the same with one more MUST outside the `scope` sections and one more whose party `scope` excludes: exactly five E090 | U2 |
+| 15 | E090, two statuses | same | `e090_two_statuses.ignite`: one requirement both satisfied and `unsupported`, one both `unsupported` and `not_applicable`: two E090 with the two-status message of 19.7 | U2 |
+| 16 | E092 | same | `e092_satisfies_foreign.ignite`, `e092_verifies_foreign.ignite`, `e092_status_foreign.ignite`, each with first line `// ignite check --std claims_std`: each names a requirement of `RFC2`, a spec the protocol does not conform to; one E092 each | U2 |
+| 17 | E091, second trigger | same | `e091_catalogue.ignite`: one E091 per case of 19.4, with its precedence: an `ordinal` under 1, a name that does not match its section and ordinal (which is how a duplicate section and ordinal shows), a requirement not listed in the `Spec`, one listed twice, an `rfc` that differs from the `Spec`'s, two `Spec` constants in one module | U2 |
+| 18 | the claim model API | `cargo test -p ignite-eval --test main claims::` | `claims::should_without_status_is_unclassified`: a SHOULD with no status reads as `Status::None` and in scope. `claims::limit_below_minimum_does_not_meet_it`: a field default of `7999` against `minimum = Some(8000)` reads `meets == Some(false)`, `8 KiB` reads `Some(true)`. The tests build their programs from source through `ignite-syntax`, `ignite-check` and `ignite-types` (dev-dependencies of `ignite-eval`) | U2 |
+| 19 | import is deterministic and checks | `cargo test -p ignite --test main rfc::` | `rfc::import_writes_the_golden_twice`: `ignite rfc import` of `crates/ignite/tests/fixtures/rfc/sample.xml` writes a module byte-identical to `sample.ignite`, twice in a row. `rfc::imported_golden_checks_silently`: `ignite check` of the golden exits 0, silent | U3 |
+| 20 | keyword rule | same | `rfc::lowercase_must_is_no_requirement`: a sentence with a plain "must" yields no requirement. `rfc::marked_must_is_one_requirement`: a sentence with `<bcp14>MUST</bcp14>` and `<bcp14>SHOULD</bcp14>` yields one requirement with `level = Must` | U3 |
+| 21 | ids, sections and the filter | same | `rfc::sections_filter_keeps_ordinals`: with `--sections 2`, the fixture's §2.1 and §2.2 requirements appear with the same ids and ordinals as without the filter, and §3 requirements do not | U3 |
+| 22 | digest check | same | `rfc::check_matches_the_source`: `ignite rfc check sample.ignite sample.xml` exit 0, silent. `rfc::check_names_the_catalogue_when_a_byte_changes`: after one byte of a copy of the source changes, exit 1, and stderr names the catalogue file and both digests. `rfc::check_without_source_is_unchecked`: `ignite rfc check sample.ignite` prints `sample.ignite: unchecked` on stdout, exit 0 | U3 |
+| 23 | reader and file errors | same | `rfc::malformed_xml_is_exit_2`: an unclosed element, an unknown entity and a DOCTYPE with an internal subset each give exit 2 and one line `<file>:<line>:<col>: <message>`. `rfc::missing_file_is_exit_3`: `ignite rfc import` and `ignite rfc check` of a path that does not exist exit 3 | U3 |
+| 24 | no network client | `cargo tree -p ignite -e normal` | lists none of `reqwest`, `ureq`, `hyper`, `curl`, `isahc`, `attohttpc` | U3 |
+| 25 | catalogues check | `cargo test -p ignite --test main rfc::committed_catalogues_check_silently` | `ignite check` of each of `std/rfc/rfc854.ignite`, `rfc855.ignite`, `rfc1143.ignite`, `rfc9112.ignite`, `rfc9110.ignite` exits 0, silent | U4 |
+| 26 | catalogues match their sources | `cargo test -p ignite --test main rfc::committed_catalogues_match_their_sources` | `ignite rfc check std/rfc/rfc9112.ignite docs/rfc/rfc9112.xml` and the same for 9110 exit 0, silent. `ignite rfc check std/rfc/rfcN.ignite` for 854, 855 and 1143 prints `unchecked`, exit 0, and each of the three `Spec` digests equals 19.9's | U4 |
+| 27 | the prose catalogues | `cargo test -p ignite --test main rfc::prose_catalogues_quote_their_rfcs` | `rfc854.ignite` holds `RP14_1` with `source = Prose` whose `text` contains "only the IAC need be doubled to be sent as data". `rfc855.ignite` equals the table of 19.4 (ids, levels, parties, texts). `rfc1143.ignite` holds at least one `source = Prose` requirement. Each requirement is listed in its module's `Spec`, and every level follows the word table of 19.4 | U4 |
+| 28 | the RFC 9112 extent | `cargo test -p ignite --test main rfc::rfc9112_holds_sections_2_to_9` | `rfc9112.ignite` holds requirements from sections 2 to 9 only, at least one from each. It holds `R7_1_2` and `R3_2_6`, both `level = Must`, with the texts quoted verbatim in row 2 | U4 |
+| 29 | the RFC 9110 server subset | `cargo test -p ignite --test main rfc::rfc9110_holds_exactly_the_server_subset` | every requirement's section is one of D4's list or below it, and every listed section with a BCP 14 mark has at least one requirement | U4 |
+| 30 | the hand review changes only parties | `cargo test -p ignite --test main rfc::reimport_changes_only_party_lines` | from the repository root, re-running `ignite rfc import` with the source path and flags recorded in each imported catalogue's header (paths relative to the repository root) and diffing against the committed file changes only `party =` lines. The commit that adds a catalogue states how many it changed | U4 |
+| 31 | one row per verdict | `cargo test -p ignite --test main conformance::each_verdict_prints_its_row` | one fixture each under `crates/ignite/tests/fixtures/conformance/` for pass, fail, gap, deviation, inconclusive, n/a, out of scope and unclassified. Each prints its row as its `.expected` says | U5 |
+| 32 | a failing test | `conformance::a_failing_verifies_test_fails_the_row_and_the_claim` | the row prints `fail`, the claim line `no (0 gaps, 1 failures, 0 inconclusive)`, exit 1 | U5 |
+| 33 | satisfied without a passing test | `conformance::satisfied_without_a_passing_test_is_inconclusive`; `cargo test -p ignite --lib conformance::` | the fixture row with no test prints `inconclusive`, evidence `no test`. A unit test in `crates/ignite/src/conformance.rs` gives the verdict function a row with two verifying tests, one passed and one absent from the result lines, and gets `inconclusive` with evidence `… passed, test "<name>" not run` | U5 |
+| 34 | a claim that holds | `conformance::a_complete_claim_holds` | every MUST row `pass`; claim line `yes (0 gaps, 0 failures, 0 inconclusive)`; exit 0 | U5 |
+| 35 | an inconclusive MUST | `conformance::an_inconclusive_must_breaks_the_claim` | the only non-pass MUST row is `inconclusive`; claim line `no (0 gaps, 0 failures, 1 inconclusive)`; exit 1 | U5 |
+| 36 | determinism and targets | `conformance::output_is_deterministic`, `conformance::both_targets_print_the_same_matrix` | two runs print byte-identical stdout; `--target rust` and `--target llvm` print byte-identical stdout | U5 |
+| 37 | exit statuses | `conformance::conformance_exit_statuses` | a file with a diagnostic: exit 2, the diagnostic on stderr, no stdout. A file with no conforming protocol: exit 2. A test build that fails: exit 3. A test executable killed by a signal: exit 3 | U5 |
+| 38 | the workspace | `cargo test --workspace` after each unit | passes. No golden of `crates/ignite-rustgen/tests/golden/` changes in U1 to U5. In the `.ll` goldens of `crates/ignite-llvm/tests/golden/`, U1's dropping of unreferenced constants (19.13) may remove the definitions, strings and debug nodes of unreferenced constants and renumber the remaining metadata; no other golden change | every unit |
+| 39 | unreferenced constants leave no trace on LLVM | `cargo test -p ignite-llvm --test main` (U1 names the test) | a std module with an unreferenced `const DIGEST: Text = "sha256:probe-unreferenced-constant-text"` and a referenced constant: `std.ll` holds the referenced constant's definition and string, and neither the probe text nor a `DISubprogram` named after `DIGEST`. `apply::plan::CODEGEN_REVISION` is past the value the shadowing fix sets | U1 |
+| 40 | the claim-fixture std stays the real vocabulary | `cargo test -p ignite --test main plan::claims_std_vocabulary_is_std_rfc` | `crates/ignite/tests/fixtures/claims_std/rfc.ignite` is byte-identical to `std/rfc.ignite` | U2 |
+| 41 | a complete claim is silent | `cargo test -p ignite --test main plan::complete_claim_fixture_is_silent` | `ignite check claim_ok_complete.ignite` in `crates/ignite/tests/fixtures/` (the protocol of row 14 with a status on each requirement): exit 0, silent | U2 |
+
+### 19.1 Scope and non-goals
+
+In scope: the vocabulary, five catalogues, the six clauses, literal-data rules, the claim
+model with E090 to E092, the importer and the digest check, the conformance command, the two
+std claims, and the records.
+
+Not in scope:
+
+- `grammar` blocks in catalogues and everything else of P3 (§3.4 to §3.6 of `protocols.md`,
+  E093 to E095). The P2 catalogues hold requirements only.
+- Requirement aliases (`const BARE_CR: Requirement = R2_2_3`, §3.1). In P2 an alias is E091
+  (19.4).
+- A `minimum` in an imported catalogue. The importer never writes one, and P2 adds none by
+  hand, so row 30 holds. P3's limits work adds them.
+- Claims of RFC 1143. Its catalogue lands; the Telnet Q method that would satisfy it is P5.
+- Implementing the HTTP §7.1 chunked coding or the §3.2 Host check (P3). They stay gaps (row 2).
+- Fetching RFCs over the network. The importer reads a local file (D6).
+- A skip verdict in the test runner. A `verifies` test with no result line counts as not run
+  (19.10).
+- ESS traces and mutation audits of `verifies` tests (`protocols.md` §8, Q7 and Q4).
+- Splitting `std/protocol/telnet.ignite` to meet X16's bound (19.14 item 14, 19.18 Q4).
+- RFC 9110 §8.6 and §15 (19.14 item 13), and checking a `minimum` against a system's
+  overriding limit (19.14 item 11).
+
+### 19.2 Current state (at `296f849`)
+
+| fact | where |
+|---|---|
+| A protocol body holds roles only; the grammar is `protocol := 'protocol' ident '{' NL* (fn NL*)* '}'` | section 3; `ProtocolDecl { name, fns, span }` in `crates/ignite-syntax/src/ast.rs` |
+| A test is `'test' STRING block`; the AST holds name, body and span | section 3 and 12.1; `TestDecl` in `ast.rs` |
+| A fn has `requires` and then a block or `= expr`; a record `type Name tparams? { fields }`; a field `name: Type (= default)?` | section 3; `FnDecl`, `RecordDecl`, `Field` in `ast.rs` |
+| Full struct literals of `FnDecl`, `RecordDecl`, `Field` and `ProtocolDecl` are in the parser, in `crates/ignite-rustgen/tests/units.rs` and in the `#[cfg(test)]` module of `crates/ignite-check/src/lib.rs`, so a new AST field breaks them; `crates/ignite-types/tests/surface.rs` only reads them | `parser.rs` in `crates/ignite-syntax/src/` (grep `Ok(FnDecl {`, `Ok(ProtocolDecl {`, `Decl::Record(RecordDecl {`); `units.rs` (grep `FnDecl {`, `RecordDecl {`, `ProtocolDecl {`); `crates/ignite-check/src/lib.rs` (grep `Decl::Fn(FnDecl {`) |
+| No std or example file uses `conforms`, `scope`, `verifies`, `unsupported`, `not_applicable`, `parties` or `sections` as a name. `std.sli` declares a fn `satisfies`, so the clause words must stay contextual | `grep -rnw` over `std/` and `examples/`; `satisfies` in `std/sli.ignite` |
+| A constant of any type compiles on both targets: Rust emits it as a fn, LLVM defines it through `Lower::define_const` | `constant` in `crates/ignite-rustgen/src/lib.rs`; the `Decl::Const` arm in `crates/ignite-llvm/src/lib.rs`, `Lower::define_const` in `crates/ignite-llvm/src/lower.rs` |
+| Std emission is reachable-only for functions on both targets. Rust keeps a std item when a reachable item's text names it (`reachable`, over name tokens; std `use` lines are filtered, but a program's own `use` lines are roots, so a program that imports a constant emits it). LLVM lowers every `Decl::Const` through `Lower::define_const`, whose Text literals go to `Module::string`; `Module::prune` drops unreachable functions only, and `Module::finish` writes every string and debug node. So on LLVM an unreferenced std constant's text and debug entry reach `std.ll` | `reachable` in `crates/ignite-rustgen/src/lib.rs`; `lower_decls`, `Module::prune`, `Module::finish`, `Module::string` in `crates/ignite-llvm/src/`; `AGENTS.md`, slice 12b |
+| Rust emission writes the source path as given and the line and column of each failure site into the generated code. `ignite emit` emits Rust only; `ignite::emit_llvm(file, std)` returns the LLVM output, and `ignite build --target llvm` writes `std.ll`, `program.ll` and `main_<executable>.ll` | `escaped_site_file`, `position` in `crates/ignite-rustgen/src/lib.rs`; `emit`, `emit_llvm` in `crates/ignite/src/lib.rs`; `crates/ignite/src/llvm_build.rs` |
+| The fixture std of each checker crate is pinned by an asserted module list: `["std.greeting", "std.protocol.hello", "std.salute"]` and `["std.net", "std.shapes", "std.shapes.protocol"]` | `crates/ignite-check/tests/fixtures.rs`, `crates/ignite-types/tests/fixtures.rs` |
+| `CODEGEN_REVISION` is `ignite-codegen/0.1.0-2` at `296f849`; the slice branch's shadowing unit sets `0.1.0-3` | `crates/ignite/src/apply/plan.rs`; 19.16 |
+| The frontend loads only the std modules a program reaches | `AGENTS.md`, slice 12b; `PLAN.md` row 12b |
+| The evaluator evaluates constants | `find_const` in `crates/ignite-eval/src/eval.rs` |
+| `Model::check` returns `Ok` before any work when the program has no systems and no assemblies | `Model::check` in `crates/ignite-eval/src/model.rs` |
+| `ignite check` runs `Model::check` through `Loaded::check` | `check_with_std`, `Loaded::check` in `crates/ignite/src/lib.rs` |
+| `ignite_eval::Module` holds path, source, program and types, and no `Symbols` | `Module` in `crates/ignite-eval/src/lib.rs` |
+| A test verdict is `Passed`, `Failed`, `Exited`, `Signal` or `TimedOut`; there is no skip. A result line is `test <module>/<name> ... ok`, `... FAILED` or `... FAILED (<reason>)` | `Verdict`, `Verdict::word` in `crates/ignite-io/src/test.rs` |
+| `test_build` builds one test executable per target for the files given; `lib.rs` re-exports `TestGroup`, `TestOptions`, `build_tests`, `test`, `test_groups` and `test_targets` as `pub` | `crates/ignite/src/test_build.rs`; the `pub use test_build::…` line in `crates/ignite/src/lib.rs` |
+| The test runner prints `running N tests`, one result line per test, a `failures:` section that echoes each failed test's output, then `test result:`; its exit is 0 or 1 | `crates/ignite-io/src/test.rs` |
+| `Error::exit_status` maps a diagnostic to 1, a cargo or clang failure to 2, IO to 3; `ignite run` maps its own statuses in `main.rs` | `Error::exit_status` in `crates/ignite/src/lib.rs`; `crates/ignite/src/main.rs` |
+| `ignite check` takes `--std DIR` | `cli::missing_std_root_is_exit_3` in `crates/ignite/tests/cli.rs` |
+| `plan::fixtures_match_expected` runs `crates/ignite/tests/fixtures/e11*` and `e12*` except `e125` to `e128` | `fixtures_match_expected` in `crates/ignite/tests/plan.rs` |
+| `every_checker_code_has_a_fixture` lists the checker's codes | `crates/ignite-check/tests/fixtures.rs` |
+| The layering test knows four layers, a protocol prefix `std.protocol.` and a table of non-protocol modules. Rule 5 fails any line under `crates/*/src` whose lowercase text contains a protocol name (`telnet`, `http`), so it also fails `https` | `Layer`, `LAYERS`, `PROTOCOL_PREFIX`, `compiler_crates_name_no_application_protocol` in `crates/ignite-check/tests/layering.rs`; `docs/layering.md` rules 1 to 5 |
+| `sha2` is a normal dependency of `crates/ignite`; no XML crate is in `Cargo.lock` | `crates/ignite/Cargo.toml`; `Cargo.lock` |
+| Telnet answers `DO` with `WONT` and `WILL` with `DONT`, ignores `DONT` and `WONT`, and skips a subnegotiation up to `IAC SE` | `decode_within` in `std/protocol/telnet.ignite`; tests "DO is answered WONT and WILL is answered DONT", "a subnegotiation is skipped up to IAC SE" |
+| The HTTP server answers any `Transfer-Encoding` with 501 and does not check Host | the module comment and `parse_head` in `std/protocol/http.ignite` |
+| Limits are quantities: `HttpLimits.head: ByteSize = 8 KiB`, `SessionLimits.maximum: Int = 1000` | `HttpLimits` in `std/protocol/http.ignite`, `SessionLimits` in `std/protocol/telnet.ignite` |
+| Enum variants are written bare in std (`Exponential(initial, maximum)`); no std enum has a variant named like one of 19.3 | `std/policy.ignite`; grep of `std/` |
+| Codes E096 and E099 are taken (slice 14). `protocols.md` §3.3 assigns E093 to E095 and E098 to P3 and P4, and keeps E097 unused | section 8; `docs/protocols.md` §3.3 |
+| RFC 9112's RFCXML has 149 `<bcp14>` marks: 11 in §1.1 (notation), 137 in §2 to §9, 1 in §10.1. RFC 9110 has 445; the D4 subset has 75 | count of `<bcp14>` per innermost `<section pn>` over the files of 19.9 |
+
+### 19.3 The vocabulary, `std.rfc` (D1)
+
+File `std/rfc.ignite`, module `std.rfc` (the rule "module `std.a.b` is `std/a/b.ignite`").
+The catalogues are `std/rfc/rfcN.ignite`, modules `std.rfc.rfcN`. The text, which U1 writes
+and the importer targets:
+
+```ignite
+package std.rfc
+
+// The requirement keywords of BCP 14 (RFC 2119, RFC 8174).
+enum Level { Must, MustNot, Required, Shall, ShallNot, Should, ShouldNot, Recommended,
+  NotRecommended, May, Optional }
+
+// Whom a requirement addresses.
+enum Party { Any, Sender, Recipient, Client, Server, Proxy }
+
+// Bcp14: extracted from a <bcp14> mark; Prose: written by hand from an RFC that predates BCP 14.
+enum Source { Bcp14, Prose }
+
+type Requirement {
+  rfc: Int
+  section: Text
+  ordinal: Int
+  level: Level
+  party: Party = Any
+  source: Source = Bcp14
+  minimum: Option<Int> = None
+  text: Text
+}
+
+type Spec {
+  rfc: Int
+  title: Text
+  url: Text
+  digest: Text
+  requirements: List<Requirement>
+}
+```
+
+Level classes, used by 19.7 and 19.10:
+
+| class | levels |
+|---|---|
+| MUST | `Must`, `MustNot`, `Required`, `Shall`, `ShallNot` |
+| SHOULD | `Should`, `ShouldNot`, `Recommended`, `NotRecommended` |
+| MAY | `May`, `Optional` |
+
+The module declares no fn. Tests of the module, if any, are inline.
+
+### 19.4 Catalogues, ids and literal data
+
+A catalogue module is a module that declares a constant of type `std.rfc.Spec`. It holds:
+
+- exactly one `Spec` constant, named `RFC<n>` (`RFC9112`);
+- one `Requirement` constant per requirement, each listed exactly once, in declaration order, in
+  the `Spec`'s `requirements`;
+- an `import std.rfc.{Level, Party, Source, Requirement, Spec}` (unused names allowed).
+
+A module under `std/rfc/` holds nothing else (row 25 checks the committed ones). A program
+module may also declare one `Spec` and its requirements beside other declarations: the claim
+fixtures of rows 12 and 14 to 17 do, and the rules below apply to it as to a catalogue
+module.
+
+**Ids.** A requirement's constant name is its id: `R` + its `section` with each `.` replaced by
+`_` and letters upper-cased + `_` + its `ordinal`. The ordinal is 1-based within the
+requirement's innermost section, in document order. Section 3.2's sixth requirement is
+`R3_2_6`.
+
+- Numbered sections (RFC 1143, RFC 9110, RFC 9112): `section` is the section number.
+- RFC 854 and RFC 855 number no sections. `section` is `p<page>`, the page of the plain-text
+  RFC on which the sentence starts (`p14`), and the id is `RP14_1`.
+
+**Literal data.** The value of every constant whose declared type is `std.rfc.Requirement` or
+`std.rfc.Spec`, in any module, is literal data. Literal data is:
+
+- an Int literal, also with a leading `-`;
+- a Text literal without interpolation, or a `+` chain of such literals;
+- a variant of `Level`, `Party` or `Source`, bare or qualified;
+- `None`, or `Some(` Int literal `)`;
+- a `Requirement { .. }` literal whose field values are literal data;
+- a `Spec { .. }` literal whose fields are literal data and whose `requirements` is a list
+  literal of names of `Requirement` constants of the same module.
+
+Anything else is E091 (first trigger, `ignite-check`): a call, a name of any other constant
+(an alias), an interpolated text, a list built with `+`, `if`, `match` or a block. The
+message names the constant and what was found: "catalogue constant `R2_1_1` must be literal
+data, found a call".
+
+E091 (second trigger, `ignite-eval`), from the constants' values, for the `Spec` and
+`Requirement` constants declared in the checked file only (a catalogue imported by the
+checked file is checked when it is itself the checked file, row 25). One E091 per constant,
+the first of these that applies:
+
+1. an `ordinal` under 1;
+2. a constant name that differs from the id of its `section` and `ordinal`;
+3. a `Requirement` constant not listed in the `Spec`, or listed twice;
+4. a requirement whose `rfc` differs from the `Spec`'s.
+
+Two `Spec` constants in one module are one E091 at the second. Two requirements with one
+`section` and `ordinal` need no rule of their own: if both have the same name, the second is
+E004 (a duplicate name, `ignite-check`); otherwise one name differs from the id and is case 2.
+The checker cannot see these: they need the values.
+
+**Level words.** A BCP 14 mark gives its keyword's level. A prose requirement (`source =
+Prose`) takes the level of its sentence's strongest word, MUST class over SHOULD class over
+MAY class (19.3):
+
+| word in the sentence | level |
+|---|---|
+| must | `Must` |
+| must not, must never | `MustNot` |
+| required, will be required | `Required` |
+| necessary, need be | `Must` |
+| should, desirable | `Should` |
+| should not | `ShouldNot` |
+| may | `May` |
+
+A sentence that describes the RFC's own standing or what hosts are able to do is no
+requirement. Excluded from the RFC 854 and RFC 855 catalogues: "Hosts on the ARPA Internet are
+expected to adopt and implement this standard." and "It should be possible for hosts to
+invent, test, or discard options at will."
+
+**The RFC 855 catalogue**, fixed here because rows 3 and 27 name its ids. One requirement
+per sentence that says what an implementation, an option designer or the option registrar
+must, should or may do, all `source = Prose`, texts verbatim with whitespace collapsed:
+
+| id | level | party | text |
+|---|---|---|---|
+| `RP1_1` | `Should` | `Any` | "Nevertheless, it is envisioned that options which prove to be generally useful will eventually be supported by many hosts; therefore it is desirable that options should be carefully documented and well publicized." |
+| `RP1_2` | `Must` | `Any` | "In addition, it is necessary to insure that a single option code is not used for several different options." |
+| `RP1_3` | `Required` | `Any` | "The individual responsible for assignment of option codes may waive the requirement for complete documentation for some cases of experimentation, but in general documentation will be required prior to code assignment." |
+| `RP1_4` | `May` | `Any` | "Options will be publicized by publishing their documentation as RFCs; inventors of options may, of course, publicize them in other ways as well." |
+| `RP1_5` | `Should` | `Any` | "Documentation of options should contain at least the following sections:" |
+| `RP1_6` | `Should` | `Any` | "The meaning of each possible TELNET command relevant to this option should be described." |
+| `RP2_1` | `Must` | `Any` | "The default assumptions for hosts which do not implement, or use, the option must be described." |
+| `RP2_2` | `Should` | `Any` | "Therefore, a more complete description should be furnished in most cases." |
+| `RP2_3` | `May` | `Recipient` | "On the other hand, the receiver may locate the end of a parameter string by searching for the SE command (i.e., the string IAC SE), even if the receiver is unable to parse the parameters." |
+| `RP2_4` | `May` | `Any` | "Of course, either party may refuse to pursue further subnegotiation at any time by sending a WON'T or DON'T to the other party." |
+| `RP3_1` | `Must` | `Any` | "Designers of options requiring \"subnegotiation\" must take great care to avoid unending loops in the subnegotiation process." |
+| `RP3_2` | `Must` | `Sender` | "Finally, if parameters in an option \"subnegotiation\" include a byte with a value of 255, it is necessary to double this byte in accordance the general TELNET rules." |
+
+The `Spec`: `rfc = 855`, `title = "Telnet Option Specifications"`,
+`url = "https://www.rfc-editor.org/rfc/rfc855"`, `digest` the sha256 of the published text
+file of 19.9 (the file is not vendored, D5).
+RFC 854 and RFC 1143 follow the same rule; their ids are U4's, except `RFC854.RP14_1`, the
+sentence "With the current set-up, only the IAC need be doubled to be sent as data, and the
+other 255 codes may be passed transparently." at `Must`, `Any` (rows 1 and 27). U4's commit
+lists the MUST-class ids of RFC 854 it wrote and the status each gets in `telnet.ignite`.
+
+### 19.5 Clauses (D3)
+
+The grammar of section 3 changes in these productions. `conforms`, `scope`, `satisfies`,
+`verifies`, `unsupported`, `not_applicable`, `parties` and `sections` are identifiers, read as
+clause words only in the positions below.
+
+```
+protocol   := 'protocol' ident conforms? '{' NL* ((fn | status) NL*)* '}'
+conforms   := 'conforms' '[' ident (',' ident)* ','? ']' scope?
+scope      := 'scope' '{' (scope_item sep)* scope_item? '}'
+scope_item := 'parties' '=' '[' (ident (',' ident)* ','?)? ']'
+            | 'sections' '=' '[' (STRING (',' STRING)* ','?)? ']'
+status     := ('unsupported' | 'not_applicable') reqref STRING
+satisfies  := 'satisfies' '[' reqref (',' reqref)* ','? ']'
+verifies   := 'verifies' '[' reqref (',' reqref)* ','? ']'
+reqref     := ident '.' ident
+fn         := 'fn' ident tparams? '(' params ')' ('->' type)? requires? satisfies? (block | '=' expr)
+record     := 'type' ident tparams? satisfies? '{' (field sep)* field? '}'
+field      := ident ':' type ('=' expr)? satisfies?
+test       := 'test' STRING verifies? block
+```
+
+- `conforms` lists names of `Spec` constants, local or imported (`import std.rfc.rfc9112.{RFC9112}`); a qualified path is E001 (row 10).
+- A `reqref` is `Spec.Id`: the first segment names a `Spec` constant in scope, the second a
+  `Requirement` constant declared in that constant's module. The requirement need not be
+  imported. Bare ids are not accepted, because every catalogue reuses ids such as `R2_1_1`.
+- `scope` narrows the claim. A requirement is in scope when its `party` is in `parties` and its
+  `section` equals an entry of `sections` or starts with that entry followed by `.`. A missing
+  `parties` or `sections`, or a missing `scope`, admits everything. Each item at most once
+  (E001 otherwise).
+- A `satisfies` on a fn or role, a type or a field says that the declaration implements the
+  requirements. It counts for every protocol of its module that conforms to the requirement's
+  spec, inside or outside the protocol body.
+- A `verifies` on a test says that the test is evidence for the requirements. It counts in the
+  same way.
+- `unsupported REF "reason"` and `not_applicable REF "reason"` are members of a protocol body.
+  The reason is a non-empty Text literal without interpolation (E001 otherwise).
+- A requirement may be satisfied by several declarations. That is one status, "satisfied".
+- A `satisfies` on a field of a record: the field's default is the configured value of 19.7.
+- Malformed clauses are E001 (row 10).
+
+Examples, as U6 writes them:
+
+```ignite
+import std.rfc.{Party}
+import std.rfc.rfc9112.{RFC9112}
+import std.rfc.rfc9110.{RFC9110}
+
+protocol Http conforms [RFC9112, RFC9110] scope { parties = [Server, Sender, Recipient, Any] } {
+  fn serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> requires [stream.read, stream.write, application.*] satisfies [RFC9112.R2_2_3] { .. }
+  unsupported RFC9112.R7_1_2 "only Content-Length framing; any Transfer-Encoding is 501"
+  unsupported RFC9112.R3_2_6 "Host is not checked"
+}
+
+test "bare CR is 400" verifies [RFC9112.R2_2_3] { .. }
+```
+
+The ids in this example other than `R7_1_2` and `R3_2_6` are illustrative.
+
+### 19.6 Resolution and typing
+
+| rule | crate | diagnostic |
+|---|---|---|
+| A `conforms` entry or the first segment of a `reqref` that names nothing | `ignite-check` | E003 |
+| The second segment of a `reqref` that names no constant of the spec's module | `ignite-check` | E003 "`RFC9112` has no requirement `R9_9_9`" |
+| A `conforms` entry that is not a constant of type `Spec`; a `reqref` whose first segment is not one; a `reqref` whose second segment is not a `Requirement` | `ignite-types` | E040 |
+| A `parties` entry that is no variant of `Party` | `ignite-types` | E040 |
+| A `conforms` that names one spec twice | `ignite-check` | E004 |
+| A non-literal catalogue constant | `ignite-check` | E091 (first trigger) |
+
+`ignite-check` resolves the names for E003 and E004 only. The type checker records the
+resolution in `TypedProgram`: for every `conforms` entry and every `reqref`, its span and the
+`QualName` of the constant it names, read through an add-only accessor (19.13), as
+`pattern_consts` already records constant patterns. `ignite_eval::Module` holds the module's
+`TypedProgram` (`types`), so the claim model reads the resolutions from there, and neither
+`ignite_eval::Module` nor `Loaded::modules` changes.
+
+### 19.7 The claim model and E090 to E092
+
+The claim model is computed by `ignite-eval` (U2) from the typed program of the checked file
+and the values of the catalogue constants its protocols name. It covers the protocols of the
+checked file only. A program that imports `std.protocol.http` does not re-check `Http`'s claim:
+row 4 does that.
+
+`Model::check` computes it first, before its early return for a program without systems and
+assemblies, and reports its diagnostics with the model's. No change in `crates/ignite/src/`
+is needed for `ignite check` (`Loaded::check` already calls `Model::check`).
+
+For each protocol P that `conforms`, and each spec S in its list, one row per requirement of S,
+in `requirements` order:
+
+- **in scope**: by 19.5's `scope` rule;
+- **status**: `satisfied` (by one or more declarations), `unsupported` (reason),
+  `not_applicable` (reason), or none;
+- **satisfiers**: the declarations, named `f` (fn), `Owner.f` (associated fn), `P.role`,
+  `Name` (type) or `Record.field`;
+- **tests**: the full names (`<module>/<name>`, 12.7) of the tests that verify it;
+- **limit**: for a satisfier that is a field and a requirement with `minimum = Some(m)`, the
+  configured value, which is the field's default as an Int (an `Int` value, or a `ByteSize` in
+  bytes), and whether it is at least `m`. A field with no default, or of another type, has no
+  configured value.
+
+Diagnostics:
+
+| code | rule | crate, story |
+|---|---|---|
+| E090 | A requirement in scope of P, at MUST class, with no status. Message: "requirement `RFC9112.R7_1_2` (MUST, section 7.1) is in scope of `Http` and has no status; add `satisfies`, `unsupported` or `not_applicable`". Position: the spec's entry in P's `conforms`. Several at one position are ordered by `requirements` order | `ignite-eval`, claim-model (U2) |
+| E090 | A requirement of P, at any level, with two statuses: satisfied and `unsupported`, satisfied and `not_applicable`, `unsupported` and `not_applicable`, or one status kind twice. Message: "requirement `RFC9112.R3_2_6` has two statuses in `Http`: satisfied by `parse_head` and unsupported". Position: the later clause | `ignite-eval`, U2 |
+| E091 | First trigger: 19.4, literal data | `ignite-check`, frontend (U1) |
+| E091 | Second trigger: 19.4, the four cases with their precedence, and two `Spec` constants | `ignite-eval`, U2 |
+| E092 | A `satisfies` or `verifies` naming a requirement of a spec that no protocol of its module conforms to; a status in P naming a requirement of a spec P does not conform to. Message: "`RFC9110.R9_3_1_1` belongs to RFC 9110, which `Http` does not conform to" or "…, which no protocol of this module conforms to". Position: the `reqref` | `ignite-eval`, U2 |
+
+A status on a requirement out of scope is allowed; its row's verdict is `out of scope`. A
+SHOULD or MAY with no status is not an error; its row is `unclassified`.
+
+The second-trigger E091 checks run for the `Spec` and `Requirement` constants declared in the
+checked file only, not for a catalogue the file imports, so a broken std catalogue never
+surfaces in a program that conforms to it. `ignite check std/rfc/rfc9112.ignite` validates
+the catalogue itself; row 25 runs it for every committed catalogue.
+
+### 19.8 `ignite rfc import` and `ignite rfc check` (D6)
+
+```
+ignite rfc import FILE [--sections LIST] [--package NAME] [--url URL] [--out FILE]
+ignite rfc check CATALOGUE [SOURCE]
+```
+
+`import` reads a local RFCXML v3 file (prepped, as the RFC Editor publishes it). It never opens
+a network connection. Exit 0 when the module is written; 2 on a usage error, malformed XML or
+a root without a `number` attribute; 3 when FILE cannot be read or `--out` cannot be written.
+
+**Reader.** `crates/ignite/src/rfc/xml.rs`, hand-written, no dependency. It reads:
+
+- elements, attributes in single or double quotes, and character data;
+- CDATA sections, comments, processing instructions and the XML declaration, which it skips;
+- a DOCTYPE without an internal subset, which it skips;
+- the five predefined entities and numeric character references.
+
+Any other entity, a DOCTYPE with an internal subset, a mismatched or unclosed element, or a
+file over 16 MiB is an error. The error is `<file>:<line>:<col>: <message>` on stderr, exit 2.
+There is no validation and no namespace processing. Prefixed names are kept as written.
+
+**Extraction**, in document order:
+
+1. The section of a node is the `pn` attribute of its innermost `<section>`, without the
+   `section-` prefix. Front and back matter (`<front>`, `<back>`) are skipped.
+2. A text block is a `<t>`, or an `<li>`, `<dd>`, `<td>` or `<th>` with no `<t>` child.
+3. A block's text is its character data with the markup removed, plus these renderings:
+   - `<bcp14>`, `<em>`, `<strong>`, `<tt>`, `<sub>`, `<sup>` and an `<xref>` or `<eref>` with
+     content: the content;
+   - an empty `<xref>` with a `section` attribute: `Section <section> of [<derivedContent>]`,
+     or `[<derivedContent>], Section <section>` when `sectionFormat="comma"`;
+   - an empty `<xref>` without one: `[<derivedContent>]` when its target is a `<reference>`
+     anchor, else `derivedContent`;
+   - an empty `<eref>`: its `target`;
+   - `<iref>`: nothing.
+
+   Runs of whitespace become one space, and the text is trimmed.
+4. Sentences end at `.`, `?` or `!`, optionally followed by `)` or `"`, then a space and an
+   upper-case ASCII letter, `"` or `(`.
+5. A sentence that contains at least one `<bcp14>` mark is one requirement. Its level is the
+   first mark's keyword (`MUST NOT` gives `MustNot`, `NOT RECOMMENDED` gives `NotRecommended`).
+   Keywords outside `<bcp14>` never count, so a lowercase "must" yields nothing (RFC 8174).
+6. Ordinals count requirements per section, over the whole file. `--sections` filters after
+   counting, so ids do not depend on the filter.
+7. The party is the last party word before the first mark, case-insensitive, whole words:
+   `server`, `servers`, `origin server` give `Server`; `client`, `clients`, `user agent`,
+   `user agents` give `Client`; `sender`, `senders` give `Sender`; `recipient`, `recipients`,
+   `receiver` give `Recipient`; `proxy`, `proxies`, `intermediary`, `intermediaries`,
+   `gateway`, `cache`, `caches` give `Proxy`. With none, `Any`. A human reviews every party
+   (row 30).
+
+**Flags.**
+
+- `--sections` is a comma-separated list of section numbers. A requirement is kept when its
+  section equals one or starts with one followed by `.`. Without the flag, every section is
+  kept.
+- `--package` defaults to `std.rfc.rfc<number>`, from the root's `number` attribute. A given
+  `--package` must be a module path (dotted identifiers); anything else is a usage error.
+- `--url` defaults to the `href` of the root's first `<link rel="alternate">`.
+- Without `--out`, the module goes to stdout.
+
+**Output.** One file, in this order:
+
+1. A header comment naming the RFC number, the title, the source path as given, and the exact
+   flags. Row 30 re-runs the import from it.
+2. `package`, then `import std.rfc.{Level, Party, Source, Requirement, Spec}`.
+3. The `Spec` constant: `rfc`, `title` from the root `<front><title>`, `url`, `digest`, and
+   `requirements` with one name per line.
+4. One `Requirement` constant per requirement. Each field is on its own line, in the order
+   `rfc`, `section`, `ordinal`, `level`, `party`, `text`. `party` is written even when it is
+   `Any`; `source` and `minimum` are never written.
+
+Texts escape `\` as `\\`, `"` as `\"`, `{` as `{{` and `}` as `}}`. Output is deterministic:
+no time, no absolute path beyond what was given.
+
+**Digest.** `"sha256:" + lowercase hex` of the source file's bytes, with the `sha2` crate
+`crates/ignite` already depends on.
+
+**`rfc check`** parses CATALOGUE with `ignite-syntax`, finds the single `Spec` constant's
+`digest` Text literal, and compares it with the digest of SOURCE's bytes. It works for any
+source file, a `.txt` too.
+
+- Without SOURCE: one line `<CATALOGUE>: unchecked` on stdout, exit 0. This is how the gate
+  reports the prose catalogues, whose sources are not vendored (D5).
+- Exit 0, silent: the digests match.
+- Exit 1: they differ. One line on stderr names CATALOGUE and both digests.
+- Exit 2: CATALOGUE has no single `Spec` constant with a literal `digest`.
+- Exit 3: a file cannot be read.
+
+**Layering rule 5.** No file under `crates/*/src` may contain a protocol name, so the importer's
+source holds no URL literal (`https` contains `http`) and no RFC title. URLs and titles come
+from the source file or from flags.
+
+### 19.9 Sources and licence (D5)
+
+Only the two RFCXML sources are vendored, unmodified, under `docs/rfc/` by U4. They are
+post-2008 RFCs under the IETF Trust Legal Provisions. RFC 854, 855 and 1143 predate them and
+are not vendored: their prose catalogues quote the sentences they need with page citations,
+and their `Spec` digest is the sha256 of the published text file as read on the import day,
+recorded in the catalogue and here, and reported `unchecked` by `ignite rfc check` without
+SOURCE (row 26; no network in the gate).
+
+| source | vendored as | from | bytes | sha256 |
+|---|---|---|---|---|
+| RFC 854 text | not vendored | `https://www.rfc-editor.org/rfc/rfc854.txt` | 38,517 | `f9cb6d4a7d7a67e5a1ac5ae3c2962b1183fb26119632a1617f3c8379820dfb10` |
+| RFC 855 text | not vendored | `https://www.rfc-editor.org/rfc/rfc855.txt` | 6,049 | `c8c4744c9fa7650c0ae78d140f560b26e26b2935391e1ff624476c5fdbf4e03a` |
+| RFC 1143 text | not vendored | `https://www.rfc-editor.org/rfc/rfc1143.txt` | 22,771 | `4d2ef5878b0b88742c860fc777d6d91ad61580633fe277eae06410a6eee04bdf` |
+| RFC 9110 RFCXML | `docs/rfc/rfc9110.xml` | `https://www.rfc-editor.org/rfc/rfc9110.xml` | 1,223,686 | `09ec9ad4d1664623adcb298577e3fb9cd5c285f1bbe6b24d8c715b29f218e721` |
+| RFC 9112 RFCXML | `docs/rfc/rfc9112.xml` | `https://www.rfc-editor.org/rfc/rfc9112.xml` | 262,821 | `ce82219c272374005115c909244a79e587687df3858edca4112b8563c02ccf19` |
+
+The sizes and digests are those of the downloads of 2026-11-03. If U4's download differs, U4
+records the new values in its commit and in this table.
+
+`docs/rfc/README.md` (U4) says that the two files are RFCs published by the RFC Editor,
+unmodified, subject to the IETF Trust Legal Provisions (`https://trustee.ietf.org/license-info`),
+that they are vendored so that `ignite rfc check` runs offline in the gate, and that the three
+older RFCs are cited, not vendored.
+
+### 19.10 `ignite conformance` (D8)
+
+```
+ignite conformance FILE [--target rust|llvm] [the build flags of `ignite test`]
+```
+
+1. Load and check FILE as `ignite check` does. A diagnostic: print it as `ignite check` does,
+   exit 2, no stdout.
+2. Read the claim model (19.7). No protocol of FILE conforms: one line on stderr, exit 2.
+3. If any row names a test, build FILE's test executable on the target (default `llvm`)
+   through `ignite::build_tests`, run it once without arguments, and read its stdout. Result
+   lines are read after the `running N tests` line, one entry per test of FILE in the order
+   the runner runs them (declaration order, 12.7), each matched against that test's exact
+   full name, which may hold `\n`; the first entry that does not match ends them, so a name
+   cannot end the section early, and the `failures:` section, which echoes test output, is
+   never parsed. An entry `test <module>/<name> ... ok` is a pass, `test <module>/<name> ...
+   FAILED…` a failure. A test with more than one result keeps the worst (failed over not run
+   over passed), so a forged line never raises a verdict. A named test with no entry is `not
+   run`. Test output is not echoed.
+   - A build failure is exit 3.
+   - A run failure is exit 3: the executable cannot be spawned, ends by a signal, exits with a
+     status other than 0 or 1, or prints no `test result:` line.
+4. Print one block per (protocol, spec), in protocol then `conforms` order, with a blank line
+   between blocks.
+
+Block:
+
+```
+rfc<n> <title>, protocol <P>, parties <names|all>, sections <list|all>
+<row>
+...
+claim conformance of <P> to rfc<n>: <yes|no> (<g> gaps, <f> failures, <i> inconclusive)
+```
+
+`<names>` is the `parties` list and `<list>` the `sections` list, each entry joined by one
+space; `all` when the item is absent, `none` when its list is empty (`parties = []`). A row
+has six columns: id, section, level, status,
+evidence, verdict. Columns are joined by two spaces and padded with spaces to the widest
+entry of their column within the block. The last column is not padded, and no line ends in a
+space.
+
+- **level**: `MUST`, `MUST NOT`, `REQUIRED`, `SHALL`, `SHALL NOT`, `SHOULD`, `SHOULD NOT`,
+  `RECOMMENDED`, `NOT RECOMMENDED`, `MAY`, `OPTIONAL`.
+- **status**: one of
+  - `satisfied`;
+  - `limit` (satisfied, with a limit satisfier);
+  - `unsupported`;
+  - `not_applicable`;
+  - `none`.
+- **evidence**:
+  - satisfied: the satisfiers joined by `, `, then `; `, then each test as `test "<name>"
+    passed|failed|not run` joined by `, `, or `no test`;
+  - limit: `<Record.field> = <value>, minimum <m>`, or `<Record.field> has no value,
+    minimum <m>`;
+  - unsupported and not_applicable: the reason in double quotes;
+  - none: `-`.
+- **verdict**, the first rule that applies:
+  1. not in scope: `out of scope`;
+  2. `not_applicable`: `n/a`;
+  3. `unsupported`: `gap` at MUST class, `deviation` at SHOULD class, `n/a` at MAY class;
+  4. no status: `unclassified`;
+  5. satisfied:
+     - `fail` when any verifying test failed or a limit is below its minimum;
+     - else `inconclusive` when any verifying test did not run, or a limit has no value
+       (`protocols.md` §3.3: a skipped test makes the row inconclusive);
+     - else `pass` when at least one verifying test exists and every one passed, or when there
+       is no test, at least one limit, and every limit meets its minimum;
+     - else `inconclusive` (no test and no limit).
+
+The claim holds (`yes`) when no MUST-class row in scope is `fail`, `gap` or `inconclusive`.
+The counts are over all rows in scope, at any level: `gaps` counts `gap`, `failures` counts
+`fail`, and `inconclusive` counts `inconclusive`.
+
+Exit statuses, mapped in `crates/ignite/src/main.rs` as `ignite run` maps its own:
+
+| exit | when |
+|---|---|
+| 0 | every claim in the output holds |
+| 1 | a claim does not hold |
+| 2 | a diagnostic, a usage error, or no protocol of FILE conforms |
+| 3 | a test build or run failure (step 3), or an IO error |
+
+A `not run` test is what `protocols.md` §3.3 calls skipped. The runner at `296f849` has no skip
+(19.2), and a run that dies is exit 3, so `not run` is a named test without a result line in a
+run that ended normally. Row 33 covers it through the verdict function.
+
+Illustrative, not a golden (ids other than `R7_1_2` and `R3_2_6` are made up):
+
+```
+rfc9112 HTTP/1.1, protocol Http, parties Server Sender Recipient Any, sections all
+R2_2_3  2.2  MUST         satisfied    parse_head; test "bare CR is 400" passed                        pass
+R3_2_6  3.2  MUST         unsupported  "Host is not checked"                                           gap
+R6_1_6  6.1  SHOULD       satisfied    next_request; test "unknown coding is 501" not run              inconclusive
+R7_1_2  7.1  MUST         unsupported  "only Content-Length framing; any Transfer-Encoding is 501"     gap
+claim conformance of Http to rfc9112: no (2 gaps, 0 failures, 1 inconclusive)
+```
+
+`crates/ignite/src/conformance.rs` and the CLI dispatch hold no protocol name (rule 5).
+
+### 19.11 Layering (D7)
+
+A prefix rule, as for `std.protocol.*`:
+
+- `std.rfc` and every `std.rfc.*` module are layer **leaf**. They import base and leaf only. A
+  catalogue imports `std.rfc`, which is leaf.
+- Protocol modules import every layer, so `std.protocol.telnet` and `std.protocol.http` may
+  import the catalogues. General and base modules may import leaf modules by the existing
+  rules, so nothing forbids them a catalogue; none imports one in this slice.
+- `docs/layering.md`: the leaf row reads "`std.sli`, `std.time`, `std.policy` (O45), `std.rfc`
+  and every `std.rfc.*`", and rule 4's text names the `std.rfc` prefix beside
+  `std.protocol.`. `crates/ignite-check/tests/layering.rs` gets an `RFC_PREFIX` beside
+  `PROTOCOL_PREFIX`, with the same effect in `layer_of` and in `StdModule::layer`. U1 makes
+  these changes; U4 adds no layering row. U2 adds a paragraph to `docs/layering.md`, after the
+  `crates/ignite-load` paragraph: `crates/ignite-eval/src` mirrors the std vocabulary `std.rfc`
+  (`Level`, `Party`, `Source`), as it already names `std.sli.Window.Rolling` (the audit row of
+  `crates/ignite-eval/src/validate.rs`). No protocol name is involved, so rule 5 holds.
+- Rule 3 applies to the catalogues: no item, field or variant name contains a protocol name.
+  The spec constants are `RFC854` and `RFC9112`, not names of the protocols. Titles and texts
+  are Text values, not names.
+
+### 19.12 Diagnostics E090, E091 and E092
+
+| code | rule | phase | fixture |
+|---|---|---|---|
+| E090 | 19.7: a MUST-class requirement in scope with no status; a requirement with two statuses (separate message) | eval (`ignite-eval`), through `ignite check` and `ignite conformance` | `crates/ignite/tests/fixtures/e090_missing_status`, `e090_scope`, `e090_two_statuses`; the silent `claim_ok_complete` (row 41) |
+| E091 | 19.4: first trigger, a catalogue constant that is not literal data | check (`ignite-check`) | `crates/ignite-check/tests/fixtures/e091_non_literal_catalogue` |
+| E091 | 19.4: second trigger, an inconsistent catalogue in the checked file (the four cases, two `Spec` constants) | eval (`ignite-eval`) | `crates/ignite/tests/fixtures/e091_catalogue` |
+| E092 | 19.7: a clause naming a requirement of a spec its protocol, or no protocol of its module, conforms to | eval (`ignite-eval`) | `crates/ignite/tests/fixtures/e092_satisfies_foreign`, `e092_verifies_foreign`, `e092_status_foreign`, run with `--std claims_std` |
+
+No other new code (D2, D3). E093 to E095 and E098 stay with P3 and P4, and E097 stays unused.
+`plan::fixtures_match_expected`'s filter gains `e090`, `e091` and `e092` (U2); a fixture
+whose name starts with `claim_ok` is not in the filter and is checked by row 41.
+
+**The claim-fixture std.** E092 needs a second spec the protocol does not conform to, so its
+fixtures run against `crates/ignite/tests/fixtures/claims_std/`: a byte copy of
+`std/rfc.ignite` as `rfc.ignite` (row 40 keeps it equal), and two small catalogues
+`rfc/rfc1.ignite` and `rfc/rfc2.ignite` (modules `std.rfc.rfc1`, `std.rfc.rfc2`). The fixture's
+first line `// ignite check --std claims_std` makes `plan::fixtures_match_expected` pass the
+directory. The other claim fixtures declare their catalogue in the fixture itself (19.4) and
+use the real std.
+
+### 19.13 Typed API (add-only)
+
+Names may change in review. Shapes are what implementors build against. Nothing existing is
+renamed.
+
+`ignite-syntax` (U1):
+
+- `ProtocolDecl` gains `conforms: Vec<Ident>`, `scope: Option<Scope>` and
+  `statuses: Vec<StatusDecl>`.
+- `pub struct Scope { pub parties: Option<Vec<Ident>>, pub sections: Option<Vec<(String, Span)>>, pub span: Span }`.
+- `pub struct StatusDecl { pub kind: StatusKind, pub requirement: Path, pub reason: String, pub span: Span }`,
+  with `pub enum StatusKind { Unsupported, NotApplicable }`.
+- `FnDecl`, `RecordDecl` and `Field` gain `satisfies: Vec<Path>`.
+- `TestDecl` gains `verifies: Vec<Path>`.
+- A `reqref` is a `Path` of two segments.
+
+`ignite-check` (U1): resolution of the clause names for E003 and E004, and E091's first
+trigger. `Symbols` does not change.
+
+`ignite-types` (U1): `TypedProgram` records the `QualName` of the constant every `conforms`
+entry and every `reqref` names, keyed by the reference's span
+(`std.rfc.rfc9112.RFC9112`, `std.rfc.rfc9112.R7_1_2`), with an accessor
+`pub fn clause_constant(&self, span: Span) -> Option<&QualName>`.
+
+`ignite-llvm` (U1, as built): unreferenced constants are dropped after lowering. `lower_decls`
+still lowers every `Decl::Const` in declaration order and marks its symbol
+(`Module::mark_const`). `Module::finish` calls `prune`, which keeps a constant only when a kept
+function, a global, a root or a symbol named by another module of the build
+(`Module::add_const_roots`) references it, in a module with roots (std) and without (the
+program). A dropped constant takes with it its definition, every `@.str` no other function or
+global names, its `DISubprogram` and its `DILocation`s; the metadata ids of dropped nodes are
+left as gaps, not renumbered. `generate_with` and `generate_tests` build the mains before the
+program module and pass the symbols the mains name as constant roots. An unreferenced constant
+therefore adds no definition, no `@.str` and no `DISubprogram` (row 39), and the string
+numbering and function order of every kept item stay as before, so no golden changes. Known
+gap: glue, instances and closures lowered for a dropped constant stay in the module (the
+ignored test `golden::adversary_an_unreferenced_constant_leaves_no_closure_behind`); a
+worklist that lowers constants on first reference would close it at the cost of renumbering
+strings.
+The Rust target needs no change: `reachable` already drops unreferenced std constants
+(19.2). `apply::plan::CODEGEN_REVISION` moves one step past the value of the shadowing fix
+(`ignite-codegen/0.1.0-4` if that fix sets `0.1.0-3`), as `AGENTS.md` requires for a backend
+generation change.
+
+`ignite-eval` (U2):
+
+```rust
+pub struct Claims { pub protocols: Vec<ProtocolClaim> }
+impl Claims {
+    pub fn of(evaluator: &mut Evaluator<'_>, module: Module<'_>) -> Result<Claims, Vec<Diagnostic>>;
+}
+pub struct ProtocolClaim { pub protocol: String, pub specs: Vec<SpecClaim> }
+pub struct SpecClaim {
+    pub constant: String, pub rfc: i64, pub title: String, pub url: String, pub digest: String,
+    pub parties: Option<Vec<Party>>, pub sections: Option<Vec<String>>, pub rows: Vec<Row>,
+}
+pub struct Row {
+    pub id: String, pub section: String, pub ordinal: i64, pub level: Level, pub party: Party,
+    pub source: Source, pub minimum: Option<i64>, pub text: String,
+    pub in_scope: bool, pub status: Status, pub tests: Vec<String>,
+}
+pub enum Status { None, Satisfied(Vec<Satisfier>), Unsupported(String), NotApplicable(String) }
+pub struct Satisfier { pub declaration: String, pub limit: Option<Limit> }
+pub struct Limit { pub configured: Option<i64>, pub minimum: i64, pub meets: Option<bool> }
+pub enum Level { Must, MustNot, Required, Shall, ShallNot, Should, ShouldNot, Recommended, NotRecommended, May, Optional }
+pub enum LevelClass { Must, Should, May }
+impl Level { pub fn class(self) -> LevelClass; pub fn keyword(self) -> &'static str; }
+pub enum Party { Any, Sender, Recipient, Client, Server, Proxy }
+pub enum Source { Bcp14, Prose }
+```
+
+`Model::check` calls `Claims::of` first (19.7). `ignite-eval` gains `ignite-check` as a
+dev-dependency (it has `ignite-syntax` and `ignite-types` as normal dependencies), so
+`crates/ignite-eval/tests/claims.rs` builds its programs from source (row 18); the commit
+says what it replaces (nothing; a test-only dependency).
+
+`ignite` (U3, U5): `pub mod rfc;` (`rfc::import`, `rfc::check`) and `pub mod conformance;`
+(`conformance::run(file, options) -> Result<i32, Error>`). The verdict rules of 19.10 live in
+`conformance`, which calls the public `ignite::build_tests` and `ignite::TestOptions`.
+`main.rs` maps `conformance::run`'s statuses and `rfc`'s (19.8, 19.10) as it maps `ignite
+run`'s.
+
+### 19.14 Stale points and known deviations
+
+| # | where | stale text | resolution |
+|---|---|---|---|
+| 1 | `protocols.md` §3.1 | a catalogue holds "the RFC's collected ABNF, verbatim, in a `grammar` block" | phase 3; P2 catalogues hold requirements only (19.1). Marked "(phase 3)" there |
+| 2 | `protocols.md` §3.1 | "a module may alias one (`const BARE_CR: Requirement = R2_2_3`)" | deferred; in P2 an alias is E091 (19.4). Noted there |
+| 3 | `protocols.md` §3.1 | "`ignite rfc import 9112` reads RFCXML" | the importer takes a local file path (D6). Edited there |
+| 4 | `protocols.md` §3.2 | `satisfies [R2_2_3, ..]`, `unsupported R7_1_1 "reason"`: bare ids | references are `Spec.Id` (19.5). Edited there |
+| 5 | `protocols.md` §3.3 | the illustrative ids `R3_2_4` (Host) and `R7_1_1` (chunked) | by the id rule of 19.4 they are `R3_2_6` and `R7_1_2`. Inferred from the XML read by hand; row 28 confirms it. Edited there |
+| 6 | `protocols.md` §3.3 | the example's status column shows `gap` for an unsupported row, and "skipped" for a test | the status is `unsupported`, the verdict `gap`; a test without a result is `not run` and makes its row `inconclusive` (19.10). The example is replaced by 19.10's format |
+| 7 | `protocols.md` §3.3 | claim line `claim conformance to rfc9112: …` | `claim conformance of Http to rfc9112: …`, because a file may hold two protocols conforming to one spec (19.10). Edited there |
+| 8 | `protocols.md` §3.1 and §7 row P2 | the vocabulary block shows `package std.rfc` with no file; the stories and the P2 row name `std/rfc/rfc.ignite` | `std/rfc/rfc.ignite` would be module `std.rfc.rfc`; the vocabulary is `std/rfc.ignite` (D1). Noted in §3.1, edited in the P2 row |
+| 9 | `protocols.md` §3.1 | ids `R<section>_<ordinal>` | RFC 854 and 855 number no sections; their `section` is `p<page>` (19.4). Noted there |
+| 10 | `protocols.md` §3.3, E096 row | "missing impl, an impl method needing more effects than its interface, or a stream-kind mismatch" | slice 14 gives E096 only "does not implement `ByteStream`" (18.7); the other meanings are P4's. Not edited: outside P2 |
+| 11 | `protocols.md` §3.1 | the example catalogue constant sets `minimum = Some(8000)` | the importer writes no `minimum`, and P2 adds none (19.1). A `minimum` checked against a system's overriding value, not only the field default, is P3's (`protocols.md` §3.1 "Limits"). Noted there |
+| 12 | `protocols.md` §3.3 | "prints one row per requirement in scope" | every requirement of each claimed spec gets a row; those outside `scope` print `out of scope`, the verdict §3.3 lists (19.10). Edited there |
+| 13 | D4, `protocols.md` §3.3 | the RFC 9110 subset leaves out §8.6 (Content-Length, 13 marks) and §15 (status codes, 77 marks), which `http.ignite` implements | deferred: §15 alone is more than D4's 75 marks, and §8.6 framing is judged through RFC 9112 §6 in this slice. A later slice widens D4; the `Http` claim of row 2 says nothing about them |
+| 14 | `docs/vision.md` X16, slice 10 acceptance | "`std/protocol/telnet.ignite` at most 400 lines", excluding tests | known deviation, not fixed in this slice: at `296f849` the file has 1,086 lines, 762 outside top-level `test` blocks (the review's awk count; slice 14 item 14 recorded about 655). U6 adds clauses to it. Not split in slice 15; Q4 |
+| 15 | 19.4 "Level words", `std/rfc/rfc854.ignite` | a prose requirement "takes the level of its sentence's strongest word" | known limits of the mechanical classification, kept as written for this slice (steering, 2026-11-03): `RFC854.RP5_3` reads `Must` from "find it necessary", `RP7_1` `Required` from "not required … may treat", `RP12_1` `May` because "the protocol requires" has no word in the table. Two obligations have no word in the table and are not in the catalogue: "is obliged to provide" (p7) and "shall be capable" (p12, whose "reguired" is the RFC's typo). A later slice may widen the table |
+| 16 | `protocols.md` §7 row P2, test 3; 19.0 row 3 | "The Telnet matrix claims RFC 854 for an NVT that refuses every option" | not met in this slice (steering, 2026-11-03): the RFC 854 claim prints `no (4 gaps, …)`, the RFC 855 claim holds. The four MUST-class rows are `unsupported` in `telnet.ignite`, checked against the plain-text RFC 854: `RP5_4` (p5, "the process must transmit the TELNET Go Ahead (GA) command") needs IAC GA after the prompt, or SUPPRESS-GO-AHEAD, which an NVT refusing every option cannot negotiate; `RP10_2` (p10, "must transmit the TELNET SYNCH sequence") and `RP12_4` (p12, "The pair DM-Urgent is to have required meaning") need the Synch, a DM with TCP urgent send and receive, in `ignite-io` and `ignite-rt` on both targets (`tn` sends IAC IP on Ctrl+C without it, and IAC DM is read as a no-op); `RP5_3` (p5, "implementers are cautioned to provide methods of locally signaling that all buffered data should be transmitted immediately") needs a key in `tn`'s line editor that sends a partial line, and its `Must` comes from the word-table limit of item 15. Cost, measured on the U6 tree: GA changes every server transcript (about 20 inline assertions in `telnet.ignite`, the transcript test in `examples/terminal/commands.ignite`, the raw reads in `crates/ignite/tests/terminal.rs`); the Synch adds a substrate operation on both targets, a pipe counterpart and a `CODEGEN_REVISION` step, and changes `tn`'s Ctrl+C transcript in `terminal.rs`; the partial-line key changes the `apply_key` test. A later slice |
+| 17 | U6's claims of `http.ignite` and `telnet.ignite`; 19.0 rows 2 and 4 | statuses the U6 adversary found wrong (`crates/ignite/tests/conformance.rs`, `adversary_*`) | resolved (steering, 2026-11-03). Fixed in code: `RFC9112.R6_3_4` and `R6_3_5` (a field value is trimmed of SP and HTAB only, RFC 9110 OWS, so `Content-Length: 3` beside U+00A0, U+0085 or U+3000 is 400); `R9_6_6` and `R9_6_7` (a response whose application headers list the `close` option ends the connection); the client role prints CR NUL as a carriage return alone, CR LF and a lone CR as LF (`RFC854.RP11_3`, `RP13_3`; no transcript changed, and of the goldens only `terminal.model.json` and `todo.model.json` move, by the std source positions the claims of `1bc293f` shifted). Restated as `unsupported`, so the `rfc9112` claim counts 15 gaps instead of 12: `R6_1_2` and `R6_1_4` (were `not_applicable`: the application's `Transfer-Encoding` is sent as given on a kept connection), `R2_2_1` (was satisfied by `parse_head` and `read_head`: the head is decoded as lossy UTF-8 before it is parsed). Their adversary tests stay ignored with the gap id; story `http-rfc9112-9110-gaps` |
+
+### 19.15 Decisions
+
+| # | decision | alternative | why |
+|---|---|---|---|
+| D1 | The vocabulary is 19.3's text, in `std/rfc.ignite`, module `std.rfc`, as `protocols.md` §3.1 gives it. The spec constant is `RFC<n>`. Requirement ids are 19.4's | `std/rfc/rfc.ignite` (the stories' path) | that path is module `std.rfc.rfc` by the module-path rule; §3.1's `package std.rfc` needs `std/rfc.ignite` |
+| D2 | Catalogue constants are ordinary constants (section 4.3). Clauses are no expressions: no backend reads them and no reachability walk starts at them. A catalogue reaches generated code only through a name the program imports (Rust: a program's `use` lines are roots) or an expression uses. U1 makes LLVM drop every constant nothing kept references, after lowering (19.13), so that an unreferenced constant leaves no text or debug entry on either target. No runtime-use diagnostic, no new code. Rows 5, 12 and 39 make "clauses emit nothing" observable | (a) compile-time only, with a diagnostic for a runtime use; (b) exclude modules under `std.rfc` from emission by prefix | (a) needs a number outside E090 to E099's free slots (E093 to E095 and E098 are P3's and P4's, E097 is kept unused). (b) is smaller in code but turns a test's legitimate read of a requirement's `minimum` into a link error that needs its own diagnostic. Dropping unreferenced constants is one pass in `ignite-llvm`'s `prune`, needs no new code, and fixes the same leak for every unreferenced constant (as built; a constant's glue, instances and closures stay, 19.13) |
+| D3 | Clause grammar as 19.5. A requirement reference is `Spec.Id`; a `conforms` entry is a name. E091's first trigger is in `ignite-check` (U1); its second trigger, E090 and E092 are in `ignite-eval` (U2). Two statuses on one requirement is E090 with its own message. Clause resolutions travel in `TypedProgram` (19.13) | bare ids; E092 for two statuses; resolutions in `Symbols` | ids repeat across catalogues; E090 is "status count is not one", while E092 means "outside the protocol's specs"; `ignite_eval::Module` carries `TypedProgram` and no `Symbols` |
+| D4 | RFC 9112 is truncated at import to sections 2 to 9 (`--sections 2,3,4,5,6,7,8,9`). The RFC 9110 server subset is sections 5, 6, 7.2, 9.1, 9.2, 9.3.1, 9.3.2, 9.3.3 and 9.3.5 (fields, message abstraction, Host and `:authority`, method overview and properties, GET, HEAD, POST, DELETE), 75 marks. `Http` narrows parties by `scope { parties = [Server, Sender, Recipient, Any] }`, which leaves out `Client` and `Proxy`. §8.6 and §15 are left out (19.14 item 13) | 9112 whole, narrowed by `scope`; 9110 with §8.6 and §15 | §1.1 is the notation boilerplate (11 marks) and §10.1 is security prose (1). Truncating keeps the catalogue to what the claim judges. The 9110 subset is what an origin server for `todod`'s routes (GET, POST, PATCH, DELETE; PATCH is RFC 5789) must classify |
+| D5 | Only the RFCXML sources of RFC 9112 and RFC 9110 are vendored, unmodified, under `docs/rfc/`, with `docs/rfc/README.md` citing the IETF Trust Legal Provisions (19.9). RFC 854, 855 and 1143 are not vendored: their catalogues quote the sentences they need with page or section citations, their digest is recorded from the published text file as read on the import day, and `ignite rfc check` without SOURCE reports them `unchecked` | vendor all five; tests download | steering decision, 2026-11-03: the post-2008 RFCs are under the Trust's licence; the gate runs offline; `rfc check` of the imported catalogues needs their bytes (1.49 MB) |
+| D6 | `ignite rfc import FILE [--sections] [--package] [--url] [--out]` reads a local RFCXML v3 file with a hand-written reader (`crates/ignite/src/rfc/xml.rs`, no dependency, so the commit needs no "replaces" line). The digest is `sha256:<hex>` through the existing `sha2` dependency. Extraction as 19.8 | an XML crate | RFCXML uses a small subset of XML; no new dependency |
+| D7 | `std.rfc` and `std.rfc.*` are leaf by a prefix rule (19.11), in `docs/layering.md` and `layering.rs`; U1 adds it | one row per module | five catalogues now and more with every protocol; a prefix rule needs no edit per catalogue |
+| D8 | `ignite conformance FILE [--target rust\|llvm]`, default `rust` (`llvm` since 2026-11-05, `story:llvm-default-target`). It builds FILE's test executable on that target through `ignite::build_tests`, runs it once, and reads the result lines between `running N tests` and the first blank line. Output and verdicts as 19.10, with the claim line `claim conformance of <P> to rfc<n>: yes\|no (<g> gaps, <f> failures, <i> inconclusive)`. Exit 0 when every claim holds, 1 when one does not, 2 on a diagnostic, usage error or no conforming protocol, 3 on a test build or run failure or IO | run on all targets at once; JSON output | one target per run matches `ignite test --target`; rows 2, 3 and 36 run both and compare. JSON can be added later without changing the text |
+| D9 | Seven units as 19.16, one per story, in five waves | merge importer and catalogues | the stories are already cut this way; their file scopes do not overlap within a wave |
+
+### 19.16 Work split
+
+| unit | story | owns | depends on | first failing test | rows |
+|---|---|---|---|---|---|
+| U0 | `story:slice-15-contract` | this section, the section-8 rows, `docs/protocols.md` stale points, slice 14's row 17 | — | — | — |
+| U1 | `story:slice-15-frontend` | `crates/ignite-syntax/` (clauses, AST fields, `e001_malformed_clause`, `valid_clauses`, the message in `e001_protocol_member.expected`); `crates/ignite-check/` (resolution, E091 first trigger, the struct literals of its `#[cfg(test)]` module, `valid_clauses`, the fixture std's `std/rfc.ignite` and catalogue and the module list in `tests/fixtures.rs`); `crates/ignite-types/` (E040 on clauses, the `TypedProgram` resolutions, `valid_clauses`, the fixture std and module list in `tests/fixtures.rs`); `crates/ignite-llvm/src/` (dropping unreferenced constants, 19.13) and its row-39 test; `CODEGEN_REVISION` in `crates/ignite/src/apply/plan.rs`; the struct literals in `crates/ignite-rustgen/tests/units.rs`; `std/rfc.ignite`; the prefix rule in `docs/layering.md` and `layering.rs` (`layer_of`, `StdModule::layer`); `crates/ignite/tests/clauses.rs`, its `mod clauses;` line, `crates/ignite/tests/fixtures/clauses/` | `story:rustgen-type-parameter-shadowing` (shared rustgen test binary, `CODEGEN_REVISION`) | `fixtures::fixtures_match_expected` (ignite-syntax) on `valid_clauses` | 8 to 13, 39 |
+| U2 | `story:slice-15-claim-model` | `crates/ignite-eval/` (`Claims`, E090, E092, E091 second trigger, the call in `Model::check`, the `ignite-check` dev-dependency); `crates/ignite-eval/tests/claims.rs` and its `mod` line; `crates/ignite/tests/fixtures/e090_*`, `e091_catalogue`, `e092_*`, `claim_ok_complete`, `claims_std/`; in `plan.rs` the filter of `plan::fixtures_match_expected` and the tests of rows 40 and 41; the `docs/layering.md` paragraph on the eval enums (19.11) | U1 | `plan::fixtures_match_expected` on `e090_missing_status` | 14 to 18, 40, 41 |
+| U3 | `story:slice-15-rfc-importer` | `crates/ignite/src/rfc/`; `pub mod rfc;` in `crates/ignite/src/lib.rs`; `rfc` and its exit statuses in `crates/ignite/src/main.rs`; `crates/ignite/tests/rfc.rs`, its `mod rfc;` line, `crates/ignite/tests/fixtures/rfc/` | U1 | `rfc::import_writes_the_golden_twice` | 19 to 24 |
+| U4 | `story:slice-15-catalogues` | `std/rfc/rfc854.ignite`, `rfc855.ignite`, `rfc1143.ignite`, `rfc9112.ignite`, `rfc9110.ignite`; `docs/rfc/rfc9112.xml`, `rfc9110.xml`, `README.md`; its tests appended to `crates/ignite/tests/rfc.rs` | U1, U3 | `rfc::committed_catalogues_check_silently` | 25 to 30 |
+| U5 | `story:slice-15-conformance-command` | `crates/ignite/src/conformance.rs` and its unit tests; `pub mod conformance;` in `lib.rs`; `conformance` and its exit statuses in `main.rs`; `crates/ignite/tests/conformance.rs`, its `mod conformance;` line, `crates/ignite/tests/fixtures/conformance/` | U2, U3 (shared `main.rs`, `lib.rs`, `tests/main.rs`) | `conformance::each_verdict_prints_its_row` | 31 to 37 |
+| U6 | `story:slice-15-protocol-claims` | the clauses in `std/protocol/telnet.ignite` and `std/protocol/http.ignite`; rows 1 to 5 appended to `crates/ignite/tests/conformance.rs`; `STATUS.md`, `AGENTS.md`, `PLAN.md`, `docs/vision.md` §4.1, `docs/performance/15/` | U4, U5 | `conformance::telnet_matrix_claims_rfc854_for_an_nvt_that_refuses_every_option` | 1 to 7 |
+
+Row 38 belongs to every unit.
+
+Order: W1 U0 (with `story:rustgen-type-parameter-shadowing`); W2 U1; W3 U2 and U3; W4 U4 and U5;
+W5 U6.
+
+Shared files:
+
+- W2: U1 edits `crates/ignite/src/apply/plan.rs` after the shadowing fix merged (W1), so
+  its `CODEGEN_REVISION` step follows that fix's.
+- W3: U2 and U3 both touch `crates/ignite/tests/`. U2 adds fixtures and edits `plan.rs`;
+  U3 adds `rfc.rs` and the `mod rfc;` line in `tests/main.rs`, and edits `src/main.rs` and
+  `src/lib.rs`, which U2 does not touch. Neither edits the other's file.
+- W4: U4 appends to `rfc.rs` and edits nothing in `src/`. U5 edits `lib.rs`, `main.rs` and
+  `tests/main.rs`.
+- U6 appends to `conformance.rs` after U5 merged.
+
+Rules: one integration-test binary per crate (`AGENTS.md`), so every new test file is a `mod`
+line in its crate's `tests/main.rs`. Layering rule 5 holds for `crates/ignite/src/rfc/` and
+`conformance.rs`. Each unit's commit names the rows of 19.0 it makes pass.
+
+Planning store: the stories' bodies differ from this split in the points of the contract
+report ("Story updates"). The steering session updates them; U0 does not edit the store.
+
+### 19.17 Gate time
+
+Method of 18.18 (`docs/slice.md` 15.1), run through `tools/ignite-perf` (modes `cold`,
+`warm`, `programs`, `cli`; records `ignite-performance/1`). "Before" is a `git archive 296f849`
+copy and "after" the closed tree, each with its own `CARGO_TARGET_DIR`. One cold gate per tree,
+then three interleaved warm passes. A pair whose two 1-minute loads differ by more than 5 is
+dropped. Report the medians of the pair ratios next to the absolute times.
+
+Units: those of 18.18, plus:
+
+- `ignite check examples/todo/todo.ignite` (15 pairs). `std.protocol.http` now imports two
+  catalogues (about 200 requirement constants), and every program that reaches it loads them.
+  The rise is the expected cost of the slice;
+- `ignite conformance std/protocol/telnet.ignite` and `…/http.ignite`, per target, cold and
+  warm (after only);
+- `ignite rfc import docs/rfc/rfc9110.xml` with D4's sections (after only, 5 runs).
+
+Expected causes, to be measured or labelled inferred: the frontend on the catalogues for every
+program that reaches a protocol module (`ignite check`, `ignite plan`, program builds), and in
+`task test-ignite` the compile of the catalogue constants into the test executables of
+`telnet.ignite` and `http.ignite`.
+
+A unit that rises over 10 % gets a measured cause, or the record labels the cause inferred. No
+baseline moves. The apply suites stay the slice-13 exception.
+
+Records: a "Slice 15" paragraph in `AGENTS.md`'s gate-time section; raw logs and records under
+`docs/performance/15/`.
+
+### 19.18 Open questions
+
+Each has a default, which the units follow unless the review changes it.
+
+| # | question | default |
+|---|---|---|
+| Q1 | An RFC 854 MUST that the refuse-everything NVT does not meet would make row 3 fail | U6 may narrow `scope` by party only where RFC 854 addresses a party `Telnet` does not implement, with the reason in the commit. It never marks an implemented party's MUST `not_applicable` to make the claim hold. If a MUST stays unmet, U6 implements it when the change fits the story. Otherwise it reports a blocker |
+| Q2 | `ignite check` of `todo.ignite` (and every HTTP program) rises over 10 % from loading the catalogues (19.17) | record the measured cause as a slice-15 exception, as 12c and 13 did. A later milestone loads catalogue modules only for `check` and `conformance` |
+| Q4 | X16: when `std/protocol/telnet.ignite` is split to meet the 400-line bound (19.14 item 14), and along which seam (codec, session, executable kinds) | not in slice 15. The slice that next changes Telnet beyond clauses proposes the split |
+
+Q3 (licence of vendoring the older RFCs) is closed by D5.
+
+## 20 Slice 16: language gaps (wave A)
+
+**Status: contract written 2026-11-04. The independent review (`docs/slice16-review.md`, 4
+blockers, 5 should-fix, 14 notes) is resolved in this text; its "Resolution" section maps each
+finding to the place that resolves it. Implemented 2026-11-04 to 2026-11-05 in units U1 to U6
+(20.10); every row of 20.0 has a dated row in `STATUS.md`.** The rows of 20.0 are
+required checks, not results.
+
+Sources:
+
+- `docs/vision.md` §4 row "A language gaps" and row "C actors P1 to P3" (which needs "A
+  (last-use moves), T1"), §4.1, §5, §6, §7 (T1, T2, T3, T4), invariants 3, 7, 8 and 9.
+- `docs/friction.md` rows 1, 2, 4, 7, 8, 9, 10, 12, 13, 15 and 17; `docs/actors.md` R1, §3.3
+  and the P1 and P4 rows; `docs/protocols.md` §5.2; `docs/syntax.md` P9 and R7; `docs/llvm.md`
+  §3, §3.1 and §4.
+- This file: sections 3, 6, 8, 13 (slice 9: 13.3 closures, 13.4 boxing, 13.7 ranges), 14.3
+  (`Map`), 14.8 (T1), and 19.0 to 19.18 (the structure this section follows).
+
+The base of the slice is commit `7ab3f7c`, the slice-15 branch head; it will be rebased onto the
+merge of slice 15 into `main`, and the before tree of 20.12 is then that merge. Everything in
+this section cites files and symbols, not lines (vision T3). Where `docs/syntax.md`,
+`docs/actors.md` or `docs/vision.md` disagree with this section, this section wins and records
+the point in 20.8.
+
+Most of the wave-A row holds already: slice 9 and slice 10 delivered it, and 20.1 cites the test
+for each item. The slice adds what is missing:
+
+- last-use moves (actors R1): a frontend analysis in `ignite-types` that marks the arguments,
+  initializers and results that may take a place's value without a copy, and the parameters a
+  callee consumes; both backends drop the copy there (20.3);
+- calls of fn-typed expressions, `adder(1)(2)`, `fs[i](x)`, `(|x: Int| x * 3)(2)` (20.4);
+- rest patterns in list patterns, `[_, _, ..]`, `[first, ..rest]`, `[.., last]`, as `docs/syntax.md`
+  P9 proposes them, with its code E076 (20.5);
+- a both-target fixture for every item that holds, and the records.
+
+### 20.0 Acceptance
+
+Every row is a required check. "Exit 0, silent" means exit status 0, empty stdout and empty
+stderr. A test name is `<file>::<test>` in its crate's single integration-test binary
+(`cargo test -p <crate> --test main <file>::<test>`). "Both targets" means `--target rust` and
+`--target llvm`. The fixtures named `slice16/…` are under `crates/ignite/tests/fixtures/slice16/`.
+`STATUS.md` gets one dated row per row of this table (row 27).
+
+| # | check | command | required observation | unit |
+|---|---|---|---|---|
+| 1 | the moves analysis marks R1's shape | `cargo test -p ignite-types --test main moves::a_var_passed_and_reassigned_moves` | the test types the source of `run` and `step` of 20.1's probe p07 (inline in the test) and collects every expression for which `TypedProgram::moves` is true, as (line, col). The list is exactly the `s` in `s = step(s, i)`, the `state` in `var next = state` and the `next` that is `step`'s result; `consumed(&Callee::Fn(step), 0)` is true, `consumed(&Callee::Fn(step), 1)` false | U1 |
+| 2 | a read after the move point keeps the copy | `moves::a_later_read_keeps_the_copy` | for each case of 20.3.2's list "no move" (a read later in the block, a read in the next loop iteration, another argument or the receiver of the same call mentioning an overlapping place, among them `take(s, if c { s = fresh(); 0 } else { 0 })`, a use inside the arms of a `match` whose scrutinee is rooted at the variable, a use in the body of a `for` whose iterable is rooted at it, an in-place change after the call) `moves` is false at the argument. With a local `s`, in `if c { consume(s) } else { s.count }` as a fn body's result, `moves` is true at `consume`'s argument. In `consume(t); if c { var t = a } else { var t = b }; t.count` (inner `t`s shadow) `moves` is false at `consume`'s argument | U1 |
+| 3 | positions and places | `moves::every_move_position_moves` and `moves::places_move_through_fields_only` | each move position of 20.3.1 with a dead place is marked; a receiver of a builtin method, a `match` scrutinee, a `for` iterable, an operator operand, a `spawn` argument, a closure capture and the initializer of a pattern `let` are not. `b.f` with `b.f` dead after is marked; `xs[0]`, a boxed field (13.4) and a place rooted at a pattern binding are not. Field paths are disjoint: in `a.state = a.handle(a.state, i)` the argument `a.state` is marked; in `Step { state = st.state, out = publish(st.out) }` with `st` dead after, `st.state` is marked; in `answer(state, reply, state.table.values())` `state` is not. No expression whose type is `Int`, `Byte`, `Bool`, `Unit`, a quantity, a handle type or a fn type is marked | U1 |
+| 4 | consumed parameters are a fixpoint | `moves::consumed_is_a_fixpoint` | in a module with `a(x)` calling `b(x)` at its last use, `b(y)` changing `y` in place and calling `a`, and `c(z)` only reading `z`: `a` and `b` consume their parameter, `c` does not. `d(m)` whose only change is `m.put(k, v)` consumes `m`; `e(p)` that passes `p.items` to a consumed parameter on every path consumes `p`. `pick(a, b, c) = if c { a } else { b }` consumes neither `a` nor `b` (each is moved on one path only, 20.3.3), and neither does `unwrap_or` in `std/option.ignite` consume `fallback`. A program fn whose last use of a local passes it to a std fn that consumes its parameter moves it; `ModuleTypes::consumed` of the std module lists that fn | U1 |
+| 5 | closure bodies are not entered | `moves::closure_bodies_never_move` | no expression inside a closure body is marked, and creating a closure that captures `s` counts as a read of `s` | U1 |
+| 6 | the checker accepts calls of fn-typed expressions | `cargo test -p ignite-check --test main fixtures::` | fixture `crates/ignite-check/tests/fixtures/valid_expression_calls` (`adder(1)(2)`, `fs[1](10)`, `(|x: Int| x * 3)(2)`, `(h.run)(2)`, `pick(true)(3)`): exit silent. `nope(1)(2)` in fixture `e003_unknown_variable` gives one E003 `unknown name \`nope\`` and no `not callable` | U2 |
+| 7 | the typer types them | `cargo test -p ignite-types --test main fixtures::` | fixture `valid_expression_calls` (the same source with a checked use of each result) is silent. `e040_not_callable`: `(1)(2)`, `xs[0](1)` with `xs: List<Int>` and `"a"(1)` give one E040 each, `type mismatch: this expression has type \`<T>\` and cannot be called`. `e043_expression_call_arity`: `adder(1)(2, 3)` gives one E043. `valid_expression_calls` also holds `hs[0](conn)` with `hs: List<fn(c: PipeStream) -> Int requires [c.write]>` and `(h.send)(conn)` with an effectful fn field, inside a fn that `requires [conn.write]`: silent, as `h.send(conn)` is today. `e042_effectful_expression_callee`: `pick_sender(true)(conn)`, with `pick_sender` returning that effectful fn type, gives one E042, the message of 20.7; the same fn without `conn.write` in `requires` gives the E042 and no E016. `e042_closure.expected` and `e017_closure.expected` are unchanged | U2 |
+| 8 | closures already hold, both targets | `cargo test -p ignite --test main slice16::closure_shapes_pass_on_both_targets` | `ignite test slice16/closures.ignite --target all` exits 0, every test passed on both targets, 0 failed. The fixture holds the closure tests of 20.1's probes p02, p08 and p04b: captures by copy, a var captured and then changed (the closure keeps the old value), a generic fn returning a closure that captures a `T`, a closure returning a closure, a closure in a record kept in a `Store`, a closure passed to a spawned task, a closure that writes through a captured `PipeStream` called through its `let` binding, and a record holding `handle: fn(S, M) -> S` stepped in a loop (the actors §5.1 shape) | U2 |
+| 9 | Rust: R1 is linear | `cargo test -p ignite-rustgen --test main slice16::state_threading_is_linear` | the test builds `slice16/moves_scale.ignite` once on the Rust target (dev profile) with the helpers `crates/ignite-rustgen/tests/slice9.rs` uses (`common::lower_tests` with the repository's `std/` and cargo), then runs the test executable twice, with the exact filters "50000 steps through a call" and "200000 steps through a call". Both pass. The time of each is the `finished in` figure of the runner's `test result:` line; the 200,000-step time is under 8 times the 50,000-step time (linear is about 4; p07's quadratic growth is about 20 per factor 4) | U3 |
+| 10 | LLVM: R1 is linear | `cargo test -p ignite --test main slice16::llvm_state_threading_is_linear` | the same as row 9 on the LLVM target (dev, `-O0`), through `ignite test slice16/moves_scale.ignite --target llvm <filter>`, each filter run twice and the second run's `finished in` figure taken | U4 |
+| 11 | Rust: moves keep value semantics | `cargo test -p ignite-rustgen --test main slice16::fixtures_pass` | with the same helpers as row 9, the Rust target builds `slice16/moves.ignite` and `slice16/calls.ignite` (both import std) with rustc without an error (in particular no E0382, E0505 or E0507) and every test of both passes | U3 |
+| 12 | LLVM: moves keep value semantics | `cargo test -p ignite --test main slice16::llvm_fixtures_pass` | `ignite test slice16/moves.ignite slice16/calls.ignite --target llvm`: exit 0, every test passed, built against the debug runtime that overwrites released memory with 0xDB (`docs/llvm.md` §4) | U4 |
+| 13 | Rust golden | `cargo test -p ignite-rustgen --test main golden::last_use_moves_and_expression_calls` | `crates/ignite-rustgen/tests/golden/slice16.ignite` lowers to exactly `slice16.rs`. In it `step` (which moves its parameter into `var next`, as p07's does) is declared `fn step(state: State, x: &i64) -> State`, the call in `run` is `step(s, &i)` with no `.clone()` on `s`, a read-only aggregate parameter stays `&T`, a call to a consumed parameter whose argument is read later passes `.clone()`, a role called with a moving argument receives it bare, and `adder(1)(2)` is a call of the call's result | U3 |
+| 14 | LLVM golden | `cargo test -p ignite-llvm --test main golden::last_use_moves_and_expression_calls` | `crates/ignite-llvm/tests/golden/slice16.ignite` (self-contained, no std, as the other LLVM goldens) lowers to exactly `slice16.program.ll`. The test also asserts on the text: in `run`, no `copy.` call lies between the loop head and the call of `step`, and the call passes the slot of `s` (the loop's release block keeps its `copy.State`, `docs/llvm.md` §4); in `run_read_after`, a `copy.State` call precedes the call of `step`; `read_only_parameters_are_borrowed` and `loops_release_their_region` still pass | U4 |
+| 15 | codegen revision | read `apply::plan::CODEGEN_REVISION` in `crates/ignite/src/apply/plan.rs` | after W3 one step past its value at the slice base, one step for U3 and U4 together (U4 does not edit `plan.rs`); after W4 one step further | U3, U5 |
+| 16 | rest pattern syntax | `cargo test -p ignite-syntax --test main fixtures::` (`fixtures::fixtures_match_expected_diagnostics`) | fixture `valid_rest_patterns` (`[..]`, `[_, _, ..]`, `[first, ..rest]`, `[.., last]`, `[a, .., z]`, `[[a, ..], ..]`, `[] \| [_, ..]` in one arm, a rest on `Bytes`) parses, silent. `e076_rest`: `[.., x, ..]`, `[..a, ..b]` and `[..init, last]` give one E076 each, with the two messages of 20.7. `e001_rest_outside_list`: `(a, ..)`, `Some(..)` and a bare `..` arm give one E001 `expected pattern, found \`..\`` each | U5 |
+| 17 | rest pattern types | `cargo test -p ignite-types --test main fixtures::` | `valid_rest_patterns` is silent, among it `[] => …`, `[_, ..] => …` (exhaustive on `List<Int>` and on `Bytes`) and `[first, ..rest]` passing `rest` where `List<Int>` is expected. `e040_rest_binding`: `rest` of a `List<Int>` passed where `Int` is expected, and `rest` of a `Bytes` where `List<Int>` is expected: one E040 each. `e046_rest`: `[] , [_, _, ..]` gives E046 `match does not cover \`[_]\``; `[x, ..]` alone gives `match does not cover \`[]\``; on `List<Bool>`, `[]`, `[_]`, `[_, _]`, `[_, true, ..]`, `[.., false, _]` gives `match does not cover \`[_, false, true, _]\`` (the case where prefix and suffix overlap below length P + S, 20.5); on `List<Bool>`, `[true]`, `[]`, `[_, _, ..]` gives `match does not cover \`[false]\``. `valid_rest_patterns` holds the same five `List<Bool>` arms plus `[_, _, _, _, ..]`, silent. `e046_patterns.expected`'s list case reads `match does not cover \`[_, _, ..]\`` (20.7); every other line of it is unchanged | U5 |
+| 18 | rest patterns run | `cargo test -p ignite-rustgen --test main slice16::fixtures_pass`, `cargo test -p ignite --test main slice16::llvm_fixtures_pass` | both now also build `slice16/rest.ignite` and every test passes: lengths 0 to 4 against `[]`, `[_]`, `[_, _, ..]`; `[first, ..rest]` binding a copy (pushing to a `var` bound to `rest` leaves the scrutinee unchanged); `[.., last]`; `[a, .., z]` on two and on three elements; nested rests; the rest on `Bytes`; protocols §5.2's `([_, _, ..], _, _)` inside a tuple | U5 |
+| 19 | rest goldens | `cargo test -p ignite-rustgen --test main golden::rest_patterns`, `cargo test -p ignite-llvm --test main golden::rest_patterns` | `rest.ignite` in each crate's `tests/golden/` lowers to exactly `rest.rs` and `rest.program.ll` | U5 |
+| 20 | the evaluator agrees on rest patterns | `cargo test -p ignite --test main eval::` | `eval_equivalence.ignite` gains a `rest_` family (at least four fns); `fixture_covers_every_family` lists it; `evaluator_agrees_with_the_rust_target` and `evaluator_agrees_with_the_llvm_target` pass | U5 |
+| 21 | every wave-A fixture on both targets through the CLI | `cargo test -p ignite --test main slice16::fixtures_pass_on_both_targets` | `ignite test` of `slice16/holds.ignite`, `calls.ignite`, `moves.ignite` and `rest.ignite`, each with `--target all`: exit 0, every test passed on both targets, 0 failed | U6 |
+| 22 | the items that hold | same, `holds.ignite` | the fixture holds one test per "holds" verdict of 20.1 (unwrap_or and `!=` on `Option`, a range pattern on `Byte`, raw text and raw byte literals, a `\u{..}` escape, an interpolation holding a string literal, tuple fields, `break` as a match arm's value, a boxed recursive enum, `Map` operations in key order, an associated fn), taken from probe p01 | U6 |
+| 23 | the evaluator agrees on calls and moves | `cargo test -p ignite --test main eval::` | `eval_equivalence.ignite` gains a `call_` family (expression callees, at least three fns) and a `move_` family (fns whose arguments move, with a read of the moved variable's old value through a copy made before, at least three fns); both agreement tests and `fixture_covers_every_family` pass | U6 |
+| 24 | the workspace | `cargo test --workspace` after each unit | passes. Golden changes in U3 and U4 only as 20.3.4 and 20.3.5 allow (a parameter's passing mode, a dropped copy at a move, a `.clone()` or `copy.` at a call to a consumed parameter, renumbered metadata); in U1, U2 and U6 no golden changes; in U5 only the rest goldens are new | every unit |
+| 25 | inline tests | `task test-ignite` | passes on both targets; the per-target count equals the base's plus the slice's std additions (none planned) | every unit |
+| 26 | end-to-end unchanged | `cargo test -p ignite --test main -- terminal:: todo:: failover:: slice9:: slice10_llvm::` | passes; `crates/ignite/tests/terminal.rs` and `todo.rs` unchanged against the base | U3, U4, U6 |
+| 27 | records and gate | `task gate` on the slice branch; read `STATUS.md`, `AGENTS.md`, `PLAN.md`, `docs/vision.md`, `docs/friction.md`, `docs/actors.md`, `docs/syntax.md` | exit 0. Every row of this table has a dated `STATUS.md` row naming its command. `AGENTS.md` has a "Slice 16" section with the merge gate's time, counts and exit, and its `crates/ignite-types/` layout row names the moves analysis. `PLAN.md` has a row 16 that says done. `docs/vision.md` §4.1 has a row "16" for wave A, and §5's rows of wave A say where each landed. The stale points of 20.8 are edited where 20.8 says, among them the title of this file. `docs/performance/16/` holds the records of 20.12 | U6 |
+
+### 20.1 Current state and verdicts (at `7ab3f7c`)
+
+Probes are `.ignite` files run with the worktree's `target/debug/ignite test FILE --target all`
+or `ignite check FILE` on 2026-11-03; their sources are folded into the fixtures of 20.0 (p01 into
+`holds.ignite`, p02, p04b and p08 into `closures.ignite`, p03 into `calls.ignite`, p06 into
+`rest.ignite`, p07 into `moves_scale.ignite`).
+
+| item (vision §4 row A) | verdict | evidence |
+|---|---|---|
+| closures capturing locals (`friction` 9, 13; actors P4) | holds; one gap in, two deferred | captures by copy on both targets: tests "closures capture by copy" and "store update with a closure is atomic" of `crates/ignite-rustgen/tests/slice9/features.ignite`, run by `slice9::slice9_features_pass` (Rust) and `slice9::rust_target_features_pass_on_llvm` in `crates/ignite/tests/slice9.rs` (LLVM); the closure in `patch` of `examples/todo/todo.ignite`, exercised by `crud_flow` in `crates/ignite/tests/todo.rs` on both targets. Probes p02, p08 and p04b (20.0 row 8's shapes) pass on both targets. Gaps: (a) a call whose callee is an expression of fn type is E003 `not callable` (p03: `adder(1)(2)`, `fs[1](10)`, `(|x: Int| x * 3)(2)`): **in** (20.4). (b) An unannotated closure parameter whose expected type holds a type parameter only the closure body decides, the shape of actors P4's `call(|r| Get(id, r))`, is E042 twice (p05: `cannot infer type parameter \`T\` of \`call\``, `cannot infer the type of closure parameter \`r\``); annotated, `call(\|r: Reply<Text>\| Get(id, r))` passes (p05b): **deferred** (20.13). (c) A closure that captures a capability and uses it (`\|t\| s.write_all(..)`) passed where a fn type is expected is E017 (p04: `effectful closure (requires [s.write]) where the pure fn type … is expected`); called through its `let` binding it passes (p04b): **deferred**, E017 stays the rule (20.4.3) |
+| `Option.unwrap_or`, `!=` on `Option` (7) | holds | std/option.ignite test "unwrap_or gives the value or the fallback" (`task test-ignite`, both targets); `!= None` in `contains` of `std/text.ignite`; p01 |
+| rest patterns `..` (protocols §5.2) | missing; **in** | p06: `[_, _, ..] => "many"` is E001 `expected pattern, found \`..\``. A list column is covered only by `_` or a binding: p09's `[] => 0, [x] => x` is E046 `match on \`List<Int>\` does not cover every value; add a \`_\` arm or a binding arm` (`crates/ignite-types/src/exhaustive.rs`) |
+| ranges in patterns (8) | holds | test "range patterns" of `slice9/features.ignite` (both targets as above); fixture `e046_ranges` of `crates/ignite-types/tests/fixtures`; p01 |
+| raw strings (2; also 1 and 12, vision §5) | holds | the std/json.ignite tests "encode and parse round trip" and "the accessors read members of the right kind" (`task test-ignite`, both targets); p01 (`r#"…"#`, `br"…"`) |
+| tuple field access `.0` (10) | holds | test "record update and tuple fields" of `slice9/features.ignite`; p01 |
+| `break` as an expression (4) | holds | test "break and continue expressions" of `slice9/features.ignite`; p01 (`None => break` as a `match` arm inside `let`) |
+| recursive enums by boxing (15) | holds | test "boxed recursion" of `slice9/features.ignite`; section 13.4; p01 |
+| static fns on records (17, vision §5) | holds | test "associated fns" of `slice9/features.ignite`; section 13.8 |
+| `Map<K, V>` (design §3.3) | holds | tests "map literal and lookups", "map mutation has value semantics", "for over a map visits pairs in key order", "maps compare structurally" of `crates/ignite-rustgen/tests/slice10/features.ignite`, run by the rustgen `slice10` tests (Rust) and `crates/ignite/tests/slice10_llvm.rs` (LLVM); section 14.3; p01 |
+| last-use moves (actors R1) | missing; **in** | p07, state threaded through a call, `s = step(s, i)` with `step` pushing to `state.items`: Rust 0.04 s for 10,000 steps and 0.84 s for 40,000; LLVM 0.36 s and 7.40 s. Four times the steps cost about 21 times the time on both targets: every step copies the whole state. The same loop with the push inline takes 0.01 s for 40,000 steps. Rust parameters are `&T`, copied on entry when the body changes them (section 6, `mutated_names` in `crates/ignite-rustgen/src/lib.rs`); LLVM passes a fresh copy to a parameter the body modifies (`docs/llvm.md` §3, `region::modified` in `crates/ignite-llvm/src/region.rs`) |
+| T1 failure rule (vision §7) | holds | section 14.8; `failover::a_failing_session_does_not_end_the_service` (`crates/ignite/tests/failover.rs`), `slice10::crashd_survives_failing_handlers` (`crates/ignite-rustgen/tests/slice10.rs`) |
+
+Facts the design relies on:
+
+| fact | where |
+|---|---|
+| A call's callee is any postfix expression in the grammar; `ignite-check` reports E003 `not callable` for every callee that is no name and no path head, and `ignite-types` records `Callee::Local` only for a name | `call` in `crates/ignite-check/src/lib.rs` (its `ExprKind::Field` arm without a path head and its `_` arm); the `ExprKind::Name` branch of the call typing in `crates/ignite-types/src/typer.rs` (grep `Callee::Local`) |
+| `ignite-check` already gives a declared type to a name, a field, a method result, `?`, a tuple field, a closure and an index of a `List` or `Bytes` (not to a call's result), and reads an effectful fn type's effects from it; so `h.send(conn)` with an effectful fn field, and `let f = hs[0]; f(conn)`, check today | `static_type`, `fn_value_effects` in `crates/ignite-check/src/lib.rs` |
+| Rust parameters: a protocol role's are `mut name: T` by value; every other parameter is `&T` (scalars too), cloned on entry when the body changes it or its type is Copy; a role argument is passed as a value (a place with `.clone()`) | `function_line`, `args` in `crates/ignite-rustgen/src/lib.rs`; section 6 |
+| The in-place changes that make a parameter owned today: on LLVM `region::mutates` (`push`, `append`, `clear`, `Map.put`, `Map.remove`, the `Store` mutators, assignments); on Rust `mutated_names` with `mutates_receiver` (`push`, `append`, `clear`, `Map.put`, `Map.remove`, assignments) | `crates/ignite-llvm/src/region.rs`, `crates/ignite-rustgen/src/lib.rs` |
+| The backends and the evaluator already lower a `Callee::Local` call by evaluating the callee as an expression | the `_` arm of `call` in `crates/ignite-rustgen/src/lib.rs`; the `Some(Callee::Local)` arms in `crates/ignite-llvm/src/lower.rs` and `call_expr` in `crates/ignite-eval/src/eval.rs` |
+| The typer's effect pass maps an effectful fn type's `requires` onto a call's arguments for any `Callee::Local` callee; an effectful operation at a span `ignite-check` did not record as an effect site is E042 | `Callee::Local` arm in `crates/ignite-types/src/typer/effects.rs`; `effect_site` in `typer.rs` |
+| A closure parameter takes its type from an annotation or from the expected fn type; a type that still holds a type variable is E042 | `closure` in `typer.rs` |
+| Pattern grammar: `'[' (pattern (',' pattern)*)? ']'` matches a list (or `Bytes`) of exactly that length | section 3; `PatternKind::List` in `crates/ignite-syntax/src/ast.rs` |
+| `PatternKind::List` is matched in `ignite-syntax` (parser), `ignite-check`, `ignite-types` (`typer.rs`), `ignite-eval`, `ignite-rustgen` and `ignite-llvm` (`lower.rs`, `region.rs` `pattern_binds`); `exhaustive.rs` has no list arm, so a list pattern falls to its catch-all rule | grep `PatternKind::List` |
+| Fn values: Rust `Arc<dyn Fn(..) -> R + Send + Sync>`; LLVM `{ ptr code, ptr env }`, environment block in the arena, captures copied at creation, glue ops 0 to 2 | section 13.3; `docs/llvm.md` §3.1 |
+| A call through a fn value passes copies on LLVM, owned values on Rust | `docs/llvm.md` §3; `fn_value` in `crates/ignite-rustgen/src/lib.rs` |
+| `ModuleTypes` derives `Default`; a new query field needs a line in `query_snapshot` | `ModuleTypes`, `query_snapshot` in `crates/ignite-types/src/lib.rs` |
+| `CODEGEN_REVISION` is `ignite-codegen/0.1.0-4` at `7ab3f7c` | `crates/ignite/src/apply/plan.rs` |
+| E076 is free: `docs/syntax.md` §8.3 proposes it for P9 inside T4's range E070 to E079 for that proposal; no code uses it | `docs/syntax.md` §8.3; grep of `crates/` and `docs/slice.md` |
+| The test runner's default timeout is 60 s | `DEFAULT_TIMEOUT` in `crates/ignite-io/src/test.rs` |
+
+### 20.2 Scope and non-goals
+
+In scope: last-use moves (20.3), calls of fn-typed expressions (20.4), rest patterns in list
+patterns (20.5), both-target fixtures for every item that holds, and the records.
+
+Not in scope (20.13 gives the reasons): effectful closures passed as fn values; inferring a
+closure parameter from the closure body; capture by move; moves of pattern bindings, `for`
+elements, closure parameters and anything inside a closure body; rest patterns in tuples and
+variant payloads; the open rows of `docs/friction.md` that are not on the wave-A row; a
+persistent `Table` (actors R1 "Open").
+
+### 20.3 Last-use moves (D1, D2, D3)
+
+A move is an optimisation that must change no observable value: a program means the same with
+and without it, and the evaluator, which copies by construction, stays the reference (row 23).
+The analysis runs once in `ignite-types`, after typing a module, in a new module
+`crates/ignite-types/src/moves.rs`; both backends read its result through `TypedProgram`
+(20.6). It reports no diagnostic.
+
+#### 20.3.1 Tracked variables, move positions and places
+
+Tracked variables: a single-name `let` or `var` binding, and a parameter of a fn, an associated
+fn or a protocol role, whose type is an aggregate or a type parameter: not `Int`, `Byte`, `Bool`,
+`Unit`, a quantity, a handle type (invariant 3) or a fn type (copying a fn value is a reference
+count on Rust; on LLVM its environment copy is left for later, 20.13). Each binding is its own
+variable: a shadowing `let` or `var` starts a new one and neither reads nor reassigns the outer
+one; the analysis works on resolved bindings, not on names. Pattern bindings, `for` elements and
+closure parameters are not tracked.
+
+Move positions, where an aggregate value is taken:
+
+- an argument of a direct call (a named fn, an associated fn, a role, or a UFCS call of a user
+  fn, whose receiver is argument 0) to a parameter the callee consumes (20.3.3);
+- an argument of a call through a fn value;
+- the element argument of the builtins `push` and `put`;
+- the initializer of a single-name `let` or `var`, and the right side of an assignment (not the
+  initializer of a pattern `let`, whose bindings point into it on LLVM);
+- the operand of `return`, and the result expression of a fn body or of a block whose value is
+  used;
+- a list element, a record literal's field value, the base of a record update, a variant,
+  `Some`, `Ok` or `Err` payload, a tuple element.
+
+Not move positions: a receiver of a builtin method, a `match` scrutinee, a `for` iterable, an
+operator operand (also `==` and `+` on `Text`), a `spawn` argument, an `assert` operand, a
+closure capture.
+
+A place in a move position moves when it is a tracked variable `v` or a field chain `v.f.g`
+rooted at one, and that place is dead after the position (20.3.2). A chain through an index
+(`v[i]`), through a boxed field or payload (section 13.4), or rooted at an untracked binding never
+moves.
+
+#### 20.3.2 Liveness
+
+Liveness is per place: a tracked variable `v` or a field path `v.f.g` rooted at it. Two places
+overlap when one is a prefix of the other (`v` and `v.f`, `v.f` and `v.f.g`); `v.f` and `v.g`
+do not. A place is dead after a position when no path from the position mentions an overlapping
+place before that place, or a prefix of it, is reassigned as a whole (`v.f = e` kills `v.f`;
+`v = e` kills every place of `v`) or the fn exits. Evaluation order is section 6's: arguments
+left to right, record fields in source order, then the base. Paths follow `if`, `match` arms,
+loops with their back-edges, `break`, `continue`, `return` and `?`. A mention is any read of an
+overlapping place, an in-place change through one (`v.items.push(x)`, `v.f = e` for a longer
+`v.f.g`), and the creation of a closure that captures `v`.
+
+No move, even when the rule above would allow one:
+
+- inside the arms of a `match` whose scrutinee is a place overlapping the moved one, and inside
+  the body of a `for` whose iterable overlaps it: on LLVM their pattern bindings point into it
+  (`docs/llvm.md` §4), on Rust they borrow it;
+- at an argument when another argument of the same call or of an enclosing call, the receiver
+  of an enclosing builtin, the left operand of an enclosing operator or the receiver of an
+  enclosing index mentions an overlapping place at all: a read, an in-place change, or an
+  assignment to it or to a place rooted at it. A borrowed parameter or an operand read in place
+  would see the moved value change (`f(s, s)`, `f(s.count, s)`, `look(s, wipe(s))`,
+  `s.items.at(wipe(s))`, `s == bump(s)`, `s.items == bump(s).items`, `xs[reset(xs)]`), and on
+  LLVM a later argument that assigns `s` would overwrite the slot the callee owns
+  (`take(s, if c { s = fresh(); 0 } else { 0 })`). For an enclosing call, operator or index the
+  operands that count are those evaluated before the one the move is in and read in place after
+  it ran: a borrowed argument, a builtin or borrowed UFCS receiver, the receiver of a fn-field
+  call, the left operand of a binary operator when it is an aggregate (an `Int`, `Bool` or
+  other scalar left operand is a value once evaluated, and `&&` and `||` branch on theirs before
+  the right one runs), the receiver of an index. An argument of an enclosing call in a move
+  position is a value once evaluated (moved or copied, 20.3.5), and a later one is kept by
+  liveness;
+- anywhere inside a closure body (the analysis does not enter closure bodies).
+
+Examples. R1's shape: in `while i < n { s = step(s, i); i = i + 1 }` the `s` argument moves,
+because `s` is reassigned before any mention. In `let t = step(s, 1); t.count + s.count` it does
+not. A handle loop's `a.state = a.handle(a.state, i)` moves `a.state`: the receiver path
+`a.handle` does not overlap it, and `a.state` is reassigned after the call. A
+`Step { state = st.state, out = publish(st.out) }` with `st` dead after moves `st.state`, and
+`st.out` too when `publish` consumes its parameter.
+`answer(state, reply, state.table.values())` does not move `state` (another argument mentions
+`state.table`); `let values = state.table.values(); answer(state, reply, values)` does.
+
+#### 20.3.3 Consumed parameters
+
+A parameter `p` is consumed when either holds:
+
+- its fn changes it in place on some path: an assignment to `p` or a place rooted at it, or a
+  `push`, `append`, `clear` (`List`, `Bytes`), `put` or `remove` (`Map`) through a place rooted
+  at it. This set is the union of what `region::mutates` (LLVM) and `mutates_receiver` with
+  `mutated_names` (Rust) count today, which the analysis replaces; `consumed` must be a superset
+  of both, so that no parameter the backends own today becomes borrowed;
+- its fn moves `p` or a place rooted at it (`p.items`) on every path that reaches a `return`, a
+  `?` exit or the end of the body (any move position of 20.3.1, including passing it on to a
+  consumed parameter and returning it).
+
+A place rooted at a parameter that is not consumed never moves; it is copied where it is taken,
+as today (`pick(a, b, c) = if c { a } else { b }` copies the one it returns). The set is the least
+fixpoint over each module's fns, computed in import order, so a std fn's set is known before the
+program's. Generic fns have one set per declaration, not per instance. A protocol role's set is
+its declaration's.
+
+Copy count: a parameter consumed by an in-place change was owned before, and its caller passed or
+its entry made one copy, as now. A parameter consumed by a move was copied at the move point on
+every path before; now the caller copies once, or not at all when its argument moves. So no
+call makes more copies than before.
+
+#### 20.3.4 Rust target (U3)
+
+- A consumed parameter is declared by value, `p: T`, or `mut p: T` when the body changes it; the
+  entry copy of section 6 disappears for it. Every other parameter keeps today's form: `&T`,
+  scalars and fn types included (`x: &i64`, cloned on entry when Copy), and a role's parameters
+  stay `mut name: T` by value whether consumed or not.
+- A moving place is emitted bare, without `.clone()` or `&`, to a consumed parameter, to any
+  role parameter and through a fn value. A non-moving argument to a consumed parameter is
+  emitted as a value (a place with `.clone()`).
+- Every call site the backend writes itself follows the same rule: the generated mains' calls of
+  `K.main`, the test runner's calls, `spawn`'s `__spawn_N` (passed by value to a consumed
+  parameter, `&__spawn_N` otherwise), and a named fn wrapped as a fn value (the wrapper passes its
+  owned argument by value to a consumed parameter).
+- rustc must accept every program the checker accepts (vision X23): a move the analysis allows
+  is one rustc's move check allows. Rows 11 and 26 check it on the fixtures, the examples and
+  the end-to-end programs.
+- Section 6's sentence on parameters gets the consumed rule; its `fn(A, B) -> R` row, the "fn
+  types" among the Copy parameters cloned on entry and the `as fn(i64) -> i64` wrapper get 13.3's
+  `Arc<dyn Fn>` (20.8 item 4).
+
+#### 20.3.5 LLVM target (U4)
+
+- A parameter is owned exactly when it is consumed, borrowed otherwise (today: owned when
+  modified, `region::modified`).
+- A moving argument passes the place's own pointer to the owned parameter, with no `copy.` call;
+  ownership passes to the callee, which may change the value in place. A non-moving argument to
+  an owned parameter is a fresh copy, as today.
+- A non-moving operand in a move position is copied when it is evaluated, before the next
+  operand runs, in every form that evaluates several: positional and named arguments, variant
+  payloads, list, tuple and record literal elements, record update fields. 20.3.2 relies on it:
+  a later operand may move the same place into a callee that changes it in place
+  (`weigh(first = s, second = bump_count(s))`, `Both(s, bump_count(s))`).
+- A moving `let`/`var` initializer, assignment, field value, element or payload takes the value
+  with a shallow `memcpy` of its representation, without `copy.` glue.
+- The result slot never aliases a moved variable: `s = step(s, i)` writes the result to a
+  temporary slot and then moves it into `s`.
+- Loop regions keep their rule: a moved variable that the loop reassigns is a carried variable
+  (`docs/llvm.md` §4), and a moved argument lies below every mark the callee takes, as a borrowed
+  one does. `slice16/moves.ignite` (U1) grows a moved state past 64 KiB inside a loop, so
+  releases happen, and row 12 runs it under the debug runtime.
+- The call sites the backend writes itself (the `spawn` thunk, the fn-value thunk, the
+  `store_update` thunk, the generated mains) pass fresh copies today, which is correct for an
+  owned parameter; they need no change.
+- `docs/llvm.md` §3's borrowed/owned sentence and §4's soundness sentence ("Callee arguments are
+  fresh copies or the caller's places") get the consumed rule and the moved place.
+
+#### 20.3.6 The evaluator
+
+Unchanged. `ignite-eval` copies values by construction and reads neither `moves` nor
+`consumed`.
+
+### 20.4 Closures and calls of fn-typed expressions (D4, D5)
+
+#### 20.4.1 What holds, as the contract
+
+Section 13.3 stays the rule: a closure captures by copy at creation; its type is a fn type; it
+lowers on Rust to `Arc<dyn Fn(..) -> R + Send + Sync>` and on LLVM to `{ ptr code, ptr env }`
+with the environment block of `docs/llvm.md` §3.1 (glue word first, captures in
+`ClosureInfo.captures` order with C layout, null for no captures). Row 8 pins the shapes wave C
+uses. No change to either lowering in this slice.
+
+#### 20.4.2 Calls of fn-typed expressions
+
+Grammar: unchanged (a call's callee is a postfix expression, section 3).
+
+- `ignite-check` resolves the names inside a callee expression and no longer reports E003 `not
+  callable`; a name callee keeps its rules (an unknown name is E003, a constant callee is E003
+  `constant … is not callable; bind it first`).
+- `ignite-types` types the callee. When its type is `fn(..) -> R` or an effectful fn type, the
+  call is a `Callee::Local` call: arguments checked against the parameter types (E040, E043 on
+  arity), result `R`. Any other type is E040 (20.7).
+- Effects: in its non-name arms, `ignite-check`'s `call` uses `static_type(callee)` and
+  `fn_value_effects` as its `Name` branch does, charges the effects (E016 when `requires` lacks
+  them) and records the effect site. So `hs[0](conn)` and `(h.send)(conn)` check as `h.send(conn)`
+  does today. Only when `static_type` gives no type (a call's result, `pick_sender(true)(conn)`)
+  and the typer finds an effectful fn type is the call E042 (20.7), through the existing
+  effect-site rule. Binding it first (`let f: fn(c: PipeStream) -> Int requires [c.write] =
+  pick_sender(true)`, then `f(conn)`) is the way out.
+- Evaluation order: the callee first, then the arguments left to right (as `docs/llvm.md` §3.1
+  says for fn values).
+- Lowering: the existing `Callee::Local` arms (20.1 facts); U3 and U4 check them with
+  `calls.ignite` and fix what fails.
+
+#### 20.4.3 Effects of a captured capability
+
+Unchanged: the effects a closure body performs on captures are charged where the closure is
+created (section 13.3, E016), and the closure is effectful. A fn type's `requires` names only its
+own parameters (`fn(n: Int) -> Int requires [n.read]`), so no fn type can describe an effect on
+a capture; passing such a closure where a fn type is expected is E017 (fixture `e017_closure`).
+Calling it through its `let` binding, or passing the capability as a parameter of an effectful
+fn type, works today (p04b, row 8). Wave C does not need more: actors P1 says "No closures", and
+`call(fn)` is P4 (20.13).
+
+### 20.5 Rest patterns (D6)
+
+`docs/syntax.md` P9 and R7 as written, contracted here (vision T2).
+
+Grammar (section 3's `pattern`, one alternative replaced):
+
+```
+pattern  += '[' (elem (',' elem)*)? ']'
+elem     := pattern | '..' ident?
+```
+
+with at most one `..` per list pattern, and `..name` only as the last element. A second `..`, or a
+`..name` that is not last, is E076, reported by the parser. `..` outside the brackets of a list
+pattern stays E001 `expected pattern, found \`..\``. A list pattern in a `let` stays refutable
+(E001), with or without a rest.
+
+AST (add-only): `PatternKind::Rest(Option<Ident>)`, which appears only as an element of
+`PatternKind::List`.
+
+Typing: on a `List<T>` scrutinee the elements are `T` and `..name` binds `List<T>`; on `Bytes`
+they are `Byte` and `..name` binds `Bytes`. A rest binding is an ordinary pattern binding (E049
+in an or-pattern applies; it is immutable, section 13.11's E006 rules apply).
+
+Exhaustiveness (E046): a list column is split by length, as rustc splits slice patterns. Let `m`
+be the largest element count of an exact pattern, and `P` and `S` the largest prefix and the
+largest suffix (elements before and after the `..`) over the column's rest patterns. Every length
+`L` from `0` to `max(m, P + S - 1)` is checked on its own, and one representative length
+`max(m + 1, P + S)` stands for every longer length (from `P + S` on, no rest pattern's prefix
+and suffix share a position, so all longer lengths behave alike). At a length `L` an exact pattern
+of `L` elements applies, and a rest pattern with `p + s <= L` applies with its prefix at
+positions `0` to `p - 1`, its suffix at `L - s` to `L - 1` and `_` in between; the `L` element
+columns are then checked as a tuple's. A value missing at a checked length is printed as that
+length's list pattern, element by element, with `_` for an unconstrained position (`[_]`,
+`[false]`, `[_, true]`), in the order of the lengths and then of the element witnesses. A
+value missing at the representative length `R` stands for every length from `R` on, so it is
+printed as rustc prints a slice witness: its first `R - S` elements, `..`, then its last `S`
+(`[None, ..]`, `[.., false]`, `[true, .., false]`, `[_, false, .., true, _]`, `[_, _, ..]`);
+adding the printed pattern as an arm covers every length it names. This also applies to list
+columns without a rest, so p09's `[] , [x]` now reads `match does not cover \`[_, _, ..]\`` (20.7).
+
+Lowering, both targets and the evaluator: an exact pattern tests `len == n`, a rest pattern
+`len >= k`; prefix element `i` is index `i`, suffix element `j` of `s` is index `len - s + j`; a
+rest binding is a copy of elements `p` to `len - s`, as `List<T>` or `Bytes`, where `p` is the
+prefix length. Rust may use a slice pattern (`[a, rest @ .., z]`, with `rest.to_vec()`) or the
+explicit tests. The copy is a value position of section 6.
+
+### 20.6 Typed API (add-only)
+
+In `crates/ignite-types/src/lib.rs`:
+
+```rust
+impl TypedProgram {
+    /// Whether `expr`, a place in a move position, takes its value without a copy
+    /// (`docs/slice.md` 20.3). False for every other expression.
+    pub fn moves(&self, expr: &Expr) -> bool;
+    /// Whether the callee consumes its parameter `index` (UFCS receiver = 0). Defined for a
+    /// declared fn, associated fn or role; false for every other callee (a variant, a builtin,
+    /// `Callee::Local`, `Callee::FieldFn`, `Callee::Const`).
+    pub fn consumed(&self, callee: &Callee, index: usize) -> bool;
+}
+pub struct ModuleTypes {
+    // …existing fields…
+    /// Consumed parameters per fn, associated fn (`Owner.name`) and role (`Protocol.role`).
+    pub consumed: BTreeMap<String, Vec<bool>>,
+}
+```
+
+Both struct literals of `ModuleTypes` end in `..Default::default()`, so the field is add-only.
+`query_snapshot` copies it: `TypedProgram::consumed` answers for a callee of an imported module
+from that module's snapshot, so a backend asks it about a std fn the program calls. In `crates/ignite-syntax/src/ast.rs`:
+`PatternKind::Rest(Option<Ident>)`. Nothing is renamed.
+
+### 20.7 Diagnostics
+
+New code, in section 8's syntax-stage table:
+
+| code | meaning |
+|---|---|
+| E076 | a second `..` in a list pattern (`a list pattern has at most one \`..\``), or a `..name` that is not the last element (`\`..name\` must be the last element of a list pattern`); reported by the parser |
+
+E076 is the code `docs/syntax.md` §8.3 proposes, in T4's range E070 to E079 for that proposal,
+taken over with P9 (D6); slice 16 adds no range.
+
+Changed meanings:
+
+- E003: no longer for a callee that is an expression (`not callable`); a name callee keeps its
+  rules.
+- E040: also a callee whose type is no fn type: `type mismatch: this expression has type \`<T>\`
+  and cannot be called`; a name callee keeps `\`<name>\` has type \`<T>\` and cannot be called`.
+- E042: also a call of an effectful fn-typed expression that is no name and to which
+  `ignite-check`'s `static_type` gives no type (20.4.2): `cannot check the effects of a call of
+  this expression; bind it first with its type: \`let f: <fn type> = …\``.
+- E046: list columns are split by length (20.5); the witness of a list column is a list pattern,
+  and `match on \`List<…>\` does not cover every value; add a \`_\` arm or a binding arm` no
+  longer appears for lists.
+
+Fixtures: as in rows 6, 7, 16 and 17.
+
+### 20.8 Stale points
+
+| # | where | stale text | resolution, by whom |
+|---|---|---|---|
+| 1 | `epic:slice-16-language-gaps`, acceptance | "`examples/todo` `patch` uses a closure (friction 9 closed)" | holds since slice 9 (20.1). The steering session updates the epic; U0 does not edit the store |
+| 2 | `docs/vision.md` §4.1, row "15+" | lists "B (P2 on), C, D, E, G, H", which skips A although C needs it | U6 adds a row "16 \| A language gaps" before it |
+| 3 | `docs/vision.md` §4 row A and §5 | the wave-A items read as open | U6 marks each with the slice that landed it (20.1) |
+| 4 | section 6, lowering table | `fn(A, B) -> R` lowers to `fn(A, B) -> R` | 13.3's `Arc<dyn Fn(..) -> R + Send + Sync>`; U3 edits it with the parameter rule (20.3.4) |
+| 5 | `docs/actors.md` R1 | "P1 adds last-use moves in the generators"; "The LLVM target already passes borrowed parameters without a copy" | slice 16 adds them (20.3); a borrowed parameter is not the case R1 needs (the callee changes the state). U6 edits R1 with what moves and what still copies: `s = handle(s, m)`, `a.state = a.handle(a.state, m)` and `Step { state = st.state, … }` move; an argument beside another argument that mentions the state (`answer(state, reply, state.table.values())`) copies, and binding that argument first moves (20.3.2) |
+| 6 | `docs/actors.md` §3.3 | "T3 found that a Ignite fn value cannot capture locals. Once closures land (P4)" | closures capture since slice 9 (13.3); what P4 still needs is 20.13 items 1 and 2. U6 edits it |
+| 7 | `docs/syntax.md` P9, §8.3 | P9 proposed, E076 proposed | contracted by 20.5 and 20.7; U6 marks P9 "contracted, `docs/slice.md` 20.5" |
+| 8 | `docs/llvm.md` §3, §4 | borrowed iff not modified; callee arguments are fresh copies or the caller's places | U4 (20.3.5) |
+| 9 | `docs/friction.md` | no row for `assert` as a match arm body (`Some(h) => assert …` is E001; braces work) | U6 adds a row, open (20.13) |
+| 10 | title of this file | "slices 1 to 15" | U6 makes it "slices 1 to 16" (vision X15) |
+| 11 | section 6, parameters | "fn types" among the Copy parameters cloned on entry; the `as fn(i64) -> i64` wrapper | U3, with item 4 (20.3.4) |
+
+### 20.9 Decisions
+
+| # | decision | alternative | why |
+|---|---|---|---|
+| D1 | One frontend analysis in `ignite-types`, read by both backends through `TypedProgram::moves` and `consumed` (20.6) | an analysis per backend, as `mutated_names` (Rust) and `region::modified` (LLVM) are today | both targets must agree on which parameter is owned, because a std fn's mode is part of every caller's code; one analysis is one rule to review and test (rows 1 to 5) |
+| D2 | Moves are conservative (20.3.2): tracked single-name bindings and parameters only, resolved per binding; liveness per field path, so disjoint fields move independently; no indexes or boxes; no move inside closure bodies, inside `match` arms or `for` bodies over an overlapping place, or beside another argument that mentions an overlapping place | Rust-like full ownership with moves of pattern bindings and partial moves through indexes; liveness per variable only | R1's shapes (a variable or a field reassigned from a call, a record built from a dead record's fields, 20.3.2's examples) need field paths and nothing more; every excluded case is one where a backend aliases (LLVM pattern bindings point into the scrutinee, a later argument overwrites the moved slot) or rustc's borrow check differs. Widening is additive (20.13) |
+| D3 | A parameter is consumed when changed in place on some path or moved on every path; the set is a per-module least fixpoint in import order; no new diagnostic | an annotation on parameters (`own p: T`); consumed when moved on any path | no new keyword (invariant 6); moved-on-every-path keeps the copy count from rising (20.3.3), where moved-on-any-path would copy `unwrap_or`'s `fallback` at every call |
+| D4 | Calls of fn-typed expressions are in. Their effects are charged by `ignite-check` from `static_type` where it gives a type, as for a name; E042 only where it gives none | E042 for every effectful non-name callee | `static_type` already types fields and indexes, so `(h.send)(conn)` must check as `h.send(conn)` does; only a call's result is left without a type, and binding it with a type is the way out |
+| D5 | Closures keep section 13.3; effectful closures as fn values (E017) and body-directed inference of closure parameters are deferred (20.13) | effects on captures in fn types; inference variables for closure parameters | actors P1 to P3 use no closures; P4's `call` works with an annotated parameter (p05b); either change is a type-system extension larger than the rest of the slice |
+| D6 | Rest patterns as `docs/syntax.md` P9 and R7, with its code E076 | `..name` anywhere, a new code in a slice-16 range | the proposal is what protocols §5.2 asked for and its code is reserved by T4 for it; one fewer deviation to record |
+| D7 | Seven units in five waves (20.10) | one unit per backend for each feature | the moves analysis and the expression callees share no file; the two backends share no file; rest patterns touch every crate and so get their own wave |
+
+### 20.10 Work split
+
+| unit | story | owns | depends on | first failing test | rows |
+|---|---|---|---|---|---|
+| U0 | `story:slice-16-contract` | this section, the section-8 rows, `docs/slice16-review.md` | — | — | — |
+| U1 | `story:slice-16-moves-analysis` | `crates/ignite-types/src/moves.rs`; in `crates/ignite-types/src/lib.rs` the `moves` and `consumed` accessors, `ModuleTypes::consumed`, its `query_snapshot` line and the call of the analysis after typing; `crates/ignite-types/tests/moves.rs` and its `mod moves;` line; `slice16/moves.ignite` (with a moved state grown past 64 KiB inside a loop, 20.3.5, and the shapes of 20.3.2's examples), `slice16/moves_scale.ignite` | U0 | `moves::a_var_passed_and_reassigned_moves` | 1 to 5 |
+| U2 | `story:slice-16-expression-calls` | in `crates/ignite-check/src/lib.rs` the non-name arms of `call` (with `static_type` and `fn_value_effects`); in `crates/ignite-types/src/typer.rs` the call typing of an expression callee; fixtures `valid_expression_calls` (check and types), `e003_unknown_variable` (the added case), `e040_not_callable`, `e043_expression_call_arity`, `e042_effectful_expression_callee`; `crates/ignite/tests/slice16.rs` with row 8's test, its `mod slice16;` line; `slice16/closures.ignite`, `slice16/calls.ignite` | U0 | `fixtures::fixtures_match_expected` (ignite-check) on `valid_expression_calls` | 6 to 8 |
+| U3 | `story:slice-16-rust-moves` | `crates/ignite-rustgen/src/lib.rs` (consumed parameters, bare moves, the backend's own call sites, expression calls if `calls.ignite` fails); `crates/ignite-rustgen/tests/slice16.rs` and its `mod` line; `crates/ignite-rustgen/tests/golden/slice16.{ignite,rs}` and the test of row 13; existing rustgen goldens as row 24 allows; `CODEGEN_REVISION`; section 6's parameter sentence and `fn` row | U1, U2 | `golden::last_use_moves_and_expression_calls` (rustgen) | 9, 11, 13, 15 |
+| U4 | `story:slice-16-llvm-moves` | `crates/ignite-llvm/src/` (owned iff consumed, moved places, result slots, expression calls if `calls.ignite` fails); rows 10 and 12 appended to `crates/ignite/tests/slice16.rs`; `crates/ignite-llvm/tests/golden/slice16.{ignite,program.ll}` and the test of row 14; existing LLVM goldens as row 24 allows; `docs/llvm.md` §3 and §4 | U1, U2 | `golden::last_use_moves_and_expression_calls` (ignite-llvm) | 10, 12, 14 |
+| U5 | `story:slice-16-rest-patterns` | `PatternKind::Rest` and its arms in every crate (`ignite-syntax` parser and AST, `ignite-check`, `ignite-types` `typer.rs`, `exhaustive.rs` with its new list arm, `moves.rs`, `ignite-eval`, `ignite-rustgen`, `ignite-llvm` `lower.rs` and `region.rs`); fixtures of rows 16 and 17 and the list line of `e046_patterns.expected`; `slice16/rest.ignite` added to `slice16::fixtures_pass` (rustgen) and `slice16::llvm_fixtures_pass` (`crates/ignite/tests/slice16.rs`); the rest goldens of row 19; the `rest_` family in `crates/ignite/tests/fixtures/eval_equivalence.ignite` and its line in `fixture_covers_every_family`; `CODEGEN_REVISION` | U3, U4 | `fixtures::fixtures_match_expected_diagnostics` (ignite-syntax) on `valid_rest_patterns` | 16 to 20 |
+| U6 | `story:slice-16-records` | `slice16/holds.ignite`; row 21's test appended to `crates/ignite/tests/slice16.rs`; the `call_` and `move_` families of `eval_equivalence.ignite`; `STATUS.md`, `AGENTS.md`, `PLAN.md`, `docs/vision.md` §4, §4.1 and §5, `docs/friction.md`, `docs/actors.md` R1 and §3.3, `docs/syntax.md` P9, the title of `docs/slice.md`; `docs/performance/16/` | U5 | `slice16::fixtures_pass_on_both_targets` | 21 to 23, 27 |
+
+Rows 24 and 25 belong to every unit; row 26 to U3, U4 and U6.
+
+Order: W1 U0; W2 U1 and U2; W3 U3 and U4; W4 U5; W5 U6.
+
+Shared files:
+
+- W2: U1 and U2 are both in `crates/ignite-types/`. U1 owns `moves.rs`, `lib.rs` and
+  `tests/main.rs`; U2 owns `typer.rs` and adds fixture files only. Neither edits the other's
+  file. U1 adds fixture files under `crates/ignite/tests/fixtures/slice16/`; U2 adds others there
+  and owns `crates/ignite/tests/slice16.rs` and `crates/ignite/tests/main.rs`.
+- W3: U3 owns `crates/ignite-rustgen/` and `crates/ignite/src/apply/plan.rs`; U4 owns
+  `crates/ignite-llvm/`, `docs/llvm.md` and the appends to `crates/ignite/tests/slice16.rs`
+  (U2's file, merged in W2). Both read the W2 fixtures and edit none.
+- W4: U5 is alone; it edits files of every earlier unit after they merged.
+- W5: U6 appends to `crates/ignite/tests/slice16.rs` and `eval_equivalence.ignite` after U2, U4
+  and U5 merged.
+
+Rules: one integration-test binary per crate (`AGENTS.md`), so every new test file is a `mod`
+line in its crate's `tests/main.rs`. Each unit's commit names the rows of 20.0 it makes pass.
+The story ids above are the contract's names; the steering session creates or updates the
+stories, U0 does not edit the store.
+
+### 20.11 Placeholder arms
+
+- After U1 (W2), `moves` and `consumed` exist and no backend reads them: no behaviour or golden
+  changes.
+- After U2 (W2), expression callees type as `Callee::Local`; the backends' existing arms lower
+  them (20.1 facts). No existing test has an expression callee, so the workspace stays green
+  even if a backend fails on `calls.ignite`; rows 11 and 12 are where U3 and U4 find out.
+- U5 adds `PatternKind::Rest` and every match arm over it in one unit, so no crate sees the
+  variant without its arm.
+
+### 20.12 Gate time
+
+Method of 18.18 and 19.17 (section 15.1), through `tools/ignite-perf` (modes `cold`, `warm`,
+`programs`, `cli`; records `ignite-performance/1`). "Before" is a `git archive` copy of the slice
+base after the rebase (the slice-15 merge), "after" the closed tree, each with its own
+`CARGO_TARGET_DIR`. One cold gate per tree, then three interleaved warm passes. A pair whose two
+1-minute loads differ by more than 5 is dropped. Report the medians of the pair ratios next to the
+absolute times.
+
+Units: those of 18.18, plus:
+
+- `ignite check examples/terminal/terminal.design.ignite` and `ignite check
+  examples/todo/todo.ignite` (15 pairs each): the moves analysis runs on every program and on the
+  std modules it reaches;
+- the program builds of `todod` and `terminald`, both targets, dev and release (3 pairs): fewer
+  copies, changed parameter modes;
+- `ignite test slice16/moves_scale.ignite`, per target, cold and warm (after only), with the run
+  times of its two tests.
+
+Expected causes, to be measured or labelled inferred: the analysis's cost in the frontend
+(linear in the fn bodies, with one fixpoint per loop and per module); smaller generated code
+where clones disappear.
+
+A unit that rises over 10 % gets a measured cause, or the record labels the cause inferred. No
+baseline moves. The apply suites stay the slice-13 exception.
+
+Records: a "Slice 16" paragraph in `AGENTS.md`'s gate-time section; raw logs and records under
+`docs/performance/16/`.
+
+### 20.13 Deferred
+
+| # | item | why | where it goes |
+|---|---|---|---|
+| 1 | an effectful closure (one that uses a captured capability) passed as a fn value; E017 stays | no fn type can name an effect on a capture (20.4.3); wave C P1 to P3 pass no closures | actors P4, or the slice that adds effect polymorphism |
+| 2 | inferring an unannotated closure parameter from the closure body (p05) | an annotation works (p05b); needs inference variables the typer does not have | actors P4 |
+| 3 | capture by move (a closure taking a dead variable without a copy) | a capture copies once per closure creation, not per loop step; not on R1's path | later, with measurements |
+| 4 | moves of pattern bindings, `for` elements, closure parameters, fn-typed variables, inside closure bodies, at `spawn` arguments and operator operands (`a + b` on `Text`), and beside another argument that only reads an overlapping place (`answer(state, reply, state.table.values())`; binding the argument first moves) | D2; each needs its own aliasing argument on LLVM | additive, when a measurement asks for one |
+| 5 | rest patterns in tuples (`(a, ..)`) and variant payloads | P9 covers lists; protocols §5.2's shape is a list rest inside a tuple, which row 18 covers | `docs/syntax.md`, unscheduled |
+| 6 | `docs/friction.md` open rows (19 `for` patterns, 20 match guards, 22, 23, 24, 38, 41 and the others not on the wave-A row) | not on vision §4 row A | their own proposals (`docs/syntax.md` P4, P5) |
+| 7 | `assert` as a match arm body (20.8 item 9) | found while probing; braces work | friction row by U6 |
+| 8 | a persistent `Table` (actors R1 "Open") | a data-structure question of wave C, not a language gap | actors P1 |
+
+### 20.14 Open questions
+
+Each has a default, which the units follow unless the review changes it.
+
+| # | question | default |
+|---|---|---|
+| Q1 | actors R1 says "Measure on the 1600-POST test", which exists only once actors P1 lands | rows 9 and 10 stand in for it; actors P1 measures R1 on its own acceptance test |
+| Q2 | the rebase onto the slice-15 merge changes the base values this section quotes (`CODEGEN_REVISION`, test counts) | rows 15 and 25 are relative to the base; U3 and U5 read the value at their wave's base |
+| Q3 | whether a copy the analysis keeps in a loop (a read after the call) should be reported to the user | no diagnostic in this slice (D3); a later lint can use `moves` |
 
 ## 21 Slice 17: processes, files, arguments and random bytes (playground substrate)
 

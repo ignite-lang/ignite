@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-15-protocol-claims
 kind: story
-status: active
+status: implemented
 title: Telnet and Http state their claims; P2 acceptance and records
 summary: conforms and statuses in std/protocol, the three P2 acceptance tests on both targets, close records
 relations:
@@ -26,10 +26,11 @@ scope:
   path: std/protocol/http.ignite
 - confidence: inferred
   path: std/protocol/telnet.ignite
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T16:02:31Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":3}}}
 - {from: "proposed", to: "active", at: "2026-11-03T16:07:59Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":3}}, correlation: "slice-15-wave-1"}
+- {from: "active", to: "implemented", at: "2026-11-04T02:25:51Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 
 # Story: slice-15-protocol-claims

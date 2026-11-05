@@ -1,0 +1,27 @@
+package tests.conformance.not_applicable
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const RFC7106: Spec = Spec {
+  rfc = 7106
+  title = "Line Echo"
+  url = "https://example.invalid/rfc7106"
+  digest = "sha256:7106"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7106
+  section = "2"
+  ordinal = 1
+  level = Required
+  text = "A greeting is REQUIRED when the server greets."
+}
+
+protocol Echo conforms [RFC7106] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+
+  not_applicable RFC7106.R2_1 "the server never greets"
+}

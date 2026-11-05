@@ -1,4 +1,4 @@
-#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, clippy::all)]
+#![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 use ignite_std::console::CommandConsole;
 use ignite_std::protocol::telnet::{TelnetServer, TelnetClient};
 
@@ -21,7 +21,7 @@ pub mod commands {
     }
 
     pub fn answer(command: &Command) -> Reply {
-        match command.clone() {
+        match command {
             Command::Help => Reply { lines: vec![String::from("help"), String::from("echo <text>"), String::from("status"), String::from("quit")], action: Reply::default_action() },
             Command::Echo(text) => Reply { lines: vec![text.clone()], action: Reply::default_action() },
             Command::Status => Reply { lines: vec![String::from("ready")], action: Reply::default_action() },
@@ -46,7 +46,7 @@ pub mod commands {
         } else {
             match parse(&trimmed) {
                 Some(command) => answer(&command),
-                None => Reply { lines: vec![format!("{}{}", String::from("unknown command: "), first_word(&trimmed).clone())], action: Reply::default_action() },
+                None => Reply { lines: vec![format!("unknown command: {}", first_word(&trimmed))], action: Reply::default_action() },
             }
         }
     }

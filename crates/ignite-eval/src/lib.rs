@@ -11,7 +11,8 @@
 //! and `ignite replay` step the `std.control` reducers through
 //! [`Evaluator::call`]; `model.rs`, `value.rs`, `eval.rs` and `explain.rs`
 //! are P3's, `resolve.rs` and `validate.rs` P1's. Still linked by no
-//! backend and no compiled program.
+//! backend and no compiled program. Slice 15 (19.7): `claims.rs` is the
+//! claim model and E090 to E092, computed first by [`Model::check`].
 
 use std::collections::BTreeMap;
 
@@ -19,6 +20,7 @@ use ignite_syntax::SourceFile;
 use ignite_syntax::ast::Program;
 use ignite_types::TypedProgram;
 
+pub mod claims;
 mod eval;
 mod explain;
 mod model;
@@ -26,6 +28,11 @@ mod resolve;
 mod validate;
 mod value;
 
+/// The claim model (`docs/slice.md` 19.13). Its `Limit` is
+/// [`claims::Limit`]: the crate root's [`Limit`] is the evaluator's.
+pub use claims::{
+    Claims, Level, LevelClass, Party, ProtocolClaim, Row, Satisfier, Source, SpecClaim, Status,
+};
 pub use eval::{EvalError, Evaluator, Fuel, Limit};
 pub use explain::explain;
 pub use model::{

@@ -7,7 +7,7 @@ use std::os::fd::AsFd;
 
 use nix::errno::Errno;
 
-use crate::{Input, IoError, input, read_buffer, terminal};
+use crate::{Input, IoError, read_input, terminal};
 
 /// Standard input of the process, as a byte stream.
 #[derive(Clone, Copy, Debug)]
@@ -23,15 +23,16 @@ impl Stdin {
     /// wait for a read that has no input yet.
     pub fn read(maximum: i64) -> Result<Input, IoError> {
         crate::flush();
-        let mut buffer = read_buffer(maximum);
         let stdin = std::io::stdin();
-        loop {
-            match nix::unistd::read(stdin.as_fd(), &mut buffer) {
-                Ok(count) => return Ok(input(buffer, count)),
-                Err(Errno::EINTR) => continue,
-                Err(errno) => return Err(std::io::Error::from(errno).into()),
+        read_input(maximum, |buffer| {
+            loop {
+                match nix::unistd::read(stdin.as_fd(), &mut *buffer) {
+                    Ok(count) => return Ok(count),
+                    Err(Errno::EINTR) => continue,
+                    Err(errno) => return Err(std::io::Error::from(errno).into()),
+                }
             }
-        }
+        })
     }
 
     /// Whether standard input is a terminal.
