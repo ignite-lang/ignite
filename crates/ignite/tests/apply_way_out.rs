@@ -857,3 +857,332 @@ fn recover_refuses_an_unaccounted_process() {
     await_converged(&flow, &host, 1);
     host.stop();
 }
+
+// ---- slice 18 wave 3, adversary: recover with a live instance ----------------
+
+/// `source` with a third Telnet server `extra` on `port` beside `server`,
+/// one restart attempt, so that a failed restart gives it up and its run
+/// spawns nothing more.
+fn with_extra(source: &str, port: u16) -> String {
+    let members = format!(
+        r#"  resource extraIngress: TcpListener {{
+    address = "127.0.0.1"
+    port = {port}
+    exposure = Exposure.Loopback
+    backlog = 128
+  }}
+
+  component extraConsole: CommandConsole {{
+    implementation = module("examples.terminal.commands")
+    prompt = "terminal> "
+    maximum_line = 4096 bytes
+    command_schema = module("examples.terminal.command_schema")
+  }}
+
+  component extra: TelnetServer {{
+    listener = extraIngress
+    application = extraConsole
+    executable = "terminald3"
+    recovery = Restart {{
+      backoff = exponential(100 ms, 1 seconds)
+      maximum_attempts = 1
+      interval = 5 minutes
+    }}
+    rollout = DrainRollout {{
+      deadline = 10 seconds
+      on_deadline = "disconnect_remaining"
+    }}
+  }}
+
+"#
+    );
+    let client = "  component client: Application";
+    let binding = "    Terminal.client = workstationExecutable()\n";
+    assert!(source.contains(client) && source.contains(binding));
+    source.replace(client, &format!("{members}{client}")).replace(
+        binding,
+        &format!(
+            "{binding}    Terminal.extraIngress = localSocket()\n    Terminal.extra = nativeProcess(\n      includes = [Terminal.extraConsole]\n    )\n"
+        ),
+    )
+}
+
+/// The owned pids of `members` once revision `revision` is committed, no
+/// operation is active and every one of them is ready.
+fn await_members(flow: &Flow, host: &Host, revision: i64, members: &[&str]) -> Vec<i64> {
+    let mut pids = Vec::new();
+    until(
+        "every member ready",
+        || {
+            let status = flow.inspect();
+            pids = members
+                .iter()
+                .filter_map(|member| {
+                    let owner = status.get("ownership")?.get(member)?;
+                    (owner.get("ready").and_then(Json::as_bool) == Some(true))
+                        .then(|| owner.get("pid").and_then(Json::as_i64))
+                        .flatten()
+                })
+                .collect();
+            pids.len() == members.len()
+                && status.get("committedRevision").and_then(Json::as_i64) == Some(revision)
+                && status.get("activeOperation") == Some(&Json::Null)
+        },
+        || format!("{}\n{}", flow.inspect().compact(), read(&host.stderr)),
+    );
+    pids
+}
+
+/// The 22.9 state built to keep `server` running: revision 1 is `server` and
+/// `extra`; revision 2 adds a server on a held port, which gives up; then
+/// `extra`'s executable in the running revision is removed and `extra`
+/// SIGKILLed, so its one restart fails to spawn ("a required owned process
+/// failed to start", a later reason no corrective resolves) and the run,
+/// which spawns nothing more, keeps `server` serving.
+struct Live {
+    failed: String,
+    server: i64,
+    /// `ignite recover` while the recovery was still correctable.
+    correctable: (Option<i32>, String),
+    _occupied: TcpListener,
+}
+
+fn live_unresolvable(flow: &Flow, host: &Host) -> Live {
+    let first = flow.prepare("first");
+    let (code, stderr) = flow.apply("first-apply", &first);
+    assert_eq!(code, Some(0), "{stderr}");
+    let pids = await_members(flow, host, 1, &["Terminal.server", "Terminal.extra"]);
+    let (server, extra) = (pids[0], pids[1]);
+
+    let occupied = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let original = read(&flow.source);
+    fs::write(
+        &flow.source,
+        with_auxiliary(&original, occupied.local_addr().unwrap().port()),
+    )
+    .unwrap();
+    let failing_plan = flow.prepare("failing");
+    let failed = plan_id(&failing_plan);
+    let (code, stderr) = flow.apply("apply-gives-up", &failing_plan);
+    assert_eq!(code, Some(1), "the second server gives up: {stderr}");
+    let status = flow.inspect();
+    assert_eq!(
+        field(&status, "recoveryReason"),
+        Some("gave_up"),
+        "{}",
+        status.compact()
+    );
+    let (code, _, stderr) = flow.recover("recover-correctable", &failed);
+    let correctable = (code, stderr);
+    fs::write(&flow.source, original).unwrap();
+
+    let bin = flow.run_directory(&failed).join("bin");
+    for generation in fs::read_dir(&bin).unwrap().filter_map(Result::ok) {
+        let _ = fs::remove_file(generation.path().join("terminald3"));
+    }
+    nix::sys::signal::kill(
+        nix::unistd::Pid::from_raw(extra as i32),
+        nix::sys::signal::Signal::SIGKILL,
+    )
+    .unwrap();
+    until(
+        "a later reason kept beside gave_up",
+        || {
+            receipt(&flow.inspect(), &failed)
+                .get("laterReasons")
+                .and_then(Json::as_array)
+                .is_some_and(|later| !later.is_empty())
+        },
+        || format!("{}\n{}", flow.inspect().compact(), read(&host.stderr)),
+    );
+    // Its run settles: the failed restart gave `extra` up.
+    std::thread::sleep(Duration::from_secs(2));
+    Live {
+        failed,
+        server,
+        correctable,
+        _occupied: occupied,
+    }
+}
+
+/// No `Started` event of any member between the first `recoverStarted`
+/// and the `operatorRecovered` record (22.0 row 25).
+fn started_while_recovering(journal: &[(String, Json)]) -> Vec<String> {
+    let Some(started) = journal
+        .iter()
+        .position(|(kind, _)| kind == "recoverStarted")
+    else {
+        return vec!["no recoverStarted".into()];
+    };
+    let Some(finished) = journal
+        .iter()
+        .position(|(kind, _)| kind == "operatorRecovered")
+    else {
+        return vec!["no operatorRecovered".into()];
+    };
+    journal[started..finished]
+        .iter()
+        .filter(|(kind, _)| kind == "revisionRecord")
+        .filter_map(|(_, value)| value.get("record"))
+        .filter(|record| field(record, "kind") == Some("event"))
+        .filter(|record| {
+            record
+                .get("value")
+                .and_then(|value| value.get("fields"))
+                .and_then(|fields| fields.get("kind"))
+                .and_then(|kind| field(kind, "variant"))
+                == Some("Started")
+        })
+        .map(Json::compact)
+        .collect()
+}
+
+/// 22.9 with a live instance. 17.5: once a later reason no corrective
+/// resolves stands, "the running revision dispatches no further effect";
+/// 22.9 then has `ignite recover` "drain and stop every owned and retiring
+/// instance of the failed and the committed revision through their
+/// pidfds". So the committed revision's `server`, healthy and adopted by
+/// the failed operation's run, still serves when the operator calls
+/// `ignite recover`, which ends it, names it in `stopped`, restarts
+/// revision 1 and lets the next plan complete. A recover while a
+/// corrective still resolves the recovery is exit 2 `requires no
+/// recovery`.
+fn recover_ends_a_live_instance(target: &'static str) {
+    let flow = Flow::new("live", target);
+    let base = read(&flow.source);
+    fs::write(&flow.source, with_extra(&base, free_port())).unwrap();
+    let mut host = Host::start(&flow, "host");
+    let state = live_unresolvable(&flow, &host);
+    let failed = state.failed.as_str();
+    let (code, stderr) = &state.correctable;
+    assert_eq!(
+        *code,
+        Some(2),
+        "recover of a correctable recovery: {stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("operation {failed} requires no recovery")),
+        "{stderr}"
+    );
+
+    assert!(
+        alive(state.server),
+        "the committed revision's server {} still serves until ignite recover; the failed run's journal ends: {:?}",
+        state.server,
+        read(&flow.run_directory(failed).join("journal.jsonl"))
+            .lines()
+            .rev()
+            .take(2)
+            .map(|line| line.chars().take(240).collect::<String>())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(flow.servers("terminald"), vec![state.server], "one server");
+
+    let (code, stdout, stderr) = flow.recover("recover", failed);
+    assert_eq!(code, Some(0), "{stdout}\n{stderr}\n{}", read(&host.stderr));
+    let journal = flow.journal();
+    let record = journal
+        .iter()
+        .find(|(kind, _)| kind == "operatorRecovered")
+        .map(|(_, value)| value.clone())
+        .expect("an operatorRecovered record");
+    let stopped: Vec<i64> = record
+        .get("stopped")
+        .and_then(Json::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Json::as_i64)
+        .collect();
+    assert!(
+        stopped.contains(&state.server),
+        "the live server {} is among the stopped {stopped:?}",
+        state.server
+    );
+    assert!(!alive(state.server), "the live server ended");
+    assert_eq!(
+        stdout.trim_end(),
+        format!(
+            "recovered {failed}: stopped {} instances; committed revision 1 restarted",
+            stopped.len()
+        )
+    );
+    assert_eq!(started_while_recovering(&journal), Vec::<String>::new());
+
+    let pids = await_members(&flow, &host, 1, &["Terminal.server", "Terminal.extra"]);
+    assert_eq!(flow.servers("terminald"), vec![pids[0]], "one server");
+    change_command_body(&flow);
+    let next = flow.prepare("next");
+    let (code, stderr) = flow.apply("apply-next", &next);
+    assert_eq!(code, Some(0), "{stderr}\n{}", read(&host.stderr));
+    assert!(terminal_status(flow.port).contains("replacement-ready"));
+    host.stop();
+}
+
+#[test]
+fn llvm_recover_ends_a_live_instance() {
+    recover_ends_a_live_instance("llvm");
+}
+
+/// Row 25's flow with the design's probe and contracts kept, which
+/// [`without_probe`] strips: the state of 22.9, `ignite recover`, then the
+/// next plan replaces the server (revision 2) and must complete with the
+/// replacement serving, the probe's attempts answered again.
+fn recover_then_rollout_with_the_probe(target: &'static str) {
+    let flow = Flow::new("probe", target);
+    let design = read(&repo().join("examples/terminal/terminal.design.ignite"));
+    assert!(design.contains("component promptProbe"));
+    fs::write(
+        &flow.source,
+        design.replace("port = 2323", &format!("port = {}", flow.port)),
+    )
+    .unwrap();
+    let host = Host::start(&flow, "host");
+    let state = unresolvable(&flow, &host);
+    let failed = state.failed.as_str();
+    let (code, stdout, stderr) = flow.recover("recover", failed);
+    assert_eq!(code, Some(0), "{stdout}\n{stderr}\n{}", read(&host.stderr));
+    await_converged(&flow, &host, 1);
+
+    change_command_body(&flow);
+    let next = flow.prepare("next");
+    let started = Instant::now();
+    let (code, stderr) = flow.apply("apply-next", &next);
+    let took = started.elapsed();
+    let journals: Vec<String> = fs::read_dir(flow.state.join("revisions"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| {
+            let text = read(&entry.path().join("journal.jsonl"));
+            format!(
+                "{}: {} lines, {} probe timeouts",
+                entry.file_name().to_string_lossy(),
+                text.lines().count(),
+                text.matches("probe timeout").count()
+            )
+        })
+        .collect();
+    let host_tail: Vec<String> = read(&host.stderr)
+        .lines()
+        .rev()
+        .take(40)
+        .map(str::to_string)
+        .collect();
+    assert_eq!(
+        code,
+        Some(0),
+        "the rollout after recover with the probe ({took:?}): {stderr}\n{journals:?}\n{}\n{}",
+        flow.inspect().compact(),
+        host_tail.join("\n")
+    );
+    assert!(terminal_status(flow.port).contains("replacement-ready"));
+}
+
+#[test]
+fn llvm_recover_then_rollout_with_the_probe() {
+    recover_then_rollout_with_the_probe("llvm");
+}
+
+#[test]
+fn rust_recover_then_rollout_with_the_probe() {
+    recover_then_rollout_with_the_probe("rust");
+}

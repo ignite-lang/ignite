@@ -7,6 +7,7 @@ mod apply;
 mod apply_admission;
 mod apply_host;
 mod apply_integrity;
+mod apply_probe_handover;
 mod apply_recovery;
 mod apply_transition;
 mod apply_way_out;
