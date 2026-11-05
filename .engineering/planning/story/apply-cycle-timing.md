@@ -11,24 +11,33 @@ relations:
 scope:
 - confidence: cited
   path: tools/ignite-perf/src
-revision: 2
+revision: 3
 ---
 # Story: apply-cycle-timing
 
 ## Outcome
 
-`ignite-perf` has a mode `apply-cycle` that times the edit-build-restart cycle under `ignite apply` (22.15; the terminal design before and after, the todo after only, D12).
+`tools/ignite-perf` measures what rows 27 and 28 of `docs/slice.md` 22.0 need: a new mode
+`apply-cycle` times the edit-build-restart cycle under `ignite apply` (22.15), and mode `programs`
+times `todod` and `health` as separate units. Unit U7 of 22.13.
 
 ## Context
 
-- Unit U7 of `docs/slice.md` 22.13 (branch `feat/slice18-one-service`, contract at `19c70564`): owned files, wave and shared-file rules are there; decisions in 22.12.
-- Depends on: story:durable-todo-service.
+- Contract: 22.15 on branch `feat/slice18-one-service` (`19c70564`); D12 (the todo after only).
+- `programs` today times the whole `examples/todo/todo.ignite` build as one unit
+  (`tools/ignite-perf/src/perf.rs:1775`); row 27 needs `todod` alone.
+- U8 (`story:slice-18-records`) runs both modes and writes the records.
 
 ## Acceptance
 
-- The first failing test `ignite-perf self-check naming apply-cycle` is red before and green after, on both targets where it has a target.
-- Rows 28 (mode) of 22.0 pass with the exact results the table names; rows 8 and 31 hold; `task gate` green.
+- Before: `ignite-perf apply-cycle` is refused as an unknown mode. After: run on one tree it
+  writes, per target, 5 samples after one discarded warm-up for `apply-cycle-terminal-<target>`
+  and `apply-cycle-todo-<target>`, each sample split into plan (build included), apply until
+  `completed`, and first answer; `ignite-perf self-check` exits 0 with a case for the mode.
+- After: `ignite-perf programs` writes separate units for `todod` and `health` per target and
+  profile.
+- Rows 8 and 31 hold; `task gate` green.
 
 ## Out of Scope
 
-- Files 22.13 gives to another unit.
+- The records themselves (U8).

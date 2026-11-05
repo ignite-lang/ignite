@@ -23,22 +23,36 @@ scope:
 - confidence: cited
   path: crates/ignite/src/run
 - confidence: cited
+  path: crates/ignite/tests/apply_transition.rs
+- confidence: cited
+  path: crates/ignite/tests/fixtures
+- confidence: cited
   path: crates/ignite/tests/golden
 - confidence: cited
   path: crates/ignite/tests/plan.rs
 - confidence: cited
   path: crates/ignite/tests/run.rs
 - confidence: cited
+  path: docs/layering.md
+- confidence: cited
+  path: docs/slice.md
+- confidence: cited
   path: examples/terminal/terminal.design.ignite
+- confidence: cited
+  path: site/book/src
+- confidence: cited
+  path: site/index.html
 - confidence: cited
   path: std/contract.ignite
 - confidence: cited
   path: std/control.ignite
 - confidence: cited
+  path: std/protocol/telnet.ignite
+- confidence: cited
   path: std/sli.ignite
 - confidence: cited
   path: tools/ignite-perf/src/readiness.rs
-revision: 16
+revision: 17
 ---
 # Story: typed-probe-outcomes
 
