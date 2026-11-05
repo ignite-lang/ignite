@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:program-argument-list
 kind: story
-status: draft
+status: active
 title: Read the program's argument list
 summary: A program reads its whole command line as a list of Text, so a CLI with subcommands and positional arguments can be written
 relations:
@@ -17,7 +17,10 @@ scope:
   path: crates/ignite-types/src
 - confidence: inferred
   path: std/process.ignite
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T16:35:41Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-05T16:35:41Z", actor: "human:timo", revision: 4}
 ---
 # Story: program-argument-list
 

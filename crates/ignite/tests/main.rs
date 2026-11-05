@@ -28,6 +28,7 @@ mod ignite_test;
 mod llvm;
 mod llvm_build;
 mod llvm_memory;
+mod lsp;
 mod plan;
 mod reachability;
 mod rfc;

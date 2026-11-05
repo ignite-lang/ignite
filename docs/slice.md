@@ -7203,6 +7203,7 @@ type Invocation {
   inherit_environment: Bool = true
   timeout: Duration = 30 seconds
   output_limit: ByteSize = 1 MiB
+  input: Bytes = b""
 }
 
 type ChildExit {
@@ -7239,6 +7240,12 @@ fn succeeded(exit: ChildExit) -> Bool
 - `output_limit`: per stream, at most 16 MiB (`output_limit must be at most 16 MiB`). Output
   past it is read and discarded and counted in `dropped` (both streams together), so a child
   that writes a lot never blocks on a full pipe.
+- `input` (add-only, story `lsp-server`, 2026-11-05): the bytes written to the child's stdin,
+  which is then closed. Empty, the default, keeps stdin the null device. A thread named
+  `child-input` writes them while the watcher reads the output, so neither side blocks on a
+  full pipe; a child that exits without reading ends the write with `EPIPE`, which is ignored
+  (both targets ignore SIGPIPE). The language server passes an editor buffer to `ignite check
+  --stdin-for` this way.
 - `ChildExit.ending`: 0 exited (`code` is the exit status), 1 signalled (`code` is the signal
   number), 2 timed out, 3 killed (`code` -1 for both). `outcome(exit)` maps it to `Ending`; a
   fn named `ending` would shadow the field in a UFCS call.
@@ -7257,7 +7264,8 @@ The substrate (`ignite_io::child`):
 
 - Every child is started by its own watcher thread (named `child`), also for `execute`, so that
   `PR_SET_PDEATHSIG` (which fires when the starting thread ends) lives as long as the watcher.
-- The child starts with `Command` (Rust std), stdin the null device, stdout and stderr pipes,
+- The child starts with `Command` (Rust std), stdin the null device (a pipe when `input` is
+  not empty), stdout and stderr pipes,
   its own process group (`process_group(0)`) and an empty signal mask. Rust's `Command`
   resets SIGPIPE but keeps the signal mask of the thread that forks, which blocks SIGTERM (16.13;
   row 13 failed without the hook), so a `pre_exec` hook empties the mask; other dispositions the

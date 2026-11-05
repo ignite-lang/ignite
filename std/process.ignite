@@ -30,7 +30,9 @@ package std.process
 // absolute; `environment` entries `NAME=value` apply over the inherited
 // environment, or over an empty one when `inherit_environment` is false;
 // on `timeout` the child's group is killed; output past `output_limit` per
-// stream (at most 16 MiB) is counted in `dropped`, not kept.
+// stream (at most 16 MiB) is counted in `dropped`, not kept; `input` is
+// written to the child's stdin, which is then closed (empty: stdin is the
+// null device).
 type Invocation {
   program: Text
   arguments: List<Text> = []
@@ -39,6 +41,7 @@ type Invocation {
   inherit_environment: Bool = true
   timeout: Duration = 30 seconds
   output_limit: ByteSize = 1 MiB
+  input: Bytes = b""
 }
 
 // How a child ended: `ending` 0 exited (`code` the status), 1 signalled
@@ -89,6 +92,36 @@ test "an invocation's defaults" {
   assert invocation.inherit_environment
   assert invocation.timeout == 30 seconds
   assert invocation.output_limit == 1 MiB
+  assert invocation.input == b""
+}
+
+// `count` bytes `x`, more than a pipe holds.
+test fn filled(count: Int) -> Bytes {
+  var out = b""
+  var at = 0
+  while at < count {
+    out.push(b'x')
+    at = at + 1
+  }
+  out
+}
+
+test "a child reads its input on stdin, and the null device without one" {
+  let launcher = Launcher.new()
+  let echoed = launcher.execute(Invocation { program = "/bin/cat", input = b"line one\nline two\n" })?
+  assert echoed.code == 0
+  assert echoed.stdout == b"line one\nline two\n"
+  let empty = launcher.execute(Invocation { program = "/bin/cat" })?
+  assert empty.code == 0
+  assert empty.stdout == b""
+  let counted = launcher.execute(Invocation { program = "/usr/bin/wc", arguments = ["-c"], input = filled(200000) })?
+  assert counted.stdout.to_text().trim() == "200000"
+}
+
+test "a child that does not read its input still ends" {
+  let exit = Launcher.new().execute(Invocation { program = "/bin/true", input = filled(300000) })?
+  assert exit.ending == 0
+  assert exit.code == 0
 }
 
 test "a child's output and status are captured" {

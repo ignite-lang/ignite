@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:apply-recovery-way-out
 kind: story
-status: draft
+status: active
 title: An operator path out of a non-resolvable recovery
 summary: A host holding a later reason no corrective resolves has a stated command back to accepting plans
 relations:
@@ -30,7 +30,10 @@ scope:
   path: crates/ignite/tests/main.rs
 - confidence: cited
   path: docs/slice.md
-revision: 5
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T12:43:30Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-11-05T12:43:30Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":3}}}
 ---
 # Story: apply-recovery-way-out
 

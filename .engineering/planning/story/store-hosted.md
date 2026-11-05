@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:store-hosted
 kind: story
-status: active
+status: implemented
 title: A Store resource is hosted by the process that creates it
 relations:
 - decomposes: epic:slice-18-one-service-operated
@@ -12,10 +12,11 @@ scope:
   path: crates/ignite-eval/src/resolve.rs
 - confidence: cited
   path: crates/ignite/tests/plan.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T09:47:32Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-11-05T09:47:32Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-11-05T12:43:29Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: store-hosted
 
