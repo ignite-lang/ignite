@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:rt-abi-panic-containment
 kind: story
-status: draft
+status: active
 title: A Rust panic in the LLVM runtime fails the task instead of aborting the process
 scope:
 - confidence: inferred
   path: crates/ignite-rt/src
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T19:10:27Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-05T19:10:27Z", actor: "human:timo", revision: 4}
 ---
 # Story: rt-abi-panic-containment
 
