@@ -48,6 +48,26 @@ pub struct SpecClaim {
     /// `None` when `scope` has no `sections` (every section is in scope).
     pub sections: Option<Vec<String>>,
     pub rows: Vec<Row>,
+    /// The text id of a specification that is no RFC, e.g. `line-echo-1`;
+    /// empty for an RFC (19.19).
+    pub id: String,
+}
+
+impl SpecClaim {
+    /// The name the matrix and E092 give the spec: its text id, or
+    /// `rfc<n>` when it has none (19.10, 19.19).
+    pub fn label(&self) -> String {
+        label(&self.id, self.rfc)
+    }
+}
+
+/// [`SpecClaim::label`] of `id` and `rfc`.
+fn label(id: &str, rfc: i64) -> String {
+    if id.is_empty() {
+        format!("rfc{rfc}")
+    } else {
+        id.to_string()
+    }
 }
 
 /// One requirement of a claimed spec.
@@ -295,6 +315,7 @@ struct Spec {
     url: String,
     digest: String,
     requirements: Vec<Requirement>,
+    id: String,
 }
 
 /// What a clause says about one requirement.
@@ -526,6 +547,7 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
                     parties: parties.clone(),
                     sections: sections.clone(),
                     rows,
+                    id: spec.id.clone(),
                 });
             }
             claims.protocols.push(claim);
@@ -630,9 +652,17 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
     /// E092 at `path`: its spec is outside `protocol`'s claim, or outside
     /// every claim of the module when `protocol` is `None`.
     fn foreign(&mut self, path: &Path, spec: &QualName, protocol: Option<&String>) {
-        let rfc = self
-            .spec(spec, path.span)
-            .map_or_else(|| spec.name.clone(), |s| format!("RFC {}", s.rfc));
+        // An RFC is `RFC <n>`; a specification that is no RFC, its id (19.19).
+        let rfc = self.spec(spec, path.span).map_or_else(
+            || spec.name.clone(),
+            |s| {
+                if s.id.is_empty() {
+                    format!("RFC {}", s.rfc)
+                } else {
+                    s.id
+                }
+            },
+        );
         let whom = match protocol {
             Some(p) => format!("which `{p}` does not conform to"),
             None => "which no protocol of this module conforms to".to_string(),
@@ -696,6 +726,7 @@ impl<'e, 'p, 'm> Builder<'e, 'p, 'm> {
             url: text(&value, "url")?,
             digest: text(&value, "digest")?,
             requirements,
+            id: text(&value, "id").unwrap_or_default(),
         })
     }
 

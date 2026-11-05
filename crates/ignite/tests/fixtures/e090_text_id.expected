@@ -1,0 +1,1 @@
+e090_text_id.ignite:30:25: error[E090]: requirement `LINE_ECHO_1.R2_1` (MUST, section 2) is in scope of `Echo` and has no status; add `satisfies`, `unsupported` or `not_applicable`
