@@ -1,0 +1,1 @@
+e051_command_line_of.ignite:2:34: error[E051]: `CommandLine.of()` is test-only; a program's capabilities are `resource`s

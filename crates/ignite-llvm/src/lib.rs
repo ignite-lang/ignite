@@ -778,10 +778,11 @@ fn executable_main_in<'e>(
     m.finish()
 }
 /// The creation order of capability resources in a generated `main`
-/// (`docs/slice.md` 21.8): settings, directories, launchers, entropy.
+/// (`docs/slice.md` 21.8, 21.19): settings and command lines, directories,
+/// launchers, entropy.
 fn launch_order(kind: Capability) -> u8 {
     match kind {
-        Capability::Setting => 0,
+        Capability::Setting | Capability::CommandLine => 0,
         Capability::Directory => 1,
         Capability::Launcher => 2,
         Capability::Entropy | Capability::ChildProcess => 3,
@@ -854,6 +855,12 @@ fn launch_capability(
             return l
                 .f
                 .val(format!("call i64 @ignite_rt_launcher_new(i64 {maximum})"));
+        }
+        Capability::CommandLine => {
+            l.m.declare("ignite_rt_command_line_launch", "i32", &[ptr(), ptr()]);
+            l.f.val(format!(
+                "call i32 @ignite_rt_command_line_launch(ptr {handle}, ptr {err})"
+            ))
         }
         Capability::Entropy | Capability::ChildProcess => {
             l.m.declare("ignite_rt_entropy_open", "i32", &[ptr(), ptr()]);

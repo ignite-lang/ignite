@@ -3680,6 +3680,19 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let s = handle(self);
                 self.rt_out("setting_value", &Ty::Text, &[format!("i64 {s}")])
             }
+            CommandLineOf => {
+                self.m.declare("ignite_rt_command_line_of", "i64", &[ptr()]);
+                let arguments = self.read_arg(&args[0]);
+                Val::Scalar(self.f.val(format!(
+                    "call i64 @ignite_rt_command_line_of(ptr {arguments})"
+                )))
+            }
+            CommandLineArguments => {
+                self.m
+                    .declare("ignite_rt_command_line_arguments", "void", &[ptr(), i64()]);
+                let c = handle(self);
+                self.rt_out("command_line_arguments", &texts, &[format!("i64 {c}")])
+            }
             other => unreachable!("`{other:?}` is no capability builtin"),
         }
     }
@@ -3936,7 +3949,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             | EntropyNew
             | EntropyRandomBytes
             | SettingOf
-            | SettingValue => self.capability(b, receiver, args),
+            | SettingValue
+            | CommandLineOf
+            | CommandLineArguments => self.capability(b, receiver, args),
             ClockMonotonic => {
                 self.m.declare("ignite_rt_clock_monotonic", "i64", &[]);
                 Val::Scalar(self.f.val("call i64 @ignite_rt_clock_monotonic()"))

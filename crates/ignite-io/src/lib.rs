@@ -539,6 +539,47 @@ pub mod args {
         }
     }
 
+    /// The whole command line of the executable (`docs/slice.md` 21.19):
+    /// the capability `CommandLine`, every argument after the executable's
+    /// name in order, read once at launch by the generated `main`. A cheap
+    /// clone.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct CommandLine {
+        arguments: std::sync::Arc<[String]>,
+    }
+
+    impl CommandLine {
+        /// `CommandLine.of(arguments)`, test-only.
+        pub fn of(arguments: Vec<String>) -> CommandLine {
+            CommandLine {
+                arguments: arguments.into(),
+            }
+        }
+
+        /// The resource `CommandLine` at launch: the process arguments
+        /// after the executable's name.
+        pub fn launch() -> Result<CommandLine, IoError> {
+            CommandLine::from_os_args(std::env::args_os().skip(1))
+        }
+
+        /// `args`, the arguments after the executable's name as the OS
+        /// gave them, as a command line. Every argument is read, so one
+        /// that is not UTF-8 is the error `argument <n>: value <bytes> is
+        /// not UTF-8` with exit code 2, `<n>` its position from 1.
+        pub fn from_os_args(args: impl Iterator<Item = OsString>) -> Result<CommandLine, IoError> {
+            let arguments = args
+                .enumerate()
+                .map(|(index, arg)| text(&format!("argument {}", index + 1), arg.as_bytes()))
+                .collect::<Result<Vec<String>, IoError>>()?;
+            Ok(CommandLine::of(arguments))
+        }
+
+        /// `command_line.arguments()`: the arguments, in order.
+        pub fn arguments(&self) -> Vec<String> {
+            self.arguments.to_vec()
+        }
+    }
+
     /// `path=address:port` split into the path and the endpoint.
     fn parse_binding(binding: &str) -> Result<(&str, (String, i64)), IoError> {
         let malformed = || {
@@ -818,6 +859,26 @@ mod tests {
         assert_eq!(setting.clone(), setting);
     }
 
+    /// 21.19: every argument in order, the empty one too; one that is not
+    /// UTF-8 is refused with its position.
+    #[test]
+    fn command_line_reads_every_argument() {
+        use std::ffi::{OsStr, OsString};
+        use std::os::unix::ffi::OsStrExt;
+        let given = ["add", "buy milk", "", "--port", "0"];
+        let read = CommandLine::from_os_args(given.iter().map(OsString::from)).unwrap();
+        assert_eq!(read.arguments(), given);
+        assert_eq!(read, CommandLine::of(given.map(String::from).to_vec()));
+        assert!(CommandLine::of(Vec::new()).arguments().is_empty());
+        let bad = [
+            OsString::from("add"),
+            OsStr::from_bytes(b"a\xffb").to_os_string(),
+        ];
+        let error = CommandLine::from_os_args(bad.into_iter()).unwrap_err();
+        assert_eq!(error.to_string(), "argument 2: value a\\xffb is not UTF-8");
+        assert_eq!(error.exit_code(), 2);
+    }
+
     #[test]
     fn io_error_display_is_message() {
         let error = IoError::new("boom");
@@ -1009,7 +1070,7 @@ pub use stream::ByteStream;
 pub mod child;
 pub mod entropy;
 pub mod fs;
-pub use args::Setting;
+pub use args::{CommandLine, Setting};
 pub use child::{ChildExit, ChildProcess, Invocation, Launcher};
 pub use entropy::Entropy;
 pub use fs::Directory;

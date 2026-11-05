@@ -25,8 +25,8 @@ use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use ignite_io::{
-    ChildProcess, Directory, Entropy, IoError, Launcher, PipeStream, Setting, TcpListener,
-    TcpStream,
+    ChildProcess, CommandLine, Directory, Entropy, IoError, Launcher, PipeStream, Setting,
+    TcpListener, TcpStream,
 };
 
 use crate::{IgniteInput, IgniteIoError, IgniteList, arena, bytes, status};
@@ -75,6 +75,8 @@ pub(crate) enum Handle {
     Entropy(Entropy),
     /// A launch argument (`crate::process`, 21.6).
     Setting(Setting),
+    /// The whole command line (`crate::process`, 21.19).
+    CommandLine(CommandLine),
 }
 
 /// The capability `handle` names, picked by `pick`; another handle is

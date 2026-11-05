@@ -1,0 +1,9 @@
+fn first_argument() -> Text {
+  let command_line = CommandLine.of(["add", "buy milk"])
+  return "add"
+}
+
+test "a test may build a command line" {
+  let command_line = CommandLine.of(["add", "buy milk"])
+  assert command_line.arguments() == ["add", "buy milk"]
+}

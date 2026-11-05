@@ -1,13 +1,14 @@
 package std.process
 
 // Child processes, random bytes and launch arguments (`docs/slice.md` 21.5
-// to 21.7). The module is also the substrate's capabilities `Launcher`,
-// `ChildProcess`, `Entropy` and `Setting`, handles a system declares as
+// to 21.7, 21.19). The module is also the substrate's capabilities `Launcher`,
+// `ChildProcess`, `Entropy`, `Setting` and `CommandLine`, handles a system declares as
 // resources (all but `ChildProcess`) and passes in values (21.3):
 //
 //   resource tools: Launcher { maximum_children = 16 }
 //   resource entropy: Entropy
 //   resource tool: Setting { flag = "--tool", default = "/bin/sh" }
+//   resource command_line: CommandLine
 //
 // Builtins of the substrate (effects on the receiver's roots, 21.3):
 //
@@ -18,11 +19,13 @@ package std.process
 //   child.kill() -> Result<Unit, IoError>                          effect kill; SIGKILL to the group
 //   entropy.random_bytes(count: Int) -> Result<Bytes, IoError>     effect draw; count in 0..=65536
 //   setting.value() -> Text                                        effect argument
+//   command_line.arguments() -> List<Text>                         effect argument; after the executable's name
 //
 // A `ChildProcess` that `start` returned has no roots, so the fn that
 // started it waits for and kills it without further `requires`. Tests make
 // capabilities with the test-only `Launcher.new()` (`maximum_children`
-// 16), `Entropy.new()` and `Setting.of(flag, value)`.
+// 16), `Entropy.new()`, `Setting.of(flag, value)` and
+// `CommandLine.of(arguments)`.
 
 // What `Launcher.execute` and `Launcher.start` run: `program` is a bare name
 // looked up in the child's `PATH` or an absolute path; `arguments` are
@@ -290,6 +293,15 @@ test "adversary: environment entries, PATH and odd programs" {
   let env = launcher.execute(Invocation { program = "env", environment = ["PATH=/usr/bin:/bin", "A=1=2"], inherit_environment = false })?
   assert env.stdout == b"A=1=2\nPATH=/usr/bin:/bin\n"
   assert launcher.execute(Invocation { program = "/bin/true", timeout = 1000000000 seconds })?.code == 0
+}
+
+// ---- command line tests ----
+
+test "a command line keeps its arguments in order" {
+  let command_line = CommandLine.of(["add", "buy milk", "--port", "0"])
+  assert command_line.arguments() == ["add", "buy milk", "--port", "0"]
+  assert command_line.arguments().len() == 4
+  assert CommandLine.of([]).arguments().is_empty()
 }
 
 // ---- entropy tests ----
