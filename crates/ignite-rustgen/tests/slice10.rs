@@ -212,6 +212,8 @@ struct Server {
     process: Running,
     port: u16,
     log: Arc<Mutex<String>>,
+    /// The thread that collects stderr; finished once stderr is closed.
+    reader: std::thread::JoinHandle<()>,
 }
 
 impl Server {
@@ -230,7 +232,7 @@ impl Server {
         let (ports, port) = mpsc::channel();
         let log = Arc::new(Mutex::new(String::new()));
         let lines = Arc::clone(&log);
-        std::thread::spawn(move || {
+        let reader = std::thread::spawn(move || {
             let mut stderr = std::io::BufReader::new(stderr);
             let mut line = String::new();
             while stderr.read_line(&mut line).unwrap_or(0) > 0 {
@@ -245,7 +247,12 @@ impl Server {
             .recv_timeout(TIMEOUT)
             .expect("crashd printed no `listening on 127.0.0.1:<port>` line")
             .expect("port in the listening line");
-        Server { process, port, log }
+        Server {
+            process,
+            port,
+            log,
+            reader,
+        }
     }
 
     /// Waits until stderr holds `text`; the whole log.
@@ -280,12 +287,15 @@ impl Server {
         );
     }
 
-    /// The exit code, once the process ends within `limit`.
+    /// The exit code, once the process ends within `limit` and `log` holds
+    /// all of its stderr (the reader saw the end of the pipe).
     #[track_caller]
     fn wait(&mut self, limit: Duration) -> Option<i32> {
         let deadline = Instant::now() + limit;
         loop {
-            if let Some(status) = self.process.0.try_wait().expect("try_wait") {
+            if let Some(status) = self.process.0.try_wait().expect("try_wait")
+                && self.reader.is_finished()
+            {
                 return status.code();
             }
             assert!(

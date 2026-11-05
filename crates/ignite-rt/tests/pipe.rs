@@ -224,26 +224,74 @@ fn adv_a_vanished_peer_through_the_abi() {
 /// Releasing an end while another thread's read on it waits: the waiting
 /// read keeps the end alive and still reads what the peer sends; the end
 /// is gone once that read ended.
+///
+/// The release waits until the reader thread sleeps in the kernel
+/// (`/proc` state `S`), not for a fixed time. A thread that slept on
+/// another lock before its read looked the handle up reads "released";
+/// that attempt proves nothing and is repeated on a fresh pair.
 #[test]
 fn adv_release_during_a_waiting_read() {
-    let (first, second) = pair();
-    let reader = std::thread::spawn(move || read(second, 64));
-    std::thread::sleep(std::time::Duration::from_millis(50));
-    ignite_rt_tcp_release(second);
-    write(first, b"late");
-    ignite_io::flush();
-    let (done, finished) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = done.send(reader.join());
-    });
-    let got = finished
-        .recv_timeout(std::time::Duration::from_secs(5))
-        .expect("the waiting read ended")
-        .unwrap();
-    assert_eq!(got.as_deref(), Some(&b"late"[..]));
-    write(first, b"gone");
-    let (mut input, mut err) = (no_input(), no_error());
-    assert_eq!(ignite_rt_pipe_read(first, 64, &mut input, &mut err), 1);
-    assert_eq!(message(&err), "pipe peer is gone");
-    ignite_rt_tcp_release(first);
+    use std::time::{Duration, Instant};
+    let deadline = Instant::now() + Duration::from_secs(20);
+    for attempt in 0.. {
+        assert!(
+            Instant::now() < deadline,
+            "no read was waiting at the release in {attempt} attempts"
+        );
+        let (first, second) = pair();
+        let name = format!("pipe-read-{attempt}");
+        let reader = std::thread::Builder::new()
+            .name(name.clone())
+            .spawn(move || {
+                let (mut input, mut err) = (no_input(), no_error());
+                let status = ignite_rt_pipe_read(second, 64, &mut input, &mut err);
+                // SAFETY: produced by the runtime in this task's arena.
+                let data = (status == 0 && input.tag == 0)
+                    .then(|| unsafe { input.data.as_bytes() }.to_vec());
+                (status, input.tag, data, message(&err))
+            })
+            .unwrap();
+        while !sleeping(&name) {
+            assert!(Instant::now() < deadline, "{name} never waited");
+            std::thread::yield_now();
+        }
+        ignite_rt_tcp_release(second);
+        write(first, b"late");
+        ignite_io::flush();
+        let (done, finished) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = done.send(reader.join());
+        });
+        let (status, tag, data, error) = finished
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .expect("the waiting read ended")
+            .unwrap();
+        if status == 1 && error == format!("handle {second} was released") {
+            ignite_rt_tcp_release(first);
+            continue;
+        }
+        assert_eq!((status, tag), (0, 0), "{error}");
+        assert_eq!(data.as_deref(), Some(&b"late"[..]));
+        write(first, b"gone");
+        let (mut input, mut err) = (no_input(), no_error());
+        assert_eq!(ignite_rt_pipe_read(first, 64, &mut input, &mut err), 1);
+        assert_eq!(message(&err), "pipe peer is gone");
+        ignite_rt_tcp_release(first);
+        return;
+    }
+}
+
+/// Whether this process's thread named `name` sleeps in the kernel.
+fn sleeping(name: &str) -> bool {
+    let Ok(tasks) = std::fs::read_dir("/proc/self/task") else {
+        return false;
+    };
+    tasks.filter_map(Result::ok).any(|task| {
+        let stat = std::fs::read_to_string(task.path().join("stat")).unwrap_or_default();
+        let Some((head, tail)) = stat.rsplit_once(") ") else {
+            return false;
+        };
+        let comm = head.split_once(" (").map_or("", |(_, comm)| comm);
+        comm == name && tail.starts_with('S')
+    })
 }
