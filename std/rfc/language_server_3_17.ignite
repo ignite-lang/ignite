@@ -14,6 +14,10 @@
 //   base.cancel             #cancellation-support-arrow_right-arrow_left
 //   lifecycle.initialize    #initialize-request-leftwards_arrow_with_hook
 //   lifecycle.initialized   #initialized-notification-arrow_right
+//   lifecycle.register      #register-capability-arrow_right_hook
+//   lifecycle.unregister    #unregister-capability-arrow_right_hook (no sentence with a word)
+//   lifecycle.settrace      #settrace-notification-arrow_right
+//   lifecycle.logtrace      #logtrace-notification-arrow_left
 //   lifecycle.shutdown      #shutdown-request-leftwards_arrow_with_hook
 //   lifecycle.exit          #exit-notification-arrow_right
 // One requirement per sentence with a word of 19.19's table, upper or lower case; the level
@@ -25,6 +29,8 @@
 // Left out, no word of the table: "at least one header is mandatory" (base.header), "This
 // is in line with the JSON-RPC protocol that requires that every request sends a response
 // back." (base.cancel), "The message can be picked by the server." (lifecycle.initialize).
+// Left out as a description: "Not all clients need to support dynamic capability
+// registration." (lifecycle.register; what a client may leave out, not an obligation).
 
 package std.rfc.language_server_3_17
 
@@ -62,6 +68,13 @@ const LANGUAGE_SERVER_3_17: Spec = Spec {
     RLIFECYCLE_INITIALIZE_6,
     RLIFECYCLE_INITIALIZE_7,
     RLIFECYCLE_INITIALIZED_1,
+    RLIFECYCLE_REGISTER_1,
+    RLIFECYCLE_REGISTER_2,
+    RLIFECYCLE_SETTRACE_1,
+    RLIFECYCLE_LOGTRACE_1,
+    RLIFECYCLE_LOGTRACE_2,
+    RLIFECYCLE_LOGTRACE_3,
+    RLIFECYCLE_LOGTRACE_4,
     RLIFECYCLE_SHUTDOWN_1,
     RLIFECYCLE_SHUTDOWN_2,
     RLIFECYCLE_SHUTDOWN_3,
@@ -301,6 +314,69 @@ const RLIFECYCLE_INITIALIZED_1: Requirement = Requirement {
   party = Client
   source = Prose
   text = "The initialized notification may only be sent once."
+}
+
+const RLIFECYCLE_REGISTER_1: Requirement = Requirement {
+  section = "lifecycle.register"
+  ordinal = 1
+  level = MustNot
+  party = Server
+  source = Prose
+  text = "Server must not register the same capability both statically through the initialize result and dynamically for the same document selector."
+}
+
+const RLIFECYCLE_REGISTER_2: Requirement = Requirement {
+  section = "lifecycle.register"
+  ordinal = 2
+  level = Must
+  party = Server
+  source = Prose
+  text = "If a server wants to support both static and dynamic registration it needs to check the client capability in the initialize request and only register the capability statically if the client doesn’t support dynamic registration for that capability."
+}
+
+const RLIFECYCLE_SETTRACE_1: Requirement = Requirement {
+  section = "lifecycle.settrace"
+  ordinal = 1
+  level = Should
+  party = Client
+  source = Prose
+  text = "A notification that should be used by the client to modify the trace setting of the server."
+}
+
+const RLIFECYCLE_LOGTRACE_1: Requirement = Requirement {
+  section = "lifecycle.logtrace"
+  ordinal = 1
+  level = ShouldNot
+  party = Server
+  source = Prose
+  text = "If trace is 'off', the server should not send any logTrace notification."
+}
+
+const RLIFECYCLE_LOGTRACE_2: Requirement = Requirement {
+  section = "lifecycle.logtrace"
+  ordinal = 2
+  level = ShouldNot
+  party = Server
+  source = Prose
+  text = "If trace is 'messages', the server should not add the 'verbose' field in the LogTraceParams."
+}
+
+const RLIFECYCLE_LOGTRACE_3: Requirement = Requirement {
+  section = "lifecycle.logtrace"
+  ordinal = 3
+  level = Should
+  party = Server
+  source = Prose
+  text = "$/logTrace should be used for systematic trace reporting."
+}
+
+const RLIFECYCLE_LOGTRACE_4: Requirement = Requirement {
+  section = "lifecycle.logtrace"
+  ordinal = 4
+  level = Should
+  party = Server
+  source = Prose
+  text = "For single debugging messages, the server should send window/logMessage notifications."
 }
 
 const RLIFECYCLE_SHUTDOWN_1: Requirement = Requirement {

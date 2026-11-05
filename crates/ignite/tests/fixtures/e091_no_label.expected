@@ -1,0 +1,1 @@
+e091_no_label.ignite:6:7: error[E091]: spec `NOID` has neither `rfc` nor `id`; an RFC sets `rfc`, a specification that is no RFC sets a text `id`

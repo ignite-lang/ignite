@@ -1590,8 +1590,8 @@ fn adversary_committed_catalogues_read_the_same_on_both_targets() {
 /// read, and the number of requirements.
 const TEXT_ID_CATALOGUES: [(&str, &str, &str, &str, &str, usize); 2] = [
     (
-        "json_rpc_2",
-        "JSON_RPC_2",
+        "jsonrpc_2",
+        "JSONRPC_2",
         "jsonrpc-2.0",
         "https://www.jsonrpc.org/specification",
         "sha256:8fe1edfdca511d309e712e47447457ea5159b728ec02071a84593aed692aefeb",
@@ -1603,7 +1603,7 @@ const TEXT_ID_CATALOGUES: [(&str, &str, &str, &str, &str, usize); 2] = [
         "lsp-3.17",
         "https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/",
         "sha256:93afdf15adbaa7355cd00d0134de05331b8dcc9361ffdd11d3da0924cab20579",
-        30,
+        37,
     ),
 ];
 
@@ -1702,12 +1702,9 @@ fn lsp_catalogue_holds_or_lists_every_server_lifecycle_rule() {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
-    for sentence in [
-        "Server must not register the same capability both statically through the initialize result and dynamically for the same document selector.",
-    ] {
-        assert!(
-            flat.contains(sentence),
-            "std/rfc/language_server_3_17.ignite neither quotes nor leaves out: {sentence}"
-        );
-    }
+    let sentence = "Server must not register the same capability both statically through the initialize result and dynamically for the same document selector.";
+    assert!(
+        flat.contains(sentence),
+        "std/rfc/language_server_3_17.ignite neither quotes nor leaves out: {sentence}"
+    );
 }

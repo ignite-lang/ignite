@@ -1,0 +1,27 @@
+package tests.e091
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+// A spec with neither `rfc` nor `id` has no label (docs/slice.md 19.19).
+const NOID: Spec = Spec {
+  title = "neither rfc nor id"
+  url = "https://example.invalid/noid"
+  digest = "sha256:0009"
+  requirements = [R1_1]
+}
+
+const R1_1: Requirement = Requirement {
+  section = "1"
+  ordinal = 1
+  level = Must
+  source = Prose
+  text = "A server MUST answer."
+}
+
+protocol Echo conforms [NOID] {
+  unsupported NOID.R1_1 "not done"
+
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}

@@ -12,11 +12,11 @@
 // description) and "... and as such no Response object needs to be returned to the
 // client." (4.1, a description; the rule is the next sentence, R4_1_1).
 
-package std.rfc.json_rpc_2
+package std.rfc.jsonrpc_2
 
 import std.rfc.{Level, Party, Source, Requirement, Spec}
 
-const JSON_RPC_2: Spec = Spec {
+const JSONRPC_2: Spec = Spec {
   id = "jsonrpc-2.0"
   title = "JSON-RPC 2.0 Specification"
   url = "https://www.jsonrpc.org/specification"

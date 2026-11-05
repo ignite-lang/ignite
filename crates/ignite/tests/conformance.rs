@@ -956,17 +956,19 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
 }
 
 /// The JsonRpc claim of 19.19: one block labelled by the text id, every
-/// MUST-class row in scope held or stated, the batch rows unsupported,
-/// exit 0 and the same matrix on both targets.
+/// MUST-class row in scope held or stated, the batch rows unsupported, the
+/// three rows std.json's integer numbers break stated as gaps naming
+/// story:json-decimals, so the claim is no and exits 1; the same matrix on
+/// both targets.
 #[test]
-fn json_rpc_matrix_is_labelled_by_its_id_and_holds() {
+fn json_rpc_matrix_is_labelled_by_its_id_and_states_its_gaps() {
     let mut outputs = Vec::new();
     for target in ["rust", "llvm"] {
         let output = std_conformance("jsonrpc", target);
         let stdout = text(&output.stdout);
         assert_eq!(
             output.status.code(),
-            Some(0),
+            Some(1),
             "{target}: {stdout}{}",
             text(&output.stderr)
         );
@@ -979,7 +981,7 @@ fn json_rpc_matrix_is_labelled_by_its_id_and_holds() {
         let block = block(&stdout, "jsonrpc-2.0");
         assert_eq!(
             block.trim_end().lines().last().unwrap_or_default(),
-            "claim conformance of JsonRpc to jsonrpc-2.0: yes (0 gaps, 0 failures, 0 inconclusive)",
+            "claim conformance of JsonRpc to jsonrpc-2.0: no (3 gaps, 0 failures, 0 inconclusive)",
             "{target}"
         );
         for id in ["R6_2", "R6_3", "R6_4", "R6_5"] {
@@ -987,7 +989,13 @@ fn json_rpc_matrix_is_labelled_by_its_id_and_holds() {
             assert_eq!(row[1], "6", "{target}: {row:?}");
             assert_eq!(row[3], "unsupported", "{target}: {row:?}");
         }
-        for id in ["R4_6", "R4_1_1", "R5_9", "R5_10", "R6_7"] {
+        for id in ["R4_6", "R4_1_1", "R5_9"] {
+            let row = columns(block, id);
+            assert_eq!(row[3], "unsupported", "{target}: {row:?}");
+            assert!(row[4].contains("story:json-decimals"), "{target}: {row:?}");
+            assert_eq!(row[5], "gap", "{target}: {row:?}");
+        }
+        for id in ["R5_1", "R5_10", "R6_7"] {
             let row = columns(block, id);
             assert_eq!(row[3], "satisfied", "{target}: {row:?}");
             assert_eq!(row[5], "pass", "{target}: {row:?}");
