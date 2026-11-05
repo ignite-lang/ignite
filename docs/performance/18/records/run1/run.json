@@ -1,0 +1,36 @@
+{
+  "builds": "/home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s18w5u8/perf18/builds",
+  "commits": {
+    "baseline": "421742b33ee898b8e6c6aa305532d568a8b83e5c",
+    "candidate": "661e55b428b45d4a2431c1b44cfc32a4000e3267"
+  },
+  "controls": {
+    "absolute_max_load": 9,
+    "check_pairs": 15,
+    "cold_retries": 0,
+    "extra_warm_passes": 2,
+    "load_delta": 5,
+    "warm_pairs": 3
+  },
+  "environment": {
+    "CARGO_BUILD_JOBS": "8",
+    "CARGO_BUILD_TARGET": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_NET_OFFLINE": null,
+    "CARGO_PROFILE_DEV_DEBUG": "line-tables-only",
+    "CARGO_PROFILE_RELEASE_DEBUG": "0",
+    "RUSTC_WORKSPACE_WRAPPER": null,
+    "RUSTC_WRAPPER": null,
+    "RUSTFLAGS": null,
+    "RUSTUP_TOOLCHAIN": null,
+    "SCCACHE_DISABLE": null
+  },
+  "load_delta": 5,
+  "refs": {
+    "baseline": "421742b33",
+    "candidate": "661e55b42"
+  },
+  "schema": "ignite-performance/1",
+  "sources": "/home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s18w5u8/perf18/sources"
+}

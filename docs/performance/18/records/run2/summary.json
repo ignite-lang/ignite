@@ -1,0 +1,83 @@
+{
+  "accepted": false,
+  "any_command_failed": false,
+  "candidate_failed": false,
+  "closure_controls_pass": false,
+  "commits": {
+    "baseline": "661e55b428b45d4a2431c1b44cfc32a4000e3267",
+    "candidate": "661e55b428b45d4a2431c1b44cfc32a4000e3267"
+  },
+  "comparable_low_load": false,
+  "comparison_missing": [
+    "published comparison not configured"
+  ],
+  "coverage_pass": false,
+  "frozen_baseline_matches": false,
+  "ignite_test_absolute_pass": false,
+  "missing": [
+    "check",
+    "cold-clippy",
+    "cold-fmt",
+    "cold-inline",
+    "cold-workspace",
+    "file-ignite_test",
+    "file-rustgen",
+    "gate-cold",
+    "gate-warm",
+    "no-run-touch",
+    "no-run-warm",
+    "plan",
+    "todod-llvm-dev",
+    "todod-llvm-release",
+    "todod-rust-dev",
+    "todod-rust-release",
+    "warm-clippy",
+    "warm-fmt",
+    "warm-inline",
+    "warm-workspace"
+  ],
+  "over_budget": [],
+  "results": [
+    {
+      "baseline": "baseline",
+      "before": 30.870068829,
+      "candidate": 28.496501535,
+      "excluded": [],
+      "loads": [
+        7.4462890625,
+        15.1943359375
+      ],
+      "ratio": 0.9099217763835303,
+      "unit": "apply-cycle-terminal-rust",
+      "valid_pairs": 5
+    },
+    {
+      "baseline": "baseline",
+      "excluded": [],
+      "unit": "apply-cycle-todo-rust",
+      "valid_pairs": 0
+    },
+    {
+      "baseline": "baseline",
+      "before": 28.268573458,
+      "candidate": 24.667427365,
+      "excluded": [],
+      "loads": [
+        12.056640625,
+        29.6171875
+      ],
+      "ratio": 0.9664550719214208,
+      "unit": "apply-cycle-terminal-llvm",
+      "valid_pairs": 5
+    },
+    {
+      "baseline": "baseline",
+      "excluded": [],
+      "unit": "apply-cycle-todo-llvm",
+      "valid_pairs": 0
+    }
+  ],
+  "rustgen_11b_pass": false,
+  "schema": "ignite-performance/1",
+  "warm_workspace_absolute_pass": false
+}

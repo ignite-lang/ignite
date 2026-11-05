@@ -1,0 +1,18 @@
+WAIT 21:09:16 free=73G floor=40G
+START 21:09:16 free=73G lane=1 load=18
+MODE cold 21:09:17 load 17.71 free 73G
+{"label": "baseline", "unit": "clean", "pair": "1793909359159743968-cold-1", "seconds": 0.048034024, "exit": 0, "load_before": 17.71337890625}
+{"label": "baseline", "unit": "cold-fmt", "pair": "1793909359159743968-cold-1", "seconds": 1.216043407, "exit": 0, "load_before": 17.71337890625}
+{"label": "baseline", "unit": "cold-clippy", "pair": "1793909359159743968-cold-1", "seconds": 20.26626963, "exit": 0, "load_before": 17.71337890625}
+{"label": "baseline", "unit": "cold-workspace", "pair": "1793909359159743968-cold-1", "seconds": 1182.490719377, "exit": 0, "load_before": 20.43994140625}
+{"label": "baseline", "unit": "cold-inline", "pair": "1793909359159743968-cold-1", "seconds": 42.656125862, "exit": 0, "load_before": 10.4560546875}
+{"label": "baseline", "unit": "gate-cold", "pair": "1793909359159743968-cold-1", "seconds": 1246.63233063, "exit": 0, "load_before": 17.71337890625}
+{"label": "candidate", "unit": "clean", "pair": "1793909359159743968-cold-1", "seconds": 0.435761341, "exit": 0, "load_before": 10.22265625}
+{"label": "candidate", "unit": "cold-fmt", "pair": "1793909359159743968-cold-1", "seconds": 1.402074541, "exit": 0, "load_before": 10.22265625}
+{"label": "candidate", "unit": "cold-clippy", "pair": "1793909359159743968-cold-1", "seconds": 12.759516400999999, "exit": 0, "load_before": 10.04443359375}
+{"label": "candidate", "unit": "cold-workspace", "pair": "1793909359159743968-cold-1", "seconds": 2313.059532926, "exit": 101, "load_before": 10.1240234375}
+{"label": "candidate", "unit": "cold-inline", "pair": "1793909359159743968-cold-1", "seconds": 39.426038699, "exit": 0, "load_before": 13.09423828125}
+{"label": "candidate", "unit": "gate-cold", "pair": "1793909359159743968-cold-1", "seconds": 2366.650711559, "exit": 1, "load_before": 10.22265625}
+Candidate cold failure; freeze corrected source before restarting
+MODE_EXIT cold=1 22:09:34 builds 11G
+EXIT=0 22:09:39 free=71G
