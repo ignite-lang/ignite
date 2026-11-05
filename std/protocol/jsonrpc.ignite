@@ -545,3 +545,60 @@ test "serve ends on a framing error" {
   client.write_all(b"Content-Length: x\r\n\r\n")?
   assert client.read(10)? == Eof
 }
+
+// ---- adversary cases --------------------------------------------------------
+
+// JSON-RPC 2.0 bodies are any JSON text: a number with a fraction or an
+// exponent (an LSP `decimal`, as in a color) is valid JSON, so the request
+// must not be answered with the parse error.
+test "a request whose params carry a fraction or an exponent is not a parse error" {
+  assert decode(r#"{"jsonrpc":"2.0","id":1,"method":"m","params":{"red":0.5}}"#) != Err(standard_error(PARSE_ERROR))
+  assert decode(r#"{"jsonrpc":"2.0","id":1,"method":"m","params":[1e2]}"#) != Err(standard_error(PARSE_ERROR))
+}
+
+// A body must be UTF-8 JSON (RFC 8259 §8.1); one that is not is the parse
+// error, not a message whose invalid bytes became U+FFFD.
+test "a body that is not UTF-8 is answered with the parse error" {
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, JsonRpcApp { state = (), handle = answer })
+  var body = br#"{"jsonrpc":"2.0","id":1,"method":"echo","params":[""#
+  body.append(b"\xff")
+  body.append(br#""]}"#)
+  var out = "Content-Length: {body.len()}\r\n\r\n".to_bytes()
+  out.append(body)
+  client.write_all(out)?
+  _ = client.close()
+  match read_message(client, JsonRpcLimits {}, Bytes.empty())? {
+    Got(reply, _) => {
+      assert reply.to_text() == r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}"#
+    }
+    _ => {
+      assert false, "a reply is read"
+    }
+  }
+}
+
+// Answers every message, notifications included, with a response.
+test fn respond_to_all(state: Unit, message: Message) -> Option<Message> = Some(Reply(Response { id = Some(NumberId(0)), outcome = Ok(Null) }))
+
+// "The Server MUST NOT reply to a Notification" (JSON-RPC 2.0 §4.1): serve
+// must not write a response the application returns for one.
+test "serve does not write a response to a notification" {
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, JsonRpcApp { state = (), handle = respond_to_all })
+  write_message(client, r#"{"jsonrpc":"2.0","method":"note"}"#)?
+  write_message(client, r#"{"jsonrpc":"2.0","id":0,"method":"m"}"#)?
+  _ = client.close()
+  var replies = 0
+  var buffer = Bytes.empty()
+  loop {
+    match read_message(client, JsonRpcLimits {}, buffer)? {
+      Got(_, rest) => {
+        replies = replies + 1
+        buffer = rest
+      }
+      _ => break
+    }
+  }
+  assert replies == 1
+}
