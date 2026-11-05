@@ -2167,6 +2167,71 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         }
     }
 
+    /// A mention of the constant `q` of type `ty`. A scalar constant is a
+    /// call of its function, which LLVM folds. An aggregate constant is
+    /// evaluated once per process and IR module instead of at every
+    /// mention: the first mention calls `"<q>.once"`, which evaluates it,
+    /// copies the value to the heap (`copy_to_heap`) and publishes the
+    /// copy in the module's `"<q>.cache"` with a compare-and-swap (a task
+    /// that loses a race frees its copy and takes the winner's); every
+    /// mention after it is an acquire load. The mention is borrowed, so
+    /// every value position copies it into the task's arena as it copies
+    /// a variable, and an in-place builtin on it changes a copy
+    /// ([`Lower::mutable_receiver`]). A failure while the constant is
+    /// evaluated publishes nothing.
+    fn constant(&mut self, q: &QualName, ty: &Ty) -> Val {
+        let name = symbol(q);
+        let callee = self.function(&name, &[], ty);
+        if !is_aggregate(ty) {
+            return self.call(&callee, ty, Vec::new());
+        }
+        let once = format!("{name}.once");
+        let cache = global(&format!("{name}.cache"));
+        if !self.m.has(&once) {
+            let layout = self.layout(ty);
+            let to_heap = self.m.glue_of(Glue::ToHeap, ty);
+            let free = self.m.glue_of(Glue::FreeHeap, ty);
+            self.m
+                .global_definition(format!("{cache} = internal global ptr null, align 8"));
+            let text = format!(
+                "define internal ptr {once_global}() noinline {{\n\
+                 entry:\n  \
+                 %value = alloca [{size} x i8], align {align}\n  \
+                 call void {callee}(ptr %value)\n  \
+                 %heap = call ptr {to_heap}(ptr %value)\n  \
+                 %swap = cmpxchg ptr {cache}, ptr null, ptr %heap acq_rel acquire, align 8\n  \
+                 %old = extractvalue {{ ptr, i1 }} %swap, 0\n  \
+                 %won = extractvalue {{ ptr, i1 }} %swap, 1\n  \
+                 br i1 %won, label %mine, label %theirs\n\
+                 mine:\n  \
+                 ret ptr %heap\n\
+                 theirs:\n  \
+                 call void {free}(ptr %heap)\n  \
+                 ret ptr %old\n\
+                 }}\n",
+                once_global = global(&once),
+                size = layout.size.max(1),
+                align = layout.align.max(1),
+            );
+            self.m.helper(&once, &text);
+        }
+        let have = self
+            .f
+            .val(format!("load atomic ptr, ptr {cache} acquire, align 8"));
+        let missing = self.f.val(format!("icmp eq ptr {have}, null"));
+        let from = self.f.current().to_string();
+        let (make, done) = (self.f.label(), self.f.label());
+        self.f.cond_br(&missing, &make, &done);
+        self.f.place(&make);
+        let made = self.f.val(format!("call ptr {}()", global(&once)));
+        self.f.br(&done);
+        self.f.place(&done);
+        let p = self
+            .f
+            .val(format!("phi ptr [ {have}, %{from} ], [ {made}, %{make} ]"));
+        Val::Ptr(p, false)
+    }
+
     fn is_const(&self, name: &str) -> bool {
         self.cx.consts.contains(name)
     }
@@ -2186,8 +2251,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             Some(Callee::Const(q)) => {
                 if let Some(ty) = self.env.const_ty(&q).map(repr) {
-                    let callee = self.function(&symbol(&q), &[], &ty);
-                    return self.call(&callee, &ty, Vec::new());
+                    return self.constant(&q, &ty);
                 }
             }
             Some(Callee::Variant { .. }) => {
@@ -2203,8 +2267,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 .const_ty(&q)
                 .map(repr)
                 .unwrap_or_else(|| self.ty(e));
-            let callee = self.function(&symbol(&q), &[], &ty);
-            return self.call(&callee, &ty, Vec::new());
+            return self.constant(&q, &ty);
         }
         if self.cx.fns.contains(&id.name) {
             let q = self.cx.qual(&id.name);
@@ -3534,8 +3597,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// A constant pattern: the value `==` the constant `q`.
     fn const_pattern(&mut self, q: &QualName, v: &Val, ty: &Ty, fail: &str) {
         let cty = self.env.const_ty(q).map(repr).unwrap_or_else(|| ty.clone());
-        let callee = self.function(&symbol(q), &[], &cty);
-        let c = self.call(&callee, &cty, Vec::new());
+        let c = self.constant(q, &cty);
         let ok = if *ty == Ty::Text {
             let (a, b) = (self.ptr(v), self.ptr(&c));
             crate::glue::text_eq(self.m, &mut self.f, &a, &b)
@@ -3669,14 +3731,15 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
 
     /// The receiver of a builtin that changes it in place (`push`,
     /// `append`, `clear`). A place the region analysis sees
-    /// ([`crate::region::root`]) is changed in place; any other borrowed
+    /// ([`crate::region::root`]) rooted at a local is changed in place; one
+    /// rooted at a constant ([`Lower::constant`]), and any other borrowed
     /// value, such as `x.to_bytes()`, which is `x`'s own memory, is copied
     /// first, so the change goes to a temporary and never to a variable
     /// the analysis counts as unmodified (`docs/vision.md` section 10.1,
     /// M1).
     fn mutable_receiver(&mut self, receiver: &Expr) -> Val {
         let r = self.expr(receiver, true);
-        if crate::region::root(receiver, self.cx.types).is_some() {
+        if crate::region::root(receiver, self.cx.types).is_some_and(|n| self.lookup(&n).is_some()) {
             return r;
         }
         let ty = self.ty(receiver);

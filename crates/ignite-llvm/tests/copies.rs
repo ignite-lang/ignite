@@ -26,6 +26,31 @@ fn text_chains_copy_each_operand_once() {
     assert_eq!(four.matches("call void @llvm.memcpy").count(), 5, "{four}");
 }
 
+/// P2: a mention of an aggregate constant reads the module's once-made
+/// heap copy; the constant's function is called only by its `.once`
+/// helper. A scalar constant stays a call LLVM folds.
+#[test]
+fn constants_are_evaluated_once() {
+    let (generated, _) = lower_with("copies", true);
+    let program = &generated.program;
+    let body = function(program, "tests.copies.count_constants");
+    for name in ["GREETING", "TAGS", "NESTED", "HOLDER", "EMPTY"] {
+        let constant = format!("@\"tests.copies.{name}\"(");
+        assert!(!body.contains(&constant), "{name} is evaluated:\n{body}");
+        assert!(
+            body.contains(&format!(
+                "load atomic ptr, ptr @\"tests.copies.{name}.cache\" acquire"
+            )),
+            "{name} is not read from its cache:\n{body}"
+        );
+        let callers = program
+            .lines()
+            .filter(|l| l.contains(&format!("call void {constant}")))
+            .count();
+        assert_eq!(callers, 1, "{name} is called outside its .once helper");
+    }
+}
+
 #[test]
 fn every_copies_test_runs() {
     let (generated, tests) = lower_with("copies", true);

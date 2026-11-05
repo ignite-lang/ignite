@@ -122,3 +122,114 @@ test "concatenation in a released loop keeps the texts that are carried" {
   assert kept[0] == "0:0é"
   assert kept[19] == "19000:19000é"
 }
+
+type Holder {
+  name: Text
+  items: List<Int>
+}
+
+const GREETING: Text = "hello, world".concat("!")
+const TAGS: List<Text> = ["a", "b", "c"]
+const NESTED: List<List<Text>> = [["é"], [], ["x", "yz"]]
+const HOLDER: Holder = Holder { name = "h".concat("é"), items = [1, 2] }
+const EMPTY: List<Text> = []
+const LIMIT: Int = 6 * 7
+
+test fn count_constants(n: Int) -> Int {
+  var total = 0
+  var i = 0
+  while i < n {
+    total = total + GREETING.len() + TAGS.len() + NESTED[2][1].len() + HOLDER.items.len() + EMPTY.len()
+    i = i + 1
+  }
+  return total
+}
+
+test fn send_constants(stream: PipeStream) -> Result<Unit, IoError> requires [stream.write] {
+  var tags = TAGS
+  tags.push(GREETING)
+  stream.write_all((HOLDER.name + tags[3] + Int.to_text(tags.len() + count_constants(3))).to_bytes())?
+  stream.close()
+}
+
+test fn all_of(client: PipeStream) -> Result<Bytes, IoError> requires [client.read] {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test "a constant mentioned in a loop keeps its value" {
+  assert count_constants(1000) == 20000
+  assert count_constants(1000) == 20000
+  assert LIMIT == 42
+}
+
+test "a change to a copy of a constant leaves the constant as it was" {
+  var tags = TAGS
+  tags.push("d")
+  assert tags == ["a", "b", "c", "d"]
+  assert TAGS == ["a", "b", "c"]
+  var holder = HOLDER
+  holder.items.push(3)
+  holder.name = holder.name + "!"
+  assert HOLDER.items == [1, 2]
+  assert HOLDER.name == "hé"
+  assert holder.name == "hé!"
+  var i = 0
+  while i < 3 {
+    var nested = NESTED
+    nested[0].push(Int.to_text(i))
+    assert nested[0].len() == 2
+    i = i + 1
+  }
+  assert NESTED == [["é"], [], ["x", "yz"]]
+  let g = GREETING + GREETING
+  assert g == "hello, world!hello, world!"
+  assert GREETING == "hello, world!"
+}
+
+test "in-place builtins on a constant change a copy" {
+  TAGS.push("z")
+  TAGS.clear()
+  assert TAGS == ["a", "b", "c"]
+  let n = match GREETING {
+    "hello, world!" => 1
+    _ => 0
+  }
+  assert n == 1
+}
+
+test "tasks that read constants at once see the same values" {
+  var ends: List<PipeStream> = []
+  var i = 0
+  while i < 24 {
+    let (client, server) = Pipe.pair()
+    client.set_idle_timeout(5000)?
+    spawn send_constants(server)
+    ends.push(client)
+    i = i + 1
+  }
+  for client in ends {
+    assert all_of(client)?.to_text() == "héhello, world!64"
+  }
+  assert TAGS.len() == 3
+}
+
+const HELLO: Text = "hel".concat("lo")
+
+test "a constant pattern compares with the constant" {
+  let n = match "he".concat("llo") {
+    HELLO => 1
+    _ => 0
+  }
+  assert n == 1
+  let m = match "help" {
+    HELLO => 1
+    _ => 0
+  }
+  assert m == 0
+}

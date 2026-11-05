@@ -221,6 +221,16 @@ takes or returns Ignite values):
   `"<module>.<Protocol>.<role>"`, constants `"<module>.<NAME>"` and field defaults
   `"<module>.<Record>.<field>"` as functions without arguments; a record literal that omits a
   defaulted field calls its default function. Executables' entry points are C `main`.
+- A mention of a constant of scalar type calls its function. A constant of aggregate type
+  is evaluated once per process and IR module: each module that mentions it has an internal
+  `"<module>.<NAME>.cache"` (a `ptr`, null at first) and `"<module>.<NAME>.once"`; a mention
+  loads the cache (acquire) and calls `.once` when it is null, which evaluates the constant,
+  copies it to the heap (`"copy_to_heap.<T>"`, as a `Store<T>` value) and publishes the copy
+  with a compare-and-swap; a task that loses the race frees its copy and takes the
+  winner's. The heap copy is never freed. A mention is borrowed, like a variable: a value
+  position copies it into the task's arena, and `push`, `append`, `clear`, `put` or
+  `remove` on it changes a copy (a constant is no local, so it is no place that changes in
+  place). A failure inside the evaluation publishes nothing.
 - Generic code is lowered per instance, never as such: a generic fn, a role of a generic
   protocol and a field default of a generic record emit nothing themselves. Each use names an
   instance from `TypedProgram::instance` (`docs/slice.md` section 11): `"<module>.<name><A,B>"`,

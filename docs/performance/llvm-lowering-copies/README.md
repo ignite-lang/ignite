@@ -65,3 +65,26 @@ spawn thunks' error line (`log_error`) uses the same inline copy.
 `slice9::long_chains_100k_lower_quickly` and `slice9::long_chains_100k_run_on_llvm`
 (`#[ignore]`, run by hand with `--include-ignored`) pass with the new lowering, as do the
 10,000-term chains of the gate.
+
+## P2: an aggregate constant is evaluated once
+
+A mention of a constant called its function, which rebuilt the value (a `.concat`, a list
+literal, a record) in the task's arena every time. Now a scalar constant stays a call LLVM
+folds, and an aggregate one is evaluated once per process and IR module: a mention loads the
+module's `"<NAME>.cache"` (acquire) and, while it is null, calls `"<NAME>.once"`, which
+evaluates the constant, copies it to the heap with the `Store` glue (`copy_to_heap`) and
+publishes it by compare-and-swap. The mention is borrowed, as a variable is: value positions
+copy it, and an in-place builtin on a constant (`TAGS.push(x)` type-checks) changes a copy,
+because `mutable_receiver` changes in place only a place rooted at a local. Constant
+patterns use the same cache. LLVM target only: the Rust target (`crates/ignite-rustgen`)
+is outside this story's scope and still evaluates a constant per mention.
+
+| measure | base | P2 |
+|---|---|---|
+| `probe.ignite` `program.ll`: calls of `main.GREETING` / `main.TAGS` | 2 / 2 (one per mention) | 1 / 1 (inside `.once`) |
+| `bench constants` (4,000,000 rounds, 4 mentions of 3 aggregate constants each): calls of the constants' functions (callgrind) | 16,000,000 (GREETING 4M, TAGS 4M, WORDS 8M) | TAGS 1, WORDS 1; GREETING's function inlined into its `.once` |
+| same: instructions (callgrind `Ir`) | 3,596,432,908 | 172,439,498 |
+| wall time, `bench constants`, median of 21 interleaved (load 14.5 to 15.6) | 333 ms | 9 ms |
+| same, against P1 (P9 and P1 applied, constants not), median of 21 (load 7.1 to 7.3) | 262 ms (P1) | 10 ms |
+| wall time, `bench text concat` against P1, median of 11 (load 13.7 to 14.5) | 124 ms (P1) | 121 ms |
+| Rust target, `bench constants`, `ignite test --release`, 5 runs before any change (load 17 to 22) | 5.01 to 6.12 s | not changed by this step (no Rust generator change) |

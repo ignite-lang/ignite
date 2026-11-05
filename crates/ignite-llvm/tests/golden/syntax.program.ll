@@ -46,6 +46,7 @@ source_filename = "tests.syntax"
 @.str.22 = private unnamed_addr constant [1 x i8] c"u", align 1
 @.str.26 = private unnamed_addr constant [1 x i8] c"x", align 1
 @.str.23 = private unnamed_addr constant [4 x i8] c"zero", align 1
+@"tests.syntax.QUIT.cache" = internal global ptr null, align 8
 
 declare void @ignite_rt_init(i32, ptr)
 declare ptr @ignite_rt_alloc(i64, i64)
@@ -473,6 +474,22 @@ L4:
   ret void, !dbg !37
 }
 
+define internal ptr @"tests.syntax.QUIT.once"() noinline {
+entry:
+  %value = alloca [24 x i8], align 8
+  call void @"tests.syntax.QUIT"(ptr %value)
+  %heap = call ptr @"copy_to_heap.Text"(ptr %value)
+  %swap = cmpxchg ptr @"tests.syntax.QUIT.cache", ptr null, ptr %heap acq_rel acquire, align 8
+  %old = extractvalue { ptr, i1 } %swap, 0
+  %won = extractvalue { ptr, i1 } %swap, 1
+  br i1 %won, label %mine, label %theirs
+mine:
+  ret ptr %heap
+theirs:
+  call void @"free_heap.Text"(ptr %heap)
+  ret ptr %old
+}
+
 define internal i1 @ignite.text_eq(ptr %a, ptr %b) alwaysinline {
 entry:
   %lenpa = getelementptr inbounds i8, ptr %a, i64 8
@@ -500,13 +517,12 @@ entry:
   %t8 = alloca [24 x i8], align 8
   %t11 = alloca [24 x i8], align 8
   %t18 = alloca [24 x i8], align 8
-  %t33 = alloca [24 x i8], align 8
-  %t37 = alloca [24 x i8], align 8
-  %t40 = alloca [24 x i8], align 8
-  %t48 = alloca [24 x i8], align 8
-  %t63 = alloca [24 x i8], align 8
-  %t66 = alloca [24 x i8], align 8
-  %t67 = alloca [24 x i8], align 8
+  %t42 = alloca [24 x i8], align 8
+  %t45 = alloca [24 x i8], align 8
+  %t53 = alloca [24 x i8], align 8
+  %t68 = alloca [24 x i8], align 8
+  %t71 = alloca [24 x i8], align 8
+  %t72 = alloca [24 x i8], align 8
   %t4 = getelementptr inbounds i8, ptr %p0, i64 8, !dbg !45
   %t5 = load i64, ptr %t4, align 8, !dbg !45
   %t6 = icmp eq i64 %t5, 0, !dbg !45
@@ -549,64 +565,71 @@ L12:
   br i1 %t30, label %L31, label %L27, !dbg !45
 L31:
   %t32 = load ptr, ptr %p0, align 8, !dbg !45
-  call void @"tests.syntax.QUIT"(ptr %t33), !dbg !45
-  %t34 = call i1 @ignite.text_eq(ptr %t32, ptr %t33), !dbg !45
-  br i1 %t34, label %L35, label %L27, !dbg !45
+  %t33 = load atomic ptr, ptr @"tests.syntax.QUIT.cache" acquire, align 8, !dbg !45
+  %t34 = icmp eq ptr %t33, null, !dbg !45
+  br i1 %t34, label %L35, label %L36, !dbg !45
 L35:
-  %t36 = getelementptr inbounds i8, ptr %t32, i64 24, !dbg !45
-  store ptr @.str.12, ptr %t37, align 8, !dbg !50
-  %t38 = getelementptr inbounds i8, ptr %t37, i64 8, !dbg !50
-  store i64 18, ptr %t38, align 8, !dbg !50
-  %t39 = getelementptr inbounds i8, ptr %t37, i64 16, !dbg !50
-  store i64 18, ptr %t39, align 8, !dbg !50
-  call void @"copy.Text"(ptr %t40, ptr %t37), !dbg !50
-  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t40, i64 24, i1 false), !dbg !45
+  %t37 = call ptr @"tests.syntax.QUIT.once"(), !dbg !45
+  br label %L36, !dbg !45
+L36:
+  %t38 = phi ptr [ %t33, %L31 ], [ %t37, %L35 ], !dbg !45
+  %t39 = call i1 @ignite.text_eq(ptr %t32, ptr %t38), !dbg !45
+  br i1 %t39, label %L40, label %L27, !dbg !45
+L40:
+  %t41 = getelementptr inbounds i8, ptr %t32, i64 24, !dbg !45
+  store ptr @.str.12, ptr %t42, align 8, !dbg !50
+  %t43 = getelementptr inbounds i8, ptr %t42, i64 8, !dbg !50
+  store i64 18, ptr %t43, align 8, !dbg !50
+  %t44 = getelementptr inbounds i8, ptr %t42, i64 16, !dbg !50
+  store i64 18, ptr %t44, align 8, !dbg !50
+  call void @"copy.Text"(ptr %t45, ptr %t42), !dbg !50
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t45, i64 24, i1 false), !dbg !45
   br label %L2, !dbg !45
 L27:
-  %t42 = getelementptr inbounds i8, ptr %p0, i64 8, !dbg !45
-  %t43 = load i64, ptr %t42, align 8, !dbg !45
-  %t44 = icmp eq i64 %t43, 2, !dbg !45
-  br i1 %t44, label %L45, label %L41, !dbg !45
-L45:
-  %t46 = load ptr, ptr %p0, align 8, !dbg !45
-  %t47 = getelementptr inbounds i8, ptr %t46, i64 24, !dbg !45
-  %t49 = load ptr, ptr %t46, align 8, !dbg !51
-  %t50 = getelementptr inbounds i8, ptr %t46, i64 8, !dbg !51
-  %t51 = load i64, ptr %t50, align 8, !dbg !51
-  %t52 = load ptr, ptr %t47, align 8, !dbg !51
-  %t53 = getelementptr inbounds i8, ptr %t47, i64 8, !dbg !51
-  %t54 = load i64, ptr %t53, align 8, !dbg !51
-  %t55 = add i64 %t51, %t54, !dbg !51
-  %t56 = add i64 %t55, 4, !dbg !51
-  %t57 = call ptr @ignite.alloc(i64 %t56, i64 1), !dbg !51
-  store ptr %t57, ptr %t48, align 8, !dbg !51
-  call void @llvm.memcpy.p0.p0.i64(ptr %t57, ptr @.str.13, i64 4, i1 false), !dbg !51
-  %t58 = getelementptr inbounds i8, ptr %t57, i64 4, !dbg !51
-  call void @llvm.memcpy.p0.p0.i64(ptr %t58, ptr %t49, i64 %t51, i1 false), !dbg !51
-  %t59 = getelementptr inbounds i8, ptr %t58, i64 %t51, !dbg !51
-  call void @llvm.memcpy.p0.p0.i64(ptr %t59, ptr %t52, i64 %t54, i1 false), !dbg !51
-  %t60 = getelementptr inbounds i8, ptr %t48, i64 8, !dbg !51
-  store i64 %t56, ptr %t60, align 8, !dbg !51
-  %t61 = getelementptr inbounds i8, ptr %t48, i64 16, !dbg !51
-  store i64 %t56, ptr %t61, align 8, !dbg !51
-  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t48, i64 24, i1 false), !dbg !45
+  %t47 = getelementptr inbounds i8, ptr %p0, i64 8, !dbg !45
+  %t48 = load i64, ptr %t47, align 8, !dbg !45
+  %t49 = icmp eq i64 %t48, 2, !dbg !45
+  br i1 %t49, label %L50, label %L46, !dbg !45
+L50:
+  %t51 = load ptr, ptr %p0, align 8, !dbg !45
+  %t52 = getelementptr inbounds i8, ptr %t51, i64 24, !dbg !45
+  %t54 = load ptr, ptr %t51, align 8, !dbg !51
+  %t55 = getelementptr inbounds i8, ptr %t51, i64 8, !dbg !51
+  %t56 = load i64, ptr %t55, align 8, !dbg !51
+  %t57 = load ptr, ptr %t52, align 8, !dbg !51
+  %t58 = getelementptr inbounds i8, ptr %t52, i64 8, !dbg !51
+  %t59 = load i64, ptr %t58, align 8, !dbg !51
+  %t60 = add i64 %t56, %t59, !dbg !51
+  %t61 = add i64 %t60, 4, !dbg !51
+  %t62 = call ptr @ignite.alloc(i64 %t61, i64 1), !dbg !51
+  store ptr %t62, ptr %t53, align 8, !dbg !51
+  call void @llvm.memcpy.p0.p0.i64(ptr %t62, ptr @.str.13, i64 4, i1 false), !dbg !51
+  %t63 = getelementptr inbounds i8, ptr %t62, i64 4, !dbg !51
+  call void @llvm.memcpy.p0.p0.i64(ptr %t63, ptr %t54, i64 %t56, i1 false), !dbg !51
+  %t64 = getelementptr inbounds i8, ptr %t63, i64 %t56, !dbg !51
+  call void @llvm.memcpy.p0.p0.i64(ptr %t64, ptr %t57, i64 %t59, i1 false), !dbg !51
+  %t65 = getelementptr inbounds i8, ptr %t53, i64 8, !dbg !51
+  store i64 %t61, ptr %t65, align 8, !dbg !51
+  %t66 = getelementptr inbounds i8, ptr %t53, i64 16, !dbg !51
+  store i64 %t61, ptr %t66, align 8, !dbg !51
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t53, i64 24, i1 false), !dbg !45
   br label %L2, !dbg !45
-L41:
-  store ptr @.str.14, ptr %t63, align 8, !dbg !54
-  %t64 = getelementptr inbounds i8, ptr %t63, i64 8, !dbg !54
-  store i64 4, ptr %t64, align 8, !dbg !54
-  %t65 = getelementptr inbounds i8, ptr %t63, i64 16, !dbg !54
-  store i64 4, ptr %t65, align 8, !dbg !54
-  call void @"copy.Text"(ptr %t66, ptr %t63), !dbg !54
-  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t66, i64 24, i1 false), !dbg !45
+L46:
+  store ptr @.str.14, ptr %t68, align 8, !dbg !54
+  %t69 = getelementptr inbounds i8, ptr %t68, i64 8, !dbg !54
+  store i64 4, ptr %t69, align 8, !dbg !54
+  %t70 = getelementptr inbounds i8, ptr %t68, i64 16, !dbg !54
+  store i64 4, ptr %t70, align 8, !dbg !54
+  call void @"copy.Text"(ptr %t71, ptr %t68), !dbg !54
+  call void @llvm.memcpy.p0.p0.i64(ptr %t1, ptr %t71, i64 24, i1 false), !dbg !45
   br label %L2, !dbg !45
-L62:
-  store ptr @.str.0, ptr %t67, align 8, !dbg !45
-  %t68 = getelementptr inbounds i8, ptr %t67, i64 8, !dbg !45
-  store i64 26, ptr %t68, align 8, !dbg !45
-  %t69 = getelementptr inbounds i8, ptr %t67, i64 16, !dbg !45
-  store i64 26, ptr %t69, align 8, !dbg !45
-  call void @ignite_rt_fail_match(ptr %t67, i64 53, i64 3), !dbg !45
+L67:
+  store ptr @.str.0, ptr %t72, align 8, !dbg !45
+  %t73 = getelementptr inbounds i8, ptr %t72, i64 8, !dbg !45
+  store i64 26, ptr %t73, align 8, !dbg !45
+  %t74 = getelementptr inbounds i8, ptr %t72, i64 16, !dbg !45
+  store i64 26, ptr %t74, align 8, !dbg !45
+  call void @ignite_rt_fail_match(ptr %t72, i64 53, i64 3), !dbg !45
   unreachable, !dbg !45
 L2:
   call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t1, i64 24, i1 false), !dbg !44
@@ -2441,6 +2464,63 @@ L5:
 L6:
   %t10 = mul i64 %t2, 1
   %t11 = call ptr @ignite.alloc(i64 %t10, i64 1)
+  call void @llvm.memcpy.p0.p0.i64(ptr %t11, ptr %t3, i64 %t10, i1 false)
+  store ptr %t11, ptr %dst, align 8
+  %t12 = getelementptr inbounds i8, ptr %dst, i64 8
+  store i64 %t2, ptr %t12, align 8
+  %t13 = getelementptr inbounds i8, ptr %dst, i64 16
+  store i64 %t2, ptr %t13, align 8
+  br label %L7
+L7:
+  ret void
+}
+
+define internal void @"free_heap.Text"(ptr %src) {
+entry:
+  call void @"heap_free.Text"(ptr %src)
+  call void @free(ptr %src)
+  ret void
+}
+
+define internal void @"heap_free.Text"(ptr %src) {
+entry:
+  %t1 = getelementptr inbounds i8, ptr %src, i64 16
+  %t2 = load i64, ptr %t1, align 8
+  %t3 = icmp sgt i64 %t2, 0
+  br i1 %t3, label %L4, label %L5
+L4:
+  %t6 = load ptr, ptr %src, align 8
+  call void @free(ptr %t6)
+  br label %L5
+L5:
+  ret void
+}
+
+define internal ptr @"copy_to_heap.Text"(ptr %src) {
+entry:
+  %t1 = call ptr @malloc(i64 24)
+  call void @"heap_copy.Text"(ptr %t1, ptr %src)
+  ret ptr %t1
+}
+
+define internal void @"heap_copy.Text"(ptr %dst, ptr %src) {
+entry:
+  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %src, i64 24, i1 false)
+  %t1 = getelementptr inbounds i8, ptr %src, i64 8
+  %t2 = load i64, ptr %t1, align 8
+  %t3 = load ptr, ptr %src, align 8
+  %t4 = icmp sle i64 %t2, 0
+  br i1 %t4, label %L5, label %L6
+L5:
+  store ptr @ignite.empty, ptr %dst, align 8
+  %t8 = getelementptr inbounds i8, ptr %dst, i64 8
+  store i64 0, ptr %t8, align 8
+  %t9 = getelementptr inbounds i8, ptr %dst, i64 16
+  store i64 0, ptr %t9, align 8
+  br label %L7
+L6:
+  %t10 = mul i64 %t2, 1
+  %t11 = call ptr @malloc(i64 %t10)
   call void @llvm.memcpy.p0.p0.i64(ptr %t11, ptr %t3, i64 %t10, i1 false)
   store ptr %t11, ptr %dst, align 8
   %t12 = getelementptr inbounds i8, ptr %dst, i64 8
