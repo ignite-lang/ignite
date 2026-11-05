@@ -150,6 +150,8 @@ fn fixture_covers_every_family() {
         "named_args",
         "match_",
         "rest_",
+        "call_",
+        "move_",
     ] {
         assert!(
             names.iter().any(|name| name.starts_with(family)),

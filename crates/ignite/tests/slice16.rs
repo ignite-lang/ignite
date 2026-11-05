@@ -322,6 +322,31 @@ fn evaluator_matches_rest_patterns() {
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 
+/// Rows 21 and 22: every wave-A fixture through the CLI with `--target
+/// all`, one `ignite test` per file. `holds.ignite` has one test per
+/// "holds" verdict of 20.1 (probe p01 and the items it left out);
+/// `calls.ignite`, `moves.ignite` and `rest.ignite` are the fixtures of
+/// rows 11, 12 and 18. Each passes every test on both targets.
+#[test]
+fn fixtures_pass_on_both_targets() {
+    for (name, count) in [
+        ("holds.ignite", 11),
+        ("calls.ignite", 6),
+        ("moves.ignite", 13),
+        ("rest.ignite", 7),
+    ] {
+        let (status, out) = both_targets(name);
+        assert_eq!(status, Some(0), "{name}: {out}");
+        assert_eq!(
+            out.matches(&format!("test result: ok. {count} passed; 0 failed;"))
+                .count(),
+            2,
+            "{name}: {out}"
+        );
+        assert!(!out.contains("FAILED"), "{name}: {out}");
+    }
+}
+
 /// 20.3.2 and 20.3.5: named arguments (a UFCS receiver among them) and
 /// variant payloads are evaluated into values and passed or stored after
 /// the last one, so an earlier operand in a move position that is copied

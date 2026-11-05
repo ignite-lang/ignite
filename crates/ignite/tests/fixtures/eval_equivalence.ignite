@@ -340,6 +340,84 @@ fn rest_copy() -> (List<Int>, List<Int>) {
   (xs, grown)
 }
 
+// Calls of fn-typed expressions (docs/slice.md 20.4, 20.0 row 23)
+
+fn call_result() -> List<Int> = [adder(1)(2), adder(10)(adder(1)(0)), apply(adder(3), 4)]
+
+fn call_index() -> List<Int> {
+  let fs = [adder(1), adder(5)]
+  [fs[1](10), fs[0](fs[1](0))]
+}
+
+fn call_paren_closure() -> List<Int> = [(|x: Int| x * 3)(2), (|x: Int| x - 1)((|y: Int| y + y)(4))]
+
+fn call_field() -> List<Text> {
+  let ops = Ops { name = "quiet", f = |s| s.to_lower() }
+  [(ops.f)("LOUD"), ops.f("Mixed")]
+}
+
+fn pick_op(first: Bool) -> fn(Int) -> Int = if first { double } else { adder(100) }
+
+fn call_returned() -> List<Int> = [pick_op(true)(3), pick_op(false)(3)]
+
+// Last-use moves (docs/slice.md 20.3, 20.0 row 23): each fn reads the moved
+// variable's old value through a copy made before the move.
+
+type Acc {
+  items: List<Int>
+  n: Int
+}
+
+type Holder {
+  state: Acc
+  label: Text
+}
+
+fn acc_step(state: Acc, x: Int) -> Acc {
+  var next = state
+  next.items.push(x)
+  next.n = next.n + 1
+  next
+}
+
+fn grow(xs: List<Text>, x: Text) -> List<Text> {
+  xs.push(x)
+  xs
+}
+
+fn move_threaded() -> (Acc, Acc) {
+  var s = Acc { items = [], n = 0 }
+  let before = s
+  var i = 0
+  while i < 3 {
+    s = acc_step(s, i)
+    i = i + 1
+  }
+  (before, s)
+}
+
+fn move_field() -> (Acc, Holder) {
+  var h = Holder { state = Acc { items = [1], n = 1 }, label = "h" }
+  let old = h.state
+  h.state = acc_step(h.state, 2)
+  (old, h)
+}
+
+fn move_rebuild() -> (Holder, Holder) {
+  let h = Holder { state = Acc { items = [7], n = 1 }, label = "a" }
+  let copy = h
+  let built = Holder { state = acc_step(h.state, 8), label = h.label + "!" }
+  (copy, built)
+}
+
+fn move_consumed() -> (List<Text>, List<Text>) {
+  var xs = ["a"]
+  let kept = xs
+  xs = grow(xs, "b")
+  xs = grow(xs, "c")
+  (kept, xs)
+}
+
 // Quantities
 
 fn quantity_durations() -> List<Duration> = [100 ms + 2 seconds, 1 minute - 30 seconds, 3 ms * 4, 2 * 500 us, 10 seconds / 4, 1500 ms, 2 hours, 90 minutes]
@@ -566,6 +644,15 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(rest_bytes().debug())?
   show(rest_nested().debug())?
   show(rest_copy().debug())?
+  show(call_result().debug())?
+  show(call_index().debug())?
+  show(call_paren_closure().debug())?
+  show(call_field().debug())?
+  show(call_returned().debug())?
+  show(move_threaded().debug())?
+  show(move_field().debug())?
+  show(move_rebuild().debug())?
+  show(move_consumed().debug())?
   show(quantity_durations().debug())?
   show(quantity_sizes().debug())?
   show(quantity_ratios().debug())?
