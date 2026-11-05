@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:host-journal-integrity
 kind: story
-status: active
+status: implemented
 title: The host detects a torn, altered or cut journal
 relations:
 - decomposes: epic:slice-18-one-service-operated
@@ -18,10 +18,11 @@ scope:
   path: crates/ignite/tests/apply_integrity.rs
 - confidence: cited
   path: crates/ignite/tests/main.rs
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T09:47:32Z", actor: "human:timo", revision: 7}
 - {from: "proposed", to: "active", at: "2026-11-05T09:47:33Z", actor: "human:timo", revision: 8}
+- {from: "active", to: "implemented", at: "2026-11-05T12:43:29Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: host-journal-integrity
 

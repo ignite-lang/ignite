@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:typed-probe-outcomes
 kind: story
-status: active
+status: implemented
 title: A contract's good is a typed predicate over its probe's outcome
 relations:
 - decomposes: epic:slice-18-one-service-operated
@@ -52,10 +52,11 @@ scope:
   path: std/sli.ignite
 - confidence: cited
   path: tools/ignite-perf/src/readiness.rs
-revision: 19
+revision: 20
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T09:47:32Z", actor: "human:timo", revision: 18, decided_on: {"recorded":{"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-11-05T09:47:32Z", actor: "human:timo", revision: 19, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-11-05T12:43:29Z", actor: "human:timo", revision: 20, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: typed-probe-outcomes
 
