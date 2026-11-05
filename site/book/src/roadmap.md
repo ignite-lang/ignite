@@ -22,20 +22,16 @@ dependencies between the waves are in
 | **v0.3.0** | in-process streams: `Pipe.pair()`, the `ByteStream` bound `<S: ByteStream>`, the Telnet and HTTP roles generic over the stream with `SessionLimits` and `HttpLimits`, protocol tests without a network on both targets |
 | **v0.4.0** | protocols that state which RFC requirements they meet: `std.rfc` and catalogues of RFC 854, 855, 1143, 9112 and 9110; the clauses `conforms`, `scope`, `satisfies`, `verifies`, `unsupported` and `not_applicable` with E090 to E092; `ignite conformance`, `ignite rfc import` and `ignite rfc check`; the claims of `Telnet` (RFC 855 met, RFC 854 with four gaps) and `Http` (gaps listed, nothing claimed) ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.4.0)) |
 | **v0.5.0** | the language gaps of wave A on both targets: values move at their last use, calls of fn-typed expressions, rest patterns in list patterns with E076; store `upsert`, borrowed store reads and performance work on both targets ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.5.0)) |
+| **v0.6.0** | processes, files, settings and random bytes for programs: `std.fs` with the `Directory` resource, `std.process`, one `--flag` per `Setting` with E142, `std.random`; `HttpServer` runs under `ignite run` and `ignite apply`; LLVM is the default `--target`, and an installed `ignite` carries its runtime ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.6.0)) |
 
 ## Being built <span class="badge wip">unreleased</span>
 
-One step is being implemented on its branch and is in no release:
+One step is next and is in no release:
 
-- slice 17, processes, files, settings and entropy for programs, on
-  [`feat/slice17-processes-files`](https://github.com/ignite-lang/ignite/tree/feat/slice17-processes-files).
-
-On `main` since v0.5.0 and in no release yet: LLVM is the default `--target` of every command
-that builds; `--target rust` keeps the Rust target.
-
-Planned after it, slice 18: one service operated, the todo service on the LLVM target with
-its data in a directory, an HTTP probe, an availability contract and `ignite apply` rollouts
-that keep the data.
+- slice 18, one service operated: the todo service on the LLVM target with its data in a
+  directory, an HTTP probe, an availability contract and `ignite apply` rollouts that keep the
+  data; its contract is in
+  [`docs/slice.md`](https://github.com/ignite-lang/ignite/blob/main/docs/slice.md) section 22.
 
 Until it is released, treat this list as a plan, not as documentation.
 
