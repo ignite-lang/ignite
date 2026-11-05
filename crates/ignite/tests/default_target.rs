@@ -45,8 +45,13 @@ fn build_without_target_writes_an_llvm_built_todod() {
     ]);
     assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
     let todod = out.join("bin").join("todod");
-    assert_eq!(text(&output.stdout), format!("built {}\n", todod.display()));
+    let health = out.join("bin").join("health");
+    assert_eq!(
+        text(&output.stdout),
+        format!("built {}\nbuilt {}\n", todod.display(), health.display())
+    );
     assert!(todod.is_file(), "{}", todod.display());
+    assert!(health.is_file(), "{}", health.display());
     assert!(out.join("llvm").join("program.ll").is_file());
     assert!(out.join("llvm").join("std.ll").is_file());
     assert!(!out.join("Cargo.toml").exists());

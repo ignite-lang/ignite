@@ -281,7 +281,7 @@ fn terminal_example_model_matches_golden() {
 #[test]
 fn todo_example_model_matches_golden() {
     let model = success(&ignite(&["plan", "examples/todo/todo.ignite"]));
-    assert!(model.contains("\"assembly\": null"), "{model}");
+    assert!(model.contains("\"assembly\": {"), "{model}");
     compare(&golden_dir().join("todo.model.json"), &model);
 }
 
