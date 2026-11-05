@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-16-rest-patterns
 kind: story
-status: active
+status: implemented
 title: Rest patterns in list patterns
 summary: Add the rest element to list patterns in every crate, with exhaustiveness split by length and E076
 relations:
@@ -40,10 +40,11 @@ scope:
   path: crates/ignite/tests/fixtures/slice16/rest.ignite
 - confidence: cited
   path: crates/ignite/tests/slice16.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T00:57:52Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-05T00:57:52Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-05T01:45:01Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: slice-16-rest-patterns
 
