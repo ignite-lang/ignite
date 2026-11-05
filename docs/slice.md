@@ -6125,19 +6125,15 @@ Read on 2026-11-05. Neither page is vendored; `ignite rfc check` reports both ca
 (a request with `"id": null` stays refused as an invalid request, which the LSP base protocol
 also forbids; it would be a deviation if the Client were claimed).
 
-- Satisfied, each with a passing test on both targets: R5_1 to R5_8, R5_10, R5_11, R5_1_1,
-  R5_1_2, R5_1_4, R6_7.
-- `unsupported` until `story:json-decimals`, each reason naming it: R4_6, R4_1_1 and R5_9.
-  `std.json` reads integer numbers only, so a valid message whose id or params hold a fraction,
-  an exponent or an integer beyond 64 bits is answered with the parse error under a null id: a
-  notification is answered, and a request is not answered under its own id. At MUST class
-  these are gaps.
+- Satisfied, each with a passing test on both targets: R4_6, R4_1_1, R5_1 to R5_11, R5_1_1,
+  R5_1_2, R5_1_4, R6_7. R4_6, R4_1_1 and R5_9 hold for ids and params that are JSON numbers
+  with a fraction, an exponent or more than 18 digits since `story:json-decimals` (19.20); from
+  831b72d4 until then they were `unsupported` gaps and the claim was no.
 - `unsupported`, batches: R6_2 and R6_3 (SHOULD, `deviation`), R6_4 and R6_5 (MAY, `n/a`).
 - `not_applicable`: R4_2 and R4_2_4 (the application names methods and reads their params),
   R5_1_3 (the error's author writes its message), R6_8 (no response array is ever sent).
-- The claim does not hold: `claim conformance of JsonRpc to jsonrpc-2.0: no (3 gaps, 0
-  failures, 0 inconclusive)`, exit 1 on both targets. It holds once `story:json-decimals` lets
-  `std.json` read every JSON number and the three rows are satisfied.
+- The claim holds: `claim conformance of JsonRpc to jsonrpc-2.0: yes (0 gaps, 0 failures, 0
+  inconclusive)`, exit 0 on both targets.
 - A body that is no message is answered under the id it holds when it is a JSON object whose
   `id` is a number or a string (`detected_id`), and under null only when none can be read
   (R5_10).
@@ -6155,7 +6151,7 @@ only the id and no status is E090) and `e092_text_id_foreign` with the claim-fix
 `rfc::text_id_catalogues_check_and_quote_their_pages` (both catalogues check silently, are
 `unchecked`, carry no `rfc`, and every level follows the table above);
 `rfc::lsp_catalogue_holds_or_lists_every_server_lifecycle_rule`;
-`conformance::json_rpc_matrix_is_labelled_by_its_id_and_states_its_gaps` on both targets; the
+`conformance::json_rpc_matrix_is_labelled_by_its_id_and_holds` on both targets; the
 `plan::adversary_*` label cases; `layering::rule_3_exempts_only_catalogues_of_their_own_protocol`.
 
 Not done: a URL per requirement (the anchors are in the header comment).
@@ -6183,6 +6179,10 @@ Not done: a URL per requirement (the anchors are in the header comment).
   and `int` return `None` for a `Decimal`.
 - Exhaustive matches over `Json`: `encode` is the only one in `std/`, `examples/`, the crates'
   test fixtures and the book's checked blocks; every other match has a wildcard arm.
+- `std.protocol.jsonrpc`: `Id` gains `DecimalId(Text)`. `id_of` reads a `Decimal` id as
+  `DecimalId`, `id_json` writes it back as `Decimal`, so a request with id `1.5` or
+  `12345678901234567890` is answered under that id (R4_5 discourages a fractional id but
+  allows it). R4_6, R4_1_1 and R5_9 are satisfied again (19.19).
 - No compiler crate names `std.json` or `Json`: both targets lower the new variant like any
   other enum variant, so no generated code changes shape and `apply::plan::CODEGEN_REVISION`
   stays. `ignite_eval::Json`, the canonical JSON of `ignite plan` and `check --json`, is a
@@ -6190,4 +6190,5 @@ Not done: a URL per requirement (the anchors are in the header comment).
 
 Tests: in `std/json.ignite`, "a number with a fraction, an exponent or more than 18 digits is a
 decimal of its exact text", "an invalid number token is still an error" and "numbers compare
-by their structure, not their value".
+by their structure, not their value"; in `std/protocol/jsonrpc.ignite`, the four tests removed
+in 0b28ae4e and 831b72d4, restored; `conformance::json_rpc_matrix_is_labelled_by_its_id_and_holds`.

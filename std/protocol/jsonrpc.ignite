@@ -140,9 +140,12 @@ fn read_message<T: ByteStream>(stream: T, limits: JsonRpcLimits, buffer: Bytes) 
 
 // ---- messages ---------------------------------------------------------------
 
-// A request id: a number or a string. A response to a request whose id
-// could not be read has none (`null`).
-enum Id { NumberId(Int), TextId(Text) }
+// A request id: a number or a string. A number with a fraction, an
+// exponent or more than 18 digits is a `DecimalId` of its exact text, so
+// the response carries it as sent (JSON-RPC 2.0 section 4 discourages a
+// fractional id but allows it). A response to a request whose id could not
+// be read has none (`null`).
+enum Id { NumberId(Int), TextId(Text), DecimalId(Text) }
 
 type Request {
   id: Id
@@ -192,6 +195,7 @@ fn standard_error(code: Int) -> ErrorObject {
 fn id_json(id: Option<Id>) -> Json = match id {
   Some(NumberId(n)) => Number(n)
   Some(TextId(text)) => Str(text)
+  Some(DecimalId(text)) => Decimal(text)
   None => Null
 }
 
@@ -244,6 +248,7 @@ fn invalid_request() -> Result<Message, ErrorObject> = Err(standard_error(INVALI
 fn id_of(value: Json) -> Option<Id> = match value {
   Number(n) => Some(NumberId(n))
   Str(text) => Some(TextId(text))
+  Decimal(text) => Some(DecimalId(text))
   _ => None
 }
 
@@ -381,14 +386,10 @@ type JsonRpcApp<S> {
 // `verifies` clauses on the tests. Batches are not supported: a batch that
 // holds a request is answered with one invalid-request error; a batch of
 // notifications only is delivered to the application and not answered.
-// `std.json` reads integer numbers only, so a valid message holding a
-// fraction, an exponent or an integer beyond 64 bits is answered with the
-// parse error under a null id: R4_1_1, R4_6 and R5_9 are unsupported until
-// story:json-decimals.
+// `std.json` reads every JSON number, a fraction, an exponent or more
+// than 18 digits as a `Decimal` of its text, so such an id comes back as
+// sent (`DecimalId`) and such params reach the application.
 protocol JsonRpc conforms [JSONRPC_2] scope { parties = [Server, Any] } {
-  unsupported JSONRPC_2.R4_6 "an id that is a fraction or an integer beyond 64 bits is not read: std.json parses integer numbers only, so the request is answered with the parse error under a null id (story:json-decimals)"
-  unsupported JSONRPC_2.R4_1_1 "a notification whose params hold a fraction or an exponent is answered with the parse error: std.json parses integer numbers only (story:json-decimals)"
-  unsupported JSONRPC_2.R5_9 "a request whose id or params hold a fraction, an exponent or an integer beyond 64 bits is answered with the parse error under a null id, not its own: std.json parses integer numbers only (story:json-decimals)"
   not_applicable JSONRPC_2.R4_2 "addresses whoever names methods: every method name reaches the application's handlers, and JsonRpc defines none of its own"
   not_applicable JSONRPC_2.R4_2_4 "addresses the application's handler, which reads the params of its methods"
   not_applicable JSONRPC_2.R5_1_3 "addresses the error's author: the standard errors carry the specification's messages, the application's errors its own"
@@ -456,7 +457,7 @@ fn notification_batch(body: Bytes) -> Option<List<Notification>> {
 }
 
 fn session<T: ByteStream, S>(stream: T, limits: JsonRpcLimits, application: JsonRpcApp<S>) -> IoResult<Unit> satisfies [
-  JSONRPC_2.R5_1, JSONRPC_2.R5_10, JSONRPC_2.R6_7
+  JSONRPC_2.R4_6, JSONRPC_2.R4_1_1, JSONRPC_2.R5_1, JSONRPC_2.R5_9, JSONRPC_2.R5_10, JSONRPC_2.R6_7
 ] {
   var buffer = Bytes.empty()
   loop {
@@ -720,6 +721,14 @@ test "serve ends on a framing error" {
 
 // ---- adversary cases --------------------------------------------------------
 
+// JSON-RPC 2.0 bodies are any JSON text: a number with a fraction or an
+// exponent (an LSP `decimal`, as in a color) is valid JSON, so the request
+// must not be answered with the parse error.
+test "a request whose params carry a fraction or an exponent is not a parse error" {
+  assert decode(r#"{"jsonrpc":"2.0","id":1,"method":"m","params":{"red":0.5}}"#) != Err(standard_error(PARSE_ERROR))
+  assert decode(r#"{"jsonrpc":"2.0","id":1,"method":"m","params":[1e2]}"#) != Err(standard_error(PARSE_ERROR))
+}
+
 // A body must be UTF-8 JSON (RFC 8259 §8.1); one that is not is the parse
 // error, not a message whose invalid bytes became U+FFFD.
 test "a body that is not UTF-8 is answered with the parse error" {
@@ -798,6 +807,20 @@ test "an empty or unparsable batch is answered with one error object" verifies [
 
 // ---- adversary cases of the JSONRPC_2 claim (story rfc-spec-id) -------------
 
+// "The Server MUST NOT reply to a Notification" (R4_1_1): a notification
+// whose params hold a fraction or an exponent is valid JSON (RFC 8259
+// section 6) and a valid Notification, so it is not answered at all, not
+// with a parse error.
+test "a notification with a fractional or exponent param is not answered" verifies [JSONRPC_2.R4_1_1] {
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
+  write_message(client, r#"{"jsonrpc":"2.0","method":"note","params":[0.5]}"#)?
+  write_message(client, r#"{"jsonrpc":"2.0","method":"note","params":{"x":1e3}}"#)?
+  write_message(client, r#"{"jsonrpc":"2.0","id":1,"method":"echo","params":["after"]}"#)?
+  _ = client.close()
+  assert replies_of(client)? == [r#"{"jsonrpc":"2.0","id":1,"result":["after"]}"#]
+}
+
 // "The Server MUST NOT reply to a Notification, including those that are
 // within a batch request" (R4_1_1, its own text): a batch of notifications
 // only is answered with nothing, batches supported or not.
@@ -808,4 +831,30 @@ test "a batch that holds only notifications is not answered" verifies [JSONRPC_2
   write_message(client, r#"{"jsonrpc":"2.0","id":1,"method":"echo","params":["after"]}"#)?
   _ = client.close()
   assert replies_of(client)? == [r#"{"jsonrpc":"2.0","id":1,"result":["after"]}"#]
+}
+
+// "It MUST be the same as the value of the id member in the Request
+// Object" (R5_9): a valid request whose params hold a fraction is answered
+// under its id 7, not under null with a parse error; the id is readable.
+test "a request with a fractional param is answered under its id" verifies [JSONRPC_2.R5_9] {
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
+  write_message(client, r#"{"jsonrpc":"2.0","id":7,"method":"echo","params":[1.5]}"#)?
+  _ = client.close()
+  assert replies_of(client)? == [r#"{"jsonrpc":"2.0","id":7,"result":[1.5]}"#]
+}
+
+// R5_9 and R4_6 for ids that are JSON numbers (R4_4 admits any Number; R4_5
+// only discourages fractions): a fractional id and a 20-digit id come back
+// as sent.
+test "a request whose id is a fraction or has 20 digits is answered under that id" verifies [JSONRPC_2.R4_6, JSONRPC_2.R5_9] {
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
+  write_message(client, r#"{"jsonrpc":"2.0","id":1.5,"method":"echo","params":[]}"#)?
+  write_message(client, r#"{"jsonrpc":"2.0","id":12345678901234567890,"method":"echo","params":[]}"#)?
+  _ = client.close()
+  assert replies_of(client)? == [
+    r#"{"jsonrpc":"2.0","id":1.5,"result":[]}"#,
+    r#"{"jsonrpc":"2.0","id":12345678901234567890,"result":[]}"#
+  ]
 }
