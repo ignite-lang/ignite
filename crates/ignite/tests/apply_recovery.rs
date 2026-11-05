@@ -57,6 +57,23 @@ fn free_port() -> u16 {
         .port()
 }
 
+/// A listener on `port` once the port is free, within [`LIVE_TIMEOUT`]: a
+/// server that just ended may hold it until the kernel closed its socket.
+fn bind_when_free(port: u16) -> TcpListener {
+    let deadline = Instant::now() + LIVE_TIMEOUT;
+    loop {
+        match TcpListener::bind(("127.0.0.1", port)) {
+            Ok(listener) => return listener,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::AddrInUse && Instant::now() < deadline =>
+            {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Err(error) => panic!("a foreign listener on {port}: {error}"),
+        }
+    }
+}
+
 struct Host {
     child: Option<Child>,
     stderr: PathBuf,
@@ -665,8 +682,13 @@ fn crash_mid_transition(target: &'static str) {
     );
     assert_eq!(receipt.get("revision").and_then(Json::as_i64), Some(2));
     host.stop();
+    until(
+        "the server ends with its stopped host",
+        || flow.servers(&name).is_empty(),
+        || format!("{:?}", flow.servers(&name)),
+    );
 
-    let foreign = TcpListener::bind(("127.0.0.1", flow.port)).expect("a foreign listener");
+    let foreign = bind_when_free(flow.port);
     let mut host = Host::start(&flow, "foreign", &[]);
     let status = flow.inspect();
     assert_eq!(
