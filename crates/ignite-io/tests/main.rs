@@ -3,6 +3,7 @@
 //! invariant 9). Each file is a module; harness names are
 //! `<file>::<test>`.
 
+mod fs_adversary;
 mod pipe;
 mod stdio;
 mod tcp;
