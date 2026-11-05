@@ -1222,3 +1222,27 @@ fn studio_defaults_runs() {
         assert!(!place.exists(), "{} was created", place.display());
     }
 }
+
+/// Adversary (U4), row 26 and 21.6: the started member reaches the
+/// `Setting` without `default` only through a component it embeds; its
+/// generated `main` still creates the setting, so `ignite run` refuses the
+/// system with one E142 naming the setting and the started member.
+#[test]
+fn adversary_e142_through_an_embedded_component() {
+    let state = state("adv-e142-embedded");
+    let output = run_fixture_diagnostic(
+        "slice17/adversary_e142_embedded.ignite",
+        &["--state", state.to_str().unwrap()],
+    );
+    let stderr = text(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(output.stdout.is_empty());
+    assert_eq!(stderr.matches("E142").count(), 1, "{stderr}");
+    assert!(
+        stderr.contains(
+            "setting `Bench.tool` (`--tool`) has no `default`, and `Bench.runner` uses it"
+        ),
+        "{stderr}"
+    );
+    assert!(!state.exists(), "the run created its state");
+}
