@@ -43,7 +43,7 @@ tasks:
   lsp-types:
     desc: Regenerate examples/lsp/lsp_types.ignite from docs/lsp/metaModel.json
     cmds:
-      - cargo run -q -p ignite-lsp-types -- --meta-model docs/lsp/metaModel.json --root initialize --root initialized --root shutdown --root exit --root textDocument/didOpen --root textDocument/didChange --root textDocument/didClose --root textDocument/publishDiagnostics --root '$/cancelRequest' --out examples/lsp/lsp_types.ignite
+      - cargo run -q -p ignite-lsp-types -- --meta-model docs/lsp/metaModel.json --root initialize --root initialized --root shutdown --root exit --root textDocument/didOpen --root textDocument/didChange --root textDocument/didClose --root textDocument/publishDiagnostics --root '$/cancelRequest' --root-type ErrorCodes --root-type LSPErrorCodes --out examples/lsp/lsp_types.ignite
 
   check:
     desc: Format check and clippy with warnings denied
