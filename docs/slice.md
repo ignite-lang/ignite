@@ -7428,8 +7428,8 @@ placement is not `std.deploy`'s.
 blockers, 6 majors and 18 minors; all are resolved in this text, and 22.17 maps each finding to
 its resolution. Implementation has not started.** The rows of 22.0 are required checks, not results.
 
-This section is numbered 22 and appended after section 21 (slice 17), which is on
-`feat/slice17-processes-files` and not on `main` yet; no line of section 21 changes here.
+This section is numbered 22 and follows section 21 (slice 17, merged into `main` as PR 34,
+`421742b3`); no line of section 21 changes here.
 
 Sources:
 
@@ -7495,7 +7495,7 @@ starts, so that the relative `Directory` path of 22.4 never resolves inside the 
 | 29 | the code lists | `cargo test -p ignite --test main plan::fixtures_match_expected`; section 8 | section 8 has a "Codes of slice 18" paragraph naming E150 and E151 with their fixtures; both fixtures exist and match | U0 (paragraph), U1 (fixtures) |
 | 30 | reducer and evaluator revisions | `git diff <base> -- crates/ignite/src/apply/plan.rs`; `cargo test -p ignite --test main apply_recovery::a_changed_reducer_revision_starts_the_host_without_driving_and_asks_to_replan` | `REDUCER_EVALUATOR` differs from the base (U1); the test passes; `CODEGEN_REVISION` is unchanged unless a unit changes generation, which that unit's commit then says | U1 |
 | 31 | gate | `task gate` | exit 0 on the slice branch at the close | every unit |
-| 32 | gate time | 22.15 | the records of 22.15 exist under `docs/performance/18/` and in `AGENTS.md` | U8 |
+| 32 | gate time | `ls docs/performance/18/`; `grep -n "^Slice 18" AGENTS.md` | the directory holds the raw records, logs and scripts of every unit of 22.15; `AGENTS.md`'s gate-time section has one paragraph starting `Slice 18` that names the gate's head, exit, cargo passed/failed/ignored counts and inline counts per target | U8 |
 | 33 | the host keeps its working directory | `cargo test -p ignite --test main apply_integrity::a_host_started_elsewhere_is_refused` | a host started once in directory A writes `<state>/workdir` (A, canonical); stopped and started from directory B it exits 2 with ``error: state <S> is hosted from <A>; start ignite host there``, starts no process and changes no file; started from A again it runs. A state without `workdir` (written before the slice) gets one at its next start | U3 |
 | 34 | `classify` is a checked hook | `cargo test -p ignite-types --test main fixtures::` | fixture `e109_classify_signature` (a contract kind whose `classify` takes no `sample`, and one whose `classify` declares `requires [stdout.write]`) gives exactly two E109 | U1 |
 
@@ -7948,7 +7948,7 @@ version bump makes `e126_journal_mismatch` hit its existing version branch (row 
 | S8 | 17.5 | no path beyond `inspect` | the line of 22.9; U5 |
 | S9 | `examples/todo/todo.ignite:7` | "kept in memory" | the comment of 22.4, including the drain-window limit of 22.2; U4 |
 | S10 | `AGENTS.md` layout and commands | no `ignite recover`, `examples/todo/health.ignite`, durable todo, `Sample`/`Verdict` | rows; U8 |
-| S11 | README and `site/` wording (review R6) | any sentence that says a check or a build proves a contract holds at run time | reworded to "states and measures"; U8 |
+| S11 | README and `site/` wording (review R6) | any sentence that says a check or a build proves a contract holds at run time | deferred: no sentence of the epic asks for it (scope critic, 2026-11-05); a later slice rewords it to "states and measures" |
 | S12 | `docs/vision.md` §3 invariant 6 | the hook names `machine` and `validate` | add `classify`; U8 |
 
 ### 22.12 Decisions
@@ -7984,7 +7984,7 @@ Each has a default the units follow unless the steering session says otherwise.
 | U5 | `story:apply-recovery-way-out` | `ignite recover` in `crates/ignite/src/main.rs`; the client `recover` in `crates/ignite/src/apply/mod.rs`; the `recover` operation in `crates/ignite/src/apply/host/{transport,admission,controller,recovery}.rs`; `crates/ignite/tests/apply_way_out.rs` and its `mod` line; the 17.5 line (S8) | U3 | `apply_way_out::rust_operator_recover_returns_the_host_to_accepting_plans` | 25, 26 |
 | U6 | `story:slice-18-fault-matrix` | `crates/ignite/tests/slice18.rs` and its `mod` line; helpers it needs in `crates/ignite/tests/common/apply.rs` (added, none changed) | U4, U5 | `slice18::llvm::todo_survives_sigkill_and_a_rollout` | 16 to 22 |
 | U7 | `story:apply-cycle-timing` | mode `apply-cycle` in `tools/ignite-perf/src/` (22.15) and its `self-check` case | U4 | `ignite-perf self-check` naming `apply-cycle` | 28 (mode) |
-| U8 | `story:slice-18-records` | `docs/performance/18/`, `AGENTS.md`, `STATUS.md`, `PLAN.md`, `docs/vision.md` (S1, S6, S12), README and `site/` wording (S10, S11) | U6, U7 | — (records) | 27, 28, 32 |
+| U8 | `story:slice-18-records` | `docs/performance/18/`, `AGENTS.md`, `STATUS.md`, `PLAN.md`, `docs/vision.md` (S1, S6, S12), README and `site/` wording (S10) | U6, U7 | — (records) | 27, 28, 32 |
 
 Rows 8 and 31 belong to every unit.
 
