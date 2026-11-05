@@ -30,7 +30,20 @@
 //! `reducer_revision_changed` and the next action "replan and apply", which
 //! does not block an apply: the host starts, owns nothing, and the next
 //! admitted plan starts its members afresh.
+//!
+//! Operator recovery (`ignite recover`, `docs/slice.md` 22.9, decision
+//! D11): an operation that is `recovery_required` with a reason kept
+//! beside it that no corrective resolves is abandoned on the operator's
+//! request. The host refuses it while a process of this state's
+//! generations runs that it cannot account for; otherwise it journals
+//! `recoverStarted`, stops the running revision's run (its supervisors
+//! restart nothing from there on), ends every instance through its pidfd,
+//! journals `operatorRecovered`, marks the receipt `abandoned` and starts
+//! the committed revision afresh. A host that dies in between restarts
+//! with the operation still `recovery_required`, and a second `ignite
+//! recover` completes it.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -38,8 +51,9 @@ use ignite_eval::Json;
 
 use super::admission::retained_plan;
 use super::journal::FORMAT;
-use super::{Host, read_json};
+use super::{Host, Reply, read_json};
 use crate::apply::{Failure, fail, object, plan::Plan, required, text};
+use crate::run::control::Observation;
 use crate::run::process::{signal_instance, start_time};
 
 pub(super) const OUTCOME_UNKNOWN: &str = "outcome_unknown";
@@ -50,6 +64,31 @@ pub(super) const REDUCER_CHANGED: &str = "reducer_revision_changed";
 pub const REDUCER_OVERRIDE: &str = "IGNITE_DEBUG_HOST_REDUCER_REVISION";
 /// How long recovery waits for instances to end after a crash or a kill.
 const SETTLE: Duration = Duration::from_secs(3);
+/// How long `ignite recover` waits for the committed revision it started
+/// to report every awaited machine ready.
+const RECOVER_READY: Duration = Duration::from_secs(60);
+/// What `operatorRecovered` names as its author.
+const RECOVERED_BY: &str = "ignite recover";
+
+/// An `ignite recover` waiting for the running revision's run to stop.
+pub(super) struct Recovering {
+    operation: String,
+    reply: Reply,
+    /// Every instance this host accounted for when the recover was
+    /// accepted: pid and start time.
+    instances: Vec<(i64, String)>,
+}
+
+/// The parent pid of a live process.
+fn parent(pid: i64) -> Option<i64> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    stat.rsplit_once(") ")?
+        .1
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
+}
 
 /// This host's reducer revision for `plan`'s retained standard library.
 fn host_reducer(plan: &Plan) -> String {
@@ -666,6 +705,235 @@ impl Host {
             }
         }
     }
+
+    /// `ignite recover` of the operation `payload` names (module doc). It
+    /// is accepted only for the active operation while it is
+    /// `recovery_required` and admission refuses a corrective for it, else
+    /// exit 2; a process of this state's generations that the host cannot
+    /// account for refuses it with exit 1, before anything is signalled or
+    /// journaled.
+    pub(super) fn operator_recover(&mut self, payload: &Json, reply: Reply) -> Result<(), Failure> {
+        let id = required(payload, "operationId")?.to_string();
+        if self
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.recovering.is_some())
+        {
+            return Err(fail(2, format!("operation {id} is being recovered")));
+        }
+        let failed = self.active.as_deref() == Some(id.as_str())
+            && self.transition.is_none()
+            && self
+                .receipts
+                .get(&id)
+                .and_then(|receipt| receipt.get("state"))
+                .and_then(Json::as_str)
+                == Some("recovery_required")
+            && !self.correctable();
+        if !failed {
+            return Err(fail(2, format!("operation {id} requires no recovery")));
+        }
+        let instances = self.accounted_instances()?;
+        self.append("recoverStarted", object([("operationId", text(&id))]))?;
+        let recovering = Recovering {
+            operation: id,
+            reply,
+            instances,
+        };
+        match &mut self.runtime {
+            // Stopped as the host's `stop` stops it; its end continues the
+            // recovery (`finished`).
+            Some(runtime) => {
+                let _ = runtime.control.send(Observation::Control("stop".into()));
+                runtime.recovering = Some(recovering);
+                Ok(())
+            }
+            None => self.finish_recover(recovering),
+        }
+    }
+
+    /// Every process of this state's generations, as pid and start time,
+    /// once each is accounted for: an instance an ownership record names
+    /// (pid and start time), or a child of this host, which only its run
+    /// drivers start. Any other is exit 1, `recovery refused: unaccounted
+    /// process <pid> runs <path>`.
+    fn accounted_instances(&self) -> Result<Vec<(i64, String)>, Failure> {
+        let named: BTreeSet<(i64, String)> = self
+            .owned
+            .values()
+            .chain(self.retiring.values())
+            .filter_map(|owner| match prove(owner) {
+                Proof::Runs { pid, started } => Some((pid, started)),
+                Proof::Ended => None,
+            })
+            .collect();
+        let host = i64::from(std::process::id());
+        let mut instances: BTreeSet<(i64, String)> = named.clone();
+        for (pid, executable, started) in generation_processes(&self.root.join("revisions")) {
+            if !named.contains(&(pid, started.clone())) && parent(pid) != Some(host) {
+                return Err(fail(
+                    1,
+                    format!(
+                        "recovery refused: unaccounted process {pid} runs {}",
+                        executable.display()
+                    ),
+                ));
+            }
+            instances.insert((pid, started));
+        }
+        Ok(instances.into_iter().collect())
+    }
+
+    /// The rest of `ignite recover` once no run drives a revision: end
+    /// every instance (SIGTERM, then SIGKILL after `SETTLE`), journal
+    /// `operatorRecovered`, abandon the operation, clear the recovery and
+    /// start the committed revision afresh. The reply is sent once that
+    /// revision is ready ([`Host::answer_recovered`]), or with exit 1 when
+    /// an instance does not end, the revision does not start, or it is not
+    /// ready within `RECOVER_READY`. Only a failed journal write is an
+    /// error of the host.
+    pub(super) fn finish_recover(&mut self, recovering: Recovering) -> Result<(), Failure> {
+        let Recovering {
+            operation,
+            reply,
+            instances,
+        } = recovering;
+        let mut instances: BTreeSet<(i64, String)> = instances.into_iter().collect();
+        for owner in self.owned.values().chain(self.retiring.values()) {
+            if let Proof::Runs { pid, started } = prove(owner) {
+                instances.insert((pid, started));
+            }
+        }
+        let host = i64::from(std::process::id());
+        for (pid, _, started) in generation_processes(&self.root.join("revisions")) {
+            if parent(pid) == Some(host) {
+                instances.insert((pid, started));
+            }
+        }
+        let ended = |instances: &BTreeSet<(i64, String)>| {
+            instances
+                .iter()
+                .all(|(pid, started)| start_time(*pid).as_deref() != Some(started))
+        };
+        for signal in [nix::libc::SIGTERM, nix::libc::SIGKILL] {
+            for (pid, started) in &instances {
+                signal_instance(*pid, started, signal)?;
+            }
+            if settle(|| ended(&instances)) {
+                break;
+            }
+        }
+        if let Some((pid, _)) = instances
+            .iter()
+            .find(|(pid, started)| start_time(*pid).as_deref() == Some(started))
+        {
+            let _ = reply.send(Err(fail(
+                1,
+                format!("recovery stopped: instance {pid} did not end; retry `ignite recover`"),
+            )));
+            return Ok(());
+        }
+        let mut left = Vec::new();
+        settle(|| {
+            left = generation_processes(&self.root.join("revisions"));
+            left.is_empty()
+        });
+        if let Some((pid, executable, _)) = left.first() {
+            let _ = reply.send(Err(fail(
+                1,
+                format!(
+                    "recovery refused: unaccounted process {pid} runs {}",
+                    executable.display()
+                ),
+            )));
+            return Ok(());
+        }
+        self.owned.clear();
+        self.retiring.clear();
+        let stopped: Vec<i64> = instances.iter().map(|(pid, _)| *pid).collect();
+        let later = self
+            .receipts
+            .get(&operation)
+            .and_then(|receipt| receipt.get("laterReasons"))
+            .cloned()
+            .unwrap_or(Json::Array(Vec::new()));
+        self.append(
+            "operatorRecovered",
+            object([
+                ("operationId", text(&operation)),
+                ("by", text(RECOVERED_BY)),
+                (
+                    "stopped",
+                    Json::Array(stopped.iter().copied().map(Json::Int).collect()),
+                ),
+                ("laterReasons", later),
+            ]),
+        )?;
+        if let Some(Json::Object(receipt)) = self.receipts.get_mut(&operation) {
+            receipt.insert("state".into(), text("abandoned"));
+            receipt.insert("nextAction".into(), text("prepare a new plan"));
+        }
+        self.active = None;
+        self.recovery_reason = None;
+        self.recovery = None;
+        self.persist()?;
+        let payload = object([
+            ("operationId", text(&operation)),
+            (
+                "stopped",
+                Json::Array(stopped.into_iter().map(Json::Int).collect()),
+            ),
+            ("committedRevision", Json::Int(self.revision)),
+            (
+                "committedPlan",
+                self.committed.as_ref().map_or(Json::Null, text),
+            ),
+        ]);
+        let Some(committed) = self.committed.clone() else {
+            let _ = reply.send(Ok(payload));
+            return Ok(());
+        };
+        let revision = self.revision;
+        let started = read_json(&self.root.join("plans").join(format!("{committed}.json")))
+            .and_then(|value| Plan::parse(&value).map_err(|reason| fail(3, reason)))
+            .and_then(|plan| self.start(plan));
+        if let Err(error) = started {
+            let _ = reply.send(Err(fail(
+                1,
+                format!("committed revision {revision} did not start: {error}"),
+            )));
+            return Ok(());
+        }
+        let timer = reply.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(RECOVER_READY);
+            let _ = timer.send(Err(fail(
+                1,
+                format!(
+                    "committed revision {revision} was not ready within {} s",
+                    RECOVER_READY.as_secs()
+                ),
+            )));
+        });
+        if let Some(runtime) = &mut self.runtime {
+            runtime.recovered = Some((reply, payload));
+        }
+        Ok(())
+    }
+
+    /// Answer the `ignite recover` that started the running revision once
+    /// every machine it awaits reports ready.
+    pub(super) fn answer_recovered(&mut self) {
+        let Some(runtime) = &mut self.runtime else {
+            return;
+        };
+        if !runtime.expected.is_subset(&runtime.ready) {
+            return;
+        }
+        if let Some((reply, payload)) = runtime.recovered.take() {
+            let _ = reply.send(Ok(payload));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1033,6 +1301,8 @@ mod tests {
             adopted: Default::default(),
             supervised: Default::default(),
             restore_to: None,
+            recovering: None,
+            recovered: None,
         }
     }
 

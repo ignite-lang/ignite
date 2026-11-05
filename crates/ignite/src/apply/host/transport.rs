@@ -362,6 +362,7 @@ impl Host {
                 }
                 self.apply(payload, reply.clone())?
             }
+            "recover" if !shutdown => self.operator_recover(&payload, reply.clone())?,
             _ => return Err(fail(2, "unsupported operation or host is stopping")),
         }
         Ok(())
