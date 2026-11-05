@@ -221,6 +221,16 @@ takes or returns Ignite values):
   `"<module>.<Protocol>.<role>"`, constants `"<module>.<NAME>"` and field defaults
   `"<module>.<Record>.<field>"` as functions without arguments; a record literal that omits a
   defaulted field calls its default function. Executables' entry points are C `main`.
+- A mention of a constant of scalar type calls its function. A constant of aggregate type
+  is evaluated once per process and IR module: each module that mentions it has an internal
+  `"<module>.<NAME>.cache"` (a `ptr`, null at first) and `"<module>.<NAME>.once"`; a mention
+  loads the cache (acquire) and calls `.once` when it is null, which evaluates the constant,
+  copies it to the heap (`"copy_to_heap.<T>"`, as a `Store<T>` value) and publishes the copy
+  with a compare-and-swap; a task that loses the race frees its copy and takes the
+  winner's. The heap copy is never freed. A mention is borrowed, like a variable: a value
+  position copies it into the task's arena, and `push`, `append`, `clear`, `put` or
+  `remove` on it changes a copy (a constant is no local, so it is no place that changes in
+  place). A failure inside the evaluation publishes nothing.
 - Generic code is lowered per instance, never as such: a generic fn, a role of a generic
   protocol and a field default of a generic record emit nothing themselves. Each use names an
   instance from `TypedProgram::instance` (`docs/slice.md` section 11): `"<module>.<name><A,B>"`,
@@ -313,11 +323,15 @@ position, even with no buffer.
 - Lowering walks the left spine of a binary chain (`a + b + c ..`) with a loop, as the
   loop-region analysis does, so a 100,000-term chain needs no deep native stack. After
   each step the stack slots its right operand used are dead and later temporaries reuse
-  them, so a chain has a constant number of slots. A `Text` chain makes one owned text at
-  its first `+` and appends every further operand to it in place (`@ignite.append`, a
-  literal straight from its constant), which is linear where a new text per step would be
-  quadratic. `@ignite.append` and `@ignite.append_text` are `noinline`: inlined 100,000
-  times they made clang's `-O1` superlinear.
+  them, so a chain has a constant number of slots. A `Text` chain (`+`, `.concat`, mixed,
+  along the left spine) is lowered inline without a runtime call: the operands are
+  evaluated left to right and each one's pointer and length loaded at once, adjacent
+  literals are joined into one constant, and one arena block of the summed length
+  (`@ignite.alloc`) takes one `memcpy` per operand. Past 16 non-literal operands the text
+  grows with `@ignite.reserve` (doubling) for each further batch of 16, so a long chain
+  stays linear and holds a bounded number of values. `@ignite.append` and
+  `@ignite.append_text` (the debug text glue) are `noinline`: inlined 100,000 times they
+  made clang's `-O1` superlinear.
 - Allocation: from the current task's arena, inline (`@ignite.alloc`, an internal
   `alwaysinline` function of every IR module). It bumps the task's bump state
   (`ignite_rt_arena_state`, section 5) when the request fits in the current chunk. Otherwise
@@ -610,7 +624,9 @@ still an error and no handle value is issued twice. Neither crate uses tokio.
 Inline helpers. Every IR module defines these as internal `alwaysinline` functions over
 `arena_state()`:
 - `ptr @ignite.alloc(i64 size, i64 align)` bumps the cursor when an aligned request under
-  64 KiB ends below `limit`; otherwise it calls `alloc`.
+  64 KiB ends at or below a non-null `limit` (a request that fills the chunk exactly stays
+  inline); otherwise it calls `alloc`. With no chunk last (`limit` null) even a zero-size
+  request calls `alloc`, which returns a non-null dangling pointer, never null.
 - `i64 @ignite.arena_mark()` returns `cursor + offset`.
 - `i1 @ignite.arena_due(i64 mark, i64 kept)` is `arena_due` without the call.
 - `void @ignite.arena_release(i64 mark)` does nothing when `mark` is at or above the

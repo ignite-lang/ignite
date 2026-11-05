@@ -121,8 +121,10 @@ entry:
   %start = and i64 %up, %mask
   %end = add i64 %start, %size
   %small = icmp ult i64 %size, 65536
-  %fits = icmp ult i64 %end, %li
-  %ok = and i1 %small, %fits
+  %fits = icmp ule i64 %end, %li
+  %live = icmp ne i64 %li, 0
+  %fit = and i1 %fits, %live
+  %ok = and i1 %small, %fit
   br i1 %ok, label %fast, label %slow
 fast:
   %skip = sub i64 %start, %ci
@@ -209,7 +211,6 @@ define internal void @"spawn.tests.bounds.relay<PipeStream>.1"(ptr %env) {
 entry:
   %t1 = alloca [256 x i8], align 16
   %t7 = alloca [40 x i8], align 8
-  %t13 = alloca [24 x i8], align 8
   %t16 = alloca [24 x i8], align 8
   %t2 = call i32 @_setjmp(ptr %t1)
   %t3 = icmp eq i32 %t2, 0
@@ -228,12 +229,19 @@ L4:
   br i1 %t9, label %L10, label %L11
 L10:
   %t12 = getelementptr inbounds i8, ptr %t7, i64 8
-  store ptr @.str.1, ptr %t13, align 8
-  %t14 = getelementptr inbounds i8, ptr %t13, i64 8
-  store i64 23, ptr %t14, align 8
-  %t15 = getelementptr inbounds i8, ptr %t13, i64 16
-  store i64 23, ptr %t15, align 8
-  call void @ignite_rt_text_concat(ptr %t16, ptr %t13, ptr %t12)
+  %t13 = load ptr, ptr %t12, align 8
+  %t14 = getelementptr inbounds i8, ptr %t12, i64 8
+  %t15 = load i64, ptr %t14, align 8
+  %t17 = add i64 %t15, 23
+  %t18 = call ptr @ignite.alloc(i64 %t17, i64 1)
+  store ptr %t18, ptr %t16, align 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t18, ptr @.str.1, i64 23, i1 false)
+  %t19 = getelementptr inbounds i8, ptr %t18, i64 23
+  call void @llvm.memcpy.p0.p0.i64(ptr %t19, ptr %t13, i64 %t15, i1 false)
+  %t20 = getelementptr inbounds i8, ptr %t16, i64 8
+  store i64 %t17, ptr %t20, align 8
+  %t21 = getelementptr inbounds i8, ptr %t16, i64 16
+  store i64 %t17, ptr %t21, align 8
   call void @ignite_rt_log(ptr %t16)
   br label %L11
 L11:
@@ -312,7 +320,6 @@ entry:
   %t1 = alloca [256 x i8], align 16
   %t8 = alloca [24 x i8], align 8
   %t9 = alloca [40 x i8], align 8
-  %t15 = alloca [24 x i8], align 8
   %t18 = alloca [24 x i8], align 8
   %t2 = call i32 @_setjmp(ptr %t1)
   %t3 = icmp eq i32 %t2, 0
@@ -333,12 +340,19 @@ L4:
   br i1 %t11, label %L12, label %L13
 L12:
   %t14 = getelementptr inbounds i8, ptr %t9, i64 8
-  store ptr @.str.1, ptr %t15, align 8
-  %t16 = getelementptr inbounds i8, ptr %t15, i64 8
-  store i64 23, ptr %t16, align 8
-  %t17 = getelementptr inbounds i8, ptr %t15, i64 16
-  store i64 23, ptr %t17, align 8
-  call void @ignite_rt_text_concat(ptr %t18, ptr %t15, ptr %t14)
+  %t15 = load ptr, ptr %t14, align 8
+  %t16 = getelementptr inbounds i8, ptr %t14, i64 8
+  %t17 = load i64, ptr %t16, align 8
+  %t19 = add i64 %t17, 23
+  %t20 = call ptr @ignite.alloc(i64 %t19, i64 1)
+  store ptr %t20, ptr %t18, align 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t20, ptr @.str.1, i64 23, i1 false)
+  %t21 = getelementptr inbounds i8, ptr %t20, i64 23
+  call void @llvm.memcpy.p0.p0.i64(ptr %t21, ptr %t15, i64 %t17, i1 false)
+  %t22 = getelementptr inbounds i8, ptr %t18, i64 8
+  store i64 %t19, ptr %t22, align 8
+  %t23 = getelementptr inbounds i8, ptr %t18, i64 16
+  store i64 %t19, ptr %t23, align 8
   call void @ignite_rt_log(ptr %t18)
   br label %L13
 L13:

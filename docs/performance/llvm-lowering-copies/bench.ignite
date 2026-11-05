@@ -1,0 +1,31 @@
+const GREETING: Text = "hello, world".concat("!")
+const TAGS: List<Text> = ["a", "b", "c"]
+const WORDS: List<Text> = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi"]
+
+fn four(a: Text, b: Text, c: Text, d: Text) -> Text = a + b + c + d
+
+test "bench text concat" {
+  var total = 0
+  var i = 0
+  let a = "alpha-"
+  let b = "beta-"
+  while i < 4000000 {
+    let n = Int.to_text(i)
+    let s = four(a, n, b, "x")
+    let t = a.concat(n).concat(b).concat("y")
+    let u = s + "|" + t + "|" + n + "é"
+    total = total + u.len()
+    i = i + 1
+  }
+  assert total > 0
+}
+
+test "bench constants" {
+  var total = 0
+  var i = 0
+  while i < 4000000 {
+    total = total + GREETING.len() + TAGS.len() + WORDS.len() + WORDS[i % 16].len()
+    i = i + 1
+  }
+  assert total > 0
+}

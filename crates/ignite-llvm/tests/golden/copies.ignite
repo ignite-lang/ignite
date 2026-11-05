@@ -1,0 +1,235 @@
+package tests.copies
+
+test fn letter(i: Int) -> Text = if i % 2 == 0 { "A" } else { "B" }
+
+test "one-byte texts that fill arena chunks to the last byte keep their bytes" {
+  var kept: List<Text> = []
+  var i = 0
+  while i < 200000 {
+    kept.push(letter(i))
+    i = i + 1
+  }
+  assert kept.len() == 200000
+  var j = 0
+  while j < 200000 {
+    assert kept[j] == letter(j), "text {j} changed"
+    j = j + 1
+  }
+}
+
+test fn shout(t: Text) -> Text = t.concat("!")
+
+test fn four(a: Text, b: Text, c: Text, d: Text) -> Text = a + b + c + d
+
+test fn noisy(log: List<Text>, t: Text) -> Text {
+  var l = log
+  l.push(t)
+  return Int.to_text(l.len()).concat(t)
+}
+
+test "an empty concatenation as a task's first allocation is empty" {
+  let e = "" + ""
+  assert e.len() == 0
+  assert e == ""
+  assert e.to_bytes().len() == 0
+  let f = e.concat(e) + e
+  assert f == ""
+  assert (f + "x").len() == 1
+}
+
+test "concatenation copies empty, multibyte and long operands in order" {
+  let e = ""
+  let m = "héllo, wörld ✓"
+  assert e + m + e == m
+  assert (m + e).len() == m.len()
+  assert m.concat(m) == "héllo, wörld ✓héllo, wörld ✓"
+  assert (m + "é" + m).len() == 2 * m.len() + 2
+  var long = "x"
+  var i = 0
+  while i < 15 {
+    long = long + long
+    i = i + 1
+  }
+  assert long.len() == 32768
+  let both = long + m + long
+  assert both.len() == 65536 + m.len()
+  assert both.to_bytes().at(32768) == 104
+  assert both.to_bytes().at(65535 + m.len()) == 120
+  assert both.to_bytes().at(32767) == 120
+}
+
+test "a concatenation does not alias or change its operands" {
+  let base = "ab".concat("cd")
+  let s = base + "e"
+  let t = base + "1" + base
+  assert s == "abcde"
+  assert t == "abcd1abcd"
+  assert base == "abcd"
+  var acc = "x"
+  var i = 0
+  while i < 5 {
+    let before = acc
+    acc = acc + "y" + ""
+    assert before.len() == i + 1
+    i = i + 1
+  }
+  assert acc == "xyyyyy"
+  var self_twice = "ab"
+  self_twice = self_twice + self_twice + self_twice
+  assert self_twice == "ababab"
+}
+
+test "concat and plus chains, mixed and nested, keep the order of their operands" {
+  assert four("a", "b", "c", "d") == "abcd"
+  assert four("", "é", "", "z") == "éz"
+  let a = "p"
+  let b = a.concat("q").concat("r")
+  assert a == "p"
+  assert b == "pqr"
+  let c = (a + "1").concat(b + "2") + "3".concat(shout(a))
+  assert c == "p1pqr23p!"
+  assert ("a" + "b" + "c") == "abc"
+  assert ("a" + ("b" + "c") + "d") == "abcd"
+  assert "a" + "b" == "ab"
+  assert "a" + "b" != "a"
+}
+
+test "operands are evaluated once each, left to right" {
+  let log = ["x"]
+  let t = noisy(log, "a") + noisy(log, "b") + noisy(log, "c")
+  assert t == "2a2b2c"
+  assert log == ["x"]
+}
+
+test "a chain of more operands than one batch keeps every operand" {
+  let n = Int.to_text(7)
+  let t = n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + "-" + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + n + "é"
+  assert t.len() == 38
+  assert t == "77777777777777777-777777777777777777é"
+}
+
+test "concatenation in a released loop keeps the texts that are carried" {
+  var kept: List<Text> = []
+  var i = 0
+  while i < 20000 {
+    let t = Int.to_text(i) + ":" + Int.to_text(i).concat("é")
+    if i % 1000 == 0 {
+      kept.push(t)
+    }
+    i = i + 1
+  }
+  assert kept.len() == 20
+  assert kept[0] == "0:0é"
+  assert kept[19] == "19000:19000é"
+}
+
+type Holder {
+  name: Text
+  items: List<Int>
+}
+
+const GREETING: Text = "hello, world".concat("!")
+const TAGS: List<Text> = ["a", "b", "c"]
+const NESTED: List<List<Text>> = [["é"], [], ["x", "yz"]]
+const HOLDER: Holder = Holder { name = "h".concat("é"), items = [1, 2] }
+const EMPTY: List<Text> = []
+const LIMIT: Int = 6 * 7
+
+test fn count_constants(n: Int) -> Int {
+  var total = 0
+  var i = 0
+  while i < n {
+    total = total + GREETING.len() + TAGS.len() + NESTED[2][1].len() + HOLDER.items.len() + EMPTY.len()
+    i = i + 1
+  }
+  return total
+}
+
+test fn send_constants(stream: PipeStream) -> Result<Unit, IoError> requires [stream.write] {
+  var tags = TAGS
+  tags.push(GREETING)
+  stream.write_all((HOLDER.name + tags[3] + Int.to_text(tags.len() + count_constants(3))).to_bytes())?
+  stream.close()
+}
+
+test fn all_of(client: PipeStream) -> Result<Bytes, IoError> requires [client.read] {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test "a constant mentioned in a loop keeps its value" {
+  assert count_constants(1000) == 20000
+  assert count_constants(1000) == 20000
+  assert LIMIT == 42
+}
+
+test "a change to a copy of a constant leaves the constant as it was" {
+  var tags = TAGS
+  tags.push("d")
+  assert tags == ["a", "b", "c", "d"]
+  assert TAGS == ["a", "b", "c"]
+  var holder = HOLDER
+  holder.items.push(3)
+  holder.name = holder.name + "!"
+  assert HOLDER.items == [1, 2]
+  assert HOLDER.name == "hé"
+  assert holder.name == "hé!"
+  var i = 0
+  while i < 3 {
+    var nested = NESTED
+    nested[0].push(Int.to_text(i))
+    assert nested[0].len() == 2
+    i = i + 1
+  }
+  assert NESTED == [["é"], [], ["x", "yz"]]
+  let g = GREETING + GREETING
+  assert g == "hello, world!hello, world!"
+  assert GREETING == "hello, world!"
+}
+
+test "in-place builtins on a constant change a copy" {
+  TAGS.push("z")
+  TAGS.clear()
+  assert TAGS == ["a", "b", "c"]
+  let n = match GREETING {
+    "hello, world!" => 1
+    _ => 0
+  }
+  assert n == 1
+}
+
+test "tasks that read constants at once see the same values" {
+  var ends: List<PipeStream> = []
+  var i = 0
+  while i < 24 {
+    let (client, server) = Pipe.pair()
+    client.set_idle_timeout(5000)?
+    spawn send_constants(server)
+    ends.push(client)
+    i = i + 1
+  }
+  for client in ends {
+    assert all_of(client)?.to_text() == "héhello, world!64"
+  }
+  assert TAGS.len() == 3
+}
+
+const HELLO: Text = "hel".concat("lo")
+
+test "a constant pattern compares with the constant" {
+  let n = match "he".concat("llo") {
+    HELLO => 1
+    _ => 0
+  }
+  assert n == 1
+  let m = match "help" {
+    HELLO => 1
+    _ => 0
+  }
+  assert m == 0
+}

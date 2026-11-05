@@ -24,6 +24,10 @@ use crate::layout::{
     scalar_type,
 };
 
+/// Operands of a `Text` chain copied per arena block or growth
+/// ([`Lower::text_chain`]).
+const CONCAT_BATCH: usize = 16;
+
 /// The module a function is lowered in.
 pub struct Ctx<'a> {
     /// Module path used in symbol names.
@@ -2163,6 +2167,74 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         }
     }
 
+    /// A mention of the constant `q` of type `ty`. A scalar constant is a
+    /// call of its function, which LLVM folds. An aggregate constant is
+    /// evaluated once per process and IR module instead of at every
+    /// mention: the first mention calls `"<q>.once"`, which evaluates it,
+    /// copies the value to the heap (`copy_to_heap`) and publishes the
+    /// copy in the module's `"<q>.cache"` with a compare-and-swap (a task
+    /// that loses a race frees its copy and takes the winner's); every
+    /// mention after it is an acquire load. The mention is borrowed, so
+    /// every value position copies it into the task's arena as it copies
+    /// a variable, and an in-place builtin on it changes a copy
+    /// ([`Lower::mutable_receiver`]). A failure while the constant is
+    /// evaluated publishes nothing. The `.once` helper is pruned as a
+    /// constant ([`crate::ir::Module::mark_const`]): kept only when kept
+    /// code mentions the constant.
+    fn constant(&mut self, q: &QualName, ty: &Ty) -> Val {
+        let name = symbol(q);
+        let callee = self.function(&name, &[], ty);
+        if !is_aggregate(ty) {
+            return self.call(&callee, ty, Vec::new());
+        }
+        let once = format!("{name}.once");
+        let cache = global(&format!("{name}.cache"));
+        if !self.m.has(&once) {
+            let layout = self.layout(ty);
+            let to_heap = self.m.glue_of(Glue::ToHeap, ty);
+            let free = self.m.glue_of(Glue::FreeHeap, ty);
+            self.m
+                .global_definition(format!("{cache} = internal global ptr null, align 8"));
+            let text = format!(
+                "define internal ptr {once_global}() noinline {{\n\
+                 entry:\n  \
+                 %value = alloca [{size} x i8], align {align}\n  \
+                 call void {callee}(ptr %value)\n  \
+                 %heap = call ptr {to_heap}(ptr %value)\n  \
+                 %swap = cmpxchg ptr {cache}, ptr null, ptr %heap acq_rel acquire, align 8\n  \
+                 %old = extractvalue {{ ptr, i1 }} %swap, 0\n  \
+                 %won = extractvalue {{ ptr, i1 }} %swap, 1\n  \
+                 br i1 %won, label %mine, label %theirs\n\
+                 mine:\n  \
+                 ret ptr %heap\n\
+                 theirs:\n  \
+                 call void {free}(ptr %heap)\n  \
+                 ret ptr %old\n\
+                 }}\n",
+                once_global = global(&once),
+                size = layout.size.max(1),
+                align = layout.align.max(1),
+            );
+            self.m.helper(&once, &text);
+            self.m.mark_const(&once);
+        }
+        let have = self
+            .f
+            .val(format!("load atomic ptr, ptr {cache} acquire, align 8"));
+        let missing = self.f.val(format!("icmp eq ptr {have}, null"));
+        let from = self.f.current().to_string();
+        let (make, done) = (self.f.label(), self.f.label());
+        self.f.cond_br(&missing, &make, &done);
+        self.f.place(&make);
+        let made = self.f.val(format!("call ptr {}()", global(&once)));
+        self.f.br(&done);
+        self.f.place(&done);
+        let p = self
+            .f
+            .val(format!("phi ptr [ {have}, %{from} ], [ {made}, %{make} ]"));
+        Val::Ptr(p, false)
+    }
+
     fn is_const(&self, name: &str) -> bool {
         self.cx.consts.contains(name)
     }
@@ -2182,8 +2254,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             Some(Callee::Const(q)) => {
                 if let Some(ty) = self.env.const_ty(&q).map(repr) {
-                    let callee = self.function(&symbol(&q), &[], &ty);
-                    return self.call(&callee, &ty, Vec::new());
+                    return self.constant(&q, &ty);
                 }
             }
             Some(Callee::Variant { .. }) => {
@@ -2199,8 +2270,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 .const_ty(&q)
                 .map(repr)
                 .unwrap_or_else(|| self.ty(e));
-            let callee = self.function(&symbol(&q), &[], &ty);
-            return self.call(&callee, &ty, Vec::new());
+            return self.constant(&q, &ty);
         }
         if self.cx.fns.contains(&id.name) {
             let q = self.cx.qual(&id.name);
@@ -2738,40 +2808,27 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             cur = left;
         }
         let mark = self.f.alloca_mark();
-        let mut value = self.expr(cur, true);
-        // The `Text` this chain owns and appends to in place, once its
-        // first `+` made it.
-        let mut text: Option<String> = None;
+        // The `Text` `+` steps come first from the inside (no other
+        // operator yields a `Text`); [`Lower::text_chain`] lowers them all
+        // at once, `.concat` calls on the spine included.
+        let concats = spine
+            .iter()
+            .rev()
+            .take_while(|(op, left, ..)| *op == BinaryOp::Add && self.ty(left) == Ty::Text)
+            .count();
+        let mut value = if concats > 0 {
+            let rest = spine.len() - concats;
+            let node = spine[rest].3;
+            spine.truncate(rest);
+            self.text_chain(node)
+        } else {
+            self.expr(cur, true)
+        };
         for (op, left, right, node) in spine.into_iter().rev() {
             if value == Val::Never {
                 return Val::Never;
             }
-            let concat = op == BinaryOp::Add && self.ty(left) == Ty::Text;
-            value = match (&text, concat) {
-                (Some(acc), true) if matches!(right.kind, ExprKind::Str(_)) => {
-                    if let ExprKind::Str(s) = &right.kind {
-                        crate::glue::append_literal(self.m, &mut self.f, acc, s);
-                    }
-                    Val::Ptr(acc.clone(), true)
-                }
-                (Some(acc), true) => {
-                    let r = self.expr(right, true);
-                    if r == Val::Never {
-                        return Val::Never;
-                    }
-                    let b = self.ptr(&r);
-                    crate::glue::append_text(self.m, &mut self.f, acc, &b);
-                    Val::Ptr(acc.clone(), true)
-                }
-                _ => {
-                    let v = self.binary_step(op, left, value, right, node);
-                    text = match (&v, concat) {
-                        (Val::Ptr(p, true), true) => Some(p.clone()),
-                        _ => None,
-                    };
-                    v
-                }
-            };
+            value = self.binary_step(op, left, value, right, node);
             let keep = match &value {
                 Val::Ptr(p, _) => vec![p.as_str()],
                 _ => Vec::new(),
@@ -2779,6 +2836,185 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             self.f.reuse_allocas(mark, &keep);
         }
         value
+    }
+
+    /// The operands of `e` when it is one `Text` concatenation, `a + b`
+    /// or `a.concat(b)`: `(a, b)`.
+    fn concat_parts<'x>(&self, e: &'x Expr) -> Option<(&'x Expr, &'x Expr)> {
+        match &e.kind {
+            ExprKind::Binary {
+                op: BinaryOp::Add,
+                left,
+                right,
+            } if self.ty(left) == Ty::Text => Some((left, right)),
+            ExprKind::Method { receiver, args, .. }
+                if args.len() == 1
+                    && matches!(
+                        self.cx.types.callee(e),
+                        Some(Callee::Builtin(Builtin::TextConcat))
+                    ) =>
+            {
+                Some((receiver, &args[0]))
+            }
+            ExprKind::Call { callee, args }
+                if args.len() == 1
+                    && matches!(
+                        self.cx.types.callee(e),
+                        Some(Callee::Builtin(Builtin::TextConcat))
+                    ) =>
+            {
+                match &callee.kind {
+                    ExprKind::Field { receiver, .. } => Some((receiver, &args[0])),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// The `Text` concatenation `e` with every concatenation on its left
+    /// spine (`a + b + c`, `a.concat(b).concat(c)`, mixed): the operands
+    /// are evaluated left to right and their pointer and length loaded at
+    /// once, then one arena block of the summed length takes one `memcpy`
+    /// per operand, a literal straight from its constant (adjacent literals
+    /// joined into one). Operands go in
+    /// batches of [`CONCAT_BATCH`]: the first makes the text with an exact
+    /// capacity, each later one grows it with `@ignite.reserve` (doubling)
+    /// and copies into place, so a 100,000-term chain stays linear and
+    /// holds a bounded number of values and stack slots.
+    fn text_chain(&mut self, e: &Expr) -> Val {
+        let mut operands = Vec::new();
+        let mut cur = e;
+        while let Some((left, right)) = self.concat_parts(cur) {
+            operands.push(right);
+            cur = left;
+        }
+        operands.push(cur);
+        operands.reverse();
+        let out = self.temp(&Ty::Text);
+        let mark = self.f.alloca_mark();
+        let mut pieces = Vec::new();
+        // Adjacent literals, joined into one constant.
+        let mut literal: Vec<u8> = Vec::new();
+        let mut made = false;
+        for operand in operands {
+            if let ExprKind::Str(s) = &operand.kind {
+                literal.extend_from_slice(s.as_bytes());
+                continue;
+            }
+            let v = self.expr(operand, true);
+            if v == Val::Never {
+                return Val::Never;
+            }
+            let p = self.ptr(&v);
+            let piece = self.text_piece(&p);
+            self.f.reuse_allocas(mark, &[]);
+            if !literal.is_empty() {
+                pieces.push(self.literal_piece(&std::mem::take(&mut literal)));
+            }
+            pieces.push(piece);
+            if pieces.len() >= CONCAT_BATCH {
+                self.concat_into(&out, &pieces, made);
+                pieces.clear();
+                made = true;
+            }
+        }
+        if !literal.is_empty() {
+            pieces.push(self.literal_piece(&literal));
+        }
+        if !made || !pieces.is_empty() {
+            self.concat_into(&out, &pieces, made);
+        }
+        Val::Ptr(out, true)
+    }
+
+    /// The bytes of a literal, for [`Lower::concat_into`].
+    fn literal_piece(&mut self, text: &[u8]) -> (String, String) {
+        let data = if text.is_empty() {
+            "@ignite.empty".to_string()
+        } else {
+            self.m.string(text)
+        };
+        (data, text.len().to_string())
+    }
+
+    /// The data pointer and length of the `Text` at `p`, loaded now, for
+    /// [`Lower::concat_into`].
+    fn text_piece(&mut self, p: &str) -> (String, String) {
+        let data = self.f.val(format!("load ptr, ptr {p}, align 8"));
+        let lenp = self.gep(p, 8);
+        let len = self.f.val(format!("load i64, ptr {lenp}, align 8"));
+        (data, len)
+    }
+
+    /// Copy `pieces` (data pointer, length) one after the other into the
+    /// `Text` at `out`: a new block of their summed length, or, when
+    /// `grow`, appended to the text `out` already holds.
+    fn concat_into(&mut self, out: &str, pieces: &[(String, String)], grow: bool) {
+        let mut fixed: u64 = 0;
+        let mut total: Option<String> = None;
+        for (_, len) in pieces {
+            match len.parse::<u64>() {
+                Ok(n) => fixed += n,
+                Err(_) => {
+                    total = Some(match total {
+                        None => len.clone(),
+                        Some(t) => self.f.val(format!("add i64 {t}, {len}")),
+                    })
+                }
+            }
+        }
+        let total = match total {
+            None => fixed.to_string(),
+            Some(t) if fixed == 0 => t,
+            Some(t) => self.f.val(format!("add i64 {t}, {fixed}")),
+        };
+        let (mut at, old) = if grow {
+            self.f.ins(format!(
+                "call void @ignite.reserve(ptr {out}, i64 {total}, i64 1, i64 1)"
+            ));
+            let lenp = self.gep(out, 8);
+            let old = self.f.val(format!("load i64, ptr {lenp}, align 8"));
+            let data = self.f.val(format!("load ptr, ptr {out}, align 8"));
+            let at = self
+                .f
+                .val(format!("getelementptr inbounds i8, ptr {data}, i64 {old}"));
+            (at, Some(old))
+        } else {
+            let data = self
+                .f
+                .val(format!("call ptr @ignite.alloc(i64 {total}, i64 1)"));
+            self.f.ins(format!("store ptr {data}, ptr {out}, align 8"));
+            (data, None)
+        };
+        let last = pieces.len().saturating_sub(1);
+        for (i, (data, len)) in pieces.iter().enumerate() {
+            if len == "0" {
+                continue;
+            }
+            self.f.ins(format!(
+                "call void @llvm.memcpy.p0.p0.i64(ptr {at}, ptr {data}, i64 {len}, i1 false)"
+            ));
+            if i < last {
+                at = self
+                    .f
+                    .val(format!("getelementptr inbounds i8, ptr {at}, i64 {len}"));
+            }
+        }
+        let lenp = self.gep(out, 8);
+        match old {
+            Some(old) => {
+                let new = self.f.val(format!("add i64 {old}, {total}"));
+                self.f.ins(format!("store i64 {new}, ptr {lenp}, align 8"));
+            }
+            None => {
+                self.f
+                    .ins(format!("store i64 {total}, ptr {lenp}, align 8"));
+                let capp = self.gep(out, 16);
+                self.f
+                    .ins(format!("store i64 {total}, ptr {capp}, align 8"));
+            }
+        }
     }
 
     /// `left op right` with `left` already evaluated to `l`; `node` is the
@@ -3364,8 +3600,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// A constant pattern: the value `==` the constant `q`.
     fn const_pattern(&mut self, q: &QualName, v: &Val, ty: &Ty, fail: &str) {
         let cty = self.env.const_ty(q).map(repr).unwrap_or_else(|| ty.clone());
-        let callee = self.function(&symbol(q), &[], &cty);
-        let c = self.call(&callee, &cty, Vec::new());
+        let c = self.constant(q, &cty);
         let ok = if *ty == Ty::Text {
             let (a, b) = (self.ptr(v), self.ptr(&c));
             crate::glue::text_eq(self.m, &mut self.f, &a, &b)
@@ -3499,14 +3734,15 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
 
     /// The receiver of a builtin that changes it in place (`push`,
     /// `append`, `clear`). A place the region analysis sees
-    /// ([`crate::region::root`]) is changed in place; any other borrowed
+    /// ([`crate::region::root`]) rooted at a local is changed in place; one
+    /// rooted at a constant ([`Lower::constant`]), and any other borrowed
     /// value, such as `x.to_bytes()`, which is `x`'s own memory, is copied
     /// first, so the change goes to a temporary and never to a variable
     /// the analysis counts as unmodified (`docs/vision.md` section 10.1,
     /// M1).
     fn mutable_receiver(&mut self, receiver: &Expr) -> Val {
         let r = self.expr(receiver, true);
-        if crate::region::root(receiver, self.cx.types).is_some() {
+        if crate::region::root(receiver, self.cx.types).is_some_and(|n| self.lookup(&n).is_some()) {
             return r;
         }
         let ty = self.ty(receiver);
@@ -3905,15 +4141,16 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 Val::Scalar(self.f.val(format!("icmp ne i8 {v}, 0")))
             }
             TextStripPrefix => self.strip_prefix(receiver.expect("receiver"), &args[0]),
+            TextConcat if self.concat_parts(e).is_some() => self.text_chain(e),
             TextConcat => {
                 let r = recv(self);
                 let p = self.ptr(&r);
+                let a = self.text_piece(&p);
                 let other = self.read_arg(&args[0]);
-                self.rt_out(
-                    "text_concat",
-                    &Ty::Text,
-                    &[format!("ptr {p}"), format!("ptr {other}")],
-                )
+                let b = self.text_piece(&other);
+                let out = self.temp(&Ty::Text);
+                self.concat_into(&out, &[a, b], false);
+                Val::Ptr(out, true)
             }
             TextToBytes => self.expr(receiver.expect("receiver"), true),
             Copy => {
@@ -4754,13 +4991,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         self.f.cond_br(&failed, &bad, &done);
         self.f.place(&bad);
         let error = self.gep(result, layout.variants[1].1[0].1);
-        let pre = self.literal_ref(prefix.as_bytes());
-        let line = self.rt_out(
-            "text_concat",
-            &Ty::Text,
-            &[format!("ptr {pre}"), format!("ptr {error}")],
-        );
-        let line = self.ptr(&line);
+        let pieces = [
+            self.literal_piece(prefix.as_bytes()),
+            self.text_piece(&error),
+        ];
+        let line = self.temp(&Ty::Text);
+        self.concat_into(&line, &pieces, false);
         self.f.ins(format!("call void @ignite_rt_log(ptr {line})"));
         self.f.br(&done);
         self.f.place(&done);
