@@ -1,0 +1,376 @@
+// JSON-RPC 2.0 Specification, sections 4 to 6, a specification that is no RFC
+// (docs/slice.md 19.19).
+// Quoted by hand from https://www.jsonrpc.org/specification (24,512 bytes, read 2026-11-05),
+// which is not vendored: `ignite rfc check` reports this catalogue unchecked. One
+// requirement per sentence of sections 4 (Request object), 4.1 (Notification), 4.2
+// (Parameter Structures), 5 (Response object), 5.1 (Error object) and 6 (Batch) with a word
+// of 19.19's table, upper or lower case; the level is that of its strongest word (19.4).
+// Texts are verbatim with the markup removed and whitespace collapsed; the footnote marks
+// [1] and [2] are kept. A Request object's members address the Client, a Response
+// object's the Server. Left out: "Fractional parts may be problematic, since many decimal
+// fractions cannot be represented exactly as binary fractions." (footnote [2], a
+// description) and "... and as such no Response object needs to be returned to the
+// client." (4.1, a description; the rule is the next sentence, R4_1_1).
+
+package std.rfc.jsonrpc_2
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const JSONRPC_2: Spec = Spec {
+  id = "jsonrpc-2.0"
+  title = "JSON-RPC 2.0 Specification"
+  url = "https://www.jsonrpc.org/specification"
+  digest = "sha256:8fe1edfdca511d309e712e47447457ea5159b728ec02071a84593aed692aefeb"
+  requirements = [
+    R4_1,
+    R4_2,
+    R4_3,
+    R4_4,
+    R4_5,
+    R4_6,
+    R4_1_1,
+    R4_2_1,
+    R4_2_2,
+    R4_2_3,
+    R4_2_4,
+    R4_2_5,
+    R5_1,
+    R5_2,
+    R5_3,
+    R5_4,
+    R5_5,
+    R5_6,
+    R5_7,
+    R5_8,
+    R5_9,
+    R5_10,
+    R5_11,
+    R5_1_1,
+    R5_1_2,
+    R5_1_3,
+    R5_1_4,
+    R6_1,
+    R6_2,
+    R6_3,
+    R6_4,
+    R6_5,
+    R6_6,
+    R6_7,
+    R6_8
+  ]
+}
+
+const R4_1: Requirement = Requirement {
+  section = "4"
+  ordinal = 1
+  level = Must
+  party = Client
+  source = Prose
+  text = "MUST be exactly \"2.0\"."
+}
+
+const R4_2: Requirement = Requirement {
+  section = "4"
+  ordinal = 2
+  level = MustNot
+  party = Any
+  source = Prose
+  text = "Method names that begin with the word rpc followed by a period character (U+002E or ASCII 46) are reserved for rpc-internal methods and extensions and MUST NOT be used for anything else."
+}
+
+const R4_3: Requirement = Requirement {
+  section = "4"
+  ordinal = 3
+  level = May
+  party = Client
+  source = Prose
+  text = "This member MAY be omitted."
+}
+
+const R4_4: Requirement = Requirement {
+  section = "4"
+  ordinal = 4
+  level = Must
+  party = Client
+  source = Prose
+  text = "An identifier established by the Client that MUST contain a String, Number, or NULL value if included."
+}
+
+const R4_5: Requirement = Requirement {
+  section = "4"
+  ordinal = 5
+  level = Should
+  party = Client
+  source = Prose
+  text = "The value SHOULD normally not be Null [1] and Numbers SHOULD NOT contain fractional parts [2]"
+}
+
+const R4_6: Requirement = Requirement {
+  section = "4"
+  ordinal = 6
+  level = Must
+  party = Server
+  source = Prose
+  text = "The Server MUST reply with the same value in the Response object if included."
+}
+
+const R4_1_1: Requirement = Requirement {
+  section = "4.1"
+  ordinal = 1
+  level = MustNot
+  party = Server
+  source = Prose
+  text = "The Server MUST NOT reply to a Notification, including those that are within a batch request."
+}
+
+const R4_2_1: Requirement = Requirement {
+  section = "4.2"
+  ordinal = 1
+  level = Must
+  party = Client
+  source = Prose
+  text = "If present, parameters for the rpc call MUST be provided as a Structured value."
+}
+
+const R4_2_2: Requirement = Requirement {
+  section = "4.2"
+  ordinal = 2
+  level = Must
+  party = Client
+  source = Prose
+  text = "by-position: params MUST be an Array, containing the values in the Server expected order."
+}
+
+const R4_2_3: Requirement = Requirement {
+  section = "4.2"
+  ordinal = 3
+  level = Must
+  party = Client
+  source = Prose
+  text = "by-name: params MUST be an Object, with member names that match the Server expected parameter names."
+}
+
+const R4_2_4: Requirement = Requirement {
+  section = "4.2"
+  ordinal = 4
+  level = May
+  party = Server
+  source = Prose
+  text = "The absence of expected names MAY result in an error being generated."
+}
+
+const R4_2_5: Requirement = Requirement {
+  section = "4.2"
+  ordinal = 5
+  level = Must
+  party = Client
+  source = Prose
+  text = "The names MUST match exactly, including case, to the method's expected parameters."
+}
+
+const R5_1: Requirement = Requirement {
+  section = "5"
+  ordinal = 1
+  level = Must
+  party = Server
+  source = Prose
+  text = "When a rpc call is made, the Server MUST reply with a Response, except for in the case of Notifications."
+}
+
+const R5_2: Requirement = Requirement {
+  section = "5"
+  ordinal = 2
+  level = Must
+  party = Server
+  source = Prose
+  text = "MUST be exactly \"2.0\"."
+}
+
+const R5_3: Requirement = Requirement {
+  section = "5"
+  ordinal = 3
+  level = Required
+  party = Server
+  source = Prose
+  text = "This member is REQUIRED on success."
+}
+
+const R5_4: Requirement = Requirement {
+  section = "5"
+  ordinal = 4
+  level = MustNot
+  party = Server
+  source = Prose
+  text = "This member MUST NOT exist if there was an error invoking the method."
+}
+
+const R5_5: Requirement = Requirement {
+  section = "5"
+  ordinal = 5
+  level = Required
+  party = Server
+  source = Prose
+  text = "This member is REQUIRED on error."
+}
+
+const R5_6: Requirement = Requirement {
+  section = "5"
+  ordinal = 6
+  level = MustNot
+  party = Server
+  source = Prose
+  text = "This member MUST NOT exist if there was no error triggered during invocation."
+}
+
+const R5_7: Requirement = Requirement {
+  section = "5"
+  ordinal = 7
+  level = Must
+  party = Server
+  source = Prose
+  text = "The value for this member MUST be an Object as defined in section 5.1."
+}
+
+const R5_8: Requirement = Requirement {
+  section = "5"
+  ordinal = 8
+  level = Required
+  party = Server
+  source = Prose
+  text = "This member is REQUIRED."
+}
+
+const R5_9: Requirement = Requirement {
+  section = "5"
+  ordinal = 9
+  level = Must
+  party = Server
+  source = Prose
+  text = "It MUST be the same as the value of the id member in the Request Object."
+}
+
+const R5_10: Requirement = Requirement {
+  section = "5"
+  ordinal = 10
+  level = Must
+  party = Server
+  source = Prose
+  text = "If there was an error in detecting the id in the Request object (e.g. Parse error/Invalid Request), it MUST be Null."
+}
+
+const R5_11: Requirement = Requirement {
+  section = "5"
+  ordinal = 11
+  level = Must
+  party = Server
+  source = Prose
+  text = "Either the result member or error member MUST be included, but both members MUST NOT be included."
+}
+
+const R5_1_1: Requirement = Requirement {
+  section = "5.1"
+  ordinal = 1
+  level = Must
+  party = Server
+  source = Prose
+  text = "When a rpc call encounters an error, the Response Object MUST contain the error member with a value that is a Object with the following members:"
+}
+
+const R5_1_2: Requirement = Requirement {
+  section = "5.1"
+  ordinal = 2
+  level = Must
+  party = Server
+  source = Prose
+  text = "This MUST be an integer."
+}
+
+const R5_1_3: Requirement = Requirement {
+  section = "5.1"
+  ordinal = 3
+  level = Should
+  party = Server
+  source = Prose
+  text = "The message SHOULD be limited to a concise single sentence."
+}
+
+const R5_1_4: Requirement = Requirement {
+  section = "5.1"
+  ordinal = 4
+  level = May
+  party = Server
+  source = Prose
+  text = "This may be omitted."
+}
+
+const R6_1: Requirement = Requirement {
+  section = "6"
+  ordinal = 1
+  level = May
+  party = Client
+  source = Prose
+  text = "To send several Request objects at the same time, the Client MAY send an Array filled with Request objects."
+}
+
+const R6_2: Requirement = Requirement {
+  section = "6"
+  ordinal = 2
+  level = Should
+  party = Server
+  source = Prose
+  text = "The Server should respond with an Array containing the corresponding Response objects, after all of the batch Request objects have been processed."
+}
+
+const R6_3: Requirement = Requirement {
+  section = "6"
+  ordinal = 3
+  level = Should
+  party = Server
+  source = Prose
+  text = "A Response object SHOULD exist for each Request object, except that there SHOULD NOT be any Response objects for notifications."
+}
+
+const R6_4: Requirement = Requirement {
+  section = "6"
+  ordinal = 4
+  level = May
+  party = Server
+  source = Prose
+  text = "The Server MAY process a batch rpc call as a set of concurrent tasks, processing them in any order and with any width of parallelism."
+}
+
+const R6_5: Requirement = Requirement {
+  section = "6"
+  ordinal = 5
+  level = May
+  party = Server
+  source = Prose
+  text = "The Response objects being returned from a batch call MAY be returned in any order within the Array."
+}
+
+const R6_6: Requirement = Requirement {
+  section = "6"
+  ordinal = 6
+  level = Should
+  party = Client
+  source = Prose
+  text = "The Client SHOULD match contexts between the set of Request objects and the resulting set of Response objects based on the id member within each Object."
+}
+
+const R6_7: Requirement = Requirement {
+  section = "6"
+  ordinal = 7
+  level = Must
+  party = Server
+  source = Prose
+  text = "If the batch rpc call itself fails to be recognized as an valid JSON or as an Array with at least one value, the response from the Server MUST be a single Response object."
+}
+
+const R6_8: Requirement = Requirement {
+  section = "6"
+  ordinal = 8
+  level = MustNot
+  party = Server
+  source = Prose
+  text = "If there are no Response objects contained within the Response array as it is to be sent to the client, the server MUST NOT return an empty Array and should return nothing at all."
+}

@@ -1,0 +1,19 @@
+package std.rfc.dup3
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+const DUP3: Spec = Spec {
+  id = "text-3.0"
+  title = "A second fixture specification with the id of TEXT3"
+  url = "https://example.invalid/dup3"
+  digest = "sha256:0005"
+  requirements = [R1_1]
+}
+
+const R1_1: Requirement = Requirement {
+  section = "1"
+  ordinal = 1
+  level = Must
+  source = Prose
+  text = "A peer MUST answer."
+}

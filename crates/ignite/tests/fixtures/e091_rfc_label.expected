@@ -1,0 +1,1 @@
+e091_rfc_label.ignite:6:7: error[E091]: spec `FAKE7` has the id `rfc7`, the label form of an RFC; an RFC sets `rfc`, and a text id is not `rfc<digits>`

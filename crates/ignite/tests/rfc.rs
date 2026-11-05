@@ -1583,3 +1583,128 @@ fn adversary_committed_catalogues_read_the_same_on_both_targets() {
         "{stdout}"
     );
 }
+
+// The catalogues of specifications that are no RFC (19.19).
+
+/// Each catalogue: module file name, `Spec` constant, text id, url, digest of the page as
+/// read, and the number of requirements.
+const TEXT_ID_CATALOGUES: [(&str, &str, &str, &str, &str, usize); 2] = [
+    (
+        "jsonrpc_2",
+        "JSONRPC_2",
+        "jsonrpc-2.0",
+        "https://www.jsonrpc.org/specification",
+        "sha256:8fe1edfdca511d309e712e47447457ea5159b728ec02071a84593aed692aefeb",
+        35,
+    ),
+    (
+        "language_server_3_17",
+        "LANGUAGE_SERVER_3_17",
+        "lsp-3.17",
+        "https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/",
+        "sha256:93afdf15adbaa7355cd00d0134de05331b8dcc9361ffdd11d3da0924cab20579",
+        37,
+    ),
+];
+
+/// The levels of a sentence by 19.19's word table: 19.4's, plus `needs to` and `need to`
+/// (`Must`), `not allowed` (`MustNot`), `allowed` and `free to` (`May`), `recommended`
+/// (`Recommended`) and `advised` (`Should`).
+fn text_id_levels(text: &str) -> Vec<&'static str> {
+    let mut found = word_levels(text);
+    let words: Vec<String> = text
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .filter(|word| !word.is_empty())
+        .map(|word| word.to_ascii_lowercase())
+        .collect();
+    for (at, word) in words.iter().enumerate() {
+        let next = words.get(at + 1).map(String::as_str);
+        let previous = at.checked_sub(1).map(|p| words[p].as_str());
+        match (word.as_str(), next) {
+            ("needs" | "need", Some("to")) => found.push("Must"),
+            ("allowed", _) if previous == Some("not") => found.push("MustNot"),
+            ("allowed", _) => found.push("May"),
+            ("free", Some("to")) => found.push("May"),
+            ("recommended", _) => found.push("Recommended"),
+            ("advised", _) => found.push("Should"),
+            _ => {}
+        }
+    }
+    found
+}
+
+#[test]
+fn text_id_catalogues_check_and_quote_their_pages() {
+    for (name, constant, id, url, digest, count) in TEXT_ID_CATALOGUES {
+        let path = format!("std/rfc/{name}.ignite");
+        let output = ignite(&repository(), &["check", &path]);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{path}: {}",
+            text(&output.stderr)
+        );
+        assert_eq!(text(&output.stdout), "", "{path}");
+        assert_eq!(text(&output.stderr), "", "{path}");
+        let output = ignite(&repository(), &["rfc", "check", &path]);
+        assert_eq!(output.status.code(), Some(0), "{path}");
+        assert_eq!(text(&output.stdout), format!("{path}: unchecked\n"));
+
+        let module = catalogue(name);
+        let spec = module
+            .find(&format!("\nconst {constant}: Spec = Spec {{\n"))
+            .map(|at| &module[at..])
+            .unwrap_or_else(|| panic!("{path}: no Spec `{constant}`"));
+        let spec = &spec[..spec.find("\n}\n").expect("the Spec's end")];
+        assert_eq!(field(spec, "id"), Some(format!("\"{id}\"").as_str()));
+        assert_eq!(field(spec, "url"), Some(format!("\"{url}\"").as_str()));
+        assert_eq!(
+            field(spec, "digest"),
+            Some(format!("\"{digest}\"").as_str())
+        );
+        assert_eq!(field(spec, "rfc"), None, "{path}: no RFC number");
+
+        let found = requirements(&module);
+        assert_eq!(found.len(), count, "{path}");
+        let ids: Vec<String> = found.iter().map(|(id, _)| id.clone()).collect();
+        assert_eq!(listed(&module), ids, "{path}: listed once each, in order");
+        for (id, decl) in &found {
+            assert_eq!(field(decl, "rfc"), None, "{path}.{id}");
+            assert_eq!(field(decl, "source"), Some("Prose"), "{path}.{id}");
+            assert!(field(decl, "party").is_some(), "{path}.{id}: a party");
+            let level = field(decl, "level").expect("a level");
+            let text = unescape(field(decl, "text").expect("a text"));
+            let words = text_id_levels(&text);
+            let strongest = words.iter().map(|level| class(level)).min();
+            let allowed: Vec<&str> = words
+                .iter()
+                .copied()
+                .filter(|word| Some(class(word)) == strongest)
+                .collect();
+            assert!(
+                allowed.contains(&level),
+                "{path}.{id}: level {level}, but the word table gives {allowed:?} for {text:?}"
+            );
+        }
+    }
+}
+
+/// The LSP catalogue covers "the base protocol and the server lifecycle" (19.19), but the
+/// page's Server lifecycle heading also holds Register Capability, whose prose says
+/// "Server must not register the same capability both statically through the initialize
+/// result and dynamically for the same document selector." That MUST NOT for the Server is
+/// neither a requirement nor among the sentences the header lists as left out.
+#[test]
+fn lsp_catalogue_holds_or_lists_every_server_lifecycle_rule() {
+    let module = catalogue("language_server_3_17");
+    let flat: String = module
+        .replace("\n//", " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let sentence = "Server must not register the same capability both statically through the initialize result and dynamically for the same document selector.";
+    assert!(
+        flat.contains(sentence),
+        "std/rfc/language_server_3_17.ignite neither quotes nor leaves out: {sentence}"
+    );
+}

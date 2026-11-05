@@ -7,11 +7,13 @@ enum Level { Must, MustNot, Required, Shall, ShallNot, Should, ShouldNot, Recomm
 // Whom a requirement addresses.
 enum Party { Any, Sender, Recipient, Client, Server, Proxy }
 
-// Bcp14: extracted from a <bcp14> mark; Prose: written by hand from an RFC that predates BCP 14.
+// Bcp14: extracted from a <bcp14> mark; Prose: written by hand from an RFC that predates BCP 14,
+// or from a specification that is no RFC.
 enum Source { Bcp14, Prose }
 
+// `rfc` is the RFC's number; 0, the default, for a specification that is no RFC.
 type Requirement {
-  rfc: Int
+  rfc: Int = 0
   section: Text
   ordinal: Int
   level: Level
@@ -21,10 +23,12 @@ type Requirement {
   text: Text
 }
 
+// `id` names a specification that is no RFC ("jsonrpc-2.0"), whose `rfc` is 0; an RFC's is "".
 type Spec {
-  rfc: Int
+  rfc: Int = 0
   title: Text
   url: Text
   digest: Text
   requirements: List<Requirement>
+  id: Text = ""
 }
