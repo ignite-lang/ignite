@@ -11,7 +11,7 @@ relations:
 scope:
 - confidence: cited
   path: tools/ignite-perf/src
-revision: 3
+revision: 4
 ---
 # Story: apply-cycle-timing
 
@@ -30,12 +30,14 @@ times `todod` and `health` as separate units. Unit U7 of 22.13.
 
 ## Acceptance
 
-- Before: `ignite-perf apply-cycle` is refused as an unknown mode. After: run on one tree it
-  writes, per target, 5 samples after one discarded warm-up for `apply-cycle-terminal-<target>`
-  and `apply-cycle-todo-<target>`, each sample split into plan (build included), apply until
-  `completed`, and first answer; `ignite-perf self-check` exits 0 with a case for the mode.
+- Before (on `main` at the slice base): `ignite-perf apply-cycle` is refused as an unknown mode.
+- After, on the after tree: `ignite-perf apply-cycle` writes, per target, 5 samples after one
+  discarded warm-up for `apply-cycle-terminal-<target>` and `apply-cycle-todo-<target>`; on the
+  before tree (a `git archive` of the slice base) it writes `apply-cycle-terminal-<target>` only
+  (D12). Each sample is split into plan (build included), apply until `completed`, and first
+  answer.
 - After: `ignite-perf programs` writes separate units for `todod` and `health` per target and
-  profile.
+  profile on the after tree.
 - Rows 8 and 31 hold; `task gate` green.
 
 ## Out of Scope

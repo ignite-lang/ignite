@@ -15,12 +15,14 @@ scope:
 - confidence: cited
   path: PLAN.md
 - confidence: cited
+  path: README.md
+- confidence: cited
   path: STATUS.md
 - confidence: cited
   path: docs/performance/18
 - confidence: cited
   path: docs/vision.md
-revision: 9
+revision: 11
 ---
 # Story: slice-18-records
 
@@ -40,10 +42,13 @@ The performance records of slice 18 are in `docs/performance/18/`, and `AGENTS.m
   median Rust dev build in the same passes, recorded under `docs/performance/18/`.
 - Row 28: `apply-cycle` records exist for the todo (after tree, both targets) and the terminal
   design (both trees, both targets); the todo cycle's LLVM median is below its Rust median.
-- Row 32: `AGENTS.md`'s gate-time section has a "Slice 18" paragraph naming the gate's exit and
-  counts.
-- `STATUS.md`, `PLAN.md` and `docs/vision.md` (S1, S6, S12) each name slice 18 with its merge
-  commit.
+- Row 32: `ls docs/performance/18/` lists the records, logs and scripts of every unit of 22.15,
+  and `AGENTS.md`'s gate-time section has one paragraph starting `Slice 18` naming the gate's
+  head, exit, cargo counts and inline counts per target.
+- S10: `AGENTS.md`'s layout table names `examples/todo/health.ignite` and the durable todo, and
+  its commands table has a row for `ignite recover`.
+- `STATUS.md`, `PLAN.md` and `docs/vision.md` (S1, S6, S12) each have a slice 18 row naming the
+  gate commit and "merge into `main` pending", as the rows of slices 15 to 17 did.
 
 ## Out of Scope
 
