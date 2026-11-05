@@ -224,3 +224,43 @@ pub use pipe::{
     ignite_rt_pipe_close, ignite_rt_pipe_pair, ignite_rt_pipe_read,
     ignite_rt_pipe_received_batches, ignite_rt_pipe_set_idle_timeout, ignite_rt_pipe_write_all,
 };
+
+// Slice 17 (`docs/slice.md` 21.8): the capability entries, after the tests
+// for the same reason. Surface: U1; `fs` U2, `child` U3, `entropy` U5.
+mod child;
+mod entropy;
+mod fs;
+pub use child::{
+    IgniteChildExit, IgniteInvocation, ignite_rt_child_id, ignite_rt_child_kill,
+    ignite_rt_child_wait, ignite_rt_launcher_execute, ignite_rt_launcher_new,
+    ignite_rt_launcher_start,
+};
+pub use entropy::{ignite_rt_entropy_new, ignite_rt_entropy_open, ignite_rt_entropy_random_bytes};
+pub use fs::{
+    ignite_rt_directory_absolute_path, ignite_rt_directory_create_directory,
+    ignite_rt_directory_launch, ignite_rt_directory_read_directory, ignite_rt_directory_read_file,
+    ignite_rt_directory_remove, ignite_rt_directory_remove_tree, ignite_rt_directory_temporary,
+    ignite_rt_directory_write_file,
+};
+pub use process::{
+    ignite_rt_args_flag, ignite_rt_setting_launch, ignite_rt_setting_of, ignite_rt_setting_value,
+};
+
+impl IgniteList {
+    /// A `List<Text>` of copies of `texts` in the current task's arena.
+    pub fn from_texts(texts: &[String]) -> IgniteList {
+        let size = std::mem::size_of::<IgniteList>();
+        let ptr = arena::alloc(texts.len() * size, std::mem::align_of::<IgniteList>());
+        for (index, text) in texts.iter().enumerate() {
+            let element = IgniteList::from_bytes(text.as_bytes());
+            // SAFETY: `ptr` is a fresh arena block of `texts.len()` aligned
+            // elements; `index` is in range.
+            unsafe { ptr.cast::<IgniteList>().add(index).write(element) };
+        }
+        IgniteList {
+            ptr,
+            len: texts.len() as i64,
+            cap: texts.len() as i64,
+        }
+    }
+}

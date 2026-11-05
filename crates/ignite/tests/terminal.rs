@@ -40,6 +40,7 @@ fn executables(target: Target) -> &'static Executables {
         let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
         let options = match target {
             Target::Rust => ignite::BuildOptions {
+                target: Target::Rust,
                 out: Some(tmp.join("terminal")),
                 ..Default::default()
             },
@@ -978,6 +979,7 @@ fn short_idle_terminald(target: Target) -> &'static Path {
         let short = format!("idle_timeout: Duration = {SHORT_IDLE_MS} ms");
         std::fs::write(&telnet, text.replace(constant, &short)).unwrap();
         let mut options = ignite::BuildOptions {
+            target: Target::Rust,
             out: Some(tmp.join("out")),
             std: Some(std),
             ..Default::default()

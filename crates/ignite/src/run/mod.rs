@@ -29,6 +29,91 @@ pub struct Standing {
 /// The default epoch of the manual clock (16.4).
 pub const DEFAULT_EPOCH: &str = "2026-01-01T00:00:00Z";
 
+/// E142 (`docs/slice.md` 21.6, 21.9): the message for each `Setting`
+/// without `default` that one of `started` (member ids) uses, directly or
+/// through the members it uses; once per setting, in id order, naming the
+/// first started member that reaches it. `ignite run` and `ignite apply`
+/// pass no setting values (D12), so such a member would exit 2 at every
+/// start.
+pub fn settings_without_default<'a>(
+    model: &ignite_eval::Model,
+    started: impl IntoIterator<Item = &'a String>,
+) -> Vec<String> {
+    let mut found: std::collections::BTreeMap<&str, (&str, &str)> = Default::default();
+    for member in started {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut pending = vec![member.as_str()];
+        while let Some(from) = pending.pop() {
+            for edge in &model.edges {
+                if edge.from == from
+                    && edge.kind == ignite_eval::EdgeKind::Uses
+                    && seen.insert(edge.to.as_str())
+                {
+                    pending.push(&edge.to);
+                }
+            }
+        }
+        for id in seen {
+            let Some(resource) = model.member(id) else {
+                continue;
+            };
+            if resource.declaration != ignite_types::MemberDeclaration::Resource
+                || resource.kind != "Setting"
+                || resource
+                    .properties
+                    .iter()
+                    .any(|(name, _)| name == "default")
+            {
+                continue;
+            }
+            let flag = resource
+                .properties
+                .iter()
+                .find_map(|(name, value)| match (name.as_str(), value) {
+                    ("flag", ignite_eval::Value::Text(flag)) => Some(flag.as_str()),
+                    _ => None,
+                })
+                .unwrap_or("");
+            found.entry(&resource.id).or_insert((member, flag));
+        }
+    }
+    found
+        .into_iter()
+        .map(|(setting, (member, flag))| {
+            format!(
+                "setting `{setting}` (`{flag}`) has no `default`, and `{member}` uses it: `ignite run` and `ignite apply` pass no setting values, so the member would exit 2 at every start; give it a `default`"
+            )
+        })
+        .collect()
+}
+
+/// E142 for the members `ignite run` or `ignite plan --for-apply` would
+/// start (`crate::run_members`), one diagnostic per setting
+/// ([`settings_without_default`]); `Ok` when there is none.
+pub(crate) fn refuse_settings_without_default(
+    loaded: &crate::Loaded,
+    model: &ignite_eval::Model,
+) -> Result<(), crate::Error> {
+    let (started, _) = crate::run_members(model);
+    let found = settings_without_default(model, started.keys());
+    if found.is_empty() {
+        return Ok(());
+    }
+    Err(crate::diagnostics(
+        loaded.source(),
+        found
+            .into_iter()
+            .map(|message| {
+                ignite_syntax::diagnostic::Diagnostic::new(
+                    "E142",
+                    ignite_syntax::ast::Span::new(0, 0),
+                    message,
+                )
+            })
+            .collect(),
+    ))
+}
+
 /// An RFC 3339 instant (`2026-10-31T22:50:00Z`, `…T23:50:00+01:00`, an
 /// optional fraction) as nanoseconds since 1970-01-01T00:00:00Z; `None`
 /// when malformed.

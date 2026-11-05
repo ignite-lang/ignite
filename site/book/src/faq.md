@@ -9,7 +9,7 @@ turns it into native executables. The same declaration is what `ignite plan` mod
 
 ## Can I use it in production?
 
-No. Ignite is an early prototype. v0.4.0 runs systems on one machine, in the foreground
+No. Ignite is an early prototype. v0.6.0 runs systems on one machine, in the foreground
 (`ignite run`) or under a local host (`ignite apply`); there is no cloud provider, no
 portable bundle and no stateful migration. See the [roadmap](roadmap.md).
 
@@ -26,9 +26,10 @@ platforms are not covered by this book.
 
 ## Rust target or LLVM target?
 
-Start with the default, Rust. Both targets compile the same checked program, call the same
+Start with the default, LLVM. Both targets compile the same checked program, call the same
 IO substrate and must behave the same, down to the text of an error; every feature lands on
-both. The LLVM target builds without cargo and needs clang and the runtime archive. See
+both. The LLVM target builds without cargo and needs clang and the runtime archive;
+`--target rust` builds with cargo instead. See
 [Building for Rust and LLVM](guide/targets.md).
 
 ## Is the generated Rust meant to be edited?

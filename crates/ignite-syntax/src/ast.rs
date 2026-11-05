@@ -789,8 +789,14 @@ pub enum PatternKind {
     Or(Vec<Pattern>),
     /// `(p, q)`
     Tuple(Vec<Pattern>),
-    /// `[p, q]`: a list of exactly that length.
+    /// `[p, q]`: a list of exactly that length; with a [`PatternKind::Rest`]
+    /// element, a list of at least the other elements' count
+    /// (`docs/slice.md` 20.5).
     List(Vec<Pattern>),
+    /// `..` or `..name`, only as an element of [`PatternKind::List`], at
+    /// most one per list and `..name` only last (E076): the elements
+    /// between the prefix and the suffix, bound as a `List<T>` or `Bytes`.
+    Rest(Option<Ident>),
     /// A lowercase identifier with no payload binds the value.
     Binding(Ident),
     /// `Variant`, `Variant(p, q)`, or `Enum.Variant(...)`: an uppercase

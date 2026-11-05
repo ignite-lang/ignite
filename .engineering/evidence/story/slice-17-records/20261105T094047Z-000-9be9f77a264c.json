@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T09:40:47Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-17-records",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 6c727d11 (slice 17 with main merged): exit 0, 1090 cargo passed, 0 failed, 11 ignored, 233 inline per target; merged as PR 34 (421742b3)",
+    "reference": "https://github.com/ignite-lang/ignite/pull/34"
+  }
+}

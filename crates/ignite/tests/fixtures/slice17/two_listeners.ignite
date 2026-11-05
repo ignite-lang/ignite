@@ -1,0 +1,54 @@
+package two_listeners
+
+import std.control.{Machine, Supervisor}
+import std.deploy.{Deployment, localSocket, nativeProcess}
+import std.policy.Restart
+import std.protocol.http.*
+
+// `docs/slice.md` 16.3: a member with two `TcpListener`s. The generated
+// `main` applies `--port` to the first it declares, `Duo.zeta`, which
+// sorts after `Duo.alpha`; `ignite run --port Duo.zeta=P` must pass `P`.
+//   any request on `zeta`   200 with `zeta`
+
+fn handle(state: Text, request: Request) -> Response = Response.plain(200, state)
+
+type Pair {
+  first: TcpListener
+  second: TcpListener
+  application: HttpApp<Text>
+  executable: Text
+}
+
+fn Pair.main(self: Pair) -> Result<Unit, IoError> {
+  loop {
+    let stream = self.first.accept()?
+    spawn Http.serve(stream, HttpLimits {}, self.application)
+  }
+}
+
+fn Pair.machine(self: Pair, id: Text) -> Machine = Machine.Supervise(Supervisor {
+  id = "{id}.supervisor"
+  member = id
+  restart = Restart {}
+})
+
+system Duo {
+  resource zeta: TcpListener { address = "127.0.0.1", port = 0 }
+  resource alpha: TcpListener { address = "127.0.0.1", port = 0 }
+
+  component server: Pair {
+    first = zeta
+    second = alpha
+    application = HttpApp { state = "zeta", handle }
+    executable = "duod"
+  }
+}
+
+assembly local: Deployment {
+  system = Duo
+  bindings = {
+    Duo.zeta = localSocket()
+    Duo.alpha = localSocket()
+    Duo.server = nativeProcess(includes = [])
+  }
+}

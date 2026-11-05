@@ -20,9 +20,9 @@ use ignite_syntax::ast::{
     PatternKind, Program, RecordDecl, Stmt, StmtKind, UnaryOp,
 };
 use ignite_types::{
-    AssertCompare, BraceKind, Builtin, Callee, EXPOSURE_VARIANTS, FailureOp, MemberInfo,
-    PropertySource, QualName, QuantityKind, Show, TCP_LISTENER_DEFAULT_BACKLOG,
-    TCP_LISTENER_DEFAULT_EXPOSURE, Ty, TypedProgram, field_default,
+    AssertCompare, BraceKind, Builtin, Callee, EXPOSURE_VARIANTS, FailureOp,
+    LAUNCHER_DEFAULT_MAXIMUM_CHILDREN, MemberInfo, PropertySource, QualName, QuantityKind, Show,
+    TCP_LISTENER_DEFAULT_BACKLOG, TCP_LISTENER_DEFAULT_EXPOSURE, Ty, TypedProgram, field_default,
 };
 
 use crate::{Module, Modules, Value};
@@ -785,6 +785,9 @@ impl<'p> Evaluator<'p> {
                         fields: Vec::new(),
                     },
                     "backlog" => Value::Int(TCP_LISTENER_DEFAULT_BACKLOG),
+                    "create" => Value::Bool(false),
+                    "flag" => Value::Text(String::new()),
+                    "maximum_children" => Value::Int(LAUNCHER_DEFAULT_MAXIMUM_CHILDREN),
                     other => return Err(internal(format!("no builtin default for `{other}`"))),
                 },
                 PropertySource::Default(q) => {
@@ -1305,7 +1308,21 @@ impl<'p> Evaluator<'p> {
                 | Builtin::StoreRemove
                 | Builtin::StoreValues
                 | Builtin::StoreUpdate
-                | Builtin::StoreUpsert,
+                | Builtin::StoreUpsert
+                | Builtin::DirectoryReadFile
+                | Builtin::DirectoryWriteFile
+                | Builtin::DirectoryReadDirectory
+                | Builtin::DirectoryCreateDirectory
+                | Builtin::DirectoryRemove
+                | Builtin::DirectoryRemoveTree
+                | Builtin::DirectoryAbsolutePath
+                | Builtin::LauncherStart
+                | Builtin::LauncherExecute
+                | Builtin::ChildProcessId
+                | Builtin::ChildProcessWait
+                | Builtin::ChildProcessKill
+                | Builtin::EntropyRandomBytes
+                | Builtin::SettingValue,
                 _,
             ) => Err(internal(format!(
                 "builtin `{builtin:?}` has no value at compile time"
@@ -1692,12 +1709,35 @@ impl<'p> Evaluator<'p> {
                 }
                 _ => false,
             },
-            PatternKind::List(items) => match value {
-                Value::List(values) if values.len() == items.len() => {
-                    self.match_all(cx, items, values, bindings)?
+            PatternKind::List(items) => {
+                let rest = items
+                    .iter()
+                    .position(|item| matches!(item.kind, PatternKind::Rest(_)));
+                match (value, rest) {
+                    (Value::List(values), None) if values.len() == items.len() => {
+                        self.match_all(cx, items, values, bindings)?
+                    }
+                    (Value::List(values), Some(at)) if values.len() + 1 >= items.len() => {
+                        let suffix = items.len() - at - 1;
+                        let end = values.len() - suffix;
+                        self.match_all(cx, &items[..at], &values[..at], bindings)?
+                            && self.match_all(cx, &items[at + 1..], &values[end..], bindings)?
+                            && self.matches(
+                                cx,
+                                &items[at],
+                                &Value::List(values[at..end].to_vec()),
+                                bindings,
+                            )?
+                    }
+                    _ => false,
                 }
-                _ => false,
-            },
+            }
+            PatternKind::Rest(name) => {
+                if let Some(name) = name {
+                    bindings.push((name.name.clone(), value.clone()));
+                }
+                true
+            }
             PatternKind::Binding(name) => {
                 bindings.push((name.name.clone(), value.clone()));
                 true
@@ -2090,6 +2130,10 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::ClockMonotonic
             | Builtin::EndpointOf
             | Builtin::PipePair
+            | Builtin::DirectoryTemporary
+            | Builtin::LauncherNew
+            | Builtin::EntropyNew
+            | Builtin::SettingOf
     )
 }
 

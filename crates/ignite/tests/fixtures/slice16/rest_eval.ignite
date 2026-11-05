@@ -1,0 +1,92 @@
+type Person {
+  name: Text
+  tags: List<Text>
+}
+
+fn tail_of<T>(xs: List<T>) -> List<T> = match xs {
+  [_, ..rest] => rest
+  [] => []
+}
+
+fn e_text_suffix() -> Bool {
+  let hit = match ["a", "end"] { [.., "end"] => true, _ => false }
+  let one = match ["end"] { [.., "end"] => true, _ => false }
+  let miss = match ["end", "a"] { [.., "end"] => true, _ => false }
+  hit && one && !miss
+}
+
+fn e_two_each_side() -> Bool {
+  let four = match ["a", "b", "c", "d"] { [a, b, .., y, z] => a + b + y + z, _ => "short" }
+  let five = match ["a", "b", "x", "c", "d"] { [a, b, .., y, z] => a + b + y + z, _ => "short" }
+  let three = match ["a", "b", "c"] { [a, b, .., y, z] => a + b + y + z, _ => "short" }
+  four == "abcd" && five == "abcd" && three == "short"
+}
+
+fn e_or_head() -> Bool {
+  let a = match [2, 9] { [1 | 2, ..] => 1, [_, ..] => 2, [] => 0 }
+  let b = match [3] { [1 | 2, ..] => 1, [_, ..] => 2, [] => 0 }
+  a == 1 && b == 2
+}
+
+fn e_payload() -> Bool {
+  let some: Option<List<Text>> = Some(["a", "b", "c"])
+  let got = match some { Some([_, ..rest]) => rest, Some([]) => ["empty"], None => ["none"] }
+  got == ["b", "c"]
+}
+
+fn e_two_rests() -> Bool {
+  let xss = [["a", "b", "c"], ["d"], ["e"]]
+  let got = match xss { [[_, ..inner], ..outer] => (inner, outer.len()), _ => ([], 0 - 1) }
+  got == (["b", "c"], 2)
+}
+
+fn e_records() -> Bool {
+  let people = [Person { name = "a", tags = ["x"] }, Person { name = "b", tags = ["y", "z"] }]
+  var after = tail_of(people)
+  after[0].tags.push("w")
+  after[0].tags == ["y", "z", "w"] && people[1].tags == ["y", "z"]
+}
+
+fn e_bytes() -> Bool {
+  let rest = match b"\xff\xfbab" { [255, _, ..rest] => rest, _ => Bytes.empty() }
+  var grown = rest
+  grown.push(1)
+  rest == b"ab" && grown.len() == 3
+}
+
+fn e_units() -> Bool {
+  let n = match [(), (), ()] { [_, ..rest] => rest.len(), [] => 0 - 1 }
+  n == 2
+}
+
+fn e_whole() -> Bool {
+  let empty: List<Int> = []
+  let a = match empty { [..all] => all }
+  let b = match [4, 5] { [..all] => all }
+  a == [] && b == [4, 5]
+}
+
+fn e_closure() -> Bool {
+  let f = match [10, 20, 30] { [_, ..rest] => |i: Int| rest.at(i), [] => |_i: Int| 0 - 1 }
+  f(0) == 20 && f(1) == 30
+}
+
+fn e_tuple_in_list() -> Bool {
+  let xs = [("a", [1, 2, 3]), ("b", [])]
+  let got = match xs { [(_, [_, ..r]), ..] => r, _ => [0 - 1] }
+  got == [2, 3]
+}
+
+test "the evaluator's rest cases also hold on the target" {
+  assert e_text_suffix()
+  assert e_two_each_side()
+  assert e_or_head()
+  assert e_payload()
+  assert e_two_rests()
+  assert e_records()
+  assert e_bytes()
+  assert e_units()
+  assert e_whole()
+  assert e_closure()
+  assert e_tuple_in_list()
+}

@@ -1,0 +1,39 @@
+package orphans
+
+import std.process.Invocation
+import std.protocol.http.*
+
+// Row 17 of `docs/slice.md` 21.0: children end with the program.
+//   orphan    starts /bin/sleep 30, prints its id and returns from `main`
+//   orphand   an HTTP server; any request starts /bin/sleep 30 and answers
+//             its id, the child never waited
+
+fn sleeper() -> Invocation = Invocation { program = "/bin/sleep", arguments = ["30"] }
+
+type Orphan {
+  tools: Launcher
+  executable: Text
+}
+
+fn Orphan.main(self: Orphan) -> Result<Unit, IoError> {
+  let child = self.tools.start(sleeper())?
+  Stdout.write_all(child.id().to_text().concat("\n").to_bytes())
+}
+
+fn handle(tools: Launcher, request: Request) -> Response = match tools.start(sleeper()) {
+  Ok(child) => Response.plain(200, child.id().to_text())
+  Err(error) => Response.plain(500, error.message)
+}
+
+system Orphans {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 8097 }
+  resource tools: Launcher
+
+  component once: Orphan { tools = tools, executable = "orphan" }
+
+  component server: HttpServer {
+    listener = ingress
+    application = HttpApp { state = tools, handle }
+    executable = "orphand"
+  }
+}

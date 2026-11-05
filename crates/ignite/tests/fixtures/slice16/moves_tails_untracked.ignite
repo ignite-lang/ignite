@@ -1,0 +1,44 @@
+// Slice 16 U3 (docs/slice.md 20.3.1, 20.3.4): bindings the moves analysis
+// does not track, a pattern binding of a scrutinee that is a value and the
+// element of a `for` over a value, are the tail of an `if` branch whose value
+// is used and are read again afterwards. The analysis never moves them, so
+// the branch must copy them; rustc must accept the program and both targets
+// return the copied values.
+
+type State {
+  items: List<Int>
+  count: Int
+}
+
+fn fresh() -> State = State { items = [], count = 0 }
+
+fn same(o: Option<State>) -> Option<State> = o
+
+fn binding_tail_read_later(o: Option<State>, c: Bool) -> Int = match same(o) {
+  Some(v) => {
+    let t = if c { v } else { fresh() }
+    t.count + v.count
+  }
+  None => 0
+}
+
+fn element_tail_read_later(xs: List<State>, c: Bool) -> Int {
+  var n = 0
+  for x in xs.map(|s| s) {
+    let t = if c { x } else { fresh() }
+    n = n + t.count + x.items.len()
+  }
+  n
+}
+
+test "a pattern binding as a branch tail keeps its value" {
+  let s = State { items = [1], count = 2 }
+  assert binding_tail_read_later(Some(s), true) == 4
+  assert binding_tail_read_later(Some(s), false) == 2
+}
+
+test "an owned for element as a branch tail keeps its value" {
+  let s = State { items = [1], count = 2 }
+  assert element_tail_read_later([s], true) == 3
+  assert element_tail_read_later([s], false) == 1
+}

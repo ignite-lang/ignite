@@ -1,5 +1,5 @@
 e046_patterns.ignite:4:10: error[E046]: match does not cover `false`
 e046_patterns.ignite:10:10: error[E046]: match does not cover `(false, None)`
-e046_patterns.ignite:17:10: error[E046]: match on `List<Int>` does not cover every value; add a `_` arm or a binding arm
+e046_patterns.ignite:17:10: error[E046]: match does not cover `[_, _, ..]`
 e046_patterns.ignite:24:10: error[E046]: match on `Int` does not cover every value; add a `_` arm or a binding arm
 e046_patterns.ignite:31:10: error[E046]: match does not cover `Some(false)`

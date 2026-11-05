@@ -1,0 +1,22 @@
+package fixtures.rest
+
+fn two_rests(xs: List<Int>) -> Int {
+  return match xs {
+    [.., x, ..] => x
+    _ => 0
+  }
+}
+
+fn two_named(xs: List<Int>) -> Int {
+  return match xs {
+    [..a, ..b] => 0
+    _ => 0
+  }
+}
+
+fn named_not_last(xs: List<Int>) -> Int {
+  return match xs {
+    [..init, last] => last
+    _ => 0
+  }
+}

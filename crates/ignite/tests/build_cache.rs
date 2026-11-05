@@ -7,6 +7,7 @@ fn build(source: &Path, out: &Path, target: &Path) -> std::path::PathBuf {
     ignite::build(
         source,
         &ignite::BuildOptions {
+            target: ignite::Target::Rust,
             out: Some(out.to_path_buf()),
             target_dir: Some(target.to_path_buf()),
             ..Default::default()

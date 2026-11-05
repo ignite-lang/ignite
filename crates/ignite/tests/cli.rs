@@ -483,6 +483,8 @@ fn build_std_and_program_then_run_both_executables() {
     let target = target_dir();
     let output = ignite(&[
         "build",
+        "--target",
+        "rust",
         arg(&dir.join("hello.ignite")),
         "--std",
         arg(&dir.join("std")),
@@ -622,6 +624,8 @@ fn client_exit_statuses() {
     let target = target_dir();
     let output = ignite(&[
         "build",
+        "--target",
+        "rust",
         arg(&dir.join("exits.ignite")),
         "--std",
         arg(&dir.join("std")),

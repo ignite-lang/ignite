@@ -2,7 +2,7 @@ proposal, not scheduled
 
 # Ignite syntax: less ceremony, same explicitness
 
-Status: proposal drafted 2026-11-01. Nothing here is implemented or scheduled. Under
+Status: proposal drafted 2026-11-01. Nothing here is implemented or scheduled except P9, contracted by `docs/slice.md` 20.5 and implemented in slice 16. Under
 `vision.md` §7 T2 a future design stays a proposal until a wave adopts it, and `vision.md` §4.1
 plans no sugar slice before the system-declaration slice (slice 10, wave F1): a sugar item
 enters a slice only when that slice's declarations need it. Section 7 lists what slice 10
@@ -257,6 +257,10 @@ contextual `pub` costs 46 tokens and brings std to about 46 definitions against 
 
 ### P9 Rest patterns in list patterns
 
+Status: contracted, `docs/slice.md` 20.5 (slice 16, wave A); E076 is section 8 of that file (20.7). The
+contract adds what this proposal left open: the length split and witness text of E046, and the
+rest binding as a copy. The text below is the proposal as drafted.
+
 Syntax: one `..` anywhere in a list pattern, or one `..name` as the last element:
 `[_, _, ..]`, `[first, ..rest]`, `[.., last]`. Wanted by `protocols.md` line 585
 (`([_, _, ..], _, _) => Reject(400)`) and line 596, and by `vision.md` §5.
@@ -343,7 +347,7 @@ lists for the rest.
 | 7 | P4 match guards | 12 | about 30 | 4 × S | state machines (`decode`), actors' `handle` |
 | 8 | P10 defaults, named args | 3 | 26 | 3 × S | the design's call syntax; needed by slice 10 (section 7) |
 | 9 | P11 pair-list literals | 0 | 88 | S | JSON and headers; reserves the `Map` literal |
-| 10 | P9 rest patterns | 0 | — | S + M | `protocols.md` P1 |
+| 10 | P9 rest patterns | 0 | — | S + M | `protocols.md` P1; contracted, `docs/slice.md` 20.5 |
 | — | P8 visibility | 0 | −46 | M | question Q2 |
 
 Total of ranks 1 to 10: about 207 of 2696 lines (7.7 %), 78 of them without compiler work.
@@ -414,7 +418,7 @@ Keyword table: add `is`.
 | E073 | a range `..` or `..=` outside a `for` head or a pattern | syntax |
 | E074 | a named argument that names no parameter or repeats one; a positional argument after a named one; a required parameter after a defaulted one | check |
 | E075 | a named or omitted argument in a call through a fn value; a default on a protocol role | types |
-| E076 | a second `..` in a list pattern, or `..name` not last | syntax |
+| E076 | a second `..` in a list pattern, or `..name` not last (contracted, `docs/slice.md` 20.7) | syntax |
 
 Reused: E001 (initializer ending in `}` before `else`; mixed list elements), E003 (`is`
 binding out of scope), E006 (`+=` on a `let` binding), E040, E045, E046, E047.

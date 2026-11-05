@@ -2,13 +2,14 @@
 format: aep.planning-md/3
 id: epic:slice-16-language-gaps
 kind: epic
-status: active
+status: implemented
 title: 'Slice 16, wave A language gaps: closures, last-use moves and the small gaps'
 summary: 'Wave A of docs/vision.md 4.1 before actors: closures, last-use moves, and the remaining language gaps on both targets'
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-03T22:40:55Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-03T22:40:55Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T03:28:31Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 
 # Epic: slice-16-language-gaps

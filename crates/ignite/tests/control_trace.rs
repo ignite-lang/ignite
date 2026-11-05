@@ -63,6 +63,7 @@ fn traceprint(target: Target) -> &'static Path {
         let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
         let options = match target {
             Target::Rust => ignite::BuildOptions {
+                target: Target::Rust,
                 out: Some(tmp.join("control-trace")),
                 ..Default::default()
             },

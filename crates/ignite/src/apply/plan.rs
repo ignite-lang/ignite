@@ -14,7 +14,7 @@ pub const FORMAT: &str = "ignite-apply-plan/0.1";
 pub const CONTROLLER_ABI: &str = "ignite-local-host/0.1";
 /// Increment when compiler/backend generation semantics change. The admitted
 /// compiler bytes are a separate raw input, so a rebuild never changes a plan.
-pub const CODEGEN_REVISION: &str = "ignite-codegen/0.1.0-12";
+pub const CODEGEN_REVISION: &str = "ignite-codegen/0.1.0-18";
 /// Increment when the evaluator's stepping of `std.control` reducers may
 /// change. With the digests of the standard-library inputs it forms a plan's
 /// reducer revision.
@@ -1159,6 +1159,24 @@ fn identity(
     ])
 }
 
+/// E142 for `ignite plan --for-apply` before the host is contacted
+/// (`docs/slice.md` 21.6, row 26): a program whose plan would start a
+/// member with a `Setting` without `default`. Any other failure to load or
+/// model the program is left to the host's [`prepare`], which reports it
+/// as before.
+pub fn refuse_settings_without_default(
+    file: &Path,
+    options: &crate::PlanOptions,
+) -> Result<(), crate::Error> {
+    let Ok(loaded) = crate::load_for(file, options.std.as_deref(), crate::RUN_ROOTS) else {
+        return Ok(());
+    };
+    let Ok(model) = loaded.model(options) else {
+        return Ok(());
+    };
+    crate::run::refuse_settings_without_default(&loaded, &model)
+}
+
 /// Prepare before any destructive progress; all files are checked again after
 /// the build so a concurrent workspace edit cannot produce mixed input pins.
 pub fn prepare(
@@ -1197,6 +1215,7 @@ pub fn prepare(
             ),
         ));
     }
+    crate::run::refuse_settings_without_default(&loaded, &model)?;
     let model_json = Json::parse(&model.to_json()).map_err(|why| invalid(&source, why))?;
     let mut kinds: BTreeMap<PathBuf, InputKind> = BTreeMap::new();
     let mut source_pins = BTreeMap::new();
@@ -1272,12 +1291,11 @@ pub fn prepare(
         }
     }
     let runtime = if build_options.target == crate::Target::Llvm {
-        let path = canonical(
-            &build_options
-                .runtime
-                .clone()
-                .unwrap_or_else(crate::default_runtime_path),
-        )?;
+        let runtime = crate::runtime_or_default(build_options.runtime.as_ref())?;
+        if !runtime.is_file() {
+            return Err(crate::llvm_build::missing_runtime(runtime));
+        }
+        let path = canonical(&runtime)?;
         kinds.insert(path.clone(), InputKind::Runtime);
         match on_path("clang") {
             Some(clang) => {
@@ -1589,6 +1607,32 @@ mod tests {
         let file = ignite_syntax::SourceFile::new("projection.ignite", source);
         let tokens = ignite_syntax::lexer::lex(&file.text).unwrap();
         ignite_syntax::parser::parse(&tokens).unwrap()
+    }
+
+    /// Only a `TcpListener` resource has a listener provider: the studio's
+    /// capability resources (`Studio.entropy` sorts before the listener)
+    /// carry no listener authority in an action.
+    #[test]
+    fn a_capability_resource_has_no_listener_provider() {
+        let file = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/slice17/studio_defaults.ignite");
+        let loaded = crate::load_for(&file, None, crate::RUN_ROOTS).expect("the studio loads");
+        let model = loaded
+            .model(&crate::PlanOptions::default())
+            .expect("the studio models");
+        let model = Json::parse(&model.to_json()).expect("the model is JSON");
+        assert_eq!(
+            listener_provider(&model, "Studio.ingress").as_deref(),
+            Some("Studio.server")
+        );
+        for capability in [
+            "Studio.entropy",
+            "Studio.files",
+            "Studio.tool",
+            "Studio.tools",
+        ] {
+            assert_eq!(listener_provider(&model, capability), None, "{capability}");
+        }
     }
 
     #[test]

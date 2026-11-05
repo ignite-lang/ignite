@@ -18,10 +18,10 @@ use crate::address::AddressMap;
 use crate::builtins::{self, bytes, io};
 use crate::exhaustive;
 use crate::{
-    Alias, AssemblyInfo, AssertCompare, BraceKind, Builtin, Callee, Capture, ClosureInfo,
-    EXPOSURE_VARIANTS, EffectSet, ExecutableInfo, FailureOp, FailureSite, FnEffects, FnSig,
-    ModuleRecord, ModuleTypes, QualName, QuantityKind, Reference, Show, SystemInfo, TestInfo,
-    TestTry, Ty, TypedModules, Variants, instantiate, key, variants_of,
+    Alias, AssemblyInfo, AssertCompare, BraceKind, Builtin, Callee, Capability, Capture,
+    ClosureInfo, EXPOSURE_VARIANTS, EffectSet, ExecutableInfo, FailureOp, FailureSite, FnEffects,
+    FnSig, ModuleRecord, ModuleTypes, QualName, QuantityKind, Reference, Show, SystemInfo,
+    TestInfo, TestTry, Ty, TypedModules, Variants, instantiate, key, variants_of,
 };
 
 /// What [`Typer::run`] produces for a module without diagnostics.
@@ -731,10 +731,7 @@ impl<'a> Typer<'a> {
     /// walk: there the type checker owns the rule (E116, `docs/slice.md`
     /// section 15.2).
     fn effect_site(&mut self, expr: &Expr, what: &str) {
-        if self.current_system.is_some() || self.assembly_system.is_some() {
-            return;
-        }
-        if !self.symbols.effect_sites.contains(&expr.span) {
+        if self.unchecked_effects(expr) {
             self.error(
                 "E042",
                 expr.span,
@@ -743,6 +740,40 @@ impl<'a> Typer<'a> {
                 ),
             );
         }
+    }
+
+    /// E140 for a `Text` literal path argument of a `Directory` method that
+    /// is absolute, has a `..` component or a NUL (`docs/slice.md` 21.4,
+    /// 21.9). A path from anything but a literal is checked at run time only.
+    fn path_literal(&mut self, method: &str, arg: Option<&Expr>) {
+        let Some(arg) = arg else {
+            return;
+        };
+        let ExprKind::Str(path) = &arg.kind else {
+            return;
+        };
+        let reason = if path.starts_with('/') {
+            "absolute"
+        } else if path.split('/').any(|c| c == "..") {
+            "leaves its root"
+        } else if path.contains('\0') {
+            "contains NUL"
+        } else {
+            return;
+        };
+        self.error(
+            "E140",
+            arg.span,
+            format!("path `{path}` of `{method}`: {reason}"),
+        );
+    }
+
+    /// Whether the effectful operation `expr` is one `ignite-check` did not
+    /// record as an effect site, outside a `system` or `assembly`.
+    fn unchecked_effects(&self, expr: &Expr) -> bool {
+        self.current_system.is_none()
+            && self.assembly_system.is_none()
+            && !self.symbols.effect_sites.contains(&expr.span)
     }
 
     /// The effectful fn `name` (of type `ty`) used as a value: allowed only
@@ -1164,6 +1195,11 @@ impl<'a> Typer<'a> {
             "Text" => Ty::Text,
             "Bytes" => bytes(),
             "TcpListener" => Ty::TcpListener,
+            "Directory" => Ty::Capability(Capability::Directory),
+            "Launcher" => Ty::Capability(Capability::Launcher),
+            "ChildProcess" => Ty::Capability(Capability::ChildProcess),
+            "Entropy" => Ty::Capability(Capability::Entropy),
+            "Setting" => Ty::Capability(Capability::Setting),
             "TcpStream" => Ty::TcpStream,
             "PipeStream" => Ty::PipeStream,
             "IoError" => Ty::IoError,
@@ -1626,6 +1662,7 @@ impl<'a> Typer<'a> {
             Ty::Fn(..)
             | Ty::EffectFn(..)
             | Ty::TcpListener
+            | Ty::Capability(_)
             | Ty::TcpStream
             | Ty::PipeStream
             | Ty::IoError
@@ -2595,24 +2632,63 @@ impl<'a> Typer<'a> {
                 Some(head) => {
                     self.path_call(expr, receiver, head, name, args, Some(callee), expected)
                 }
-                None => {
-                    self.synth(callee);
-                    for arg in args {
-                        self.synth(arg);
-                    }
-                    self.unresolved(callee.span, &name.name);
-                    None
-                }
+                None => self.expression_call(expr, callee, args),
             },
-            _ => {
-                self.synth(callee);
-                for arg in args {
-                    self.synth(arg);
-                }
-                self.unresolved(callee.span, "callee");
-                None
-            }
+            _ => self.expression_call(expr, callee, args),
         }
+    }
+
+    /// `e(args)` whose callee is an expression, not a name or a path
+    /// (`docs/slice.md` 20.4.2): a `Callee::Local` call when the callee has
+    /// a fn type, E040 otherwise, E043 on arity. A callee of effectful fn
+    /// type whose effects `ignite-check` could not charge (no declared type,
+    /// such as a call's result) is E042 (20.7).
+    fn expression_call(&mut self, expr: &Expr, callee: &Expr, args: &[Expr]) -> Option<Ty> {
+        let Some(ty) = self.synth(callee) else {
+            for arg in args {
+                self.synth(arg);
+            }
+            return None;
+        };
+        let (Ty::Fn(params, ret) | Ty::EffectFn(params, ret, _)) = &ty else {
+            self.error(
+                "E040",
+                callee.span,
+                format!("type mismatch: this expression has type `{ty}` and cannot be called"),
+            );
+            for arg in args {
+                self.synth(arg);
+            }
+            return None;
+        };
+        if matches!(ty, Ty::EffectFn(..)) && self.unchecked_effects(expr) {
+            self.error(
+                "E042",
+                expr.span,
+                format!(
+                    "cannot check the effects of a call of this expression; bind it first with its type: `let f: {ty} = …`"
+                ),
+            );
+        }
+        self.callees.insert(key(expr), Callee::Local);
+        if params.len() != args.len() {
+            self.error(
+                "E043",
+                expr.span,
+                format!(
+                    "wrong number of arguments to this expression: expected {}, found {}",
+                    params.len(),
+                    args.len()
+                ),
+            );
+        }
+        for (i, arg) in args.iter().enumerate() {
+            match params.get(i) {
+                Some(param) => self.check(arg, param),
+                None => self.synth(arg),
+            };
+        }
+        Some((**ret).clone())
     }
 
     /// Record the function type of a variant constructor's callee node.
@@ -3176,6 +3252,14 @@ impl<'a> Typer<'a> {
         if let Some(sig) = bounded.or_else(|| builtins::method(&receiver_ty, &name.name)) {
             if matches!(receiver_ty, Ty::Store(_)) {
                 self.effect_site(expr, &name.name);
+            }
+            if let Ty::Capability(kind) = receiver_ty {
+                if sig.builtin != Builtin::ChildProcessId {
+                    self.effect_site(expr, &format!("{}.{}", kind.name(), name.name));
+                }
+                if kind == Capability::Directory {
+                    self.path_literal(&name.name, args.first());
+                }
             }
             match sig.builtin {
                 Builtin::ListAt => self.fail_site(expr, FailureOp::Index, expr.span.start),
@@ -3890,10 +3974,16 @@ impl<'a> Typer<'a> {
                         None
                     }
                 };
+                let whole = element.clone().map(|element| Ty::List(Box::new(element)));
                 for item in items {
-                    self.pattern(item, element.as_ref());
+                    match item.kind {
+                        PatternKind::Rest(_) => self.pattern(item, whole.as_ref()),
+                        _ => self.pattern(item, element.as_ref()),
+                    }
                 }
             }
+            PatternKind::Rest(Some(name)) => self.bind(name, ty.cloned()),
+            PatternKind::Rest(None) => {}
             PatternKind::Variant { path, args }
                 if args.is_empty()
                     && path.len() == 1

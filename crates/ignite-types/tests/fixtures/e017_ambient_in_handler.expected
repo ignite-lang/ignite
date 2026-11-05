@@ -1,0 +1,1 @@
+e017_ambient_in_handler.ignite:11:88: error[E017]: effectful function `handle` does not fit `fn(state: Store<Int>, request: Text) -> Text requires [state.*]`: its effect `clock.read` is not covered by the type's `requires`

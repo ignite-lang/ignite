@@ -1,0 +1,38 @@
+package tests.rest
+
+fn shape(xs: List<Int>) -> Int {
+  return match xs {
+    [] => 0
+    [_] => 1
+    [_, _, ..] => 2
+  }
+}
+
+fn tail(xs: List<Text>) -> List<Text> {
+  return match xs {
+    [_, ..rest] => rest
+    [] => []
+  }
+}
+
+fn ends(xs: List<Int>) -> Int {
+  return match xs {
+    [a, .., z] => a + z
+    [a] => a
+    [] => 0
+  }
+}
+
+fn after_command(bytes: Bytes) -> Bytes {
+  return match bytes {
+    [255, _, ..rest] => rest
+    _ => bytes
+  }
+}
+
+fn status(request: (List<Text>, Int)) -> Int {
+  return match request {
+    ([_, _, ..], _) => 400
+    (_, _) => 200
+  }
+}

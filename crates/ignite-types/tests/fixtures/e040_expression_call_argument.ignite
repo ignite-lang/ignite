@@ -1,0 +1,15 @@
+type Handler {
+  run: fn(Int) -> Int
+}
+
+fn adder(n: Int) -> fn(Int) -> Int = |x: Int| x + n
+
+fn call_result() -> Int = adder(1)("a")
+
+fn field(h: Handler) -> Int = (h.run)(true)
+
+fn element(fs: List<fn(Int) -> Int>) -> Int = fs[0]("x")
+
+fn closure() -> Int = (|x: Int| x)([1])
+
+fn result() -> Text = adder(1)(2)

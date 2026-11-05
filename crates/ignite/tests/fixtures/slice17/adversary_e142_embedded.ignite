@@ -1,0 +1,66 @@
+package adversary_e142_embedded
+
+import std.control.{Machine, Supervisor}
+import std.deploy.Member
+import std.policy.Restart
+
+// Adversary (U4): E142 for a `Setting` without `default` that the started
+// member reaches only through a component it embeds (`holder`), not
+// through a field of its own. The generated `main` of `runner` creates
+// `tool` (the embedded component's resources are the executable's), so
+// the member would exit 2 at every start, as in
+// `e142_setting_without_default.ignite`.
+
+type Holder {
+  tool: Setting
+}
+
+type Tool {
+  holder: Holder
+}
+
+fn Tool.main(self: Tool) -> Result<Unit, IoError> = Ok(Unit)
+
+fn Tool.machine(self: Tool, id: Text) -> Machine = Machine.Supervise(Supervisor {
+  id = "{id}.supervisor"
+  member = id
+  restart = Restart {}
+  has_listener = false
+})
+
+enum Place {
+  NativeProcess(List<Ref>),
+  InProcess
+}
+
+fn admits(binding: Place, member: Member) -> Option<Text> = None
+
+fn includes(binding: Place) -> List<Ref> = match binding {
+  NativeProcess(members) => members
+  InProcess => []
+}
+
+fn entries(binding: Place) -> List<Text> = match binding {
+  NativeProcess(_) => ["main", "machine"]
+  InProcess => []
+}
+
+type Placement {
+  system: SystemRef
+  bindings: Map<Ref, Place>
+}
+
+system Bench {
+  resource tool: Setting { flag = "--tool" }
+
+  component holder: Holder { tool = tool }
+  component runner: Tool { holder = holder }
+}
+
+assembly local: Placement {
+  system = Bench
+  bindings = {
+    Bench.tool = InProcess
+    Bench.runner = NativeProcess([Bench.holder])
+  }
+}

@@ -1,0 +1,168 @@
+STEP check-todo before 1 .065442545 9.93 0
+STEP check-todo after 1 .127146103 9.93 0
+STEP check-todo-std pre 1 .069682974 9.93 0
+STEP check-todo-std hooks 1 .129851481 9.93 0
+STEP check-todo before 2 .065376916 9.93 0
+STEP check-todo after 2 .124087940 9.93 0
+STEP check-todo-std pre 2 .066735160 9.93 0
+STEP check-todo-std hooks 2 .132135065 9.54 0
+STEP check-todo before 3 .063383415 9.54 0
+STEP check-todo after 3 .124563165 9.54 0
+STEP check-todo-std pre 3 .077575791 9.54 0
+STEP check-todo-std hooks 3 .127640694 9.54 0
+STEP check-todo before 4 .066509444 9.54 0
+STEP check-todo after 4 .126157883 9.54 0
+STEP check-todo-std pre 4 .068080282 9.54 0
+STEP check-todo-std hooks 4 .128789466 9.54 0
+STEP check-todo before 5 .069509361 9.54 0
+STEP check-todo after 5 .138240903 9.54 0
+STEP check-todo-std pre 5 .077157233 9.54 0
+STEP check-todo-std hooks 5 .130720546 9.54 0
+STEP check-todo before 6 .066535176 9.54 0
+STEP check-todo after 6 .130162254 9.54 0
+STEP check-todo-std pre 6 .068869806 9.54 0
+STEP check-todo-std hooks 6 .123271729 9.54 0
+STEP check-todo before 7 .064956607 9.54 0
+STEP check-todo after 7 .127642631 9.54 0
+STEP check-todo-std pre 7 .068880359 9.54 0
+STEP check-todo-std hooks 7 .137116423 9.54 0
+STEP check-todo before 8 .065185725 9.54 0
+STEP check-todo after 8 .132858815 9.54 0
+STEP check-todo-std pre 8 .069001860 9.54 0
+STEP check-todo-std hooks 8 .126569563 9.54 0
+STEP check-todo before 9 .067904377 9.54 0
+STEP check-todo after 9 .130607117 9.54 0
+STEP check-todo-std pre 9 .067345373 9.54 0
+STEP check-todo-std hooks 9 .127297731 9.54 0
+STEP check-todo before 10 .065226874 9.54 0
+STEP check-todo after 10 .124725726 9.54 0
+STEP check-todo-std pre 10 .067187210 9.54 0
+STEP check-todo-std hooks 10 .131504822 9.54 0
+STEP check-todo before 11 .064013119 9.54 0
+STEP check-todo after 11 .124714952 9.54 0
+STEP check-todo-std pre 11 .066622722 9.54 0
+STEP check-todo-std hooks 11 .134141254 9.54 0
+STEP check-todo before 12 .068600249 9.54 0
+STEP check-todo after 12 .125586101 9.54 0
+STEP check-todo-std pre 12 .066776732 9.54 0
+STEP check-todo-std hooks 12 .130084763 9.54 0
+STEP check-todo before 13 .068983282 9.54 0
+STEP check-todo after 13 .125242478 9.54 0
+STEP check-todo-std pre 13 .067576748 9.54 0
+STEP check-todo-std hooks 13 .146690232 9.54 0
+STEP check-todo before 14 .069116926 9.54 0
+STEP check-todo after 14 .134130452 9.54 0
+STEP check-todo-std pre 14 .066765319 9.54 0
+STEP check-todo-std hooks 14 .132549175 9.54 0
+STEP check-todo before 15 .069367416 9.49 0
+STEP check-todo after 15 .144291492 9.49 0
+STEP check-todo-std pre 15 .072607422 9.49 0
+STEP check-todo-std hooks 15 .132687381 9.49 0
+STEP terminald-rust-dev before 1 3.927417893 9.49 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-before-rust-dev-1 exit=101
+STEP terminald-rust-dev after 1 5.729243659 9.49 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-after-rust-dev-1 exit=101
+STEP studio-rust-dev after 1 5.436697464 9.81 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/studio-rust-dev-1 exit=101
+STEP terminald-llvm-dev before 1 .568208349 9.91 0
+STEP terminald-llvm-dev after 1 .596247594 9.91 0
+STEP studio-llvm-dev after 1 .497690133 9.91 0
+STEP terminald-rust-release before 1 4.586580838 9.91 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-before-rust-release-1 exit=101
+STEP terminald-rust-release after 1 5.473465494 9.59 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-after-rust-release-1 exit=101
+STEP studio-rust-release after 1 6.618771250 9.55 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/studio-rust-release-1 exit=101
+STEP terminald-llvm-release before 1 1.388524650 9.34 0
+STEP terminald-llvm-release after 1 1.515981402 11.96 0
+STEP studio-llvm-release after 1 1.724419006 11.96 0
+STEP terminald-rust-dev before 2 7.258296121 11.96 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-before-rust-dev-2 exit=101
+STEP terminald-rust-dev after 2 7.878578304 18.05 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-after-rust-dev-2 exit=101
+STEP studio-rust-dev after 2 5.113071232 21.17 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/studio-rust-dev-2 exit=101
+STEP terminald-llvm-dev before 2 .516281288 21.32 0
+STEP terminald-llvm-dev after 2 .534053827 21.32 0
+STEP studio-llvm-dev after 2 .471137350 19.93 0
+STEP terminald-rust-release before 2 4.614983372 19.93 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-before-rust-release-2 exit=101
+STEP terminald-rust-release after 2 5.635195220 18.65 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-after-rust-release-2 exit=101
+STEP studio-rust-release after 2 9.267395797 18.92 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/studio-rust-release-2 exit=101
+STEP terminald-llvm-release before 2 .660764716 17.84 0
+STEP terminald-llvm-release after 2 .690531650 17.84 0
+STEP studio-llvm-release after 2 .713416098 17.84 0
+STEP terminald-rust-dev before 3 3.902546797 17.84 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-before-rust-dev-3 exit=101
+STEP terminald-rust-dev after 3 6.002018325 16.97 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-after-rust-dev-3 exit=101
+STEP studio-rust-dev after 3 4.542458124 16.34 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/studio-rust-dev-3 exit=101
+STEP terminald-llvm-dev before 3 .792901658 15.43 0
+STEP terminald-llvm-dev after 3 .629370301 15.43 0
+STEP studio-llvm-dev after 3 .886814345 15.43 0
+STEP terminald-rust-release before 3 4.771531520 15.43 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-before-rust-release-3 exit=101
+STEP terminald-rust-release after 3 5.555977535 14.59 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/terminald-after-rust-release-3 exit=101
+STEP studio-rust-release after 3 7.056959982 13.74 0
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/studio-rust-release-3 exit=101
+STEP terminald-llvm-release before 3 .926231084 15.03 0
+STEP terminald-llvm-release after 3 .895461808 15.03 0
+STEP studio-llvm-release after 3 .987772078 15.03 0
+STEP test-fs-rust-cold after 1 5.512117263 15.03 0
+RESULT test-fs-rust-cold 1 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.14s
+STEP test-fs-rust-warm after 1 .109337950 17.19 0
+RESULT test-fs-rust-warm 1 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.07s
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/test-fs-rust-1 exit=101
+STEP test-fs-rust-cold after 2 4.516606342 17.19 0
+RESULT test-fs-rust-cold 2 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.05s
+STEP test-fs-rust-warm after 2 .093597837 17.19 0
+RESULT test-fs-rust-warm 2 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.06s
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/test-fs-rust-2 exit=101
+STEP test-fs-rust-cold after 3 5.593350221 17.19 0
+RESULT test-fs-rust-cold 3 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.12s
+STEP test-fs-rust-warm after 3 .175004517 17.68 0
+RESULT test-fs-rust-warm 3 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.12s
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/test-fs-rust-3 exit=101
+STEP test-fs-llvm-cold after 1 .477662117 17.68 0
+RESULT test-fs-llvm-cold 1 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.09s
+STEP test-fs-llvm-warm after 1 .133204176 17.68 0
+RESULT test-fs-llvm-warm 1 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.11s
+STEP test-fs-llvm-cold after 2 .360694114 17.68 0
+RESULT test-fs-llvm-cold 2 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.11s
+STEP test-fs-llvm-warm after 2 .100241802 17.68 0
+RESULT test-fs-llvm-warm 2 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.08s
+STEP test-fs-llvm-cold after 3 .314420233 17.68 0
+RESULT test-fs-llvm-cold 3 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.06s
+STEP test-fs-llvm-warm after 3 .066808301 17.68 0
+RESULT test-fs-llvm-warm 3 test result: ok. 6 passed; 0 failed; 0 filtered out; finished in 0.05s
+STEP test-process-rust-cold after 1 9.456166941 17.68 0
+RESULT test-process-rust-cold 1 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.41s
+STEP test-process-rust-warm after 1 .482650083 18.87 0
+RESULT test-process-rust-warm 1 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.41s
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/test-process-rust-1 exit=101
+STEP test-process-rust-cold after 2 8.192280580 18.87 0
+RESULT test-process-rust-cold 2 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.95s
+STEP test-process-rust-warm after 2 1.168939782 21.71 0
+RESULT test-process-rust-warm 2 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.77s
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/test-process-rust-2 exit=101
+STEP test-process-rust-cold after 3 8.980936710 21.71 0
+RESULT test-process-rust-cold 3 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.44s
+STEP test-process-rust-warm after 3 .746438151 22.54 0
+RESULT test-process-rust-warm 3 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.59s
+CLEAN /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/extra/test-process-rust-3 exit=101
+STEP test-process-llvm-cold after 1 .735348384 22.54 0
+RESULT test-process-llvm-cold 1 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.36s
+STEP test-process-llvm-warm after 1 .390467478 22.54 0
+RESULT test-process-llvm-warm 1 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.36s
+STEP test-process-llvm-cold after 2 .883197882 22.54 0
+RESULT test-process-llvm-cold 2 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.46s
+STEP test-process-llvm-warm after 2 .430281447 22.54 0
+RESULT test-process-llvm-warm 2 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.38s
+STEP test-process-llvm-cold after 3 .672799968 22.54 0
+RESULT test-process-llvm-cold 3 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.36s
+STEP test-process-llvm-warm after 3 .510468104 22.54 0
+RESULT test-process-llvm-warm 3 test result: ok. 15 passed; 0 failed; 0 filtered out; finished in 0.48s
