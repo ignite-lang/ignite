@@ -241,6 +241,16 @@ impl Host {
                 Some("accepted" | "applying") => {
                     self.waiters.entry(plan.id).or_default().push(reply)
                 }
+                // 22.9: `ignite recover` ended it for good.
+                Some("abandoned") => {
+                    let _ = reply.send(Err(fail(
+                        2,
+                        format!(
+                            "operation {} was abandoned by ignite recover; prepare a new plan",
+                            plan.id
+                        ),
+                    )));
+                }
                 _ => {
                     let _ = reply.send(Err(fail(
                         1,
