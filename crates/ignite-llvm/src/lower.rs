@@ -2178,7 +2178,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// every value position copies it into the task's arena as it copies
     /// a variable, and an in-place builtin on it changes a copy
     /// ([`Lower::mutable_receiver`]). A failure while the constant is
-    /// evaluated publishes nothing.
+    /// evaluated publishes nothing. The `.once` helper is pruned as a
+    /// constant ([`crate::ir::Module::mark_const`]): kept only when kept
+    /// code mentions the constant.
     fn constant(&mut self, q: &QualName, ty: &Ty) -> Val {
         let name = symbol(q);
         let callee = self.function(&name, &[], ty);
@@ -2214,6 +2216,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 align = layout.align.max(1),
             );
             self.m.helper(&once, &text);
+            self.m.mark_const(&once);
         }
         let have = self
             .f
