@@ -5315,7 +5315,7 @@ impl<'a> Generator<'a> {
             .expect("a structural operand");
         let glue = self.glue_fn(Glue::Eq, ty);
         let [left, right]: [String; 2] = self
-            .ref_args([left, right])
+            .ref_args(None, [left, right])
             .try_into()
             .expect("two operands");
         let negation = if op == BinaryOp::Ne { "!" } else { "" };
