@@ -352,8 +352,6 @@ fn modules_name_target_and_source() {
     assert!(program.contains("!llvm.dbg.cu = !{!"));
 }
 
-/// The text of the function defined as `symbol` in `ir`, from its `define`
-/// line to its closing brace.
 /// Row 19 of `docs/slice.md` 20.0: rest patterns (20.5) lower to a length
 /// test `len >= k`, suffix elements read at `len - s + j`, and a rest
 /// binding that is a copy of the elements between, on a list and on
@@ -404,6 +402,8 @@ fn rest_patterns() {
     compiles("rest_program", program);
 }
 
+/// The text of the function defined as `symbol` in `ir`, from its `define`
+/// line to its closing brace.
 fn function<'a>(ir: &'a str, symbol: &str) -> &'a str {
     let quoted = format!("@\"{symbol}\"(");
     let start = ir

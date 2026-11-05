@@ -1,4 +1,4 @@
 e046_rest.ignite:2:10: error[E046]: match does not cover `[_]`
 e046_rest.ignite:9:10: error[E046]: match does not cover `[]`
-e046_rest.ignite:15:10: error[E046]: match does not cover `[_, false, true, _]`
+e046_rest.ignite:15:10: error[E046]: match does not cover `[_, false, .., true, _]`
 e046_rest.ignite:25:10: error[E046]: match does not cover `[false]`

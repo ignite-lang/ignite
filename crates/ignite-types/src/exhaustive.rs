@@ -308,7 +308,9 @@ fn list_shape(items: &[Pattern]) -> (&[Pattern], &[Pattern], bool) {
 /// longest exact pattern and `p`, `s` the longest prefix and suffix of a
 /// rest pattern, every length up to `max(m, p + s - 1)` is checked on its
 /// own as a tuple of that many elements, and `max(m + 1, p + s)` stands
-/// for every longer length.
+/// for every longer length. A witness at that length prints its first
+/// `representative - s` elements, `..`, then its last `s`, so it names
+/// every length it stands for.
 fn uncovered_list(
     rows: &[Vec<&Pattern>],
     element: &Ty,
@@ -366,9 +368,14 @@ fn uncovered_list(
         };
         for witness in witnesses {
             let (inner, tail) = witness.split_at(length);
-            let shown = if length == representative && inner.iter().all(|w| w == "_") {
-                let mut items = inner.to_vec();
-                items.push("..".to_string());
+            let shown = if length == representative {
+                let (front, back) = inner.split_at(representative - suffix);
+                let items: Vec<&str> = front
+                    .iter()
+                    .map(String::as_str)
+                    .chain(std::iter::once(".."))
+                    .chain(back.iter().map(String::as_str))
+                    .collect();
                 format!("[{}]", items.join(", "))
             } else {
                 format!("[{}]", inner.join(", "))

@@ -6401,10 +6401,12 @@ of `L` elements applies, and a rest pattern with `p + s <= L` applies with its p
 positions `0` to `p - 1`, its suffix at `L - s` to `L - 1` and `_` in between; the `L` element
 columns are then checked as a tuple's. A value missing at a checked length is printed as that
 length's list pattern, element by element, with `_` for an unconstrained position (`[_]`,
-`[false]`, `[_, false, true, _]`), in the order of the lengths and then of the element witnesses;
-a value missing at the representative length is printed with a trailing `..` when every element
-is `_` (`[_, _, ..]`). This also applies to list columns without a rest, so p09's `[] , [x]` now
-reads `match does not cover \`[_, _, ..]\`` (20.7).
+`[false]`, `[_, true]`), in the order of the lengths and then of the element witnesses. A
+value missing at the representative length `R` stands for every length from `R` on, so it is
+printed as rustc prints a slice witness: its first `R - S` elements, `..`, then its last `S`
+(`[None, ..]`, `[.., false]`, `[true, .., false]`, `[_, false, .., true, _]`, `[_, _, ..]`);
+adding the printed pattern as an arm covers every length it names. This also applies to list
+columns without a rest, so p09's `[] , [x]` now reads `match does not cover \`[_, _, ..]\`` (20.7).
 
 Lowering, both targets and the evaluator: an exact pattern tests `len == n`, a rest pattern
 `len >= k`; prefix element `i` is index `i`, suffix element `j` of `s` is index `len - s + j`; a
