@@ -6,7 +6,7 @@ status: draft
 title: 'ignite-lsp design: ESS-generated types, catalogue rules, compiler diagnostics over a child process'
 relations:
 - designs: epic:ignite-lsp
-revision: 1
+revision: 2
 ---
 # ignite-lsp: a Language Server written in Ignite, derived from the LSP specification
 
@@ -120,3 +120,20 @@ Step 1 is useful alone: any editor integration and CI can read `--json`.
   request once step 5 runs.
 - Pin LSP 3.17 (a release tag) or 3.18 (main)? Default: the 3.17 release tag, since clients
   implement it.
+
+## Decision 2026-11-05: generated types
+
+Operator decision (Timo, 2026-11-05, "B"; hand-written types refused: "no, not handwritten"):
+the LSP message types are generated straight from `metaModel.json` by a Rust generator in the
+ignite repository, not through ESS and ignite-ess. This replaces the types row of §3.1 and step 4
+of §4; D2 (subset closure, refuse what cannot be mapped) stays.
+
+- Source: `metaModel.json` of the LSP 3.17 release, vendored unmodified with its licence and
+  pinned by digest, as `docs/rfc/` vendors the RFCXML sources.
+- Generator: a Rust binary (clap derive) in the workspace; input the vendored file and a root
+  list of requests and notifications; output one Ignite module of records, enums, `Option`,
+  `List`, `Map` and shape-discriminated unions, with `to_json`/`from_json` over `std.json`
+  (decimals as `Decimal(Text)`).
+- Drift check: a `#[test]` regenerates the module and compares it byte for byte with the
+  committed file (`IGNITE_BLESS=1` rewrites it), as the goldens do.
+- The ESS route stays possible later; nothing in the server depends on how the types were made.

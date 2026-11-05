@@ -6514,13 +6514,15 @@ fn content_hash(text: &str) -> u64 {
 /// name from the package name, version and workspace-relative path, which
 /// are the same for every generated `std/`; without the hash, two programs
 /// built into one `--target-dir` share one `ignite-std` artifact, and the
-/// one written earlier counts as up to date.
+/// one written earlier counts as up to date. The hash follows an `h`: a
+/// pre-release identifier of digits only may not start with `0` (SemVer
+/// 2.0.0 item 9), and a hash whose 16 hex digits are all decimal would be one.
 fn std_cargo_toml(substrate: &Path, lib_rs: &str) -> String {
     let substrate = substrate.to_string_lossy().replace('\\', "/");
     let mut out = String::new();
     out.push_str("[package]\n");
     let _ = writeln!(out, "name = {}", toml_string(STD_PACKAGE));
-    let _ = writeln!(out, "version = \"0.0.0-{:016x}\"", content_hash(lib_rs));
+    let _ = writeln!(out, "version = \"0.0.0-h{:016x}\"", content_hash(lib_rs));
     out.push_str("edition = \"2024\"\n");
     out.push_str("\n[lib]\n");
     out.push_str("path = \"src/lib.rs\"\n");

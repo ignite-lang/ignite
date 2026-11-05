@@ -1,10 +1,12 @@
 # std.json
 
-JSON values (RFC 8259) with integer numbers. `encode` writes the compact form, `parse` reads
-one value surrounded by optional whitespace, and the accessors read object members
-(`body.text("title")`). Numbers are `Int`: a fraction or an exponent is a parse error, and so
-is a number of more than 18 digits. Strings are decoded completely, `\uXXXX` with surrogate
-pairs included; a lone surrogate is an error.
+JSON values (RFC 8259). `encode` writes the compact form, `parse` reads one value surrounded
+by optional whitespace, and the accessors read object members (`body.text("title")`). A
+number without fraction or exponent that fits the 64-bit `Int` is a `Number(Int)`, except
+`-0`; every other number is a `Decimal` holding the token's exact text, never converted, so
+`encode` writes it back unchanged. `Decimal(text)` built by hand is not checked; `decimal`
+is the checked constructor. Strings are decoded completely, `\uXXXX` with surrogate pairs
+included; a lone surrogate is an error.
 
 - Layer: base.
 - Source: [`std/json.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/json.ignite).
@@ -18,6 +20,7 @@ enum Json {
   Null,
   Bool(Bool),
   Number(Int),
+  Decimal(Text),
   Str(Text),
   Array(List<Json>),
   Object(List<(Text, Json)>)
@@ -30,21 +33,25 @@ type JsonError {
 
 type Parsed = Result<(Json, Int), JsonError>
 
-const MAXIMUM_DIGITS: Int = 18
+const MAXIMUM_DIGITS: Int = 19
 const MAXIMUM_DEPTH: Int = 64
 ```
 
 - `Json` is one JSON value. An object is a list of members in their order; a name may repeat.
 - `JsonError` says why `parse` failed and at which byte offset of its input.
 - `Parsed` is a value and the offset just after it, the result of the internal parse steps.
-- Numbers have at most `MAXIMUM_DIGITS` digits; arrays and objects nest at most
-  `MAXIMUM_DEPTH` levels.
+- A `Number` fits `Int`. An integer beyond it, or of more than `MAXIMUM_DIGITS` digits (the
+  digit count of the longest `Int`), is a `Decimal`, and so are `-0` and any number with a
+  fraction or an exponent. Values compare by structure: `Number(1)`,
+  `Decimal("1.0")` and `Decimal("1.00")` are three different values.
+- Arrays and objects nest at most `MAXIMUM_DEPTH` levels.
 
 ## Encoding and parsing
 
 ```ignite,fragment
 fn encode(value: Json) -> Text
 fn parse(text: Text) -> Result<Json, JsonError>
+fn decimal(text: Text) -> Result<Json, JsonError>
 fn quote(text: Text) -> Text
 ```
 
@@ -52,12 +59,12 @@ fn quote(text: Text) -> Text
 |---|---|
 | `encode` | the compact JSON text of `value`: no whitespace, members in their order |
 | `parse` | the one JSON value of `text`, with whitespace allowed around it |
+| `decimal` | the checked constructor: the `Number` or `Decimal` `parse` gives for exactly one number token, an error for any other text; `Decimal(text)` built by hand is not checked |
 | `quote` | `text` as a JSON string literal: quote, backslash and the control characters escaped, every other character as it is |
 
 Parse errors carry messages such as `unexpected end of input`, `unexpected character`,
-``expected `,` or `]` ``, `only integer numbers are supported`, `number longer than 18 digits`,
-`leading zero in a number`, `unterminated string`, `control character in a string` and
-`nested deeper than 64`.
+``expected `,` or `]` ``, `expected a digit`, `leading zero in a number`, `unterminated
+string`, `control character in a string` and `nested deeper than 64`.
 
 ## Reading values
 
@@ -96,11 +103,13 @@ test "parse, read and encode JSON" {
 }
 
 test "what parse refuses" {
-  let error = match parse("1.5") {
+  let error = match parse("1.") {
     Ok(_) => JsonError { message = "", offset = 0 }
     Err(e) => e
   }
-  assert error == JsonError { message = "only integer numbers are supported", offset = 1 }
+  assert error == JsonError { message = "expected a digit", offset = 2 }
+  assert parse("1.5")? == Decimal("1.5")
+  assert encode(parse("-1.25E-3")?) == "-1.25E-3"
 }
 ```
 

@@ -1579,7 +1579,7 @@ fn generate_std_nests_modules() {
     );
     let (head, tail) = project
         .cargo_toml
-        .split_once("version = \"0.0.0-")
+        .split_once("version = \"0.0.0-h")
         .expect("version with content hash");
     assert_eq!(head, "[package]\nname = \"ignite-std\"\n");
     let (hash, rest) = tail.split_once("\"\n").unwrap();
