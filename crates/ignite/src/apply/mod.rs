@@ -386,8 +386,12 @@ pub fn apply(file: &Path, state: &Path) -> Result<Json, Failure> {
     }
 }
 
+/// The next action of offline `inspect` on a damaged journal (22.7).
+const DAMAGED: &str = "restore host-journal.jsonl or move the state aside; the host does not start on a damaged journal";
+
 /// Inspect live status, or label a durable snapshot as offline when no host
-/// is reachable. Offline status never asserts current workload health.
+/// is reachable. Offline status never asserts current workload health; it
+/// verifies the journals read only and reports them as `journal` (22.7).
 pub fn inspect(state: &Path, operation: Option<&str>) -> Result<Json, Failure> {
     match request(state, "inspect", "", operation.map_or(Json::Null, text)) {
         Ok(value) => Ok(value),
@@ -409,6 +413,13 @@ pub fn inspect(state: &Path, operation: Option<&str>) -> Result<Json, Failure> {
             let snapshot = Json::parse(&source)
                 .map_err(|reason| fail(3, format!("{}: {reason}", path.display())))?;
             let mut value = describe(&snapshot, state, None);
+            let journal = host::integrity(state)?;
+            if let Json::Object(fields) = &mut value {
+                if journal.get("intact") == Some(&Json::Bool(false)) {
+                    fields.insert("nextAction".into(), text(DAMAGED));
+                }
+                fields.insert("journal".into(), journal);
+            }
             if let (Some(operation), Json::Object(fields)) = (operation, &mut value) {
                 let receipt = fields
                     .get("operations")
@@ -504,6 +515,8 @@ fn describe(snapshot: &Json, state: &Path, live: Option<Liveness>) -> Json {
     fields.insert("nextAction".into(), text(next));
     match live {
         Some(live) => {
+            // A running host verified its journals at its start.
+            fields.insert("journal".into(), object([("intact", Json::Bool(true))]));
             let converged = live.expected.iter().all(|id| live.ready.contains(id))
                 && recovery.is_none()
                 && get("activeOperation").is_none();
