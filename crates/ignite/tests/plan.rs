@@ -422,7 +422,8 @@ fn explain_unknown_path_is_e119() {
     }
 }
 
-/// Every `tests/fixtures/e11*.ignite`, `e12*` and `e090` to `e092` (the
+/// Every `tests/fixtures/e11*.ignite`, `e12*`, `e15*` (`docs/slice.md`
+/// 22.10) and `e090` to `e092` (the
 /// claim model, `docs/slice.md` 19.12) run through `ignite check` (or the
 /// subcommand its first line names, `// ignite plan` or `// ignite explain
 /// <path>`, the file name inserted after the subcommand) from the fixtures
@@ -436,6 +437,7 @@ fn fixtures_match_expected() {
             let name = path.file_name().unwrap().to_string_lossy();
             (name.starts_with("e11")
                 || name.starts_with("e12")
+                || name.starts_with("e15")
                 || ["e090", "e091", "e092"].contains(&name.get(..4).unwrap_or("")))
                 && name.ends_with(".ignite")
                 && !["e125", "e126", "e127", "e128"].contains(&&name[..4])

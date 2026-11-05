@@ -1,0 +1,2 @@
+e109_classify_signature.ignite:11:10: error[E109]: `Blind.classify` is a hook of `ignite run` and must have the signature `fn Blind.classify(self: Blind, sample: T) -> Bool`, found `fn(Blind) -> Bool`
+e109_classify_signature.ignite:17:9: error[E109]: `Loud.classify` is a hook of `ignite run` and must have the signature `fn Loud.classify(self: Loud, sample: T) -> Bool`, found `fn(Loud, Beat) -> Bool` and it must be pure

@@ -5,8 +5,9 @@ import std.deploy.{Deployment, nativeProcess}
 import std.control.{Machine, Supervisor}
 import std.policy.{Restart, fixed}
 
-// E126 (`docs/slice.md` 16.17): a run whose state directory holds a
-// journal written for another model. The test writes that journal first;
+// E126 (`docs/slice.md` 16.17, 22.0 row 6): a run whose state directory holds a
+// journal of an older driver (`ignite-journal/0.1`) written for another
+// model; the version is reported first. The test writes that journal first;
 // the mismatch is reported before anything is built.
 
 type Daemon {

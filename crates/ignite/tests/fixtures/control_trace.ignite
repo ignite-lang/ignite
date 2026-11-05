@@ -1,7 +1,7 @@
 package control_trace
 
 import std.control.*
-import std.sli.{ProbeAttempt, Window, MissingData}
+import std.sli.{Sample, Verdict, Window, MissingData}
 import std.policy.Restart
 
 // Slice 12 (docs/slice.md 16.4, 16.10): the reducers of std.control stepped
@@ -10,12 +10,19 @@ import std.policy.Restart
 // three debug texts must agree (tests/control.rs). `a7_machine` and
 // `a7_event` feed the A7 fuel measurement: ten thousand emissions into a
 // thirty-day rolling window at five-second slots, stepped in the evaluator.
+// Since slice 18 (docs/slice.md 22.3) a scheduler gets the probe's line in
+// `AttemptDone` and emits a `Sample`; an evaluator gets a `Verdict`, whose
+// slots below are those the latency-derived slot gave before.
 
 fn at(ms: Int, kind: EventKind) -> Event = Event { at = ms * 1 ms, kind }
 
-fn good(latency: Duration) -> ProbeAttempt = ProbeAttempt { received = true, latency }
+fn good(slot: Duration) -> Verdict = Verdict { slot, good = true }
 
-fn bad() -> ProbeAttempt = ProbeAttempt { received = false, latency = 2 seconds }
+fn bad(slot: Duration) -> Verdict = Verdict { slot, good = false }
+
+fn timeout_sample() -> Sample = Sample { slot = 1 second, line = None }
+
+fn bad_verdict() -> Verdict = bad(10 seconds)
 
 fn server() -> Supervisor = Supervisor {
   id = "T.server.supervisor"
@@ -37,7 +44,6 @@ fn reachable() -> Evaluator = Evaluator {
   contract = "T.reachable"
   signal = "T.probe.attempts"
   interval = 10 seconds
-  good = "prompt_received_before_timeout"
   target = 99.9%
   window = Rolling(30 days)
   missing_data = MissingData.InsufficientEvidence
@@ -49,7 +55,6 @@ fn access() -> Evaluator = Evaluator {
   contract = "T.customerAccess"
   signal = "T.probe.attempts"
   interval = 10 seconds
-  good = "prompt_received_before_timeout"
   target = 99.5%
   window = CalendarMonth("Europe/Berlin")
   missing_data = MissingData.InsufficientEvidence
@@ -105,10 +110,10 @@ fn scheduler_events() -> List<Event> = [
   at(0, Start(0 ms)),
   at(0, Started(42, 1)),
   at(1000, Ready(42)),
-  at(1003, AttemptDone(1, good(3 ms))),
+  at(1003, AttemptDone(1, "first")),
   at(11000, Timer(SLOT_TIMER)),
   at(13000, Timer(2)),
-  at(13500, AttemptDone(2, good(2500 ms))),
+  at(13500, AttemptDone(2, "late")),
   at(21000, Timer(SLOT_TIMER)),
   at(21001, AttemptFailed(3, "exit status 1")),
   at(31000, Timer(SLOT_TIMER))
@@ -120,10 +125,10 @@ fn scheduler_machine() -> Machine = run(Schedule(probe()), scheduler_events()).0
 
 fn rolling_events() -> List<Event> = [
   at(0, Start(0 ms)),
-  at(0, Emitted("T.probe.attempts", good(3 ms))),
-  at(12000, Emitted("T.probe.attempts", bad())),
-  at(20000, Emitted("T.probe.attempts", good(1 ms))),
-  at(20500, Emitted("T.other", good(1 ms)))
+  at(0, Emitted("T.probe.attempts", good(0 ms))),
+  at(12000, Emitted("T.probe.attempts", bad(10 seconds))),
+  at(20000, Emitted("T.probe.attempts", good(19999 ms))),
+  at(20500, Emitted("T.other", good(20499 ms)))
 ]
 
 fn rolling_effects() -> List<Effect> = run(Evaluate(reachable()), rolling_events()).1
@@ -131,10 +136,10 @@ fn rolling_effects() -> List<Effect> = run(Evaluate(reachable()), rolling_events
 fn rolling_machine() -> Machine = run(Evaluate(reachable()), rolling_events()).0
 
 fn calendar_events() -> List<Event> {
-  var events = [at(0, Start(1793487000 seconds)), at(0, Emitted("T.probe.attempts", good(2 ms))), at(12000, Emitted("T.probe.attempts", bad()))]
+  var events = [at(0, Start(1793487000 seconds)), at(0, Emitted("T.probe.attempts", good(0 ms))), at(12000, Emitted("T.probe.attempts", bad(10 seconds)))]
   var k = 2
   while k < 60 {
-    events.push(at(k * 10000, Emitted("T.probe.attempts", good(1 ms))))
+    events.push(at(k * 10000, Emitted("T.probe.attempts", good(k * 10 seconds - 1 ms))))
     k = k + 1
   }
   events.push(at(600000, Timer(PERIOD_TIMER)))
@@ -162,7 +167,7 @@ fn a7_machine() -> Machine {
   Evaluate(e)
 }
 
-fn a7_event(i: Int) -> Event = at(i * 5000, Emitted("T.probe.attempts", good(1 ms)))
+fn a7_event(i: Int) -> Event = at(i * 5000, Emitted("T.probe.attempts", good(later(i * 5 seconds - 1 ms, 0 ms))))
 
 // Slice 13 (docs/slice.md 17.4, D1): the transition reducer over one plan's
 // member actions: an external member, an addition, a stop-first and a
@@ -224,7 +229,8 @@ type Printer {
 }
 
 fn Printer.main(self: Printer) -> Result<Unit, IoError> {
-  show(bad().debug())?
+  show(timeout_sample().debug())?
+  show(bad_verdict().debug())?
   show(server().debug())?
   show(probe().debug())?
   show(reachable().debug())?

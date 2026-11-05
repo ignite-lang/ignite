@@ -42,7 +42,7 @@ component server: TelnetServer {
 
 contract reachable: Availability {
   signal = promptProbe.attempts
-  good = "prompt_received_before_timeout"
+  good = prompt_received_before_timeout
   target = 99.9%
   window = rolling(30 days)
   missing_data = "insufficient_evidence"

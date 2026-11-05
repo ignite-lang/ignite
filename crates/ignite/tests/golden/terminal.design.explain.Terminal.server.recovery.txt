@@ -1,4 +1,4 @@
-Terminal.server.recovery: property std.policy.Restart (terminal.design.ignite:46:16)
+Terminal.server.recovery: property std.policy.Restart (terminal.design.ignite:47:16)
   backoff = Exponential(100 ms, 10 seconds)
   maximum_attempts = 10
   interval = 5 minutes

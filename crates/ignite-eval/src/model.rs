@@ -195,6 +195,13 @@ pub struct ModelMachine {
     pub subscribes: Vec<String>,
     /// [`DISRUPTION`] for a `Roll` machine.
     pub disruption: Option<String>,
+    /// The member kind's `classify` hook and the member's value it is
+    /// called on (`docs/slice.md` 22.3), when the machine subscribes to a
+    /// signal and the kind declares `K.classify(self, sample)`: the driver
+    /// calls it on each decoded emission it routes to the machine. Not
+    /// part of the model's JSON: it is derived from the member's kind and
+    /// properties, which are.
+    pub classify: Option<(QualName, Value)>,
 }
 
 impl ModelMachine {
@@ -250,8 +257,8 @@ fn kind_name(kind: &Ty) -> Option<&QualName> {
 }
 
 /// The hook `<Owner>.<hook>` with `arity` parameters in `owner`'s module,
-/// when the module declares one (16.6: the compiler knows the hook names
-/// `machine` and `validate`, O18).
+/// when the module declares one (16.6, 22.3: the compiler knows the hook names
+/// `machine`, `validate` and `classify`, O18).
 fn hook_fn(modules: &Modules<'_>, owner: &QualName, hook: &str, arity: usize) -> Option<QualName> {
     if owner.is_builtin() {
         return None;
@@ -371,6 +378,13 @@ pub fn machines(
         for (_, value) in &member.properties {
             signal_refs(value, &mut subscribes);
         }
+        let classify = if subscribes.is_empty() {
+            None
+        } else {
+            kind_name(&info.kind)
+                .and_then(|q| hook_fn(modules, q, "classify", 2))
+                .zip(member_value(program, system, info, member))
+        };
         let span = Span::new(info.offset, info.offset);
         let companions = modules
             .get(CONTROL_MODULE)
@@ -408,6 +422,7 @@ pub fn machines(
                 member: info.id.clone(),
                 subscribes: subscribes.iter().cloned().collect(),
                 disruption: None,
+                classify: classify.clone(),
             };
             let probe = ModelMachine {
                 machine: machine.clone(),
@@ -581,6 +596,150 @@ pub fn type_name(ty: &Ty) -> String {
         Ty::Ref(Some(k)) => format!("Ref<{}>", type_name(k)),
         Ty::Signal(t) => format!("Signal<{}>", type_name(t)),
         other => other.to_string(),
+    }
+}
+
+/// The type `text` names in the grammar [`type_name`] prints (15.4),
+/// records and enums looked up by their qualified name in `modules`: how
+/// the driver reads an observation's `element` (`docs/slice.md` 22.3).
+/// Covers the types an outcome may have (E151) and the other names the
+/// printer writes for value types; `None` for a text that names no type
+/// or a qualified name no module declares.
+pub fn parse_type_name(text: &str, modules: &Modules<'_>) -> Option<Ty> {
+    let mut parser = TypeText {
+        text: text.as_bytes(),
+        at: 0,
+        modules,
+    };
+    let ty = parser.ty()?;
+    parser.space();
+    (parser.at == parser.text.len()).then_some(ty)
+}
+
+/// The cursor of [`parse_type_name`].
+struct TypeText<'t, 'm> {
+    text: &'t [u8],
+    at: usize,
+    modules: &'m Modules<'m>,
+}
+
+impl TypeText<'_, '_> {
+    fn space(&mut self) {
+        while self.text.get(self.at) == Some(&b' ') {
+            self.at += 1;
+        }
+    }
+
+    fn eat(&mut self, token: &str) -> bool {
+        self.space();
+        if self.text[self.at..].starts_with(token.as_bytes()) {
+            self.at += token.len();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// A dotted name: letters, digits, `_` and `.`.
+    fn name(&mut self) -> Option<String> {
+        self.space();
+        let start = self.at;
+        while self
+            .text
+            .get(self.at)
+            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_' || *c == b'.')
+        {
+            self.at += 1;
+        }
+        (self.at > start).then(|| String::from_utf8_lossy(&self.text[start..self.at]).into_owned())
+    }
+
+    /// `ty, ty, …` up to and including `close`.
+    fn list(&mut self, close: &str) -> Option<Vec<Ty>> {
+        let mut items = Vec::new();
+        if self.eat(close) {
+            return Some(items);
+        }
+        loop {
+            items.push(self.ty()?);
+            if self.eat(close) {
+                return Some(items);
+            }
+            if !self.eat(",") {
+                return None;
+            }
+        }
+    }
+
+    fn ty(&mut self) -> Option<Ty> {
+        if self.eat("(") {
+            let items = self.list(")")?;
+            return match items.len() {
+                0 => Some(Ty::Unit),
+                1 => None,
+                _ => Some(Ty::Tuple(items)),
+            };
+        }
+        let name = self.name()?;
+        if name == "fn" {
+            if !self.eat("(") {
+                return None;
+            }
+            let params = self.list(")")?;
+            if !self.eat("->") {
+                return None;
+            }
+            return Some(Ty::Fn(params, Box::new(self.ty()?)));
+        }
+        let args = if self.eat("<") {
+            self.list(">")?
+        } else {
+            Vec::new()
+        };
+        let one = |args: &[Ty]| (args.len() == 1).then(|| Box::new(args[0].clone()));
+        let two = |args: &[Ty]| {
+            (args.len() == 2).then(|| (Box::new(args[0].clone()), Box::new(args[1].clone())))
+        };
+        let plain = |ty: Ty| args.is_empty().then_some(ty);
+        match name.as_str() {
+            "Int" => plain(Ty::Int),
+            "Bool" => plain(Ty::Bool),
+            "Byte" => plain(Ty::Byte),
+            "Unit" => plain(Ty::Unit),
+            "Text" => plain(Ty::Text),
+            "Bytes" => plain(Ty::List(Box::new(Ty::Byte))),
+            "List" => one(&args).map(Ty::List),
+            "Option" => one(&args).map(Ty::Option),
+            "Store" => one(&args).map(Ty::Store),
+            "Signal" => one(&args).map(Ty::Signal),
+            "Ref" if args.is_empty() => Some(Ty::Ref(None)),
+            "Ref" => one(&args).map(|k| Ty::Ref(Some(k))),
+            "Result" => two(&args).map(|(ok, err)| Ty::Result(ok, err)),
+            "Map" => two(&args).map(|(k, v)| Ty::Map(k, v)),
+            other => {
+                if let Some(kind) = QuantityKind::from_name(other) {
+                    return plain(Ty::Quantity(kind));
+                }
+                let (module, local) = other.rsplit_once('.')?;
+                let types = self.modules.get(module)?.types;
+                let q = QualName::new(module, local);
+                if types.record_fields(&q).is_some() {
+                    Some(if args.is_empty() {
+                        Ty::Record(q)
+                    } else {
+                        Ty::GenericRecord(q, args)
+                    })
+                } else if types.enum_variants(&q).is_some() {
+                    Some(if args.is_empty() {
+                        Ty::Enum(q)
+                    } else {
+                        Ty::GenericEnum(q, args)
+                    })
+                } else {
+                    None
+                }
+            }
+        }
     }
 }
 

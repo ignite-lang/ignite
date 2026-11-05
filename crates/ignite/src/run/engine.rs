@@ -12,18 +12,33 @@
 //!
 //! The core knows the `std.control` types and nothing of any domain
 //! (invariant 6): a member is a path text, a signal a ref text, and the
-//! only fields it reads are those `std.control` declares (`id`, `state`,
-//! `version`, `standing_seq`, `contract`, `period_from`).
+//! only fields it reads are those `std.control` and `std.sli` declare
+//! (`id`, `state`, `version`, `standing_seq`, `contract`, `period_from`,
+//! `signal`, a `Sample`'s `slot` and `line`).
+//!
+//! Classification (`docs/slice.md` 22.3): an `Emit` carries a
+//! `std.sli.Sample`. For each alive subscriber the core builds the
+//! subscriber's own `std.sli.Verdict` when it dequeues the `Emitted`
+//! event: a sample without a line is `good = false`; a line is decoded
+//! with the element type of the signal (the model observation whose `ref`
+//! it is) and given to the subscriber member's `K.classify(self, sample)`.
+//! A `classify` that fails is E128 of that machine, in place of its
+//! `Emitted` event. Replay re-derives every verdict the same way.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use ignite_eval::{CONTROL_MODULE, EvalError, Evaluator, Json, Limit, Model, Value, value_json};
-use ignite_types::{QualName, QuantityKind};
+use ignite_eval::{
+    CONTROL_MODULE, EvalError, Evaluator, Json, Limit, Model, Value, parse_type_name, type_name,
+    value_json,
+};
+use ignite_types::{QualName, QuantityKind, Ty};
 
 use super::Standing;
 
-/// The `formatVersion` of the journal (16.5).
-pub const JOURNAL_VERSION: &str = "ignite-journal/0.1";
+/// The `formatVersion` of the journal (16.5). `0.2` since slice 18 (22.3,
+/// D3): `AttemptDone` carries the probe's line, `signal` records a
+/// `std.sli.Sample` and `Emitted` a `std.sli.Verdict`.
+pub const JOURNAL_VERSION: &str = "ignite-journal/0.2";
 
 /// One journal record (16.5) before it is written: `seq`, `at`, the kind,
 /// the machine it belongs to, the value, whether it is synced before the
@@ -181,8 +196,18 @@ pub struct MachineState {
     pub member: String,
     pub value: Value,
     pub subscribes: Vec<String>,
+    /// The member's `classify` hook and the value it is called on (22.3).
+    pub classify: Option<(QualName, Value)>,
     /// `false` after E128.
     pub alive: bool,
+}
+
+/// What [`Core::feed`] steps next: an event, or an emission of `sample`
+/// on `signal` whose `Verdict` the receiving machine's `classify` decides
+/// when it is dequeued.
+enum Pending {
+    Event(Value),
+    Emission { signal: String, sample: Value },
 }
 
 impl MachineState {
@@ -232,6 +257,9 @@ pub struct Core<'a, 'p> {
     /// A machine failed (E128).
     failed: bool,
     step: QualName,
+    /// Signal ref to its element type (the model's `observations`, 22.3);
+    /// `None` for an element text that names no type.
+    elements: BTreeMap<String, Option<Ty>>,
 }
 
 impl<'a, 'p> Core<'a, 'p> {
@@ -245,7 +273,16 @@ impl<'a, 'p> Core<'a, 'p> {
                 member: m.member.clone(),
                 value: m.machine.clone(),
                 subscribes: m.subscribes.clone(),
+                classify: m.classify.clone(),
                 alive: true,
+            })
+            .collect();
+        let elements = model
+            .observations
+            .iter()
+            .map(|o| {
+                let ty = parse_type_name(&o.element, evaluator.modules());
+                (o.reference.clone(), ty)
             })
             .collect();
         Core {
@@ -261,7 +298,65 @@ impl<'a, 'p> Core<'a, 'p> {
             standings: BTreeMap::new(),
             failed: false,
             step: QualName::new(CONTROL_MODULE, "step"),
+            elements,
         }
+    }
+
+    /// The signal ref text of machine `machine`'s `signal` field: the
+    /// signal a scheduler emits on.
+    pub fn signal_of(&self, machine: usize) -> Option<String> {
+        self.machines.get(machine)?.field("signal").and_then(text)
+    }
+
+    /// `line` decoded with the element type of `signal` (22.3), or why it
+    /// does not decode.
+    pub fn decode(&self, signal: &str, line: &str) -> Result<Value, String> {
+        let element = match self.elements.get(signal) {
+            Some(Some(ty)) => ty,
+            Some(None) => return Err(format!("the element type of `{signal}` names no type")),
+            None => return Err(format!("`{signal}` is no observation of the model")),
+        };
+        let modules = self.evaluator.modules();
+        let types = decoder(element)
+            .and_then(|module| modules.get(&module))
+            .or_else(|| modules.get(CONTROL_MODULE))
+            .map(|module| module.types)
+            .ok_or_else(|| format!("no module types `{}`", type_name(element)))?;
+        Value::decode(line, element, types).map_err(|error| error.message)
+    }
+
+    /// The `std.sli.Verdict` of `sample` on `signal` for machine `index`
+    /// (module doc), or the report of E128.
+    fn verdict(&mut self, index: usize, signal: &str, sample: &Value) -> Result<Value, String> {
+        let slot = field(sample, "slot")
+            .cloned()
+            .ok_or_else(|| "an emission without a `slot`".to_string())?;
+        let good = match field(sample, "line").and_then(enum_parts) {
+            Some(("Some", [Value::Text(line)])) => {
+                let decoded = self
+                    .decode(signal, line)
+                    .map_err(|reason| format!("undecodable emission on {signal}: {reason}"))?;
+                let (hook, this) = self.machines[index].classify.clone().ok_or_else(|| {
+                    format!(
+                        "the kind of {} declares no `classify`",
+                        self.machines[index].member
+                    )
+                })?;
+                match self.evaluator.call(&hook, vec![this, decoded]) {
+                    Ok(Value::Bool(good)) => good,
+                    Ok(_) => return Err(format!("{} returned no `Bool`", hook.name)),
+                    Err(error) => return Err(eval_report(error)),
+                }
+            }
+            _ => false,
+        };
+        Ok(Value::Record {
+            name: QualName::new(SLI_MODULE, "Verdict"),
+            fields: vec![
+                ("slot".to_string(), slot),
+                ("good".to_string(), Value::Bool(good)),
+            ],
+        })
     }
 
     pub fn machines(&self) -> &[MachineState] {
@@ -419,8 +514,8 @@ impl<'a, 'p> Core<'a, 'p> {
     /// journal order (module doc). A dead machine produces nothing.
     pub fn feed(&mut self, machine: usize, at: i64, kind: Value) -> Vec<Record> {
         let mut out = Vec::new();
-        let mut queue = VecDeque::from([(machine, kind)]);
-        while let Some((index, kind)) = queue.pop_front() {
+        let mut queue = VecDeque::from([(machine, Pending::Event(kind))]);
+        while let Some((index, pending)) = queue.pop_front() {
             let Some(state) = self.machines.get(index) else {
                 continue;
             };
@@ -428,7 +523,19 @@ impl<'a, 'p> Core<'a, 'p> {
                 continue;
             }
             let id = state.id.clone();
-            let current = state.value.clone();
+            let kind = match pending {
+                Pending::Event(kind) => kind,
+                Pending::Emission { signal, sample } => {
+                    match self.verdict(index, &signal, &sample) {
+                        Ok(verdict) => self::kind("Emitted", vec![Value::Text(signal), verdict]),
+                        Err(report) => {
+                            out.push(self.error(at, &id, &format!("classify failed: {report}")));
+                            continue;
+                        }
+                    }
+                }
+            };
+            let current = self.machines[index].value.clone();
             let event = event(at, kind);
             let record = self.record(
                 "event",
@@ -455,20 +562,7 @@ impl<'a, 'p> Core<'a, 'p> {
                     }
                 }
                 Err(error) => {
-                    let report = match error {
-                        EvalError::Failed { report } => report,
-                        EvalError::Limit { limit, running } => {
-                            let limit = match limit {
-                                Limit::Fuel(n) => format!("the fuel limit of {n} units"),
-                                Limit::Nodes(n) => format!("the value-size limit of {n} nodes"),
-                                Limit::Depth(n) => format!("the call-depth limit of {n} calls"),
-                            };
-                            format!("{limit} exceeded in {running}")
-                        }
-                        EvalError::Unencodable { what } => {
-                            format!("{what} cannot be encoded")
-                        }
-                    };
+                    let report = eval_report(error);
                     out.push(self.error(at, &id, &report));
                 }
             }
@@ -506,7 +600,7 @@ impl<'a, 'p> Core<'a, 'p> {
         at: i64,
         mut effect: Value,
         out: &mut Vec<Record>,
-        queue: &mut VecDeque<(usize, Value)>,
+        queue: &mut VecDeque<(usize, Pending)>,
     ) {
         let id = self.machines[machine].id.clone();
         let Some((variant, fields)) = enum_parts(&effect) else {
@@ -573,10 +667,10 @@ impl<'a, 'p> Core<'a, 'p> {
                     if state.alive && state.subscribes.contains(&reference) {
                         queue.push_back((
                             index,
-                            kind(
-                                "Emitted",
-                                vec![Value::Text(reference.clone()), value.clone()],
-                            ),
+                            Pending::Emission {
+                                signal: reference.clone(),
+                                sample: value.clone(),
+                            },
                         ));
                     }
                 }
@@ -651,6 +745,38 @@ impl<'a, 'p> Core<'a, 'p> {
         for (kind, value) in follow {
             out.push(self.record(kind, at, Some(id.clone()), value, false, None));
         }
+    }
+}
+
+/// The module of `Sample` and `Verdict` (22.3).
+const SLI_MODULE: &str = "std.sli";
+
+/// The report of an evaluation that produced no value (E128).
+fn eval_report(error: EvalError) -> String {
+    match error {
+        EvalError::Failed { report } => report,
+        EvalError::Limit { limit, running } => {
+            let limit = match limit {
+                Limit::Fuel(n) => format!("the fuel limit of {n} units"),
+                Limit::Nodes(n) => format!("the value-size limit of {n} nodes"),
+                Limit::Depth(n) => format!("the call-depth limit of {n} calls"),
+            };
+            format!("{limit} exceeded in {running}")
+        }
+        EvalError::Unencodable { what } => format!("{what} cannot be encoded"),
+    }
+}
+
+/// The module whose typed program decodes `ty`: that of the first record
+/// or enum inside it, `None` for a type made of builtins only.
+fn decoder(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Record(q) | Ty::Enum(q) => Some(q.module.clone()),
+        Ty::GenericRecord(q, _) | Ty::GenericEnum(q, _) => Some(q.module.clone()),
+        Ty::List(t) | Ty::Option(t) | Ty::Store(t) | Ty::Signal(t) => decoder(t),
+        Ty::Result(a, b) | Ty::Map(a, b) => decoder(a).or_else(|| decoder(b)),
+        Ty::Tuple(items) => items.iter().find_map(decoder),
+        _ => None,
     }
 }
 

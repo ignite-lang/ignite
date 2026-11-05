@@ -11,25 +11,26 @@ and what happens to attempts the probe never made. A contract is a declaration i
 - Import: `import std.contract.{Availability, ThresholdCompliance, SLA, event}`.
 
 The window, the missing-data rule and the compliance arithmetic come from
-[std.sli](sli.md): `good` is an outcome name such as `prompt_received_before_timeout`,
+[std.sli](sli.md): `good` is a predicate over the probe's outcome type, such as
+`prompt_received_before_timeout` over `ProbeAttempt`,
 `window` is `rolling(span)` or `calendar_month(zone)`, and `missing_data` is
 `insufficient_evidence`, `counts_as_good` or `counts_as_bad`.
 
 ## Contract kinds
 
 ```ignite,fragment
-type Availability {
-  signal: Signal<ProbeAttempt>
-  good: Text
+type Availability<T> {
+  signal: Signal<T>
+  good: fn(T) -> Bool
   target: Ratio
   window: Window
   missing_data: Text = "insufficient_evidence"
   minimum_completeness: Ratio = 90%
 }
 
-type ThresholdCompliance {
-  signal: Signal<ProbeAttempt>
-  good: Text
+type ThresholdCompliance<T> {
+  signal: Signal<T>
+  good: fn(T, Duration) -> Bool
   threshold: Duration
   target: Ratio
   window: Window
@@ -37,9 +38,9 @@ type ThresholdCompliance {
   minimum_completeness: Ratio = 90%
 }
 
-type SLA {
-  signal: Signal<ProbeAttempt>
-  good: Text
+type SLA<T> {
+  signal: Signal<T>
+  good: fn(T) -> Bool
   target: Ratio
   period: Window
   exclusions: List<Text> = []
@@ -61,20 +62,26 @@ type SLA {
 - For an `SLA`, missing attempts are always insufficient evidence. `exclusions` (named
   maintenance windows) are not evaluated yet, so none may be declared.
 
-Each kind has two hooks:
+Each kind is generic in its outcome type `T`, inferred from `signal` and `good`; a predicate over
+another type is E040. Each kind has three hooks:
 
 ```ignite,fragment
-fn Availability.machine(self: Availability, id: Text) -> Machine
-fn Availability.validate(self: Availability) -> List<Text>
-fn ThresholdCompliance.machine(self: ThresholdCompliance, id: Text) -> Machine
-fn ThresholdCompliance.validate(self: ThresholdCompliance) -> List<Text>
-fn SLA.machine(self: SLA, id: Text) -> Machine
-fn SLA.validate(self: SLA) -> List<Text>
+fn Availability.machine<T>(self: Availability<T>, id: Text) -> Machine
+fn Availability.classify<T>(self: Availability<T>, sample: T) -> Bool = self.good(sample)
+fn Availability.validate<T>(self: Availability<T>) -> List<Text>
+fn ThresholdCompliance.machine<T>(self: ThresholdCompliance<T>, id: Text) -> Machine
+fn ThresholdCompliance.classify<T>(self: ThresholdCompliance<T>, sample: T) -> Bool = self.good(sample, self.threshold)
+fn ThresholdCompliance.validate<T>(self: ThresholdCompliance<T>) -> List<Text>
+fn SLA.machine<T>(self: SLA<T>, id: Text) -> Machine
+fn SLA.classify<T>(self: SLA<T>, sample: T) -> Bool = self.good(sample)
+fn SLA.validate<T>(self: SLA<T>) -> List<Text>
 ```
 
 - `machine` returns the contract's evaluator, `Machine.Evaluate`, with the id `<id>.evaluator`.
   An `SLA`'s evaluator fires the consequence at a period close whose standing is `Violated`.
-- `validate` returns the reasons `ignite check` reports as E120: an unknown `good` outcome, a
+- `classify` applies `good` to one decoded outcome; the driver calls it for each emission it
+  routes to the contract and hands the evaluator the resulting `Verdict`.
+- `validate` returns the reasons `ignite check` reports as E120: a
   `target` outside (0 %, 100 %], an unknown time zone, a window that is not positive, an
   unknown `missing_data`, a `minimum_completeness` above 100 %; for `ThresholdCompliance` a
   `threshold` that is not positive; for an `SLA` any `exclusions`.
@@ -97,7 +104,7 @@ yet.
 ## Helpers
 
 ```ignite,fragment
-fn reasons(good: Text, target: Ratio, window: Window, missing: Option<Text>, minimum_completeness: Ratio) -> List<Text>
+fn reasons(target: Ratio, window: Window, missing: Option<Text>, minimum_completeness: Ratio) -> List<Text>
 fn missing_rule(text: Text) -> MissingData
 ```
 
@@ -114,7 +121,7 @@ where `promptProbe` is a [`TelnetPrompt`](telnet.md):
 ```ignite,fragment
 contract reachable: Availability {
   signal = promptProbe.attempts
-  good = "prompt_received_before_timeout"
+  good = prompt_received_before_timeout
   target = 99.9%
   window = rolling(30 days)
   missing_data = "insufficient_evidence"
@@ -122,7 +129,7 @@ contract reachable: Availability {
 
 contract promptFast: ThresholdCompliance {
   signal = promptProbe.attempts
-  good = "prompt_received_within_threshold"
+  good = prompt_received_within_threshold
   threshold = 200 ms
   target = 99%
   window = rolling(1 hour)
@@ -131,7 +138,7 @@ contract promptFast: ThresholdCompliance {
 
 contract customerAccess: SLA {
   signal = promptProbe.attempts
-  good = "prompt_received_before_timeout"
+  good = prompt_received_before_timeout
   target = 99.5%
   period = calendar_month("Europe/Berlin")
   exclusions = []
@@ -150,9 +157,9 @@ test "consequences are built by name" {
 }
 
 test "the shared declaration rules" {
-  assert reasons("prompt_received_before_timeout", 99.9%, Rolling(30 days), Some("insufficient_evidence"), 90%) == []
-  assert reasons("prompt_received_before_timeout", 99%, CalendarMonth("Europe/Paris"), None, 90%) == ["unknown time zone \"Europe/Paris\": the closed set is UTC, Europe/Berlin"]
-  assert reasons("prompt_received_before_timeout", 0%, Rolling(1 hour), None, 90%) == ["target 0% is not in (0 %, 100 %]"]
+  assert reasons(99.9%, Rolling(30 days), Some("insufficient_evidence"), 90%) == []
+  assert reasons(99%, CalendarMonth("Europe/Paris"), None, 90%) == ["unknown time zone \"Europe/Paris\": the closed set is UTC, Europe/Berlin"]
+  assert reasons(0%, Rolling(1 hour), None, 90%) == ["target 0% is not in (0 %, 100 %]"]
   assert missing_rule("counts_as_good") == CountsAsGood
   assert missing_rule("nonsense") == MissingData.InsufficientEvidence
 }

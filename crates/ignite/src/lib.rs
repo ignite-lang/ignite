@@ -753,8 +753,10 @@ const EVAL_ROOTS: &[&str] = &["std.deploy"];
 /// The same for `run` and `replay`, plus the reducers' modules the run
 /// driver names: `std.control` (`ignite_eval::CONTROL_MODULE`: `step`,
 /// `standing_at`, `companions`, `Event`, `Effect`, `Segment`; E125 without
-/// it) and `std.sli` (`ProbeAttempt`, the probe event's payload in
-/// `run::live`). `std.time` is reached through `std.control`'s import.
+/// it) and `std.sli` (`Sample` and `Verdict`, the payloads of `Emit` and
+/// `Emitted` that `run::engine` builds, `docs/slice.md` 22.3). `std.time`
+/// is reached through `std.control`'s import. A probe's outcome type is
+/// decoded by the module that declares it, which the program imports.
 const RUN_ROOTS: &[&str] = &["std.deploy", "std.control", "std.sli"];
 
 /// The program at `file`, parsed with its siblings, and the standard
@@ -1660,16 +1662,7 @@ pub fn run(file: &Path, options: &RunOptions) -> Result<i32, Error> {
         start_at,
         builder,
     };
-    let live = run::live::Live::new(
-        core,
-        &model,
-        control_types,
-        config,
-        journal,
-        adapters,
-        tx,
-        rx,
-    );
+    let live = run::live::Live::new(core, &model, config, journal, adapters, tx, rx);
     live.run().map_err(io_error(&state))
 }
 

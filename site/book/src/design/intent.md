@@ -140,7 +140,7 @@ does not know `Restart`, `Availability`, `TelnetServer` or `NativeProcess`. Thos
 |---|---|---|
 | contracts | `Availability`, `ThresholdCompliance`, `SLA` | [`std.contract`](../reference/std/contract.md) |
 | policies | `Restart`, `Backoff`, `DrainRollout` | [`std.policy`](../reference/std/policy.md) |
-| indicators | `ProbeAttempt`, `Window`, `MissingData` | [`std.sli`](../reference/std/sli.md) |
+| indicators | `ProbeAttempt`, `Sample`, `Verdict`, `Window`, `MissingData` | [`std.sli`](../reference/std/sli.md) |
 | deployment | `Deployment`, `Binding`, `localSocket()`, `nativeProcess(..)` | [`std.deploy`](../reference/std/deploy.md) |
 | consoles | `CommandConsole`, `Reply`, `Action` | [`std.console`](../reference/std/console.md) |
 | protocols | `TelnetServer`, `TelnetClient`, `TelnetPrompt`, `HttpServer` | [`std.protocol.telnet`](../reference/std/telnet.md), [`std.protocol.http`](../reference/std/http.md) |

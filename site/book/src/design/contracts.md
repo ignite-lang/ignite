@@ -49,7 +49,7 @@ The terminal declares three contracts over one signal, the prompt probe's attemp
 ```ignite,fragment
 contract reachable: Availability {
   signal = promptProbe.attempts
-  good = "prompt_received_before_timeout"
+  good = prompt_received_before_timeout
   target = 99.9%
   window = rolling(30 days)
   missing_data = "insufficient_evidence"
@@ -57,7 +57,7 @@ contract reachable: Availability {
 
 contract promptFast: ThresholdCompliance {
   signal = promptProbe.attempts
-  good = "prompt_received_within_threshold"
+  good = prompt_received_within_threshold
   threshold = 200 ms
   target = 99%
   window = rolling(1 hour)
@@ -66,7 +66,7 @@ contract promptFast: ThresholdCompliance {
 
 contract customerAccess: SLA {
   signal = promptProbe.attempts
-  good = "prompt_received_before_timeout"
+  good = prompt_received_before_timeout
   target = 99.5%
   period = calendar_month("Europe/Berlin")
   exclusions = []
@@ -74,7 +74,10 @@ contract customerAccess: SLA {
 }
 ```
 
-Texts such as `good`, `missing_data` and `on_deadline` are closed sets. Each kind's
+`good` names a predicate over the probe's outcome type: a name that does not exist is
+[E003](../reference/diagnostics.md#e003), a predicate over another type is
+[E040](../reference/diagnostics.md#e040). Texts such as `missing_data` and `on_deadline` are
+closed sets. Each kind's
 `validate` refuses an unknown value with [E120](../reference/diagnostics.md#e120), as it does a
 target outside (0%, 100%], an unknown time zone or a non-empty `exclusions` (exclusions are not
 evaluated yet, so accepting them would silently ignore them).
@@ -97,23 +100,25 @@ component promptProbe: TelnetPrompt {
   the latency, print one `ProbeAttempt { received, latency }` line, exit 0.
 - Its `machine` is a scheduler: one slot every `interval` from the target's first `Ready`, one
   probe process per slot, a deadline `timeout` after it.
-- A prompt before the deadline is an attempt; the deadline itself emits
-  `received = false`, a bad attempt. A probe that cannot run (no executable, a non-zero exit, an
+- The line before the deadline is the attempt's sample; the deadline itself emits a sample
+  without a line, a bad attempt. A probe that cannot run (no executable, a non-zero exit, an
   undecodable line) emits nothing and journals `missing`: the slot was expected, not executed.
 - `timeout` must be under `interval` ([E123](../reference/diagnostics.md#e123)), so attempts of
   one probe never overlap; a window shorter than `interval` is
   [E124](../reference/diagnostics.md#e124).
 
-`good` names an outcome of [`std.sli`](../reference/std/sli.md)'s `satisfies`, and `meets`
+The driver decodes each line by the signal's element type and asks every contract's `classify`
+hook whether its `good` predicate holds; the two Telnet predicates live in
+[`std.sli`](../reference/std/sli.md), and `meets`
 compares the good attempts with the target in parts per million:
 
 ```ignite
-import std.sli.{ProbeAttempt, satisfies, meets}
+import std.sli.{ProbeAttempt, prompt_received_before_timeout, prompt_received_within_threshold, meets}
 
 test "outcomes and targets" {
   let slow = ProbeAttempt { received = true, latency = 350 ms }
-  assert satisfies(slow, "prompt_received_before_timeout", 0 ms)
-  assert !satisfies(slow, "prompt_received_within_threshold", 200 ms)
+  assert prompt_received_before_timeout(slow)
+  assert !prompt_received_within_threshold(slow, 200 ms)
   assert meets(99.9%, 999, 1000)
   assert !meets(99.9%, 998, 1000)
 }
