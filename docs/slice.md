@@ -928,7 +928,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E032 | import cycle |
 | E049 | a binding inside an or-pattern |
 | E050 | two tests of one module with the same name (section 12.2) |
-| E051 | a test-only item used outside tests and test-only items, or imported (section 12.2), or `Store.new()` there (section 12.3), or `Pipe.pair()` there (section 18.4), or since slice 17 `Directory.temporary()`, `Launcher.new()`, `Entropy.new()` or `Setting.of(..)` there (section 21.8); a UFCS use is reported by the type checker |
+| E051 | a test-only item used outside tests and test-only items, or imported (section 12.2), or `Store.new()` there (section 12.3), or `Pipe.pair()` there (section 18.4), or since slice 17 `Directory.temporary()`, `Launcher.new()`, `Entropy.new()` or `Setting.of(..)` there (section 21.8), or `CommandLine.of(..)` there (section 21.19); a UFCS use is reported by the type checker |
 | E053 | a test name that is empty or interpolated; reported by the parser (section 12.1) |
 | E041 | (slice 9) a name two glob imports provide, used without an explicit import (section 13.1 row 6) |
 | E054 | nesting deeper than 256 levels of brackets, type arguments, prefix operators or `return` (section 3); string literals nested deeper than 32 interpolations (section 13.1 row 1) |
@@ -7648,6 +7648,66 @@ it in a kind of their own. `HttpServer` now has `recovery: Restart` and `rollout
 `Running`. The model of every `HttpServer` member gains the two defaulted properties
 (`todo.model.json`, `studio.model.json`). `studio_defaults.ignite` keeps its own kind: its
 placement is not `std.deploy`'s.
+
+### 21.19 The command line (`CommandLine`), added after the slice
+
+Added 2026-11-05 by `story:program-argument-list`: a command-line tool with subcommands and
+positional arguments (`todo add "buy milk"`, `todo done 3`) needs the whole argument list, which
+`Setting` (one `--flag V` each, 21.6) does not give. The form follows 21.3 (P3) and D11 as
+`Setting` does.
+
+Resource kind `CommandLine`, no properties (E047 for any):
+
+```ignite
+type Todo {
+  command_line: CommandLine
+  executable: Text
+}
+
+fn Todo.main(self: Todo) -> Result<Unit, IoError> {
+  let arguments = self.command_line.arguments()
+  ...
+}
+
+system TodoCli {
+  resource command_line: CommandLine
+  component cli: Todo { command_line = command_line, executable = "todo" }
+}
+```
+
+- The generated `main` reads the process arguments once at launch, with the settings (21.8's
+  order: settings and command lines, directories, launchers, entropy): every argument after the
+  executable's name, in order, flags included. `todo add "buy milk" --port 0` gives `["add",
+  "buy milk", "--port", "0"]`; `--port`, `--ref` and the setting flags keep their meaning, as
+  every read sees the same list (21.6). No arguments is the empty list.
+- Every argument is read, so each needs a `Text`: an argument that is not UTF-8 ends the
+  program before `K.main` with exit status 2 and `error: argument <n>: value <bytes> is not
+  UTF-8`, `<n>` its position from 1 after the executable's name and `<bytes>` as 21.6 writes
+  them.
+- `command_line.arguments() -> List<Text>` needs `<root>.argument`, the op of `setting.value()`:
+  both read the launch arguments, and a command line can read every flag a setting reads, so a
+  separate op would grant nothing narrower (D2 separates authorities, not two views of one).
+- `CommandLine.of(arguments: List<Text>) -> CommandLine` is the test-only constructor (21.8);
+  anywhere else it is E051, as `Setting.of(..)`.
+- D11 holds: there is no `process.args` static and no new ambient head. A handler reaches the
+  command line only if its state holds the handle.
+- Parsing (subcommand tables, help text) stays out of `std` (the story's out-of-scope line); a
+  program or `std.cli` builds it on the list.
+- `ignite run` and `ignite apply` start an executable with `--port` and `--ref` only (21.6, D12),
+  so under them a `CommandLine` sees those.
+- `ignite-io`: `args::CommandLine` (`of`, `launch`, `from_os_args`, `arguments`), re-exported
+  as `ignite_io::CommandLine`. `ignite-rt`: the `Handle` variant `CommandLine` and the entries
+  `ignite_rt_command_line_launch`, `ignite_rt_command_line_of`,
+  `ignite_rt_command_line_arguments`. `ignite-types`: `Capability::CommandLine`, the builtins
+  `CommandLineOf` and `CommandLineArguments`. The model (15.5) is unchanged in format.
+- E020's resource text (21.9) ends ``…, `Entropy`, `Setting` or `CommandLine` ``.
+  `apply::plan::CODEGEN_REVISION` becomes `ignite-codegen/0.1.0-21`.
+
+Tests: `slice17::{rust,llvm}::the_command_line_reaches_the_program` and
+`an_argument_that_is_not_utf8_ends_the_launch` (fixture `slice17/command_line.ignite`);
+`slice17::the_command_line_parse_runs_inline_on_both_targets` runs that file's inline tests,
+which parse `CommandLine.of(..)`; the inline test "a command line keeps its arguments in order"
+in `std/process.ignite`; `e051_command_line_of` (ignite-check).
 
 ## 22 Slice 18: one service operated end to end (F5)
 

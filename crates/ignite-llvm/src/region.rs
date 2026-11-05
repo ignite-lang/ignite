@@ -111,6 +111,8 @@ fn mutates(builtin: Builtin) -> bool {
         | EntropyRandomBytes
         | SettingOf
         | SettingValue
+        | CommandLineOf
+        | CommandLineArguments
         | Debug => false,
     }
 }

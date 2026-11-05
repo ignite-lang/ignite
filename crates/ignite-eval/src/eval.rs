@@ -1322,7 +1322,8 @@ impl<'p> Evaluator<'p> {
                 | Builtin::ChildProcessWait
                 | Builtin::ChildProcessKill
                 | Builtin::EntropyRandomBytes
-                | Builtin::SettingValue,
+                | Builtin::SettingValue
+                | Builtin::CommandLineArguments,
                 _,
             ) => Err(internal(format!(
                 "builtin `{builtin:?}` has no value at compile time"
@@ -2134,6 +2135,7 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::LauncherNew
             | Builtin::EntropyNew
             | Builtin::SettingOf
+            | Builtin::CommandLineOf
     )
 }
 

@@ -67,6 +67,7 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         LauncherNew => (Effect::Ambient("launcher.new"), "Launcher.new"),
         EntropyNew => (Effect::Ambient("entropy.new"), "Entropy.new"),
         SettingOf => (Effect::Ambient("setting.new"), "Setting.of"),
+        CommandLineOf => (Effect::Ambient("command_line.new"), "CommandLine.of"),
         DirectoryReadFile => (Effect::Receiver("read"), "read_file"),
         DirectoryReadDirectory => (Effect::Receiver("read"), "read_directory"),
         DirectoryAbsolutePath => (Effect::Receiver("read"), "absolute_path"),
@@ -80,6 +81,7 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         ChildProcessKill => (Effect::Receiver("kill"), "kill"),
         EntropyRandomBytes => (Effect::Receiver("draw"), "random_bytes"),
         SettingValue => (Effect::Receiver("argument"), "value"),
+        CommandLineArguments => (Effect::Receiver("argument"), "arguments"),
         _ => return None,
     })
 }

@@ -198,7 +198,7 @@ pub enum Ty {
     SystemRef,
     /// `Protocol`: the value of a protocol name (`endpoint(Echo)`).
     Protocol,
-    /// `Directory`, `Launcher`, `ChildProcess`, `Entropy` or `Setting`
+    /// `Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting` or `CommandLine`
     /// (`docs/slice.md` 21.3): a handle like `TcpListener`, passed in values.
     Capability(Capability),
 }
@@ -216,16 +216,19 @@ pub enum Capability {
     Entropy,
     /// One command-line argument of the executable (21.6).
     Setting,
+    /// The whole command line of the executable (21.19).
+    CommandLine,
 }
 
 impl Capability {
     /// Every capability, in the order of 21.8.
-    pub const ALL: [Capability; 5] = [
+    pub const ALL: [Capability; 6] = [
         Capability::Directory,
         Capability::Launcher,
         Capability::ChildProcess,
         Capability::Entropy,
         Capability::Setting,
+        Capability::CommandLine,
     ];
 
     /// The type name.
@@ -236,6 +239,7 @@ impl Capability {
             Capability::ChildProcess => "ChildProcess",
             Capability::Entropy => "Entropy",
             Capability::Setting => "Setting",
+            Capability::CommandLine => "CommandLine",
         }
     }
 
@@ -727,6 +731,10 @@ pub enum Builtin {
     SettingOf,
     /// `s.value() -> Text`; `<root>.argument`.
     SettingValue,
+    /// `CommandLine.of(arguments) -> CommandLine`: test-only (21.19).
+    CommandLineOf,
+    /// `c.arguments() -> List<Text>`; `<root>.argument`.
+    CommandLineArguments,
 }
 
 /// What a `Call` or `Method` expression calls.

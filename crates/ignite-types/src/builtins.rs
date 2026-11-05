@@ -121,6 +121,9 @@ fn capability_method(kind: Capability, name: &str) -> Option<Sig> {
             sig(EntropyRandomBytes, vec![Ty::Int], io(bytes()))
         }
         (Capability::Setting, "value") => sig(SettingValue, vec![], Ty::Text),
+        (Capability::CommandLine, "arguments") => {
+            sig(CommandLineArguments, vec![], Ty::List(Box::new(Ty::Text)))
+        }
         _ => None,
     }
 }
@@ -311,6 +314,11 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
             SettingOf,
             vec![Ty::Text, Ty::Text],
             Ty::Capability(Capability::Setting),
+        ),
+        ("CommandLine", "of") => sig(
+            CommandLineOf,
+            vec![Ty::List(Box::new(Ty::Text))],
+            Ty::Capability(Capability::CommandLine),
         ),
         _ => None,
     }

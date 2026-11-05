@@ -2,25 +2,34 @@
 format: aep.planning-md/3
 id: story:program-argument-list
 kind: story
-status: active
+status: implemented
 title: Read the program's argument list
 summary: A program reads its whole command line as a list of Text, so a CLI with subcommands and positional arguments can be written
 relations:
 - depends_on: story:program-arguments
 - depends_on: story:slice-17-records
 scope:
+- confidence: cited
+  path: crates/ignite-check/src
+- confidence: cited
+  path: crates/ignite-eval/src
 - confidence: inferred
   path: crates/ignite-io/src/lib.rs
+- confidence: cited
+  path: crates/ignite-llvm/src
 - confidence: inferred
   path: crates/ignite-rt/src
+- confidence: cited
+  path: crates/ignite-rustgen/src
 - confidence: inferred
   path: crates/ignite-types/src
 - confidence: inferred
   path: std/process.ignite
-revision: 4
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T16:35:41Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-05T16:35:41Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-05T17:26:40Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: program-argument-list
 
