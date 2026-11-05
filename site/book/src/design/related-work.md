@@ -15,7 +15,7 @@ Kubernetes resource limits are written as quantities such as `hugepages-2Mi: 80M
 
 "Yes" means the project does it as part of what it is; "partial" is explained in a footnote;
 "no" means it is not part of the project, which is often a deliberate choice of scope. Ignite's
-column describes v0.4.0.
+column describes v0.5.0.
 
 | capability | Ignite | Lean 4 | Winglang | Pulumi | CUE | Kubernetes controllers | Temporal |
 |---|---|---|---|---|---|---|---|
