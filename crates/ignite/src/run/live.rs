@@ -73,7 +73,21 @@ pub type Builder = Arc<dyn Fn() -> Result<BTreeMap<String, PathBuf>, String> + S
 
 /// A host receives each record before its effect can be dispatched. Returning
 /// an error stops the live driver, including when durable host storage fails.
-pub type RecordSink = Box<dyn FnMut(&Record) -> io::Result<()> + Send>;
+pub type RecordSink = Box<dyn FnMut(&Record) -> io::Result<Admission> + Send>;
+
+/// A host's answer to one record (17.5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Admission {
+    /// The record's effect, if it has one, is dispatched.
+    Dispatch,
+    /// The host refuses the record's effect, with the reason: while a
+    /// recovery that no corrective resolves stands, the running revision
+    /// dispatches no further effect. The record stays journaled as the
+    /// effect's intent, nothing is dispatched for it, and the run goes on,
+    /// so the instances it supervises keep serving until `ignite recover`
+    /// stops them (22.9).
+    Refused(String),
+}
 
 /// What a run is given besides the model.
 pub struct Config {
@@ -507,9 +521,10 @@ impl<'a, 'p> Live<'a, 'p> {
         for record in records {
             let line = record.line();
             self.journal.append(&line, record.durable)?;
-            if let Some(sink) = &mut self.record_sink {
-                sink(&record)?;
-            }
+            let admission = match &mut self.record_sink {
+                Some(sink) => sink(&record)?,
+                None => Admission::Dispatch,
+            };
             if self.config.json {
                 let stdout = io::stdout();
                 let mut out = stdout.lock();
@@ -517,8 +532,12 @@ impl<'a, 'p> Live<'a, 'p> {
                 out.flush()?;
             }
             eprintln!("{}", record.human());
-            if let Some(dispatch) = record.dispatch {
-                self.dispatch(dispatch);
+            match (record.dispatch, admission) {
+                (Some(dispatch), Admission::Dispatch) => self.dispatch(dispatch),
+                (Some(_), Admission::Refused(reason)) => {
+                    eprintln!("effect not dispatched: {reason}");
+                }
+                (None, _) => {}
             }
         }
         Ok(())

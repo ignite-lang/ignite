@@ -1409,6 +1409,54 @@ mod tests {
         }
     }
 
+    /// 17.5 since slice 18: an effect the host refuses beside an unresolved
+    /// recovery reaches the run driver as `Admission::Refused`, which it
+    /// journals, does not dispatch and goes on after, so the committed
+    /// instances keep serving until `ignite recover`; any other failed
+    /// record, such as a storage failure, still ends the run.
+    #[test]
+    fn a_refused_effect_is_answered_refused_and_does_not_end_the_run() {
+        use super::super::controller::{EFFECT_REFUSED, admission};
+        use crate::run::live::Admission;
+        let root = scratch("refused");
+        let mut host = gave_up_host(&root);
+        host.runtime = Some(committed_runtime("committed"));
+        let failed = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("error")),
+                ("machine", text("Terminal.probe.scheduler")),
+                (
+                    "value",
+                    object([
+                        ("code", text("E128")),
+                        ("report", text("reducer of Terminal.probe.scheduler failed")),
+                    ]),
+                ),
+            ]),
+        );
+        let note = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("effect")),
+                ("machine", text("Terminal.server.supervisor")),
+                ("value", object([("variant", text("Note"))])),
+            ]),
+        );
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(failed.is_ok(), "{failed:?}");
+        assert_eq!(
+            admission(note).ok(),
+            Some(Admission::Refused(EFFECT_REFUSED.to_string()))
+        );
+        assert_eq!(admission(Ok(())).ok(), Some(Admission::Dispatch));
+        assert!(admission(Err(fail(3, "host journal sync failed"))).is_err());
+        assert!(admission(Err(fail(1, "ready artifact identity mismatch"))).is_err());
+    }
+
     /// `finished`: the committed revision's controller that ends while a
     /// `gave_up` is unresolved leaves that operation active with its reason
     /// and keeps the end beside it; nothing resumes the failed operation.

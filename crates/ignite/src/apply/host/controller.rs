@@ -79,7 +79,24 @@ use crate::apply::revision::Launch;
 use crate::apply::{Failure, fail, object, plan::Plan, text};
 use crate::run::control::Observation;
 use crate::run::engine::{enum_parts, field};
-use crate::run::live::Carried;
+use crate::run::live::{Admission, Carried};
+
+/// The reason [`Host::record`] refuses an effect while a recovery that no
+/// corrective resolves stands (17.5).
+pub(super) const EFFECT_REFUSED: &str = "effect dispatch blocked by unresolved recovery";
+
+/// The answer the run driver gets for a record: a refused effect is
+/// [`Admission::Refused`], which the run journals and does not dispatch
+/// while it goes on serving (17.5, 22.9); any other failure ends the run.
+pub(super) fn admission(result: Result<(), Failure>) -> io::Result<Admission> {
+    match result {
+        Ok(()) => Ok(Admission::Dispatch),
+        Err(error) if error.status == 1 && error.reason == EFFECT_REFUSED => {
+            Ok(Admission::Refused(error.reason))
+        }
+        Err(error) => Err(io::Error::other(error.to_string())),
+    }
+}
 
 /// The revision controller running on the run driver's thread.
 pub(super) struct Runtime {
@@ -1378,7 +1395,7 @@ impl Host {
             && !self.correctable()
             && !stopping
         {
-            return Err(fail(1, "effect dispatch blocked by unresolved recovery"));
+            return Err(fail(1, EFFECT_REFUSED));
         }
         if kind == Some("error") {
             self.reject_operation(

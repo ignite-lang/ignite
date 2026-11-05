@@ -4396,7 +4396,14 @@ one is kept beside it without replacing it.
   corrective's premise, the committed revision's instances as they were, no longer holds: the
   receipt's next action becomes "inspect retained ownership and journal before recovery", the
   running revision dispatches no further effect, no corrective is admitted and no start resumes
-  the committed revision. Keeping the first reason never weakens what the later one blocks. While
+  the committed revision. Since slice 18 a refused effect does not end the run: the host answers
+  its record "refused" (`Admission::Refused`, `crates/ignite/src/run/live.rs`), the record stays
+  in the run's journal and the host journal as the effect's intent, the run dispatches nothing
+  for it, prints `effect not dispatched: <reason>` and goes on. So the instances the run still
+  supervises, the committed revision's among them, keep serving until `ignite recover` (22.9)
+  stops them; before slice 18 the refusal ended the run and its children with it (parent-death
+  rule), the healthy committed instances included. Keeping the first reason never weakens what
+  the later one blocks. While
   the unresolved recovery is the committed revision's own (its receipt stays `completed`, and its
   reason is never resolvable), nothing is kept beside it.
 - In `recovery` the first entry recorded stands; a later one is kept in `recovery.laterReasons`
@@ -8103,6 +8110,9 @@ ignite recover --state DIR --operation ID [--json]
 - Sent over the control socket as operation `recover` (`ignite-host-control/0.1`, 17.2). The
   host accepts it only for the active operation when it is `recovery_required` and admission
   refuses a corrective for it (F16); otherwise exit 2 `operation <id> requires no recovery`.
+- Until then the instances of that state keep serving: the run of the committed revision, which
+  supervises them, has every further effect refused (17.5) and is not ended by the refusal, so
+  `recover` finds them alive and stops them below.
 - The host scans as at start (17.5): an unaccounted process under `<state>/revisions/` refuses
   with exit 1 and its pid and path, nothing signalled, nothing journaled (row 26).
 - Otherwise, in this order: journal `recoverStarted {"operationId"}`; stop the run driver of

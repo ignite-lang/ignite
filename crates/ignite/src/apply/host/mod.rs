@@ -28,7 +28,12 @@ type Reply = mpsc::Sender<Result<Json, Failure>>;
 enum Message {
     Request(Json, Reply),
     Prepared(Box<Result<Plan, Failure>>, Reply),
-    Record(String, String, Json, mpsc::Sender<io::Result<()>>),
+    Record(
+        String,
+        String,
+        Json,
+        mpsc::Sender<io::Result<crate::run::live::Admission>>,
+    ),
     Finished(String, Result<i32, String>),
     Initialized(String),
     Handover(String, Box<crate::run::live::Carried>),
@@ -235,7 +240,7 @@ pub fn run(state: &Path) -> Result<i32, Failure> {
                     .err()
                     .filter(|error| error.status == 3)
                     .map(|error| error.reason.clone());
-                let _ = ack.send(result.map_err(|error| io::Error::other(error.to_string())));
+                let _ = ack.send(controller::admission(result));
                 if let Some(reason) = failed {
                     stopping.store(true, Ordering::Relaxed);
                     return Err(fail(
