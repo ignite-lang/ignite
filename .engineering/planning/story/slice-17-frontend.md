@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-17-frontend
 kind: story
-status: draft
+status: active
 title: 'Slice 17 frontend: the four handle types'
 summary: Checker, typer, evaluator and lowering for Directory, Launcher, Entropy and Setting
 relations:
@@ -28,7 +28,10 @@ scope:
   path: std/fs.ignite
 - confidence: cited
   path: std/process.ignite
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T03:52:11Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-05T03:52:11Z", actor: "human:timo", revision: 4}
 ---
 # Story: slice-17-frontend
 
