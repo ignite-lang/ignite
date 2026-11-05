@@ -5,7 +5,9 @@
 
 use ignite_io::{ChildExit, ChildProcess, Invocation, IoError, Launcher};
 
-use crate::net::{Handle, capability, register};
+use std::sync::{Mutex, MutexGuard, PoisonError};
+
+use crate::net::{Handle, capability, ignite_rt_tcp_release, register};
 use crate::text::texts;
 use crate::{IgniteIoError, IgniteList, bytes, get, status};
 
@@ -83,6 +85,45 @@ fn child(handle: i64) -> Result<ChildProcess, IoError> {
     })
 }
 
+/// The ids of waited children, by the slot of their released handle: the
+/// newest handle of each slot and its child's id. Bounded by the table's
+/// slots, since a slot reused by a later waited child replaces its entry.
+static WAITED: Mutex<Vec<(i64, i64)>> = Mutex::new(Vec::new());
+
+fn waited() -> MutexGuard<'static, Vec<(i64, i64)>> {
+    WAITED.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// The slot index of a handle value (its low 32 bits, minus one).
+fn slot_of(handle: i64) -> usize {
+    ((handle & 0xffff_ffff) as usize).saturating_sub(1)
+}
+
+/// Remember `id` for the waited child `handle`, before its slot is freed.
+fn remember(handle: i64, id: i64) {
+    let slot = slot_of(handle);
+    let mut waited = waited();
+    if waited.len() <= slot {
+        waited.resize(slot + 1, (0, 0));
+    }
+    waited[slot] = (handle, id);
+}
+
+/// The id of the waited child `handle`, if this is its released handle.
+fn remembered(handle: i64) -> Option<i64> {
+    waited()
+        .get(slot_of(handle))
+        .filter(|(h, _)| *h == handle)
+        .map(|(_, id)| *id)
+}
+
+/// Whether `error`, from looking `handle` up, says the handle was released:
+/// a child handle is released only by its `wait` (`docs/slice.md` 21.5),
+/// so it names a waited child, also one whose slot a later child reused.
+fn released(handle: i64, error: &IoError) -> bool {
+    remembered(handle).is_some() || error.message.ends_with("was released")
+}
+
 /// `i64 launcher_new(i64 maximum_children)`: `Launcher.new()` (16) and the
 /// resource at launch.
 #[unsafe(no_mangle)]
@@ -120,29 +161,42 @@ pub extern "C" fn ignite_rt_launcher_start(
     status(started, out, err)
 }
 
-/// `i64 child_id(i64 c)`: the child's process id; 0 for a handle that is
-/// no child.
+/// `i64 child_id(i64 c)`: the child's process id, also once it was waited
+/// and its handle released; 0 for a handle that is no child or whose id
+/// a later waited child in the same slot replaced.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_child_id(handle: i64) -> i64 {
-    child(handle).map_or(0, |c| c.id())
+    child(handle).map_or_else(|_| remembered(handle).unwrap_or(0), |c| c.id())
 }
 
-/// `i32 child_wait(i64 c, ChildExit* out, IoError* err)`.
+/// `i32 child_wait(i64 c, ChildExit* out, IoError* err)`: the first wait
+/// frees the handle's slot (`docs/slice.md` 21.5); a later one is `child
+/// already waited`, as on the Rust target.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_child_wait(
     handle: i64,
     out: *mut IgniteChildExit,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let waited = child(handle)
-        .and_then(|c| c.wait())
-        .map(|exit| IgniteChildExit::of(&exit));
-    status(waited, out, err)
+    let waited = match child(handle) {
+        Ok(c) => c.wait().inspect(|_| {
+            remember(handle, c.id());
+            ignite_rt_tcp_release(handle);
+        }),
+        Err(error) if released(handle, &error) => Err(IoError::new("child already waited")),
+        Err(error) => Err(error),
+    };
+    status(waited.map(|exit| IgniteChildExit::of(&exit)), out, err)
 }
 
-/// `i32 child_kill(i64 c, IoError* err)`.
+/// `i32 child_kill(i64 c, IoError* err)`: `Ok` and nothing sent once the
+/// child was waited.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_child_kill(handle: i64, err: *mut IgniteIoError) -> i32 {
-    let killed = child(handle).and_then(|c| c.kill());
+    let killed = match child(handle) {
+        Ok(c) => c.kill(),
+        Err(error) if released(handle, &error) => Ok(()),
+        Err(error) => Err(error),
+    };
     status(killed, std::ptr::null_mut(), err)
 }

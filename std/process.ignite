@@ -91,4 +91,91 @@ test "an invocation's defaults" {
   assert invocation.output_limit == 1 MiB
 }
 
+test "a child's output and status are captured" {
+  let exit = Launcher.new().execute(Invocation { program = "/bin/sh", arguments = ["-c", "echo out; echo err >&2; exit 3"] })?
+  assert exit.ending == 0
+  assert exit.code == 3
+  assert exit.stdout == b"out\n"
+  assert exit.stderr == b"err\n"
+  assert exit.dropped == 0
+  assert outcome(exit) == ExitCode(3)
+}
+
+// The message of a refused operation, `ok` when it succeeded.
+test fn refused<T>(result: Result<T, IoError>) -> Text = match result {
+  Ok(_) => "ok"
+  Err(error) => error.message
+}
+
+// `/bin/sleep 30`, the child the tests below kill.
+test fn sleeper() -> Invocation = Invocation { program = "/bin/sleep", arguments = ["30"] }
+
+test "a child over its timeout is killed with its group" {
+  let launcher = Launcher.new()
+  let started = Clock.monotonic()
+  let exit = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "echo $$; sleep 30 & sleep 30"], timeout = 200 ms })?
+  assert Clock.monotonic() - started < 3 seconds
+  assert exit.ending == 2
+  assert exit.code == -1
+  assert outcome(exit) == TimedOut
+  let pid = exit.stdout.to_text().trim()
+  assert Int.parse(pid) != None
+  let check = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "ps -o stat= -g ".concat(pid).concat(" | grep -v Z || echo gone")] })?
+  assert check.stdout == b"gone\n"
+  // `ps -g` selects by session; count the group's live members, zombies not:
+  let group = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "ps -e -o pgid=,stat= | awk -v g=".concat(pid).concat(" '$1 == g && $2 !~ /^Z/ {{ n++ }} END {{ print n + 0 }}'")] })?
+  assert group.stdout == b"0\n"
+}
+
+test "a started child is killed" {
+  let child = Launcher.new().start(sleeper())?
+  assert child.id() > 0
+  let started = Clock.monotonic()
+  child.kill()?
+  let exit = child.wait()?
+  assert Clock.monotonic() - started < 1 seconds
+  assert exit.ending == 3
+  assert outcome(exit) == Killed
+  assert refused(child.wait()) == "child already waited"
+  assert refused(child.kill()) == "ok"
+}
+
+test "output past the limit is counted, not kept" {
+  let launcher = Launcher.new()
+  let exit = launcher.execute(Invocation { program = "/bin/sh", arguments = ["-c", "head -c 2097152 /dev/zero"], output_limit = 1 KiB })?
+  assert exit.ending == 0
+  assert exit.code == 0
+  assert exit.stdout.len() == 1024
+  assert exit.dropped == 2097152 - 1024
+  assert refused(launcher.execute(Invocation { program = "/bin/true", output_limit = 17 MiB })) == "output_limit must be at most 16 MiB"
+}
+
+test "the launcher refuses what it cannot run" {
+  let launcher = Launcher.new()
+  var children: List<ChildProcess> = []
+  while children.len() < 16 {
+    children.push(launcher.start(sleeper())?)
+  }
+  assert refused(launcher.start(sleeper())) == "too many children (16)"
+  let first: ChildProcess = children.at(0)
+  first.kill()?
+  assert first.wait()?.ending == 3
+  let replacement = launcher.start(sleeper())?
+  assert refused(launcher.start(sleeper())) == "too many children (16)"
+  replacement.kill()?
+  replacement.wait()?
+  var i = 1
+  while i < children.len() {
+    let child: ChildProcess = children.at(i)
+    child.kill()?
+    child.wait()?
+    i = i + 1
+  }
+  assert refused(launcher.execute(Invocation { program = "nosuch-ignite-17" })).starts_with("program not found")
+  assert refused(launcher.execute(Invocation { program = "bin/sh" })) == "program bin/sh: a relative path with /"
+  assert refused(launcher.execute(Invocation { program = "/bin/true", timeout = 0 seconds })) == "timeout must be positive"
+  assert refused(launcher.execute(Invocation { program = "/bin/true", directory = "rel" })) == "directory rel: not absolute"
+  assert launcher.execute(Invocation { program = "true" })?.code == 0
+}
+
 // ---- entropy tests ----
