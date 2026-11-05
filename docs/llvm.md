@@ -313,11 +313,15 @@ position, even with no buffer.
 - Lowering walks the left spine of a binary chain (`a + b + c ..`) with a loop, as the
   loop-region analysis does, so a 100,000-term chain needs no deep native stack. After
   each step the stack slots its right operand used are dead and later temporaries reuse
-  them, so a chain has a constant number of slots. A `Text` chain makes one owned text at
-  its first `+` and appends every further operand to it in place (`@ignite.append`, a
-  literal straight from its constant), which is linear where a new text per step would be
-  quadratic. `@ignite.append` and `@ignite.append_text` are `noinline`: inlined 100,000
-  times they made clang's `-O1` superlinear.
+  them, so a chain has a constant number of slots. A `Text` chain (`+`, `.concat`, mixed,
+  along the left spine) is lowered inline without a runtime call: the operands are
+  evaluated left to right and each one's pointer and length loaded at once, adjacent
+  literals are joined into one constant, and one arena block of the summed length
+  (`@ignite.alloc`) takes one `memcpy` per operand. Past 16 non-literal operands the text
+  grows with `@ignite.reserve` (doubling) for each further batch of 16, so a long chain
+  stays linear and holds a bounded number of values. `@ignite.append` and
+  `@ignite.append_text` (the debug text glue) are `noinline`: inlined 100,000 times they
+  made clang's `-O1` superlinear.
 - Allocation: from the current task's arena, inline (`@ignite.alloc`, an internal
   `alwaysinline` function of every IR module). It bumps the task's bump state
   (`ignite_rt_arena_state`, section 5) when the request fits in the current chunk. Otherwise

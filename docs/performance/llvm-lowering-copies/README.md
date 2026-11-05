@@ -40,3 +40,28 @@ runtime, which returns a non-null pointer.
 The slow path ran 8 times fewer per 200,000 allocations; no wall-time change beyond the
 noise of the shared machine. Kept: it is the review's one-line fix, and the slow path it
 avoids is a call with the runtime's state hand-over each time.
+
+## P1: `Text` concatenation inline, one block per chain
+
+`a + b` and `a.concat(b)` called `ignite_rt_text_concat`, which built a heap `Vec` of both
+operands and copied it into the arena; a `+` chain then appended further operands with
+`@ignite.append` (growing, so copying the prefix again), and a `.concat` chain made a new
+text per step. Now the whole left spine of a chain, `+` and `.concat` mixed, is lowered
+inline: operands evaluated left to right, adjacent literals joined into one constant, one
+`@ignite.alloc` of the summed length and one `memcpy` per operand; past 16 non-literal
+operands the text grows by `@ignite.reserve` (doubling) per further batch of 16. The
+spawn thunks' error line (`log_error`) uses the same inline copy.
+
+| measure | base | P1 |
+|---|---|---|
+| `probe.ignite` `program.ll`: calls of `ignite_rt_text_concat` | 24 | 0 |
+| same: calls of `@ignite.append_text` | 4 | 2 (the debug glue's) |
+| `probe2.ignite` `program.ll`: calls of `ignite_rt_text_concat` | 9 | 0 |
+| `bench text concat` (4,000,000 rounds, 5 concatenations each): `ignite_rt_text_concat` calls | 20,000,000 | 0 |
+| same: `malloc` calls, whole process | 20,000,029 | 32 |
+| same: instructions (callgrind `Ir`, whole run) | 8,964,833,093 | 1,696,792,062 |
+| wall time, `bench text concat`, median of 21 interleaved (load 17.5 to 18.4) | 877 ms | 157 ms |
+
+`slice9::long_chains_100k_lower_quickly` and `slice9::long_chains_100k_run_on_llvm`
+(`#[ignore]`, run by hand with `--include-ignored`) pass with the new lowering, as do the
+10,000-term chains of the gate.
