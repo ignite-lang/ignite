@@ -122,7 +122,13 @@ impl Members {
             if edge.kind != EdgeKind::Provisioning {
                 continue;
             }
-            let Some(resource) = model.member(&edge.from) else {
+            // Every resource an executable creates provisions it (a
+            // `Store`, the capabilities of 21.8); only a listener has a
+            // port to pin.
+            let Some(resource) = model
+                .member(&edge.from)
+                .filter(|resource| resource.kind == "TcpListener")
+            else {
                 continue;
             };
             let property = |name: &str| resource.properties.iter().find(|(f, _)| f == name);

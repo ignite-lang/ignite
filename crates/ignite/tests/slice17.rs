@@ -7,6 +7,9 @@
 //! Children of a program (rows 13, 14 and 17 of 21.0): `signal_mask.ignite`
 //! shows what a child of a server inherits, `orphans.ignite` that children
 //! end with the program, however it ends.
+//!
+//! Arguments (row 18): `arguments.ignite` reads two settings, a directory
+//! flag, `--port` and `--ref` from one argument list (21.6).
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
@@ -401,6 +404,8 @@ both_targets!(
     orphans_after_second_sigterm,
     orphans_after_sigkill,
     a_child_status_survives_an_ignored_sigchld,
+    settings_read_their_flags,
+    a_value_that_is_not_utf8_is_refused,
 );
 
 /// Adversary: a server started by a parent that left SIGCHLD ignored (a
@@ -446,4 +451,145 @@ fn a_child_status_survives_an_ignored_sigchld(target: Target) {
     );
     let (code, body) = server.get("/");
     assert_eq!((code, body.as_str()), (200, "ending 1 code 15"));
+}
+
+// ---- program arguments (U4) ----
+
+/// `show` of `arguments.ignite` started in a working directory of its own
+/// with `args`: its exit code, stdout and stderr.
+fn show(case: &str, target: Target, args: &[&std::ffi::OsStr]) -> (Option<i32>, String, String) {
+    let show = executable("arguments.ignite", "show", target);
+    let mut child = Command::new(&show)
+        .args(args)
+        .current_dir(workdir(case, target))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| panic!("start {}: {e}", show.display()));
+    let status = wait_exit(&mut child, "show");
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout")
+        .read_to_string(&mut stdout)
+        .expect("read stdout");
+    child
+        .stderr
+        .take()
+        .expect("stderr")
+        .read_to_string(&mut stderr)
+        .expect("read stderr");
+    (status.code(), stdout, stderr)
+}
+
+fn os<'a>(args: &[&'a str]) -> Vec<&'a std::ffi::OsStr> {
+    args.iter().map(|arg| std::ffi::OsStr::new(*arg)).collect()
+}
+
+/// Row 18: two settings, a directory flag, `--port` and `--ref` read from
+/// one argument list; a missing required flag and a flag without a value
+/// end the program with exit 2 before it binds a port.
+fn settings_read_their_flags(target: Target) {
+    let root = tmp(format!("arguments-root-{}", target_name(target)));
+    std::fs::create_dir_all(&root).expect("create the root");
+    let canonical = std::fs::canonicalize(&root).expect("canonical root");
+    let root = root.to_str().expect("a UTF-8 root");
+    let peer = "Arguments.peer=127.0.0.1:9";
+    let given = [
+        "--root",
+        root,
+        "--tool",
+        "/bin/true",
+        "--port",
+        "0",
+        "--ref",
+        peer,
+    ];
+    let (code, stdout, stderr) = show("flags", target, &os(&given));
+    assert_eq!(code, Some(0), "{stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 5, "{stdout}");
+    assert_eq!(lines[0], "tool /bin/true");
+    assert_eq!(lines[1], "mode fast");
+    assert_eq!(lines[2], format!("root {}", canonical.display()));
+    let port: u16 = lines[3]
+        .strip_prefix("listening 127.0.0.1:")
+        .unwrap_or_else(|| panic!("{stdout}"))
+        .parse()
+        .unwrap_or_else(|e| panic!("{stdout}: {e}"));
+    assert!(port != 0 && port != 8096, "{stdout}");
+    assert!(
+        stderr.contains(&format!("listening on 127.0.0.1:{port}")),
+        "{stderr}"
+    );
+    assert_eq!(lines[4], "peer 127.0.0.1:9");
+
+    let mut slow = given.to_vec();
+    slow.push("--mode=slow");
+    let (code, stdout, stderr) = show("slow", target, &os(&slow));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.lines().any(|l| l == "mode slow"), "{stdout}");
+
+    let without_tool = ["--root", root, "--port", "0", "--ref", peer];
+    let (code, stdout, stderr) = show("no-tool", target, &os(&without_tool));
+    assert_eq!(code, Some(2), "{stdout}{stderr}");
+    assert_eq!(stderr, "error: --tool: required argument missing\n");
+    assert!(stdout.is_empty(), "{stdout}");
+
+    let no_value = [
+        "--root",
+        root,
+        "--mode",
+        "--tool",
+        "/bin/true",
+        "--port",
+        "0",
+        "--ref",
+        peer,
+    ];
+    let (code, stdout, stderr) = show("no-value", target, &os(&no_value));
+    assert_eq!(code, Some(2), "{stdout}{stderr}");
+    assert_eq!(stderr, "error: --mode needs a value\n");
+    assert!(stdout.is_empty(), "{stdout}");
+}
+
+/// 21.6: a flag's value that is not UTF-8 has no `Text`, so the read
+/// refuses it with its bytes as `escape_ascii` writes them, exit 2, on both
+/// targets; an argument that is not UTF-8 and that no read asks for is
+/// ignored like any other unknown argument.
+fn a_value_that_is_not_utf8_is_refused(target: Target) {
+    use std::os::unix::ffi::OsStrExt;
+    let root = tmp(format!("arguments-utf8-{}", target_name(target)));
+    std::fs::create_dir_all(&root).expect("create the root");
+    let root = root.to_str().expect("a UTF-8 root");
+    let bad = std::ffi::OsStr::from_bytes(b"/bin/\xfftrue");
+    let bad_joined = std::ffi::OsStr::from_bytes(b"--tool=/bin/\xfftrue");
+    let stray = std::ffi::OsStr::from_bytes(b"--stray=\xfe");
+    let peer = "Arguments.peer=127.0.0.1:9";
+    let rest = os(&["--root", root, "--port", "0", "--ref", peer]);
+
+    for (case, tool) in [
+        ("utf8-split", vec![std::ffi::OsStr::new("--tool"), bad]),
+        ("utf8-joined", vec![bad_joined]),
+    ] {
+        let args: Vec<&std::ffi::OsStr> = tool.into_iter().chain(rest.iter().copied()).collect();
+        let (code, stdout, stderr) = show(case, target, &args);
+        assert_eq!(code, Some(2), "{case}: {stdout}{stderr}");
+        assert_eq!(
+            stderr, "error: --tool: value /bin/\\xfftrue is not UTF-8\n",
+            "{case}"
+        );
+        assert!(stdout.is_empty(), "{case}: {stdout}");
+    }
+
+    let mut args = vec![stray];
+    args.extend(os(&["--tool", "/bin/true"]));
+    args.extend(rest.iter().copied());
+    let (code, stdout, stderr) = show("utf8-stray", target, &args);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.starts_with("tool /bin/true\n"), "{stdout}");
+    assert!(stdout.ends_with("peer 127.0.0.1:9\n"), "{stdout}");
 }

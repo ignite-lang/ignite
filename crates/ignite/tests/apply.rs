@@ -988,3 +988,43 @@ fn replacement_drains(target: &'static str) {
     restored_session.quit();
     restored.stop();
 }
+
+// ---- slice 17 (U4): E142 before the host ----
+
+/// Row 26 of `docs/slice.md` 21.0: `plan --for-apply` of a system whose
+/// started member has a `Setting` without `default` is E142, exit 2,
+/// before the host is contacted: no `ignite host` runs for the state, and
+/// the state directory and the plan file are not created.
+#[test]
+fn plan_refuses_a_setting_without_default() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join("apply-e142");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let state = root.join("state");
+    let plan = root.join("p");
+    let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("plan")
+        .arg("slice17/e142_setting_without_default.ignite")
+        .args(["--for-apply", "--state"])
+        .arg(&state)
+        .arg("--out")
+        .arg(&plan)
+        .current_dir(&fixtures)
+        .stdin(Stdio::null())
+        .output()
+        .expect("run ignite plan");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(output.stdout.is_empty());
+    assert_eq!(stderr.matches("E142").count(), 1, "{stderr}");
+    let expected =
+        fs::read_to_string(fixtures.join("slice17/e142_setting_without_default.expected"))
+            .expect("the E142 diagnostic of `ignite run`");
+    assert!(
+        stderr.contains(expected.trim_end()),
+        "{stderr}\nexpected the diagnostic of `ignite run`:\n{expected}"
+    );
+    assert!(!state.exists(), "the state directory was created");
+    assert!(!plan.exists(), "a plan was written");
+}
