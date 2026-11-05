@@ -246,6 +246,21 @@ fn local_tails_keep_their_values_on_both_targets() {
     );
 }
 
+/// 20.3.1 and 20.3.4: a pattern binding and an owned `for` element, which
+/// the analysis does not track and so never moves, as the tail of an `if`
+/// branch whose value is used and read afterwards, copy; rustc must accept
+/// the program and both targets return the copied values.
+#[test]
+fn untracked_tails_keep_their_values_on_both_targets() {
+    let (status, out) = both_targets("moves_tails_untracked.ignite");
+    assert_eq!(status, Some(0), "{out}");
+    assert_eq!(
+        out.matches("test result: ok. 2 passed; 0 failed;").count(),
+        2,
+        "{out}"
+    );
+}
+
 /// 20.3.2 and 20.3.5: named arguments (a UFCS receiver among them) and
 /// variant payloads are evaluated into values and passed or stored after
 /// the last one, so an earlier operand in a move position that is copied

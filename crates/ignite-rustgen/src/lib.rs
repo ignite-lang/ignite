@@ -2128,12 +2128,22 @@ impl<'a> Generator<'a> {
     }
 
     /// A value in a result position (the tail of a value block, an arm, a
-    /// branch): a place reached through a borrowed parameter is copied,
-    /// since it cannot be moved out; anything else as written.
+    /// branch): a move position of `docs/slice.md` 20.3.1. A place moves
+    /// only where the moves analysis marks it ([`Generator::value`]); else
+    /// it is copied, as a tail that is read later (in the block, after the
+    /// `if` or `match`, in the next loop iteration) must be. A place of a
+    /// Rust `Copy` type, or of an unknown type, is written as it is: Rust
+    /// copies it. A place reached through a borrowed parameter or a capture
+    /// is always copied, since it cannot be moved out. Anything else as
+    /// written.
     fn result(&mut self, expr: &Expr) -> String {
-        if self.is_place(expr)
-            && place_root(expr).is_some_and(|root| self.is_borrowed(root) || self.is_captured(root))
-        {
+        let copies = matches!(
+            self.type_of(expr),
+            None | Some(Ty::Int | Ty::Byte | Ty::Bool | Ty::Unit | Ty::Quantity(_))
+        );
+        let reached =
+            place_root(expr).is_some_and(|root| self.is_borrowed(root) || self.is_captured(root));
+        if self.is_place(expr) && (reached || !copies) {
             return self.value(expr);
         }
         self.bare(expr)
