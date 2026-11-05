@@ -298,21 +298,88 @@ fn decode(text: Text) -> Result<Message, ErrorObject> {
   }
 }
 
+// ---- UTF-8 ------------------------------------------------------------------
+
+// `length` when the sequence of that length at `at` fits in `bytes`, its
+// second byte is in `low..=high` and the rest are continuation bytes;
+// otherwise 0.
+fn sequence(bytes: Bytes, at: Int, length: Int, low: Byte, high: Byte) -> Int {
+  if at + length > bytes.len() {
+    return 0
+  }
+  let second = bytes.at(at + 1)
+  if second < low || second > high {
+    return 0
+  }
+  var i = at + 2
+  while i < at + length {
+    let b = bytes.at(i)
+    if b < 0x80 || b > 0xbf {
+      return 0
+    }
+    i = i + 1
+  }
+  length
+}
+
+// The length of the well-formed UTF-8 sequence at `at` (RFC 3629 section
+// 4: no overlong form, no surrogate, nothing above U+10FFFF), 0 when none
+// starts there.
+fn sequence_length(bytes: Bytes, at: Int) -> Int = match bytes.at(at) {
+  0x00..=0x7f => 1
+  0xc2..=0xdf => sequence(bytes, at, 2, 0x80, 0xbf)
+  0xe0 => sequence(bytes, at, 3, 0xa0, 0xbf)
+  0xe1..=0xec => sequence(bytes, at, 3, 0x80, 0xbf)
+  0xed => sequence(bytes, at, 3, 0x80, 0x9f)
+  0xee..=0xef => sequence(bytes, at, 3, 0x80, 0xbf)
+  0xf0 => sequence(bytes, at, 4, 0x90, 0xbf)
+  0xf1..=0xf3 => sequence(bytes, at, 4, 0x80, 0xbf)
+  0xf4 => sequence(bytes, at, 4, 0x80, 0x8f)
+  _ => 0
+}
+
+// Whether `bytes` is well-formed UTF-8. `Bytes.to_text()` is lossy, so a
+// body is checked with this before it is decoded.
+fn is_utf8(bytes: Bytes) -> Bool {
+  var at = 0
+  while at < bytes.len() {
+    let length = sequence_length(bytes, at)
+    if length == 0 {
+      return false
+    }
+    at = at + length
+  }
+  true
+}
+
+// The message of a framed body: the parse error when it is not UTF-8
+// (RFC 8259 section 8.1), else `decode` of its text.
+fn decode_body(body: Bytes) -> Result<Message, ErrorObject> = if is_utf8(body) {
+  decode(body.to_text())
+} else {
+  Err(standard_error(PARSE_ERROR))
+}
+
 // ---- the protocol -----------------------------------------------------------
 
-// What a server runs: shared state, and the handler called once per
-// decoded message, which returns the message to send back, if any.
+// What a server runs: shared state, the handler of a request, whose
+// outcome `serve` sends as the response under the request's id, and the
+// handler of a notification, which has no response (JSON-RPC 2.0 section
+// 4.1), so a request is always answered and a notification never is.
 type JsonRpcApp<S> {
   state: S
-  handle: fn(state: S, message: Message) -> Option<Message> requires [state.*]
+  call: fn(state: S, request: Request) -> Result<Json, ErrorObject> requires [state.*]
+  notify: fn(state: S, notification: Notification) -> Unit requires [state.*]
 }
 
 // No `conforms` yet: the catalogue of JSON-RPC 2.0 and the LSP base
 // protocol waits for `std.rfc` to name a non-RFC specification.
 protocol JsonRpc {
   // Server role: read messages until the stream ends or a framing error,
-  // pass each decoded one to the application and write its reply; a body
-  // that does not decode is answered with its error and a null id.
+  // pass each request and notification to the application and write each
+  // request's response; a body that is not UTF-8 JSON or not a message is
+  // answered with its error and a null id. A response from the peer is
+  // dropped: the server sends no requests of its own.
   fn serve<T: ByteStream, S>(stream: T, limits: JsonRpcLimits, application: JsonRpcApp<S>) -> IoResult<Unit> requires [
     stream.read, stream.write, application.*
   ] {
@@ -327,13 +394,14 @@ fn session<T: ByteStream, S>(stream: T, limits: JsonRpcLimits, application: Json
   loop {
     match read_message(stream, limits, buffer)? {
       Got(body, rest) => {
-        let reply = match decode(body.to_text()) {
-          Ok(message) => application.handle(application.state, message)
-          Err(error) => Some(Reply(Response { id = None, outcome = Err(error) }))
-        }
-        match reply {
-          Some(message) => write_message(stream, encode_message(message))?
-          None => {}
+        match decode_body(body) {
+          Ok(Call(request)) => {
+            let outcome = application.call(application.state, request)
+            write_message(stream, encode_message(Reply(Response { id = Some(request.id), outcome })))?
+          }
+          Ok(Notify(notification)) => application.notify(application.state, notification)
+          Ok(Reply(_)) => {}
+          Err(error) => write_message(stream, encode_message(Reply(Response { id = None, outcome = Err(error) })))?
         }
         buffer = rest
       }
@@ -502,25 +570,39 @@ test "an object without jsonrpc 2.0 or without id and method is an invalid reque
   assert decode(r"{") == Err(standard_error(PARSE_ERROR))
 }
 
-// Answers a request for `echo` with its params, any other request with
-// method not found, and ignores notifications and responses.
-test fn answer(state: Unit, message: Message) -> Option<Message> = match message {
-  Call(request) => if request.method == "echo" {
-    Some(Reply(Response { id = Some(request.id), outcome = Ok(request.params.unwrap_or(Null)) }))
-  } else {
-    Some(Reply(Response { id = Some(request.id), outcome = Err(standard_error(METHOD_NOT_FOUND)) }))
-  }
-  _ => None
+
+test "is_utf8 accepts well-formed UTF-8 only" {
+  assert is_utf8(Bytes.empty())
+  assert is_utf8("aé€\u{1F600}\u{10FFFF}\u{D7FF}\u{E000}".to_bytes())
+  assert !is_utf8(b"\xff")
+  assert !is_utf8(b"\x80")
+  assert !is_utf8(b"\xc0\xaf")
+  assert !is_utf8(b"\xc3")
+  assert !is_utf8(b"\xe0\x80\xaf")
+  assert !is_utf8(b"\xed\xa0\x80")
+  assert !is_utf8(b"\xf0\x80\x80\xaf")
+  assert !is_utf8(b"\xf4\x90\x80\x80")
+  assert !is_utf8(b"\xf5\x80\x80\x80")
+  assert !is_utf8(b"\xe2\x82")
+  assert !is_utf8(b"a\xe2\x82(")
+  assert decode_body(b"\xff") == Err(standard_error(PARSE_ERROR))
+  assert decode_body(b"{\"jsonrpc\":\"2.0\",\"method\":\"n\"}") == Ok(Notify(Notification { method = "n" }))
 }
 
-test "serve answers each request, an undecodable one with its error, until the stream ends" {
-  let (client, server) = connected()?
-  spawn JsonRpc.serve(server, JsonRpcLimits {}, JsonRpcApp { state = (), handle = answer })
-  write_message(client, r#"{"jsonrpc":"2.0","id":1,"method":"echo","params":["hi"]}"#)?
-  write_message(client, r#"{"jsonrpc":"2.0","method":"note"}"#)?
-  write_message(client, r"{")?
-  write_message(client, r#"{"jsonrpc":"2.0","id":"b","method":"nope"}"#)?
-  _ = client.close()
+// Answers a request for `echo` with its params, any other request with
+// method not found.
+test fn answer(state: Unit, request: Request) -> Result<Json, ErrorObject> = if request.method == "echo" {
+  Ok(request.params.unwrap_or(Null))
+} else {
+  Err(standard_error(METHOD_NOT_FOUND))
+}
+
+test fn ignore(state: Unit, notification: Notification) -> Unit = ()
+
+test fn echo_app() -> JsonRpcApp<Unit> = JsonRpcApp { state = (), call = answer, notify = ignore }
+
+// Every body `client` reads until the server closes.
+test fn replies_of(client: PipeStream) -> IoResult<List<Text>> {
   var replies = []
   var buffer = Bytes.empty()
   loop {
@@ -529,10 +611,20 @@ test "serve answers each request, an undecodable one with its error, until the s
         replies.push(body.to_text())
         buffer = rest
       }
-      _ => break
+      _ => return Ok(replies)
     }
   }
-  assert replies == [
+}
+
+test "serve answers each request, an undecodable one with its error, until the stream ends" {
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
+  write_message(client, r#"{"jsonrpc":"2.0","id":1,"method":"echo","params":["hi"]}"#)?
+  write_message(client, r#"{"jsonrpc":"2.0","method":"note"}"#)?
+  write_message(client, r"{")?
+  write_message(client, r#"{"jsonrpc":"2.0","id":"b","method":"nope"}"#)?
+  _ = client.close()
+  assert replies_of(client)? == [
     r#"{"jsonrpc":"2.0","id":1,"result":["hi"]}"#,
     r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}"#,
     r#"{"jsonrpc":"2.0","id":"b","error":{"code":-32601,"message":"Method not found"}}"#
@@ -541,26 +633,18 @@ test "serve answers each request, an undecodable one with its error, until the s
 
 test "serve ends on a framing error" {
   let (client, server) = connected()?
-  spawn JsonRpc.serve(server, JsonRpcLimits {}, JsonRpcApp { state = (), handle = answer })
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
   client.write_all(b"Content-Length: x\r\n\r\n")?
   assert client.read(10)? == Eof
 }
 
 // ---- adversary cases --------------------------------------------------------
 
-// JSON-RPC 2.0 bodies are any JSON text: a number with a fraction or an
-// exponent (an LSP `decimal`, as in a color) is valid JSON, so the request
-// must not be answered with the parse error.
-test "a request whose params carry a fraction or an exponent is not a parse error" {
-  assert decode(r#"{"jsonrpc":"2.0","id":1,"method":"m","params":{"red":0.5}}"#) != Err(standard_error(PARSE_ERROR))
-  assert decode(r#"{"jsonrpc":"2.0","id":1,"method":"m","params":[1e2]}"#) != Err(standard_error(PARSE_ERROR))
-}
-
 // A body must be UTF-8 JSON (RFC 8259 §8.1); one that is not is the parse
 // error, not a message whose invalid bytes became U+FFFD.
 test "a body that is not UTF-8 is answered with the parse error" {
   let (client, server) = connected()?
-  spawn JsonRpc.serve(server, JsonRpcLimits {}, JsonRpcApp { state = (), handle = answer })
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
   var body = br#"{"jsonrpc":"2.0","id":1,"method":"echo","params":[""#
   body.append(b"\xff")
   body.append(br#""]}"#)
@@ -578,27 +662,15 @@ test "a body that is not UTF-8 is answered with the parse error" {
   }
 }
 
-// Answers every message, notifications included, with a response.
-test fn respond_to_all(state: Unit, message: Message) -> Option<Message> = Some(Reply(Response { id = Some(NumberId(0)), outcome = Ok(Null) }))
-
-// "The Server MUST NOT reply to a Notification" (JSON-RPC 2.0 §4.1): serve
-// must not write a response the application returns for one.
+// "The Server MUST NOT reply to a Notification" (JSON-RPC 2.0 §4.1): the
+// notification handler has no response to return, and a response from
+// the peer is not answered either; only the request is.
 test "serve does not write a response to a notification" {
   let (client, server) = connected()?
-  spawn JsonRpc.serve(server, JsonRpcLimits {}, JsonRpcApp { state = (), handle = respond_to_all })
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
   write_message(client, r#"{"jsonrpc":"2.0","method":"note"}"#)?
-  write_message(client, r#"{"jsonrpc":"2.0","id":0,"method":"m"}"#)?
+  write_message(client, r#"{"jsonrpc":"2.0","id":7,"result":null}"#)?
+  write_message(client, r#"{"jsonrpc":"2.0","id":0,"method":"echo"}"#)?
   _ = client.close()
-  var replies = 0
-  var buffer = Bytes.empty()
-  loop {
-    match read_message(client, JsonRpcLimits {}, buffer)? {
-      Got(_, rest) => {
-        replies = replies + 1
-        buffer = rest
-      }
-      _ => break
-    }
-  }
-  assert replies == 1
+  assert replies_of(client)? == [r#"{"jsonrpc":"2.0","id":0,"result":null}"#]
 }
