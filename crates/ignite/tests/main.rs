@@ -6,6 +6,7 @@
 mod apply;
 mod apply_admission;
 mod apply_host;
+mod apply_integrity;
 mod apply_recovery;
 mod apply_transition;
 mod build_cache;
