@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T09:22:00Z",
+  "actor": "human:timo",
+  "artifact": "story:llvm-runtime-without-flags",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 770e245c: exit 0, 1015 cargo passed, 0 failed, 11 ignored, 211 inline per target; llvm_build::a_driver_alone_links_the_runtime_it_carries red then green",
+    "reference": "https://github.com/ignite-lang/ignite/pull/33"
+  }
+}
