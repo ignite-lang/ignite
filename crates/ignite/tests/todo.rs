@@ -9,8 +9,9 @@ use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{OnceLock, mpsc};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ignite::Target;
 
@@ -82,16 +83,59 @@ impl Drop for Running {
 
 // ---- the todo server --------------------------------------------------------
 
+/// A new empty working directory for one server under the test's scratch
+/// directory (`docs/slice.md` 22.0): the todo's relative `todo-data`
+/// directory resolves inside it, never inside the repository.
+fn workdir(target: Target) -> PathBuf {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "todo-work-{target:?}-{}-{}-{stamp}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+/// The entries of `dir`, sorted, a directory with a trailing `/`.
+fn listing(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+        .map(|entry| {
+            let entry = entry.unwrap();
+            let name = entry.file_name().into_string().unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                format!("{name}/")
+            } else {
+                name
+            }
+        })
+        .collect();
+    names.sort();
+    names
+}
+
 /// A running compiled `todod --port 0`.
 struct Server {
-    _process: Running,
+    process: Running,
     port: u16,
 }
 
 impl Server {
+    /// `todod` in a new working directory of its own.
     fn start(target: Target) -> Server {
+        Server::start_in(target, &workdir(target))
+    }
+
+    /// `todod` with `dir` as its working directory.
+    fn start_in(target: Target, dir: &Path) -> Server {
         let mut child = Command::new(todod(target))
             .args(["--port", "0"])
+            .current_dir(dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
@@ -114,10 +158,18 @@ impl Server {
             .recv_timeout(TIMEOUT)
             .expect("todod printed no `listening on 127.0.0.1:<port>` line")
             .expect("port in the listening line");
-        Server {
-            _process: process,
-            port,
-        }
+        Server { process, port }
+    }
+
+    /// SIGKILL, then wait until the process has ended.
+    fn kill(mut self) {
+        self.process.0.kill().expect("SIGKILL todod");
+        let status = self.process.0.wait().expect("wait for todod");
+        assert_eq!(
+            std::os::unix::process::ExitStatusExt::signal(&status),
+            Some(9),
+            "{status:?}"
+        );
     }
 
     fn connect(&self) -> Client {
@@ -352,9 +404,56 @@ fn keep_alive(target: Target) {
     assert!(client.closed());
 }
 
-/// 16 connections, 100 POSTs each, at the same time: 1600 distinct ids.
+/// `docs/slice.md` 22.0 row 12: every acknowledged change is on disk when
+/// its reply is read, so a `todod` started after a SIGKILL in the same
+/// working directory serves it, continues the ids after every id it ever
+/// gave, tombstones included, and keeps one file per todo, its latest
+/// version.
+fn todos_survive_sigkill(target: Target) {
+    let dir = workdir(target);
+    let server = Server::start_in(target, &dir);
+    let mut client = server.connect();
+    for (title, id) in [("a", 1), ("b", 2), ("c", 3)] {
+        let created = client.send("POST", "/todos", Some(&format!(r#"{{"title":"{title}"}}"#)));
+        assert_eq!(created.status, 201, "{created:?}");
+        assert_eq!(id_of(&created.body), id);
+    }
+    let deleted = client.send("DELETE", "/todos/1", None);
+    assert_eq!(deleted.status, 204, "{deleted:?}");
+    let patched = client.send("PATCH", "/todos/2", Some(r#"{"done":true}"#));
+    assert_eq!(patched.status, 200, "{patched:?}");
+    drop(client);
+    server.kill();
+
+    let server = Server::start_in(target, &dir);
+    let mut client = server.connect();
+    let all = client.send("GET", "/todos", None);
+    assert_eq!(
+        (all.status, all.body.as_str()),
+        (
+            200,
+            r#"[{"id":2,"title":"b","done":true},{"id":3,"title":"c","done":false}]"#
+        )
+    );
+    assert_eq!(client.send("GET", "/todos/1", None).status, 404);
+    let next = client.send("POST", "/todos", Some(r#"{"title":"d"}"#));
+    assert_eq!(
+        (next.status, next.body.as_str()),
+        (201, r#"{"id":4,"title":"d","done":false}"#)
+    );
+    drop(client);
+    drop(server);
+    let todos = dir.join("todo-data").join("todos");
+    assert_eq!(listing(&todos), ["1/", "2/", "3/", "4/"]);
+    assert_eq!(listing(&todos.join("2")), ["2.json"]);
+}
+
+/// 16 connections, 100 POSTs each, at the same time: 1600 distinct ids;
+/// after a SIGKILL a new `todod` in the same directory lists all 1600
+/// (`docs/slice.md` 22.0 row 13).
 fn concurrent_posts(target: Target) {
-    let server = Server::start(target);
+    let dir = workdir(target);
+    let server = Server::start_in(target, &dir);
     let workers: Vec<_> = (0..16)
         .map(|worker| {
             let mut client = server.connect();
@@ -380,6 +479,13 @@ fn concurrent_posts(target: Target) {
     let all = client.send("GET", "/todos", None);
     assert_eq!(all.body.matches(r#""id":"#).count(), 1600);
     client.stream.shutdown(Shutdown::Both).unwrap();
+    server.kill();
+
+    let server = Server::start_in(target, &dir);
+    let mut client = server.connect();
+    let all = client.send("GET", "/todos", None);
+    assert_eq!(all.status, 200);
+    assert_eq!(all.body.matches(r#""id":"#).count(), 1600);
 }
 
 /// Two connections PATCH different fields of one todo at the same time,
@@ -551,6 +657,7 @@ both_targets!(
     limits,
     keep_alive,
     concurrent_posts,
+    todos_survive_sigkill,
     concurrent_patches,
     header_framing,
     content_length,
