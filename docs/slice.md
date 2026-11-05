@@ -8124,7 +8124,9 @@ ignite recover --state DIR --operation ID [--json]
 
 - Sent over the control socket as operation `recover` (`ignite-host-control/0.1`, 17.2). The
   host accepts it only for the active operation when it is `recovery_required` and admission
-  refuses a corrective for it (F16); otherwise exit 2 `operation <id> requires no recovery`.
+  refuses a corrective for it (F16); otherwise exit 2 `operation <id> requires no recovery`. A
+  `recover` while one is in progress (its run driver still stopping) exits 2 `operation <id> is
+  being recovered`.
 - Until then the instances of that state keep serving: the run of the committed revision, which
   supervises them, has every further effect refused (17.5) and is not ended by the refusal, so
   `recover` finds them alive and stops them below.
