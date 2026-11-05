@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T17:25:18Z",
+  "actor": "human:timo",
+  "artifact": "story:program-argument-list",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 2bda50442 (PR 45): EXIT=0, 1138 cargo passed, 0 failed, 11 ignored; 286 std inline per target",
+    "reference": "https://github.com/ignite-lang/ignite/pull/45"
+  }
+}
