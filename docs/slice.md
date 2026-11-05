@@ -6045,3 +6045,117 @@ Each has a default, which the units follow unless the review changes it.
 | Q4 | X16: when `std/protocol/telnet.ignite` is split to meet the 400-line bound (19.14 item 14), and along which seam (codec, session, executable kinds) | not in slice 15. The slice that next changes Telnet beyond clauses proposes the split |
 
 Q3 (licence of vendoring the older RFCs) is closed by D5.
+
+### 19.19 Specifications that are no RFC (story `rfc-spec-id`, 2026-11-05)
+
+JSON-RPC 2.0 and the Language Server Protocol are not RFCs, so their catalogues have no honest
+`rfc` value. This subsection adds a text identifier. It is add-only: nothing in 19.3 to 19.18
+is renamed, removed or retyped, and every output of an RFC catalogue stays byte-identical
+(the Telnet and Http matrices, `ignite rfc check` of the committed catalogues, the model
+goldens).
+
+**Vocabulary.** `std/rfc.ignite` changes in three lines; where its text differs from 19.3's
+block, the file holds:
+
+- `Requirement.rfc` and `Spec.rfc` are `rfc: Int = 0`. A default only: the type stays `Int`,
+  and every existing literal names `rfc`.
+- `Spec` gains a last field `id: Text = ""`: the text id of a specification that is no RFC
+  (`"jsonrpc-2.0"`, `"lsp-3.17"`), empty for an RFC.
+
+A specification that is no RFC sets `id` and leaves out `rfc` in the `Spec` and in every
+requirement, so both are 0 and case 4 of E091's second trigger (19.4) still holds. The claim
+model links a requirement to its spec through the `Spec`'s `requirements` and the `Spec.Id`
+reference (19.5), not through `rfc`, so a requirement needs no field of its own.
+
+**Label.** A spec's label is its `id` when that is not empty, else `rfc<n>`.
+
+- 19.10's block header is `<label> <title>, protocol …` and its claim line `claim conformance of
+  <P> to <label>: …`. For an RFC that is the text of 19.10, unchanged.
+- E092 (19.7) names a spec with an id by the id ("`TEXT3.R1_1` belongs to text-3.0, which …"),
+  an RFC as before ("belongs to RFC 2").
+- E091's case 4 (19.4) names a spec with an id by the id: "requirement `R2_1` has rfc 5, and
+  `LINE_ECHO_1` is `line-echo-1`, which is no RFC"; an RFC as before ("… is RFC 7001").
+- `ignite_eval::SpecClaim` gains `pub id: String` and `pub fn label(&self) -> String` (19.13).
+
+**E091, labels.** A label names one specification, so E091 (`ignite-eval`) also reports:
+
+| case | position | message |
+|---|---|---|
+| a `Spec` with neither `rfc` nor `id` | the constant, when the checked file declares it; else the first reference to it | "spec `NOID` has neither `rfc` nor `id`; an RFC sets `rfc`, a specification that is no RFC sets a text `id`" |
+| a `Spec` whose `id` is `rfc` followed by digits, in any case | as above | "spec `FAKE7` has the id `rfc7`, the label form of an RFC; an RFC sets `rfc`, and a text id is not `rfc<digits>`" |
+| two specs with one label among those the checked file's clauses name | the first reference to the second spec, in source order (`satisfies`, `conforms` entries, statuses, `verifies`) | "specs `TEXT3` and `DUP3` have one label `text-3.0`; a label names one specification" |
+
+The first two run for the checked file's own `Spec` in the second trigger's pass, and for an
+imported spec at its first reference, because the label is what the checked file's matrix
+prints. E092 does not name a spec these cases report. Fixtures: `e091_no_label`,
+`e091_rfc_label`, `e091_one_label` (with the claim-fixture std's `rfc/dup3.ignite`, a second
+spec with the id `text-3.0`) and `e091_text_id_rfc` (case 4's wording).
+
+**Catalogues.** Module `std.rfc.<name>`, file `std/rfc/<name>.ignite`. 19.4 applies, with these
+differences:
+
+- The `Spec` constant is the upper-case module name (`JSONRPC_2`), not `RFC<n>`.
+- Rule 3 of `docs/layering.md` exempts a catalogue `std.rfc.*` from names containing the name of
+  a protocol whose module imports it, so `std.rfc.jsonrpc_2` declares `JSONRPC_2`, which
+  `std.protocol.jsonrpc` imports. The exemption is explicit, not the effect of an underscore,
+  and covers no other module. The LSP catalogue is `std.rfc.language_server_3_17`
+  (`LANGUAGE_SERVER_3_17`) until a protocol module imports it.
+- `section` is the section number where the specification numbers its sections. Where it does
+  not (LSP), `section` is a dotted label of the heading (`base.header`, `lifecycle.shutdown`),
+  and the module's header comment maps each label to its anchor on the page. The id rule of
+  19.4 is unchanged (`RBASE_HEADER_1`); 19.5's `sections` prefix rule works on the labels.
+- `source = Prose`. One requirement per sentence with a word of the table below, case
+  insensitive; the level is that of the strongest word (19.4). The table is 19.4's, plus:
+  `needs to`, `need to` give `Must`; `not allowed` gives `MustNot`; `allowed`, `free to` give
+  `May`; `recommended` gives `Recommended`; `advised` gives `Should`. The module's header
+  comment lists the sentences left out as descriptions or for want of a word.
+- The party is `Client` or `Server` where the sentence names one, else `Sender` or `Recipient`
+  of the message the sentence describes, else `Any`.
+
+| source | catalogue | id | from | bytes | sha256 | requirements |
+|---|---|---|---|---|---|---|
+| JSON-RPC 2.0, sections 4 to 6 | `std.rfc.jsonrpc_2` (`JSONRPC_2`) | `jsonrpc-2.0` | `https://www.jsonrpc.org/specification` | 24,512 | `8fe1edfdca511d309e712e47447457ea5159b728ec02071a84593aed692aefeb` | 35 |
+| LSP 3.17, base protocol and every subsection of the server lifecycle up to exit (initialize, initialized, register and unregister capability, setTrace, logTrace, shutdown, exit) | `std.rfc.language_server_3_17` (`LANGUAGE_SERVER_3_17`) | `lsp-3.17` | `https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/` | 918,678 | `93afdf15adbaa7355cd00d0134de05331b8dcc9361ffdd11d3da0924cab20579` | 37 |
+
+Read on 2026-11-05. Neither page is vendored; `ignite rfc check` reports both catalogues
+`unchecked`, as the prose RFC catalogues (19.9).
+
+**The JsonRpc claim.** `protocol JsonRpc conforms [JSONRPC_2] scope { parties = [Server, Any]
+}`: the module is the server, so the Client's requirements are `out of scope`, R4_4 among them
+(a request with `"id": null` stays refused as an invalid request, which the LSP base protocol
+also forbids; it would be a deviation if the Client were claimed).
+
+- Satisfied, each with a passing test on both targets: R5_1 to R5_8, R5_10, R5_11, R5_1_1,
+  R5_1_2, R5_1_4, R6_7.
+- `unsupported` until `story:json-decimals`, each reason naming it: R4_6, R4_1_1 and R5_9.
+  `std.json` reads integer numbers only, so a valid message whose id or params hold a fraction,
+  an exponent or an integer beyond 64 bits is answered with the parse error under a null id: a
+  notification is answered, and a request is not answered under its own id. At MUST class
+  these are gaps.
+- `unsupported`, batches: R6_2 and R6_3 (SHOULD, `deviation`), R6_4 and R6_5 (MAY, `n/a`).
+- `not_applicable`: R4_2 and R4_2_4 (the application names methods and reads their params),
+  R5_1_3 (the error's author writes its message), R6_8 (no response array is ever sent).
+- The claim does not hold: `claim conformance of JsonRpc to jsonrpc-2.0: no (3 gaps, 0
+  failures, 0 inconclusive)`, exit 1 on both targets. It holds once `story:json-decimals` lets
+  `std.json` read every JSON number and the three rows are satisfied.
+- A body that is no message is answered under the id it holds when it is a JSON object whose
+  `id` is a number or a string (`detected_id`), and under null only when none can be read
+  (R5_10).
+- A batch of notifications only, a non-empty array whose every element decodes as a
+  notification, is passed to the application in order and not answered (R4_1_1's "including
+  those that are within a batch request"). Any other batch is one invalid-request error, or
+  the parse error when it is no JSON (R6_7).
+
+The LSP catalogue is claimed by no protocol yet; the later server conforms to it.
+
+**Fixtures and tests.** `crates/ignite/tests/fixtures/e090_text_id` (a MUST of a spec with
+only the id and no status is E090) and `e092_text_id_foreign` with the claim-fixture std's
+`rfc/text3.ignite` (E092 names the id); the E091 fixtures above;
+`claims::a_spec_with_only_a_text_id_is_claimed_under_its_id` in `ignite-eval`;
+`rfc::text_id_catalogues_check_and_quote_their_pages` (both catalogues check silently, are
+`unchecked`, carry no `rfc`, and every level follows the table above);
+`rfc::lsp_catalogue_holds_or_lists_every_server_lifecycle_rule`;
+`conformance::json_rpc_matrix_is_labelled_by_its_id_and_states_its_gaps` on both targets; the
+`plan::adversary_*` label cases; `layering::rule_3_exempts_only_catalogues_of_their_own_protocol`.
+
+Not done: a URL per requirement (the anchors are in the header comment).

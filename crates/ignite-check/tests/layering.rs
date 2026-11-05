@@ -6,12 +6,13 @@
 //! path. A module imports only
 //! modules of its own layer or a lower one; no module outside
 //! `std.protocol.*` imports a protocol module or declares a name that
-//! contains a protocol's name; and no file under `crates/*/src` mentions
+//! contains a protocol's name, except a catalogue `std.rfc.*` naming a
+//! protocol whose module imports it; and no file under `crates/*/src` mentions
 //! one, except the crates in [`CRATES_EXEMPT`]. The protocol names are read
 //! from std: the `protocol` declarations and file names under
 //! `std/protocol/`, so a new protocol is covered without editing this file.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -194,6 +195,78 @@ fn protocol_names(std: &[StdModule]) -> BTreeSet<String> {
     names
 }
 
+/// The prefix of the catalogue modules, which rule 3's exemption covers.
+const CATALOGUE_PREFIX: &str = "std.rfc.";
+
+/// For each catalogue `std.rfc.*` that a protocol module imports, the
+/// protocol names of that module (its file name and its `protocol`
+/// declarations, lowercase): the protocols whose specification the
+/// catalogue quotes.
+fn catalogued(std: &[StdModule]) -> BTreeMap<String, BTreeSet<String>> {
+    let mut catalogued: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for module in std.iter().filter(|m| m.module.starts_with(PROTOCOL_PREFIX)) {
+        let mut names = BTreeSet::from([module.module[PROTOCOL_PREFIX.len()..].to_lowercase()]);
+        for decl in &module.program.decls {
+            if let Decl::Protocol(protocol) = decl {
+                names.insert(protocol.name.name.to_lowercase());
+            }
+        }
+        for import in &module.program.imports {
+            let target = import.module();
+            if target.starts_with(CATALOGUE_PREFIX) {
+                catalogued
+                    .entry(target)
+                    .or_default()
+                    .extend(names.iter().cloned());
+            }
+        }
+    }
+    catalogued
+}
+
+/// Rule 3's exemption: a catalogue `std.rfc.*` may declare names that
+/// contain the name of a protocol whose module imports it. No other module
+/// is exempt, `std.rfc` itself included.
+fn exempt(module: &str, protocol: &str, catalogued: &BTreeMap<String, BTreeSet<String>>) -> bool {
+    module.starts_with(CATALOGUE_PREFIX)
+        && catalogued
+            .get(module)
+            .is_some_and(|protocols| protocols.contains(protocol))
+}
+
+#[test]
+fn rule_3_exempts_only_catalogues_of_their_own_protocol() {
+    let map = BTreeMap::from([
+        (
+            "std.rfc.rfc9112".to_string(),
+            BTreeSet::from(["http".to_string()]),
+        ),
+        ("std.json".to_string(), BTreeSet::from(["http".to_string()])),
+        ("std.rfc".to_string(), BTreeSet::from(["http".to_string()])),
+    ]);
+    assert!(exempt("std.rfc.rfc9112", "http", &map));
+    assert!(!exempt("std.rfc.rfc9112", "telnet", &map));
+    assert!(!exempt("std.rfc.rfc854", "http", &map));
+    assert!(
+        !exempt("std.json", "http", &map),
+        "only std.rfc.* is exempt"
+    );
+    assert!(
+        !exempt("std.rfc", "http", &map),
+        "the vocabulary is no catalogue"
+    );
+    assert!(!exempt("std.control", "http", &map));
+
+    let real = catalogued(&standard_library());
+    assert!(real["std.rfc.rfc9112"].contains("http"), "{real:?}");
+    assert!(real["std.rfc.rfc854"].contains("telnet"), "{real:?}");
+    assert!(
+        real.keys()
+            .all(|module| module.starts_with(CATALOGUE_PREFIX)),
+        "{real:?}"
+    );
+}
+
 /// Every identifier a module declares: items, owners of associated fns,
 /// record fields, enum variants and protocol roles.
 fn declared_names(program: &Program) -> Vec<&Ident> {
@@ -216,6 +289,7 @@ fn declared_names(program: &Program) -> Vec<&Ident> {
 fn std_modules_import_only_their_own_layer_or_below() {
     let std = standard_library();
     let protocols = protocol_names(&std);
+    let catalogued = catalogued(&std);
     assert!(
         protocols.contains("telnet") && protocols.contains("http") && protocols.contains("jsonrpc"),
         "protocol names read from std/protocol/: {protocols:?}"
@@ -257,7 +331,10 @@ fn std_modules_import_only_their_own_layer_or_below() {
         }
         for name in declared_names(&module.program) {
             let lower = name.name.to_lowercase();
-            if let Some(protocol) = protocols.iter().find(|p| lower.contains(p.as_str())) {
+            if let Some(protocol) = protocols
+                .iter()
+                .find(|p| lower.contains(p.as_str()) && !exempt(&module.module, p, &catalogued))
+            {
                 violations.push(format!(
                     "{}: {layer} module `{}` declares `{}`, which names the protocol `{protocol}`: protocol-specific items live in std.protocol.{protocol}",
                     module.at(name),

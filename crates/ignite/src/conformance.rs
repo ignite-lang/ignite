@@ -359,8 +359,9 @@ fn block(
             .map(|sections| sections.iter().map(String::as_str).collect()),
     );
     out.push_str(&format!(
-        "rfc{} {}, protocol {protocol}, parties {parties}, sections {sections}\n",
-        spec.rfc, spec.title
+        "{} {}, protocol {protocol}, parties {parties}, sections {sections}\n",
+        spec.label(),
+        spec.title
     ));
     let (mut gaps, mut failures, mut inconclusive) = (0, 0, 0);
     let mut holds = true;
@@ -412,8 +413,8 @@ fn block(
         out.push('\n');
     }
     out.push_str(&format!(
-        "claim conformance of {protocol} to rfc{}: {} ({gaps} gaps, {failures} failures, {inconclusive} inconclusive)\n",
-        spec.rfc,
+        "claim conformance of {protocol} to {}: {} ({gaps} gaps, {failures} failures, {inconclusive} inconclusive)\n",
+        spec.label(),
         if holds { "yes" } else { "no" }
     ));
     holds

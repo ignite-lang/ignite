@@ -1,0 +1,28 @@
+package tests.e091
+
+import std.rfc.{Level, Party, Source, Requirement, Spec}
+
+// A text id in the label form of an RFC (docs/slice.md 19.19).
+const FAKE7: Spec = Spec {
+  id = "rfc7"
+  title = "A specification that is no RFC with an RFC's label"
+  url = "https://example.invalid/fake7"
+  digest = "sha256:0007"
+  requirements = [R1_1]
+}
+
+const R1_1: Requirement = Requirement {
+  section = "1"
+  ordinal = 1
+  level = Must
+  source = Prose
+  text = "A peer MUST answer."
+}
+
+protocol Echo conforms [FAKE7] {
+  unsupported FAKE7.R1_1 "not done"
+
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}
