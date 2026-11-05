@@ -66,17 +66,23 @@ fn remove_tree_removes_a_name_that_is_not_utf8() {
     assert!(!tree.exists());
 }
 
-/// 21.4: a listed entry is a path of the directory: `remove` of a name
-/// `read_directory` returned removes that entry.
+/// 21.4: a listed entry is a path of the directory, so a name that is not
+/// UTF-8, which no `Text` names back, is never listed under another name:
+/// the listing is refused with the name's bytes escaped, and the entry is
+/// left as it was.
 #[test]
 fn a_listed_name_that_is_not_utf8_can_be_removed() {
     let scratch = Scratch::new("non-utf8-list");
     std::fs::write(scratch.root().join(OsStr::from_bytes(b"a\xff")), b"x").unwrap();
     let d = scratch.directory();
-    let listed = d.read_directory("").unwrap();
-    assert_eq!(listed.len(), 1);
-    assert_eq!(d.remove(&listed[0]).map_err(|e| e.message), Ok(()));
-    assert_eq!(d.read_directory("").unwrap(), Vec::<String>::new());
+    assert_eq!(
+        d.read_directory("").map_err(|e| e.message),
+        Err("path : entry a\\xff is not UTF-8".to_string())
+    );
+    assert_eq!(
+        std::fs::read(scratch.root().join(OsStr::from_bytes(b"a\xff"))).unwrap(),
+        b"x"
+    );
 }
 
 /// 21.4: `write_file` "creates or replaces the file". A name of 250 bytes
