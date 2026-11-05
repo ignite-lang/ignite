@@ -14,7 +14,7 @@ pub const FORMAT: &str = "ignite-apply-plan/0.1";
 pub const CONTROLLER_ABI: &str = "ignite-local-host/0.1";
 /// Increment when compiler/backend generation semantics change. The admitted
 /// compiler bytes are a separate raw input, so a rebuild never changes a plan.
-pub const CODEGEN_REVISION: &str = "ignite-codegen/0.1.0-17";
+pub const CODEGEN_REVISION: &str = "ignite-codegen/0.1.0-18";
 /// Increment when the evaluator's stepping of `std.control` reducers may
 /// change. With the digests of the standard-library inputs it forms a plan's
 /// reducer revision.
@@ -1159,6 +1159,24 @@ fn identity(
     ])
 }
 
+/// E142 for `ignite plan --for-apply` before the host is contacted
+/// (`docs/slice.md` 21.6, row 26): a program whose plan would start a
+/// member with a `Setting` without `default`. Any other failure to load or
+/// model the program is left to the host's [`prepare`], which reports it
+/// as before.
+pub fn refuse_settings_without_default(
+    file: &Path,
+    options: &crate::PlanOptions,
+) -> Result<(), crate::Error> {
+    let Ok(loaded) = crate::load_for(file, options.std.as_deref(), crate::RUN_ROOTS) else {
+        return Ok(());
+    };
+    let Ok(model) = loaded.model(options) else {
+        return Ok(());
+    };
+    crate::run::refuse_settings_without_default(&loaded, &model)
+}
+
 /// Prepare before any destructive progress; all files are checked again after
 /// the build so a concurrent workspace edit cannot produce mixed input pins.
 pub fn prepare(
@@ -1197,6 +1215,7 @@ pub fn prepare(
             ),
         ));
     }
+    crate::run::refuse_settings_without_default(&loaded, &model)?;
     let model_json = Json::parse(&model.to_json()).map_err(|why| invalid(&source, why))?;
     let mut kinds: BTreeMap<PathBuf, InputKind> = BTreeMap::new();
     let mut source_pins = BTreeMap::new();

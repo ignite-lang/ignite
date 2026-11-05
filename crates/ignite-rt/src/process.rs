@@ -5,7 +5,8 @@
 //! Rust panic inside the runtime through the panic hook. A process killed by
 //! a signal cannot restore them.
 
-use std::ffi::{CStr, c_char, c_int};
+use std::ffi::{CStr, OsStr, OsString, c_char, c_int};
+use std::os::unix::ffi::OsStrExt;
 use std::sync::{Once, PoisonError, RwLock};
 
 use ignite_io::IoError;
@@ -16,9 +17,9 @@ use crate::{IgniteEndpoint, IgniteIoError, IgniteList, bytes, get, put, status};
 /// Exit status of a panic (`docs/llvm.md` section 4).
 const PANIC_EXIT_CODE: i32 = 101;
 
-/// The arguments stored by `init`; `None` before it (then the process
-/// arguments as std sees them are used).
-static ARGS: RwLock<Option<Vec<String>>> = RwLock::new(None);
+/// The arguments stored by `init`, as the OS gave them; `None` before it
+/// (then the process arguments as std sees them are used).
+static ARGS: RwLock<Option<Vec<OsString>>> = RwLock::new(None);
 
 static HOOKS: Once = Once::new();
 
@@ -30,8 +31,10 @@ extern "C" fn restore_at_exit() {
     ignite_io::terminal::restore();
 }
 
-/// The arguments `argv[0..argc]`, lossily decoded; null entries are skipped.
-fn decode_args(argc: i32, argv: *const *const c_char) -> Vec<String> {
+/// The arguments `argv[0..argc]`, their bytes as they are (`ignite_io::args`
+/// decides what a byte string that is not UTF-8 means, 21.6, as on the Rust
+/// target); null entries are skipped.
+fn decode_args(argc: i32, argv: *const *const c_char) -> Vec<OsString> {
     if argv.is_null() {
         return Vec::new();
     }
@@ -41,27 +44,32 @@ fn decode_args(argc: i32, argv: *const *const c_char) -> Vec<String> {
             let arg = unsafe { *argv.add(index) };
             // SAFETY: a non-null entry is a NUL-terminated string.
             (!arg.is_null()).then(|| {
-                unsafe { CStr::from_ptr(arg) }
-                    .to_string_lossy()
-                    .into_owned()
+                OsStr::from_bytes(unsafe { CStr::from_ptr(arg) }.to_bytes()).to_os_string()
             })
         })
         .collect()
 }
 
-fn store_args(args: Vec<String>) {
+fn store_args(args: Vec<OsString>) {
     *ARGS.write().unwrap_or_else(PoisonError::into_inner) = Some(args);
 }
 
-pub(crate) fn args() -> Vec<String> {
+/// The arguments `init` stored, as the OS gave them: what `--port`,
+/// `--ref` and the flags are read from.
+fn os_args() -> Vec<OsString> {
     ARGS.read()
         .unwrap_or_else(PoisonError::into_inner)
         .clone()
-        .unwrap_or_else(|| {
-            std::env::args_os()
-                .map(|arg| arg.to_string_lossy().into_owned())
-                .collect()
-        })
+        .unwrap_or_else(|| std::env::args_os().collect())
+}
+
+/// The arguments of a test executable for its runner (`ignite_io::test`),
+/// lossily decoded: the runner's filter and options, no program's flags.
+pub(crate) fn args() -> Vec<String> {
+    os_args()
+        .into_iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect()
 }
 
 /// `message` (lossily decoded) and a newline to stderr, through `ignite-io`.
@@ -121,7 +129,7 @@ pub extern "C" fn ignite_rt_args_port(
     present: *mut i32,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let result = ignite_io::args::port_from_args(args().into_iter());
+    let result = ignite_io::args::port_from_os_args(os_args().into_iter());
     if let Ok(port) = result {
         put(present, i32::from(port.is_some()));
     }
@@ -134,7 +142,7 @@ pub(crate) fn flag_value(flag: &str) -> Result<Option<String>, IoError> {
     if flag.is_empty() {
         return Ok(None);
     }
-    ignite_io::args::flag_from_args(args().into_iter(), flag)
+    ignite_io::args::flag_from_os_args(os_args().into_iter(), flag)
 }
 
 /// `i32 args_flag(Text* flag, Text* out, i32* present, IoError* err)`: the
@@ -220,7 +228,7 @@ pub extern "C" fn ignite_rt_endpoint_of(
     err: *mut IgniteIoError,
 ) -> i32 {
     let reference = String::from_utf8_lossy(bytes(reference)).into_owned();
-    let result = ignite_io::args::endpoint_from_args(args().into_iter(), &reference);
+    let result = ignite_io::args::endpoint_from_os_args(os_args().into_iter(), &reference);
     status(
         result.map(|(address, port)| IgniteEndpoint {
             address: IgniteList::from_bytes(address.as_bytes()),
@@ -314,7 +322,7 @@ mod tests {
         store_args(
             std::iter::once("prog")
                 .chain(args.iter().copied())
-                .map(String::from)
+                .map(OsString::from)
                 .collect(),
         );
         let (mut out, mut present) = (-7i64, -7i32);
@@ -358,7 +366,7 @@ mod tests {
         store_args(
             std::iter::once("prog")
                 .chain(args.iter().copied())
-                .map(String::from)
+                .map(OsString::from)
                 .collect(),
         );
         let mut out = IgniteEndpoint {
@@ -407,6 +415,65 @@ mod tests {
         let argv = [first.as_ptr(), std::ptr::null(), second.as_ptr()];
         assert_eq!(decode_args(3, argv.as_ptr()), ["terminald", "--port"]);
         assert!(decode_args(2, std::ptr::null()).is_empty());
+    }
+
+    /// 21.6: `argv` keeps its bytes; the Rust target reads `args_os`, so
+    /// both targets see the same byte strings.
+    #[test]
+    fn decode_args_keeps_bytes_that_are_not_utf8() {
+        let bad = c"/bin/\xfftrue";
+        let argv = [bad.as_ptr()];
+        assert_eq!(
+            decode_args(1, argv.as_ptr()),
+            [OsStr::from_bytes(b"/bin/\xfftrue")]
+        );
+    }
+
+    fn flag(args: &[&[u8]], flag: &str) -> Result<Option<String>, (String, i32)> {
+        let _guard = ARGUMENTS.lock().unwrap();
+        store_args(
+            std::iter::once(&b"prog"[..])
+                .chain(args.iter().copied())
+                .map(|arg| OsStr::from_bytes(arg).to_os_string())
+                .collect(),
+        );
+        let mut out = IgniteList::from_bytes(b"untouched");
+        let mut present = -7i32;
+        let mut err = IgniteIoError {
+            message: IgniteList::from_bytes(b"untouched"),
+            exit_code: -1,
+        };
+        let text = IgniteList::from_bytes(flag.as_bytes());
+        let code = ignite_rt_args_flag(&text, &mut out, &mut present, &mut err);
+        // SAFETY: both lists were written by the runtime in this task's arena.
+        let read = |list: &IgniteList| String::from_utf8(unsafe { list.as_bytes() }.to_vec());
+        if code == 0 {
+            Ok((present == 1).then(|| read(&out).unwrap()))
+        } else {
+            assert_eq!(code, 1);
+            Err((read(&err.message).unwrap(), err.exit_code))
+        }
+    }
+
+    /// `args_flag` over the arguments `init` stored (21.6).
+    #[test]
+    fn args_flag_reads_the_flag() {
+        let list: &[&[u8]] = &[b"--port", b"0", b"--tool", b"/bin/true", b"--mode=slow"];
+        assert_eq!(flag(list, "--tool"), Ok(Some("/bin/true".to_string())));
+        assert_eq!(flag(list, "--mode"), Ok(Some("slow".to_string())));
+        assert_eq!(flag(list, "--root"), Ok(None));
+        assert_eq!(
+            flag(&[b"--mode", b"--tool", b"/x"], "--mode"),
+            Err(("--mode needs a value".to_string(), 2))
+        );
+        assert_eq!(
+            flag(&[b"--tool", b"a\xffb"], "--tool"),
+            Err(("--tool: value a\\xffb is not UTF-8".to_string(), 2))
+        );
+        assert_eq!(
+            flag(&[b"\xfe", b"--tool", b"x"], "--tool"),
+            Ok(Some("x".to_string()))
+        );
     }
 
     #[test]
