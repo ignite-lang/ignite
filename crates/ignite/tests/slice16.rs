@@ -266,6 +266,62 @@ fn untracked_tails_keep_their_values_on_both_targets() {
     );
 }
 
+/// 20.5 (adversary, U5): rest bindings of texts, records, lists of lists,
+/// variant payloads, closures, bytes and units, and a rest that drives a
+/// loop reassigning its scrutinee, on both targets.
+#[test]
+fn rest_adversary_cases_pass_on_both_targets() {
+    for (name, count) in [
+        ("rest_adversary.ignite", 13),
+        ("rest_adversary2.ignite", 11),
+        ("rest_moves.ignite", 5),
+        ("rest_eval.ignite", 1),
+    ] {
+        let (status, out) = both_targets(name);
+        assert_eq!(status, Some(0), "{name}: {out}");
+        assert_eq!(
+            out.matches(&format!("test result: ok. {count} passed; 0 failed;"))
+                .count(),
+            2,
+            "{name}: {out}"
+        );
+    }
+}
+
+/// 20.0 row 20 (adversary, U5): the evaluator matches the rest patterns of
+/// `rest_eval.ignite` as both targets do; every `e_` fn is `true` on the
+/// targets (`rest_adversary_cases_pass_on_both_targets`) and must be in the
+/// evaluator.
+#[test]
+fn evaluator_matches_rest_patterns() {
+    use ignite_eval::{Evaluator, Fuel};
+    use ignite_syntax::ast::Decl;
+    use ignite_types::QualName;
+    let loaded = ignite::load(&fixture("rest_eval.ignite"), None).unwrap_or_else(|e| panic!("{e}"));
+    let modules = loaded.modules();
+    let mut evaluator = Evaluator::new(&modules, Fuel::default());
+    let module = loaded.types().module.clone();
+    let names: Vec<String> = loaded
+        .program()
+        .decls
+        .iter()
+        .filter_map(|decl| match decl {
+            Decl::Fn(f) if f.name.name.starts_with("e_") => Some(f.qualified_name()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(names.len(), 11, "{names:?}");
+    let mut wrong = Vec::new();
+    for name in &names {
+        match evaluator.call(&QualName::new(module.clone(), name.clone()), Vec::new()) {
+            Ok(value) if value.debug_text() == "true" => {}
+            Ok(value) => wrong.push(format!("{name}: {}", value.debug_text())),
+            Err(e) => wrong.push(format!("{name}: {e:?}")),
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
 /// 20.3.2 and 20.3.5: named arguments (a UFCS receiver among them) and
 /// variant payloads are evaluated into values and passed or stored after
 /// the last one, so an earlier operand in a move position that is copied

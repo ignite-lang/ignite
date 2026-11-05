@@ -1,0 +1,209 @@
+type Person {
+  name: Text
+  tags: List<Text>
+}
+
+enum Tree {
+  Leaf(Int)
+  Node(List<Tree>)
+}
+
+fn words_joined(words: List<Text>) -> Text {
+  var out = ""
+  var current = words
+  loop {
+    match current {
+      [w, ..rest] => {
+        current = rest
+        out = out + w + ";"
+      }
+      [] => break
+    }
+  }
+  return out
+}
+
+fn people_after(people: List<Person>) -> List<Person> {
+  return match people {
+    [_, ..rest] => rest
+    [] => []
+  }
+}
+
+fn rows_after(rows: List<List<Int>>) -> List<List<Int>> {
+  return match rows {
+    [_, ..rest] => rest
+    [] => []
+  }
+}
+
+fn payload_rest(value: Option<List<Text>>) -> List<Text> {
+  return match value {
+    Some([_, ..rest]) => rest
+    Some([]) => ["empty"]
+    None => ["none"]
+  }
+}
+
+fn whole(xs: List<Text>) -> List<Text> {
+  return match xs {
+    [..all] => all
+  }
+}
+
+fn ends_with_end(xs: List<Text>) -> Bool {
+  return match xs {
+    [.., "end"] => true
+    _ => false
+  }
+}
+
+fn small_head(xs: List<Int>) -> Int {
+  return match xs {
+    [1 | 2, ..] => 1
+    [_, ..] => 2
+    [] => 0
+  }
+}
+
+fn pairs_rest(xs: List<(Text, List<Int>)>) -> List<Int> {
+  return match xs {
+    [(_, [_, ..r]), ..] => r
+    _ => [0 - 1]
+  }
+}
+
+fn last_text(xs: List<Text>) -> Text {
+  return match xs {
+    [.., z] => z
+    [] => "none"
+  }
+}
+
+fn tree_sum(t: Tree) -> Int {
+  return match t {
+    Leaf(n) => n
+    Node(children) => children_sum(children)
+  }
+}
+
+fn children_sum(children: List<Tree>) -> Int {
+  return match children {
+    [first, ..rest] => tree_sum(first) + children_sum(rest)
+    [] => 0
+  }
+}
+
+fn reader(xs: List<Int>) -> fn(Int) -> Int {
+  return match xs {
+    [_, ..rest] => |i| rest.at(i)
+    [] => |_i| 0 - 1
+  }
+}
+
+fn consume(xs: List<Text>) -> Int {
+  var ys = xs
+  ys.push("x")
+  ys.len()
+}
+
+fn moved_rest(xs: List<Text>) -> (Int, List<Text>) {
+  return match xs {
+    [_, ..rest] => (consume(rest), xs)
+    [] => (0, xs)
+  }
+}
+
+fn bytes_tail_len(bytes: Bytes) -> Int {
+  return match bytes {
+    [_, ..rest] => {
+      var grown = rest
+      grown.push(1)
+      grown.len()
+    }
+    [] => 0
+  }
+}
+
+test "a rest of texts drives a loop that reassigns the scrutinee first" {
+  assert words_joined(["alpha", "beta", "gamma"]) == "alpha;beta;gamma;"
+  assert words_joined([]) == ""
+}
+
+test "a rest of records is a deep copy" {
+  let people = [Person { name = "a", tags = ["x"] }, Person { name = "b", tags = ["y", "z"] }]
+  var after = people_after(people)
+  after[0].tags.push("w")
+  assert after[0].tags == ["y", "z", "w"]
+  assert people[1].tags == ["y", "z"]
+  assert people_after([]) == []
+}
+
+test "a rest of lists of lists is a deep copy" {
+  let rows = [[1], [2, 3], [4]]
+  var after = rows_after(rows)
+  after[0].push(9)
+  assert after == [[2, 3, 9], [4]]
+  assert rows == [[1], [2, 3], [4]]
+}
+
+test "a rest inside a variant payload" {
+  assert payload_rest(Some(["a", "b", "c"])) == ["b", "c"]
+  assert payload_rest(Some(["a"])) == []
+  assert payload_rest(Some([])) == ["empty"]
+  assert payload_rest(None) == ["none"]
+}
+
+test "a rest that takes the whole list" {
+  assert whole([]) == []
+  assert whole(["p", "q"]) == ["p", "q"]
+}
+
+test "a text suffix after the rest" {
+  assert ends_with_end(["a", "end"])
+  assert ends_with_end(["end"])
+  assert !ends_with_end(["end", "a"])
+  assert !ends_with_end([])
+}
+
+test "an or-pattern element before the rest" {
+  assert small_head([2, 9]) == 1
+  assert small_head([1]) == 1
+  assert small_head([3]) == 2
+  assert small_head([]) == 0
+}
+
+test "a rest inside a tuple inside a list" {
+  assert pairs_rest([("a", [1, 2, 3]), ("b", [])]) == [2, 3]
+  assert pairs_rest([("a", [])]) == [0 - 1]
+  assert pairs_rest([]) == [0 - 1]
+}
+
+test "the last text of one and of many" {
+  assert last_text(["only"]) == "only"
+  assert last_text(["a", "b"]) == "b"
+  assert last_text([]) == "none"
+}
+
+test "a rest of a recursive enum" {
+  assert tree_sum(Node([Leaf(1), Node([Leaf(2), Leaf(3)]), Leaf(4)])) == 10
+  assert tree_sum(Node([])) == 0
+}
+
+test "a rest captured by a closure" {
+  let f = reader([10, 20, 30])
+  assert f(0) == 20
+  assert f(1) == 30
+}
+
+test "a rest passed to a consuming fn leaves the scrutinee whole" {
+  let (n, xs) = moved_rest(["a", "b", "c"])
+  assert n == 3
+  assert xs == ["a", "b", "c"]
+}
+
+test "a rest of bytes grows on its own" {
+  assert bytes_tail_len(b"abc") == 3
+  assert bytes_tail_len(b"a") == 1
+  assert bytes_tail_len(Bytes.empty()) == 0
+}
