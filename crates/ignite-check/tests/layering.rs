@@ -219,7 +219,7 @@ fn std_modules_import_only_their_own_layer_or_below() {
     let std = standard_library();
     let protocols = protocol_names(&std);
     assert!(
-        protocols.contains("telnet") && protocols.contains("http"),
+        protocols.contains("telnet") && protocols.contains("http") && protocols.contains("jsonrpc"),
         "protocol names read from std/protocol/: {protocols:?}"
     );
     let mut violations = Vec::new();
