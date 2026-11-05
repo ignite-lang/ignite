@@ -995,6 +995,15 @@ and E042 (the capability methods, section 21.3) and E056 (`clock`, section 21.1)
 E140 and E141 under `crates/ignite-types/tests/fixtures`, E142 under
 `crates/ignite/tests/fixtures`, named as in section 21.9.
 
+Codes of slice 18 (section 22.10): from the check of the system model (`ignite-eval`), E150 a
+member whose machine subscribes to a signal and whose kind declares no `classify(self, sample)`
+hook over the signal's element type, and E151 a signal the assembly runs and a machine
+subscribes to whose element type is not an outcome type (no fn, handle, reference or signal,
+section 22.3). Slice 18 also drops the "unknown `good` outcome" text of E120 (an unknown
+predicate is E003) and extends E109 to the `classify` hook. Fixtures: `e150_classify_missing`
+and `e151_undecodable_element` under `crates/ignite/tests/fixtures`, `e109_classify_signature`
+under `crates/ignite-types/tests/fixtures`.
+
 Fixtures: E001 (including a keyword as a variable, fn and type name, beside
 `valid_keyword_fields`), E002, E053 and E054 under `crates/ignite-syntax/tests/fixtures`;
 E003, E004, E006, E010, E013, E015, E016, E030, E031, E041 (glob conflict), E047, E048, E049,
@@ -7412,3 +7421,671 @@ it in a kind of their own. `HttpServer` now has `recovery: Restart` and `rollout
 `Running`. The model of every `HttpServer` member gains the two defaulted properties
 (`todo.model.json`, `studio.model.json`). `studio_defaults.ignite` keeps its own kind: its
 placement is not `std.deploy`'s.
+
+## 22 Slice 18: one service operated end to end (F5)
+
+**Status: contract written 2026-11-05. The independent review (`docs/slice18-review.md`) found 4
+blockers, 6 majors and 18 minors; all are resolved in this text, and 22.17 maps each finding to
+its resolution. Implementation has not started.** The rows of 22.0 are required checks, not results.
+
+This section is numbered 22 and appended after section 21 (slice 17), which is on
+`feat/slice17-processes-files` and not on `main` yet; no line of section 21 changes here.
+
+Sources:
+
+- the planning store at `c4e24bc`: `epic:slice-18-one-service-operated`,
+  `story:slice-18-contract`, `story:apply-recovery-way-out`;
+- `docs/research/review-2026-11-04.md`: findings R2, R10, R11, R13, priorities 1, 2 and 4, and
+  Timo's correction in its section 2 (the LLVM target is the fast-build path and the target the
+  service is operated on);
+- this file: 15.4 and 15.5 (the model and its encoding), 16.5 to 16.10 (journal, reducers,
+  probes, signals, contract evaluation), 16.16 and 16.17 (hooks and their checks), 17 (`ignite apply`), 21.3 to 21.6
+  (`Directory`, capability resources, settings); `docs/vision.md` §3 invariants 5, 6, 7 and 9,
+  §7 T4.
+
+Base: `c19ab173`, the head of `feat/slice17-processes-files` when this contract was written; rebased onto `f3abeb20` (slice 17's U6 close, 21.18), whose `HttpServer` changes are cited at that commit (F8, 22.5, row 9).
+Every code citation below was read at that commit, nothing was built or run (the contract is
+documents only). Once slice 17 merges, the base becomes the merge of slice 17 into `main`; every
+`git diff` of 22.0 and the before tree of 22.15 are taken from it.
+
+The slice makes one real HTTP service, the todo example, an operated system: its data lives in
+a `Directory` (21.4) and survives a SIGKILL and an `ignite apply` rollout; an HTTP health probe
+kind and its outcome type are declared in `examples/todo/`, and an `Availability` contract over
+them is evaluated by the existing reducers through a typed predicate; `ignite apply` gets fault
+rows on that service and a way out of a recovery no corrective resolves; the build and the
+edit-build-restart cycle are timed on both targets.
+
+### 22.0 Acceptance
+
+`both` means the test runs on the Rust and the LLVM target. Fixture paths without a directory
+are under `crates/ignite/tests/fixtures/`. "Temporary working directory" means a directory under
+the test's own scratch directory that the test passes as `current_dir` to every process it
+starts, so that the relative `Directory` path of 22.4 never resolves inside the repository.
+
+| # | check | command | exact required observation | unit |
+|---|---|---|---|---|
+| 1 | the Telnet outcomes are predicates | `ignite test std/sli.ignite --target all` | the test "the prompt outcomes are predicates" passes on both targets: for `fast = ProbeAttempt { received = true, latency = 50 ms }`, `slow = { received = true, latency = 900 ms }`, `missed = { received = false, latency = 2 seconds }`: `prompt_received_before_timeout` is true, true, false; `prompt_received_within_threshold(_, 200 ms)` is true, false, false; `prompt_received_within_threshold(slow, 900 ms)` is true. `std/sli.ignite` declares no fn `satisfies` and no fn `known_outcome` | U1 |
+| 2 | the design file keeps both outcomes | `ignite check examples/terminal/terminal.design.ignite`; `cargo test -p ignite --test main plan::` | silent, exit 0, with `good = prompt_received_before_timeout` (contracts `reachable`, `customerAccess`) and `good = prompt_received_within_threshold` (`promptFast`); `plan::design_model_is_byte_identical_across_processes_and_directories` passes against `crates/ignite/tests/golden/terminal.design.model.json`, whose three contracts carry `"good": {"fn": "std.sli.prompt_received_before_timeout", "type": "Fn"}` (resp. `…within_threshold`), and the explain golden `terminal.design.explain.Terminal.reachable.txt` names the same fn | U1 |
+| 3 | the classify hook is required | `cargo test -p ignite --test main plan::fixtures_match_expected` | `e150_classify_missing.ignite` (a probe kind and a contract kind declared in the fixture; the contract's `machine` returns `Evaluate` and its kind declares no `classify`) gives exactly one E150: ``contract `S.c` of kind `fixture_e150.Watch` subscribes to `S.p.beats` of `fixture_e150.Beat` but declares no `fn Watch.classify(self: Watch, sample: fixture_e150.Beat) -> Bool` ``; the filter of the test includes `e15` | U1 |
+| 4 | the element type must be an outcome | same | `e151_undecodable_element.ignite` (a probe kind with `beats: Signal<fn() -> Int>`, run by the assembly, and a contract whose machine subscribes to it) gives exactly one E151: ``signal `S.p.beats` carries `fn() -> Int`; a probe outcome holds no fn, handle, reference or signal`` | U1 |
+| 5 | the run of the terminal is unchanged | `cargo test -p ignite --test main run::` | every `run::` test passes; `run::terminal_runs_under_ignite_run{,_on_the_llvm_target}` publish `Compliant` standings for `Terminal.reachable` as before; the journal header's `formatVersion` is `ignite-journal/0.2`; every `signal` record's `value` is a `std.sli.Sample` and every `Emitted` event a `std.sli.Verdict` | U1 |
+| 6 | an old journal is refused | `cargo test -p ignite --test main run::e126_journal_mismatch` | the fixture's journal carries `formatVersion` `ignite-journal/0.1` (it does already, `crates/ignite/tests/run.rs:1010` to `:1029`); after the bump `ignite run` and, newly in the test, `ignite replay` exit 2 with exactly one E126 of the existing version text (``the journal has formatVersion `ignite-journal/0.1`, this driver writes `ignite-journal/0.2` ``, `crates/ignite/src/lib.rs:1459` to `:1475`); the fixture's `.expected` changes from the model text to that text | U1 |
+| 7 | reducers agree | `cargo test -p ignite --test main control_trace::` | `control_trace::reducers_agree_across_the_evaluator_and_both_targets` passes with the fixture's emissions written as `Sample` and its evaluator events as `Verdict` | U1 |
+| 8 | no general layer names the probe | `git grep -n -e HttpHealth -e HealthCheck -e 'examples\.todo\.health' -- 'crates/*/src' std 'tools/*/src'` | prints nothing, exit 1. Tests and goldens under `crates/*/tests` may name the example (row 11's golden does); the epic's "no file under `crates/`" means the general layers, and the steering session rewords the epic line to match | every unit |
+| 9 | the todo checks | `ignite check examples/todo/todo.ignite` | silent, exit 0, with its server bound by `nativeProcess` (the `HttpServer.machine` hook landed in slice 17, 21.18; `std/protocol/http.ignite:144`, `:145`, `:160` to `:169` at `f3abeb20`) | U4 |
+| 10 | a store is hosted by its creator | `cargo test -p ignite --test main -- plan::fixtures_match_expected plan::store_is_hosted_by_its_server` | `store_is_hosted_by_its_server`: `ignite plan store_hosted.ignite` (a `TcpListener`, a `Store<Int>` and an `HttpServer` over it; bindings for the listener and the server only) exits 0 and its `edges` hold `{"from": "S.server", "kind": "hosts", "to": "S.counts"}`; `e110_unbound_member` keeps its expected output | U2 |
+| 11 | the todo model | `cargo test -p ignite --test main plan::todo_example_model_matches_golden` | passes against `crates/ignite/tests/golden/todo.model.json`, whose `machines` are exactly `TodoService.health.scheduler`, `TodoService.reachable.evaluator`, `TodoService.server.rollout`, `TodoService.server.supervisor`; whose `observations` hold `{"element": "examples.todo.health.HealthCheck", "interval": {"ns": 10000000000, "type": "Duration"}, "producer": "TodoService.health", "ref": "TodoService.health.checks"}`; and whose `edges` hold `hosts` edges from `TodoService.server` to `TodoService.data`, `TodoService.loaded` and `TodoService.todos` | U4 |
+| 12 | data survives SIGKILL | `cargo test -p ignite --test main todo::` | `todo::{rust,llvm}::todos_survive_sigkill`: `todod --port 0` in a temporary working directory; `POST` titles `a`, `b`, `c` (ids 1, 2, 3), `DELETE /todos/1`, `PATCH /todos/2 {"done":true}`; SIGKILL; a new `todod` in the same directory answers `GET /todos` with exactly `[{"id":2,"title":"b","done":true},{"id":3,"title":"c","done":false}]`, `GET /todos/1` with 404, and the next `POST` with id 4; afterwards `todo-data/todos/` lists exactly `1/`, `2/`, `3/`, `4/`, and `todo-data/todos/2/` lists exactly `2.json` | U4 |
+| 13 | concurrency kept | same | `todo::{rust,llvm}::{concurrent_posts,concurrent_patches}` pass unchanged in a temporary working directory each; after `concurrent_posts`, a SIGKILL and a restart in the same directory, `GET /todos` lists 1,600 todos | U4 |
+| 14 | inline tests of the todo | `ignite test examples/todo/todo.ignite --target all` | the existing tests "to_json", "handle creates, lists, reads, updates and deletes" and "handle answers 400, 404 and 405" pass on both targets with the same assertions (their helpers `answer` and `status` take the state record, and their `Store.new()` stores become the state record of 22.4 built with `Directory.temporary()`); the new test "a todo written is loaded by a fresh state" passes: a todo created through one state record is listed through a second record over the same directory with fresh stores | U4 |
+| 15 | the probe kind | `ignite test examples/todo/health.ignite --target all` | the test "a check line is the model encoding" passes on both targets: `encode_check(HealthCheck { answered = true, status = 200, latency = 12 ms })` equals `{"fields":{"answered":true,"latency":{"ns":12000000,"type":"Duration"},"status":200},"type":"examples.todo.health.HealthCheck"}` plus `\n`; `healthy` holds for it and not for `status = 503` or `answered = false` | U4 |
+| 16 | the contract reaches each status | `cargo test -p ignite --test main slice18::` | `slice18::{rust,llvm}::todo_contract_reaches_every_status`: `ignite run <copy>/todo.ignite --clock manual --target <t> --port TodoService.ingress=<free>` in a temporary working directory; the test advances the clock by `10 seconds` per slot and waits for each attempt's `signal` record (or its `AttemptFailed` event) before the next advance. Phases: 3 good slots; 4 slots with the run's copied probe executable (`<state>/bin/<generation>/health`) replaced by a script that exits 1, so the attempts fail and emit nothing while `expected` grows; the executable restored and 31 good slots, so the gap leaves the 5-minute window; then SIGSTOP of `todod` and 3 slots past their timeouts; then SIGCONT before `stop`. The statuses of the `standing` records of `TodoService.reachable`, consecutive repeats collapsed, are exactly `Compliant`, `InsufficientEvidence`, `Compliant`, `Violated` (an evaluator publishes only at an emission, and the first emission has `expected` 1, `std/control.ignite:631` to `:645`, `:793` to `:844`) | U6 |
+| 17 | durable across SIGKILL and a rollout, LLVM | same | `slice18::llvm::todo_survives_sigkill_and_a_rollout`: `ignite host` in a temporary working directory; plan and apply the todo copy (`--target llvm`), exit 0; `POST /todos {"title":"milk"}` answers 201 id 1; SIGKILL of the `TodoService.server` pid that `ignite inspect --json` reports; within 10 s inspect reports another pid ready; `GET /todos` is `[{"id":1,"title":"milk","done":false}]`; the copy's health body `ok\n` is changed to `ok 2\n`, replanned and applied, exit 0, with the action `replace` for `TodoService.server`; `GET /health` answers `ok 2\n` and `GET /todos` is the same list | U6 |
+| 18 | R11: host killed after an effect, before its receipt | same | `slice18::llvm::a_host_killed_after_dispatch_never_reports_an_unobserved_start`: the rollout of row 17 with the host started under `IGNITE_DEBUG_HOST_FAULT=after_dispatch`; the host dies; the restarted host's inspect reports the operation either `completed` with a `Ready` record in the host journal for the pid it names, or `recovery_required` with reason `outcome_unknown`; in neither case is more than one process running `revisions/*/…/todod`, and the host journal holds no two `Started` records of `TodoService.server` with one generation; `GET /todos` lists `milk` once the operation is `completed` (after a retry of the same plan if it was resumed) | U6 |
+| 19 | R11: a plan saved before a source change | same | `slice18::llvm::a_plan_saved_before_a_source_change_is_refused`: plan saved, then a response text of the copy changed; `ignite apply` exits 2 with a reason naming the changed source file; the `TodoService.server` pid in inspect is unchanged, no `transition` record follows the refusal, `GET /todos` lists `milk` | U6 |
+| 20 | R11: a torn last record | same | `slice18::llvm::a_torn_last_journal_record_is_dropped_and_recorded`: host stopped with `stop`; the bytes `{"kind":"sta` appended to `host-journal.jsonl`; the next `ignite host` prints `ignite host: dropped a torn final journal record of 12 bytes` on stderr, its journal's first new record is `journalRepaired` with `{"droppedBytes": 12, "droppedDigest": "sha256:…"}` (the digest of the 12 bytes), `ignite inspect --json` holds `journalRepairs` with that entry, and the committed revision serves `GET /todos` with `milk` | U3 (unit test), U6 (row) |
+| 21 | R11: an altered last record | same | `slice18::llvm::an_altered_last_journal_record_refuses_the_host`: host stopped; one byte inside the last record's `value` changed (the line stays valid JSON); `ignite host` exits 3 with stderr ``error: host journal record <n>: digest mismatch``, starts no process, and leaves every file of the state byte-identical; `ignite inspect --json` exits 0 with `"online": false`, `"journal": {"intact": false, "record": <n>, "reason": "digest mismatch"}` and `"nextAction": "restore host-journal.jsonl or move the state aside; the host does not start on a damaged journal"` | U3 (unit test), U6 (row) |
+| 22 | R11: the last records cut at a line boundary | same | `slice18::llvm::a_journal_cut_before_its_last_state_record_refuses_the_host`: host stopped; the journal truncated to the end of the line before its last `state` record; `ignite host` exits 3 with ``error: host journal ends before record <n> that status.json anchors``; inspect reports `"journal": {"intact": false, "record": <n>, "reason": "shorter than status.json"}` and the `nextAction` of row 21 | U3 (unit test), U6 (row) |
+| 23 | a revision journal that differs from the host's copy | `cargo test -p ignite --test main apply_integrity::` | `apply_integrity::an_altered_revision_journal_line_refuses_the_host`: after a committed apply of the terminal design (Rust), one byte of the last record of `revisions/<r>/journal.jsonl` that has a `revisionRecord` copy in the host journal is changed; `ignite host` exits 3 with ``error: revisions/<r>/journal.jsonl record <seq>: differs from the host journal``; inspect reports `"journal": {"intact": false, "record": <seq>, "reason": "revision journal differs", "file": "revisions/<r>/journal.jsonl"}` | U3 |
+| 24 | journal integrity, unit level | `cargo test -p ignite --lib apply::host::journal::` | `a_torn_final_line_is_dropped_and_repaired` (row 20's bytes give `journalRepaired`), `an_altered_record_names_its_index` (`History::load` fails with `host journal record 3: digest mismatch` for an altered third record), `a_journal_shorter_than_its_anchor_is_refused`, `a_missing_anchor_is_accepted` (a state with no `status.json`, or one without `journalAnchor`, loads as today) pass | U3 |
+| 25 | a way out of a non-resolvable recovery | `cargo test -p ignite --test main apply_way_out::` | `apply_way_out::{rust,llvm}_operator_recover_returns_the_host_to_accepting_plans`: a host driven into the state of 22.9 (a committed revision, a failed operation `gave_up`, and a later reason no corrective resolves); `ignite apply <corrective>` exits 2 with `host has an active or unresolved operation` (`crates/ignite/src/apply/host/admission.rs:279` to `:281`) and a retry of the failed plan exits 1 with `operation requires recovery; inspect its durable status` (`:244` to `:249`); `ignite recover --state S --operation <id>` exits 0 and prints `recovered <id>: stopped <n> instances; committed revision <r> restarted`; the host journal holds one `operatorRecovered` record naming the operation, the stopped pids and `"by": "ignite recover"`, and between the `recoverStarted` record and the fresh start no `Started` record of any member; inspect reports `recovery` null, the operation's receipt `state` `abandoned` with its reasons kept, and the committed revision ready; a retry of the abandoned plan exits 2 with `operation <id> was abandoned by ignite recover; prepare a new plan`; a new plan applies with exit 0 and `completed` | U5 |
+| 26 | recover refuses what it cannot prove | same | `apply_way_out::recover_refuses_an_unaccounted_process`: as row 25 with a process running an executable under `<state>/revisions/` that no ownership record names; `ignite recover` exits 1 with `recovery refused: unaccounted process <pid> runs <path>`, signals nothing (the process is alive afterwards), and journals nothing; `ignite recover` of an operation that is not `recovery_required` exits 2 with `operation <id> requires no recovery` | U5 |
+| 27 | the build is a fraction of rustc's | 22.15, `ignite-perf programs` | the records of 22.15 exist; in the after tree the median dev build of `todod` alone (`ignite build` builds `health` too; the unit times the two executables separately) on LLVM is at most 0.15 of the median on Rust in the same passes (the 12b rows give 0.309 / 3.998 = 0.077) | U8 |
+| 28 | the edit-build-restart cycle | 22.15, `ignite-perf apply-cycle` | records exist for the todo (after tree, both targets) and the terminal design (both trees, both targets); in the after tree the todo cycle's median on LLVM is below its median on Rust | U7 (mode), U8 (records) |
+| 29 | the code lists | `cargo test -p ignite --test main plan::fixtures_match_expected`; section 8 | section 8 has a "Codes of slice 18" paragraph naming E150 and E151 with their fixtures; both fixtures exist and match | U0 (paragraph), U1 (fixtures) |
+| 30 | reducer and evaluator revisions | `git diff <base> -- crates/ignite/src/apply/plan.rs`; `cargo test -p ignite --test main apply_recovery::a_changed_reducer_revision_starts_the_host_without_driving_and_asks_to_replan` | `REDUCER_EVALUATOR` differs from the base (U1); the test passes; `CODEGEN_REVISION` is unchanged unless a unit changes generation, which that unit's commit then says | U1 |
+| 31 | gate | `task gate` | exit 0 on the slice branch at the close | every unit |
+| 32 | gate time | 22.15 | the records of 22.15 exist under `docs/performance/18/` and in `AGENTS.md` | U8 |
+| 33 | the host keeps its working directory | `cargo test -p ignite --test main apply_integrity::a_host_started_elsewhere_is_refused` | a host started once in directory A writes `<state>/workdir` (A, canonical); stopped and started from directory B it exits 2 with ``error: state <S> is hosted from <A>; start ignite host there``, starts no process and changes no file; started from A again it runs. A state without `workdir` (written before the slice) gets one at its next start | U3 |
+| 34 | `classify` is a checked hook | `cargo test -p ignite-types --test main fixtures::` | fixture `e109_classify_signature` (a contract kind whose `classify` takes no `sample`, and one whose `classify` declares `requires [stdout.write]`) gives exactly two E109 | U1 |
+
+### 22.1 Current state and verdicts (at `c19ab173`)
+
+Read, not run: every fact below was read in the cited code; a statement marked "inferred" was
+not.
+
+| fact | where | verdict |
+|---|---|---|
+| F1 a contract's `good` is a `Text` matched against two Telnet outcomes; any other text holds for no attempt and `validate` refuses it (E120) | `std/sli.ignite:22` (`satisfies`), `:30` (`known_outcome`); `std/contract.ignite:33`, `:132` | R2 holds. `good` becomes `fn(T) -> Bool` (22.3, D1) |
+| F2 the reducers carry `ProbeAttempt` in `AttemptDone`, `Emitted` and `Emit`, and the scheduler builds the timeout sample itself | `std/control.ignite:63`, `:66`, `:88`, `:519` | a probe whose outcome is another type cannot pass through them; the payloads become `std.sli.Sample` and `Verdict` (22.3) |
+| F3 the evaluator classifies with `satisfies` and derives the slot from the sample's latency | `std/control.ignite:639`, `:626` | the classification moves to the driver's routing; the slot comes from the scheduler (22.3, D14) |
+| F4 the driver decodes a probe's line by the payload type of `EventKind.AttemptDone`, not by the signal's element type | `crates/ignite/src/run/live.rs:303` to `:311`, `:883` | the doc comment of `crates/ignite/src/run/probe.rs:4` ("decodes it by the signal's element type") and the review's R5 verdict are true only because the one element type is `ProbeAttempt`; U1 makes them true (22.3) |
+| F5 the model already records each signal's element type | `ModelObservation::element`, `crates/ignite-eval/src/model.rs:233` to `:241` | the driver reads it (22.3) |
+| F6 the driver routes an emission to every alive subscriber unchanged | `Core`, the `Emit` arm, `crates/ignite/src/run/engine.rs:565` to `:581` | the classification point (22.3) |
+| F7 the machine set is closed | `std/control.ignite:24` to `:33` (O39) | kept (out of scope, R4); the probe kind returns `Schedule`, the contract `Evaluate` |
+| F8 `HttpServer<S>` has `recovery`, `rollout`, `machine` and `validate` since slice 17's close (21.18), so a `nativeProcess` binding of it is no longer E129 | `std/protocol/http.ignite:144` to `:169` at `f3abeb20`; `std/deploy.ignite:97` to `:100` | nothing left for this slice; at `c19ab173` the hook was missing (`:137` to `:149`) |
+| F9 the todo example keeps its data in a `Store<Todo>` in memory and declares no assembly | `examples/todo/todo.ignite:80` to `:89` | R10 holds; 22.4 |
+| F10 only a capability resource is hosted implicitly; `admits` hosts a resource only when it is a `TcpListener` | `implicit_host`, `crates/ignite-eval/src/resolve.rs:341` to `:370`; `admits`, `std/deploy.ignite:52` to `:77` | inferred: an assembly of the todo with its `Store` resource is E110 today; U2 hosts a `Store` as a capability (22.5, D6) |
+| F11 replacing a member whose kind starts with `Store<` is an unsupported migration; an implementation-only change gives `replace` only to members with an artifact | `stateful_kind`, `crates/ignite/src/apply/plan.rs:930`; `annotate`, `:551` to `:556`, `:620` to `:630` | inferred from the code: a changed todo build replaces `TodoService.server` and leaves `TodoService.todos` `unchanged`; row 17 checks it |
+| F12 `write_file` replaces atomically by rename, without `fsync` | 21.4 | a SIGKILL of `todod` keeps every file whose write returned (the page cache outlives the process; inferred from POSIX, row 12 checks); a power loss is not covered (22.2) |
+| F13 the host journal is a SHA-256 digest chain per record; a final line without `\n` is dropped silently; a broken chain or digest stops the host with exit 3 | `chained`, `crates/ignite/src/apply/host/journal.rs:129` to `:141`; `History::load`, `:199` to `:233`; `host::run`, `crates/ignite/src/apply/host/mod.rs:86` | a checksum exists; what is missing is a record of the drop, an index in the error, an anchor against a cut at a line boundary, and an offline report (22.7) |
+| F14 offline `ignite inspect` reads `status.json` only | `inspect`, `crates/ignite/src/apply/mod.rs:391` to `:424` | it reports a damaged journal as a healthy snapshot; 22.7 |
+| F15 every run record the host acknowledges is copied into the host journal as `revisionRecord`; a retained revision replays its own `journal.jsonl` at start | `Host::record`, `crates/ignite/src/apply/host/controller.rs:1316` to `:1328`; `crates/ignite/src/apply/revision.rs:118` to `:130` | the copy is the checksum of the revision journal (22.7); inferred: every record of a revision journal but an unacknowledged tail has a copy, row 23 checks |
+| F16 a corrective is admitted only for `gave_up` and `listener_unavailable`; under any other later reason every apply is refused: a corrective with exit 2 `host has an active or unresolved operation`, a retry of the failed plan with exit 1 `operation requires recovery` | `resolvable`, `crates/ignite/src/apply/host/controller.rs:142` to `:147`, `correctable`, `:410` to `:426`; `crates/ignite/src/apply/host/admission.rs:244` to `:249`, `:279` to `:281`; 17.5 "Precedence" | `story:apply-recovery-way-out` holds; U5 (22.9) |
+| F17 crash points exist after intent, before and after dispatch and mid-transition | `IGNITE_DEBUG_HOST_FAULT`, `crates/ignite/src/run/process.rs:95` to `:125`, `:278`; `crates/ignite/src/apply/host/journal.rs:176` to `:182` | row 18 reuses `after_dispatch`; no new crash point |
+| F18 the apply tests start the host with the repository as working directory, and `todo.rs` starts `todod` without one | `crates/ignite/tests/apply_recovery.rs:73`, `apply_host.rs:99`; `crates/ignite/tests/todo.rs:88` to `:95` | a relative `Directory` would land in the repository; every slice-18 test passes a temporary working directory (22.0) |
+| F19 E150 to E159 are unused; T4 ends at slice 13 on `main` and slice 17 takes E140 to E149 | section 8, 21.9; `docs/vision.md:250` | this slice takes E150 to E159 (S1) |
+
+### 22.2 Scope and non-goals
+
+In scope: typed probe outcomes and contract predicates (R2, R13's measurement), supervision of
+`HttpServer`, the durable todo with its HTTP probe kind and contract, the fault rows of R11 on
+that service, journal integrity reporting, the operator way out of a non-resolvable recovery,
+and the timing of builds and of the apply cycle.
+
+Not in scope:
+
+- more than one host, fencing, distributed authority (R8);
+- user-defined machines (R4) and a new protocol (R13's other parts); the probe writes its HTTP
+  request by hand (D13);
+- binding executables written in other languages (R12);
+- durability against power loss or a kernel crash: `Directory.write_file` does not `fsync`
+  (21.4); a durable store in the substrate (D4 C) is a later slice;
+- a schema migration of the todo files; the format of 22.4 is `version 1`;
+- consistency between two processes of the todo: during an occupied-listener rollout the
+  draining instance may still answer a request on an open keep-alive connection after the new
+  instance has loaded (16.12). Each process allocates ids and versions from its own memory
+  store, so the two can write the same `todos/<id>/<version>.json`, and `write_file` replaces
+  (21.4): an acknowledged write in the drain window can be lost or hidden from the new instance.
+  This is a known limit, stated here, in the todo's header comment and in `AGENTS.md` (S9, S10);
+  rows 17 and 18 create their todo before the rollout and send no request on the old instance
+  after it; a store shared across processes is D4 C's (22.16 Q3);
+- the todo's apply cycle before the slice: the todo cannot be applied at the base (F9, F10; at the slice-17 base before 21.18 also F8),
+  so its cycle is timed after only and the terminal design's on both trees (D12). The epic asks
+  for a todo before; the steering session records this deviation in the epic;
+- changing the default fuel, the closed machine set or the `ignite run` command surface.
+
+### 22.3 Typed outcomes: `good` is a predicate (D1)
+
+A probe kind declares its outcome type `O` as the element type of a `Signal<O>` output, prints
+one line per attempt, the 15.4 encoding of an `O`, and returns `Machine.Schedule` from its
+`machine` hook, as `TelnetPrompt` does. A contract names a predicate over `O`:
+
+```ignite
+type Availability<T> {
+  signal: Signal<T>
+  good: fn(T) -> Bool
+  target: Ratio
+  window: Window
+  missing_data: Text = "insufficient_evidence"
+  minimum_completeness: Ratio = 90%
+}
+
+fn Availability.classify<T>(self: Availability<T>, sample: T) -> Bool = self.good(sample)
+```
+
+- `std.contract`'s three kinds become generic in `T`: `Availability<T>` and `SLA<T>` with
+  `good: fn(T) -> Bool`, `ThresholdCompliance<T>` with `good: fn(T, Duration) -> Bool` and
+  `classify` = `self.good(sample, self.threshold)`. `T` is inferred from `signal` and `good`, as
+  `S` of `HttpServer<S>` is from its application (the todo declares `HttpServer` without type
+  arguments, `examples/todo/todo.ignite:84`); a predicate over another type is E040.
+- A predicate is a named top-level fn: the model encodes it as `{"fn": "<qualified name>",
+  "type": "Fn"}` (15.4); a closure there is E118 as today.
+- `std.sli` keeps `ProbeAttempt` and declares the two Telnet outcomes as predicates with their
+  old names: `fn prompt_received_before_timeout(attempt: ProbeAttempt) -> Bool =
+  attempt.received` and `fn prompt_received_within_threshold(attempt: ProbeAttempt, threshold:
+  Duration) -> Bool = attempt.received && attempt.latency <= threshold`. `satisfies` and
+  `known_outcome` are removed; `reasons` in `std/contract.ignite` drops its `good` check, because
+  an unknown name is now a name-resolution error (E003) at check time.
+- Declarations change from text to name: `good = "prompt_received_before_timeout"` becomes
+  `good = prompt_received_before_timeout` (D2).
+
+`std.sli` gains the two records the reducers carry instead of `ProbeAttempt`:
+
+```ignite
+// One attempt as a scheduler emits it: the slot it was dispatched for and the
+// probe's printed line, `None` when the attempt timed out.
+type Sample {
+  slot: Duration
+  line: Option<Text>
+}
+
+// One emission as an evaluator receives it: the slot and whether its contract's
+// `classify` held for the decoded line (`false` for `line = None`).
+type Verdict {
+  slot: Duration
+  good: Bool
+}
+```
+
+`std.control` changes (the reducer interface, 16.6):
+
+- `EventKind.AttemptDone(Int, Text)`: the probe's line. The driver still decodes it at once with
+  the element type of the scheduler's `signal` (the model observation whose `ref` is that field,
+  so a probe kind with several `Signal` outputs is decoded by the one it schedules) and turns an undecodable line into `AttemptFailed` with
+  `undecodable probe line: <reason>` (`live.rs:883` to `:899`), so the line a reducer sees
+  always decodes.
+- `ProbeScheduler` gains `in_flight_slot: Option<Duration>`; `AttemptDone` emits
+  `Emit(signal, Sample { slot = <in_flight_slot>, line = Some(line) })`, the deadline emits
+  `Sample { slot, line = None }` (today `ProbeAttempt { received = false, latency = timeout }`,
+  `:519`). `AttemptFailed` still emits nothing (missing evidence).
+- `Effect.Emit(Text, Sample)`, `EventKind.Emitted(Text, Verdict)`.
+- `Evaluator` loses `good` and `threshold`; `emission` counts `verdict.good` in the bucket of
+  `verdict.slot` (D14: the dispatched slot, not `at - latency`).
+- `std.control` imports `Sample` and `Verdict` from `std.sli` and no longer `ProbeAttempt` or
+  `satisfies`.
+
+The driver (`crates/ignite/src/run/`, and its callers in `crates/ignite/src/lib.rs` and
+`crates/ignite/src/apply/revision.rs`):
+
+- Today the driver gets one `TypedProgram`, that of `std.control`: `ignite run` takes
+  `modules.get(CONTROL_MODULE).types` (`crates/ignite/src/lib.rs:1579` to `:1591`) and passes
+  it to `Live::new` and `replay::replay` (`:1613`, `:1659` to `:1668`), as `ignite replay`
+  (`:1726` to `:1733`) and the apply revision (`crates/ignite/src/apply/revision.rs:111` to
+  `:115`, `:129`, `:186`) do. `Value::decode` finds only records of that module or of a module
+  it was typed against (`TypedProgram::record_fields`, `crates/ignite-types/src/lib.rs:1440` to
+  `:1448`), so a `HealthCheck` line would not decode. The Telnet case works only because
+  `std.sli` is an import of `std.control`.
+- After U1, `Live::new`, `Core` and `replay::replay` also receive the loaded modules
+  (`Loaded::modules()`), and decoding a line looks up the typed program of the element type's
+  module by the qualified name in the observation's `element` (F5), not `AttemptDone`'s payload
+  (F4). The element text is parsed into a `Ty` by the type printer's grammar (15.4); the outcome
+  rule of E151 keeps it to the types that grammar names.
+- At the `Emit` arm of `Core` (F6), for each alive subscriber, the driver builds the `Verdict`:
+  for `line = Some(l)` it decodes `l` with the signal's element type and calls the subscriber
+  member's hook `K.classify(contract, sample)` through the evaluator, with the step's fuel; for
+  `None`, `good = false` without a call. The `signal` record keeps the `Sample`; each subscriber's
+  `Emitted` event carries its own `Verdict`. A `classify` that fails (fuel, a run-time error) is
+  E128 of that machine, as a failing reducer step is.
+- Replay re-derives each `Verdict` from the journaled `Sample` and the model (16.15); a
+  journaled `Emitted` that differs is E127, as today.
+- `JOURNAL_VERSION` (`crates/ignite/src/run/engine.rs:26`) becomes `ignite-journal/0.2`: a
+  journal of 0.1 is E126 through `check_header`'s existing version text (row 6, D3). `REDUCER_EVALUATOR`
+  (`crates/ignite/src/apply/plan.rs:21`) changes, so a host whose committed revision was planned
+  before the slice reports `reducer_revision_changed` and asks to replan (17.5 D2).
+- The hook names the driver knows become `machine`, `validate` and `classify` (vision invariant
+  6 lists hooks by name; U1 updates its line).
+
+Check-time rules (in `ignite-eval`, beside E129):
+
+- E150: a member whose machine subscribes to a signal, and whose kind declares no `classify`
+  hook with `self` and one parameter of the signal's element type returning `Bool` (row 3).
+- E151: a signal that the assembly runs (its producer's binding has entries, `std.deploy.entries`,
+  as E121 and E129 decide; the compiler names no binding variant, 16.17) and that a member with
+  a machine subscribes to (`ModelMachine::subscribes`, `crates/ignite-eval/src/model.rs:349` to
+  `:375`), whose element type is not an outcome type. An outcome type is `Bool`, `Int`,
+  `Text`, `Byte`, a quantity (`Duration`, `ByteSize`, `Ratio`), or a `List`, `Option`, tuple,
+  record or enum of outcome types. This is a policy, not a claim about decoding:
+  `Value::decode` also reads fn, `Ref` and `Signal` values (`crates/ignite-eval/src/value.rs:520`
+  to `:551`), but a probe outcome holds none of them (row 4).
+- E109 also checks `classify`: `fn K.classify(self: K, sample: T) -> Bool`, pure, through
+  `hook_signature` (`crates/ignite-types/src/typer/system.rs:1662` to `:1673`); row 34.
+
+### 22.4 The durable todo (D4, D7)
+
+`examples/todo/todo.ignite` declares:
+
+```ignite
+type Todo {
+  id: Int
+  title: Text
+  done: Bool = false
+  version: Int = 1
+  deleted: Bool = false
+}
+
+type Todos {
+  todos: Store<Todo>
+  loaded: Store<Bool>
+  data: Directory
+}
+
+system TodoService {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 8080 }
+  resource todos: Store<Todo>
+  resource loaded: Store<Bool>
+  resource data: Directory { path = "todo-data", create = true }
+
+  component server: HttpServer {
+    listener = ingress
+    application = HttpApp { state = Todos { todos = todos, loaded = loaded, data = data }, handle }
+    executable = "todod"
+  }
+
+  component health: HttpHealth {
+    target = server
+    path = "/health"
+    interval = 10 seconds
+    timeout = 2 seconds
+  }
+
+  contract reachable: Availability {
+    signal = health.checks
+    good = healthy
+    target = 99%
+    window = rolling(5 minutes)
+    missing_data = "insufficient_evidence"
+  }
+}
+
+assembly local: Deployment {
+  system = TodoService
+  bindings = {
+    TodoService.ingress = localSocket()
+    TodoService.server = nativeProcess(includes = [])
+    TodoService.health = scheduledProbeHost()
+  }
+}
+```
+
+`HttpHealth`, `HealthCheck` and `healthy` are imported from the sibling module
+`examples.todo.health` (22.6). The window is five minutes so that row 16 reaches `Compliant`
+within a test (31 slots of 10 s); the values are the example's, not a recommendation.
+
+Files, under the root of `data` (the working directory of `todod`, of `ignite run` or of
+`ignite host`, 21.6 and 21.16 Q2; D7). Under `apply` that working directory is recorded: the
+host writes `<state>/workdir` at its first start and refuses to start from another directory
+(exit 2, row 33, U3), so a host restarted elsewhere cannot silently open an empty `todo-data`.
+This settles 21.16 Q2's open end for `apply` without changing 21.4's resolution rule.
+
+- `todos/<id>/<version>.json`: the `to_record` JSON of the todo at that version, an object with
+  `id`, `title`, `done`, `version` and `deleted`, written with `write_file` (atomic replace,
+  21.4). The HTTP bodies keep the three fields of `to_json` (`examples/todo/todo.ignite:20`), so
+  every existing response and test is unchanged.
+- A deleted todo is a file whose `deleted` is true at the next version (a tombstone); its id is
+  never reused.
+
+Behaviour:
+
+- The memory `Store<Todo>` is the authority inside a process; every change goes through one
+  atomic `update` or `upsert` that also increments `version` (`f` stays pure, 11.3), and the
+  handler then creates `todos/<id>` (`create_directory`; `write_file` needs its parent, 21.4)
+  and writes the returned value's file before it answers. A failed write answers 500 with the
+  body `not stored\n`; 500 means "not durable", not "not applied": the memory value stays, and a
+  later successful write of that id persists it. After the write, files of that id with a lower version are
+  removed; a failed removal is ignored (the next load takes the highest version).
+- Load: each request first checks `loaded.get(0)`; while it is not `Some(true)`, the request
+  loads: `create_directory("todos")`, then for each `<id>/` the highest `<version>.json` that
+  parses, merged with `todos.upsert(id, |held| keep the higher version)`, then
+  `loaded.put(0, true)`. Loads are idempotent and monotone, so concurrent first requests may each
+  load and no load overwrites a newer change. `GET /health` loads too, then answers 200
+  `ok\n`; a failed load answers 503 `loading failed: <reason>\n`.
+- `POST /todos` takes `todos.next_id()` until `todos.get(id)` is `None` (after the load every id
+  on disk, tombstones included, is in memory), so ids continue after a restart (row 12).
+- `GET` and the listing skip tombstones; `PATCH` and `DELETE` of a tombstone answer 404.
+- The tests of `todo.ignite` build the state record with `Store.new()` twice and
+  `Directory.temporary()?` (21.8).
+
+### 22.5 `HttpServer` under `ignite run` and `ignite apply` (D5, D6)
+
+- `std/protocol/http.ignite`: nothing to do. Slice 17 (21.18) gave `HttpServer<S>` `recovery`,
+  `rollout`, `machine` and `validate` (`std/protocol/http.ignite:144` to `:169` at `f3abeb20`),
+  and updated `todo.model.json` and `studio.model.json` itself.
+- `crates/ignite-eval/src/resolve.rs`: `implicit_host` also hosts a resource of kind
+  `Store<T>` (F10): by the process of the first declared executable component that creates it.
+  A `Store` still provisions nothing (16.14). `admits` is unchanged.
+
+### 22.6 The HTTP probe kind (`examples/todo/health.ignite`)
+
+The module `examples.todo.health` declares, and nothing under `crates/`, `std/` or `tools/`
+names (row 8):
+
+```ignite
+type HealthCheck {
+  answered: Bool
+  status: Int
+  latency: Duration
+}
+
+fn healthy(check: HealthCheck) -> Bool = check.answered && check.status == 200
+
+type HttpHealth {
+  target: Ref
+  path: Text = "/health"
+  interval: Duration = 10 seconds
+  timeout: Duration = 2 seconds
+  checks: Signal<HealthCheck>
+  executable: Text
+}
+```
+
+- `HttpHealth.main`: `Endpoint.of(self.target)?`, connect, set the idle timeout to `timeout`,
+  write `GET <path> HTTP/1.1\r\nHost: <address>\r\nConnection: close\r\n\r\n`, read until the
+  first `\r\n`, take the status from `HTTP/1.1 <code> …`, print `encode_check(check)`. A refused
+  connection, a read past the timeout or a status line that does not parse is `answered = false,
+  status = 0`; exit 0. No `--ref` binding exits 1, as `TelnetPrompt.main` (16.9).
+- `HttpHealth.machine`: `Machine.Schedule(ProbeScheduler { id = "{id}.scheduler", member = id,
+  target = self.target.to_text(), signal = self.checks.to_text(), interval, timeout })`.
+- `HttpHealth.validate`: `path` starts with `/` and has no space.
+- `encode_check` writes the 15.4 encoding, keys in byte order (row 15).
+- `target` is the kind-erased `Ref` (`Ty::Ref(None)`, 14.10), not `Ref<HttpServer<Todos>>`:
+  `examples.todo` imports the probe, so `health.ignite` must not import `examples.todo` back
+  for `Todos` (E032). E122 still checks that the ref resolves to exactly one listener (16.9).
+  `health.ignite` imports general std modules only (`std.net`, `std.control`, `std.sli`,
+  `std.text`, the `IoError` result type), never `examples.todo`. `Endpoint.of` takes the
+  kind-erased `Ref` (`("Endpoint", "of") => sig(EndpointOf, vec![Ty::Ref(None)], …)`,
+  `crates/ignite-types/src/builtins.rs:297`), and E122 matches any `Ty::Ref(_)`
+  (`crates/ignite-eval/src/validate.rs:509`).
+
+### 22.7 Journal integrity (D8 to D10)
+
+The host journal's digest chain (F13) is the checksum: a record whose bytes changed fails its
+digest, a removed or reordered record breaks the chain. No length frame is added (D8). This
+slice adds:
+
+- A torn final line (bytes after the last `\n`) is still dropped, because every record is synced
+  before the host acts on it (17.5), so a torn line is a write the host never acted on. Today
+  `History::load` truncates and syncs at once (`journal.rs:208` to `:211`). After U3 the load
+  is split: a read-only verifier (chain, digests, anchor, revision journals; used by offline
+  `inspect`) and the repair, which runs after the lock is held and appends `journalRepaired
+  {"droppedBytes": n, "droppedDigest": "sha256:<hex of the bytes>", "previousDigest": <last good>}`
+  in place of the torn bytes (truncate to the last good record, append the repair record, one
+  sync), so a crash after the repair leaves the record and a crash before it leaves the torn
+  line to repair again. The host prints `ignite host: dropped a torn final journal record of <n>
+  bytes`, and `inspect` lists every such record in `journalRepairs` (row 20). Offline `inspect`
+  of a journal that is only torn reports `"intact": true, "pendingRepair": {"droppedBytes": n}`.
+- An altered record: `History::load` reports its 1-based line number, `host journal record <n>:
+  digest mismatch` (or `: does not parse`, `: chain diverged`), exit 3, before anything is
+  written (row 21). The host does not truncate or rewrite the journal (D10).
+- A cut at a line boundary: `persist` writes `journalAnchor: {"record": n, "digest": "<digest>"}`
+  of the `state` record it just appended into `status.json`. At start, a `status.json` whose
+  anchor names a record the journal does not hold with that digest is ``host journal ends before
+  record <n> that status.json anchors``, exit 3 (row 22). A cut after the anchored record is not
+  detectable and is reconciled as a crash after that record (17.5). A `status.json` without
+  `journalAnchor` (written before the slice) is accepted.
+- A revision journal (F15): at start, before a retained revision is replayed, every record of
+  `revisions/<r>/journal.jsonl` that has a `revisionRecord` copy must equal it: the host
+  journal keeps the parsed record (`("record", record.clone())`, `controller.rs:1316` to
+  `:1328`), so the check is that the copy's compact encoding equals the line. Records after the
+  last copy (written, never acknowledged) are kept as today. A difference is
+  ``revisions/<r>/journal.jsonl record <seq>: differs from the host journal``, exit 3 (row 23).
+  The check runs in `host/mod.rs` before `verify_history` (`recovery.rs:218` to `:283`), so U3
+  does not touch `recovery.rs`.
+- Offline `inspect` (F14) verifies the chain, the anchor and the revision journals read-only and
+  adds `journal: {"intact": bool, "record"?, "reason"?, "file"?}`; when `intact` is false its
+  `nextAction` is the text of row 21. Online `inspect` reports `{"intact": true}` and
+  `journalRepairs`.
+
+### 22.8 Fault matrix (R11)
+
+| R11 case | 17.7 row covering it on the terminal | slice 18 row on the todo | outcome required |
+|---|---|---|---|
+| interrupted deployment (crash after intent, before dispatch, mid-transition) | 11 | none new | covered; unchanged |
+| lost acknowledgement: host killed after an effect, before its receipt | 11 (`after_dispatch` in `crash_after_intent`, `apply_recovery.rs:472`) | 18 | `completed` only over an observed `Ready`, else `outcome_unknown`; one instance |
+| client disconnect | 10 | none new | covered |
+| stale plan: saved before a source change | 5 (changed source of `apply::{rust,llvm}_saved_apply_…`) | 19 | refused, exit 2, nothing changes |
+| stale base, wrong state | 5 | none new | covered |
+| corrupted journal: torn last record | none end to end (unit test `a_torn_final_line_is_dropped_and_the_chain_continues`) | 20 | dropped and recorded |
+| corrupted journal: altered record | first record only (`apply::tampered_host_history_is_rejected_before_startup`, `apply.rs:756`) | 21, 23 | refused, exit 3, reported offline |
+| corrupted journal: cut at a line boundary | none | 22 | refused when the anchor shows it |
+| uncertain external effect | 12 (unaccounted generation process) | none new | covered |
+| a recovery no corrective resolves | none (`story:apply-recovery-way-out`) | 25, 26 | `ignite recover` |
+
+Rows 17 to 22 run on LLVM only: the target is the slice's service target (review section 2),
+and the 17.7 twins already run the host on both.
+
+### 22.9 Operator recovery (`ignite recover`, D11)
+
+`story:apply-recovery-way-out` is folded in as U5: R11 asks that the controller never repeat an
+unsafe operation, and a host that refuses every apply forever leaves the operator only the
+unsafe way of deleting the state.
+
+```
+ignite recover --state DIR --operation ID [--json]
+```
+
+- Sent over the control socket as operation `recover` (`ignite-host-control/0.1`, 17.2). The
+  host accepts it only for the active operation when it is `recovery_required` and admission
+  refuses a corrective for it (F16); otherwise exit 2 `operation <id> requires no recovery`.
+- The host scans as at start (17.5): an unaccounted process under `<state>/revisions/` refuses
+  with exit 1 and its pid and path, nothing signalled, nothing journaled (row 26).
+- Otherwise, in this order: journal `recoverStarted {"operationId"}`; stop the run driver of
+  every revision, as the host's `stop` does (`crates/ignite/src/apply/host/mod.rs:174`), so no
+  supervisor sees the exits and restarts anything; drain and stop every owned and retiring
+  instance of the failed and the committed revision through their pidfds (start time
+  re-checked) and wait until each ended; journal `operatorRecovered {"operationId", "by":
+  "ignite recover", "stopped": [pids], "laterReasons": [...]}`; set the operation's receipt
+  `state` to `abandoned` (its `reason` and `laterReasons` kept); clear `recovery`; start the
+  committed revision afresh as a host start does after reconciliation, which recopies its
+  artifacts (`copy_into`, `crates/ignite/src/run/live.rs:1587` to `:1599`). Exit 0 once that
+  revision is ready; exit 1 if it is not ready within its readiness timeout, with the reason.
+  Between `recoverStarted` and the fresh start the host journal holds no `Started` record
+  (row 25).
+- `abandoned` is a new receipt state beside those of 17: a retry of an abandoned plan exits 2
+  with `operation <id> was abandoned by ignite recover; prepare a new plan`, and `apply`
+  prints `operation <id> is abandoned` (`crates/ignite/src/apply/mod.rs:369` to `:384`).
+- `recover` is repeatable. A host killed between `recoverStarted` and `operatorRecovered`
+  restarts with the operation still `recovery_required` and its instances ended, reconciles as
+  after any crash (17.5), and a second `ignite recover` completes it.
+- The state row 25 drives (on the terminal design): commit revision 1; apply revision 2 whose
+  server exits at once, so the supervisor gives up (`gave_up`); then replace the run's copy of
+  revision 1's executable, `revisions/<r>/bin/<generation>/terminald` (not the plan artifact,
+  which the fresh start of `recover` copies over it again), with other bytes and SIGKILL its
+  process, so the supervisor's restart finds "ready process artifact differs from the admitted
+  desired artifact" (`crates/ignite/src/apply/host/controller.rs:1506` to `:1541`), a later
+  reason no corrective resolves. Inferred from the code: the unit's first test confirms the
+  path; if the restart refuses before `Ready`, the reason is the failed start of 17.5, which is
+  also non-resolvable.
+- 17.5 gains one line after "Precedence of recovery reasons": "Since slice 18 `ignite recover`
+  (22.9) is the operator's way back to accepting plans."
+
+### 22.10 Diagnostics
+
+Section 8 gets a "Codes of slice 18" paragraph:
+
+| code | stage | meaning | fixture |
+|---|---|---|---|
+| E150 | check (`ignite-eval`) | a member whose machine subscribes to a signal and whose kind declares no `classify(self, sample: <element type>) -> Bool` | `e150_classify_missing` |
+| E151 | check (`ignite-eval`) | a signal the assembly runs and a machine subscribes to, whose element type is not an outcome type (22.3) | `e151_undecodable_element` |
+
+Changed: E120 loses the text "unknown good outcome" (an unknown predicate is E003); E109 also
+checks `classify` (fixture `e109_classify_signature`, row 34); E126 is unchanged, and the
+version bump makes `e126_journal_mismatch` hit its existing version branch (row 6).
+`fixtures_match_expected` (`crates/ignite/tests/plan.rs:431`) includes `e15`. Exit codes of `ignite host`, `inspect` and
+`recover` are those of 17.1; no new code for them.
+
+### 22.11 Stale points
+
+| # | where | stale text | resolution, by whom |
+|---|---|---|---|
+| S1 | `docs/vision.md` §7 T4 | ends at slice 13 (slice 17 adds E140 to E149) | add "E150 to E159: slice 18 (F5)"; U8 |
+| S2 | 16.6, 16.8, 16.9, 16.10 | `ProbeAttempt` as the reducers' payload, `satisfies`, the latency-derived slot | one forward line each to 22.3; U1 |
+| S3 | 16.17 table, E120 row | "an unknown `good` outcome" | forward line to 22.10; U1 |
+| S4 | `crates/ignite/src/run/probe.rs:4`, `live.rs` doc comments | decode "by the signal's element type" (F4) | true after U1; the comments name `observations`; U1 |
+| S5 | `site/book/src/{design/contracts.md,design/index.md,design/intent.md,guide/operate.md,reference/std/contract.md,reference/std/sli.md,reference/std/control.md,reference/std/index.md,reference/std/telnet.md}`, `site/index.html`, the doc comment at `crates/ignite/src/lib.rs:755` | `good = "…"`, `satisfies`, the `ProbeAttempt` payloads of `AttemptDone`, `Emitted` and `Emit` | the predicate form; `site::` passes; U1 |
+| S6 | `docs/design.md` §11.3 | `good = "prompt_received_before_timeout"` | unchanged (direction, T2); an X-row in `docs/vision.md` §6; U8 |
+| S7 | `docs/layering.md` | outcome names in the `std.sli` row | updated; U1 (`std.sli`) |
+| S8 | 17.5 | no path beyond `inspect` | the line of 22.9; U5 |
+| S9 | `examples/todo/todo.ignite:7` | "kept in memory" | the comment of 22.4, including the drain-window limit of 22.2; U4 |
+| S10 | `AGENTS.md` layout and commands | no `ignite recover`, `examples/todo/health.ignite`, durable todo, `Sample`/`Verdict` | rows; U8 |
+| S11 | README and `site/` wording (review R6) | any sentence that says a check or a build proves a contract holds at run time | reworded to "states and measures"; U8 |
+| S12 | `docs/vision.md` §3 invariant 6 | the hook names `machine` and `validate` | add `classify`; U8 |
+
+### 22.12 Decisions
+
+Each has a default the units follow unless the steering session says otherwise.
+
+| # | decision | options | default and why |
+|---|---|---|---|
+| D1 | how a probe kind outside `std/` names its outcome type, and how `good` becomes typed | A: generic contract kinds with `good: fn(T) -> Bool`, a `classify` hook, the driver decodes by the signal's element type and classifies at routing; B: the probe prints the names of the predicates that hold, `good` stays `Text`; C: a builtin `Signal<T>.decode(Text) -> Option<T>` and a closure in `Evaluator`; D: a closed outcome per probe kind in `std` | A: the predicate is checked against the probe's type at compile time, the reducers stay non-generic (O39) and need no decode in Ignite; B keeps `good` untyped; C needs a decode on both backends for code only the evaluator runs; D breaks row 8 |
+| D2 | the Telnet outcomes | A: two named predicates with the old names, declarations lose their quotes; B: keep `Text` beside `fn` | A: a field has one type; the names and meanings stay |
+| D3 | old run journals | A: `ignite-journal/0.2`, a 0.1 journal is E126; B: keep 0.1 | A: the payloads changed; reading 0.1 as 0.2 would be E127 at an arbitrary record instead of a clear refusal |
+| D4 | where the todo's data lives | A: memory store as authority, one file per todo version, lazy monotone load; B: a todo-owned server kind that loads in `main`; C: a durable `Store` in the substrate | A: no new substrate code, no std field of fn type with a default, correct under concurrent requests (row 13); C needs a per-type encoding on both backends, later |
+| D5 | supervising an HTTP service | settled by slice 17 (21.18): `std`'s `HttpServer` has `recovery`, `rollout` and `machine` | — |
+| D6 | hosting a `Store` resource | A: implicitly, as a capability (21.3); B: a new binding `processState()` | A: a store lives in its creator's process; B adds vocabulary that says nothing new |
+| D7 | the data directory's path | A: relative `todo-data`, `create = true`, against the working directory of the process that starts `todod`; B: absolute; C: a `flag` | A, with the host recording its working directory (`<state>/workdir`, row 33) so that a host started elsewhere is refused instead of opening an empty directory: B is not portable and C is not passed by `run` or `apply` (21.16 Q1) |
+| D8 | detecting a corrupt record | A: the existing SHA-256 chain, plus a `status.json` anchor; B: a length frame per record (format 0.2); C: both | A: the chain already detects any changed byte; a length frame adds nothing the newline does not, and neither detects a cut at a boundary, which the anchor does for `state` records |
+| D9 | a torn last record | A: drop it and journal `journalRepaired`; B: refuse to start | A: a torn record was never synced, so the host never acted on it; the record makes the drop visible |
+| D10 | an altered record or a detected cut | A: refuse to start, exit 3, report offline; B: truncate to the last good record and continue | A: B could drop a synced acceptance and start the operation a second time |
+| D11 | the way out of a non-resolvable recovery | A: `ignite recover` stops all owned instances and restarts the committed revision; B: move the state aside; C: admit a corrective with `--force` | A: it keeps history and ownership and proves every instance ended before anything starts; C would act on the premise 17.5 says no longer holds |
+| D12 | the "before" of the apply cycle | A: the terminal design on both trees, the todo after only; B: no before | A: the todo cannot be applied at the base (F8, F9, F10) |
+| D13 | the probe's HTTP request | A: written by hand in the example; B: a client role in `std.protocol.http` | A: a client role is a protocol change outside the slice (R13) |
+| D14 | the slot of an emission | A: carried in `Sample` from the scheduler; B: `at - latency` | A: the outcome type need not have a latency |
+
+### 22.13 Work split
+
+| unit | story | owns | depends on | first failing test | rows |
+|---|---|---|---|---|---|
+| U0 | `story:slice-18-contract` | this section, the section-8 paragraph, `docs/slice18-review.md` | — | — | — |
+| U1 | `story:typed-probe-outcomes` | `std/sli.ignite`, `std/control.ignite`, `std/contract.ignite`, the doc comments of `std/protocol/telnet.ignite`; `crates/ignite/src/run/{engine,live,probe,replay}.rs`; the driver call sites in `crates/ignite/src/lib.rs` (`run`, `replay`, the doc comment at `:755`) and `crates/ignite/src/apply/revision.rs` (the loaded modules, 22.3); `hook_signature` in `crates/ignite-types/src/typer/system.rs` and fixture `e109_classify_signature` (row 34); the fixture `e126_journal_mismatch` and its test in `run.rs` (row 6); `crates/ignite-eval/src/{model,validate}.rs` (E150, E151, `classify` discovery); `REDUCER_EVALUATOR` in `crates/ignite/src/apply/plan.rs`; `examples/terminal/terminal.design.ignite`; the goldens `terminal.design.model.json` and `terminal.design.explain.Terminal.reachable.txt`; the contract declarations in `crates/ignite/tests/apply_transition.rs` and `fixtures/control_trace.ignite`; the readers of a signal's `received` in `crates/ignite/tests/run.rs` and `tools/ignite-perf/src/readiness.rs`; fixtures `e150_*`, `e151_*`, the `e15` filter in `plan.rs`; S2 to S5, S7 (`std.sli`) | U0 | the test "the prompt outcomes are predicates" in `std/sli.ignite` | 1 to 7, 29, 30, 34 |
+| U2 | `story:store-hosted` | `implicit_host` in `crates/ignite-eval/src/resolve.rs`; fixture `store_hosted.ignite` and `plan::store_is_hosted_by_its_server` appended to `crates/ignite/tests/plan.rs` | U0 | `plan::store_is_hosted_by_its_server` | 10 |
+| U3 | `story:host-journal-integrity` | `crates/ignite/src/apply/host/journal.rs` (repair record, anchor, line numbers, revision-journal check, unit tests), `crates/ignite/src/apply/host/mod.rs` (start: the repair, the revision-journal check before `verify_history`, the `workdir` record of row 33), `inspect` and `describe` in `crates/ignite/src/apply/mod.rs`; `crates/ignite/tests/apply_integrity.rs` and its `mod` line | U0 | `apply::host::journal::tests::an_altered_record_names_its_index` | 23, 24, 33; unit level of 20 to 22 |
+| U4 | `story:durable-todo-service` | `examples/todo/todo.ignite`, `examples/todo/health.ignite`; `crates/ignite/tests/todo.rs`; the golden `todo.model.json`; S9 | U1, U2, slice 17 | `todo::rust::todos_survive_sigkill` | 9 (check), 11 to 15 |
+| U5 | `story:apply-recovery-way-out` | `ignite recover` in `crates/ignite/src/main.rs`; the client `recover` in `crates/ignite/src/apply/mod.rs`; the `recover` operation in `crates/ignite/src/apply/host/{transport,admission,controller,recovery}.rs`; `crates/ignite/tests/apply_way_out.rs` and its `mod` line; the 17.5 line (S8) | U3 | `apply_way_out::rust_operator_recover_returns_the_host_to_accepting_plans` | 25, 26 |
+| U6 | `story:slice-18-fault-matrix` | `crates/ignite/tests/slice18.rs` and its `mod` line; helpers it needs in `crates/ignite/tests/common/apply.rs` (added, none changed) | U4, U5 | `slice18::llvm::todo_survives_sigkill_and_a_rollout` | 16 to 22 |
+| U7 | `story:apply-cycle-timing` | mode `apply-cycle` in `tools/ignite-perf/src/` (22.15) and its `self-check` case | U4 | `ignite-perf self-check` naming `apply-cycle` | 28 (mode) |
+| U8 | `story:slice-18-records` | `docs/performance/18/`, `AGENTS.md`, `STATUS.md`, `PLAN.md`, `docs/vision.md` (S1, S6, S12), README and `site/` wording (S10, S11) | U6, U7 | — (records) | 27, 28, 32 |
+
+Rows 8 and 31 belong to every unit.
+
+Order: W1 U0; W2 U1, U2, U3; W3 U4, U5; W4 U6, U7; W5 U8.
+
+Shared files:
+
+- W2: U1 and U2 both touch `ignite-eval`, in different files (`model.rs`, `validate.rs` against
+  `resolve.rs`); U1 alone edits `crates/ignite/tests/plan.rs`'s filter, U2 appends one test to
+  the end of that file (merge order U1 then U2, or a trivial append conflict). U3 edits
+  `crates/ignite/src/apply/host/{journal,mod}.rs`, `apply/mod.rs` and
+  `crates/ignite/tests/main.rs` (one `mod` line); U1 edits `apply/plan.rs` and
+  `apply/revision.rs`, which U3 does not touch. U1 edits the contract declaration in
+  `apply_transition.rs`, the readers and the E126 test in `run.rs`, `crates/ignite/src/lib.rs`
+  and the design goldens; U2 and U3 touch no golden.
+- W3: U4 owns `examples/todo/` and `todo.rs`, and rewrites `todo.model.json`;
+  U5 owns `apply/host/{transport,admission,
+  controller,recovery}.rs`, `apply/mod.rs` (after U3 merged), `main.rs` (CLI) and its test
+  file. No file is shared.
+- W4: U6 owns `slice18.rs` and appends to `common/apply.rs`; U7 owns `tools/ignite-perf/`.
+  Only U6 adds a `mod` line to `crates/ignite/tests/main.rs` in W4; in W3 only U5 does, in W2
+  only U3.
+
+Rules: one integration-test binary per crate (`AGENTS.md`). Each unit's commit names the rows of
+22.0 it makes pass. The story ids above are the contract's names; all but
+`story:slice-18-contract` and `story:apply-recovery-way-out` are new, and the steering session
+creates them; U0 does not edit the store.
+
+### 22.14 Placeholder arms
+
+None: U1 changes the reducers and the driver together, and every other unit adds behaviour
+behind tests that fail first. Between U1 and U4 no system in the repository has a probe kind
+outside `std/`; rows 1 to 7 hold with the Telnet probe alone.
+
+### 22.15 Gate time and build time
+
+Method of 21.14 (18.18, section 15.1) through `tools/ignite-perf`. "Before" is a `git archive`
+copy of the slice base, "after" the closed tree, each with its own `CARGO_TARGET_DIR`. One cold
+gate per tree, then three interleaved warm passes; a pair whose two 1-minute loads differ by more
+than 5 is dropped; medians of pair ratios beside absolute medians.
+
+Units: those of 18.18, plus:
+
+- `todod` and `health` builds, per target and profile, fresh `--out` and `--target-dir`,
+  `SCCACHE_RECACHE=1` (mode `programs`; `health` after only), and the ratio LLVM dev / Rust dev
+  of `todod` in each tree (row 27).
+- The apply cycle (new mode `apply-cycle`, U7): in a temporary working directory, `ignite host`
+  running and revision 1 of the system applied; then per sample: change one response literal of
+  the server (for the todo the `/health` body, for the terminal one command's reply), `ignite plan
+  --for-apply --target <t>` (which builds the artifact), `ignite apply`, until the replaced server
+  answers the new text. Recorded split: plan (build included), apply until `completed`, first
+  answer. Per target, 5 samples per tree after one discarded warm-up; units `apply-cycle-
+  terminal-<target>` (both trees) and `apply-cycle-todo-<target>` (after only, D12).
+
+A unit that rises over 10 % gets a measured cause or the record labels the cause inferred. No
+baseline moves. The apply suites stay the slice-13 exception. Records: a "Slice 18" paragraph
+in `AGENTS.md`'s gate-time section; raw records, logs and scripts under
+`docs/performance/18/`.
+
+### 22.16 Open questions
+
+| # | question | default |
+|---|---|---|
+| Q1 | Is `rolling(5 minutes)` the window the example should carry? | yes for the example, so that row 16 runs in a test; a real deployment declares its own |
+| Q2 | Should old `ignite-journal/0.1` journals be converted? | no: `--fresh` (16.3) starts a new journal; history stays readable as a file |
+| Q3 | Should the new instance of a rollout wait for the old one's last write? | no in this slice (22.2); a durable store with cross-process locking is D4 C's |
+| Q4 | Does `ignite recover` need a confirmation flag? | no: it refuses whatever it cannot prove (row 26) and journals what it did |
+| Q5 | Should `healthy` also bound latency? | no: `ThresholdCompliance` with a two-argument predicate is the form for that; the example keeps one contract |
+
+### 22.17 Resolution of the review
+
+`docs/slice18-review.md` (28 findings at the contract's first draft) is resolved in this text as
+follows.
+
+| finding | resolution |
+|---|---|
+| R1 (blocker) | row 8 greps `crates/*/src`, `std` and `tools/*/src` only; tests and goldens may name the example; the epic line is reworded by the steering session |
+| R2 (blocker) | row 16 forces failed attempts between good ones and requires `Compliant`, `InsufficientEvidence`, `Compliant`, `Violated` |
+| R3 (blocker) | row 25 expects exit 2 `host has an active or unresolved operation` for the corrective and exit 1 for a retry; F16 corrected |
+| R4 (blocker) | 22.3 states the single `std.control` typed program and decodes with the loaded modules by the element's module; `crates/ignite/src/lib.rs` and `apply/revision.rs` are U1's |
+| R5 | 22.9 stops every run driver before signalling; `recoverStarted` record; row 25 asserts no `Started` in between |
+| R6 | 22.2 states the drain-window loss plainly (S9, S10); rows 17 and 18 avoid it; Q3 |
+| R7 | the host records `<state>/workdir` and refuses another (row 33, U3, D7) |
+| R8 | E151 is an outcome-type policy, the decoder's set cited (22.3, 22.10, section 8) |
+| R9 | E151 uses `entries` and the subscriber rule, no binding variant name |
+| R10 | void after the rebase onto `f3abeb20`: slice 17 added the `HttpServer` fields and updated both goldens itself (21.18); U2 now owns only Store hosting |
+| R11 | `abandoned` declared with its retry answer (22.9); row 25 asserts it |
+| R12 | status line names the counts and this table |
+| R13 | sources cite 16.16 and 16.17 |
+| R14 | row 10's command uses `--` |
+| R15 | 22.6 cites `builtins.rs:297` and `validate.rs:509`; fallback dropped; imports are general std modules |
+| R16 | E109 covers `classify` (row 34, U1) |
+| R17 | 22.7 splits a read-only verifier from the repair; repair order and offline `pendingRepair` stated |
+| R18 | the check compares the compact encoding; it runs in `host/mod.rs` before `verify_history` |
+| R19 | E126 unchanged; row 6 names the existing text and adds `replay`; fixture and test are U1's |
+| R20 | S5 lists the missed pages and the `lib.rs:755` comment |
+| R21 | row 16 names `<copy>/todo.ignite` and SIGCONT before `stop` |
+| R22 | row 14 says "with the same assertions" |
+| R23 | row 27 times `todod` alone, `health` separately |
+| R24 | 22.9 names `revisions/<r>/bin/<generation>/terminald` and cites `copy_into` |
+| R25 | decoding uses the observation of the scheduler's `signal`; the element text parses by the type printer's grammar within E151's set |
+| R26 | 22.4 creates `todos/<id>` before writing; 500 means "not durable" |
+| R27 | 22.2 records the D12 deviation for the steering session to carry into the epic |
+| R28 | 22.9 states that `recover` is repeatable and how a crash in it reconciles |
