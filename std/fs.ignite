@@ -127,3 +127,13 @@ test "a file over the read bound is refused" {
   files.write_file("big.bin", big)?
   assert refusal(files.read_file("big.bin")) == "path big.bin: larger than 16 MiB"
 }
+
+test "a legal 250-byte name is written" {
+  let files = Directory.temporary()?
+  var name = ""
+  while name.len() < 250 {
+    name = name.concat("n")
+  }
+  assert refusal(files.write_file(name, b"x")) == "ok"
+  assert files.read_file(name)? == b"x"
+}
