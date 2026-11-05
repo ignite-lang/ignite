@@ -351,19 +351,33 @@ pub fn store_effect(method: &str) -> Option<&'static str> {
 /// so user fns named `start`, `value`, `wait`, `kill` or `execute` stay
 /// free (21.11 D3).
 pub fn capability_effect(ty: &str, method: &str) -> Option<Option<&'static str>> {
-    let op = match (ty, method) {
-        ("Directory", "read_file" | "read_directory" | "absolute_path") => "read",
-        ("Directory", "write_file" | "create_directory" | "remove" | "remove_tree") => "write",
-        ("Launcher", "start" | "execute") => "launch",
-        ("ChildProcess", "wait") => "wait",
-        ("ChildProcess", "kill") => "kill",
-        ("ChildProcess", "id") => return Some(None),
-        ("Entropy", "random_bytes") => "draw",
-        ("Setting", "value") => "argument",
-        _ => return None,
-    };
-    Some(Some(op))
+    CAPABILITY_METHODS
+        .iter()
+        .find(|(t, m, _)| *t == ty && *m == method)
+        .map(|(_, _, op)| *op)
 }
+
+/// Every method of a capability type (`docs/slice.md` 21.8): its type, its
+/// name and the operation of its effect (`None` for the pure
+/// `ChildProcess.id`). [`capability_effect`] reads it, and `ignite-types`
+/// reads it for the standard-library modules a capability's signatures
+/// name.
+pub const CAPABILITY_METHODS: &[(&str, &str, Option<&str>)] = &[
+    ("Directory", "read_file", Some("read")),
+    ("Directory", "read_directory", Some("read")),
+    ("Directory", "absolute_path", Some("read")),
+    ("Directory", "write_file", Some("write")),
+    ("Directory", "create_directory", Some("write")),
+    ("Directory", "remove", Some("write")),
+    ("Directory", "remove_tree", Some("write")),
+    ("Launcher", "start", Some("launch")),
+    ("Launcher", "execute", Some("launch")),
+    ("ChildProcess", "wait", Some("wait")),
+    ("ChildProcess", "kill", Some("kill")),
+    ("ChildProcess", "id", None),
+    ("Entropy", "random_bytes", Some("draw")),
+    ("Setting", "value", Some("argument")),
+];
 
 /// The capability types of `docs/slice.md` 21.3: handles a system declares
 /// as resources (all but `ChildProcess`) and passes in values.
@@ -2039,10 +2053,16 @@ impl Checker {
             }
             _ => {}
         }
+        let receiver_ty = self.static_type(receiver);
+        if self.store_op(receiver_ty.as_ref(), &name.name).is_some() {
+            return self.arg_roots(std::iter::once(receiver).chain(args));
+        }
+        if self.map_read(receiver_ty.as_ref(), &name.name) {
+            return self.arg_roots(std::iter::once(receiver));
+        }
         if self.builtin_method(receiver, name) {
             return BTreeSet::new();
         }
-        let receiver_ty = self.static_type(receiver);
         if self
             .capability_op(receiver_ty.as_ref(), &name.name)
             .is_some()
@@ -2053,8 +2073,7 @@ impl Checker {
             .as_ref()
             .and_then(|ty| self.field_type(ty, &name.name))
             .is_some_and(|ty| ty.is_fn());
-        let store = self.store_op(receiver_ty.as_ref(), &name.name).is_some();
-        if store || (!fn_field && self.ufcs(receiver, name).is_some()) {
+        if !fn_field && self.ufcs(receiver, name).is_some() {
             self.arg_roots(std::iter::once(receiver).chain(args))
         } else {
             self.arg_roots(args.iter())
@@ -2930,6 +2949,14 @@ impl Checker {
             _ => return None,
         };
         Some(self.expand(&ty))
+    }
+
+    /// Whether `receiver.method(..)` on a receiver of declared type
+    /// `receiver` reads elements out of a `Map`: `get`, `remove` and `keys`,
+    /// whose results have the roots of the receiver (`docs/slice.md` 5.1).
+    fn map_read(&self, receiver: Option<&Type>, method: &str) -> bool {
+        matches!(receiver, Some(ty) if ty.name.name == "Map" && !self.type_params.contains("Map"))
+            && matches!(method, "get" | "remove" | "keys")
     }
 
     /// The effect operation of a `Store` method called on a receiver of

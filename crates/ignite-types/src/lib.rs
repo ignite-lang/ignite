@@ -251,6 +251,27 @@ impl Capability {
     }
 }
 
+/// The standard-library modules that builtin signatures name, by the type
+/// or owner name that reaches them: a name's statics (`Endpoint.of`:
+/// `std.net`), its methods when it is a capability (`ChildProcess.wait`:
+/// `std.process`, 21.5) and the methods of the capabilities those return
+/// (`Launcher.start`). A program that names the type loads the modules,
+/// though it imports nothing from them (`docs/slice.md` 16.22, 21.8). Only
+/// names with at least one module are keys.
+pub fn builtin_std_modules() -> BTreeMap<&'static str, std::collections::BTreeSet<String>> {
+    Capability::ALL
+        .into_iter()
+        .map(Capability::name)
+        .chain(
+            ignite_check::BUILTIN_STATICS
+                .iter()
+                .map(|(owner, _)| *owner),
+        )
+        .map(|name| (name, builtins::std_modules_of(name)))
+        .filter(|(_, modules)| !modules.is_empty())
+        .collect()
+}
+
 /// The three quantity types of `docs/slice.md` section 14.1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum QuantityKind {

@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ignite_syntax::ast::{
     AssemblyDecl, BinaryOp, BraceEntry, ComponentDecl, Expr, ExprKind, FieldInit, FnDecl, Ident,
-    Path, ResourceDecl, Span, SystemDecl,
+    Path, ResourceDecl, Span, SystemDecl, UnaryOp,
 };
 
 use super::{Typer, compatible, exposure, fn_ty};
@@ -109,6 +109,22 @@ pub(crate) fn capability_fields(kind: Capability) -> Vec<CapabilityField> {
 /// The resource kinds a system may declare, for E020.
 const RESOURCE_KINDS: &str =
     "`TcpListener`, `Store`, `Directory`, `Launcher`, `Entropy` or `Setting`";
+
+/// The value of an integer literal, negated or not (`-1`): a literal for
+/// E104 (`docs/slice.md` 21.9), so its range is checked.
+fn int_literal(expr: &Expr) -> Option<i64> {
+    match &expr.kind {
+        ExprKind::Int(n) => Some(*n),
+        ExprKind::Unary {
+            op: UnaryOp::Neg,
+            operand,
+        } => match &operand.kind {
+            ExprKind::Int(n) => n.checked_neg(),
+            _ => None,
+        },
+        _ => None,
+    }
+}
 
 /// Whether `flag` is `--` followed by one or more of `[a-z0-9-]`
 /// (`docs/slice.md` 21.6).
@@ -1499,8 +1515,9 @@ impl Typer<'_> {
                         );
                     }
                 }
-                (ExprKind::Int(n), "maximum_children") => {
-                    if !(1..=1024).contains(n) {
+                (_, "maximum_children") if int_literal(value).is_some() => {
+                    let n = int_literal(value).expect("guarded by the arm");
+                    if !(1..=1024).contains(&n) {
                         self.error(
                             "E104",
                             value.span,

@@ -1,6 +1,8 @@
 //! Signatures of the builtin methods and statics (`docs/slice.md` sections 6
 //! and 7), resolved by receiver type or owner name.
 
+use std::collections::BTreeSet;
+
 use crate::{Builtin, Capability, QuantityKind, Ty};
 
 /// A builtin's parameter types and result type, receiver excluded.
@@ -120,6 +122,73 @@ fn capability_method(kind: Capability, name: &str) -> Option<Sig> {
         }
         (Capability::Setting, "value") => sig(SettingValue, vec![], Ty::Text),
         _ => None,
+    }
+}
+
+/// [`crate::builtin_std_modules`]: the modules of the records and enums in
+/// the signature of each builtin static `name.f` in
+/// `ignite_check::BUILTIN_STATICS` and, when `name` is a capability, of each
+/// of its methods in `ignite_check::CAPABILITY_METHODS`; and the same for
+/// each capability those signatures name, transitively.
+pub(crate) fn std_modules_of(name: &str) -> BTreeSet<String> {
+    let mut modules = BTreeSet::new();
+    let mut pending: Vec<Capability> = Capability::from_name(name).into_iter().collect();
+    let statics = ignite_check::BUILTIN_STATICS
+        .iter()
+        .filter(|(owner, _)| *owner == name)
+        .filter_map(|(owner, f)| static_fn(owner, f));
+    for sig in statics {
+        for ty in sig.params.iter().chain(std::iter::once(&sig.ret)) {
+            named_in(ty, &mut modules, &mut pending);
+        }
+    }
+    let mut seen = BTreeSet::new();
+    while let Some(kind) = pending.pop() {
+        if !seen.insert(kind) {
+            continue;
+        }
+        let sigs = ignite_check::CAPABILITY_METHODS
+            .iter()
+            .filter(|(ty, _, _)| *ty == kind.name())
+            .filter_map(|(_, method, _)| capability_method(kind, method));
+        for sig in sigs {
+            for ty in sig.params.iter().chain(std::iter::once(&sig.ret)) {
+                named_in(ty, &mut modules, &mut pending);
+            }
+        }
+    }
+    modules
+}
+
+/// Adds the module of every record and enum `ty` names to `modules`, and
+/// every capability it names to `capabilities`.
+fn named_in(ty: &Ty, modules: &mut BTreeSet<String>, capabilities: &mut Vec<Capability>) {
+    let inner: Vec<&Ty> = match ty {
+        Ty::Record(q) | Ty::Enum(q) => {
+            modules.insert(q.module.clone());
+            Vec::new()
+        }
+        Ty::GenericRecord(q, items) | Ty::GenericEnum(q, items) => {
+            modules.insert(q.module.clone());
+            items.iter().collect()
+        }
+        Ty::List(t) | Ty::Option(t) | Ty::Store(t) | Ty::Signal(t) | Ty::Ref(Some(t)) => {
+            vec![&**t]
+        }
+        Ty::Result(a, b) | Ty::Map(a, b) => vec![&**a, &**b],
+        Ty::Fn(params, ret) | Ty::EffectFn(params, ret, _) => {
+            params.iter().chain(std::iter::once(&**ret)).collect()
+        }
+        Ty::Tuple(items) => items.iter().collect(),
+        Ty::Capability(kind) => {
+            capabilities.push(*kind);
+            Vec::new()
+        }
+        _ => Vec::new(),
+    };
+    modules.remove("");
+    for item in inner {
+        named_in(item, modules, capabilities);
     }
 }
 
@@ -259,5 +328,40 @@ pub(crate) fn log() -> Sig {
         builtin: Builtin::Log,
         params: vec![Ty::Text],
         ret: Ty::Unit,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every method `ignite-check` gives an effect has a signature here, so
+    /// [`std_modules_of`] reads every capability signature.
+    #[test]
+    fn every_capability_method_has_a_signature() {
+        for (ty, method, _) in ignite_check::CAPABILITY_METHODS {
+            let kind = Capability::from_name(ty).expect("a capability type");
+            assert!(
+                capability_method(kind, method).is_some(),
+                "{ty}.{method} has no builtin signature"
+            );
+        }
+    }
+
+    #[test]
+    fn builtin_signatures_name_process_and_net() {
+        let modules: Vec<(&str, Vec<String>)> = crate::builtin_std_modules()
+            .into_iter()
+            .map(|(name, modules)| (name, modules.into_iter().collect()))
+            .collect();
+        let process = vec!["std.process".to_string()];
+        assert_eq!(
+            modules,
+            [
+                ("ChildProcess", process.clone()),
+                ("Endpoint", vec!["std.net".to_string()]),
+                ("Launcher", process),
+            ]
+        );
     }
 }

@@ -399,7 +399,10 @@ may come from:
   from; an assignment `x = e` (or `x.f = e`) adds the roots of `e` to those of `x`, whatever
   the control flow, so a `var` assigned from two parameters needs effects on both; `l.push(e)`
   and `l.append(e)` add the roots of `e` to those of the local `l`;
-- `e.f`, `e[i]`, `e.copy()`, `e.at(i)`, `e.slice(a, b)` and `e?` have the roots of `e`;
+- `e.f`, `e[i]`, `e.copy()`, `e.at(i)`, `e.slice(a, b)` and `e?` have the roots of `e`; so
+  do the container reads that return an element on a receiver `e` of declared type `Map`:
+  `e.get(k)`, `e.remove(k)` and `e.keys()` (since slice 17: a `requires []` fn could otherwise
+  use a `Setting` or `Launcher` held in a `Map`);
   `a.concat(b)` has those of `a` and `b`;
 - a tuple, list literal or record literal has the roots of its elements or field values;
 - `if`, `match` and a block have the roots of every value they may produce: the last
@@ -410,8 +413,8 @@ may come from:
   payload, element or type argument; a type parameter or an unknown type may). This covers a
   user fn called by name or by UFCS (the receiver is an argument), pure or effectful,
   `requires []` included; a fn value or fn-typed field; a variant constructor (`Some(s)`); a
-  protocol role; and a `Store` method (receiver and arguments). A callee cannot launder a
-  parameter by returning it;
+  protocol role; and every `Store` method, `get`, `remove`, `values`, `update` and `upsert`
+  included (receiver and arguments). A callee cannot launder a parameter by returning it;
 - every other expression has no roots: literals, operators, the other builtin methods and the
   results of substrate operations. Such a value is owned by the function: a stream returned by
   `accept` or `TcpStream.connect` needs no effect for its own operations or for the calls it
@@ -3917,6 +3920,12 @@ Work:
 1. Frontend: a program's build, `check`, `plan`, `explain`, `run` and `test` load, check and
    type only the std modules it reaches. The reached set is:
    - the modules its files import, transitively;
+   - the modules whose records a builtin signature names, for each type or static owner a
+     loaded file spells (since slice 17): `std.process` for `Launcher` and `ChildProcess`
+     (`ChildExit`, `Invocation`), `std.net` for `Endpoint` (`Endpoint.of`), derived from
+     `ignite_check::CAPABILITY_METHODS`, `BUILTIN_STATICS` and the signatures of
+     `ignite-types` (`ignite_types::builtin_std_modules`); `child.wait()` in a module that
+     imports nothing from `std.process` reaches it;
    - the modules the compiler itself calls into for that command: `std.deploy` for
      assembly resolution (15.6), the kinds' modules for `K.main`, the reducers' modules for
      `ignite run`.
@@ -6698,7 +6707,7 @@ Fixture paths without a directory are under `crates/ignite/tests/fixtures/slice1
 | 27 | path literals checked | `cargo test -p ignite-types --test main fixtures::` | fixture `e140_path_leaves_root`: `files.read_file("../x")`, `files.write_file("/etc/x", ..)` and `files.read_directory("a/../..")` give exactly three E140; `files.read_file(name)` with a variable and `files.read_file("a/b")` give none | U1 |
 | 28 | layering | `cargo test -p ignite-check --test main layering::` | passes with rows for `std.fs` and `std.process` in `docs/layering.md` and in the test's table, both in the base layer | U1 |
 | 29 | no new dependency | `cargo tree -p ignite-io -e normal --prefix none \| sort -u` and `cargo tree -p ignite-io -e features` | the first lists the same crate set as at the base; the second shows `nix` with the added features `dir` and `poll` (the latter now outside `runner` too), recorded in the commit message that adds them | U1 |
-| 30 | names stay free | `ignite check` of every `std/` and `examples/` file; `cargo test -p ignite-check --test main fixtures::` | silent; `std/cli.ignite` still declares `Command` and `Argument`; the fixtures that declare a fn `start` (`valid_protocol`, `e013_spawn_not_effectful_call`) give their expected output unchanged; no `.expected` file mentions `value`, `wait`, `kill` or `execute` newly | every unit |
+| 30 | names stay free | `ignite check` of every `std/` and `examples/` file; `cargo test -p ignite-check --test main fixtures::` | silent; `std/cli.ignite` still declares `Command` and `Argument`; the fixtures that declare a fn `start` (`valid_protocol`, `e013_spawn_not_effectful_call`) give their expected output unchanged; no existing `.expected` file newly mentions `value`, `wait`, `kill` or `execute` | every unit |
 | 31 | the old resource error | `git diff --stat c539392 -- '*.expected'` at U1's merge | only files whose E020 text "expected `TcpListener` or `Store`" became the new text of 21.9, and the new fixtures, appear | U1 |
 | 32 | codegen revision | `git diff c539392 -- crates/ignite/src/apply/plan.rs`; `cargo test -p ignite --test main apply_admission::` | `CODEGEN_REVISION` differs from the base, bumped by U1 and again by U4; the admission tests pass | U1, U4 |
 | 33 | gate | `task gate` | exit 0 on the slice branch at the close | every unit |
@@ -7068,9 +7077,11 @@ Builtin statics, all test-only (E051 outside tests and test-only items):
 | `Entropy.new()` | `Entropy` |
 | `Setting.of(flag: Text, value: Text)` | `Setting` |
 
-Builtin methods: those of 21.3, with the signatures of 21.4 to 21.7. They are added to
-`BUILTIN_METHODS` and typed by receiver (`builtin_applies`); none is added to
-`EFFECTFUL_METHODS`.
+Builtin methods: those of 21.3, with the signatures of 21.4 to 21.7. They dispatch on the
+receiver's type and are not in `BUILTIN_METHODS` (D3): `ignite-check` finds them by the
+receiver's declared type in `CAPABILITY_METHODS` (type, method, effect operation), and
+`ignite-types` types them by the receiver's type; none is added to `EFFECTFUL_METHODS`. The
+std modules their signatures name are loaded with any file that names the type (16.22).
 
 Resource kinds: `Directory`, `Launcher`, `Entropy`, `Setting`, beside `TcpListener` and
 `Store`. The generated `main`'s order becomes: `run`; stores; settings and directory flags read

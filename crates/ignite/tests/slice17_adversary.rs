@@ -73,3 +73,13 @@ fn wait_without_import_builds_on_llvm() {
 fn wait_without_import_builds_on_rust() {
     assert_passes(&ignite_test("wait_without_import.ignite", "rust"));
 }
+
+/// The class of `wait_without_import`: `Endpoint.of`, a builtin static
+/// whose signature names `std.net.Endpoint`, in a module that imports
+/// nothing from `std.net`, on both targets.
+#[test]
+fn endpoint_without_import_builds_on_both_targets() {
+    for target in ["llvm", "rust"] {
+        assert_passes(&ignite_test("endpoint_without_import.ignite", target));
+    }
+}

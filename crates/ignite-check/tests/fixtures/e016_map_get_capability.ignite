@@ -1,0 +1,34 @@
+type Tools {
+  settings: Map<Text, Setting>
+}
+
+fn tool(settings: Map<Text, Setting>) -> Text requires [] = match settings.get("tool") {
+  Some(s) => {
+    let setting: Setting = s
+    setting.value()
+  }
+  None => ""
+}
+
+fn taken(settings: Map<Text, Setting>) -> Text requires [] = match settings.remove("tool") {
+  Some(s) => {
+    let setting: Setting = s
+    setting.value()
+  }
+  None => ""
+}
+
+fn nested(tools: Tools) -> Text requires [] = match tools.settings.get("tool") {
+  Some(s) => {
+    let setting: Setting = s
+    setting.value()
+  }
+  None => ""
+}
+
+fn first(settings: List<Setting>) -> Text requires [] {
+  let setting: Setting = settings.at(0)
+  return setting.value()
+}
+
+fn indexed(settings: List<Setting>) -> Text requires [] = settings[0].value()
