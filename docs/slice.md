@@ -2588,12 +2588,23 @@ The design 6.2 envelope's `machines`, `observations`, `artifacts`, `stateSchema`
 
 | rule | diagnostic |
 |---|---|
-| every resource and component of the system is a `bindings` key or in exactly one binding's `includes` | E110 when neither |
+| every resource and component of the system is a `bindings` key, in exactly one binding's `includes`, or a capability resource hosted implicitly (below) | E110 when none of the three |
 | no member is both a key and included, or included by two bindings | E111 |
 | `admits(binding, member)` returns `Some(reason)` for a key | E112 with that reason |
 | a binding's `includes` equals the components its member embeds (`ExecutableInfo.embedded`, 14.14 item 12) | E113, naming the missing or extra member |
 | contracts and policies are never keys | E112 (`admits` is not consulted) |
 
+- Implicit hosting (slice 17, 21.3): a capability resource (`Directory`, `Launcher`, `Entropy`,
+  `Setting`) belongs to the process of the member that creates it and needs no binding. One
+  that is neither a key nor included is hosted by the first declared executable component
+  whose `ExecutableInfo.resources` name it (its embedded components' included), with that
+  component's binding and `via` (the component itself when it is a key, else the key that
+  includes it); its entry is `{"binding": <the server's binding>, "member": "Studio.entropy",
+  "via": "Studio.server"}` and the model gains a `hosts` edge from `via` to it. `admits` is
+  not consulted for it, and E113 does not count it (`includes` names components only). A
+  capability resource no hosted executable creates is E110. A capability resource may still
+  be a key; `admits` then decides as for any key (`std.deploy.Binding` admits none, E112).
+  `TcpListener` and `Store` resources keep needing a key or an `includes`.
 - `assembly.resolution` lists one entry per resource and component, sorted by member id:
   `{"binding": <value>, "member": "Terminal.console", "via": "Terminal.server"}`, where `via`
   is the key whose binding hosts the member (the member itself when it is a key).
@@ -6787,6 +6798,12 @@ A capability is obtained in exactly two ways:
    receives it through a property, typically the `state` of an `HttpApp`.
 2. A test or test-only item creates one with a test-only constructor: `Directory.temporary()`,
    `Launcher.new()`, `Entropy.new()`, `Setting.of(flag, value)`. Anywhere else these are E051.
+
+A capability resource needs no deployment binding: it belongs to the process of the member
+that creates it, and an assembly's resolution hosts it there implicitly (15.6), so the studio
+below resolves under the standard `Deployment` with bindings for `Studio.ingress` and
+`Studio.server` only. A capability resource provisions nothing: only a `TcpListener` has a
+`provisioning` edge (16.14).
 
 There is no static that yields a capability outside tests, and no new ambient head: `process`
 stays the head of `process.exit` and `process.args` only. A handler of an `HttpApp<S>` can use a

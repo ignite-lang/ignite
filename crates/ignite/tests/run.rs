@@ -1223,6 +1223,49 @@ fn studio_defaults_runs() {
     }
 }
 
+/// 15.6 and 21.3: the studio under the standard `Deployment`, which binds
+/// only its listener and server, runs: its capability resources are
+/// hosted by the server's process without a binding, the member reads its
+/// setting's default, and `stop` exits 0.
+#[test]
+fn studio_under_the_standard_deployment_runs() {
+    let work = Path::new(env!("CARGO_TARGET_TMPDIR")).join("run-work-studio-deployment");
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(&work).unwrap();
+    let file = fixture("slice17/studio_deployment.ignite");
+    let mut run = Run::start_in(
+        &work,
+        &file,
+        "studio_deployment",
+        "llvm",
+        "studio-deployment",
+        &["--clock", "manual", "--port", "Studio.ingress=0"],
+    );
+    run.wait_event("Ready");
+    let status = run.status();
+    let port = status
+        .get("ports")
+        .and_then(|p| p.get("Studio.ingress"))
+        .and_then(Json::as_i64)
+        .unwrap_or_else(|| panic!("no port in {}", status.compact()));
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port as u16)).unwrap();
+    stream.set_read_timeout(Some(TIMEOUT)).unwrap();
+    write!(
+        stream,
+        "GET /tool HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let mut reply = String::new();
+    stream.read_to_string(&mut reply).unwrap();
+    assert!(reply.starts_with("HTTP/1.1 200"), "{reply}");
+    assert!(reply.ends_with("\r\n\r\n/bin/sh"), "{reply}");
+    assert!(work.join("workspace").is_dir(), "the root was not created");
+    let pids = run.pids();
+    let code = run.stop();
+    assert_eq!(code, 0, "stderr:\n{}", run.stderr());
+    assert_no_process_left(&pids);
+}
+
 /// Adversary (U4), row 26 and 21.6: the started member reaches the
 /// `Setting` without `default` only through a component it embeds; its
 /// generated `main` still creates the setting, so `ignite run` refuses the

@@ -324,6 +324,60 @@ fn only_a_listener_provisions_its_executable() {
     assert_eq!(provisioning, [("Studio.ingress", "Studio.server")]);
 }
 
+/// `docs/slice.md` 15.6: a capability resource needs no binding. Under the
+/// standard `Deployment`, which binds only the studio's listener and
+/// server, `ignite check` is silent and the resolution hosts each of the
+/// four capabilities via `Studio.server`, with the server's binding.
+#[test]
+fn capability_resources_are_hosted_by_their_members_process() {
+    let fixture = fixtures_dir().join("slice17/studio_deployment.ignite");
+    let fixture = fixture.to_str().unwrap();
+    assert_eq!(success(&ignite(&["check", fixture])), "");
+    let json = Json::parse(&success(&ignite(&["plan", fixture])));
+    let resolution: Vec<(&str, &str, &str)> = json.object()["assembly"].object()["resolution"]
+        .array()
+        .iter()
+        .map(Json::object)
+        .map(|entry| {
+            (
+                entry["member"].string(),
+                entry["via"].string(),
+                entry["binding"].object()["variant"].string(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        resolution,
+        [
+            ("Studio.entropy", "Studio.server", "NativeProcess"),
+            ("Studio.files", "Studio.server", "NativeProcess"),
+            ("Studio.ingress", "Studio.ingress", "LocalSocket"),
+            ("Studio.server", "Studio.server", "NativeProcess"),
+            ("Studio.tool", "Studio.server", "NativeProcess"),
+            ("Studio.tools", "Studio.server", "NativeProcess"),
+        ]
+    );
+    let hosted: Vec<&str> = json.object()["edges"]
+        .array()
+        .iter()
+        .map(Json::object)
+        .filter(|edge| edge["kind"].string() == "hosts")
+        .map(|edge| {
+            assert_eq!(edge["from"].string(), "Studio.server");
+            edge["to"].string()
+        })
+        .collect();
+    assert_eq!(
+        hosted,
+        [
+            "Studio.entropy",
+            "Studio.files",
+            "Studio.tool",
+            "Studio.tools"
+        ]
+    );
+}
+
 #[test]
 fn explain_matches_the_goldens_of_15_8() {
     for (path, golden) in [
