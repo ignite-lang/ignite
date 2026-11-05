@@ -579,6 +579,34 @@ fn overflow_fails_the_same_everywhere() {
     }
 }
 
+/// `Text` and `Bytes` equality against literals (`match` arms, constant
+/// patterns, `==` and `!=`), which the LLVM target lowers inline: empty
+/// values, literals shorter and longer than the value, equal lengths with
+/// other bytes, non-ASCII text and nested patterns pass on both targets in
+/// dev and in release (`fixtures/tests/text_eq.ignite`).
+#[test]
+fn text_equality_against_literals() {
+    let file = fixture("text_eq.ignite");
+    on_both_targets(|target| {
+        for profile in [&[][..], &["--release"][..]] {
+            let mut args = vec![file.as_str()];
+            args.extend(profile.iter().copied());
+            let run = ignite_test(Chain::Fixtures, target, &args);
+            assert_eq!(
+                run.status, 0,
+                "{target} {profile:?}: {}\n{}",
+                run.stdout, run.stderr
+            );
+            assert!(
+                run.stdout
+                    .contains("test result: ok. 8 passed; 0 failed; 0 filtered out"),
+                "{target} {profile:?}: {}",
+                run.stdout
+            );
+        }
+    });
+}
+
 /// Both native targets use one preparation while retaining their normal
 /// runner selection, reports and failure status. A Rust failure must not
 /// prevent the LLVM suite from executing.
