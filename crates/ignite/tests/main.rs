@@ -36,6 +36,7 @@ mod slice10_llvm;
 mod slice16;
 mod slice17;
 mod slice17_adversary;
+mod slice18_adversary;
 mod slice9;
 mod syntax;
 mod terminal;

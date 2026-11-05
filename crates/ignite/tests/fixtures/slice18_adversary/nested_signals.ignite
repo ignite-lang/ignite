@@ -1,0 +1,89 @@
+package nested_signals
+
+import std.deploy.Member
+import std.control.{Machine, Evaluator}
+import std.sli.{MissingData, rolling}
+
+// E150 and E151 (`docs/slice.md` 22.3) are defined on the signals a
+// member's machine subscribes to, `ModelMachine::subscribes`, which takes
+// every signal inside a property (a list here). `S.w` subscribes to
+// `S.q.counts` and its kind declares no `classify`; `S.v` subscribes to
+// `S.p.beats`, which carries a fn.
+
+type Ticker {
+  interval: Duration = 10 seconds
+  beats: Signal<fn() -> Int>
+}
+
+fn Ticker.main(self: Ticker) -> Result<Unit, IoError> = Ok(Unit)
+
+type Counter {
+  interval: Duration = 10 seconds
+  counts: Signal<Int>
+}
+
+fn Counter.main(self: Counter) -> Result<Unit, IoError> = Ok(Unit)
+
+type Watch {
+  signals: List<Signal<Int>>
+}
+
+fn Watch.machine(self: Watch, id: Text) -> Machine = Machine.Evaluate(Evaluator {
+  id = "{id}.evaluator"
+  contract = id
+  signal = "S.q.counts"
+  target = 99%
+  window = rolling(1 hour)
+  missing_data = MissingData.InsufficientEvidence
+  minimum_completeness = 90%
+})
+
+type Vet {
+  signals: List<Signal<fn() -> Int>>
+}
+
+fn Vet.machine(self: Vet, id: Text) -> Machine = Machine.Evaluate(Evaluator {
+  id = "{id}.evaluator"
+  contract = id
+  signal = "S.p.beats"
+  target = 99%
+  window = rolling(1 hour)
+  missing_data = MissingData.InsufficientEvidence
+  minimum_completeness = 90%
+})
+
+fn Vet.classify(self: Vet, sample: fn() -> Int) -> Bool = sample() > 0
+
+enum Host {
+  Runner
+}
+
+fn runner() -> Host = Runner
+
+fn admits(binding: Host, member: Member) -> Option<Text> = None
+
+fn includes(binding: Host) -> List<Ref> = []
+
+fn entries(binding: Host) -> List<Text> = match binding {
+  Runner => ["main"]
+}
+
+type Plan {
+  system: SystemRef
+  bindings: Map<Ref, Host>
+}
+
+system S {
+  component p: Ticker {}
+  component q: Counter {}
+  contract w: Watch { signals = [q.counts] }
+  contract v: Vet { signals = [p.beats] }
+}
+
+assembly a: Plan {
+  system = S
+  bindings = {
+    S.p = runner()
+    S.q = runner()
+  }
+}
