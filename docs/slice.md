@@ -3151,6 +3151,10 @@ Ports:
 - `--port Terminal.ingress=0` binds a free port.
 - The driver reads the port from the child's `listening on <address>:<port>` line (6.1) and
   pins it for every restart of that member.
+- A member's listener, the resource whose `--port RESOURCE=PORT`, pinned port and endpoint
+  the driver uses, is the first `TcpListener` its executable declares
+  (`ExecutableInfo.resources`), the one the generated `main` applies `--port` to on both
+  targets, not the first by resource id (slice 17).
 
 `WorkstationExecutable` members (A10):
 

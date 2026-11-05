@@ -1651,6 +1651,7 @@ pub fn run(file: &Path, options: &RunOptions) -> Result<i32, Error> {
         ports: options.ports.iter().cloned().collect(),
         declared,
         executables,
+        first_listeners: run::live::first_listeners(loaded.types()),
         generation,
         start_at,
         builder,

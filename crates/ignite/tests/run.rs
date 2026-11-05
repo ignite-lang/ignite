@@ -1266,6 +1266,47 @@ fn studio_under_the_standard_deployment_runs() {
     assert_no_process_left(&pids);
 }
 
+/// 16.3: with two `TcpListener`s in one member, `--port` is passed for the
+/// first the member declares (`Duo.zeta`), which is the one the generated
+/// `main` applies it to, although `Duo.alpha` sorts first.
+#[test]
+fn the_first_declared_listener_takes_the_port() {
+    let port = std::net::TcpListener::bind(("127.0.0.1", 0))
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let pinned = format!("Duo.zeta={port}");
+    let mut run = Run::start(
+        &fixture("slice17/two_listeners.ignite"),
+        "two_listeners",
+        "llvm",
+        "two-listeners",
+        &["--clock", "manual", "--port", &pinned],
+    );
+    run.wait_event("Ready");
+    let status = run.status();
+    let ports = status
+        .get("ports")
+        .unwrap_or_else(|| panic!("no ports in {}", status.compact()))
+        .compact();
+    assert_eq!(ports, format!(r#"{{"Duo.zeta":{port}}}"#));
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    stream.set_read_timeout(Some(TIMEOUT)).unwrap();
+    write!(
+        stream,
+        "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let mut reply = String::new();
+    stream.read_to_string(&mut reply).unwrap();
+    assert!(reply.ends_with("\r\n\r\nzeta"), "{reply}");
+    let pids = run.pids();
+    let code = run.stop();
+    assert_eq!(code, 0, "stderr:\n{}", run.stderr());
+    assert_no_process_left(&pids);
+}
+
 /// Adversary (U4), row 26 and 21.6: the started member reaches the
 /// `Setting` without `default` only through a component it embeds; its
 /// generated `main` still creates the setting, so `ignite run` refuses the
