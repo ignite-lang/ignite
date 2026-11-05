@@ -497,6 +497,31 @@ test "numbers compare by their structure, not their value" {
   assert parse("1e2")? == parse("1e2")?
 }
 
+// ---- adversary cases of story json-decimals ---------------------------------
+
+// The rule: a token without fraction or exponent is a `Number` when it fits
+// `Int`, not when it has at most 18 digits. Every 19-digit integer in
+// i64 range fits; the first ones beyond it stay decimals.
+test "an integer of 19 digits that fits Int is a number" {
+  assert parse("9223372036854775807")? == Number(9223372036854775807)
+  assert parse("-9223372036854775807")? == Number(-9223372036854775807)
+  assert parse("-9223372036854775808")? == Number(-9223372036854775807 - 1)
+  assert parse("1000000000000000000")? == Number(1000000000000000000)
+  assert parse(r#"{"id":4611686018427387904}"#)?.int("id") == Some(4611686018427387904)
+  assert parse("9223372036854775808")? == Decimal("9223372036854775808")
+  assert parse("-9223372036854775809")? == Decimal("-9223372036854775809")
+  assert parse("9999999999999999999")? == Decimal("9999999999999999999")
+}
+
+// The rule: a parse/print round trip is byte-identical. `-0` is a valid
+// token (RFC 8259 section 6) and must come back as `-0`, also inside a
+// container.
+test "minus zero round trips byte-identical" {
+  for token in ["-0", "[-0]", r#"{"x":-0}"#] {
+    assert encode(parse(token)?) == token
+  }
+}
+
 test "nesting is limited to 64 levels" {
   assert failure("[".repeat(64) + "1" + "]".repeat(64)) == None
   assert failure("[".repeat(65) + "1" + "]".repeat(65)) == at("nested deeper than 64", 64)

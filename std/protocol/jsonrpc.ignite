@@ -858,3 +858,16 @@ test "a request whose id is a fraction or has 20 digits is answered under that i
     r#"{"jsonrpc":"2.0","id":12345678901234567890,"result":[]}"#
   ]
 }
+
+// ---- adversary cases of story json-decimals ---------------------------------
+
+// An integer id that fits Int is a `NumberId`, whatever its digit count;
+// an id of `-0` is answered as sent, not as `0`.
+test "an id of 19 digits that fits Int is a NumberId and -0 comes back as sent" {
+  assert decode(r#"{"jsonrpc":"2.0","id":9223372036854775807,"method":"m"}"#) == Ok(Call(Request { id = NumberId(9223372036854775807), method = "m", params = None }))
+  let (client, server) = connected()?
+  spawn JsonRpc.serve(server, JsonRpcLimits {}, echo_app())
+  write_message(client, r#"{"jsonrpc":"2.0","id":-0,"method":"echo","params":[]}"#)?
+  _ = client.close()
+  assert replies_of(client)? == [r#"{"jsonrpc":"2.0","id":-0,"result":[]}"#]
+}
