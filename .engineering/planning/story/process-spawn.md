@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:process-spawn
 kind: story
-status: active
+status: implemented
 title: Start and supervise child processes
 summary: Spawn a child with arguments, directory and timeout, capture stdout, stderr and status, kill it
 relations:
@@ -19,10 +19,11 @@ scope:
   path: crates/ignite/tests/slice17.rs
 - confidence: cited
   path: std/process.ignite
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T05:11:07Z", actor: "human:timo", revision: 7}
 - {from: "proposed", to: "active", at: "2026-11-05T05:11:07Z", actor: "human:timo", revision: 8}
+- {from: "active", to: "implemented", at: "2026-11-05T06:27:17Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: process-spawn
 
