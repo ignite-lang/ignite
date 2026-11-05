@@ -367,6 +367,19 @@ fn out_dir(package: &str, options: &BuildOptions) -> PathBuf {
         .unwrap_or_else(|| Path::new("target").join("ignite").join(package))
 }
 
+/// Exit 3 for a runtime archive that is not a file, naming both ways out:
+/// build the archive (with the test runner, which `ignite test` also
+/// needs) and pass it, or build with the Rust target, which needs none.
+pub(crate) fn missing_runtime(runtime: PathBuf) -> Error {
+    Error::Io {
+        path: runtime,
+        error: std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "runtime archive not found: the LLVM target, the default, links it; build it in the ignite source tree with `cargo build -p ignite-rt --features runner` and pass it with --runtime, or build with --target rust",
+        ),
+    }
+}
+
 /// Write the IR of `generated`, compile it for the target of `options`
 /// ([`target`]) and link each executable. The runtime archive is checked
 /// against the target before clang compiles anything.
@@ -383,10 +396,7 @@ pub(crate) fn link(
         .clone()
         .unwrap_or_else(crate::default_runtime_path);
     if !runtime.is_file() {
-        return Err(Error::Io {
-            path: runtime,
-            error: std::io::Error::new(std::io::ErrorKind::NotFound, "runtime archive not found"),
-        });
+        return Err(missing_runtime(runtime));
     }
     check_runtime_target(&runtime, &spec.triple)?;
     let bin_dir = out.join("bin");

@@ -194,6 +194,9 @@ impl Case {
             "--out",
             out.to_str().unwrap(),
         ];
+        if !extra.contains(&"--target") {
+            args.extend(["--target", "rust"]);
+        }
         args.extend_from_slice(extra);
         self.cli(label, &args, 0);
         let plan = Plan::parse(&Json::parse(&read(&out)).unwrap()).expect("saved apply envelope");
