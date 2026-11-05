@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:random-bytes
 kind: story
-status: draft
+status: implemented
 title: Secure random bytes
 summary: Obtain OS random bytes through a tracked effect, for per-launch tokens
 relations:
@@ -13,7 +13,11 @@ scope:
   path: crates/ignite-io/src/entropy.rs
 - confidence: cited
   path: crates/ignite-rt/src/entropy.rs
-revision: 4
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T05:11:07Z", actor: "human:timo", revision: 5}
+- {from: "proposed", to: "active", at: "2026-11-05T05:11:07Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-05T06:27:17Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: random-bytes
 

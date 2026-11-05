@@ -1,0 +1,87 @@
+fn consume(xs: List<Text>) -> Int {
+  var ys = xs
+  ys.push("x")
+  ys.len()
+}
+
+fn grow(xs: List<Text>) -> List<Text> {
+  var ys = xs
+  ys.push("g")
+  ys
+}
+
+fn tail_then_read(xs: List<Text>, pick: Bool) -> (List<Text>, Int) {
+  return match xs {
+    [_, ..rest] => {
+      let chosen = if pick { rest } else { [] }
+      (chosen, rest.len())
+    }
+    [] => ([], 0)
+  }
+}
+
+fn consumed_then_read(xs: List<Text>) -> (Int, Int) {
+  return match xs {
+    [_, ..rest] => {
+      let n = consume(rest)
+      (n, rest.len())
+    }
+    [] => (0, 0)
+  }
+}
+
+fn var_then_read(xs: List<Text>) -> (List<Text>, List<Text>) {
+  return match xs {
+    [_, ..rest] => {
+      var next = rest
+      next.push("v")
+      (next, rest)
+    }
+    [] => ([], [])
+  }
+}
+
+fn moved_at_last_use(xs: List<Text>) -> List<Text> {
+  return match xs {
+    [_, ..rest] => grow(rest)
+    [] => []
+  }
+}
+
+fn loop_grow(xss: List<List<Text>>) -> Int {
+  var total = 0
+  for xs in xss {
+    match xs {
+      [_, ..rest] => {
+        total = total + grow(rest).len()
+      }
+      [] => {}
+    }
+  }
+  total
+}
+
+test "a rest tail of an if is read afterwards" {
+  let (chosen, n) = tail_then_read(["a", "b", "c"], true)
+  assert chosen == ["b", "c"]
+  assert n == 2
+}
+
+test "a rest passed to a consuming fn is read afterwards" {
+  assert consumed_then_read(["a", "b", "c"]) == (3, 2)
+}
+
+test "a rest copied into a var keeps its value" {
+  let (next, rest) = var_then_read(["a", "b"])
+  assert next == ["b", "v"]
+  assert rest == ["b"]
+}
+
+test "a rest moved at its last use" {
+  assert moved_at_last_use(["a", "b"]) == ["b", "g"]
+  assert moved_at_last_use([]) == []
+}
+
+test "a rest moved in a loop" {
+  assert loop_grow([["a", "b"], [], ["c"]]) == 2 + 1
+}

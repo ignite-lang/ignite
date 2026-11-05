@@ -1,0 +1,5 @@
+e040_expression_call_argument.ignite:7:36: error[E040]: type mismatch: expected `Int`, found `Text`
+e040_expression_call_argument.ignite:9:39: error[E040]: type mismatch: expected `Int`, found `Bool`
+e040_expression_call_argument.ignite:11:53: error[E040]: type mismatch: expected `Int`, found `Text`
+e040_expression_call_argument.ignite:13:36: error[E040]: type mismatch: expected `Int`, found `List<Int>`
+e040_expression_call_argument.ignite:15:23: error[E040]: type mismatch: expected `Text`, found `Int`

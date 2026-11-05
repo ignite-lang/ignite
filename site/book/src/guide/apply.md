@@ -37,12 +37,14 @@ In a second terminal, save a plan and apply it:
 
 ```sh
 ignite plan examples/terminal/terminal.design.ignite --assembly local \
-  --for-apply --state .ignite/terminal --out terminal.apply.json
+  --for-apply --state .ignite/terminal --out terminal.apply.json \
+  --runtime target/debug/libignite_rt.a
 ignite apply terminal.apply.json --state .ignite/terminal
 ```
 
 `plan --for-apply` needs the running host: it reads the host's base revision and ownership,
-checks the source and builds the artifacts, without changing anything that runs. The saved
+checks the source and builds the artifacts, on the LLVM target unless `--target rust` is
+given, without changing anything that runs. The saved
 plan (`ignite-apply-plan/0.1`) lists one action per member. For the first apply every member
 is an `add`:
 

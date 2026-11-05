@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T02:27:10Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-16-records",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on d208141e: 1009 passed, 0 failed, 10 ignored; 211 inline per target",
+    "reference": "https://github.com/ignite-lang/ignite/pull/30"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T04:50:02Z",
+  "actor": "human:timo",
+  "artifact": "story:llvm-default-target",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 013c33dd: EXIT=0; cargo 1014 passed, 0 failed, 10 ignored; inline 211 passed per target",
+    "reference": "https://github.com/ignite-lang/ignite/pull/32"
+  }
+}

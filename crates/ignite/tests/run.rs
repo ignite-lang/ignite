@@ -93,6 +93,18 @@ impl Run {
     /// <shared> --json --settle 1 s` plus `args`; the design file also gets
     /// `--port Terminal.ingress=0`.
     fn start(file: &Path, program: &str, target: &str, name: &str, args: &[&str]) -> Run {
+        Run::start_in(&repo(), file, program, target, name, args)
+    }
+
+    /// [`Run::start`] in the working directory `dir`.
+    fn start_in(
+        dir: &Path,
+        file: &Path,
+        program: &str,
+        target: &str,
+        name: &str,
+        args: &[&str],
+    ) -> Run {
         let state = state(name);
         let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
         command
@@ -113,7 +125,7 @@ impl Run {
         }
         command.args(args);
         command
-            .current_dir(repo())
+            .current_dir(dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -1113,4 +1125,221 @@ fn pinned_port_survives_a_restart() {
     assert_eq!(code, 0, "stderr:\n{}", run.stderr());
     assert_no_process_left(&pids);
     run.replay();
+}
+
+// ---- slice 17 (U4): E142 and settings under ignite run ----
+
+/// Row 26 of `docs/slice.md` 21.0: `ignite run` passes no setting values,
+/// so a started member with a `Setting` without `default` is E142, exit 2,
+/// before anything starts (no state directory).
+#[test]
+fn a_setting_without_default_is_e142() {
+    let state = state("e142");
+    let output = run_fixture_diagnostic(
+        "slice17/e142_setting_without_default.ignite",
+        &["--state", state.to_str().unwrap()],
+    );
+    let stderr = text(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(output.stdout.is_empty());
+    assert_eq!(stderr.matches("E142").count(), 1, "{stderr}");
+    assert!(stderr.contains("`Bench.tool`"), "{stderr}");
+    assert!(!stderr.contains("Bench.mode"), "{stderr}");
+    compare(
+        &fixture("slice17/e142_setting_without_default.expected"),
+        &stderr,
+    );
+    assert!(!state.exists(), "the run created its state");
+}
+
+/// Row 26: the studio with `default = "/bin/sh"` runs under `ignite run`
+/// in a working directory of its own: its member reads the default, the
+/// relative root is created there, `status` shows the member running,
+/// `stop` exits 0, and the repository gains no file.
+#[test]
+fn studio_defaults_runs() {
+    let work = Path::new(env!("CARGO_TARGET_TMPDIR")).join("run-work-studio-defaults");
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(&work).unwrap();
+    let file = fixture("slice17/studio_defaults.ignite");
+    let mut run = Run::start_in(
+        &work,
+        &file,
+        "studio_defaults",
+        "llvm",
+        "studio-defaults",
+        &["--clock", "manual", "--port", "Studio.ingress=0"],
+    );
+    run.wait_event("Ready");
+    let status = run.status();
+    let supervisor = status
+        .get("machines")
+        .and_then(Json::as_array)
+        .and_then(|machines| {
+            machines
+                .iter()
+                .find(|m| m.get("id").and_then(Json::as_str) == Some("Studio.server.supervisor"))
+        })
+        .unwrap_or_else(|| panic!("no supervisor in {}", status.compact()))
+        .compact();
+    assert!(supervisor.contains("Running"), "{supervisor}");
+    let port = status
+        .get("ports")
+        .and_then(|p| p.get("Studio.ingress"))
+        .and_then(Json::as_i64)
+        .unwrap_or_else(|| panic!("no port in {}", status.compact()));
+    let get = |path: &str| {
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port as u16)).unwrap();
+        stream.set_read_timeout(Some(TIMEOUT)).unwrap();
+        write!(
+            stream,
+            "GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        )
+        .unwrap();
+        let mut reply = String::new();
+        stream.read_to_string(&mut reply).unwrap();
+        reply
+    };
+    let tool = get("/tool");
+    assert!(tool.starts_with("HTTP/1.1 200"), "{tool}");
+    assert!(tool.ends_with("\r\n\r\n/bin/sh"), "{tool}");
+    let canonical = std::fs::canonicalize(work.join("workspace")).expect("the root was created");
+    let root = get("/root");
+    assert!(
+        root.ends_with(&format!("\r\n\r\n{}", canonical.display())),
+        "{root}"
+    );
+    let pids = run.pids();
+    let code = run.stop();
+    assert_eq!(code, 0, "stderr:\n{}", run.stderr());
+    assert_no_process_left(&pids);
+    for place in [
+        repo().join("workspace"),
+        repo().join("crates/ignite/workspace"),
+        fixtures_dir().join("workspace"),
+        fixtures_dir().join("slice17/workspace"),
+    ] {
+        assert!(!place.exists(), "{} was created", place.display());
+    }
+}
+
+/// 15.6 and 21.3: the studio under the standard `Deployment`, which binds
+/// only its listener and server, runs: its capability resources are
+/// hosted by the server's process without a binding, the member reads its
+/// setting's default, and `stop` exits 0. The server is the standard
+/// `HttpServer`, whose `machine` hook (16.16) is the supervisor the run
+/// steps.
+#[test]
+fn studio_under_the_standard_deployment_runs() {
+    let work = Path::new(env!("CARGO_TARGET_TMPDIR")).join("run-work-studio-deployment");
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(&work).unwrap();
+    let file = fixture("slice17/studio_deployment.ignite");
+    let mut run = Run::start_in(
+        &work,
+        &file,
+        "studio_deployment",
+        "llvm",
+        "studio-deployment",
+        &["--clock", "manual", "--port", "Studio.ingress=0"],
+    );
+    run.wait_event("Ready");
+    let status = run.status();
+    let supervisor = status
+        .get("machines")
+        .and_then(Json::as_array)
+        .and_then(|machines| {
+            machines
+                .iter()
+                .find(|m| m.get("id").and_then(Json::as_str) == Some("Studio.server.supervisor"))
+        })
+        .unwrap_or_else(|| panic!("no supervisor in {}", status.compact()))
+        .compact();
+    assert!(supervisor.contains("Running"), "{supervisor}");
+    let port = status
+        .get("ports")
+        .and_then(|p| p.get("Studio.ingress"))
+        .and_then(Json::as_i64)
+        .unwrap_or_else(|| panic!("no port in {}", status.compact()));
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port as u16)).unwrap();
+    stream.set_read_timeout(Some(TIMEOUT)).unwrap();
+    write!(
+        stream,
+        "GET /tool HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let mut reply = String::new();
+    stream.read_to_string(&mut reply).unwrap();
+    assert!(reply.starts_with("HTTP/1.1 200"), "{reply}");
+    assert!(reply.ends_with("\r\n\r\n/bin/sh"), "{reply}");
+    assert!(work.join("workspace").is_dir(), "the root was not created");
+    let pids = run.pids();
+    let code = run.stop();
+    assert_eq!(code, 0, "stderr:\n{}", run.stderr());
+    assert_no_process_left(&pids);
+}
+
+/// 16.3: with two `TcpListener`s in one member, `--port` is passed for the
+/// first the member declares (`Duo.zeta`), which is the one the generated
+/// `main` applies it to, although `Duo.alpha` sorts first.
+#[test]
+fn the_first_declared_listener_takes_the_port() {
+    let port = std::net::TcpListener::bind(("127.0.0.1", 0))
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let pinned = format!("Duo.zeta={port}");
+    let mut run = Run::start(
+        &fixture("slice17/two_listeners.ignite"),
+        "two_listeners",
+        "llvm",
+        "two-listeners",
+        &["--clock", "manual", "--port", &pinned],
+    );
+    run.wait_event("Ready");
+    let status = run.status();
+    let ports = status
+        .get("ports")
+        .unwrap_or_else(|| panic!("no ports in {}", status.compact()))
+        .compact();
+    assert_eq!(ports, format!(r#"{{"Duo.zeta":{port}}}"#));
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    stream.set_read_timeout(Some(TIMEOUT)).unwrap();
+    write!(
+        stream,
+        "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let mut reply = String::new();
+    stream.read_to_string(&mut reply).unwrap();
+    assert!(reply.ends_with("\r\n\r\nzeta"), "{reply}");
+    let pids = run.pids();
+    let code = run.stop();
+    assert_eq!(code, 0, "stderr:\n{}", run.stderr());
+    assert_no_process_left(&pids);
+}
+
+/// Adversary (U4), row 26 and 21.6: the started member reaches the
+/// `Setting` without `default` only through a component it embeds; its
+/// generated `main` still creates the setting, so `ignite run` refuses the
+/// system with one E142 naming the setting and the started member.
+#[test]
+fn adversary_e142_through_an_embedded_component() {
+    let state = state("adv-e142-embedded");
+    let output = run_fixture_diagnostic(
+        "slice17/adversary_e142_embedded.ignite",
+        &["--state", state.to_str().unwrap()],
+    );
+    let stderr = text(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(output.stdout.is_empty());
+    assert_eq!(stderr.matches("E142").count(), 1, "{stderr}");
+    assert!(
+        stderr.contains(
+            "setting `Bench.tool` (`--tool`) has no `default`, and `Bench.runner` uses it"
+        ),
+        "{stderr}"
+    );
+    assert!(!state.exists(), "the run created its state");
 }

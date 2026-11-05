@@ -1,0 +1,1 @@
+e016_child_effect.ignite:2:10: error[E016]: missing effect `child.kill` for `child.kill`; add it to the `requires` of `stop`

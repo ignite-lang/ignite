@@ -6,8 +6,8 @@
 //! The invocations of one target form two chains ([`Chain`]), each with
 //! an output directory, a cargo target directory and a lock of its own,
 //! so a Rust build (cargo) and an LLVM build (clang) overlap and so do the
-//! chains. The fixtures chain builds `slow`, `basics`, `targets`, `builtins`
-//! and `store` into one executable once per target ([`fixtures_run`]) and
+//! chains. The fixtures chain builds `slow`, `basics`, `targets`, `builtins`,
+//! `store` and `fields` into one executable once per target ([`fixtures_run`]) and
 //! runs the filter, list and overflow invocations over the same files,
 //! which cargo keeps incremental. The groups chain holds the invocations
 //! that change the project's shape (a second group `tests-2`, a standard
@@ -28,12 +28,13 @@ const TARGETS: [&str; 2] = ["rust", "llvm"];
 /// The fixture programs of one test executable, in command-line order:
 /// `slow` before `basics` shows the order is the command line's, not the
 /// alphabet's.
-const FIXTURES: [&str; 5] = [
+const FIXTURES: [&str; 6] = [
     "slow.ignite",
     "basics.ignite",
     "targets.ignite",
     "builtins.ignite",
     "store.ignite",
+    "fields.ignite",
 ];
 
 /// The invocations of one target that share an output directory and a
@@ -144,8 +145,8 @@ fn without_time(report: &str) -> String {
 }
 
 /// The run of the [`FIXTURES`] in one executable with `--timeout 1` on
-/// `target`, once per test binary: nine tests read it. `slow`'s `never
-/// ends` is the test the timeout kills; the other 23 finish well inside
+/// `target`, once per test binary: ten tests read it. `slow`'s `never
+/// ends` is the test the timeout kills; the other 28 finish well inside
 /// a second.
 fn fixtures_run(target: &str) -> &'static Run {
     static RUNS: [OnceLock<Run>; 2] = [OnceLock::new(), OnceLock::new()];
@@ -158,7 +159,7 @@ fn counts_results_and_failures() {
         let run = fixtures_run(target);
         let out = &run.stdout;
         assert_eq!(run.status, 1, "{target}: {out}\n{}", run.stderr);
-        assert!(out.starts_with("running 24 tests\n"), "{target}: {out}");
+        assert!(out.starts_with("running 29 tests\n"), "{target}: {out}");
         for line in [
             "test fixtures.basics/arithmetic passes ... ok",
             "test fixtures.basics/int differs ... FAILED",
@@ -166,7 +167,7 @@ fn counts_results_and_failures() {
             "test fixtures.basics/index out of range panics ... FAILED",
             "test fixtures.basics/output hidden on success ... ok",
             "test fixtures.basics/tcp echo through a task ... ok",
-            "test result: FAILED. 13 passed; 11 failed; 0 filtered out; finished in ",
+            "test result: FAILED. 18 passed; 11 failed; 0 filtered out; finished in ",
         ] {
             assert!(out.contains(line), "{target}: no `{line}` in\n{out}");
         }
@@ -251,7 +252,7 @@ fn filter_exact_passing_and_none() {
         assert!(
             exact
                 .stdout
-                .contains("test result: FAILED. 0 passed; 1 failed; 23 filtered out;"),
+                .contains("test result: FAILED. 0 passed; 1 failed; 28 filtered out;"),
             "{target}: {}",
             exact.stdout
         );
@@ -259,14 +260,14 @@ fn filter_exact_passing_and_none() {
         assert_eq!(passing.status, 0, "{target}: {}", passing.stdout);
         assert_eq!(
             without_time(&passing.stdout),
-            "running 1 test\ntest fixtures.basics/arithmetic passes ... ok\n\ntest result: ok. 1 passed; 0 failed; 23 filtered out",
+            "running 1 test\ntest fixtures.basics/arithmetic passes ... ok\n\ntest result: ok. 1 passed; 0 failed; 28 filtered out",
             "{target}"
         );
         let none = fixtures_test(target, &["no such test"]);
         assert_eq!(none.status, 0, "{target}");
         assert_eq!(
             without_time(&none.stdout),
-            "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 24 filtered out",
+            "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 29 filtered out",
             "{target}"
         );
     });
@@ -434,6 +435,27 @@ fn store_upsert_is_atomic_on_both_targets() {
     });
 }
 
+/// Fields of list elements on both targets (`fixtures/tests/fields.ignite`):
+/// read, passed by reference and compared (the Rust target borrows the
+/// field from the list, `ignite-rustgen` `element_field`), nested, read from
+/// a `Store`, read before the element or its list changes, and matched.
+#[test]
+fn fields_of_elements_on_both_targets() {
+    on_both_targets(|target| {
+        let out = &fixtures_run(target).stdout;
+        for name in [
+            "a field of an element is read, passed by reference and compared",
+            "nested fields of elements",
+            "a field of a Store read",
+            "the element changes after its field is read",
+            "a match on a field of an element",
+        ] {
+            let line = format!("test fixtures.fields/{name} ... ok\n");
+            assert!(out.contains(&line), "{target}: no `{line}` in\n{out}");
+        }
+    });
+}
+
 /// `Endpoint.of` on both targets (`docs/slice.md` 16.13, 16.9): the
 /// `prober` of `fixtures/tests/builtins.ignite` fails without a `--ref`
 /// binding and prints the endpoint of one.
@@ -555,6 +577,34 @@ fn overflow_fails_the_same_everywhere() {
             reports[0].0
         );
     }
+}
+
+/// `Text` and `Bytes` equality against literals (`match` arms, constant
+/// patterns, `==` and `!=`), which the LLVM target lowers inline: empty
+/// values, literals shorter and longer than the value, equal lengths with
+/// other bytes, non-ASCII text and nested patterns pass on both targets in
+/// dev and in release (`fixtures/tests/text_eq.ignite`).
+#[test]
+fn text_equality_against_literals() {
+    let file = fixture("text_eq.ignite");
+    on_both_targets(|target| {
+        for profile in [&[][..], &["--release"][..]] {
+            let mut args = vec![file.as_str()];
+            args.extend(profile.iter().copied());
+            let run = ignite_test(Chain::Fixtures, target, &args);
+            assert_eq!(
+                run.status, 0,
+                "{target} {profile:?}: {}\n{}",
+                run.stdout, run.stderr
+            );
+            assert!(
+                run.stdout
+                    .contains("test result: ok. 8 passed; 0 failed; 0 filtered out"),
+                "{target} {profile:?}: {}",
+                run.stdout
+            );
+        }
+    });
 }
 
 /// Both native targets use one preparation while retaining their normal

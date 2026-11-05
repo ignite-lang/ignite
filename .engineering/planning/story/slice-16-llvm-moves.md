@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-16-llvm-moves
 kind: story
-status: active
+status: implemented
 title: LLVM target moves at last use
 summary: Own a parameter iff consumed, move places at last use and lower expression calls on the LLVM target
 relations:
@@ -18,10 +18,11 @@ scope:
   path: crates/ignite/tests/slice16.rs
 - confidence: cited
   path: docs/llvm.md
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:03:30Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-04T07:03:30Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-05T00:57:41Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: slice-16-llvm-moves
 

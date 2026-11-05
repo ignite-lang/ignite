@@ -1,0 +1,1 @@
+e043_expression_call_arity.ignite:3:24: error[E043]: wrong number of arguments to this expression: expected 1, found 2

@@ -1,0 +1,101 @@
+SIZE 08:50:16 load 20.56 baseline-99647132de58=0G candidate-884d6b191a77=0G total=2G
+SIZE 08:50:36 load 21.08 baseline-99647132de58=0G candidate-884d6b191a77=0G total=2G
+SIZE 08:50:56 load 19.88 baseline-99647132de58=0G candidate-884d6b191a77=0G total=2G
+SIZE 08:51:16 load 21.37 baseline-99647132de58=0G candidate-884d6b191a77=0G total=2G
+SIZE 08:51:36 load 21.14 baseline-99647132de58=0G candidate-884d6b191a77=0G total=2G
+SIZE 08:51:57 load 22.11 baseline-99647132de58=0G candidate-884d6b191a77=0G total=2G
+SIZE 08:52:17 load 35.50 baseline-99647132de58=0G candidate-884d6b191a77=0G total=2G
+SIZE 08:52:37 load 30.84 baseline-99647132de58=0G candidate-884d6b191a77=0G total=2G
+SIZE 08:52:57 load 28.01 baseline-99647132de58=0G candidate-884d6b191a77=0G total=2G
+SIZE 08:53:17 load 27.66 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:53:37 load 25.79 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:53:57 load 23.43 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:54:17 load 25.28 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:54:37 load 28.40 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:54:57 load 23.54 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:55:17 load 21.39 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:55:37 load 22.44 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:55:57 load 24.03 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:56:17 load 25.02 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:56:38 load 29.17 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:56:58 load 34.15 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:57:18 load 36.35 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:57:38 load 38.92 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:57:58 load 38.40 baseline-99647132de58=1G candidate-884d6b191a77=0G total=3G
+SIZE 08:58:18 load 40.63 baseline-99647132de58=1G candidate-884d6b191a77=0G total=4G
+SIZE 08:58:39 load 40.71 baseline-99647132de58=1G candidate-884d6b191a77=0G total=4G
+SIZE 08:58:59 load 39.85 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 08:59:19 load 36.30 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 08:59:39 load 37.31 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 08:59:59 load 33.92 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:00:19 load 31.48 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:00:39 load 26.51 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:00:59 load 22.89 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:01:19 load 26.10 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:01:39 load 29.66 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:02:00 load 36.71 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:02:20 load 45.59 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:02:40 load 54.00 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:03:01 load 47.19 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:03:21 load 54.14 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:03:41 load 46.95 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:04:01 load 39.53 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:04:21 load 38.08 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:04:41 load 34.11 baseline-99647132de58=2G candidate-884d6b191a77=0G total=4G
+SIZE 09:05:01 load 29.12 baseline-99647132de58=2G candidate-884d6b191a77=0G total=5G
+SIZE 09:05:21 load 24.76 baseline-99647132de58=3G candidate-884d6b191a77=0G total=5G
+SIZE 09:05:42 load 22.53 baseline-99647132de58=4G candidate-884d6b191a77=0G total=6G
+SIZE 09:06:04 load 19.59 baseline-99647132de58=4G candidate-884d6b191a77=0G total=6G
+SIZE 09:06:24 load 16.96 baseline-99647132de58=4G candidate-884d6b191a77=0G total=7G
+SIZE 09:06:44 load 15.78 baseline-99647132de58=5G candidate-884d6b191a77=0G total=7G
+SIZE 09:07:04 load 14.26 baseline-99647132de58=5G candidate-884d6b191a77=0G total=7G
+SIZE 09:07:25 load 13.08 baseline-99647132de58=6G candidate-884d6b191a77=0G total=8G
+SIZE 09:07:48 load 14.58 baseline-99647132de58=6G candidate-884d6b191a77=0G total=8G
+SIZE 09:08:08 load 14.95 baseline-99647132de58=6G candidate-884d6b191a77=0G total=8G
+SIZE 09:08:28 load 18.87 baseline-99647132de58=6G candidate-884d6b191a77=0G total=8G
+CLEAN_BASELINE 09:08:29 /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s17u6/perf17/builds/baseline-99647132de58/
+     Removed 13788 files, 8.1GiB total
+SIZE 09:08:51 load 19.33 candidate-884d6b191a77=0G total=1G
+SIZE 09:09:13 load 18.07 candidate-884d6b191a77=0G total=2G
+SIZE 09:09:33 load 16.56 candidate-884d6b191a77=0G total=2G
+SIZE 09:09:54 load 15.32 candidate-884d6b191a77=0G total=2G
+SIZE 09:10:14 load 14.44 candidate-884d6b191a77=1G total=2G
+SIZE 09:10:34 load 13.57 candidate-884d6b191a77=1G total=2G
+SIZE 09:10:54 load 16.05 candidate-884d6b191a77=1G total=2G
+SIZE 09:11:14 load 16.22 candidate-884d6b191a77=1G total=3G
+SIZE 09:11:34 load 16.38 candidate-884d6b191a77=1G total=3G
+SIZE 09:11:54 load 13.57 candidate-884d6b191a77=1G total=3G
+SIZE 09:12:14 load 14.57 candidate-884d6b191a77=1G total=3G
+SIZE 09:12:34 load 18.71 candidate-884d6b191a77=1G total=3G
+SIZE 09:12:54 load 29.02 candidate-884d6b191a77=1G total=3G
+SIZE 09:13:14 load 31.02 candidate-884d6b191a77=1G total=3G
+SIZE 09:13:34 load 31.84 candidate-884d6b191a77=1G total=3G
+SIZE 09:13:54 load 30.22 candidate-884d6b191a77=1G total=3G
+SIZE 09:14:14 load 24.59 candidate-884d6b191a77=1G total=3G
+SIZE 09:14:34 load 22.86 candidate-884d6b191a77=1G total=3G
+SIZE 09:14:54 load 20.04 candidate-884d6b191a77=2G total=3G
+SIZE 09:15:14 load 16.59 candidate-884d6b191a77=2G total=3G
+SIZE 09:15:34 load 15.63 candidate-884d6b191a77=2G total=3G
+SIZE 09:15:54 load 13.85 candidate-884d6b191a77=2G total=3G
+SIZE 09:16:14 load 11.91 candidate-884d6b191a77=2G total=3G
+SIZE 09:16:34 load 9.63 candidate-884d6b191a77=2G total=4G
+SIZE 09:16:54 load 9.78 candidate-884d6b191a77=2G total=4G
+SIZE 09:17:14 load 8.75 candidate-884d6b191a77=2G total=4G
+SIZE 09:17:35 load 9.00 candidate-884d6b191a77=2G total=4G
+SIZE 09:17:55 load 10.00 candidate-884d6b191a77=2G total=4G
+SIZE 09:18:15 load 11.08 candidate-884d6b191a77=2G total=4G
+SIZE 09:18:35 load 11.48 candidate-884d6b191a77=3G total=4G
+SIZE 09:18:55 load 12.98 candidate-884d6b191a77=3G total=5G
+SIZE 09:19:15 load 12.23 candidate-884d6b191a77=3G total=5G
+SIZE 09:19:35 load 11.36 candidate-884d6b191a77=4G total=6G
+SIZE 09:19:55 load 10.41 candidate-884d6b191a77=5G total=7G
+SIZE 09:20:15 load 9.19 candidate-884d6b191a77=5G total=7G
+SIZE 09:20:35 load 8.19 candidate-884d6b191a77=5G total=7G
+SIZE 09:20:55 load 9.53 candidate-884d6b191a77=6G total=8G
+SIZE 09:21:15 load 10.04 candidate-884d6b191a77=7G total=8G
+SIZE 09:21:35 load 10.06 candidate-884d6b191a77=7G total=9G
+SIZE 09:21:56 load 8.98 baseline-99647132de58=0G candidate-884d6b191a77=7G total=9G
+SIZE 09:22:16 load 9.49 baseline-99647132de58=0G candidate-884d6b191a77=7G total=9G
+SIZE 09:22:36 load 8.26 baseline-99647132de58=0G candidate-884d6b191a77=7G total=10G
+SIZE 09:22:56 load 7.43 baseline-99647132de58=0G candidate-884d6b191a77=7G total=10G
+WATCH_END 09:23:16

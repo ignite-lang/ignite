@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T01:45:16Z",
+  "actor": "human:timo",
+  "artifact": "story:llvm-runtime-hot-paths",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on d3d51d2d (PR 29, inlined literal text equality); round 6 conversions in PR 22 (f9bac4ce)",
+    "reference": "https://github.com/ignite-lang/ignite/pull/29"
+  }
+}

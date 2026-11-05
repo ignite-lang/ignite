@@ -1,0 +1,11 @@
+type HttpApp<S> {
+  state: S
+  handle: fn(state: S, request: Text) -> Text requires [state.*]
+}
+
+fn handle(state: Store<Int>, request: Text) -> Text {
+  let now = Clock.monotonic()
+  return request
+}
+
+fn app(counts: Store<Int>) -> HttpApp<Store<Int>> = HttpApp { state = counts, handle = handle }

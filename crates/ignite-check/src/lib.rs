@@ -124,6 +124,11 @@ pub const BUILTIN_TYPES: &[&str] = &[
     "Protocol",
     "Module",
     "Exposure",
+    "Directory",
+    "Launcher",
+    "ChildProcess",
+    "Entropy",
+    "Setting",
 ];
 
 /// Static builtin calls written `Type.name(...)`.
@@ -146,6 +151,10 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Clock", "monotonic"),
     ("Endpoint", "of"),
     ("Pipe", "pair"),
+    ("Directory", "temporary"),
+    ("Launcher", "new"),
+    ("Entropy", "new"),
+    ("Setting", "of"),
 ];
 
 /// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
@@ -215,7 +224,7 @@ pub const BUILTIN_FUNCTIONS: &[&str] = &["log", "module"];
 
 /// Modules whose names are the builtins: importing from them only checks
 /// that the name is a builtin.
-pub const SUBSTRATE_MODULES: &[&str] = &["std.net", "std.io"];
+pub const SUBSTRATE_MODULES: &[&str] = &["std.net", "std.io", "std.fs", "std.process"];
 
 /// The protocol roles and their parameter counts.
 pub const PROTOCOL_ROLES: &[(&str, usize)] = &[("serve", 2), ("connect", 1)];
@@ -263,6 +272,10 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Clock", "monotonic", 0),
     ("Endpoint", "of", 1),
     ("Pipe", "pair", 0),
+    ("Directory", "temporary", 0),
+    ("Launcher", "new", 0),
+    ("Entropy", "new", 0),
+    ("Setting", "of", 2),
 ];
 
 /// Builtin statics that are effectful substrate operations.
@@ -331,9 +344,54 @@ pub fn store_effect(method: &str) -> Option<&'static str> {
     }
 }
 
+/// The effect a method of a capability type (`docs/slice.md` 21.3) needs on
+/// its receiver: `Some(Some(op))` for an effectful method, `Some(None)` for
+/// the pure `ChildProcess.id`, `None` for a name that is no method of the
+/// type. Checked by the receiver's declared type, as `Store` methods are,
+/// so user fns named `start`, `value`, `wait`, `kill` or `execute` stay
+/// free (21.11 D3).
+pub fn capability_effect(ty: &str, method: &str) -> Option<Option<&'static str>> {
+    CAPABILITY_METHODS
+        .iter()
+        .find(|(t, m, _)| *t == ty && *m == method)
+        .map(|(_, _, op)| *op)
+}
+
+/// Every method of a capability type (`docs/slice.md` 21.8): its type, its
+/// name and the operation of its effect (`None` for the pure
+/// `ChildProcess.id`). [`capability_effect`] reads it, and `ignite-types`
+/// reads it for the standard-library modules a capability's signatures
+/// name.
+pub const CAPABILITY_METHODS: &[(&str, &str, Option<&str>)] = &[
+    ("Directory", "read_file", Some("read")),
+    ("Directory", "read_directory", Some("read")),
+    ("Directory", "absolute_path", Some("read")),
+    ("Directory", "write_file", Some("write")),
+    ("Directory", "create_directory", Some("write")),
+    ("Directory", "remove", Some("write")),
+    ("Directory", "remove_tree", Some("write")),
+    ("Launcher", "start", Some("launch")),
+    ("Launcher", "execute", Some("launch")),
+    ("ChildProcess", "wait", Some("wait")),
+    ("ChildProcess", "kill", Some("kill")),
+    ("ChildProcess", "id", None),
+    ("Entropy", "random_bytes", Some("draw")),
+    ("Setting", "value", Some("argument")),
+];
+
+/// The capability types of `docs/slice.md` 21.3: handles a system declares
+/// as resources (all but `ChildProcess`) and passes in values.
+pub const CAPABILITY_TYPES: &[&str] = &[
+    "Directory",
+    "Launcher",
+    "ChildProcess",
+    "Entropy",
+    "Setting",
+];
+
 /// The heads of ambient effects (`stdin.read`, `net.connect`): no
 /// parameter may take one of these names (E056).
-pub const AMBIENT_HEADS: &[&str] = &["stdin", "stdout", "process", "net"];
+pub const AMBIENT_HEADS: &[&str] = &["stdin", "stdout", "process", "net", "clock"];
 
 /// The ambient effect an effectful builtin static needs.
 pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
@@ -1995,16 +2053,27 @@ impl Checker {
             }
             _ => {}
         }
+        let receiver_ty = self.static_type(receiver);
+        if self.store_op(receiver_ty.as_ref(), &name.name).is_some() {
+            return self.arg_roots(std::iter::once(receiver).chain(args));
+        }
+        if self.map_read(receiver_ty.as_ref(), &name.name) {
+            return self.arg_roots(std::iter::once(receiver));
+        }
         if self.builtin_method(receiver, name) {
             return BTreeSet::new();
         }
-        let receiver_ty = self.static_type(receiver);
+        if self
+            .capability_op(receiver_ty.as_ref(), &name.name)
+            .is_some()
+        {
+            return self.arg_roots(args.iter());
+        }
         let fn_field = receiver_ty
             .as_ref()
             .and_then(|ty| self.field_type(ty, &name.name))
             .is_some_and(|ty| ty.is_fn());
-        let store = self.store_op(receiver_ty.as_ref(), &name.name).is_some();
-        if store || (!fn_field && self.ufcs(receiver, name).is_some()) {
+        if !fn_field && self.ufcs(receiver, name).is_some() {
             self.arg_roots(std::iter::once(receiver).chain(args))
         } else {
             self.arg_roots(args.iter())
@@ -2033,7 +2102,8 @@ impl Checker {
     }
 
     /// Whether a value of declared type `ty` may hold a `TcpStream`,
-    /// `PipeStream`, `TcpListener`, `Store`, `Stdin` or `Stdout`, directly or in a
+    /// `PipeStream`, `TcpListener`, `Store`, `Stdin`, `Stdout` or a capability
+    /// (`Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`), directly or in a
     /// field, payload, element or type argument. Unknown types may.
     fn can_hold_handle(&self, ty: &Type, depth: usize) -> bool {
         if depth > 16 {
@@ -2048,7 +2118,8 @@ impl Checker {
             "Int" | "Text" | "Bool" | "Byte" | "Bytes" | "Unit" | "IoError" | "Input" => {
                 return false;
             }
-            "TcpStream" | "PipeStream" | "TcpListener" | "Store" | "Stdin" | "Stdout" => {
+            "TcpStream" | "PipeStream" | "TcpListener" | "Store" | "Stdin" | "Stdout"
+            | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting" => {
                 return true;
             }
             "List" | "Option" | "Result" | "Tuple" => {
@@ -2537,6 +2608,25 @@ impl Checker {
             }
         }
         let receiver_ty = self.static_type(receiver);
+        if let Some(op) = self.capability_op(receiver_ty.as_ref(), &name.name) {
+            let needed = match op {
+                Some(op) => self
+                    .roots(receiver)
+                    .into_iter()
+                    .map(|root| format!("{root}.{op}"))
+                    .collect(),
+                None => Vec::new(),
+            };
+            let what = match &receiver.kind {
+                ExprKind::Name(r) => format!("{}.{}", r.name, name.name),
+                _ => name.name.clone(),
+            };
+            if op.is_some() {
+                self.effectful_op(needed, expr.span, &what);
+            }
+            self.symbols.effect_sites.insert(expr.span);
+            return;
+        }
         if let Some(op) = self.store_op(receiver_ty.as_ref(), &name.name) {
             let needed = self
                 .roots(receiver)
@@ -2807,8 +2897,31 @@ impl Checker {
                         named("List", receiver.args.clone())
                     }
                     "upsert" if receiver.name.name == "Store" => receiver.args.first()?.clone(),
+                    "start"
+                        if receiver.name.name == "Launcher"
+                            && !self.type_params.contains("Launcher") =>
+                    {
+                        named(
+                            "Result",
+                            vec![
+                                named("ChildProcess", Vec::new()),
+                                named("IoError", Vec::new()),
+                            ],
+                        )
+                    }
                     _ => return None,
                 }
+            }
+            ExprKind::Method { receiver, name, .. } => {
+                let owner = self.path_head(receiver)?;
+                return self.constructor_type(&owner.name, &name.name, expr.span);
+            }
+            ExprKind::Call { callee, .. } => {
+                let ExprKind::Field { receiver, name } = &callee.kind else {
+                    return None;
+                };
+                let owner = self.path_head(receiver)?;
+                return self.constructor_type(&owner.name, &name.name, expr.span);
             }
             ExprKind::Try(inner) => {
                 let inner = self.static_type(inner)?;
@@ -2838,6 +2951,14 @@ impl Checker {
         Some(self.expand(&ty))
     }
 
+    /// Whether `receiver.method(..)` on a receiver of declared type
+    /// `receiver` reads elements out of a `Map`: `get`, `remove` and `keys`,
+    /// whose results have the roots of the receiver (`docs/slice.md` 5.1).
+    fn map_read(&self, receiver: Option<&Type>, method: &str) -> bool {
+        matches!(receiver, Some(ty) if ty.name.name == "Map" && !self.type_params.contains("Map"))
+            && matches!(method, "get" | "remove" | "keys")
+    }
+
     /// The effect operation of a `Store` method called on a receiver of
     /// declared type `receiver`.
     fn store_op(&self, receiver: Option<&Type>, method: &str) -> Option<&'static str> {
@@ -2847,6 +2968,45 @@ impl Checker {
             }
             _ => None,
         }
+    }
+
+    /// The result type of a test-only capability constructor
+    /// (`docs/slice.md` 21.3, 21.8): `Directory.temporary()` is a
+    /// `Result<Directory, IoError>`, `Launcher.new()`, `Entropy.new()` and
+    /// `Setting.of(..)` the capability itself. `None` for any other static
+    /// or when a declaration shadows the owner.
+    fn constructor_type(&self, owner: &str, name: &str, span: Span) -> Option<Type> {
+        if self.type_params.contains(owner) || self.symbols.records.contains(owner) {
+            return None;
+        }
+        let named = |name: &str, args: Vec<Type>| {
+            let ident = Ident {
+                name: name.to_string(),
+                span,
+            };
+            Type::named(ident, args, span)
+        };
+        match (owner, name) {
+            ("Directory", "temporary") => Some(named(
+                "Result",
+                vec![named("Directory", Vec::new()), named("IoError", Vec::new())],
+            )),
+            ("Launcher", "new") | ("Entropy", "new") | ("Setting", "of") => {
+                Some(named(owner, Vec::new()))
+            }
+            _ => None,
+        }
+    }
+
+    /// The effect of a capability method (`docs/slice.md` 21.3) called on a
+    /// receiver of declared type `receiver`, as [`capability_effect`].
+    fn capability_op(&self, receiver: Option<&Type>, method: &str) -> Option<Option<&'static str>> {
+        let ty = receiver?;
+        let name = ty.name.name.as_str();
+        if self.type_params.contains(name) {
+            return None;
+        }
+        capability_effect(name, method)
     }
 
     /// The effects a call of a value of fn type `ty` needs: each entry
@@ -3170,21 +3330,31 @@ impl Checker {
             }
             ExprKind::Field { receiver, name } => match self.path_head(receiver) {
                 Some(ty) => self.path_call(expr, ty, name, args),
-                None => {
-                    self.expr(receiver);
-                    for arg in args {
-                        self.expr(arg);
-                    }
-                    self.error("E003", callee.span, "not callable".to_string());
-                }
+                None => self.expression_call(expr, callee, &name.name, args),
             },
-            _ => {
-                self.expr(callee);
-                for arg in args {
-                    self.expr(arg);
-                }
-                self.error("E003", callee.span, "not callable".to_string());
-            }
+            _ => self.expression_call(expr, callee, "fn value", args),
+        }
+    }
+
+    /// `e(args)` whose callee is an expression, not a name or a path
+    /// (`adder(1)(2)`, `fs[1](10)`, `(h.send)(conn)`; `docs/slice.md`
+    /// 20.4.2): the callee's names are resolved, and when `static_type`
+    /// gives it an effectful fn type the effects are charged and the call is
+    /// an effect site, as for a local of that type. Whether the callee is a
+    /// fn at all is the type checker's (E040, and E042 for an effectful
+    /// callee without a declared type).
+    fn expression_call(&mut self, expr: &Expr, callee: &Expr, what: &str, args: &[Expr]) {
+        self.expr(callee);
+        for arg in args {
+            self.expr(arg);
+        }
+        let all: Vec<&Expr> = args.iter().collect();
+        if let Some(needed) = self
+            .static_type(callee)
+            .and_then(|ty| self.fn_value_effects(&ty, &all))
+        {
+            self.effectful_op(needed, expr.span, what);
+            self.symbols.effect_sites.insert(expr.span);
         }
     }
 
@@ -3252,6 +3422,20 @@ impl Checker {
                     name.span,
                     "`Pipe.pair()` is test-only; a program's streams come from a listener or a connect"
                         .to_string(),
+                );
+            }
+            if self
+                .constructor_type(&ty.name, &name.name, name.span)
+                .is_some()
+                && !self.in_test
+            {
+                self.error(
+                    "E051",
+                    name.span,
+                    format!(
+                        "`{}.{}()` is test-only; a program's capabilities are `resource`s",
+                        ty.name, name.name
+                    ),
                 );
             }
             if is_effectful_static(&ty.name, &name.name) {
@@ -3342,6 +3526,8 @@ impl Checker {
                 self.test_only_use(name)
             }
             PatternKind::Binding(name) => self.bind_rooted(name, binding, roots.clone()),
+            PatternKind::Rest(Some(name)) => self.bind_rooted(name, binding, roots.clone()),
+            PatternKind::Rest(None) => {}
             PatternKind::Range { start, end } => {
                 self.pattern(start, roots, binding);
                 self.pattern(end, roots, binding);
@@ -3750,6 +3936,7 @@ fn builtin_applies(ty: &Type, method: &str) -> bool {
 fn first_binding(pattern: &Pattern) -> Option<&Ident> {
     match &pattern.kind {
         PatternKind::Binding(name) => Some(name),
+        PatternKind::Rest(name) => name.as_ref(),
         PatternKind::Tuple(items) | PatternKind::List(items) | PatternKind::Or(items) => {
             items.iter().find_map(first_binding)
         }

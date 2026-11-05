@@ -1,0 +1,38 @@
+// R1 at scale (docs/slice.md 20.0 rows 9 and 10): a state threaded through a call
+// in a loop. `step` takes its parameter into `next`, changes it and returns it;
+// `run` passes its var and reassigns it from the result, so `s` moves at the call
+// and each step costs the same whatever the length of `items`.
+type State {
+  items: List<Int>
+  count: Int
+}
+
+fn step(state: State, x: Int) -> State {
+  var next = state
+  next.items.push(x)
+  next.count = next.count + 1
+  next
+}
+
+fn run(n: Int) -> State {
+  var s = State { items = [], count = 0 }
+  var i = 0
+  while i < n {
+    s = step(s, i)
+    i = i + 1
+  }
+  s
+}
+
+fn check(n: Int) -> Bool {
+  let s = run(n)
+  s.count == n && s.items.len() == n && s.items[0] == 0 && s.items[n - 1] == n - 1
+}
+
+test "50000 steps through a call" {
+  assert check(50000)
+}
+
+test "200000 steps through a call" {
+  assert check(200000)
+}

@@ -1,0 +1,8 @@
+fn probe(files: Directory, name: Text) -> Result<Unit, IoError> requires [files.*] {
+  files.read_file("../x")?
+  files.write_file("/etc/x", Bytes.empty())?
+  files.read_directory("a/../..")?
+  files.read_file(name)?
+  files.read_file("a/b")?
+  return files.create_directory("fine/./deeper")
+}

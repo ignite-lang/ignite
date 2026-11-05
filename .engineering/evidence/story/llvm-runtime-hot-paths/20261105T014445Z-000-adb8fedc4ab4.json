@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T01:44:45Z",
+  "actor": "human:timo",
+  "artifact": "story:llvm-runtime-hot-paths",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "metric_observation",
+    "source": "ember 1x1 A/B, LLVM release, 5 interleaved rounds, start load 4.29 to 4.84: after/before ops/s median x0.992 (0.992, 1.024, 0.985, 1.059, 0.960); server CPU ticks median 70 to 69",
+    "reference": "https://github.com/ignite-lang/ignite/pull/29"
+  }
+}

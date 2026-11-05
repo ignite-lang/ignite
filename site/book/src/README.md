@@ -56,11 +56,11 @@ itself is Ignite code in the standard library.
 
 ## Status
 
-Ignite is an early prototype, at release v0.4.0. What works today:
+Ignite is an early prototype, at release v0.6.0. What works today:
 
 - the language subset, with records, enums, pattern matching, generics with bounds,
   closures, quantities such as `4096 bytes` and `15 minutes`, and explicit effects;
-- two native targets, Rust (the default) and LLVM, over one IO substrate;
+- two native targets, LLVM (the default) and Rust, over one IO substrate;
 - the standard library in Ignite, including Telnet and HTTP/1.1 and the control reducers;
 - inline `test` blocks, run on both targets by `ignite test`;
 - the system declaration: resources, components, contracts, policies and assemblies;

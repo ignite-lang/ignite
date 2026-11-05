@@ -1,0 +1,2 @@
+e042_effectful_expression_callee.ignite:9:10: error[E042]: cannot check the effects of a call of this expression; bind it first with its type: `let f: fn(c: PipeStream) -> Int requires [c.write] = …`
+e042_effectful_expression_callee.ignite:13:10: error[E042]: cannot check the effects of a call of this expression; bind it first with its type: `let f: fn(c: PipeStream) -> Int requires [c.write] = …`

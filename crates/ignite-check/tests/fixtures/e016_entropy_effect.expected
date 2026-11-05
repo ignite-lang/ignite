@@ -1,0 +1,1 @@
+e016_entropy_effect.ignite:2:10: error[E016]: missing effect `entropy.draw` for `entropy.random_bytes`; add it to the `requires` of `token`

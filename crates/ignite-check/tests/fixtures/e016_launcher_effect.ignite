@@ -1,0 +1,11 @@
+type Invocation {
+  program: Text
+}
+
+type ChildExit {
+  code: Int
+}
+
+fn build(tools: Launcher) -> Result<ChildExit, IoError> requires [] {
+  return tools.execute(Invocation { program = "/bin/true" })
+}

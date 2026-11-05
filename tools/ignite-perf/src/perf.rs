@@ -1587,6 +1587,8 @@ impl Harness {
                 &compiler,
                 "build",
                 "examples/todo/todo.ignite",
+                "--target",
+                "rust",
                 "--out",
                 &path_str(&output.join("program")),
                 "--target-dir",
@@ -1755,7 +1757,7 @@ impl Harness {
                             command.push("--release".into());
                         }
                         if target == "rust" {
-                            command.push("--target-dir".into());
+                            command.extend(words(&["--target", "rust", "--target-dir"]));
                             command.push(format!("{}-cargo", path_str(&output)));
                         } else {
                             let dir = if profile == "release" {
