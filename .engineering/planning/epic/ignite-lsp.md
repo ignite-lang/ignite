@@ -7,7 +7,7 @@ title: 'ignite-lsp: a Language Server written in Ignite, derived from the LSP sp
 summary: Diagnostics and document symbols for .ignite files from a server written in Ignite, with message types generated from LSP metaModel.json via ESS and protocol rules as a conformance catalogue.
 relations:
 - depends_on: story:slice-17-frontend
-revision: 1
+revision: 2
 ---
 <!-- Starting point for an `epic` artifact, seeded by `aep artifact new epic <name>`.
      No frontmatter here on purpose: the `---` block is written by the CLI from the id, kind, status
@@ -51,3 +51,11 @@ later.*
 
 *The condition under which this epic moves to `implemented` — stated once, here, so it is not
 renegotiated story by story.*
+
+## Decision 2026-11-05: where the server lives
+
+Operator decision (Timo, 2026-11-05, option A, relayed by the ignite session): `feat/lsp-server`
+merges into ignite main with the server in `examples/lsp/` as it is. The `ignite-lsp` repository is
+created after v0.7.0, once a release carries `ignite check --json`, `std.protocol.jsonrpc` and
+`Launcher` with `Invocation.input`; the move is `story:lsp-repository`. This replaces the
+"new repository `ignite-lsp`" row of the layers table until then.
