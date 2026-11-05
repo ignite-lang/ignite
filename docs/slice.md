@@ -6159,3 +6159,35 @@ only the id and no status is E090) and `e092_text_id_foreign` with the claim-fix
 `plan::adversary_*` label cases; `layering::rule_3_exempts_only_catalogues_of_their_own_protocol`.
 
 Not done: a URL per requirement (the anchors are in the header comment).
+
+### 19.20 JSON numbers with a fraction or an exponent (story `json-decimals`, 2026-11-05)
+
+`std.json` read integer numbers of at most 18 digits only, so a JSON-RPC message holding an LSP
+`decimal` such as `0.5` was answered with the parse error. `Json` gains the variant
+`Decimal(Text)`; every other variant is unchanged.
+
+- `parse` reads every number RFC 8259 section 6 allows: `-`, an integer part without leading
+  zero, an optional fraction `.` with one or more digits, an optional exponent `e` or `E` with
+  an optional sign and one or more digits.
+- A token with no fraction, no exponent and at most `MAXIMUM_DIGITS` (18) digits is a
+  `Number(Int)`, as before; `-0` is `Number(0)`, as before. Every other token is a
+  `Decimal` holding the token's exact text. Nothing converts a number to a float.
+- An invalid token is still an error: `01` and `00.5` "leading zero in a number"; `1.`, `1e`,
+  `1e+`, `-` and `-.5` "expected a digit" at the offset where a digit is missing; `.5` and `+1`
+  "unexpected character". The messages "only integer numbers are supported" and "number longer
+  than 18 digits" are gone.
+- `encode` writes a `Decimal` as its text, so `encode(parse(t)?) == t` for every number token
+  `t` except `-0`, whose `Number(0)` encodes as `0`.
+- Equality is structural: `Number(1) != Decimal("1.0")`, `Decimal("1.0") != Decimal("1.00")`,
+  `Decimal("1e2") == Decimal("1e2")`. Numeric comparison is the caller's business. `as_int`
+  and `int` return `None` for a `Decimal`.
+- Exhaustive matches over `Json`: `encode` is the only one in `std/`, `examples/`, the crates'
+  test fixtures and the book's checked blocks; every other match has a wildcard arm.
+- No compiler crate names `std.json` or `Json`: both targets lower the new variant like any
+  other enum variant, so no generated code changes shape and `apply::plan::CODEGEN_REVISION`
+  stays. `ignite_eval::Json`, the canonical JSON of `ignite plan` and `check --json`, is a
+  separate Rust type and is unchanged.
+
+Tests: in `std/json.ignite`, "a number with a fraction, an exponent or more than 18 digits is a
+decimal of its exact text", "an invalid number token is still an error" and "numbers compare
+by their structure, not their value".

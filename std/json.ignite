@@ -1,19 +1,23 @@
 package std.json
 
-import std.text.{digit_value, repeat}
-import std.option.and_then
+import std.text.{digit_value, is_digit, repeat}
+import std.option.{and_then, unwrap_or}
 
-// JSON values (RFC 8259) with integer numbers: `encode` writes the compact
-// form, `parse` reads one value surrounded by optional whitespace, and the
-// accessors read object members (`body.text("title")`). Numbers are `Int`;
-// a fraction or an exponent is a parse error, and so is a number of more
-// than 18 digits. Strings are decoded completely, `\uXXXX` with surrogate
-// pairs included; a lone surrogate is an error.
+// JSON values (RFC 8259): `encode` writes the compact form, `parse` reads
+// one value surrounded by optional whitespace, and the accessors read
+// object members (`body.text("title")`). A number without fraction or
+// exponent of at most 18 digits is a `Number(Int)`; every other number is a
+// `Decimal` holding the token's exact text, never converted, so `encode`
+// writes it back unchanged. Two values are equal when their structure is:
+// `Decimal("1.0")` is neither `Number(1)` nor `Decimal("1.00")`. Strings
+// are decoded completely, `\uXXXX` with surrogate pairs included; a lone
+// surrogate is an error.
 
 enum Json {
   Null,
   Bool(Bool),
   Number(Int),
+  Decimal(Text),
   Str(Text),
   Array(List<Json>),
   Object(List<(Text, Json)>)
@@ -65,6 +69,7 @@ fn encode(value: Json) -> Text = match value {
   Null => "null"
   Bool(b) => b.to_text()
   Number(n) => n.to_text()
+  Decimal(text) => text
   Str(text) => quote(text)
   Array(items) => "[{items.map(encode).join(",")}]"
   Object(members) => "{{" + members.map(|m| quote(m.0) + ":" + encode(m.1)).join(",") + "}}"
@@ -153,33 +158,55 @@ fn parse_word(bytes: Bytes, at: Int, word: Text, value: Json) -> Parsed {
   Ok((value, end))
 }
 
+// The offset after the digits starting at `at`; `at` when there is none.
+fn digits_end(bytes: Bytes, at: Int) -> Int {
+  var i = at
+  while i < bytes.len() && is_digit(bytes.at(i)) {
+    i = i + 1
+  }
+  i
+}
+
+// The offset after one or more digits at `at`, or the error that there is
+// none.
+fn some_digits(bytes: Bytes, at: Int) -> Result<Int, JsonError> {
+  let end = digits_end(bytes, at)
+  if end == at {
+    return Err(error("expected a digit", at))
+  }
+  Ok(end)
+}
+
+// The number token at `at` (RFC 8259 section 6): `-`, an integer part
+// without leading zero, an optional fraction, an optional exponent. An
+// integer part alone of at most `MAXIMUM_DIGITS` digits is a `Number`;
+// every other token is a `Decimal` of its exact text.
 fn parse_number(bytes: Bytes, at: Int) -> Parsed {
   let negative = bytes.at(at) == b'-'
   let start = if negative { at + 1 } else { at }
-  var i = start
-  var value = 0
-  while i < bytes.len() {
-    let digit = match digit_value(bytes.at(i)) {
-      Some(digit) => digit
-      None => break
-    }
-    if i - start == MAXIMUM_DIGITS {
-      return Err(error("number longer than {MAXIMUM_DIGITS} digits", start))
-    }
-    value = value * 10 + digit
-    i = i + 1
-  }
-  if i == start {
-    return Err(error("expected a digit", i))
-  }
-  if i - start > 1 && bytes.at(start) == b'0' {
+  let integer_end = some_digits(bytes, start)?
+  if integer_end - start > 1 && bytes.at(start) == b'0' {
     return Err(error("leading zero in a number", start))
   }
-  if i < bytes.len() {
-    match bytes.at(i) {
-      b'.' | b'e' | b'E' => return Err(error("only integer numbers are supported", i))
-      _ => {}
+  var i = integer_end
+  if i < bytes.len() && bytes.at(i) == b'.' {
+    i = some_digits(bytes, i + 1)?
+  }
+  if i < bytes.len() && (bytes.at(i) == b'e' || bytes.at(i) == b'E') {
+    var from = i + 1
+    if from < bytes.len() && (bytes.at(from) == b'+' || bytes.at(from) == b'-') {
+      from = from + 1
     }
+    i = some_digits(bytes, from)?
+  }
+  if i > integer_end || integer_end - start > MAXIMUM_DIGITS {
+    return Ok((Decimal(bytes.slice(at, i).to_text()), i))
+  }
+  var value = 0
+  var j = start
+  while j < integer_end {
+    value = value * 10 + digit_value(bytes.at(j)).unwrap_or(0)
+    j = j + 1
   }
   Ok((Number(if negative { -value } else { value }), i))
 }
@@ -422,22 +449,52 @@ test "a lone or broken surrogate is an invalid escape" {
   assert failure(r#""ab\x""#) == at("invalid escape", 3)
 }
 
-test "numbers are integers of at most 18 digits" {
+test "integers of at most 18 digits are numbers" {
   assert parse("999999999999999999")? == Number(999999999999999999)
   assert parse("-999999999999999999")? == Number(-999999999999999999)
   assert parse("[123456789012345678]")? == Array([Number(123456789012345678)])
-  assert failure("1234567890123456789") == at("number longer than 18 digits", 0)
-  assert failure("-1234567890123456789") == at("number longer than 18 digits", 1)
-  let fraction = "only integer numbers are supported"
-  assert failure("1.5") == at(fraction, 1)
-  assert failure("1e5") == at(fraction, 1)
-  assert failure("-20E3") == at(fraction, 3)
-  assert failure("[0.0]") == at(fraction, 2)
   assert failure("0123") == at("leading zero in a number", 0)
   assert failure("-01") == at("leading zero in a number", 1)
   assert failure("-") == at("expected a digit", 1)
   assert failure("-a") == at("expected a digit", 1)
   assert failure("+1") == at("unexpected character", 0)
+}
+
+test "a number with a fraction, an exponent or more than 18 digits is a decimal of its exact text" {
+  assert parse("0.5")? == Decimal("0.5")
+  assert parse("-1.25E-3")? == Decimal("-1.25E-3")
+  assert parse("1e2")? == Decimal("1e2")
+  assert parse("1E+2")? == Decimal("1E+2")
+  assert parse("-0.0")? == Decimal("-0.0")
+  assert parse("1234567890123456789")? == Decimal("1234567890123456789")
+  assert parse("-12345678901234567890")? == Decimal("-12345678901234567890")
+  assert parse(r#"[0.0, {"x": 2e-0}]"#)? == Array([Decimal("0.0"), Object([("x", Decimal("2e-0"))])])
+  for token in ["0.5", "-1.25E-3", "1e2", "12345678901234567890", "-0.0", "42", "-7", "[1.50,2E10]"] {
+    assert encode(parse(token)?) == token
+  }
+  assert encode(Decimal("6.02e23")) == "6.02e23"
+}
+
+test "an invalid number token is still an error" {
+  assert failure("01") == at("leading zero in a number", 0)
+  assert failure("1.") == at("expected a digit", 2)
+  assert failure(".5") == at("unexpected character", 0)
+  assert failure("1e") == at("expected a digit", 2)
+  assert failure("1e+") == at("expected a digit", 3)
+  assert failure("1.e5") == at("expected a digit", 2)
+  assert failure("+1") == at("unexpected character", 0)
+  assert failure("-") == at("expected a digit", 1)
+  assert failure("-.5") == at("expected a digit", 1)
+  assert failure("00.5") == at("leading zero in a number", 0)
+  assert failure("1.5.2") == at("unexpected character after the value", 3)
+}
+
+test "numbers compare by their structure, not their value" {
+  assert Number(1) != Decimal("1.0")
+  assert Decimal("1.0") != Decimal("1.00")
+  assert Decimal("1e2") == Decimal("1e2")
+  assert parse("1")? != parse("1.0")?
+  assert parse("1e2")? == parse("1e2")?
 }
 
 test "nesting is limited to 64 levels" {
