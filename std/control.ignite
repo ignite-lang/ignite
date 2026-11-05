@@ -859,24 +859,22 @@ fn standing(path: Text, target: Ratio, missing_data: MissingData, minimum_comple
 // the old process with SIGTERM, waits for its `released` line, starts the
 // new generation and awaits its readiness; the disruption is the interval
 // from `Released` to the new `Ready`. An old process that exits before
-// `Released` ends the drain as `Released` would. The old process retires
-// when it exits; at the deadline `on_deadline` applies to what remains, and
-// a new generation not started by then aborts the rollout. A failed build
-// aborts before the drain and the old process keeps serving. A rollout past
-// its deadline does not hold the next one. The member's lifecycle events
-// reach this machine too, so it knows the serving pid while idle, and a
-// process the supervisor restarts after the drain is the next one to drain.
+// `Released` ends the drain: its supervisor counts the exit as a failure
+// and restarts the member, and that restart is the new process (spawning a
+// second one would race the restart for the port and for the instance the
+// host owns). The old process retires when it exits; at the deadline
+// `on_deadline` applies to what remains, and a rollout whose new process
+// has not started by then aborts. A failed build aborts before the drain
+// and the old process keeps serving. A rollout past its deadline does not
+// hold the next one. The member's lifecycle events reach this machine too,
+// so it knows the serving pid while idle.
 fn roll(r: Rollout, event: Event) -> Step {
   let at = event.at
   match event.kind {
     Started(pid, generation) => match r.state {
-      Starting | Retiring => if generation == r.generation {
+      Starting | Retiring => if generation == r.generation || (r.state == Starting && r.old_pid == None && r.new_pid == None) {
         var next = r
         next.new_pid = Some(pid)
-        rolled(next, [])
-      } else if r.state == Starting && r.old_pid == None && r.new_pid == None {
-        var next = r
-        next.old_pid = Some(pid)
         rolled(next, [])
       } else {
         unchanged(Roll(r))
@@ -1036,7 +1034,8 @@ fn begin(r: Rollout, line: Text) -> Step {
 
 // The old process of a rollout ended: `retired`, and the rollout is done
 // once the new one is ready. While draining, its end is the release: the
-// new generation starts. Any other pid is not the rollout's concern.
+// rollout awaits the supervisor's restart as its new process. Any other pid
+// is not the rollout's concern.
 fn retired(r: Rollout, pid: Int, at: Duration) -> Step = match r.state {
   Draining | Starting | Retiring => if r.old_pid == Some(pid) {
     var next = r
@@ -1045,7 +1044,6 @@ fn retired(r: Rollout, pid: Int, at: Duration) -> Step = match r.state {
     if r.state == Draining {
       next.state = Starting
       next.released_at = Some(at)
-      effects.push(Spawn(r.member, r.generation))
     }
     if r.state == Retiring {
       next.state = Done
@@ -1932,33 +1930,37 @@ test "a start-first rollout keeps the old process serving until the new one is r
 }
 
 // The host journal of story rollout-drain-stuck: the old server exits on
-// SIGTERM before any `Released`, the supervisor restarts it, the deadline
-// passes; the next rollout must still be accepted.
-test "a drain that ends without released and a supervisor restart leave the next rollout accepted" {
+// SIGTERM before any `Released` and the supervisor restarts the member.
+// That restart is the new process; the deadline kills nothing, and the
+// second and third rollouts are accepted.
+test "a drain that ends without released completes on the supervisor's restart" {
   let (draining, _) = run(rollout(), [at(0, Started(42, 1)), at(5, Ready(42)), at(1000, Control("rollout")), at(1500, Built(3))])
-  let (restarted, _) = run(draining, [at(3500, Exited(42, 0)), at(3900, Started(50, 2)), at(4000, Ready(50))])
-  let (expired, e1) = run(restarted, [at(31500, Timer(DEADLINE_TIMER))])
-  assert e1 == [Note("rollout aborted: generation 3 did not start by the deadline")]
-  assert rollout_of(expired).old_pid == Some(50)
-  let (again, e2) = run(expired, [at(32000, Control("rollout")), at(32100, Built(4))])
-  assert e2 == [Build("T.server"), Kill("T.server", 50, SIGTERM), AwaitRelease("T.server"), SetTimer(DEADLINE_TIMER, 62100 ms)]
-  assert rollout_of(again).state == Draining
+  let (starting, e1) = run(draining, [at(3500, Exited(42, 0))])
+  assert e1 == [Note("retired")]
+  assert rollout_of(starting).state == Starting && rollout_of(starting).old_pid == None
+  assert run(starting, [at(3550, Released)]) == (starting, [])
+  let (done, e2) = run(starting, [at(3900, Started(50, 2)), at(4000, Ready(50))])
+  assert e2 == [Note("disruption 500 ms"), CancelTimer(DEADLINE_TIMER)]
+  assert rollout_of(done).state == Done && rollout_of(done).old_pid == Some(50) && rollout_of(done).deadline_timer == None
+  assert run(done, [at(31500, Timer(DEADLINE_TIMER))]) == (done, [])
+  let (second, e3) = run(done, [at(20000, Control("rollout")), at(20100, Built(4)), at(20150, Exited(50, 0)), at(20400, Started(60, 2)), at(20500, Ready(60))])
+  assert e3 == [Build("T.server"), Kill("T.server", 50, SIGTERM), AwaitRelease("T.server"), SetTimer(DEADLINE_TIMER, 50100 ms), Note("retired"), Note("disruption 350 ms"), CancelTimer(DEADLINE_TIMER)]
+  assert rollout_of(second).state == Done && rollout_of(second).old_pid == Some(60)
+  let (third, e4) = run(second, [at(30000, Control("rollout")), at(30100, Built(5))])
+  assert e4 == [Build("T.server"), Kill("T.server", 60, SIGTERM), AwaitRelease("T.server"), SetTimer(DEADLINE_TIMER, 60100 ms)]
+  assert rollout_of(third).state == Draining
 }
 
-test "an old process that exits while draining starts the new generation at once" {
+test "a drain that ends without released and without a restart aborts at the deadline" {
   let (draining, _) = run(rollout(), [at(0, Started(42, 1)), at(5, Ready(42)), at(1000, Control("rollout")), at(1500, Built(3))])
-  let (starting, e1) = run(draining, [at(1550, Exited(42, 0))])
-  assert e1 == [Note("retired"), Spawn("T.server", 3)]
-  assert rollout_of(starting).state == Starting && rollout_of(starting).old_pid == None
-  assert run(starting, [at(1560, Released)]) == (starting, [])
-  let (done, e2) = run(starting, [at(1600, Started(51, 3)), at(1700, Ready(51))])
-  assert e2 == [Note("disruption 150 ms"), CancelTimer(DEADLINE_TIMER)]
-  assert rollout_of(done).state == Done && rollout_of(done).old_pid == Some(51) && rollout_of(done).deadline_timer == None
-  let (second, e3) = run(done, [at(2000, Control("rollout")), at(2100, Built(4)), at(2150, Signalled(51, 15)), at(2200, Started(52, 4)), at(2300, Ready(52))])
-  assert e3 == [Build("T.server"), Kill("T.server", 51, SIGTERM), AwaitRelease("T.server"), SetTimer(DEADLINE_TIMER, 32100 ms), Note("retired"), Spawn("T.server", 4), Note("disruption 150 ms"), CancelTimer(DEADLINE_TIMER)]
-  let (third, e4) = run(second, [at(3000, Control("rollout")), at(3100, Built(5))])
-  assert e4 == [Build("T.server"), Kill("T.server", 52, SIGTERM), AwaitRelease("T.server"), SetTimer(DEADLINE_TIMER, 33100 ms)]
-  assert rollout_of(third).state == Draining
+  let (starting, _) = run(draining, [at(3500, Exited(42, 0))])
+  assert run(starting, [at(20000, Control("rollout"))]).1 == [Note("rollout already in progress")]
+  let (aborted, e1) = run(starting, [at(31500, Timer(DEADLINE_TIMER))])
+  assert e1 == [Note("rollout aborted: generation 3 did not start by the deadline")]
+  assert rollout_of(aborted).state == Aborted && rollout_of(aborted).old_pid == None
+  assert run(aborted, [at(32000, Control("rollout")), at(32100, Built(4))]).1 == [Build("T.server"), Spawn("T.server", 4)]
+  let (late, _) = run(aborted, [at(40000, Started(70, 2))])
+  assert rollout_of(late).old_pid == Some(70)
 }
 
 test "a rollout past its deadline never holds the next one" {
@@ -1968,7 +1970,7 @@ test "a rollout past its deadline never holds the next one" {
   assert rollout_of(forced).state == Draining && rollout_of(forced).old_pid == Some(42)
   assert run(forced, [at(31501, Control("rollout"))]).1 == [Build("T.server")]
   let (starting, e2) = run(forced, [at(31600, Signalled(42, 9))])
-  assert e2 == [Note("retired"), Spawn("T.server", 2)]
+  assert e2 == [Note("retired")]
   let (unready, e3) = run(starting, [at(31700, Started(50, 2)), at(41700, Signalled(50, 9))])
   assert e3 == []
   assert rollout_of(unready).state == Starting && rollout_of(unready).new_pid == None
