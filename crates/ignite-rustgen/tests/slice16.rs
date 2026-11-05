@@ -136,3 +136,17 @@ fn fixtures_pass() {
         assert!(shown.contains(" 0 failed;"), "{name}: {shown}");
     }
 }
+
+/// Row 11 (adversary, U3): a consumed parameter and a local that are the
+/// tail of a branch or an arm whose value is used, and are read afterwards,
+/// build with rustc (no E0382) and every test passes.
+#[test]
+fn branch_tails_build_and_pass() {
+    for name in ["moves_tails", "moves_tails_local"] {
+        let executable = build_tests(&fixture(&format!("{name}.ignite")), name);
+        let output = run(&executable, &[]);
+        let shown = text(&output);
+        assert!(output.status.success(), "{name}: {shown}");
+        assert!(shown.contains(" 3 passed; 0 failed;"), "{name}: {shown}");
+    }
+}

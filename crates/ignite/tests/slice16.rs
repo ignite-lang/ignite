@@ -214,6 +214,38 @@ fn held_operands_keep_their_values_on_both_targets() {
     );
 }
 
+/// 20.3.1 and 20.3.4 (adversary, U3): a parameter its fn consumes by a
+/// move on every path is declared by value on the Rust target, and is the
+/// tail of an `if` branch or a `match` arm whose value is used while the
+/// parameter is read afterwards. The tail is no move, so it must copy; rustc
+/// must accept the program (vision X23) and both targets return the copied
+/// values.
+#[test]
+fn consumed_parameter_tails_keep_their_values_on_both_targets() {
+    let (status, out) = both_targets("moves_tails.ignite");
+    assert_eq!(status, Some(0), "{out}");
+    assert_eq!(
+        out.matches("test result: ok. 3 passed; 0 failed;").count(),
+        2,
+        "{out}"
+    );
+}
+
+/// 20.3.1 and 20.3.2 (adversary, U3): a local that is the tail of an `if`
+/// branch or a `match` arm whose value is used, read later in the block or
+/// in the next loop iteration, is no move; rustc must accept the program and
+/// both targets return the copied values.
+#[test]
+fn local_tails_keep_their_values_on_both_targets() {
+    let (status, out) = both_targets("moves_tails_local.ignite");
+    assert_eq!(status, Some(0), "{out}");
+    assert_eq!(
+        out.matches("test result: ok. 3 passed; 0 failed;").count(),
+        2,
+        "{out}"
+    );
+}
+
 /// 20.3.2 and 20.3.5: named arguments (a UFCS receiver among them) and
 /// variant payloads are evaluated into values and passed or stored after
 /// the last one, so an earlier operand in a move position that is copied
