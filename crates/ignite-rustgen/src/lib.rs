@@ -5743,7 +5743,7 @@ fn mutated_names(block: &Block, types: Option<&TypedProgram>, out: &mut BTreeSet
 /// The fields of `std.process.Invocation` and `std.process.ChildExit` in
 /// declaration order, as `ignite_io::Invocation` and
 /// `ignite_io::ChildExit` name them (`docs/slice.md` 21.5).
-const INVOCATION_FIELDS: [&str; 7] = [
+const INVOCATION_FIELDS: [&str; 8] = [
     "program",
     "arguments",
     "directory",
@@ -5751,6 +5751,7 @@ const INVOCATION_FIELDS: [&str; 7] = [
     "inherit_environment",
     "timeout",
     "output_limit",
+    "input",
 ];
 const CHILD_EXIT_FIELDS: [&str; 5] = ["ending", "code", "stdout", "stderr", "dropped"];
 

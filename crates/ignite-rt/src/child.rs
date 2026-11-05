@@ -11,7 +11,7 @@ use crate::{IgniteIoError, IgniteList, bytes, get, status};
 
 /// `std.process.Invocation`: its fields in declaration order
 /// (`docs/llvm.md` section 3); `timeout` in nanoseconds, `output_limit` in
-/// bytes.
+/// bytes, `input` the bytes written to the child's stdin.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct IgniteInvocation {
@@ -22,6 +22,7 @@ pub struct IgniteInvocation {
     pub inherit_environment: i8,
     pub timeout: i64,
     pub output_limit: i64,
+    pub input: IgniteList,
 }
 
 /// `std.process.ChildExit`: its fields in declaration order.
@@ -52,6 +53,7 @@ impl IgniteInvocation {
             inherit_environment: record.inherit_environment != 0,
             timeout: record.timeout,
             output_limit: record.output_limit,
+            input: bytes(&record.input).to_vec(),
         })
     }
 }

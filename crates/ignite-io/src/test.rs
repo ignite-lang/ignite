@@ -364,6 +364,7 @@ fn run_child(
         &watched,
         Duration::from_secs(timeout),
         usize::MAX,
+        Vec::new(),
         |_| {},
     );
     match finished {

@@ -6,7 +6,7 @@ status: draft
 title: 'ignite-lsp design: ESS-generated types, catalogue rules, compiler diagnostics over a child process'
 relations:
 - designs: epic:ignite-lsp
-revision: 2
+revision: 3
 ---
 # ignite-lsp: a Language Server written in Ignite, derived from the LSP specification
 
@@ -137,3 +137,11 @@ of §4; D2 (subset closure, refuse what cannot be mapped) stays.
 - Drift check: a `#[test]` regenerates the module and compares it byte for byte with the
   committed file (`IGNITE_BLESS=1` rewrites it), as the goldens do.
 - The ESS route stays possible later; nothing in the server depends on how the types were made.
+
+## Decision 2026-11-05: where the server lives
+
+Operator decision (Timo, 2026-11-05, option A, relayed by the ignite session): `feat/lsp-server`
+merges into ignite main with the server in `examples/lsp/` as it is. The `ignite-lsp` repository is
+created after v0.7.0, once a release carries `ignite check --json`, `std.protocol.jsonrpc` and
+`Launcher` with `Invocation.input`; the move is `story:lsp-repository`. This replaces the
+"new repository `ignite-lsp`" row of the layers table until then.

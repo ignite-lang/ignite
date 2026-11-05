@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:lsp-server
 kind: story
-status: draft
+status: implemented
 title: 'ignite-lsp: an LSP server written in Ignite on the generated message types'
 relations:
 - decomposes: epic:ignite-lsp
@@ -10,7 +10,11 @@ relations:
 - depends_on: story:jsonrpc-protocol
 - depends_on: story:check-json-diagnostics
 - depends_on: story:slice-17-frontend
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T11:05:43Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-05T11:05:43Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T12:35:39Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 # ignite-lsp: an LSP server written in Ignite on the generated message types
 
