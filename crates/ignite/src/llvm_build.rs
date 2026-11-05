@@ -391,10 +391,7 @@ pub(crate) fn link(
     let out = out_dir(package, options);
     let ir_dir = out.join("llvm");
     let spec = target(options, &ir_dir)?;
-    let runtime = options
-        .runtime
-        .clone()
-        .unwrap_or_else(crate::default_runtime_path);
+    let runtime = crate::runtime_or_default(options.runtime.as_ref())?;
     if !runtime.is_file() {
         return Err(missing_runtime(runtime));
     }

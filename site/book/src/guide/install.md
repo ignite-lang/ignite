@@ -1,7 +1,7 @@
 # Install from source
 
 Ignite is installed from source. There are no binary releases yet; the releases (v0.1.0 to
-v0.3.0) are tags of the repository.
+v0.5.0) are tags of the repository.
 
 ## What you need
 
@@ -28,7 +28,7 @@ ignite --version
 ```
 
 ```text
-ignite 0.3.0
+ignite 0.5.0
 ```
 
 `ignite --help` lists the commands: `check`, `emit`, `build`, `test`, `plan`, `host`,
@@ -47,18 +47,17 @@ takes `--std DIR` to use another copy of the standard library.
 
 - **LLVM target (the default).** `ignite build` never runs cargo or rustc for the program:
   clang compiles the generated LLVM IR and links it against the runtime archive
-  `libignite_rt.a`, with the Linux system libraries. Build the archive once in the clone, with
-  the test runner that `ignite test` links, and pass it with `--runtime`:
+  `libignite_rt.a`, with the Linux system libraries. `cargo install` builds that archive, with
+  the test runner that `ignite test` links, into the `ignite` binary, and the first LLVM
+  build writes it to `$XDG_CACHE_HOME/ignite/runtime/` (`~/.cache/ignite/runtime/` when
+  `XDG_CACHE_HOME` is unset), so there is nothing to pass:
 
   ```sh
-  cargo build -p ignite-rt --features runner
-  ignite build hello.ignite --runtime ~/ignite/target/debug/libignite_rt.a
+  ignite build hello.ignite
   ```
 
-  Here `~/ignite` stands for your clone. Without `--runtime`, `ignite` looks for the archive
-  next to its own binary and then in that directory's parent, so a copy in `~/.cargo/bin/`
-  makes the flag unnecessary. A missing archive is exit 3, and the error names the command
-  above. [Building for Rust and LLVM](targets.md) has the details.
+  An archive given with `--runtime`, or one next to the `ignite` binary or in that
+  directory's parent, comes first. [Building for Rust and LLVM](targets.md) has the details.
 - **Rust target.** `ignite build --target rust` writes a Rust project and runs `cargo build`
   on it, so cargo must be on the `PATH`. The first build of a project fetches the crates the
   IO substrate depends on.

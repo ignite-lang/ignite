@@ -92,9 +92,14 @@ the same path is not noticed; delete `DIR/llvm`.
 `--clang` defaults to `clang` on `PATH`. `--runtime` defaults to the first file of: (1)
 `libignite_rt.a` in the directory of the running executable, which `cargo build -p ignite-rt`
 writes next to `target/<profile>/ignite`; (2) `libignite_rt.a` in that directory's parent, for
-a driver running in a test binary in `target/<profile>/deps`. When neither exists the error
-(exit 3) names the first and the fix: `cargo build -p ignite-rt --features runner` and
-`--runtime`, or `--target rust`. Tests pass `--runtime` with the newest `deps/libignite_rt-*.a`,
+a driver running in a test binary in `target/<profile>/deps`; (3) the archive the driver
+carries: `crates/ignite/build.rs` builds `ignite-rt --features runner` for the driver's target
+and profile, the crate embeds it, and the first build that needs it writes it to
+`$XDG_CACHE_HOME/ignite/runtime/<hash>/libignite_rt.a` (`$HOME/.cache` when `XDG_CACHE_HOME`
+is unset or relative; a temporary file and a rename), where later builds find it. When that
+write fails the error (exit 3) names the first candidate, the cache path and the fix:
+`--runtime` with an archive from `cargo build -p ignite-rt --features runner`, or
+`--target rust`. Tests pass `--runtime` with the newest `deps/libignite_rt-*.a`,
 because a test build does not refresh the top-level copy. `task bench` prints sizes, build
 times and startup time of both targets.
 

@@ -476,10 +476,7 @@ fn build_group(
                 siblings: Vec::new(),
             };
             let generated = ignite_llvm::generate_tests(&std_inputs, &inputs, &options);
-            let runtime = build
-                .runtime
-                .clone()
-                .unwrap_or_else(crate::default_runtime_path);
+            let runtime = crate::runtime_or_default(build.runtime.as_ref())?;
             check_runner(&runtime)?;
             let build = BuildOptions {
                 out: Some(out),
