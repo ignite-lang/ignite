@@ -679,3 +679,45 @@ reasons is in 17.5 "As landed (U5)"; no known gaps.
   inferred cause). Cold clippy 2.40 in the per-step comparison, inferred: larger crates and a
   different load.
 - No baseline moved. The apply suites stay the slice-13 exception.
+
+## Slice 18 one service operated (2026-11-05)
+
+Slice 18 gate at the close: `task gate` on `s18/u8-records` (f64adfec8, the code of the slice's
+final head with `main` up to PR 48 merged; the later commit changes documents only), 2026-11-05 22:43:53 to 23:07:33 UTC,
+1420 s, exit 0, start load 13, the worktree's own target, `RUST_TEST_THREADS=4`:
+1190 cargo tests passed, 0 failed, 11 ignored; 322 (294 plus the LSP example's 28) inline tests per
+target. The `crates/ignite` end-to-end binary is 1353.60 s of it (440 passed, 9 ignored). The first gate on the same head failed only `slice10::executable_component_main_runs_and_maps_the_exit_code` (`ignite-rustgen`, the known flake: `listening on` not yet in the captured log); 5 of 5 runs alone passed, and the second gate is the one above.
+
+- 22.15 method through `tools/ignite-perf` (`docs/performance/18/README.md`): "before" is
+  `421742b33` (the merge of slice 17 into `main`, the slice base), "after" `661e55b42` (every
+  unit and `main` up to PR 47; PR 48 is not in the measured tree). Partly collected: `smoke`,
+  `programs` (6 pairs), `cli`, `apply-cycle` and one `cold` attempt; `warm` uncollected. Loads
+  5.3 to 29.6, so no pair was taken under load 5.
+
+| unit | before s | after s | ratio | pairs | start loads |
+|---|---|---|---|---|---|
+| gate, cold (fmt, clippy, test, test-ignite) | 1246.63 (1.22, 20.27, 1182.49, 42.66) | 2366.65 (1.40, 12.76, 2313.06, 39.43), exit 1 | no valid pair | 0/1 | 17.7 against 10.2 |
+| `ignite check`, `ignite plan` of the design file | 0.134, 0.137 | 0.136, 0.144 | 1.05, 1.06 | 15 | 7.1 to 7.6 |
+| todo program (`todod`, after also `health`), Rust dev / release | 7.203 / 10.308 | 6.304 / 8.203 | 0.91 / 0.89 | 6 | 5.3 to 16.2 |
+| todo program, LLVM dev / release | 0.513 / 0.994 | 0.856 / 1.499 | 1.53 / 1.42 | 6 | 5.3 to 16.2 |
+| row 27: LLVM dev / Rust dev of the todo program, after | | 0.856 / 6.304 = 0.136 (per-pass median 0.148) | | 6 | 5.3 to 16.2 |
+| apply cycle, terminal design, Rust / LLVM (after only, 5 + 5 samples) | uncollected (below) | 30.870 and 28.497 / 28.269 and 24.667 | | | 7.4 to 29.6 |
+| apply cycle, todo, Rust / LLVM (after only, 5 samples) | | 31.458 / 30.821 | | | 7.4 to 29.6 |
+
+- Rows 27 and 28 hold: the LLVM dev build of the todo program is 0.136 of the Rust one (at most
+  0.15), and the todo cycle's LLVM median is below its Rust median (`todo_llvm_below_rust`
+  true), by 2 %: both cycles spend 13 to 17 s in `plan --for-apply` and 12 to 15 s in the
+  rollout, against a build of 0.9 s (LLVM) and 6.3 s (Rust); the split of the plan beyond its
+  build is not measured.
+- Rises over 10 %: the todo program on LLVM, dev 1.53 and release 1.42, measured growth: the
+  after tree builds a second executable (`health`, its own main of 278 IR lines and link) and a
+  larger program (`program.ll` 1,743 to 5,184 lines, `std.ll` 12,780 to 14,350); the split
+  between the two is inferred. The cold gate has no valid pair: the after tree failed the slice-16 timing bound `slice16::llvm_state_threading_is_linear` (0.08 s against 0.01 s at a 0.01 s resolution, load 10 to 36), and the start loads differ by 7.5; measured, the workspace step runs 1,188 cargo tests against 1,090 and the end-to-end binary 2184.42 s (440 tests) against 1042.08 s (381), with the slice's live suites and `main`'s `rollout_repeat::` and `stream_ownership::` among the new ones; the split between tests and load is not measured; the timing test passed in the final gate. The Rust program rows fall (0.91, 0.89) although
+  `ignite-std` grows from 1,700 to 2,049 lines; not attributed at their spread (4.3 to 30.6 s).
+- Uncollected: `warm` (its passes need both trees' gate targets at once, against this unit's
+  15 GB bound for scratch and target); the before tree's terminal apply cycle: Rust stopped
+  after 1 of 5 samples and LLVM never ran, because the before tree lacks `fix/rollout-drain-stuck`
+  (PR 46) and its third rollout on one host is refused as `rollout already in progress` (host
+  journal in `docs/performance/18/logs/`); the before tree was not patched. `health` is not timed
+  apart from `todod` (`ignite build` builds both; 22.0 row 27 as landed).
+- No baseline moved. The apply suites stay the slice-13 exception.
