@@ -1,0 +1,51 @@
+fn missing_one(xs: List<Int>) -> Int {
+  return match xs {
+    [] => 0
+    [_, _] => 2
+    [_, _, _, ..] => 3
+  }
+}
+
+fn missing_none(xs: List<Option<Int>>) -> Int {
+  return match xs {
+    [Some(x), ..] => x
+    [] => 1
+  }
+}
+
+fn missing_inner_empty(xss: List<List<Int>>) -> Int {
+  return match xss {
+    [[_, ..], ..] => 1
+    [] => 2
+  }
+}
+
+fn missing_last(xs: List<Bool>) -> Int {
+  return match xs {
+    [.., true] => 0
+    [] => 2
+  }
+}
+
+fn missing_short(xs: List<Bool>) -> Int {
+  return match xs {
+    [true, .., true] => 0
+    [false, ..] => 1
+    [] => 2
+  }
+}
+
+fn missing_long(xs: List<Int>) -> Int {
+  return match xs {
+    [] => 0
+    [_] => 1
+    [_, _] => 2
+  }
+}
+
+fn missing_in_tuple(pair: (List<Int>, Bool)) -> Int {
+  return match pair {
+    ([], _) => 0
+    ([_, ..], true) => 1
+  }
+}

@@ -1,0 +1,2 @@
+e040_rest_binding.ignite:7:30: error[E040]: type mismatch: expected `Int`, found `List<Int>`
+e040_rest_binding.ignite:14:31: error[E040]: type mismatch: expected `List<Int>`, found `Bytes`

@@ -1,4 +1,4 @@
-# Ignite slices 1 to 15: language subset, standard library, substrate and lowering
+# Ignite slices 1 to 16: language subset, standard library, substrate and lowering
 
 Status: implementation contract for the compiler slice, 2026-11-01. It narrows
 `design.md` to what `examples/terminal/terminal.ignite` and `std/` need. Where the two
@@ -446,15 +446,15 @@ Every generated file starts with
 | `Unit` (type) | `()` |
 | `List<T>` | `Vec<T>` |
 | `Option<T>`, `Result<T, E>` | same |
-| `fn(A, B) -> R` | `fn(A, B) -> R` |
+| `fn(A, B) -> R` | `std::sync::Arc<dyn Fn(A, B) -> R + Send + Sync>` (13.3) |
 | `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError` | `ignite_io::` same name |
 | record `type R { a: T }` | `#[derive(Clone, Debug)] pub struct R { pub a: T }` |
 | `enum E { A, B(T) }` | `#[derive(Clone, Debug)] pub enum E { A, B(T) }` |
-| `fn f(p: T) -> U` | `pub fn f(p: &T) -> U` (parameters, below) |
+| `fn f(p: T) -> U` | `pub fn f(p: &T) -> U`, or `pub fn f(p: T) -> U` when `f` consumes `p` (parameters, below) |
 | `fn f(...) requires [...]` | `pub fn f(...)` |
 | `type R<A> {..}`, `enum E<A> {..}`, `fn f<A>(..)`, a role `fn serve<A>(..)` | `pub struct R<A: Clone + Send + Sync + 'static>` and so on: every type parameter carries these bounds (11.1) |
 | `Store<T>` | `ignite_io::Store<T>` |
-| `fn(p: A) -> R requires [p.*]` | `fn(A) -> R` |
+| `fn(p: A) -> R requires [p.*]` | `std::sync::Arc<dyn Fn(A) -> R + Send + Sync>` |
 | `protocol P { fn serve ... fn connect ... }` | `pub struct P;` and `impl P { pub fn serve ... pub fn connect ... }` |
 | `P.serve(a, b)` | `P::serve(a, b)` |
 | `import std.a.b.{X, Y}` in a program | `use ignite_std::a::b::{X, Y};` |
@@ -494,7 +494,9 @@ The `spawn` arguments are evaluated (and cloned, ownership rule) before the task
 the spawning function keeps its own copies.
 
 **Ownership rule.** Rust moves what Ignite copies. A *place* (an identifier, or a place
-followed by `.field`) used in a value position is emitted with `.clone()`. Value positions:
+followed by `.field`) used in a value position is emitted with `.clone()`, except where
+`TypedProgram::moves` marks it (20.3): that place is dead after its move position, and it is
+emitted bare, so Rust moves it. Value positions:
 call and method arguments, `let`/`var` initializers, assignment right-hand sides, `match`
 scrutinees, `return` operands, list elements, record field values, `for` iterables, and
 operands of `await`, `?`, `!` and `-`. Non-value positions: the receiver of a method call or
@@ -502,18 +504,29 @@ field access, the left-hand side of an assignment, and operands of binary arithm
 comparison and logic operators. Every substrate handle implements `Clone` so this rule has
 no exceptions.
 
-**Parameters.** Every parameter of a fn (not of a protocol role, which a generated `main`
-calls with owned values) is a reference `p: &T`, so a call copies nothing: an argument that
-is a place is passed as `&place`, a parameter that is itself a reference as it is, any other
-argument as `&(value)`; `l.at(i)` on a place `l` passes the element borrowed from the list,
-`ignite_io::checked::at(&l, i, <site>)`, unless another argument of the call changes `l`. A
-parameter the body assigns or changes in place (`push`, `append`, `clear` on it or a field of
-it), and one of a `Copy` type (`Int`, `Byte`, `Bool`, `Unit`, fn types), is copied once on
-entry: `let mut p = p.clone();`. In the body a reference
-parameter is dereferenced as an operand of an operator, a condition or an index (`(*p)`), and
-copied where it is the result of a block, arm or branch. A fn of the module or an imported
-one used as a value is a closure that borrows for it, cast to the fn pointer type:
-`((|__a0: i64| f(&__a0)) as fn(i64) -> i64)`; `spawn f(a)` calls `f(&__spawn_0)`.
+**Parameters.** A parameter of a fn or associated fn that its fn consumes
+(`TypedProgram::consumed`, 20.3.3: changed in place on some path or moved on every path) is
+declared by value, `p: T`, or `mut p: T` when the body assigns or changes it in place, and
+has no entry copy. A protocol role's parameters are `mut name: T` by value, consumed or not
+(a generated `main` calls a role with owned values). Every other parameter is a reference
+`p: &T`, so a call copies nothing: an argument that is a place is passed as `&place`, a
+parameter that is itself a reference as it is, any other argument as `&(value)`; `l.at(i)`
+on a place `l` passes the element borrowed from the list, `ignite_io::checked::at(&l, i,
+<site>)`, unless another argument of the call changes `l`. Such a parameter of type `Int`,
+`Byte`, `Bool`, `Unit` or a fn type (an `Arc`, copied by a reference count) is copied once on entry: `let mut p = p.clone();`. An argument to a
+consumed parameter or to a role parameter is a value: a place that moves is emitted bare,
+any other place with `.clone()`, so `s = step(s, i)` passes `s` without a copy and `let t =
+step(s, 1); t.count + s.count` passes `s.clone()`. In the body a reference parameter is
+dereferenced as an operand of an operator, a condition or an index (`(*p)`), and copied
+where it is the result of a block, arm or branch. A fn of the module or an imported one used
+as a value is a closure in an `Arc` cast to the fn value type (13.3); it takes its arguments
+by value and passes each as its parameter is declared:
+`(std::sync::Arc::new(|__a0: i64| f(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send +
+Sync>)`, and `step(__a0, &__a1)` for a `step` that consumes its first parameter. The calls
+the generator writes itself follow the same rule: `spawn f(a)` calls `f(&__spawn_0)`, or
+`f(__spawn_0)` when `f` consumes the parameter; a generated `main` calls `K.main(&value)`,
+or `K.main(value)` when `K.main` consumes `self`; a `to_text` fn that shows a value in an
+`assert` or `?` report gets `&value`, or `value.clone()` when it consumes it.
 
 **Block values.** A block in *value position* emits its last statement, when it is an
 expression, without a trailing `;` so it becomes the block's value. Value positions: a
@@ -884,6 +897,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E057 | a type parameter of a generic record, enum or alias that no field, payload or aliased type uses (section 13.11) |
 | E099 | (slice 14) a bound naming an interface other than `ByteStream` or more than one interface, or `ByteStream` in a type position (section 18.7) |
 | E091 | (slice 15) a catalogue constant, of type `std.rfc.Requirement` or `std.rfc.Spec`, whose value is not literal data (section 19.4); the consistency trigger is the evaluator's (below) |
+| E076 | (slice 16) a second `..` in a list pattern, or a `..name` that is not the last element (section 20.5); reported by the parser |
 
 Keywords are accepted as names in package and import paths, property names and
 record-literal field names.
@@ -946,6 +960,15 @@ the wrong type), section 19.6.
 
 Fixtures: E091 (literal data) under `crates/ignite-check/tests/fixtures`; E090, E091
 (consistency) and E092 under `crates/ignite/tests/fixtures`, named as in section 19.12.
+
+Codes of slice 16 (section 20.7): E076 above. Changed meanings: E003 is no longer reported for a
+callee that is an expression (`not callable`); E040 also for a callee whose type is no fn type;
+E042 also for a call of an effectful fn-typed expression that is no name and that `ignite-check`
+gives no type (a call's result); E046 splits a list
+column by length and names the missing lengths as list patterns. Fixtures: `e076_rest` and
+`e001_rest_outside_list` under `crates/ignite-syntax/tests/fixtures`; `e040_not_callable`,
+`e043_expression_call_arity`, `e042_effectful_expression_callee`, `e040_rest_binding` and
+`e046_rest` under `crates/ignite-types/tests/fixtures`.
 
 Fixtures: E001 (including a keyword as a variable, fn and type name, beside
 `valid_keyword_fields`), E002, E053 and E054 under `crates/ignite-syntax/tests/fixtures`;
@@ -6023,3 +6046,551 @@ Each has a default, which the units follow unless the review changes it.
 | Q4 | X16: when `std/protocol/telnet.ignite` is split to meet the 400-line bound (19.14 item 14), and along which seam (codec, session, executable kinds) | not in slice 15. The slice that next changes Telnet beyond clauses proposes the split |
 
 Q3 (licence of vendoring the older RFCs) is closed by D5.
+
+## 20 Slice 16: language gaps (wave A)
+
+**Status: contract written 2026-11-04. The independent review (`docs/slice16-review.md`, 4
+blockers, 5 should-fix, 14 notes) is resolved in this text; its "Resolution" section maps each
+finding to the place that resolves it. Implemented 2026-11-04 to 2026-11-05 in units U1 to U6
+(20.10); every row of 20.0 has a dated row in `STATUS.md`.** The rows of 20.0 are
+required checks, not results.
+
+Sources:
+
+- `docs/vision.md` §4 row "A language gaps" and row "C actors P1 to P3" (which needs "A
+  (last-use moves), T1"), §4.1, §5, §6, §7 (T1, T2, T3, T4), invariants 3, 7, 8 and 9.
+- `docs/friction.md` rows 1, 2, 4, 7, 8, 9, 10, 12, 13, 15 and 17; `docs/actors.md` R1, §3.3
+  and the P1 and P4 rows; `docs/protocols.md` §5.2; `docs/syntax.md` P9 and R7; `docs/llvm.md`
+  §3, §3.1 and §4.
+- This file: sections 3, 6, 8, 13 (slice 9: 13.3 closures, 13.4 boxing, 13.7 ranges), 14.3
+  (`Map`), 14.8 (T1), and 19.0 to 19.18 (the structure this section follows).
+
+The base of the slice is commit `7ab3f7c`, the slice-15 branch head; it will be rebased onto the
+merge of slice 15 into `main`, and the before tree of 20.12 is then that merge. Everything in
+this section cites files and symbols, not lines (vision T3). Where `docs/syntax.md`,
+`docs/actors.md` or `docs/vision.md` disagree with this section, this section wins and records
+the point in 20.8.
+
+Most of the wave-A row holds already: slice 9 and slice 10 delivered it, and 20.1 cites the test
+for each item. The slice adds what is missing:
+
+- last-use moves (actors R1): a frontend analysis in `ignite-types` that marks the arguments,
+  initializers and results that may take a place's value without a copy, and the parameters a
+  callee consumes; both backends drop the copy there (20.3);
+- calls of fn-typed expressions, `adder(1)(2)`, `fs[i](x)`, `(|x: Int| x * 3)(2)` (20.4);
+- rest patterns in list patterns, `[_, _, ..]`, `[first, ..rest]`, `[.., last]`, as `docs/syntax.md`
+  P9 proposes them, with its code E076 (20.5);
+- a both-target fixture for every item that holds, and the records.
+
+### 20.0 Acceptance
+
+Every row is a required check. "Exit 0, silent" means exit status 0, empty stdout and empty
+stderr. A test name is `<file>::<test>` in its crate's single integration-test binary
+(`cargo test -p <crate> --test main <file>::<test>`). "Both targets" means `--target rust` and
+`--target llvm`. The fixtures named `slice16/…` are under `crates/ignite/tests/fixtures/slice16/`.
+`STATUS.md` gets one dated row per row of this table (row 27).
+
+| # | check | command | required observation | unit |
+|---|---|---|---|---|
+| 1 | the moves analysis marks R1's shape | `cargo test -p ignite-types --test main moves::a_var_passed_and_reassigned_moves` | the test types the source of `run` and `step` of 20.1's probe p07 (inline in the test) and collects every expression for which `TypedProgram::moves` is true, as (line, col). The list is exactly the `s` in `s = step(s, i)`, the `state` in `var next = state` and the `next` that is `step`'s result; `consumed(&Callee::Fn(step), 0)` is true, `consumed(&Callee::Fn(step), 1)` false | U1 |
+| 2 | a read after the move point keeps the copy | `moves::a_later_read_keeps_the_copy` | for each case of 20.3.2's list "no move" (a read later in the block, a read in the next loop iteration, another argument or the receiver of the same call mentioning an overlapping place, among them `take(s, if c { s = fresh(); 0 } else { 0 })`, a use inside the arms of a `match` whose scrutinee is rooted at the variable, a use in the body of a `for` whose iterable is rooted at it, an in-place change after the call) `moves` is false at the argument. With a local `s`, in `if c { consume(s) } else { s.count }` as a fn body's result, `moves` is true at `consume`'s argument. In `consume(t); if c { var t = a } else { var t = b }; t.count` (inner `t`s shadow) `moves` is false at `consume`'s argument | U1 |
+| 3 | positions and places | `moves::every_move_position_moves` and `moves::places_move_through_fields_only` | each move position of 20.3.1 with a dead place is marked; a receiver of a builtin method, a `match` scrutinee, a `for` iterable, an operator operand, a `spawn` argument, a closure capture and the initializer of a pattern `let` are not. `b.f` with `b.f` dead after is marked; `xs[0]`, a boxed field (13.4) and a place rooted at a pattern binding are not. Field paths are disjoint: in `a.state = a.handle(a.state, i)` the argument `a.state` is marked; in `Step { state = st.state, out = publish(st.out) }` with `st` dead after, `st.state` is marked; in `answer(state, reply, state.table.values())` `state` is not. No expression whose type is `Int`, `Byte`, `Bool`, `Unit`, a quantity, a handle type or a fn type is marked | U1 |
+| 4 | consumed parameters are a fixpoint | `moves::consumed_is_a_fixpoint` | in a module with `a(x)` calling `b(x)` at its last use, `b(y)` changing `y` in place and calling `a`, and `c(z)` only reading `z`: `a` and `b` consume their parameter, `c` does not. `d(m)` whose only change is `m.put(k, v)` consumes `m`; `e(p)` that passes `p.items` to a consumed parameter on every path consumes `p`. `pick(a, b, c) = if c { a } else { b }` consumes neither `a` nor `b` (each is moved on one path only, 20.3.3), and neither does `unwrap_or` in `std/option.ignite` consume `fallback`. A program fn whose last use of a local passes it to a std fn that consumes its parameter moves it; `ModuleTypes::consumed` of the std module lists that fn | U1 |
+| 5 | closure bodies are not entered | `moves::closure_bodies_never_move` | no expression inside a closure body is marked, and creating a closure that captures `s` counts as a read of `s` | U1 |
+| 6 | the checker accepts calls of fn-typed expressions | `cargo test -p ignite-check --test main fixtures::` | fixture `crates/ignite-check/tests/fixtures/valid_expression_calls` (`adder(1)(2)`, `fs[1](10)`, `(|x: Int| x * 3)(2)`, `(h.run)(2)`, `pick(true)(3)`): exit silent. `nope(1)(2)` in fixture `e003_unknown_variable` gives one E003 `unknown name \`nope\`` and no `not callable` | U2 |
+| 7 | the typer types them | `cargo test -p ignite-types --test main fixtures::` | fixture `valid_expression_calls` (the same source with a checked use of each result) is silent. `e040_not_callable`: `(1)(2)`, `xs[0](1)` with `xs: List<Int>` and `"a"(1)` give one E040 each, `type mismatch: this expression has type \`<T>\` and cannot be called`. `e043_expression_call_arity`: `adder(1)(2, 3)` gives one E043. `valid_expression_calls` also holds `hs[0](conn)` with `hs: List<fn(c: PipeStream) -> Int requires [c.write]>` and `(h.send)(conn)` with an effectful fn field, inside a fn that `requires [conn.write]`: silent, as `h.send(conn)` is today. `e042_effectful_expression_callee`: `pick_sender(true)(conn)`, with `pick_sender` returning that effectful fn type, gives one E042, the message of 20.7; the same fn without `conn.write` in `requires` gives the E042 and no E016. `e042_closure.expected` and `e017_closure.expected` are unchanged | U2 |
+| 8 | closures already hold, both targets | `cargo test -p ignite --test main slice16::closure_shapes_pass_on_both_targets` | `ignite test slice16/closures.ignite --target all` exits 0, every test passed on both targets, 0 failed. The fixture holds the closure tests of 20.1's probes p02, p08 and p04b: captures by copy, a var captured and then changed (the closure keeps the old value), a generic fn returning a closure that captures a `T`, a closure returning a closure, a closure in a record kept in a `Store`, a closure passed to a spawned task, a closure that writes through a captured `PipeStream` called through its `let` binding, and a record holding `handle: fn(S, M) -> S` stepped in a loop (the actors §5.1 shape) | U2 |
+| 9 | Rust: R1 is linear | `cargo test -p ignite-rustgen --test main slice16::state_threading_is_linear` | the test builds `slice16/moves_scale.ignite` once on the Rust target (dev profile) with the helpers `crates/ignite-rustgen/tests/slice9.rs` uses (`common::lower_tests` with the repository's `std/` and cargo), then runs the test executable twice, with the exact filters "50000 steps through a call" and "200000 steps through a call". Both pass. The time of each is the `finished in` figure of the runner's `test result:` line; the 200,000-step time is under 8 times the 50,000-step time (linear is about 4; p07's quadratic growth is about 20 per factor 4) | U3 |
+| 10 | LLVM: R1 is linear | `cargo test -p ignite --test main slice16::llvm_state_threading_is_linear` | the same as row 9 on the LLVM target (dev, `-O0`), through `ignite test slice16/moves_scale.ignite --target llvm <filter>`, each filter run twice and the second run's `finished in` figure taken | U4 |
+| 11 | Rust: moves keep value semantics | `cargo test -p ignite-rustgen --test main slice16::fixtures_pass` | with the same helpers as row 9, the Rust target builds `slice16/moves.ignite` and `slice16/calls.ignite` (both import std) with rustc without an error (in particular no E0382, E0505 or E0507) and every test of both passes | U3 |
+| 12 | LLVM: moves keep value semantics | `cargo test -p ignite --test main slice16::llvm_fixtures_pass` | `ignite test slice16/moves.ignite slice16/calls.ignite --target llvm`: exit 0, every test passed, built against the debug runtime that overwrites released memory with 0xDB (`docs/llvm.md` §4) | U4 |
+| 13 | Rust golden | `cargo test -p ignite-rustgen --test main golden::last_use_moves_and_expression_calls` | `crates/ignite-rustgen/tests/golden/slice16.ignite` lowers to exactly `slice16.rs`. In it `step` (which moves its parameter into `var next`, as p07's does) is declared `fn step(state: State, x: &i64) -> State`, the call in `run` is `step(s, &i)` with no `.clone()` on `s`, a read-only aggregate parameter stays `&T`, a call to a consumed parameter whose argument is read later passes `.clone()`, a role called with a moving argument receives it bare, and `adder(1)(2)` is a call of the call's result | U3 |
+| 14 | LLVM golden | `cargo test -p ignite-llvm --test main golden::last_use_moves_and_expression_calls` | `crates/ignite-llvm/tests/golden/slice16.ignite` (self-contained, no std, as the other LLVM goldens) lowers to exactly `slice16.program.ll`. The test also asserts on the text: in `run`, no `copy.` call lies between the loop head and the call of `step`, and the call passes the slot of `s` (the loop's release block keeps its `copy.State`, `docs/llvm.md` §4); in `run_read_after`, a `copy.State` call precedes the call of `step`; `read_only_parameters_are_borrowed` and `loops_release_their_region` still pass | U4 |
+| 15 | codegen revision | read `apply::plan::CODEGEN_REVISION` in `crates/ignite/src/apply/plan.rs` | after W3 one step past its value at the slice base, one step for U3 and U4 together (U4 does not edit `plan.rs`); after W4 one step further | U3, U5 |
+| 16 | rest pattern syntax | `cargo test -p ignite-syntax --test main fixtures::` (`fixtures::fixtures_match_expected_diagnostics`) | fixture `valid_rest_patterns` (`[..]`, `[_, _, ..]`, `[first, ..rest]`, `[.., last]`, `[a, .., z]`, `[[a, ..], ..]`, `[] \| [_, ..]` in one arm, a rest on `Bytes`) parses, silent. `e076_rest`: `[.., x, ..]`, `[..a, ..b]` and `[..init, last]` give one E076 each, with the two messages of 20.7. `e001_rest_outside_list`: `(a, ..)`, `Some(..)` and a bare `..` arm give one E001 `expected pattern, found \`..\`` each | U5 |
+| 17 | rest pattern types | `cargo test -p ignite-types --test main fixtures::` | `valid_rest_patterns` is silent, among it `[] => …`, `[_, ..] => …` (exhaustive on `List<Int>` and on `Bytes`) and `[first, ..rest]` passing `rest` where `List<Int>` is expected. `e040_rest_binding`: `rest` of a `List<Int>` passed where `Int` is expected, and `rest` of a `Bytes` where `List<Int>` is expected: one E040 each. `e046_rest`: `[] , [_, _, ..]` gives E046 `match does not cover \`[_]\``; `[x, ..]` alone gives `match does not cover \`[]\``; on `List<Bool>`, `[]`, `[_]`, `[_, _]`, `[_, true, ..]`, `[.., false, _]` gives `match does not cover \`[_, false, true, _]\`` (the case where prefix and suffix overlap below length P + S, 20.5); on `List<Bool>`, `[true]`, `[]`, `[_, _, ..]` gives `match does not cover \`[false]\``. `valid_rest_patterns` holds the same five `List<Bool>` arms plus `[_, _, _, _, ..]`, silent. `e046_patterns.expected`'s list case reads `match does not cover \`[_, _, ..]\`` (20.7); every other line of it is unchanged | U5 |
+| 18 | rest patterns run | `cargo test -p ignite-rustgen --test main slice16::fixtures_pass`, `cargo test -p ignite --test main slice16::llvm_fixtures_pass` | both now also build `slice16/rest.ignite` and every test passes: lengths 0 to 4 against `[]`, `[_]`, `[_, _, ..]`; `[first, ..rest]` binding a copy (pushing to a `var` bound to `rest` leaves the scrutinee unchanged); `[.., last]`; `[a, .., z]` on two and on three elements; nested rests; the rest on `Bytes`; protocols §5.2's `([_, _, ..], _, _)` inside a tuple | U5 |
+| 19 | rest goldens | `cargo test -p ignite-rustgen --test main golden::rest_patterns`, `cargo test -p ignite-llvm --test main golden::rest_patterns` | `rest.ignite` in each crate's `tests/golden/` lowers to exactly `rest.rs` and `rest.program.ll` | U5 |
+| 20 | the evaluator agrees on rest patterns | `cargo test -p ignite --test main eval::` | `eval_equivalence.ignite` gains a `rest_` family (at least four fns); `fixture_covers_every_family` lists it; `evaluator_agrees_with_the_rust_target` and `evaluator_agrees_with_the_llvm_target` pass | U5 |
+| 21 | every wave-A fixture on both targets through the CLI | `cargo test -p ignite --test main slice16::fixtures_pass_on_both_targets` | `ignite test` of `slice16/holds.ignite`, `calls.ignite`, `moves.ignite` and `rest.ignite`, each with `--target all`: exit 0, every test passed on both targets, 0 failed | U6 |
+| 22 | the items that hold | same, `holds.ignite` | the fixture holds one test per "holds" verdict of 20.1 (unwrap_or and `!=` on `Option`, a range pattern on `Byte`, raw text and raw byte literals, a `\u{..}` escape, an interpolation holding a string literal, tuple fields, `break` as a match arm's value, a boxed recursive enum, `Map` operations in key order, an associated fn), taken from probe p01 | U6 |
+| 23 | the evaluator agrees on calls and moves | `cargo test -p ignite --test main eval::` | `eval_equivalence.ignite` gains a `call_` family (expression callees, at least three fns) and a `move_` family (fns whose arguments move, with a read of the moved variable's old value through a copy made before, at least three fns); both agreement tests and `fixture_covers_every_family` pass | U6 |
+| 24 | the workspace | `cargo test --workspace` after each unit | passes. Golden changes in U3 and U4 only as 20.3.4 and 20.3.5 allow (a parameter's passing mode, a dropped copy at a move, a `.clone()` or `copy.` at a call to a consumed parameter, renumbered metadata); in U1, U2 and U6 no golden changes; in U5 only the rest goldens are new | every unit |
+| 25 | inline tests | `task test-ignite` | passes on both targets; the per-target count equals the base's plus the slice's std additions (none planned) | every unit |
+| 26 | end-to-end unchanged | `cargo test -p ignite --test main -- terminal:: todo:: failover:: slice9:: slice10_llvm::` | passes; `crates/ignite/tests/terminal.rs` and `todo.rs` unchanged against the base | U3, U4, U6 |
+| 27 | records and gate | `task gate` on the slice branch; read `STATUS.md`, `AGENTS.md`, `PLAN.md`, `docs/vision.md`, `docs/friction.md`, `docs/actors.md`, `docs/syntax.md` | exit 0. Every row of this table has a dated `STATUS.md` row naming its command. `AGENTS.md` has a "Slice 16" section with the merge gate's time, counts and exit, and its `crates/ignite-types/` layout row names the moves analysis. `PLAN.md` has a row 16 that says done. `docs/vision.md` §4.1 has a row "16" for wave A, and §5's rows of wave A say where each landed. The stale points of 20.8 are edited where 20.8 says, among them the title of this file. `docs/performance/16/` holds the records of 20.12 | U6 |
+
+### 20.1 Current state and verdicts (at `7ab3f7c`)
+
+Probes are `.ignite` files run with the worktree's `target/debug/ignite test FILE --target all`
+or `ignite check FILE` on 2026-11-03; their sources are folded into the fixtures of 20.0 (p01 into
+`holds.ignite`, p02, p04b and p08 into `closures.ignite`, p03 into `calls.ignite`, p06 into
+`rest.ignite`, p07 into `moves_scale.ignite`).
+
+| item (vision §4 row A) | verdict | evidence |
+|---|---|---|
+| closures capturing locals (`friction` 9, 13; actors P4) | holds; one gap in, two deferred | captures by copy on both targets: tests "closures capture by copy" and "store update with a closure is atomic" of `crates/ignite-rustgen/tests/slice9/features.ignite`, run by `slice9::slice9_features_pass` (Rust) and `slice9::rust_target_features_pass_on_llvm` in `crates/ignite/tests/slice9.rs` (LLVM); the closure in `patch` of `examples/todo/todo.ignite`, exercised by `crud_flow` in `crates/ignite/tests/todo.rs` on both targets. Probes p02, p08 and p04b (20.0 row 8's shapes) pass on both targets. Gaps: (a) a call whose callee is an expression of fn type is E003 `not callable` (p03: `adder(1)(2)`, `fs[1](10)`, `(|x: Int| x * 3)(2)`): **in** (20.4). (b) An unannotated closure parameter whose expected type holds a type parameter only the closure body decides, the shape of actors P4's `call(|r| Get(id, r))`, is E042 twice (p05: `cannot infer type parameter \`T\` of \`call\``, `cannot infer the type of closure parameter \`r\``); annotated, `call(\|r: Reply<Text>\| Get(id, r))` passes (p05b): **deferred** (20.13). (c) A closure that captures a capability and uses it (`\|t\| s.write_all(..)`) passed where a fn type is expected is E017 (p04: `effectful closure (requires [s.write]) where the pure fn type … is expected`); called through its `let` binding it passes (p04b): **deferred**, E017 stays the rule (20.4.3) |
+| `Option.unwrap_or`, `!=` on `Option` (7) | holds | std/option.ignite test "unwrap_or gives the value or the fallback" (`task test-ignite`, both targets); `!= None` in `contains` of `std/text.ignite`; p01 |
+| rest patterns `..` (protocols §5.2) | missing; **in** | p06: `[_, _, ..] => "many"` is E001 `expected pattern, found \`..\``. A list column is covered only by `_` or a binding: p09's `[] => 0, [x] => x` is E046 `match on \`List<Int>\` does not cover every value; add a \`_\` arm or a binding arm` (`crates/ignite-types/src/exhaustive.rs`) |
+| ranges in patterns (8) | holds | test "range patterns" of `slice9/features.ignite` (both targets as above); fixture `e046_ranges` of `crates/ignite-types/tests/fixtures`; p01 |
+| raw strings (2; also 1 and 12, vision §5) | holds | the std/json.ignite tests "encode and parse round trip" and "the accessors read members of the right kind" (`task test-ignite`, both targets); p01 (`r#"…"#`, `br"…"`) |
+| tuple field access `.0` (10) | holds | test "record update and tuple fields" of `slice9/features.ignite`; p01 |
+| `break` as an expression (4) | holds | test "break and continue expressions" of `slice9/features.ignite`; p01 (`None => break` as a `match` arm inside `let`) |
+| recursive enums by boxing (15) | holds | test "boxed recursion" of `slice9/features.ignite`; section 13.4; p01 |
+| static fns on records (17, vision §5) | holds | test "associated fns" of `slice9/features.ignite`; section 13.8 |
+| `Map<K, V>` (design §3.3) | holds | tests "map literal and lookups", "map mutation has value semantics", "for over a map visits pairs in key order", "maps compare structurally" of `crates/ignite-rustgen/tests/slice10/features.ignite`, run by the rustgen `slice10` tests (Rust) and `crates/ignite/tests/slice10_llvm.rs` (LLVM); section 14.3; p01 |
+| last-use moves (actors R1) | missing; **in** | p07, state threaded through a call, `s = step(s, i)` with `step` pushing to `state.items`: Rust 0.04 s for 10,000 steps and 0.84 s for 40,000; LLVM 0.36 s and 7.40 s. Four times the steps cost about 21 times the time on both targets: every step copies the whole state. The same loop with the push inline takes 0.01 s for 40,000 steps. Rust parameters are `&T`, copied on entry when the body changes them (section 6, `mutated_names` in `crates/ignite-rustgen/src/lib.rs`); LLVM passes a fresh copy to a parameter the body modifies (`docs/llvm.md` §3, `region::modified` in `crates/ignite-llvm/src/region.rs`) |
+| T1 failure rule (vision §7) | holds | section 14.8; `failover::a_failing_session_does_not_end_the_service` (`crates/ignite/tests/failover.rs`), `slice10::crashd_survives_failing_handlers` (`crates/ignite-rustgen/tests/slice10.rs`) |
+
+Facts the design relies on:
+
+| fact | where |
+|---|---|
+| A call's callee is any postfix expression in the grammar; `ignite-check` reports E003 `not callable` for every callee that is no name and no path head, and `ignite-types` records `Callee::Local` only for a name | `call` in `crates/ignite-check/src/lib.rs` (its `ExprKind::Field` arm without a path head and its `_` arm); the `ExprKind::Name` branch of the call typing in `crates/ignite-types/src/typer.rs` (grep `Callee::Local`) |
+| `ignite-check` already gives a declared type to a name, a field, a method result, `?`, a tuple field, a closure and an index of a `List` or `Bytes` (not to a call's result), and reads an effectful fn type's effects from it; so `h.send(conn)` with an effectful fn field, and `let f = hs[0]; f(conn)`, check today | `static_type`, `fn_value_effects` in `crates/ignite-check/src/lib.rs` |
+| Rust parameters: a protocol role's are `mut name: T` by value; every other parameter is `&T` (scalars too), cloned on entry when the body changes it or its type is Copy; a role argument is passed as a value (a place with `.clone()`) | `function_line`, `args` in `crates/ignite-rustgen/src/lib.rs`; section 6 |
+| The in-place changes that make a parameter owned today: on LLVM `region::mutates` (`push`, `append`, `clear`, `Map.put`, `Map.remove`, the `Store` mutators, assignments); on Rust `mutated_names` with `mutates_receiver` (`push`, `append`, `clear`, `Map.put`, `Map.remove`, assignments) | `crates/ignite-llvm/src/region.rs`, `crates/ignite-rustgen/src/lib.rs` |
+| The backends and the evaluator already lower a `Callee::Local` call by evaluating the callee as an expression | the `_` arm of `call` in `crates/ignite-rustgen/src/lib.rs`; the `Some(Callee::Local)` arms in `crates/ignite-llvm/src/lower.rs` and `call_expr` in `crates/ignite-eval/src/eval.rs` |
+| The typer's effect pass maps an effectful fn type's `requires` onto a call's arguments for any `Callee::Local` callee; an effectful operation at a span `ignite-check` did not record as an effect site is E042 | `Callee::Local` arm in `crates/ignite-types/src/typer/effects.rs`; `effect_site` in `typer.rs` |
+| A closure parameter takes its type from an annotation or from the expected fn type; a type that still holds a type variable is E042 | `closure` in `typer.rs` |
+| Pattern grammar: `'[' (pattern (',' pattern)*)? ']'` matches a list (or `Bytes`) of exactly that length | section 3; `PatternKind::List` in `crates/ignite-syntax/src/ast.rs` |
+| `PatternKind::List` is matched in `ignite-syntax` (parser), `ignite-check`, `ignite-types` (`typer.rs`), `ignite-eval`, `ignite-rustgen` and `ignite-llvm` (`lower.rs`, `region.rs` `pattern_binds`); `exhaustive.rs` has no list arm, so a list pattern falls to its catch-all rule | grep `PatternKind::List` |
+| Fn values: Rust `Arc<dyn Fn(..) -> R + Send + Sync>`; LLVM `{ ptr code, ptr env }`, environment block in the arena, captures copied at creation, glue ops 0 to 2 | section 13.3; `docs/llvm.md` §3.1 |
+| A call through a fn value passes copies on LLVM, owned values on Rust | `docs/llvm.md` §3; `fn_value` in `crates/ignite-rustgen/src/lib.rs` |
+| `ModuleTypes` derives `Default`; a new query field needs a line in `query_snapshot` | `ModuleTypes`, `query_snapshot` in `crates/ignite-types/src/lib.rs` |
+| `CODEGEN_REVISION` is `ignite-codegen/0.1.0-4` at `7ab3f7c` | `crates/ignite/src/apply/plan.rs` |
+| E076 is free: `docs/syntax.md` §8.3 proposes it for P9 inside T4's range E070 to E079 for that proposal; no code uses it | `docs/syntax.md` §8.3; grep of `crates/` and `docs/slice.md` |
+| The test runner's default timeout is 60 s | `DEFAULT_TIMEOUT` in `crates/ignite-io/src/test.rs` |
+
+### 20.2 Scope and non-goals
+
+In scope: last-use moves (20.3), calls of fn-typed expressions (20.4), rest patterns in list
+patterns (20.5), both-target fixtures for every item that holds, and the records.
+
+Not in scope (20.13 gives the reasons): effectful closures passed as fn values; inferring a
+closure parameter from the closure body; capture by move; moves of pattern bindings, `for`
+elements, closure parameters and anything inside a closure body; rest patterns in tuples and
+variant payloads; the open rows of `docs/friction.md` that are not on the wave-A row; a
+persistent `Table` (actors R1 "Open").
+
+### 20.3 Last-use moves (D1, D2, D3)
+
+A move is an optimisation that must change no observable value: a program means the same with
+and without it, and the evaluator, which copies by construction, stays the reference (row 23).
+The analysis runs once in `ignite-types`, after typing a module, in a new module
+`crates/ignite-types/src/moves.rs`; both backends read its result through `TypedProgram`
+(20.6). It reports no diagnostic.
+
+#### 20.3.1 Tracked variables, move positions and places
+
+Tracked variables: a single-name `let` or `var` binding, and a parameter of a fn, an associated
+fn or a protocol role, whose type is an aggregate or a type parameter: not `Int`, `Byte`, `Bool`,
+`Unit`, a quantity, a handle type (invariant 3) or a fn type (copying a fn value is a reference
+count on Rust; on LLVM its environment copy is left for later, 20.13). Each binding is its own
+variable: a shadowing `let` or `var` starts a new one and neither reads nor reassigns the outer
+one; the analysis works on resolved bindings, not on names. Pattern bindings, `for` elements and
+closure parameters are not tracked.
+
+Move positions, where an aggregate value is taken:
+
+- an argument of a direct call (a named fn, an associated fn, a role, or a UFCS call of a user
+  fn, whose receiver is argument 0) to a parameter the callee consumes (20.3.3);
+- an argument of a call through a fn value;
+- the element argument of the builtins `push` and `put`;
+- the initializer of a single-name `let` or `var`, and the right side of an assignment (not the
+  initializer of a pattern `let`, whose bindings point into it on LLVM);
+- the operand of `return`, and the result expression of a fn body or of a block whose value is
+  used;
+- a list element, a record literal's field value, the base of a record update, a variant,
+  `Some`, `Ok` or `Err` payload, a tuple element.
+
+Not move positions: a receiver of a builtin method, a `match` scrutinee, a `for` iterable, an
+operator operand (also `==` and `+` on `Text`), a `spawn` argument, an `assert` operand, a
+closure capture.
+
+A place in a move position moves when it is a tracked variable `v` or a field chain `v.f.g`
+rooted at one, and that place is dead after the position (20.3.2). A chain through an index
+(`v[i]`), through a boxed field or payload (section 13.4), or rooted at an untracked binding never
+moves.
+
+#### 20.3.2 Liveness
+
+Liveness is per place: a tracked variable `v` or a field path `v.f.g` rooted at it. Two places
+overlap when one is a prefix of the other (`v` and `v.f`, `v.f` and `v.f.g`); `v.f` and `v.g`
+do not. A place is dead after a position when no path from the position mentions an overlapping
+place before that place, or a prefix of it, is reassigned as a whole (`v.f = e` kills `v.f`;
+`v = e` kills every place of `v`) or the fn exits. Evaluation order is section 6's: arguments
+left to right, record fields in source order, then the base. Paths follow `if`, `match` arms,
+loops with their back-edges, `break`, `continue`, `return` and `?`. A mention is any read of an
+overlapping place, an in-place change through one (`v.items.push(x)`, `v.f = e` for a longer
+`v.f.g`), and the creation of a closure that captures `v`.
+
+No move, even when the rule above would allow one:
+
+- inside the arms of a `match` whose scrutinee is a place overlapping the moved one, and inside
+  the body of a `for` whose iterable overlaps it: on LLVM their pattern bindings point into it
+  (`docs/llvm.md` §4), on Rust they borrow it;
+- at an argument when another argument of the same call or of an enclosing call, the receiver
+  of an enclosing builtin, the left operand of an enclosing operator or the receiver of an
+  enclosing index mentions an overlapping place at all: a read, an in-place change, or an
+  assignment to it or to a place rooted at it. A borrowed parameter or an operand read in place
+  would see the moved value change (`f(s, s)`, `f(s.count, s)`, `look(s, wipe(s))`,
+  `s.items.at(wipe(s))`, `s == bump(s)`, `s.items == bump(s).items`, `xs[reset(xs)]`), and on
+  LLVM a later argument that assigns `s` would overwrite the slot the callee owns
+  (`take(s, if c { s = fresh(); 0 } else { 0 })`). For an enclosing call, operator or index the
+  operands that count are those evaluated before the one the move is in and read in place after
+  it ran: a borrowed argument, a builtin or borrowed UFCS receiver, the receiver of a fn-field
+  call, the left operand of a binary operator when it is an aggregate (an `Int`, `Bool` or
+  other scalar left operand is a value once evaluated, and `&&` and `||` branch on theirs before
+  the right one runs), the receiver of an index. An argument of an enclosing call in a move
+  position is a value once evaluated (moved or copied, 20.3.5), and a later one is kept by
+  liveness;
+- anywhere inside a closure body (the analysis does not enter closure bodies).
+
+Examples. R1's shape: in `while i < n { s = step(s, i); i = i + 1 }` the `s` argument moves,
+because `s` is reassigned before any mention. In `let t = step(s, 1); t.count + s.count` it does
+not. A handle loop's `a.state = a.handle(a.state, i)` moves `a.state`: the receiver path
+`a.handle` does not overlap it, and `a.state` is reassigned after the call. A
+`Step { state = st.state, out = publish(st.out) }` with `st` dead after moves `st.state`, and
+`st.out` too when `publish` consumes its parameter.
+`answer(state, reply, state.table.values())` does not move `state` (another argument mentions
+`state.table`); `let values = state.table.values(); answer(state, reply, values)` does.
+
+#### 20.3.3 Consumed parameters
+
+A parameter `p` is consumed when either holds:
+
+- its fn changes it in place on some path: an assignment to `p` or a place rooted at it, or a
+  `push`, `append`, `clear` (`List`, `Bytes`), `put` or `remove` (`Map`) through a place rooted
+  at it. This set is the union of what `region::mutates` (LLVM) and `mutates_receiver` with
+  `mutated_names` (Rust) count today, which the analysis replaces; `consumed` must be a superset
+  of both, so that no parameter the backends own today becomes borrowed;
+- its fn moves `p` or a place rooted at it (`p.items`) on every path that reaches a `return`, a
+  `?` exit or the end of the body (any move position of 20.3.1, including passing it on to a
+  consumed parameter and returning it).
+
+A place rooted at a parameter that is not consumed never moves; it is copied where it is taken,
+as today (`pick(a, b, c) = if c { a } else { b }` copies the one it returns). The set is the least
+fixpoint over each module's fns, computed in import order, so a std fn's set is known before the
+program's. Generic fns have one set per declaration, not per instance. A protocol role's set is
+its declaration's.
+
+Copy count: a parameter consumed by an in-place change was owned before, and its caller passed or
+its entry made one copy, as now. A parameter consumed by a move was copied at the move point on
+every path before; now the caller copies once, or not at all when its argument moves. So no
+call makes more copies than before.
+
+#### 20.3.4 Rust target (U3)
+
+- A consumed parameter is declared by value, `p: T`, or `mut p: T` when the body changes it; the
+  entry copy of section 6 disappears for it. Every other parameter keeps today's form: `&T`,
+  scalars and fn types included (`x: &i64`, cloned on entry when Copy), and a role's parameters
+  stay `mut name: T` by value whether consumed or not.
+- A moving place is emitted bare, without `.clone()` or `&`, to a consumed parameter, to any
+  role parameter and through a fn value. A non-moving argument to a consumed parameter is
+  emitted as a value (a place with `.clone()`).
+- Every call site the backend writes itself follows the same rule: the generated mains' calls of
+  `K.main`, the test runner's calls, `spawn`'s `__spawn_N` (passed by value to a consumed
+  parameter, `&__spawn_N` otherwise), and a named fn wrapped as a fn value (the wrapper passes its
+  owned argument by value to a consumed parameter).
+- rustc must accept every program the checker accepts (vision X23): a move the analysis allows
+  is one rustc's move check allows. Rows 11 and 26 check it on the fixtures, the examples and
+  the end-to-end programs.
+- Section 6's sentence on parameters gets the consumed rule; its `fn(A, B) -> R` row, the "fn
+  types" among the Copy parameters cloned on entry and the `as fn(i64) -> i64` wrapper get 13.3's
+  `Arc<dyn Fn>` (20.8 item 4).
+
+#### 20.3.5 LLVM target (U4)
+
+- A parameter is owned exactly when it is consumed, borrowed otherwise (today: owned when
+  modified, `region::modified`).
+- A moving argument passes the place's own pointer to the owned parameter, with no `copy.` call;
+  ownership passes to the callee, which may change the value in place. A non-moving argument to
+  an owned parameter is a fresh copy, as today.
+- A non-moving operand in a move position is copied when it is evaluated, before the next
+  operand runs, in every form that evaluates several: positional and named arguments, variant
+  payloads, list, tuple and record literal elements, record update fields. 20.3.2 relies on it:
+  a later operand may move the same place into a callee that changes it in place
+  (`weigh(first = s, second = bump_count(s))`, `Both(s, bump_count(s))`).
+- A moving `let`/`var` initializer, assignment, field value, element or payload takes the value
+  with a shallow `memcpy` of its representation, without `copy.` glue.
+- The result slot never aliases a moved variable: `s = step(s, i)` writes the result to a
+  temporary slot and then moves it into `s`.
+- Loop regions keep their rule: a moved variable that the loop reassigns is a carried variable
+  (`docs/llvm.md` §4), and a moved argument lies below every mark the callee takes, as a borrowed
+  one does. `slice16/moves.ignite` (U1) grows a moved state past 64 KiB inside a loop, so
+  releases happen, and row 12 runs it under the debug runtime.
+- The call sites the backend writes itself (the `spawn` thunk, the fn-value thunk, the
+  `store_update` thunk, the generated mains) pass fresh copies today, which is correct for an
+  owned parameter; they need no change.
+- `docs/llvm.md` §3's borrowed/owned sentence and §4's soundness sentence ("Callee arguments are
+  fresh copies or the caller's places") get the consumed rule and the moved place.
+
+#### 20.3.6 The evaluator
+
+Unchanged. `ignite-eval` copies values by construction and reads neither `moves` nor
+`consumed`.
+
+### 20.4 Closures and calls of fn-typed expressions (D4, D5)
+
+#### 20.4.1 What holds, as the contract
+
+Section 13.3 stays the rule: a closure captures by copy at creation; its type is a fn type; it
+lowers on Rust to `Arc<dyn Fn(..) -> R + Send + Sync>` and on LLVM to `{ ptr code, ptr env }`
+with the environment block of `docs/llvm.md` §3.1 (glue word first, captures in
+`ClosureInfo.captures` order with C layout, null for no captures). Row 8 pins the shapes wave C
+uses. No change to either lowering in this slice.
+
+#### 20.4.2 Calls of fn-typed expressions
+
+Grammar: unchanged (a call's callee is a postfix expression, section 3).
+
+- `ignite-check` resolves the names inside a callee expression and no longer reports E003 `not
+  callable`; a name callee keeps its rules (an unknown name is E003, a constant callee is E003
+  `constant … is not callable; bind it first`).
+- `ignite-types` types the callee. When its type is `fn(..) -> R` or an effectful fn type, the
+  call is a `Callee::Local` call: arguments checked against the parameter types (E040, E043 on
+  arity), result `R`. Any other type is E040 (20.7).
+- Effects: in its non-name arms, `ignite-check`'s `call` uses `static_type(callee)` and
+  `fn_value_effects` as its `Name` branch does, charges the effects (E016 when `requires` lacks
+  them) and records the effect site. So `hs[0](conn)` and `(h.send)(conn)` check as `h.send(conn)`
+  does today. Only when `static_type` gives no type (a call's result, `pick_sender(true)(conn)`)
+  and the typer finds an effectful fn type is the call E042 (20.7), through the existing
+  effect-site rule. Binding it first (`let f: fn(c: PipeStream) -> Int requires [c.write] =
+  pick_sender(true)`, then `f(conn)`) is the way out.
+- Evaluation order: the callee first, then the arguments left to right (as `docs/llvm.md` §3.1
+  says for fn values).
+- Lowering: the existing `Callee::Local` arms (20.1 facts); U3 and U4 check them with
+  `calls.ignite` and fix what fails.
+
+#### 20.4.3 Effects of a captured capability
+
+Unchanged: the effects a closure body performs on captures are charged where the closure is
+created (section 13.3, E016), and the closure is effectful. A fn type's `requires` names only its
+own parameters (`fn(n: Int) -> Int requires [n.read]`), so no fn type can describe an effect on
+a capture; passing such a closure where a fn type is expected is E017 (fixture `e017_closure`).
+Calling it through its `let` binding, or passing the capability as a parameter of an effectful
+fn type, works today (p04b, row 8). Wave C does not need more: actors P1 says "No closures", and
+`call(fn)` is P4 (20.13).
+
+### 20.5 Rest patterns (D6)
+
+`docs/syntax.md` P9 and R7 as written, contracted here (vision T2).
+
+Grammar (section 3's `pattern`, one alternative replaced):
+
+```
+pattern  += '[' (elem (',' elem)*)? ']'
+elem     := pattern | '..' ident?
+```
+
+with at most one `..` per list pattern, and `..name` only as the last element. A second `..`, or a
+`..name` that is not last, is E076, reported by the parser. `..` outside the brackets of a list
+pattern stays E001 `expected pattern, found \`..\``. A list pattern in a `let` stays refutable
+(E001), with or without a rest.
+
+AST (add-only): `PatternKind::Rest(Option<Ident>)`, which appears only as an element of
+`PatternKind::List`.
+
+Typing: on a `List<T>` scrutinee the elements are `T` and `..name` binds `List<T>`; on `Bytes`
+they are `Byte` and `..name` binds `Bytes`. A rest binding is an ordinary pattern binding (E049
+in an or-pattern applies; it is immutable, section 13.11's E006 rules apply).
+
+Exhaustiveness (E046): a list column is split by length, as rustc splits slice patterns. Let `m`
+be the largest element count of an exact pattern, and `P` and `S` the largest prefix and the
+largest suffix (elements before and after the `..`) over the column's rest patterns. Every length
+`L` from `0` to `max(m, P + S - 1)` is checked on its own, and one representative length
+`max(m + 1, P + S)` stands for every longer length (from `P + S` on, no rest pattern's prefix
+and suffix share a position, so all longer lengths behave alike). At a length `L` an exact pattern
+of `L` elements applies, and a rest pattern with `p + s <= L` applies with its prefix at
+positions `0` to `p - 1`, its suffix at `L - s` to `L - 1` and `_` in between; the `L` element
+columns are then checked as a tuple's. A value missing at a checked length is printed as that
+length's list pattern, element by element, with `_` for an unconstrained position (`[_]`,
+`[false]`, `[_, true]`), in the order of the lengths and then of the element witnesses. A
+value missing at the representative length `R` stands for every length from `R` on, so it is
+printed as rustc prints a slice witness: its first `R - S` elements, `..`, then its last `S`
+(`[None, ..]`, `[.., false]`, `[true, .., false]`, `[_, false, .., true, _]`, `[_, _, ..]`);
+adding the printed pattern as an arm covers every length it names. This also applies to list
+columns without a rest, so p09's `[] , [x]` now reads `match does not cover \`[_, _, ..]\`` (20.7).
+
+Lowering, both targets and the evaluator: an exact pattern tests `len == n`, a rest pattern
+`len >= k`; prefix element `i` is index `i`, suffix element `j` of `s` is index `len - s + j`; a
+rest binding is a copy of elements `p` to `len - s`, as `List<T>` or `Bytes`, where `p` is the
+prefix length. Rust may use a slice pattern (`[a, rest @ .., z]`, with `rest.to_vec()`) or the
+explicit tests. The copy is a value position of section 6.
+
+### 20.6 Typed API (add-only)
+
+In `crates/ignite-types/src/lib.rs`:
+
+```rust
+impl TypedProgram {
+    /// Whether `expr`, a place in a move position, takes its value without a copy
+    /// (`docs/slice.md` 20.3). False for every other expression.
+    pub fn moves(&self, expr: &Expr) -> bool;
+    /// Whether the callee consumes its parameter `index` (UFCS receiver = 0). Defined for a
+    /// declared fn, associated fn or role; false for every other callee (a variant, a builtin,
+    /// `Callee::Local`, `Callee::FieldFn`, `Callee::Const`).
+    pub fn consumed(&self, callee: &Callee, index: usize) -> bool;
+}
+pub struct ModuleTypes {
+    // …existing fields…
+    /// Consumed parameters per fn, associated fn (`Owner.name`) and role (`Protocol.role`).
+    pub consumed: BTreeMap<String, Vec<bool>>,
+}
+```
+
+Both struct literals of `ModuleTypes` end in `..Default::default()`, so the field is add-only.
+`query_snapshot` copies it: `TypedProgram::consumed` answers for a callee of an imported module
+from that module's snapshot, so a backend asks it about a std fn the program calls. In `crates/ignite-syntax/src/ast.rs`:
+`PatternKind::Rest(Option<Ident>)`. Nothing is renamed.
+
+### 20.7 Diagnostics
+
+New code, in section 8's syntax-stage table:
+
+| code | meaning |
+|---|---|
+| E076 | a second `..` in a list pattern (`a list pattern has at most one \`..\``), or a `..name` that is not the last element (`\`..name\` must be the last element of a list pattern`); reported by the parser |
+
+E076 is the code `docs/syntax.md` §8.3 proposes, in T4's range E070 to E079 for that proposal,
+taken over with P9 (D6); slice 16 adds no range.
+
+Changed meanings:
+
+- E003: no longer for a callee that is an expression (`not callable`); a name callee keeps its
+  rules.
+- E040: also a callee whose type is no fn type: `type mismatch: this expression has type \`<T>\`
+  and cannot be called`; a name callee keeps `\`<name>\` has type \`<T>\` and cannot be called`.
+- E042: also a call of an effectful fn-typed expression that is no name and to which
+  `ignite-check`'s `static_type` gives no type (20.4.2): `cannot check the effects of a call of
+  this expression; bind it first with its type: \`let f: <fn type> = …\``.
+- E046: list columns are split by length (20.5); the witness of a list column is a list pattern,
+  and `match on \`List<…>\` does not cover every value; add a \`_\` arm or a binding arm` no
+  longer appears for lists.
+
+Fixtures: as in rows 6, 7, 16 and 17.
+
+### 20.8 Stale points
+
+| # | where | stale text | resolution, by whom |
+|---|---|---|---|
+| 1 | `epic:slice-16-language-gaps`, acceptance | "`examples/todo` `patch` uses a closure (friction 9 closed)" | holds since slice 9 (20.1). The steering session updates the epic; U0 does not edit the store |
+| 2 | `docs/vision.md` §4.1, row "15+" | lists "B (P2 on), C, D, E, G, H", which skips A although C needs it | U6 adds a row "16 \| A language gaps" before it |
+| 3 | `docs/vision.md` §4 row A and §5 | the wave-A items read as open | U6 marks each with the slice that landed it (20.1) |
+| 4 | section 6, lowering table | `fn(A, B) -> R` lowers to `fn(A, B) -> R` | 13.3's `Arc<dyn Fn(..) -> R + Send + Sync>`; U3 edits it with the parameter rule (20.3.4) |
+| 5 | `docs/actors.md` R1 | "P1 adds last-use moves in the generators"; "The LLVM target already passes borrowed parameters without a copy" | slice 16 adds them (20.3); a borrowed parameter is not the case R1 needs (the callee changes the state). U6 edits R1 with what moves and what still copies: `s = handle(s, m)`, `a.state = a.handle(a.state, m)` and `Step { state = st.state, … }` move; an argument beside another argument that mentions the state (`answer(state, reply, state.table.values())`) copies, and binding that argument first moves (20.3.2) |
+| 6 | `docs/actors.md` §3.3 | "T3 found that a Ignite fn value cannot capture locals. Once closures land (P4)" | closures capture since slice 9 (13.3); what P4 still needs is 20.13 items 1 and 2. U6 edits it |
+| 7 | `docs/syntax.md` P9, §8.3 | P9 proposed, E076 proposed | contracted by 20.5 and 20.7; U6 marks P9 "contracted, `docs/slice.md` 20.5" |
+| 8 | `docs/llvm.md` §3, §4 | borrowed iff not modified; callee arguments are fresh copies or the caller's places | U4 (20.3.5) |
+| 9 | `docs/friction.md` | no row for `assert` as a match arm body (`Some(h) => assert …` is E001; braces work) | U6 adds a row, open (20.13) |
+| 10 | title of this file | "slices 1 to 15" | U6 makes it "slices 1 to 16" (vision X15) |
+| 11 | section 6, parameters | "fn types" among the Copy parameters cloned on entry; the `as fn(i64) -> i64` wrapper | U3, with item 4 (20.3.4) |
+
+### 20.9 Decisions
+
+| # | decision | alternative | why |
+|---|---|---|---|
+| D1 | One frontend analysis in `ignite-types`, read by both backends through `TypedProgram::moves` and `consumed` (20.6) | an analysis per backend, as `mutated_names` (Rust) and `region::modified` (LLVM) are today | both targets must agree on which parameter is owned, because a std fn's mode is part of every caller's code; one analysis is one rule to review and test (rows 1 to 5) |
+| D2 | Moves are conservative (20.3.2): tracked single-name bindings and parameters only, resolved per binding; liveness per field path, so disjoint fields move independently; no indexes or boxes; no move inside closure bodies, inside `match` arms or `for` bodies over an overlapping place, or beside another argument that mentions an overlapping place | Rust-like full ownership with moves of pattern bindings and partial moves through indexes; liveness per variable only | R1's shapes (a variable or a field reassigned from a call, a record built from a dead record's fields, 20.3.2's examples) need field paths and nothing more; every excluded case is one where a backend aliases (LLVM pattern bindings point into the scrutinee, a later argument overwrites the moved slot) or rustc's borrow check differs. Widening is additive (20.13) |
+| D3 | A parameter is consumed when changed in place on some path or moved on every path; the set is a per-module least fixpoint in import order; no new diagnostic | an annotation on parameters (`own p: T`); consumed when moved on any path | no new keyword (invariant 6); moved-on-every-path keeps the copy count from rising (20.3.3), where moved-on-any-path would copy `unwrap_or`'s `fallback` at every call |
+| D4 | Calls of fn-typed expressions are in. Their effects are charged by `ignite-check` from `static_type` where it gives a type, as for a name; E042 only where it gives none | E042 for every effectful non-name callee | `static_type` already types fields and indexes, so `(h.send)(conn)` must check as `h.send(conn)` does; only a call's result is left without a type, and binding it with a type is the way out |
+| D5 | Closures keep section 13.3; effectful closures as fn values (E017) and body-directed inference of closure parameters are deferred (20.13) | effects on captures in fn types; inference variables for closure parameters | actors P1 to P3 use no closures; P4's `call` works with an annotated parameter (p05b); either change is a type-system extension larger than the rest of the slice |
+| D6 | Rest patterns as `docs/syntax.md` P9 and R7, with its code E076 | `..name` anywhere, a new code in a slice-16 range | the proposal is what protocols §5.2 asked for and its code is reserved by T4 for it; one fewer deviation to record |
+| D7 | Seven units in five waves (20.10) | one unit per backend for each feature | the moves analysis and the expression callees share no file; the two backends share no file; rest patterns touch every crate and so get their own wave |
+
+### 20.10 Work split
+
+| unit | story | owns | depends on | first failing test | rows |
+|---|---|---|---|---|---|
+| U0 | `story:slice-16-contract` | this section, the section-8 rows, `docs/slice16-review.md` | — | — | — |
+| U1 | `story:slice-16-moves-analysis` | `crates/ignite-types/src/moves.rs`; in `crates/ignite-types/src/lib.rs` the `moves` and `consumed` accessors, `ModuleTypes::consumed`, its `query_snapshot` line and the call of the analysis after typing; `crates/ignite-types/tests/moves.rs` and its `mod moves;` line; `slice16/moves.ignite` (with a moved state grown past 64 KiB inside a loop, 20.3.5, and the shapes of 20.3.2's examples), `slice16/moves_scale.ignite` | U0 | `moves::a_var_passed_and_reassigned_moves` | 1 to 5 |
+| U2 | `story:slice-16-expression-calls` | in `crates/ignite-check/src/lib.rs` the non-name arms of `call` (with `static_type` and `fn_value_effects`); in `crates/ignite-types/src/typer.rs` the call typing of an expression callee; fixtures `valid_expression_calls` (check and types), `e003_unknown_variable` (the added case), `e040_not_callable`, `e043_expression_call_arity`, `e042_effectful_expression_callee`; `crates/ignite/tests/slice16.rs` with row 8's test, its `mod slice16;` line; `slice16/closures.ignite`, `slice16/calls.ignite` | U0 | `fixtures::fixtures_match_expected` (ignite-check) on `valid_expression_calls` | 6 to 8 |
+| U3 | `story:slice-16-rust-moves` | `crates/ignite-rustgen/src/lib.rs` (consumed parameters, bare moves, the backend's own call sites, expression calls if `calls.ignite` fails); `crates/ignite-rustgen/tests/slice16.rs` and its `mod` line; `crates/ignite-rustgen/tests/golden/slice16.{ignite,rs}` and the test of row 13; existing rustgen goldens as row 24 allows; `CODEGEN_REVISION`; section 6's parameter sentence and `fn` row | U1, U2 | `golden::last_use_moves_and_expression_calls` (rustgen) | 9, 11, 13, 15 |
+| U4 | `story:slice-16-llvm-moves` | `crates/ignite-llvm/src/` (owned iff consumed, moved places, result slots, expression calls if `calls.ignite` fails); rows 10 and 12 appended to `crates/ignite/tests/slice16.rs`; `crates/ignite-llvm/tests/golden/slice16.{ignite,program.ll}` and the test of row 14; existing LLVM goldens as row 24 allows; `docs/llvm.md` §3 and §4 | U1, U2 | `golden::last_use_moves_and_expression_calls` (ignite-llvm) | 10, 12, 14 |
+| U5 | `story:slice-16-rest-patterns` | `PatternKind::Rest` and its arms in every crate (`ignite-syntax` parser and AST, `ignite-check`, `ignite-types` `typer.rs`, `exhaustive.rs` with its new list arm, `moves.rs`, `ignite-eval`, `ignite-rustgen`, `ignite-llvm` `lower.rs` and `region.rs`); fixtures of rows 16 and 17 and the list line of `e046_patterns.expected`; `slice16/rest.ignite` added to `slice16::fixtures_pass` (rustgen) and `slice16::llvm_fixtures_pass` (`crates/ignite/tests/slice16.rs`); the rest goldens of row 19; the `rest_` family in `crates/ignite/tests/fixtures/eval_equivalence.ignite` and its line in `fixture_covers_every_family`; `CODEGEN_REVISION` | U3, U4 | `fixtures::fixtures_match_expected_diagnostics` (ignite-syntax) on `valid_rest_patterns` | 16 to 20 |
+| U6 | `story:slice-16-records` | `slice16/holds.ignite`; row 21's test appended to `crates/ignite/tests/slice16.rs`; the `call_` and `move_` families of `eval_equivalence.ignite`; `STATUS.md`, `AGENTS.md`, `PLAN.md`, `docs/vision.md` §4, §4.1 and §5, `docs/friction.md`, `docs/actors.md` R1 and §3.3, `docs/syntax.md` P9, the title of `docs/slice.md`; `docs/performance/16/` | U5 | `slice16::fixtures_pass_on_both_targets` | 21 to 23, 27 |
+
+Rows 24 and 25 belong to every unit; row 26 to U3, U4 and U6.
+
+Order: W1 U0; W2 U1 and U2; W3 U3 and U4; W4 U5; W5 U6.
+
+Shared files:
+
+- W2: U1 and U2 are both in `crates/ignite-types/`. U1 owns `moves.rs`, `lib.rs` and
+  `tests/main.rs`; U2 owns `typer.rs` and adds fixture files only. Neither edits the other's
+  file. U1 adds fixture files under `crates/ignite/tests/fixtures/slice16/`; U2 adds others there
+  and owns `crates/ignite/tests/slice16.rs` and `crates/ignite/tests/main.rs`.
+- W3: U3 owns `crates/ignite-rustgen/` and `crates/ignite/src/apply/plan.rs`; U4 owns
+  `crates/ignite-llvm/`, `docs/llvm.md` and the appends to `crates/ignite/tests/slice16.rs`
+  (U2's file, merged in W2). Both read the W2 fixtures and edit none.
+- W4: U5 is alone; it edits files of every earlier unit after they merged.
+- W5: U6 appends to `crates/ignite/tests/slice16.rs` and `eval_equivalence.ignite` after U2, U4
+  and U5 merged.
+
+Rules: one integration-test binary per crate (`AGENTS.md`), so every new test file is a `mod`
+line in its crate's `tests/main.rs`. Each unit's commit names the rows of 20.0 it makes pass.
+The story ids above are the contract's names; the steering session creates or updates the
+stories, U0 does not edit the store.
+
+### 20.11 Placeholder arms
+
+- After U1 (W2), `moves` and `consumed` exist and no backend reads them: no behaviour or golden
+  changes.
+- After U2 (W2), expression callees type as `Callee::Local`; the backends' existing arms lower
+  them (20.1 facts). No existing test has an expression callee, so the workspace stays green
+  even if a backend fails on `calls.ignite`; rows 11 and 12 are where U3 and U4 find out.
+- U5 adds `PatternKind::Rest` and every match arm over it in one unit, so no crate sees the
+  variant without its arm.
+
+### 20.12 Gate time
+
+Method of 18.18 and 19.17 (section 15.1), through `tools/ignite-perf` (modes `cold`, `warm`,
+`programs`, `cli`; records `ignite-performance/1`). "Before" is a `git archive` copy of the slice
+base after the rebase (the slice-15 merge), "after" the closed tree, each with its own
+`CARGO_TARGET_DIR`. One cold gate per tree, then three interleaved warm passes. A pair whose two
+1-minute loads differ by more than 5 is dropped. Report the medians of the pair ratios next to the
+absolute times.
+
+Units: those of 18.18, plus:
+
+- `ignite check examples/terminal/terminal.design.ignite` and `ignite check
+  examples/todo/todo.ignite` (15 pairs each): the moves analysis runs on every program and on the
+  std modules it reaches;
+- the program builds of `todod` and `terminald`, both targets, dev and release (3 pairs): fewer
+  copies, changed parameter modes;
+- `ignite test slice16/moves_scale.ignite`, per target, cold and warm (after only), with the run
+  times of its two tests.
+
+Expected causes, to be measured or labelled inferred: the analysis's cost in the frontend
+(linear in the fn bodies, with one fixpoint per loop and per module); smaller generated code
+where clones disappear.
+
+A unit that rises over 10 % gets a measured cause, or the record labels the cause inferred. No
+baseline moves. The apply suites stay the slice-13 exception.
+
+Records: a "Slice 16" paragraph in `AGENTS.md`'s gate-time section; raw logs and records under
+`docs/performance/16/`.
+
+### 20.13 Deferred
+
+| # | item | why | where it goes |
+|---|---|---|---|
+| 1 | an effectful closure (one that uses a captured capability) passed as a fn value; E017 stays | no fn type can name an effect on a capture (20.4.3); wave C P1 to P3 pass no closures | actors P4, or the slice that adds effect polymorphism |
+| 2 | inferring an unannotated closure parameter from the closure body (p05) | an annotation works (p05b); needs inference variables the typer does not have | actors P4 |
+| 3 | capture by move (a closure taking a dead variable without a copy) | a capture copies once per closure creation, not per loop step; not on R1's path | later, with measurements |
+| 4 | moves of pattern bindings, `for` elements, closure parameters, fn-typed variables, inside closure bodies, at `spawn` arguments and operator operands (`a + b` on `Text`), and beside another argument that only reads an overlapping place (`answer(state, reply, state.table.values())`; binding the argument first moves) | D2; each needs its own aliasing argument on LLVM | additive, when a measurement asks for one |
+| 5 | rest patterns in tuples (`(a, ..)`) and variant payloads | P9 covers lists; protocols §5.2's shape is a list rest inside a tuple, which row 18 covers | `docs/syntax.md`, unscheduled |
+| 6 | `docs/friction.md` open rows (19 `for` patterns, 20 match guards, 22, 23, 24, 38, 41 and the others not on the wave-A row) | not on vision §4 row A | their own proposals (`docs/syntax.md` P4, P5) |
+| 7 | `assert` as a match arm body (20.8 item 9) | found while probing; braces work | friction row by U6 |
+| 8 | a persistent `Table` (actors R1 "Open") | a data-structure question of wave C, not a language gap | actors P1 |
+
+### 20.14 Open questions
+
+Each has a default, which the units follow unless the review changes it.
+
+| # | question | default |
+|---|---|---|
+| Q1 | actors R1 says "Measure on the 1600-POST test", which exists only once actors P1 lands | rows 9 and 10 stand in for it; actors P1 measures R1 on its own acceptance test |
+| Q2 | the rebase onto the slice-15 merge changes the base values this section quotes (`CODEGEN_REVISION`, test counts) | rows 15 and 25 are relative to the base; U3 and U5 read the value at their wave's base |
+| Q3 | whether a copy the analysis keeps in a loop (a read after the call) should be reported to the user | no diagnostic in this slice (D3); a later lint can use `moves` |

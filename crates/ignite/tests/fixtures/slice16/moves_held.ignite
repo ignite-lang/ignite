@@ -1,0 +1,47 @@
+// Adversary cases for slice 16 U4 (docs/slice.md 20.3.2): an operand that an
+// operator or an index evaluates first and reads in place keeps its value while
+// a later operand moves the same place into a fn that changes its parameter in
+// place. With copies, each fn below returns the value its test asserts.
+
+type State {
+  items: List<Int>
+  count: Int
+}
+
+fn bump(x: State) -> State {
+  x.items.push(9)
+  x
+}
+
+fn reset(v: List<Int>) -> Int {
+  v.clear()
+  v.push(7)
+  0
+}
+
+fn compared() -> Bool {
+  let s = State { items = [1], count = 1 }
+  s == bump(s)
+}
+
+fn compared_items() -> Bool {
+  let s = State { items = [1], count = 1 }
+  s.items == bump(s).items
+}
+
+fn indexed() -> Int {
+  let xs = [1, 2]
+  xs[reset(xs)]
+}
+
+test "an equality's left operand keeps its value when the right moves it" {
+  assert !compared()
+}
+
+test "a field operand keeps its value when the right moves its record" {
+  assert !compared_items()
+}
+
+test "an index receiver keeps its value when the index moves it" {
+  assert indexed() == 1
+}

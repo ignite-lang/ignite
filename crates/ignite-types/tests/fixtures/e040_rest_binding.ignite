@@ -1,0 +1,17 @@
+fn takes_int(n: Int) -> Int = n
+
+fn takes_list(xs: List<Int>) -> Int = xs.len()
+
+fn list_rest(xs: List<Int>) -> Int {
+  return match xs {
+    [_, ..rest] => takes_int(rest)
+    [] => 0
+  }
+}
+
+fn bytes_rest(bytes: Bytes) -> Int {
+  return match bytes {
+    [_, ..rest] => takes_list(rest)
+    [] => 0
+  }
+}

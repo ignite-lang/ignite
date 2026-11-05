@@ -29,6 +29,7 @@ names the row in its contract.
 | 39 | Protocol roles are the closed set `serve` and `connect` (E030), so a client helper that reads a stream up to a prompt cannot be `Telnet.await_prompt` | slice 12 P4 (std/protocol/telnet), 2026-11-02 | the module fn `await_prompt(stream, expected_prompt)`, imported by name in std/probe (now beside it in std/protocol/telnet) |
 | 40 | Imports may not form a cycle (E032) and an associated fn lives in its type's module (E003), so four reducers over one `Event`/`Effect` pair cannot be split into `std/control/*.ignite`, and a policy record of `std.policy` cannot carry a `machine` hook returning a `std.control.Machine` | slice 12 P4 (std/control, std/policy `DrainRollout`), 2026-11-02 | every reducer in `std/control.ignite` (O45); `std.control.companions(machine)` gives a supervisor's rollout machine |
 | 41 | An assignment place is a name followed by field steps only: `buckets[i].good = n` does not parse | slice 12 P4 (std/control `count`), 2026-11-02 | the open bucket is `Evaluator.current: Option<Bucket>`, replaced by a new `Bucket { from = open.from, good = open.good + good, executed = open.executed + 1 }` and pushed to `buckets` when it closes |
+| 42 | A match arm body cannot be an `assert`: `Some(h) => assert h == 1` is E001 ``expected expression, found `assert` `` (open, `docs/slice.md` 20.8 item 9 and 20.13 item 7) | slice 16 contract probes, 2026-11-04 | `Some(h) => { assert h == 1 }` |
 
 ## Solved in slice 11b (`docs/slice.md` §13.11 row d, §15.14)
 

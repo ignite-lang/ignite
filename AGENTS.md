@@ -11,7 +11,7 @@ the IO substrate (Rust) that compiled programs link.
 |---|---|
 | `crates/ignite-syntax/` | lexer, parser, AST, diagnostics |
 | `crates/ignite-check/` | name resolution across modules, effect and protocol rules; produces `Symbols` |
-| `crates/ignite-types/` | type checker: a type for every expression, E040 to E046 (E046 match exhaustiveness) |
+| `crates/ignite-types/` | type checker: a type for every expression, E040 to E046 (E046 match exhaustiveness, list columns split by length for rest patterns, `docs/slice.md` 20.5); `moves.rs`, the last-use moves analysis (20.3): `TypedProgram::moves` (a place in a move position taken without a copy) and `consumed` (the parameters a callee takes by value, a per-module fixpoint, `ModuleTypes::consumed`), read by both backends |
 | `crates/ignite-rustgen/` | Rust target: the `ignite-std` crate and the program crate |
 | `crates/ignite-llvm/` | LLVM target: IR text for std, program and one main per executable |
 | `crates/ignite-rt/` | runtime of the LLVM target, `libignite_rt.a`: C ABI adapter over `ignite-io` (value conversion, handle table), arenas and regions, the spawn handshake; no IO of its own |
@@ -577,3 +577,47 @@ reasons is in 17.5 "As landed (U5)"; no known gaps.
 - `ignite-perf` needed one fix to measure at all: it refused every tree since 9ad4640 for
   `docs/performance/evidence/.gitattributes` (621070e). No baseline moved. The apply suites stay
   the slice-13 exception.
+
+## Slice 16 language gaps, wave A (2026-11-05)
+
+- Gate at the close, `task gate` on `s16/u6-records` (426449e, the code of the slice's final
+  head; later commits change documents only), 2026-11-05 01:51:29 to 02:00:36 UTC, 547 s, exit 0,
+  start load 6.9, the worktree's own target, `RUST_TEST_THREADS=4`: 1009 cargo tests passed, 0
+  failed, 10 ignored; 211 inline tests per target. The `crates/ignite` end-to-end binary is
+  492.65 s of it (336 passed, 8 ignored).
+- 20.12 method through `tools/ignite-perf`: "before" is `31b738b` (`main`, the side of the
+  close's merge without slice 16), "after" `426449e`. Partly collected: one cold pair and one
+  warm pair; the run stopped in warm pass 2 when the before tree's target passed the session's
+  12 GB limit. Check, plan and program builds were then timed with copies of both compilers
+  (`STEP` lines, same pair and load rules). Records, scripts and the uncollected units in
+  `docs/performance/16/README.md`.
+
+| unit | before s | after s | ratio | pairs | start loads |
+|---|---|---|---|---|---|
+| gate, cold (fmt, clippy, test, test-ignite) | 605.56 (0.85, 8.67, 579.63, 16.41) | 664.34 (0.93, 5.77, 629.57, 28.07) | 1.10 (1.10, 0.67, 1.09, 1.71) | 1 | 7.7 to 12.6 |
+| gate, warm after the touch | 450.11 | 516.89 | 1.15 | 1 | 5.9, 8.7 |
+| `cargo test --workspace`, warm | 440.21 | 507.38 | 1.15 | 1 | 8.9, 9.1 |
+| fmt, clippy, warm | 1.063, 6.754 | 0.931, 6.430 | 0.88, 0.95 | 1 | 5.7 to 8.7 |
+| `ignite check`, `ignite plan` of the design file | 0.089, 0.090 | 0.120, 0.121 | 1.32, 1.34 | 15 | 8.7 to 8.8 |
+| `ignite check examples/todo/todo.ignite` | 0.056 | 0.068 | 1.21 | 15 | 8.7 to 8.8 |
+| todod Rust dev / release | 4.362 / 4.890 | 4.402 / 4.613 | 1.18 / 0.91 | 3 | 6.7 to 9.4 |
+| todod LLVM dev / release | 0.412 / 0.799 | 0.519 / 0.772 | 1.16 / 0.97 | 3 | 6.7 to 9.0 |
+| terminald Rust dev / release | 3.727 / 4.092 | 4.151 / 3.955 | 1.02 / 1.00 | 3 | 7.6 to 9.2 |
+| terminald LLVM dev / release | 0.463 / 0.594 | 0.506 / 0.662 | 1.07 / 1.19 | 3 | 7.0 to 8.5 |
+| `ignite test slice16/moves_scale.ignite`, Rust / LLVM, cold and warm (after only) | | 3.345 and 0.031 / 0.181 and 0.017 | | 3 runs | 7.5 to 7.8 |
+
+- Uncollected: warm pairs 2 and 3; the warm `task test-ignite`, `--no-run`, `ignite_test::` and
+  rustgen units (pair 1 dropped by the load rule, 5.9 to 6.1 against 13.7 to 15.5). Each of the
+  two `moves_scale` tests runs in 0.00 to 0.02 s on both targets, under the runner's 0.01 s
+  resolution; rows 9 and 10 of 20.0 check linearity.
+- Rises over 10 %, inferred unless marked: `std/` is unchanged (measured), so `ignite check` and
+  `plan` (1.21 to 1.34) and the dev builds of todod (1.16, 1.18) and the LLVM release of
+  terminald (1.19) pay the frontend's new work, the moves analysis over every program and
+  reached std module and E046's length split; the warm workspace (1.15) runs 30 more cargo tests
+  (measured), among them the `slice16::` builds on both targets; cold `task test-ignite` (1.71)
+  is its compiler and runtime build, its inline execution unchanged at 0.33 to 0.35 s
+  (measured). todod release falls (0.91 Rust, 0.97 LLVM).
+- Known cost not measured: since wave 3 a pattern binding that is a used branch or arm tail is
+  copied (the analysis does not track pattern bindings; draft story
+  `moves-for-pattern-bindings`).
+- No baseline moved. The apply suites stay the slice-13 exception.

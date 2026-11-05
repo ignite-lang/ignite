@@ -1955,6 +1955,27 @@ impl<'a> Generator<'a> {
         ty.is_fn() || matches!(ty.name.name.as_str(), "Int" | "Byte" | "Bool" | "Unit")
     }
 
+    /// Whether `expr`, a place in a move position, takes its value without
+    /// a copy: the moves analysis marks it (`docs/slice.md` 20.3). Rust
+    /// cannot move out of a reference or a capture; the analysis marks no
+    /// place rooted at a borrowed parameter, a `for` element or a capture,
+    /// and this keeps the copy should it ever mark one.
+    fn moves(&self, expr: &Expr) -> bool {
+        self.types.is_some_and(|t| t.moves(expr))
+            && place_root(expr)
+                .is_some_and(|root| !self.is_borrowed(root) && !self.is_captured(root))
+    }
+
+    /// Whether `callee` consumes its parameter `index` (`docs/slice.md`
+    /// 20.3.3): such a parameter is declared by value and takes its
+    /// argument as a value. False without types.
+    fn consumes(&self, callee: Option<&Callee>, index: usize) -> bool {
+        match (self.types, callee) {
+            (Some(types), Some(callee)) => types.consumed(callee, index),
+            _ => false,
+        }
+    }
+
     /// Whether the call `expr` of the non-local name `id` calls a fn of the
     /// module or an imported one (not a variant, `log` or a constant).
     fn calls_fn(&self, expr: &Expr, id: &Ident) -> bool {
@@ -2033,8 +2054,14 @@ impl<'a> Generator<'a> {
     /// Arguments by reference, left to right. A place whose variable a
     /// later argument modifies (`x.pick(if c { x = ..; 1 } else { 2 })`)
     /// is copied before the later argument runs, so the call sees the
-    /// value the place had when its argument was evaluated.
-    fn ref_args<'e>(&mut self, args: impl IntoIterator<Item = &'e Expr>) -> Vec<String> {
+    /// value the place had when its argument was evaluated. The argument
+    /// of a parameter that `callee` consumes is a value instead
+    /// ([`Generator::value`]: moved when the analysis says so, else a copy).
+    fn ref_args<'e>(
+        &mut self,
+        callee: Option<&Callee>,
+        args: impl IntoIterator<Item = &'e Expr>,
+    ) -> Vec<String> {
         let args: Vec<&Expr> = args.into_iter().collect();
         let mut later = BTreeSet::new();
         let mut modified = vec![BTreeSet::new(); args.len()];
@@ -2044,7 +2071,11 @@ impl<'a> Generator<'a> {
         }
         args.iter()
             .zip(modified)
-            .map(|(arg, modified)| {
+            .enumerate()
+            .map(|(index, (arg, modified))| {
+                if self.consumes(callee, index) {
+                    return self.value(arg);
+                }
                 let root = if let Some((list, _, _)) = self.borrowed_at(arg) {
                     place_root(list)
                 } else if self.is_place(arg) {
@@ -2102,20 +2133,48 @@ impl<'a> Generator<'a> {
     }
 
     /// A value in a result position (the tail of a value block, an arm, a
-    /// branch): a place reached through a borrowed parameter is copied,
-    /// since it cannot be moved out; anything else as written.
+    /// branch): a move position of `docs/slice.md` 20.3.1. A place moves
+    /// only where the moves analysis marks it ([`Generator::value`]); else
+    /// it is copied, as a tail that is read later (in the block, after the
+    /// `if` or `match`, in the next loop iteration) must be. A place of a
+    /// Rust `Copy` type, or of an unknown type, is written as it is: Rust
+    /// copies it. A place reached through a borrowed parameter or a capture
+    /// is always copied, since it cannot be moved out. Anything else as
+    /// written.
     fn result(&mut self, expr: &Expr) -> String {
-        if self.is_place(expr)
-            && place_root(expr).is_some_and(|root| self.is_borrowed(root) || self.is_captured(root))
-        {
+        let copies = matches!(
+            self.type_of(expr),
+            None | Some(Ty::Int | Ty::Byte | Ty::Bool | Ty::Unit | Ty::Quantity(_))
+        );
+        let reached =
+            place_root(expr).is_some_and(|root| self.is_borrowed(root) || self.is_captured(root));
+        if self.is_place(expr) && (reached || !copies) {
             return self.value(expr);
         }
         self.bare(expr)
     }
 
+    /// The arguments a fn-value wrapper passes on to the fn `callee`: its
+    /// owned `names`, each by reference, or by value to a parameter the
+    /// callee consumes (`docs/slice.md` 20.3.4).
+    fn wrapper_args(&self, callee: Option<&Callee>, names: &[String]) -> Vec<String> {
+        names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| {
+                if self.consumes(callee, index) {
+                    name.clone()
+                } else {
+                    format!("&{name}")
+                }
+            })
+            .collect()
+    }
+
     /// A fn of the module or an imported one used as a value: a closure
-    /// that borrows its arguments for the fn, in an `Arc` cast to the fn
-    /// value type (`docs/slice.md` section 13.3:
+    /// that takes its arguments for the fn (by reference, or by value to
+    /// a consumed parameter), in an `Arc` cast to the fn value type
+    /// (`docs/slice.md` section 13.3:
     /// `(Arc::new(|__a0: i64| f(&__a0)) as Arc<dyn Fn(i64) -> i64 + ..>)`).
     /// Without types the closure is left to inference.
     fn fn_value(&mut self, expr: &Expr, id: &Ident) -> String {
@@ -2139,7 +2198,7 @@ impl<'a> Generator<'a> {
             (None, None) => return target,
         };
         let names: Vec<String> = (0..arity).map(|i| format!("__a{i}")).collect();
-        let refs: Vec<String> = names.iter().map(|n| format!("&{n}")).collect();
+        let refs = self.wrapper_args(self.callee(expr), &names);
         let call = format!("{target}({})", refs.join(", "));
         match fn_ty {
             Some((params, ret)) => {
@@ -2505,6 +2564,9 @@ impl<'a> Generator<'a> {
                 format!("String::from_utf8_lossy(&{value}).into_owned()")
             }
             Some(Show::Builtin(_)) => format!("{value}.to_string()"),
+            Some(Show::Fn(q)) if self.consumes(Some(&Callee::Fn(q.clone())), 0) => {
+                format!("{}({value}.clone())", self.fn_path(q))
+            }
             Some(Show::Fn(q)) => format!("{}(&{value})", self.fn_path(q)),
             Some(Show::IoErrorMessage) => format!("{value}.message.clone()"),
             None => format!("String::from(\"{}\")", escape_str(&format!("<{ty}>"))),
@@ -2594,14 +2656,26 @@ impl<'a> Generator<'a> {
         let mut prologue = Vec::new();
         self.borrowed.clear();
         self.type_params = decl.type_params.iter().map(|p| p.name.clone()).collect();
+        let callee = self
+            .types
+            .map(|t| Callee::Fn(QualName::new(t.module.clone(), decl.qualified_name())));
         let params: Vec<String> = decl
             .params
             .iter()
-            .map(|p| {
+            .enumerate()
+            .map(|(index, p)| {
                 let name = ident(&p.name.name);
                 let ty = self.annotation(&p.ty);
                 if role {
                     return format!("mut {name}: {ty}");
+                }
+                if self.consumes(callee.as_ref(), index) {
+                    let mutability = if mutated.contains(&p.name.name) {
+                        "mut "
+                    } else {
+                        ""
+                    };
+                    return format!("{mutability}{name}: {ty}");
                 }
                 if mutated.contains(&p.name.name) || self.is_copy(&p.ty) {
                     prologue.push(format!("let mut {name} = {name}.clone();"));
@@ -2713,6 +2787,38 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// Whether `expr` is a value whose type only its context decides: `[]`,
+    /// `None`, `List.empty()`, `Map.empty()`, `Store.new()`, or a block or
+    /// `if` ending in one. The typer decides such a `let` from later uses
+    /// (`docs/slice.md` section 13, row 3); rustc does not when the first
+    /// use is a generic fn such as `ignite_io::checked::at`, so the `let`
+    /// carries the type the typer recorded.
+    fn undecided(&self, expr: &Expr) -> bool {
+        let tail = |block: &Block| matches!(block.stmts.last(), Some(Stmt { kind: StmtKind::Expr(e), .. }) if self.undecided(e));
+        let empty = |receiver: &Expr, name: &Ident| {
+            matches!(
+                (self.qualifier(receiver), name.name.as_str()),
+                (Some("List" | "Map"), "empty") | (Some("Store"), "new")
+            )
+        };
+        match &expr.kind {
+            ExprKind::List(items) => items.is_empty(),
+            ExprKind::Name(id) => id.name == "None" && !self.is_local(&id.name),
+            ExprKind::Method {
+                receiver,
+                name,
+                args,
+            } => args.is_empty() && empty(receiver, name),
+            ExprKind::Call { callee, args } => {
+                args.is_empty()
+                    && matches!(&callee.kind, ExprKind::Field { receiver, name } if empty(receiver, name))
+            }
+            ExprKind::Block(block) => tail(block),
+            ExprKind::If { then, .. } => tail(then),
+            _ => false,
+        }
+    }
+
     fn is_place(&self, expr: &Expr) -> bool {
         match &expr.kind {
             ExprKind::Name(id) => self.is_local(&id.name),
@@ -2795,11 +2901,16 @@ impl<'a> Generator<'a> {
                 value,
                 mutable,
             } => {
+                let decided = match ty {
+                    None if self.undecided(value) => self.type_of(value).cloned(),
+                    _ => None,
+                };
                 let value = self.value(value);
                 self.bind(&name.name);
-                let ty = match ty {
-                    Some(ty) => format!(": {}", self.annotation(ty)),
-                    None => String::new(),
+                let ty = match (ty, decided) {
+                    (Some(ty), _) => format!(": {}", self.annotation(ty)),
+                    (None, Some(decided)) => format!(": {}", self.rust_ty(&decided)),
+                    (None, None) => String::new(),
                 };
                 let mutability = if *mutable { "mut " } else { "" };
                 format!("let {mutability}{}{ty} = {value};", ident(&name.name))
@@ -2949,6 +3060,9 @@ impl<'a> Generator<'a> {
             return format!("String::from(\"{}\")", escape_str(&reference.text()));
         }
         if clone && self.is_place(expr) {
+            if self.moves(expr) {
+                return self.bare(expr);
+            }
             return format!("{}.clone()", self.bare(expr));
         }
         if self.field_of_element(expr) {
@@ -3435,7 +3549,9 @@ impl<'a> Generator<'a> {
             .map(|(field, q)| {
                 let target = self.module_fn_path(q);
                 let value = match declared.iter().find(|(name, _, _)| name == field) {
-                    Some((_, ty, _)) => self.fn_value_typed(target, ty),
+                    Some((_, ty, _)) => {
+                        self.fn_value_typed(target, ty, Some(&Callee::Fn(q.clone())))
+                    }
                     None => target,
                 };
                 format!("{}: {value}", ident(field))
@@ -3454,13 +3570,13 @@ impl<'a> Generator<'a> {
 
     /// The Rust fn `target` as a fn value of fn type `ty`
     /// ([`Generator::fn_value_of`] with the type given).
-    fn fn_value_typed(&mut self, target: String, ty: &Ty) -> String {
+    fn fn_value_typed(&mut self, target: String, ty: &Ty, callee: Option<&Callee>) -> String {
         let (params, ret) = match ty {
             Ty::Fn(params, ret) | Ty::EffectFn(params, ret, _) => (params, &**ret),
             _ => return target,
         };
         let names: Vec<String> = (0..params.len()).map(|i| format!("__a{i}")).collect();
-        let refs: Vec<String> = names.iter().map(|n| format!("&{n}")).collect();
+        let refs = self.wrapper_args(callee, &names);
         let typed: Vec<String> = names
             .iter()
             .zip(params)
@@ -3475,8 +3591,9 @@ impl<'a> Generator<'a> {
         )
     }
 
-    /// A call of the Ignite fn `target` with `args` by reference, the
-    /// receiver of a UFCS call first. Named arguments (`docs/slice.md`
+    /// A call of the Ignite fn `target` with `args` by reference, by value
+    /// to a parameter the callee consumes, the receiver of a UFCS call
+    /// first. Named arguments (`docs/slice.md`
     /// section 14.2) are reordered to the parameters; when the order
     /// changes, every argument is evaluated into a temporary first, in
     /// source order.
@@ -3492,22 +3609,33 @@ impl<'a> Generator<'a> {
             .and_then(|t| t.named_args(call))
             .filter(|order| order.iter().enumerate().any(|(i, j)| i != *j))
             .map(<[usize]>::to_vec);
+        let callee = self.callee(call);
         let Some(order) = order else {
-            let texts = self.ref_args(receiver.into_iter().chain(args));
+            let texts = self.ref_args(callee, receiver.into_iter().chain(args));
             return format!("{target}({})", texts.join(", "));
+        };
+        let borrow = |this: &Self, param: usize| {
+            if this.consumes(callee, param) {
+                ""
+            } else {
+                "&"
+            }
         };
         let mut lets = String::new();
         let mut texts = Vec::new();
         if let Some(receiver) = receiver {
             let value = self.value(receiver);
             let _ = write!(lets, "let __ignite_r = {value}; ");
-            texts.push("&__ignite_r".to_string());
+            texts.push(format!("{}__ignite_r", borrow(self, 0)));
         }
         for (index, arg) in args.iter().enumerate() {
             let value = self.value(arg);
             let _ = write!(lets, "let __ignite_a{index} = {value}; ");
         }
-        texts.extend(order.iter().map(|index| format!("&__ignite_a{index}")));
+        let first = usize::from(receiver.is_some());
+        for (param, index) in order.iter().enumerate() {
+            texts.push(format!("{}__ignite_a{index}", borrow(self, first + param)));
+        }
         format!("{{ {lets}{target}({}) }}", texts.join(", "))
     }
 
@@ -3725,12 +3853,17 @@ impl<'a> Generator<'a> {
                 "{{ ignite_io::spawn(move || {{ if let Err(error) = ({task}) {{ {LOG} }} }}); }}"
             );
         };
+        let callee = self.callee(operand);
         let mut out = String::from("{ ");
         let mut names = Vec::new();
         for (index, arg) in args.iter().enumerate() {
             let value = self.value(arg);
             let _ = write!(out, "let __spawn_{index} = {value}; ");
-            let borrow = if by_ref { "&" } else { "" };
+            let borrow = if by_ref && !self.consumes(callee, index) {
+                "&"
+            } else {
+                ""
+            };
             names.push(format!("{borrow}__spawn_{index}"));
         }
         let _ = write!(
@@ -4180,7 +4313,9 @@ impl<'a> Generator<'a> {
             if !bindings.is_empty() {
                 let lets: String = bindings
                     .iter()
-                    .map(|(name, access)| format!("let {} = ({access}).clone(); ", ident(name)))
+                    .map(|(name, access)| {
+                        format!("let {} = {}; ", ident(name), binding_value(access))
+                    })
                     .collect();
                 body = format!("{{ {lets}{body} }}");
             }
@@ -4311,7 +4446,7 @@ impl<'a> Generator<'a> {
         }
         match &pattern.kind {
             PatternKind::Range { .. } => self.range(pattern).is_some(),
-            PatternKind::Str(_) | PatternKind::List(_) => false,
+            PatternKind::Str(_) | PatternKind::List(_) | PatternKind::Rest(_) => false,
             PatternKind::Or(items) => items.iter().all(|p| self.is_native(p, ty)),
             PatternKind::Tuple(items) => {
                 let elements = tuple_elements(ty, items.len());
@@ -4419,6 +4554,11 @@ impl<'a> Generator<'a> {
                 let items: Vec<String> = items.iter().map(|p| self.pattern(p, None)).collect();
                 format!("[{}]", items.join(", "))
             }
+            PatternKind::Rest(None) => "..".to_string(),
+            PatternKind::Rest(Some(id)) => {
+                self.bind(&id.name);
+                format!("{} @ ..", ident(&id.name))
+            }
             PatternKind::Binding(id) => {
                 if id.is_uppercase() {
                     let (owner, _) = self.variant_owner(&[], &id.name, ty);
@@ -4479,7 +4619,7 @@ impl<'a> Generator<'a> {
                 let (lo, hi) = self.range(pattern)?;
                 Some(format!("({lo}..={hi}).contains({subject})"))
             }
-            PatternKind::Wildcard => None,
+            PatternKind::Wildcard | PatternKind::Rest(_) => None,
             PatternKind::Int(value) => Some(format!("(*{subject} == {value})")),
             PatternKind::Str(text) => Some(format!("(*{subject} == \"{}\")", escape_str(text))),
             PatternKind::Bool(value) => Some(format!("(*{subject} == {value})")),
@@ -4528,12 +4668,22 @@ impl<'a> Generator<'a> {
                     Some(Ty::List(t)) => Some((**t).clone()),
                     _ => None,
                 };
+                let rest = items
+                    .iter()
+                    .position(|item| matches!(item.kind, PatternKind::Rest(_)));
                 let mut lets = String::new();
-                let mut tests = vec![format!("{subject}.len() == {}", items.len())];
+                let mut tests = match rest {
+                    None => vec![format!("{subject}.len() == {}", items.len())],
+                    Some(_) if items.len() == 1 => {
+                        return None;
+                    }
+                    Some(_) => vec![format!("{subject}.len() >= {}", items.len() - 1)],
+                };
                 for (i, item) in items.iter().enumerate() {
+                    let index = list_index(subject, i, rest, items.len());
                     let name = self.fresh();
                     if let Some(test) = self.test(item, &name, element.as_ref()) {
-                        let _ = write!(lets, "let {name} = &{subject}[{i}]; ");
+                        let _ = write!(lets, "let {name} = &{subject}[{index}]; ");
                         tests.push(test);
                     }
                 }
@@ -4610,8 +4760,26 @@ impl<'a> Generator<'a> {
                     Some(Ty::List(t)) => Some((**t).clone()),
                     _ => None,
                 };
+                let rest = items
+                    .iter()
+                    .position(|item| matches!(item.kind, PatternKind::Rest(_)));
                 for (i, item) in items.iter().enumerate() {
-                    self.extract(item, format!("(&{subject}[{i}])"), element.as_ref(), out);
+                    if let PatternKind::Rest(Some(id)) = &item.kind {
+                        let end = match items.len() - i - 1 {
+                            0 => String::new(),
+                            n => format!("{subject}.len() - {n}"),
+                        };
+                        self.bind(&id.name);
+                        out.push((id.name.clone(), format!("{subject}[{i}..{end}].to_vec()")));
+                        continue;
+                    }
+                    let index = list_index(&subject, i, rest, items.len());
+                    self.extract(
+                        item,
+                        format!("(&{subject}[{index}])"),
+                        element.as_ref(),
+                        out,
+                    );
                 }
             }
             PatternKind::Variant { path, args } => {
@@ -4637,7 +4805,8 @@ impl<'a> Generator<'a> {
             | PatternKind::Int(_)
             | PatternKind::Str(_)
             | PatternKind::Bool(_)
-            | PatternKind::Or(_) => {}
+            | PatternKind::Or(_)
+            | PatternKind::Rest(_) => {}
         }
     }
 }
@@ -5146,7 +5315,7 @@ impl<'a> Generator<'a> {
             .expect("a structural operand");
         let glue = self.glue_fn(Glue::Eq, ty);
         let [left, right]: [String; 2] = self
-            .ref_args([left, right])
+            .ref_args(None, [left, right])
             .try_into()
             .expect("two operands");
         let negation = if op == BinaryOp::Ne { "!" } else { "" };
@@ -5418,11 +5587,33 @@ fn has_range(pattern: &Pattern) -> bool {
     }
 }
 
+/// The Rust index of element `i` of a list pattern of `count` elements on
+/// `subject`: `i` before the rest at `rest` (or without one), counted from
+/// the end after it (`docs/slice.md` 20.5).
+fn list_index(subject: &str, i: usize, rest: Option<usize>, count: usize) -> String {
+    match rest {
+        Some(at) if i > at => format!("{subject}.len() - {}", count - i),
+        _ => i.to_string(),
+    }
+}
+
+/// The Rust expression a pattern binding takes its value from: a place
+/// read through a reference is cloned, a rest binding's `to_vec()` is
+/// already an owned copy.
+fn binding_value(access: &str) -> String {
+    if access.ends_with(".to_vec()") {
+        access.to_string()
+    } else {
+        format!("({access}).clone()")
+    }
+}
+
 /// The names `pattern` binds, in order; an uppercase binding may name a
 /// variant and is told apart by the caller.
 fn pattern_bindings<'p>(pattern: &'p Pattern, out: &mut Vec<&'p Ident>) {
     match &pattern.kind {
         PatternKind::Binding(id) => out.push(id),
+        PatternKind::Rest(Some(id)) => out.push(id),
         PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
             items.iter().for_each(|item| pattern_bindings(item, out));
         }
@@ -5989,8 +6180,13 @@ fn executable_main(
             ),
         ));
     }
+    let borrow = if generator.consumes(Some(&Callee::Fn(info.main.clone())), 0) {
+        ""
+    } else {
+        "&"
+    };
     w.line(&format!(
-        "{}(&{})",
+        "{}({borrow}{})",
         generator.fn_path(&info.main),
         resource_variable(&info.component)
     ));

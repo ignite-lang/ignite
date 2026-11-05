@@ -194,16 +194,21 @@ takes or returns Ignite values):
 
 - Scalars (`Int`, `Bool`, `Byte`, handles, `Store` pointers) by value.
 - Aggregates (`Text`, lists, records, tuples, enums, `IoError`, fn values) by pointer. A parameter is
-  borrowed when the function's body never modifies it (by the rule of section 4's carried
-  variables: no assignment to it or a field of it, no `push`, `append` or `clear` through a
-  place rooted at it; matched by name). Otherwise the callee owns it and may change it in
-  place. A direct call (a named function, method or role) passes a place to a borrowed
+  owned exactly when its function consumes it (`TypedProgram::consumed`, `docs/slice.md`
+  20.3.3: the body changes it in place on some path, or moves it or a place rooted at it on
+  every path to an exit), and borrowed otherwise. The consumed set contains every parameter
+  the body modifies by the rule of section 4's carried variables (an assignment to it or a
+  field of it, a `push`, `append` or `clear` through a place rooted at it; matched by name),
+  which owned a parameter until slice 16. The callee may change an owned parameter in place
+  and move it. A direct call (a named function, method or role) passes a place to a borrowed
   parameter as the place's own pointer, with no copy. The exception is a later argument
-  that modifies a variable, because it could change the place before the call. Every
-  other aggregate argument is a fresh copy (section 4). A call through a fn pointer
-  always passes copies, which is correct for both kinds of parameter. A borrowed
-  parameter reads the caller's memory, which stays valid for the whole call: no callee
-  releases below its own loops' marks.
+  that modifies a variable, because it could change the place before the call. An argument
+  that moves (`TypedProgram::moves`, `docs/slice.md` 20.3.5) passes the place's own pointer
+  to the owned parameter, with no copy: the place is dead after the call, so ownership of
+  its memory passes to the callee. Every other aggregate argument is a fresh copy (section
+  4). A call through a fn pointer passes copies, or the moved place, which is correct for
+  both kinds of parameter. A borrowed parameter reads the caller's memory, which stays
+  valid for the whole call: no callee releases below its own loops' marks.
 - An aggregate result is written to a pointer passed as the first argument (plain `ptr`, no LLVM `sret` attribute).
 - Symbol names: `"<module>.<name>"` (`"std.protocol.telnet.decode"`), roles
   `"<module>.<Protocol>.<role>"`, constants `"<module>.<NAME>"` and field defaults
@@ -259,8 +264,14 @@ position, even with no buffer.
 
 - Value semantics as in the Rust target: in every value position of the ownership rule
   (`docs/slice.md` section 6) a place is deep-copied. The generator emits one copy function
-  per aggregate type (`"copy.<mangled type>"`). A place in a position that only reads it
-  is not copied:
+  per aggregate type (`"copy.<mangled type>"`). A place in a move position that is dead
+  after it (`TypedProgram::moves`, `docs/slice.md` 20.3) is not copied but moved: an
+  argument passes the place's pointer to the owned parameter (section 3), and a `let` or
+  `var` initializer, an assignment, a field value, a list element, a payload, a returned
+  value or a block's result takes it with a shallow `memcpy` of its representation. The
+  result of a call is always written to a fresh temporary, so `s = step(s, i)` moves `s`
+  into the call and then the temporary into `s`; the result slot never aliases the moved
+  place. A place in a position that only reads it is not copied:
   - an argument to a borrowed parameter (section 3);
   - the scrutinee of a `match` whose arms do not modify the place's root variable;
   - the list of a `for` whose body does not modify the list's root variable;
@@ -343,8 +354,12 @@ position, even with no buffer.
   semantics) and nothing outside the carried variables that survives a back-edge points
   above the mark. Block-local bindings die with the iteration. Pattern bindings point into a
   scrutinee that was copied before the loop or that lives below the mark. The `for` list is
-  evaluated before the mark. Callee arguments are fresh copies or the caller's places, and
-  both lie below every mark the callee takes. A loop inside an expression that holds a partial value (an
+  evaluated before the mark. Callee arguments are fresh copies, the caller's places
+  (borrowed) or the caller's moved places (owned), and all three lie below every mark the
+  callee takes. A moved place is dead until it is reassigned, so a callee that changes it
+  in place, or a release that copies a carried variable the loop moved and then reassigns,
+  never shows a changed value to a later read. A moved variable that the loop reassigns is
+  a carried variable like any other. A loop inside an expression that holds a partial value (an
   operand, an argument, a field, a receiver) gets no region, because that value could
   point into memory a release frees. The copies go through the scratch arena, not to a
   second mark above the first: a copy above a second mark is freed by the release to the

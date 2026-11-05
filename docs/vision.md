@@ -111,7 +111,7 @@ counts. Sizes marked "estimate" are this document's.
 | wave | content | size | needs | unblocks |
 |---|---|---|---|---|
 | A0 soundness fixes | the audit findings of section 10: E006 for in-place mutation through `let`, `for` and pattern bindings, `to_bytes()` not a mutable receiver (M1 to M3); index and `len` on `if`/`match` receivers (M4, M5); ambient capability names (E1 to E3); roots of `map` (E4) and of `push`/`append` on field receivers (E5); unused type parameters (R1); regression tests from `docs/audit/2026-11-01/` | S, estimate | none | everything: both targets must agree before more features land |
-| A language gaps | closures (`friction` 9, 13; actors P4); `Option.unwrap_or` and `!=` on Option (7); rest patterns `..` (protocols §5.2); ranges in patterns (8); raw strings (2); tuple field access (10); `break` as expression (4); recursive enums by boxing (15); `Map<K, V>` (design §3.3); last-use moves (actors R1); T1 failure rule (section 7) | M, estimate | A0 | B, C, E, H |
+| A language gaps (done: slices 9, 10 and 16) | closures (`friction` 9, 13; actors P4; slice 9, calls of fn-typed expressions slice 16); `Option.unwrap_or` and `!=` on Option (7; slice 9); rest patterns `..` (protocols §5.2; slice 16); ranges in patterns (8; slice 9); raw strings (2; slice 9); tuple field access (10; slice 9); `break` as expression (4; slice 9); recursive enums by boxing (15; slice 9); `Map<K, V>` (design §3.3; slice 10); last-use moves (actors R1; slice 16); T1 failure rule (section 7; slice 10). Where each holds: `docs/slice.md` 20.1 | M, estimate | A0 | B, C, E, H |
 | B protocols P1 | `Pipe.pair()` and `PipeStream` in the substrate; `ByteStream` bound with one compiler-known interface; `Telnet` and `Http` roles generic over the stream with a `Limits` record; in-process protocol tests | S | slice 8 (done) | C's tests, G, TLS |
 | C actors P1 to P3 | `Address`, `ReplyTo`, `Outbox`; `Actor` kind; mailboxes and dispatch in the substrate; `std/actor`, `std/table`; `Topic`, `Sink`, `Supervisor`, monitors; exit status 5; todo example on an actor (D4) | M + S + L | A (last-use moves), T1 | events for the ESS bridge (`research/ess.md` option c), F |
 | D slice 5 async | tokio inside `ignite-io`; Rust-target futures; LLVM-target coroutines; `Task.yield_now` (wasm G6) | L | B, C stable | E (host suspension), actors P5, 10,000 idle actors |
@@ -154,6 +154,7 @@ steering session against section 6 before agents are dispatched.
 | 12 (done 2026-11-02, uncommitted, `docs/slice.md` section 16: 636 cargo tests, 148 inline tests per target; gate time rose over 10 % on 7 units, measured causes std 3,033 to 5,135 lines loaded per spawn and `ignite-std` 2,191 to 3,792 lines, carried into 12b: reachable-only std loading and emission) | F3 run and control | `ignite run <assembly>` and `ignite replay` over its journal: probes as protocol clients (`TelnetPrompt` over the telnet `connect` role), SLI windows and contract evaluation (design §4.1), `Restart` with backoff and `DrainRollout` (design §4.2, §7.4), event journal, `event("…")` consequences | the terminal system runs under `ignite run`; killing `terminald` restarts it within the policy's backoff; a probe timeout is visible in the journal and in the contract's standing |
 | 13 | F4 apply | `ignite apply` with plan diff, changes and deletion (design §7.3), recovery of a half-applied plan from the journal | a second `apply` of the same plan is a no-op; an interrupted `apply` resumes |
 | 14 | B protocols P1 | `Pipe.pair()` and `PipeStream`, the bound `<S: ByteStream>` on fns and roles, `Telnet` and `Http` generic over the stream with their limits records (`docs/slice.md` section 18) | the 18.0 matrix of `docs/slice.md` |
+| 16 (done 2026-11-05, `docs/slice.md` section 20; counts and gate time in `AGENTS.md` "Slice 16") | A language gaps | the items of wave A that slices 9 and 10 had not delivered: last-use moves (one analysis in `ignite-types`, read by both targets; actors R1), calls of fn-typed expressions (`adder(1)(2)`, `fs[i](x)`), rest patterns in list patterns (`docs/syntax.md` P9, E076); a both-target fixture for every item that already held | the 20.0 matrix of `docs/slice.md` |
 | 15+ | slice 15 is G's P2 (`docs/slice.md` section 19); after it B (P2 on), C, D, E, G (P3 to P5), H | slice 15: RFC catalogues as literal data, the claim clauses and E090 to E092, `ignite rfc import` and `ignite rfc check`, `ignite conformance`, the claims of `Telnet` and `Http`; after it as the table above, in that order | slice 15: the 19.0 matrix of `docs/slice.md`; after it as the table above |
 
 Consequences for the open decisions of section 8: D5 moves from the start of H to slice 11;
@@ -168,14 +169,14 @@ and §11, `research/ess.md` §3 and `research/lean.md` §3.
 
 | gap | wanted by | wave |
 |---|---|---|
-| closures capturing locals | todo PATCH (`friction` 9), `map` arguments (13), actors `call(fn)` and dynamic actors (P4) | A |
-| `Option.unwrap_or`, `!=` on `Option` | todo (`friction` 7) | A |
-| rest pattern `[a, ..]`, range patterns | protocols §5.2, `digit_value` (`friction` 8) | A |
-| raw strings, `\u{..}`, interpolation holding a string literal | json fixtures (`friction` 1, 2, 12) | A |
-| tuple field access `.0`, `break` as an expression, static fns on records | tests (`friction` 10, 4, 17) | A |
-| recursive enums without `List` boxing (E055) | `Tree<T>`, json (`friction` 15) | A |
-| `Map<K, V>` with canonical order | design §3.3; a self-hosted frontend (H) | A |
-| last-use move of a `var` passed and reassigned | actors R1 (state through the loop) | A |
+| closures capturing locals | todo PATCH (`friction` 9), `map` arguments (13), actors `call(fn)` and dynamic actors (P4) | A: slice 9 (13.3); calls of fn-typed expressions slice 16 (20.4) |
+| `Option.unwrap_or`, `!=` on `Option` | todo (`friction` 7) | A: slice 9 |
+| rest pattern `[a, ..]`, range patterns | protocols §5.2, `digit_value` (`friction` 8) | A: range patterns slice 9; rest patterns slice 16 (20.5) |
+| raw strings, `\u{..}`, interpolation holding a string literal | json fixtures (`friction` 1, 2, 12) | A: slice 9 |
+| tuple field access `.0`, `break` as an expression, static fns on records | tests (`friction` 10, 4, 17) | A: slice 9 |
+| recursive enums without `List` boxing (E055) | `Tree<T>`, json (`friction` 15) | A: slice 9 (13.4) |
+| `Map<K, V>` with canonical order | design §3.3; a self-hosted frontend (H) | A: slice 10 (14.3) |
+| last-use move of a `var` passed and reassigned | actors R1 (state through the loop) | A: slice 16 (20.3) |
 | typed bounds on generics, `interface`, `impl`, associated types, `Eq` | protocols §2.2 (P1 ships one builtin bound; P4 user-declared) | B, G |
 | machine scalars `I32`, `F32`, `F64`; `Buffer`; `xs[i] = e`; dense `match` to `switch` | wasm G1 to G4 | E |
 | `Task.yield_now` | wasm G6 under tokio | D |

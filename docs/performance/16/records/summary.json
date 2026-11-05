@@ -1,0 +1,107 @@
+{
+  "accepted": false,
+  "any_command_failed": false,
+  "candidate_failed": false,
+  "closure_controls_pass": false,
+  "commits": {
+    "baseline": "31b738b96b67bd0886247db27978addb1efb2c3b",
+    "candidate": "426449e9c67f7d8eb209597541f34478590e83cf"
+  },
+  "comparable_low_load": false,
+  "comparison_missing": [
+    "published comparison not configured"
+  ],
+  "coverage_pass": false,
+  "frozen_baseline_matches": false,
+  "ignite_test_absolute_pass": false,
+  "missing": [
+    "check",
+    "file-ignite_test",
+    "file-rustgen",
+    "gate-warm",
+    "no-run-touch",
+    "no-run-warm",
+    "plan",
+    "todod-llvm-dev",
+    "todod-llvm-release",
+    "todod-rust-dev",
+    "todod-rust-release",
+    "warm-clippy",
+    "warm-fmt",
+    "warm-inline",
+    "warm-workspace"
+  ],
+  "over_budget": [
+    "cold-inline"
+  ],
+  "results": [
+    {
+      "baseline": "baseline",
+      "before": 0.845470405,
+      "candidate": 0.928196033,
+      "excluded": [],
+      "loads": [
+        8.2802734375,
+        10.43505859375
+      ],
+      "ratio": 1.0978456815410351,
+      "unit": "cold-fmt",
+      "valid_pairs": 1
+    },
+    {
+      "baseline": "baseline",
+      "before": 8.665813056,
+      "candidate": 5.765876256,
+      "excluded": [],
+      "loads": [
+        8.2802734375,
+        10.43505859375
+      ],
+      "ratio": 0.6653589477109534,
+      "unit": "cold-clippy",
+      "valid_pairs": 1
+    },
+    {
+      "baseline": "baseline",
+      "before": 579.631433524,
+      "candidate": 629.565257098,
+      "excluded": [],
+      "loads": [
+        8.017578125,
+        12.642578125
+      ],
+      "ratio": 1.0861475425347724,
+      "unit": "cold-workspace",
+      "valid_pairs": 1
+    },
+    {
+      "baseline": "baseline",
+      "before": 16.413094181,
+      "candidate": 28.071287858,
+      "excluded": [],
+      "loads": [
+        7.685546875,
+        10.16162109375
+      ],
+      "ratio": 1.710298347675094,
+      "unit": "cold-inline",
+      "valid_pairs": 1
+    },
+    {
+      "baseline": "baseline",
+      "before": 605.56277916,
+      "candidate": 664.336731824,
+      "excluded": [],
+      "loads": [
+        8.2802734375,
+        10.43505859375
+      ],
+      "ratio": 1.0970567457027787,
+      "unit": "gate-cold",
+      "valid_pairs": 1
+    }
+  ],
+  "rustgen_11b_pass": false,
+  "schema": "ignite-performance/1",
+  "warm_workspace_absolute_pass": false
+}

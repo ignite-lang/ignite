@@ -243,6 +243,8 @@ fn show_pattern(pattern: &Pattern) -> String {
             format!("[{}]", items.join(", "))
         }
         PatternKind::Wildcard => "_".to_string(),
+        PatternKind::Rest(None) => "..".to_string(),
+        PatternKind::Rest(Some(name)) => format!("..${}", name.name),
         PatternKind::Range { start, end } => {
             format!("{}..={}", show_pattern(start), show_pattern(end))
         }
@@ -1197,6 +1199,10 @@ fn bool_tuple_list_and_or_patterns() {
         "(match b ((| 1 2 3) => 0) (Some((| 4 5)) => 1) (_ => 2))"
     );
     assert_eq!(expr("match u { () => 0 }"), "(match u (() => 0))");
+    assert_eq!(
+        expr("match l { [..] => 0, [f, ..r] => f, [.., z] => z, [a, .., [b, ..]] => a }"),
+        "(match l ([..] => 0) ([$f, ..$r] => f) ([.., $z] => z) ([$a, .., [$b, ..]] => a))"
+    );
     assert_eq!(
         expr("match b { IAC | SE => 0, _ => 1 }"),
         "(match b ((| IAC SE) => 0) (_ => 1))"

@@ -1,0 +1,72 @@
+import std.net.{Pipe, PipeStream}
+
+type IoResult<T> = Result<T, IoError>
+
+type Handler {
+  run: fn(Int) -> Int
+}
+
+type Sender {
+  send: fn(s: PipeStream) -> IoResult<Unit> requires [s.write]
+}
+
+fn adder(n: Int) -> fn(Int) -> Int = |x| x + n
+
+fn curry(a: Int) -> fn(Int) -> fn(Int) -> Int = |b| |c| a + b + c
+
+fn double(x: Int) -> Int = x * 2
+
+fn negate(x: Int) -> Int = 0 - x
+
+fn pick(first: Bool) -> fn(Int) -> Int = if first { double } else { negate }
+
+fn hello(s: PipeStream) -> IoResult<Unit> requires [s.write] = s.write_all(b"hi")
+
+fn via_field(h: Sender, s: PipeStream) -> IoResult<Unit> requires [s.write] = (h.send)(s)
+
+fn via_index(
+  hs: List<fn(s: PipeStream) -> IoResult<Unit> requires [s.write]>,
+  s: PipeStream
+) -> IoResult<Unit> requires [s.write] = hs[0](s)
+
+test "a call of a call result" {
+  assert adder(1)(2) == 3
+  assert curry(1)(10)(100) == 111
+}
+
+test "a call of an indexed fn value" {
+  let fs = [adder(1), adder(2)]
+  assert fs[1](10) == 12
+  assert fs[0](fs[1](0)) == 3
+}
+
+test "a call of a parenthesised closure" {
+  assert (|x: Int| x * 3)(2) == 6
+}
+
+test "a call of a fn field in parentheses" {
+  let k = 5
+  let h = Handler { run = |x| x + k }
+  assert (h.run)(2) == 7
+  assert h.run(2) == 7
+}
+
+test "a call of a returned named fn" {
+  assert pick(true)(3) == 6
+  assert pick(false)(3) == 0 - 3
+}
+
+test "effectful fn values called through a field and an index" {
+  let (a, b) = Pipe.pair()
+  via_field(Sender { send = hello }, a)?
+  via_index([hello], a)?
+  a.close()
+  var out = Bytes.empty()
+  loop {
+    match b.read(64)? {
+      Eof => break
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  assert out.to_text() == "hihi"
+}

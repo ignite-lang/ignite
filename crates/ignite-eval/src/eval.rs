@@ -1692,12 +1692,35 @@ impl<'p> Evaluator<'p> {
                 }
                 _ => false,
             },
-            PatternKind::List(items) => match value {
-                Value::List(values) if values.len() == items.len() => {
-                    self.match_all(cx, items, values, bindings)?
+            PatternKind::List(items) => {
+                let rest = items
+                    .iter()
+                    .position(|item| matches!(item.kind, PatternKind::Rest(_)));
+                match (value, rest) {
+                    (Value::List(values), None) if values.len() == items.len() => {
+                        self.match_all(cx, items, values, bindings)?
+                    }
+                    (Value::List(values), Some(at)) if values.len() + 1 >= items.len() => {
+                        let suffix = items.len() - at - 1;
+                        let end = values.len() - suffix;
+                        self.match_all(cx, &items[..at], &values[..at], bindings)?
+                            && self.match_all(cx, &items[at + 1..], &values[end..], bindings)?
+                            && self.matches(
+                                cx,
+                                &items[at],
+                                &Value::List(values[at..end].to_vec()),
+                                bindings,
+                            )?
+                    }
+                    _ => false,
                 }
-                _ => false,
-            },
+            }
+            PatternKind::Rest(name) => {
+                if let Some(name) = name {
+                    bindings.push((name.name.clone(), value.clone()));
+                }
+                true
+            }
             PatternKind::Binding(name) => {
                 bindings.push((name.name.clone(), value.clone()));
                 true

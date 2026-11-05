@@ -1,0 +1,30 @@
+fn gap(xs: List<Int>) -> Int {
+  return match xs {
+    [] => 0
+    [_, _, ..] => 2
+  }
+}
+
+fn not_empty(xs: List<Int>) -> Int {
+  return match xs {
+    [x, ..] => x
+  }
+}
+
+fn overlap(xs: List<Bool>) -> Int {
+  return match xs {
+    [] => 0
+    [_] => 1
+    [_, _] => 2
+    [_, true, ..] => 3
+    [.., false, _] => 4
+  }
+}
+
+fn single(xs: List<Bool>) -> Int {
+  return match xs {
+    [true] => 1
+    [] => 0
+    [_, _, ..] => 2
+  }
+}

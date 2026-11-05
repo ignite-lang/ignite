@@ -1,1 +1,2 @@
 e003_unknown_variable.ignite:3:14: error[E003]: unknown name `b`
+e003_unknown_variable.ignite:7:10: error[E003]: unknown name `nope`
