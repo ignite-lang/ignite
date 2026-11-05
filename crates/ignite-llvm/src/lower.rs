@@ -130,6 +130,8 @@ struct Local {
     /// Slot of a scalar or memory of an aggregate; empty for `Unit`.
     ptr: String,
     ty: Ty,
+    /// A stream binding its block owns ([`crate::own`]).
+    owned: bool,
 }
 
 pub struct Lower<'a, 'm, 'e> {
@@ -138,7 +140,13 @@ pub struct Lower<'a, 'm, 'e> {
     pub cx: &'a Ctx<'a>,
     pub f: Func,
     scopes: Vec<Vec<Local>>,
-    loops: Vec<(String, String)>,
+    /// Per enclosing loop: the label `continue` goes to, the label `break`
+    /// goes to, and the length of `own_marks` at the loop's entry.
+    loops: Vec<(String, String, usize)>,
+    /// Per open block: the owner mark (`ignite_rt_own_mark`) taken at its
+    /// first owned stream binding ([`crate::own`]), released when the
+    /// block is left.
+    own_marks: Vec<Option<String>>,
     ret: Ty,
     sret: Option<String>,
     /// Depth of expressions that may hold a partial value (an operand, an
@@ -153,6 +161,10 @@ pub struct Lower<'a, 'm, 'e> {
     /// stream handles move to the task (`region::moved_to_task`); set by
     /// [`Lower::block`] before the statement, taken by [`Lower::spawn`].
     moved_streams: Vec<String>,
+    /// The argument names of that `spawn` statement that no later
+    /// statement mentions (`own::last_use`); set and taken with
+    /// `moved_streams`.
+    last_streams: Vec<String>,
 }
 
 /// The region of one loop (`docs/llvm.md` section 4): the arena mark taken
@@ -184,11 +196,13 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             f,
             scopes: vec![Vec::new()],
             loops: Vec::new(),
+            own_marks: Vec::new(),
             ret,
             sret,
             nested: 0,
             subst: (Vec::new(), Vec::new()),
             moved_streams: Vec::new(),
+            last_streams: Vec::new(),
         }
     }
 
@@ -450,11 +464,14 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let ret = self.ret.clone();
         if let Some(sret) = self.sret.clone() {
             self.store_value(&ret, &sret, value);
+            self.release_owned(0);
             self.f.term("ret void");
         } else if let Some(t) = scalar_type(&ret) {
             let op = self.scalar(&value);
+            self.release_owned(0);
             self.f.term(format!("ret {t} {op}"));
         } else {
+            self.release_owned(0);
             self.f.term("ret void");
         }
     }
@@ -469,7 +486,62 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 name: name.to_string(),
                 ptr,
                 ty,
+                owned: false,
             });
+    }
+
+    // ---- stream ownership ------------------------------------------------
+
+    /// Make the stream bindings `names` of the current block owners of
+    /// their handles (`docs/llvm.md` section 4): registered with
+    /// `tcp_own`, so a failure releases them, and released when the block
+    /// is left. The block's mark is taken at its first owned binding.
+    fn own_streams(&mut self, names: &[String]) {
+        self.m.declare("ignite_rt_own_mark", "i64", &[]);
+        self.m
+            .declare("ignite_rt_own_release", "void", &["i64".into()]);
+        self.m.declare("ignite_rt_tcp_own", "void", &["i64".into()]);
+        if matches!(self.own_marks.last(), Some(None)) {
+            let mark = self.f.val("call i64 @ignite_rt_own_mark()");
+            *self.own_marks.last_mut().expect("a block is open") = Some(mark);
+        }
+        for name in names {
+            let Some(local) = self
+                .scopes
+                .last_mut()
+                .and_then(|scope| scope.iter_mut().rev().find(|l| l.name == *name))
+            else {
+                continue;
+            };
+            local.owned = true;
+            let local = local.clone();
+            let handle = self.load_scalar(&local.ty, &local.ptr);
+            self.f
+                .ins(format!("call void @ignite_rt_tcp_own(i64 {handle})"));
+        }
+    }
+
+    /// Release the owned stream bindings of the open blocks from `depth`
+    /// on: those of every block when leaving the function, those inside a
+    /// loop for its `break` and `continue`.
+    fn release_owned(&mut self, depth: usize) {
+        let mark = self
+            .own_marks
+            .get(depth..)
+            .and_then(|marks| marks.iter().flatten().next())
+            .cloned();
+        if let Some(mark) = mark {
+            self.f
+                .ins(format!("call void @ignite_rt_own_release(i64 {mark})"));
+        }
+    }
+
+    /// The `continue` (`next`) or `break` target of the innermost loop,
+    /// after releasing the owned streams bound inside it.
+    fn leave_loop(&mut self, next: bool) -> String {
+        let (latch, exit, depth) = self.loops.last().cloned().expect("inside a loop");
+        self.release_owned(depth);
+        if next { latch } else { exit }
     }
 
     fn lookup(&self, name: &str) -> Option<Local> {
@@ -896,6 +968,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// expression.
     pub fn block(&mut self, block: &Block, want: bool) -> Val {
         self.scopes.push(Vec::new());
+        self.own_marks.push(None);
         let mut value = Val::Unit;
         for (i, stmt) in block.stmts.iter().enumerate() {
             let last = i + 1 == block.stmts.len();
@@ -904,14 +977,31 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 && let ExprKind::Spawn(call) = &e.kind
             {
                 self.moved_streams = crate::region::moved_to_task(&block.stmts, i, call);
+                self.last_streams = crate::own::last_use(&block.stmts, i, call);
             }
             match &stmt.kind {
                 StmtKind::Expr(e) if last && want => value = self.expr(e, true),
                 _ => self.stmt(stmt),
             }
+            if matches!(
+                stmt.kind,
+                StmtKind::Let { .. } | StmtKind::LetPattern { .. }
+            ) && !self.f.is_terminated()
+            {
+                let owned = crate::own::owned(&block.stmts, i, self.cx.types);
+                if !owned.is_empty() {
+                    self.own_streams(&owned);
+                }
+            }
             if let Some(previous) = previous {
                 self.f.restore_location(previous);
             }
+        }
+        if let Some(Some(mark)) = self.own_marks.pop()
+            && !self.f.is_terminated()
+        {
+            self.f
+                .ins(format!("call void @ignite_rt_own_release(i64 {mark})"));
         }
         self.scopes.pop();
         if self.f.is_terminated() && value == Val::Unit {
@@ -1003,7 +1093,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let c = self.scalar(&c);
                 self.f.cond_br(&c, &inside, &exit);
                 self.f.place(&inside);
-                self.loops.push((latch.clone(), exit.clone()));
+                self.loops
+                    .push((latch.clone(), exit.clone(), self.own_marks.len()));
                 self.block(body, false);
                 self.loops.pop();
                 self.f.place(&latch);
@@ -1014,7 +1105,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let region = self.region_enter(body);
                 let (head, latch, exit) = (self.f.label(), self.f.label(), self.f.label());
                 self.f.place(&head);
-                self.loops.push((latch.clone(), exit.clone()));
+                self.loops
+                    .push((latch.clone(), exit.clone(), self.own_marks.len()));
                 self.block(body, false);
                 self.loops.pop();
                 self.f.place(&latch);
@@ -1023,11 +1115,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             StmtKind::For { name, iter, body } => self.for_loop(name, iter, body),
             StmtKind::Break => {
-                let (_, exit) = self.loops.last().cloned().expect("break inside a loop");
+                let exit = self.leave_loop(false);
                 self.f.br(&exit);
             }
             StmtKind::Continue => {
-                let (next, _) = self.loops.last().cloned().expect("continue inside a loop");
+                let next = self.leave_loop(true);
                 self.f.br(&next);
             }
             StmtKind::Expr(e) => {
@@ -1094,7 +1186,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.f.place(&bound);
             }
         }
-        self.loops.push((step.clone(), exit.clone()));
+        self.loops
+            .push((step.clone(), exit.clone(), self.own_marks.len()));
         self.block(body, false);
         self.loops.pop();
         self.scopes.pop();
@@ -1272,12 +1365,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.at(&elements[*index], at, owned)
             }
             ExprKind::Break => {
-                let (_, exit) = self.loops.last().cloned().expect("break inside a loop");
+                let exit = self.leave_loop(false);
                 self.f.br(&exit);
                 Val::Never
             }
             ExprKind::Continue => {
-                let (next, _) = self.loops.last().cloned().expect("continue inside a loop");
+                let next = self.leave_loop(true);
                 self.f.br(&next);
                 Val::Never
             }
@@ -2407,6 +2500,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             let dst = self.gep(&sret, to);
             self.store_value(&err_ty, &dst, Val::Ptr(src, owned));
         }
+        self.release_owned(0);
         self.f.term("ret void");
         self.f.place(&good);
         match layout.variants[0].1.first().cloned() {
@@ -4443,8 +4537,26 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             .as_ref()
             .and_then(|c| self.sig_of(c, call))
             .unwrap_or_else(|| panic!("spawn of an unresolved call at {:?}", call.span));
+        // A stream binding the block owns ([`crate::own`]) and that no later
+        // statement mentions is handed over: the task becomes an owner like
+        // for any other argument, and the block releases its own owner
+        // right after the spawn, so the task holds the last one. An unowned
+        // binding that `region::moved_to_task` names moves its handle to
+        // the task as before.
         let moved = std::mem::take(&mut self.moved_streams);
-        let moves = |arg: &Expr| matches!(&arg.kind, ExprKind::Name(n) if moved.contains(&n.name));
+        let last = std::mem::take(&mut self.last_streams);
+        let name_of = |arg: &Expr| match &arg.kind {
+            ExprKind::Name(n) => Some(n.name.clone()),
+            _ => None,
+        };
+        let owned: Vec<String> = last
+            .into_iter()
+            .filter(|name| self.lookup(name).is_some_and(|l| l.owned))
+            .collect();
+        let moves =
+            |arg: &Expr| name_of(arg).is_some_and(|n| moved.contains(&n) && !owned.contains(&n));
+        let hands_over = |arg: &Expr| name_of(arg).is_some_and(|n| owned.contains(&n));
+        let mut handed: Vec<(String, Val)> = Vec::new();
         let mut values = Vec::with_capacity(sig.params.len());
         if let Some(perm) = self.cx.types.named_args(call).map(<[usize]>::to_vec) {
             let offset = args.len() - perm.len();
@@ -4455,31 +4567,52 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 } else {
                     offset + perm[i - offset]
                 };
+                if hands_over(args[src]) {
+                    handed.push((
+                        name_of(args[src]).unwrap_or_default(),
+                        evaluated[src].clone(),
+                    ));
+                }
                 values.push((ty.clone(), evaluated[src].clone(), moves(args[src])));
             }
         } else {
             for (arg, ty) in args.iter().zip(&sig.params) {
                 let v = self.expr(arg, true);
+                if hands_over(arg) {
+                    handed.push((name_of(arg).unwrap_or_default(), v.clone()));
+                }
                 values.push((ty.clone(), v, moves(arg)));
             }
         }
         let thunk = format!("spawn.{symbol}.{}", self.m.next_id());
         self.spawn_with(&thunk, &symbol, &sig, values, "task ended with error: ");
+        let mut released: Vec<String> = Vec::new();
+        for (name, handle) in handed {
+            if released.contains(&name) {
+                continue;
+            }
+            released.push(name);
+            let handle = self.scalar(&handle);
+            self.f
+                .ins(format!("call void @ignite_rt_tcp_release(i64 {handle})"));
+        }
     }
 
     /// Store `values` into an environment, define the thunk `thunk` that
     /// runs `symbol` with copies of them, and start it (`docs/llvm.md`
     /// section 4). `values` are deep-copied into the environment and
     /// `ignite_rt_spawn` waits until the thunk has copied them again into its
-    /// own arena. A stream ([`is_stream`]) flagged as moved belongs to the
-    /// task from then on: the thunk registers it with `tcp_own`, so a
-    /// failure closes it, and releases it when `symbol` returns, which closes
-    /// the connection or pipe end once the session is over (the accept loop
-    /// of a server kind's `main` hands each accepted stream to its task this
-    /// way; `docs/slice.md` 18.11 for pipe ends). When no
-    /// thread can start, the moved streams are released at once instead. A
-    /// stream not moved stays the parent's (a client role keeps reading
-    /// the stream `forward_input` writes to).
+    /// own arena. The task is an owner of every stream argument
+    /// ([`is_stream`]; a handle-table entry counts its owners): the thunk
+    /// registers it with `tcp_own`, so a failure releases it, and releases
+    /// it when `symbol` returns; the stream closes when its last owner
+    /// releases it. A stream not flagged as moved stays the parent's too:
+    /// the parent adds the task's owner with `tcp_retain` before the start
+    /// (a client role keeps reading the stream `forward_input` writes to;
+    /// a task that hands its parameter on to a second task and returns
+    /// leaves it open). A stream flagged as moved passes the parent's
+    /// owner to the task (`docs/slice.md` 18.11 for pipe ends). When no
+    /// thread can start, the task's owners are released at once instead.
     pub fn spawn_with(
         &mut self,
         thunk: &str,
@@ -4526,7 +4659,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         t.f.ins(format!("call void @ignite_rt_guard_push(ptr {jb})"));
         let mut operands = Vec::new();
         let mut streams = Vec::new();
-        for ((ty, _, moved), offset) in values.iter().zip(&offsets) {
+        for ((ty, _, _), offset) in values.iter().zip(&offsets) {
             let src = t.gep("%env", *offset);
             if is_aggregate(ty) {
                 let own = t.temp(ty);
@@ -4534,7 +4667,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 operands.push(Some(format!("ptr {own}")));
             } else if let Some(llty) = scalar_type(ty) {
                 let x = t.load_scalar(ty, &src);
-                if *moved && is_stream(ty) {
+                if is_stream(ty) {
                     streams.push(x.clone());
                 }
                 operands.push(Some(format!("{llty} {x}")));
@@ -4564,17 +4697,28 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         t.f.ins("call void @ignite_rt_task_end()");
         let text = t.f.finish("ret void");
         self.m.define(thunk, text);
+        let parents: Vec<String> = values
+            .iter()
+            .filter_map(|(ty, v, _)| match v {
+                Val::Scalar(stream) if is_stream(ty) => Some(stream.clone()),
+                _ => None,
+            })
+            .collect();
+        for (ty, v, moved) in &values {
+            if let Val::Scalar(stream) = v
+                && is_stream(ty)
+                && !moved
+            {
+                self.m
+                    .declare("ignite_rt_tcp_retain", "void", &["i64".into()]);
+                self.f
+                    .ins(format!("call void @ignite_rt_tcp_retain(i64 {stream})"));
+            }
+        }
         let started = self.f.val(format!(
             "call i8 @ignite_rt_spawn(ptr {}, ptr {env})",
             global(thunk)
         ));
-        let parents: Vec<String> = values
-            .iter()
-            .filter_map(|(ty, v, moved)| match v {
-                Val::Scalar(stream) if *moved && is_stream(ty) => Some(stream.clone()),
-                _ => None,
-            })
-            .collect();
         if !parents.is_empty() {
             let failed = self.f.val(format!("icmp eq i8 {started}, 0"));
             let (close, done) = (self.f.label(), self.f.label());

@@ -68,6 +68,9 @@ declare { i8, i1 } @llvm.usub.with.overflow.i8(i8, i8)
 declare { i8, i1 } @llvm.umul.with.overflow.i8(i8, i8)
 declare void @"ignite_rt_fail_arith"(ptr, ptr, i64, i64, i64, i64)
 declare void @"ignite_rt_fail_match"(ptr, i64, i64)
+declare i64 @"ignite_rt_own_mark"()
+declare void @"ignite_rt_own_release"(i64)
+declare void @"ignite_rt_tcp_own"(i64)
 
 define internal void @ignite.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) {
 entry:
@@ -543,7 +546,7 @@ entry:
   %t4 = alloca [8 x i8], align 8
   %t5 = alloca [32 x i8], align 8
   %t21 = alloca [8 x i8], align 8
-  %t23 = alloca [40 x i8], align 8
+  %t25 = alloca [40 x i8], align 8
   %t1 = getelementptr inbounds i8, ptr %p0, i64 24, !dbg !86
   %t2 = load i64, ptr %t1, align 8, !dbg !86
   %t6 = call i32 @ignite_rt_tcp_connect(ptr %p0, i64 %t2, ptr %t4, ptr %t5), !dbg !84
@@ -573,9 +576,13 @@ L16:
   %t19 = getelementptr inbounds i8, ptr %t3, i64 8, !dbg !84
   %t20 = load i64, ptr %t19, align 8, !dbg !84
   store i64 %t20, ptr %t21, align 8, !dbg !83
-  %t22 = load i64, ptr %t21, align 8, !dbg !88
-  call void @"tests.small.Echo.connect"(ptr %t23, i64 %t22), !dbg !87
-  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t23, i64 40, i1 false), !dbg !82
+  %t22 = call i64 @ignite_rt_own_mark(), !dbg !83
+  %t23 = load i64, ptr %t21, align 8, !dbg !83
+  call void @ignite_rt_tcp_own(i64 %t23), !dbg !83
+  %t24 = load i64, ptr %t21, align 8, !dbg !88
+  call void @"tests.small.Echo.connect"(ptr %t25, i64 %t24), !dbg !87
+  call void @ignite_rt_own_release(i64 %t22), !dbg !82
+  call void @llvm.memcpy.p0.p0.i64(ptr %sret, ptr %t25, i64 40, i1 false), !dbg !82
   ret void, !dbg !82
 }
 

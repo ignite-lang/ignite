@@ -1,0 +1,36 @@
+package tests.streams
+
+// Run on the LLVM target by tests/stream_ownership.rs (story
+// llvm-spawn-pattern-bound-streams): a pipe end bound by a pattern in a
+// test body and spawned at its last use belongs to the task, so the task's
+// failure closes it while the test body still runs. The Rust target clones
+// the end into the task and keeps the test body's until the body ends, so
+// there this test waits for its timeout.
+
+import std.net.{Pipe, PipeStream}
+import std.io.IoError
+
+type IoResult<T> = Result<T, IoError>
+
+fn fails(stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
+  let values = [1, 2]
+  assert values.len() == 3
+  stream.write_all(b"never")?
+  Ok(())
+}
+
+test fn rest(client: PipeStream) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test "a failing task closes a pattern-bound pipe end spawned from the test body" {
+  let (client, server) = Pipe.pair()
+  spawn fails(server)
+  assert rest(client)? == b""
+}

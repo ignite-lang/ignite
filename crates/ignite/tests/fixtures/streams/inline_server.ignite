@@ -1,0 +1,42 @@
+package tests.streams
+
+// Built with `--target llvm` and driven by tests/stream_ownership.rs: one
+// task accepts every connection and answers it without `spawn`; each
+// accepted stream is released at the end of its loop iteration, so the
+// server's open descriptors stay flat over 2,000 connections (story
+// llvm-stream-ownership, the review's L1).
+
+type Settings { banner: Text }
+
+fn answer(stream: TcpStream, application: Settings) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  match stream.read(64)? {
+    Eof => Ok(Unit)
+    Data(bytes) => {
+      stream.write_all(application.banner.to_bytes())?
+      stream.write_all(bytes)?
+      stream.close()
+    }
+  }
+}
+
+type Server {
+  listener: TcpListener
+  application: Settings
+  executable: Text
+}
+
+fn Server.main(self: Server) -> Result<Unit, IoError> {
+  loop {
+    let stream = self.listener.accept()?
+    answer(stream, self.application)?
+  }
+}
+
+system Inline {
+  resource listener: TcpListener { address = "127.0.0.1", port = 0 }
+  component server: Server {
+    listener = listener
+    application = Settings { banner = "ok " }
+    executable = "inlined"
+  }
+}
