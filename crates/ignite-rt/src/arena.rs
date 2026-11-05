@@ -412,19 +412,21 @@ pub fn arena_reserved() -> usize {
 /// the life of the thread; generated code may read it once per function.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_arena_state() -> *mut State {
-    state()
+    crate::entry(state)
 }
 
 /// `ptr alloc(i64 size, i64 align)`: arena allocation of the current task.
 /// A negative size or a non-power-of-two alignment is fatal (exit 101).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_alloc(size: i64, align: i64) -> *mut u8 {
-    let (Ok(size), Ok(align)) = (usize::try_from(size), usize::try_from(align)) else {
-        crate::process::die(&format!(
-            "invalid allocation of {size} bytes aligned {align}"
-        ));
-    };
-    alloc(size, align.max(1))
+    crate::entry(move || {
+        let (Ok(size), Ok(align)) = (usize::try_from(size), usize::try_from(align)) else {
+            crate::process::die(&format!(
+                "invalid allocation of {size} bytes aligned {align}"
+            ));
+        };
+        alloc(size, align.max(1))
+    })
 }
 
 fn position(mark: i64) -> u64 {
@@ -434,7 +436,7 @@ fn position(mark: i64) -> u64 {
 /// `i64 arena_mark()`: the current position of the task arena.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_arena_mark() -> i64 {
-    with_task(|task| task.arena.top() as i64).unwrap_or(0)
+    crate::entry(move || with_task(|task| task.arena.top() as i64).unwrap_or(0))
 }
 
 /// `void arena_release(i64 mark)`: free everything the task arena handed
@@ -443,7 +445,9 @@ pub extern "C" fn ignite_rt_arena_mark() -> i64 {
 /// touched.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_arena_release(mark: i64) {
-    let _ = with_task(|task| task.arena.release(position(mark)));
+    crate::entry(move || {
+        let _ = with_task(|task| task.arena.release(position(mark)));
+    })
 }
 
 /// `i8 arena_due(i64 mark, i64 kept)`: 1 when the task arena holds more
@@ -456,22 +460,28 @@ pub extern "C" fn ignite_rt_arena_release(mark: i64) {
 /// a list stays linear.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_arena_due(mark: i64, kept: i64) -> i8 {
-    let above = position(ignite_rt_arena_mark()).saturating_sub(position(mark));
-    let limit = DUE.max(position(kept).saturating_mul(4));
-    i8::from(above > limit)
+    crate::entry(move || {
+        let above = position(ignite_rt_arena_mark()).saturating_sub(position(mark));
+        let limit = DUE.max(position(kept).saturating_mul(4));
+        i8::from(above > limit)
+    })
 }
 
 /// `void arena_scratch(i8 on)`: with 1, later allocations of this task go
 /// to its scratch arena; with 0, to its task arena again.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_arena_scratch(on: i8) {
-    let _ = with_task(|task| task.in_scratch = on != 0);
+    crate::entry(move || {
+        let _ = with_task(|task| task.in_scratch = on != 0);
+    })
 }
 
 /// `void arena_scratch_clear()`: free everything in the scratch arena.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_arena_scratch_clear() {
-    let _ = with_task(|task| task.scratch.release(0));
+    crate::entry(move || {
+        let _ = with_task(|task| task.scratch.release(0));
+    })
 }
 
 /// `void task_end()`: free the current task's arenas. Every pointer they
@@ -481,6 +491,13 @@ pub extern "C" fn ignite_rt_arena_scratch_clear() {
 /// blocks mark the memory released, so the worker trims the heap.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_task_end() {
+    crate::entry(task_end)
+}
+
+/// The body of [`ignite_rt_task_end`], which `crate::task` calls from Rust
+/// after the task's function returned: a panic there unwinds to
+/// `ignite_io::spawn`'s catch, outside any task wrapper.
+pub(crate) fn task_end() {
     let _ = with_task(|task| {
         if task.arena.heap + task.scratch.heap > RELEASED_AT_TASK_END {
             ignite_io::released_memory();

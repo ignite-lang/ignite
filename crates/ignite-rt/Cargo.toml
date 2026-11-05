@@ -15,6 +15,7 @@ nix = { workspace = true, features = ["signal", "mman"] }
 
 [features]
 runner = ["ignite-io/runner"]
+panic-probe = []
 
 [[test]]
 name = "main"

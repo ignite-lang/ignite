@@ -515,12 +515,17 @@ fn bounded_streams() {
 /// and the native libraries it needs (`RUNTIME_LIBS` of the `ignite`
 /// crate) into the executable `name`.
 fn links(name: &str, modules: &[&str]) -> PathBuf {
+    links_with(name, modules, &runtime_archive())
+}
+
+/// [`links`] against the runtime archive `archive`.
+fn links_with(name: &str, modules: &[&str], archive: &Path) -> PathBuf {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("llvm-golden");
     let executable = dir.join(name);
     let output = Command::new("clang")
         .arg(format!("--target={}", target().triple))
         .args(modules.iter().map(|m| dir.join(format!("{m}.o"))))
-        .arg(runtime_archive())
+        .arg(archive)
         .args([
             "-lgcc_s",
             "-lutil",
@@ -591,6 +596,99 @@ fn bounded_streams_run_over_a_pipe() {
         "the bounds test failed with {}:\n{}",
         output.status,
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// The newest `libignite_rt-*.a` beside this test executable that carries
+/// the panic probe (`ignite_rt::PANIC_PROBE`, the dev-dependency's feature
+/// `panic-probe`); an archive of a `cargo test -p ignite-rt` in the same
+/// target directory has none and may be newer.
+fn probe_archive() -> PathBuf {
+    let exe = std::env::current_exe().expect("test executable path");
+    let deps = exe.parent().expect("test executable directory");
+    std::fs::read_dir(deps)
+        .expect("read the deps directory")
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("libignite_rt-") && name.ends_with(".a")
+        })
+        .filter(|entry| {
+            Command::new("grep")
+                .args(["-q", "-a", "-F", ignite_rt::PANIC_PROBE])
+                .arg(entry.path())
+                .status()
+                .is_ok_and(|status| status.success())
+        })
+        .filter_map(|entry| Some((entry.metadata().ok()?.modified().ok()?, entry.path())))
+        .max()
+        .map(|(_, path)| path)
+        .unwrap_or_else(|| {
+            panic!(
+                "no libignite_rt-*.a with the panic probe in {}",
+                deps.display()
+            )
+        })
+}
+
+/// Story rt-abi-panic-containment (`docs/llvm.md` section 4): a Rust panic
+/// inside a runtime entry on a task thread of an LLVM program fails that
+/// task with the panic's report, as an Ignite failure does: the task's
+/// pipe end is released, and the process, its main task and a task
+/// spawned afterwards keep running. `tests/golden/panic_probe.ignite`'s
+/// test spawns `doomed`, whose `log` of `ignite_rt::PANIC_PROBE` panics in
+/// `ignite_rt_log` (feature `panic-probe`). Without containment the panic
+/// unwinds into the `extern "C"` frame and the process aborts.
+#[test]
+fn a_runtime_panic_on_a_task_thread_fails_only_that_task() {
+    let (generated, tests) = lower_with("panic_probe", true);
+    assert_eq!(tests.len(), 1);
+    let spec = target();
+    let main = format!(
+        "target triple = \"{}\"\ntarget datalayout = \"{}\"\n\n\
+         declare void @ignite_rt_init(i32, ptr)\n\
+         declare void @ignite_rt_exit(i32) noreturn\n\
+         declare void @\"{test}\"()\n\n\
+         define i32 @main(i32 %argc, ptr %argv) {{\n\
+         entry:\n  call void @ignite_rt_init(i32 %argc, ptr %argv)\n  \
+         call void @\"{test}\"()\n  call void @ignite_rt_exit(i32 0)\n  unreachable\n}}\n",
+        spec.triple,
+        spec.datalayout,
+        test = tests[0],
+    );
+    compiles("panic_probe_std", &generated.std);
+    compiles("panic_probe_program", &generated.program);
+    compiles("panic_probe_main", &main);
+    let executable = links_with(
+        "panic-probe",
+        &["panic_probe_std", "panic_probe_program", "panic_probe_main"],
+        &probe_archive(),
+    );
+    let output = Command::new(&executable)
+        .output()
+        .expect("run the panic probe");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "the process did not survive the task's panic: {}\nstderr:\n{stderr}",
+        output.status
+    );
+    let report = stderr
+        .lines()
+        .find(|line| line.starts_with("task ended with error: panic at "))
+        .unwrap_or_else(|| panic!("no task failure report:\n{stderr}"));
+    assert!(
+        report.contains("crates/ignite-rt/src/") && report.ends_with(ignite_rt::PANIC_PROBE),
+        "{report}"
+    );
+    assert!(
+        stderr.contains("main: the doomed task's end reads eof\n"),
+        "the failed task's pipe end was not released:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("main: the survivor says alive\n"),
+        "a task spawned after the failure did not run:\n{stderr}"
     );
 }
 
