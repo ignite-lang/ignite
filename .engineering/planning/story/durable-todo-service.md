@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:durable-todo-service
 kind: story
-status: active
+status: implemented
 title: The todo service keeps its data in a Directory and is probed over HTTP
 relations:
 - decomposes: epic:slice-18-one-service-operated
@@ -17,10 +17,11 @@ scope:
   path: crates/ignite/tests/todo.rs
 - confidence: cited
   path: examples/todo
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T12:43:29Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-05T12:43:30Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-05T18:06:34Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: durable-todo-service
 

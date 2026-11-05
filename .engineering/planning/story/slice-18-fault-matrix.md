@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-18-fault-matrix
 kind: story
-status: draft
+status: active
 title: The todo system passes the slice 18 fault matrix
 relations:
 - decomposes: epic:slice-18-one-service-operated
@@ -17,7 +17,10 @@ scope:
   path: crates/ignite/tests/main.rs
 - confidence: cited
   path: crates/ignite/tests/slice18.rs
-revision: 5
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T18:06:35Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-11-05T18:06:35Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":2}}}
 ---
 # Story: slice-18-fault-matrix
 
