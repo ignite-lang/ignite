@@ -100,3 +100,22 @@ fn self_check_passes() {
     self_check(&scratch).unwrap();
     assert_eq!(std::fs::read_dir(&scratch).unwrap().count(), 0);
 }
+
+/// `ignite-perf self-check` covers the apply cycle of `docs/slice.md` 22.15 and says so.
+#[test]
+fn self_check_names_apply_cycle() {
+    let scratch = common::scratch("self-check-binary");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_ignite-perf"))
+        .arg("self-check")
+        .env("TMPDIR", &scratch)
+        .output()
+        .expect("run ignite-perf self-check");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "{stdout}{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(stdout.contains("apply-cycle"), "{stdout}");
+    assert_eq!(std::fs::read_dir(&scratch).unwrap().count(), 0);
+}

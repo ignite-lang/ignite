@@ -1356,14 +1356,14 @@ impl Harness {
         })
     }
 
-    fn side(&self, label: &str) -> &Side {
+    pub(crate) fn side(&self, label: &str) -> &Side {
         self.sides
             .iter()
             .find(|s| s.label == label)
             .expect("configured label")
     }
 
-    fn labels(&self) -> Vec<String> {
+    pub(crate) fn labels(&self) -> Vec<String> {
         self.sides.iter().map(|s| s.label.clone()).collect()
     }
 
@@ -1371,7 +1371,7 @@ impl Harness {
         self.sides.iter().any(|s| s.label == "comparison")
     }
 
-    fn guard(&self) -> R<()> {
+    pub(crate) fn guard(&self) -> R<()> {
         let stat = nix::sys::statvfs::statvfs(&self.builds).map_err(|e| format!("statvfs: {e}"))?;
         let free =
             stat.blocks_available() as f64 * stat.fragment_size() as f64 / (1u64 << 30) as f64;
@@ -1386,7 +1386,7 @@ impl Harness {
         )
     }
 
-    fn append(&mut self, mut row: Json) -> R<Json> {
+    pub(crate) fn append(&mut self, mut row: Json) -> R<Json> {
         row.set("capture", self.capture_id.as_str().into());
         row.set("harness_sha256", self.harness_sha256.as_str().into());
         let mut stream = fs::OpenOptions::new()
@@ -1400,7 +1400,7 @@ impl Harness {
         Ok(row)
     }
 
-    fn command(
+    pub(crate) fn command(
         &mut self,
         label: &str,
         unit: &str,
@@ -1899,6 +1899,7 @@ pub fn run_mode(mode: &str, args: RunArgs) -> R<i32> {
         "warm" => harness.warm(),
         "programs" => harness.programs(),
         "cli" => harness.cli(),
+        "apply-cycle" => harness.apply_cycle(),
         _ => Ok(()),
     };
     if let Err(failure) = &outcome {
@@ -1992,8 +1993,9 @@ pub fn self_check(scratch: &Path) -> R<()> {
     let result = self_check_files(&root);
     let _ = fs::remove_dir_all(&root);
     result?;
+    crate::cycle::self_check()?;
     println!(
-        "Self-check passed: paired ratios, exclusions, candidate failures, strict closure controls, and preparation reuse"
+        "Self-check passed: paired ratios, exclusions, candidate failures, strict closure controls, preparation reuse, and apply-cycle units, edits and medians"
     );
     Ok(())
 }
