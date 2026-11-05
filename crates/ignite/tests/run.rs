@@ -735,8 +735,10 @@ fn killing_terminald_restarts_it_within_backoff() {
     run.replay();
 }
 
-/// 16.0 item 2, real clock: `started.at - ended.at` lies in [100 ms,
-/// 500 ms].
+/// 16.0 item 2, real clock: the restart is planned 100 ms after the end
+/// (the `SetTimer` at `ended.at + 100 ms`) and starts no earlier than
+/// that. The real clock gives no upper bound under load; the restart only
+/// has to come within [`TIMEOUT`].
 #[test]
 fn killing_terminald_restarts_it_in_real_time() {
     let mut run = Run::design("rust", "item2-real", &["--clock", "real"]);
@@ -746,10 +748,16 @@ fn killing_terminald_restarts_it_in_real_time() {
     let ended = run.wait_for("Exited or Signalled", |r| {
         matches!(event_variant(r), Some("Exited" | "Signalled"))
     });
+    run.wait_note("restart attempt 1 delay 100 ms");
+    let timer = run.wait_effect("SetTimer");
+    assert_eq!(
+        effect_fields(&timer)[1].get("ns").and_then(Json::as_i64),
+        Some(at_ns(&ended) + 100 * NS_PER_MS)
+    );
     let started = run.wait_event("Started");
     let delay = at_ns(&started) - at_ns(&ended);
     assert!(
-        (100 * NS_PER_MS..=500 * NS_PER_MS).contains(&delay),
+        delay >= 100 * NS_PER_MS && i128::from(delay) < TIMEOUT.as_nanos() as i128,
         "restart after {delay} ns"
     );
     run.wait_event("Ready");

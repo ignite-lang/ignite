@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T22:47:59Z",
+  "actor": "human:timo",
+  "artifact": "story:test-timing-hygiene",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "3 task gates on ff6b47ce6 (PR 50) at start loads 21.06, 55.04, 30.02: each EXIT=0, 1146 passed, 0 failed, 11 ignored",
+    "reference": "https://github.com/ignite-lang/ignite/pull/50"
+  }
+}

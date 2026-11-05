@@ -9,6 +9,15 @@ use ignite_syntax::SourceFile;
 use ignite_syntax::ast::{Decl, ExprKind, StmtKind};
 use ignite_types::{TypedModules, type_module};
 
+/// The wall-clock bound of every cost check. The sizes set the
+/// separation, not the bound: the linear and polynomial paths take well
+/// under a second in a debug build (0.2 s, 28 ms and 0.5 ms unloaded on
+/// 2026-11-05), while the regressions they guard against (a quadratic
+/// walk of 100,000 terms, a line table per lookup over 400 KB, 2^40 rows
+/// for 40 columns) take minutes or never end. A deadline this generous
+/// still fails them and holds under any load a gate sees.
+const DEADLINE: Duration = Duration::from_secs(30);
+
 /// A match on a tuple of `n` `Bool`s with `2n` arms, one `true` and one
 /// `false` per column and `_` elsewhere: exhaustive.
 fn bool_columns(n: usize) -> String {
@@ -42,7 +51,7 @@ fn long_plus_chain_does_not_overflow() {
     drop(symbols);
     drop(program);
     assert!(
-        start.elapsed() < Duration::from_secs(10),
+        start.elapsed() < DEADLINE,
         "100,000 terms took {:?}",
         start.elapsed()
     );
@@ -50,7 +59,7 @@ fn long_plus_chain_does_not_overflow() {
 
 #[test]
 fn exhaustiveness_is_polynomial_in_bool_columns() {
-    let source = SourceFile::new("t.ignite", bool_columns(20));
+    let source = SourceFile::new("t.ignite", bool_columns(40));
     let program = ignite_syntax::parse(&source)
         .unwrap_or_else(|d| panic!("parse failed:\n{}", source.render_all(&d)));
     let symbols = check_module(&program, &Modules::new())
@@ -62,8 +71,8 @@ fn exhaustiveness_is_polynomial_in_bool_columns() {
         panic!("type failed:\n{}", source.render_all(&d));
     }
     assert!(
-        elapsed < Duration::from_secs(1),
-        "20 Bool columns with 40 arms took {elapsed:?}"
+        elapsed < DEADLINE,
+        "40 Bool columns with 80 arms took {elapsed:?}"
     );
 }
 
@@ -106,7 +115,7 @@ fn failure_site_positions_of_the_long_chain_are_cheap() {
     let elapsed = start.elapsed();
     assert_eq!(sites, 99_999);
     assert!(
-        elapsed < Duration::from_secs(1),
+        elapsed < DEADLINE,
         "{sites} failure-site positions took {elapsed:?}"
     );
 }

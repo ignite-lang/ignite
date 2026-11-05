@@ -187,29 +187,76 @@ fn child_failing_tasks() {
         });
         receiver.recv().unwrap();
         receiver.recv().unwrap();
-        std::thread::sleep(Duration::from_millis(200));
+        // The parent closes standard input once both failures are on
+        // standard error; the process is still running then.
+        while let Input::Data(_) = Stdin::read(16)? {}
         Stdout::write_all(b"still alive\n".to_vec())
     });
     std::process::exit(status)
 }
+
+const INDEX_FAILURE: &str =
+    "task ended with error: index failed at t.ignite:1:2: index 3 out of range for length 0";
+const PANIC_FAILURE: &str = "task ended with error: panic at ";
 
 #[test]
 fn a_failing_task_is_logged_and_the_process_continues() {
     if scenario().is_some() {
         return;
     }
-    let (code, stdout, stderr) = finish(child("child_failing_tasks"), Duration::from_secs(20));
+    let limit = Duration::from_secs(20);
+    let mut process = child("child_failing_tasks");
+    let stdin = process.stdin.take();
+    let stderr = std::io::BufReader::new(process.stderr.take().unwrap());
+    let (lines, logged) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        use std::io::BufRead;
+        for line in stderr.lines() {
+            let Ok(line) = line else { break };
+            if lines.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    let deadline = Instant::now() + limit;
+    let mut seen: Vec<String> = Vec::new();
+    let both = |seen: &[String]| {
+        seen.iter().any(|line| line == INDEX_FAILURE)
+            && seen.iter().any(|line| line.starts_with(PANIC_FAILURE))
+    };
+    while !both(&seen) {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match logged.recv_timeout(left) {
+            Ok(line) => seen.push(line),
+            Err(_) => {
+                let _ = process.kill();
+                let _ = process.wait();
+                panic!("both task failures not logged within {limit:?}:\n{seen:#?}");
+            }
+        }
+    }
+    drop(stdin);
+    let code = loop {
+        if let Some(status) = process.try_wait().unwrap() {
+            break status.code();
+        }
+        if Instant::now() > deadline {
+            let _ = process.kill();
+            let _ = process.wait();
+            panic!("child still running after {limit:?}");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let mut stdout = String::new();
+    let _ = process.stdout.take().unwrap().read_to_string(&mut stdout);
+    reader.join().unwrap();
+    seen.extend(logged.try_iter());
+    let stderr = seen.join("\n");
     assert_eq!(code, Some(0), "{stdout}\n{stderr}");
     assert!(stdout.contains("still alive\n"), "{stdout}");
-    assert!(
-        stderr.contains(
-            "task ended with error: index failed at t.ignite:1:2: index 3 out of range for length 0\n"
-        ),
-        "{stderr}"
-    );
-    let panic = stderr
-        .lines()
-        .find(|line| line.starts_with("task ended with error: panic at "))
+    let panic = seen
+        .iter()
+        .find(|line| line.starts_with(PANIC_FAILURE))
         .unwrap_or_else(|| panic!("{stderr}"));
     assert!(panic.contains("stdio.rs:"), "{panic}");
     assert!(panic.ends_with(": a Rust panic in a task"), "{panic}");
