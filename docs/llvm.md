@@ -486,9 +486,20 @@ position, even with no buffer.
     closes them. A spawned task that opens handles of its own and fails leaks them,
     and a failure inside a `Store.update` thunk would hold the store's lock: both are a
     later milestone, no current program reaches them;
-  - a Rust panic inside the runtime unwinds through Rust frames only: `ignite_io::spawn`
-    catches it at the task's thread, and on the main thread the hook `init` installs
-    reports `error: panic at <file>:<line>:<col>: <message>` and exits 101.
+  - a Rust panic inside the runtime is a failure of the task that called the entry: every
+    entry but `init` runs its body under `catch_unwind` (`crates/ignite-rt/src/contain.rs`)
+    and ends the task as an adapter does, with the report `panic at <file>:<line>:<col>:
+    <message>`, so no unwind crosses a generated frame. The entries that end the task
+    themselves guard the building of their report and `longjmp` after the catch returned,
+    never out of it; `store_update` and `store_upsert` end the task with a callback's kept
+    report after theirs. `extern "C-unwind"` is not used: the generated frames carry no
+    landing pads, so an unwind through them would skip their guards, owned handles and
+    arena. A panic outside every entry (in `init`, or in an adapter's own jump) still
+    ends the process; the hook `init` installs reports a panic no catch holds as
+    `error: panic at <file>:<line>:<col>: <message>` and exits 101. Tests:
+    `golden::a_runtime_panic_on_a_task_thread_fails_only_that_task` (`ignite-llvm`, the
+    `ignite-rt` feature `panic-probe`, which only that crate's tests enable) and
+    `contain::tests::every_entry_is_guarded`.
 
   An allocation failure is not a Ignite failure: the runtime aborts the process.
 - Integer arithmetic fails instead of wrapping, in every profile (`vision.md` T6).
@@ -505,7 +516,8 @@ position, even with no buffer.
 
 ## 5 Runtime C ABI (`ignite-rt`)
 
-All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the section-3 layout;
+All functions `extern "C"`, prefix `ignite_rt_`; a Rust panic inside one is a failure of the
+calling task (section 4). `T*` means a pointer to the section-3 layout;
 `out` pointers are written on success, `err` on failure. Status `i32`: 0 ok, 1 error.
 
 | function | meaning |
@@ -549,14 +561,14 @@ All functions `extern "C"`, prefix `ignite_rt_`. `T*` means a pointer to the sec
 | `void int_to_text(Text* out, i64 value)` | |
 | `i8 int_parse(Text* text, i64* out)` | 1 and `out` when `text` is a decimal `i64` with an optional leading `-` (`ignite_io::parse_int`: what Rust `str::parse` accepts less a leading `+`, read from the bytes without a UTF-8 pass), else 0; `text` may be the `List` of a `Bytes`, as `Int.parse(b.to_text())` passes `b` |
 | `i32 tcp_set_idle_timeout(i64 stream, i64 ms, IoError* err)` | a read that waits longer than `ms` returns `Eof`; 0 or less removes the timeout (`ignite_io::TcpStream::set_idle_timeout`) |
-| `ptr store_new(ptr to_heap, ptr from_heap, ptr free_heap, i64 size, i64 align)` | a `ignite_io::Store` of heap copies of `size`-byte values; the three functions are the element type's glue (section 4); never freed |
+| `ptr store_new(ptr to_heap, ptr from_heap, ptr free_heap, i64 size, i64 align)` | a `ignite_io::Store` of heap copies of `size`-byte values; the three functions are the element type's glue (section 4), a null one a contained panic (section 4); never freed |
 | `i64 store_next_id(ptr store)` | |
 | `void store_put(ptr store, i64 id, ptr value)` | copies `*value` to the heap |
 | `i8 store_get(ptr store, i64 id, ptr out)` | 1 and a copy in the task's arena at `out`, or 0 |
 | `i8 store_remove(ptr store, i64 id, ptr out)` | as `get`, and removes the entry |
 | `void store_values(ptr store, List* out)` | copies of every value, in ascending id order |
-| `i8 store_update(ptr store, i64 id, ptr f, ptr thunk, ptr out)` | 0 when `id` holds nothing (`f` is not called); otherwise replaces the value by `thunk(f, old)` under the store's lock, 1 and a copy of the new value at `out`; a null from the thunk (a failure of `f` its callback guard stopped) keeps the old value, releases the lock and ends the task with the failure's report |
-| `void store_upsert(ptr store, i64 id, ptr f, ptr thunk, ptr out)` | under the store's lock stores `thunk(f, old)` under `id`, `old` null when `id` holds nothing, and copies the stored value to `out`; a null from the thunk leaves the store unchanged, releases the lock and ends the task with the failure's report; declared only in a module that calls it |
+| `i8 store_update(ptr store, i64 id, ptr f, ptr thunk, ptr out)` | 0 when `id` holds nothing (`f` is not called); otherwise replaces the value by `thunk(f, old)` under the store's lock, 1 and a copy of the new value at `out`; a null from the thunk (a failure of `f` its callback guard stopped) keeps the old value, releases the lock and ends the task with the failure's report; a null `thunk` is a contained panic |
+| `void store_upsert(ptr store, i64 id, ptr f, ptr thunk, ptr out)` | under the store's lock stores `thunk(f, old)` under `id`, `old` null when `id` holds nothing, and copies the stored value to `out`; a null from the thunk leaves the store unchanged, releases the lock and ends the task with the failure's report; a null `thunk` is a contained panic; declared only in a module that calls it |
 | `void assert_failed(Text* cond, Text* message, Text* left, Text* right, Text* at)` | ends the task with `ignite_io::assert_report` (section 4: `error: <report>` and exit 101 on the main task or a test; `task ended with error: <report>` and a `longjmp` to the task wrapper in a spawned task). `message` is null without a message; `left` and `right` are null unless the condition is `a == b` or `a != b` |
 | `void try_failed(Text* error, Text* at)` | ends the task with `ignite_io::try_report`: `? failed at <at>: Err(<error>)` (`error` not null) or `? failed at <at>: None` (section 4) |
 | `void fail_arith(Text* op, Text* file, i64 line, i64 col, i64 left, i64 right)` | ends the task: `<op> failed at <file>:<line>:<col>: <left> <op> <right>` (section 4); `op` is `+`, `-`, `*`, `/` or `%`; `Byte` operands are widened to `i64` |

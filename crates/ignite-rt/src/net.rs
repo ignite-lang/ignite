@@ -46,7 +46,9 @@ thread_local! {
 /// ([`crate::fail`]) releases it before the task ends.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_own(handle: i64) {
-    let _ = OWNED.try_with(|owned| owned.borrow_mut().push(handle));
+    crate::entry(move || {
+        let _ = OWNED.try_with(|owned| owned.borrow_mut().push(handle));
+    })
 }
 
 /// Release every handle the current task still owns, on a failure. The
@@ -66,9 +68,11 @@ pub(crate) fn release_task_handles() {
 /// its first owned stream binding (`docs/llvm.md` section 4).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_own_mark() -> i64 {
-    OWNED
-        .try_with(|owned| owned.borrow().len() as i64)
-        .unwrap_or(0)
+    crate::entry(move || {
+        OWNED
+            .try_with(|owned| owned.borrow().len() as i64)
+            .unwrap_or(0)
+    })
 }
 
 /// `void own_release(i64 mark)`: release every handle the current task
@@ -76,17 +80,19 @@ pub extern "C" fn ignite_rt_own_mark() -> i64 {
 /// owns, newest first: the stream bindings of a block that is left.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_own_release(mark: i64) {
-    let mark = usize::try_from(mark).unwrap_or(0);
-    let above = OWNED
-        .try_with(|owned| {
-            let mut owned = owned.borrow_mut();
-            let at = mark.min(owned.len());
-            owned.split_off(at)
-        })
-        .unwrap_or_default();
-    for handle in above.into_iter().rev() {
-        release_owner(handle, None);
-    }
+    crate::entry(move || {
+        let mark = usize::try_from(mark).unwrap_or(0);
+        let above = OWNED
+            .try_with(|owned| {
+                let mut owned = owned.borrow_mut();
+                let at = mark.min(owned.len());
+                owned.split_off(at)
+            })
+            .unwrap_or_default();
+        for handle in above.into_iter().rev() {
+            release_owner(handle, None);
+        }
+    })
 }
 
 /// `void tcp_retain(i64 handle)`: add an owner to `handle` (a task it is
@@ -94,16 +100,18 @@ pub extern "C" fn ignite_rt_own_release(mark: i64) {
 /// owner releases it too. Nothing for a released or unknown handle.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_retain(handle: i64) {
-    let Some((index, generation)) = decode(handle) else {
-        return;
-    };
-    let Some(slot) = slot_at(index, false) else {
-        return;
-    };
-    let mut entry = lock(slot);
-    if entry.generation == generation && entry.handle.is_some() {
-        entry.owners += 1;
-    }
+    crate::entry(move || {
+        let Some((index, generation)) = decode(handle) else {
+            return;
+        };
+        let Some(slot) = slot_at(index, false) else {
+            return;
+        };
+        let mut entry = lock(slot);
+        if entry.generation == generation && entry.handle.is_some() {
+            entry.owners += 1;
+        }
+    })
 }
 
 #[derive(Clone)]
@@ -307,22 +315,26 @@ pub extern "C" fn ignite_rt_tcp_bind(
     out: *mut i64,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let bound = TcpListener::bind(text(address), port);
-    status(bound.map(|l| register(Handle::Listener(l))), out, err)
+    crate::entry(move || {
+        let bound = TcpListener::bind(text(address), port);
+        status(bound.map(|l| register(Handle::Listener(l))), out, err)
+    })
 }
 
 /// `i32 tcp_accept(i64 listener, i64* out, IoError* err)`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_accept(handle: i64, out: *mut i64, err: *mut IgniteIoError) -> i32 {
-    let accepted = listener(handle).and_then(|listener| listener.accept());
-    status(accepted.map(|s| register(Handle::Stream(s))), out, err)
+    crate::entry(move || {
+        let accepted = listener(handle).and_then(|listener| listener.accept());
+        status(accepted.map(|s| register(Handle::Stream(s))), out, err)
+    })
 }
 
 /// `i64 tcp_local_port(i64 listener)`: the bound port; 0 when the handle is
 /// not a listener or the operating system cannot report it.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_local_port(handle: i64) -> i64 {
-    listener(handle).map_or(0, |listener| listener.local_port())
+    crate::entry(move || listener(handle).map_or(0, |listener| listener.local_port()))
 }
 
 /// `i32 tcp_connect(Text* address, i64 port, i64* out, IoError* err)`.
@@ -333,8 +345,10 @@ pub extern "C" fn ignite_rt_tcp_connect(
     out: *mut i64,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let connected = TcpStream::connect(text(address), port);
-    status(connected.map(|s| register(Handle::Stream(s))), out, err)
+    crate::entry(move || {
+        let connected = TcpStream::connect(text(address), port);
+        status(connected.map(|s| register(Handle::Stream(s))), out, err)
+    })
 }
 
 /// Largest buffer a single read allocates, as in `ignite-io`.
@@ -351,9 +365,11 @@ pub extern "C" fn ignite_rt_tcp_read(
     out: *mut IgniteInput,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let read = stream(handle)
-        .and_then(|stream| read_into_arena(maximum, |buffer| stream.read_into(buffer)));
-    status(read, out, err)
+    crate::entry(move || {
+        let read = stream(handle)
+            .and_then(|stream| read_into_arena(maximum, |buffer| stream.read_into(buffer)));
+        status(read, out, err)
+    })
 }
 
 /// One read by `read_into` of up to `maximum` bytes (clamped to `1..=1
@@ -396,8 +412,10 @@ pub extern "C" fn ignite_rt_tcp_write_all(
     data: *const IgniteList,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let written = stream(handle).and_then(|stream| stream.write_from(bytes(data)));
-    status(written, std::ptr::null_mut(), err)
+    crate::entry(move || {
+        let written = stream(handle).and_then(|stream| stream.write_from(bytes(data)));
+        status(written, std::ptr::null_mut(), err)
+    })
 }
 
 /// `i32 tcp_set_idle_timeout(i64 stream, i64 ms, IoError* err)`: a later
@@ -409,16 +427,20 @@ pub extern "C" fn ignite_rt_tcp_set_idle_timeout(
     ms: i64,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let set = stream(handle).and_then(|stream| stream.set_idle_timeout(ms));
-    status(set, std::ptr::null_mut(), err)
+    crate::entry(move || {
+        let set = stream(handle).and_then(|stream| stream.set_idle_timeout(ms));
+        status(set, std::ptr::null_mut(), err)
+    })
 }
 
 /// `i32 tcp_close(i64 stream, IoError* err)`: shut down the write half. A
 /// socket that is already disconnected is not an error.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_close(handle: i64, err: *mut IgniteIoError) -> i32 {
-    let closed = stream(handle).and_then(|stream| stream.close());
-    status(closed, std::ptr::null_mut(), err)
+    crate::entry(move || {
+        let closed = stream(handle).and_then(|stream| stream.close());
+        status(closed, std::ptr::null_mut(), err)
+    })
 }
 
 /// `void tcp_release(i64 handle)`: drop one owner of any handle (a
@@ -430,7 +452,9 @@ pub extern "C" fn ignite_rt_tcp_close(handle: i64, err: *mut IgniteIoError) -> i
 /// closes it.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_release(handle: i64) {
-    release(handle, None);
+    crate::entry(move || {
+        release(handle, None);
+    })
 }
 
 /// Release the handle of a waited child and keep its process id in the

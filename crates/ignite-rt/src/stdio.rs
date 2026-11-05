@@ -15,22 +15,24 @@ pub extern "C" fn ignite_rt_stdin_read(
     out: *mut IgniteInput,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let read = Stdin::read(maximum);
-    status(read.map(|input| IgniteInput::from_input(&input)), out, err)
+    crate::entry(move || {
+        let read = Stdin::read(maximum);
+        status(read.map(|input| IgniteInput::from_input(&input)), out, err)
+    })
 }
 
 /// `i32 stdin_is_terminal(i8* out, IoError* err)`: 1 when standard input is
 /// a terminal, else 0. Never fails.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_stdin_is_terminal(out: *mut i8, err: *mut IgniteIoError) -> i32 {
-    status(Stdin::is_terminal().map(i8::from), out, err)
+    crate::entry(move || status(Stdin::is_terminal().map(i8::from), out, err))
 }
 
 /// `i32 stdin_set_raw(i8 on, IoError* err)`: `docs/slice.md` section 7
 /// terminal mode; a no-op on a standard input that is not a terminal.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_stdin_set_raw(on: i8, err: *mut IgniteIoError) -> i32 {
-    status(Stdin::set_raw(on != 0), std::ptr::null_mut(), err)
+    crate::entry(move || status(Stdin::set_raw(on != 0), std::ptr::null_mut(), err))
 }
 
 /// `i32 stdout_write_all(List* bytes, IoError* err)`: write and flush.
@@ -39,6 +41,8 @@ pub extern "C" fn ignite_rt_stdout_write_all(
     data: *const IgniteList,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let written = Stdout::write_all(bytes(data).to_vec());
-    status(written, std::ptr::null_mut(), err)
+    crate::entry(move || {
+        let written = Stdout::write_all(bytes(data).to_vec());
+        status(written, std::ptr::null_mut(), err)
+    })
 }

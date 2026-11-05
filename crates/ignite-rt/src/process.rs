@@ -129,11 +129,13 @@ pub extern "C" fn ignite_rt_args_port(
     present: *mut i32,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let result = ignite_io::args::port_from_os_args(os_args().into_iter());
-    if let Ok(port) = result {
-        put(present, i32::from(port.is_some()));
-    }
-    status(result.map(|port| port.unwrap_or(0)), out_port, err)
+    crate::entry(move || {
+        let result = ignite_io::args::port_from_os_args(os_args().into_iter());
+        if let Ok(port) = result {
+            put(present, i32::from(port.is_some()));
+        }
+        status(result.map(|port| port.unwrap_or(0)), out_port, err)
+    })
 }
 
 /// The value of `flag` in the arguments `init` stored
@@ -156,16 +158,18 @@ pub extern "C" fn ignite_rt_args_flag(
     present: *mut i32,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let flag = String::from_utf8_lossy(bytes(flag)).into_owned();
-    let result = flag_value(&flag);
-    if let Ok(value) = &result {
-        put(present, i32::from(value.is_some()));
-    }
-    status(
-        result.map(|value| IgniteList::from_bytes(value.unwrap_or_default().as_bytes())),
-        out,
-        err,
-    )
+    crate::entry(move || {
+        let flag = String::from_utf8_lossy(bytes(flag)).into_owned();
+        let result = flag_value(&flag);
+        if let Ok(value) = &result {
+            put(present, i32::from(value.is_some()));
+        }
+        status(
+            result.map(|value| IgniteList::from_bytes(value.unwrap_or_default().as_bytes())),
+            out,
+            err,
+        )
+    })
 }
 
 /// `i32 setting_launch(Text* flag, Text* default, i8 has_default, i64* out,
@@ -180,39 +184,48 @@ pub extern "C" fn ignite_rt_setting_launch(
     out: *mut i64,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let flag = String::from_utf8_lossy(bytes(flag)).into_owned();
-    let default = (has_default != 0).then(|| String::from_utf8_lossy(bytes(default)).into_owned());
-    let made = flag_value(&flag).and_then(|given| match given.or(default) {
-        Some(value) => Ok(ignite_io::Setting::of(&flag, value)),
-        None => Err(IoError::new(format!("{flag}: required argument missing")).with_exit_code(2)),
-    });
-    status(
-        made.map(|setting| crate::net::register(crate::net::Handle::Setting(setting))),
-        out,
-        err,
-    )
+    crate::entry(move || {
+        let flag = String::from_utf8_lossy(bytes(flag)).into_owned();
+        let default =
+            (has_default != 0).then(|| String::from_utf8_lossy(bytes(default)).into_owned());
+        let made = flag_value(&flag).and_then(|given| match given.or(default) {
+            Some(value) => Ok(ignite_io::Setting::of(&flag, value)),
+            None => {
+                Err(IoError::new(format!("{flag}: required argument missing")).with_exit_code(2))
+            }
+        });
+        status(
+            made.map(|setting| crate::net::register(crate::net::Handle::Setting(setting))),
+            out,
+            err,
+        )
+    })
 }
 
 /// `i64 setting_of(Text* flag, Text* value)`: `Setting.of(flag, value)`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_setting_of(flag: *const IgniteList, value: *const IgniteList) -> i64 {
-    let setting = ignite_io::Setting::of(
-        String::from_utf8_lossy(bytes(flag)),
-        String::from_utf8_lossy(bytes(value)),
-    );
-    crate::net::register(crate::net::Handle::Setting(setting))
+    crate::entry(move || {
+        let setting = ignite_io::Setting::of(
+            String::from_utf8_lossy(bytes(flag)),
+            String::from_utf8_lossy(bytes(value)),
+        );
+        crate::net::register(crate::net::Handle::Setting(setting))
+    })
 }
 
 /// `void setting_value(Text* out, i64 s)`: `setting.value()`; empty for a
 /// handle that is no setting.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_setting_value(out: *mut IgniteList, handle: i64) {
-    let value = crate::net::capability(handle, "setting", |found| match found {
-        crate::net::Handle::Setting(setting) => Some(setting.value()),
-        _ => None,
+    crate::entry(move || {
+        let value = crate::net::capability(handle, "setting", |found| match found {
+            crate::net::Handle::Setting(setting) => Some(setting.value()),
+            _ => None,
+        })
+        .unwrap_or_default();
+        put(out, IgniteList::from_bytes(value.as_bytes()));
     })
-    .unwrap_or_default();
-    put(out, IgniteList::from_bytes(value.as_bytes()));
 }
 
 /// `i32 command_line_launch(i64* out, IoError* err)`: the resource
@@ -220,38 +233,44 @@ pub extern "C" fn ignite_rt_setting_value(out: *mut IgniteList, handle: i64) {
 /// executable's name; one that is not UTF-8 is an error with exit code 2.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_command_line_launch(out: *mut i64, err: *mut IgniteIoError) -> i32 {
-    let made = ignite_io::CommandLine::from_os_args(os_args().into_iter().skip(1));
-    status(
-        made.map(|command_line| {
-            crate::net::register(crate::net::Handle::CommandLine(command_line))
-        }),
-        out,
-        err,
-    )
+    crate::entry(move || {
+        let made = ignite_io::CommandLine::from_os_args(os_args().into_iter().skip(1));
+        status(
+            made.map(|command_line| {
+                crate::net::register(crate::net::Handle::CommandLine(command_line))
+            }),
+            out,
+            err,
+        )
+    })
 }
 
 /// `i64 command_line_of(List<Text>* arguments)`: `CommandLine.of(arguments)`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_command_line_of(arguments: *const IgniteList) -> i64 {
-    let command_line = ignite_io::CommandLine::of(
-        crate::text::texts(arguments)
-            .iter()
-            .map(|argument| String::from_utf8_lossy(bytes(argument)).into_owned())
-            .collect(),
-    );
-    crate::net::register(crate::net::Handle::CommandLine(command_line))
+    crate::entry(move || {
+        let command_line = ignite_io::CommandLine::of(
+            crate::text::texts(arguments)
+                .iter()
+                .map(|argument| String::from_utf8_lossy(bytes(argument)).into_owned())
+                .collect(),
+        );
+        crate::net::register(crate::net::Handle::CommandLine(command_line))
+    })
 }
 
 /// `void command_line_arguments(List<Text>* out, i64 c)`:
 /// `command_line.arguments()`; empty for a handle that is no command line.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_command_line_arguments(out: *mut IgniteList, handle: i64) {
-    let arguments = crate::net::capability(handle, "command line", |found| match found {
-        crate::net::Handle::CommandLine(command_line) => Some(command_line.arguments()),
-        _ => None,
+    crate::entry(move || {
+        let arguments = crate::net::capability(handle, "command line", |found| match found {
+            crate::net::Handle::CommandLine(command_line) => Some(command_line.arguments()),
+            _ => None,
+        })
+        .unwrap_or_default();
+        put(out, IgniteList::from_texts(&arguments));
     })
-    .unwrap_or_default();
-    put(out, IgniteList::from_texts(&arguments));
 }
 
 /// `i32 endpoint_of(Text* reference, Endpoint* out, IoError* err)`: the
@@ -266,16 +285,18 @@ pub extern "C" fn ignite_rt_endpoint_of(
     out: *mut IgniteEndpoint,
     err: *mut IgniteIoError,
 ) -> i32 {
-    let reference = String::from_utf8_lossy(bytes(reference)).into_owned();
-    let result = ignite_io::args::endpoint_from_os_args(os_args().into_iter(), &reference);
-    status(
-        result.map(|(address, port)| IgniteEndpoint {
-            address: IgniteList::from_bytes(address.as_bytes()),
-            port,
-        }),
-        out,
-        err,
-    )
+    crate::entry(move || {
+        let reference = String::from_utf8_lossy(bytes(reference)).into_owned();
+        let result = ignite_io::args::endpoint_from_os_args(os_args().into_iter(), &reference);
+        status(
+            result.map(|(address, port)| IgniteEndpoint {
+                address: IgniteList::from_bytes(address.as_bytes()),
+                port,
+            }),
+            out,
+            err,
+        )
+    })
 }
 
 /// `void exit(i32 code)`: `ignite_io::exit`: restore the terminal, flush
@@ -284,10 +305,12 @@ pub extern "C" fn ignite_rt_endpoint_of(
 /// waits for the live tasks first and exits 0, as `ignite_io::run` does.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_exit(code: i32) -> ! {
-    if ignite_io::draining() {
-        drained();
-    }
-    ignite_io::exit(code)
+    crate::entry_never(move || {
+        if ignite_io::draining() {
+            drained();
+        }
+        ignite_io::exit(code)
+    })
 }
 
 /// `void fail(IoError* error)`: `error: <message>` to stderr, restore the
@@ -297,23 +320,25 @@ pub extern "C" fn ignite_rt_exit(code: i32) -> ! {
 /// are waited for and the status is 0 (16.13).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
-    let (message, code) = match get(error) {
-        // SAFETY: the argument is valid for the call (crate docs).
-        Some(error) => (unsafe { error.message.as_bytes() }, error.exit_code),
-        None => (&b""[..], 1),
-    };
-    if ignite_io::draining() {
-        if message != ignite_io::DRAINING.as_bytes() {
-            let mut line = b"error: ".to_vec();
-            line.extend_from_slice(message);
-            stderr_line(&line);
+    crate::entry_never(move || {
+        let (message, code) = match get(error) {
+            // SAFETY: the argument is valid for the call (crate docs).
+            Some(error) => (unsafe { error.message.as_bytes() }, error.exit_code),
+            None => (&b""[..], 1),
+        };
+        if ignite_io::draining() {
+            if message != ignite_io::DRAINING.as_bytes() {
+                let mut line = b"error: ".to_vec();
+                line.extend_from_slice(message);
+                stderr_line(&line);
+            }
+            drained();
         }
-        drained();
-    }
-    let mut line = b"error: ".to_vec();
-    line.extend_from_slice(message);
-    stderr_line(&line);
-    ignite_io::exit(code)
+        let mut line = b"error: ".to_vec();
+        line.extend_from_slice(message);
+        stderr_line(&line);
+        ignite_io::exit(code)
+    })
 }
 
 /// The end of a drained process: wait for the live tasks, exit 0.
@@ -326,27 +351,33 @@ fn drained() -> ! {
 /// restored, exit status 101.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_panic(message: *const IgniteList) -> ! {
-    die(&String::from_utf8_lossy(bytes(message)))
+    crate::entry_never(move || die(&String::from_utf8_lossy(bytes(message))))
 }
 
 /// `void log(Text* line)`: the line and a newline to stderr.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_log(line: *const IgniteList) {
-    stderr_line(bytes(line));
+    crate::entry(move || {
+        #[cfg(feature = "panic-probe")]
+        crate::panic_probe(bytes(line));
+        stderr_line(bytes(line));
+    })
 }
 
 /// `void io_error_new(IoError* out, Text* message)`: exit code 1. The
 /// message is taken over as passed (the caller's fresh copy).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_io_error_new(out: *mut IgniteIoError, message: *const IgniteList) {
-    let message = get(message).unwrap_or_else(|| IgniteList::from_bytes(&[]));
-    put(
-        out,
-        IgniteIoError {
-            message,
-            exit_code: IoError::new("").exit_code(),
-        },
-    );
+    crate::entry(move || {
+        let message = get(message).unwrap_or_else(|| IgniteList::from_bytes(&[]));
+        put(
+            out,
+            IgniteIoError {
+                message,
+                exit_code: IoError::new("").exit_code(),
+            },
+        );
+    })
 }
 
 #[cfg(test)]

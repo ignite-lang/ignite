@@ -21,6 +21,12 @@ pub struct IgniteTest {
 #[cfg(feature = "runner")]
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_test_main(table: *const IgniteTest, count: i64) -> ! {
+    crate::entry_never(move || test_main(table, count))
+}
+
+/// The body of [`ignite_rt_test_main`].
+#[cfg(feature = "runner")]
+fn test_main(table: *const IgniteTest, count: i64) -> ! {
     let entries: &[IgniteTest] = if table.is_null() || count <= 0 {
         &[]
     } else {

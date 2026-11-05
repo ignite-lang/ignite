@@ -4,7 +4,7 @@
 /// process (`ignite_io::clock::monotonic`); it never decreases.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_clock_monotonic() -> i64 {
-    ignite_io::clock::monotonic()
+    crate::entry(ignite_io::clock::monotonic)
 }
 
 #[cfg(test)]
