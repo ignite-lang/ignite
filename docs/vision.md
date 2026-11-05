@@ -58,7 +58,7 @@ One table for the layers every document agrees on. "Home" says which language it
 
 | layer | contents | home | source |
 |---|---|---|---|
-| L0 substrate | sockets, TLS engine (rustls), stdio, terminal mode, tasks, timers, bounded mailboxes and one-shot slots, `Store`, `Buffer`, process entry and exit; tokio event loop in slice 5 | Rust: `crates/ignite-io`, C ABI in `crates/ignite-rt` | `AGENTS.md`; `slice.md` §7; `actors.md` §8.4; `wasm.md` §4.2, G2 |
+| L0 substrate | sockets, TLS engine (rustls), stdio, terminal mode, tasks, timers, bounded mailboxes and one-shot slots, `Store`, `Buffer`, process entry and exit; files under a root (`Directory`), child processes (`Launcher`, `ChildProcess`), random bytes (`Entropy`) and program arguments (`Setting`) since slice 17; tokio event loop in slice 5 | Rust: `crates/ignite-io`, C ABI in `crates/ignite-rt` | `AGENTS.md`; `slice.md` §7; `actors.md` §8.4; `wasm.md` §4.2, G2 |
 | L1 language | values with value semantics, capability effects, generics; later bounds and interfaces, closures, `Map`, machine scalars, indexed assignment, rest patterns, ranges | Rust compiler until M6, then Ignite | `slice.md`; `protocols.md` §2; `wasm.md` §4.3; `friction.md` |
 | L2 std | text, json; `transport/` (Pipe, Tcp, Tls); `protocol/` (Telnet, Http, later WebSocket, Http3); `actor/` (Step, Topic, Supervisor, Table); `rfc/` catalogues; `check/explore`; `wasm/` decoder, validator, interpreter | Ignite | `protocols.md` §4; `actors.md` §8.4; `wasm.md` §4.1 |
 | L3 systems | `resource` kinds (TcpListener, Store, Topic, Listener with a transport), component kinds (Service, Client, Actor, Supervisor, application components), contracts, policies, assemblies | Ignite declarations, library kinds | design §3.2, §11.3; `actors.md` §2; `protocols.md` §2.3 |
@@ -71,7 +71,8 @@ Invariants shared by every document:
 2. Everything above IO is Ignite in `std/` or the program. Nothing named after an application
    protocol lives under `crates/`.
 3. Value semantics everywhere. The only shared things are handle types: `TcpStream`,
-   `PipeStream` (slice 14), `TcpListener`, `Store<T>`, `Buffer` (wasm G2), `Address<M>` (actors). Copying a handle copies
+   `PipeStream` (slice 14), `TcpListener`, `Store<T>`, `Directory`, `Launcher`, `ChildProcess`,
+   `Entropy`, `Setting` (slice 17), `Buffer` (wasm G2), `Address<M>` (actors). Copying a handle copies
    8 bytes and shares the resource.
 4. Effects are capabilities on parameters. Authority is passed, never ambient. A component's
    imports (wasm) and an actor's reach (actors) derive from the same effect sets.
@@ -155,6 +156,7 @@ steering session against section 6 before agents are dispatched.
 | 13 | F4 apply | `ignite apply` with plan diff, changes and deletion (design §7.3), recovery of a half-applied plan from the journal | a second `apply` of the same plan is a no-op; an interrupted `apply` resumes |
 | 14 | B protocols P1 | `Pipe.pair()` and `PipeStream`, the bound `<S: ByteStream>` on fns and roles, `Telnet` and `Http` generic over the stream with their limits records (`docs/slice.md` section 18) | the 18.0 matrix of `docs/slice.md` |
 | 16 (done 2026-11-05, `docs/slice.md` section 20; counts and gate time in `AGENTS.md` "Slice 16") | A language gaps | the items of wave A that slices 9 and 10 had not delivered: last-use moves (one analysis in `ignite-types`, read by both targets; actors R1), calls of fn-typed expressions (`adder(1)(2)`, `fs[i](x)`), rest patterns in list patterns (`docs/syntax.md` P9, E076); a both-target fixture for every item that already held | the 20.0 matrix of `docs/slice.md` |
+| 17 (done 2026-11-05, `docs/slice.md` section 21; counts and gate time in `AGENTS.md` "Slice 17") | playground substrate (`epic:playground-substrate`) | capabilities as values (P3): `Directory` (files under a root, confined by an `openat` walk), `Launcher` and `ChildProcess` (child processes with timeout, bounded output, process-group kill), `Entropy` (random bytes), `Setting` (one command-line flag), each a resource kind and handle type on both targets over `crates/ignite-io`; `std.fs`, `std.process`; E140 to E142; capability resources hosted by their member's process (15.6); `HttpServer` gains the run hooks `TelnetServer` has | the 21.0 matrix of `docs/slice.md` |
 | 15+ | slice 15 is G's P2 (`docs/slice.md` section 19); after it B (P2 on), C, D, E, G (P3 to P5), H | slice 15: RFC catalogues as literal data, the claim clauses and E090 to E092, `ignite rfc import` and `ignite rfc check`, `ignite conformance`, the claims of `Telnet` and `Http`; after it as the table above, in that order | slice 15: the 19.0 matrix of `docs/slice.md`; after it as the table above |
 
 Consequences for the open decisions of section 8: D5 moves from the start of H to slice 11;
@@ -218,6 +220,7 @@ Each row names the two places, what disagrees, and the resolution this document 
 | X23 | `llvm.md` §7 and `slice.md` §1 "a program that passes both is valid for the Rust and the LLVM target"; section 10.1 shows programs the checker accepts that rustc rejects and the LLVM target miscompiles | the checker lacks a mutability rule | wave A0: E006 for in-place mutation |
 | X24 | `slice.md` §5.1 "The capability is a parameter of the function (`stream.read`) or an ambient one (`stdin.read`)"; the implementation cannot tell the two apart when a parameter carries an ambient's name | section 10.2, E1 to E3 | wave A0: refuse or namespace ambient names |
 | X25 | section 8 D2 option B "LLVM becomes the default `--target`", taken 2026-11-01 by the steering session as reversible; `BuildOptions::default` in `crates/ignite/src/lib.rs` (`target: Target::Rust`) and every `--target` of `crates/ignite/src/main.rs` still default to Rust | which target is the default | resolved 2026-11-04: D2 B stands (Timo: build time is why Ignite exists, `vision.md` section 1); `BuildOptions::default` and the CLI switch to LLVM after slice 16 U4 (`story:slice-16-llvm-moves`) lands, in `story:llvm-default-target`; carried out 2026-11-05: `Target::default`, `BuildOptions::default` and every `--target` of the CLI are LLVM |
+| X26 | design §3.5 "effect interfaces cover operations such as reading declared files, spawning processes, accessing a clock", read as ambient interfaces; `docs/slice.md` §21.3 (slice 17) makes files, processes, random bytes and arguments capability values (`Directory`, `Launcher`, `Entropy`, `Setting`) that a system declares as resources and passes to the code that uses them, with test-only constructors as the only other way to obtain one (E051) | ambient effect interfaces or passed capabilities | resolved by slice 17 (`docs/slice.md` §21.11 D1, invariant 4): passed capabilities; the design text stays as it is (direction, T2); the clock stays an ambient head (`clock.read`), a parameter named `clock` is E056 |
 
 Logic flaws inside one document, found by reading:
 
@@ -250,7 +253,8 @@ T3. **Line-number citations are banned in design documents.** Cite a symbol (`de
 T4. **Diagnostic code ranges are reserved per wave** (steering, 2026-11-01). E001 to E059:
 slices 1 to 9 (`slice.md`). E060 to E069: actors. E070 to E079: the sugar proposal
 (`syntax.md`). E080 to E089: wasm. E090 to E099: protocols. E100 to E109: slice 10 (F1),
-E110 to E119: slice 11 (F2), E120 to E129: slice 12 (F3), E130 to E139: slice 13 (F4). A
+E110 to E119: slice 11 (F2), E120 to E129: slice 12 (F3), E130 to E139: slice 13 (F4), E140
+to E149: slice 17 (playground substrate). A
 document that cites a code from another range cites it, it does not define it. Reason: on
 2026-11-01 four documents used codes E080 to E098 with no written range table; the check that
 day found `wasm.md` defining E080 to E083 and `protocols.md` E090 to E098, the others citing

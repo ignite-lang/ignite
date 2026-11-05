@@ -6645,12 +6645,13 @@ Each has a default, which the units follow unless the review changes it.
 ## 21 Slice 17: processes, files, arguments and random bytes (playground substrate)
 
 **Status: contract written 2026-11-04. The independent review (`docs/slice17-review.md`, 37
-findings) is resolved in this text; 21.17 maps each finding to its resolution. Implementation
-has not started.** The rows of 21.0 are required checks, not results.
+findings) is resolved in this text; 21.17 maps each finding to its resolution. Implemented
+2026-11-05 on `feat/slice17-processes-files`, units U1 to U6; the standing of each row of 21.0
+is in `STATUS.md`, the stale points of the contract found during the slice in 21.18.** The
+rows of 21.0 are required checks, not results.
 
-Sections 19 (slice 15) and 20 (slice 16) are on their branches (`feat/slice15-*`,
-`feat/slice16-language-gaps`) and not on `main` yet. This section is numbered 21 so that no
-merge order renumbers it.
+Sections 19 (slice 15) and 20 (slice 16) are on `main` (slice 16 merged in PR 30 before this
+slice started). This section is numbered 21 so that no merge order renumbers it.
 
 Sources:
 
@@ -6668,9 +6669,18 @@ Sources:
   (`ignite run`, `--ref`), 17 (`ignite apply`), 18 (the form this section follows);
   `docs/layering.md`; `docs/llvm.md` §4 (handle lifetime).
 
-The base of the slice is commit `c539392` (`main`). Every `git diff` in 21.0 and the before tree
-of 21.14 are taken from it. If `main` moves before the slice closes, the base becomes the merge
-base of the slice branch and `main` at the close. Code is cited by symbol (T3).
+The base of the slice is commit `651be04c` (`main` when U1 started, with slice 16, release
+`v0.5.0` and the LLVM default target of PR 32). `main` moved after it by planning-store commits
+only, and U6 merged it, so the merge base at the close is `99647132`, whose code is the same as
+`651be04c`'s. Every `git diff` in 21.0 and the before tree of 21.14 are taken from that base.
+The contract was written against `c539392`, an older `main`; the probes of 21.1 ran there.
+Code is cited by symbol (T3).
+
+Since PR 32 (2026-11-05, before U1) LLVM is the default target of the CLI and of
+`BuildOptions::default`. A command in this section without `--target` builds with LLVM and,
+for `ignite build`, `ignite run` and `ignite plan --for-apply`, needs the runtime archive
+(`--runtime`, or `libignite_rt.a` beside the driver); the end-to-end tests pass the target and
+the runtime explicitly. Where a row below names one target, it names it.
 
 Out of this slice by the steering session's word: `story:http-server-responses` (gaps P4 to
 P6), which follows the HTTP RFC gaps story.
@@ -6710,7 +6720,7 @@ Fixture paths without a directory are under `crates/ignite/tests/fixtures/slice1
 | 15 | process effects checked | `cargo test -p ignite-check --test main fixtures::` | fixture `e016_launcher_effect` (`fn build(tools: Launcher) -> Result<ChildExit, IoError> requires []` calling `tools.execute`) gives exactly ``missing effect `tools.launch` for `tools.execute`; add it to the `requires` of `build` ``; `e016_child_effect` (`fn stop(child: ChildProcess) -> Result<Unit, IoError> requires []` calling `child.kill()`) gives exactly ``missing effect `child.kill` for `child.kill`; add it to the `requires` of `stop` `` | U1 |
 | 16 | child bound and refusals | `ignite test std/process.ignite --target all` | "the launcher refuses what it cannot run" passes on both targets: with `Launcher.new()` (bound 16) the 17th `start` of `/bin/sleep 30` returns `Err` `too many children (16)`, and after `kill` and `wait` of one of the 16 a further `start` succeeds; `program = "nosuch-ignite-17"` returns `Err` starting `program not found`; `program = "bin/sh"` returns `Err` `program bin/sh: a relative path with /`; `timeout = 0 seconds` returns `Err` `timeout must be positive`; `directory = "rel"` returns `Err` `directory rel: not absolute` | U3 |
 | 17 | children end with the program | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::live_children_die_with_the_program`: the fixture `orphans.ignite` starts `/bin/sleep 30`, prints `child.id()` and returns from `main`; within 1 s of the program's exit the pid is absent or a zombie (`/proc/<pid>/stat` state `Z`). The same holds after one SIGTERM to a drained server (`orphans_after_drain`), after a second SIGTERM during the drain (`orphans_after_second_sigterm`), and for the direct child after SIGKILL of the server (`orphans_after_sigkill`, through `PR_SET_PDEATHSIG`) | U3 |
-| 18 | arguments | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::settings_read_their_flags`: the fixture `arguments.ignite` (a kind declared in the fixture whose `main` prints its state; resources `Setting { flag = "--tool" }`, `Setting { flag = "--mode", default = "fast" }`, `Directory { path = "missing", flag = "--root" }`, a `TcpListener`; `main` also prints `Endpoint.of` of a `Ref`), started as `<exe> --root DIR --tool /bin/true --port 0 --ref peer=127.0.0.1:9`, prints `tool /bin/true`, `mode fast`, `root <DIR canonical>`, `listening 127.0.0.1:<port>` and `peer 127.0.0.1:9`; with `--mode=slow` it prints `mode slow`; without `--tool` it exits 2 with stderr `error: --tool: required argument missing` and binds no port; with `--mode --tool /bin/true` it exits 2 with stderr `error: --mode needs a value` | U4 |
+| 18 | arguments | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::settings_read_their_flags`: the fixture `arguments.ignite` (a kind declared in the fixture whose `main` prints its state; resources `Setting { flag = "--tool" }`, `Setting { flag = "--mode", default = "fast" }`, `Directory { path = "missing", flag = "--root" }`, a `TcpListener`; `main` also prints `Endpoint.of` of a `Ref`), started as `<exe> --root DIR --tool /bin/true --port 0 --ref Arguments.peer=127.0.0.1:9` (a `Ref` resolves by its path `<System>.<member>`, 16.9), prints `tool /bin/true`, `mode fast`, `root <DIR canonical>`, `listening 127.0.0.1:<port>` and `peer 127.0.0.1:9`; with `--mode=slow` it prints `mode slow`; without `--tool` it exits 2 with stderr `error: --tool: required argument missing` and binds no port; with `--mode --tool /bin/true` it exits 2 with stderr `error: --mode needs a value` | U4 |
 | 19 | property checks | `cargo test -p ignite-types --test main fixtures::` | fixtures `e104_setting_flag` (`flag = "tool"`), `e104_directory_path` (`path = ""`), `e104_launcher_bound` (`maximum_children = 0`) each give exactly one E104 with the texts of 21.9; `e141_flag_collision` (two resources with `flag = "--root"`, a third with `flag = "--port"`) gives exactly two E141; `fixtures::every_type_code_has_a_fixture` lists E140 and E141 | U1 |
 | 20 | random bytes | `ignite test std/process.ignite --target all` | "two draws differ" passes on both targets: `Entropy.new()` gives two `random_bytes(32)` results of length 32 each that differ; `random_bytes(65537)` and `random_bytes(-1)` return `Err` `random_bytes: count must be in 0..=65536`; `random_bytes(0)` is empty | U5 |
 | 21 | random effect checked | `cargo test -p ignite-check --test main fixtures::` | fixture `e016_entropy_effect` (`fn token(entropy: Entropy) -> Result<Bytes, IoError> requires []` calling `entropy.random_bytes(32)`) gives exactly ``missing effect `entropy.draw` for `entropy.random_bytes`; add it to the `requires` of `token` `` | U1 |
@@ -6718,13 +6728,13 @@ Fixture paths without a directory are under `crates/ignite/tests/fixtures/slice1
 | 23 | P3: capabilities reached ambiently are refused | `cargo test -p ignite-check --test main fixtures::` and `cargo test -p ignite-types --test main fixtures::` | fixture `e051_capability_outside_state` (ignite-check): a handler that calls `Entropy.new()` and `Directory.temporary()` gives exactly two E051; no other way to name a capability exists outside a resource (21.3). Fixture `e017_ambient_in_handler` (ignite-types; it declares an `HttpApp`-shaped record locally, because the fixture standard library has no `std/protocol`): a handler calling `Clock.monotonic()` gives exactly one E017, as probe p2 | U1 |
 | 24 | P3: the handler runs on both targets | `cargo test -p ignite --test main slice17::` | `slice17::{rust,llvm}::studio_serves_through_its_state`: `studio.ignite` built and started with `--port 0 --root <tmp> --tool /bin/sh`; `POST /write` with body `a.ignite\nx` answers 204 and `<tmp>/a.ignite` holds `x`; `POST /read` with body `a.ignite` answers 200 `x`; `POST /read` with body `../x` answers 400 with the body `path ../x: leaves its root`; `POST /run` (the handler executes `state.tool.value()` with `-c "cat a.ignite"` in `state.files.absolute_path()`) answers 200 `x`; `GET /token` answers 64 lowercase hex digits, and a second launch answers a different token | U6 |
 | 25 | the model lists the capabilities | `cargo test -p ignite --test main plan::` | `plan::studio_model_matches_golden`: `ignite plan studio.ignite` equals `crates/ignite/tests/golden/studio.model.json`, whose `resources` hold `{"id":"Studio.files","kind":"Directory","properties":{"create":true,"flag":"--root","path":"workspace"}}`, `Studio.tools` with `{"maximum_children":16}`, `Studio.entropy` with `{}` and `Studio.tool` with `{"flag":"--tool"}` | U1 |
-| 26 | `ignite run` and `plan --for-apply` refuse an unset setting | `cargo test -p ignite --test main run::` and `apply::` | `run::a_setting_without_default_is_e142`: `ignite run e142_setting_without_default.ignite` exits 2 with exactly one `E142` naming the setting; `apply::plan_refuses_a_setting_without_default`: `ignite plan e142_setting_without_default.ignite --for-apply --state <tmp> --out <tmp>/p` exits 2 with the same diagnostic, reported before the host is contacted (no `ignite host` runs); `run::studio_defaults_runs`: `studio_defaults.ignite` (`default = "/bin/sh"`) run in a temporary working directory starts, `status` shows `Studio.server` running, `stop` exits 0, and the repository gains no file | U4 |
+| 26 | `ignite run` and `plan --for-apply` refuse an unset setting | `cargo test -p ignite --test main run::` and `apply::` | `run::a_setting_without_default_is_e142`: `ignite run e142_setting_without_default.ignite` exits 2 with exactly one `E142` naming the setting; `apply::plan_refuses_a_setting_without_default`: `ignite plan e142_setting_without_default.ignite --for-apply --state <tmp> --out <tmp>/p` exits 2 with the same diagnostic, reported before the host is contacted (no `ignite host` runs); `run::studio_defaults_runs`: `studio_defaults.ignite` (`default = "/bin/sh"`) run with `--target llvm` and the test runtime in a temporary working directory starts, `status` shows `Studio.server` running, `stop` exits 0, and the repository gains no file | U4 |
 | 27 | path literals checked | `cargo test -p ignite-types --test main fixtures::` | fixture `e140_path_leaves_root`: `files.read_file("../x")`, `files.write_file("/etc/x", ..)` and `files.read_directory("a/../..")` give exactly three E140; `files.read_file(name)` with a variable and `files.read_file("a/b")` give none | U1 |
 | 28 | layering | `cargo test -p ignite-check --test main layering::` | passes with rows for `std.fs` and `std.process` in `docs/layering.md` and in the test's table, both in the base layer | U1 |
 | 29 | no new dependency | `cargo tree -p ignite-io -e normal --prefix none \| sort -u` and `cargo tree -p ignite-io -e features` | the first lists the same crate set as at the base; the second shows `nix` with the added features `dir` and `poll` (the latter now outside `runner` too), recorded in the commit message that adds them | U1 |
 | 30 | names stay free | `ignite check` of every `std/` and `examples/` file; `cargo test -p ignite-check --test main fixtures::` | silent; `std/cli.ignite` still declares `Command` and `Argument`; the fixtures that declare a fn `start` (`valid_protocol`, `e013_spawn_not_effectful_call`) give their expected output unchanged; no existing `.expected` file newly mentions `value`, `wait`, `kill` or `execute` | every unit |
-| 31 | the old resource error | `git diff --stat c539392 -- '*.expected'` at U1's merge | only files whose E020 text "expected `TcpListener` or `Store`" became the new text of 21.9, and the new fixtures, appear | U1 |
-| 32 | codegen revision | `git diff c539392 -- crates/ignite/src/apply/plan.rs`; `cargo test -p ignite --test main apply_admission::` | `CODEGEN_REVISION` differs from the base, bumped by U1 and again by U4; the admission tests pass | U1, U4 |
+| 31 | the old resource error | `git diff --stat 651be04c -- '*.expected'` at U1's merge | only files whose E020 text "expected `TcpListener` or `Store`" became the new text of 21.9, and the new fixtures, appear | U1 |
+| 32 | codegen revision | `git diff 651be04c -- crates/ignite/src/apply/plan.rs`; `cargo test -p ignite --test main apply_admission::` | `CODEGEN_REVISION` differs from the base, bumped by U1 and again by U4: `ignite-codegen/0.1.0-16` at `651be04c` (`0.1.0-2` at `c539392`; slice 16 and PRs 27 to 29 stepped it in between), `-17` after U1, `-18` after U4; the admission tests pass | U1, U4 |
 | 33 | gate | `task gate` | exit 0 on the slice branch at the close | every unit |
 | 34 | gate time | 21.14 | the records of 21.14 exist under `docs/performance/17/` and in `AGENTS.md` | U6 |
 | 35 | no laundering through a parameter named `clock` | `cargo test -p ignite-check --test main fixtures::` | fixture `e056_clock_parameter` (probe p1) gives exactly one `E056` at the parameter `clock`; `AMBIENT_HEADS` holds `clock` | U1 |
@@ -6768,6 +6778,8 @@ ignite`, exit 0):
 | F13 the model encodes a resource as `{"id","kind","properties"}` | the resource arm of the model in `crates/ignite-eval/src/eval.rs` | no format change; the new kinds appear with their properties (row 25) |
 | F14 names in use: `Command`, `Argument` (`std.cli`), `Exited`, `Signalled` (variants of `std.control`'s `Event`), `write_text` (`std.protocol.telnet`) | those modules | the new names avoid them: `Invocation`, `ChildExit`, `Ending` with `ExitCode`, `BySignal`, `TimedOut`, `Killed`, `read_text_file`, `write_text_file` |
 | F15 E140 to E149 are unused on `main` and on `feat/slice16-language-gaps`; T4 ends at E139 | section 8; `docs/vision.md` §7 T4 | this slice takes E140 to E149 (stale point S1) |
+
+The facts above are as found at `c539392`; how each stands at the close is in 21.18.
 
 ### 21.2 Scope and non-goals
 
@@ -7350,3 +7362,52 @@ Each has a default the units follow unless the steering session says otherwise.
 | R35 | row 6 makes an outside link with `Launcher` and checks on both targets that a read through it is refused and that removal leaves the target |
 | R36 | distinct ops `draw` and `argument` (21.3, D2) |
 | R37 | Q6 |
+
+### 21.18 The close (U6)
+
+Row 24 is `slice17::{rust,llvm}::studio_serves_through_its_state` in `crates/ignite/tests/slice17.rs`.
+It passed on its first run: U2 to U5 had landed what it needs. A mutation (`--tool /bin/true`)
+fails it on both targets at `POST /run` with `(200, "")`.
+
+Stale points of this section, found during the slice and fixed at the close:
+
+- the opening said sections 19 and 20 were not on `main`; both are;
+- the base was `c539392`; the slice started at `651be04c`, and the merge base at the close is
+  `99647132` (planning-store commits only after `651be04c`); rows 31 and 32 diff against
+  `651be04c`, and row 32 names the revisions (`0.1.0-16` at the base, `-17` after U1, `-18`
+  after U4);
+- LLVM became the default target before U1 (PR 32): a paragraph after the base says what a
+  command without `--target` builds, and row 26 names the target of `run::studio_defaults_runs`;
+- row 18 passed `--ref peer=127.0.0.1:9`; a `Ref` resolves by its path `<System>.<member>`
+  (16.9), so the test passes `--ref Arguments.peer=127.0.0.1:9`, and the row now says so.
+
+The facts of 21.1 at the close:
+
+| fact | at the close |
+|---|---|
+| F1 | holds: `--port` and `--ref` keep their meaning beside the settings (row 18) |
+| F2, F3 | resolved by U1: the four capabilities are builtin types with `CAPABILITY_METHODS`; E020 names the six kinds (row 31) |
+| F4 | holds; the handler of row 24 reaches the capabilities only through `state` |
+| F5 | resolved by U1 as D3: `CAPABILITY_METHODS` by receiver type, nothing added to `EFFECTFUL_METHODS` (row 30) |
+| F6 | resolved by U1: `clock` is in `AMBIENT_HEADS` (row 35) |
+| F7 | confirmed by U4: `run::studio_defaults_runs` finds the relative root `workspace` in the run's working directory |
+| F8 | resolved by U3 (row 13), as stated in 21.1 |
+| F9 | resolved by U3: the child closes every descriptor from 3 up (row 14) |
+| F10 | resolved by U3: `wait` releases the child's slot, and a released child handle answers as a waited child on both targets (row 11) |
+| F11 | resolved by U1: `ignite-io` enables `signal`, `dir` and `poll` (row 29) |
+| F12 | resolved by U3: `ignite_io::child::watch` is the watcher of `Launcher` and of the test runner's `run_child` |
+| F13 | holds: the new kinds appear in the model unchanged in format (row 25) |
+| F14 | holds: the names of F14 stay free (row 30) |
+| F15 | resolved: E140 to E142 are taken; `docs/vision.md` §7 T4 reserves E140 to E149 for slice 17 (S1) |
+
+One gap found during the slice and closed by U6: the standard `HttpServer<S>` had no `machine`
+hook (16.16), so a system that used it directly under the standard `Deployment` with
+`nativeProcess` was E129, and the studio fixtures of row 26 and of the hosting rule (15.6) wrapped
+it in a kind of their own. `HttpServer` now has `recovery: Restart` and `rollout: DrainRollout`
+(both defaulted), `HttpServer.machine` as `TelnetServer.machine` and `HttpServer.validate` (E120:
+`limits.head` at least 1 byte, `limits.idle_timeout` and `limits.drain_timeout` positive).
+`studio_deployment.ignite` uses `HttpServer` directly, and
+`run::studio_under_the_standard_deployment_runs` runs it under `ignite run` with its supervisor
+`Running`. The model of every `HttpServer` member gains the two defaulted properties
+(`todo.model.json`, `studio.model.json`). `studio_defaults.ignite` keeps its own kind: its
+placement is not `std.deploy`'s.

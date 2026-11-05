@@ -1,0 +1,4 @@
+# target/debug/ignite emit examples/todo/todo.ignite --std <std>, compiler of 884d6b19 built in the worktree, 2026-11-05 09:26
+# lines of the section std/src/lib.rs (the generated ignite-std crate)
+std of ac043ae8 (before the HttpServer hooks): 1049
+std of 884d6b19 (with the hooks): 1700
