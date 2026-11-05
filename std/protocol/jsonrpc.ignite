@@ -94,48 +94,54 @@ fn content_length(header: Text) -> Result<Int, FrameError> {
   }
 }
 
+// What the bytes read so far hold: a message and the bytes after it, or a
+// framing error (`Framed(Got(..))`, `Framed(Failed(..))`), or the start of
+// a message that needs more bytes (`Partial`).
+enum Split { Framed(Frame), Partial }
+
+// The next message in `data` under `limits`, without reading: the framing
+// of `read_message` for a reader that is no `ByteStream` (standard input).
+// At the end of input, a `Partial` of no bytes is `Closed` and one of some
+// bytes is `Failed(Truncated)`.
+fn split_frame(data: Bytes, limits: JsonRpcLimits) -> Split {
+  let maximum = limits.header.to_int()
+  let header_end = match bytes_find_from(data, b"\r\n\r\n", 0) {
+    Some(at) => if at + 4 > maximum {
+      return Framed(Failed(HeaderTooLarge))
+    } else {
+      at + 4
+    }
+    None => return if data.len() > maximum { Framed(Failed(HeaderTooLarge)) } else { Partial }
+  }
+  let length = match content_length(data.slice(0, header_end - 4).to_text()) {
+    Ok(n) => n
+    Err(error) => return Framed(Failed(error))
+  }
+  if length > limits.body.to_int() {
+    return Framed(Failed(BodyTooLarge))
+  }
+  let end = header_end + length
+  if data.len() < end {
+    Partial
+  } else {
+    Framed(Got(data.slice(header_end, end), data.slice(end, data.len())))
+  }
+}
+
 // Reads the next message from `stream`, starting with the bytes already
 // read in `buffer`.
 fn read_message<T: ByteStream>(stream: T, limits: JsonRpcLimits, buffer: Bytes) -> IoResult<Frame> {
-  let maximum = limits.header.to_int()
   var data = buffer
-  var from = 0
-  var header_end = 0
   loop {
-    match bytes_find_from(data, b"\r\n\r\n", from) {
-      Some(at) => {
-        if at + 4 > maximum {
-          return Ok(Failed(HeaderTooLarge))
-        }
-        header_end = at + 4
-        break
-      }
-      None => {}
+    match split_frame(data, limits) {
+      Framed(frame) => return Ok(frame)
+      Partial => {}
     }
-    if data.len() > maximum {
-      return Ok(Failed(HeaderTooLarge))
-    }
-    from = if data.len() > 3 { data.len() - 3 } else { 0 }
     match stream.read(READ_SIZE)? {
       Eof => return Ok(if data.is_empty() { Closed } else { Failed(Truncated) })
       Data(more) => data.append(more)
     }
   }
-  let length = match content_length(data.slice(0, header_end - 4).to_text()) {
-    Ok(n) => n
-    Err(error) => return Ok(Failed(error))
-  }
-  if length > limits.body.to_int() {
-    return Ok(Failed(BodyTooLarge))
-  }
-  let end = header_end + length
-  while data.len() < end {
-    match stream.read(READ_SIZE)? {
-      Eof => return Ok(Failed(Truncated))
-      Data(more) => data.append(more)
-    }
-  }
-  Ok(Got(data.slice(header_end, end), data.slice(end, data.len())))
 }
 
 // ---- messages ---------------------------------------------------------------
@@ -594,6 +600,17 @@ test "the limits default to 8 KiB of header and 16 MiB of body" {
   let limits = JsonRpcLimits {}
   assert limits.header.to_int() == 8192
   assert limits.body.to_int() == 16777216
+}
+
+test "split_frame frames what the bytes hold without reading" {
+  let limits = JsonRpcLimits {}
+  assert split_frame(b"", limits) == Partial
+  assert split_frame(b"Content-Length: 2\r\n", limits) == Partial
+  assert split_frame(b"Content-Length: 2\r\n\r\n{", limits) == Partial
+  assert split_frame(b"Content-Length: 2\r\n\r\n{}x", limits) == Framed(Got(b"{}", b"x"))
+  assert split_frame(b"Content-Length: x\r\n\r\n", limits) == Framed(Failed(InvalidLength))
+  assert split_frame(b"Content-Length: 9\r\n\r\n{}", JsonRpcLimits { body = 8 bytes }) == Framed(Failed(BodyTooLarge))
+  assert split_frame(b"Content-Length: 2\r\n", JsonRpcLimits { header = 8 bytes }) == Framed(Failed(HeaderTooLarge))
 }
 
 test "requests, notifications and responses round-trip" {
