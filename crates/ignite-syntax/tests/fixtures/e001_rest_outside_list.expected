@@ -1,0 +1,3 @@
+e001_rest_outside_list.ignite:5:9: error[E001]: expected pattern, found `..`
+e001_rest_outside_list.ignite:11:10: error[E001]: expected pattern, found `..`
+e001_rest_outside_list.ignite:18:5: error[E001]: expected pattern, found `..`

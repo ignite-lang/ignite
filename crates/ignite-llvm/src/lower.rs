@@ -3097,6 +3097,13 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 };
                 let p = self.ptr(v);
                 let len = self.list_len(&p);
+                if let Some(at) = items
+                    .iter()
+                    .position(|item| matches!(item.kind, PatternKind::Rest(_)))
+                {
+                    self.rest_list_pattern(items, at, &p, &len, ty, &element, fail);
+                    return;
+                }
                 let ok = self.f.val(format!("icmp eq i64 {len}, {}", items.len()));
                 self.branch_or_fail(&ok, fail);
                 if !items.is_empty() {
@@ -3109,7 +3116,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     }
                 }
             }
-            PatternKind::Wildcard => {}
+            PatternKind::Wildcard | PatternKind::Rest(None) => {}
+            PatternKind::Rest(Some(id)) => {
+                let owned = self.owned(ty, v.clone());
+                self.bind_value(&id.name, ty, owned, true);
+            }
             PatternKind::Int(n) => {
                 let x = self.scalar(v);
                 let (t, n) = match ty {
@@ -3140,6 +3151,76 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let name = path.last().map(|i| i.name.as_str()).unwrap_or("");
                 self.variant_pattern(name, args, v, ty, fail);
             }
+        }
+    }
+
+    /// A list pattern whose element `at` is a rest (`docs/slice.md` 20.5):
+    /// `len >= k` for the `k` other elements, prefix element `i` at index
+    /// `i`, suffix element `j` of `s` at `len - s + j`; a `..name` binds a
+    /// copy of elements `at` to `len - s`, made after every element test.
+    #[allow(clippy::too_many_arguments)]
+    fn rest_list_pattern(
+        &mut self,
+        items: &[Pattern],
+        at: usize,
+        p: &str,
+        len: &str,
+        ty: &Ty,
+        element: &Ty,
+        fail: &str,
+    ) {
+        let fixed = items.len() - 1;
+        let suffix = fixed - at;
+        let ok = self.f.val(format!("icmp sge i64 {len}, {fixed}"));
+        self.branch_or_fail(&ok, fail);
+        let wild =
+            |item: &Pattern| matches!(item.kind, PatternKind::Wildcard | PatternKind::Rest(None));
+        if items.iter().all(wild) {
+            return;
+        }
+        let size = self.layout(element).size;
+        let data = self.f.val(format!("load ptr, ptr {p}, align 8"));
+        for (i, item) in items[..at].iter().enumerate() {
+            if wild(item) {
+                continue;
+            }
+            let place = self.gep(&data, size * i as u64);
+            let sub = self.part(element, place);
+            self.pattern(item, &sub, element, fail);
+        }
+        let named = matches!(items[at].kind, PatternKind::Rest(Some(_)));
+        let end = if suffix == 0 {
+            len.to_string()
+        } else {
+            self.f.val(format!("sub i64 {len}, {suffix}"))
+        };
+        if !items[at + 1..].iter().all(wild) {
+            let end_bytes = self.f.val(format!("mul i64 {end}, {size}"));
+            let tail = self.f.val(format!(
+                "getelementptr inbounds i8, ptr {data}, i64 {end_bytes}"
+            ));
+            for (j, item) in items[at + 1..].iter().enumerate() {
+                if wild(item) {
+                    continue;
+                }
+                let place = self.gep(&tail, size * j as u64);
+                let sub = self.part(element, place);
+                self.pattern(item, &sub, element, fail);
+            }
+        }
+        if named {
+            let start = self.gep(&data, size * at as u64);
+            let count = self.f.val(format!("sub i64 {end}, {at}"));
+            let view = self.temp(ty);
+            self.f
+                .ins(format!("store ptr {start}, ptr {view}, align 8"));
+            let lenp = self.gep(&view, 8);
+            self.f
+                .ins(format!("store i64 {count}, ptr {lenp}, align 8"));
+            let capp = self.gep(&view, 16);
+            self.f
+                .ins(format!("store i64 {count}, ptr {capp}, align 8"));
+            self.pattern(&items[at], &Val::Ptr(view, false), ty, fail);
         }
     }
 

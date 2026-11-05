@@ -124,12 +124,17 @@ fn state_threading_is_linear() {
     );
 }
 
-/// Row 11: `moves.ignite`, `calls.ignite` and `moves_tails_untracked.ignite`
-/// build with rustc and every test of each passes. The passed count is each
+/// Rows 11 and 18: `moves.ignite`, `calls.ignite`,
+/// `moves_tails_untracked.ignite` and `rest.ignite` build with rustc and every test of each passes. The passed count is each
 /// fixture's number of tests, so a fixture that runs none fails.
 #[test]
 fn fixtures_pass() {
-    for (name, tests) in [("moves", 13), ("calls", 6), ("moves_tails_untracked", 2)] {
+    for (name, tests) in [
+        ("moves", 13),
+        ("calls", 6),
+        ("moves_tails_untracked", 2),
+        ("rest", 7),
+    ] {
         let executable = build_tests(&fixture(&format!("{name}.ignite")), name);
         let output = run(&executable, &[]);
         let shown = text(&output);

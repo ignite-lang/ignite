@@ -32,6 +32,7 @@ const TYPED: &[&str] = &[
     "targets",
     "bounds",
     "slice16",
+    "rest",
 ];
 
 fn lower(stem: &str, std_root: &Path) -> (GeneratedProject, GeneratedProject) {
@@ -435,6 +436,35 @@ fn last_use_moves_and_expression_calls() {
         assert!(!lib.contains(unexpected), "`{unexpected}` in\n{lib}");
     }
     check_program("slice16", &common::golden_std(), false);
+}
+
+/// Row 19 of `docs/slice.md` 20.0: rest patterns (20.5) lower to a length
+/// test `len >= k`, suffix elements indexed from the end, and a rest
+/// binding that is an owned copy of the elements between, on a list and on
+/// `Bytes`. `rest.ignite` is a copy of the LLVM golden program.
+#[test]
+fn rest_patterns() {
+    let (project, _) = lower("rest", &common::golden_std());
+    let lib = norm(&project.lib_rs);
+    for expected in [
+        "__m if (__m.len() == 1) => 1, __m if (__m.len() >= 2) => 2,",
+        "__m if (__m.len() >= 1) => { let rest = __m[1..].to_vec();",
+        "__m if (__m.len() >= 2) => { let a = ((&__m[0])).clone(); let z = ((&__m[__m.len() - 1])).clone();",
+        "(*__p11 == 255) }) => { let rest = __m[2..].to_vec();",
+        ".len() >= 2) } => 400,",
+    ] {
+        assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
+    }
+    let copy = std::fs::read_to_string(golden_dir().join("rest.ignite")).unwrap();
+    let original = std::fs::read_to_string(
+        common::workspace().join("crates/ignite-llvm/tests/golden/rest.ignite"),
+    )
+    .unwrap();
+    assert_eq!(
+        copy, original,
+        "tests/golden/rest.ignite is a copy of the LLVM golden program"
+    );
+    check_program("rest", &common::golden_std(), false);
 }
 
 #[test]

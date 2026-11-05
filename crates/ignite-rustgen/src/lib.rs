@@ -4178,7 +4178,9 @@ impl<'a> Generator<'a> {
             if !bindings.is_empty() {
                 let lets: String = bindings
                     .iter()
-                    .map(|(name, access)| format!("let {} = ({access}).clone(); ", ident(name)))
+                    .map(|(name, access)| {
+                        format!("let {} = {}; ", ident(name), binding_value(access))
+                    })
                     .collect();
                 body = format!("{{ {lets}{body} }}");
             }
@@ -4298,7 +4300,7 @@ impl<'a> Generator<'a> {
         }
         match &pattern.kind {
             PatternKind::Range { .. } => self.range(pattern).is_some(),
-            PatternKind::Str(_) | PatternKind::List(_) => false,
+            PatternKind::Str(_) | PatternKind::List(_) | PatternKind::Rest(_) => false,
             PatternKind::Or(items) => items.iter().all(|p| self.is_native(p, ty)),
             PatternKind::Tuple(items) => {
                 let elements = tuple_elements(ty, items.len());
@@ -4406,6 +4408,11 @@ impl<'a> Generator<'a> {
                 let items: Vec<String> = items.iter().map(|p| self.pattern(p, None)).collect();
                 format!("[{}]", items.join(", "))
             }
+            PatternKind::Rest(None) => "..".to_string(),
+            PatternKind::Rest(Some(id)) => {
+                self.bind(&id.name);
+                format!("{} @ ..", ident(&id.name))
+            }
             PatternKind::Binding(id) => {
                 if id.is_uppercase() {
                     let (owner, _) = self.variant_owner(&[], &id.name, ty);
@@ -4466,7 +4473,7 @@ impl<'a> Generator<'a> {
                 let (lo, hi) = self.range(pattern)?;
                 Some(format!("({lo}..={hi}).contains({subject})"))
             }
-            PatternKind::Wildcard => None,
+            PatternKind::Wildcard | PatternKind::Rest(_) => None,
             PatternKind::Int(value) => Some(format!("(*{subject} == {value})")),
             PatternKind::Str(text) => Some(format!("(*{subject} == \"{}\")", escape_str(text))),
             PatternKind::Bool(value) => Some(format!("(*{subject} == {value})")),
@@ -4515,12 +4522,22 @@ impl<'a> Generator<'a> {
                     Some(Ty::List(t)) => Some((**t).clone()),
                     _ => None,
                 };
+                let rest = items
+                    .iter()
+                    .position(|item| matches!(item.kind, PatternKind::Rest(_)));
                 let mut lets = String::new();
-                let mut tests = vec![format!("{subject}.len() == {}", items.len())];
+                let mut tests = match rest {
+                    None => vec![format!("{subject}.len() == {}", items.len())],
+                    Some(_) if items.len() == 1 => {
+                        return None;
+                    }
+                    Some(_) => vec![format!("{subject}.len() >= {}", items.len() - 1)],
+                };
                 for (i, item) in items.iter().enumerate() {
+                    let index = list_index(subject, i, rest, items.len());
                     let name = self.fresh();
                     if let Some(test) = self.test(item, &name, element.as_ref()) {
-                        let _ = write!(lets, "let {name} = &{subject}[{i}]; ");
+                        let _ = write!(lets, "let {name} = &{subject}[{index}]; ");
                         tests.push(test);
                     }
                 }
@@ -4597,8 +4614,26 @@ impl<'a> Generator<'a> {
                     Some(Ty::List(t)) => Some((**t).clone()),
                     _ => None,
                 };
+                let rest = items
+                    .iter()
+                    .position(|item| matches!(item.kind, PatternKind::Rest(_)));
                 for (i, item) in items.iter().enumerate() {
-                    self.extract(item, format!("(&{subject}[{i}])"), element.as_ref(), out);
+                    if let PatternKind::Rest(Some(id)) = &item.kind {
+                        let end = match items.len() - i - 1 {
+                            0 => String::new(),
+                            n => format!("{subject}.len() - {n}"),
+                        };
+                        self.bind(&id.name);
+                        out.push((id.name.clone(), format!("{subject}[{i}..{end}].to_vec()")));
+                        continue;
+                    }
+                    let index = list_index(&subject, i, rest, items.len());
+                    self.extract(
+                        item,
+                        format!("(&{subject}[{index}])"),
+                        element.as_ref(),
+                        out,
+                    );
                 }
             }
             PatternKind::Variant { path, args } => {
@@ -4624,7 +4659,8 @@ impl<'a> Generator<'a> {
             | PatternKind::Int(_)
             | PatternKind::Str(_)
             | PatternKind::Bool(_)
-            | PatternKind::Or(_) => {}
+            | PatternKind::Or(_)
+            | PatternKind::Rest(_) => {}
         }
     }
 }
@@ -5352,11 +5388,33 @@ fn has_range(pattern: &Pattern) -> bool {
     }
 }
 
+/// The Rust index of element `i` of a list pattern of `count` elements on
+/// `subject`: `i` before the rest at `rest` (or without one), counted from
+/// the end after it (`docs/slice.md` 20.5).
+fn list_index(subject: &str, i: usize, rest: Option<usize>, count: usize) -> String {
+    match rest {
+        Some(at) if i > at => format!("{subject}.len() - {}", count - i),
+        _ => i.to_string(),
+    }
+}
+
+/// The Rust expression a pattern binding takes its value from: a place
+/// read through a reference is cloned, a rest binding's `to_vec()` is
+/// already an owned copy.
+fn binding_value(access: &str) -> String {
+    if access.ends_with(".to_vec()") {
+        access.to_string()
+    } else {
+        format!("({access}).clone()")
+    }
+}
+
 /// The names `pattern` binds, in order; an uppercase binding may name a
 /// variant and is told apart by the caller.
 fn pattern_bindings<'p>(pattern: &'p Pattern, out: &mut Vec<&'p Ident>) {
     match &pattern.kind {
         PatternKind::Binding(id) => out.push(id),
+        PatternKind::Rest(Some(id)) => out.push(id),
         PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
             items.iter().for_each(|item| pattern_bindings(item, out));
         }

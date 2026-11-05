@@ -1,0 +1,165 @@
+fn shape(xs: List<Int>) -> Text {
+  return match xs {
+    [] => "empty"
+    [_] => "one"
+    [_, _, ..] => "many"
+  }
+}
+
+fn tail(xs: List<Int>) -> List<Int> {
+  return match xs {
+    [_, ..rest] => rest
+    [] => []
+  }
+}
+
+fn last(xs: List<Int>) -> Int {
+  return match xs {
+    [.., z] => z
+    [] => 0 - 1
+  }
+}
+
+fn ends(xs: List<Int>) -> Int {
+  return match xs {
+    [a, .., z] => a * 10 + z
+    [a] => a
+    [] => 0
+  }
+}
+
+fn middle(xs: List<Int>) -> Int {
+  return match xs {
+    [_, b, .., _] => b
+    _ => 0
+  }
+}
+
+fn first_of_first(xss: List<List<Int>>) -> Int {
+  return match xss {
+    [[a, ..], ..] => a
+    [[], ..] => 0 - 1
+    [] => 0 - 2
+  }
+}
+
+fn inner_rest(xss: List<List<Int>>) -> List<Int> {
+  return match xss {
+    [[_, ..rest], ..] => rest
+    _ => []
+  }
+}
+
+fn after_command(bytes: Bytes) -> Bytes {
+  return match bytes {
+    [255, _, ..rest] => rest
+    _ => bytes
+  }
+}
+
+fn byte_shape(bytes: Bytes) -> Int {
+  return match bytes {
+    [] => 0
+    [_, ..] => 1
+  }
+}
+
+fn status(request: (List<Text>, Int, Int)) -> Int {
+  return match request {
+    ([_, _, ..], _, _) => 400
+    (_, _, _) => 200
+  }
+}
+
+fn words_after(words: List<Text>) -> List<Text> {
+  return match words {
+    [_, ..rest] => rest
+    [] => []
+  }
+}
+
+fn sum_tails(xs: List<Int>) -> Int {
+  var total = 0
+  var current = xs
+  loop {
+    match current {
+      [x, ..rest] => {
+        total = total + x
+        current = rest
+      }
+      [] => break
+    }
+  }
+  return total
+}
+
+test "lengths 0 to 4 against [], [_] and [_, _, ..]" {
+  assert shape([]) == "empty"
+  assert shape([1]) == "one"
+  assert shape([1, 2]) == "many"
+  assert shape([1, 2, 3]) == "many"
+  assert shape([1, 2, 3, 4]) == "many"
+}
+
+test "a rest binding is a copy" {
+  let xs = [1, 2, 3]
+  let rest = tail(xs)
+  assert rest == [2, 3]
+  match xs {
+    [_, ..r] => {
+      var grown = r
+      grown.push(9)
+      assert grown == [2, 3, 9]
+      assert r == [2, 3]
+    }
+    [] => {
+      assert false
+    }
+  }
+  assert xs == [1, 2, 3]
+  assert tail([7]) == []
+  assert tail([]) == []
+}
+
+test "the last element and both ends" {
+  assert last([4, 5, 6]) == 6
+  assert last([4]) == 4
+  assert last([]) == 0 - 1
+  assert ends([1, 2]) == 12
+  assert ends([1, 2, 3]) == 13
+  assert ends([5]) == 5
+  assert ends([]) == 0
+  assert middle([1, 2, 3]) == 2
+  assert middle([1, 2]) == 0
+}
+
+test "nested rests" {
+  assert first_of_first([[3, 4], [5]]) == 3
+  assert first_of_first([[], [5]]) == 0 - 1
+  assert first_of_first([]) == 0 - 2
+  assert inner_rest([[1, 2, 3], [4]]) == [2, 3]
+  assert inner_rest([[1]]) == []
+  assert inner_rest([]) == []
+}
+
+test "a rest on Bytes" {
+  assert after_command(b"\xff\xfbab") == b"ab"
+  assert after_command(b"\xff\xfb") == Bytes.empty()
+  assert after_command(b"xy") == b"xy"
+  assert byte_shape(Bytes.empty()) == 0
+  assert byte_shape(b"z") == 1
+}
+
+test "a list rest inside a tuple" {
+  assert status((["GET", "/", "extra"], 1, 1)) == 400
+  assert status((["GET", "/"], 1, 1)) == 400
+  assert status((["GET"], 1, 1)) == 200
+  assert status(([], 1, 1)) == 200
+}
+
+test "rests of text and in a loop" {
+  assert words_after(["a", "b", "c"]) == ["b", "c"]
+  assert words_after([]) == []
+  assert sum_tails([1, 2, 3, 4]) == 10
+  assert sum_tails([]) == 0
+}

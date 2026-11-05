@@ -3352,6 +3352,8 @@ impl Checker {
                 self.test_only_use(name)
             }
             PatternKind::Binding(name) => self.bind_rooted(name, binding, roots.clone()),
+            PatternKind::Rest(Some(name)) => self.bind_rooted(name, binding, roots.clone()),
+            PatternKind::Rest(None) => {}
             PatternKind::Range { start, end } => {
                 self.pattern(start, roots, binding);
                 self.pattern(end, roots, binding);
@@ -3760,6 +3762,7 @@ fn builtin_applies(ty: &Type, method: &str) -> bool {
 fn first_binding(pattern: &Pattern) -> Option<&Ident> {
     match &pattern.kind {
         PatternKind::Binding(name) => Some(name),
+        PatternKind::Rest(name) => name.as_ref(),
         PatternKind::Tuple(items) | PatternKind::List(items) | PatternKind::Or(items) => {
             items.iter().find_map(first_binding)
         }

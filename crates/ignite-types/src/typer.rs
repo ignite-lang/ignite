@@ -3934,10 +3934,16 @@ impl<'a> Typer<'a> {
                         None
                     }
                 };
+                let whole = element.clone().map(|element| Ty::List(Box::new(element)));
                 for item in items {
-                    self.pattern(item, element.as_ref());
+                    match item.kind {
+                        PatternKind::Rest(_) => self.pattern(item, whole.as_ref()),
+                        _ => self.pattern(item, element.as_ref()),
+                    }
                 }
             }
+            PatternKind::Rest(Some(name)) => self.bind(name, ty.cloned()),
+            PatternKind::Rest(None) => {}
             PatternKind::Variant { path, args }
                 if args.is_empty()
                     && path.len() == 1

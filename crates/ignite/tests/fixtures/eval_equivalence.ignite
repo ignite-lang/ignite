@@ -306,6 +306,40 @@ fn match_patterns() -> List<Text> = [classify(0), classify(2), classify(5), clas
 
 fn match_bool_text() -> List<Text> = [match true { true => "t", false => "f" }, match "b" { "a" => "A", "b" => "B", _ => "?" }, match b'A' { b'A' => "letter A", _ => "other" }]
 
+// Rest patterns (docs/slice.md 20.5, 20.0 row 20)
+
+fn rest_shape_of(xs: List<Int>) -> Text = match xs {
+  [] => "empty"
+  [a] => "one:{a}"
+  [a, .., z] => "ends:{a},{z}"
+}
+
+fn rest_tail_of(xs: List<Text>) -> List<Text> = match xs {
+  [_, ..rest] => rest
+  [] => []
+}
+
+fn rest_shapes() -> List<Text> = [rest_shape_of([]), rest_shape_of([4]), rest_shape_of([4, 5]), rest_shape_of([4, 5, 6]), rest_shape_of([1, 2, 3, 4])]
+
+fn rest_tails() -> List<List<Text>> = [rest_tail_of([]), rest_tail_of(["a"]), rest_tail_of(["a", "b", "c"])]
+
+fn rest_bytes() -> List<Bytes> = [match b"\xff\xfbxy" { [255, _, ..rest] => rest, _ => b"" }, match b"ab" { [255, _, ..rest] => rest, other => other }]
+
+fn rest_nested() -> List<Int> = [match [[1, 2], [3]] { [[a, ..], .., [z]] => a * 10 + z, _ => 0 }, match [[5]] { [[_, ..rest], ..] => rest.len(), _ => 0 - 1 }]
+
+fn rest_copy() -> (List<Int>, List<Int>) {
+  let xs = [1, 2, 3]
+  let grown = match xs {
+    [_, ..r] => {
+      var g = r
+      g.push(9)
+      g
+    }
+    [] => []
+  }
+  (xs, grown)
+}
+
 // Quantities
 
 fn quantity_durations() -> List<Duration> = [100 ms + 2 seconds, 1 minute - 30 seconds, 3 ms * 4, 2 * 500 us, 10 seconds / 4, 1500 ms, 2 hours, 90 minutes]
@@ -527,6 +561,11 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(result_debug().debug())?
   show(match_patterns().debug())?
   show(match_bool_text().debug())?
+  show(rest_shapes().debug())?
+  show(rest_tails().debug())?
+  show(rest_bytes().debug())?
+  show(rest_nested().debug())?
+  show(rest_copy().debug())?
   show(quantity_durations().debug())?
   show(quantity_sizes().debug())?
   show(quantity_ratios().debug())?

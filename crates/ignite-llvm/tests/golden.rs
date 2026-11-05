@@ -354,6 +354,56 @@ fn modules_name_target_and_source() {
 
 /// The text of the function defined as `symbol` in `ir`, from its `define`
 /// line to its closing brace.
+/// Row 19 of `docs/slice.md` 20.0: rest patterns (20.5) lower to a length
+/// test `len >= k`, suffix elements read at `len - s + j`, and a rest
+/// binding that is a copy of the elements between, on a list and on
+/// `Bytes`.
+#[test]
+fn rest_patterns() {
+    let generated = lower("rest");
+    let program = &generated.program;
+
+    let shape = function(program, "tests.rest.shape");
+    assert!(shape.contains(", 2, !dbg"), "{shape}");
+    let at_least = shape
+        .find("icmp sge i64")
+        .expect("`[_, _, ..]` tests len >= 2");
+    assert!(
+        !shape[at_least..].contains("load ptr"),
+        "`[_, _, ..]` reads no element:\n{shape}"
+    );
+
+    let tail = function(program, "tests.rest.tail");
+    let test = tail
+        .find("icmp sge i64")
+        .expect("`[_, ..rest]` tests len >= 1");
+    let copy = tail
+        .find("call void @\"copy.List<Text>\"")
+        .expect("`rest` is a copy");
+    assert!(test < copy, "{tail}");
+
+    let ends = function(program, "tests.rest.ends");
+    assert!(ends.contains("icmp sge i64"), "{ends}");
+    assert!(
+        ends.contains(", 1, !dbg"),
+        "`z` is read at len - 1:\n{ends}"
+    );
+    assert!(
+        !ends.contains("copy."),
+        "`[a, .., z]` binds no rest:\n{ends}"
+    );
+
+    let bytes = function(program, "tests.rest.after_command");
+    assert!(
+        bytes.contains("call void @\"copy.List<Byte>\""),
+        "a rest on `Bytes` is a copy:\n{bytes}"
+    );
+
+    let dir = golden_dir();
+    compare(&dir.join("rest.program.ll"), program).unwrap_or_else(|e| panic!("{e}"));
+    compiles("rest_program", program);
+}
+
 fn function<'a>(ir: &'a str, symbol: &str) -> &'a str {
     let quoted = format!("@\"{symbol}\"(");
     let start = ir

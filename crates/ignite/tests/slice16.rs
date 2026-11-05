@@ -156,17 +156,18 @@ fn llvm_state_threading_is_linear() {
 
 /// Row 12 (20.3.5): moves keep value semantics on the LLVM target, built
 /// against the debug runtime, so a moved state that a loop release copied
-/// reads garbage if a move left it pointing at released memory.
+/// reads garbage if a move left it pointing at released memory. Row 18:
+/// `rest.ignite` too, whose rest bindings are copies.
 #[test]
 fn llvm_fixtures_pass() {
     let dir = out_dir("fixtures_llvm");
-    let (status, stdout) = llvm_test(&dir, &["moves.ignite", "calls.ignite"], &[]);
+    let (status, stdout) = llvm_test(&dir, &["moves.ignite", "calls.ignite", "rest.ignite"], &[]);
     assert_eq!(status, Some(0), "{stdout}");
     let results: Vec<&str> = stdout
         .lines()
         .filter(|line| line.starts_with("test result: "))
         .collect();
-    assert_eq!(results.len(), 2, "one executable per file:\n{stdout}");
+    assert_eq!(results.len(), 3, "one executable per file:\n{stdout}");
     assert!(
         results[0].starts_with("test result: ok. 13 passed; 0 failed;"),
         "moves.ignite:\n{stdout}"
@@ -174,6 +175,10 @@ fn llvm_fixtures_pass() {
     assert!(
         results[1].starts_with("test result: ok. 6 passed; 0 failed;"),
         "calls.ignite:\n{stdout}"
+    );
+    assert!(
+        results[2].starts_with("test result: ok. 7 passed; 0 failed;"),
+        "rest.ignite:\n{stdout}"
     );
     assert!(!stdout.contains("FAILED"), "{stdout}");
 }

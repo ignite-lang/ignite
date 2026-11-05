@@ -314,6 +314,7 @@ impl<'a> Resolver<'a> {
     fn pattern(&mut self, pattern: &'a Pattern) {
         match &pattern.kind {
             PatternKind::Binding(name) => self.bind(name, false, None),
+            PatternKind::Rest(Some(name)) => self.bind(name, false, None),
             PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
                 for item in items {
                     self.pattern(item);
@@ -325,6 +326,7 @@ impl<'a> Resolver<'a> {
                 }
             }
             PatternKind::Range { .. }
+            | PatternKind::Rest(None)
             | PatternKind::Wildcard
             | PatternKind::Int(_)
             | PatternKind::Str(_)

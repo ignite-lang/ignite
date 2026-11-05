@@ -149,6 +149,7 @@ fn fixture_covers_every_family() {
         "debug_",
         "named_args",
         "match_",
+        "rest_",
     ] {
         assert!(
             names.iter().any(|name| name.starts_with(family)),
