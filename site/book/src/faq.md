@@ -26,9 +26,10 @@ platforms are not covered by this book.
 
 ## Rust target or LLVM target?
 
-Start with the default, Rust. Both targets compile the same checked program, call the same
+Start with the default, LLVM. Both targets compile the same checked program, call the same
 IO substrate and must behave the same, down to the text of an error; every feature lands on
-both. The LLVM target builds without cargo and needs clang and the runtime archive. See
+both. The LLVM target builds without cargo and needs clang and the runtime archive;
+`--target rust` builds with cargo instead. See
 [Building for Rust and LLVM](guide/targets.md).
 
 ## Is the generated Rust meant to be edited?

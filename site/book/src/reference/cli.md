@@ -20,9 +20,9 @@ Options:   -h, --help     Print help
 | `--std DIR` | all that read a program | root of the standard library (default: the `std/` of the source tree `ignite` was built from) |
 | `--assembly NAME` | `plan`, `explain`, `run`, `replay` | the assembly to select (default: the program's only one) |
 | `--fuel N` | `plan`, `explain`, `run`, `replay` | `plan`, `explain`: fuel per property expression; `run`, `replay`: fuel per reducer step only, the plan inside them keeps the default; default 1,000,000 units |
-| `--target rust\|llvm` | `build`, `test`, `run`, `plan --for-apply` | native target, default `rust`; `test` also takes `all` |
+| `--target llvm\|rust` | `build`, `test`, `run`, `plan --for-apply`, `conformance` | native target, default `llvm`; `test` also takes `all` |
 | `--release` | `build`, `test`, `run`, `plan --for-apply` | optimised build (release profile on Rust, clang `-O2` on LLVM) |
-| `--runtime FILE` | `build`, `test`, `run`, `plan --for-apply` | the LLVM runtime archive `libignite_rt.a` (default: next to `ignite`) |
+| `--runtime FILE` | `build`, `test`, `run`, `plan --for-apply`, `conformance` | the LLVM runtime archive `libignite_rt.a` (default: next to `ignite`, then in its parent directory); when it is missing, the error names the command that builds it |
 | `--clang PATH`, `--triple T` | `build`, `test` | clang for the LLVM target (default `clang` on `PATH`) and its target triple (default: clang's own) |
 | `--target-dir DIR` | `build`, `test`, `run` | cargo target directory of the Rust target |
 
@@ -55,17 +55,18 @@ read it, never edit it.
 ## ignite build
 
 ```text
-ignite build [--target rust|llvm] [--out DIR] [--target-dir DIR] [--release]
+ignite build [--target llvm|rust] [--out DIR] [--target-dir DIR] [--release]
              [--clang PATH] [--runtime FILE] [--triple T] [--substrate PATH] [--std DIR] FILE
 ```
 
-Build the program's executables: generated Rust with cargo, or LLVM IR with clang. Prints
-one `built <path>` line per executable. See [Building for Rust and LLVM](../guide/targets.md).
+Build the program's executables: LLVM IR with clang (the default), or generated Rust with
+cargo (`--target rust`). Prints one `built <path>` line
+per executable. See [Building for Rust and LLVM](../guide/targets.md).
 
 | option | meaning |
 |---|---|
 | `--out DIR` | directory of the generated project (default `target/ignite/<package>`); `build` owns and overwrites it |
-| `--target-dir DIR` | cargo target directory (default `<out>/target`) |
+| `--target-dir DIR` | cargo target directory of `--target rust` (default `<out>/target`) |
 | `--substrate PATH` | path of the `ignite-io` crate |
 
 | exit | meaning |
@@ -87,7 +88,7 @@ substring of the test name). See [Testing with ignite test](../guide/testing.md)
 
 | option | meaning |
 |---|---|
-| `--target rust\|llvm\|all` | `all` runs every supported target with shared preparation |
+| `--target llvm\|rust\|all` | default `llvm`; `all` runs every supported target with shared preparation |
 | `--exact` | run only the test whose full name equals the filter |
 | `--list` | list the selected tests, run nothing |
 | `--jobs N` | tests run at once (default: the CPU count) |
@@ -106,7 +107,7 @@ substring of the test name). See [Testing with ignite test](../guide/testing.md)
 ```text
 ignite plan [--assembly NAME] [--out FILE] [--fuel N] [--std DIR] FILE
 ignite plan FILE --for-apply --state DIR --out PLAN [--assembly NAME]
-            [--target rust|llvm] [--release] [--runtime FILE] [--fuel N] [--std DIR]
+            [--target llvm|rust] [--release] [--runtime FILE] [--fuel N] [--std DIR]
 ```
 
 Print the system model as canonical JSON (`ignite-model/0.1`), or write it to `--out`. With

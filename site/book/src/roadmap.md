@@ -59,7 +59,8 @@ the declarations of a planned step need it.
 
 From [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md):
 
-- Both targets agree: the Rust target stays the default, and every feature lands on both.
+- Both targets agree: every feature lands on both; LLVM is the default target and the Rust
+  target the differential check.
 - Compile time is a budget: the gate time and the program build times are measured before and
   after each step and recorded; a rise over 10 % is a deviation to explain.
 - Each step starts with a contract section in `docs/slice.md`, reviewed before work starts,

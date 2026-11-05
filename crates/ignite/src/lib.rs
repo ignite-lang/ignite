@@ -30,14 +30,15 @@ use ignite_syntax::ast::{Import, Program, Span};
 use ignite_syntax::diagnostic::Diagnostic;
 use ignite_types::{TypedModules, TypedProgram};
 
-/// What `ignite build` compiles to.
+/// What `ignite build` compiles to. The default is LLVM (`docs/vision.md`
+/// section 8, D2 B); the Rust target stays as the differential check.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Target {
     /// Generated Rust projects built with cargo (`docs/slice.md` 6.2).
-    #[default]
     Rust,
     /// LLVM IR compiled and linked by clang with `libignite_rt.a`
     /// (`docs/llvm.md` section 1). Runs neither cargo nor rustc.
+    #[default]
     Llvm,
 }
 
@@ -82,7 +83,7 @@ pub struct BuildOptions {
 impl Default for BuildOptions {
     fn default() -> BuildOptions {
         BuildOptions {
-            target: Target::Rust,
+            target: Target::Llvm,
             clang: None,
             runtime: None,
             out: None,
