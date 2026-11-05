@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-18-contract
 kind: story
-status: draft
+status: active
 title: 'Slice 18 contract: docs/slice.md section 22'
 summary: The reviewed contract for one service operated end to end
 relations:
@@ -13,7 +13,10 @@ scope:
   path: docs/slice.md
 - confidence: cited
   path: docs/slice18-review.md
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T08:56:51Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-05T08:56:51Z", actor: "human:timo", revision: 4}
 ---
 # Story: slice-18-contract
 

@@ -10,7 +10,13 @@ relations:
 scope:
 - confidence: inferred
   path: crates/ignite-rustgen/src
-revision: 2
+- confidence: cited
+  path: crates/ignite-rustgen/src/lib.rs
+- confidence: cited
+  path: crates/ignite-rustgen/tests/golden
+- confidence: cited
+  path: crates/ignite/src/apply/plan.rs
+revision: 3
 ---
 # Story: rustgen-generated-name-collisions
 

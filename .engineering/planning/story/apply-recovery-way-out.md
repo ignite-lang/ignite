@@ -7,6 +7,8 @@ title: An operator path out of a non-resolvable recovery
 summary: A host holding a later reason no corrective resolves has a stated command back to accepting plans
 relations:
 - depends_on: story:slice-13-recovery-gaps
+- decomposes: epic:slice-18-one-service-operated
+- depends_on: story:slice-18-contract
 scope:
 - confidence: inferred
   path: crates/ignite/src/apply
