@@ -40,6 +40,32 @@ resolves every call (`docs/llvm.md` section 2). A program that passes both is va
 Rust and the LLVM target. Diagnostics from rustc on generated code mean a generator bug; they
 are shown as-is, prefixed with a note that they refer to generated code.
 
+### 1.1 `ignite check --json` and `--stdin-for`
+
+```text
+ignite check [--std DIR] [--json] FILE
+ignite check [--std DIR] [--json] --stdin-for FILE
+```
+
+- `--json` prints one JSON document on stdout, compact, followed by a newline, and nothing on
+  stderr for diagnostics:
+  `{"diagnostics":[{"code","end":{"column","line","offset"},"message","path","start":{...}}]}`.
+  `path` is the file the diagnostic is in (the program, a sibling module or a standard-library
+  file, as the text form names it); `code` and `message` are the text form's; `line` and
+  `column` are 1-based, `column` in characters, as in section 8; `offset` is in bytes from the
+  file's start, and `start` to `end` slices the offending text. The order is the text form's.
+  A clean program prints `{"diagnostics":[]}`.
+- `--stdin-for FILE` checks the text on stdin as the program at `FILE`: diagnostics name
+  `FILE`, its sibling modules (section 14.4) and the standard library are read from disk, and
+  `FILE` is neither read nor written. It takes the place of the positional `FILE`.
+- Exit statuses are those of the text form: 0 clean, 1 diagnostics, 3 a file (or stdin) could
+  not be read; a read error is reported on stderr as text also under `--json`.
+- Diagnostics stop at the first failing stage and module, as in the text form; the text form
+  is unchanged.
+- Library API (add-only): `ignite::check_text(file, text, std)`,
+  `ignite::diagnostics_json(source, diagnostics)`. Tests: `check_json::` in
+  `crates/ignite/tests/check_json.rs`.
+
 ## 2 Lexical structure
 
 - Source is UTF-8. Whitespace is insignificant except that a newline ends a statement or a

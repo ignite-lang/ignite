@@ -29,12 +29,18 @@ Options:   -h, --help     Print help
 ## ignite check
 
 ```text
-ignite check [--std DIR] FILE
+ignite check [--std DIR] [--json] FILE
+ignite check [--std DIR] [--json] --stdin-for FILE
 ```
 
 Parse and check a program and the standard library. Prints nothing on success. Diagnostics
 go to stderr, one per line, as `file:line:column: error[Ennn]: message`
 ([Diagnostics](diagnostics.md)).
+
+| option | meaning |
+|---|---|
+| `--json` | print `{"diagnostics":[...]}` on stdout instead: per diagnostic `path`, `code`, `message`, and `start` and `end`, each with 1-based `line` and `column` and the byte `offset`; a clean program prints `{"diagnostics":[]}` |
+| `--stdin-for FILE` | check the text on stdin as the program `FILE` (an unsaved editor buffer); its sibling modules and the standard library come from disk, `FILE` is not read |
 
 | exit | meaning |
 |---|---|
