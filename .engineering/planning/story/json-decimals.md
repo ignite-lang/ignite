@@ -2,11 +2,14 @@
 format: aep.planning-md/3
 id: story:json-decimals
 kind: story
-status: draft
+status: active
 title: std.json reads and writes numbers with a fraction or an exponent
 relations:
 - decomposes: epic:ignite-lsp
-revision: 3
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T09:01:27Z", actor: "human:timo", revision: 4}
+- {from: "proposed", to: "active", at: "2026-11-05T09:01:27Z", actor: "human:timo", revision: 5}
 ---
 # std.json reads and writes numbers with a fraction or an exponent
 
@@ -32,9 +35,17 @@ writes it back. A program that only uses integers sees no change.
 
 ## Open decision
 
-Adding a `Json` variant breaks every exhaustive match over `Json` (`design:ignite-lsp` §2 row
-"JSON"). Options: a new variant `Decimal(Text)` that keeps the source text, or changing
-`Number(Int)` to a number type with both forms. Decide before implementation.
+Decided 2026-11-05 by sys-mon under Timo's mandate: option A, a new variant `Decimal(Text)`.
+
+- Parsing: a number token becomes `Number(Int)` only when it has no fraction, no exponent and
+  fits `Int`; every other number token becomes `Decimal(Text)` holding the token's exact text.
+  No float conversion anywhere.
+- Encoding: a `Decimal` is written as its text unchanged, so parse then encode is
+  byte-identical for every number token.
+- Equality is structural: `Number(1) != Decimal("1.0")`, `Decimal("1.0") != Decimal("1.00")`,
+  `Decimal("1e2") == Decimal("1e2")`. Numeric comparison is the caller's business.
+- Every exhaustive match over `Json` gains a `Decimal` arm; the files are listed in the commit and
+  in the Y9 review note.
 
 ## The removed test
 
@@ -100,3 +111,21 @@ test "a request whose id is a fraction or has 20 digits is answered under that i
   ]
 }
 ```
+
+## Adversary findings
+
+Adversary pass over daac1848 and 4f39e312, 2026-11-05 (failing tests in 5aecab7a). The RFC 8259 §6
+grammar held: 12 valid and 22 invalid tokens, exponent case and sign kept, ids echoed exactly, a
+1 MB array of decimals in 0.13 s (rust) and 0.10 s (llvm). Findings, fixed in e9871722:
+
+- medium: a 19-digit integer inside the 64-bit Int became a `Decimal`; now `Number` from
+  -9223372036854775808 to 9223372036854775807, `Decimal` outside, checked on the digit text.
+- medium: `-0` printed as `0`; it now parses to `Decimal("-0")` and round-trips.
+- low: `Decimal(text)` built by hand is unchecked; added `decimal(text) -> Result<Json,
+  JsonError>` and a doc note.
+- found on the way: the generated std crate version `0.0.0-<hash>` was refused by cargo when the
+  hash was all digits with a leading zero; now `0.0.0-h<hash>`, `CODEGEN_REVISION` bumped
+  (renumber to main + 1 at merge, agreed with the ignite session).
+
+JsonRpc claim: yes (0 gaps, 0 failures, 0 inconclusive) on both targets; R4_1_1, R4_6, R5_9
+satisfied.
