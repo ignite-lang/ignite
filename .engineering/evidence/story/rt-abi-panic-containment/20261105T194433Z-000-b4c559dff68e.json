@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T19:44:33Z",
+  "actor": "human:timo",
+  "artifact": "story:rt-abi-panic-containment",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on c87804956 (PR 48): EXIT=0, 1146 cargo passed, 0 failed, 11 ignored; golden::a_runtime_panic_on_a_task_thread_fails_only_that_task",
+    "reference": "https://github.com/ignite-lang/ignite/pull/48"
+  }
+}

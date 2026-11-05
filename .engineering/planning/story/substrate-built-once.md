@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:substrate-built-once
 kind: story
-status: draft
+status: active
 title: The runtime archive is built once per gate, not again by build.rs
 scope:
 - confidence: inferred
   path: crates/ignite/build.rs
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-05T19:44:37Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-05T19:44:37Z", actor: "human:timo", revision: 4}
 ---
 # Story: substrate-built-once
 
