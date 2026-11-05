@@ -3754,8 +3754,9 @@ program as follows; the compiler knows no kind, binding variant, outcome or zone
   `NativeProcess` and `ScheduledProbeHost`, `[]` for `LocalSocket` and
   `WorkstationExecutable`, the A10 rule). A binding with a non-empty list runs its member;
   an included member runs with its host. Without `entries` the three codes are not checked.
-- E121: a property whose value is a signal ref `S.p.f`: `f` must be an unset output of `S.p`
-  (else "is no output"), and `S.p` must run.
+- E121: every signal ref `S.p.f` in a property, at any depth (since slice 18 the collection
+  `ModelMachine::subscribes` reads, `signal_refs` in `crates/ignite-eval/src/model.rs`): `f`
+  must be an unset output of `S.p` (else "is no output"), and `S.p` must run.
 - E122: for every member that runs, every property whose field type is `Ref<_>` and whose
   value names a member `T`: `T` must run, and exactly one `TcpListener` resource must appear
   among `T`'s property values (the `provisioning` edge of 16.14); zero or several is E122.
@@ -7871,8 +7872,9 @@ Check-time rules (in `ignite-eval`, beside E129):
   hook with `self` and one parameter of the signal's element type returning `Bool` (row 3).
 - E151: a signal that the assembly runs (its producer's binding has entries, `std.deploy.entries`,
   as E121 and E129 decide; the compiler names no binding variant, 16.17) and that a member with
-  a machine subscribes to (`ModelMachine::subscribes`, `crates/ignite-eval/src/model.rs:349` to
-  `:375`), whose element type is not an outcome type. An outcome type is `Bool`, `Int`,
+  a machine subscribes to (`ModelMachine::subscribes`: every signal ref in the member's
+  properties at any depth, a list element included, collected by `signal_refs` in
+  `crates/ignite-eval/src/model.rs`, which E121 and E150 read too), whose element type is not an outcome type. An outcome type is `Bool`, `Int`,
   `Text`, `Byte`, a quantity (`Duration`, `ByteSize`, `Ratio`), or a `List`, `Option`, tuple,
   record or enum of outcome types. This is a policy, not a claim about decoding:
   `Value::decode` also reads fn, `Ref` and `Signal` values (`crates/ignite-eval/src/value.rs:520`

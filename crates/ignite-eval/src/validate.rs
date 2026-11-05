@@ -20,7 +20,7 @@ use ignite_types::{
     AssemblyInfo, MemberInfo, QualName, QuantityKind, Reference, SystemInfo, Ty, TypedProgram,
 };
 
-use crate::model::{ModelMember, eval_diagnostic, type_name};
+use crate::model::{ModelMember, eval_diagnostic, signal_refs, type_name};
 use crate::resolve::{binding_key_spans, entries_fn};
 use crate::{Evaluator, Modules, ResolutionEntry, Value};
 
@@ -133,6 +133,41 @@ fn signal_ref(value: &Value) -> Option<(&str, &str, &str)> {
             member,
             field,
         }) => Some((system, member, field)),
+        _ => None,
+    }
+}
+
+/// The signals `member` subscribes to, at any depth of its properties, as
+/// `(field, system, producer, output)` in property order, each once per
+/// property. It reads them through [`signal_refs`], the collection behind
+/// `ModelMachine::subscribes`, so E121, E150 and E151 see the signals the
+/// driver routes (`docs/slice.md` 22.3).
+fn subscriptions(member: &ModelMember) -> Vec<(&str, &str, &str, &str)> {
+    let mut out = Vec::new();
+    for (field, value) in &member.properties {
+        let mut references = Vec::new();
+        signal_refs(value, &mut references);
+        for reference in references {
+            let Some((system, producer, output)) = signal_ref_of(reference) else {
+                continue;
+            };
+            let entry = (field.as_str(), system, producer, output);
+            if !out.contains(&entry) {
+                out.push(entry);
+            }
+        }
+    }
+    out
+}
+
+/// The `(system, member, field)` of a signal reference.
+fn signal_ref_of(reference: &Reference) -> Option<(&str, &str, &str)> {
+    match reference {
+        Reference::Signal {
+            system,
+            member,
+            field,
+        } => Some((system, member, field)),
         _ => None,
     }
 }
@@ -479,10 +514,7 @@ pub fn validate_system(
         if !declares_hook(evaluator.modules(), kind, "machine") {
             continue;
         }
-        for (field, value) in &member.properties {
-            let Some((signal_system, producer, output)) = signal_ref(value) else {
-                continue;
-            };
+        for (field, signal_system, producer, output) in subscriptions(member) {
             let Some(element) = element_of(system, signal_system, producer, output) else {
                 continue;
             };
@@ -600,10 +632,7 @@ pub fn validate(
     }
     for (member, info) in &infos {
         // E121: a signal with no producer the assembly runs.
-        for (field, value) in &member.properties {
-            let Some((signal_system, producer, output)) = signal_ref(value) else {
-                continue;
-            };
+        for (field, signal_system, producer, output) in subscriptions(member) {
             let producer_id = format!("{signal_system}.{producer}");
             let span = property_span(decl, info, field);
             let is_output = signal_system == system.name
@@ -635,10 +664,7 @@ pub fn validate(
         if kind_name(&info.kind)
             .is_some_and(|kind| declares_hook(evaluator.modules(), kind, "machine"))
         {
-            for (field, value) in &member.properties {
-                let Some((signal_system, producer, output)) = signal_ref(value) else {
-                    continue;
-                };
+            for (field, signal_system, producer, output) in subscriptions(member) {
                 let producer_id = format!("{signal_system}.{producer}");
                 if !runs(&producer_id) {
                     continue;

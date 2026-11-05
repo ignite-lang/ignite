@@ -304,12 +304,14 @@ fn member_value(
     })
 }
 
-/// The `Signal` references among `value`, as texts.
-fn signal_refs(value: &Value, out: &mut BTreeSet<String>) {
+/// The `Signal` references among `value` at any depth, in order: the
+/// signals a member subscribes to through a property whose value is
+/// `value`. [`ModelMachine::subscribes`] and the check-time rules E121,
+/// E150 and E151 (`crate::validate`) all read subscriptions through this
+/// one function, so the model and the checks cannot disagree on them.
+pub(crate) fn signal_refs<'v>(value: &'v Value, out: &mut Vec<&'v Reference>) {
     match value {
-        Value::Reference(reference @ Reference::Signal { .. }) => {
-            out.insert(reference.text());
-        }
+        Value::Reference(reference @ Reference::Signal { .. }) => out.push(reference),
         Value::List(items) | Value::Tuple(items) | Value::Enum { fields: items, .. } => {
             items.iter().for_each(|item| signal_refs(item, out));
         }
@@ -374,10 +376,11 @@ pub fn machines(
         if hooks.is_empty() {
             continue;
         }
-        let mut subscribes = BTreeSet::new();
+        let mut references = Vec::new();
         for (_, value) in &member.properties {
-            signal_refs(value, &mut subscribes);
+            signal_refs(value, &mut references);
         }
+        let subscribes: BTreeSet<String> = references.iter().map(|r| r.text()).collect();
         let classify = if subscribes.is_empty() {
             None
         } else {
