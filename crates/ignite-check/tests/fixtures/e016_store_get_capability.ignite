@@ -1,0 +1,19 @@
+type Invocation {
+  program: Text
+}
+
+type ChildExit {
+  code: Int
+}
+
+type Bench {
+  tools: Launcher
+}
+
+fn run(st: Store<Bench>) -> Result<ChildExit, IoError> requires [st.read] = match st.get(1) {
+  Some(b) => {
+    let bench: Bench = b
+    bench.tools.execute(Invocation { program = "/bin/true" })
+  }
+  None => Ok(ChildExit { code = 0 })
+}

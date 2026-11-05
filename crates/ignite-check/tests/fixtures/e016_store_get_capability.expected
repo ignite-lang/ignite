@@ -1,0 +1,1 @@
+e016_store_get_capability.ignite:16:5: error[E016]: missing effect `st.launch` for `execute`; add it to the `requires` of `run`
