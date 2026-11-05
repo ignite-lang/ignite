@@ -129,6 +129,7 @@ pub const BUILTIN_TYPES: &[&str] = &[
     "ChildProcess",
     "Entropy",
     "Setting",
+    "CommandLine",
 ];
 
 /// Static builtin calls written `Type.name(...)`.
@@ -155,6 +156,7 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Launcher", "new"),
     ("Entropy", "new"),
     ("Setting", "of"),
+    ("CommandLine", "of"),
 ];
 
 /// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
@@ -276,6 +278,7 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Launcher", "new", 0),
     ("Entropy", "new", 0),
     ("Setting", "of", 2),
+    ("CommandLine", "of", 1),
 ];
 
 /// Builtin statics that are effectful substrate operations.
@@ -377,6 +380,7 @@ pub const CAPABILITY_METHODS: &[(&str, &str, Option<&str>)] = &[
     ("ChildProcess", "id", None),
     ("Entropy", "random_bytes", Some("draw")),
     ("Setting", "value", Some("argument")),
+    ("CommandLine", "arguments", Some("argument")),
 ];
 
 /// The capability types of `docs/slice.md` 21.3: handles a system declares
@@ -387,6 +391,7 @@ pub const CAPABILITY_TYPES: &[&str] = &[
     "ChildProcess",
     "Entropy",
     "Setting",
+    "CommandLine",
 ];
 
 /// The heads of ambient effects (`stdin.read`, `net.connect`): no
@@ -2103,7 +2108,8 @@ impl Checker {
 
     /// Whether a value of declared type `ty` may hold a `TcpStream`,
     /// `PipeStream`, `TcpListener`, `Store`, `Stdin`, `Stdout` or a capability
-    /// (`Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`), directly or in a
+    /// (`Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`, `CommandLine`),
+    /// directly or in a
     /// field, payload, element or type argument. Unknown types may.
     fn can_hold_handle(&self, ty: &Type, depth: usize) -> bool {
         if depth > 16 {
@@ -2119,7 +2125,7 @@ impl Checker {
                 return false;
             }
             "TcpStream" | "PipeStream" | "TcpListener" | "Store" | "Stdin" | "Stdout"
-            | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting" => {
+            | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting" | "CommandLine" => {
                 return true;
             }
             "List" | "Option" | "Result" | "Tuple" => {
@@ -2972,8 +2978,9 @@ impl Checker {
 
     /// The result type of a test-only capability constructor
     /// (`docs/slice.md` 21.3, 21.8): `Directory.temporary()` is a
-    /// `Result<Directory, IoError>`, `Launcher.new()`, `Entropy.new()` and
-    /// `Setting.of(..)` the capability itself. `None` for any other static
+    /// `Result<Directory, IoError>`, `Launcher.new()`, `Entropy.new()`,
+    /// `Setting.of(..)` and `CommandLine.of(..)` (21.19) the capability
+    /// itself. `None` for any other static
     /// or when a declaration shadows the owner.
     fn constructor_type(&self, owner: &str, name: &str, span: Span) -> Option<Type> {
         if self.type_params.contains(owner) || self.symbols.records.contains(owner) {
@@ -2991,9 +2998,10 @@ impl Checker {
                 "Result",
                 vec![named("Directory", Vec::new()), named("IoError", Vec::new())],
             )),
-            ("Launcher", "new") | ("Entropy", "new") | ("Setting", "of") => {
-                Some(named(owner, Vec::new()))
-            }
+            ("Launcher", "new")
+            | ("Entropy", "new")
+            | ("Setting", "of")
+            | ("CommandLine", "of") => Some(named(owner, Vec::new())),
             _ => None,
         }
     }

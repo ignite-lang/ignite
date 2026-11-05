@@ -110,6 +110,7 @@ const SUBSTRATE_NAMES: &[&str] = &[
     "ChildProcess",
     "Entropy",
     "Setting",
+    "CommandLine",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -1548,7 +1549,8 @@ fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
         "Tuple" => format!("({})", args.join(", ")),
         "List" => generic("Vec"),
         "TcpListener" | "TcpStream" | "PipeStream" | "Stdin" | "Stdout" | "Input" | "IoError"
-        | "Exposure" | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting" => {
+        | "Exposure" | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting"
+        | "CommandLine" => {
             format!("ignite_io::{}", ty.name.name)
         }
         "Store" => generic("ignite_io::Store"),
@@ -3947,6 +3949,9 @@ impl<'a> Generator<'a> {
             ("Launcher", "new", []) => "ignite_io::Launcher::new()".to_string(),
             ("Entropy", "new", []) => "ignite_io::Entropy::new()".to_string(),
             ("Setting", "of", [flag, value]) => format!("ignite_io::Setting::of({flag}, {value})"),
+            ("CommandLine", "of", [arguments]) => {
+                format!("ignite_io::CommandLine::of({arguments})")
+            }
             ("Int", "to_text", [value]) => {
                 format!("{}.to_string()", wrap(&args[0], value.clone()))
             }
@@ -5917,7 +5922,7 @@ struct Resources {
     listeners: BTreeMap<String, Option<Listener>>,
     /// `Store` resources: name and Rust type, in declaration order.
     stores: Vec<(String, String)>,
-    /// `Directory`, `Launcher`, `Entropy` and `Setting` resources
+    /// `Directory`, `Launcher`, `Entropy`, `Setting` and `CommandLine` resources
     /// (`docs/slice.md` 21.4 to 21.7) with their literal properties.
     capabilities: BTreeMap<String, CapabilityResource>,
 }
@@ -5934,6 +5939,7 @@ enum CapabilityResource {
         maximum_children: i64,
     },
     Entropy,
+    CommandLine,
     Setting {
         flag: String,
         default: Option<String>,
@@ -5942,10 +5948,10 @@ enum CapabilityResource {
 
 impl CapabilityResource {
     /// The creation order of the generated `main` (`docs/slice.md` 21.8):
-    /// settings, directories, launchers, entropy.
+    /// settings and command lines, directories, launchers, entropy.
     fn order(&self) -> u8 {
         match self {
-            CapabilityResource::Setting { .. } => 0,
+            CapabilityResource::Setting { .. } | CapabilityResource::CommandLine => 0,
             CapabilityResource::Directory { .. } => 1,
             CapabilityResource::Launcher { .. } => 2,
             CapabilityResource::Entropy => 3,
@@ -5975,6 +5981,7 @@ impl CapabilityResource {
                 format!("ignite_io::Launcher::with_maximum({maximum_children})")
             }
             CapabilityResource::Entropy => "ignite_io::Entropy::open()?".to_string(),
+            CapabilityResource::CommandLine => "ignite_io::CommandLine::launch()?".to_string(),
         }
     }
 }
@@ -6009,6 +6016,7 @@ fn lower_capability(resource: &ResourceDecl) -> Option<CapabilityResource> {
                 .unwrap_or(ignite_types::LAUNCHER_DEFAULT_MAXIMUM_CHILDREN),
         },
         "Entropy" => CapabilityResource::Entropy,
+        "CommandLine" => CapabilityResource::CommandLine,
         "Setting" => CapabilityResource::Setting {
             flag: text("flag").unwrap_or_default(),
             default: text("default"),
@@ -6043,7 +6051,7 @@ fn lower_resources(system: &SystemDecl, diagnostics: &mut Vec<Diagnostic>) -> Re
                 None => diagnostics.push(e020(
                     resource.kind.span,
                     format!(
-                        "unsupported resource kind `{other}`; expected `TcpListener`, `Store`, `Directory`, `Launcher`, `Entropy` or `Setting`"
+                        "unsupported resource kind `{other}`; expected `TcpListener`, `Store`, `Directory`, `Launcher`, `Entropy`, `Setting` or `CommandLine`"
                     ),
                 )),
             },

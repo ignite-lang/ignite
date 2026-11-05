@@ -1200,6 +1200,7 @@ impl<'a> Typer<'a> {
             "ChildProcess" => Ty::Capability(Capability::ChildProcess),
             "Entropy" => Ty::Capability(Capability::Entropy),
             "Setting" => Ty::Capability(Capability::Setting),
+            "CommandLine" => Ty::Capability(Capability::CommandLine),
             "TcpStream" => Ty::TcpStream,
             "PipeStream" => Ty::PipeStream,
             "IoError" => Ty::IoError,

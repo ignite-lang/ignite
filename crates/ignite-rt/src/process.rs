@@ -215,6 +215,45 @@ pub extern "C" fn ignite_rt_setting_value(out: *mut IgniteList, handle: i64) {
     put(out, IgniteList::from_bytes(value.as_bytes()));
 }
 
+/// `i32 command_line_launch(i64* out, IoError* err)`: the resource
+/// `CommandLine` at launch (21.19): the arguments `init` stored after the
+/// executable's name; one that is not UTF-8 is an error with exit code 2.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_command_line_launch(out: *mut i64, err: *mut IgniteIoError) -> i32 {
+    let made = ignite_io::CommandLine::from_os_args(os_args().into_iter().skip(1));
+    status(
+        made.map(|command_line| {
+            crate::net::register(crate::net::Handle::CommandLine(command_line))
+        }),
+        out,
+        err,
+    )
+}
+
+/// `i64 command_line_of(List<Text>* arguments)`: `CommandLine.of(arguments)`.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_command_line_of(arguments: *const IgniteList) -> i64 {
+    let command_line = ignite_io::CommandLine::of(
+        crate::text::texts(arguments)
+            .iter()
+            .map(|argument| String::from_utf8_lossy(bytes(argument)).into_owned())
+            .collect(),
+    );
+    crate::net::register(crate::net::Handle::CommandLine(command_line))
+}
+
+/// `void command_line_arguments(List<Text>* out, i64 c)`:
+/// `command_line.arguments()`; empty for a handle that is no command line.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_command_line_arguments(out: *mut IgniteList, handle: i64) {
+    let arguments = crate::net::capability(handle, "command line", |found| match found {
+        crate::net::Handle::CommandLine(command_line) => Some(command_line.arguments()),
+        _ => None,
+    })
+    .unwrap_or_default();
+    put(out, IgniteList::from_texts(&arguments));
+}
+
 /// `i32 endpoint_of(Text* reference, Endpoint* out, IoError* err)`: the
 /// `--ref <path>=<address>:<port>` argument `init` stored whose path is
 /// `reference` (`docs/slice.md` 16.9, 16.13), as an `Endpoint` whose
@@ -474,6 +513,45 @@ mod tests {
             flag(&[b"\xfe", b"--tool", b"x"], "--tool"),
             Ok(Some("x".to_string()))
         );
+    }
+
+    /// `command_line_launch` over the arguments `init` stored (21.19):
+    /// every argument after the executable's name, in order.
+    #[test]
+    fn command_line_launch_reads_every_argument() {
+        let launch = |args: &[&[u8]]| {
+            let _guard = ARGUMENTS.lock().unwrap();
+            store_args(
+                std::iter::once(&b"todo"[..])
+                    .chain(args.iter().copied())
+                    .map(|arg| OsStr::from_bytes(arg).to_os_string())
+                    .collect(),
+            );
+            let mut handle = -7i64;
+            let mut err = IgniteIoError {
+                message: IgniteList::from_bytes(b"untouched"),
+                exit_code: -1,
+            };
+            let code = ignite_rt_command_line_launch(&mut handle, &mut err);
+            (code, handle, err)
+        };
+        let (code, handle, _) = launch(&[b"add", b"buy milk", b"--port", b"0"]);
+        assert_eq!(code, 0);
+        let mut out = IgniteList::from_bytes(b"");
+        ignite_rt_command_line_arguments(&mut out, handle);
+        let read: Vec<String> = crate::text::texts(&out)
+            .iter()
+            // SAFETY: written by the runtime in this task's arena.
+            .map(|text| String::from_utf8(unsafe { text.as_bytes() }.to_vec()).unwrap())
+            .collect();
+        assert_eq!(read, ["add", "buy milk", "--port", "0"]);
+
+        let (code, _, err) = launch(&[b"add", b"a\xffb"]);
+        assert_eq!(code, 1);
+        assert_eq!(err.exit_code, 2);
+        // SAFETY: written by the runtime in this task's arena.
+        let message = String::from_utf8(unsafe { err.message.as_bytes() }.to_vec()).unwrap();
+        assert_eq!(message, "argument 2: value a\\xffb is not UTF-8");
     }
 
     #[test]
