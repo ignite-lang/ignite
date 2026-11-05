@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: story:json-decimals
 kind: story
-status: active
+status: implemented
 title: std.json reads and writes numbers with a fraction or an exponent
 relations:
 - decomposes: epic:ignite-lsp
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T09:01:27Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-11-05T09:01:27Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-11-05T11:05:05Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1}}}
 ---
 # std.json reads and writes numbers with a fraction or an exponent
 

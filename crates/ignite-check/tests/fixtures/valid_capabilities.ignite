@@ -1,0 +1,67 @@
+type Invocation {
+  program: Text
+}
+
+type ChildExit {
+  code: Int
+}
+
+type Bench {
+  files: Directory
+  tools: Launcher
+  entropy: Entropy
+  tool: Setting
+}
+
+fn save(files: Directory, data: Bytes) -> Result<Unit, IoError> requires [files.write] {
+  files.write_file("a.bin", data)?
+  files.create_directory("sub/deeper")?
+  files.remove("a.bin")?
+  return files.remove_tree("sub")
+}
+
+fn load(files: Directory) -> Result<Bytes, IoError> requires [files.read] {
+  let names = files.read_directory("")?
+  let root = files.absolute_path()?
+  return files.read_file("a.bin")
+}
+
+fn run(tools: Launcher, invocation: Invocation) -> Result<ChildExit, IoError> requires [tools.launch] {
+  let child = tools.start(invocation)?
+  let pid = child.id()
+  child.kill()?
+  return child.wait()
+}
+
+fn reap(child: ChildProcess) -> Result<ChildExit, IoError> requires [child.wait, child.kill] {
+  child.kill()?
+  return child.wait()
+}
+
+fn token(entropy: Entropy) -> Result<Bytes, IoError> requires [entropy.draw] = entropy.random_bytes(32)
+
+fn tool(setting: Setting) -> Text requires [setting.argument] = setting.value()
+
+fn read_through(bench: Bench) -> Result<Bytes, IoError> requires [bench.read] = bench.files.read_file("a")
+
+fn all(bench: Bench) -> Result<ChildExit, IoError> requires [bench.*] {
+  let program = bench.tool.value()
+  let bytes = bench.entropy.random_bytes(4)?
+  return bench.tools.execute(Invocation { program = program })
+}
+
+test fn scratch() -> Result<Directory, IoError> = Directory.temporary()
+
+test "capabilities from the test-only constructors" {
+  let files = Directory.temporary()?
+  files.write_file("a", Bytes.empty())?
+  let tools = Launcher.new()
+  let exit = tools.execute(Invocation { program = "/bin/true" })?
+  let child = tools.start(Invocation { program = "/bin/true" })?
+  child.wait()?
+  let entropy = Entropy.new()
+  entropy.random_bytes(1)?
+  let setting = Setting.of("--tool", "x")
+  assert setting.value() == "x"
+  let more = scratch()?
+}

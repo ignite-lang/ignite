@@ -438,7 +438,7 @@ impl TcpStream {
 /// resolves; outside it every reference is unbound
 /// ([`crate::args::endpoint_from_args`]).
 pub fn endpoint_of(reference: &str) -> Result<(String, i64), IoError> {
-    crate::args::endpoint_from_args(std::env::args(), reference)
+    crate::args::endpoint_from_os_args(std::env::args_os(), reference)
 }
 
 #[cfg(test)]

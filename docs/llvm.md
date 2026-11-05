@@ -7,7 +7,8 @@ Direction (Timo, 2026-11-01): an LLVM target that bypasses Rust code generation.
 emits LLVM IR text; clang compiles and links it. The substrate is the Rust crate `ignite-io`,
 the same one the Rust target calls, behind the C ABI adapter `ignite-rt`, prebuilt as the
 static library `libignite_rt.a`. Building a program
-for this target never runs cargo or rustc. The Rust target stays and stays the default.
+for this target never runs cargo or rustc. Since 2026-11-05 it is the default `--target`
+(D2 B, `story:llvm-default-target`); the Rust target stays as the differential check.
 
 ## 1 Pipeline
 
@@ -91,8 +92,14 @@ the same path is not noticed; delete `DIR/llvm`.
 `--clang` defaults to `clang` on `PATH`. `--runtime` defaults to the first file of: (1)
 `libignite_rt.a` in the directory of the running executable, which `cargo build -p ignite-rt`
 writes next to `target/<profile>/ignite`; (2) `libignite_rt.a` in that directory's parent, for
-a driver running in a test binary in `target/<profile>/deps`. When neither exists the error
-(exit 3) names the first. Tests pass `--runtime` with the newest `deps/libignite_rt-*.a`,
+a driver running in a test binary in `target/<profile>/deps`; (3) the archive the driver
+carries: `crates/ignite/build.rs` builds `ignite-rt --features runner` for the driver's target
+and profile, the crate embeds it, and the first build that needs it writes it to
+`$XDG_CACHE_HOME/ignite/runtime/<hash>/libignite_rt.a` (`$HOME/.cache` when `XDG_CACHE_HOME`
+is unset or relative; a temporary file and a rename), where later builds find it. When that
+write fails the error (exit 3) names the first candidate, the cache path and the fix:
+`--runtime` with an archive from `cargo build -p ignite-rt --features runner`, or
+`--target rust`. Tests pass `--runtime` with the newest `deps/libignite_rt-*.a`,
 because a test build does not refresh the top-level copy. `task bench` prints sizes, build
 times and startup time of both targets.
 
@@ -194,16 +201,21 @@ takes or returns Ignite values):
 
 - Scalars (`Int`, `Bool`, `Byte`, handles, `Store` pointers) by value.
 - Aggregates (`Text`, lists, records, tuples, enums, `IoError`, fn values) by pointer. A parameter is
-  borrowed when the function's body never modifies it (by the rule of section 4's carried
-  variables: no assignment to it or a field of it, no `push`, `append` or `clear` through a
-  place rooted at it; matched by name). Otherwise the callee owns it and may change it in
-  place. A direct call (a named function, method or role) passes a place to a borrowed
+  owned exactly when its function consumes it (`TypedProgram::consumed`, `docs/slice.md`
+  20.3.3: the body changes it in place on some path, or moves it or a place rooted at it on
+  every path to an exit), and borrowed otherwise. The consumed set contains every parameter
+  the body modifies by the rule of section 4's carried variables (an assignment to it or a
+  field of it, a `push`, `append` or `clear` through a place rooted at it; matched by name),
+  which owned a parameter until slice 16. The callee may change an owned parameter in place
+  and move it. A direct call (a named function, method or role) passes a place to a borrowed
   parameter as the place's own pointer, with no copy. The exception is a later argument
-  that modifies a variable, because it could change the place before the call. Every
-  other aggregate argument is a fresh copy (section 4). A call through a fn pointer
-  always passes copies, which is correct for both kinds of parameter. A borrowed
-  parameter reads the caller's memory, which stays valid for the whole call: no callee
-  releases below its own loops' marks.
+  that modifies a variable, because it could change the place before the call. An argument
+  that moves (`TypedProgram::moves`, `docs/slice.md` 20.3.5) passes the place's own pointer
+  to the owned parameter, with no copy: the place is dead after the call, so ownership of
+  its memory passes to the callee. Every other aggregate argument is a fresh copy (section
+  4). A call through a fn pointer passes copies, or the moved place, which is correct for
+  both kinds of parameter. A borrowed parameter reads the caller's memory, which stays
+  valid for the whole call: no callee releases below its own loops' marks.
 - An aggregate result is written to a pointer passed as the first argument (plain `ptr`, no LLVM `sret` attribute).
 - Symbol names: `"<module>.<name>"` (`"std.protocol.telnet.decode"`), roles
   `"<module>.<Protocol>.<role>"`, constants `"<module>.<NAME>"` and field defaults
@@ -259,8 +271,14 @@ position, even with no buffer.
 
 - Value semantics as in the Rust target: in every value position of the ownership rule
   (`docs/slice.md` section 6) a place is deep-copied. The generator emits one copy function
-  per aggregate type (`"copy.<mangled type>"`). A place in a position that only reads it
-  is not copied:
+  per aggregate type (`"copy.<mangled type>"`). A place in a move position that is dead
+  after it (`TypedProgram::moves`, `docs/slice.md` 20.3) is not copied but moved: an
+  argument passes the place's pointer to the owned parameter (section 3), and a `let` or
+  `var` initializer, an assignment, a field value, a list element, a payload, a returned
+  value or a block's result takes it with a shallow `memcpy` of its representation. The
+  result of a call is always written to a fresh temporary, so `s = step(s, i)` moves `s`
+  into the call and then the temporary into `s`; the result slot never aliases the moved
+  place. A place in a position that only reads it is not copied:
   - an argument to a borrowed parameter (section 3);
   - the scrutinee of a `match` whose arms do not modify the place's root variable;
   - the list of a `for` whose body does not modify the list's root variable;
@@ -314,7 +332,10 @@ position, even with no buffer.
   frees everything allocated after the mark. When the mark is inside the last chunk, this
   resets the cursor inline; otherwise it calls `ignite_rt_arena_release`. Released chunks
   are kept for reuse, up to 16 per arena; larger blocks and further chunks go back to the
-  system allocator (both measured equal on the memory test). Each task also has a scratch
+  system allocator (both measured equal on the memory test). Chunks are anonymous
+  mappings of their own (`mmap`, given back with `munmap`), not `malloc` blocks, so a freed
+  chunk leaves the RSS at once instead of waiting for the next heap trim, and a live chunk
+  pins no freed heap memory below it; large blocks come from `malloc`. Each task also has a scratch
   arena, which allocations use while `ignite_rt_arena_scratch(1)` is on. The runtime moves
   the bump state between the two arenas.
 - Loop regions. Every `while`, `loop` and `for` takes a mark at its entry (for `for`, after
@@ -340,8 +361,12 @@ position, even with no buffer.
   semantics) and nothing outside the carried variables that survives a back-edge points
   above the mark. Block-local bindings die with the iteration. Pattern bindings point into a
   scrutinee that was copied before the loop or that lives below the mark. The `for` list is
-  evaluated before the mark. Callee arguments are fresh copies or the caller's places, and
-  both lie below every mark the callee takes. A loop inside an expression that holds a partial value (an
+  evaluated before the mark. Callee arguments are fresh copies, the caller's places
+  (borrowed) or the caller's moved places (owned), and all three lie below every mark the
+  callee takes. A moved place is dead until it is reassigned, so a callee that changes it
+  in place, or a release that copies a carried variable the loop moved and then reassigns,
+  never shows a changed value to a later read. A moved variable that the loop reassigns is
+  a carried variable like any other. A loop inside an expression that holds a partial value (an
   operand, an argument, a field, a receiver) gets no region, because that value could
   point into memory a release frees. The copies go through the scratch arena, not to a
   second mark above the first: a copy above a second mark is freed by the release to the
@@ -353,12 +378,15 @@ position, even with no buffer.
 - A task is the process's main thread, or a task `ignite_io::try_spawn` started for a
   `spawn`. It reuses idle threads (`docs/slice.md` section 7). A task's arena is freed when
   it ends (`task_end`), except for one chunk that the thread keeps for its next task.
-  A task whose arenas held more than 1 MiB at `task_end` calls `ignite_io::released_memory`,
+  A task whose arenas held more than 1 MiB of large blocks at `task_end` calls `ignite_io::released_memory`,
   as a `Store` does when it drops a value, and the substrate returns the free heap pages
   with glibc's `malloc_trim(0)` when a later task or an idle thread ends (`docs/slice.md`
   section 7). Without it glibc keeps the freed pages in the arena of every thread that
   allocated them: the ember example's churn (10 rounds of 10 MB SET then FLUSHDB) held
-  about 100 MiB RSS on 10 MB of keys (2026-11-04).
+  about 100 MiB RSS on 10 MB of keys (2026-11-04). The chunks a task frees go back to the
+  kernel without a trim: ember's `FLUSHDB` (`db.values()` copies the keyspace into the
+  arena) left 10 MB of freed chunks resident until the next trim while chunks were
+  `malloc` blocks (2026-11-04).
   `spawn` hands the new task a pointer to the arguments in the parent's memory. The task
   deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before the parent
   continues (`ignite_rt_spawn` blocks until then and returns 1).

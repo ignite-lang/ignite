@@ -1,0 +1,160 @@
+package std.fs
+
+import std.process.{Invocation}
+
+// Files under a root directory (`docs/slice.md` 21.4). The module is also
+// the substrate's capability `Directory`, a handle a system declares as a
+// resource and passes in values (21.3):
+//
+//   resource files: Directory { path = "workspace", create = true, flag = "--root" }
+//
+// `path` is required; `create` (default `false`) creates the root at
+// launch; `flag` (default `""`, none) names a command-line flag whose value
+// replaces `path` at launch (21.6). Tests make one with the test-only
+// `Directory.temporary() -> Result<Directory, IoError>`, a new empty
+// directory inside the test's scratch directory.
+//
+// The methods of `Directory`, builtins of the substrate (each returns
+// `Result<_, IoError>`; the effect is on the receiver's roots, 21.3):
+//
+//   read_file(path: Text) -> Bytes                    effect read; at most 16 MiB
+//   write_file(path: Text, data: Bytes) -> Unit       effect write; atomic replace
+//   read_directory(path: Text) -> List<Text>          effect read; byte order, a directory ends with `/`
+//   create_directory(path: Text) -> Unit              effect write; with missing parents
+//   remove(path: Text) -> Unit                        effect write; a file, a link or an empty directory
+//   remove_tree(path: Text) -> Unit                   effect write; never follows a link
+//   absolute_path() -> Text                           effect read; the root as resolved at launch
+//
+// Paths are relative and separated by `/`; `""` and `.` name the root. An
+// absolute path, a `..` component or a NUL is refused before any IO (and is
+// E140 when it is a literal), and so is a symbolic link at any component.
+
+// The file at `path` as text; bytes that are not UTF-8 are an error naming
+// the path.
+fn read_text_file(files: Directory, path: Text) -> Result<Text, IoError> requires [files.read] {
+  let bytes = files.read_file(path)?
+  let text = bytes.to_text()
+  if text.to_bytes() != bytes {
+    return Err(IoError.new("path ".concat(path).concat(": not UTF-8")))
+  }
+  return Ok(text)
+}
+
+// `text` written to `path` as UTF-8, replacing the file atomically.
+fn write_text_file(files: Directory, path: Text, text: Text) -> Result<Unit, IoError> requires [files.write] = files.write_file(path, text.to_bytes())
+
+// `left` and `right` with one `/` between them when both are non-empty.
+fn join_path(left: Text, right: Text) -> Text {
+  if left.is_empty() {
+    return right
+  }
+  if right.is_empty() {
+    return left
+  }
+  return left.concat("/").concat(right)
+}
+
+test "join_path puts one slash between non-empty parts" {
+  assert join_path("a", "b") == "a/b"
+  assert join_path("a/b", "c.txt") == "a/b/c.txt"
+  assert join_path("", "b") == "b"
+  assert join_path("a", "") == "a"
+  assert join_path("", "") == ""
+}
+
+// The message of a refused operation, `ok` when it succeeded.
+test fn refusal<T>(result: Result<T, IoError>) -> Text = match result {
+  Ok(_) => "ok"
+  Err(error) => error.message
+}
+
+// The byte of value `i`, for `0 <= i < 256`.
+test fn byte_of(i: Int) -> Byte = match i.to_byte() {
+  Some(b) => b
+  None => b'?'
+}
+
+test "a file written is read back, listed, nested and removed" {
+  let files = Directory.temporary()?
+  var every = Bytes.empty()
+  var i = 0
+  while i < 256 {
+    every.push(byte_of(i))
+    i = i + 1
+  }
+  files.write_file("a.bin", every)?
+  let read = files.read_file("a.bin")?
+  assert read.len() == 256 && read == every
+  assert files.read_directory("")? == ["a.bin"]
+  files.create_directory("sub/deeper")?
+  assert files.read_directory("")? == ["a.bin", "sub/"]
+  files.remove("a.bin")?
+  files.remove_tree("sub")?
+  assert files.read_directory("")?.is_empty()
+}
+
+test "paths that leave the root are refused" {
+  let files = Directory.temporary()?
+  let paths = ["../x", "a/../../x", "/etc/passwd", "a\0b"]
+  let reasons = ["leaves its root", "leaves its root", "absolute", "contains NUL"]
+  var i = 0
+  while i < paths.len() {
+    let path = paths.at(i)
+    let want = "path ".concat(path).concat(": ").concat(reasons.at(i))
+    assert refusal(files.read_file(path)) == want
+    assert refusal(files.write_file(path, b"x")) == want
+    assert refusal(files.read_directory(path)) == want
+    assert refusal(files.create_directory(path)) == want
+    assert refusal(files.remove(path)) == want
+    assert refusal(files.remove_tree(path)) == want
+    i = i + 1
+  }
+  assert files.read_directory("")?.is_empty()
+  assert refusal(files.read_file("")).starts_with("path : ")
+}
+
+test "a file over the read bound is refused" {
+  let files = Directory.temporary()?
+  var big = b"x"
+  var i = 0
+  while i < 24 {
+    let copy = big.slice(0, big.len())
+    big.append(copy)
+    i = i + 1
+  }
+  assert big.len() == 16777216
+  files.write_file("exact.bin", big)?
+  assert files.read_file("exact.bin")?.len() == 16777216
+  big.push(b'x')
+  files.write_file("big.bin", big)?
+  assert refusal(files.read_file("big.bin")) == "path big.bin: larger than 16 MiB"
+}
+
+test "a legal 250-byte name is written" {
+  let files = Directory.temporary()?
+  var name = ""
+  while name.len() < 250 {
+    name = name.concat("n")
+  }
+  assert refusal(files.write_file(name, b"x")) == "ok"
+  assert files.read_file(name)? == b"x"
+}
+
+test "remove_tree removes links, not their targets" {
+  let files = Directory.temporary()?
+  let outside = Directory.temporary()?
+  outside.write_file("kept", b"k")?
+  files.create_directory("tree/a/b")?
+  files.write_file("tree/a/b/f", b"f")?
+  files.write_file("tree/g", b"g")?
+  let link = join_path(files.absolute_path()?, "tree/out")
+  let made = Launcher.new().execute(Invocation { program = "/bin/ln", arguments = ["-s", outside.absolute_path()?, link] })?
+  assert made.ending == 0 && made.code == 0
+  assert refusal(files.read_directory("tree/out")) == "path tree/out: symbolic link tree/out"
+  assert files.read_directory("tree")? == ["a/", "g", "out"]
+  files.remove_tree("tree")?
+  assert files.read_directory("")?.is_empty()
+  assert outside.read_directory("")? == ["kept"]
+  assert refusal(files.remove_tree("")) == "path : the root itself"
+  assert refusal(files.remove_tree(".")) == "path .: the root itself"
+}

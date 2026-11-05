@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T06:26:03Z",
+  "actor": "human:timo",
+  "artifact": "story:random-bytes",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 9688d65d (slice 17 W3 merged): 1062 passed, 0 failed, 10 ignored; 232 inline per target",
+    "reference": "https://github.com/ignite-lang/ignite/commit/9688d65d"
+  }
+}

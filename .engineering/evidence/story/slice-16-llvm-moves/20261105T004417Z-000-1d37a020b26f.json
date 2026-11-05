@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T00:44:17Z",
+  "actor": "human:timo",
+  "artifact": "story:slice-16-llvm-moves",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 8145e3b6 (W3 merge incl. adversary fixes 13a53f1c), then 93881c7e",
+    "reference": "https://github.com/ignite-lang/ignite/commit/93881c7e"
+  }
+}

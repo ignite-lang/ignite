@@ -93,6 +93,24 @@ fn mutates(builtin: Builtin) -> bool {
         | StreamWriteAll
         | StreamClose
         | StreamSetIdleTimeout
+        | DirectoryTemporary
+        | DirectoryReadFile
+        | DirectoryWriteFile
+        | DirectoryReadDirectory
+        | DirectoryCreateDirectory
+        | DirectoryRemove
+        | DirectoryRemoveTree
+        | DirectoryAbsolutePath
+        | LauncherNew
+        | LauncherStart
+        | LauncherExecute
+        | ChildProcessId
+        | ChildProcessWait
+        | ChildProcessKill
+        | EntropyNew
+        | EntropyRandomBytes
+        | SettingOf
+        | SettingValue
         | Debug => false,
     }
 }
@@ -342,6 +360,7 @@ fn stmt_mentions(stmt: &Stmt, name: &str) -> bool {
 fn pattern_binds(pattern: &Pattern, name: &str) -> bool {
     match &pattern.kind {
         PatternKind::Binding(id) => id.name == name,
+        PatternKind::Rest(id) => id.as_ref().is_some_and(|id| id.name == name),
         PatternKind::Or(items)
         | PatternKind::Tuple(items)
         | PatternKind::List(items)

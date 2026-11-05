@@ -1,0 +1,13 @@
+// A module that resolves a reference and imports nothing from `std.net`:
+// `Endpoint.of` returns a `std.net.Endpoint` (`docs/slice.md` 16.9), a
+// builtin signature naming a standard-library record as
+// `ChildProcess.wait` does.
+
+fn port_of(target: Ref) -> Result<Int, IoError> requires [process.args] {
+  let endpoint = Endpoint.of(target)?
+  return Ok(endpoint.port)
+}
+
+test "a module that resolves a reference builds" {
+  assert 1 == 1
+}

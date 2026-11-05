@@ -285,6 +285,21 @@ pub fn resolve(
             ));
         }
     }
+    // The key whose binding hosts `id` and that binding, for a key or an
+    // included member.
+    let host = |id: &str| -> Option<(String, Value)> {
+        let via = if keys.iter().any(|(key, _)| key == id) {
+            id
+        } else {
+            included.get(id)?.as_str()
+        };
+        let binding = keys
+            .iter()
+            .find(|(key, _)| key == via)
+            .map(|(_, binding)| binding.clone())
+            .unwrap_or(Value::Unit);
+        Some((via.to_string(), binding))
+    };
     let mut resolution = Vec::new();
     for member in &system.members {
         if !matches!(
@@ -293,21 +308,16 @@ pub fn resolve(
         ) {
             continue;
         }
-        if let Some((_, binding)) = keys.iter().find(|(id, _)| *id == member.id) {
+        if let Some((via, binding)) = host(&member.id) {
             resolution.push(ResolutionEntry {
                 member: member.id.clone(),
-                via: member.id.clone(),
-                binding: binding.clone(),
+                via,
+                binding,
             });
-        } else if let Some(via) = included.get(&member.id) {
-            let binding = keys
-                .iter()
-                .find(|(id, _)| id == via)
-                .map(|(_, binding)| binding.clone())
-                .unwrap_or(Value::Unit);
+        } else if let Some((via, binding)) = implicit_host(program, system, member, &host) {
             resolution.push(ResolutionEntry {
                 member: member.id.clone(),
-                via: via.clone(),
+                via,
                 binding,
             });
         } else {
@@ -326,4 +336,34 @@ pub fn resolve(
     }
     resolution.sort_by(|a, b| a.member.cmp(&b.member));
     Ok(resolution)
+}
+
+/// The host of a capability resource that is no bindings key and that no
+/// binding includes (15.6): the process of the first declared executable
+/// component that creates it (its `ExecutableInfo::resources`, embedded
+/// components' included), hosted as that component is. `None` for any
+/// other member, and for a capability no hosted executable creates.
+fn implicit_host(
+    program: &TypedProgram,
+    system: &SystemInfo,
+    member: &MemberInfo,
+    host: &dyn Fn(&str) -> Option<(String, Value)>,
+) -> Option<(String, Value)> {
+    if member.declaration != MemberDeclaration::Resource
+        || !matches!(member.kind, Ty::Capability(_))
+    {
+        return None;
+    }
+    system
+        .members
+        .iter()
+        .filter(|component| component.declaration == MemberDeclaration::Component)
+        .filter(|component| {
+            program.executables().iter().any(|e| {
+                e.system == system.name
+                    && e.component == component.name
+                    && e.resources.iter().any(|(name, _)| *name == member.name)
+            })
+        })
+        .find_map(|component| host(&component.id))
 }

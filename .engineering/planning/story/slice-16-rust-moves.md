@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:slice-16-rust-moves
 kind: story
-status: active
+status: implemented
 title: Rust target moves at last use
 summary: Pass consumed parameters by value and move at last use on the Rust target, and lower expression calls
 relations:
@@ -18,10 +18,11 @@ scope:
   path: crates/ignite/src/apply/plan.rs
 - confidence: cited
   path: docs/slice.md
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-04T07:03:30Z", actor: "human:timo", revision: 6}
 - {from: "proposed", to: "active", at: "2026-11-04T07:03:30Z", actor: "human:timo", revision: 7}
+- {from: "active", to: "implemented", at: "2026-11-05T00:57:41Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: slice-16-rust-moves
 

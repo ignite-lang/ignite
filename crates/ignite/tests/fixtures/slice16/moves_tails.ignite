@@ -1,0 +1,56 @@
+// Adversary cases for slice 16 U3 (docs/slice.md 20.3.1, 20.3.4): a parameter
+// its fn consumes (moved on every path, so declared by value on the Rust
+// target) is the tail of an `if` branch or a `match` arm whose value is used,
+// and is read again afterwards. The tail is no move (the place is live after
+// it), so the branch must copy it. With copies, each fn returns what its test
+// asserts; at the slice base the parameter was borrowed and the tail copied.
+
+type State {
+  items: List<Int>
+  count: Int
+}
+
+fn fresh() -> State = State { items = [], count = 0 }
+
+fn consume(x: State) -> Int {
+  x.items.push(99)
+  x.count + x.items.len()
+}
+
+fn look(s: State) -> Int = s.count
+
+fn branch_then_consume(p: State, c: Bool) -> Int {
+  let t = if c { p } else { fresh() }
+  t.count + consume(p)
+}
+
+fn arm_then_consume(p: State, o: Option<Int>) -> Int {
+  let t = match o {
+    Some(_) => p
+    None => fresh()
+  }
+  t.count + consume(p)
+}
+
+fn argument_then_consume(p: State, c: Bool) -> Int {
+  let n = look(if c { p } else { fresh() })
+  n + consume(p)
+}
+
+test "a consumed parameter as a branch tail keeps its value" {
+  let s = State { items = [1], count = 2 }
+  assert branch_then_consume(s, true) == 6
+  assert branch_then_consume(s, false) == 4
+}
+
+test "a consumed parameter as a match arm keeps its value" {
+  let s = State { items = [1], count = 2 }
+  assert arm_then_consume(s, Some(1)) == 6
+  assert arm_then_consume(s, None) == 4
+}
+
+test "a consumed parameter as a branch tail in an argument keeps its value" {
+  let s = State { items = [1], count = 2 }
+  assert argument_then_consume(s, true) == 6
+  assert argument_then_consume(s, false) == 4
+}

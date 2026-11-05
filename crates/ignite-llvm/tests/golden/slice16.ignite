@@ -1,0 +1,58 @@
+package tests.slice16
+
+type State {
+  items: List<Int>
+  count: Int
+}
+
+type Actor {
+  state: State
+  handle: fn(State, Int) -> State
+}
+
+fn step(state: State, x: Int) -> State {
+  var next = state
+  next.items.push(x)
+  next.count = next.count + 1
+  next
+}
+
+fn size(state: State) -> Int = state.count + state.items.len()
+
+fn run(n: Int) -> State {
+  var s = State { items = [], count = 0 }
+  var i = 0
+  while i < n {
+    s = step(s, i)
+    i = i + 1
+  }
+  s
+}
+
+fn run_read_after(n: Int) -> Int {
+  let s = run(n)
+  let t = step(s, n)
+  t.count + s.count
+}
+
+fn read_only(n: Int) -> Int {
+  let s = run(n)
+  size(s)
+}
+
+fn run_actor(n: Int) -> Actor {
+  var a = Actor { state = State { items = [], count = 0 }, handle = step }
+  var i = 0
+  while i < n {
+    a.state = a.handle(a.state, i)
+    i = i + 1
+  }
+  a
+}
+
+fn adder(n: Int) -> fn(Int) -> Int = |x| x + n
+
+fn expression_calls() -> Int {
+  let fs = [adder(1), adder(2)]
+  adder(1)(2) + fs[1](10) + (|x: Int| x * 3)(2)
+}

@@ -1,0 +1,3 @@
+system S {
+  resource tools: Launcher { maximum_children = 0 }
+}

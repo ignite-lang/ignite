@@ -1,0 +1,43 @@
+package golden.capabilities
+
+import std.process.Invocation
+
+// Slice 17 (`docs/slice.md` 21.0 row 36): the four capability resources,
+// created by the generated main in the order of 21.8 (settings, directories,
+// launchers, entropy) with the flags `--tool` and `--root` read there, and
+// one call of each method.
+
+type Bench {
+  files: Directory
+  tools: Launcher
+  entropy: Entropy
+  tool: Setting
+  executable: Text = "bench"
+}
+
+fn Bench.main(self: Bench) -> Result<Unit, IoError> {
+  let data = self.files.read_file("in.txt")?
+  self.files.write_file("out.txt", data)?
+  let names = self.files.read_directory("")?
+  self.files.create_directory("made")?
+  self.files.remove("out.txt")?
+  self.files.remove_tree("made")?
+  let root = self.files.absolute_path()?
+  let invocation = Invocation { program = self.tool.value(), arguments = ["-c", "true"], directory = root }
+  let ran = self.tools.execute(invocation)?
+  let child = self.tools.start(invocation)?
+  let id = child.id()
+  child.kill()?
+  let waited = child.wait()?
+  let token = self.entropy.random_bytes(32)?
+  Ok(Unit)
+}
+
+system Capabilities {
+  resource files: Directory { path = "workspace", create = true, flag = "--root" }
+  resource tools: Launcher { maximum_children = 4 }
+  resource entropy: Entropy
+  resource tool: Setting { flag = "--tool", default = "/bin/sh" }
+
+  component bench: Bench { files = files, tools = tools, entropy = entropy, tool = tool }
+}

@@ -1,0 +1,85 @@
+fn options(xs: List<Option<Int>>) -> Int {
+  return match xs {
+    [Some(x), ..] => x
+    [None, ..] => 0
+    [] => 1
+  }
+}
+
+fn lists(xss: List<List<Int>>) -> Int {
+  return match xss {
+    [[], ..] => 0
+    [[_, ..], ..] => 1
+    [] => 2
+  }
+}
+
+fn heads(xs: List<Bool>) -> Int {
+  return match xs {
+    [true | false, ..] => 0
+    [] => 1
+  }
+}
+
+fn tails(xs: List<Bool>) -> Int {
+  return match xs {
+    [.., true] => 0
+    [.., false] => 1
+    [] => 2
+  }
+}
+
+fn tuples(xs: List<(Bool, Int)>) -> Int {
+  return match xs {
+    [(true, _), ..] => 0
+    [(false, n), ..] => n
+    [] => 1
+  }
+}
+
+fn inner_or(pair: (List<Int>, Bool)) -> Int {
+  return match pair {
+    ([] | [_, ..], true) => 0
+    (_, false) => 1
+  }
+}
+
+fn ends(xs: List<Bool>) -> Int {
+  return match xs {
+    [true, .., true] => 0
+    [true, .., false] => 1
+    [false, ..] => 2
+    [true] => 3
+    [] => 4
+  }
+}
+
+fn mixed(xs: List<Bool>) -> Int {
+  return match xs {
+    [] => 0
+    [true] => 1
+    [false] => 2
+    [_, _] => 3
+    [.., _, _, _] => 4
+  }
+}
+
+fn nested_options(xs: List<Option<List<Bool>>>) -> Int {
+  return match xs {
+    [] => 0
+    [None, ..] => 1
+    [Some([]), ..] => 2
+    [Some([true, ..]), ..] => 3
+    [Some([false, ..]), ..] => 4
+  }
+}
+
+fn shifted(xs: List<Bool>) -> Int {
+  return match xs {
+    [] => 0
+    [_] => 1
+    [true, _, ..] => 2
+    [false, .., true] => 3
+    [false, .., false] => 4
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-05T07:33:32Z",
+  "actor": "human:timo",
+  "artifact": "story:program-arguments",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on c19ab173 (slice 17 W4 merged): 1087 passed, 0 failed, 10 ignored; 232 inline per target",
+    "reference": "https://github.com/ignite-lang/ignite/commit/c19ab173"
+  }
+}

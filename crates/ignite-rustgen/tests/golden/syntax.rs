@@ -190,7 +190,7 @@ impl Syntax {
         (show(&twice(&n).to_string()))?;
         (show(&shout(&String::from("hey"))))?;
         let h = Handler { name: String::from("h"), respond: (std::sync::Arc::new(|__a0: String| shout(&__a0)) as std::sync::Arc<dyn Fn(String) -> String + Send + Sync>) };
-        (show(&(h.respond)(h.name.clone())))?;
+        (show(&(h.respond)(h.name)))?;
         let r = Reply { lines: vec![String::from("l")], action: Reply::default_action(), code: Reply::default_code() };
         (show(&(format!("code {}", r.code))))?;
         match &r.action {
@@ -236,7 +236,7 @@ pub struct Runner {
 #[allow(non_snake_case)]
 pub fn Runner__main(self_: &Runner) -> Result<(), ignite_io::IoError> {
     let stream = match ignite_io::TcpStream::connect(self_.address.clone(), self_.port.clone()) {
-        Ok(stream) => stream,
+        Ok(stream) => stream.clone(),
         Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
     };
     match Syntax::connect(stream.clone()) {
