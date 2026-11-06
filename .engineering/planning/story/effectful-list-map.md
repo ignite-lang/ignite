@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:effectful-list-map
 kind: story
-status: active
+status: implemented
 title: List.map over effectful fns
 summary: Let List.map and its siblings take a fn with the caller's effects, closing ember's E5
 scope:
@@ -18,10 +18,11 @@ scope:
   path: docs/slice.md
 - confidence: inferred
   path: std
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-06T17:15:49Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: effectful-list-map
 

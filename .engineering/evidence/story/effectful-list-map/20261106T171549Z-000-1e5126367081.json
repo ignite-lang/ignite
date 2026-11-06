@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T17:15:49Z",
+  "actor": "human:timo",
+  "artifact": "story:effectful-list-map",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 4930b8e: 1292 passed, 0 failed, 11 ignored; 281 inline per target; EXIT=0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/72"
+  }
+}
