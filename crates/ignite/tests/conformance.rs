@@ -910,17 +910,21 @@ fn removing_a_satisfies_from_a_must_is_e090() {
     assert!(message.contains("`RFC854.RP14_1`"), "{stderr}");
 }
 
-/// Row 2 of 19.0, P2 test 2: the HTTP matrix lists RFC 9112's chunked
-/// coding (section 7.1) as a gap and claims nothing; Host (section 3.2) was
-/// a gap until story `http-rfc9112-9110-gaps`. The rows that story `http-rfc9112-9110-gaps` closed are satisfied, each by
-/// its fn and a passing test that names it (19.22).
+/// Row 2 of 19.0, P2 test 2: the HTTP matrix claims nothing. RFC 9112's
+/// chunked coding (section 7.1) and Host (section 3.2) were gaps until story
+/// `http-rfc9112-9110-gaps`; one gap of each RFC stays, RFC 9112's octet head
+/// (section 2.2) and RFC 9110's Date (section 6.6.1). The rows that story
+/// closed are satisfied, each by its fn and a passing test that names it
+/// (19.22).
 #[test]
 fn http_matrix_lists_the_chunked_and_host_gaps() {
     const TRANSFER_ENCODING: &str = "test \"an application Transfer-Encoding is 500 and Http applies no transfer coding\" passed";
     const ABSOLUTE_FORM: &str =
         "test \"an absolute-form target is accepted and its authority replaces Host\" passed";
     const HEAD: &str = "test \"HEAD is answered as GET without content\" passed";
-    const CLOSED: [(&str, &str, &str, &str); 18] = [
+    const CHUNKED: &str = "test \"a chunked request body is decoded\" passed";
+    const TRAILER: &str = "test \"trailer fields are checked and discarded and never merged into the header section\" passed";
+    const CLOSED: [(&str, &str, &str, &str); 27] = [
         (
             "rfc9112",
             "R2_2_8",
@@ -979,14 +983,41 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
         ("rfc9112", "R3_2_2_6", "next_request", ABSOLUTE_FORM),
         ("rfc9110", "R9_1_1", "session", HEAD),
         ("rfc9110", "R9_3_2_1", "session", HEAD),
+        ("rfc9112", "R6_1_1", "read_chunked", CHUNKED),
+        ("rfc9112", "R7_1_2", "read_chunked", CHUNKED),
+        (
+            "rfc9112",
+            "R6_3_3",
+            "coding_status",
+            "test \"a Transfer-Encoding Http cannot frame is 400 and an unknown coding 501\" passed",
+        ),
+        (
+            "rfc9112",
+            "R7_1_3",
+            "chunk_size",
+            "test \"a chunked body over the body limit is 413 however many digits its size has\" passed",
+        ),
+        (
+            "rfc9112",
+            "R7_1_1_1",
+            "chunk_size",
+            "test \"chunk extensions are ignored\" passed",
+        ),
+        ("rfc9112", "R7_1_2_2", "read_chunked", TRAILER),
+        ("rfc9112", "R7_1_2_3", "read_chunked", TRAILER),
+        ("rfc9110", "R6_5_1_2", "read_chunked", TRAILER),
+        ("rfc9110", "R6_2_5", "render_message", CHUNKED),
     ];
     let mut outputs = Vec::new();
     for target in ["rust", "llvm"] {
         let output = std_conformance("http", target);
         let stdout = text(&output.stdout);
         let rfc9112 = block(&stdout, "rfc9112");
-        for (id, section, level) in [("R7_1_2", "7.1", "MUST"), ("R2_2_1", "2.2", "MUST")] {
-            let row = columns(rfc9112, id);
+        for (rfc, id, section, level) in [
+            ("rfc9112", "R2_2_1", "2.2", "MUST"),
+            ("rfc9110", "R6_6_1_2", "6.6.1", "MUST"),
+        ] {
+            let row = columns(block(&stdout, rfc), id);
             assert_eq!(row.len(), 6, "{target}: {row:?}");
             assert_eq!(row[1], section, "{target}: {row:?}");
             assert_eq!(row[2], level, "{target}: {row:?}");
@@ -1009,12 +1040,12 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
         }
         let last = rfc9112.trim_end().lines().last().unwrap_or_default();
         assert_eq!(
-            last, "claim conformance of Http to rfc9112: no (4 gaps, 0 failures, 0 inconclusive)",
+            last, "claim conformance of Http to rfc9112: no (1 gaps, 0 failures, 0 inconclusive)",
             "{target}"
         );
         assert!(
             stdout.contains(
-                "claim conformance of Http to rfc9110: no (2 gaps, 0 failures, 0 inconclusive)\n"
+                "claim conformance of Http to rfc9110: no (1 gaps, 0 failures, 0 inconclusive)\n"
             ),
             "{target}: {stdout}"
         );

@@ -18,10 +18,12 @@ With the default limits:
 |---|---|
 | a request line over 8 KiB (its request-target too long) | 414 |
 | a head (request line and fields) over 8 KiB | 431 |
-| a body over 1 MiB | 413 |
+| a body over 1 MiB, with `Content-Length` or decoded from chunks | 413 |
 | a malformed request | 400 |
 | an HTTP/1.1 request without `Host`, or any request with two `Host` lines or an invalid one | 400 |
-| any `Transfer-Encoding` (only `Content-Length` framing is implemented) | 501 |
+| a `Transfer-Encoding` whose final coding is not `chunked`, `chunked` twice, both `Transfer-Encoding` and `Content-Length`, or `Transfer-Encoding` in HTTP/1.0 | 400 |
+| a coding other than `chunked` before the final `chunked` (`gzip, chunked`) | 501 |
+| a chunk-size line or a trailer section over 8 KiB | 431 |
 | nothing for 30 s | the connection is closed |
 
 Each rejection closes the connection after a lingering close: the reply is written, the write
@@ -33,6 +35,12 @@ The head is parsed strictly, so a proxy in front cannot frame a request differen
 or LF, a header name that is not a token (whitespace before the colon, a line starting with
 whitespace), a control byte in a value, and a repeated `Content-Length` or one that is not 1
 to 18 digits are all 400.
+
+A request body sent with `Transfer-Encoding: chunked` is decoded before the application sees
+it: `Request.body` holds the joined chunks, and the request's headers are those of its head.
+Chunk extensions are ignored; trailer fields are checked like header fields and then discarded,
+never merged into the headers. A chunk size is compared against the body limit digit by digit,
+so a size with any number of digits cannot overflow.
 
 The application's response is replaced by 500 when one of its header fields would break RFC
 9112 or RFC 9110:

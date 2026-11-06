@@ -11,14 +11,16 @@ import std.policy.{Restart, DrainRollout}
 import std.control.{Machine, Supervisor}
 
 // HTTP/1.1 server (RFC 9112) over one byte stream (a `TcpStream`, or a
-// `PipeStream` in tests): requests with a `Content-Length` body, keep-alive
-// until the client asks to close, and the limits of `HttpLimits`. By
-// default a head over 8 KiB is answered 431 (414 when the request line
-// alone is over it), a body over 1 MiB 413, a malformed request 400, an
-// HTTP/1.1 request without `Host` or with a repeated or invalid one 400,
-// and any `Transfer-Encoding` 501 (only
-// `Content-Length` framing is implemented, RFC 9112 section 6.1). Each of
-// those closes the connection after a lingering close: the reply is
+// `PipeStream` in tests): requests with a `Content-Length` or a chunked
+// body, keep-alive until the client asks to close, and the limits of
+// `HttpLimits`. By default a head over 8 KiB is answered 431 (414 when the
+// request line alone is over it), a body over 1 MiB 413, a malformed
+// request 400, an HTTP/1.1 request without `Host` or with a repeated or
+// invalid one 400, a `Transfer-Encoding` whose final coding is not chunked
+// 400 and one with another coding before chunked 501 (RFC 9112 sections
+// 6.1 and 6.3). A chunked body is decoded; its trailer fields are checked
+// and discarded. Each rejection closes the connection after a lingering
+// close: the reply is
 // written, the write half shut down, and up to 64 KiB of input drained for
 // at most 1 s, so the client reads the reply instead of a reset. A
 // connection idle for 30 s is closed.
@@ -89,26 +91,17 @@ const MAXIMUM_LENGTH_DIGITS: Int = 18
 // parsing and framing fns, the `verifies` clauses on the tests.
 protocol Http conforms [RFC9112, RFC9110] scope { parties = [Server, Sender, Recipient, Any] } {
   unsupported RFC9112.R2_2_1 "the head is decoded to text before it is parsed: an obs-text octet that is not UTF-8 reaches the application as U+FFFD"
-  unsupported RFC9112.R6_1_1 "only Content-Length framing; any Transfer-Encoding is 501"
-  unsupported RFC9112.R6_3_3 "any Transfer-Encoding is 501, also when chunked is not the final coding, where 400 is required"
-  unsupported RFC9112.R7_1_2 "only Content-Length framing; any Transfer-Encoding is 501"
-  not_applicable RFC9112.R7_1_3 "no chunked message is decoded: any Transfer-Encoding is 501"
-  not_applicable RFC9112.R7_1_1_1 "no chunked message is decoded: any Transfer-Encoding is 501"
-  not_applicable RFC9112.R7_1_2_2 "no chunked message is decoded, so no trailer is received: any Transfer-Encoding is 501"
-  not_applicable RFC9112.R7_1_2_3 "no chunked message is decoded, so no trailer is received: any Transfer-Encoding is 501"
   not_applicable RFC9112.R7_3_1 "addresses the registration of transfer codings; Http registers none"
   not_applicable RFC9112.R7_3_2 "addresses the registration of transfer codings; Http registers none"
   not_applicable RFC9112.R7_3_4 "addresses the registration of transfer codings; Http registers none"
   not_applicable RFC9112.R9_3_3 "Http supports persistent connections"
   not_applicable RFC9112.R9_7_1 "Http runs over a plain byte stream; HTTP over TLS is not implemented"
   not_applicable RFC9112.R9_8_6 "Http runs over a plain byte stream; HTTP over TLS is not implemented"
-  not_applicable RFC9110.R5_6_3_5 "Http interprets no field whose grammar allows BWS: of a request it reads Connection, Content-Length and whether Transfer-Encoding is present"
-  not_applicable RFC9110.R5_6_4_1 "Http interprets no quoted-string: of a request it reads Connection, Content-Length and whether Transfer-Encoding is present"
+  not_applicable RFC9110.R5_6_3_5 "Http interprets no field whose grammar allows BWS: of a request it reads Connection, Content-Length and the coding names of Transfer-Encoding, a coding with parameters being refused, not interpreted; chunk extensions are ignored"
+  not_applicable RFC9110.R5_6_4_1 "Http interprets no quoted-string: of a request it reads Connection, Content-Length and the coding names of Transfer-Encoding, a coding with parameters being refused, not interpreted; chunk extensions are ignored"
   not_applicable RFC9110.R5_6_7_1 "Http parses no timestamp"
   not_applicable RFC9110.R5_6_7_4 "Http parses no timestamp"
-  unsupported RFC9110.R6_2_5 "every response says HTTP/1.1, while the chunked coding (RFC9112.R7_1_2) is not implemented"
   not_applicable RFC9110.R6_5_1_1 "a response framed by Content-Length has no trailer section"
-  not_applicable RFC9110.R6_5_1_2 "no trailer is received: any Transfer-Encoding is 501"
   not_applicable RFC9110.R6_5_2_1 "addresses the definition of trailer fields; Http defines none"
   unsupported RFC9110.R6_6_1_2 "no Date header is generated"
   not_applicable RFC9110.R6_6_1_3 "applies to an origin server without a clock; the host has one, see RFC9110.R6_6_1_2"
@@ -407,7 +400,7 @@ fn render(response: Response, keep_alive: Bool) -> Bytes satisfies [RFC9112.R2_2
 // `render`, or without the body when `with_body` is false, as the answer
 // to HEAD: the `Content-Length` is the one the body would have had (RFC
 // 9110 sections 8.6 and 9.3.2).
-fn render_message(response: Response, keep_alive: Bool, with_body: Bool) -> Bytes {
+fn render_message(response: Response, keep_alive: Bool, with_body: Bool) -> Bytes satisfies [RFC9110.R6_2_5] {
   var head = "HTTP/1.1 {response.status} {reason(response.status)}\r\n"
   for header in response.headers {
     head = head + "{header.0}: {header.1}\r\n"
@@ -1004,7 +997,19 @@ fn next_request<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> 
     None => return Ok(rejected(parsed, 400))
   }
   if header(request, "transfer-encoding") != None {
-    return Ok(rejected(request, 501))
+    match coding_status(request) {
+      Some(status) => return Ok(rejected(request, status))
+      None => {}
+    }
+    return match read_chunked(stream, limits, data, head_end)? {
+      Unfinished => Ok(Close)
+      Refused(status) => Ok(rejected(request, status))
+      Decoded(body, rest) => {
+        var full = request
+        full.body = body.to_text()
+        Ok(Got(full, rest))
+      }
+    }
   }
   var lengths = []
   for header in request.headers {
@@ -1031,6 +1036,193 @@ fn next_request<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> 
       Ok(Got(full, all.slice(head_end + length, all.len())))
     }
   }
+}
+
+// The value of a hexadecimal digit byte, `None` for any other byte.
+fn hex_digit_value(b: Byte) -> Option<Int> = match b {
+  b'0'..=b'9' => Some((b - b'0').to_int())
+  b'a'..=b'f' => Some((b - b'a').to_int() + 10)
+  b'A'..=b'F' => Some((b - b'A').to_int() + 10)
+  _ => None
+}
+
+// What a chunk-size line says (RFC 9112 section 7.1): the size, a size over
+// what the body may still take, or a malformed line.
+enum ChunkSize { Size(Int), SizeTooLarge, SizeMalformed }
+
+// The chunk size of `line` (without its CRLF): `1*HEXDIG`, then nothing or
+// chunk extensions after optional SP or HTAB and a `;`, which are ignored
+// (section 7.1.1) once they hold no control byte but HTAB. The size is
+// compared with `remaining`, the most the body may still take, before each
+// digit is added, so no number of digits overflows (section 7.1).
+fn chunk_size(line: Bytes, remaining: Int) -> ChunkSize satisfies [RFC9112.R7_1_3, RFC9112.R7_1_1_1] {
+  var size = 0
+  var at = 0
+  while at < line.len() {
+    match hex_digit_value(line.at(at)) {
+      Some(digit) => {
+        if size > remaining / 16 || size * 16 + digit > remaining {
+          return SizeTooLarge
+        }
+        size = size * 16 + digit
+      }
+      None => break
+    }
+    at = at + 1
+  }
+  if at == 0 {
+    return SizeMalformed
+  }
+  var rest = at
+  while rest < line.len() && is_ows(line.at(rest)) {
+    rest = rest + 1
+  }
+  if rest < line.len() && line.at(rest) != b';' || rest == line.len() && rest > at {
+    return SizeMalformed
+  }
+  if !is_field_value(line.slice(at, line.len()).to_text()) {
+    return SizeMalformed
+  }
+  Size(size)
+}
+
+// How reading a line ended: the index of its CRLF, the peer closed first,
+// or the line is longer than allowed.
+enum LineRead { Line(Int), LineClosed, LineTooLong }
+
+// Reads until `data` holds a CRLF at or after `from` and returns the
+// bytes read; a line of more than `maximum` bytes is `LineTooLong`.
+fn read_line<T: ByteStream>(stream: T, data: Bytes, from: Int, maximum: Int) -> IoResult<(LineRead, Bytes)> {
+  var out = data
+  var search = from
+  loop {
+    match bytes_find_from(out, b"\r\n", search) {
+      Some(at) => return Ok((if at - from > maximum { LineTooLong } else { Line(at) }, out))
+      None => {}
+    }
+    if out.len() - from > maximum {
+      return Ok((LineTooLong, out))
+    }
+    search = if out.len() > from + 1 { out.len() - 1 } else { from }
+    match stream.read(READ_SIZE)? {
+      Eof => return Ok((LineClosed, out))
+      Data(more) => out.append(more)
+    }
+  }
+}
+
+// How decoding a chunked body ended: the body, the bytes after the message,
+// the peer closed first, or a status to answer.
+enum Chunked { Decoded(Bytes, Bytes), Unfinished, Refused(Int) }
+
+// Decodes the chunked body that starts at `start` of `buffer` (RFC 9112
+// section 7.1): chunks until the last, then the trailer section, whose
+// field lines are checked as header field lines and discarded, so none is
+// retained or merged into the header section (section 7.1.2; RFC 9110
+// section 6.5.1). A body over `limits.body` is 413, a chunk-size line or a
+// trailer section over `limits.head` 431, anything malformed 400. The bytes
+// consumed are dropped as it goes.
+fn read_chunked<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes, start: Int) -> IoResult<Chunked> satisfies [
+  RFC9112.R6_1_1, RFC9112.R7_1_2, RFC9112.R7_1_2_2, RFC9112.R7_1_2_3, RFC9110.R6_5_1_2
+] {
+  let maximum = limits.body.to_int()
+  let line_maximum = limits.head.to_int()
+  var data = buffer
+  var at = start
+  var body = Bytes.empty()
+  loop {
+    if at >= READ_SIZE {
+      data = data.slice(at, data.len())
+      at = 0
+    }
+    let (line, read) = read_line(stream, data, at, line_maximum)?
+    data = read
+    let end = match line {
+      Line(end) => end
+      LineClosed => return Ok(Unfinished)
+      LineTooLong => return Ok(Refused(431))
+    }
+    let size = match chunk_size(data.slice(at, end), maximum - body.len()) {
+      Size(size) => size
+      SizeTooLarge => return Ok(Refused(413))
+      SizeMalformed => return Ok(Refused(400))
+    }
+    at = end + 2
+    if size == 0 {
+      break
+    }
+    match read_body(stream, limits, data, at + size + 2)? {
+      None => return Ok(Unfinished)
+      Some(more) => {
+        data = more
+      }
+    }
+    if data.at(at + size) != b'\r' || data.at(at + size + 1) != b'\n' {
+      return Ok(Refused(400))
+    }
+    body.append(data.slice(at, at + size))
+    at = at + size + 2
+  }
+  let trailer = at
+  loop {
+    let (line, read) = read_line(stream, data, at, line_maximum - (at - trailer))?
+    data = read
+    let end = match line {
+      Line(end) => end
+      LineClosed => return Ok(Unfinished)
+      LineTooLong => return Ok(Refused(431))
+    }
+    if end == at {
+      return Ok(Decoded(body, data.slice(end + 2, data.len())))
+    }
+    match data.slice(at, end).to_text().split_once(":") {
+      Some((name, value)) => if !is_token(name) || !is_field_value(value) {
+        return Ok(Refused(400))
+      }
+      None => return Ok(Refused(400))
+    }
+    at = end + 2
+  }
+}
+
+// The transfer codings of a request in order, in lower case, over all its
+// `Transfer-Encoding` lines (RFC 9112 section 6.1); empty list elements
+// are ignored (RFC 9110 section 5.6.1.2).
+fn transfer_codings(request: Request) -> List<Text> {
+  var out = []
+  for header in request.headers {
+    if header.0 == "transfer-encoding" {
+      for coding in list_elements(header.1) {
+        if !coding.is_empty() {
+          out.push(coding.to_lower())
+        }
+      }
+    }
+  }
+  out
+}
+
+// The status for a request with `Transfer-Encoding`, `None` when its body
+// is chunked and Http decodes it (RFC 9112 sections 6.1 and 6.3): 400 for
+// an HTTP/1.0 request, one with a `Content-Length` too, one with no coding,
+// one whose final coding is not chunked or that names chunked twice; 501
+// for a coding other than chunked before the final chunked.
+fn coding_status(request: Request) -> Option<Int> satisfies [RFC9112.R6_1_13, RFC9112.R6_1_14, RFC9112.R6_3_3] {
+  let codings = transfer_codings(request)
+  if request.version == "HTTP/1.0" || header(request, "content-length") != None || codings.is_empty() {
+    return Some(400)
+  }
+  if codings.at(codings.len() - 1) != "chunked" {
+    return Some(400)
+  }
+  var other = false
+  for coding in codings.slice(0, codings.len() - 1) {
+    if coding == "chunked" {
+      return Some(400)
+    }
+    other = true
+  }
+  if other { Some(501) } else { None }
 }
 
 // A `Content-Length` value: 1 to 18 decimal digits, nothing else.
@@ -1201,13 +1393,6 @@ test "a malformed head or Content-Length is 400" verifies [RFC9112.R6_3_4, RFC91
   assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 1000000000000000000\r\n\r\n")? == Reject(400)
 }
 
-test "any Transfer-Encoding is 501, also with a Content-Length" verifies [RFC9112.R5_1_1, RFC9112.R6_1_13] {
-  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n")? == Reject(501)
-  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: identity\r\nContent-Length: 3\r\n\r\nabc")? == Reject(501)
-  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\ntransfer-encoding: chunked\r\n\r\nabc")? == Reject(501)
-  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding : chunked\r\n\r\n")? == Reject(400)
-}
-
 // Answers `<method> <path>?<query> <body>`; `/bad` gets a header with a
 // line break, `/close` the header `Connection: Upgrade, Close`, `/gzip`
 // the header `Transfer-Encoding: gzip`.
@@ -1275,16 +1460,6 @@ test "the server answers a rejected request and closes" verifies [RFC9112.R6_3_5
   assert served(b"GET /a HTTP/1.1\r\nHost: h\r\n\r\nBAD\r\n\r\nGET /b HTTP/1.1\r\nHost: h\r\n\r\n")? == reply("GET /a? ", "keep-alive") + rejected
   let server_error = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 22\r\nConnection: close\r\n\r\nInternal Server Error\n"
   assert served(b"GET /bad HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")? == server_error
-}
-
-// RFC 9112 section 6.1: a request with both framings, and an HTTP/1.0
-// request with Transfer-Encoding, are answered 501, and the connection is
-// closed without reading the next request.
-test "a request with Transfer-Encoding is answered 501 and the connection closed" verifies [RFC9112.R6_1_13, RFC9112.R6_1_14] {
-  let not_implemented = render(status_response(501), false).to_text()
-  assert served(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\nabcGET /n HTTP/1.1\r\nHost: h\r\n\r\n")? == not_implemented
-  assert served(b"POST / HTTP/1.0\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\nabcGET /n HTTP/1.0\r\n\r\n")? == not_implemented
-  assert served(b"POST / HTTP/1.0\r\nTransfer-Encoding: identity\r\n\r\nGET /n HTTP/1.0\r\n\r\n")? == not_implemented
 }
 
 test "three pipelined requests over a pipe are answered in one batch" {
@@ -1512,4 +1687,100 @@ test "HEAD is answered as GET without content" verifies [RFC9110.R9_1_1, RFC9110
   assert served(b"HEAD / HTTP/1.1\r\nHost: h\r\nContent-Length: 1048577\r\n\r\n")? == render_message(status_response(413), false, false).to_text()
   assert next_of(b"HEAD / HTTP/1.1\r\n\r\n")? == RejectHead(400)
   assert render_message(status_response(204), true, false) == render(status_response(204), true)
+}
+
+// A chunked POST of `/c` in HTTP/1.1 whose body after the head is `chunks`.
+test fn chunked(chunks: Text) -> Bytes = "POST /c HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n{chunks}".to_bytes()
+
+// The request `chunked` sends, with `body`.
+test fn chunked_request(body: Text) -> Request =
+  Request { method = "POST", path = "/c", query = "", version = "HTTP/1.1", headers = [("host", "h"), ("transfer-encoding", "chunked")], body }
+
+test "a chunked request body is decoded" verifies [RFC9112.R6_1_1, RFC9112.R7_1_2, RFC9110.R6_2_5] {
+  assert next_of(chunked("5\r\nhello\r\n6\r\n world\r\n0\r\n\r\nGET /"))? == Got(chunked_request("hello world"), b"GET /")
+  assert next_of(chunked("A\r\n0123456789\r\na\r\nabcdefghij\r\n0000\r\n\r\n"))? == Got(chunked_request("0123456789abcdefghij"), Bytes.empty())
+  assert next_of(chunked("0\r\n\r\n"))? == Got(chunked_request(""), Bytes.empty())
+  var mixed = chunked_request("hi")
+  mixed.headers = [("host", "h"), ("transfer-encoding", "Chunked")]
+  assert next_of(b"POST /c HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: Chunked\r\n\r\n2\r\nhi\r\n0\r\n\r\n")? == Got(mixed, Bytes.empty())
+  for value in ["chunked,", ", chunked", " , chunked , "] {
+    var listed = chunked_request("hi")
+    listed.headers = [("host", "h"), ("transfer-encoding", trim_ows(value))]
+    assert next_of("POST /c HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: {value}\r\n\r\n2\r\nhi\r\n0\r\n\r\n".to_bytes())? == Got(listed, Bytes.empty())
+  }
+  var input = chunked("3\r\nabc\r\n0\r\n\r\n")
+  input.append(b"GET /n HTTP/1.0\r\n\r\n")
+  let answered = served(input)?
+  assert answered == reply("POST /c? abc", "keep-alive") + reply("GET /n? ", "close")
+  assert answered.starts_with("HTTP/1.1 200 OK\r\n")
+  assert served_over_tcp(input)? == answered
+  let parts = [b"POST /c HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n4\r", b"\nab", b"cd\r\n0\r", b"\n\r\n"]
+  assert served_parts(parts, HttpLimits {}, false)? == reply("POST /c? abcd", "close")
+  let body = repeat("a", 1048576)
+  var whole = chunked("100000\r\n{body}\r\n0\r\n\r\n")
+  whole.append(b"GET /n HTTP/1.0\r\n\r\n")
+  assert served(whole)? == reply("POST /c? {body}", "keep-alive") + reply("GET /n? ", "close")
+}
+
+test "a chunked body over the body limit is 413 however many digits its size has" verifies [RFC9112.R7_1_3] {
+  assert chunk_size(b"ffffffffffffffffffffffffffffffff", 1048576) == SizeTooLarge
+  assert chunk_size(b"10000000000000000", 9223372036854775807) == SizeTooLarge
+  assert chunk_size(b"7fffffffffffffff", 9223372036854775807) == Size(9223372036854775807)
+  assert chunk_size(b"8000000000000000", 9223372036854775807) == SizeTooLarge
+  assert chunk_size(b"100000", 1048576) == Size(1048576)
+  assert chunk_size(b"100001", 1048576) == SizeTooLarge
+  assert chunk_size(b"0", 0) == Size(0)
+  assert chunk_size(b"1", 0) == SizeTooLarge
+  assert chunk_size(b"1f;x", 100) == Size(31)
+  assert next_of(chunked("ffffffffffffffffffffffffffffffff\r\n"))? == Reject(413)
+  assert next_of(chunked("00000000000000000000000000000000000001\r\na\r\n0\r\n\r\n"))? == Got(chunked_request("a"), Bytes.empty())
+  assert next_of(chunked("100001\r\n"))? == Reject(413)
+  assert next_with(chunked("3\r\nabc\r\n2\r\nde\r\n0\r\n\r\n"), HttpLimits { body = 4 bytes })? == Reject(413)
+  assert next_with(chunked("4\r\nabcd\r\n0\r\n\r\n"), HttpLimits { body = 4 bytes })? == Got(chunked_request("abcd"), Bytes.empty())
+  assert served_with(chunked("3\r\nabc\r\n2\r\nde\r\n0\r\n\r\n"), HttpLimits { body = 4 bytes })? == render(status_response(413), false).to_text()
+}
+
+test "chunk extensions are ignored" verifies [RFC9112.R7_1_1_1] {
+  assert next_of(chunked("5;name=value\r\nhello\r\n0;last\r\n\r\n"))? == Got(chunked_request("hello"), Bytes.empty())
+  assert next_of(chunked("5 ; a=\"b;c\" ;d\r\nhello\r\n0\r\n\r\n"))? == Got(chunked_request("hello"), Bytes.empty())
+  for line in ["", "x", "5x", "5 ", "-5", "+5", " 5", "5;a\x01", "0x5"] {
+    assert next_of(chunked("{line}\r\nhello\r\n0\r\n\r\n"))? == Reject(400)
+  }
+  assert next_of(chunked("5\r\nhelloX\r\n0\r\n\r\n"))? == Reject(400)
+  assert next_of(chunked("5\nhello\r\n0\r\n\r\n"))? == Reject(400)
+  assert next_of(chunked("5\r\nhel"))? == Close
+  assert next_of(chunked("5\r\nhello\r\n"))? == Close
+  let limits = HttpLimits { head = 64 bytes }
+  assert next_with(chunked("1;" + repeat("x", 80) + "\r\na\r\n0\r\n\r\n"), limits)? == Reject(431)
+}
+
+test "trailer fields are checked and discarded and never merged into the header section" verifies [RFC9112.R7_1_2_2, RFC9112.R7_1_2_3, RFC9110.R6_5_1_2] {
+  assert next_of(chunked("2\r\nhi\r\n0\r\nX-Trailer: 1\r\nContent-Length: 9\r\n\r\nGET /"))? == Got(chunked_request("hi"), b"GET /")
+  assert next_of(chunked("0\r\nbad line\r\n\r\n"))? == Reject(400)
+  assert next_of(chunked("0\r\n X: 1\r\n\r\n"))? == Reject(400)
+  assert next_of(chunked("0\r\nX: a\x01\r\n\r\n"))? == Reject(400)
+  assert next_of(chunked("0\r\nX: 1\r\n"))? == Close
+  let limits = HttpLimits { head = 64 bytes }
+  assert next_with(chunked("0\r\nX: " + repeat("x", 80) + "\r\n\r\n"), limits)? == Reject(431)
+  assert next_with(chunked("0\r\nA: " + repeat("x", 30) + "\r\nB: " + repeat("x", 30) + "\r\n\r\n"), limits)? == Reject(431)
+}
+
+test "a Transfer-Encoding Http cannot frame is 400 and an unknown coding 501" verifies [RFC9112.R5_1_1, RFC9112.R6_1_13, RFC9112.R6_1_14, RFC9112.R6_3_3] {
+  for value in ["gzip", "chunked, gzip", "chunked, chunked", "", " , ", "chunked;a=b", "identity"] {
+    assert next_of("POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: {value}\r\n\r\n".to_bytes())? == Reject(400)
+  }
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip, chunked\r\n\r\n")? == Reject(501)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip\r\nTransfer-Encoding: chunked\r\n\r\n")? == Reject(501)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\nabc")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\ntransfer-encoding: chunked\r\n\r\nabc")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.0\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n")? == Reject(400)
+  assert next_of(b"HEAD / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip\r\n\r\n")? == RejectHead(400)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding : chunked\r\n\r\n")? == Reject(400)
+  let bad_request = render(status_response(400), false).to_text()
+  assert served(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\nabcGET /n HTTP/1.1\r\nHost: h\r\n\r\n")? == bad_request
+  assert served(b"POST / HTTP/1.0\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\nabcGET /n HTTP/1.0\r\n\r\n")? == bad_request
+  assert served(b"POST / HTTP/1.0\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nGET /n HTTP/1.0\r\n\r\n")? == bad_request
+  assert served(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\n\r\n")? == bad_request
+  assert served(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\n\r\n")? == render(status_response(501), false).to_text()
 }
