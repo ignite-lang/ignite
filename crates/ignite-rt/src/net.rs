@@ -372,7 +372,7 @@ pub extern "C" fn ignite_rt_tcp_read(
 }
 
 /// Read buffers up to this size stay with their thread for the next read
-/// over [`arena::LARGE`] (HTTP reads 64 KiB at a time).
+/// over [`arena::LARGE`] (a server commonly reads 64 KiB at a time).
 const KEPT_READ_BUFFER: usize = 64 * 1024;
 
 thread_local! {
