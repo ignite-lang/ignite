@@ -624,6 +624,13 @@ pub enum Builtin {
     IntWrappingSub,
     /// `a.wrapping_mul(b) -> Int`: the product modulo 2^64.
     IntWrappingMul,
+    /// `a.checked_add(b) -> Option<Int>`: the sum, `None` when it does not
+    /// fit in `Int`, never a failure (`docs/slice.md` 25.2).
+    IntCheckedAdd,
+    /// `a.checked_sub(b) -> Option<Int>`: the difference, `None` on overflow.
+    IntCheckedSub,
+    /// `a.checked_mul(b) -> Option<Int>`: the product, `None` on overflow.
+    IntCheckedMul,
     /// `s.set_idle_timeout(ms) -> Result<Unit, IoError>`.
     TcpStreamSetIdleTimeout,
     /// `s.next_id() -> Int`.

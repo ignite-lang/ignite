@@ -635,6 +635,33 @@ fn codespec_friction_on_both_targets() {
     });
 }
 
+/// `checked_add`, `checked_sub` and `checked_mul` on `Int` (`docs/slice.md`
+/// 25.2): `None` on overflow at both bounds of `Int`, `Some` otherwise,
+/// the same on both targets in dev and in release
+/// (`fixtures/tests/checked.ignite`).
+#[test]
+fn checked_arithmetic_on_both_targets() {
+    let file = fixture("checked.ignite");
+    on_both_targets(|target| {
+        for profile in [&[][..], &["--release"][..]] {
+            let mut args = vec![file.as_str()];
+            args.extend(profile.iter().copied());
+            let run = ignite_test(Chain::Fixtures, target, &args);
+            assert_eq!(
+                run.status, 0,
+                "{target} {profile:?}: {}\n{}",
+                run.stdout, run.stderr
+            );
+            assert!(
+                run.stdout
+                    .contains("test result: ok. 4 passed; 0 failed; 0 filtered out"),
+                "{target} {profile:?}: {}",
+                run.stdout
+            );
+        }
+    });
+}
+
 /// List element assignment, `List + List` and `Stderr` (`docs/slice.md`
 /// 25.3 to 25.5) on both targets in dev and in release
 /// (`fixtures/tests/codespec_lists.ignite`): an assignment out of range

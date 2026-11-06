@@ -75,6 +75,22 @@ test "wrapping arithmetic" {
 }
 ```
 
+To test for overflow before it happens, use `a.checked_add(b)`, `a.checked_sub(b)` and
+`a.checked_mul(b)` on `Int`: each returns `Some` of the result when it fits in `Int` and `None`
+when it does not, and never fails. On an `Int` receiver these builtin methods, like the
+wrapping ones, take precedence over a user fn of the same name.
+
+```ignite
+const MAX: Int = 9223372036854775807
+
+test "checked arithmetic" {
+  assert MAX.checked_add(1) == None
+  assert (-MAX - 1).checked_sub(1) == None
+  assert (-MAX - 1).checked_mul(-1) == None
+  assert (3).checked_mul(4) == Some(12)
+}
+```
+
 ### Conversions
 
 | call | result |

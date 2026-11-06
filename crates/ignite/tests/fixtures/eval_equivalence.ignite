@@ -63,6 +63,8 @@ fn int_compare() -> List<Bool> = [1 < 2, 2 <= 2, 3 > 4, 4 >= 4, 1 == 1, 1 != 1]
 
 fn int_wrapping() -> List<Int> = [(9223372036854775807).wrapping_add(1), (-9223372036854775807 - 1).wrapping_sub(1), (9223372036854775807).wrapping_mul(3), (6).wrapping_mul(-7)]
 
+fn int_checked() -> List<Option<Int>> = [(9223372036854775807).checked_add(1), (1).checked_add(2), (-9223372036854775807 - 1).checked_sub(1), (5).checked_sub(7), (3).checked_mul(4), (-9223372036854775807 - 1).checked_mul(-1), (9223372036854775807).checked_mul(2)]
+
 fn int_parse() -> List<Option<Int>> = [Int.parse("42"), Int.parse("+1"), Int.parse("x"), Int.parse("-7"), Int.parse("")]
 
 fn int_to_text() -> Text = 12.to_text() + "/" + Int.to_text(-3) + "/" + LIMIT.to_text()
@@ -614,6 +616,7 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(int_extremes().debug())?
   show(int_compare().debug())?
   show(int_wrapping().debug())?
+  show(int_checked().debug())?
   show(int_parse().debug())?
   show(int_to_text().debug())?
   show(int_while().debug())?

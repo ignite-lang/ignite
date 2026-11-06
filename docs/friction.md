@@ -53,6 +53,12 @@ names the row in its contract.
 | 50 | `List` had no element assignment (`xs[i] = v`) and `List + List` was E045, so the writer refused a Go write to a slice element | ignite-codespec story ignite-writer (`src/write.ignite:1633`, `:1832`), 2026-11-06; `story:codespec-friction` item 4 | the same test: element assignment through a `var`, a field and nested lists, out of range as the `index` failure, and `+` on lists; `list_set_concat` in the evaluator equivalence fixture; `e006_element_assign` (25.4, 25.5). The field step `xs[i].f = v` is still row 41 |
 | 51 | No wrapping integer arithmetic: a Go `+`, `-` or `++` needed hand-written `wrapping_add` and `wrapping_sub` helpers, and Go's `*` was refused | ignite-codespec story ignite-writer (`src/write.ignite:1254` to `:1263`, `:2409`), 2026-11-06; `story:codespec-friction` item 5 | the same test: `Int.wrapping_add`, `wrapping_sub`, `wrapping_mul` at the bounds of `Int` (25.2) |
 
+## Solved in story checked-arithmetic (`docs/slice.md` 25.2)
+
+| # | friction | seen by | where the fix is tested |
+|---|---|---|---|
+| E7 | `Int` had no checked arithmetic, so a program could not test for overflow before `+`, `-` or `*` ended its task: `SET k v EX 9223372036854775807` ended the session task and closed the connection with no reply | row E7 of the examples repository's `examples/friction.md`, example program ember, 2026-11-04 (compiler `9578530`); the workaround divided first (`n <= (MAX_INT - now) / unit`) | `ignite_test::checked_arithmetic_on_both_targets` (`fixtures/tests/checked.ignite`, both targets, dev and release) and `int_checked` of `fixtures/eval_equivalence.ignite`: `Int.checked_add`, `checked_sub`, `checked_mul` at the bounds of `Int` |
+
 ## Solved in slice 11b (`docs/slice.md` §13.11 row d, §15.14)
 
 | # | friction | seen by | where the fix is tested |
