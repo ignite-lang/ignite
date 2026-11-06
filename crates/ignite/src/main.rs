@@ -4,6 +4,7 @@
 //! ignite check <file.ignite> [--std PATH] [--json]
 //! ignite check --stdin-for <file.ignite> [--std PATH] [--json]
 //! ignite emit <file.ignite> [--substrate PATH] [--std PATH]
+//! ignite emit --typed-json <file.ignite> [--std PATH]
 //! ignite build <file.ignite> [--target llvm|rust] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE] [--static]
 //! ignite test <file.ignite>… [FILTER] [--target llvm|rust|all] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE] [--static]
 //! ignite plan <file.ignite> [--assembly NAME] [--out FILE] [--fuel N] [--std PATH]
@@ -69,9 +70,14 @@ enum Commands {
         #[arg(long, value_name = "PATH")]
         stdin_for: Option<PathBuf>,
     },
-    /// Print the generated Rust projects: the program, then `std/`.
+    /// Print the generated Rust projects: the program, then `std/`; with `--typed-json`, the
+    /// typed program instead.
     Emit {
         file: PathBuf,
+        /// Print the parsed and typed program as one JSON document (`ignite-typed/0.1`,
+        /// `docs/slice.md` 24) instead of the generated projects.
+        #[arg(long, conflicts_with = "substrate")]
+        typed_json: bool,
         /// Path of the `ignite-io` crate written into `Cargo.toml`.
         #[arg(long)]
         substrate: Option<PathBuf>,
@@ -700,6 +706,13 @@ fn run() {
         } => check(file, std, json, stdin_for),
         Commands::Emit {
             file,
+            typed_json: true,
+            std,
+            ..
+        } => ignite::typed_json::emit(&file, std.as_deref()).map(|document| print!("{document}")),
+        Commands::Emit {
+            file,
+            typed_json: false,
             substrate,
             std,
         } => ignite::emit_with_std(&file, substrate.as_deref(), std.as_deref())

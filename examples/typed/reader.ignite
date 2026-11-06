@@ -1,0 +1,35 @@
+package examples.typed.reader
+
+import std.json.{Json, parse, get, as_list, text}
+import std.option.{and_then, unwrap_or}
+
+// A reader of typed-program documents (`ignite emit --typed-json`, format `ignite-typed/0.1`,
+// `docs/slice.md` 24) written in Ignite: it finds a fn by name and reads its parameters. An
+// inline test cannot run the compiler, so `SAMPLE` is the document of `sample.ignite`, checked
+// in; `typed_json::the_reader_fixture_is_the_sample_document` (`crates/ignite/tests`) fails when
+// it differs from what the compiler prints today, and `IGNITE_BLESS=1` rewrites it.
+
+// The members `name` and `type.text` of each parameter of the fn `name`, in order; `None`
+// when the document declares no such fn.
+fn parameters(document: Json, name: Text) -> Option<List<(Text, Text)>> {
+  for decl in document.get("decls").and_then(as_list).unwrap_or([]) {
+    if decl.text("kind") == Some("fn") && decl.text("name") == Some(name) {
+      var found: List<(Text, Text)> = []
+      for param in decl.get("params").and_then(as_list).unwrap_or([]) {
+        let ty = param.get("type").and_then(|t| t.text("text")).unwrap_or("")
+        found.push((param.text("name").unwrap_or(""), ty))
+      }
+      return Some(found)
+    }
+  }
+  None
+}
+
+test const SAMPLE: Text = r##"{"decls":[{"fields":[{"default":null,"name":"width","satisfies":[],"span":{"column":3,"end":253,"endColumn":13,"endLine":9,"file":0,"line":9,"start":243},"type":{"kind":"Int","text":"Int"}},{"default":null,"name":"label","satisfies":[],"span":{"column":3,"end":267,"endColumn":14,"endLine":10,"file":0,"line":10,"start":256},"type":{"kind":"Text","text":"Text"}}],"kind":"record","name":"Box","satisfies":[],"span":{"column":1,"end":269,"endColumn":2,"endLine":11,"file":0,"line":8,"start":230},"testOnly":false,"typeParams":[]},{"body":{"span":{"column":66,"end":420,"endColumn":2,"endLine":16,"file":0,"line":13,"start":336},"stmts":[0,1]},"bounds":[],"effectful":false,"kind":"fn","name":"describe","owner":null,"params":[{"name":"box","span":{"column":13,"end":291,"endColumn":21,"endLine":13,"file":0,"line":13,"start":283},"type":{"args":[],"kind":"Record","module":"examples.typed.sample","name":"Box","text":"Box"}},{"name":"scale","span":{"column":23,"end":303,"endColumn":33,"endLine":13,"file":0,"line":13,"start":293},"type":{"kind":"Int","text":"Int"}},{"name":"separator","span":{"column":35,"end":320,"endColumn":50,"endLine":13,"file":0,"line":13,"start":305},"type":{"kind":"Text","text":"Text"}}],"qualifiedName":"describe","requires":null,"ret":{"args":[{"kind":"Text","text":"Text"}],"kind":"List","text":"List<Text>"},"satisfies":[],"span":{"column":1,"end":420,"endColumn":2,"endLine":16,"file":0,"line":13,"start":271},"testOnly":false,"typeParams":[]}],"exprs":[{"kind":"binary","left":1,"op":"*","right":3,"span":{"column":14,"end":368,"endColumn":31,"endLine":14,"file":0,"line":14,"start":351},"type":{"kind":"Int","text":"Int"}},{"kind":"field","name":"width","receiver":2,"span":{"column":14,"end":360,"endColumn":23,"endLine":14,"file":0,"line":14,"start":351},"type":{"kind":"Int","text":"Int"}},{"kind":"name","name":"box","span":{"column":14,"end":354,"endColumn":17,"endLine":14,"file":0,"line":14,"start":351},"type":{"args":[],"kind":"Record","module":"examples.typed.sample","name":"Box","text":"Box"}},{"kind":"name","name":"scale","span":{"column":26,"end":368,"endColumn":31,"endLine":14,"file":0,"line":14,"start":363},"type":{"kind":"Int","text":"Int"}},{"args":[14],"callee":{"kind":"fn","module":"std.text","name":"split"},"kind":"method","name":"split","namedArgs":null,"receiver":5,"span":{"column":3,"end":418,"endColumn":50,"endLine":15,"file":0,"line":15,"start":371},"type":{"args":[{"kind":"Text","text":"Text"}],"kind":"List","text":"List<Text>"},"ufcs":true},{"kind":"binary","left":6,"op":"+","right":12,"span":{"column":3,"end":401,"endColumn":33,"endLine":15,"file":0,"line":15,"start":371},"type":{"kind":"Text","text":"Text"}},{"kind":"binary","left":7,"op":"+","right":10,"span":{"column":3,"end":401,"endColumn":33,"endLine":15,"file":0,"line":15,"start":371},"type":{"kind":"Text","text":"Text"}},{"args":[],"callee":{"kind":"builtin","name":"TextToText"},"kind":"method","name":"to_text","namedArgs":null,"receiver":8,"span":{"column":5,"end":382,"endColumn":14,"endLine":15,"file":0,"line":15,"start":373},"type":{"kind":"Text","text":"Text"},"ufcs":false},{"kind":"field","name":"label","receiver":9,"span":{"column":5,"end":382,"endColumn":14,"endLine":15,"file":0,"line":15,"start":373},"type":{"kind":"Text","text":"Text"}},{"kind":"name","name":"box","span":{"column":5,"end":376,"endColumn":8,"endLine":15,"file":0,"line":15,"start":373},"type":{"args":[],"kind":"Record","module":"examples.typed.sample","name":"Box","text":"Box"}},{"args":[],"callee":{"kind":"builtin","name":"TextToText"},"kind":"method","name":"to_text","namedArgs":null,"receiver":11,"span":{"column":16,"end":393,"endColumn":25,"endLine":15,"file":0,"line":15,"start":384},"type":{"kind":"Text","text":"Text"},"ufcs":false},{"kind":"name","name":"separator","span":{"column":16,"end":393,"endColumn":25,"endLine":15,"file":0,"line":15,"start":384},"type":{"kind":"Text","text":"Text"}},{"args":[],"callee":{"kind":"builtin","name":"IntToTextMethod"},"kind":"method","name":"to_text","namedArgs":null,"receiver":13,"span":{"column":27,"end":399,"endColumn":31,"endLine":15,"file":0,"line":15,"start":395},"type":{"kind":"Text","text":"Text"},"ufcs":false},{"kind":"name","name":"area","span":{"column":27,"end":399,"endColumn":31,"endLine":15,"file":0,"line":15,"start":395},"type":{"kind":"Int","text":"Int"}},{"kind":"name","name":"separator","span":{"column":40,"end":417,"endColumn":49,"endLine":15,"file":0,"line":15,"start":408},"type":{"kind":"Text","text":"Text"}}],"files":["examples/typed/sample.ignite"],"formatVersion":"ignite-typed/0.1","imports":[{"glob":false,"module":"std.text","names":[],"path":"std.text.split","span":{"column":1,"end":228,"endColumn":22,"endLine":6,"file":0,"line":6,"start":207}}],"module":"examples.typed.sample","package":"examples.typed.sample","patterns":[],"stmts":[{"bindingType":{"kind":"Int","text":"Int"},"declaredType":null,"kind":"let","mutable":false,"name":"area","span":{"column":3,"end":368,"endColumn":31,"endLine":14,"file":0,"line":14,"start":340},"value":0},{"expr":4,"kind":"expr","span":{"column":3,"end":418,"endColumn":50,"endLine":15,"file":0,"line":15,"start":371}}]}"##
+
+test "the reader finds a fn's parameter types in the sample's document" {
+  let document = parse(SAMPLE)?
+  assert document.text("formatVersion") == Some("ignite-typed/0.1")
+  assert parameters(document, "describe") == Some([("box", "Box"), ("scale", "Int"), ("separator", "Text")])
+  assert parameters(document, "missing") == None
+}
