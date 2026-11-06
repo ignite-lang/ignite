@@ -216,7 +216,8 @@ takes or returns Ignite values):
   to the owned parameter, with no copy: the place is dead after the call, so ownership of
   its memory passes to the callee. Every other aggregate argument is a fresh copy (section
   4). A call through a fn pointer passes copies, or the moved place, which is correct for
-  both kinds of parameter. A borrowed parameter reads the caller's memory, which stays
+  both kinds of parameter, except where the callee is known to only read the parameter
+  (section 3.1). A borrowed parameter reads the caller's memory, which stays
   valid for the whole call: no callee releases below its own loops' marks.
 - An aggregate result is written to a pointer passed as the first argument (plain `ptr`, no LLVM `sret` attribute).
 - Symbol names: `"<module>.<name>"` (`"std.protocol.telnet.decode"`), roles
@@ -265,6 +266,15 @@ call through a fn value loads both words before it evaluates the arguments.
   `ClosureInfo.captures` order with C layout, each copied at creation (by copy, as
   `docs/slice.md` section 13.3 says). A closure without captures has `env` null. The body
   is lowered as a fn whose captures are borrowed bindings into the block.
+- A fn value's parameters are owned, as a consumed parameter is, because the caller does
+  not know the callee. Where it does, a borrowed place goes as its own pointer to a
+  parameter the callee only reads (`Lower::known_borrows`): a closure literal, or a `let`
+  bound to one, reads every parameter its body does not modify (`region::modified_by`;
+  nothing inside a closure body moves, so a read that keeps the value copies it), and a
+  named fn reads the parameters it does not consume. `list.map` with such an `f` passes
+  each element as its own pointer, and a call through such a `let` passes its arguments
+  under the borrow rule of a direct call (section 3), also copying an argument whose root a
+  later argument mentions.
 - The glue of a fn value calls the env glue: op 0 deep-copies the block into the arena,
   1 to the heap (a `Store` value holding a fn), 2 frees a heap copy. A null `env` is
   copied as null. So copying a fn value copies every capture, and a closure carried
@@ -403,9 +413,12 @@ position, even with no buffer.
   kernel without a trim: ember's `FLUSHDB` (`db.values()` copies the keyspace into the
   arena) left 10 MB of freed chunks resident until the next trim while chunks were
   `malloc` blocks (2026-11-04).
-  `spawn` hands the new task a pointer to the arguments in the parent's memory. The task
-  deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before the parent
-  continues (`ignite_rt_spawn` blocks until then and returns 1).
+  `spawn` hands the new task a pointer to the arguments in the parent's memory: an owned
+  argument (a temporary or a moved place) moved into a block in the parent's frame, a
+  borrowed aggregate (a variable, a field, a constant) as its place's pointer, not copied.
+  The task deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before
+  the parent continues (`ignite_rt_spawn` blocks until then and returns 1), so the places
+  are unchanged while the task reads them.
 
   A stream lives as long as on the Rust target, where each task and binding holds a clone
   of an `Arc` (story `llvm-stream-ownership`). Each handle-table entry counts its owners:
