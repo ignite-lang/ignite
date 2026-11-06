@@ -125,3 +125,35 @@ with a multibyte separator, an empty part, a 70,000-byte part, an empty separato
 plain, empty and escaped texts) and the copies test "join, trim and their edge cases"
 (NBSP and VT/FF ends, a non-whitespace control byte, empty and all-space texts), run on
 both targets.
+
+## P6: a read with a large maximum takes only the bytes read
+
+A `read(maximum)` above 16 KiB (the HTTP server reads with 65,536) asked the arena for a
+`maximum`-byte block, which as a large request is a zeroed `calloc` block of its own that is
+not trimmed and ends the task's bump chunk. Now such a read goes into a per-thread buffer
+(kept up to 64 KiB; a fresh `Vec` when the buffer is in use) and only the bytes read are
+copied into the arena; reads up to 16 KiB still go straight into an arena block. The review
+named a per-task buffer: the read does not yield between filling the buffer and copying out
+of it, so one buffer per worker thread is enough.
+
+| measure | base | P6 |
+|---|---|---|
+| `bench small reads of maximum 64 KiB` (20,000 request/answer round trips over a pipe, a 100-byte request and a 1-byte answer, both read with maximum 65,536): `calloc` calls (callgrind) | 40,000 (2,630,240,030 `Ir`) | 0 from reads |
+| same: instructions (callgrind `Ir`, whole run) | 2,714,564,088 | 65,396,310 |
+| same: wall time, median of 21 interleaved (load 16.4 to 17.8) | 311 ms | 179 ms |
+| `bench pipe reads of 64 KiB` (reads that fill the maximum): `calloc` calls | 264 (17,358,280 `Ir`) | 2 (125,265 `Ir`) |
+| same: `Ir`, whole run | 109,138,427 | 108,956,472 |
+| same: wall time, median of 21 interleaved (load 11.2) | 15 ms | 15 ms |
+
+When a read fills its maximum the saved zeroing is spent again on the copy, so that bench
+does not change; a read that returns less than its maximum, the usual case of a server
+reading a request, no longer pays for zeroing the whole maximum. Under callgrind the
+`bench pipe reads of 64 KiB` run stops early on both builds (exit 101 after 264 reads; not traced, likely the
+10 s idle timeout with the writer slowed by valgrind), so its counts cover the same
+264 reads on both; outside valgrind it passes.
+
+Tests that catch a wrong result: the copies test "reads over 16 KiB keep their bytes and
+the texts made between them" (110,017 patterned bytes written as 40,000, 70,000 and 17,
+read with maxima 65,536 and 20,000 alternating; each read checked against its maximum, the
+bytes compared whole, and texts allocated between reads checked afterwards), on both
+targets.

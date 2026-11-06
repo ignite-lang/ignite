@@ -49,7 +49,7 @@ const CHUNK: usize = 64 * 1024;
 /// Alignment of an ordinary chunk; larger alignments get their own block.
 const CHUNK_ALIGN: usize = 16;
 /// Requests above this size get their own block instead of a chunk.
-const LARGE: usize = CHUNK / 4;
+pub(crate) const LARGE: usize = CHUNK / 4;
 /// Released chunks an arena keeps for reuse; the rest go back to the
 /// system allocator. Large blocks always go back.
 const SPARE: usize = 16;

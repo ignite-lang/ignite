@@ -234,6 +234,52 @@ test "a constant pattern compares with the constant" {
   assert m == 0
 }
 
+test fn pattern(n: Int, seed: Int) -> Bytes {
+  var out = Bytes.empty()
+  var i = 0
+  while out.len() < n {
+    out.append(Int.to_text(seed * 1000003 + i).to_bytes())
+    i = i + 1
+  }
+  return out.slice(0, n)
+}
+
+test fn send_large(stream: PipeStream) -> Result<Unit, IoError> requires [stream.write] {
+  stream.write_all(pattern(40000, 1))?
+  stream.write_all(pattern(70000, 2))?
+  stream.write_all(pattern(17, 3))?
+  stream.close()
+}
+
+test "reads over 16 KiB keep their bytes and the texts made between them" {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  spawn send_large(server)
+  var got = Bytes.empty()
+  var notes: List<Text> = []
+  var reads = 0
+  loop {
+    let maximum = if reads % 2 == 0 { 65536 } else { 20000 }
+    match client.read(maximum)? {
+      Eof => break
+      Data(bytes) => {
+        assert bytes.len() <= maximum
+        assert bytes.len() > 0
+        got.append(bytes)
+        notes.push("read ".concat(Int.to_text(reads)).concat(" é"))
+        reads = reads + 1
+      }
+    }
+  }
+  var want = pattern(40000, 1)
+  want.append(pattern(70000, 2))
+  want.append(pattern(17, 3))
+  assert got.len() == 110017
+  assert got == want
+  assert notes.len() == reads
+  assert notes[0] == "read 0 é"
+}
+
 test "join, trim and their edge cases" {
   assert ["a", "b", "c"].join("-") == "a-b-c"
   assert ["é", "", "ü"].join("→") == "é→→ü"

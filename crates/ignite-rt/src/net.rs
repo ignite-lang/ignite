@@ -356,8 +356,7 @@ const MAX_READ: usize = 1024 * 1024;
 
 /// `i32 tcp_read(i64 stream, i64 maximum, Input* out, IoError* err)`: one
 /// read of up to `maximum` bytes (clamped to `1..=1 MiB`); zero bytes is
-/// `Eof`. The bytes are read straight into the task's arena: a block of
-/// `maximum` bytes whose unused tail goes back to the arena.
+/// `Eof`. The bytes go to the task's arena ([`read_into_arena`]).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_read(
     handle: i64,
@@ -372,9 +371,24 @@ pub extern "C" fn ignite_rt_tcp_read(
     })
 }
 
+/// Read buffers up to this size stay with their thread for the next read
+/// over [`arena::LARGE`] (HTTP reads 64 KiB at a time).
+const KEPT_READ_BUFFER: usize = 64 * 1024;
+
+thread_local! {
+    /// The buffer a read over [`arena::LARGE`] goes to before its bytes
+    /// are copied into the arena.
+    static READ_BUFFER: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+}
+
 /// One read by `read_into` of up to `maximum` bytes (clamped to `1..=1
-/// MiB`) straight into the task's arena: a block of `maximum` bytes whose
-/// unused tail goes back to the arena. Zero bytes is `Eof`.
+/// MiB`). Zero bytes is `Eof`. Up to [`arena::LARGE`] the bytes go straight
+/// into the task's arena: a block of `maximum` bytes in the current chunk
+/// whose unused tail goes back to it. A larger request would be a block of
+/// its own (a zeroed `malloc` block that keeps all `maximum` bytes and
+/// leaves no chunk for the inline allocator), so it reads into this
+/// thread's buffer (kept up to 64 KiB) and copies the bytes read into the
+/// arena.
 pub(crate) fn read_into_arena(
     maximum: i64,
     read_into: impl FnOnce(&mut [u8]) -> Result<usize, IoError>,
@@ -382,6 +396,9 @@ pub(crate) fn read_into_arena(
     let size = usize::try_from(maximum.max(1))
         .unwrap_or(MAX_READ)
         .min(MAX_READ);
+    if size > arena::LARGE {
+        return read_through_buffer(size, read_into);
+    }
     let block = arena::alloc(size, 1);
     // SAFETY: `block` is a fresh arena block of `size` bytes, nothing
     // else refers to it, and arena memory is always initialized (its
@@ -403,6 +420,44 @@ pub(crate) fn read_into_arena(
             },
         }
     })
+}
+
+/// [`read_into_arena`] of `size` bytes over [`arena::LARGE`]: into the
+/// thread's read buffer, or a buffer of its own for a size over 64 KiB
+/// or while the thread's buffer is in use, then `count` bytes copied into
+/// the arena.
+fn read_through_buffer(
+    size: usize,
+    read_into: impl FnOnce(&mut [u8]) -> Result<usize, IoError>,
+) -> Result<IgniteInput, IoError> {
+    let read = |buffer: &mut Vec<u8>| -> Result<IgniteInput, IoError> {
+        if buffer.len() < size {
+            buffer.resize(size, 0);
+        }
+        let count = read_into(&mut buffer[..size])?.min(size);
+        Ok(if count == 0 {
+            IgniteInput::eof()
+        } else {
+            IgniteInput {
+                tag: 0,
+                data: IgniteList::from_bytes(&buffer[..count]),
+            }
+        })
+    };
+    let mut read = Some(read);
+    if size <= KEPT_READ_BUFFER {
+        let kept = READ_BUFFER.try_with(|cell| {
+            let mut buffer = cell.try_borrow_mut().ok()?;
+            read.take().map(|read| read(&mut buffer))
+        });
+        if let Ok(Some(result)) = kept {
+            return result;
+        }
+    }
+    match read.take() {
+        Some(read) => read(&mut Vec::new()),
+        None => Err(IoError::new(String::from("the read buffer was lost"))),
+    }
 }
 
 /// `i32 tcp_write_all(i64 stream, List* bytes, IoError* err)`.

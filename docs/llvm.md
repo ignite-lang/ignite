@@ -556,7 +556,7 @@ calling task (section 4). `T*` means a pointer to the section-3 layout;
 | `i32 tcp_accept(i64 listener, i64* out, IoError* err)` | |
 | `i64 tcp_local_port(i64 listener)` | |
 | `i32 tcp_connect(Text* address, i64 port, i64* out, IoError* err)` | |
-| `i32 tcp_read(i64 stream, i64 maximum, Input* out, IoError* err)` | one read, straight into a `maximum`-byte arena block whose unused tail is given back; a concurrent `tcp_write_all` on the same stream from another task does not wait for it |
+| `i32 tcp_read(i64 stream, i64 maximum, Input* out, IoError* err)` | one read: up to 16 KiB straight into a `maximum`-byte arena block whose unused tail is given back; above 16 KiB into a per-thread buffer (kept up to 64 KiB) and then the bytes read copied into the arena, so a large `maximum` costs neither a zeroed block of its own nor the current chunk; a concurrent `tcp_write_all` on the same stream from another task does not wait for it |
 | `i32 tcp_write_all(i64 stream, List* bytes, IoError* err)` | appends to the stream's send buffer (`docs/slice.md` section 7) |
 | `i32 tcp_close(i64 stream, IoError* err)` | shut down the write half |
 | `void tcp_release(i64 handle)` | drop a listener, stream or pipe-end handle, and forget it as owned by the task (`tcp_own`); later use of it is an error |
