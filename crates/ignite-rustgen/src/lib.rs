@@ -4287,7 +4287,11 @@ impl<'a> Generator<'a> {
             ),
             ("to_int", 0) => format!("({r} as i64)"),
             ("to_byte", 0) => format!("u8::try_from({r}).ok()"),
-            ("wrapping_add" | "wrapping_sub" | "wrapping_mul", 1) => {
+            (
+                "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "checked_add" | "checked_sub"
+                | "checked_mul",
+                1,
+            ) => {
                 format!("i64::{}({r}, {})", name.name, a[0])
             }
             ("len", 0) => format!("({r}.len() as i64)"),

@@ -6081,7 +6081,7 @@ run`'s.
 | 13 | D4, `protocols.md` §3.3 | the RFC 9110 subset leaves out §8.6 (Content-Length, 13 marks) and §15 (status codes, 77 marks), which `http.ignite` implements | deferred: §15 alone is more than D4's 75 marks, and §8.6 framing is judged through RFC 9112 §6 in this slice. A later slice widens D4; the `Http` claim of row 2 says nothing about them |
 | 14 | `docs/vision.md` X16, slice 10 acceptance | "`std/protocol/telnet.ignite` at most 400 lines", excluding tests | known deviation, not fixed in this slice: at `296f849` the file has 1,086 lines, 762 outside top-level `test` blocks (the review's awk count; slice 14 item 14 recorded about 655). U6 adds clauses to it. Not split in slice 15; Q4 |
 | 15 | 19.4 "Level words", `std/rfc/rfc854.ignite` | a prose requirement "takes the level of its sentence's strongest word" | known limits of the mechanical classification, kept as written for this slice (steering, 2026-11-03): `RFC854.RP5_3` reads `Must` from "find it necessary", `RP7_1` `Required` from "not required … may treat", `RP12_1` `May` because "the protocol requires" has no word in the table. Two obligations have no word in the table and are not in the catalogue: "is obliged to provide" (p7) and "shall be capable" (p12, whose "reguired" is the RFC's typo). A later slice may widen the table |
-| 16 | `protocols.md` §7 row P2, test 3; 19.0 row 3 | "The Telnet matrix claims RFC 854 for an NVT that refuses every option" | not met in slice 15 (steering, 2026-11-03), met by story `telnet-rfc854-conformance` (2026-11-06, 19.21): the RFC 854 claim prints `yes (0 gaps, …)` on both targets. In slice 15 the four MUST-class rows were `unsupported`, checked against the plain-text RFC 854: `RP5_4` (p5, "the process must transmit the TELNET Go Ahead (GA) command"), `RP10_2` (p10, "must transmit the TELNET SYNCH sequence"), `RP12_4` (p12, "The pair DM-Urgent is to have required meaning") and `RP5_3` (p5, "implementers are cautioned to provide methods of locally signaling that all buffered data should be transmitted immediately", whose `Must` comes from the word-table limit of item 15). Each is now `satisfied` with a passing verifying test on both targets: the server sends IAC GA after every prompt and after its answer to AYT (`RP5_4`); `tn` sends IAC IP followed by the Synch, IAC DM with the DM as TCP urgent data, on Ctrl+C (`RP10_2`); a session that finds urgent data pending discards data up to the Data Mark while still obeying commands (`RP12_4`); Ctrl+D on a partial line in `tn`'s line editor sends the line without a line end (`RP5_3`). The cost slice 15 measured was paid as stated: every server transcript gained IAC GA (the inline tests of `telnet.ignite`, the transcript test of `examples/terminal/commands.ignite`, the raw reads of `crates/ignite/tests/terminal.rs` and the prompt reads of the `run`, `drain`, `apply*`, `rollout_repeat` and rustgen `slice10` suites); the substrate gained `write_urgent` and `urgent_pending` on both streams and both targets, and `CODEGEN_REVISION` stepped to `0.1.0-29`; `tn`'s Ctrl+C and Ctrl+D transcripts in `terminal.rs` changed |
+| 16 | `protocols.md` §7 row P2, test 3; 19.0 row 3 | "The Telnet matrix claims RFC 854 for an NVT that refuses every option" | not met in slice 15 (steering, 2026-11-03), met by story `telnet-rfc854-conformance` (2026-11-06, 19.21): the RFC 854 claim prints `yes (0 gaps, …)` on both targets. In slice 15 the four MUST-class rows were `unsupported`, checked against the plain-text RFC 854: `RP5_4` (p5, "the process must transmit the TELNET Go Ahead (GA) command"), `RP10_2` (p10, "must transmit the TELNET SYNCH sequence"), `RP12_4` (p12, "The pair DM-Urgent is to have required meaning") and `RP5_3` (p5, "implementers are cautioned to provide methods of locally signaling that all buffered data should be transmitted immediately", whose `Must` comes from the word-table limit of item 15). Each is now `satisfied` with a passing verifying test on both targets: the server sends IAC GA after every prompt and after its answer to AYT (`RP5_4`); `tn` sends IAC IP followed by the Synch, IAC DM with the DM as TCP urgent data, on Ctrl+C (`RP10_2`); a session that finds urgent data pending discards data up to the Data Mark while still obeying commands (`RP12_4`); Ctrl+D on a partial line in `tn`'s line editor sends the line without a line end (`RP5_3`). The cost slice 15 measured was paid as stated: every server transcript gained IAC GA (the inline tests of `telnet.ignite`, the transcript test of `examples/terminal/commands.ignite`, the raw reads of `crates/ignite/tests/terminal.rs` and the prompt reads of the `run`, `drain`, `apply*`, `rollout_repeat` and rustgen `slice10` suites); the substrate gained `write_urgent` and `urgent_pending` on both streams and both targets, and `CODEGEN_REVISION` stepped to `0.1.0-30`; `tn`'s Ctrl+C and Ctrl+D transcripts in `terminal.rs` changed |
 | 17 | U6's claims of `http.ignite` and `telnet.ignite`; 19.0 rows 2 and 4 | statuses the U6 adversary found wrong (`crates/ignite/tests/conformance.rs`, `adversary_*`) | resolved (steering, 2026-11-03). Fixed in code: `RFC9112.R6_3_4` and `R6_3_5` (a field value is trimmed of SP and HTAB only, RFC 9110 OWS, so `Content-Length: 3` beside U+00A0, U+0085 or U+3000 is 400); `R9_6_6` and `R9_6_7` (a response whose application headers list the `close` option ends the connection); the client role prints CR NUL as a carriage return alone, CR LF and a lone CR as LF (`RFC854.RP11_3`, `RP13_3`; no transcript changed, and of the goldens only `terminal.model.json` and `todo.model.json` move, by the std source positions the claims of `1bc293f` shifted). Restated as `unsupported`, so the `rfc9112` claim counts 15 gaps instead of 12: `R6_1_2` and `R6_1_4` (were `not_applicable`: the application's `Transfer-Encoding` is sent as given on a kept connection), `R2_2_1` (was satisfied by `parse_head` and `read_head`: the head is decoded as lossy UTF-8 before it is parsed). Their adversary tests stay ignored with the gap id; story `http-rfc9112-9110-gaps` |
 
 ### 19.15 Decisions
@@ -6380,7 +6380,7 @@ parameter (18.3, 18.4). The Telnet logic stays in `std/protocol/telnet.ignite`.
   `PipeStreamUrgentPending`, `StreamWriteUrgent` and `StreamUrgentPending` (add-only, 18.13). The
   Rust target calls the inherent method or `<S as ignite_io::ByteStream>::…`; the LLVM target
   resolves each instance to its `tcp_` or `pipe_` entry (18.11). `CODEGEN_REVISION` is
-  `ignite-codegen/0.1.0-29`.
+  `ignite-codegen/0.1.0-30`.
 
 **Telnet.**
 
@@ -8847,6 +8847,25 @@ the same name (13, row 5), and a call `wrapping_add(a, b)` of such a fn is uncha
 
 No wrapping form for `Byte`, `/` or `%`, and no unary negation: `(0).wrapping_sub(x)` negates.
 
+Checked forms (`story:checked-arithmetic`, row E7 of the examples repository's
+`examples/friction.md`): `a.checked_add(b)`, `a.checked_sub(b)` and `a.checked_mul(b)`, each
+`Int -> Option<Int>`, are `Some` of the exact result when it lies in the range of `Int` and
+`None` when it does not, so a program tests for overflow before it would end its task
+(`(9223372036854775807).checked_add(1)` and `(-9223372036854775807 - 1).checked_mul(-1)` are
+`None`, `(3).checked_mul(4)` is `Some(12)`). They never fail; `+`,
+`-` and `*` keep failing. Builtins `IntCheckedAdd`, `IntCheckedSub`, `IntCheckedMul`; their
+names are in `ignite_check::BUILTIN_METHODS`, so on an `Int` receiver the builtin wins over a
+user fn of the same name, as for the wrapping forms, and a call `checked_add(a, b)` of such a
+fn is unchanged.
+
+| layer | lowering |
+|---|---|
+| Rust target | `i64::checked_add(a, b)` (and `_sub`, `_mul`), Rust's `Option<i64>` |
+| LLVM target | `llvm.sadd.with.overflow.i64` (and `ssub`, `smul`), the overflow bit selects the `None` tag of the `Option<Int>` and the sum is the `Some` payload |
+| evaluator | `i64::checked_*` |
+
+No checked form for `Byte`, `/`, `%` or unary negation: `(0).checked_sub(x)` negates.
+
 ### 25.3 `Stderr` (item 2, friction row 48)
 
 `Stderr.write_all(bytes) -> Result<Unit, IoError>` writes to standard error and flushes, as
@@ -8935,3 +8954,8 @@ executable. Before, a sibling module was built into the test executable with its
   (`fixtures/codespec_siblings/`, both targets): `ignite test app.ignite` reports the tests of
   `cs`, `cs.util`, `cs.fmt` and `cs.reader` (a program file of package `cs`), 4 passed;
   `ignite test util.ignite` reports those of `cs.util` and of the sibling it imports, `cs.fmt`.
+- `ignite_test::checked_arithmetic_on_both_targets` runs `fixtures/tests/checked.ignite` on both
+  targets, dev and release: `checked_add`, `checked_sub` and `checked_mul` at both bounds of
+  `Int`, on literal operands and on operands read from text, `None` past a bound and `Some`
+  within it; `int_checked` of `fixtures/eval_equivalence.ignite` prints the same in the
+  evaluator and on both targets.

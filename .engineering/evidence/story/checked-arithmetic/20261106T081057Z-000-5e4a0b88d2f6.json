@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T08:10:57Z",
+  "actor": "human:timo",
+  "artifact": "story:checked-arithmetic",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on fb3185fe9: 1941 passed, 0 failed, EXIT=0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/63"
+  }
+}

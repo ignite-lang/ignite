@@ -216,6 +216,9 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "wrapping_add",
     "wrapping_sub",
     "wrapping_mul",
+    "checked_add",
+    "checked_sub",
+    "checked_mul",
     "set_idle_timeout",
     "get",
     "put",
@@ -3928,7 +3931,14 @@ fn builtin_applies(ty: &Type, method: &str) -> bool {
         ),
         "Int" => matches!(
             method,
-            "to_text" | "to_byte" | "wrapping_add" | "wrapping_sub" | "wrapping_mul"
+            "to_text"
+                | "to_byte"
+                | "wrapping_add"
+                | "wrapping_sub"
+                | "wrapping_mul"
+                | "checked_add"
+                | "checked_sub"
+                | "checked_mul"
         ),
         "Byte" => matches!(method, "to_text" | "to_int"),
         "Bool" => method == "to_text",

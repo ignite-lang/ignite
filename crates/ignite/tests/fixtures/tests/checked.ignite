@@ -1,0 +1,55 @@
+package fixtures.checked
+
+// Checked arithmetic on Int (`docs/slice.md` 25.2), run by `ignite test`
+// on both targets in debug and release
+// (crates/ignite/tests/ignite_test.rs `checked_arithmetic_on_both_targets`).
+// `int` reads its operand from text so no compiler sees it as a constant.
+
+const MAX: Int = 9223372036854775807
+
+const MIN: Int = -9223372036854775807 - 1
+
+fn int(text: Text) -> Int = match Int.parse(text) {
+  Some(n) => n
+  None => 0
+}
+
+test "checked_add is None on overflow" {
+  assert MAX.checked_add(1) == None
+  assert int("9223372036854775807").checked_add(int("1")) == None
+  assert MIN.checked_add(-1) == None
+  assert MAX.checked_add(MAX) == None
+  assert (1).checked_add(2) == Some(3)
+  assert MAX.checked_add(0) == Some(MAX)
+  assert MIN.checked_add(MAX) == Some(-1)
+}
+
+test "checked_sub is None on overflow" {
+  assert MIN.checked_sub(1) == None
+  assert int("-9223372036854775808").checked_sub(int("1")) == None
+  assert MAX.checked_sub(-1) == None
+  assert (0).checked_sub(MIN) == None
+  assert (5).checked_sub(7) == Some(-2)
+  assert MIN.checked_sub(0) == Some(MIN)
+  assert (-1).checked_sub(MAX) == Some(MIN)
+}
+
+test "checked_mul is None on overflow" {
+  assert (3).checked_mul(4) == Some(12)
+  assert int("3").checked_mul(int("4")) == Some(12)
+  assert MIN.checked_mul(-1) == None
+  assert int("-9223372036854775808").checked_mul(int("-1")) == None
+  assert MAX.checked_mul(2) == None
+  assert (4611686018427387904).checked_mul(2) == None
+  assert (-4611686018427387904).checked_mul(2) == Some(MIN)
+  assert (-3).checked_mul(4) == Some(-12)
+  assert MIN.checked_mul(1) == Some(MIN)
+}
+
+test "a checked result is tested before it is used" {
+  let total = match int("9223372036854775800").checked_add(int("100")) {
+    Some(n) => n
+    None => -1
+  }
+  assert total == -1
+}
