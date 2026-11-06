@@ -1,7 +1,7 @@
 # Install from source
 
 Ignite is installed from source. There are no binary releases yet; the releases (v0.1.0 to
-v0.8.0) are tags of the repository.
+v0.9.0) are tags of the repository.
 
 ## What you need
 
@@ -28,7 +28,7 @@ ignite --version
 ```
 
 ```text
-ignite 0.8.0
+ignite 0.9.0
 ```
 
 `ignite --help` lists the commands: `check`, `emit`, `build`, `test`, `plan`, `host`,
