@@ -1,0 +1,43 @@
+package fixtures.clones
+
+// Copies the Rust target leaves out (story:rustgen-redundant-clones), under
+// `ignite test` on both targets (crates/ignite/tests/ignite_test.rs
+// `redundant_clones_on_both_targets`): a byte string literal read by
+// reference is one shared value and one taken by value is a fresh copy, so
+// changing the copy never changes the literal.
+
+fn size(b: Bytes) -> Int = b.len()
+
+fn crlf() -> Bytes = b"\r\n"
+
+fn grown(times: Int) -> Bytes {
+  var out = b"<"
+  var i = 0
+  while i < times {
+    out.append(b"ab")
+    i = i + 1
+  }
+  out.append(b">")
+  out
+}
+
+test "a byte string literal read by reference and by value" {
+  assert size(b"\r\n") == 2
+  assert b"\x00\xff" == Bytes.of([0, 255])
+  assert b"" == Bytes.empty()
+  var first = crlf()
+  first.append(b"!")
+  assert first == b"\r\n!"
+  assert crlf() == b"\r\n"
+  assert grown(2) == b"<abab>"
+  assert grown(2) == b"<abab>"
+  assert grown(0) == b"<>"
+  var i = 0
+  while i < 3 {
+    var line = b"x"
+    line.append(b"\r\n")
+    assert line == b"x\r\n"
+    assert size(b"\r\n") == 2
+    i = i + 1
+  }
+}

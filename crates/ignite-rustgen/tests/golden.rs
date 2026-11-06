@@ -363,6 +363,42 @@ fn fields_of_elements_borrow_the_element() {
     }
 }
 
+/// A byte string literal (story:rustgen-redundant-clones): by reference a
+/// `static` built once, by value one `vec!` of bytes, instead of a
+/// `Vec<i64>` collected into a `Vec<u8>` on every evaluation. A list that
+/// is not all byte literals keeps the conversion.
+#[test]
+fn byte_literals_are_built_once() {
+    let project = common::generate_source(
+        "fn size(b: Bytes) -> Int = b.len()\n\
+         fn by_ref() -> Int = size(b\"\\r\\n\")\n\
+         fn by_value() -> Bytes = b\"ok\"\n\
+         fn appended(out: Bytes) -> Bytes { out.append(b\"!\")\n out }\n\
+         fn same(b: Bytes) -> Bool = b == b\"\\xff\"\n\
+         fn computed(n: Byte) -> Bytes = Bytes.of([n, 1])\n\
+         fn empty() -> Bytes = b\"\"\n",
+        &common::golden_std(),
+    )
+    .unwrap();
+    let lib = norm(&project.lib_rs);
+    let lit = |items: &str| {
+        format!(
+            "{{ static BYTES: std::sync::LazyLock<Vec<u8>> = std::sync::LazyLock::new(|| vec![{items}]); &*BYTES }}"
+        )
+    };
+    for expected in [
+        format!("size({})", lit("13u8, 10u8")),
+        "pub fn by_value() -> Vec<u8> { vec![111u8, 107u8] }".to_string(),
+        format!("out.extend_from_slice({})", lit("33u8")),
+        lit("255u8"),
+        "(vec![n.clone(), 1]).iter().map(|x| *x as u8).collect::<Vec<u8>>()".to_string(),
+        "pub fn empty() -> Vec<u8> { Vec::<u8>::new() }".to_string(),
+    ] {
+        assert!(lib.contains(&expected), "missing `{expected}` in\n{lib}");
+    }
+    assert!(!lib.contains("(vec![13, 10])"), "{lib}");
+}
+
 /// Read-only parameters that are not `Copy` are references, and one of a
 /// `Copy` type is copied once on entry; a parameter the body changes or
 /// returns is consumed (`docs/slice.md` 20.3.3) and declared by value,

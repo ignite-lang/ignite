@@ -1689,6 +1689,31 @@ fn wrap(expr: &Expr, text: String) -> String {
 }
 
 /// `&text`, parenthesized when `expr` is not atomic.
+/// The bytes of a non-empty list literal whose items are all `Int`
+/// literals in `0..=255`: the argument of `Bytes.of` a byte string literal
+/// parses to.
+fn literal_bytes(list: &Expr) -> Option<Vec<u8>> {
+    let ExprKind::List(items) = &list.kind else {
+        return None;
+    };
+    if items.is_empty() {
+        return None;
+    }
+    items
+        .iter()
+        .map(|item| match &item.kind {
+            ExprKind::Int(value) => u8::try_from(*value).ok(),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `[13u8, 10u8]`: the items of a `vec!` of bytes.
+fn byte_items(bytes: &[u8]) -> String {
+    let items: Vec<String> = bytes.iter().map(u8::to_string).collect();
+    format!("[{}u8]", items.join("u8, "))
+}
+
 fn borrow(expr: &Expr, text: String) -> String {
     format!("&{}", wrap(expr, text))
 }
@@ -2117,6 +2142,12 @@ impl<'a> Generator<'a> {
         }
         if self.field_of_element(arg) {
             return format!("&{}", self.element_field(arg));
+        }
+        if let Some(bytes) = self.byte_literal(arg) {
+            return format!(
+                "{{ static BYTES: std::sync::LazyLock<Vec<u8>> = std::sync::LazyLock::new(|| vec!{}); &*BYTES }}",
+                byte_items(&bytes)
+            );
         }
         let text = self.value(arg);
         borrow(arg, text)
@@ -2836,6 +2867,29 @@ impl<'a> Generator<'a> {
                 self.assoc_callee(expr).is_none() && self.is_place(receiver)
             }
             _ => false,
+        }
+    }
+
+    /// The bytes of `Bytes.of([..])` whose items are all `Int` literals in
+    /// `0..=255` (a byte string literal `b".."` parses to one): written as
+    /// `vec![..]` in a value position and as a `static` read by reference
+    /// in a borrowed one, instead of a temporary `Vec` collected into a
+    /// `Vec<u8>` on every evaluation.
+    fn byte_literal(&self, expr: &Expr) -> Option<Vec<u8>> {
+        let ExprKind::Method {
+            receiver,
+            name,
+            args,
+        } = &expr.kind
+        else {
+            return None;
+        };
+        if self.qualifier(receiver) != Some("Bytes") || name.name != "of" {
+            return None;
+        }
+        match args.as_slice() {
+            [list] => literal_bytes(list),
+            _ => None,
         }
     }
 
@@ -3941,6 +3995,11 @@ impl<'a> Generator<'a> {
     fn static_call(&mut self, owner: &str, name: &str, args: &[Expr]) -> String {
         if let ("Int", "parse", [text]) = (owner, name, args) {
             return format!("ignite_io::parse_int({})", self.text_bytes(text));
+        }
+        if let ("Bytes", "of", [list]) = (owner, name, args)
+            && let Some(bytes) = literal_bytes(list)
+        {
+            return format!("vec!{}", byte_items(&bytes));
         }
         let texts = self.args(args);
         match (owner, name, texts.as_slice()) {
