@@ -1470,8 +1470,13 @@ fn escapes_to(name: &str, mangled: impl Fn(&str) -> bool) -> bool {
 /// for its own locals and items (`__m`, `__x`, `__a0`, `__p1`,
 /// `__spawn_0`, `__ignite_*`) start with `__` and never end in `_`, so no
 /// program name can capture or duplicate one.
+///
+/// Every other name that contains `__` gets a `_` as well: [`assoc_symbol`]
+/// joins owner and name with `__` and never ends in `_`, so a free fn
+/// `A__b` cannot become the symbol of `fn A.b`. Rust names never reach a
+/// program's output: debug text and encoders spell the Ignite name.
 fn ident(name: &str) -> String {
-    if name.starts_with("__")
+    if name.contains("__")
         || escapes_to(name, |base| {
             matches!(base, "self" | "Self" | "crate" | "super")
                 || RUST_PRELUDE_NAMES.contains(&base)
@@ -1809,9 +1814,15 @@ fn fold_class(op: BinaryOp) -> u8 {
 }
 
 /// The Rust symbol of the associated fn `Owner.name` (`docs/slice.md`
-/// section 13.8).
+/// section 13.8): every `_` of owner and name written `_0`, then the two
+/// joined with `__`. Inside an escaped part every `_` is followed by `0`, so
+/// the first `__` is the separator and two pairs never share a symbol
+/// (`A_._b` is `A_0___0b`, `A.__b` is `A___0_0b`). The symbol never starts
+/// with `__` (the generator's own names) and never ends in `_` (the names
+/// [`ident`] escapes), and it always contains `__` (no other name `ident`
+/// leaves alone does).
 fn assoc_symbol(owner: &str, name: &str) -> String {
-    format!("{owner}__{name}")
+    format!("{}__{}", owner.replace('_', "_0"), name.replace('_', "_0"))
 }
 
 /// The Rust name of a fn: [`assoc_symbol`] for `fn Owner.name(..)`, else
