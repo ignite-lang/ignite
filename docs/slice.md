@@ -1271,20 +1271,26 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
 | `s.upsert(id, f: fn(Option<T>) -> T)` | `T` (the stored value): `f` of the current value, `None` when `id` holds nothing, atomic, `f` pure | `s.write` |
 
 - Value semantics: `get`/`values` return copies; `put` stores a copy.
-- One implementation in `ignite-io`: `Store<T: Clone + Send>` over
-  `Arc<Mutex<BTreeMap<i64, T>>>` plus an `AtomicI64` counter. The Rust target uses it
-  directly. `ignite-rt` exposes `ignite_rt_store_*` over a `Store<HeapValue>`, where
+- One implementation in `ignite-io`: `Store<T: Clone + Send>` over an `Arc` of 16 shards,
+  each a `Mutex<BTreeMap<i64, _>>` with a `Condvar`, chosen by a Fibonacci hash of the id,
+  plus an `AtomicI64` counter (story `store-lock-contention`). Every method is atomic for the
+  ids it touches; `len` and `values` lock every shard in shard order, and `values` merges the
+  shards into ascending id order. The Rust target uses it directly: its `update` and `upsert`
+  hold the shard's lock only to take the value out of its slot (marked taken) and to put the
+  new value back, and copy the old value, run `f` and drop the old value with no lock held; a
+  task that reaches a taken id (or, for `len` and `values`, a shard with one) waits until it
+  is put back, and a panic in `f` puts the old value back. `ignite-rt` exposes `ignite_rt_store_*` over a `Store<HeapValue>`, where
   `HeapValue` is a pointer to a malloc'd deep copy made and freed by generator glue
   (`copy_to_heap.<T>`, `copy_from_heap.<T>`, `free_heap.<T>`), passed to `store_new`.
   `get`, `values` and `update`'s result use the store's borrowing reads (`read`,
   `read_values`, `replace_with`): `copy_from_heap` copies the stored value straight into the
-  calling task's arena under the lock, so a read makes one copy and frees nothing. `update`'s
-  thunk `store_update.<T>` runs under the lock behind a callback guard: a failure inside `f`
+  calling task's arena under the shard's lock, so a read makes one copy and frees nothing. `update`'s
+  thunk `store_update.<T>` runs under the shard's lock behind a callback guard: a failure inside `f`
   (14.8) leaves the old value, the lock is released, then the task ends with the failure's
   report, as on the Rust target, where the failure unwinds through `ignite_io::Store`.
 - `upsert` is the atomic insert-or-update: two tasks that upsert one absent id lose neither
   write, where `update` (which answers `None` for it) followed by `put` can. `ignite_io`'s
-  `upsert` is `upsert_with` over a clone of the stored value; `ignite_rt_store_upsert` calls
+  `upsert` takes the value out as `update` does; `ignite_rt_store_upsert` calls
   the thunk `store_upsert.<T>(f, old)` under the lock with the stored heap value, or null for an
   absent id, which the thunk passes to `f` as `None`. The thunk has `update`'s callback guard.
 - Created as a system resource (11.4). `Store.new()` creates one in tests and test-only items
