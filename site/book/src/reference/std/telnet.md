@@ -224,9 +224,9 @@ enum Event {
   EndOfLine,
   Answer(Bytes),
   AreYouThere,
-  DataMark,
   Interrupt,
-  SubnegotiationTooLong
+  SubnegotiationTooLong,
+  DataMark
 }
 ```
 

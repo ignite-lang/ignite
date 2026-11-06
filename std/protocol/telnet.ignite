@@ -410,9 +410,9 @@ enum Event {
   EndOfLine,
   Answer(Bytes),
   AreYouThere,
-  DataMark,
   Interrupt,
-  SubnegotiationTooLong
+  SubnegotiationTooLong,
+  DataMark
 }
 
 // One byte of the incoming stream: the decoder's next state and the byte's
@@ -727,10 +727,10 @@ enum Edit {
   Unchanged,
   Show(Bytes),
   Enter(Bytes),
-  Send(Bytes),
   Interrupt,
   EndOfInput,
-  Escape
+  Escape,
+  Send(Bytes)
 }
 
 // The line without its last UTF-8 character.
