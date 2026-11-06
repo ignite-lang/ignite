@@ -43,6 +43,7 @@ mod slice17_adversary;
 mod slice18;
 mod slice18_adversary;
 mod slice9;
+mod static_link;
 mod stream_ownership;
 mod syntax;
 mod terminal;

@@ -32,7 +32,9 @@ writes `DIR/llvm/{std.ll, program.ll, main_<exe>.ll}`, runs
 (`-Wl,--strip-debug` with `--release` only, as cargo's release profile drops debug
 information; the libraries are the list `cargo rustc -p ignite-rt --print native-static-libs`
 prints, fixed in the driver), and prints `built DIR/bin/<exe>`. Exit statuses as for the Rust
-target; 2 also when clang fails (its output passed through).
+target; 2 also when clang fails (its output passed through). `--static` links against musl
+instead, with the kit of start files, `libc.a` and `libunwind.a` and none of these libraries
+(`docs/slice.md` 23).
 
 Size. Every function and datum is in its own section (rustc emits the runtime's code that
 way by default), so `--gc-sections` drops what no executable reaches. The workspace builds `ignite-rt` with `codegen-units = 1` in the release

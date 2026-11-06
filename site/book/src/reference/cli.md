@@ -24,6 +24,7 @@ Options:   -h, --help     Print help
 | `--release` | `build`, `test`, `run`, `plan --for-apply` | optimised build (release profile on Rust, clang `-O2` on LLVM) |
 | `--runtime FILE` | `build`, `test`, `run`, `plan --for-apply`, `conformance` | the LLVM runtime archive `libignite_rt.a` (default: next to `ignite`, then in its parent directory, then the archive `ignite` carries, written once to `$XDG_CACHE_HOME/ignite/runtime/`) |
 | `--clang PATH`, `--triple T` | `build`, `test` | clang for the LLVM target (default `clang` on `PATH`) and its target triple (default: clang's own) |
+| `--static` | `build`, `test`, `conformance` | link against musl: no dynamic loader, no shared library, on either target; needs the Rust target `<arch>-unknown-linux-musl`, exit 2 naming it when missing; with `--triple` a musl triple ([Static executables](../guide/targets.md#static-executables)) |
 | `--target-dir DIR` | `build`, `test`, `run` | cargo target directory of the Rust target |
 
 ## ignite check
@@ -62,7 +63,7 @@ read it, never edit it.
 
 ```text
 ignite build [--target llvm|rust] [--out DIR] [--target-dir DIR] [--release]
-             [--clang PATH] [--runtime FILE] [--triple T] [--substrate PATH] [--std DIR] FILE
+             [--clang PATH] [--runtime FILE] [--triple T] [--static] [--substrate PATH] [--std DIR] FILE
 ```
 
 Build the program's executables: LLVM IR with clang (the default), or generated Rust with

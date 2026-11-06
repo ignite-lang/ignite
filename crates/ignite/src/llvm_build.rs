@@ -72,7 +72,8 @@ fn file_identity(path: &Path) -> String {
 }
 
 /// The target triple and data layout every IR module of a build is pinned
-/// to (`docs/llvm.md` section 1): those of `--triple`, else clang's
+/// to (`docs/llvm.md` section 1): those of `--triple` (with `--static` the musl
+/// triple of `docs/slice.md` 23.2), else clang's
 /// default target, read from the module clang emits for an empty C file
 /// (`clang [--target=T] -S -emit-llvm -x c /dev/null -o -`). The answer is
 /// cached in `ir_dir/target.stamp` under the clang command and the clang
@@ -86,7 +87,7 @@ pub(crate) fn target(
         .clone()
         .unwrap_or_else(|| PathBuf::from("clang"));
     let mut args: Vec<OsString> = Vec::new();
-    if let Some(triple) = &options.triple {
+    if let Some(triple) = crate::musl::clang_triple(options)? {
         args.push(format!("--target={triple}").into());
     }
     args.extend(["-S", "-emit-llvm", "-x", "c", "/dev/null", "-o", "-"].map(OsString::from));
@@ -382,16 +383,26 @@ pub(crate) fn missing_runtime(runtime: PathBuf) -> Error {
 
 /// Write the IR of `generated`, compile it for the target of `options`
 /// ([`target`]) and link each executable. The runtime archive is checked
-/// against the target before clang compiles anything.
+/// against the target before clang compiles anything. With `--static` the
+/// musl kit is found first (`docs/slice.md` 23.3): the executables link
+/// its start files, the runtime archive, `libunwind.a` and `libc.a` with
+/// `-static -nostdlib` instead of [`RUNTIME_LIBS`].
 pub(crate) fn link(
     package: &str,
     generated: &ignite_llvm::Generated,
     options: &BuildOptions,
 ) -> Result<BuildOutput, Error> {
+    let kit = match crate::musl::triple(options)? {
+        Some(triple) => Some(crate::musl::kit(options, &triple)?),
+        None => None,
+    };
     let out = out_dir(package, options);
     let ir_dir = out.join("llvm");
     let spec = target(options, &ir_dir)?;
-    let runtime = crate::runtime_or_default(options.runtime.as_ref())?;
+    let runtime = match &kit {
+        Some(kit) => kit.runtime.clone(),
+        None => crate::runtime_or_default(options.runtime.as_ref())?,
+    };
     if !runtime.is_file() {
         return Err(missing_runtime(runtime));
     }
@@ -439,6 +450,9 @@ pub(crate) fn link(
             executable.clone().into(),
             format!("--target={}", spec.triple).into(),
         ];
+        if let Some(kit) = &kit {
+            args.extend(kit.before());
+        }
         let mut inputs = String::new();
         for unit in [
             format!("main_{}", main.executable),
@@ -453,7 +467,10 @@ pub(crate) fn link(
         if options.release {
             args.extend(RELEASE_LINK_FLAGS.iter().map(Into::into));
         }
-        args.extend(RUNTIME_LIBS.iter().map(Into::into));
+        match &kit {
+            Some(kit) => args.extend(kit.after()),
+            None => args.extend(RUNTIME_LIBS.iter().map(Into::into)),
+        }
         inputs.push_str(&runtime_identity);
         let expected = stamp(&clang_path, &args, &inputs);
         let stamp_path = ir_dir.join(format!("{}.link.stamp", main.executable));
