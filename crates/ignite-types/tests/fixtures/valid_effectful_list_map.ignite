@@ -1,0 +1,46 @@
+// `List.map` takes a fn with effects when the caller has them: a closure
+// over a captured store and a named effectful fn, inside a fn whose
+// `requires` covers their effects, inside a fn whose effects are inferred,
+// and nested in another closure.
+fn names(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires [store.read] {
+  return ids.map(|id| store.get(id))
+}
+
+fn wide(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires [store.*] = ids.map(|id| store.get(id))
+
+fn inferred(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> = ids.map(|id| store.get(id))
+
+fn caller(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires [store.read] = inferred(store, ids)
+
+fn nested(store: Store<Text>, rows: List<List<Int>>) -> List<List<Option<Text>>> requires [store.read] {
+  return rows.map(|row| row.map(|id| store.get(id)))
+}
+
+fn stamp(id: Int) -> Int requires [clock.read] {
+  let now = Clock.monotonic()
+  return id
+}
+
+fn stamp_inferred(id: Int) -> Int {
+  let now = Clock.monotonic()
+  return id
+}
+
+fn stamps(ids: List<Int>) -> List<Int> requires [clock.read] = ids.map(stamp)
+
+fn stamps_inferred(ids: List<Int>) -> List<Int> requires [clock.read] = ids.map(stamp_inferred)
+
+fn stamps_in_inferred(ids: List<Int>) -> List<Int> = ids.map(stamp)
+
+fn stamps_caller(ids: List<Int>) -> List<Int> requires [clock.read] = stamps_in_inferred(ids)
+
+fn annotated(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires [store.read] {
+  let found: List<Option<Text>> = ids.map(|id| store.get(id))
+  return found
+}
+
+test "an effectful closure maps in a test" {
+  let store: Store<Text> = Store.new()
+  let found = [1].map(|id| store.get(id))
+  let stamped = [2].map(stamp)
+}

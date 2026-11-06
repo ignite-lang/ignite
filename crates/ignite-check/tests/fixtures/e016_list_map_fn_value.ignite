@@ -1,0 +1,13 @@
+// A fn without `requires` that maps a named effectful fn over a list
+// performs that fn's effects: they are inferred into its set, so a caller
+// whose `requires` lacks them is E016.
+fn stamp(id: Int) -> Int requires [clock.read] {
+  let now = Clock.monotonic()
+  return id
+}
+
+fn stamps(ids: List<Int>) -> List<Int> = ids.map(stamp)
+
+fn caller(ids: List<Int>) -> List<Int> requires [stdout.write] = stamps(ids)
+
+fn covered(ids: List<Int>) -> List<Int> requires [clock.read] = stamps(ids)

@@ -437,7 +437,9 @@ example.ignite:1:61: error[E016]: missing effect `stdout.write` for `Stdout.writ
 
 An effectful function or closure used as a value where no effectful fn type covering its
 effects is expected. Give the binding or field an effectful fn type
-(`fn(..) -> R requires [..]`). Reported by the type checker.
+(`fn(..) -> R requires [..]`). Also a fn passed to `List.map` whose effects the calling
+function's `requires` does not cover, or that has an effect on its own parameter. Reported by
+the type checker.
 
 ```ignite,fails=E017
 fn send(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {
