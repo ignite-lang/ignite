@@ -1689,6 +1689,31 @@ fn wrap(expr: &Expr, text: String) -> String {
 }
 
 /// `&text`, parenthesized when `expr` is not atomic.
+/// The bytes of a non-empty list literal whose items are all `Int`
+/// literals in `0..=255`: the argument of `Bytes.of` a byte string literal
+/// parses to.
+fn literal_bytes(list: &Expr) -> Option<Vec<u8>> {
+    let ExprKind::List(items) = &list.kind else {
+        return None;
+    };
+    if items.is_empty() {
+        return None;
+    }
+    items
+        .iter()
+        .map(|item| match &item.kind {
+            ExprKind::Int(value) => u8::try_from(*value).ok(),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `[13u8, 10u8]`: the items of a `vec!` of bytes.
+fn byte_items(bytes: &[u8]) -> String {
+    let items: Vec<String> = bytes.iter().map(u8::to_string).collect();
+    format!("[{}u8]", items.join("u8, "))
+}
+
 fn borrow(expr: &Expr, text: String) -> String {
     format!("&{}", wrap(expr, text))
 }
@@ -2117,6 +2142,12 @@ impl<'a> Generator<'a> {
         }
         if self.field_of_element(arg) {
             return format!("&{}", self.element_field(arg));
+        }
+        if let Some(bytes) = self.byte_literal(arg) {
+            return format!(
+                "{{ static BYTES: std::sync::LazyLock<Vec<u8>> = std::sync::LazyLock::new(|| vec!{}); &*BYTES }}",
+                byte_items(&bytes)
+            );
         }
         let text = self.value(arg);
         borrow(arg, text)
@@ -2839,6 +2870,29 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// The bytes of `Bytes.of([..])` whose items are all `Int` literals in
+    /// `0..=255` (a byte string literal `b".."` parses to one): written as
+    /// `vec![..]` in a value position and as a `static` read by reference
+    /// in a borrowed one, instead of a temporary `Vec` collected into a
+    /// `Vec<u8>` on every evaluation.
+    fn byte_literal(&self, expr: &Expr) -> Option<Vec<u8>> {
+        let ExprKind::Method {
+            receiver,
+            name,
+            args,
+        } = &expr.kind
+        else {
+            return None;
+        };
+        if self.qualifier(receiver) != Some("Bytes") || name.name != "of" {
+            return None;
+        }
+        match args.as_slice() {
+            [list] => literal_bytes(list),
+            _ => None,
+        }
+    }
+
     /// Whether the Rust value of the `Text` expression `expr` is a `String`
     /// of its own that nothing else reads: a literal, a concatenation or
     /// interpolation, or a builtin that builds a new text. `to_bytes` then
@@ -2901,6 +2955,11 @@ impl<'a> Generator<'a> {
                 value,
                 mutable,
             } => {
+                if matches!(pattern.kind, PatternKind::Wildcard)
+                    && let Some(call) = self.store_call_read(value, "|_| ()")
+                {
+                    return format!("let _ = {call};");
+                }
                 let value = self.value(value);
                 let pattern = self.let_pattern(pattern, *mutable);
                 format!("let {pattern} = {value};")
@@ -2971,7 +3030,10 @@ impl<'a> Generator<'a> {
             StmtKind::Expr(expr) => match &expr.kind {
                 ExprKind::If { .. } => format!("{};", self.if_expr(expr, false)),
                 ExprKind::Block(block) => format!("{};", self.block(block, false)),
-                _ => format!("{};", self.bare(expr)),
+                _ => match self.store_call_read(expr, "|_| ()") {
+                    Some(call) => format!("{call};"),
+                    None => format!("{};", self.bare(expr)),
+                },
             },
         }
     }
@@ -3162,6 +3224,14 @@ impl<'a> Generator<'a> {
                     return variant_path(&self.unshadowed(owner), &name.name);
                 }
                 let receiver_ty = self.type_of(receiver);
+                if !self.is_boxed_field(receiver_ty, &name.name)
+                    && let Some(call) = self.store_call_read(
+                        receiver,
+                        &format!("|__v| __v.{}.clone()", ident(&name.name)),
+                    )
+                {
+                    return call;
+                }
                 let text = format!("{}.{}", self.receiver(receiver), ident(&name.name));
                 if self.is_boxed_field(receiver_ty, &name.name) {
                     format!("(*{text})")
@@ -3941,6 +4011,11 @@ impl<'a> Generator<'a> {
     fn static_call(&mut self, owner: &str, name: &str, args: &[Expr]) -> String {
         if let ("Int", "parse", [text]) = (owner, name, args) {
             return format!("ignite_io::parse_int({})", self.text_bytes(text));
+        }
+        if let ("Bytes", "of", [list]) = (owner, name, args)
+            && let Some(bytes) = literal_bytes(list)
+        {
+            return format!("vec!{}", byte_items(&bytes));
         }
         let texts = self.args(args);
         match (owner, name, texts.as_slice()) {
@@ -5398,6 +5473,19 @@ impl<'a> Generator<'a> {
     /// `s.update(id, f)` or `s.upsert(id, f)`: a closure literal `f` passed
     /// as a plain closure, any other fn value as `&*f`.
     fn store_with(&mut self, receiver: &Expr, method: &str, args: &[Expr]) -> String {
+        self.store_with_read(receiver, method, args, None)
+    }
+
+    /// [`Generator::store_with`], with a `read` of the stored value
+    /// (`update_read`, `upsert_read`) in place of the copy `update` and
+    /// `upsert` return.
+    fn store_with_read(
+        &mut self,
+        receiver: &Expr,
+        method: &str,
+        args: &[Expr],
+        read: Option<&str>,
+    ) -> String {
         let r = self.receiver(receiver);
         let id = self.value(&args[0]);
         let f = match self.passed_closure(&args[1]) {
@@ -5407,7 +5495,27 @@ impl<'a> Generator<'a> {
                 format!("&*{}", wrap(&args[1], f))
             }
         };
-        format!("{r}.{method}({id}, {f})")
+        match read {
+            Some(read) => format!("{r}.{method}_read({id}, {f}, {read})"),
+            None => format!("{r}.{method}({id}, {f})"),
+        }
+    }
+
+    /// `s.update(id, f)` or `s.upsert(id, f)` whose stored value is only
+    /// read by `read` (`|_| ()` for a discarded result, a copy of one field
+    /// for `s.upsert(id, f).field`): the store lends the value to `read`
+    /// under its lock instead of returning a copy of all of it. `read` never
+    /// calls a store, so the lock, which is not reentrant, is safe.
+    fn store_call_read(&mut self, expr: &Expr, read: &str) -> Option<String> {
+        let ExprKind::Method { receiver, args, .. } = &expr.kind else {
+            return None;
+        };
+        let method = match self.callee(expr) {
+            Some(Callee::Builtin(Builtin::StoreUpdate)) => "update",
+            Some(Callee::Builtin(Builtin::StoreUpsert)) => "upsert",
+            _ => return None,
+        };
+        Some(self.store_with_read(receiver, method, args, Some(read)))
     }
 
     /// A closure literal passed as an argument the callee calls before it

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:moves-for-pattern-bindings
 kind: story
-status: draft
+status: active
 title: Moves analysis tracks pattern bindings
 relations:
 - derived_from: story:slice-16-rust-moves
@@ -19,7 +19,10 @@ scope:
   path: crates/ignite/src/apply/plan.rs
 - confidence: cited
   path: docs/slice.md
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-06T10:00:26Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-06T10:00:26Z", actor: "human:timo", revision: 4}
 ---
 # Story: moves-for-pattern-bindings
 

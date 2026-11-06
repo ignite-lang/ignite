@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:rustgen-redundant-clones
 kind: story
-status: proposed
+status: implemented
 title: Drop redundant clones in generated Rust
 summary: The Rust target clones only where Ignite semantics need a copy
 relations:
@@ -10,9 +10,11 @@ relations:
 scope:
 - confidence: inferred
   path: crates/ignite-rustgen/src
-revision: 7
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T08:56:32Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":5}}}
+- {from: "proposed", to: "active", at: "2026-11-06T10:00:22Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":6}}}
+- {from: "active", to: "implemented", at: "2026-11-06T10:00:22Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":6}}}
 ---
 # Story: rustgen-redundant-clones
 

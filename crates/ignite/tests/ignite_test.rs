@@ -28,13 +28,14 @@ const TARGETS: [&str; 2] = ["rust", "llvm"];
 /// The fixture programs of one test executable, in command-line order:
 /// `slow` before `basics` shows the order is the command line's, not the
 /// alphabet's.
-const FIXTURES: [&str; 6] = [
+const FIXTURES: [&str; 7] = [
     "slow.ignite",
     "basics.ignite",
     "targets.ignite",
     "builtins.ignite",
     "store.ignite",
     "fields.ignite",
+    "clones.ignite",
 ];
 
 /// The invocations of one target that share an output directory and a
@@ -159,7 +160,7 @@ fn counts_results_and_failures() {
         let run = fixtures_run(target);
         let out = &run.stdout;
         assert_eq!(run.status, 1, "{target}: {out}\n{}", run.stderr);
-        assert!(out.starts_with("running 29 tests\n"), "{target}: {out}");
+        assert!(out.starts_with("running 32 tests\n"), "{target}: {out}");
         for line in [
             "test fixtures.basics/arithmetic passes ... ok",
             "test fixtures.basics/int differs ... FAILED",
@@ -167,7 +168,7 @@ fn counts_results_and_failures() {
             "test fixtures.basics/index out of range panics ... FAILED",
             "test fixtures.basics/output hidden on success ... ok",
             "test fixtures.basics/tcp echo through a task ... ok",
-            "test result: FAILED. 18 passed; 11 failed; 0 filtered out; finished in ",
+            "test result: FAILED. 21 passed; 11 failed; 0 filtered out; finished in ",
         ] {
             assert!(out.contains(line), "{target}: no `{line}` in\n{out}");
         }
@@ -252,7 +253,7 @@ fn filter_exact_passing_and_none() {
         assert!(
             exact
                 .stdout
-                .contains("test result: FAILED. 0 passed; 1 failed; 28 filtered out;"),
+                .contains("test result: FAILED. 0 passed; 1 failed; 31 filtered out;"),
             "{target}: {}",
             exact.stdout
         );
@@ -260,14 +261,14 @@ fn filter_exact_passing_and_none() {
         assert_eq!(passing.status, 0, "{target}: {}", passing.stdout);
         assert_eq!(
             without_time(&passing.stdout),
-            "running 1 test\ntest fixtures.basics/arithmetic passes ... ok\n\ntest result: ok. 1 passed; 0 failed; 28 filtered out",
+            "running 1 test\ntest fixtures.basics/arithmetic passes ... ok\n\ntest result: ok. 1 passed; 0 failed; 31 filtered out",
             "{target}"
         );
         let none = fixtures_test(target, &["no such test"]);
         assert_eq!(none.status, 0, "{target}");
         assert_eq!(
             without_time(&none.stdout),
-            "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 29 filtered out",
+            "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 32 filtered out",
             "{target}"
         );
     });
@@ -451,6 +452,26 @@ fn fields_of_elements_on_both_targets() {
             "a match on a field of an element",
         ] {
             let line = format!("test fixtures.fields/{name} ... ok\n");
+            assert!(out.contains(&line), "{target}: no `{line}` in\n{out}");
+        }
+    });
+}
+
+/// The copies the Rust target leaves out (`fixtures/tests/clones.ignite`,
+/// story:rustgen-redundant-clones) keep the values the same on both
+/// targets: a byte string literal read by reference and by value, and a
+/// `Store.update` or `Store.upsert` whose result is discarded or read for
+/// one field.
+#[test]
+fn redundant_clones_on_both_targets() {
+    on_both_targets(|target| {
+        let out = &fixtures_run(target).stdout;
+        for name in [
+            "a byte string literal read by reference and by value",
+            "a discarded update or upsert stores the new value",
+            "a field of an upsert result is the stored field",
+        ] {
+            let line = format!("test fixtures.clones/{name} ... ok\n");
             assert!(out.contains(&line), "{target}: no `{line}` in\n{out}");
         }
     });
