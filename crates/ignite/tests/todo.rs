@@ -557,7 +557,7 @@ fn header_framing(target: Target) {
         ),
         (b"GET /todos HTTP/1.1\nHost: x\r\n\r\n", 400),
         (
-            b"POST /todos HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+            b"POST /todos HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
             501,
         ),
     ];
