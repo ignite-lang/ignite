@@ -8777,6 +8777,25 @@ the same name (13, row 5), and a call `wrapping_add(a, b)` of such a fn is uncha
 
 No wrapping form for `Byte`, `/` or `%`, and no unary negation: `(0).wrapping_sub(x)` negates.
 
+Checked forms (`story:checked-arithmetic`, row E7 of the examples repository's
+`examples/friction.md`): `a.checked_add(b)`, `a.checked_sub(b)` and `a.checked_mul(b)`, each
+`Int -> Option<Int>`, are `Some` of the exact result when it lies in the range of `Int` and
+`None` when it does not, so a program tests for overflow before it would end its task
+(`(9223372036854775807).checked_add(1)` and `(-9223372036854775807 - 1).checked_mul(-1)` are
+`None`, `(3).checked_mul(4)` is `Some(12)`). They never fail; `+`,
+`-` and `*` keep failing. Builtins `IntCheckedAdd`, `IntCheckedSub`, `IntCheckedMul`; their
+names are in `ignite_check::BUILTIN_METHODS`, so on an `Int` receiver the builtin wins over a
+user fn of the same name, as for the wrapping forms, and a call `checked_add(a, b)` of such a
+fn is unchanged.
+
+| layer | lowering |
+|---|---|
+| Rust target | `i64::checked_add(a, b)` (and `_sub`, `_mul`), Rust's `Option<i64>` |
+| LLVM target | `llvm.sadd.with.overflow.i64` (and `ssub`, `smul`), the overflow bit selects the `None` tag of the `Option<Int>` and the sum is the `Some` payload |
+| evaluator | `i64::checked_*` |
+
+No checked form for `Byte`, `/`, `%` or unary negation: `(0).checked_sub(x)` negates.
+
 ### 25.3 `Stderr` (item 2, friction row 48)
 
 `Stderr.write_all(bytes) -> Result<Unit, IoError>` writes to standard error and flushes, as
@@ -8865,3 +8884,8 @@ executable. Before, a sibling module was built into the test executable with its
   (`fixtures/codespec_siblings/`, both targets): `ignite test app.ignite` reports the tests of
   `cs`, `cs.util`, `cs.fmt` and `cs.reader` (a program file of package `cs`), 4 passed;
   `ignite test util.ignite` reports those of `cs.util` and of the sibling it imports, `cs.fmt`.
+- `ignite_test::checked_arithmetic_on_both_targets` runs `fixtures/tests/checked.ignite` on both
+  targets, dev and release: `checked_add`, `checked_sub` and `checked_mul` at both bounds of
+  `Int`, on literal operands and on operands read from text, `None` past a bound and `Some`
+  within it; `int_checked` of `fixtures/eval_equivalence.ignite` prints the same in the
+  evaluator and on both targets.

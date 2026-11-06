@@ -1216,6 +1216,20 @@ impl<'p> Evaluator<'p> {
                     _ => a.wrapping_mul(b),
                 }))
             }
+            (
+                Builtin::IntCheckedAdd | Builtin::IntCheckedSub | Builtin::IntCheckedMul,
+                Value::Int(a),
+            ) => {
+                let Value::Int(b) = next()? else {
+                    return Err(internal("checked arithmetic on a non-Int"));
+                };
+                let result = match builtin {
+                    Builtin::IntCheckedAdd => a.checked_add(b),
+                    Builtin::IntCheckedSub => a.checked_sub(b),
+                    _ => a.checked_mul(b),
+                };
+                plain(Value::option(result.map(Value::Int)))
+            }
             (Builtin::ListLen, Value::List(items)) => plain(Value::Int(items.len() as i64)),
             (Builtin::ListIsEmpty, Value::List(items)) => plain(Value::Bool(items.is_empty())),
             (Builtin::ListAt, Value::List(items)) => {

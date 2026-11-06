@@ -4628,6 +4628,31 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 };
                 Val::Scalar(self.f.val(format!("{instr} i64 {x}, {y}")))
             }
+            IntCheckedAdd | IntCheckedSub | IntCheckedMul => {
+                let r = recv(self);
+                let x = self.scalar(&r);
+                let y = self.scalar_arg(&args[0]);
+                let name = match b {
+                    IntCheckedAdd => "sadd",
+                    IntCheckedSub => "ssub",
+                    _ => "smul",
+                };
+                let pair = self.f.val(format!(
+                    "call {{ i64, i1 }} @llvm.{name}.with.overflow.i64(i64 {x}, i64 {y})"
+                ));
+                let over = self.f.val(format!("extractvalue {{ i64, i1 }} {pair}, 1"));
+                let value = self.f.val(format!("extractvalue {{ i64, i1 }} {pair}, 0"));
+                let ty = Ty::Option(Box::new(Ty::Int));
+                let layout = self.env.enum_layout(&ty);
+                let result = self.temp(&ty);
+                let tag = self.f.val(format!("select i1 {over}, i32 1, i32 0"));
+                self.f
+                    .ins(format!("store i32 {tag}, ptr {result}, align 4"));
+                let payload = self.gep(&result, layout.variants[0].1[0].1);
+                self.f
+                    .ins(format!("store i64 {value}, ptr {payload}, align 8"));
+                Val::Ptr(result, true)
+            }
             TcpStreamSetIdleTimeout | PipeStreamSetIdleTimeout | StreamSetIdleTimeout => {
                 let entry = self.stream_entry(b, receiver, "set_idle_timeout");
                 let r = recv(self);

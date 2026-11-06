@@ -59,6 +59,15 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
         (Ty::Int, "wrapping_add") => sig(IntWrappingAdd, vec![Ty::Int], Ty::Int),
         (Ty::Int, "wrapping_sub") => sig(IntWrappingSub, vec![Ty::Int], Ty::Int),
         (Ty::Int, "wrapping_mul") => sig(IntWrappingMul, vec![Ty::Int], Ty::Int),
+        (Ty::Int, "checked_add") => {
+            sig(IntCheckedAdd, vec![Ty::Int], Ty::Option(Box::new(Ty::Int)))
+        }
+        (Ty::Int, "checked_sub") => {
+            sig(IntCheckedSub, vec![Ty::Int], Ty::Option(Box::new(Ty::Int)))
+        }
+        (Ty::Int, "checked_mul") => {
+            sig(IntCheckedMul, vec![Ty::Int], Ty::Option(Box::new(Ty::Int)))
+        }
         (Ty::TcpStream, "set_idle_timeout") => {
             sig(TcpStreamSetIdleTimeout, vec![Ty::Int], io(Ty::Unit))
         }

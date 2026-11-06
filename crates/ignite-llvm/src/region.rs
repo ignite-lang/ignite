@@ -84,6 +84,9 @@ fn mutates(builtin: Builtin) -> bool {
         | IntWrappingAdd
         | IntWrappingSub
         | IntWrappingMul
+        | IntCheckedAdd
+        | IntCheckedSub
+        | IntCheckedMul
         | TcpStreamSetIdleTimeout
         | StoreGet
         | StoreValues
