@@ -119,11 +119,17 @@ test "siblings" {
   of a sibling is E031.
 - A sibling is found from its file name: `demo.util` is `util.ignite` in the main file's
   directory. Files in the directory with another package are ignored.
+- A sibling given as the file (`ignite check util.ignite`) loads the siblings it imports:
+  `demo.names` is `names.ignite` beside it.
+- Another program file of the package can be imported as a module: an import of
+  `demo.reader` loads `reader.ignite` when that file declares `package demo`. Its functions,
+  kinds, tests and systems are those of the module `demo.reader`; `ignite build app.ignite`
+  builds the systems of `app.ignite` only. Only imported program files are loaded.
 - Importing any module that is neither standard library nor a sibling is E031 ("only
   standard-library (`std.*`) modules and the sibling modules of the program's package can be
   imported").
 - `ignite check`, `ignite test` and `ignite build` of the main file check every sibling
-  module it imports. The [terminal example](https://github.com/ignite-lang/ignite/blob/main/examples/terminal/terminal.ignite)
+  module it imports; `ignite test` also runs their tests. The [terminal example](https://github.com/ignite-lang/ignite/blob/main/examples/terminal/terminal.ignite)
   keeps its commands in two siblings.
 
 ## Visibility

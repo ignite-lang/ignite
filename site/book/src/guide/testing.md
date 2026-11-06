@@ -45,8 +45,9 @@ ignite test examples/terminal/commands.ignite
 ```
 
 Arguments ending in `.ignite` are files; at most one other argument is the filter. All named
-files share one test executable per target: one compile and one link. Every module the
-files load is built normally, with its own tests dropped. The default target is LLVM, which
+files share one test executable per target: one compile and one link. The tests of the named
+files run first, then those of their sibling modules; a standard library module the files
+load is built with its tests dropped. The default target is LLVM, which
 links the runtime archive with the test runner ([Both targets](#both-targets) shows how to
 build it); `--target rust` builds with cargo instead.
 
