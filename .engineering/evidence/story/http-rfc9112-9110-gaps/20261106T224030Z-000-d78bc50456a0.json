@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T22:40:30Z",
+  "actor": "human:timo",
+  "artifact": "story:http-rfc9112-9110-gaps",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "PR A #73 gate 1293 passed; PR B #75 gate 1296 passed; PR C #79 gate on a8bbb82b 1297 passed, 0 failed, 295 inline per target; conformance llvm+rust: rfc9112 1 gap, rfc9110 1 gap, 0 failures",
+    "reference": "https://github.com/ignite-lang/ignite/pull/79"
+  }
+}

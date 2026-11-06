@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:http-rfc9112-9110-gaps
 kind: story
-status: active
+status: implemented
 title: Http closes its RFC 9112 and 9110 MUST gaps
 summary: Check the application's response headers and parse the head as octets to close Http's MUST gaps
 relations:
@@ -18,10 +18,11 @@ scope:
   path: docs/slice.md
 - confidence: cited
   path: std/protocol/http.ignite
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-06T15:07:21Z", actor: "human:timo", revision: 7}
 - {from: "proposed", to: "active", at: "2026-11-06T15:07:22Z", actor: "human:timo", revision: 8}
+- {from: "active", to: "implemented", at: "2026-11-06T22:40:30Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1}}}
 ---
 
 # Story: http-rfc9112-9110-gaps
