@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: epic:ignite-lsp
 kind: epic
-status: active
+status: implemented
 title: 'ignite-lsp: a Language Server written in Ignite, derived from the LSP specification'
 summary: Diagnostics for .ignite buffers from an LSP 3.17 server written in Ignite (examples/lsp/server.ignite), on message types generated from the LSP metaModel.json, with the protocol rules as conformance catalogues.
 relations:
 - depends_on: story:slice-17-frontend
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T15:23:30Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-11-05T15:23:30Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-11-06T08:53:25Z", actor: "human:timo", revision: 7}
 ---
 # Epic: ignite-lsp, a language server written in Ignite
 
