@@ -280,6 +280,34 @@ test "reads over 16 KiB keep their bytes and the texts made between them" {
   assert notes[0] == "read 0 é"
 }
 
+test "map keys of multibyte and prefix texts sort bytewise" {
+  let odd = "a".concat(Bytes.of([255]).to_text())
+  var m: Map<Text, Int> = Map.empty()
+  m.put("zz", 1)
+  m.put("é", 2)
+  m.put("", 3)
+  m.put(odd, 4)
+  m.put("ab", 5)
+  m.put("a", 6)
+  m.put("e", 7)
+  m.put("aa", 8)
+  m.put("z", 9)
+  assert m.keys() == ["", "a", "aa", "ab", odd, "e", "z", "zz", "é"]
+  assert m.get("é") == Some(2)
+  assert m.get(odd) == Some(4)
+  assert m.get("a") == Some(6)
+  assert m.get("") == Some(3)
+  assert m.get("aaa") == None
+  assert m.get("é".concat("")) == Some(2)
+  m.put("a", 60)
+  m.put("é", 20)
+  assert m.len() == 9
+  assert m.get("a") == Some(60)
+  assert m.get("é") == Some(20)
+  m.remove("aa")
+  assert m.keys() == ["", "a", "ab", odd, "e", "z", "zz", "é"]
+}
+
 test "join, trim and their edge cases" {
   assert ["a", "b", "c"].join("-") == "a-b-c"
   assert ["é", "", "ü"].join("→") == "é→→ü"

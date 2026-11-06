@@ -194,7 +194,7 @@ pub enum Callee { Fn(QualName), Role { protocol: QualName, role: String }, Varia
 | generic record or enum `R<A, B>` | the record or enum layout with the type arguments substituted, one layout per argument list; mangled `R<A,B>` | C rules |
 | `Store<T>` | `ptr` to the runtime store of the resource (section 5) | 8, 8 |
 | `Duration`, `ByteSize`, `Ratio` (quantities, `docs/slice.md` section 14.1) | `i64` in the base unit `ignite_io::Quantity` defines; arithmetic is `Int`'s, with the same overflow checks (section 4); debug text through `quantity_debug` (section 5) | 8, 8 |
-| `Map<K, V>` (`docs/slice.md` section 14.3) | `{ ptr, i64 len, i64 cap }` of `(K, V)` pairs sorted by key (`Int` and `Byte` numeric, `Text` bytewise through `text_cmp`, `Bool` false before true, enums by tag), looked up by binary search; copy, drop, equality and debug glue (`{k: v, …}`) as for a list of the pair; `for` visits keys in that order. A B-tree is a later milestone | 24, 8 |
+| `Map<K, V>` (`docs/slice.md` section 14.3) | `{ ptr, i64 len, i64 cap }` of `(K, V)` pairs sorted by key (`Int` and `Byte` numeric, `Text` bytewise through the inline `@ignite.text_cmp` (a `memcmp` of the common length, then the shorter first; the runtime's `text_cmp` gives the same order), `Bool` false before true, enums by tag), looked up by binary search; copy, drop, equality and debug glue (`{k: v, …}`) as for a list of the pair; `for` visits keys in that order. A B-tree is a later milestone | 24, 8 |
 
 Calling convention (all functions the generator emits, and every `ignite_rt_*` function that
 takes or returns Ignite values):

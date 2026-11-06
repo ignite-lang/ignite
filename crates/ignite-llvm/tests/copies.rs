@@ -51,6 +51,23 @@ fn constants_are_evaluated_once() {
     }
 }
 
+/// P8: a `Map<Text, _>` probe compares keys inline (`@ignite.text_cmp`, a
+/// `memcmp` of the common length), not through a runtime call.
+#[test]
+fn text_keys_compare_inline() {
+    let (generated, _) = lower_with("copies", true);
+    let program = &generated.program;
+    assert!(
+        !program.contains("call i32 @ignite_rt_text_cmp("),
+        "a runtime comparison is left:\n{program}"
+    );
+    let find = program
+        .split("\ndefine ")
+        .find(|f| f.starts_with("internal i64 @\"map.find.") && f.contains("Text"))
+        .expect("a map.find over Text keys");
+    assert!(find.contains("call i32 @ignite.text_cmp("), "{find}");
+}
+
 #[test]
 fn every_copies_test_runs() {
     let (generated, tests) = lower_with("copies", true);

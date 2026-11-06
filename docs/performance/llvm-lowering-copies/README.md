@@ -157,3 +157,25 @@ the texts made between them" (110,017 patterned bytes written as 40,000, 70,000 
 read with maxima 65,536 and 20,000 alternating; each read checked against its maximum, the
 bytes compared whole, and texts allocated between reads checked afterwards), on both
 targets.
+
+## P8: a map compares Text keys inline
+
+Each probe of a `Map<Text, _>` binary search called `ignite_rt_text_cmp`, which entered the
+runtime (`crate::entry`) to compare two slices. Now `glue::compare` of `Text` calls the
+`alwaysinline` IR helper `@ignite.text_cmp`: `memcmp` of the common length (skipped when it
+is 0, since an empty text's pointer may be null), then the shorter first. That is Rust's
+`[u8]` order, the order `ignite_rt_text_cmp` gives, so a map's keys keep their order. The
+O(n) `memmove` of `Map.put` (the review's known O11) is not changed.
+
+| measure | base | P8 |
+|---|---|---|
+| `bench-b.ignite` `program.ll`: calls of `ignite_rt_text_cmp` | 1 (in `map.find.Map<Text,Int>`) | 0 |
+| `bench map with text keys` (400 rounds of 512 puts and 512 gets): `ignite_rt_text_cmp` calls (callgrind) | 3,197,600 | 0 (3,197,600 `memcmp` calls inline) |
+| same: instructions (callgrind `Ir`, whole run) | 438,246,089 | 276,452,453 |
+| wall time, `bench map with text keys`, median of 21 interleaved (load 11.2) | 53 ms | 39 ms |
+
+Tests that catch a wrong result: the copies test "map keys of multibyte and prefix texts
+sort bytewise" (keys `""`, a prefix and its extensions, `é`, a text with byte 0xFF; `keys()`
+order, `get` of present, absent and equal-but-distinct keys, overwrite and remove), on both
+targets, and `copies::text_keys_compare_inline`, which checks that `map.find` over `Text`
+keys calls `@ignite.text_cmp` and no runtime comparison is left.
