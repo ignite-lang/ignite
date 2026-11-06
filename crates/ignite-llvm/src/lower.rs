@@ -4841,9 +4841,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
 
     // ---- tasks -----------------------------------------------------------
 
-    /// `spawn f(args)`: the arguments are evaluated (copied) into an
-    /// environment in this frame; a per-site thunk copies them into the new
-    /// task's arena, calls `spawn_ready` and then `f`.
+    /// `spawn f(args)`: the arguments are evaluated into an environment in
+    /// this frame (a borrowed one as its place's pointer); a per-site thunk
+    /// copies them into the new task's arena, calls `spawn_ready` and then `f`.
     fn spawn(&mut self, call: &Expr) {
         let callee = self.cx.types.callee(call).cloned();
         let args: Vec<&Expr> = match &call.kind {
@@ -4931,9 +4931,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
 
     /// Store `values` into an environment, define the thunk `thunk` that
     /// runs `symbol` with copies of them, and start it (`docs/llvm.md`
-    /// section 4). `values` are deep-copied into the environment and
-    /// `ignite_rt_spawn` waits until the thunk has copied them again into its
-    /// own arena. The task is an owner of every stream argument
+    /// section 4). An owned value is moved into the environment and a
+    /// borrowed aggregate goes in as its place's pointer, not copied: the
+    /// parent waits in `ignite_rt_spawn` until the thunk has deep-copied
+    /// every value into the task's own arena (`spawn_ready`), and nothing
+    /// changes the place meanwhile. The task is an owner of every stream argument
     /// ([`is_stream`]; a handle-table entry counts its owners): the thunk
     /// registers it with `tcp_own`, so a failure releases it, and releases
     /// it when `symbol` returns; the stream closes when its last owner
@@ -4952,12 +4954,31 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         values: Vec<(Ty, Val, bool)>,
         prefix: &str,
     ) {
-        let layouts: Vec<Layout> = values.iter().map(|(ty, _, _)| self.layout(ty)).collect();
+        let by_place: Vec<bool> = values
+            .iter()
+            .map(|(ty, v, _)| is_aggregate(ty) && matches!(v, Val::Ptr(_, false)))
+            .collect();
+        let layouts: Vec<Layout> = values
+            .iter()
+            .zip(&by_place)
+            .map(|((ty, _, _), &place)| {
+                if place {
+                    Layout::scalar(8)
+                } else {
+                    self.layout(ty)
+                }
+            })
+            .collect();
         let (offsets, env_layout) = c_struct(&layouts);
         let env = self.f.alloca(env_layout);
-        for ((ty, v, _), offset) in values.iter().zip(&offsets) {
+        for (((ty, v, _), offset), &place) in values.iter().zip(&offsets).zip(&by_place) {
             let dst = self.gep(&env, *offset);
-            self.store_value(ty, &dst, v.clone());
+            if place {
+                let p = self.ptr(v);
+                self.f.ins(format!("store ptr {p}, ptr {dst}, align 8"));
+            } else {
+                self.store_value(ty, &dst, v.clone());
+            }
         }
         let callee = self.function(symbol, &sig.params, &sig.ret);
         let mut t = Lower::new(
@@ -4990,8 +5011,13 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         t.f.ins(format!("call void @ignite_rt_guard_push(ptr {jb})"));
         let mut operands = Vec::new();
         let mut streams = Vec::new();
-        for ((ty, _, _), offset) in values.iter().zip(&offsets) {
-            let src = t.gep("%env", *offset);
+        for (((ty, _, _), offset), &place) in values.iter().zip(&offsets).zip(&by_place) {
+            let slot = t.gep("%env", *offset);
+            let src = if place {
+                t.f.val(format!("load ptr, ptr {slot}, align 8"))
+            } else {
+                slot
+            };
             if is_aggregate(ty) {
                 let own = t.temp(ty);
                 t.copy(ty, &own, &src);

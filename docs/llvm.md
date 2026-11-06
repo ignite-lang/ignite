@@ -411,9 +411,12 @@ position, even with no buffer.
   kernel without a trim: ember's `FLUSHDB` (`db.values()` copies the keyspace into the
   arena) left 10 MB of freed chunks resident until the next trim while chunks were
   `malloc` blocks (2026-11-04).
-  `spawn` hands the new task a pointer to the arguments in the parent's memory. The task
-  deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before the parent
-  continues (`ignite_rt_spawn` blocks until then and returns 1).
+  `spawn` hands the new task a pointer to the arguments in the parent's memory: an owned
+  argument (a temporary or a moved place) moved into a block in the parent's frame, a
+  borrowed aggregate (a variable, a field, a constant) as its place's pointer, not copied.
+  The task deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before
+  the parent continues (`ignite_rt_spawn` blocks until then and returns 1), so the places
+  are unchanged while the task reads them.
 
   A stream lives as long as on the Rust target, where each task and binding holds a clone
   of an `Arc` (story `llvm-stream-ownership`). Each handle-table entry counts its owners:

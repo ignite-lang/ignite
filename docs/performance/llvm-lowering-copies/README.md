@@ -241,3 +241,27 @@ address, measured on base and P3 alike:
 
 In this bench the list is used again in the next round, so its capture is no last use and
 a move would not apply either; it shows what one capture copy costs.
+
+## P5: a spawn hands over a borrowed argument's place
+
+`spawn f(x)` copied a borrowed aggregate argument into an environment in the parent's
+arena, and the task's thunk copied it again into the task's arena. The parent waits in
+`ignite_rt_spawn` until the task has made its copy (`spawn_ready`, or the task ended), so
+the place stays unchanged meanwhile. Now the environment holds the place's pointer and the
+thunk copies from it; an owned argument (a temporary, a moved place) is moved into the
+environment as before.
+
+| measure | base | P5 |
+|---|---|---|
+| `bench-c.ignite` `program.ll`: calls of `copy.` glue in the spawn test | 1 | 0 |
+| golden `bounds.program.ll`: the spawn of `Echo.serve` with a borrowed `Text` | `copy.Text` in the parent, `copy.Text` in the thunk | a pointer store in the parent, `copy.Text` in the thunk |
+| `bench spawn with a borrowed list` (300 spawns of a task that reads a 100,000-int list, each waited for): `calloc` calls (large arena blocks) | 620 | 320 |
+| same: `memcpy` calls of the list | 631 (481,035,820 `Ir` in `calloc`, 484,082,894 in `memcpy`) | 331 (240,939,687 and 244,080,158) |
+| same: instructions (callgrind `Ir`, whole run) | 969,694,909 | 489,397,893 |
+| same: wall time, median of 21 interleaved (load 15.1) | 41 ms | 22 ms |
+
+Tests that catch a wrong result: the copies test "a spawned task gets the borrowed
+arguments as they were at the spawn" (a variable, a record field and a parameter passed on
+by a fn are changed or cleared right after the spawn; the task reports what it got through
+a pipe), on both targets. `copies::readers_and_spawns_take_places` checks that `start`
+copies no list and that the spawn thunk does.

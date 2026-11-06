@@ -68,9 +68,10 @@ fn text_keys_compare_inline() {
     assert!(find.contains("call i32 @ignite.text_cmp("), "{find}");
 }
 
-/// P3: `list.map` with a closure literal or a named fn that only reads
-/// its parameter, and a call through a `let` bound to such a closure,
-/// copy no list in the caller.
+/// P3 and P5: `list.map` with a closure literal or a named fn that only
+/// reads its parameter, a call through a `let` bound to such a closure,
+/// and a `spawn` of a borrowed list copy no list in the caller (the
+/// spawned task copies its arguments in its own thunk).
 #[test]
 fn readers_and_spawns_take_places() {
     let (generated, _) = lower_with("copies", true);
@@ -79,6 +80,7 @@ fn readers_and_spawns_take_places() {
         "tests.copies.lengths",
         "tests.copies.sums",
         "tests.copies.measured",
+        "tests.copies.start",
     ] {
         let body = function(program, symbol);
         assert!(
@@ -86,6 +88,11 @@ fn readers_and_spawns_take_places() {
             "{symbol}:\n{body}"
         );
     }
+    let thunk = program
+        .split("\ndefine ")
+        .find(|f| f.starts_with("internal void @\"spawn.tests.copies.report."))
+        .expect("the spawn thunk of report");
+    assert!(thunk.contains("call void @\"copy.List"), "{thunk}");
 }
 
 #[test]
