@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:store-lock-contention
 kind: story
-status: active
+status: implemented
 title: Store under pipelined load without lock contention
 summary: Shard or split the Store lock; futex calls per request toward the handwritten baseline
 relations:
@@ -16,10 +16,11 @@ scope:
   path: docs/performance
 - confidence: cited
   path: docs/slice.md
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 7}
 - {from: "proposed", to: "active", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 8}
+- {from: "active", to: "implemented", at: "2026-11-06T18:52:59Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: store-lock-contention
 
