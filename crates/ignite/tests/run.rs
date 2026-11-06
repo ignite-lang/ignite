@@ -424,9 +424,24 @@ fn note_text(record: &Json) -> Option<&str> {
 }
 
 /// A field of a record value's `fields` object (a `Standing`, a
-/// `ProbeAttempt`).
+/// `Sample`, a `ProbeAttempt`).
 fn field<'a>(value: &'a Json, name: &str) -> Option<&'a Json> {
     value.get("fields")?.get(name)
+}
+
+/// Whether the prompt arrived, read from a `std.sli.Sample` (`docs/slice.md`
+/// 22.3): `Some(false)` for a sample without a line (the deadline's), else
+/// the `received` field of the `ProbeAttempt` its line encodes.
+fn sample_received(sample: &Json) -> Option<bool> {
+    let line = field(sample, "line")?;
+    match line.get("variant")?.as_str()? {
+        "None" => Some(false),
+        "Some" => {
+            let text = line.get("fields")?.as_array()?.first()?.as_str()?;
+            field(&Json::parse(text).ok()?, "received")?.as_bool()
+        }
+        _ => None,
+    }
 }
 
 fn standing_status(record: &Json) -> &str {
@@ -483,6 +498,48 @@ fn echo_hello(port: i64) {
 /// client echo on the reported port, `client` declared, `stop` exits 0
 /// and leaves no process; then item 7 (replay) and item 4 (no `standing`
 /// claims `Compliant` without an attempt).
+/// Row 5 of `docs/slice.md` 22.0: the journal is `ignite-journal/0.2`,
+/// every `signal` record's value is a `std.sli.Sample` and every `Emitted`
+/// event carries a `std.sli.Verdict`; the journal holds at least one of
+/// each.
+fn assert_typed_payloads(lines: &[String]) {
+    let header = Json::parse(&lines[0]).unwrap();
+    assert_eq!(
+        header.get("formatVersion").and_then(Json::as_str),
+        Some("ignite-journal/0.2"),
+        "{}",
+        lines[0]
+    );
+    let type_of = |value: Option<&Json>| {
+        value
+            .and_then(|v| v.get("type"))
+            .and_then(Json::as_str)
+            .map(str::to_string)
+    };
+    let (mut signals, mut emitted) = (0, 0);
+    for line in &lines[1..] {
+        let record = Json::parse(line).unwrap();
+        if kind(&record) == "signal" {
+            signals += 1;
+            let value = record.get("value").and_then(|v| v.get("value"));
+            assert_eq!(type_of(value).as_deref(), Some("std.sli.Sample"), "{line}");
+        }
+        if event_variant(&record) == Some("Emitted") {
+            emitted += 1;
+            let verdict = event_fields(&record).get(1);
+            assert_eq!(
+                type_of(verdict).as_deref(),
+                Some("std.sli.Verdict"),
+                "{line}"
+            );
+        }
+    }
+    assert!(
+        signals > 0 && emitted > 0,
+        "{signals} signals, {emitted} Emitted"
+    );
+}
+
 fn terminal_runs(target: &str) {
     let mut run = Run::design(target, &format!("item1-{target}"), &["--clock", "manual"]);
     let segment = run.wait_kind("segment");
@@ -516,11 +573,21 @@ fn terminal_runs(target: &str) {
         .collect();
     assert_eq!(declared, ["Terminal.client"]);
     echo_hello(port);
+    let reachable = run.wait_for("standing of Terminal.reachable", |r| {
+        kind(r) == "standing" && standing_contract(r) == "Terminal.reachable"
+    });
+    assert_eq!(
+        standing_status(&reachable),
+        "Compliant",
+        "{}",
+        reachable.compact()
+    );
     let pids = run.pids();
     assert_eq!(pids.len(), 1, "{pids:?}");
     let code = run.stop();
     assert_eq!(code, 0, "stderr:\n{}", run.stderr());
     assert_no_process_left(&pids);
+    assert_typed_payloads(&run.journal_lines());
     let stderr = run.stderr();
     assert!(
         stderr.contains("Terminal.client: declared, not buildable: its kind has no main"),
@@ -763,8 +830,7 @@ fn probe_timeout_is_visible_in_journal_and_standing() {
         kind(r) == "signal"
             && r.get("value")
                 .and_then(|v| v.get("value"))
-                .and_then(|a| field(a, "received"))
-                .and_then(Json::as_bool)
+                .and_then(sample_received)
                 == Some(false)
     });
     let bad_at = at_ns(&bad);
@@ -789,8 +855,9 @@ fn probe_timeout_is_visible_in_journal_and_standing() {
             || (event_variant(r) == Some("AttemptDone")
                 && event_fields(r)
                     .get(1)
-                    .and_then(|a| field(a, "received"))
-                    .and_then(Json::as_bool)
+                    .and_then(Json::as_str)
+                    .and_then(|line| Json::parse(line).ok())
+                    .and_then(|a| field(&a, "received").and_then(Json::as_bool))
                     == Some(false))
     });
     assert!(timed_out, "neither a probe timeout nor a bad AttemptDone");
@@ -812,8 +879,7 @@ fn probe_timeout_is_visible_in_journal_and_standing() {
             && at_ns(r) == 20_000 * NS_PER_MS
             && r.get("value")
                 .and_then(|v| v.get("value"))
-                .and_then(|a| field(a, "received"))
-                .and_then(Json::as_bool)
+                .and_then(sample_received)
                 == Some(true)
     });
     assert_eq!(at_ns(&good), 20_000 * NS_PER_MS);
@@ -890,7 +956,9 @@ fn good_attempts_across_the_period_fire_no_consequence() {
 }
 
 /// Mask the values a real process contributes (16.0 item 8): the pid of
-/// lifecycle events and kills, the latency of attempts and emissions.
+/// lifecycle events and kills, the latency of attempts and emissions
+/// (inside the probe's line, which `AttemptDone` and a `Sample` carry as
+/// text since `docs/slice.md` 22.3).
 fn masked(line: &str) -> String {
     fn walk(json: &mut Json) {
         match json {
@@ -925,6 +993,12 @@ fn masked(line: &str) -> String {
                 }
             }
             Json::Array(items) => items.iter_mut().for_each(walk),
+            Json::Str(text) if text.starts_with('{') => {
+                if let Ok(mut inner) = Json::parse(text) {
+                    walk(&mut inner);
+                    *text = inner.compact();
+                }
+            }
             _ => {}
         }
     }
@@ -1012,8 +1086,10 @@ fn e125_nothing_to_run() {
     );
 }
 
-/// E126 (16.17): a state directory whose journal was written for another
-/// model, reported before anything is built.
+/// E126 (16.17, `docs/slice.md` 22.0 row 6): a state directory whose journal
+/// has `formatVersion` `ignite-journal/0.1` (and another model), refused by
+/// `ignite run` before anything is built (exit 2) and by `ignite replay`
+/// (exit 1, its diagnostics exit like `plan`'s).
 #[test]
 fn e126_journal_mismatch() {
     let state = state("e126");
@@ -1034,6 +1110,24 @@ fn e126_journal_mismatch() {
         &text(&output.stderr),
     );
     assert!(!state.join("build").exists(), "E126 cost a build");
+    let replayed = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .args(["replay", "e126_journal_mismatch.ignite", "--state"])
+        .arg(&state)
+        .current_dir(fixtures_dir())
+        .stdin(Stdio::null())
+        .output()
+        .expect("run ignite replay");
+    assert_eq!(
+        replayed.status.code(),
+        Some(1),
+        "{}",
+        text(&replayed.stderr)
+    );
+    assert!(replayed.stdout.is_empty());
+    compare(
+        &fixture("e126_journal_mismatch.expected"),
+        &text(&replayed.stderr),
+    );
 }
 
 /// E127 (16.17, item 7): a journal with one `effect` record altered does

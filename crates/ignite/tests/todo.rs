@@ -9,8 +9,9 @@ use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{OnceLock, mpsc};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ignite::Target;
 
@@ -82,16 +83,59 @@ impl Drop for Running {
 
 // ---- the todo server --------------------------------------------------------
 
+/// A new empty working directory for one server under the test's scratch
+/// directory (`docs/slice.md` 22.0): the todo's relative `todo-data`
+/// directory resolves inside it, never inside the repository.
+fn workdir(target: Target) -> PathBuf {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "todo-work-{target:?}-{}-{}-{stamp}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+/// The entries of `dir`, sorted, a directory with a trailing `/`.
+fn listing(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+        .map(|entry| {
+            let entry = entry.unwrap();
+            let name = entry.file_name().into_string().unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                format!("{name}/")
+            } else {
+                name
+            }
+        })
+        .collect();
+    names.sort();
+    names
+}
+
 /// A running compiled `todod --port 0`.
 struct Server {
-    _process: Running,
+    process: Running,
     port: u16,
 }
 
 impl Server {
+    /// `todod` in a new working directory of its own.
     fn start(target: Target) -> Server {
+        Server::start_in(target, &workdir(target))
+    }
+
+    /// `todod` with `dir` as its working directory.
+    fn start_in(target: Target, dir: &Path) -> Server {
         let mut child = Command::new(todod(target))
             .args(["--port", "0"])
+            .current_dir(dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
@@ -114,10 +158,18 @@ impl Server {
             .recv_timeout(TIMEOUT)
             .expect("todod printed no `listening on 127.0.0.1:<port>` line")
             .expect("port in the listening line");
-        Server {
-            _process: process,
-            port,
-        }
+        Server { process, port }
+    }
+
+    /// SIGKILL, then wait until the process has ended.
+    fn kill(mut self) {
+        self.process.0.kill().expect("SIGKILL todod");
+        let status = self.process.0.wait().expect("wait for todod");
+        assert_eq!(
+            std::os::unix::process::ExitStatusExt::signal(&status),
+            Some(9),
+            "{status:?}"
+        );
     }
 
     fn connect(&self) -> Client {
@@ -352,9 +404,56 @@ fn keep_alive(target: Target) {
     assert!(client.closed());
 }
 
-/// 16 connections, 100 POSTs each, at the same time: 1600 distinct ids.
+/// `docs/slice.md` 22.0 row 12: every acknowledged change is on disk when
+/// its reply is read, so a `todod` started after a SIGKILL in the same
+/// working directory serves it, continues the ids after every id it ever
+/// gave, tombstones included, and keeps one file per todo, its latest
+/// version.
+fn todos_survive_sigkill(target: Target) {
+    let dir = workdir(target);
+    let server = Server::start_in(target, &dir);
+    let mut client = server.connect();
+    for (title, id) in [("a", 1), ("b", 2), ("c", 3)] {
+        let created = client.send("POST", "/todos", Some(&format!(r#"{{"title":"{title}"}}"#)));
+        assert_eq!(created.status, 201, "{created:?}");
+        assert_eq!(id_of(&created.body), id);
+    }
+    let deleted = client.send("DELETE", "/todos/1", None);
+    assert_eq!(deleted.status, 204, "{deleted:?}");
+    let patched = client.send("PATCH", "/todos/2", Some(r#"{"done":true}"#));
+    assert_eq!(patched.status, 200, "{patched:?}");
+    drop(client);
+    server.kill();
+
+    let server = Server::start_in(target, &dir);
+    let mut client = server.connect();
+    let all = client.send("GET", "/todos", None);
+    assert_eq!(
+        (all.status, all.body.as_str()),
+        (
+            200,
+            r#"[{"id":2,"title":"b","done":true},{"id":3,"title":"c","done":false}]"#
+        )
+    );
+    assert_eq!(client.send("GET", "/todos/1", None).status, 404);
+    let next = client.send("POST", "/todos", Some(r#"{"title":"d"}"#));
+    assert_eq!(
+        (next.status, next.body.as_str()),
+        (201, r#"{"id":4,"title":"d","done":false}"#)
+    );
+    drop(client);
+    drop(server);
+    let todos = dir.join("todo-data").join("todos");
+    assert_eq!(listing(&todos), ["1/", "2/", "3/", "4/"]);
+    assert_eq!(listing(&todos.join("2")), ["2.json"]);
+}
+
+/// 16 connections, 100 POSTs each, at the same time: 1600 distinct ids;
+/// after a SIGKILL a new `todod` in the same directory lists all 1600
+/// (`docs/slice.md` 22.0 row 13).
 fn concurrent_posts(target: Target) {
-    let server = Server::start(target);
+    let dir = workdir(target);
+    let server = Server::start_in(target, &dir);
     let workers: Vec<_> = (0..16)
         .map(|worker| {
             let mut client = server.connect();
@@ -380,6 +479,13 @@ fn concurrent_posts(target: Target) {
     let all = client.send("GET", "/todos", None);
     assert_eq!(all.body.matches(r#""id":"#).count(), 1600);
     client.stream.shutdown(Shutdown::Both).unwrap();
+    server.kill();
+
+    let server = Server::start_in(target, &dir);
+    let mut client = server.connect();
+    let all = client.send("GET", "/todos", None);
+    assert_eq!(all.status, 200);
+    assert_eq!(all.body.matches(r#""id":"#).count(), 1600);
 }
 
 /// Two connections PATCH different fields of one todo at the same time,
@@ -551,8 +657,131 @@ both_targets!(
     limits,
     keep_alive,
     concurrent_posts,
+    todos_survive_sigkill,
     concurrent_patches,
     header_framing,
     content_length,
     rejection_is_read,
+);
+
+// ---- slice 18 wave 3, adversary ---------------------------------------------
+
+/// `docs/slice.md` 22.4: every change is one atomic `update`, and "PATCH
+/// and DELETE of a tombstone answer 404". Two DELETEs of one todo at the
+/// same time are ordered by that update, so the later one deletes a
+/// tombstone: exactly one of them answers 204, the other 404, as two
+/// DELETEs in sequence do. 200 rounds behind a barrier.
+fn concurrent_deletes_answer_one_204(target: Target) {
+    const ROUNDS: usize = 200;
+    let server = Server::start(target);
+    let mut client = server.connect();
+    for id in 1..=ROUNDS {
+        let created = client.send("POST", "/todos", Some(r#"{"title":"t"}"#));
+        assert_eq!(created.status, 201, "{created:?}");
+        assert_eq!(id_of(&created.body), id as i64);
+    }
+    let sequential = client.send("DELETE", "/todos/1", None).status;
+    let again = client.send("DELETE", "/todos/1", None).status;
+    assert_eq!((sequential, again), (204, 404), "DELETE twice in sequence");
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let worker = || {
+        let mut client = server.connect();
+        let barrier = barrier.clone();
+        std::thread::spawn(move || {
+            (2..=ROUNDS)
+                .map(|id| {
+                    barrier.wait();
+                    client.send("DELETE", &format!("/todos/{id}"), None).status
+                })
+                .collect::<Vec<u16>>()
+        })
+    };
+    let first = worker();
+    let second = worker();
+    let first = first.join().expect("first worker");
+    let second = second.join().expect("second worker");
+    let both_204: Vec<usize> = first
+        .iter()
+        .zip(&second)
+        .enumerate()
+        .filter(|(_, (a, b))| **a == 204 && **b == 204)
+        .map(|(round, _)| round + 2)
+        .collect();
+    let other: Vec<(usize, u16, u16)> = first
+        .iter()
+        .zip(&second)
+        .enumerate()
+        .filter(|(_, (a, b))| {
+            let mut pair = [**a, **b];
+            pair.sort();
+            pair != [204, 404] && pair != [204, 204]
+        })
+        .map(|(round, (a, b))| (round + 2, *a, *b))
+        .collect();
+    assert!(other.is_empty(), "unexpected statuses: {other:?}");
+    assert!(
+        both_204.is_empty(),
+        "{} of {} ids answered 204 to both concurrent DELETEs: {:?}",
+        both_204.len(),
+        ROUNDS - 1,
+        &both_204[..both_204.len().min(20)]
+    );
+}
+
+/// `std.fs`'s `read_directory` refuses a directory of more than 65,536
+/// entries (`crates/ignite-io/src/fs.rs` `ENTRY_LIMIT`), and the todo keeps
+/// one directory per id under `todos/`, tombstones included, forever
+/// (22.4). A service whose ids reached that count (here: 65,536 deleted
+/// todos already on disk, as a service leaves them after creating and
+/// deleting them) acknowledges one more POST with 201; after a SIGKILL
+/// the new `todod` must still load (22.0 row 12: "data survives
+/// SIGKILL"), list the acknowledged todo and answer `/health` 200.
+fn the_65537th_todo_survives_a_restart(target: Target) {
+    const ENTRIES: i64 = 65_536;
+    let dir = workdir(target);
+    let todos = dir.join("todo-data").join("todos");
+    for id in 1..=ENTRIES {
+        let todo = todos.join(id.to_string());
+        std::fs::create_dir_all(&todo).unwrap();
+        std::fs::write(
+            todo.join("2.json"),
+            format!(r#"{{"deleted":true,"done":false,"id":{id},"title":"t","version":2}}"#),
+        )
+        .unwrap();
+    }
+    let slow = Duration::from_secs(120);
+    let server = Server::start_in(target, &dir);
+    let mut client = server.connect();
+    client.stream.set_read_timeout(Some(slow)).unwrap();
+    let before = client.send("GET", "/todos", None);
+    let created = client.send("POST", "/todos", Some(r#"{"title":"kept"}"#));
+    drop(client);
+    server.kill();
+
+    let server = Server::start_in(target, &dir);
+    let mut client = server.connect();
+    client.stream.set_read_timeout(Some(slow)).unwrap();
+    let after = client.send("GET", "/todos", None);
+    let health = client.send("GET", "/health", None);
+    drop(client);
+    drop(server);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!((before.status, before.body.as_str()), (200, "[]"));
+    assert_eq!(
+        (created.status, created.body.as_str()),
+        (201, r#"{"id":65537,"title":"kept","done":false}"#)
+    );
+    assert_eq!(
+        (after.status, after.body.as_str()),
+        (200, r#"[{"id":65537,"title":"kept","done":false}]"#),
+        "the acknowledged todo after a restart"
+    );
+    assert_eq!((health.status, health.body.as_str()), (200, "ok\n"));
+}
+
+both_targets!(
+    todo_w3_adversary;
+    concurrent_deletes_answer_one_204,
+    the_65537th_todo_survives_a_restart,
 );

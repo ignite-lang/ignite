@@ -37,6 +37,8 @@ pub enum Mode {
     Programs(RunArgs),
     /// Time check and plan of the design file
     Cli(RunArgs),
+    /// Time the edit-build-restart cycle under ignite host and ignite apply
+    ApplyCycle(RunArgs),
     /// smoke, cold, warm, programs and cli
     All(RunArgs),
     /// Write summary.json and summary.md from the records

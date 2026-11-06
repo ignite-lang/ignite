@@ -1,5 +1,6 @@
 //! The check-time rules of slice 12 (`docs/slice.md` 16.17): E120 to E124
-//! per system and E121, E122 and E129 per resolved assembly (15.6), run by
+//! and E150 (22.3) per system and E121, E122, E129 and E151 per resolved
+//! assembly (15.6), run by
 //! `ignite check` for every system and assembly and by `ignite plan` and
 //! `ignite run` for the selected one (O20). The compiler knows no kind, no
 //! binding variant and no outcome or zone name (invariant 6): everything
@@ -11,7 +12,7 @@
 //! 16.14); a contract's window is its property of type `std.sli.Window`.
 //! Owner: P1.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ignite_syntax::ast::{Decl, Span, SystemDecl};
 use ignite_syntax::diagnostic::Diagnostic;
@@ -19,7 +20,7 @@ use ignite_types::{
     AssemblyInfo, MemberInfo, QualName, QuantityKind, Reference, SystemInfo, Ty, TypedProgram,
 };
 
-use crate::model::{ModelMember, eval_diagnostic, type_name};
+use crate::model::{ModelMember, eval_diagnostic, signal_refs, type_name};
 use crate::resolve::{binding_key_spans, entries_fn};
 use crate::{Evaluator, Modules, ResolutionEntry, Value};
 
@@ -133,6 +134,142 @@ fn signal_ref(value: &Value) -> Option<(&str, &str, &str)> {
             field,
         }) => Some((system, member, field)),
         _ => None,
+    }
+}
+
+/// The signals `member` subscribes to, at any depth of its properties, as
+/// `(field, system, producer, output)` in property order, each once per
+/// property. It reads them through [`signal_refs`], the collection behind
+/// `ModelMachine::subscribes`, so E121, E150 and E151 see the signals the
+/// driver routes (`docs/slice.md` 22.3).
+fn subscriptions(member: &ModelMember) -> Vec<(&str, &str, &str, &str)> {
+    let mut out = Vec::new();
+    for (field, value) in &member.properties {
+        let mut references = Vec::new();
+        signal_refs(value, &mut references);
+        for reference in references {
+            let Some((system, producer, output)) = signal_ref_of(reference) else {
+                continue;
+            };
+            let entry = (field.as_str(), system, producer, output);
+            if !out.contains(&entry) {
+                out.push(entry);
+            }
+        }
+    }
+    out
+}
+
+/// The `(system, member, field)` of a signal reference.
+fn signal_ref_of(reference: &Reference) -> Option<(&str, &str, &str)> {
+    match reference {
+        Reference::Signal {
+            system,
+            member,
+            field,
+        } => Some((system, member, field)),
+        _ => None,
+    }
+}
+
+/// The element type of the signal `producer.output` of `system`, when
+/// `producer` is a member of `system` with that unset `Signal<T>` output.
+fn element_of(
+    system: &SystemInfo,
+    signal_system: &str,
+    producer: &str,
+    output: &str,
+) -> Option<Ty> {
+    if signal_system != system.name {
+        return None;
+    }
+    let (_, ty) = system
+        .member(producer)?
+        .outputs
+        .iter()
+        .find(|(o, _)| o == output)?;
+    Some(match ty {
+        Ty::Signal(element) => (**element).clone(),
+        other => other.clone(),
+    })
+}
+
+/// Whether the module of `kind` declares the hook `fn K.classify(self: K,
+/// sample: element) -> Bool`, pure (`docs/slice.md` 22.3), with a generic
+/// kind's type arguments put in for the hook's parameters.
+fn classifies(modules: &Modules<'_>, kind: &Ty, element: &Ty) -> bool {
+    let Some(q) = kind_name(kind) else {
+        return false;
+    };
+    let Some(module) = modules.get(&q.module) else {
+        return false;
+    };
+    let exports = module.types.exports();
+    let Some(sig) = exports.fns.get(&format!("{}.classify", q.name)) else {
+        return false;
+    };
+    if sig.params.len() != 2 || sig.ret != Ty::Bool || sig.effectful {
+        return false;
+    }
+    let sample = match (&sig.params[0], kind) {
+        (Ty::GenericRecord(_, params), Ty::GenericRecord(_, args)) => {
+            let names: Vec<String> = params
+                .iter()
+                .filter_map(|p| match p {
+                    Ty::Param(name) => Some(name.clone()),
+                    _ => None,
+                })
+                .collect();
+            sig.params[1].substitute(&names, args)
+        }
+        _ => sig.params[1].clone(),
+    };
+    sample == *element
+}
+
+/// Whether `ty` is an outcome type (`docs/slice.md` 22.3, E151):
+/// `Bool`, `Int`, `Text`, `Byte`, a quantity, or a `List`,
+/// `Option`, tuple, record or enum of outcome types. `seen` stops at a
+/// record or enum already being checked (a recursive type).
+fn outcome(ty: &Ty, modules: &Modules<'_>, seen: &mut Vec<QualName>) -> bool {
+    match ty {
+        Ty::Bool | Ty::Int | Ty::Text | Ty::Byte | Ty::Quantity(_) => true,
+        Ty::List(item) | Ty::Option(item) => outcome(item, modules, seen),
+        Ty::Tuple(items) => items.iter().all(|item| outcome(item, modules, seen)),
+        Ty::Record(q) | Ty::GenericRecord(q, _) | Ty::Enum(q) | Ty::GenericEnum(q, _) => {
+            if seen.contains(q) {
+                return true;
+            }
+            let Some(module) = modules.get(&q.module) else {
+                return false;
+            };
+            let types = module.types;
+            let args: &[Ty] = match ty {
+                Ty::GenericRecord(_, args) | Ty::GenericEnum(_, args) => args,
+                _ => &[],
+            };
+            let params: Vec<String> = types
+                .type_params(q)
+                .map(<[String]>::to_vec)
+                .unwrap_or_default();
+            seen.push(q.clone());
+            let ok = if let Some(fields) = types.record_fields(q) {
+                fields
+                    .iter()
+                    .all(|(_, field)| outcome(&field.substitute(&params, args), modules, seen))
+            } else if let Some(variants) = types.enum_variants(q) {
+                variants.iter().all(|(_, payload)| {
+                    payload
+                        .iter()
+                        .all(|item| outcome(&item.substitute(&params, args), modules, seen))
+                })
+            } else {
+                false
+            };
+            seen.pop();
+            ok
+        }
+        _ => false,
     }
 }
 
@@ -369,6 +506,34 @@ pub fn validate_system(
                 }
             }
         }
+        // E150: a member with a machine that subscribes to a signal and
+        // whose kind cannot classify the signal's element (22.3).
+        let Some(kind) = kind_name(&info.kind) else {
+            continue;
+        };
+        if !declares_hook(evaluator.modules(), kind, "machine") {
+            continue;
+        }
+        for (field, signal_system, producer, output) in subscriptions(member) {
+            let Some(element) = element_of(system, signal_system, producer, output) else {
+                continue;
+            };
+            if classifies(evaluator.modules(), &info.kind, &element) {
+                continue;
+            }
+            let element_text = type_name(&element);
+            diagnostics.push(Diagnostic::new(
+                "E150",
+                property_span(decl, info, field),
+                format!(
+                    "{} `{}` of kind `{}` subscribes to `{signal_system}.{producer}.{output}` of `{element_text}` but declares no `fn {name}.classify(self: {name}, sample: {element_text}) -> Bool`",
+                    info.declaration,
+                    member.id,
+                    type_name(&info.kind),
+                    name = kind.name,
+                ),
+            ));
+        }
     }
     if diagnostics.is_empty() {
         Ok(())
@@ -433,6 +598,8 @@ pub fn validate(
             .is_some_and(|names| !names.is_empty())
     };
     let infos = infos(system, members);
+    // Signals already reported as E151.
+    let mut undecodable: BTreeSet<String> = BTreeSet::new();
     // E129: a hosted member whose kind lacks an entry its host needs.
     for (id, names) in &needed {
         let Some((_, info)) = infos.iter().find(|(m, _)| m.id == *id) else {
@@ -465,10 +632,7 @@ pub fn validate(
     }
     for (member, info) in &infos {
         // E121: a signal with no producer the assembly runs.
-        for (field, value) in &member.properties {
-            let Some((signal_system, producer, output)) = signal_ref(value) else {
-                continue;
-            };
+        for (field, signal_system, producer, output) in subscriptions(member) {
             let producer_id = format!("{signal_system}.{producer}");
             let span = property_span(decl, info, field);
             let is_output = signal_system == system.name
@@ -491,6 +655,35 @@ pub fn validate(
                     format!(
                         "`{}.{field}` has no producer that assembly `{}` runs: `{producer_id}` is not bound to a host that runs it",
                         member.id, assembly.name
+                    ),
+                ));
+            }
+        }
+        // E151: a signal the assembly runs and a machine subscribes to,
+        // whose element type is no outcome type (22.3).
+        if kind_name(&info.kind)
+            .is_some_and(|kind| declares_hook(evaluator.modules(), kind, "machine"))
+        {
+            for (field, signal_system, producer, output) in subscriptions(member) {
+                let producer_id = format!("{signal_system}.{producer}");
+                if !runs(&producer_id) {
+                    continue;
+                }
+                let Some(element) = element_of(system, signal_system, producer, output) else {
+                    continue;
+                };
+                let signal = format!("{producer_id}.{output}");
+                if outcome(&element, evaluator.modules(), &mut Vec::new())
+                    || !undecodable.insert(signal.clone())
+                {
+                    continue;
+                }
+                diagnostics.push(Diagnostic::new(
+                    "E151",
+                    property_span(decl, info, field),
+                    format!(
+                        "signal `{signal}` carries `{}`; a probe outcome holds no fn, handle, reference or signal",
+                        type_name(&element)
                     ),
                 ));
             }

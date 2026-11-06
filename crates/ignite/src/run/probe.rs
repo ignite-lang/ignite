@@ -1,8 +1,9 @@
 //! The probe adapter (`docs/slice.md` 16.8): one probe process per
 //! attempt (O28), started through the spawner thread (16.2) with
 //! `--ref <path>=<address>:<port>` for the probe's `target`, its single
-//! stdout line handed to the engine as `AttemptDone` (the engine decodes
-//! it by the signal's element type); a missing executable, an exit status
+//! stdout line handed to the driver as `AttemptDone` (the driver decodes
+//! it by the element type of the scheduler's signal, the model's
+//! `observations`, `docs/slice.md` 22.3); a missing executable, an exit status
 //! other than 0 or no line is `AttemptFailed` with the reason. At the
 //! deadline the engine's `Kill` becomes [`kill_attempt`]: SIGKILL to the
 //! probe, after which the attempt sends nothing (the reducer already

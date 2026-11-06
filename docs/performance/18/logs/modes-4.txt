@@ -1,0 +1,51 @@
+WAIT 20:44:58 free=85G floor=40G
+START 20:44:58 free=85G lane=1 load=7
+MODE apply-cycle 20:44:58 load 7.71 free 85G
+{"label": "baseline", "unit": "apply-cycle-compiler", "pair": "1793907902837859245-apply-cycle-prepare", "seconds": 31.90845265, "exit": 0, "load_before": 7.89111328125}
+{"label": "baseline", "unit": "runtime-dev", "pair": "1793907902837859245-apply-cycle-prepare", "seconds": 7.392247137, "exit": 0, "load_before": 8.865234375}
+{"label": "candidate", "unit": "apply-cycle-compiler", "pair": "1793907902837859245-apply-cycle-prepare", "seconds": 32.940464535, "exit": 0, "load_before": 9.046875}
+{"label": "candidate", "unit": "runtime-dev", "pair": "1793907902837859245-apply-cycle-prepare", "seconds": 3.927590065, "exit": 0, "load_before": 9.03564453125}
+{"label": "baseline", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-setup", "seconds": 34.67189109, "exit": 0, "load_before": 8.55224609375}
+{"label": "candidate", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-setup", "seconds": 27.922312175, "exit": 0, "load_before": 8.31787109375}
+{"label": "baseline", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-0", "seconds": 24.358876638, "exit": 0, "load_before": 8.95361328125}
+{"label": "candidate", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-0", "seconds": 25.581447264, "exit": 0, "load_before": 8.61865234375}
+{"label": "baseline", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-1", "seconds": 24.444654145, "exit": 0, "load_before": 7.7880859375}
+{"label": "candidate", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-1", "seconds": 38.963004468, "exit": 0, "load_before": 7.4462890625}
+{"label": "baseline", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-2", "seconds": 26.354760375, "exit": 0, "load_before": 15.1943359375}
+{"label": "candidate", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-2", "seconds": 24.948843852, "exit": 0, "load_before": 13.07861328125}
+{"label": "baseline", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-3", "seconds": 39.158345532, "exit": 0, "load_before": 10.75}
+{"label": "candidate", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-3", "seconds": 31.694916389, "exit": 0, "load_before": 12.017578125}
+{"label": "baseline", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-4", "seconds": 30.870068829, "exit": 0, "load_before": 12.57080078125}
+{"label": "candidate", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-4", "seconds": 25.965862947, "exit": 0, "load_before": 12.62060546875}
+{"label": "baseline", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-5", "seconds": 31.317528907, "exit": 0, "load_before": 11.08984375}
+{"label": "candidate", "unit": "apply-cycle-terminal-rust", "pair": "1793907902837859245-apply-cycle-5", "seconds": 28.496501535, "exit": 0, "load_before": 13.1240234375}
+{"label": "candidate", "unit": "apply-cycle-todo-rust", "pair": "1793907902837859245-apply-cycle-setup", "seconds": 28.855096598, "exit": 0, "load_before": 15.27392578125}
+{"label": "candidate", "unit": "apply-cycle-todo-rust", "pair": "1793907902837859245-apply-cycle-0", "seconds": 26.651340229, "exit": 0, "load_before": 13.560546875}
+{"label": "candidate", "unit": "apply-cycle-todo-rust", "pair": "1793907902837859245-apply-cycle-1", "seconds": 26.155972742, "exit": 0, "load_before": 11.1083984375}
+{"label": "candidate", "unit": "apply-cycle-todo-rust", "pair": "1793907902837859245-apply-cycle-2", "seconds": 31.458055383, "exit": 0, "load_before": 10.8896484375}
+{"label": "candidate", "unit": "apply-cycle-todo-rust", "pair": "1793907902837859245-apply-cycle-3", "seconds": 66.180849714, "exit": 0, "load_before": 10.33935546875}
+{"label": "candidate", "unit": "apply-cycle-todo-rust", "pair": "1793907902837859245-apply-cycle-4", "seconds": 30.98227897, "exit": 0, "load_before": 18.67529296875}
+{"label": "candidate", "unit": "apply-cycle-todo-rust", "pair": "1793907902837859245-apply-cycle-5", "seconds": 38.5513955, "exit": 0, "load_before": 18.20849609375}
+{"label": "baseline", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-setup", "seconds": 30.60440805, "exit": 0, "load_before": 21.556640625}
+{"label": "candidate", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-setup", "seconds": 30.324967712, "exit": 0, "load_before": 24.34326171875}
+{"label": "baseline", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-0", "seconds": 32.644437418, "exit": 0, "load_before": 24.935546875}
+{"label": "candidate", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-0", "seconds": 31.621549397, "exit": 0, "load_before": 27.13916015625}
+{"label": "baseline", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-1", "seconds": 29.990518314, "exit": 0, "load_before": 26.75341796875}
+{"label": "candidate", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-1", "seconds": 33.127350042, "exit": 0, "load_before": 27.94482421875}
+{"label": "baseline", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-2", "seconds": 26.963382169, "exit": 0, "load_before": 29.6171875}
+{"label": "candidate", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-2", "seconds": 23.177815731, "exit": 0, "load_before": 25.72900390625}
+{"label": "baseline", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-3", "seconds": 24.850211634, "exit": 0, "load_before": 18.8408203125}
+{"label": "candidate", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-3", "seconds": 24.016613072, "exit": 0, "load_before": 15.89990234375}
+{"label": "baseline", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-4", "seconds": 35.242096445, "exit": 0, "load_before": 12.287109375}
+{"label": "candidate", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-4", "seconds": 24.667427365, "exit": 0, "load_before": 12.056640625}
+{"label": "baseline", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-5", "seconds": 28.268573458, "exit": 0, "load_before": 13.20166015625}
+{"label": "candidate", "unit": "apply-cycle-terminal-llvm", "pair": "1793907902837859245-apply-cycle-5", "seconds": 35.168206475, "exit": 0, "load_before": 12.23876953125}
+{"label": "candidate", "unit": "apply-cycle-todo-llvm", "pair": "1793907902837859245-apply-cycle-setup", "seconds": 25.30857018, "exit": 0, "load_before": 13.978515625}
+{"label": "candidate", "unit": "apply-cycle-todo-llvm", "pair": "1793907902837859245-apply-cycle-0", "seconds": 27.609873203, "exit": 0, "load_before": 12.05712890625}
+{"label": "candidate", "unit": "apply-cycle-todo-llvm", "pair": "1793907902837859245-apply-cycle-1", "seconds": 30.820564802, "exit": 0, "load_before": 11.16015625}
+{"label": "candidate", "unit": "apply-cycle-todo-llvm", "pair": "1793907902837859245-apply-cycle-2", "seconds": 27.769414006, "exit": 0, "load_before": 16.744140625}
+{"label": "candidate", "unit": "apply-cycle-todo-llvm", "pair": "1793907902837859245-apply-cycle-3", "seconds": 30.082478675, "exit": 0, "load_before": 14.798828125}
+{"label": "candidate", "unit": "apply-cycle-todo-llvm", "pair": "1793907902837859245-apply-cycle-4", "seconds": 35.840213859, "exit": 0, "load_before": 21.58056640625}
+{"label": "candidate", "unit": "apply-cycle-todo-llvm", "pair": "1793907902837859245-apply-cycle-5", "seconds": 31.546056331, "exit": 0, "load_before": 18.60693359375}
+MODE_EXIT apply-cycle=0 21:07:54 builds 1.1G
+EXIT=0 21:07:58 free=74G

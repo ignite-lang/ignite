@@ -63,15 +63,13 @@ Still open, with the proposed fix:
 
 | where | class | what | proposed fix |
 |---|---|---|---|
-| `std/sli.ignite:19` to `:31` (`satisfies`, `known_outcome`) | behaviour in a leaf | the closed outcome set `prompt_received_before_timeout`, `prompt_received_within_threshold` is the prompt probe's vocabulary, so the leaf knows one kind of probe | neutral outcome names (`received_before_timeout`, `received_within_threshold`) in `std.sli`, the design file and the goldens; or the probe kind supplies its outcome set |
-| `std/contract.ignite:133` | message in a general module | the E120 reason lists the prompt outcomes | follows the `std.sli` fix |
+| `std/sli.ignite` (`ProbeAttempt`, `prompt_received_before_timeout`, `prompt_received_within_threshold`) | vocabulary in a leaf | the prompt probe's outcome type and its two predicates live in the leaf; since slice 18 (`docs/slice.md` 22.3) no closed outcome set remains: a contract's `good` is any predicate over its probe's outcome type, checked by the type checker and applied by the kind's `classify` | move `ProbeAttempt` and its predicates beside `TelnetPrompt` once the design file may import them from there |
 | `std/deploy.ignite:127`, `:131`, `:140`, `:147`, `:160` | test data | the `admits` fixtures use the kind names `std.protocol.telnet.TelnetServer` and `TelnetPrompt` as text; no import | neutral kind names (`app.Server`, `app.Probe`) |
 | `std/text.ignite:273` | test data | an HTTP request line as input of `lines()` | any CR LF text |
 | `std/cli.ignite:6` | doc comment | names `std.protocol.telnet.TelnetClient` as the buildable client | keep while it is the only one, or say "a protocol's client kind" |
 | `std/console.ignite:6` | doc comment | "A protocol such as std.protocol.telnet" | acceptable as an example |
 | `std/control.ignite:26`, `:75` | doc comment | ids of the terminal example (`Terminal.promptProbe`) | neutral ids (`App.probe`) |
 | `crates/ignite-types/src/lib.rs:814` | doc comment | `Terminal.promptProbe.attempts` as a reference example | neutral path |
-| `crates/ignite/src/run/live.rs:267` | domain noun in the driver | falls back to `std.sli.ProbeAttempt` when `std.control.EventKind.AttemptDone` has no payload type; invariant 6 says the driver knows only the `std.control` types | drop the fallback and fail when the payload type is missing |
 | `crates/ignite-eval/src/validate.rs:350` | domain noun in the evaluator | E123 recognises `std.sli.Window.Rolling` by name to compare a window with a probe interval | acceptable: `std.sli` is a leaf the compiler already reads; revisit if the window moves |
 | `crates/ignite-load/src/main.rs` | protocol client under `crates/` | 21 Telnet mentions, a Telnet filter of its own | exempt (above); move to `tools/ignite-load/` if the layout rule should hold by its letter |
 

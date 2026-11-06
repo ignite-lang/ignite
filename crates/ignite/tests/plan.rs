@@ -281,7 +281,7 @@ fn terminal_example_model_matches_golden() {
 #[test]
 fn todo_example_model_matches_golden() {
     let model = success(&ignite(&["plan", "examples/todo/todo.ignite"]));
-    assert!(model.contains("\"assembly\": null"), "{model}");
+    assert!(model.contains("\"assembly\": {"), "{model}");
     compare(&golden_dir().join("todo.model.json"), &model);
 }
 
@@ -422,7 +422,8 @@ fn explain_unknown_path_is_e119() {
     }
 }
 
-/// Every `tests/fixtures/e11*.ignite`, `e12*` and `e090` to `e092` (the
+/// Every `tests/fixtures/e11*.ignite`, `e12*`, `e15*` (`docs/slice.md`
+/// 22.10) and `e090` to `e092` (the
 /// claim model, `docs/slice.md` 19.12) run through `ignite check` (or the
 /// subcommand its first line names, `// ignite plan` or `// ignite explain
 /// <path>`, the file name inserted after the subcommand) from the fixtures
@@ -436,6 +437,7 @@ fn fixtures_match_expected() {
             let name = path.file_name().unwrap().to_string_lossy();
             (name.starts_with("e11")
                 || name.starts_with("e12")
+                || name.starts_with("e15")
                 || ["e090", "e091", "e092"].contains(&name.get(..4).unwrap_or("")))
                 && name.ends_with(".ignite")
                 && !["e125", "e126", "e127", "e128"].contains(&&name[..4])
@@ -881,6 +883,46 @@ fn adversary_spec_imported_through_a_sibling_is_no_silent_claim() {
         "a conforming protocol with an unclassified MUST checked silently"
     );
     assert!(!output.stderr.is_empty());
+}
+
+/// `docs/slice.md` 22.0 row 10 (22.5, D6): a `Store` resource needs no
+/// binding. The assembly of `store_hosted.ignite` binds only its listener
+/// and its server; `ignite plan` exits 0, hosts `S.counts` via `S.server`
+/// with the server's binding, and the model has the `hosts` edge from the
+/// server to the store.
+#[test]
+fn store_is_hosted_by_its_server() {
+    let fixture = fixtures_dir().join("store_hosted.ignite");
+    let fixture = fixture.to_str().unwrap();
+    let json = Json::parse(&success(&ignite(&["plan", fixture])));
+    let resolution: Vec<(&str, &str, &str)> = json.object()["assembly"].object()["resolution"]
+        .array()
+        .iter()
+        .map(Json::object)
+        .map(|entry| {
+            (
+                entry["member"].string(),
+                entry["via"].string(),
+                entry["binding"].object()["variant"].string(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        resolution,
+        [
+            ("S.counts", "S.server", "NativeProcess"),
+            ("S.ingress", "S.ingress", "LocalSocket"),
+            ("S.server", "S.server", "NativeProcess"),
+        ]
+    );
+    let hosted: Vec<(&str, &str)> = json.object()["edges"]
+        .array()
+        .iter()
+        .map(Json::object)
+        .filter(|edge| edge["kind"].string() == "hosts")
+        .map(|edge| (edge["from"].string(), edge["to"].string()))
+        .collect();
+    assert_eq!(hosted, [("S.server", "S.counts")]);
 }
 
 /// A `Spec` with only the text id `id` and one MUST, `R1_1`, in package

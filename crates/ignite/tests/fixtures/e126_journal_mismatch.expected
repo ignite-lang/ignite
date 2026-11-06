@@ -1,1 +1,1 @@
-e126_journal_mismatch.ignite:1:1: error[E126]: the journal was written for another model: use another --state or --fresh
+e126_journal_mismatch.ignite:1:1: error[E126]: the journal has formatVersion `ignite-journal/0.1`, this driver writes `ignite-journal/0.2`

@@ -80,6 +80,8 @@ Invariants shared by every document:
    declared `Drop` where dropping is wanted.
 6. Domain nouns are library symbols. Keyword budget 30 to 50; 29 today; `protocols.md` adds
    `interface`, `impl`, `grammar`; design §3.2 adds `contract`, `policy`, `assembly`: 35.
+   The hooks a kind declares are library fns the compiler looks up by name, not keywords:
+   `machine` and `validate` (slice 12, `docs/slice.md` 16.16) and `classify` (slice 18, 22.3).
 7. Every language feature lands on both native targets with a golden and a fixture, until D2
    says otherwise.
 8. Behaviour is tested inline with `test`; every diagnostic code has a fixture.
@@ -157,6 +159,7 @@ steering session against section 6 before agents are dispatched.
 | 14 | B protocols P1 | `Pipe.pair()` and `PipeStream`, the bound `<S: ByteStream>` on fns and roles, `Telnet` and `Http` generic over the stream with their limits records (`docs/slice.md` section 18) | the 18.0 matrix of `docs/slice.md` |
 | 16 (done 2026-11-05, `docs/slice.md` section 20; counts and gate time in `AGENTS.md` "Slice 16") | A language gaps | the items of wave A that slices 9 and 10 had not delivered: last-use moves (one analysis in `ignite-types`, read by both targets; actors R1), calls of fn-typed expressions (`adder(1)(2)`, `fs[i](x)`), rest patterns in list patterns (`docs/syntax.md` P9, E076); a both-target fixture for every item that already held | the 20.0 matrix of `docs/slice.md` |
 | 17 (done 2026-11-05, `docs/slice.md` section 21; counts and gate time in `AGENTS.md` "Slice 17") | playground substrate (`epic:playground-substrate`) | capabilities as values (P3): `Directory` (files under a root, confined by an `openat` walk), `Launcher` and `ChildProcess` (child processes with timeout, bounded output, process-group kill), `Entropy` (random bytes), `Setting` (one command-line flag), each a resource kind and handle type on both targets over `crates/ignite-io`; `std.fs`, `std.process`; E140 to E142; capability resources hosted by their member's process (15.6); `HttpServer` gains the run hooks `TelnetServer` has | the 21.0 matrix of `docs/slice.md` |
+| 18 (done 2026-11-05 on `feat/slice18-one-service`, `task gate` exit 0 at f64adfec8, merge into `main` pending; `docs/slice.md` section 22; counts and gate time in `AGENTS.md` "Slice 18") | F5 one service operated (`epic:slice-18-one-service-operated`) | typed probe outcomes: a contract's `good` is a predicate `fn(T) -> Bool`, a contract kind's `classify` hook, run journals `ignite-journal/0.2`, E150 and E151; the todo example keeps its data in a `Directory` and declares its HTTP probe kind `HealthCheck` (`examples/todo/health.ignite`) and an `Availability` contract outside `std/`; a `Store` is hosted by its creator; host journal integrity (torn record repaired, altered record and cut refused, offline report, `<state>/workdir`); `ignite recover`; the R11 fault rows on the todo; the apply cycle timed (`ignite-perf apply-cycle`) | the 22.0 matrix of `docs/slice.md` |
 | 15+ | slice 15 is G's P2 (`docs/slice.md` section 19); after it B (P2 on), C, D, E, G (P3 to P5), H | slice 15: RFC catalogues as literal data, the claim clauses and E090 to E092, `ignite rfc import` and `ignite rfc check`, `ignite conformance`, the claims of `Telnet` and `Http`; after it as the table above, in that order | slice 15: the 19.0 matrix of `docs/slice.md`; after it as the table above |
 
 Consequences for the open decisions of section 8: D5 moves from the start of H to slice 11;
@@ -221,6 +224,7 @@ Each row names the two places, what disagrees, and the resolution this document 
 | X24 | `slice.md` §5.1 "The capability is a parameter of the function (`stream.read`) or an ambient one (`stdin.read`)"; the implementation cannot tell the two apart when a parameter carries an ambient's name | section 10.2, E1 to E3 | wave A0: refuse or namespace ambient names |
 | X25 | section 8 D2 option B "LLVM becomes the default `--target`", taken 2026-11-01 by the steering session as reversible; `BuildOptions::default` in `crates/ignite/src/lib.rs` (`target: Target::Rust`) and every `--target` of `crates/ignite/src/main.rs` still default to Rust | which target is the default | resolved 2026-11-04: D2 B stands (Timo: build time is why Ignite exists, `vision.md` section 1); `BuildOptions::default` and the CLI switch to LLVM after slice 16 U4 (`story:slice-16-llvm-moves`) lands, in `story:llvm-default-target`; carried out 2026-11-05: `Target::default`, `BuildOptions::default` and every `--target` of the CLI are LLVM |
 | X26 | design §3.5 "effect interfaces cover operations such as reading declared files, spawning processes, accessing a clock", read as ambient interfaces; `docs/slice.md` §21.3 (slice 17) makes files, processes, random bytes and arguments capability values (`Directory`, `Launcher`, `Entropy`, `Setting`) that a system declares as resources and passes to the code that uses them, with test-only constructors as the only other way to obtain one (E051) | ambient effect interfaces or passed capabilities | resolved by slice 17 (`docs/slice.md` §21.11 D1, invariant 4): passed capabilities; the design text stays as it is (direction, T2); the clock stays an ambient head (`clock.read`), a parameter named `clock` is E056 |
+| X27 | design §11.3 `good = "prompt_received_before_timeout"` and `good = "prompt_received_within_threshold"`, a quoted outcome name; `docs/slice.md` §22.3 (slice 18) makes `good` a predicate `fn(T) -> Bool` over the probe's outcome type, written without quotes (`good = prompt_received_before_timeout`) | a contract's good outcome: a name or a typed predicate | resolved by slice 18 (`docs/slice.md` §22.12 D1, D2): a typed predicate; the design text stays as it is (direction, T2); `examples/terminal/terminal.design.ignite` carries the predicate form |
 
 Logic flaws inside one document, found by reading:
 
@@ -254,7 +258,7 @@ T4. **Diagnostic code ranges are reserved per wave** (steering, 2026-11-01). E00
 slices 1 to 9 (`slice.md`). E060 to E069: actors. E070 to E079: the sugar proposal
 (`syntax.md`). E080 to E089: wasm. E090 to E099: protocols. E100 to E109: slice 10 (F1),
 E110 to E119: slice 11 (F2), E120 to E129: slice 12 (F3), E130 to E139: slice 13 (F4), E140
-to E149: slice 17 (playground substrate). A
+to E149: slice 17 (playground substrate), E150 to E159: slice 18 (F5). A
 document that cites a code from another range cites it, it does not define it. Reason: on
 2026-11-01 four documents used codes E080 to E098 with no written range table; the check that
 day found `wasm.md` defining E080 to E083 and `protocols.md` E090 to E098, the others citing

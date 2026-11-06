@@ -1,6 +1,6 @@
-Terminal.reachable: contract std.contract.Availability (terminal.design.ignite:81:3)
+Terminal.reachable: contract std.contract.Availability<std.sli.ProbeAttempt> (terminal.design.ignite:82:3)
   signal = Terminal.promptProbe.attempts
-  good = "prompt_received_before_timeout"
+  good = std.sli.prompt_received_before_timeout
   target = 99.9%
   window = Rolling(30 days)
   missing_data = "insufficient_evidence"

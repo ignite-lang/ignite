@@ -1,0 +1,184 @@
+SIZE 21:09:16 load 18.39 free 73G baseline-421742b33ee8=0G candidate-661e55b428b4=0G total=1G
+SIZE 21:09:36 load 20.44 free 74G baseline-421742b33ee8=0G candidate-661e55b428b4=0G total=0G
+SIZE 21:09:57 load 21.27 free 74G baseline-421742b33ee8=0G candidate-661e55b428b4=0G total=1G
+SIZE 21:10:17 load 19.92 free 73G baseline-421742b33ee8=0G candidate-661e55b428b4=0G total=1G
+SIZE 21:10:37 load 17.76 free 73G baseline-421742b33ee8=0G candidate-661e55b428b4=0G total=1G
+SIZE 21:10:57 load 15.09 free 72G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=1G
+SIZE 21:11:17 load 13.95 free 72G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:11:37 load 15.02 free 72G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:11:57 load 14.45 free 72G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:12:17 load 15.06 free 71G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:12:37 load 14.31 free 71G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:12:57 load 16.07 free 71G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:13:17 load 20.17 free 69G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:13:37 load 20.30 free 69G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:13:58 load 18.46 free 69G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:14:18 load 16.97 free 68G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:14:38 load 17.73 free 68G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:14:58 load 20.31 free 68G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:15:18 load 19.18 free 68G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:15:38 load 18.22 free 68G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:15:58 load 18.66 free 68G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:16:18 load 17.10 free 67G baseline-421742b33ee8=1G candidate-661e55b428b4=0G total=2G
+SIZE 21:16:38 load 16.01 free 66G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=2G
+SIZE 21:16:59 load 16.91 free 66G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=2G
+SIZE 21:17:19 load 16.85 free 61G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:17:39 load 19.97 free 61G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:17:59 load 19.88 free 61G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:18:19 load 17.74 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:18:39 load 21.88 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:18:59 load 22.12 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:19:19 load 21.68 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:19:39 load 23.02 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:20:00 load 20.49 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:20:20 load 17.91 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:20:40 load 17.93 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:21:00 load 19.49 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:21:20 load 20.80 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:21:40 load 20.53 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:22:00 load 21.03 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:22:21 load 19.58 free 60G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:22:41 load 17.57 free 62G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:23:01 load 18.22 free 78G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:23:21 load 15.96 free 77G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:23:41 load 15.13 free 77G baseline-421742b33ee8=2G candidate-661e55b428b4=0G total=3G
+SIZE 21:24:01 load 15.31 free 71G baseline-421742b33ee8=3G candidate-661e55b428b4=0G total=3G
+SIZE 21:24:21 load 15.89 free 71G baseline-421742b33ee8=3G candidate-661e55b428b4=0G total=3G
+SIZE 21:24:41 load 15.82 free 70G baseline-421742b33ee8=3G candidate-661e55b428b4=0G total=4G
+SIZE 21:25:01 load 14.56 free 70G baseline-421742b33ee8=3G candidate-661e55b428b4=0G total=4G
+SIZE 21:25:22 load 13.91 free 69G baseline-421742b33ee8=4G candidate-661e55b428b4=0G total=5G
+SIZE 21:25:42 load 13.22 free 69G baseline-421742b33ee8=4G candidate-661e55b428b4=0G total=5G
+SIZE 21:26:02 load 12.06 free 68G baseline-421742b33ee8=5G candidate-661e55b428b4=0G total=6G
+SIZE 21:26:22 load 11.47 free 68G baseline-421742b33ee8=5G candidate-661e55b428b4=0G total=6G
+SIZE 21:26:42 load 10.51 free 68G baseline-421742b33ee8=5G candidate-661e55b428b4=0G total=6G
+SIZE 21:27:02 load 10.49 free 67G baseline-421742b33ee8=6G candidate-661e55b428b4=0G total=6G
+SIZE 21:27:22 load 9.62 free 67G baseline-421742b33ee8=6G candidate-661e55b428b4=0G total=7G
+SIZE 21:27:42 load 9.34 free 66G baseline-421742b33ee8=6G candidate-661e55b428b4=0G total=7G
+SIZE 21:28:02 load 10.51 free 66G baseline-421742b33ee8=6G candidate-661e55b428b4=0G total=7G
+SIZE 21:28:23 load 11.92 free 65G baseline-421742b33ee8=7G candidate-661e55b428b4=0G total=7G
+SIZE 21:28:43 load 13.52 free 64G baseline-421742b33ee8=7G candidate-661e55b428b4=0G total=8G
+SIZE 21:29:03 load 11.35 free 63G baseline-421742b33ee8=7G candidate-661e55b428b4=0G total=8G
+SIZE 21:29:23 load 10.46 free 63G baseline-421742b33ee8=7G candidate-661e55b428b4=0G total=8G
+SIZE 21:29:43 load 11.51 free 63G baseline-421742b33ee8=8G candidate-661e55b428b4=0G total=8G
+SIZE 21:30:04 load 10.22 free 62G baseline-421742b33ee8=8G candidate-661e55b428b4=0G total=9G
+SIZE 21:30:24 load 9.87 free 62G baseline-421742b33ee8=8G candidate-661e55b428b4=0G total=8G
+CLEAN_BASELINE 21:30:24 /home/timo/.cache/scratch/c7fc37f1-9791-4466-8333-da801f43672c/s18w5u8/perf18/builds/baseline-421742b33ee8/
+     Removed 14818 files, 9.7GiB total
+SIZE 21:30:45 load 9.28 free 70G candidate-661e55b428b4=0G total=1G
+SIZE 21:31:05 load 9.50 free 70G candidate-661e55b428b4=0G total=1G
+SIZE 21:31:25 load 10.44 free 78G candidate-661e55b428b4=1G total=1G
+SIZE 21:31:45 load 10.89 free 78G candidate-661e55b428b4=1G total=1G
+SIZE 21:32:05 load 12.61 free 77G candidate-661e55b428b4=1G total=1G
+SIZE 21:32:25 load 14.31 free 79G candidate-661e55b428b4=1G total=1G
+SIZE 21:32:45 load 16.57 free 77G candidate-661e55b428b4=1G total=1G
+SIZE 21:33:05 load 15.82 free 77G candidate-661e55b428b4=1G total=1G
+SIZE 21:33:25 load 13.78 free 77G candidate-661e55b428b4=1G total=1G
+SIZE 21:33:45 load 13.46 free 77G candidate-661e55b428b4=1G total=1G
+SIZE 21:34:06 load 15.61 free 76G candidate-661e55b428b4=1G total=1G
+SIZE 21:34:26 load 15.31 free 76G candidate-661e55b428b4=1G total=1G
+SIZE 21:34:46 load 14.62 free 76G candidate-661e55b428b4=1G total=2G
+SIZE 21:35:06 load 13.80 free 79G candidate-661e55b428b4=1G total=2G
+SIZE 21:35:26 load 13.15 free 79G candidate-661e55b428b4=2G total=2G
+SIZE 21:35:46 load 13.23 free 79G candidate-661e55b428b4=2G total=2G
+SIZE 21:36:06 load 12.54 free 79G candidate-661e55b428b4=2G total=2G
+SIZE 21:36:26 load 11.58 free 79G candidate-661e55b428b4=2G total=2G
+SIZE 21:36:46 load 14.00 free 76G candidate-661e55b428b4=2G total=2G
+SIZE 21:37:06 load 12.82 free 76G candidate-661e55b428b4=2G total=2G
+SIZE 21:37:26 load 13.49 free 75G candidate-661e55b428b4=2G total=2G
+SIZE 21:37:46 load 12.25 free 75G candidate-661e55b428b4=2G total=2G
+SIZE 21:38:06 load 13.23 free 80G candidate-661e55b428b4=2G total=3G
+SIZE 21:38:26 load 11.23 free 80G candidate-661e55b428b4=2G total=3G
+SIZE 21:38:47 load 10.39 free 79G candidate-661e55b428b4=2G total=3G
+SIZE 21:39:07 load 9.71 free 79G candidate-661e55b428b4=2G total=3G
+SIZE 21:39:27 load 8.23 free 79G candidate-661e55b428b4=2G total=3G
+SIZE 21:39:47 load 7.50 free 79G candidate-661e55b428b4=2G total=3G
+SIZE 21:40:07 load 6.97 free 79G candidate-661e55b428b4=2G total=3G
+SIZE 21:40:27 load 6.55 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:40:47 load 6.09 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:41:07 load 11.35 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:41:27 load 16.35 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:41:47 load 19.54 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:42:07 load 21.79 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:42:27 load 23.37 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:42:48 load 27.41 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:43:08 load 30.77 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:43:28 load 33.65 free 77G candidate-661e55b428b4=3G total=3G
+SIZE 21:43:48 load 35.59 free 77G candidate-661e55b428b4=3G total=3G
+SIZE 21:44:08 load 35.38 free 77G candidate-661e55b428b4=3G total=3G
+SIZE 21:44:28 load 37.27 free 77G candidate-661e55b428b4=3G total=3G
+SIZE 21:44:49 load 37.86 free 77G candidate-661e55b428b4=3G total=3G
+SIZE 21:45:09 load 38.37 free 77G candidate-661e55b428b4=3G total=3G
+SIZE 21:45:29 load 40.23 free 77G candidate-661e55b428b4=3G total=3G
+SIZE 21:45:49 load 38.45 free 77G candidate-661e55b428b4=3G total=3G
+SIZE 21:46:09 load 39.93 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:46:29 load 37.58 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:46:49 load 31.79 free 79G candidate-661e55b428b4=3G total=3G
+SIZE 21:47:10 load 29.78 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:47:30 load 25.29 free 78G candidate-661e55b428b4=3G total=3G
+SIZE 21:47:50 load 23.87 free 79G candidate-661e55b428b4=3G total=3G
+SIZE 21:48:10 load 23.08 free 84G candidate-661e55b428b4=3G total=3G
+SIZE 21:48:30 load 21.36 free 84G candidate-661e55b428b4=3G total=4G
+SIZE 21:48:50 load 18.60 free 83G candidate-661e55b428b4=3G total=4G
+SIZE 21:49:10 load 21.00 free 83G candidate-661e55b428b4=4G total=4G
+SIZE 21:49:30 load 17.08 free 83G candidate-661e55b428b4=4G total=4G
+SIZE 21:49:50 load 14.20 free 82G candidate-661e55b428b4=4G total=4G
+SIZE 21:50:10 load 15.26 free 82G candidate-661e55b428b4=4G total=4G
+SIZE 21:50:31 load 19.21 free 82G candidate-661e55b428b4=4G total=4G
+SIZE 21:50:51 load 21.06 free 82G candidate-661e55b428b4=4G total=4G
+SIZE 21:51:11 load 23.11 free 82G candidate-661e55b428b4=4G total=4G
+SIZE 21:51:32 load 25.26 free 82G candidate-661e55b428b4=4G total=4G
+SIZE 21:51:52 load 25.27 free 82G candidate-661e55b428b4=4G total=5G
+SIZE 21:52:12 load 26.34 free 82G candidate-661e55b428b4=4G total=5G
+SIZE 21:52:32 load 27.11 free 82G candidate-661e55b428b4=4G total=5G
+SIZE 21:52:52 load 26.69 free 81G candidate-661e55b428b4=4G total=5G
+SIZE 21:53:12 load 26.69 free 81G candidate-661e55b428b4=5G total=5G
+SIZE 21:53:33 load 26.40 free 81G candidate-661e55b428b4=5G total=5G
+SIZE 21:53:53 load 26.70 free 81G candidate-661e55b428b4=5G total=5G
+SIZE 21:54:13 load 25.26 free 81G candidate-661e55b428b4=5G total=5G
+SIZE 21:54:33 load 23.83 free 81G candidate-661e55b428b4=5G total=5G
+SIZE 21:54:53 load 23.57 free 81G candidate-661e55b428b4=5G total=5G
+SIZE 21:55:13 load 24.02 free 81G candidate-661e55b428b4=5G total=5G
+SIZE 21:55:34 load 23.59 free 81G candidate-661e55b428b4=5G total=5G
+SIZE 21:55:54 load 23.89 free 81G candidate-661e55b428b4=5G total=5G
+SIZE 21:56:14 load 25.07 free 81G candidate-661e55b428b4=5G total=5G
+SIZE 21:56:35 load 25.17 free 80G candidate-661e55b428b4=5G total=5G
+SIZE 21:56:55 load 24.05 free 80G candidate-661e55b428b4=5G total=5G
+SIZE 21:57:15 load 23.19 free 80G candidate-661e55b428b4=5G total=5G
+SIZE 21:57:35 load 22.79 free 80G candidate-661e55b428b4=5G total=5G
+SIZE 21:57:55 load 22.77 free 80G candidate-661e55b428b4=5G total=6G
+SIZE 21:58:15 load 22.98 free 80G candidate-661e55b428b4=5G total=6G
+SIZE 21:58:36 load 24.88 free 80G candidate-661e55b428b4=5G total=6G
+SIZE 21:58:56 load 27.68 free 79G candidate-661e55b428b4=6G total=6G
+SIZE 21:59:16 load 29.77 free 79G candidate-661e55b428b4=6G total=6G
+SIZE 21:59:36 load 29.64 free 78G candidate-661e55b428b4=6G total=7G
+SIZE 21:59:56 load 30.75 free 77G candidate-661e55b428b4=7G total=7G
+SIZE 22:00:17 load 30.63 free 77G candidate-661e55b428b4=7G total=7G
+SIZE 22:00:37 load 32.05 free 77G candidate-661e55b428b4=7G total=7G
+SIZE 22:00:57 load 33.69 free 77G candidate-661e55b428b4=7G total=7G
+SIZE 22:01:17 load 35.79 free 77G candidate-661e55b428b4=7G total=7G
+SIZE 22:01:38 load 36.26 free 77G candidate-661e55b428b4=7G total=7G
+SIZE 22:01:58 load 39.99 free 76G candidate-661e55b428b4=7G total=7G
+SIZE 22:02:18 load 40.43 free 76G candidate-661e55b428b4=7G total=8G
+SIZE 22:02:38 load 40.71 free 76G candidate-661e55b428b4=7G total=8G
+SIZE 22:02:59 load 39.97 free 76G candidate-661e55b428b4=7G total=8G
+SIZE 22:03:19 load 39.04 free 75G candidate-661e55b428b4=7G total=8G
+SIZE 22:03:40 load 41.33 free 75G candidate-661e55b428b4=7G total=8G
+SIZE 22:04:00 load 45.11 free 75G candidate-661e55b428b4=7G total=8G
+SIZE 22:04:20 load 40.48 free 75G candidate-661e55b428b4=7G total=8G
+SIZE 22:04:41 load 35.31 free 76G candidate-661e55b428b4=8G total=8G
+SIZE 22:05:01 load 32.83 free 76G candidate-661e55b428b4=8G total=8G
+SIZE 22:05:21 load 29.59 free 75G candidate-661e55b428b4=8G total=8G
+SIZE 22:05:41 load 33.31 free 75G candidate-661e55b428b4=8G total=8G
+SIZE 22:06:01 load 30.20 free 75G candidate-661e55b428b4=8G total=8G
+SIZE 22:06:22 load 25.36 free 75G candidate-661e55b428b4=8G total=8G
+SIZE 22:06:42 load 21.28 free 74G candidate-661e55b428b4=8G total=9G
+SIZE 22:07:02 load 18.43 free 73G candidate-661e55b428b4=10G total=10G
+SIZE 22:07:24 load 16.40 free 74G candidate-661e55b428b4=9G total=9G
+SIZE 22:07:44 load 14.78 free 73G candidate-661e55b428b4=9G total=9G
+SIZE 22:08:04 load 14.05 free 73G candidate-661e55b428b4=9G total=10G
+SIZE 22:08:25 load 12.61 free 73G candidate-661e55b428b4=10G total=10G
+SIZE 22:08:45 load 13.77 free 72G candidate-661e55b428b4=10G total=10G
+SIZE 22:09:05 load 12.63 free 72G candidate-661e55b428b4=10G total=10G
+SIZE 22:09:25 load 13.04 free 71G candidate-661e55b428b4=10G total=10G
+SIZE 22:09:45 load 10.47 free 71G candidate-661e55b428b4=10G total=11G
+WATCH_END 22:10:06

@@ -3301,6 +3301,10 @@ Rules:
 
 ### 16.6 Machines: the reducer interface (`std/control.ignite`)
 
+Slice 18 (22.3): `AttemptDone(Int, Text)`, `Emitted(Text, Verdict)` and `Emit(Text, Sample)`
+replace the `ProbeAttempt` payloads below; `Evaluator` loses `good` and `threshold`; the hooks
+the driver knows are `machine`, `validate` and `classify`.
+
 ```
 enum Machine { Supervise(Supervisor), Schedule(ProbeScheduler), Evaluate(Evaluator), Roll(Rollout) }
 type Step { machine: Machine, effects: List<Effect> }
@@ -3403,6 +3407,10 @@ Failures:
 
 ### 16.8 Probe scheduler and the probe process
 
+Slice 18 (22.3): `AttemptDone` carries the probe's line as `Text`, decoded first by the
+element type of the scheduler's signal; the scheduler emits `Sample { slot, line }` (the
+deadline `line = None`) instead of a `ProbeAttempt` with the timeout as latency.
+
 The probe executable:
 
 - `TelnetPrompt` gains `executable: Text` (defaulting to the component name, the 6.1 rule)
@@ -3450,6 +3458,10 @@ The scheduler: `TelnetPrompt.machine` returns `Schedule`.
 
 ### 16.9 Signals and references at run time
 
+Slice 18 (22.3): an emission is a `std.sli.Sample` (slot and the probe's line); each
+subscriber receives its own `std.sli.Verdict` in `Emitted`, built by the driver through the
+subscriber's `classify`.
+
 Signals:
 
 - A `Signal<T>` value is a stream name, its 15.4 `ref` text.
@@ -3474,6 +3486,11 @@ References:
 - No such resource, or several, is E122.
 
 ### 16.10 Contract evaluation
+
+Slice 18 (22.3, D1, D14): `good` is a predicate `fn(T) -> Bool` the contract kind's `classify`
+hook applies to the decoded line; the evaluator counts the `std.sli.Verdict` the driver builds,
+in the bucket of the slot the scheduler dispatched the attempt for. `satisfies` and the
+latency-derived slot below are the slice-12 form.
 
 - `Availability.machine`, `ThresholdCompliance.machine` and `SLA.machine` return `Evaluate`.
   Each subscribes to its `signal`.
@@ -3567,8 +3584,11 @@ Rules:
 
 - The journal records `disruption` with the measured interval from `Released.at` to
   `Ready.at`.
-- The old process's exit during `Draining` is not a failure. A failure of the new process
-  follows 16.7.
+- The old process's exit during `Draining` ends the drain, and the supervisor counts it as a
+  failure (16.7): it restarts the member. Corrected in slice 18 (22.16 Q8): this rule said the
+  exit was not a failure, but the supervisor has always counted it, and the rollout relies on
+  that restart since `fix/rollout-drain-stuck` (PR 46, the next rule). A failure of the new
+  process follows 16.7.
 - An old process that exits during `Draining` before `Released` ends the drain: the journal
   records `retired`, the supervisor restarts the member (16.7) and that restart is the new
   process; the rollout spawns none of its own, so no second process races the restart for
@@ -3705,7 +3725,7 @@ As landed in the skeleton (P1, 2026-11-02), where it differs from the list above
 
 | code | rule | phase | fixture |
 |---|---|---|---|
-| E120 | a declaration its kind's `validate` refuses, with the reason text from std: an unknown `good` outcome, `missing_data`, `on_deadline` or time zone; `maximum_attempts` < 1; `target` not in (0 %, 100 %]; non-empty `exclusions`; a backoff initial greater than its maximum | check | `e120_validate_refused` |
+| E120 | a declaration its kind's `validate` refuses, with the reason text from std: an unknown `missing_data`, `on_deadline` or time zone (an unknown `good` outcome until slice 18; an unknown `good` predicate is E003 since, 22.10); `maximum_attempts` < 1; `target` not in (0 %, 100 %]; non-empty `exclusions`; a backoff initial greater than its maximum | check | `e120_validate_refused` |
 | E121 | a contract's `signal` has no producer the assembly runs: its member is not bound to a host that runs it, or the ref is no output | check | `e121_signal_without_producer` |
 | E122 | a run-time `Ref` (a probe's `target`) names a member the assembly does not run as a process, or resolves to no endpoint or to several | check | `e122_unresolvable_ref` |
 | E123 | probe timing: `interval` or `timeout` not positive, or `timeout >= interval` | check | `e123_probe_timing` |
@@ -3748,8 +3768,9 @@ program as follows; the compiler knows no kind, binding variant, outcome or zone
   `NativeProcess` and `ScheduledProbeHost`, `[]` for `LocalSocket` and
   `WorkstationExecutable`, the A10 rule). A binding with a non-empty list runs its member;
   an included member runs with its host. Without `entries` the three codes are not checked.
-- E121: a property whose value is a signal ref `S.p.f`: `f` must be an unset output of `S.p`
-  (else "is no output"), and `S.p` must run.
+- E121: every signal ref `S.p.f` in a property, at any depth (since slice 18 the collection
+  `ModelMachine::subscribes` reads, `signal_refs` in `crates/ignite-eval/src/model.rs`): `f`
+  must be an unset output of `S.p` (else "is no output"), and `S.p` must run.
 - E122: for every member that runs, every property whose field type is `Ref<_>` and whose
   value names a member `T`: `T` must run, and exactly one `TcpListener` resource must appear
   among `T`'s property values (the `provisioning` edge of 16.14); zero or several is E122.
@@ -4389,7 +4410,14 @@ one is kept beside it without replacing it.
   corrective's premise, the committed revision's instances as they were, no longer holds: the
   receipt's next action becomes "inspect retained ownership and journal before recovery", the
   running revision dispatches no further effect, no corrective is admitted and no start resumes
-  the committed revision. Keeping the first reason never weakens what the later one blocks. While
+  the committed revision. Since slice 18 a refused effect does not end the run: the host answers
+  its record "refused" (`Admission::Refused`, `crates/ignite/src/run/live.rs`), the record stays
+  in the run's journal and the host journal as the effect's intent, the run dispatches nothing
+  for it, prints `effect not dispatched: <reason>` and goes on. So the instances the run still
+  supervises, the committed revision's among them, keep serving until `ignite recover` (22.9)
+  stops them; before slice 18 the refusal ended the run and its children with it (parent-death
+  rule), the healthy committed instances included. Keeping the first reason never weakens what
+  the later one blocks. While
   the unresolved recovery is the committed revision's own (its receipt stays `completed`, and its
   reason is never resolvable), nothing is kept beside it.
 - In `recovery` the first entry recorded stands; a later one is kept in `recovery.laterReasons`
@@ -4403,6 +4431,8 @@ one is kept beside it without replacing it.
 - A transition abandoned before the running revision realizes its plan gives the run back the
   operation it carried before: `runtimeOperation` and the run's records name the committed
   revision's operation again, not the refused plan.
+
+Since slice 18 `ignite recover` (22.9) is the operator's way back to accepting plans.
 
 ### 17.6 Terminal walkthrough
 
@@ -7697,7 +7727,9 @@ in `std/process.ignite`; `e051_command_line_of` (ignite-check).
 
 **Status: contract written 2026-11-05. The independent review (`docs/slice18-review.md`) found 4
 blockers, 6 majors and 18 minors; all are resolved in this text, and 22.17 maps each finding to
-its resolution. Implementation has not started.** The rows of 22.0 are required checks, not results.
+its resolution. Implemented 2026-11-05 on `feat/slice18-one-service`, units U1 to U8; the
+standing of each row of 22.0 is in `STATUS.md`, the rows reworded as landed are 18 and 27, and the
+gaps found during the slice are 22.16 Q6 to Q10.** The rows of 22.0 are required checks, not results.
 
 This section is numbered 22 and follows section 21 (slice 17, merged into `main` as PR 34,
 `421742b3`); no line of section 21 changes here.
@@ -7740,7 +7772,7 @@ starts, so that the relative `Directory` path of 22.4 never resolves inside the 
 | 3 | the classify hook is required | `cargo test -p ignite --test main plan::fixtures_match_expected` | `e150_classify_missing.ignite` (a probe kind and a contract kind declared in the fixture; the contract's `machine` returns `Evaluate` and its kind declares no `classify`) gives exactly one E150: ``contract `S.c` of kind `fixture_e150.Watch` subscribes to `S.p.beats` of `fixture_e150.Beat` but declares no `fn Watch.classify(self: Watch, sample: fixture_e150.Beat) -> Bool` ``; the filter of the test includes `e15` | U1 |
 | 4 | the element type must be an outcome | same | `e151_undecodable_element.ignite` (a probe kind with `beats: Signal<fn() -> Int>`, run by the assembly, and a contract whose machine subscribes to it) gives exactly one E151: ``signal `S.p.beats` carries `fn() -> Int`; a probe outcome holds no fn, handle, reference or signal`` | U1 |
 | 5 | the run of the terminal is unchanged | `cargo test -p ignite --test main run::` | every `run::` test passes; `run::terminal_runs_under_ignite_run{,_on_the_llvm_target}` publish `Compliant` standings for `Terminal.reachable` as before; the journal header's `formatVersion` is `ignite-journal/0.2`; every `signal` record's `value` is a `std.sli.Sample` and every `Emitted` event a `std.sli.Verdict` | U1 |
-| 6 | an old journal is refused | `cargo test -p ignite --test main run::e126_journal_mismatch` | the fixture's journal carries `formatVersion` `ignite-journal/0.1` (it does already, `crates/ignite/tests/run.rs:1010` to `:1029`); after the bump `ignite run` and, newly in the test, `ignite replay` exit 2 with exactly one E126 of the existing version text (``the journal has formatVersion `ignite-journal/0.1`, this driver writes `ignite-journal/0.2` ``, `crates/ignite/src/lib.rs:1459` to `:1475`); the fixture's `.expected` changes from the model text to that text | U1 |
+| 6 | an old journal is refused | `cargo test -p ignite --test main run::e126_journal_mismatch` | the fixture's journal carries `formatVersion` `ignite-journal/0.1` (it does already, `crates/ignite/tests/run.rs:1010` to `:1029`); after the bump `ignite run` exits 2 and, newly in the test, `ignite replay` exits 1 (16.3: replay maps `Error::Diagnostics` to exit 1 like `plan`), each with exactly one E126 of the existing version text (``the journal has formatVersion `ignite-journal/0.1`, this driver writes `ignite-journal/0.2` ``, `crates/ignite/src/lib.rs:1459` to `:1475`); the fixture's `.expected` changes from the model text to that text | U1 |
 | 7 | reducers agree | `cargo test -p ignite --test main control_trace::` | `control_trace::reducers_agree_across_the_evaluator_and_both_targets` passes with the fixture's emissions written as `Sample` and its evaluator events as `Verdict` | U1 |
 | 8 | no general layer names the probe | `git grep -n -e HttpHealth -e HealthCheck -e 'examples\.todo\.health' -- 'crates/*/src' std 'tools/*/src'` | prints nothing, exit 1. Tests and goldens under `crates/*/tests` may name the example (row 11's golden does); the epic's "no file under `crates/`" means the general layers, and the steering session rewords the epic line to match | every unit |
 | 9 | the todo checks | `ignite check examples/todo/todo.ignite` | silent, exit 0, with its server bound by `nativeProcess` (the `HttpServer.machine` hook landed in slice 17, 21.18; `std/protocol/http.ignite:144`, `:145`, `:160` to `:169` at `f3abeb20`) | U4 |
@@ -7752,7 +7784,7 @@ starts, so that the relative `Directory` path of 22.4 never resolves inside the 
 | 15 | the probe kind | `ignite test examples/todo/health.ignite --target all` | the test "a check line is the model encoding" passes on both targets: `encode_check(HealthCheck { answered = true, status = 200, latency = 12 ms })` equals `{"fields":{"answered":true,"latency":{"ns":12000000,"type":"Duration"},"status":200},"type":"examples.todo.health.HealthCheck"}` plus `\n`; `healthy` holds for it and not for `status = 503` or `answered = false` | U4 |
 | 16 | the contract reaches each status | `cargo test -p ignite --test main slice18::` | `slice18::{rust,llvm}::todo_contract_reaches_every_status`: `ignite run <copy>/todo.ignite --clock manual --target <t> --port TodoService.ingress=<free>` in a temporary working directory; the test advances the clock by `10 seconds` per slot and waits for each attempt's `signal` record (or its `AttemptFailed` event) before the next advance. Phases: 3 good slots; 4 slots with the run's copied probe executable (`<state>/bin/<generation>/health`) replaced by a script that exits 1, so the attempts fail and emit nothing while `expected` grows; the executable restored and 31 good slots, so the gap leaves the 5-minute window; then SIGSTOP of `todod` and 3 slots past their timeouts; then SIGCONT before `stop`. The statuses of the `standing` records of `TodoService.reachable`, consecutive repeats collapsed, are exactly `Compliant`, `InsufficientEvidence`, `Compliant`, `Violated` (an evaluator publishes only at an emission, and the first emission has `expected` 1, `std/control.ignite:631` to `:645`, `:793` to `:844`) | U6 |
 | 17 | durable across SIGKILL and a rollout, LLVM | same | `slice18::llvm::todo_survives_sigkill_and_a_rollout`: `ignite host` in a temporary working directory; plan and apply the todo copy (`--target llvm`), exit 0; `POST /todos {"title":"milk"}` answers 201 id 1; SIGKILL of the `TodoService.server` pid that `ignite inspect --json` reports; within 10 s inspect reports another pid ready; `GET /todos` is `[{"id":1,"title":"milk","done":false}]`; the copy's health body `ok\n` is changed to `ok 2\n`, replanned and applied, exit 0, with the action `replace` for `TodoService.server`; `GET /health` answers `ok 2\n` and `GET /todos` is the same list | U6 |
-| 18 | R11: host killed after an effect, before its receipt | same | `slice18::llvm::a_host_killed_after_dispatch_never_reports_an_unobserved_start`: the rollout of row 17 with the host started under `IGNITE_DEBUG_HOST_FAULT=after_dispatch`; the host dies; the restarted host's inspect reports the operation either `completed` with a `Ready` record in the host journal for the pid it names, or `recovery_required` with reason `outcome_unknown`; in neither case is more than one process running `revisions/*/…/todod`, and the host journal holds no two `Started` records of `TodoService.server` with one generation; `GET /todos` lists `milk` once the operation is `completed` (after a retry of the same plan if it was resumed) | U6 |
+| 18 | R11: host killed after an effect, before its receipt | same | `slice18::llvm::a_host_killed_after_dispatch_never_reports_an_unobserved_start`: the rollout of row 17 in three host runs: a host under `IGNITE_DEBUG_HOST_FAULT=after_intent` accepts the rollout and dies after journaling its acceptance; a host under `after_dispatch` resumes it and dies after dispatching its spawn; a clean host starts last. (As landed, U6: the row first named one host under `after_dispatch`, which cannot be built: such a host dies at the restart of the committed revision 1 that every host start dispatches first (17.5), before any rollout is submitted.) The clean host's inspect reports the operation either `completed` with a `Ready` record in the host journal for the pid it names, or `recovery_required` with reason `outcome_unknown`; in neither case is more than one process running `revisions/*/…/todod`, and within one run of an operation the host journal holds no two `Started` records of `TodoService.server` with one generation (each host start begins a fresh journal segment whose generations count from 1 again, 17.5, so the rule holds per run, not across runs); `GET /todos` lists `milk` once the operation is `completed` (after a retry of the same plan if it was resumed) | U6 |
 | 19 | R11: a plan saved before a source change | same | `slice18::llvm::a_plan_saved_before_a_source_change_is_refused`: plan saved, then a response text of the copy changed; `ignite apply` exits 2 with a reason naming the changed source file; the `TodoService.server` pid in inspect is unchanged, no `transition` record follows the refusal, `GET /todos` lists `milk` | U6 |
 | 20 | R11: a torn last record | same | `slice18::llvm::a_torn_last_journal_record_is_dropped_and_recorded`: host stopped with `stop`; the bytes `{"kind":"sta` appended to `host-journal.jsonl`; the next `ignite host` prints `ignite host: dropped a torn final journal record of 12 bytes` on stderr, its journal's first new record is `journalRepaired` with `{"droppedBytes": 12, "droppedDigest": "sha256:…"}` (the digest of the 12 bytes), `ignite inspect --json` holds `journalRepairs` with that entry, and the committed revision serves `GET /todos` with `milk` | U3 (unit test), U6 (row) |
 | 21 | R11: an altered last record | same | `slice18::llvm::an_altered_last_journal_record_refuses_the_host`: host stopped; one byte inside the last record's `value` changed (the line stays valid JSON); `ignite host` exits 3 with stderr ``error: host journal record <n>: digest mismatch``, starts no process, and leaves every file of the state byte-identical; `ignite inspect --json` exits 0 with `"online": false`, `"journal": {"intact": false, "record": <n>, "reason": "digest mismatch"}` and `"nextAction": "restore host-journal.jsonl or move the state aside; the host does not start on a damaged journal"` | U3 (unit test), U6 (row) |
@@ -7761,7 +7793,7 @@ starts, so that the relative `Directory` path of 22.4 never resolves inside the 
 | 24 | journal integrity, unit level | `cargo test -p ignite --lib apply::host::journal::` | `a_torn_final_line_is_dropped_and_repaired` (row 20's bytes give `journalRepaired`), `an_altered_record_names_its_index` (`History::load` fails with `host journal record 3: digest mismatch` for an altered third record), `a_journal_shorter_than_its_anchor_is_refused`, `a_missing_anchor_is_accepted` (a state with no `status.json`, or one without `journalAnchor`, loads as today) pass | U3 |
 | 25 | a way out of a non-resolvable recovery | `cargo test -p ignite --test main apply_way_out::` | `apply_way_out::{rust,llvm}_operator_recover_returns_the_host_to_accepting_plans`: a host driven into the state of 22.9 (a committed revision, a failed operation `gave_up`, and a later reason no corrective resolves); `ignite apply <corrective>` exits 2 with `host has an active or unresolved operation` (`crates/ignite/src/apply/host/admission.rs:279` to `:281`) and a retry of the failed plan exits 1 with `operation requires recovery; inspect its durable status` (`:244` to `:249`); `ignite recover --state S --operation <id>` exits 0 and prints `recovered <id>: stopped <n> instances; committed revision <r> restarted`; the host journal holds one `operatorRecovered` record naming the operation, the stopped pids and `"by": "ignite recover"`, and between the `recoverStarted` record and the fresh start no `Started` record of any member; inspect reports `recovery` null, the operation's receipt `state` `abandoned` with its reasons kept, and the committed revision ready; a retry of the abandoned plan exits 2 with `operation <id> was abandoned by ignite recover; prepare a new plan`; a new plan applies with exit 0 and `completed` | U5 |
 | 26 | recover refuses what it cannot prove | same | `apply_way_out::recover_refuses_an_unaccounted_process`: as row 25 with a process running an executable under `<state>/revisions/` that no ownership record names; `ignite recover` exits 1 with `recovery refused: unaccounted process <pid> runs <path>`, signals nothing (the process is alive afterwards), and journals nothing; `ignite recover` of an operation that is not `recovery_required` exits 2 with `operation <id> requires no recovery` | U5 |
-| 27 | the build is a fraction of rustc's | 22.15, `ignite-perf programs` | the records of 22.15 exist; in the after tree the median dev build of `todod` alone (`ignite build` builds `health` too; the unit times the two executables separately) on LLVM is at most 0.15 of the median on Rust in the same passes (the 12b rows give 0.309 / 3.998 = 0.077) | U8 |
+| 27 | the build is a fraction of rustc's | 22.15, `ignite-perf programs` | the records of 22.15 exist; in the after tree the median dev build of the todo program (`ignite build examples/todo/todo.ignite`, both executables `todod` and `health`; harness unit `todod-<target>-dev`) on LLVM is at most 0.15 of the median on Rust in the same passes (the 12b rows give 0.309 / 3.998 = 0.077). As landed (U8): the row first asked for `todod` alone, timed apart from `health`; `ignite build` has no option to build one executable of a program, and the slice adds no compiler change only to time one, so the unit times the program's build, which holds both | U8 |
 | 28 | the edit-build-restart cycle | 22.15, `ignite-perf apply-cycle` | records exist for the todo (after tree, both targets) and the terminal design (both trees, both targets); in the after tree the todo cycle's median on LLVM is below its median on Rust | U7 (mode), U8 (records) |
 | 29 | the code lists | `cargo test -p ignite --test main plan::fixtures_match_expected`; section 8 | section 8 has a "Codes of slice 18" paragraph naming E150 and E151 with their fixtures; both fixtures exist and match | U0 (paragraph), U1 (fixtures) |
 | 30 | reducer and evaluator revisions | `git diff <base> -- crates/ignite/src/apply/plan.rs`; `cargo test -p ignite --test main apply_recovery::a_changed_reducer_revision_starts_the_host_without_driving_and_asks_to_replan` | `REDUCER_EVALUATOR` differs from the base (U1); the test passes; `CODEGEN_REVISION` is unchanged unless a unit changes generation, which that unit's commit then says | U1 |
@@ -7816,7 +7848,7 @@ Not in scope:
 - consistency between two processes of the todo: during an occupied-listener rollout the
   draining instance may still answer a request on an open keep-alive connection after the new
   instance has loaded (16.12). Each process allocates ids and versions from its own memory
-  store, so the two can write the same `todos/<id>/<version>.json`, and `write_file` replaces
+  store, so the two can write the same `<shard>/<id>/<version>.json`, and `write_file` replaces
   (21.4): an acknowledged write in the drain window can be lost or hidden from the new instance.
   This is a known limit, stated here, in the todo's header comment and in `AGENTS.md` (S9, S10);
   rows 17 and 18 create their todo before the rollout and send no request on the old instance
@@ -7933,8 +7965,9 @@ Check-time rules (in `ignite-eval`, beside E129):
   hook with `self` and one parameter of the signal's element type returning `Bool` (row 3).
 - E151: a signal that the assembly runs (its producer's binding has entries, `std.deploy.entries`,
   as E121 and E129 decide; the compiler names no binding variant, 16.17) and that a member with
-  a machine subscribes to (`ModelMachine::subscribes`, `crates/ignite-eval/src/model.rs:349` to
-  `:375`), whose element type is not an outcome type. An outcome type is `Bool`, `Int`,
+  a machine subscribes to (`ModelMachine::subscribes`: every signal ref in the member's
+  properties at any depth, a list element included, collected by `signal_refs` in
+  `crates/ignite-eval/src/model.rs`, which E121 and E150 read too), whose element type is not an outcome type. An outcome type is `Bool`, `Int`,
   `Text`, `Byte`, a quantity (`Duration`, `ByteSize`, `Ratio`), or a `List`, `Option`, tuple,
   record or enum of outcome types. This is a policy, not a claim about decoding:
   `Value::decode` also reads fn, `Ref` and `Signal` values (`crates/ignite-eval/src/value.rs:520`
@@ -7953,6 +7986,7 @@ type Todo {
   done: Bool = false
   version: Int = 1
   deleted: Bool = false
+  deleted_by: Int = 0
 }
 
 type Todos {
@@ -8009,10 +8043,17 @@ host writes `<state>/workdir` at its first start and refuses to start from anoth
 (exit 2, row 33, U3), so a host restarted elsewhere cannot silently open an empty `todo-data`.
 This settles 21.16 Q2's open end for `apply` without changing 21.4's resolution rule.
 
-- `todos/<id>/<version>.json`: the `to_record` JSON of the todo at that version, an object with
+- `<shard>/<id>/<version>.json`: the `to_record` JSON of the todo at that version, an object with
   `id`, `title`, `done`, `version` and `deleted`, written with `write_file` (atomic replace,
   21.4). The HTTP bodies keep the three fields of `to_json` (`examples/todo/todo.ignite:20`), so
   every existing response and test is unchanged.
+- The shard of an id (`shard_of`) is `todos` for ids 1 to 65,536 and `todos-<k>` for ids
+  `k * 65536 + 1` to `(k + 1) * 65536`. `read_directory` lists at most 65,536 entries (21.4) and
+  every id keeps its directory forever, so no shard outgrows a listing; the root of `data`
+  lists one shard per 65,536 ids, which bounds the ids at about 4.29 billion (65,536 shards).
+  Before W3's fix every id was under `todos/`, and the 65,537th made every later load fail
+  (`todo::todo_w3_adversary::*::the_65537th_todo_survives_a_restart`); a `todos/` of up to
+  65,536 ids written before is the first shard as it is.
 - A deleted todo is a file whose `deleted` is true at the next version (a tombstone); its id is
   never reused.
 
@@ -8020,20 +8061,27 @@ Behaviour:
 
 - The memory `Store<Todo>` is the authority inside a process; every change goes through one
   atomic `update` or `upsert` that also increments `version` (`f` stays pure, 11.3), and the
-  handler then creates `todos/<id>` (`create_directory`; `write_file` needs its parent, 21.4)
+  handler then creates `<shard>/<id>` (`create_directory`; `write_file` needs its parent, 21.4)
   and writes the returned value's file before it answers. A failed write answers 500 with the
   body `not stored\n`; 500 means "not durable", not "not applied": the memory value stays, and a
   later successful write of that id persists it. After the write, files of that id with a lower version are
   removed; a failed removal is ignored (the next load takes the highest version).
 - Load: each request first checks `loaded.get(0)`; while it is not `Some(true)`, the request
-  loads: `create_directory("todos")`, then for each `<id>/` the highest `<version>.json` that
-  parses, merged with `todos.upsert(id, |held| keep the higher version)`, then
+  loads: `create_directory("todos")`, then for each shard directory at the root of `data`
+  (`todos/` and every `todos-<digits>/`; other entries are skipped) and each `<id>/` in it the
+  highest `<version>.json` that parses, merged with `todos.upsert(id, |held| keep the higher version)`, then
   `loaded.put(0, true)`. Loads are idempotent and monotone, so concurrent first requests may each
   load and no load overwrites a newer change. `GET /health` loads too, then answers 200
   `ok\n`; a failed load answers 503 `loading failed: <reason>\n`.
 - `POST /todos` takes `todos.next_id()` until `todos.get(id)` is `None` (after the load every id
   on disk, tombstones included, is in memory), so ids continue after a restart (row 12).
 - `GET` and the listing skip tombstones; `PATCH` and `DELETE` of a tombstone answer 404.
+- `DELETE` decides 204 or 404 inside its one atomic `update`, not from a `get` before it: the
+  request takes a token, `loaded.next_id()`, and the tombstone it makes carries it in
+  `deleted_by` (memory only; `to_record` leaves it out and a loaded todo has 0). The request
+  answers 204 when the value `update` returns carries its token, else 404, so of two concurrent
+  DELETEs of one todo exactly one answers 204, as two in sequence do (W3 adversary,
+  `todo::todo_w3_adversary::*::concurrent_deletes_answer_one_204`).
 - The tests of `todo.ignite` build the state record with `Store.new()` twice and
   `Directory.temporary()?` (21.8).
 
@@ -8100,10 +8148,13 @@ slice adds:
   is split: a read-only verifier (chain, digests, anchor, revision journals; used by offline
   `inspect`) and the repair, which runs after the lock is held and appends `journalRepaired
   {"droppedBytes": n, "droppedDigest": "sha256:<hex of the bytes>", "previousDigest": <last good>}`
-  in place of the torn bytes (truncate to the last good record, append the repair record, one
-  sync), so a crash after the repair leaves the record and a crash before it leaves the torn
-  line to repair again. The host prints `ignite host: dropped a torn final journal record of <n>
-  bytes`, and `inspect` lists every such record in `journalRepairs` (row 20). Offline `inspect`
+  in place of the torn bytes in one atomic step (`Writer::repair`: the good records and the
+  repair record written to `host-journal.<pid>.writing` in the same directory and synced, renamed
+  over the journal, the directory synced), so a crash after the rename leaves the record and a
+  crash before it leaves the old journal, torn line included, to repair again; the good records
+  never stand without the repair record (unit test
+  `a_crash_during_the_repair_leaves_the_torn_journal`). The host prints `ignite host: dropped a
+  torn final journal record of <n> bytes`, and `inspect` lists every such record in `journalRepairs` (row 20). Offline `inspect`
   of a journal that is only torn reports `"intact": true, "pendingRepair": {"droppedBytes": n}`.
 - An altered record: `History::load` reports its 1-based line number, `host journal record <n>:
   digest mismatch` (or `: does not parse`, `: chain diverged`), exit 3, before anything is
@@ -8157,7 +8208,12 @@ ignite recover --state DIR --operation ID [--json]
 
 - Sent over the control socket as operation `recover` (`ignite-host-control/0.1`, 17.2). The
   host accepts it only for the active operation when it is `recovery_required` and admission
-  refuses a corrective for it (F16); otherwise exit 2 `operation <id> requires no recovery`.
+  refuses a corrective for it (F16); otherwise exit 2 `operation <id> requires no recovery`. A
+  `recover` while one is in progress (its run driver still stopping) exits 2 `operation <id> is
+  being recovered`.
+- Until then the instances of that state keep serving: the run of the committed revision, which
+  supervises them, has every further effect refused (17.5) and is not ended by the refusal, so
+  `recover` finds them alive and stops them below.
 - The host scans as at start (17.5): an unaccounted process under `<state>/revisions/` refuses
   with exit 1 and its pid and path, nothing signalled, nothing journaled (row 26).
 - Otherwise, in this order: journal `recoverStarted {"operationId"}`; stop the run driver of
@@ -8301,7 +8357,8 @@ Units: those of 18.18, plus:
 
 - `todod` and `health` builds, per target and profile, fresh `--out` and `--target-dir`,
   `SCCACHE_RECACHE=1` (mode `programs`; `health` after only), and the ratio LLVM dev / Rust dev
-  of `todod` in each tree (row 27).
+  of `todod` in each tree (row 27). As landed (U8): one build of the todo program per run, which
+  writes both executables in the after tree (`todod` alone in the before tree); row 27 says why.
 - The apply cycle (new mode `apply-cycle`, U7): in a temporary working directory, `ignite host`
   running and revision 1 of the system applied; then per sample: change one response literal of
   the server (for the todo the `/health` body, for the terminal one command's reply), `ignite plan
@@ -8324,6 +8381,11 @@ in `AGENTS.md`'s gate-time section; raw records, logs and scripts under
 | Q3 | Should the new instance of a rollout wait for the old one's last write? | no in this slice (22.2); a durable store with cross-process locking is D4 C's |
 | Q4 | Does `ignite recover` need a confirmation flag? | no: it refuses whatever it cannot prove (row 26) and journals what it did |
 | Q5 | Should `healthy` also bound latency? | no: `ThresholdCompliance` with a two-argument predicate is the form for that; the example keeps one contract |
+| Q6 | Known gap: should the model pin the body of a `good` predicate? A `good` fn value is recorded by its name only (`crates/ignite-eval/src/model.rs:1677`), while `ignite replay` and a resumed `ignite run` call the current source's `classify` and through it the current body of `good` (`crates/ignite/src/run/engine.rs:345`). An edited body gives E127 at whichever record first classifies differently, not at the edit (W2 review finding, not reproduced). | not in this slice: recorded by the W2 review; a fix pins the body's digest in the model or journal |
+| Q7 | Known gap: should a signal's element decode with the types of every module it names? `decoder` picks the module of the first record or enum inside the element type (`crates/ignite/src/run/engine.rs:772`, used at `:320`), so the whole element is decoded against that module's types only, also a record or enum of another module inside it (W2 review finding, not reproduced). | not in this slice: recorded by the W2 review; a fix decodes against the program's merged types |
+| Q8 | Open: is a `Released` lost after `Kill`? 16.12 said the old process's exit during `Draining` is not a failure; the supervisor counts it as one (`ended` in `std/control.ignite`: a `Running` supervisor without its own kill request fails), and since `fix/rollout-drain-stuck` (PR 46) the rollout relies on that restart as its new process, so 16.12 is corrected (slice 18, U8). What stays open: when the old process exits on `SIGTERM` before the driver handles `AwaitRelease`, the adapter finds no live process and only notes `<member> has no live process to release` (`Dispatch::AwaitRelease` in `crates/ignite/src/run/live.rs`); no `Released` is sent, so the disruption counts from the exit, not from the listener's close. | not in this slice: the rollout completes on the restart (PR 46); whether the adapter should send `Released` for a process that already ended is a later decision |
+| Q9 | Known gap: a ready process whose binary differs from the admitted artifact ends the run. The host's `Ready` check (`ready artifact identity mismatch` in `crates/ignite/src/apply/host/controller.rs`) rejects the operation and returns an error that ends the revision's run, which takes the other committed instances of that run down with it, though only one instance differs. | not in this slice: `ignite recover` (22.9) is the way back; a fix stops only the differing instance and keeps the run |
+| Q10 | Known limit (U4, U5): `ignite recover` waits a fixed 60 s for the committed revision it starts to be ready (`RECOVER_READY` in `crates/ignite/src/apply/host/recovery.rs`), whatever the revision's own readiness deadline is. | not in this slice: a revision whose start takes longer makes `recover` exit 1; a fix reads the deadline from the revision's model |
 
 ### 22.17 Resolution of the review
 

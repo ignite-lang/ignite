@@ -30,7 +30,20 @@
 //! `reducer_revision_changed` and the next action "replan and apply", which
 //! does not block an apply: the host starts, owns nothing, and the next
 //! admitted plan starts its members afresh.
+//!
+//! Operator recovery (`ignite recover`, `docs/slice.md` 22.9, decision
+//! D11): an operation that is `recovery_required` with a reason kept
+//! beside it that no corrective resolves is abandoned on the operator's
+//! request. The host refuses it while a process of this state's
+//! generations runs that it cannot account for; otherwise it journals
+//! `recoverStarted`, stops the running revision's run (its supervisors
+//! restart nothing from there on), ends every instance through its pidfd,
+//! journals `operatorRecovered`, marks the receipt `abandoned` and starts
+//! the committed revision afresh. A host that dies in between restarts
+//! with the operation still `recovery_required`, and a second `ignite
+//! recover` completes it.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -38,8 +51,9 @@ use ignite_eval::Json;
 
 use super::admission::retained_plan;
 use super::journal::FORMAT;
-use super::{Host, read_json};
+use super::{Host, Reply, read_json};
 use crate::apply::{Failure, fail, object, plan::Plan, required, text};
+use crate::run::control::Observation;
 use crate::run::process::{signal_instance, start_time};
 
 pub(super) const OUTCOME_UNKNOWN: &str = "outcome_unknown";
@@ -50,6 +64,31 @@ pub(super) const REDUCER_CHANGED: &str = "reducer_revision_changed";
 pub const REDUCER_OVERRIDE: &str = "IGNITE_DEBUG_HOST_REDUCER_REVISION";
 /// How long recovery waits for instances to end after a crash or a kill.
 const SETTLE: Duration = Duration::from_secs(3);
+/// How long `ignite recover` waits for the committed revision it started
+/// to report every awaited machine ready.
+const RECOVER_READY: Duration = Duration::from_secs(60);
+/// What `operatorRecovered` names as its author.
+const RECOVERED_BY: &str = "ignite recover";
+
+/// An `ignite recover` waiting for the running revision's run to stop.
+pub(super) struct Recovering {
+    operation: String,
+    reply: Reply,
+    /// Every instance this host accounted for when the recover was
+    /// accepted: pid and start time.
+    instances: Vec<(i64, String)>,
+}
+
+/// The parent pid of a live process.
+fn parent(pid: i64) -> Option<i64> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    stat.rsplit_once(") ")?
+        .1
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
+}
 
 /// This host's reducer revision for `plan`'s retained standard library.
 fn host_reducer(plan: &Plan) -> String {
@@ -666,6 +705,235 @@ impl Host {
             }
         }
     }
+
+    /// `ignite recover` of the operation `payload` names (module doc). It
+    /// is accepted only for the active operation while it is
+    /// `recovery_required` and admission refuses a corrective for it, else
+    /// exit 2; a process of this state's generations that the host cannot
+    /// account for refuses it with exit 1, before anything is signalled or
+    /// journaled.
+    pub(super) fn operator_recover(&mut self, payload: &Json, reply: Reply) -> Result<(), Failure> {
+        let id = required(payload, "operationId")?.to_string();
+        if self
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.recovering.is_some())
+        {
+            return Err(fail(2, format!("operation {id} is being recovered")));
+        }
+        let failed = self.active.as_deref() == Some(id.as_str())
+            && self.transition.is_none()
+            && self
+                .receipts
+                .get(&id)
+                .and_then(|receipt| receipt.get("state"))
+                .and_then(Json::as_str)
+                == Some("recovery_required")
+            && !self.correctable();
+        if !failed {
+            return Err(fail(2, format!("operation {id} requires no recovery")));
+        }
+        let instances = self.accounted_instances()?;
+        self.append("recoverStarted", object([("operationId", text(&id))]))?;
+        let recovering = Recovering {
+            operation: id,
+            reply,
+            instances,
+        };
+        match &mut self.runtime {
+            // Stopped as the host's `stop` stops it; its end continues the
+            // recovery (`finished`).
+            Some(runtime) => {
+                let _ = runtime.control.send(Observation::Control("stop".into()));
+                runtime.recovering = Some(recovering);
+                Ok(())
+            }
+            None => self.finish_recover(recovering),
+        }
+    }
+
+    /// Every process of this state's generations, as pid and start time,
+    /// once each is accounted for: an instance an ownership record names
+    /// (pid and start time), or a child of this host, which only its run
+    /// drivers start. Any other is exit 1, `recovery refused: unaccounted
+    /// process <pid> runs <path>`.
+    fn accounted_instances(&self) -> Result<Vec<(i64, String)>, Failure> {
+        let named: BTreeSet<(i64, String)> = self
+            .owned
+            .values()
+            .chain(self.retiring.values())
+            .filter_map(|owner| match prove(owner) {
+                Proof::Runs { pid, started } => Some((pid, started)),
+                Proof::Ended => None,
+            })
+            .collect();
+        let host = i64::from(std::process::id());
+        let mut instances: BTreeSet<(i64, String)> = named.clone();
+        for (pid, executable, started) in generation_processes(&self.root.join("revisions")) {
+            if !named.contains(&(pid, started.clone())) && parent(pid) != Some(host) {
+                return Err(fail(
+                    1,
+                    format!(
+                        "recovery refused: unaccounted process {pid} runs {}",
+                        executable.display()
+                    ),
+                ));
+            }
+            instances.insert((pid, started));
+        }
+        Ok(instances.into_iter().collect())
+    }
+
+    /// The rest of `ignite recover` once no run drives a revision: end
+    /// every instance (SIGTERM, then SIGKILL after `SETTLE`), journal
+    /// `operatorRecovered`, abandon the operation, clear the recovery and
+    /// start the committed revision afresh. The reply is sent once that
+    /// revision is ready ([`Host::answer_recovered`]), or with exit 1 when
+    /// an instance does not end, the revision does not start, or it is not
+    /// ready within `RECOVER_READY`. Only a failed journal write is an
+    /// error of the host.
+    pub(super) fn finish_recover(&mut self, recovering: Recovering) -> Result<(), Failure> {
+        let Recovering {
+            operation,
+            reply,
+            instances,
+        } = recovering;
+        let mut instances: BTreeSet<(i64, String)> = instances.into_iter().collect();
+        for owner in self.owned.values().chain(self.retiring.values()) {
+            if let Proof::Runs { pid, started } = prove(owner) {
+                instances.insert((pid, started));
+            }
+        }
+        let host = i64::from(std::process::id());
+        for (pid, _, started) in generation_processes(&self.root.join("revisions")) {
+            if parent(pid) == Some(host) {
+                instances.insert((pid, started));
+            }
+        }
+        let ended = |instances: &BTreeSet<(i64, String)>| {
+            instances
+                .iter()
+                .all(|(pid, started)| start_time(*pid).as_deref() != Some(started))
+        };
+        for signal in [nix::libc::SIGTERM, nix::libc::SIGKILL] {
+            for (pid, started) in &instances {
+                signal_instance(*pid, started, signal)?;
+            }
+            if settle(|| ended(&instances)) {
+                break;
+            }
+        }
+        if let Some((pid, _)) = instances
+            .iter()
+            .find(|(pid, started)| start_time(*pid).as_deref() == Some(started))
+        {
+            let _ = reply.send(Err(fail(
+                1,
+                format!("recovery stopped: instance {pid} did not end; retry `ignite recover`"),
+            )));
+            return Ok(());
+        }
+        let mut left = Vec::new();
+        settle(|| {
+            left = generation_processes(&self.root.join("revisions"));
+            left.is_empty()
+        });
+        if let Some((pid, executable, _)) = left.first() {
+            let _ = reply.send(Err(fail(
+                1,
+                format!(
+                    "recovery refused: unaccounted process {pid} runs {}",
+                    executable.display()
+                ),
+            )));
+            return Ok(());
+        }
+        self.owned.clear();
+        self.retiring.clear();
+        let stopped: Vec<i64> = instances.iter().map(|(pid, _)| *pid).collect();
+        let later = self
+            .receipts
+            .get(&operation)
+            .and_then(|receipt| receipt.get("laterReasons"))
+            .cloned()
+            .unwrap_or(Json::Array(Vec::new()));
+        self.append(
+            "operatorRecovered",
+            object([
+                ("operationId", text(&operation)),
+                ("by", text(RECOVERED_BY)),
+                (
+                    "stopped",
+                    Json::Array(stopped.iter().copied().map(Json::Int).collect()),
+                ),
+                ("laterReasons", later),
+            ]),
+        )?;
+        if let Some(Json::Object(receipt)) = self.receipts.get_mut(&operation) {
+            receipt.insert("state".into(), text("abandoned"));
+            receipt.insert("nextAction".into(), text("prepare a new plan"));
+        }
+        self.active = None;
+        self.recovery_reason = None;
+        self.recovery = None;
+        self.persist()?;
+        let payload = object([
+            ("operationId", text(&operation)),
+            (
+                "stopped",
+                Json::Array(stopped.into_iter().map(Json::Int).collect()),
+            ),
+            ("committedRevision", Json::Int(self.revision)),
+            (
+                "committedPlan",
+                self.committed.as_ref().map_or(Json::Null, text),
+            ),
+        ]);
+        let Some(committed) = self.committed.clone() else {
+            let _ = reply.send(Ok(payload));
+            return Ok(());
+        };
+        let revision = self.revision;
+        let started = read_json(&self.root.join("plans").join(format!("{committed}.json")))
+            .and_then(|value| Plan::parse(&value).map_err(|reason| fail(3, reason)))
+            .and_then(|plan| self.start(plan));
+        if let Err(error) = started {
+            let _ = reply.send(Err(fail(
+                1,
+                format!("committed revision {revision} did not start: {error}"),
+            )));
+            return Ok(());
+        }
+        let timer = reply.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(RECOVER_READY);
+            let _ = timer.send(Err(fail(
+                1,
+                format!(
+                    "committed revision {revision} was not ready within {} s",
+                    RECOVER_READY.as_secs()
+                ),
+            )));
+        });
+        if let Some(runtime) = &mut self.runtime {
+            runtime.recovered = Some((reply, payload));
+        }
+        Ok(())
+    }
+
+    /// Answer the `ignite recover` that started the running revision once
+    /// every machine it awaits reports ready.
+    pub(super) fn answer_recovered(&mut self) {
+        let Some(runtime) = &mut self.runtime else {
+            return;
+        };
+        if !runtime.expected.is_subset(&runtime.ready) {
+            return;
+        }
+        if let Some((reply, payload)) = runtime.recovered.take() {
+            let _ = reply.send(Ok(payload));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1033,6 +1301,8 @@ mod tests {
             adopted: Default::default(),
             supervised: Default::default(),
             restore_to: None,
+            recovering: None,
+            recovered: None,
         }
     }
 
@@ -1137,6 +1407,54 @@ mod tests {
                 "{sink}: the reducer failure still blocks every effect"
             );
         }
+    }
+
+    /// 17.5 since slice 18: an effect the host refuses beside an unresolved
+    /// recovery reaches the run driver as `Admission::Refused`, which it
+    /// journals, does not dispatch and goes on after, so the committed
+    /// instances keep serving until `ignite recover`; any other failed
+    /// record, such as a storage failure, still ends the run.
+    #[test]
+    fn a_refused_effect_is_answered_refused_and_does_not_end_the_run() {
+        use super::super::controller::{EFFECT_REFUSED, admission};
+        use crate::run::live::Admission;
+        let root = scratch("refused");
+        let mut host = gave_up_host(&root);
+        host.runtime = Some(committed_runtime("committed"));
+        let failed = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("error")),
+                ("machine", text("Terminal.probe.scheduler")),
+                (
+                    "value",
+                    object([
+                        ("code", text("E128")),
+                        ("report", text("reducer of Terminal.probe.scheduler failed")),
+                    ]),
+                ),
+            ]),
+        );
+        let note = host.record(
+            "committed",
+            "committed",
+            object([
+                ("kind", text("effect")),
+                ("machine", text("Terminal.server.supervisor")),
+                ("value", object([("variant", text("Note"))])),
+            ]),
+        );
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(failed.is_ok(), "{failed:?}");
+        assert_eq!(
+            admission(note).ok(),
+            Some(Admission::Refused(EFFECT_REFUSED.to_string()))
+        );
+        assert_eq!(admission(Ok(())).ok(), Some(Admission::Dispatch));
+        assert!(admission(Err(fail(3, "host journal sync failed"))).is_err());
+        assert!(admission(Err(fail(1, "ready artifact identity mismatch"))).is_err());
     }
 
     /// `finished`: the committed revision's controller that ends while a
@@ -1355,5 +1673,108 @@ mod tests {
         );
         assert_eq!(receipt_of(&host, "failed").2.as_deref(), Some(INSPECT));
         assert!(!host.correctable());
+    }
+
+    /// The kinds of the host journal's records under `root`, in order.
+    fn journal_kinds(root: &Path) -> Vec<String> {
+        std::fs::read_to_string(root.join("host-journal.jsonl"))
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|line| Json::parse(line).ok())
+            .filter_map(|record| {
+                record
+                    .get("kind")
+                    .and_then(Json::as_str)
+                    .map(str::to_string)
+            })
+            .collect()
+    }
+
+    /// 22.9 while the failed operation's run still runs: `ignite recover`
+    /// journals `recoverStarted`, stops that run as the host's `stop` does
+    /// and waits for its end, which abandons the operation, journals
+    /// `operatorRecovered` and clears the recovery before the committed
+    /// revision starts. An operation that is not the unresolved one, and a
+    /// second recover while the first waits, are exit 2.
+    #[test]
+    fn recover_stops_the_running_revision_before_it_abandons_the_operation() {
+        let root = scratch("operator-recover");
+        let mut host = gave_up_host(&root);
+        if let Some(Json::Object(receipt)) = host.receipts.get_mut("failed") {
+            receipt.insert(
+                "laterReasons".into(),
+                Json::Array(vec![object([
+                    ("operationId", text("failed")),
+                    ("reason", text("a required owned process failed to start")),
+                ])]),
+            );
+        }
+        let (control, lines) = std::sync::mpsc::channel();
+        let mut runtime = committed_runtime("failed");
+        runtime.control = control;
+        host.runtime = Some(runtime);
+        let (reply, answer) = std::sync::mpsc::channel();
+
+        let committed =
+            host.operator_recover(&object([("operationId", text("committed"))]), reply.clone());
+        let accepted =
+            host.operator_recover(&object([("operationId", text("failed"))]), reply.clone());
+        let stop = lines.try_recv();
+        let waiting = (
+            journal_kinds(&root),
+            receipt_of(&host, "failed").0,
+            answer.try_recv().is_err(),
+        );
+        let again = host.operator_recover(&object([("operationId", text("failed"))]), reply);
+        let ended = host.finished("committed", Ok(0), false);
+        let answered = answer.try_recv();
+        let kinds = journal_kinds(&root);
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert_eq!(
+            committed
+                .map_err(|error| (error.status, error.reason))
+                .err(),
+            Some((2, "operation committed requires no recovery".to_string()))
+        );
+        assert!(accepted.is_ok(), "{accepted:?}");
+        assert!(
+            matches!(&stop, Ok(Observation::Control(line)) if line == "stop"),
+            "the run is stopped"
+        );
+        assert_eq!(
+            waiting,
+            (
+                vec!["recoverStarted".to_string()],
+                Some("recovery_required".to_string()),
+                true
+            ),
+            "nothing is abandoned before the run ended"
+        );
+        assert_eq!(
+            again.map_err(|error| (error.status, error.reason)).err(),
+            Some((2, "operation failed is being recovered".to_string()))
+        );
+        assert!(ended.is_ok(), "{ended:?}");
+        assert_eq!(
+            kinds[..2],
+            [
+                "recoverStarted".to_string(),
+                "operatorRecovered".to_string()
+            ]
+        );
+        assert_eq!(receipt_of(&host, "failed").0.as_deref(), Some("abandoned"));
+        assert_eq!(receipt_of(&host, "failed").1.as_deref(), Some("gave_up"));
+        assert_eq!(host.active, None);
+        assert_eq!(host.recovery_reason, None);
+        // The committed plan is absent here, so the fresh start fails and
+        // the recover says so with exit 1.
+        let answered = answered.expect("the recover is answered");
+        assert!(
+            answered
+                .as_ref()
+                .is_err_and(|error| error.status == 1 && error.reason.contains("did not start")),
+            "{answered:?}"
+        );
     }
 }

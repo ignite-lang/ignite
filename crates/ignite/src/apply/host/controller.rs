@@ -79,7 +79,24 @@ use crate::apply::revision::Launch;
 use crate::apply::{Failure, fail, object, plan::Plan, text};
 use crate::run::control::Observation;
 use crate::run::engine::{enum_parts, field};
-use crate::run::live::Carried;
+use crate::run::live::{Admission, Carried};
+
+/// The reason [`Host::record`] refuses an effect while a recovery that no
+/// corrective resolves stands (17.5).
+pub(super) const EFFECT_REFUSED: &str = "effect dispatch blocked by unresolved recovery";
+
+/// The answer the run driver gets for a record: a refused effect is
+/// [`Admission::Refused`], which the run journals and does not dispatch
+/// while it goes on serving (17.5, 22.9); any other failure ends the run.
+pub(super) fn admission(result: Result<(), Failure>) -> io::Result<Admission> {
+    match result {
+        Ok(()) => Ok(Admission::Dispatch),
+        Err(error) if error.status == 1 && error.reason == EFFECT_REFUSED => {
+            Ok(Admission::Refused(error.reason))
+        }
+        Err(error) => Err(io::Error::other(error.to_string())),
+    }
+}
 
 /// The revision controller running on the run driver's thread.
 pub(super) struct Runtime {
@@ -106,6 +123,12 @@ pub(super) struct Runtime {
     /// The committed plan whose run takes this run's handover: set when a
     /// failed start-first cutover gives the old instances back (module doc).
     pub(super) restore_to: Option<String>,
+    /// Set while this run stops for `ignite recover` (`docs/slice.md`
+    /// 22.9): its end continues the recovery ([`Host::finish_recover`]).
+    pub(super) recovering: Option<super::recovery::Recovering>,
+    /// The reply to the `ignite recover` that started this run, sent once
+    /// every awaited machine reports ready ([`Host::answer_recovered`]).
+    pub(super) recovered: Option<(super::Reply, Json)>,
 }
 
 /// The transition of one operation in flight.
@@ -1178,6 +1201,8 @@ impl Host {
             adopted,
             supervised,
             restore_to: None,
+            recovering: None,
+            recovered: None,
         });
         std::thread::spawn(move || {
             let initialized_tx = tx.clone();
@@ -1236,12 +1261,14 @@ impl Host {
         {
             self.complete(id)?;
         }
+        self.answer_recovered();
         Ok(())
     }
 
     /// The controller of `id` ended. Unless the host is shutting down, an
     /// active operation of another plan starts after a clean stop; any other
-    /// end requires recovery.
+    /// end requires recovery. A run that `ignite recover` stopped continues
+    /// that recovery ([`Host::finish_recover`]).
     pub(super) fn finished(
         &mut self,
         id: &str,
@@ -1255,12 +1282,20 @@ impl Host {
         {
             return Ok(());
         }
-        self.runtime = None;
-        self.owned.clear();
-        self.retiring.clear();
+        let recovering = self
+            .runtime
+            .take()
+            .and_then(|mut runtime| runtime.recovering.take());
         if shutdown {
+            self.owned.clear();
+            self.retiring.clear();
             return Ok(());
         }
+        if let Some(recovering) = recovering {
+            return self.finish_recover(recovering);
+        }
+        self.owned.clear();
+        self.retiring.clear();
         let reason = format!("revision controller ended before convergence: {result:?}");
         if self.effect_failed(&reason, "")? {
             if let Some(driving) = self.transition.take() {
@@ -1343,9 +1378,24 @@ impl Host {
         }
         // A machine that gave up blocks nothing: the operation it failed
         // waits for a corrective apply, and the other machines go on. A
-        // failure kept beside it that a corrective does not resolve blocks.
-        if kind == Some("effect") && self.recovery_reason.is_some() && !self.correctable() {
-            return Err(fail(1, "effect dispatch blocked by unresolved recovery"));
+        // failure kept beside it that a corrective does not resolve blocks,
+        // except what a run stopping for `ignite recover` needs to end its
+        // processes: anything but a spawn (22.9).
+        let stopping = self
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.recovering.is_some())
+            && record
+                .get("value")
+                .and_then(|value| value.get("variant"))
+                .and_then(Json::as_str)
+                != Some("Spawn");
+        if kind == Some("effect")
+            && self.recovery_reason.is_some()
+            && !self.correctable()
+            && !stopping
+        {
+            return Err(fail(1, EFFECT_REFUSED));
         }
         if kind == Some("error") {
             self.reject_operation(
@@ -1394,6 +1444,13 @@ impl Host {
             .is_some_and(|runtime| runtime.supervised.contains(machine));
         if kind == Some("event") && supervised {
             self.lifecycle(operation, machine, event, variant)?;
+        }
+        if self
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| !runtime.expected.is_empty())
+        {
+            self.answer_recovered();
         }
         if self.transition.is_some() {
             return self.drive();

@@ -67,11 +67,44 @@ pub fn reachable(record: &Json) -> bool {
     standing(record, "Terminal.reachable")
 }
 
-/// A probe-attempt signal whose `received` is exactly `value` (Python `is`).
+/// A probe-attempt signal whose `received` is exactly `value` (Python `is`). In an
+/// `ignite-journal/0.2` journal the signal's value is a `std.sli.Sample` (`docs/slice.md`
+/// 22.3): a sample without a line is the deadline's, `received` false; else `received` is
+/// read from the `ProbeAttempt` its line encodes. The recorded `ignite-journal/0.1` runs
+/// carry the `ProbeAttempt` itself.
 pub fn received(record: &Json, value: bool) -> bool {
     record.field("kind").as_str() == Some("signal")
         && record.field("value").field("ref").as_str() == Some("Terminal.promptProbe.attempts")
-        && matches!(fields(record.field("value").field("value")).get("received"), Some(Json::Bool(b)) if *b == value)
+        && sample_received(record.field("value").field("value")) == Some(value)
+}
+
+/// Whether the prompt arrived in a signal value: a `std.sli.Sample`, or a 0.1 `ProbeAttempt`.
+fn sample_received(sample: &Json) -> Option<bool> {
+    if sample.field("type").as_str() != Some("std.sli.Sample") {
+        return attempt_received(sample);
+    }
+    let line = fields(sample).field("line");
+    match line.field("variant").as_str()? {
+        "None" => Some(false),
+        "Some" => line_received(line.field("fields").item(0)),
+        _ => None,
+    }
+}
+
+/// The `received` field of a probe line: the JSON string of a `ProbeAttempt`, or in a 0.1
+/// journal the decoded `ProbeAttempt`.
+fn line_received(line: &Json) -> Option<bool> {
+    match line.as_str() {
+        Some(text) => attempt_received(&Json::parse(text).ok()?),
+        None => attempt_received(line),
+    }
+}
+
+fn attempt_received(attempt: &Json) -> Option<bool> {
+    match fields(attempt).get("received") {
+        Some(Json::Bool(b)) => Some(*b),
+        _ => None,
+    }
 }
 
 fn note_contains(record: &Json, text: &str) -> bool {
@@ -795,10 +828,7 @@ pub fn timeout_seen(seen: &[Json]) -> bool {
             && row.field("value").field("fields").item(0).as_str() == Some("probe timeout");
         let kind = event(row);
         let done = kind.field("variant").as_str() == Some("AttemptDone")
-            && matches!(
-                fields(kind.field("fields").item(1)).get("received"),
-                Some(Json::Bool(false))
-            );
+            && line_received(kind.field("fields").item(1)) == Some(false);
         note || done
     })
 }

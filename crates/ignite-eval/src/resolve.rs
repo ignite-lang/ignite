@@ -338,11 +338,12 @@ pub fn resolve(
     Ok(resolution)
 }
 
-/// The host of a capability resource that is no bindings key and that no
-/// binding includes (15.6): the process of the first declared executable
-/// component that creates it (its `ExecutableInfo::resources`, embedded
-/// components' included), hosted as that component is. `None` for any
-/// other member, and for a capability no hosted executable creates.
+/// The host of a capability or `Store<T>` resource that is no bindings key
+/// and that no binding includes (15.6, 22.5): the process of the first
+/// declared executable component that creates it (its
+/// `ExecutableInfo::resources`, embedded components' included), hosted as
+/// that component is. `None` for any other member, and for a resource no
+/// hosted executable creates.
 fn implicit_host(
     program: &TypedProgram,
     system: &SystemInfo,
@@ -350,7 +351,7 @@ fn implicit_host(
     host: &dyn Fn(&str) -> Option<(String, Value)>,
 ) -> Option<(String, Value)> {
     if member.declaration != MemberDeclaration::Resource
-        || !matches!(member.kind, Ty::Capability(_))
+        || !matches!(member.kind, Ty::Capability(_) | Ty::Store(_))
     {
         return None;
     }

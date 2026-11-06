@@ -386,8 +386,52 @@ pub fn apply(file: &Path, state: &Path) -> Result<Json, Failure> {
     }
 }
 
+/// Ask the host of `state` to recover `operation` (`docs/slice.md` 22.9)
+/// and wait until the committed revision it restarts is ready: the host's
+/// payload (`operationId`, `stopped`, `committedRevision`,
+/// `committedPlan`). Exit 1 when the host refuses an unaccounted process or
+/// the revision is not ready, 2 when the operation requires no recovery.
+pub fn recover(state: &Path, operation: &str) -> Result<Json, Failure> {
+    let snapshot = request(state, "snapshot", "", Json::Null)?;
+    let identity = required(&snapshot, "stateIdentity")?;
+    request(
+        state,
+        "recover",
+        identity,
+        object([("operationId", text(operation))]),
+    )
+}
+
+/// The line `ignite recover` prints for the host's payload.
+pub fn recovered_line(payload: &Json) -> String {
+    let stopped = payload
+        .get("stopped")
+        .and_then(Json::as_array)
+        .map_or(0, <[Json]>::len);
+    let operation = payload
+        .get("operationId")
+        .and_then(Json::as_str)
+        .unwrap_or_default();
+    match payload.get("committedPlan").and_then(Json::as_str) {
+        Some(_) => format!(
+            "recovered {operation}: stopped {stopped} instances; committed revision {} restarted",
+            payload
+                .get("committedRevision")
+                .and_then(Json::as_i64)
+                .unwrap_or(0)
+        ),
+        None => format!(
+            "recovered {operation}: stopped {stopped} instances; no committed revision to restart"
+        ),
+    }
+}
+
+/// The next action of offline `inspect` on a damaged journal (22.7).
+const DAMAGED: &str = "restore host-journal.jsonl or move the state aside; the host does not start on a damaged journal";
+
 /// Inspect live status, or label a durable snapshot as offline when no host
-/// is reachable. Offline status never asserts current workload health.
+/// is reachable. Offline status never asserts current workload health; it
+/// verifies the journals read only and reports them as `journal` (22.7).
 pub fn inspect(state: &Path, operation: Option<&str>) -> Result<Json, Failure> {
     match request(state, "inspect", "", operation.map_or(Json::Null, text)) {
         Ok(value) => Ok(value),
@@ -409,6 +453,13 @@ pub fn inspect(state: &Path, operation: Option<&str>) -> Result<Json, Failure> {
             let snapshot = Json::parse(&source)
                 .map_err(|reason| fail(3, format!("{}: {reason}", path.display())))?;
             let mut value = describe(&snapshot, state, None);
+            let journal = host::integrity(state)?;
+            if let Json::Object(fields) = &mut value {
+                if journal.get("intact") == Some(&Json::Bool(false)) {
+                    fields.insert("nextAction".into(), text(DAMAGED));
+                }
+                fields.insert("journal".into(), journal);
+            }
             if let (Some(operation), Json::Object(fields)) = (operation, &mut value) {
                 let receipt = fields
                     .get("operations")
@@ -504,6 +555,8 @@ fn describe(snapshot: &Json, state: &Path, live: Option<Liveness>) -> Json {
     fields.insert("nextAction".into(), text(next));
     match live {
         Some(live) => {
+            // A running host verified its journals at its start.
+            fields.insert("journal".into(), object([("intact", Json::Bool(true))]));
             let converged = live.expected.iter().all(|id| live.ready.contains(id))
                 && recovery.is_none()
                 && get("activeOperation").is_none();

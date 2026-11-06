@@ -1,0 +1,28 @@
+{
+  "results": [
+    {
+      "answer_seconds": 0.000245307,
+      "apply_seconds": 72.037866955,
+      "failed": 1,
+      "label": "baseline",
+      "plan_seconds": 18.497859622,
+      "samples": 1,
+      "seconds": 90.535999744,
+      "unit": "apply-cycle-terminal-rust"
+    },
+    {
+      "answer_seconds": 0.000322596,
+      "apply_seconds": 12.480808268,
+      "failed": 0,
+      "label": "candidate",
+      "plan_seconds": 16.761147939,
+      "samples": 1,
+      "seconds": 29.242315632,
+      "unit": "apply-cycle-terminal-rust"
+    }
+  ],
+  "samples": 5,
+  "schema": "ignite-performance/1",
+  "todo_llvm_below_rust": null,
+  "warmup": 1
+}

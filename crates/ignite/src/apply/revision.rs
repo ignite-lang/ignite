@@ -183,7 +183,7 @@ pub(super) fn run(
         start_at: 0,
         builder,
     };
-    Live::new(core, &model, types, config, journal, adapters, tx, rx)
+    Live::new(core, &model, config, journal, adapters, tx, rx)
         .with_record_sink(sink)
         .with_started_hook(started)
         .with_transitions(deferred, adopted, pinned)

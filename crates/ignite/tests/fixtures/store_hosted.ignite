@@ -1,0 +1,36 @@
+package store_hosted
+
+import std.deploy.{Deployment, localSocket, nativeProcess}
+import std.protocol.http.*
+
+// `docs/slice.md` 22.5 and 22.12 D6: a `Store` resource is hosted by the
+// process of the server that creates it, as a capability is (21.3). The
+// assembly binds only the listener and the server.
+//   GET /count   200 `set` when a count is stored under 1, else `unset`
+
+fn handle(counts: Store<Int>, request: Request) -> Response = match (request.method, request.segments()) {
+  ("GET", ["count"]) => match counts.get(1) {
+    Some(_) => Response.plain(200, "set")
+    None => Response.plain(200, "unset")
+  }
+  _ => status_response(404)
+}
+
+system S {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  resource counts: Store<Int>
+
+  component server: HttpServer {
+    listener = ingress
+    application = HttpApp { state = counts, handle }
+    executable = "countd"
+  }
+}
+
+assembly local: Deployment {
+  system = S
+  bindings = {
+    S.ingress = localSocket()
+    S.server = nativeProcess(includes = [])
+  }
+}

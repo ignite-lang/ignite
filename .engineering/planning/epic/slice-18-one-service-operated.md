@@ -2,16 +2,17 @@
 format: aep.planning-md/3
 id: epic:slice-18-one-service-operated
 kind: epic
-status: active
+status: implemented
 title: 'Slice 18, F5: one service operated end to end'
 summary: The todo service built on LLVM, its data durable, probed by an HTTP probe kind written outside std, deployed and recovered by ignite apply under fault injection
 relations:
 - depends_on: epic:playground-substrate
 - depends_on: epic:slice-13-local-apply
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-05T08:56:51Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-05T08:56:51Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-05T23:57:45Z", actor: "human:timo", revision: 5}
 ---
 # Epic: slice-18-one-service-operated
 

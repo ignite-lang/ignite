@@ -1,0 +1,41 @@
+WAIT 20:35:12 free=86G floor=40G
+START 20:35:12 free=86G lane=1 load=15
+MODE programs 20:35:12 load 15.83 free 86G
+{"label": "baseline", "unit": "todod-rust-dev", "pair": "1793907314048011086-programs-1", "seconds": 8.202085, "exit": 0, "load_before": 15.826171875}
+{"label": "candidate", "unit": "todod-rust-dev", "pair": "1793907314048011086-programs-1", "seconds": 6.539455252, "exit": 0, "load_before": 16.08056640625}
+{"label": "baseline", "unit": "runtime-dev", "pair": "1793907314048011086-programs-1", "seconds": 0.043689967, "exit": 0, "load_before": 15.91357421875}
+{"label": "baseline", "unit": "todod-llvm-dev", "pair": "1793907314048011086-programs-1", "seconds": 0.977088612, "exit": 0, "load_before": 15.91357421875}
+{"label": "candidate", "unit": "runtime-dev", "pair": "1793907314048011086-programs-1", "seconds": 0.035713109, "exit": 0, "load_before": 15.91357421875}
+{"label": "candidate", "unit": "todod-llvm-dev", "pair": "1793907314048011086-programs-1", "seconds": 1.020680029, "exit": 0, "load_before": 15.91357421875}
+{"label": "baseline", "unit": "todod-rust-release", "pair": "1793907314048011086-programs-1", "seconds": 9.192943103, "exit": 0, "load_before": 15.91357421875}
+{"label": "candidate", "unit": "todod-rust-release", "pair": "1793907314048011086-programs-1", "seconds": 8.093917463, "exit": 0, "load_before": 16.1513671875}
+{"label": "baseline", "unit": "runtime-release", "pair": "1793907314048011086-programs-1", "seconds": 0.02426049, "exit": 0, "load_before": 14.50390625}
+{"label": "baseline", "unit": "todod-llvm-release", "pair": "1793907314048011086-programs-1", "seconds": 1.380095074, "exit": 0, "load_before": 14.50390625}
+{"label": "candidate", "unit": "runtime-release", "pair": "1793907314048011086-programs-1", "seconds": 0.031083515, "exit": 0, "load_before": 14.50390625}
+{"label": "candidate", "unit": "todod-llvm-release", "pair": "1793907314048011086-programs-1", "seconds": 1.490986811, "exit": 0, "load_before": 14.50390625}
+{"label": "baseline", "unit": "todod-rust-dev", "pair": "1793907314048011086-programs-2", "seconds": 5.017362832, "exit": 0, "load_before": 14.50390625}
+{"label": "candidate", "unit": "todod-rust-dev", "pair": "1793907314048011086-programs-2", "seconds": 6.068932542, "exit": 0, "load_before": 13.90283203125}
+{"label": "baseline", "unit": "runtime-dev", "pair": "1793907314048011086-programs-2", "seconds": 0.019611911, "exit": 0, "load_before": 13.14208984375}
+{"label": "baseline", "unit": "todod-llvm-dev", "pair": "1793907314048011086-programs-2", "seconds": 0.514132959, "exit": 0, "load_before": 13.14208984375}
+{"label": "candidate", "unit": "runtime-dev", "pair": "1793907314048011086-programs-2", "seconds": 0.021626674, "exit": 0, "load_before": 13.14208984375}
+{"label": "candidate", "unit": "todod-llvm-dev", "pair": "1793907314048011086-programs-2", "seconds": 0.847645096, "exit": 0, "load_before": 13.14208984375}
+{"label": "baseline", "unit": "todod-rust-release", "pair": "1793907314048011086-programs-2", "seconds": 8.198523096, "exit": 0, "load_before": 13.14208984375}
+{"label": "candidate", "unit": "todod-rust-release", "pair": "1793907314048011086-programs-2", "seconds": 7.45307149, "exit": 0, "load_before": 12.27099609375}
+{"label": "baseline", "unit": "runtime-release", "pair": "1793907314048011086-programs-2", "seconds": 0.024765859, "exit": 0, "load_before": 11.8486328125}
+{"label": "baseline", "unit": "todod-llvm-release", "pair": "1793907314048011086-programs-2", "seconds": 1.1924148780000001, "exit": 0, "load_before": 11.8486328125}
+{"label": "candidate", "unit": "runtime-release", "pair": "1793907314048011086-programs-2", "seconds": 0.024616232, "exit": 0, "load_before": 11.8486328125}
+{"label": "candidate", "unit": "todod-llvm-release", "pair": "1793907314048011086-programs-2", "seconds": 1.610398114, "exit": 0, "load_before": 11.8486328125}
+{"label": "baseline", "unit": "todod-rust-dev", "pair": "1793907314048011086-programs-3", "seconds": 10.475897697, "exit": 0, "load_before": 11.7001953125}
+{"label": "candidate", "unit": "todod-rust-dev", "pair": "1793907314048011086-programs-3", "seconds": 7.995838101, "exit": 0, "load_before": 11.259765625}
+{"label": "baseline", "unit": "runtime-dev", "pair": "1793907314048011086-programs-3", "seconds": 0.021826197, "exit": 0, "load_before": 10.91845703125}
+{"label": "baseline", "unit": "todod-llvm-dev", "pair": "1793907314048011086-programs-3", "seconds": 0.632832062, "exit": 0, "load_before": 10.91845703125}
+{"label": "candidate", "unit": "runtime-dev", "pair": "1793907314048011086-programs-3", "seconds": 0.027555771, "exit": 0, "load_before": 10.91845703125}
+{"label": "candidate", "unit": "todod-llvm-dev", "pair": "1793907314048011086-programs-3", "seconds": 0.863578424, "exit": 0, "load_before": 10.91845703125}
+{"label": "baseline", "unit": "todod-rust-release", "pair": "1793907314048011086-programs-3", "seconds": 12.341779001999999, "exit": 0, "load_before": 10.7646484375}
+{"label": "candidate", "unit": "todod-rust-release", "pair": "1793907314048011086-programs-3", "seconds": 8.047893127, "exit": 0, "load_before": 10.48046875}
+{"label": "baseline", "unit": "runtime-release", "pair": "1793907314048011086-programs-3", "seconds": 0.018516958, "exit": 0, "load_before": 10.61474609375}
+{"label": "baseline", "unit": "todod-llvm-release", "pair": "1793907314048011086-programs-3", "seconds": 1.009577861, "exit": 0, "load_before": 10.61474609375}
+{"label": "candidate", "unit": "runtime-release", "pair": "1793907314048011086-programs-3", "seconds": 0.027961929, "exit": 0, "load_before": 10.61474609375}
+{"label": "candidate", "unit": "todod-llvm-release", "pair": "1793907314048011086-programs-3", "seconds": 1.507065965, "exit": 0, "load_before": 10.61474609375}
+MODE_EXIT programs=1 20:37:06 builds 2.3G
+EXIT=0 20:37:12 free=86G
