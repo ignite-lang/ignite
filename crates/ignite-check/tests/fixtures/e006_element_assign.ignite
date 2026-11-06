@@ -1,0 +1,13 @@
+fn f(words: List<Text>) -> Int {
+  let l = [1]
+  l[0] = 2
+  for w in [[1]] {
+    w[0] = 3
+  }
+  var ok = [1]
+  ok[0] = 2
+  words[0] = "x"
+  let n = [[1]]
+  n[0][0] = 5
+  return l.len()
+}

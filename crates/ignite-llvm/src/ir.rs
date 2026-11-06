@@ -40,6 +40,7 @@ pub const RUNTIME: &[&str] = &[
     "declare i32 @ignite_rt_stdin_is_terminal(ptr, ptr)",
     "declare i32 @ignite_rt_stdin_set_raw(i8, ptr)",
     "declare i32 @ignite_rt_stdout_write_all(ptr, ptr)",
+    "declare i32 @ignite_rt_stderr_write_all(ptr, ptr)",
     "declare void @ignite_rt_io_error_new(ptr, ptr)",
     "declare void @ignite_rt_text_from_bytes_lossy(ptr, ptr)",
     "declare void @ignite_rt_text_trim(ptr, ptr)",

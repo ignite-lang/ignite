@@ -25,7 +25,7 @@ mod task;
 pub use net::{
     ACCEPT_BACKOFF_FIRST, ACCEPT_BACKOFF_LAST, SEND_BUFFER, TcpListener, TcpStream, flush,
 };
-pub use stdio::{Stdin, Stdout};
+pub use stdio::{Stderr, Stdin, Stdout};
 pub use store::Store;
 pub use task::{LINGER, released_memory, spawn, try_spawn};
 

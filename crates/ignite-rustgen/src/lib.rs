@@ -80,6 +80,7 @@ const SUBSTRATE_OWNERS: &[&str] = &[
     "TcpStream",
     "Stdin",
     "Stdout",
+    "Stderr",
     "Process",
     "IoError",
 ];
@@ -96,6 +97,7 @@ const SUBSTRATE_NAMES: &[&str] = &[
     "TcpStream",
     "Stdin",
     "Stdout",
+    "Stderr",
     "Process",
     "IoError",
     "Input",
@@ -1548,9 +1550,9 @@ fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
         "Unit" => "()".to_string(),
         "Tuple" => format!("({})", args.join(", ")),
         "List" => generic("Vec"),
-        "TcpListener" | "TcpStream" | "PipeStream" | "Stdin" | "Stdout" | "Input" | "IoError"
-        | "Exposure" | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting"
-        | "CommandLine" => {
+        "TcpListener" | "TcpStream" | "PipeStream" | "Stdin" | "Stdout" | "Stderr" | "Input"
+        | "IoError" | "Exposure" | "Directory" | "Launcher" | "ChildProcess" | "Entropy"
+        | "Setting" | "CommandLine" => {
             format!("ignite_io::{}", ty.name.name)
         }
         "Store" => generic("ignite_io::Store"),
@@ -3250,6 +3252,14 @@ impl<'a> Generator<'a> {
             } if self.structural_operand(left, right).is_some() => {
                 self.structural_eq(*op, left, right)
             }
+            ExprKind::Binary {
+                op: BinaryOp::Add,
+                left,
+                right,
+            } if matches!(self.type_of(expr), Some(Ty::List(_))) => {
+                let (l, r) = (self.operand(left), self.operand(right));
+                format!("[&({l})[..], &({r})[..]].concat()")
+            }
             ExprKind::Binary { op, left, right } => {
                 if let Some(chunked) = self.chunked_spine(expr) {
                     return chunked;
@@ -4021,7 +4031,7 @@ impl<'a> Generator<'a> {
         ))
     }
 
-    /// A call that changes an indexed receiver in place
+    /// A call that changes an indexed receiver in place, and every `set`
     /// (`lists[i].push(v)`, `holders[i].items.append(vs)`,
     /// `maps[i].put(k, v)`): a block binding the indexes and the arguments
     /// first, then the call on the [`mutable_place`](Self::mutable_place).
@@ -4044,6 +4054,18 @@ impl<'a> Generator<'a> {
             })
             .collect();
         let call = match self.callee(expr) {
+            Some(Callee::Builtin(Builtin::ListSet)) => {
+                let site = self
+                    .types
+                    .and_then(|t| t.failure_site(expr))
+                    .expect("`set` has a failure site");
+                format!(
+                    "*ignite_io::checked::at_mut(&mut {place}, {}, {}) = {};",
+                    temps[0],
+                    self.site_args(site),
+                    temps[1]
+                )
+            }
             Some(Callee::Builtin(Builtin::MapPut)) => {
                 format!("{place}.insert({}, {});", temps[0], temps[1])
             }
@@ -4116,6 +4138,9 @@ impl<'a> Generator<'a> {
                     ident(&name.name),
                     a.join(", ")
                 );
+            }
+            Some(Callee::Builtin(Builtin::ListSet)) => {
+                return self.indexed_mutation(expr, receiver, name, args);
             }
             _ if mutates_receiver(expr, &name.name, self.types) && self.indexed_place(receiver) => {
                 return self.indexed_mutation(expr, receiver, name, args);
@@ -5699,7 +5724,7 @@ fn and_all(tests: Vec<String>) -> String {
 }
 
 /// Builtin methods that change their receiver in place.
-const MUTATING_METHODS: &[&str] = &["push", "append", "clear"];
+const MUTATING_METHODS: &[&str] = &["push", "set", "append", "clear"];
 
 /// The names a block may change in place: the base of every assignment
 /// and the root of every receiver of a [`MUTATING_METHODS`] call. A name

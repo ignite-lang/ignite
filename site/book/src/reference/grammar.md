@@ -71,6 +71,7 @@ stmt         := ('let' | 'var') ident (':' type)? '=' expr
               | ('let' | 'var') pattern '=' expr              `_` or a tuple of bindings
               | '_' '=' expr                                  discard
               | place '=' expr                                assignment
+              | postfix '[' expr ']' '=' expr                 element: `l.set(i, v)`
               | 'return' expr?
               | 'while' expr block
               | 'loop' block

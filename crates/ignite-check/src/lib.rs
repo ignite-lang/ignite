@@ -111,6 +111,7 @@ pub const BUILTIN_TYPES: &[&str] = &[
     "PipeStream",
     "Stdin",
     "Stdout",
+    "Stderr",
     "Input",
     "IoError",
     "Store",
@@ -144,6 +145,7 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Stdin", "is_terminal"),
     ("Stdin", "set_raw"),
     ("Stdout", "write_all"),
+    ("Stderr", "write_all"),
     ("Process", "exit"),
     ("IoError", "new"),
     ("Int", "parse"),
@@ -194,6 +196,7 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "at",
     "slice",
     "push",
+    "set",
     "append",
     "clear",
     "join",
@@ -269,6 +272,7 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Stdin", "is_terminal", 0),
     ("Stdin", "set_raw", 1),
     ("Stdout", "write_all", 1),
+    ("Stderr", "write_all", 1),
     ("Process", "exit", 1),
     ("IoError", "new", 1),
     ("Int", "parse", 1),
@@ -292,6 +296,7 @@ const EFFECTFUL_STATICS: &[(&str, &str)] = &[
     ("Stdin", "is_terminal"),
     ("Stdin", "set_raw"),
     ("Stdout", "write_all"),
+    ("Stderr", "write_all"),
     ("Process", "exit"),
     ("Clock", "monotonic"),
     ("Endpoint", "of"),
@@ -399,7 +404,7 @@ pub const CAPABILITY_TYPES: &[&str] = &[
 
 /// The heads of ambient effects (`stdin.read`, `net.connect`): no
 /// parameter may take one of these names (E056).
-pub const AMBIENT_HEADS: &[&str] = &["stdin", "stdout", "process", "net", "clock"];
+pub const AMBIENT_HEADS: &[&str] = &["stdin", "stdout", "stderr", "process", "net", "clock"];
 
 /// The ambient effect an effectful builtin static needs.
 pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
@@ -407,6 +412,7 @@ pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
         ("Stdin", "read") => Some("stdin.read"),
         ("Stdin", "is_terminal" | "set_raw") => Some("stdin.mode"),
         ("Stdout", "write_all") => Some("stdout.write"),
+        ("Stderr", "write_all") => Some("stderr.write"),
         ("Process", "exit") => Some("process.exit"),
         ("TcpListener", "bind") => Some("net.listen"),
         ("TcpStream", "connect") => Some("net.connect"),
@@ -2110,7 +2116,7 @@ impl Checker {
     }
 
     /// Whether a value of declared type `ty` may hold a `TcpStream`,
-    /// `PipeStream`, `TcpListener`, `Store`, `Stdin`, `Stdout` or a capability
+    /// `PipeStream`, `TcpListener`, `Store`, `Stdin`, `Stdout`, `Stderr` or a capability
     /// (`Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`, `CommandLine`),
     /// directly or in a
     /// field, payload, element or type argument. Unknown types may.
@@ -2128,7 +2134,8 @@ impl Checker {
                 return false;
             }
             "TcpStream" | "PipeStream" | "TcpListener" | "Store" | "Stdin" | "Stdout"
-            | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting" | "CommandLine" => {
+            | "Stderr" | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting"
+            | "CommandLine" => {
                 return true;
             }
             "List" | "Option" | "Result" | "Tuple" => {
@@ -2580,7 +2587,7 @@ impl Checker {
         for arg in args {
             self.expr(arg);
         }
-        if matches!(name.name.as_str(), "push" | "append" | "clear")
+        if matches!(name.name.as_str(), "push" | "set" | "append" | "clear")
             && let ExprKind::Name(list) = &receiver.kind
             && self.captured(&list.name)
             && self.builtin_method(receiver, name)
@@ -2597,13 +2604,13 @@ impl Checker {
         let map_receiver = self
             .static_type(receiver)
             .is_some_and(|ty| ty.name.name == "Map");
-        let mutating = (matches!(name.name.as_str(), "push" | "append" | "clear")
+        let mutating = (matches!(name.name.as_str(), "push" | "set" | "append" | "clear")
             || (matches!(name.name.as_str(), "put" | "remove") && map_receiver))
             && self.builtin_method(receiver, name);
         if mutating {
             self.mutable_receiver(expr, receiver, name);
         }
-        if matches!(name.name.as_str(), "push" | "append")
+        if matches!(name.name.as_str(), "push" | "set" | "append")
             && let Some(list) = place_root(receiver)
         {
             let roots = self.arg_roots(args.iter());
@@ -3919,12 +3926,21 @@ fn builtin_applies(ty: &Type, method: &str) -> bool {
         "Bool" => method == "to_text",
         "Bytes" => matches!(
             method,
-            "len" | "is_empty" | "at" | "slice" | "push" | "append" | "clear" | "map" | "to_text"
+            "len"
+                | "is_empty"
+                | "at"
+                | "slice"
+                | "push"
+                | "set"
+                | "append"
+                | "clear"
+                | "map"
+                | "to_text"
         ),
         "List" => {
             matches!(
                 method,
-                "len" | "is_empty" | "at" | "slice" | "push" | "append" | "clear" | "map"
+                "len" | "is_empty" | "at" | "slice" | "push" | "set" | "append" | "clear" | "map"
             ) || (method == "join" && text)
         }
         "Store" => matches!(
