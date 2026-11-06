@@ -399,6 +399,36 @@ fn byte_literals_are_built_once() {
     assert!(!lib.contains("(vec![13, 10])"), "{lib}");
 }
 
+/// `Store.update` and `Store.upsert` whose result is discarded, or of which
+/// only one field is read (story:rustgen-redundant-clones): `update_read`
+/// and `upsert_read` lend the stored value to a read under the lock (`|_|
+/// ()`, or a copy of the field) instead of returning a copy of all of it.
+/// A result used whole keeps `update` and `upsert`.
+#[test]
+fn store_results_read_in_place() {
+    let project = common::generate_source(
+        "type T { n: Int, name: Text }\n\
+         fn bump(t: Option<T>) -> T = match t { Some(v) => v\n None => T { n = 0, name = \"\" } }\n\
+         fn discarded(s: Store<T>) requires [s.write] { _ = s.upsert(1, |t| bump(t))\n _ = s.update(1, |t| t) }\n\
+         fn named(s: Store<T>) -> Int requires [s.write] = s.upsert(1, bump).n\n\
+         fn whole(s: Store<T>) -> T requires [s.write] = s.upsert(1, bump)\n\
+         fn kept(s: Store<T>) -> Option<T> requires [s.write] = s.update(1, |t| t)\n",
+        &common::golden_std(),
+    )
+    .unwrap();
+    let lib = norm(&project.lib_rs);
+    for expected in [
+        "let _ = s.upsert_read(1, |t: Option<T>| -> T { bump(&t) }, |_| ());",
+        "let _ = s.update_read(1, |t: T| -> T { t.clone() }, |_| ());",
+        "-> i64 { s.upsert_read(1, &*(std::sync::Arc::new(|__a0: Option<T>| bump(&__a0))",
+        "Send + Sync>), |__v| __v.n.clone()) }",
+        "-> T { s.upsert(1, &*(std::sync::Arc::new(",
+        "-> Option<T> { s.update(1, |t: T| -> T { t.clone() }) }",
+    ] {
+        assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
+    }
+}
+
 /// Read-only parameters that are not `Copy` are references, and one of a
 /// `Copy` type is copied once on entry; a parameter the body changes or
 /// returns is consumed (`docs/slice.md` 20.3.3) and declared by value,

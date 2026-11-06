@@ -2955,6 +2955,11 @@ impl<'a> Generator<'a> {
                 value,
                 mutable,
             } => {
+                if matches!(pattern.kind, PatternKind::Wildcard)
+                    && let Some(call) = self.store_call_read(value, "|_| ()")
+                {
+                    return format!("let _ = {call};");
+                }
                 let value = self.value(value);
                 let pattern = self.let_pattern(pattern, *mutable);
                 format!("let {pattern} = {value};")
@@ -3025,7 +3030,10 @@ impl<'a> Generator<'a> {
             StmtKind::Expr(expr) => match &expr.kind {
                 ExprKind::If { .. } => format!("{};", self.if_expr(expr, false)),
                 ExprKind::Block(block) => format!("{};", self.block(block, false)),
-                _ => format!("{};", self.bare(expr)),
+                _ => match self.store_call_read(expr, "|_| ()") {
+                    Some(call) => format!("{call};"),
+                    None => format!("{};", self.bare(expr)),
+                },
             },
         }
     }
@@ -3216,6 +3224,14 @@ impl<'a> Generator<'a> {
                     return variant_path(&self.unshadowed(owner), &name.name);
                 }
                 let receiver_ty = self.type_of(receiver);
+                if !self.is_boxed_field(receiver_ty, &name.name)
+                    && let Some(call) = self.store_call_read(
+                        receiver,
+                        &format!("|__v| __v.{}.clone()", ident(&name.name)),
+                    )
+                {
+                    return call;
+                }
                 let text = format!("{}.{}", self.receiver(receiver), ident(&name.name));
                 if self.is_boxed_field(receiver_ty, &name.name) {
                     format!("(*{text})")
@@ -5453,6 +5469,19 @@ impl<'a> Generator<'a> {
     /// `s.update(id, f)` or `s.upsert(id, f)`: a closure literal `f` passed
     /// as a plain closure, any other fn value as `&*f`.
     fn store_with(&mut self, receiver: &Expr, method: &str, args: &[Expr]) -> String {
+        self.store_with_read(receiver, method, args, None)
+    }
+
+    /// [`Generator::store_with`], with a `read` of the stored value
+    /// (`update_read`, `upsert_read`) in place of the copy `update` and
+    /// `upsert` return.
+    fn store_with_read(
+        &mut self,
+        receiver: &Expr,
+        method: &str,
+        args: &[Expr],
+        read: Option<&str>,
+    ) -> String {
         let r = self.receiver(receiver);
         let id = self.value(&args[0]);
         let f = match self.passed_closure(&args[1]) {
@@ -5462,7 +5491,27 @@ impl<'a> Generator<'a> {
                 format!("&*{}", wrap(&args[1], f))
             }
         };
-        format!("{r}.{method}({id}, {f})")
+        match read {
+            Some(read) => format!("{r}.{method}_read({id}, {f}, {read})"),
+            None => format!("{r}.{method}({id}, {f})"),
+        }
+    }
+
+    /// `s.update(id, f)` or `s.upsert(id, f)` whose stored value is only
+    /// read by `read` (`|_| ()` for a discarded result, a copy of one field
+    /// for `s.upsert(id, f).field`): the store lends the value to `read`
+    /// under its lock instead of returning a copy of all of it. `read` never
+    /// calls a store, so the lock, which is not reentrant, is safe.
+    fn store_call_read(&mut self, expr: &Expr, read: &str) -> Option<String> {
+        let ExprKind::Method { receiver, args, .. } = &expr.kind else {
+            return None;
+        };
+        let method = match self.callee(expr) {
+            Some(Callee::Builtin(Builtin::StoreUpdate)) => "update",
+            Some(Callee::Builtin(Builtin::StoreUpsert)) => "upsert",
+            _ => return None,
+        };
+        Some(self.store_with_read(receiver, method, args, Some(read)))
     }
 
     /// A closure literal passed as an argument the callee calls before it
