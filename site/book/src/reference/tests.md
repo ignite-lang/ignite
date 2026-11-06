@@ -141,8 +141,8 @@ error: assert failed at app.ignite:13:3: result == Err("out of range: 70000")
 - `ignite build` and `ignite emit` drop every test and test-only item after checking. A
   built program contains no test code.
 - `ignite test FILE..` builds one test executable per target for all files given. It
-  includes the tests of the named files only; the standard library modules they load are
-  built without their tests.
+  includes the tests of the named files, then those of their sibling modules (each module
+  once); the standard library modules they load are built without their tests.
 - Each test runs in its own child process, with a timeout (60 s by default). Exit status 0
   passes; 101 fails; a timeout, another exit status or a signal also fails. Output is shown
   for failing tests only.

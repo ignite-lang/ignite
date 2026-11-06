@@ -8736,7 +8736,7 @@ across edits of the source (`story:stable-node-ids`).
 
 ## 25 Language gaps found by the codespec adapters
 
-**Status: in progress on `story:codespec-friction`, one pull request per part.**
+**Status: implemented on `story:codespec-friction`, in three pull requests.**
 
 Sources: the planning store's `story:codespec-friction` (its fix list, items 1 to 5);
 `docs/friction.md` rows 47 to 59, which record each gap with the place in
@@ -8819,6 +8819,28 @@ literal on the left after the right operand). Rust: `[&a[..], &b[..]].concat()`;
 copy of `a` with `b`'s elements appended as `append` copies them; evaluator: the two lists
 joined.
 
+### 25.6 Sibling modules (item 1, friction row 47)
+
+14.4's siblings of a program file of package `p` stay every file `<name>.ignite` beside it that
+declares `package p.<name>`, loaded whether or not anything imports it. Two more kinds of
+module are loaded when imported, transitively (`parse_siblings` in `crates/ignite/src/lib.rs`):
+
+- a sibling module given as the file: when the file `a.ignite` declares `package p.a`, an
+  import of `p.<name>` loads `<name>.ignite` beside it if that file declares `package p.<name>`;
+  before, the import was E031;
+- another program file of the package: an import of `p.<name>` (from the program of package
+  `p`, or from a sibling given as the file) loads `<name>.ignite` beside it if that file declares
+  `package p`, as the module `p.<name>`. Its declarations, tests and systems are those of the
+  module `p.<name>`; `ignite build` of the importing file builds the importing file's systems
+  only.
+
+Only imported files are loaded this way, so a directory of unrelated programs of one package
+(the fixtures of `ignite_test::`) loads nothing new.
+
+`ignite test FILE` runs the tests of FILE's modules in this order: the files named on the
+command line, then their sibling modules not named themselves, each module once per test
+executable. Before, a sibling module was built into the test executable with its tests dropped.
+
 ### 25.9 Tests
 
 - `ignite_test::codespec_friction_on_both_targets` runs `fixtures/tests/codespec.ignite` on the
@@ -8839,3 +8861,7 @@ joined.
 - `list_set_concat` of `fixtures/eval_equivalence.ignite` prints the same in the evaluator and on
   both targets; `e006_element_assign` (`ignite-check`) is E006 for an element assignment
   through a `let` and a `for` element.
+- `siblings::test_runs_siblings_and_imported_program_files_on_both_targets`
+  (`fixtures/codespec_siblings/`, both targets): `ignite test app.ignite` reports the tests of
+  `cs`, `cs.util`, `cs.fmt` and `cs.reader` (a program file of package `cs`), 4 passed;
+  `ignite test util.ignite` reports those of `cs.util` and of the sibling it imports, `cs.fmt`.
