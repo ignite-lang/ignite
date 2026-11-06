@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T15:03:14Z",
+  "actor": "human:timo",
+  "artifact": "story:structural-apply-identity",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 9640d8b66d: 1290 passed, 0 failed, EXIT=0 (devtools)",
+    "reference": "https://github.com/ignite-lang/ignite/pull/70"
+  }
+}
