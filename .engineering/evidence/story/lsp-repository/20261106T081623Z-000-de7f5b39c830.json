@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T08:16:23Z",
+  "actor": "human:timo",
+  "artifact": "story:lsp-repository",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "ignite-lsp task gate on 65dfcf754 against ignite v0.8.0: e2e 8 passed, generator 18 passed, ignite test 28+19 per target, conformance lsp-3.17 yes",
+    "reference": "https://github.com/ignite-lang/ignite-lsp"
+  }
+}

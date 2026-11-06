@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T08:52:03Z",
+  "actor": "human:timo",
+  "artifact": "story:lsp-repository",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "ignite task gate on af5086390 (PR 64): EXIT=0, 1269 passed, 0 failed, 11 ignored",
+    "reference": "https://github.com/ignite-lang/ignite/pull/64"
+  }
+}

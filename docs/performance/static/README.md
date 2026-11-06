@@ -13,6 +13,10 @@ release runtime and the release musl kit) builds each program with `--release` i
 time of the whole `ignite build` call; the size is the executable's byte count. Raw rows:
 `records.tsv`.
 
+`examples/lsp/` left this repository in story:lsp-repository; the server is `src/server.ignite`
+of github.com/ignite-lang/ignite-lsp. To rerun `measure.sh` on a later tree, change its
+`examples/lsp/server.ignite` to that file in a checkout of ignite-lsp.
+
 ## Programs
 
 Median of 3 runs, range in brackets; sizes were identical in all three runs.
