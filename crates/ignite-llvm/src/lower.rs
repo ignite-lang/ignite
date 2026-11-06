@@ -136,6 +136,9 @@ struct Local {
     ty: Ty,
     /// A stream binding its block owns ([`crate::own`]).
     owned: bool,
+    /// For a `let` of a closure literal: per parameter, whether the
+    /// closure only reads it ([`Lower::known_borrows`]); empty otherwise.
+    borrows: Vec<bool>,
 }
 
 pub struct Lower<'a, 'm, 'e> {
@@ -491,6 +494,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 ptr,
                 ty,
                 owned: false,
+                borrows: Vec::new(),
             });
     }
 
@@ -760,6 +764,77 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let at = self.gep(fv, 8);
         let env = self.f.val(format!("load ptr, ptr {at}, align 8"));
         (code, env)
+    }
+
+    /// Per parameter of the fn value `f` evaluates to, whether its callee is
+    /// known to only read it (`docs/llvm.md` section 3.1): a closure literal
+    /// (or a `let` bound to one) reads every parameter its body does not
+    /// modify (`region::modified_by`; nothing inside a closure body moves,
+    /// so a read that keeps the value copies it), and a named fn reads the
+    /// parameters it does not consume. Empty when the callee is not known.
+    fn known_borrows(&mut self, f: &Expr) -> Vec<bool> {
+        match &f.kind {
+            ExprKind::Closure(closure) => {
+                let modified = crate::region::modified_by(&closure.body, self.cx.types);
+                closure
+                    .params
+                    .iter()
+                    .map(|p| !modified.contains(&p.name.name))
+                    .collect()
+            }
+            ExprKind::Name(id) => {
+                if let Some(local) = self.lookup(&id.name) {
+                    return local.borrows;
+                }
+                match self.cx.types.callee(f).cloned() {
+                    Some(Callee::Fn(q)) => match self.fn_instance(&q, f) {
+                        Some((symbol, sig)) => (0..sig.params.len())
+                            .map(|i| self.env.reads_only(&symbol, i))
+                            .collect(),
+                        None => Vec::new(),
+                    },
+                    _ => Vec::new(),
+                }
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// The operands of a call through a fn value, `None` when an argument
+    /// does not return. A borrowed place goes as its own pointer to a
+    /// parameter `borrows` marks (the callee only reads it), unless a later
+    /// argument modifies a variable or mentions the place's root (it could
+    /// move the place into a callee that changes it); every other
+    /// aggregate is copied when it is evaluated, or moved.
+    fn value_operands(
+        &mut self,
+        args: &[Expr],
+        params: &[Ty],
+        borrows: &[bool],
+    ) -> Option<Vec<Option<String>>> {
+        let mut operands = Vec::new();
+        for (i, (arg, ty)) in args.iter().zip(params).enumerate() {
+            let v = self.expr(arg, true);
+            if v == Val::Never {
+                return None;
+            }
+            let root = crate::region::root(arg, self.cx.types);
+            let borrow = is_aggregate(ty)
+                && borrows.get(i).copied().unwrap_or(false)
+                && matches!(v, Val::Ptr(_, false))
+                && args[i + 1..].iter().all(|later| {
+                    crate::region::modified_by(later, self.cx.types).is_empty()
+                        && root
+                            .as_ref()
+                            .is_none_or(|n| !crate::region::mentions(later, n))
+                });
+            if borrow {
+                operands.push(Some(format!("ptr {}", self.ptr(&v))));
+            } else {
+                operands.push(self.arg(ty, v));
+            }
+        }
+        Some(operands)
     }
 
     /// Call a fn value (`docs/llvm.md` section 3): its code with its
@@ -1037,7 +1112,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.f.term("unreachable");
                 self.f.place(&bound);
             }
-            StmtKind::Let { name, value, .. } => {
+            StmtKind::Let {
+                name,
+                value,
+                mutable,
+                ..
+            } => {
                 let ty = self
                     .cx
                     .types
@@ -1051,6 +1131,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     let slot = self.temp(&ty);
                     self.store_value(&ty, &slot, v);
                     self.bind(&name.name, slot, ty);
+                    if !mutable && matches!(value.kind, ExprKind::Closure(_)) {
+                        let borrows = self.known_borrows(value);
+                        if let Some(local) = self.scopes.last_mut().and_then(|s| s.last_mut()) {
+                            local.borrows = borrows;
+                        }
+                    }
                 }
             }
             StmtKind::Assign { target, value } => {
@@ -2415,14 +2501,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 }
                 let fp = self.ptr(&f);
                 let parts = self.fn_parts(&fp);
-                let mut operands = Vec::new();
-                for (arg, ty) in args.iter().zip(&params) {
-                    let v = self.expr(arg, true);
-                    if v == Val::Never {
-                        return Val::Never;
-                    }
-                    operands.push(self.arg(ty, v));
-                }
+                let borrows = self.known_borrows(callee);
+                let Some(operands) = self.value_operands(args, &params, &borrows) else {
+                    return Val::Never;
+                };
                 self.call_value(&parts, &ret, operands)
             }
             Some(other) => match self.sig_of(&other, e) {
@@ -2469,14 +2551,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 }
                 let fp = self.ptr(&f);
                 let parts = self.fn_parts(&fp);
-                let mut operands = Vec::new();
-                for (arg, ty) in args.iter().zip(&params) {
-                    let v = self.expr(arg, true);
-                    if v == Val::Never {
-                        return Val::Never;
-                    }
-                    operands.push(self.arg(ty, v));
-                }
+                let Some(operands) = self.value_operands(args, &params, &[]) else {
+                    return Val::Never;
+                };
                 self.call_value(&parts, &ret, operands)
             }
             Some(other) => match self.sig_of(&other, e) {
@@ -4614,8 +4691,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         Val::Ptr(result, true)
     }
 
-    /// `list.map(f)`: a new list of `f` applied to a copy of each element,
-    /// in order.
+    /// `list.map(f)`: a new list of `f` applied to each element, in order;
+    /// an aggregate element goes as its own pointer when `f` only reads it
+    /// ([`Lower::known_borrows`]), else as a copy.
     fn list_map(&mut self, receiver: &Expr, f: &Expr) -> Val {
         let element = match self.ty(receiver) {
             Ty::List(t) => *t,
@@ -4631,6 +4709,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         }
         let list = self.ptr(&r);
         let fv = self.expr(f, true);
+        let borrow = self.known_borrows(f).first().copied().unwrap_or(false);
         let fp = self.ptr(&fv);
         let parts = self.fn_parts(&fp);
         let len = self.list_len(&list);
@@ -4656,8 +4735,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let src = self
             .f
             .val(format!("getelementptr inbounds i8, ptr {data}, i64 {at}"));
-        let item = self.at(&element, src, false);
-        let operand = self.arg(&element, item);
+        let operand = if is_aggregate(&element) && borrow {
+            Some(format!("ptr {src}"))
+        } else {
+            let item = self.at(&element, src, false);
+            self.arg(&element, item)
+        };
         let result = self.call_value(&parts, &out, vec![operand]);
         let to = self.f.val(format!("mul i64 {i}, {}", out_layout.size));
         let dst = self
@@ -4758,9 +4841,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
 
     // ---- tasks -----------------------------------------------------------
 
-    /// `spawn f(args)`: the arguments are evaluated (copied) into an
-    /// environment in this frame; a per-site thunk copies them into the new
-    /// task's arena, calls `spawn_ready` and then `f`.
+    /// `spawn f(args)`: the arguments are evaluated into an environment in
+    /// this frame (a borrowed one as its place's pointer); a per-site thunk
+    /// copies them into the new task's arena, calls `spawn_ready` and then `f`.
     fn spawn(&mut self, call: &Expr) {
         let callee = self.cx.types.callee(call).cloned();
         let args: Vec<&Expr> = match &call.kind {
@@ -4848,9 +4931,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
 
     /// Store `values` into an environment, define the thunk `thunk` that
     /// runs `symbol` with copies of them, and start it (`docs/llvm.md`
-    /// section 4). `values` are deep-copied into the environment and
-    /// `ignite_rt_spawn` waits until the thunk has copied them again into its
-    /// own arena. The task is an owner of every stream argument
+    /// section 4). An owned value is moved into the environment and a
+    /// borrowed aggregate goes in as its place's pointer, not copied: the
+    /// parent waits in `ignite_rt_spawn` until the thunk has deep-copied
+    /// every value into the task's own arena (`spawn_ready`), and nothing
+    /// changes the place meanwhile. The task is an owner of every stream argument
     /// ([`is_stream`]; a handle-table entry counts its owners): the thunk
     /// registers it with `tcp_own`, so a failure releases it, and releases
     /// it when `symbol` returns; the stream closes when its last owner
@@ -4869,12 +4954,31 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         values: Vec<(Ty, Val, bool)>,
         prefix: &str,
     ) {
-        let layouts: Vec<Layout> = values.iter().map(|(ty, _, _)| self.layout(ty)).collect();
+        let by_place: Vec<bool> = values
+            .iter()
+            .map(|(ty, v, _)| is_aggregate(ty) && matches!(v, Val::Ptr(_, false)))
+            .collect();
+        let layouts: Vec<Layout> = values
+            .iter()
+            .zip(&by_place)
+            .map(|((ty, _, _), &place)| {
+                if place {
+                    Layout::scalar(8)
+                } else {
+                    self.layout(ty)
+                }
+            })
+            .collect();
         let (offsets, env_layout) = c_struct(&layouts);
         let env = self.f.alloca(env_layout);
-        for ((ty, v, _), offset) in values.iter().zip(&offsets) {
+        for (((ty, v, _), offset), &place) in values.iter().zip(&offsets).zip(&by_place) {
             let dst = self.gep(&env, *offset);
-            self.store_value(ty, &dst, v.clone());
+            if place {
+                let p = self.ptr(v);
+                self.f.ins(format!("store ptr {p}, ptr {dst}, align 8"));
+            } else {
+                self.store_value(ty, &dst, v.clone());
+            }
         }
         let callee = self.function(symbol, &sig.params, &sig.ret);
         let mut t = Lower::new(
@@ -4907,8 +5011,13 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         t.f.ins(format!("call void @ignite_rt_guard_push(ptr {jb})"));
         let mut operands = Vec::new();
         let mut streams = Vec::new();
-        for ((ty, _, _), offset) in values.iter().zip(&offsets) {
-            let src = t.gep("%env", *offset);
+        for (((ty, _, _), offset), &place) in values.iter().zip(&offsets).zip(&by_place) {
+            let slot = t.gep("%env", *offset);
+            let src = if place {
+                t.f.val(format!("load ptr, ptr {slot}, align 8"))
+            } else {
+                slot
+            };
             if is_aggregate(ty) {
                 let own = t.temp(ty);
                 t.copy(ty, &own, &src);
