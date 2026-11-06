@@ -1,7 +1,9 @@
 //! Slice 7 (`docs/slice.md` section 11.6): `examples/todo/todo.ignite`
 //! built with `ignite::build` and driven over a real socket as an HTTP/1.1
-//! client. Every case runs once per target (`<group>::rust::<case>`,
-//! `<group>::llvm::<case>`). The inline tests of `std.text` and `std.json`
+//! client. Every case runs once per target and once more per target with
+//! `--static` (`<group>::rust::<case>`, `<group>::llvm::<case>`,
+//! `<group>::rust_static::<case>`, `<group>::llvm_static::<case>`;
+//! `docs/slice.md` 23.6). The inline tests of `std.text` and `std.json`
 //! (`task test-ignite`) replace the probe program this file used to run.
 
 use std::collections::HashSet;
@@ -13,29 +15,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{OnceLock, mpsc};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use ignite::Target;
-
-use crate::common;
+use crate::common::Target;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-/// `source` built once per target and test binary under the cargo target
-/// directory; the executable named `name`.
+/// `source` built once per build of the matrix and test binary under the
+/// cargo target directory; the executable named `name`.
 fn build(source: &Path, out: &str, target: Target, name: &str) -> PathBuf {
-    let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
-    let options = match target {
-        Target::Rust => ignite::BuildOptions {
-            target: Target::Rust,
-            out: Some(tmp.join(out)),
-            ..Default::default()
-        },
-        Target::Llvm => ignite::BuildOptions {
-            target: Target::Llvm,
-            out: Some(tmp.join(format!("{out}-llvm"))),
-            runtime: Some(common::runtime_archive()),
-            ..Default::default()
-        },
-    };
+    let options = target.options(&Path::new(env!("CARGO_TARGET_TMPDIR")).join(out));
     let output = ignite::build(source, &options).unwrap_or_else(|e| panic!("{e}"));
     let executable = output
         .executables
@@ -52,19 +39,15 @@ fn build(source: &Path, out: &str, target: Target, name: &str) -> PathBuf {
 }
 
 fn cached(
-    cells: &'static [OnceLock<PathBuf>; 2],
+    cells: &'static [OnceLock<PathBuf>; 4],
     target: Target,
     make: fn(Target) -> PathBuf,
 ) -> &'static Path {
-    let cell = match target {
-        Target::Rust => &cells[0],
-        Target::Llvm => &cells[1],
-    };
-    cell.get_or_init(|| make(target))
+    cells[target.index()].get_or_init(|| make(target))
 }
 
 fn todod(target: Target) -> &'static Path {
-    static BUILT: [OnceLock<PathBuf>; 2] = [OnceLock::new(), OnceLock::new()];
+    static BUILT: [OnceLock<PathBuf>; 4] = [const { OnceLock::new() }; 4];
     cached(&BUILT, target, |target| {
         let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/todo/todo.ignite");
         build(&source, "todo", target, "todod")
@@ -637,13 +620,25 @@ macro_rules! both_targets {
             mod rust {
                 $(#[test]
                 fn $case() {
-                    super::super::$case(ignite::Target::Rust);
+                    super::super::$case(crate::common::Target::Rust);
                 })*
             }
             mod llvm {
                 $(#[test]
                 fn $case() {
-                    super::super::$case(ignite::Target::Llvm);
+                    super::super::$case(crate::common::Target::Llvm);
+                })*
+            }
+            mod rust_static {
+                $(#[test]
+                fn $case() {
+                    super::super::$case(crate::common::Target::RustStatic);
+                })*
+            }
+            mod llvm_static {
+                $(#[test]
+                fn $case() {
+                    super::super::$case(crate::common::Target::LlvmStatic);
                 })*
             }
         }

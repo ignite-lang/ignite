@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T03:08:31Z",
+  "actor": "human:timo",
+  "artifact": "story:static-linking",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on f029613d7: 1284 passed, 0 failed, 11 ignored, EXIT=0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/56"
+  }
+}

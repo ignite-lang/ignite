@@ -4,8 +4,8 @@
 //! ignite check <file.ignite> [--std PATH] [--json]
 //! ignite check --stdin-for <file.ignite> [--std PATH] [--json]
 //! ignite emit <file.ignite> [--substrate PATH] [--std PATH]
-//! ignite build <file.ignite> [--target llvm|rust] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE]
-//! ignite test <file.ignite>… [FILTER] [--target llvm|rust|all] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE]
+//! ignite build <file.ignite> [--target llvm|rust] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE] [--static]
+//! ignite test <file.ignite>… [FILTER] [--target llvm|rust|all] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE] [--static]
 //! ignite plan <file.ignite> [--assembly NAME] [--out FILE] [--fuel N] [--std PATH]
 //! ignite plan <file.ignite> --for-apply --state DIR --out PLAN [--assembly NAME] [--target llvm|rust] [--release] [--std PATH] [--runtime FILE] [--fuel N]
 //! ignite host --state DIR
@@ -17,7 +17,7 @@
 //! ignite replay <file.ignite> [--assembly NAME] [--state DIR] [--std PATH] [--fuel N]
 //! ignite rfc import FILE [--sections LIST] [--package NAME] [--url URL] [--out FILE]
 //! ignite rfc check CATALOGUE [SOURCE]
-//! ignite conformance <file.ignite> [--target llvm|rust] [--std DIR] [--out DIR] [--clang PATH] [--runtime PATH] [--target-dir DIR] [--release] [--triple TRIPLE]
+//! ignite conformance <file.ignite> [--target llvm|rust] [--std DIR] [--out DIR] [--clang PATH] [--runtime PATH] [--target-dir DIR] [--release] [--triple TRIPLE] [--static]
 //! ```
 //!
 //! `--std` is the standard-library root (default: the repository's `std/`
@@ -106,9 +106,12 @@ enum Commands {
         std: Option<PathBuf>,
         #[arg(long)]
         release: bool,
-        /// Target triple for `--target llvm`, passed to clang (default: clang's own target).
+        /// Target triple for `--target llvm`, passed to clang (default: clang's own target); with `--static` a musl triple for either target.
         #[arg(long)]
         triple: Option<String>,
+        /// Link against musl: no program interpreter, no shared library (`docs/slice.md` 23).
+        #[arg(long = "static")]
+        static_link: bool,
     },
     /// Build the tests of the named files and run them (`docs/slice.md` section 12.7).
     /// Arguments ending in `.ignite` are files; another one is the filter.
@@ -149,9 +152,12 @@ enum Commands {
         /// Build the tests with the release profile (`-O2` on `--target llvm`).
         #[arg(long)]
         release: bool,
-        /// Target triple for `--target llvm`, passed to clang (default: clang's own target).
+        /// Target triple for `--target llvm`, passed to clang (default: clang's own target); with `--static` a musl triple for either target.
         #[arg(long)]
         triple: Option<String>,
+        /// Link against musl: no program interpreter, no shared library (`docs/slice.md` 23).
+        #[arg(long = "static")]
+        static_link: bool,
     },
     /// Print the system model of a program as canonical JSON (`docs/slice.md` section 15.5).
     Plan {
@@ -344,6 +350,9 @@ enum Commands {
         /// Target triple for `--target llvm`, passed to clang.
         #[arg(long)]
         triple: Option<String>,
+        /// Link against musl: no program interpreter, no shared library (`docs/slice.md` 23).
+        #[arg(long = "static")]
+        static_link: bool,
     },
 }
 
@@ -505,6 +514,7 @@ fn run() {
         target_dir,
         release,
         triple,
+        static_link,
     } = cli.command
     {
         let options = ignite::TestOptions {
@@ -517,6 +527,7 @@ fn run() {
                 std,
                 release,
                 triple,
+                static_link,
                 ..ignite::BuildOptions::default()
             },
             runner: Vec::new(),
@@ -549,6 +560,7 @@ fn run() {
         target_dir,
         release,
         triple,
+        static_link,
     } = cli.command
     {
         let (files, filters): (Vec<String>, Vec<String>) =
@@ -581,6 +593,7 @@ fn run() {
                 std,
                 release,
                 triple,
+                static_link,
                 ..ignite::BuildOptions::default()
             },
             runner,
@@ -702,6 +715,7 @@ fn run() {
             std,
             release,
             triple,
+            static_link,
         } => {
             let options = ignite::BuildOptions {
                 target: match target {
@@ -716,6 +730,7 @@ fn run() {
                 release,
                 std,
                 triple,
+                static_link,
             };
             ignite::build(&file, &options).map(|output| {
                 for executable in &output.executables {
