@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:structural-apply-identity
 kind: story
-status: draft
+status: active
 title: Saved plans identify an implementation by structure, not Debug text
 scope:
 - confidence: inferred
   path: crates/ignite/src/apply/plan.rs
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-06T07:25:52Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-06T07:26:03Z", actor: "human:timo", revision: 4}
 ---
 # Story: structural-apply-identity
 

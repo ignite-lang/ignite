@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:checked-arithmetic
 kind: story
-status: draft
+status: active
 title: Checked Int arithmetic
 summary: checked_add, checked_sub and checked_mul returning Option<Int>, so overflow can be tested before it ends a task
 scope:
@@ -16,7 +16,10 @@ scope:
   path: crates/ignite-types/src
 - confidence: inferred
   path: std
-revision: 3
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-06T07:25:52Z", actor: "human:timo", revision: 4}
+- {from: "proposed", to: "active", at: "2026-11-06T07:26:03Z", actor: "human:timo", revision: 5}
 ---
 # Story: checked-arithmetic
 

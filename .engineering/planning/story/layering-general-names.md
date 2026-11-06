@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:layering-general-names
 kind: story
-status: draft
+status: active
 title: The layering check covers std names in the general crates
 scope:
 - confidence: inferred
@@ -11,7 +11,10 @@ scope:
   path: crates/ignite/src/run/live.rs
 - confidence: inferred
   path: docs/layering.md
-revision: 4
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-06T07:25:52Z", actor: "human:timo", revision: 5}
+- {from: "proposed", to: "active", at: "2026-11-06T07:26:03Z", actor: "human:timo", revision: 6}
 ---
 # Story: layering-general-names
 

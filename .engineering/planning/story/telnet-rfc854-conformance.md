@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:telnet-rfc854-conformance
 kind: story
-status: draft
+status: active
 title: Telnet conforms to RFC 854
 summary: GA after the prompt, Synch over TCP urgent data and a partial-line key, so the rfc854 claim holds
 relations:
@@ -18,7 +18,10 @@ scope:
   path: examples/terminal/commands.ignite
 - confidence: inferred
   path: std/protocol/telnet.ignite
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-06T07:25:52Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-06T07:26:03Z", actor: "human:timo", revision: 4}
 ---
 
 # Story: telnet-rfc854-conformance
