@@ -655,6 +655,9 @@ struct Checker {
     /// For each closure being walked, innermost last: the number of scopes
     /// open outside it. A binding of a scope below that is a capture.
     closure_scopes: Vec<usize>,
+    /// The span of the closure literal that is the argument of the
+    /// `List.map` call being walked, set until that closure is entered.
+    map_argument: Option<Span>,
 }
 
 fn is_static_owner(name: &str) -> bool {
@@ -2597,8 +2600,19 @@ impl Checker {
             return;
         }
         self.expr(receiver);
+        let list_map = name.name == "map"
+            && self.builtin_method(receiver, name)
+            && self
+                .static_type(receiver)
+                .is_none_or(|ty| matches!(ty.name.name.as_str(), "List" | "Bytes"));
         for arg in args {
+            if list_map && matches!(arg.kind, ExprKind::Closure(_)) {
+                self.map_argument = Some(arg.span);
+            }
             self.expr(arg);
+            if list_map {
+                self.map_fn_value(arg);
+            }
         }
         if matches!(name.name.as_str(), "push" | "set" | "append" | "clear")
             && let ExprKind::Name(list) = &receiver.kind
@@ -2712,7 +2726,12 @@ impl Checker {
     /// roots or ambient) is also needed where the closure is created, which
     /// is how it carries the authority it captured (`docs/slice.md` section
     /// 13.3).
+    ///
+    /// The argument of a `List.map` call inside a fn with `requires` is
+    /// the exception: the type checker checks its effects against that
+    /// `requires` (E017, `docs/slice.md` 20.4.3).
     fn closure(&mut self, expr: &Expr, closure: &Closure) {
+        let map_argument = self.map_argument.take() == Some(expr.span);
         let ctx = std::mem::replace(&mut self.ctx, Ctx::Inferred);
         let inferred = std::mem::take(&mut self.inferred);
         let performs = std::mem::replace(&mut self.performs, false);
@@ -2755,7 +2774,7 @@ impl Checker {
             })
             .cloned()
             .collect();
-        if !outer.is_empty() {
+        if !outer.is_empty() && !(map_argument && matches!(self.ctx, Ctx::Declared)) {
             self.effectful_op(outer, expr.span, "closure");
         }
         self.symbols.closure_effects.insert(
@@ -2765,6 +2784,43 @@ impl Checker {
                 requires: effects.into_iter().collect(),
             },
         );
+    }
+
+    /// `arg`, the argument of a `List.map` call, when it names an effectful
+    /// fn: `map` calls it, so a fn without `requires` performs its effects
+    /// that are not on its own parameter (an effect on the parameter is
+    /// E017, the type checker's, as is an uncovered one in a fn with
+    /// `requires`; `docs/slice.md` 20.4.3).
+    fn map_fn_value(&mut self, arg: &Expr) {
+        let ExprKind::Name(name) = &arg.kind else {
+            return;
+        };
+        if !matches!(self.ctx, Ctx::Inferred)
+            || self.lookup(&name.name).is_some()
+            || !self
+                .symbols
+                .functions
+                .get(&name.name)
+                .is_some_and(|f| f.effectful)
+        {
+            return;
+        }
+        let needed: Vec<String> = self
+            .symbols
+            .effects
+            .get(&name.name)
+            .map(|sig| {
+                sig.requires
+                    .iter()
+                    .filter(|effect| {
+                        let head = effect.split_once('.').map_or(effect.as_str(), |(h, _)| h);
+                        !sig.params.iter().any(|p| p == head)
+                    })
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.effectful_op(needed, arg.span, &name.name);
     }
 
     /// The declared fn type of a closure literal as far as the checker

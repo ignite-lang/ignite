@@ -69,6 +69,21 @@ enum Mode<'t> {
     Stmt,
 }
 
+/// The effects a fn passed to `List.map` may have where the walk is
+/// (`docs/slice.md` 20.4.3): those of the code that calls `map`.
+#[derive(Clone, Default)]
+enum EffectScope {
+    /// A constant, a field default, a property: pure, so `map` takes a
+    /// pure fn only.
+    #[default]
+    Pure,
+    /// A test body, a closure body or a fn without `requires`: any effect
+    /// on a capture or ambient; `ignite-check` adds it to the inferred set.
+    Open,
+    /// The body of the fn or role `name` with these `requires` entries.
+    Declared { name: String, requires: Vec<String> },
+}
+
 /// One arm of a `match` or `if`.
 enum Branch<'e> {
     Block(&'e Block),
@@ -324,6 +339,8 @@ pub(crate) struct Typer<'a> {
     /// Whether the walk is directly inside a test body, where `?` fails the
     /// test instead of returning.
     in_test_body: bool,
+    /// The effects of the code being walked, for `List.map`'s fn.
+    effect_scope: EffectScope,
     tests: Vec<TestInfo>,
     assert_compares: AddressMap<AssertCompare>,
     /// Complete structural-equality results. Nested coinductive visits must
@@ -421,6 +438,7 @@ impl<'a> Typer<'a> {
             diagnostics: Vec::new(),
             in_test: false,
             in_test_body: false,
+            effect_scope: EffectScope::Pure,
             tests: Vec::new(),
             assert_compares: AddressMap::default(),
             equatable_cache: HashMap::new(),
@@ -1532,7 +1550,9 @@ impl<'a> Typer<'a> {
         self.scopes = vec![BTreeMap::new()];
         self.loops.clear();
         self.in_test_body = true;
+        self.effect_scope = EffectScope::Open;
         self.block(&test.body, Mode::Stmt);
+        self.effect_scope = EffectScope::Pure;
         self.in_test_body = false;
         self.scopes.clear();
         self.ret = None;
@@ -1727,11 +1747,19 @@ impl<'a> Typer<'a> {
         for (param, ty) in f.params.iter().zip(&sig.params) {
             self.bind(&param.name, Some(ty.clone()));
         }
+        self.effect_scope = match &f.requires {
+            Some(requires) => EffectScope::Declared {
+                name: f.name.name.clone(),
+                requires: requires.iter().map(|path| path.dotted()).collect(),
+            },
+            None => EffectScope::Open,
+        };
         if sig.ret == Ty::Unit {
             self.block(&f.body, Mode::Stmt);
         } else {
             self.block(&f.body, Mode::Value(Some(&sig.ret)));
         }
+        self.effect_scope = EffectScope::Pure;
         self.scopes.clear();
         self.ret = None;
         self.type_params.clear();
@@ -2142,6 +2170,7 @@ impl<'a> Typer<'a> {
         let ret_scope = std::mem::replace(&mut self.ret, wanted_ret.clone());
         let loops = std::mem::take(&mut self.loops);
         let in_test_body = std::mem::replace(&mut self.in_test_body, false);
+        let effect_scope = std::mem::replace(&mut self.effect_scope, EffectScope::Open);
         self.closure_frames.push((self.scopes.len(), Vec::new()));
         self.scopes.push(BTreeMap::new());
         for (param, ty) in closure.params.iter().zip(bound) {
@@ -2160,6 +2189,7 @@ impl<'a> Typer<'a> {
         self.ret = ret_scope;
         self.loops = loops;
         self.in_test_body = in_test_body;
+        self.effect_scope = effect_scope;
         if !known {
             return None;
         }
@@ -3389,8 +3419,11 @@ impl<'a> Typer<'a> {
         }
     }
 
-    /// `l.map(f)` on a `List<element>`: `f` is a pure `fn(element) -> U`,
-    /// `U` from the expected `List<U>` or from `f`'s type.
+    /// `l.map(f)` on a `List<element>`: `f` is a `fn(element) -> U`, `U`
+    /// from the expected `List<U>` or from `f`'s type. Where the caller
+    /// has effects, `f` may be an effectful closure or named fn whose
+    /// effects the caller's cover (`docs/slice.md` 20.4.3); elsewhere it is
+    /// pure.
     fn list_map(
         &mut self,
         expr: &Expr,
@@ -3404,15 +3437,32 @@ impl<'a> Typer<'a> {
             self.arguments(expr.span, "map", &[Ty::Unit], args);
             return None;
         };
+        let own = match self.effect_scope {
+            EffectScope::Pure => None,
+            _ => self.map_fn_effects(f),
+        };
+        let wanted = |ret: Ty| match &own {
+            Some(effects) => Ty::EffectFn(vec![element.clone()], Box::new(ret), effects.clone()),
+            None => fn_ty(vec![element.clone()], ret),
+        };
         if let Some(Ty::List(item)) = expected {
-            self.check(f, &fn_ty(vec![element.clone()], (**item).clone()));
+            if self.check(f, &wanted((**item).clone())).is_some()
+                && let Some(effects) = &own
+            {
+                self.map_effects_fit(f, effects);
+            }
             return expected.cloned();
         }
-        let open = fn_ty(vec![element.clone()], Ty::Param("'U".into()));
-        let given = matches!(f.kind, ExprKind::Closure(_)).then_some(&open);
+        let open = wanted(Ty::Param("'U".into()));
+        let given = (own.is_some() || matches!(f.kind, ExprKind::Closure(_))).then_some(&open);
         match self.expr(f, Mode::Value(given))? {
             Ty::Fn(params, ret) if params.len() == 1 && compatible(element, &params[0]) => {
                 Some(Ty::List(ret))
+            }
+            Ty::EffectFn(params, ret, effects)
+                if own.is_some() && params.len() == 1 && compatible(element, &params[0]) =>
+            {
+                self.map_effects_fit(f, &effects).then_some(Ty::List(ret))
             }
             Ty::Never => None,
             other => {
@@ -3426,6 +3476,89 @@ impl<'a> Typer<'a> {
                 None
             }
         }
+    }
+
+    /// The effects of `map`'s argument `f` when it is an effectful closure
+    /// literal or the name of an effectful fn (not a local binding): what
+    /// `ignite-check` inferred or the fn declares.
+    fn map_fn_effects(&self, f: &Expr) -> Option<FnEffects> {
+        let sig = match &f.kind {
+            ExprKind::Closure(_) => self.symbols.closure_effects.get(&f.span)?,
+            ExprKind::Name(name) if self.lookup(&name.name).is_none() => {
+                let q = self.fns.get(&name.name)?;
+                if !self.sig_of(q)?.effectful {
+                    return None;
+                }
+                let Some(sig) = self.symbols.effects.get(&name.name) else {
+                    return Some(FnEffects {
+                        names: Vec::new(),
+                        requires: Vec::new(),
+                    });
+                };
+                sig
+            }
+            _ => return None,
+        };
+        Some(FnEffects {
+            names: sig.params.clone(),
+            requires: sig.requires.clone(),
+        })
+    }
+
+    /// Whether the effects of `map`'s argument `f` fit where `map` is
+    /// called (`docs/slice.md` 20.4.3): none on `f`'s own parameter, the
+    /// element `map` hands it, and every other one covered by the
+    /// `requires` of the fn that calls `map`. E017 at `f` otherwise.
+    fn map_effects_fit(&mut self, f: &Expr, effects: &FnEffects) -> bool {
+        let what = match &f.kind {
+            ExprKind::Name(name) => format!("effectful function `{}`", name.name),
+            _ => "effectful closure".to_string(),
+        };
+        let shown = |entries: &[&String]| {
+            entries
+                .iter()
+                .map(|e| format!("`{e}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let (on_param, outer): (Vec<&String>, Vec<&String>) =
+            effects.requires.iter().partition(|entry| {
+                entry
+                    .split_once('.')
+                    .is_some_and(|(head, _)| effects.names.iter().any(|n| n == head))
+            });
+        let mut fit = true;
+        if let Some(param) = effects.names.first()
+            && !on_param.is_empty()
+        {
+            self.error(
+                "E017",
+                f.span,
+                format!(
+                    "{what} passed to `map` needs {} on its parameter `{param}`, the list's element; `map` passes on only its caller's effects",
+                    shown(&on_param)
+                ),
+            );
+            fit = false;
+        }
+        if let EffectScope::Declared { name, requires } = self.effect_scope.clone() {
+            let missing: Vec<&String> = outer
+                .into_iter()
+                .filter(|entry| !ignite_check::covers(&requires, entry))
+                .collect();
+            if !missing.is_empty() {
+                self.error(
+                    "E017",
+                    f.span,
+                    format!(
+                        "{what} passed to `map` needs {}, which the `requires` of `{name}` does not cover",
+                        shown(&missing)
+                    ),
+                );
+                fit = false;
+            }
+        }
+        fit
     }
 
     fn field(

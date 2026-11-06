@@ -1,0 +1,24 @@
+// `List.map`'s fn may have only effects its caller's `requires` covers;
+// an effect on the fn's own parameter is never covered.
+fn names(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires [store.write] {
+  return ids.map(|id| store.get(id))
+}
+
+fn stamp(id: Int) -> Int requires [clock.read] {
+  let now = Clock.monotonic()
+  return id
+}
+
+fn stamps(ids: List<Int>) -> List<Int> requires [stdout.write] = ids.map(stamp)
+
+fn none(ids: List<Int>) -> List<Int> requires [] = ids.map(stamp)
+
+fn firsts(stores: List<Store<Text>>) -> List<Option<Text>> requires [stores.read] {
+  return stores.map(|s: Store<Text>| s.get(1))
+}
+
+fn first(s: Store<Text>) -> Option<Text> requires [s.read] = s.get(1)
+
+fn firsts_named(stores: List<Store<Text>>) -> List<Option<Text>> requires [stores.read] = stores.map(first)
+
+fn firsts_inferred(stores: List<Store<Text>>) -> List<Option<Text>> = stores.map(|s: Store<Text>| s.get(1))

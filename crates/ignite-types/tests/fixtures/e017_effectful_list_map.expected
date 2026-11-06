@@ -1,0 +1,6 @@
+e017_effectful_list_map.ignite:4:18: error[E017]: effectful closure passed to `map` needs `store.read`, which the `requires` of `names` does not cover
+e017_effectful_list_map.ignite:12:74: error[E017]: effectful function `stamp` passed to `map` needs `clock.read`, which the `requires` of `stamps` does not cover
+e017_effectful_list_map.ignite:14:60: error[E017]: effectful function `stamp` passed to `map` needs `clock.read`, which the `requires` of `none` does not cover
+e017_effectful_list_map.ignite:17:21: error[E017]: effectful closure passed to `map` needs `s.read` on its parameter `s`, the list's element; `map` passes on only its caller's effects
+e017_effectful_list_map.ignite:22:102: error[E017]: effectful function `first` passed to `map` needs `s.read` on its parameter `s`, the list's element; `map` passes on only its caller's effects
+e017_effectful_list_map.ignite:24:82: error[E017]: effectful closure passed to `map` needs `s.read` on its parameter `s`, the list's element; `map` passes on only its caller's effects
