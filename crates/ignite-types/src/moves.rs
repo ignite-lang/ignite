@@ -932,6 +932,10 @@ enum Operand<'a> {
     Move,
     /// The receiver of a fn-field call: the field `name` is read.
     Field(&'a str),
+    /// An argument of a `spawn`: taken like [`Operand::Move`] (a handle
+    /// binding too, a place rooted at a parameter never), held like
+    /// [`Operand::Read`] (20.3.1).
+    Spawned,
 }
 
 struct Walk<'a> {
@@ -1216,7 +1220,16 @@ impl<'a> Walk<'a> {
     /// A move position: `e` moves when it is a movable place, dead after,
     /// not pinned, not `excluded` by another operand of its call and not
     /// held by an operand of an enclosing call.
-    fn take(&mut self, e: &'a Expr, mut st: State, excluded: bool) -> State {
+    fn take(&mut self, e: &'a Expr, st: State, excluded: bool) -> State {
+        self.take_as(e, st, excluded, false)
+    }
+
+    /// [`take`](Self::take), or with `spawned` an argument of a `spawn`
+    /// (20.3.1): the task takes every argument, so a handle binding moves
+    /// at its last use there too, handing its share to the task, and a
+    /// place rooted at a parameter is copied, so no `spawn` makes a
+    /// parameter consumed.
+    fn take_as(&mut self, e: &'a Expr, mut st: State, excluded: bool, spawned: bool) -> State {
         let e = match &e.kind {
             ExprKind::NamedArg { value, .. } => &**value,
             _ => e,
@@ -1224,23 +1237,24 @@ impl<'a> Walk<'a> {
         // A handle moves only as a whole binding at the tail of the scope
         // that binds it: the scope ends there, so the move hands on the
         // one share the binding would have dropped (20.3.1).
-        let handle_tail = |w: &Self, place: &Place| {
+        let handle_binding = |w: &Self, place: &Place| {
             place.path.is_empty()
                 && w.res.vars[place.var].handle
-                && w.res.tails.contains_key(&key(e))
+                && (spawned || w.res.tails.contains_key(&key(e)))
                 && w.types.try_type_of(e).is_some_and(handle)
         };
         let Some(place) = self
             .movable(e)
-            .filter(|place| self.aggregate_expr(e) || handle_tail(self, place))
+            .filter(|place| self.aggregate_expr(e) || handle_binding(self, place))
         else {
             return self.expr(e, st);
         };
+        let param = self.res.vars[place.var].param;
         let would = !excluded
+            && !(spawned && param.is_some())
             && !self.pinned(&place)
             && st.live.dead(&place)
             && !self.held_overlaps(&place);
-        let param = self.res.vars[place.var].param;
         if would && let Some(i) = param {
             st.moved.insert(i);
             self.any_move.insert(i);
@@ -1514,7 +1528,7 @@ impl<'a> Walk<'a> {
     }
 
     /// A call or method call; `spawned` for the call of a `spawn`, whose
-    /// arguments are no move positions.
+    /// arguments are [`Operand::Spawned`] move positions (20.3.1).
     fn call(&mut self, e: &'a Expr, mut st: State, spawned: bool) -> State {
         let callee = self.types.callee(e).cloned();
         let mut operands: Vec<(&'a Expr, Operand<'a>)> = Vec::new();
@@ -1544,9 +1558,15 @@ impl<'a> Walk<'a> {
             _ => return self.expr(e, st),
         }
         if spawned {
-            for operand in &mut operands {
-                if matches!(operand.1, Operand::Move) {
-                    operand.1 = Operand::Read;
+            // The task takes every argument (the receiver of a fn call
+            // too, its argument 0): each is a move position of its own
+            // kind, held like a borrowed one, because LLVM's spawn reads a
+            // copied aggregate in place after the later arguments ran.
+            let receiver_taken =
+                matches!(e.kind, ExprKind::Method { .. }) && matches!(&callee, Some(Callee::Fn(_)));
+            for (k, operand) in operands.iter_mut().enumerate() {
+                if k > 0 || receiver_taken {
+                    operand.1 = Operand::Spawned;
                 }
             }
         }
@@ -1561,7 +1581,7 @@ impl<'a> Walk<'a> {
             for (other, other_kind) in operands[..i].iter().copied() {
                 let field = match other_kind {
                     Operand::Move => continue,
-                    Operand::Read => None,
+                    Operand::Read | Operand::Spawned => None,
                     Operand::Field(name) => Some(name),
                 };
                 self.held.push(Held {
@@ -1572,7 +1592,7 @@ impl<'a> Walk<'a> {
             }
             st = match kind {
                 Operand::Read => self.expr(operand, st),
-                Operand::Move => {
+                Operand::Move | Operand::Spawned => {
                     let inner = match &operand.kind {
                         ExprKind::NamedArg { value, .. } => &**value,
                         _ => operand,
@@ -1583,7 +1603,7 @@ impl<'a> Walk<'a> {
                         }
                         _ => false,
                     };
-                    self.take(operand, st, excluded)
+                    self.take_as(operand, st, excluded, matches!(kind, Operand::Spawned))
                 }
                 Operand::Field(name) => match self.read_place(operand) {
                     Some(mut place) => {
@@ -1647,7 +1667,7 @@ impl<'a> Walk<'a> {
             }
             let field = match kind {
                 Operand::Field(name) => Some(*name),
-                Operand::Read | Operand::Move => None,
+                Operand::Read | Operand::Move | Operand::Spawned => None,
             };
             self.operand_places(operand, field)
                 .iter()

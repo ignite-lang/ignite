@@ -1,7 +1,8 @@
 //! Stream ownership on the LLVM target (`docs/llvm.md` section 4): a
 //! stream lives as long as the last task or binding that uses it, as the
 //! `Arc` of the Rust target does. `tests/fixtures/streams/handed_on.ignite`
-//! runs on both targets; `inline_server.ignite`, built with the LLVM
+//! and `test_body_spawn.ignite`
+//! run on both targets; `inline_server.ignite`, built with the LLVM
 //! target, answers 2,000 connections on one task without `spawn` and must
 //! not keep a descriptor per connection.
 
@@ -63,12 +64,13 @@ fn handed_on_streams_pass_on_both_targets() {
 }
 
 /// Story llvm-spawn-pattern-bound-streams with the spawn in the test body:
-/// the end is the task's from its last use on, so the failure closes it.
-/// LLVM only: the Rust target keeps the test body's clone until the body
-/// ends (`test_body_spawn.ignite`).
+/// the end is the task's from its last use on, so the failure closes it
+/// (on Rust the moves analysis moves it into the task, `docs/slice.md`
+/// 20.3.1); an end used after its spawn stays the body's
+/// (`test_body_spawn.ignite`).
 #[test]
 fn a_spawn_in_a_test_body_hands_the_pattern_bound_end_over() {
-    ignite_test("test_body_spawn.ignite", "llvm", 1, 1);
+    ignite_test("test_body_spawn.ignite", "all", 2, 2);
 }
 
 /// A running `inlined`, killed on drop.

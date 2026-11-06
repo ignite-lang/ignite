@@ -3917,8 +3917,9 @@ impl<'a> Generator<'a> {
     }
 
     /// `spawn f(a, b)`: the arguments are bound to `__spawn_N` (value
-    /// position, so places are cloned) before the task starts; the task
-    /// logs an `Err` result.
+    /// position: a place is cloned, or moved where the moves analysis marks
+    /// it at its last use, `docs/slice.md` 20.3.1) before the task starts;
+    /// the task logs an `Err` result.
     fn spawn(&mut self, operand: &Expr) -> String {
         let instance = self.bounded_turbofish(operand);
         let (target, args, by_ref): (Option<String>, Vec<&Expr>, bool) = match &operand.kind {
