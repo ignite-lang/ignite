@@ -36,7 +36,7 @@ pub struct Greeter {
 pub fn Greeter__main(self_: &Greeter) -> Result<(), ignite_io::IoError> {
     loop {
         let stream = (self_.listener.accept())?;
-        { let __spawn_0 = stream.clone(); let __spawn_1 = self_.text.clone(); ignite_io::spawn(move || { if let Err(error) = Greeting::serve(__spawn_0, __spawn_1) { ignite_io::log(&format!("task ended with error: {}", error)); } }); };
+        { let __spawn_0 = stream; let __spawn_1 = self_.text.clone(); ignite_io::spawn(move || { if let Err(error) = Greeting::serve(__spawn_0, __spawn_1) { ignite_io::log(&format!("task ended with error: {}", error)); } }); };
     }
 }
 

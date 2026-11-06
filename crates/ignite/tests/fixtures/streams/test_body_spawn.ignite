@@ -1,11 +1,10 @@
 package tests.streams
 
-// Run on the LLVM target by tests/stream_ownership.rs (story
+// Run on both targets by tests/stream_ownership.rs (story
 // llvm-spawn-pattern-bound-streams): a pipe end bound by a pattern in a
 // test body and spawned at its last use belongs to the task, so the task's
-// failure closes it while the test body still runs. The Rust target clones
-// the end into the task and keeps the test body's until the body ends, so
-// there this test waits for its timeout.
+// failure closes it while the test body still runs. An end the test body
+// uses after its spawn stays the body's too and outlives the task.
 
 import std.net.{Pipe, PipeStream}
 import std.io.IoError
@@ -19,6 +18,11 @@ fn fails(stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
   Ok(())
 }
 
+fn greets(stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
+  stream.write_all(b"hi")?
+  Ok(())
+}
+
 test fn rest(client: PipeStream) -> IoResult<Bytes> {
   var out = Bytes.empty()
   loop {
@@ -29,8 +33,27 @@ test fn rest(client: PipeStream) -> IoResult<Bytes> {
   }
 }
 
+test fn exactly(client: PipeStream, count: Int) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  while out.len() < count {
+    match client.read(count - out.len())? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out)
+}
+
 test "a failing task closes a pattern-bound pipe end spawned from the test body" {
   let (client, server) = Pipe.pair()
   spawn fails(server)
   assert rest(client)? == b""
+}
+
+test "a pipe end used after its spawn stays open for the test body" {
+  let (client, server) = Pipe.pair()
+  spawn greets(server)
+  assert exactly(client, 2)? == b"hi"
+  server.write_all(b"!")?
+  assert exactly(client, 1)? == b"!"
 }

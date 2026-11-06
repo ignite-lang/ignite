@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:llvm-spawn-pattern-bound-streams
 kind: story
-status: active
+status: implemented
 title: LLVM spawn hands pattern-bound streams to the task
 summary: A failing task closes a stream bound by let (a, b) = ...; spawn in a test body behaves as in a helper
 scope:
@@ -16,10 +16,11 @@ scope:
   path: crates/ignite/tests/fixtures/streams
 - confidence: cited
   path: crates/ignite/tests/stream_ownership.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-11-06T21:40:34Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: llvm-spawn-pattern-bound-streams
 

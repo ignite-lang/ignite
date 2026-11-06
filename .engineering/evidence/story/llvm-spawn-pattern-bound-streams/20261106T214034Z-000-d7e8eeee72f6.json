@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T21:40:34Z",
+  "actor": "human:timo",
+  "artifact": "story:llvm-spawn-pattern-bound-streams",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on ba6b2893: 1297 passed, 0 failed, 11 ignored; 292 inline per target; EXIT=0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/77"
+  }
+}

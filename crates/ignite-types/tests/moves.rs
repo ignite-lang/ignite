@@ -423,13 +423,13 @@ fn asserted() -> Int {
         t.marked_in("into_literals"),
         vec!["a", "b", "c", "d", "e", "f", "g", "h"]
     );
+    assert_eq!(t.marked_in("launch"), vec!["s"]);
     for name in [
         "receiver_of_builtin",
         "scrutinee",
         "iterable",
         "operand",
         "text_operand",
-        "launch",
         "capture",
         "pattern_let",
         "asserted",
@@ -904,6 +904,80 @@ fn borrowed(o: Option<TcpStream>, conn: TcpStream) -> TcpStream = match o {
     assert_eq!(t.marked_in("block_tail"), vec!["s"]);
     assert_eq!(t.marked_in("not_tail"), none());
     assert_eq!(t.marked_in("borrowed"), none());
+}
+
+/// `docs/slice.md` 20.3.1 (story llvm-spawn-pattern-bound-streams): a
+/// `spawn` argument is a move position, so a handle binding (and an
+/// aggregate) at its last use is handed to the task; one read after the
+/// `spawn`, inside a loop, named twice by the call, rooted at a parameter
+/// or a borrowed pattern binding stays shared.
+#[test]
+fn spawn_arguments_move_at_their_last_use() {
+    let t = with_prelude(
+        r#"
+fn keep(c: TcpStream) -> TcpStream = c
+
+fn serve(c: TcpStream) -> Result<Unit, IoError> requires [stdout.write] = Stdout.write_all("x".to_bytes())
+
+fn both(a: TcpStream, b: TcpStream) -> Result<Unit, IoError> requires [stdout.write] = Stdout.write_all("x".to_bytes())
+
+fn work(s: State, c: TcpStream) -> Result<Unit, IoError> requires [stdout.write] = Stdout.write_all("x".to_bytes())
+
+fn handed(conn: TcpStream) -> Result<Unit, IoError> requires [stdout.write] {
+  let c = keep(conn)
+  let s = fresh()
+  spawn work(s, c)
+  Ok(())
+}
+
+fn pattern_bound(conn: TcpStream) -> Result<Unit, IoError> requires [stdout.write] {
+  let (c, n) = (keep(conn), 1)
+  spawn serve(c)
+  Ok(())
+}
+
+fn read_after(conn: TcpStream) -> Result<Unit, IoError> requires [stdout.write] {
+  let c = keep(conn)
+  spawn serve(c)
+  serve(c)
+}
+
+fn twice(conn: TcpStream) -> Result<Unit, IoError> requires [stdout.write] {
+  let c = keep(conn)
+  spawn both(c, c)
+  Ok(())
+}
+
+fn in_loop(conn: TcpStream, n: Int) -> Result<Unit, IoError> requires [stdout.write] {
+  let c = keep(conn)
+  var i = 0
+  while i < n {
+    spawn serve(c)
+    i = i + 1
+  }
+  Ok(())
+}
+
+fn parameter(s: State, conn: TcpStream) -> Result<Unit, IoError> requires [stdout.write] {
+  spawn work(s, conn)
+  Ok(())
+}
+
+fn borrowed(o: Option<TcpStream>) -> Result<Unit, IoError> requires [stdout.write] = match o {
+  Some(c) => {
+    spawn serve(c)
+    Ok(())
+  }
+  None => Ok(())
+}
+"#,
+    );
+    assert_eq!(t.marked_in("handed"), vec!["s", "c"]);
+    assert_eq!(t.marked_in("pattern_bound"), vec!["c"]);
+    for name in ["read_after", "twice", "in_loop", "parameter", "borrowed"] {
+        assert_eq!(t.marked_in(name), none(), "{name}");
+    }
+    assert!(!t.consumed("parameter", 0));
 }
 
 /// Stale point S10 of `docs/slice.md` 21.10: the five capability types are
