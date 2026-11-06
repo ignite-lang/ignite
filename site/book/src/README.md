@@ -56,7 +56,7 @@ itself is Ignite code in the standard library.
 
 ## Status
 
-Ignite is an early prototype, at release v0.10.0. What works today:
+Ignite is an early prototype, at release v0.11.0. What works today:
 
 - the language subset, with records, enums, pattern matching, generics with bounds,
   closures, quantities such as `4096 bytes` and `15 minutes`, and explicit effects;
