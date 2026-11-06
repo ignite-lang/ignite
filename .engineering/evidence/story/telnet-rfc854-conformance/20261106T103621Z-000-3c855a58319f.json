@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T10:36:21Z",
+  "actor": "human:timo",
+  "artifact": "story:telnet-rfc854-conformance",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on f01c0b1475: 1279 passed, 0 failed, 11 ignored, EXIT=0; conformance rfc854 yes (0 gaps) on both targets",
+    "reference": "https://github.com/ignite-lang/ignite/pull/66"
+  }
+}
