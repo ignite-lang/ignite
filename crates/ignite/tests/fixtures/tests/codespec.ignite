@@ -1,6 +1,6 @@
 package fixtures.codespec
 
-// The language gaps of story codespec-friction (`docs/slice.md` 24), run by
+// The language gaps of story codespec-friction (`docs/slice.md` 25), run by
 // `ignite test` on both targets in debug and release
 // (crates/ignite/tests/ignite_test.rs `codespec_friction_on_both_targets`).
 

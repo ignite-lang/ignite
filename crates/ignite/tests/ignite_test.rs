@@ -607,7 +607,7 @@ fn text_equality_against_literals() {
     });
 }
 
-/// The language gaps of story codespec-friction (`docs/slice.md` 24):
+/// The language gaps of story codespec-friction (`docs/slice.md` 25):
 /// `<`, `<=`, `>`, `>=` on `Text` in byte order, the order of a `Map`'s
 /// `Text` keys, and `wrapping_add`, `wrapping_sub`, `wrapping_mul` on
 /// `Int`, the same on both targets in dev and in release

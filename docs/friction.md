@@ -46,12 +46,12 @@ names the row in its contract.
 | 58 | `for` and assignment are not expressions, so neither is a match arm body or a block's value | ignite-codespec story ignite-writer, 2026-11-06; `story:codespec-friction`, recorded only | an arm body in braces, `{ x = v }` (row 38 for assignment) |
 | 59 | A sibling module needs the main file's package as its prefix (`import codespec.cir.{…}` in package `codespec`) | ignite-codespec story cir-model (`src/cir_json.ignite:7`), 2026-11-06; `story:codespec-friction`, recorded only | each sibling import names the full path |
 
-## Solved in story codespec-friction (`docs/slice.md` 24)
+## Solved in story codespec-friction (`docs/slice.md` 25)
 
 | # | friction | seen by | where the fix is tested |
 |---|---|---|---|
-| 49 | `Text` had no `<`, `<=`, `>`, `>=` (E045), so Go's string ordering was refused | ignite-codespec stories ignite-writer (`src/write.ignite:1269`) and cir-model (`tools/gen_model.ignite:370`), 2026-11-06; `story:codespec-friction` item 3 | `ignite_test::codespec_friction_on_both_targets` (`fixtures/tests/codespec.ignite`, both targets, dev and release): byte order, which is code point order and a `Map`'s `Text` key order (24.1) |
-| 51 | No wrapping integer arithmetic: a Go `+`, `-` or `++` needed hand-written `wrapping_add` and `wrapping_sub` helpers, and Go's `*` was refused | ignite-codespec story ignite-writer (`src/write.ignite:1254` to `:1263`, `:2409`), 2026-11-06; `story:codespec-friction` item 5 | the same test: `Int.wrapping_add`, `wrapping_sub`, `wrapping_mul` at the bounds of `Int` (24.2) |
+| 49 | `Text` had no `<`, `<=`, `>`, `>=` (E045), so Go's string ordering was refused | ignite-codespec stories ignite-writer (`src/write.ignite:1269`) and cir-model (`tools/gen_model.ignite:370`), 2026-11-06; `story:codespec-friction` item 3 | `ignite_test::codespec_friction_on_both_targets` (`fixtures/tests/codespec.ignite`, both targets, dev and release): byte order, which is code point order and a `Map`'s `Text` key order (25.1) |
+| 51 | No wrapping integer arithmetic: a Go `+`, `-` or `++` needed hand-written `wrapping_add` and `wrapping_sub` helpers, and Go's `*` was refused | ignite-codespec story ignite-writer (`src/write.ignite:1254` to `:1263`, `:2409`), 2026-11-06; `story:codespec-friction` item 5 | the same test: `Int.wrapping_add`, `wrapping_sub`, `wrapping_mul` at the bounds of `Int` (25.2) |
 
 ## Solved in slice 11b (`docs/slice.md` §13.11 row d, §15.14)
 

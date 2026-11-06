@@ -48,3 +48,4 @@ mod stream_ownership;
 mod syntax;
 mod terminal;
 mod todo;
+mod typed_json;
