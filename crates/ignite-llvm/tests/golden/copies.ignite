@@ -233,3 +233,97 @@ test "a constant pattern compares with the constant" {
   }
   assert m == 0
 }
+
+test fn grow(l: List<Int>) -> Int {
+  l.push(0)
+  l.len()
+}
+
+test fn total(l: List<Int>) -> Int {
+  var sum = 0
+  for x in l {
+    sum = sum + x
+  }
+  sum
+}
+
+test fn drain(l: List<Int>) -> Int {
+  l.clear()
+  l.len()
+}
+
+test "fn values borrow what they only read and copy what they change" {
+  var lists = [[1], [2, 3]]
+  assert lists.map(|l| l.len()) == [1, 2]
+  assert lists.map(|l| {
+    l.push(9)
+    l.len()
+  }) == [2, 3]
+  assert lists == [[1], [2, 3]]
+  assert lists.map(grow) == [2, 3]
+  assert lists.map(total) == [1, 5]
+  assert lists == [[1], [2, 3]]
+  var same = lists.map(|l| l)
+  same[0].push(7)
+  lists[1].push(8)
+  assert same == [[1, 7], [2, 3]]
+  assert lists == [[1], [2, 3, 8]]
+  let f = |a: List<Int>, n: Int| a.len() + n
+  var xs = [1]
+  assert f(xs, {
+    xs.push(2)
+    0
+  }) == 1
+  assert xs == [1, 2]
+  assert f(xs, drain(xs)) == 2
+  let g = grow
+  assert g(xs) == 3
+  assert xs == [1, 2]
+  let words = ["a", "bb"]
+  let stamped = words.map(|w| w.concat("!"))
+  assert stamped == ["a!", "bb!"]
+  assert words == ["a", "bb"]
+  var ys = [5, 6]
+  assert f(ys, drain(ys)) == 2
+}
+
+test fn report(xs: List<Int>, label: Text, s: PipeStream) -> Result<Unit, IoError> requires [s.write] {
+  s.write_all(label.concat(Int.to_text(xs.len())).to_bytes())?
+  s.close()
+}
+
+test type Bag {
+  items: List<Int>
+  name: Text
+}
+
+test "a spawned task gets the borrowed arguments as they were at the spawn" {
+  var xs = [1, 2, 3]
+  var bag = Bag { items = [4, 5], name = "bag:" }
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  spawn report(xs, bag.name, server)
+  xs.push(4)
+  bag.name = "changed:"
+  var got = Bytes.empty()
+  loop {
+    match client.read(100)? {
+      Eof => break
+      Data(bytes) => got.append(bytes)
+    }
+  }
+  assert got.to_text() == "bag:3"
+  let (c2, s2) = Pipe.pair()
+  c2.set_idle_timeout(5000)?
+  spawn report(bag.items, "items:", s2)
+  bag.items.clear()
+  var got2 = Bytes.empty()
+  loop {
+    match c2.read(100)? {
+      Eof => break
+      Data(bytes) => got2.append(bytes)
+    }
+  }
+  assert got2.to_text() == "items:2"
+  assert xs.len() == 4
+}

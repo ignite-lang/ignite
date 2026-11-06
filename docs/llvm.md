@@ -213,8 +213,8 @@ takes or returns Ignite values):
   that moves (`TypedProgram::moves`, `docs/slice.md` 20.3.5) passes the place's own pointer
   to the owned parameter, with no copy: the place is dead after the call, so ownership of
   its memory passes to the callee. Every other aggregate argument is a fresh copy (section
-  4). A call through a fn pointer passes copies, or the moved place, which is correct for
-  both kinds of parameter. A borrowed parameter reads the caller's memory, which stays
+  4). A call through a fn value passes a borrowed place as its own pointer (section 3.1)
+  and otherwise a copy or the moved place. A borrowed parameter reads the caller's memory, which stays
   valid for the whole call: no callee releases below its own loops' marks.
 - An aggregate result is written to a pointer passed as the first argument (plain `ptr`, no LLVM `sret` attribute).
 - Symbol names: `"<module>.<name>"` (`"std.protocol.telnet.decode"`), roles
@@ -252,17 +252,27 @@ takes or returns Ignite values):
 ### 3.1 Fn values
 
 A fn value is `{ ptr code, ptr env }`. `code` has the signature
-`code(ptr env, [ptr out], params..)`: the environment first, then the usual convention. A
-call through a fn value loads both words before it evaluates the arguments.
+`code(ptr env, [ptr out], params..)`: the environment first, then the usual convention,
+except that every aggregate parameter is borrowed: `code` neither changes nor keeps the
+memory an argument points to, so a caller passes a variable, a field or a list element as
+its own pointer (`list.map` passes each element so). The exception is the caller's rule of
+section 3: a later argument that modifies a variable or mentions the place's root makes
+the argument a copy. A call through a fn value loads both words before it evaluates the
+arguments.
 
 - A named fn (or associated fn) used as a value is `{ "fnval.<symbol>", null }`, where
-  the internal thunk `"fnval.<symbol>"` drops `env` and calls the fn.
+  the internal thunk `"fnval.<symbol>"` drops `env` and calls the fn, with a copy for each
+  parameter the fn consumes and the given pointer for each one it borrows.
 - A closure is the internal function `"closure.<module>.<n>"` and an environment block
   allocated in the arena where the closure is created. The block's first word is the
   address of its glue `ptr "<closure>.env"(i32 op, ptr env)`; the captures follow in
   `ClosureInfo.captures` order with C layout, each copied at creation (by copy, as
   `docs/slice.md` section 13.3 says). A closure without captures has `env` null. The body
-  is lowered as a fn whose captures are borrowed bindings into the block.
+  is lowered as a fn whose captures are borrowed bindings into the block. An aggregate
+  parameter the body modifies (`region::modified_by`, as for a loop's carried variables)
+  is copied on entry; the others read the caller's memory. Nothing inside a closure body
+  moves (`TypedProgram::moves` never enters one), so a read of a parameter that keeps the
+  value (a returned value, a list element, a field) copies it.
 - The glue of a fn value calls the env glue: op 0 deep-copies the block into the arena,
   1 to the heap (a `Store` value holding a fn), 2 frees a heap copy. A null `env` is
   copied as null. So copying a fn value copies every capture, and a closure carried
@@ -401,9 +411,12 @@ position, even with no buffer.
   kernel without a trim: ember's `FLUSHDB` (`db.values()` copies the keyspace into the
   arena) left 10 MB of freed chunks resident until the next trim while chunks were
   `malloc` blocks (2026-11-04).
-  `spawn` hands the new task a pointer to the arguments in the parent's memory. The task
-  deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before the parent
-  continues (`ignite_rt_spawn` blocks until then and returns 1).
+  `spawn` hands the new task a pointer to the arguments in the parent's memory: an owned
+  argument (a temporary or a moved place) moved into a block in the parent's frame, a
+  borrowed aggregate (a variable, a field, a constant) as its place's pointer, not copied.
+  The task deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before
+  the parent continues (`ignite_rt_spawn` blocks until then and returns 1), so the places
+  are unchanged while the task reads them.
 
   A stream lives as long as on the Rust target, where each task and binding holds a clone
   of an `Arc` (story `llvm-stream-ownership`). Each handle-table entry counts its owners:

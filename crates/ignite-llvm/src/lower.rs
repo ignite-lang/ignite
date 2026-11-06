@@ -762,6 +762,37 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         (code, env)
     }
 
+    /// The operands of a call through a fn value, `None` when an argument
+    /// does not return. A fn value borrows its aggregate parameters
+    /// (`docs/llvm.md` section 3.1), so a borrowed place goes as its own
+    /// pointer, unless a later argument modifies a variable or mentions the
+    /// place's root (it could move the place into a callee that changes
+    /// it): then the argument is copied when it is evaluated.
+    fn value_operands(&mut self, args: &[Expr], params: &[Ty]) -> Option<Vec<Option<String>>> {
+        let mut operands = Vec::new();
+        for (i, (arg, ty)) in args.iter().zip(params).enumerate() {
+            let v = self.expr(arg, true);
+            if v == Val::Never {
+                return None;
+            }
+            let root = crate::region::root(arg, self.cx.types);
+            let borrow = is_aggregate(ty)
+                && matches!(v, Val::Ptr(_, false))
+                && args[i + 1..].iter().all(|later| {
+                    crate::region::modified_by(later, self.cx.types).is_empty()
+                        && root
+                            .as_ref()
+                            .is_none_or(|n| !crate::region::mentions(later, n))
+                });
+            if borrow {
+                operands.push(Some(format!("ptr {}", self.ptr(&v))));
+            } else {
+                operands.push(self.arg(ty, v));
+            }
+        }
+        Some(operands)
+    }
+
     /// Call a fn value (`docs/llvm.md` section 3): its code with its
     /// environment first.
     fn call_value(&mut self, parts: &(String, String), ret: &Ty, args: Vec<Option<String>>) -> Val {
@@ -770,7 +801,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     }
 
     /// A fn value of the function `symbol` with `sig`: a thunk that ignores
-    /// the environment, and a null environment.
+    /// the environment, and a null environment. A fn value borrows its
+    /// aggregate parameters (`docs/llvm.md` section 3.1), so the thunk
+    /// passes a copy to each parameter `symbol` consumes and the pointer
+    /// it was given to each one `symbol` borrows.
     fn fn_value(&mut self, symbol: &str, sig: &FnSig) -> Val {
         let callee = self.function(symbol, &sig.params, &sig.ret);
         let thunk = format!("fnval.{symbol}");
@@ -782,17 +816,39 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             .collect();
         let mut header = vec!["ptr %env".to_string()];
         header.extend(typed.iter().cloned());
-        let call = format!("call {ret} {callee}({})", typed.join(", "));
-        let body = if ret == "void" {
-            format!("  {call}\n  ret void\n")
-        } else {
-            format!("  %r = {call}\n  ret {ret} %r\n")
-        };
-        let text = format!(
-            "define internal {ret} {}({}) {{\nentry:\n{body}}}\n",
+        let mut index = usize::from(is_aggregate(&sig.ret));
+        let mut copies = Vec::new();
+        for (i, ty) in sig.params.iter().enumerate() {
+            if is_aggregate(ty) {
+                if !self.env.reads_only(symbol, i) {
+                    copies.push((index, ty.clone()));
+                }
+                index += 1;
+            } else if scalar_type(ty).is_some() {
+                index += 1;
+            }
+        }
+        let header = format!(
+            "define internal {ret} {}({})",
             global(&thunk),
             header.join(", ")
         );
+        let mut body = Lower::new(self.m, self.cx, Func::new(header), Ty::Unit);
+        let mut operands = typed;
+        for (index, ty) in &copies {
+            let own = body.temp(ty);
+            body.copy(ty, &own, &format!("%a{index}"));
+            operands[*index] = format!("ptr {own}");
+        }
+        let call = format!("call {ret} {callee}({})", operands.join(", "));
+        if ret == "void" {
+            body.f.ins(call);
+            body.f.term("ret void");
+        } else {
+            let r = body.f.val(call);
+            body.f.term(format!("ret {ret} {r}"));
+        }
+        let text = body.f.finish("unreachable");
         self.m.helper(&thunk, &text);
         let ty = Ty::Fn(sig.params.clone(), Box::new(sig.ret.clone()));
         let t = self.temp(&ty);
@@ -2062,9 +2118,14 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             let at = body.gep("%env", *offset);
             body.bind_value(name, ty, Val::Ptr(at, false), true);
         }
+        let modified = crate::region::modified_by(&closure.body, self.cx.types);
         for (i, (name, ty)) in params.iter().enumerate() {
             let value = format!("%p{i}");
-            if is_aggregate(ty) {
+            if is_aggregate(ty) && modified.contains(name) {
+                let own = body.temp(ty);
+                body.copy(ty, &own, &value);
+                body.bind(name, own, ty.clone());
+            } else if is_aggregate(ty) {
                 body.bind(name, value, ty.clone());
             } else if is_void(ty) {
                 body.bind(name, String::new(), ty.clone());
@@ -2415,14 +2476,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 }
                 let fp = self.ptr(&f);
                 let parts = self.fn_parts(&fp);
-                let mut operands = Vec::new();
-                for (arg, ty) in args.iter().zip(&params) {
-                    let v = self.expr(arg, true);
-                    if v == Val::Never {
-                        return Val::Never;
-                    }
-                    operands.push(self.arg(ty, v));
-                }
+                let Some(operands) = self.value_operands(args, &params) else {
+                    return Val::Never;
+                };
                 self.call_value(&parts, &ret, operands)
             }
             Some(other) => match self.sig_of(&other, e) {
@@ -2469,14 +2525,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 }
                 let fp = self.ptr(&f);
                 let parts = self.fn_parts(&fp);
-                let mut operands = Vec::new();
-                for (arg, ty) in args.iter().zip(&params) {
-                    let v = self.expr(arg, true);
-                    if v == Val::Never {
-                        return Val::Never;
-                    }
-                    operands.push(self.arg(ty, v));
-                }
+                let Some(operands) = self.value_operands(args, &params) else {
+                    return Val::Never;
+                };
                 self.call_value(&parts, &ret, operands)
             }
             Some(other) => match self.sig_of(&other, e) {
@@ -4614,8 +4665,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         Val::Ptr(result, true)
     }
 
-    /// `list.map(f)`: a new list of `f` applied to a copy of each element,
-    /// in order.
+    /// `list.map(f)`: a new list of `f` applied to each element, in order;
+    /// an aggregate element is passed as its own pointer (fn values borrow).
     fn list_map(&mut self, receiver: &Expr, f: &Expr) -> Val {
         let element = match self.ty(receiver) {
             Ty::List(t) => *t,
@@ -4656,8 +4707,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let src = self
             .f
             .val(format!("getelementptr inbounds i8, ptr {data}, i64 {at}"));
-        let item = self.at(&element, src, false);
-        let operand = self.arg(&element, item);
+        let operand = if is_aggregate(&element) {
+            Some(format!("ptr {src}"))
+        } else {
+            let item = self.at(&element, src, false);
+            self.arg(&element, item)
+        };
         let result = self.call_value(&parts, &out, vec![operand]);
         let to = self.f.val(format!("mul i64 {i}, {}", out_layout.size));
         let dst = self
@@ -4758,9 +4813,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
 
     // ---- tasks -----------------------------------------------------------
 
-    /// `spawn f(args)`: the arguments are evaluated (copied) into an
-    /// environment in this frame; a per-site thunk copies them into the new
-    /// task's arena, calls `spawn_ready` and then `f`.
+    /// `spawn f(args)`: the arguments are evaluated into an environment in
+    /// this frame (a borrowed one as its place's pointer); a per-site thunk
+    /// copies them into the new task's arena, calls `spawn_ready` and then `f`.
     fn spawn(&mut self, call: &Expr) {
         let callee = self.cx.types.callee(call).cloned();
         let args: Vec<&Expr> = match &call.kind {
@@ -4848,9 +4903,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
 
     /// Store `values` into an environment, define the thunk `thunk` that
     /// runs `symbol` with copies of them, and start it (`docs/llvm.md`
-    /// section 4). `values` are deep-copied into the environment and
-    /// `ignite_rt_spawn` waits until the thunk has copied them again into its
-    /// own arena. The task is an owner of every stream argument
+    /// section 4). An owned value is moved into the environment and a
+    /// borrowed aggregate goes in as its place's pointer, not copied: the
+    /// parent waits in `ignite_rt_spawn` until the thunk has deep-copied
+    /// every value into the task's own arena (`spawn_ready`), and nothing
+    /// changes the place meanwhile. The task is an owner of every stream argument
     /// ([`is_stream`]; a handle-table entry counts its owners): the thunk
     /// registers it with `tcp_own`, so a failure releases it, and releases
     /// it when `symbol` returns; the stream closes when its last owner
@@ -4869,12 +4926,31 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         values: Vec<(Ty, Val, bool)>,
         prefix: &str,
     ) {
-        let layouts: Vec<Layout> = values.iter().map(|(ty, _, _)| self.layout(ty)).collect();
+        let by_place: Vec<bool> = values
+            .iter()
+            .map(|(ty, v, _)| is_aggregate(ty) && matches!(v, Val::Ptr(_, false)))
+            .collect();
+        let layouts: Vec<Layout> = values
+            .iter()
+            .zip(&by_place)
+            .map(|((ty, _, _), &place)| {
+                if place {
+                    Layout::scalar(8)
+                } else {
+                    self.layout(ty)
+                }
+            })
+            .collect();
         let (offsets, env_layout) = c_struct(&layouts);
         let env = self.f.alloca(env_layout);
-        for ((ty, v, _), offset) in values.iter().zip(&offsets) {
+        for (((ty, v, _), offset), &place) in values.iter().zip(&offsets).zip(&by_place) {
             let dst = self.gep(&env, *offset);
-            self.store_value(ty, &dst, v.clone());
+            if place {
+                let p = self.ptr(v);
+                self.f.ins(format!("store ptr {p}, ptr {dst}, align 8"));
+            } else {
+                self.store_value(ty, &dst, v.clone());
+            }
         }
         let callee = self.function(symbol, &sig.params, &sig.ret);
         let mut t = Lower::new(
@@ -4907,8 +4983,13 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         t.f.ins(format!("call void @ignite_rt_guard_push(ptr {jb})"));
         let mut operands = Vec::new();
         let mut streams = Vec::new();
-        for ((ty, _, _), offset) in values.iter().zip(&offsets) {
-            let src = t.gep("%env", *offset);
+        for (((ty, _, _), offset), &place) in values.iter().zip(&offsets).zip(&by_place) {
+            let slot = t.gep("%env", *offset);
+            let src = if place {
+                t.f.val(format!("load ptr, ptr {slot}, align 8"))
+            } else {
+                slot
+            };
             if is_aggregate(ty) {
                 let own = t.temp(ty);
                 t.copy(ty, &own, &src);
