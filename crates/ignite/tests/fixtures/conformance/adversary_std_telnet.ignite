@@ -10,11 +10,14 @@ import std.protocol.telnet.{Telnet, SessionLimits}
 // where a carriage return alone is actually desired; and the CR character
 // must be avoided in other contexts"; p14, RP14_1, IAC doubled). The
 // prompt after a reply goes through `answer_line`, not `session`, so the
-// console continues once before it closes.
+// console continues once before it closes. Each prompt is followed by
+// IAC GA (RFC 854 p5, RP5_4), the only command the server sends here, so
+// every IAC in the output starts IAC GA and no data byte is 255.
 
 type IoResult<T> = Result<T, IoError>
 
 const IAC: Byte = 255
+const GA: Byte = 249
 
 // Everything `client` reads until the end of the stream.
 test fn rest(client: PipeStream) -> IoResult<Bytes> {
@@ -49,6 +52,7 @@ test "adversary: replies and the prompt after a reply are NVT data" {
   client.write_all(b"hi\r\nbye\r\n")?
   let out = rest(client)?
   var expected = b"\r\0>\r\n"
+  expected.append([IAC, GA])
   expected.append(b"a\r\0b\r\n")
   expected.append(b"c\r\nd\r\n")
   expected.append([0xC3, 0xBF])
@@ -56,9 +60,15 @@ test "adversary: replies and the prompt after a reply are NVT data" {
   expected.append([0xEF, 0xBF, 0xBD])
   expected.append(b"\r\n")
   expected.append(b"\r\0>\r\n")
+  expected.append([IAC, GA])
   expected.append(b"b\r\0y\r\n")
   assert out == expected
-  for b in out {
-    assert b != IAC
+  var i = 0
+  while i < out.len() {
+    if out.at(i) == IAC {
+      assert i + 1 < out.len() && out.at(i + 1) == GA
+      i = i + 1
+    }
+    i = i + 1
   }
 }

@@ -374,7 +374,7 @@ fn terminal_prompt(port: u16) {
     stream.set_read_timeout(Some(LIVE_TIMEOUT)).unwrap();
     let deadline = Instant::now() + LIVE_TIMEOUT;
     let mut received = Vec::new();
-    while !received.ends_with(b"terminal> ") {
+    while !received.ends_with(b"terminal> \xff\xf9") {
         assert!(
             Instant::now() < deadline,
             "terminal prompt deadline: {received:?}"
@@ -816,7 +816,7 @@ impl TerminalSession {
     fn prompt(&mut self) -> String {
         let deadline = Instant::now() + LIVE_TIMEOUT;
         let mut response = Vec::new();
-        while !response.ends_with(b"terminal> ") {
+        while !response.ends_with(b"terminal> \xff\xf9") {
             assert!(
                 Instant::now() < deadline,
                 "session prompt deadline: {response:?}"

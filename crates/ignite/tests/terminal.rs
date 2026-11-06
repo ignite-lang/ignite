@@ -17,7 +17,10 @@ use std::time::{Duration, Instant};
 use crate::common::Target;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
-const PROMPT: &[u8] = b"terminal> ";
+/// The prompt as `terminald` sends it: the text, then IAC GA (RFC 854 p5).
+const PROMPT: &[u8] = b"terminal> \xff\xf9";
+/// The prompt as `tn` prints it: the Go Ahead is a command, not text.
+const SHOWN_PROMPT: &[u8] = b"terminal> ";
 
 struct Executables {
     terminald: PathBuf,
@@ -201,14 +204,17 @@ fn send_line(stream: &mut TcpStream, line: &str) {
 const STEPS: &[(&str, &[u8])] = &[
     (
         "help",
-        b"help\r\necho <text>\r\nstatus\r\nquit\r\nterminal> ",
+        b"help\r\necho <text>\r\nstatus\r\nquit\r\nterminal> \xff\xf9",
     ),
-    ("echo hello", b"hello\r\nterminal> "),
-    ("status", b"ready\r\nterminal> "),
-    ("frobnicate x", b"unknown command: frobnicate\r\nterminal> "),
-    ("", b"terminal> "),
-    ("echo", b"\r\nterminal> "),
-    ("  echo  x", b" x\r\nterminal> "),
+    ("echo hello", b"hello\r\nterminal> \xff\xf9"),
+    ("status", b"ready\r\nterminal> \xff\xf9"),
+    (
+        "frobnicate x",
+        b"unknown command: frobnicate\r\nterminal> \xff\xf9",
+    ),
+    ("", b"terminal> \xff\xf9"),
+    ("echo", b"\r\nterminal> \xff\xf9"),
+    ("  echo  x", b" x\r\nterminal> \xff\xf9"),
 ];
 
 fn transcript_on_raw_socket(target: Target) {
@@ -240,7 +246,7 @@ fn fragmented_input_is_reassembled(target: Target) {
     send_in_pieces(&mut stream, &[b"ec", b"ho hi\r", b"\n"]);
     assert_eq!(
         shown(&read_through_prompt(&mut stream)),
-        shown(b"hi\r\nterminal> ")
+        shown(b"hi\r\nterminal> \xff\xf9")
     );
     send_in_pieces(&mut stream, &[b"\xff", b"\xfd", b"\x01"]);
     assert_eq!(read_exactly(&mut stream, 3), [255, 252, 1]);
@@ -268,7 +274,7 @@ fn iac_iac_is_a_literal_byte(target: Target) {
     stream.write_all(b"echo a\xff\xffb\r\n").unwrap();
     assert_eq!(
         shown(&read_through_prompt(&mut stream)),
-        shown("a\u{FFFD}b\r\nterminal> ".as_bytes())
+        shown(&["a\u{FFFD}b\r\n".as_bytes(), PROMPT].concat())
     );
 }
 
@@ -278,12 +284,12 @@ fn cr_nul_ends_a_line(target: Target) {
     stream.write_all(b"echo x\r\0").unwrap();
     assert_eq!(
         shown(&read_through_prompt(&mut stream)),
-        shown(b"x\r\nterminal> ")
+        shown(b"x\r\nterminal> \xff\xf9")
     );
     send_line(&mut stream, "status");
     assert_eq!(
         shown(&read_through_prompt(&mut stream)),
-        shown(b"ready\r\nterminal> ")
+        shown(b"ready\r\nterminal> \xff\xf9")
     );
 }
 
@@ -291,7 +297,10 @@ fn are_you_there_is_answered(target: Target) {
     let server = Server::start(target);
     let mut stream = server.raw();
     stream.write_all(&[255, 246]).unwrap();
-    assert_eq!(shown(&read_exactly(&mut stream, 7)), shown(b"[yes]\r\n"));
+    assert_eq!(
+        shown(&read_exactly(&mut stream, 9)),
+        shown(b"[yes]\r\n\xff\xf9")
+    );
 }
 
 fn subnegotiation_is_skipped(target: Target) {
@@ -303,7 +312,7 @@ fn subnegotiation_is_skipped(target: Target) {
     send_line(&mut stream, "status");
     assert_eq!(
         shown(&read_through_prompt(&mut stream)),
-        shown(b"ready\r\nterminal> ")
+        shown(b"ready\r\nterminal> \xff\xf9")
     );
 }
 
@@ -317,7 +326,7 @@ fn subnegotiation_of_1024_bytes_is_skipped(target: Target) {
     send_line(&mut stream, "status");
     assert_eq!(
         shown(&read_through_prompt(&mut stream)),
-        shown(b"ready\r\nterminal> ")
+        shown(b"ready\r\nterminal> \xff\xf9")
     );
 }
 
@@ -358,7 +367,7 @@ fn line_of_4096_bytes_is_accepted(target: Target) {
     stream.write_all(&line).unwrap();
     stream.write_all(b"\r\n").unwrap();
     let mut expected = vec![b'a'; 4091];
-    expected.extend_from_slice(b"\r\nterminal> ");
+    expected.extend_from_slice(b"\r\nterminal> \xff\xf9");
     assert_eq!(shown(&read_through_prompt(&mut stream)), shown(&expected));
 }
 
@@ -497,7 +506,7 @@ fn tn_exits_when_input_ends_and_terminald_closes(target: Target) {
     let mut client = Client::start(target, server.port);
     client.close_stdin();
     let (status, stdout) = client.finish();
-    assert_eq!(shown(&stdout), shown(PROMPT));
+    assert_eq!(shown(&stdout), shown(SHOWN_PROMPT));
     assert_eq!(status, Some(0));
     server.assert_alive();
 }
@@ -676,7 +685,7 @@ fn tn_on_a_terminal_echoes_and_sends_a_line(target: Target) {
     let mut server = Server::start(target);
     let mut terminal = Terminal::open();
     let _tn = terminal.start_tn(target, server.port);
-    terminal.expect(PROMPT);
+    terminal.expect(SHOWN_PROMPT);
     terminal.type_keys(b"help\r");
     terminal.expect(b"help\r\nhelp\r\necho <text>\r\nstatus\r\nquit\r\nterminal> ");
     terminal.type_keys(b"echo hello\r");
@@ -688,7 +697,7 @@ fn tn_on_a_terminal_erases_with_backspace(target: Target) {
     let server = Server::start(target);
     let mut terminal = Terminal::open();
     let _tn = terminal.start_tn(target, server.port);
-    terminal.expect(PROMPT);
+    terminal.expect(SHOWN_PROMPT);
     terminal.type_keys(b"ecx\x08ho hi\x7f\x7fyo\r");
     terminal.expect(b"ecx\x08 \x08ho hi\x08 \x08\x08 \x08yo\r\nyo\r\nterminal> ");
 }
@@ -697,7 +706,7 @@ fn tn_on_a_terminal_quits_from_the_command_prompt(target: Target) {
     let mut server = Server::start(target);
     let mut terminal = Terminal::open();
     let mut tn = terminal.start_tn(target, server.port);
-    terminal.expect(PROMPT);
+    terminal.expect(SHOWN_PROMPT);
     terminal.type_keys(b"\x1d");
     terminal.expect(b"\ntelnet> ");
     terminal.type_keys(b"quit\r");
@@ -724,7 +733,7 @@ fn tn_on_a_terminal_answers_help_unknown_and_empty_commands(target: Target) {
     let server = Server::start(target);
     let mut terminal = Terminal::open();
     let mut tn = terminal.start_tn(target, server.port);
-    terminal.expect(PROMPT);
+    terminal.expect(SHOWN_PROMPT);
     terminal.type_keys(b"\x1dhelp\r");
     terminal.expect(b"\ntelnet> help\r\n");
     terminal.expect(b"close ");
@@ -746,25 +755,56 @@ fn tn_on_a_terminal_ends_the_session_on_ctrl_c(target: Target) {
     let mut server = Server::start(target);
     let mut terminal = Terminal::open();
     let mut tn = terminal.start_tn(target, server.port);
-    terminal.expect(PROMPT);
+    terminal.expect(SHOWN_PROMPT);
     terminal.type_keys(b"stat\x03");
     assert_eq!(exit_code(&mut tn), Some(0));
     terminal.assert_canonical_with_echo();
     server.assert_alive();
 }
 
+/// Whether urgent data is ahead of `stream`'s reader (`POLLPRI`).
+fn urgent_pending(stream: &TcpStream) -> bool {
+    use nix::poll::{PollFd, PollFlags, poll};
+    use std::os::fd::AsFd;
+    let mut fds = [PollFd::new(stream.as_fd(), PollFlags::POLLPRI)];
+    poll(&mut fds, 0u16).expect("poll");
+    fds[0]
+        .revents()
+        .is_some_and(|events| events.contains(PollFlags::POLLPRI))
+}
+
+/// Ctrl+C sends IAC IP and the Synch (RFC 854 p10): IAC DM with the DM as
+/// TCP urgent data. The test's socket reads urgent data inline
+/// (`SO_OOBINLINE`), so the first read stops before the DM while the
+/// urgent mark is pending, and the next starts with it.
 fn tn_on_a_terminal_sends_ctrl_c_as_iac_ip(target: Target) {
+    use std::os::fd::AsRawFd;
     let (listener, port) = listener();
     let mut terminal = Terminal::open();
     let _tn = terminal.start_tn(target, port);
     let mut stream = accept(&listener);
+    let on: nix::libc::c_int = 1;
+    // SAFETY: the descriptor belongs to `stream`, and `on` outlives the
+    // call with the size given.
+    let set = unsafe {
+        nix::libc::setsockopt(
+            stream.as_raw_fd(),
+            nix::libc::SOL_SOCKET,
+            nix::libc::SO_OOBINLINE,
+            (&raw const on).cast(),
+            std::mem::size_of::<nix::libc::c_int>() as nix::libc::socklen_t,
+        )
+    };
+    assert_eq!(set, 0, "SO_OOBINLINE");
     terminal.type_keys(b"a\x03b\r");
-    assert_eq!(
-        shown(&read_exactly(&mut stream, 5)),
-        shown(b"\xff\xf4b\r\n")
-    );
+    assert_eq!(shown(&read_exactly(&mut stream, 3)), shown(b"\xff\xf4\xff"));
+    assert!(urgent_pending(&stream), "the DM is urgent data");
+    assert_eq!(shown(&read_exactly(&mut stream, 4)), shown(b"\xf2b\r\n"));
+    assert!(!urgent_pending(&stream), "read past the urgent mark");
 }
 
+/// Ctrl+D on a partial line sends it without a line end (RFC 854 p5);
+/// Ctrl+D on an empty line closes the write half.
 fn tn_on_a_terminal_closes_its_side_on_ctrl_d(target: Target) {
     let (listener, port) = listener();
     let mut terminal = Terminal::open();
@@ -773,7 +813,7 @@ fn tn_on_a_terminal_closes_its_side_on_ctrl_d(target: Target) {
     terminal.type_keys(b"one\r");
     terminal.expect(b"one\r\n");
     terminal.type_keys(b"x\x04\x7f\x04");
-    assert_eq!(shown(&read_until_closed(&mut stream)), shown(b"one\r\n"));
+    assert_eq!(shown(&read_until_closed(&mut stream)), shown(b"one\r\nx"));
     stream.write_all(b"bye\r\n").unwrap();
     drop(stream);
     terminal.expect(b"bye\r\n");
@@ -865,7 +905,7 @@ fn accept_survives_running_out_of_descriptors(target: Target) {
     send_line(&mut first, "echo still here");
     assert_eq!(
         shown(&read_through_prompt(&mut first)),
-        shown(b"still here\r\nterminal> ")
+        shown(b"still here\r\nterminal> \xff\xf9")
     );
     drop(crowd);
     let mut later = server.raw();
@@ -931,7 +971,7 @@ fn a_task_that_cannot_start_closes_only_its_connection(target: Target) {
     send_line(&mut first, "echo still here");
     assert_eq!(
         shown(&read_through_prompt(&mut first)),
-        shown(b"still here\r\nterminal> ")
+        shown(b"still here\r\nterminal> \xff\xf9")
     );
     send_line(&mut first, "quit");
     assert_eq!(shown(&read_until_closed(&mut first)), shown(b"bye\r\n"));
@@ -1002,7 +1042,7 @@ fn a_silent_session_is_closed_after_the_idle_timeout(target: Target) {
     send_line(&mut active, "echo still here");
     assert_eq!(
         shown(&read_through_prompt(&mut active)),
-        shown(b"still here\r\nterminal> ")
+        shown(b"still here\r\nterminal> \xff\xf9")
     );
 }
 

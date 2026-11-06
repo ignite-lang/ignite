@@ -248,7 +248,7 @@ fn answers(port: u16, text: &str) -> bool {
     let prompt = |stream: &mut TcpStream| {
         let mut received = Vec::new();
         let mut bytes = [0; 1024];
-        while !received.ends_with(b"terminal> ") {
+        while !received.ends_with(b"terminal> \xff\xf9") {
             match stream.read(&mut bytes) {
                 Ok(0) | Err(_) => return None,
                 Ok(count) => received.extend_from_slice(&bytes[..count]),

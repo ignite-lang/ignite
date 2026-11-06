@@ -417,7 +417,7 @@ fn terminal_status(port: u16) -> String {
     let prompt = |stream: &mut TcpStream| {
         let deadline = Instant::now() + LIVE_TIMEOUT;
         let mut received = Vec::new();
-        while !received.ends_with(b"terminal> ") {
+        while !received.ends_with(b"terminal> \xff\xf9") {
             assert!(Instant::now() < deadline, "prompt deadline: {received:?}");
             let mut bytes = [0; 1024];
             let count = stream.read(&mut bytes).expect("read the terminal");

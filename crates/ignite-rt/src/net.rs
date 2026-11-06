@@ -488,6 +488,36 @@ pub extern "C" fn ignite_rt_tcp_set_idle_timeout(
     })
 }
 
+/// `i32 tcp_write_urgent(i64 stream, List* bytes, IoError* err)`: what was
+/// written and `bytes` sent at once, the last byte as urgent data
+/// (`ignite_io::TcpStream::write_urgent`).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_tcp_write_urgent(
+    handle: i64,
+    data: *const IgniteList,
+    err: *mut IgniteIoError,
+) -> i32 {
+    crate::entry(move || {
+        let written = stream(handle).and_then(|stream| stream.write_urgent_from(bytes(data)));
+        status(written, std::ptr::null_mut(), err)
+    })
+}
+
+/// `i32 tcp_urgent_pending(i64 stream, i8* out, IoError* err)`: 1 when an
+/// urgent byte is ahead of the reader, else 0
+/// (`ignite_io::TcpStream::urgent_pending`).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_tcp_urgent_pending(
+    handle: i64,
+    out: *mut i8,
+    err: *mut IgniteIoError,
+) -> i32 {
+    crate::entry(move || {
+        let pending = stream(handle).and_then(|stream| stream.urgent_pending());
+        status(pending.map(i8::from), out, err)
+    })
+}
+
 /// `i32 tcp_close(i64 stream, IoError* err)`: shut down the write half. A
 /// socket that is already disconnected is not an error.
 #[unsafe(no_mangle)]

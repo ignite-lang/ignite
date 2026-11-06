@@ -91,6 +91,10 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
             sig(PipeStreamSetIdleTimeout, vec![Ty::Int], io(Ty::Unit))
         }
         (Ty::PipeStream, "received_batches") => sig(PipeStreamReceivedBatches, vec![], Ty::Int),
+        (Ty::TcpStream, "write_urgent") => sig(TcpStreamWriteUrgent, vec![bytes()], io(Ty::Unit)),
+        (Ty::TcpStream, "urgent_pending") => sig(TcpStreamUrgentPending, vec![], io(Ty::Bool)),
+        (Ty::PipeStream, "write_urgent") => sig(PipeStreamWriteUrgent, vec![bytes()], io(Ty::Unit)),
+        (Ty::PipeStream, "urgent_pending") => sig(PipeStreamUrgentPending, vec![], io(Ty::Bool)),
         (Ty::Capability(kind), _) => capability_method(*kind, name),
         _ => None,
     }
@@ -218,7 +222,7 @@ pub(crate) fn child_exit() -> Ty {
 }
 
 /// `receiver.name(..)` for a receiver whose type is a type parameter bounded
-/// by `ByteStream` (`docs/slice.md` 18.3): the four stream methods, with
+/// by `ByteStream` (`docs/slice.md` 18.3): the six stream methods, with
 /// the signatures of `TcpStream`'s. `copy` comes from [`method`].
 pub(crate) fn stream_method(name: &str) -> Option<Sig> {
     use Builtin::*;
@@ -227,6 +231,8 @@ pub(crate) fn stream_method(name: &str) -> Option<Sig> {
         "write_all" => sig(StreamWriteAll, vec![bytes()], io(Ty::Unit)),
         "close" => sig(StreamClose, vec![], io(Ty::Unit)),
         "set_idle_timeout" => sig(StreamSetIdleTimeout, vec![Ty::Int], io(Ty::Unit)),
+        "write_urgent" => sig(StreamWriteUrgent, vec![bytes()], io(Ty::Unit)),
+        "urgent_pending" => sig(StreamUrgentPending, vec![], io(Ty::Bool)),
         _ => None,
     }
 }

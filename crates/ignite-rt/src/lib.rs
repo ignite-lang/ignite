@@ -48,7 +48,8 @@ pub use net::{
     ignite_rt_own_mark, ignite_rt_own_release, ignite_rt_tcp_accept, ignite_rt_tcp_bind,
     ignite_rt_tcp_close, ignite_rt_tcp_connect, ignite_rt_tcp_local_port, ignite_rt_tcp_own,
     ignite_rt_tcp_read, ignite_rt_tcp_release, ignite_rt_tcp_retain,
-    ignite_rt_tcp_set_idle_timeout, ignite_rt_tcp_write_all,
+    ignite_rt_tcp_set_idle_timeout, ignite_rt_tcp_urgent_pending, ignite_rt_tcp_write_all,
+    ignite_rt_tcp_write_urgent,
 };
 pub use process::{
     ignite_rt_args_port, ignite_rt_endpoint_of, ignite_rt_exit, ignite_rt_fail, ignite_rt_init,
@@ -225,7 +226,8 @@ pub use test::ignite_rt_test_main;
 mod pipe;
 pub use pipe::{
     ignite_rt_pipe_close, ignite_rt_pipe_pair, ignite_rt_pipe_read,
-    ignite_rt_pipe_received_batches, ignite_rt_pipe_set_idle_timeout, ignite_rt_pipe_write_all,
+    ignite_rt_pipe_received_batches, ignite_rt_pipe_set_idle_timeout,
+    ignite_rt_pipe_urgent_pending, ignite_rt_pipe_write_all, ignite_rt_pipe_write_urgent,
 };
 
 // Slice 17 (`docs/slice.md` 21.8): the capability entries, after the tests

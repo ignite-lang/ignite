@@ -24,7 +24,8 @@ use crate::common;
 /// The longest a test waits for one record or an exit.
 const TIMEOUT: Duration = Duration::from_secs(15);
 const DESIGN: &str = "examples/terminal/terminal.design.ignite";
-const PROMPT: &[u8] = b"terminal> ";
+/// The prompt as `std.protocol.telnet` sends it: the text, then IAC GA.
+const PROMPT: &[u8] = b"terminal> \xff\xf9";
 const NS_PER_MS: i64 = 1_000_000;
 const SIGKILL: i32 = 9;
 const SIGSTOP: i32 = 19;

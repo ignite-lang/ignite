@@ -713,6 +713,21 @@ pub enum Builtin {
     StreamClose,
     /// `s.set_idle_timeout(ms)` on a `ByteStream`-bounded receiver.
     StreamSetIdleTimeout,
+    /// `s.write_urgent(data) -> Result<Unit, IoError>` on a `TcpStream`:
+    /// what was written and `data` sent at once, the last byte of `data`
+    /// as urgent data (`docs/slice.md` 18.8); effect `<root>.write`.
+    TcpStreamWriteUrgent,
+    /// `s.urgent_pending() -> Result<Bool, IoError>` on a `TcpStream`:
+    /// whether an urgent byte is ahead of the reader; effect `<root>.read`.
+    TcpStreamUrgentPending,
+    /// `p.write_urgent(data)` on a `PipeStream`.
+    PipeStreamWriteUrgent,
+    /// `p.urgent_pending()` on a `PipeStream`.
+    PipeStreamUrgentPending,
+    /// `s.write_urgent(data)` on a `ByteStream`-bounded receiver.
+    StreamWriteUrgent,
+    /// `s.urgent_pending()` on a `ByteStream`-bounded receiver.
+    StreamUrgentPending,
     /// `Directory.temporary() -> Result<Directory, IoError>`: test-only
     /// (`docs/slice.md` 21.8).
     DirectoryTemporary,
