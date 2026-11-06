@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:typed-program-json
 kind: story
-status: active
+status: implemented
 title: ignite emit --typed-json prints the typed program
 summary: A versioned JSON document of the parsed and typed program, so tools written in Ignite can read Ignite
 relations:
@@ -18,10 +18,11 @@ scope:
   path: crates/ignite/src/typed_json.rs
 - confidence: inferred
   path: docs/slice.md
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-06T01:15:03Z", actor: "human:timo", revision: 6}
 - {from: "proposed", to: "active", at: "2026-11-06T03:08:34Z", actor: "human:timo", revision: 9}
+- {from: "active", to: "implemented", at: "2026-11-06T04:00:31Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: typed-program-json
 

@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T04:00:31Z",
+  "actor": "human:timo",
+  "artifact": "story:typed-program-json",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 8a6890764: 1290 passed, 0 failed, 11 ignored, EXIT=0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/58"
+  }
+}
