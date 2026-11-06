@@ -530,11 +530,12 @@ fn rejected(server: &Server, raw: &[u8], half_close: bool) -> u16 {
     reply.status
 }
 
-/// Heads a proxy could frame differently are 400; any
-/// `Transfer-Encoding` is 501, never framed by `Content-Length`.
+/// Heads a proxy could frame differently are 400, as is a request with both
+/// `Transfer-Encoding` and `Content-Length`; a coding Http does not know is
+/// 501; a chunked body is decoded, so the todo it carries is created.
 fn header_framing(target: Target) {
     let server = Server::start(target);
-    let cases: [(&[u8], u16); 7] = [
+    let cases: [(&[u8], u16); 10] = [
         (
             b"POST /todos HTTP/1.1\r\nTransfer-Encoding\t: chunked\r\nContent-Length: 3\r\n\r\nabc",
             400,
@@ -557,8 +558,20 @@ fn header_framing(target: Target) {
         ),
         (b"GET /todos HTTP/1.1\nHost: x\r\n\r\n", 400),
         (
-            b"POST /todos HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+            b"POST /todos HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n{\"tit\r\n8;x=y\r\nle\":\"x\"}\r\n0\r\nX-Trailer: 1\r\n\r\n",
+            201,
+        ),
+        (
+            b"POST /todos HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\nabc",
+            400,
+        ),
+        (
+            b"POST /todos HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\n",
             501,
+        ),
+        (
+            b"POST /todos HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: gzip\r\n\r\n",
+            400,
         ),
     ];
     for (raw, status) in cases {
