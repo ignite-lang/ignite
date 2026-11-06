@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:static-linking
 kind: story
-status: proposed
+status: active
 title: ignite build --static writes fully self-contained executables
 summary: Static linking against musl on both targets, so a compiled program runs without any shared library or dynamic loader
 scope:
@@ -20,9 +20,10 @@ scope:
   path: crates/ignite/tests
 - confidence: inferred
   path: docs/slice.md
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-06T01:06:55Z", actor: "human:timo", revision: 9}
+- {from: "proposed", to: "active", at: "2026-11-06T01:07:33Z", actor: "human:timo", revision: 10}
 ---
 # Story: static-linking
 
