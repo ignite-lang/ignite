@@ -6461,7 +6461,7 @@ own `Content-Length` and applies no transfer coding, so an application `Transfer
 | row | section | refused by `checked` | verified by |
 |---|---|---|---|
 | `RFC9112.R2_2_8` | 2.2 | a field name that is not a token (one starting with whitespace) | "a response header name that is not a token is 500" |
-| `RFC9112.R6_1_2`, `R6_1_4`, `R6_1_7`, `R6_1_8`, `R6_1_11`, `R6_2_1` | 6.1, 6.2 | `Transfer-Encoding` | "an application Transfer-Encoding is 500, so Http applies no transfer coding" |
+| `RFC9112.R6_1_2`, `R6_1_4`, `R6_1_7`, `R6_1_8`, `R6_1_11`, `R6_2_1` | 6.1, 6.2 | `Transfer-Encoding` | "an application Transfer-Encoding is 500 and Http applies no transfer coding" |
 | `RFC9110.R5_3_3` | 5.3 | `Content-Length`; a repeated name other than a list field of RFC 9110 or 9111 and `Set-Cookie` | "a repeated response field is 500 unless it is a list or Set-Cookie" |
 | `RFC9110.R5_6_1_1_1` | 5.6.1.1 | an empty element of a list field (commas inside a quoted-string do not count) | "an empty element of a response list field is 500" |
 | `RFC9110.R5_6_3_4` | 5.6.3 | whitespace beside `=` in an authentication field's `auth-param`, the fields whose grammar has BWS | "BWS in a response's auth-param is 500" |

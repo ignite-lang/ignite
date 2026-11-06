@@ -916,7 +916,7 @@ fn removing_a_satisfies_from_a_must_is_e090() {
 /// its fn and a passing test that names it (19.22).
 #[test]
 fn http_matrix_lists_the_chunked_and_host_gaps() {
-    const TRANSFER_ENCODING: &str = "test \"an application Transfer-Encoding is 500, so Http applies no transfer coding\" passed";
+    const TRANSFER_ENCODING: &str = "test \"an application Transfer-Encoding is 500 and Http applies no transfer coding\" passed";
     const CLOSED: [(&str, &str, &str, &str); 12] = [
         (
             "rfc9112",

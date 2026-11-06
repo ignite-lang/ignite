@@ -452,7 +452,7 @@ test "a response header name that is not a token is 500" verifies [RFC9112.R2_2_
   assert checked_status([("X-Custom_1", "a")]) == 200
 }
 
-test "an application Transfer-Encoding is 500, so Http applies no transfer coding" verifies [
+test "an application Transfer-Encoding is 500 and Http applies no transfer coding" verifies [
   RFC9112.R6_1_2, RFC9112.R6_1_4, RFC9112.R6_1_7, RFC9112.R6_1_8, RFC9112.R6_1_11, RFC9112.R6_2_1
 ] {
   for value in ["chunked", "chunked, chunked", "gzip", "gzip, chunked", ""] {
@@ -465,7 +465,7 @@ test "an application Transfer-Encoding is 500, so Http applies no transfer codin
   assert served_gzip == render(status_response(500), true).to_text() + reply("GET /a? ", "close")
 }
 
-test "a response's own Content-Length is 500, Http frames it" verifies [RFC9112.R6_2_1, RFC9110.R5_3_3] {
+test "a response's own Content-Length is 500 since Http frames it" verifies [RFC9112.R6_2_1, RFC9110.R5_3_3] {
   assert checked_status([("Content-Length", "2")]) == 500
   assert checked_status([("content-length", "0")]) == 500
   let length = render(checked(Response { status = 200, body = "hi" }), true).to_text()
