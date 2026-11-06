@@ -153,6 +153,11 @@ test "an effectful field" {
 - A closure that performs effects on a captured value charges them to the function that
   creates the closure, at the point of creation (E016 if that function's `requires` lacks
   them).
+- `xs.map(f)` on a `List` takes a closure or a named fn that performs effects of the function
+  calling `map`: `ids.map(|id| store.get(id))` checks in a function with
+  `requires [store.read]`. An effect the caller's `requires` does not cover, or one on `f`'s
+  own parameter (the element), is E017 at `f`. Every other higher-order fn (`Option.map`,
+  `Result.map`, …) takes a pure fn.
 
 ## `spawn`
 

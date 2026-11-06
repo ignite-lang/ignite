@@ -1,0 +1,1 @@
+e016_list_map_fn_value.ignite:11:66: error[E016]: missing effect `clock.read` for `stamps`; add it to the `requires` of `caller`

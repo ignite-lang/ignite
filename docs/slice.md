@@ -923,7 +923,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E014 | retired in slice 6 (was: constant used as a pattern; constant patterns are allowed, section 4.3) |
 | E015 | constant cycle |
 | E016 | effect missing from `requires` (section 5.1); a closure's effects not on its own parameters are charged where it is created (section 13.3) |
-| E017 | effectful function used as a value where no effectful fn type covering its effects is expected (section 4.5); reported by the type checker since slice 7 |
+| E017 | effectful function used as a value where no effectful fn type covering its effects is expected (section 4.5); reported by the type checker since slice 7; also a fn passed to `List.map` with an effect on its parameter or one the caller's `requires` does not cover (20.4.3) |
 | E020 | unsupported or malformed resource, component, contract, policy or assembly (also: a kind that is no record type, two components with one executable name, a `system` in a std module); reported by the type checker since slice 10. The Rust backend keeps E020 for a malformed resource and, when it runs without the typed program, for every component (a component is executable only through the type checker) |
 | E021 | reserved (unused since slice 1) |
 | E030 | protocol role missing or malformed, a role without `requires`, a call to a role the protocol lacks (the component rules of slices 1 to 9, `Client` without `connect` and `Service` without `serve`, retired with those kinds in slice 10: a kind's `main` calls the role, and a missing role is this E030 at the call); since slice 14 a `serve` role takes 2 parameters `(stream, application)` or 3 `(stream, limits, application)` (section 18.6) |
@@ -6808,6 +6808,34 @@ Calling it through its `let` binding, or passing the capability as a parameter o
 fn type, works today (p04b, row 8). Wave C does not need more: actors P1 says "No closures", and
 `call(fn)` is P4 (20.13).
 
+`List.map` is the exception since story `effectful-list-map` (20.13 row 1): its fn may have the
+effects of the code that calls `map`. The rule, as landed:
+
+- `xs.map(f)`, `xs` a `List` (`Bytes` included), `f` a closure literal or the name of a
+  module-level fn (not a local binding), may be effectful where `map` is called inside a fn
+  body, a role body, a test body or a closure body. In a constant, a field default or a
+  property `map` takes a pure fn, as before.
+- An effect of `f` on its own parameter (the element: `|s| s.get(1)` over a `List<Store<T>>`,
+  or a named fn with `requires [s.read]` on its parameter `s`) is E017 everywhere: ``effectful
+  closure passed to `map` needs `s.read` on its parameter `s`, the list's element; `map` passes
+  on only its caller's effects``.
+- Every other effect (on a capture's roots, or ambient) must be covered by the `requires` of the
+  fn or role that calls `map`, when it has one; otherwise E017 at `f`: ``effectful closure passed
+  to `map` needs `store.read`, which the `requires` of `names` does not cover`` (for a named fn,
+  ``effectful function `stamp` passed to …``). The type checker reports it; `ignite-check` does
+  not charge such a closure where it is created, so no E016 comes beside the E017.
+- In a fn without `requires`, `ignite-check` adds those effects to the inferred set: a closure's
+  where it is created (13.3), a named fn's at the `map` call, so a caller whose `requires` lacks
+  them is E016 (fixture `e016_list_map_fn_value`). A test body and a closure body accept them as
+  they accept any effect.
+- Both backends and the evaluator lower an effectful fn value as a pure one; nothing changes
+  there. Tests: fixtures `valid_effectful_list_map` and `e017_effectful_list_map`
+  (`ignite-types`), the inline test "List.map takes a fn with the effects of its caller" in
+  `std/text.ignite` (both targets).
+- Not covered: a local binding of effectful fn type passed to `map` (E040, `map` takes a pure fn
+  there), and `Option.map`, `and_then`, `Result.map`, `map_err` and every other higher-order fn,
+  which take a pure fn (E017).
+
 ### 20.5 Rest patterns (D6)
 
 `docs/syntax.md` P9 and R7 as written, contracted here (vision T2).
@@ -7011,7 +7039,7 @@ Records: a "Slice 16" paragraph in `AGENTS.md`'s gate-time section; raw logs and
 
 | # | item | why | where it goes |
 |---|---|---|---|
-| 1 | an effectful closure (one that uses a captured capability) passed as a fn value; E017 stays | no fn type can name an effect on a capture (20.4.3); wave C P1 to P3 pass no closures | actors P4, or the slice that adds effect polymorphism |
+| 1 | an effectful closure (one that uses a captured capability) passed as a fn value; E017 stays | no fn type can name an effect on a capture (20.4.3); wave C P1 to P3 pass no closures | `List.map` landed (story `effectful-list-map`, 20.4.3: its fn may have the effects its caller's `requires` covers); every other fn type: actors P4, or the slice that adds effect polymorphism |
 | 2 | inferring an unannotated closure parameter from the closure body (p05) | an annotation works (p05b); needs inference variables the typer does not have | actors P4 |
 | 3 | capture by move (a closure taking a dead variable without a copy) | a capture copies once per closure creation, not per loop step; not on R1's path | later, with measurements |
 | 4 | moves of pattern bindings, `for` elements, closure parameters, fn-typed variables, inside closure bodies, at `spawn` arguments and operator operands (`a + b` on `Text`), and beside another argument that only reads an overlapping place (`answer(state, reply, state.table.values())`; binding the argument first moves) | D2; each needs its own aliasing argument on LLVM | additive, when a measurement asks for one |

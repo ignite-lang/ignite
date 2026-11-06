@@ -730,3 +730,26 @@ test "repeat concatenates copies" {
   assert repeat("", 5) == ""
   assert repeat("é", 2) == "éé"
 }
+
+test fn names_of(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires [store.read] {
+  return ids.map(|id| store.get(id))
+}
+
+test fn names_inferred(store: Store<Text>, ids: List<Int>) -> List<Text> = ids.map(|id| store.get(id).unwrap_or("?"))
+
+test fn stamped(n: Int) -> Text requires [clock.read] {
+  let now = Clock.monotonic()
+  return n.to_text()
+}
+
+test fn stamp_all(ns: List<Int>) -> List<Text> requires [clock.read] = ns.map(stamped)
+
+test "List.map takes a fn with the effects of its caller" {
+  let store: Store<Text> = Store.new()
+  store.put(1, "one")
+  store.put(3, "three")
+  assert names_of(store, [1, 2, 3]) == [Some("one"), None, Some("three")]
+  assert names_inferred(store, [3, 1, 2]) == ["three", "one", "?"]
+  assert [3, 1].map(|id| store.get(id)) == [Some("three"), Some("one")]
+  assert stamp_all([4, 5]) == ["4", "5"]
+}
