@@ -6,6 +6,7 @@
 mod common;
 mod compiles;
 mod golden;
+mod names;
 mod reachable;
 mod slice10;
 mod slice16;

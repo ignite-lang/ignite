@@ -1310,12 +1310,16 @@ pub fn package_name(program: &Program) -> String {
 /// The Rust name of the program crate of the Cargo package `package_name`:
 /// `-` as `_`, with a `_` after a name a crate cannot have in a path
 /// (`async`, `self`, `super_`; [`ident`]'s rule, since a crate name cannot
-/// be raw). [`cargo_toml`] names the lib so when it differs from the
-/// package name.
+/// be raw), and so does the name of a crate the generated code names
+/// (`std`, `ignite_io`, `ignite_std`). [`cargo_toml`] names the lib so
+/// when it differs from the package name.
 fn crate_name(package_name: &str) -> String {
     let name = package_name.replace('-', "_");
     if escapes_to(&name, |base| {
-        matches!(base, "self" | "Self" | "crate" | "super") || RUST_KEYWORDS.contains(&base)
+        matches!(
+            base,
+            "self" | "Self" | "crate" | "super" | "std" | "ignite_io" | "ignite_std"
+        ) || RUST_KEYWORDS.contains(&base)
     }) {
         format!("{name}_")
     } else {
@@ -1460,10 +1464,19 @@ fn escapes_to(name: &str, mangled: impl Fn(&str) -> bool) -> bool {
 /// does every name that is one of them followed by `_`s: `self` is
 /// `self_`, `self_` is `self__`. The mapping is one to one, so two Ignite
 /// names never become one Rust name.
+///
+/// A name that starts with `__` gets a `_` too, so every such name the
+/// program declares ends in `_` in Rust. The names the generator invents
+/// for its own locals and items (`__m`, `__x`, `__a0`, `__p1`,
+/// `__spawn_0`, `__ignite_*`) start with `__` and never end in `_`, so no
+/// program name can capture or duplicate one.
 fn ident(name: &str) -> String {
-    if escapes_to(name, |base| {
-        matches!(base, "self" | "Self" | "crate" | "super") || RUST_PRELUDE_NAMES.contains(&base)
-    }) {
+    if name.starts_with("__")
+        || escapes_to(name, |base| {
+            matches!(base, "self" | "Self" | "crate" | "super")
+                || RUST_PRELUDE_NAMES.contains(&base)
+        })
+    {
         format!("{name}_")
     } else if RUST_KEYWORDS.contains(&name) {
         format!("r#{name}")
@@ -6329,10 +6342,12 @@ fn is_duplicate(properties: &[FieldInit], property: &FieldInit) -> bool {
 
 /// A Rust variable for a resource, kept apart from the names `main` binds,
 /// escaped one to one as [`ident`] escapes `self`: `port` is `port_`,
-/// `port_` is `port__`.
+/// `port_` is `port__`. A name ending in `_endpoint` is escaped the same
+/// way (`x_endpoint` is `x_endpoint_`), so it is never the
+/// [`endpoint_variable`] of another resource.
 fn resource_variable(name: &str) -> String {
     if escapes_to(name, |base| {
-        matches!(base, "application" | "port" | "stream" | "error")
+        matches!(base, "application" | "port" | "stream" | "error") || base.ends_with("_endpoint")
     }) {
         format!("{name}_")
     } else {
@@ -6341,7 +6356,8 @@ fn resource_variable(name: &str) -> String {
 }
 
 /// The Rust variable holding the `Endpoint` value of a `TcpListener`
-/// resource used as a target.
+/// resource used as a target: [`resource_variable`] followed by
+/// `_endpoint`, a name no resource variable has.
 fn endpoint_variable(name: &str) -> String {
     format!("{}_endpoint", resource_variable(name))
 }
