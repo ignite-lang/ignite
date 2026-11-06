@@ -336,7 +336,14 @@ fn prepare_group(
         .zip(std.types)
         .chain(programs.iter().map(|p| (p.types.module.as_str(), &p.types)))
         .collect();
-    let test_modules = group.modules;
+    // The tests of the named files, then those of their sibling modules
+    // not named themselves (`docs/slice.md` 25.6).
+    let mut test_modules = group.modules;
+    for program in &programs {
+        if !test_modules.contains(&program.types.module) {
+            test_modules.push(program.types.module.clone());
+        }
+    }
     let tests: Vec<TestInfo> = test_modules
         .iter()
         .filter_map(|module| typed.get(module.as_str()))

@@ -94,3 +94,58 @@ fn llvm_test_runs_a_module_sibling() {
         "stdout: {stdout}"
     );
 }
+
+/// `ignite test FILE` on both targets in the directory of
+/// `fixtures/codespec_siblings` (`docs/slice.md` 25.6): its report lines.
+fn codespec_siblings_test(file: &str, target: &str) -> String {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codespec_siblings");
+    let out = tmp(&format!("codespec-siblings-{target}"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
+    command
+        .arg("test")
+        .arg(dir.join(file))
+        .args(["--target", target, "--out"])
+        .arg(&out)
+        .arg("--runtime")
+        .arg(common::runner_archive());
+    if target == "rust" {
+        command.arg("--target-dir").arg(out.join("cargo"));
+    }
+    let output = command.output().expect("run ignite test");
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{target} {file}: stdout: {stdout}\nstderr: {stderr}"
+    );
+    stdout
+}
+
+/// A program file runs the tests of its sibling modules and of another
+/// program file of its package it imports (`cs.reader`, from `reader.ignite`,
+/// which declares `package cs`); a sibling module given as the file imports
+/// its own sibling (`cs.util` imports `cs.fmt`, E031 before 25.6).
+#[test]
+fn test_runs_siblings_and_imported_program_files_on_both_targets() {
+    for target in ["rust", "llvm"] {
+        let app = codespec_siblings_test("app.ignite", target);
+        for line in [
+            "test cs/app reads and multiplies ... ok",
+            "test cs.util/util quadruples ... ok",
+            "test cs.fmt/fmt doubles ... ok",
+            "test cs.reader/reader parses ... ok",
+            "test result: ok. 4 passed; 0 failed;",
+        ] {
+            assert!(app.contains(line), "{target} app: no `{line}` in {app}");
+        }
+        let util = codespec_siblings_test("util.ignite", target);
+        for line in [
+            "test cs.util/util quadruples ... ok",
+            "test cs.fmt/fmt doubles ... ok",
+            "test result: ok. 2 passed; 0 failed;",
+        ] {
+            assert!(util.contains(line), "{target} util: no `{line}` in {util}");
+        }
+    }
+}

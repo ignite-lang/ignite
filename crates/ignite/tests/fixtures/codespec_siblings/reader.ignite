@@ -1,0 +1,23 @@
+package cs
+
+import std.option.{unwrap_or}
+
+// A program file of package `cs` with an executable of its own; `app.ignite`
+// imports it as `cs.reader`.
+
+fn read(text: Text) -> Int = Int.parse(text).unwrap_or(0)
+
+type Reader {
+  executable: Text
+}
+
+fn Reader.main(self: Reader) -> Result<Unit, IoError> = Stdout.write_all(read("7").to_text().to_bytes())
+
+system Reading {
+  component reader: Reader { executable = "reader" }
+}
+
+test "reader parses" {
+  assert read("42") == 42
+  assert read("x") == 0
+}
