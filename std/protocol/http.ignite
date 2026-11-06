@@ -13,8 +13,10 @@ import std.control.{Machine, Supervisor}
 // HTTP/1.1 server (RFC 9112) over one byte stream (a `TcpStream`, or a
 // `PipeStream` in tests): requests with a `Content-Length` body, keep-alive
 // until the client asks to close, and the limits of `HttpLimits`. By
-// default a head over 8 KiB is answered 431, a body over 1 MiB 413, a
-// malformed request 400 and any `Transfer-Encoding` 501 (only
+// default a head over 8 KiB is answered 431 (414 when the request line
+// alone is over it), a body over 1 MiB 413, a malformed request 400, an
+// HTTP/1.1 request without `Host` or with a repeated or invalid one 400,
+// and any `Transfer-Encoding` 501 (only
 // `Content-Length` framing is implemented, RFC 9112 section 6.1). Each of
 // those closes the connection after a lingering close: the reply is
 // written, the write half shut down, and up to 64 KiB of input drained for
@@ -31,6 +33,10 @@ import std.control.{Machine, Supervisor}
 // a value holding CR or LF, a `Transfer-Encoding` or `Content-Length` (Http
 // frames every response itself), a repeated field that is not a list, an
 // empty list element, BWS, an HTTP-date that is not an IMF-fixdate.
+//
+// An absolute-form request-target is accepted, its authority replacing
+// the received `Host`; HEAD is asked of the application as GET and
+// answered without content.
 
 type IoResult<T> = Result<T, IoError>
 
@@ -83,10 +89,6 @@ const MAXIMUM_LENGTH_DIGITS: Int = 18
 // parsing and framing fns, the `verifies` clauses on the tests.
 protocol Http conforms [RFC9112, RFC9110] scope { parties = [Server, Sender, Recipient, Any] } {
   unsupported RFC9112.R2_2_1 "the head is decoded to text before it is parsed: an obs-text octet that is not UTF-8 reaches the application as U+FFFD"
-  unsupported RFC9112.R3_3 "a request-target is bounded only by HttpLimits.head; a longer head is 431, not 414"
-  unsupported RFC9112.R3_2_6 "Host is not checked"
-  unsupported RFC9112.R3_2_2_5 "only the origin-form is accepted; an absolute-form request-target is 400"
-  unsupported RFC9112.R3_2_2_6 "only the origin-form is accepted; an absolute-form request-target is 400"
   unsupported RFC9112.R6_1_1 "only Content-Length framing; any Transfer-Encoding is 501"
   unsupported RFC9112.R6_3_3 "any Transfer-Encoding is 501, also when chunked is not the final coding, where 400 is required"
   unsupported RFC9112.R7_1_2 "only Content-Length framing; any Transfer-Encoding is 501"
@@ -104,15 +106,13 @@ protocol Http conforms [RFC9112, RFC9110] scope { parties = [Server, Sender, Rec
   not_applicable RFC9110.R5_6_4_1 "Http interprets no quoted-string: of a request it reads Connection, Content-Length and whether Transfer-Encoding is present"
   not_applicable RFC9110.R5_6_7_1 "Http parses no timestamp"
   not_applicable RFC9110.R5_6_7_4 "Http parses no timestamp"
-  unsupported RFC9110.R6_2_5 "every response says HTTP/1.1, while the chunked coding (RFC9112.R7_1_2) and the Host check (RFC9112.R3_2_6) are not implemented"
+  unsupported RFC9110.R6_2_5 "every response says HTTP/1.1, while the chunked coding (RFC9112.R7_1_2) is not implemented"
   not_applicable RFC9110.R6_5_1_1 "a response framed by Content-Length has no trailer section"
   not_applicable RFC9110.R6_5_1_2 "no trailer is received: any Transfer-Encoding is 501"
   not_applicable RFC9110.R6_5_2_1 "addresses the definition of trailer fields; Http defines none"
   unsupported RFC9110.R6_6_1_2 "no Date header is generated"
   not_applicable RFC9110.R6_6_1_3 "applies to an origin server without a clock; the host has one, see RFC9110.R6_6_1_2"
-  unsupported RFC9110.R9_1_1 "HEAD is passed to the application like any other method; Http does not answer it as GET without content"
   not_applicable RFC9110.R9_2_1_2 "addresses the resource owner: the application's handler decides what a method does"
-  unsupported RFC9110.R9_3_2_1 "a response to HEAD carries the application's body"
 
   fn serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> requires [
     stream.read, stream.write, application.*
@@ -191,6 +191,7 @@ fn reason(status: Int) -> Text = match status {
   404 => "Not Found"
   405 => "Method Not Allowed"
   413 => "Content Too Large"
+  414 => "URI Too Long"
   431 => "Request Header Fields Too Large"
   500 => "Internal Server Error"
   501 => "Not Implemented"
@@ -401,7 +402,12 @@ fn checked(response: Response) -> Response satisfies [
 
 // The head and body of `response`. A 204 has neither `Content-Length` nor
 // a body (RFC 9110 sections 8.6 and 15.3.5).
-fn render(response: Response, keep_alive: Bool) -> Bytes satisfies [RFC9112.R2_2_3, RFC9112.R4_4] {
+fn render(response: Response, keep_alive: Bool) -> Bytes satisfies [RFC9112.R2_2_3, RFC9112.R4_4] = render_message(response, keep_alive, true)
+
+// `render`, or without the body when `with_body` is false, as the answer
+// to HEAD: the `Content-Length` is the one the body would have had (RFC
+// 9110 sections 8.6 and 9.3.2).
+fn render_message(response: Response, keep_alive: Bool, with_body: Bool) -> Bytes {
   var head = "HTTP/1.1 {response.status} {reason(response.status)}\r\n"
   for header in response.headers {
     head = head + "{header.0}: {header.1}\r\n"
@@ -413,7 +419,9 @@ fn render(response: Response, keep_alive: Bool) -> Bytes satisfies [RFC9112.R2_2
   let connection = if keep_alive { "keep-alive" } else { "close" }
   head = head + "Connection: {connection}\r\n\r\n"
   var out = head.to_bytes()
-  out.append(body.to_bytes())
+  if with_body {
+    out.append(body.to_bytes())
+  }
   out
 }
 
@@ -460,7 +468,7 @@ test "an application Transfer-Encoding is 500 and Http applies no transfer codin
     assert checked(Response { status = 204, headers = [("transfer-encoding", value)] }) == status_response(500)
     assert checked(Response { status = 101, headers = [("TRANSFER-ENCODING", value)] }) == status_response(500)
   }
-  let served_gzip = served(b"GET /gzip HTTP/1.1\r\n\r\nGET /a HTTP/1.0\r\n\r\n")?
+  let served_gzip = served(b"GET /gzip HTTP/1.1\r\nHost: h\r\n\r\nGET /a HTTP/1.0\r\n\r\n")?
   assert !served_gzip.to_lower().contains("transfer-encoding")
   assert served_gzip == render(status_response(500), true).to_text() + reply("GET /a? ", "close")
 }
@@ -692,9 +700,9 @@ test "OWS is SP and HTAB only" verifies [RFC9112.R6_3_4, RFC9112.R6_3_5] {
   }
   assert parse_head("POST / HTTP/1.1\r\nContent-Length: 3\u{a0}")?.headers == [("content-length", "3\u{a0}")]
   for space in ["\u{a0}", "\u{85}", "\u{3000}"] {
-    assert next_of("POST / HTTP/1.1\r\nContent-Length: 3{space}\r\n\r\nabc".to_bytes())? == Reject(400)
+    assert next_of("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3{space}\r\n\r\nabc".to_bytes())? == Reject(400)
   }
-  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: \t3 \r\n\r\nabc")? != Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: \t3 \r\n\r\nabc")? != Reject(400)
 }
 
 // A field value: no control byte except tab, so no bare CR or LF.
@@ -717,6 +725,125 @@ fn is_target(text: Text) -> Bool {
   !text.is_empty()
 }
 
+// An absolute-form request-target (RFC 9112 section 3.2.2) of the `http`
+// or `https` scheme, in any case: its authority and the rest as an
+// origin-form target, `/` when the path is empty. `None` for any other
+// form.
+fn absolute_form(target: Text) -> Option<(Text, Text)> {
+  let lower = target.to_lower()
+  var scheme = 8
+  if lower.starts_with("http://") {
+    scheme = 7
+  } else if !lower.starts_with("https://") {
+    return None
+  }
+  let bytes = target.to_bytes()
+  var end = scheme
+  while end < bytes.len() && bytes.at(end) != b'/' && bytes.at(end) != b'?' {
+    end = end + 1
+  }
+  let rest = bytes.slice(end, bytes.len()).to_text()
+  let origin = if rest.starts_with("/") { rest } else { "/" + rest }
+  Some((bytes.slice(scheme, end).to_text(), origin))
+}
+
+// RFC 3986 `unreserved`, `sub-delims` and `%`: the bytes of a `reg-name`.
+fn is_reg_name_byte(b: Byte) -> Bool = match b {
+  b'-' | b'.' | b'_' | b'~' | b'!' | b'$' | b'&' | b'\'' | b'(' | b')' | b'*' | b'+' | b',' | b';' | b'=' | b'%' => true
+  b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' => true
+  _ => false
+}
+
+// A `Host` value (RFC 9110 section 7.2): `uri-host [ ":" port ]`, the host
+// a `reg-name`, an IPv4 address or an IP-literal in brackets, the port
+// digits. Empty is valid: the target URI has no authority.
+fn is_host(value: Text) -> Bool {
+  let bytes = value.to_bytes()
+  if bytes.is_empty() {
+    return true
+  }
+  var at = 0
+  if bytes.at(0) == b'[' {
+    at = 1
+    while at < bytes.len() && bytes.at(at) != b']' {
+      if !is_reg_name_byte(bytes.at(at)) && bytes.at(at) != b':' {
+        return false
+      }
+      at = at + 1
+    }
+    if at == bytes.len() || at == 1 {
+      return false
+    }
+    at = at + 1
+  } else {
+    while at < bytes.len() && bytes.at(at) != b':' {
+      if !is_reg_name_byte(bytes.at(at)) {
+        return false
+      }
+      at = at + 1
+    }
+    if at == 0 {
+      return false
+    }
+  }
+  if at == bytes.len() {
+    return true
+  }
+  bytes.at(at) == b':' && (at + 1 == bytes.len() || is_digits(bytes.slice(at + 1, bytes.len())))
+}
+
+// `request` once its `Host` is checked: `None` (400) when an HTTP/1.1
+// request has none, when it is repeated or its value is not a host. For an
+// absolute-form target, the received `Host` is replaced by the target's
+// `authority`, which must be a host and not empty.
+fn resolve_host(request: Request, authority: Option<Text>) -> Option<Request> satisfies [RFC9112.R3_2_6, RFC9112.R3_2_2_5] {
+  var hosts = []
+  var others = []
+  for header in request.headers {
+    if header.0 == "host" {
+      hosts.push(header.1)
+    } else {
+      others.push(header)
+    }
+  }
+  if hosts.len() > 1 || hosts.len() == 0 && request.version == "HTTP/1.1" {
+    return None
+  }
+  for value in hosts {
+    if !is_host(value) {
+      return None
+    }
+  }
+  match authority {
+    None => Some(request)
+    Some(host) => if host.is_empty() || !is_host(host) {
+      None
+    } else {
+      var resolved = request
+      others.push(("host", host))
+      resolved.headers = others
+      Some(resolved)
+    }
+  }
+}
+
+// Whether the request line of a head over the limit is itself longer than
+// `maximum` bytes and starts with a method: its request-target is longer
+// than Http parses, 414 rather than 431 (RFC 9112 section 3).
+fn target_too_long(data: Bytes, maximum: Int) -> Bool satisfies [RFC9112.R3_3] {
+  let line_end = match bytes_find_from(data, b"\r\n", 0) {
+    Some(at) => at
+    None => data.len()
+  }
+  if line_end <= maximum {
+    return false
+  }
+  match bytes_find_from(data, b" ", 0) {
+    Some(at) => at < line_end && is_token(data.slice(0, at).to_text())
+    None => false
+  }
+}
+
 // The request line and header lines of a head, without the blank line.
 fn parse_head(head: Text) -> Option<Request> satisfies [RFC9112.R2_2_4, RFC9112.R2_2_9, RFC9112.R5_1_1, RFC9112.R5_2_2, RFC9110.R5_5_1, RFC9110.R5_5_4] {
   let lines = head.split("\r\n")
@@ -727,7 +854,11 @@ fn parse_head(head: Text) -> Option<Request> satisfies [RFC9112.R2_2_4, RFC9112.
   if parts.at(2) != "HTTP/1.1" && parts.at(2) != "HTTP/1.0" {
     return None
   }
-  let (path, query) = parts.at(1).split_once("?").unwrap_or((parts.at(1), ""))
+  let target = match absolute_form(parts.at(1)) {
+    Some((_, rest)) => rest
+    None => parts.at(1)
+  }
+  let (path, query) = target.split_once("?").unwrap_or((target, ""))
   if !path.starts_with("/") {
     return None
   }
@@ -845,22 +976,35 @@ fn read_body<T: ByteStream>(stream: T, limits: HttpLimits, data: Bytes, end: Int
 }
 
 // What comes next on a connection: a request and the bytes after it, the
-// end of the connection, or a status to answer before closing.
-enum Next { Got(Request, Bytes), Close, Reject(Int) }
+// end of the connection, or a status to answer before closing;
+// `RejectHead` answers a HEAD request, without content.
+enum Next { Got(Request, Bytes), Close, Reject(Int), RejectHead(Int) }
 
-fn next_request<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> IoResult<Next> satisfies [RFC9112.R5_1_1, RFC9112.R6_1_13, RFC9112.R6_1_14, RFC9112.R6_3_4, RFC9112.R6_3_5, RFC9112.R6_3_8, RFC9112.R9_3_5, RFC9110.R5_3_4, RFC9110.R5_4_1] {
+// The rejection of a parsed `request` with `status`.
+fn rejected(request: Request, status: Int) -> Next = if request.method == "HEAD" { RejectHead(status) } else { Reject(status) }
+
+fn next_request<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> IoResult<Next> satisfies [RFC9112.R3_3, RFC9112.R3_2_6, RFC9112.R3_2_2_5, RFC9112.R3_2_2_6, RFC9112.R5_1_1, RFC9112.R6_1_13, RFC9112.R6_1_14, RFC9112.R6_3_4, RFC9112.R6_3_5, RFC9112.R6_3_8, RFC9112.R9_3_5, RFC9110.R5_3_4, RFC9110.R5_4_1] {
   let (outcome, data) = read_head(stream, limits, buffer)?
   let head_end = match outcome {
     Complete(end) => end
     Closed => return Ok(Close)
-    TooLarge => return Ok(Reject(431))
+    TooLarge => return Ok(Reject(if target_too_long(data, limits.head.to_int()) { 414 } else { 431 }))
   }
-  let request = match parse_head(data.slice(0, head_end - 4).to_text()) {
+  let head = data.slice(0, head_end - 4).to_text()
+  let parsed = match parse_head(head) {
     Some(parsed) => parsed
     None => return Ok(Reject(400))
   }
+  let authority = match absolute_form(head.split("\r\n").at(0).split(" ").at(1)) {
+    Some((host, _)) => Some(host)
+    None => None
+  }
+  let request = match resolve_host(parsed, authority) {
+    Some(resolved) => resolved
+    None => return Ok(rejected(parsed, 400))
+  }
   if header(request, "transfer-encoding") != None {
-    return Ok(Reject(501))
+    return Ok(rejected(request, 501))
   }
   var lengths = []
   for header in request.headers {
@@ -872,12 +1016,12 @@ fn next_request<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> 
     [] => 0
     [text] => match parse_length(text) {
       Some(n) => n
-      None => return Ok(Reject(400))
+      None => return Ok(rejected(request, 400))
     }
-    _ => return Ok(Reject(400))
+    _ => return Ok(rejected(request, 400))
   }
   if length > limits.body.to_int() {
-    return Ok(Reject(413))
+    return Ok(rejected(request, 413))
   }
   match read_body(stream, limits, data, head_end + length)? {
     None => Ok(Close)
@@ -921,8 +1065,9 @@ test "a Content-Length is 1 to 18 decimal digits" verifies [RFC9112.R6_3_4] {
 // shut down, then input drained (at most `limits.drain`, each read waiting
 // at most `limits.drain_timeout`) so unread input does not turn the close
 // into a reset that discards the reply at the client.
-fn reject<T: ByteStream>(stream: T, limits: HttpLimits, status: Int) -> IoResult<Unit> satisfies [RFC9112.R6_1_13, RFC9112.R6_1_14, RFC9112.R6_3_5, RFC9112.R9_6_6, RFC9112.R9_6_7] {
-  stream.write_all(render(status_response(status), false))?
+// A HEAD request gets the head of the reply only.
+fn reject<T: ByteStream>(stream: T, limits: HttpLimits, status: Int, head: Bool) -> IoResult<Unit> satisfies [RFC9112.R6_1_13, RFC9112.R6_1_14, RFC9112.R6_3_5, RFC9112.R9_6_6, RFC9112.R9_6_7, RFC9110.R9_3_2_1] {
+  stream.write_all(render_message(status_response(status), false, !head))?
   _ = stream.close()
   stream.set_idle_timeout(limits.drain_timeout.to_ms())?
   let maximum = limits.drain.to_int()
@@ -938,16 +1083,27 @@ fn reject<T: ByteStream>(stream: T, limits: HttpLimits, status: Int) -> IoResult
   Ok(())
 }
 
-fn session<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> satisfies [RFC9112.R9_6_3, RFC9112.R9_6_5, RFC9112.R9_6_6, RFC9112.R9_6_7] {
+// The request the application is asked: HEAD is asked as GET, and its
+// answer is sent without content (RFC 9110 sections 9.1 and 9.3.2).
+fn asked(request: Request) -> Request {
+  var out = request
+  if request.method == "HEAD" {
+    out.method = "GET"
+  }
+  out
+}
+
+fn session<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> satisfies [RFC9112.R9_6_3, RFC9112.R9_6_5, RFC9112.R9_6_6, RFC9112.R9_6_7, RFC9110.R9_1_1, RFC9110.R9_3_2_1] {
   var buffer = Bytes.empty()
   loop {
     match next_request(stream, limits, buffer)? {
       Close => return Ok(())
-      Reject(status) => return reject(stream, limits, status)
+      Reject(status) => return reject(stream, limits, status, false)
+      RejectHead(status) => return reject(stream, limits, status, true)
       Got(request, rest) => {
-        let response = checked(application.handle(application.state, request))
+        let response = checked(application.handle(application.state, asked(request)))
         let keep = keep_alive(request) && !response_closes(response)
-        stream.write_all(render(response, keep))?
+        stream.write_all(render_message(response, keep, request.method != "HEAD"))?
         if !keep {
           return Ok(())
         }
@@ -996,60 +1152,60 @@ test "next_request reads a head, its body and keeps the rest" verifies [RFC9112.
     path = "/todos"
     query = ""
     version = "HTTP/1.1"
-    headers = [("content-length", "5")]
+    headers = [("host", "h"), ("content-length", "5")]
     body = "hello"
   }
-  assert next_of(b"POST /todos HTTP/1.1\r\nContent-Length: 5\r\n\r\nhelloGET /")? == Got(request, b"GET /")
+  assert next_of(b"POST /todos HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nhelloGET /")? == Got(request, b"GET /")
   assert next_of(b"GET / HTTP/1.0\r\n\r\n")? == Got(get("HTTP/1.0", []), Bytes.empty())
 }
 
 test "next_request takes a pipelined request from the buffer" {
   let (client, server) = connected()?
   _ = client.close()
-  let buffer = b"GET / HTTP/1.1\r\n\r\nGET / HTTP/1.0\r\n\r\n"
-  assert next_request(server, HttpLimits {}, buffer)? == Got(get("HTTP/1.1", []), b"GET / HTTP/1.0\r\n\r\n")
+  let buffer = b"GET / HTTP/1.1\r\nHost: h\r\n\r\nGET / HTTP/1.0\r\n\r\n"
+  assert next_request(server, HttpLimits {}, buffer)? == Got(get("HTTP/1.1", [("host", "h")]), b"GET / HTTP/1.0\r\n\r\n")
 }
 
 test "next_request ends on a connection closed before a whole request" verifies [RFC9112.R6_3_8, RFC9110.R5_3_4] {
   assert next_of(Bytes.empty())? == Close
-  assert next_of(b"GET / HTTP/1.1\r\n")? == Close
-  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhi")? == Close
-  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 1048576\r\n\r\n")? == Close
+  assert next_of(b"GET / HTTP/1.1\r\nHost: h\r\n")? == Close
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nhi")? == Close
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 1048576\r\n\r\n")? == Close
 }
 
 test "a head over 8 KiB is 431" verifies [RFC9110.R5_4_1] {
-  match next_of(padded("GET / HTTP/1.1\r\n", 8192))? {
+  match next_of(padded("GET / HTTP/1.1\r\nHost: h\r\n", 8192))? {
     Got(request, rest) => {
-      assert request.headers.len() == 1 && rest.is_empty()
+      assert request.headers.len() == 2 && rest.is_empty()
     }
     _ => {
       assert false, "a head of 8192 bytes is read"
     }
   }
-  assert next_of(padded("GET / HTTP/1.1\r\n", 8193))? == Reject(431)
-  assert next_of(padded("GET / HTTP/1.1\r\n", 9000).slice(0, 8999))? == Reject(431)
+  assert next_of(padded("GET / HTTP/1.1\r\nHost: h\r\n", 8193))? == Reject(431)
+  assert next_of(padded("GET / HTTP/1.1\r\nHost: h\r\n", 9000).slice(0, 8999))? == Reject(431)
 }
 
 test "a body over 1 MiB is 413" {
-  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 1048577\r\n\r\n")? == Reject(413)
-  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 999999999999999999\r\n\r\n")? == Reject(413)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 1048577\r\n\r\n")? == Reject(413)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 999999999999999999\r\n\r\n")? == Reject(413)
 }
 
 test "a malformed head or Content-Length is 400" verifies [RFC9112.R6_3_4, RFC9112.R6_3_5] {
   assert next_of(b"NONSENSE\r\n\r\n")? == Reject(400)
-  assert next_of(b"GET / HTTP/1.1\r\nX: a\nContent-Length: 3\r\n\r\nabc")? == Reject(400)
-  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 3\r\nContent-Length: 3\r\n\r\nabc")? == Reject(400)
-  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 3, 3\r\n\r\nabc")? == Reject(400)
-  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: -1\r\n\r\n")? == Reject(400)
-  assert next_of(b"POST / HTTP/1.1\r\nContent-Length:\r\n\r\n")? == Reject(400)
-  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 1000000000000000000\r\n\r\n")? == Reject(400)
+  assert next_of(b"GET / HTTP/1.1\r\nHost: h\r\nX: a\nContent-Length: 3\r\n\r\nabc")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\nContent-Length: 3\r\n\r\nabc")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3, 3\r\n\r\nabc")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: -1\r\n\r\n")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length:\r\n\r\n")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 1000000000000000000\r\n\r\n")? == Reject(400)
 }
 
 test "any Transfer-Encoding is 501, also with a Content-Length" verifies [RFC9112.R5_1_1, RFC9112.R6_1_13] {
-  assert next_of(b"POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")? == Reject(501)
-  assert next_of(b"POST / HTTP/1.1\r\nTransfer-Encoding: identity\r\nContent-Length: 3\r\n\r\nabc")? == Reject(501)
-  assert next_of(b"POST / HTTP/1.1\r\nContent-Length: 3\r\ntransfer-encoding: chunked\r\n\r\nabc")? == Reject(501)
-  assert next_of(b"POST / HTTP/1.1\r\nTransfer-Encoding : chunked\r\n\r\n")? == Reject(400)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n")? == Reject(501)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: identity\r\nContent-Length: 3\r\n\r\nabc")? == Reject(501)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\ntransfer-encoding: chunked\r\n\r\nabc")? == Reject(501)
+  assert next_of(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding : chunked\r\n\r\n")? == Reject(400)
 }
 
 // Answers `<method> <path>?<query> <body>`; `/bad` gets a header with a
@@ -1106,7 +1262,7 @@ test fn reply(body: Text, connection: Text) -> Text {
 }
 
 test "the server answers pipelined requests until one asks to close" verifies [RFC9112.R9_6_3, RFC9112.R9_6_6] {
-  let input = b"GET /a?x HTTP/1.1\r\n\r\nPOST /b HTTP/1.1\r\nContent-Length: 2\r\n\r\nhiGET /c HTTP/1.1\r\nConnection: close\r\n\r\n"
+  let input = b"GET /a?x HTTP/1.1\r\nHost: h\r\n\r\nPOST /b HTTP/1.1\r\nHost: h\r\nContent-Length: 2\r\n\r\nhiGET /c HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n"
   let expected = reply("GET /a?x ", "keep-alive") + reply("POST /b? hi", "keep-alive") + reply("GET /c? ", "close")
   assert served(input)? == expected
   assert served_over_tcp(input)? == expected
@@ -1116,9 +1272,9 @@ test "the server answers pipelined requests until one asks to close" verifies [R
 
 test "the server answers a rejected request and closes" verifies [RFC9112.R6_3_5, RFC9112.R9_6_6, RFC9112.R9_6_7] {
   let rejected = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 12\r\nConnection: close\r\n\r\nBad Request\n"
-  assert served(b"GET /a HTTP/1.1\r\n\r\nBAD\r\n\r\nGET /b HTTP/1.1\r\n\r\n")? == reply("GET /a? ", "keep-alive") + rejected
+  assert served(b"GET /a HTTP/1.1\r\nHost: h\r\n\r\nBAD\r\n\r\nGET /b HTTP/1.1\r\nHost: h\r\n\r\n")? == reply("GET /a? ", "keep-alive") + rejected
   let server_error = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 22\r\nConnection: close\r\n\r\nInternal Server Error\n"
-  assert served(b"GET /bad HTTP/1.1\r\nConnection: close\r\n\r\n")? == server_error
+  assert served(b"GET /bad HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")? == server_error
 }
 
 // RFC 9112 section 6.1: a request with both framings, and an HTTP/1.0
@@ -1126,7 +1282,7 @@ test "the server answers a rejected request and closes" verifies [RFC9112.R6_3_5
 // closed without reading the next request.
 test "a request with Transfer-Encoding is answered 501 and the connection closed" verifies [RFC9112.R6_1_13, RFC9112.R6_1_14] {
   let not_implemented = render(status_response(501), false).to_text()
-  assert served(b"POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\nabcGET /n HTTP/1.1\r\n\r\n")? == not_implemented
+  assert served(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\nabcGET /n HTTP/1.1\r\nHost: h\r\n\r\n")? == not_implemented
   assert served(b"POST / HTTP/1.0\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\nabcGET /n HTTP/1.0\r\n\r\n")? == not_implemented
   assert served(b"POST / HTTP/1.0\r\nTransfer-Encoding: identity\r\n\r\nGET /n HTTP/1.0\r\n\r\n")? == not_implemented
 }
@@ -1134,7 +1290,7 @@ test "a request with Transfer-Encoding is answered 501 and the connection closed
 test "three pipelined requests over a pipe are answered in one batch" {
   let (client, server) = connected()?
   spawn Http.serve(server, HttpLimits {}, HttpApp { state = (), handle = answer })
-  client.write_all(b"GET /a HTTP/1.1\r\n\r\nGET /b HTTP/1.1\r\n\r\nGET /c HTTP/1.1\r\nConnection: close\r\n\r\n")?
+  client.write_all(b"GET /a HTTP/1.1\r\nHost: h\r\n\r\nGET /b HTTP/1.1\r\nHost: h\r\n\r\nGET /c HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?
   let out = read_to_end(client)?
   assert out == reply("GET /a? ", "keep-alive") + reply("GET /b? ", "keep-alive") + reply("GET /c? ", "close")
   assert client.received_batches() == 1
@@ -1142,17 +1298,17 @@ test "three pipelined requests over a pipe are answered in one batch" {
 
 test "a pipe client gets 400, 413 and 431" {
   assert served(b"NONSENSE\r\n\r\n")? == render(status_response(400), false).to_text()
-  assert served(b"POST / HTTP/1.1\r\nContent-Length: 1048577\r\n\r\n")? == render(status_response(413), false).to_text()
-  assert served(padded("GET / HTTP/1.1\r\n", 8193))? == render(status_response(431), false).to_text()
+  assert served(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 1048577\r\n\r\n")? == render(status_response(413), false).to_text()
+  assert served(padded("GET / HTTP/1.1\r\nHost: h\r\n", 8193))? == render(status_response(431), false).to_text()
   assert render(status_response(431), false).to_text().starts_with("HTTP/1.1 431 Request Header Fields Too Large\r\n")
   assert render(status_response(413), false).to_text().contains("\r\nConnection: close\r\n")
 }
 
 test "the limits record bounds the body" {
   let limits = HttpLimits { body = 4 bytes }
-  assert next_with(b"POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nabcde", limits)? == Reject(413)
-  assert served_with(b"POST /b HTTP/1.1\r\nContent-Length: 5\r\n\r\nabcde", limits)? == render(status_response(413), false).to_text()
-  assert served_with(b"POST /b HTTP/1.1\r\nContent-Length: 4\r\nConnection: close\r\n\r\nabcd", limits)? == reply("POST /b? abcd", "close")
+  assert next_with(b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nabcde", limits)? == Reject(413)
+  assert served_with(b"POST /b HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nabcde", limits)? == render(status_response(413), false).to_text()
+  assert served_with(b"POST /b HTTP/1.1\r\nHost: h\r\nContent-Length: 4\r\nConnection: close\r\n\r\nabcd", limits)? == reply("POST /b? abcd", "close")
 }
 
 test "the limits default to 8 KiB, 1 MiB, 30 s, 64 KiB and 1 s" {
@@ -1233,11 +1389,11 @@ test "a head split across deliveries at its blank line" verifies [RFC9110.R5_3_4
 }
 
 test "a Content-Length longer than the body, then close, gets no answer" verifies [RFC9112.R6_3_8] {
-  assert served_parts([b"POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nabc"], HttpLimits {}, true)? == ""
+  assert served_parts([b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nabc"], HttpLimits {}, true)? == ""
 }
 
 test "a Content-Length shorter than the body leaves the rest as the next head" verifies [RFC9112.R9_3_5] {
-  let input = b"POST / HTTP/1.1\r\nContent-Length: 2\r\n\r\nabGET /n HTTP/1.0\r\n\r\n"
+  let input = b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 2\r\n\r\nabGET /n HTTP/1.0\r\n\r\n"
   assert served(input)? == reply("POST /? ab", "keep-alive") + reply("GET /n? ", "close")
 }
 
@@ -1246,26 +1402,26 @@ test "a response with the close option ends the connection" verifies [RFC9112.R9
   assert !response_closes(Response { status = 200, headers = [("Connection", "keep-alive")] })
   assert !response_closes(Response { status = 200, headers = [("X", "close")] })
   let closing = "HTTP/1.1 200 OK\r\nconnection: Upgrade,\tClose \r\nContent-Length: 7\r\nConnection: close\r\n\r\nclosing"
-  assert served(b"GET /a HTTP/1.1\r\n\r\nGET /close HTTP/1.1\r\n\r\nGET /b HTTP/1.1\r\n\r\n")? == reply("GET /a? ", "keep-alive") + closing
+  assert served(b"GET /a HTTP/1.1\r\nHost: h\r\n\r\nGET /close HTTP/1.1\r\nHost: h\r\n\r\nGET /b HTTP/1.1\r\nHost: h\r\n\r\n")? == reply("GET /a? ", "keep-alive") + closing
 }
 
 test "a request after Connection: close is not answered" verifies [RFC9112.R9_6_3, RFC9112.R9_6_5] {
-  let input = b"GET /a HTTP/1.1\r\nConnection: close\r\n\r\nGET /b HTTP/1.1\r\n\r\n"
+  let input = b"GET /a HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\nGET /b HTTP/1.1\r\nHost: h\r\n\r\n"
   assert served(input)? == reply("GET /a? ", "close")
 }
 
 test "pipelined heads whose total crosses the head limit are each within it" {
   let limits = HttpLimits { head = 64 bytes }
-  var input = padded("GET /a HTTP/1.1\r\n", 60)
-  input.append(padded("GET /b HTTP/1.1\r\n", 60))
+  var input = padded("GET /a HTTP/1.1\r\nHost: h\r\n", 60)
+  input.append(padded("GET /b HTTP/1.1\r\nHost: h\r\n", 60))
   input.append(padded("GET /c HTTP/1.0\r\n", 60))
   assert served_with(input, limits)? == reply("GET /a? ", "keep-alive") + reply("GET /b? ", "keep-alive") + reply("GET /c? ", "close")
 }
 
 test "a pipelined request over the head limit after two within it" {
   let limits = HttpLimits { head = 64 bytes }
-  var input = padded("GET /a HTTP/1.1\r\n", 60)
-  input.append(padded("GET /b HTTP/1.1\r\n", 64))
+  var input = padded("GET /a HTTP/1.1\r\nHost: h\r\n", 60)
+  input.append(padded("GET /b HTTP/1.1\r\nHost: h\r\n", 64))
   input.append(padded("GET /c HTTP/1.0\r\n", 65))
   let out = served_with(input, limits)?
   assert out.starts_with(reply("GET /a? ", "keep-alive") + reply("GET /b? ", "keep-alive") + "HTTP/1.1 431 ")
@@ -1273,7 +1429,7 @@ test "a pipelined request over the head limit after two within it" {
 
 test "pipelined bodies whose total crosses the body limit are each within it" {
   let limits = HttpLimits { body = 4 bytes }
-  let input = b"POST /a HTTP/1.1\r\nContent-Length: 4\r\n\r\nabcdPOST /b HTTP/1.0\r\nContent-Length: 4\r\n\r\nefgh"
+  let input = b"POST /a HTTP/1.1\r\nHost: h\r\nContent-Length: 4\r\n\r\nabcdPOST /b HTTP/1.0\r\nContent-Length: 4\r\n\r\nefgh"
   assert served_with(input, limits)? == reply("POST /a? abcd", "keep-alive") + reply("POST /b? efgh", "close")
 }
 
@@ -1293,7 +1449,67 @@ test "an empty write delivers nothing and the closed connection gets no answer" 
 test "the HTTP idle timeout alone ends a pipe connection" {
   let (client, server) = Pipe.pair()
   client.set_idle_timeout(0)?
-  client.write_all(b"GET /i HTTP/1.1\r\n\r\n")?
+  client.write_all(b"GET /i HTTP/1.1\r\nHost: h\r\n\r\n")?
   spawn Http.serve(server, HttpLimits { idle_timeout = 20 ms }, HttpApp { state = (), handle = answer })
   assert read_to_end(client)? == reply("GET /i? ", "keep-alive")
+}
+
+// The head of `reply(body, connection)`, without its body.
+test fn reply_head(body: Text, connection: Text) -> Text = reply(body, connection).split("\r\n\r\n").at(0) + "\r\n\r\n"
+
+test "a request-target longer than the head limit is 414" verifies [RFC9112.R3_3] {
+  let limits = HttpLimits { head = 64 bytes }
+  let long = "/" + repeat("a", 80)
+  assert next_with("GET {long} HTTP/1.0\r\n\r\n".to_bytes(), limits)? == Reject(414)
+  assert next_with("GET {long}".to_bytes(), limits)? == Reject(414)
+  assert status_line(served_with("GET {long} HTTP/1.1\r\nHost: h\r\n\r\n".to_bytes(), limits)?) == "HTTP/1.1 414 URI Too Long"
+  let huge = "/" + repeat("b", 9000)
+  assert status_line(served("GET {huge} HTTP/1.1\r\nHost: h\r\n\r\n".to_bytes())?) == "HTTP/1.1 414 URI Too Long"
+  assert next_with(padded("GET / HTTP/1.0\r\n", 65), limits)? == Reject(431)
+  assert next_with(repeat("x", 80).to_bytes(), limits)? == Reject(431)
+  assert next_with("G@T {long}".to_bytes(), limits)? == Reject(431)
+}
+
+test "an HTTP/1.1 request has exactly one valid Host or is 400" verifies [RFC9112.R3_2_6] {
+  assert next_of(b"GET / HTTP/1.1\r\n\r\n")? == Reject(400)
+  assert next_of(b"GET / HTTP/1.1\r\nHost: a\r\nHost: a\r\n\r\n")? == Reject(400)
+  assert next_of(b"GET / HTTP/1.0\r\nHost: a\r\nhost: b\r\n\r\n")? == Reject(400)
+  for value in ["a b", "x@y", "a/b", "a:b:c", "a:8x", ":80", "[::1", "[]", "[::1]x", "a?"] {
+    assert next_of("GET / HTTP/1.1\r\nHost: {value}\r\n\r\n".to_bytes())? == Reject(400)
+  }
+  for value in ["", "example.com", "example.com:8080", "h:", "127.0.0.1:80", "[::1]:8080", "[v1.x]", "a%20b"] {
+    assert next_of("GET / HTTP/1.1\r\nHost: {value}\r\n\r\n".to_bytes())? == Got(get("HTTP/1.1", [("host", value)]), Bytes.empty())
+  }
+  assert next_of(b"GET / HTTP/1.0\r\n\r\n")? == Got(get("HTTP/1.0", []), Bytes.empty())
+  assert served(b"GET /n HTTP/1.1\r\n\r\n")? == render(status_response(400), false).to_text()
+}
+
+test "an absolute-form target is accepted and its authority replaces Host" verifies [RFC9112.R3_2_2_5, RFC9112.R3_2_2_6] {
+  var expected = get("HTTP/1.1", [("x", "1"), ("host", "example.com:8080")])
+  expected.path = "/p/q"
+  expected.query = "a=1"
+  assert next_of(b"GET http://example.com:8080/p/q?a=1 HTTP/1.1\r\nHost: other\r\nX: 1\r\n\r\n")? == Got(expected, Bytes.empty())
+  assert next_of(b"GET HTTPS://e HTTP/1.1\r\nHost: e\r\n\r\n")? == Got(get("HTTP/1.1", [("host", "e")]), Bytes.empty())
+  var query = get("HTTP/1.0", [("host", "e")])
+  query.query = "q"
+  assert next_of(b"GET http://e?q HTTP/1.0\r\n\r\n")? == Got(query, Bytes.empty())
+  assert next_of(b"GET http:///p HTTP/1.1\r\nHost: e\r\n\r\n")? == Reject(400)
+  assert next_of(b"GET http://a b/ HTTP/1.1\r\nHost: e\r\n\r\n")? == Reject(400)
+  assert next_of(b"GET http://u@e/ HTTP/1.1\r\nHost: e\r\n\r\n")? == Reject(400)
+  assert next_of(b"GET http://e/ HTTP/1.1\r\n\r\n")? == Reject(400)
+  assert next_of(b"GET ftp://e/ HTTP/1.1\r\nHost: e\r\n\r\n")? == Reject(400)
+  assert served(b"GET http://e/x?y HTTP/1.0\r\n\r\n")? == reply("GET /x?y ", "close")
+}
+
+test "HEAD is answered as GET without content" verifies [RFC9110.R9_1_1, RFC9110.R9_3_2_1] {
+  assert asked(Request { method = "HEAD", path = "/", query = "", version = "HTTP/1.1", headers = [], body = "" }).method == "GET"
+  assert asked(get("HTTP/1.1", [])).method == "GET"
+  let input = b"HEAD /h?q HTTP/1.1\r\nHost: h\r\n\r\nGET /g HTTP/1.1\r\nHost: h\r\n\r\nHEAD /e HTTP/1.0\r\n\r\n"
+  let expected = reply_head("GET /h?q ", "keep-alive") + reply("GET /g? ", "keep-alive") + reply_head("GET /e? ", "close")
+  assert served(input)? == expected
+  assert expected.contains("Content-Length: 9\r\n")
+  assert served(b"HEAD / HTTP/1.1\r\n\r\n")? == render_message(status_response(400), false, false).to_text()
+  assert served(b"HEAD / HTTP/1.1\r\nHost: h\r\nContent-Length: 1048577\r\n\r\n")? == render_message(status_response(413), false, false).to_text()
+  assert next_of(b"HEAD / HTTP/1.1\r\n\r\n")? == RejectHead(400)
+  assert render_message(status_response(204), true, false) == render(status_response(204), true)
 }
