@@ -1,0 +1,83 @@
+package fixtures.clones
+
+// Copies the Rust target leaves out (story:rustgen-redundant-clones), under
+// `ignite test` on both targets (crates/ignite/tests/ignite_test.rs
+// `redundant_clones_on_both_targets`): a byte string literal read by
+// reference is one shared value and one taken by value is a fresh copy, so
+// changing the copy never changes the literal.
+
+fn size(b: Bytes) -> Int = b.len()
+
+fn crlf() -> Bytes = b"\r\n"
+
+fn grown(times: Int) -> Bytes {
+  var out = b"<"
+  var i = 0
+  while i < times {
+    out.append(b"ab")
+    i = i + 1
+  }
+  out.append(b">")
+  out
+}
+
+test "a byte string literal read by reference and by value" {
+  assert size(b"\r\n") == 2
+  assert b"\x00\xff" == Bytes.of([0, 255])
+  assert b"" == Bytes.empty()
+  var first = crlf()
+  first.append(b"!")
+  assert first == b"\r\n!"
+  assert crlf() == b"\r\n"
+  assert grown(2) == b"<abab>"
+  assert grown(2) == b"<abab>"
+  assert grown(0) == b"<>"
+  var i = 0
+  while i < 3 {
+    var line = b"x"
+    line.append(b"\r\n")
+    assert line == b"x\r\n"
+    assert size(b"\r\n") == 2
+    i = i + 1
+  }
+}
+
+// `Store.update` and `Store.upsert` whose result is discarded or read for
+// one field: the Rust target lends the stored value to a read under the
+// store's lock (`update_read`, `upsert_read`) instead of copying all of it.
+
+type Tally {
+  n: Int
+  name: Text
+}
+
+fn bumped(found: Option<Tally>) -> Tally = match found {
+  Some(t) => Tally { n = t.n + 1, name = t.name + "a" }
+  None => Tally { n = 1, name = "a" }
+}
+
+test "a discarded update or upsert stores the new value" {
+  let s: Store<Tally> = Store.new()
+  _ = s.upsert(1, |v| bumped(v))
+  _ = s.upsert(1, bumped)
+  assert s.get(1) == Some(Tally { n = 2, name = "aa" })
+  _ = s.update(1, |t| Tally { n = t.n * 10, name = t.name })
+  assert s.get(1) == Some(Tally { n = 20, name = "aa" })
+  _ = s.update(2, |t| Tally { n = t.n + 1, name = t.name })
+  assert s.get(2) == None
+}
+
+test "a field of an upsert result is the stored field" {
+  let s: Store<Tally> = Store.new()
+  assert s.upsert(5, |v| bumped(v)).n == 1
+  assert s.upsert(5, bumped).n == 2
+  let name = s.upsert(5, |v| bumped(v)).name
+  assert name == "aaa"
+  assert s.get(5) == Some(Tally { n = 3, name = "aaa" })
+  match s.upsert(5, bumped).name {
+    "aaaa" => {}
+    other => {
+      assert false, "upsert stored {other}"
+    }
+  }
+}

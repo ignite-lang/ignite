@@ -574,7 +574,7 @@ fn builtin_methods() {
         ),
         (
             method(name("Bytes"), "of", vec![list(vec![int(1), int(2)])]),
-            "(vec![1, 2]).iter().map(|x| *x as u8).collect::<Vec<u8>>()",
+            "vec![1u8, 2u8]",
         ),
         (
             method(name("Bytes"), "of", vec![list(vec![])]),

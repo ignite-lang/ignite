@@ -202,7 +202,19 @@ impl<T: Clone> Store<T> {
     /// result. The new value, or `None` (and `f` is not called) when `id`
     /// holds nothing. When `f` panics the old value stays.
     pub fn update(&self, id: i64, f: impl FnOnce(T) -> T) -> Option<T> {
-        self.replace_with(id, |old| f(old.clone()), T::clone)
+        self.update_read(id, f, T::clone)
+    }
+
+    /// [`Store::update`] that returns `read` of the new value, borrowed
+    /// under the lock, instead of a copy of it: the Rust target's form of
+    /// an `update` whose result is discarded (`read` is `|_| ()`).
+    pub fn update_read<R>(
+        &self,
+        id: i64,
+        f: impl FnOnce(T) -> T,
+        read: impl FnOnce(&T) -> R,
+    ) -> Option<R> {
+        self.replace_with(id, |old| f(old.clone()), read)
     }
 
     /// Store `f` of a copy of the value under `id`, or of `None` when it
@@ -211,7 +223,20 @@ impl<T: Clone> Store<T> {
     /// that upsert one new id lose neither write. The stored value. When `f`
     /// panics the store is unchanged.
     pub fn upsert(&self, id: i64, f: impl FnOnce(Option<T>) -> T) -> T {
-        let stored = self.upsert_with(id, |old| Ok::<T, Infallible>(f(old.cloned())), T::clone);
+        self.upsert_read(id, f, T::clone)
+    }
+
+    /// [`Store::upsert`] that returns `read` of the stored value, borrowed
+    /// under the lock, instead of a copy of it: the Rust target's form of
+    /// an `upsert` whose result is discarded (`read` is `|_| ()`) or read
+    /// for one field (`read` copies the field).
+    pub fn upsert_read<R>(
+        &self,
+        id: i64,
+        f: impl FnOnce(Option<T>) -> T,
+        read: impl FnOnce(&T) -> R,
+    ) -> R {
+        let stored = self.upsert_with(id, |old| Ok::<T, Infallible>(f(old.cloned())), read);
         match stored {
             Ok(value) => value,
         }
