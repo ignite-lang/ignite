@@ -157,6 +157,6 @@ pub struct Server<S: Clone + Send + Sync + 'static> {
 pub fn Server__main<S: Clone + Send + Sync + 'static>(self_: &Server<S>) -> IoResult<()> {
     loop {
         let stream = (self_.listener.accept())?;
-        { let __spawn_0 = stream.clone(); let __spawn_1 = self_.application.clone(); ignite_io::spawn(move || { if let Err(error) = Lines::serve(__spawn_0, __spawn_1) { ignite_io::log(&format!("task ended with error: {}", error)); } }); };
+        { let __spawn_0 = stream; let __spawn_1 = self_.application.clone(); ignite_io::spawn(move || { if let Err(error) = Lines::serve(__spawn_0, __spawn_1) { ignite_io::log(&format!("task ended with error: {}", error)); } }); };
     }
 }
