@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T06:07:41Z",
+  "actor": "human:timo",
+  "artifact": "story:codespec-friction",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "PRs 59, 60, 61 each gated on the merged head, EXIT=0, 0 failed (1292, 1293, 1294 passed)",
+    "reference": "https://github.com/ignite-lang/ignite/pull/61"
+  }
+}
