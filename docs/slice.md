@@ -521,7 +521,8 @@ Every generated file starts with
 | patterns `true`, `p \| q`, `(p, q)` | same |
 
 The `spawn` arguments are evaluated (and cloned, ownership rule) before the task starts, so
-the spawning function keeps its own copies.
+the spawning function keeps its own copies; an argument the moves analysis marks (dead after the
+`spawn`, 20.3.1) is moved into the task instead.
 
 **Ownership rule.** Rust moves what Ignite copies. A *place* (an identifier, or a place
 followed by `.field`) used in a value position is emitted with `.clone()`, except where
@@ -6539,7 +6540,7 @@ stderr. A test name is `<file>::<test>` in its crate's single integration-test b
 |---|---|---|---|---|
 | 1 | the moves analysis marks R1's shape | `cargo test -p ignite-types --test main moves::a_var_passed_and_reassigned_moves` | the test types the source of `run` and `step` of 20.1's probe p07 (inline in the test) and collects every expression for which `TypedProgram::moves` is true, as (line, col). The list is exactly the `s` in `s = step(s, i)`, the `state` in `var next = state` and the `next` that is `step`'s result; `consumed(&Callee::Fn(step), 0)` is true, `consumed(&Callee::Fn(step), 1)` false | U1 |
 | 2 | a read after the move point keeps the copy | `moves::a_later_read_keeps_the_copy` | for each case of 20.3.2's list "no move" (a read later in the block, a read in the next loop iteration, another argument or the receiver of the same call mentioning an overlapping place, among them `take(s, if c { s = fresh(); 0 } else { 0 })`, a use inside the arms of a `match` whose scrutinee is rooted at the variable, a use in the body of a `for` whose iterable is rooted at it, an in-place change after the call) `moves` is false at the argument. With a local `s`, in `if c { consume(s) } else { s.count }` as a fn body's result, `moves` is true at `consume`'s argument. In `consume(t); if c { var t = a } else { var t = b }; t.count` (inner `t`s shadow) `moves` is false at `consume`'s argument | U1 |
-| 3 | positions and places | `moves::every_move_position_moves` and `moves::places_move_through_fields_only` | each move position of 20.3.1 with a dead place is marked; a receiver of a builtin method, a `match` scrutinee, a `for` iterable, an operator operand, a `spawn` argument, a closure capture and the initializer of a pattern `let` are not. `b.f` with `b.f` dead after is marked; `xs[0]`, a boxed field (13.4) and a place rooted at a pattern binding are not. Field paths are disjoint: in `a.state = a.handle(a.state, i)` the argument `a.state` is marked; in `Step { state = st.state, out = publish(st.out) }` with `st` dead after, `st.state` is marked; in `answer(state, reply, state.table.values())` `state` is not. No expression whose type is `Int`, `Byte`, `Bool`, `Unit`, a quantity, a handle type or a fn type is marked | U1 |
+| 3 | positions and places | `moves::every_move_position_moves` and `moves::places_move_through_fields_only` | each move position of 20.3.1 with a dead place is marked; a receiver of a builtin method, a `match` scrutinee, a `for` iterable, an operator operand, a closure capture and the initializer of a pattern `let` are not; a `spawn` argument is marked (`moves::spawn_arguments_move_at_their_last_use`, 20.3.1). `b.f` with `b.f` dead after is marked; `xs[0]`, a boxed field (13.4) and a place rooted at a pattern binding are not. Field paths are disjoint: in `a.state = a.handle(a.state, i)` the argument `a.state` is marked; in `Step { state = st.state, out = publish(st.out) }` with `st` dead after, `st.state` is marked; in `answer(state, reply, state.table.values())` `state` is not. No expression whose type is `Int`, `Byte`, `Bool`, `Unit`, a quantity, a handle type (but for 20.3.1's scope tail and `spawn` argument) or a fn type is marked | U1 |
 | 4 | consumed parameters are a fixpoint | `moves::consumed_is_a_fixpoint` | in a module with `a(x)` calling `b(x)` at its last use, `b(y)` changing `y` in place and calling `a`, and `c(z)` only reading `z`: `a` and `b` consume their parameter, `c` does not. `d(m)` whose only change is `m.put(k, v)` consumes `m`; `e(p)` that passes `p.items` to a consumed parameter on every path consumes `p`. `pick(a, b, c) = if c { a } else { b }` consumes neither `a` nor `b` (each is moved on one path only, 20.3.3), and neither does `unwrap_or` in `std/option.ignite` consume `fallback`. A program fn whose last use of a local passes it to a std fn that consumes its parameter moves it; `ModuleTypes::consumed` of the std module lists that fn | U1 |
 | 5 | closure bodies are not entered | `moves::closure_bodies_never_move` | no expression inside a closure body is marked, and creating a closure that captures `s` counts as a read of `s` | U1 |
 | 6 | the checker accepts calls of fn-typed expressions | `cargo test -p ignite-check --test main fixtures::` | fixture `crates/ignite-check/tests/fixtures/valid_expression_calls` (`adder(1)(2)`, `fs[1](10)`, `(|x: Int| x * 3)(2)`, `(h.run)(2)`, `pick(true)(3)`): exit silent. `nope(1)(2)` in fixture `e003_unknown_variable` gives one E003 `unknown name \`nope\`` and no `not callable` | U2 |
@@ -6647,11 +6648,19 @@ Move positions, where an aggregate value is taken:
 - the operand of `return`, and the result expression of a fn body or of a block whose value is
   used;
 - a list element, a record literal's field value, the base of a record update, a variant,
-  `Some`, `Ok` or `Err` payload, a tuple element.
+  `Some`, `Ok` or `Err` payload, a tuple element;
+- an argument of `spawn f(args)`, the receiver of a spawned fn call included (the task takes
+  every argument; 2026-11-06, `story:llvm-spawn-pattern-bound-streams`). A handle binding moves
+  there at its last use, not only at its scope's tail (the move hands the binding's share to
+  the task, which the task drops when it ends); a place rooted at a parameter never moves there,
+  so a `spawn` makes no parameter consumed. For 20.3.2 a spawn argument is held like a borrowed
+  one, since LLVM's thunk reads a copied aggregate in place after the later arguments ran.
+  On Rust a moved argument is emitted bare into `__spawn_N`, so the spawning body keeps no
+  clone; on LLVM a moved aggregate goes into the thunk's environment as an owned value instead
+  of its place's pointer, and a handle is a scalar, so the mark changes nothing there.
 
 Not move positions: a receiver of a builtin method, a `match` scrutinee, a `for` iterable, an
-operator operand (also `==` and `+` on `Text`), a `spawn` argument, an `assert` operand, a
-closure capture.
+operator operand (also `==` and `+` on `Text`), an `assert` operand, a closure capture.
 
 A place in a move position moves when it is a tracked variable `v` or a field chain `v.f.g`
 rooted at one, and that place is dead after the position (20.3.2). A chain through an index
@@ -6681,15 +6690,19 @@ moves.
   item 3). The LLVM target lends a caller's place to a closure parameter only when the closure
   neither modifies nor consumes it (`Lower::known_borrows`, `docs/llvm.md` §3.1); on Rust a
   closure parameter is a value.
-- A handle stays shared and is never moved as an aggregate, with one exception: a `let`/`var`
+- A handle stays shared and is never moved as an aggregate, with two exceptions. A `let`/`var`
   or owned binding of a handle type moves as the value of the block or `match` arm that binds
   it (directly, or as the value of an `if` branch or `match` arm that is that value), where its
   scope ends. The move hands on the share the binding drops there, so nothing closes earlier
-  than with a copy; on LLVM a handle is a scalar and the mark changes nothing. A handle
-  parameter is never consumed by a move.
+  than with a copy; on LLVM a handle is a scalar and the mark changes nothing. Such a binding
+  also moves as a `spawn` argument at its last use (above): the task holds the share from then
+  on, so the stream closes when the task ends or fails, not when the spawning body ends
+  (`stream_ownership::a_spawn_in_a_test_body_hands_the_pattern_bound_end_over`, both targets).
+  A handle parameter is never consumed by a move.
 
 Checks: `moves::owned_pattern_bindings_move`, `moves::owned_for_elements_move`,
-`moves::closure_parameters_move_when_consumed`, `moves::handles_move_only_at_their_scope_tail`
+`moves::closure_parameters_move_when_consumed`, `moves::handles_move_only_at_their_scope_tail`,
+`moves::spawn_arguments_move_at_their_last_use`
 (`cargo test -p ignite-types --test main moves::`), and `slice16/moves_tails_owned.ignite`
 on both targets (`slice16::owned_binding_tails_move_on_both_targets` in `crates/ignite`,
 `slice16::fixtures_pass` in `ignite-rustgen`).
@@ -6803,7 +6816,8 @@ call makes more copies than before.
   releases happen, and row 12 runs it under the debug runtime.
 - The call sites the backend writes itself (the `spawn` thunk, the fn-value thunk, the
   `store_update` thunk, the generated mains) pass fresh copies today, which is correct for an
-  owned parameter; they need no change.
+  owned parameter; they need no change. A `spawn` argument the analysis moves (20.3.1) is stored
+  in the thunk's environment as an owned value; the thunk still copies it into the task's arena.
 - `docs/llvm.md` §3's borrowed/owned sentence and §4's soundness sentence ("Callee arguments are
   fresh copies or the caller's places") get the consumed rule and the moved place.
 
@@ -7088,7 +7102,7 @@ Records: a "Slice 16" paragraph in `AGENTS.md`'s gate-time section; raw logs and
 | 1 | an effectful closure (one that uses a captured capability) passed as a fn value; E017 stays | no fn type can name an effect on a capture (20.4.3); wave C P1 to P3 pass no closures | `List.map` landed (story `effectful-list-map`, 20.4.3: its fn may have the effects its caller's `requires` covers); every other fn type: actors P4, or the slice that adds effect polymorphism |
 | 2 | inferring an unannotated closure parameter from the closure body (p05) | an annotation works (p05b); needs inference variables the typer does not have | actors P4 |
 | 3 | capture by move (a closure taking a dead variable without a copy) | a capture copies once per closure creation, not per loop step; not on R1's path | later, with measurements |
-| 4 | moves of pattern bindings, `for` elements, closure parameters, fn-typed variables, inside closure bodies, at `spawn` arguments and operator operands (`a + b` on `Text`), and beside another argument that only reads an overlapping place (`answer(state, reply, state.table.values())`; binding the argument first moves) | D2; each needs its own aliasing argument on LLVM | additive, when a measurement asks for one |
+| 4 | moves of pattern bindings, `for` elements, closure parameters, fn-typed variables, inside closure bodies, operator operands (`a + b` on `Text`), and beside another argument that only reads an overlapping place (`answer(state, reply, state.table.values())`; binding the argument first moves) | D2; each needs its own aliasing argument on LLVM | additive, when a measurement asks for one |
 | 5 | rest patterns in tuples (`(a, ..)`) and variant payloads | P9 covers lists; protocols §5.2's shape is a list rest inside a tuple, which row 18 covers | `docs/syntax.md`, unscheduled |
 | 6 | `docs/friction.md` open rows (19 `for` patterns, 20 match guards, 22, 23, 24, 38, 41 and the others not on the wave-A row) | not on vision §4 row A | their own proposals (`docs/syntax.md` P4, P5) |
 | 7 | `assert` as a match arm body (20.8 item 9) | found while probing; braces work | friction row by U6 |
