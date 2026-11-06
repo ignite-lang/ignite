@@ -4271,6 +4271,43 @@ and normalizes member/edge collections already defined as unordered; it never so
 lists. Stale raw inputs still invalidate an unaccepted plan even when its operational diff
 would be empty. Replanning is required, not automatic substitution at apply time.
 
+Canonical implementation form (story `structural-apply-identity`, 2026-11-06). The
+implementation projection is written from the syntax tree by an encoder of its own
+(`crates/ignite/src/apply/canonical.rs`), no longer from the AST's `Debug` text with spans
+scrubbed by a string scan. Per module it holds the sorted imports and one canonical text per
+non-test declaration other than systems and assemblies (the model carries those). Spans,
+comments, layout and declaration order are absent. Names are written by what they denote:
+
+- local bindings (`let`, `var`, `for`, pattern bindings, closure parameters) are numbered per
+  declaration in binding order, type parameters by position; a reference names its binding,
+  so a rename that a local would capture is a change;
+- a private module-level declaration is numbered by first reference, walking the public
+  declarations in name order; private declarations no public one reaches follow, ordered by
+  their text with the unnumbered names masked;
+- every other name stays as written: public names, imports, builtins, fn parameters (named
+  arguments call them by name), record fields, variants, methods and associated-fn members.
+
+Ignite has no visibility keyword (4.1 exports every declaration), so public is decided over
+the loaded program: every declaration of a std module; a name another module imports, by name
+or by a glob; a fn of a module named by a `module("p")` literal whose name is a field of some
+record (14.4 fills the interface record by name); a name a system or assembly of its module
+references; a free fn `main`. Everything else is private: renaming it, a local or a type
+parameter keeps the plan identity, as does any edit of spans, comments or order. A change of
+a body, a literal, a type, a public name or a parameter name changes it. The projection covers
+the whole loaded program, so a helper's change reaches the identity of every member that
+calls it; identity is per plan, not per member.
+
+The identity domains are `ignite-implementation/0.2` and `ignite-operational/0.2`; `0.1` was
+the `Debug` scheme. A change of the canonical encoding bumps both. The plan format stays
+`ignite-apply-plan/0.1`, so a host keeps reading the plan it committed under `0.1`; that
+plan's identities differ from every `0.2` plan, so the first apply after the upgrade replaces
+each hosted executable once with the reason "implementation, target, runtime contract or
+codegen revision changed", as a `CODEGEN_REVISION` step does. A plan prepared under `0.1` and
+applied after the upgrade is still admitted (its codegen revision matches), and the next
+replanning compares against it as above. `CODEGEN_REVISION` remains the pin of generated
+code; it no longer versions the AST's `Debug` layout, so an AST change that leaves generation
+alone needs no step.
+
 ### 17.4 Changes and authority
 
 The plan shows `add`, `replace`, `remove`, `detach` or `unchanged` per stable member id,
