@@ -3153,6 +3153,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.f.val(format!("xor i1 {same}, true"))
             });
         }
+        if let (BinaryOp::Add, Ty::List(element)) = (op, &ty) {
+            return self.list_concat(&ty, element, l, r);
+        }
         if ty == Ty::Text && op == BinaryOp::Add {
             let (a, b) = (self.ptr(&l), self.ptr(&r));
             return self.rt_out(
@@ -3160,6 +3163,22 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 &Ty::Text,
                 &[format!("ptr {a}"), format!("ptr {b}")],
             );
+        }
+        if ty == Ty::Text
+            && matches!(
+                op,
+                BinaryOp::Lt | BinaryOp::Gt | BinaryOp::Le | BinaryOp::Ge
+            )
+        {
+            let (a, b) = (self.ptr(&l), self.ptr(&r));
+            let order = crate::glue::compare(self.m, &mut self.f, &Ty::Text, &a, &b);
+            let predicate = match op {
+                BinaryOp::Lt => "slt",
+                BinaryOp::Gt => "sgt",
+                BinaryOp::Le => "sle",
+                _ => "sge",
+            };
+            return Val::Scalar(self.f.val(format!("icmp {predicate} i32 {order}, 0")));
         }
         if ty == Ty::Text {
             let (a, b) = (self.ptr(&l), self.ptr(&r));
@@ -3229,6 +3248,39 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             BinaryOp::And | BinaryOp::Or => unreachable!("handled above"),
         };
         Val::Scalar(self.f.val(format!("{instr} {t} {a}, {b}")))
+    }
+
+    /// `l + r` on `List<element>` (`docs/slice.md` 25.5): an owned copy of
+    /// `l` with the elements of `r` appended, copied as `append` copies them.
+    fn list_concat(&mut self, ty: &Ty, element: &Ty, l: Val, r: Val) -> Val {
+        let out = self.owned(ty, l);
+        let r = if self.env.needs_glue(element) {
+            self.owned(ty, r)
+        } else {
+            r
+        };
+        let (p, rp) = (self.ptr(&out), self.ptr(&r));
+        let layout = self.layout(element);
+        let rlen = self.list_len(&rp);
+        self.f.ins(format!(
+            "call void @ignite.reserve(ptr {p}, i64 {rlen}, i64 {}, i64 {})",
+            layout.size, layout.align
+        ));
+        let len = self.list_len(&p);
+        let data = self.f.val(format!("load ptr, ptr {p}, align 8"));
+        let at = self.f.val(format!("mul i64 {len}, {}", layout.size));
+        let dst = self
+            .f
+            .val(format!("getelementptr inbounds i8, ptr {data}, i64 {at}"));
+        let src = self.f.val(format!("load ptr, ptr {rp}, align 8"));
+        let bytes = self.f.val(format!("mul i64 {rlen}, {}", layout.size));
+        self.f.ins(format!(
+            "call void @llvm.memcpy.p0.p0.i64(ptr {dst}, ptr {src}, i64 {bytes}, i1 false)"
+        ));
+        let next = self.f.val(format!("add i64 {len}, {rlen}"));
+        let lenp = self.gep(&p, 8);
+        self.f.ins(format!("store i64 {next}, ptr {lenp}, align 8"));
+        out
     }
 
     /// `a op b` for `+`, `-` and `*` through `llvm.*.with.overflow`: an
@@ -4283,6 +4335,31 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.f.ins(format!("store i64 {next}, ptr {lenp}, align 8"));
                 Val::Unit
             }
+            ListSet => {
+                let rexpr = receiver.expect("receiver");
+                let element = match self.ty(rexpr) {
+                    Ty::List(t) => *t,
+                    _ => Ty::Byte,
+                };
+                let i = self.scalar_arg(&args[0]);
+                let x = self.expr(&args[1], true);
+                let have = self.ty(&args[1]);
+                let x = self.coerce(&element, &have, x);
+                let x = self.owned(&element, x);
+                let r = self.mutable_receiver(rexpr);
+                let p = self.ptr(&r);
+                let len = self.list_len(&p);
+                let oob = self.f.val(format!("icmp uge i64 {i}, {len}"));
+                self.fail_index_if(&oob, e, &i, &len);
+                let size = self.layout(&element).size;
+                let data = self.f.val(format!("load ptr, ptr {p}, align 8"));
+                let at = self.f.val(format!("mul i64 {i}, {size}"));
+                let dst = self
+                    .f
+                    .val(format!("getelementptr inbounds i8, ptr {data}, i64 {at}"));
+                self.store_value(&element, &dst, x);
+                Val::Unit
+            }
             ListAppend => {
                 let rexpr = receiver.expect("receiver");
                 let ty = self.ty(rexpr);
@@ -4486,6 +4563,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let data = self.read_arg(&args[0]);
                 self.rt_result("stdout_write_all", &[format!("ptr {data}")], Ty::Unit)
             }
+            StderrWriteAll => {
+                let data = self.read_arg(&args[0]);
+                self.rt_result("stderr_write_all", &[format!("ptr {data}")], Ty::Unit)
+            }
             ProcessExit => {
                 let code = self.scalar_arg(&args[0]);
                 let c = self.f.val(format!("trunc i64 {code} to i32"));
@@ -4535,6 +4616,17 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.f
                     .ins(format!("store i8 {byte}, ptr {payload}, align 1"));
                 Val::Ptr(result, true)
+            }
+            IntWrappingAdd | IntWrappingSub | IntWrappingMul => {
+                let r = recv(self);
+                let x = self.scalar(&r);
+                let y = self.scalar_arg(&args[0]);
+                let instr = match b {
+                    IntWrappingAdd => "add",
+                    IntWrappingSub => "sub",
+                    _ => "mul",
+                };
+                Val::Scalar(self.f.val(format!("{instr} i64 {x}, {y}")))
             }
             TcpStreamSetIdleTimeout | PipeStreamSetIdleTimeout | StreamSetIdleTimeout => {
                 let entry = self.stream_entry(b, receiver, "set_idle_timeout");

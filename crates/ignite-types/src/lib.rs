@@ -574,6 +574,9 @@ pub enum Builtin {
     ListAt,
     ListSlice,
     ListPush,
+    /// `l.set(i, x)`, also written `l[i] = x`: replace the element at `i`;
+    /// out of range is the `index` failure of `l[i]` (`docs/slice.md` 25.4).
+    ListSet,
     ListAppend,
     ListClear,
     ListJoin,
@@ -594,6 +597,8 @@ pub enum Builtin {
     StdinIsTerminal,
     StdinSetRaw,
     StdoutWriteAll,
+    /// `Stderr.write_all(bytes)`: standard error, as `StdoutWriteAll` (`docs/slice.md` 25.3).
+    StderrWriteAll,
     ProcessExit,
     IoErrorNew,
     /// `i.to_text()` on an `Int`: decimal (the static `Int.to_text(i)` is `IntToText`).
@@ -612,6 +617,13 @@ pub enum Builtin {
     ByteToInt,
     /// `i.to_byte() -> Option<Byte>`, `None` outside 0 to 255.
     IntToByte,
+    /// `a.wrapping_add(b) -> Int`: the sum modulo 2^64 in two's complement,
+    /// never a failure (`docs/slice.md` 25.2).
+    IntWrappingAdd,
+    /// `a.wrapping_sub(b) -> Int`: the difference modulo 2^64.
+    IntWrappingSub,
+    /// `a.wrapping_mul(b) -> Int`: the product modulo 2^64.
+    IntWrappingMul,
     /// `s.set_idle_timeout(ms) -> Result<Unit, IoError>`.
     TcpStreamSetIdleTimeout,
     /// `s.next_id() -> Int`.

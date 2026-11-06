@@ -61,6 +61,8 @@ fn int_extremes() -> List<Int> = [9223372036854775807, -9223372036854775807 - 1,
 
 fn int_compare() -> List<Bool> = [1 < 2, 2 <= 2, 3 > 4, 4 >= 4, 1 == 1, 1 != 1]
 
+fn int_wrapping() -> List<Int> = [(9223372036854775807).wrapping_add(1), (-9223372036854775807 - 1).wrapping_sub(1), (9223372036854775807).wrapping_mul(3), (6).wrapping_mul(-7)]
+
 fn int_parse() -> List<Option<Int>> = [Int.parse("42"), Int.parse("+1"), Int.parse("x"), Int.parse("-7"), Int.parse("")]
 
 fn int_to_text() -> Text = 12.to_text() + "/" + Int.to_text(-3) + "/" + LIMIT.to_text()
@@ -114,6 +116,8 @@ fn byte_convert() -> (Int, Option<Byte>, Option<Byte>, Option<Byte>, Text) {
 }
 
 fn byte_compare() -> List<Bool> = [b'a' < b'b', b'a' == b'a', b'z' >= b'z']
+
+fn text_compare() -> List<Bool> = ["a" < "b", "ab" < "a", "" <= "", "Z" > "a", "é" >= "z", "abc".concat("d") < "abce"]
 
 fn bytes_text() -> List<Text> {
   var bs = b"h"
@@ -194,6 +198,16 @@ fn list_index_push() -> List<List<Int>> {
   lists.append(deep[1])
   lists.push(deep[0][0])
   lists
+}
+
+fn list_set_concat() -> (List<List<Int>>, List<Text>) {
+  var grid = [[1, 2], [3]]
+  grid[0][1] = 20
+  grid[1] = grid[1] + [4] + []
+  grid.set(0, [] + grid[0])
+  var names = ["a"] + ["b", "c"]
+  names[2] = names[0] + names[1]
+  (grid, names)
 }
 
 // Map
@@ -599,6 +613,7 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(int_neg().debug())?
   show(int_extremes().debug())?
   show(int_compare().debug())?
+  show(int_wrapping().debug())?
   show(int_parse().debug())?
   show(int_to_text().debug())?
   show(int_while().debug())?
@@ -607,6 +622,7 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(byte_arith().debug())?
   show(byte_convert().debug())?
   show(byte_compare().debug())?
+  show(text_compare().debug())?
   show(bytes_text().debug())?
   show(bytes_literal().debug())?
   show(text_ops().debug())?
@@ -624,6 +640,7 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(list_eq().debug())?
   show(list_mutate_place().debug())?
   show(list_index_push().debug())?
+  show(list_set_concat().debug())?
   show(map_literal().debug())?
   show(map_ops().debug())?
   show(map_queries().debug())?

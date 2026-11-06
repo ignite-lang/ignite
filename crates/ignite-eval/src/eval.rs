@@ -1103,6 +1103,7 @@ impl<'p> Evaluator<'p> {
         }
         match builtin {
             Builtin::ListPush
+            | Builtin::ListSet
             | Builtin::ListAppend
             | Builtin::ListClear
             | Builtin::MapPut
@@ -1201,6 +1202,19 @@ impl<'p> Evaluator<'p> {
             (Builtin::ByteToInt, Value::Byte(b)) => plain(Value::Int(i64::from(*b))),
             (Builtin::IntToByte, Value::Int(n)) => {
                 plain(Value::option(u8::try_from(*n).ok().map(Value::Byte)))
+            }
+            (
+                Builtin::IntWrappingAdd | Builtin::IntWrappingSub | Builtin::IntWrappingMul,
+                Value::Int(a),
+            ) => {
+                let Value::Int(b) = next()? else {
+                    return Err(internal("wrapping arithmetic on a non-Int"));
+                };
+                plain(Value::Int(match builtin {
+                    Builtin::IntWrappingAdd => a.wrapping_add(b),
+                    Builtin::IntWrappingSub => a.wrapping_sub(b),
+                    _ => a.wrapping_mul(b),
+                }))
             }
             (Builtin::ListLen, Value::List(items)) => plain(Value::Int(items.len() as i64)),
             (Builtin::ListIsEmpty, Value::List(items)) => plain(Value::Bool(items.is_empty())),
@@ -1350,6 +1364,7 @@ impl<'p> Evaluator<'p> {
         let values = self.exprs(cx, args)?;
         let modules = self.modules;
         let unit_result = matches!(cx.types().try_type_of(e), Some(Ty::Unit));
+        let mut out_of_range = None;
         let mut temporary;
         let target: &mut Value = match path {
             Some((base, steps)) => {
@@ -1384,6 +1399,24 @@ impl<'p> Evaluator<'p> {
                 items.extend(more);
                 (Value::Unit, nodes)
             }
+            (Builtin::ListSet, Value::List(items)) => {
+                let Some(Value::Int(i)) = values.next() else {
+                    return Err(internal("set at a non-Int"));
+                };
+                let item = values.next().ok_or_else(|| internal("missing argument"))?;
+                match usize::try_from(i).ok().filter(|&at| at < items.len()) {
+                    Some(at) => {
+                        let nodes = item.nodes();
+                        items[at] = item;
+                        (Value::Unit, nodes)
+                    }
+                    None => {
+                        out_of_range =
+                            Some(format!("index {i} out of range for length {}", items.len()));
+                        (Value::Unit, 0)
+                    }
+                }
+            }
             (Builtin::ListClear, Value::List(items)) => {
                 items.clear();
                 (Value::Unit, 0)
@@ -1415,6 +1448,9 @@ impl<'p> Evaluator<'p> {
                 )));
             }
         };
+        if let Some(detail) = out_of_range {
+            return Err(self.fail(cx, e, FailureOp::Index, &detail));
+        }
         self.alloc(nodes)?;
         Ok(result)
     }
@@ -1579,6 +1615,7 @@ impl<'p> Evaluator<'p> {
                     (Value::Int(a), Value::Int(b)) => a.cmp(b),
                     (Value::Byte(a), Value::Byte(b)) => a.cmp(b),
                     (Value::Quantity(_, a), Value::Quantity(_, b)) => a.cmp(b),
+                    (Value::Text(a), Value::Text(b)) => a.as_bytes().cmp(b.as_bytes()),
                     _ => {
                         return Err(internal(format!(
                             "`{}` on `{}` and `{}`",
@@ -1628,6 +1665,11 @@ impl<'p> Evaluator<'p> {
             (Value::Byte(a), Value::Byte(b)) => byte(*a, *b)
                 .map(Value::Byte)
                 .ok_or_else(|| overflow(self, i64::from(*a), i64::from(*b))),
+            (Value::List(a), Value::List(b)) if op == Add => {
+                let joined: Vec<Value> = a.iter().chain(b).cloned().collect();
+                self.alloc(joined.len() as u64)?;
+                Ok(Value::List(joined))
+            }
             (Value::Text(a), Value::Text(b)) if op == Add => {
                 let joined = format!("{a}{b}");
                 self.alloc(joined.len() as u64 / 64)?;
@@ -2125,6 +2167,7 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::StdinIsTerminal
             | Builtin::StdinSetRaw
             | Builtin::StdoutWriteAll
+            | Builtin::StderrWriteAll
             | Builtin::ProcessExit
             | Builtin::Log
             | Builtin::ModuleRecord

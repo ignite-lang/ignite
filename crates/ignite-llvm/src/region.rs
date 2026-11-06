@@ -24,8 +24,8 @@ pub fn modified(body: &Block, types: &TypedProgram) -> BTreeSet<String> {
 fn mutates(builtin: Builtin) -> bool {
     use Builtin::*;
     match builtin {
-        ListPush | ListAppend | ListClear | MapPut | MapRemove | StoreNextId | StorePut
-        | StoreRemove | StoreUpdate | StoreUpsert => true,
+        ListPush | ListSet | ListAppend | ListClear | MapPut | MapRemove | StoreNextId
+        | StorePut | StoreRemove | StoreUpdate | StoreUpsert => true,
         MapEmpty
         | MapGet
         | MapKeys
@@ -74,12 +74,16 @@ fn mutates(builtin: Builtin) -> bool {
         | StdinIsTerminal
         | StdinSetRaw
         | StdoutWriteAll
+        | StderrWriteAll
         | ProcessExit
         | IoErrorNew
         | ListMap
         | IntParse
         | ByteToInt
         | IntToByte
+        | IntWrappingAdd
+        | IntWrappingSub
+        | IntWrappingMul
         | TcpStreamSetIdleTimeout
         | StoreGet
         | StoreValues

@@ -500,6 +500,7 @@ fn mutates(builtin: Builtin) -> bool {
     matches!(
         builtin,
         Builtin::ListPush
+            | Builtin::ListSet
             | Builtin::ListAppend
             | Builtin::ListClear
             | Builtin::MapPut
@@ -514,7 +515,7 @@ fn mutates(builtin: Builtin) -> bool {
 
 /// Method names the Rust target counts as in-place changes whatever the
 /// callee (`MUTATING_METHODS` in `ignite-rustgen`).
-const MUTATING_METHODS: [&str; 3] = ["push", "append", "clear"];
+const MUTATING_METHODS: [&str; 4] = ["push", "set", "append", "clear"];
 
 /// The variable a place expression is rooted at, through every expression
 /// `region::root` (LLVM) follows: fields, tuple fields, indexes, `?`,
@@ -1359,7 +1360,10 @@ impl<'a> Walk<'a> {
             ) => true,
             Some(Callee::Builtin(b)) => matches!(
                 (b, j),
-                (Builtin::ListPush, 0) | (Builtin::MapPut, 1) | (Builtin::StorePut, 1)
+                (Builtin::ListPush, 0)
+                    | (Builtin::ListSet, 1)
+                    | (Builtin::MapPut, 1)
+                    | (Builtin::StorePut, 1)
             ),
             None => false,
         };

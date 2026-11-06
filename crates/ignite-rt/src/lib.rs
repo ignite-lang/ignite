@@ -55,8 +55,8 @@ pub use process::{
     ignite_rt_io_error_new, ignite_rt_log, ignite_rt_panic,
 };
 pub use stdio::{
-    ignite_rt_stdin_is_terminal, ignite_rt_stdin_read, ignite_rt_stdin_set_raw,
-    ignite_rt_stdout_write_all,
+    ignite_rt_stderr_write_all, ignite_rt_stdin_is_terminal, ignite_rt_stdin_read,
+    ignite_rt_stdin_set_raw, ignite_rt_stdout_write_all,
 };
 pub use store::{
     FreeHeap, FromHeap, RtStore, ToHeap, UpdateThunk, UpsertThunk, ignite_rt_store_get,

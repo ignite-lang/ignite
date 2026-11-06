@@ -56,6 +56,9 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
         (Ty::Bool, "to_text") => sig(BoolToText, vec![], Ty::Text),
         (Ty::Byte, "to_int") => sig(ByteToInt, vec![], Ty::Int),
         (Ty::Int, "to_byte") => sig(IntToByte, vec![], Ty::Option(Box::new(Ty::Byte))),
+        (Ty::Int, "wrapping_add") => sig(IntWrappingAdd, vec![Ty::Int], Ty::Int),
+        (Ty::Int, "wrapping_sub") => sig(IntWrappingSub, vec![Ty::Int], Ty::Int),
+        (Ty::Int, "wrapping_mul") => sig(IntWrappingMul, vec![Ty::Int], Ty::Int),
         (Ty::TcpStream, "set_idle_timeout") => {
             sig(TcpStreamSetIdleTimeout, vec![Ty::Int], io(Ty::Unit))
         }
@@ -228,6 +231,7 @@ fn list_method(element: &Ty, name: &str) -> Option<Sig> {
         "at" => sig(ListAt, vec![Ty::Int], element.clone()),
         "slice" => sig(ListSlice, vec![Ty::Int, Ty::Int], list),
         "push" => sig(ListPush, vec![element.clone()], Ty::Unit),
+        "set" => sig(ListSet, vec![Ty::Int, element.clone()], Ty::Unit),
         "append" => sig(ListAppend, vec![list], Ty::Unit),
         "clear" => sig(ListClear, vec![], Ty::Unit),
         "join" if *element == Ty::Text => sig(ListJoin, vec![Ty::Text], Ty::Text),
@@ -294,6 +298,7 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
         ("Stdin", "is_terminal") => sig(StdinIsTerminal, vec![], io(Ty::Bool)),
         ("Stdin", "set_raw") => sig(StdinSetRaw, vec![Ty::Bool], io(Ty::Unit)),
         ("Stdout", "write_all") => sig(StdoutWriteAll, vec![bytes()], io(Ty::Unit)),
+        ("Stderr", "write_all") => sig(StderrWriteAll, vec![bytes()], io(Ty::Unit)),
         ("Process", "exit") => sig(ProcessExit, vec![Ty::Int], Ty::Never),
         ("IoError", "new") => sig(IoErrorNew, vec![Ty::Text], Ty::IoError),
         ("Clock", "monotonic") => sig(ClockMonotonic, vec![], Ty::Quantity(QuantityKind::Duration)),

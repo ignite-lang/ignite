@@ -912,7 +912,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E003 | unknown name; also wrong arity of a call (a UFCS call counts the receiver), `log` used as a value, a constant with payload patterns, an associated fn whose owner is no record or enum of the module (section 13.8) |
 | E004 | duplicate definition, including a declaration named like a builtin or `Tuple`, a role or record field declared twice, an associated fn declared twice or named like a variant of its owner, and a closure parameter repeated |
 | E005 | ambiguous bare variant (section 4); reported by the type checker since slice 6 |
-| E006 | assignment to an immutable binding or a constant; since slice 9 also `push`, `append` or `clear` through a `let`, a `for` element or a pattern binding, on `x.to_bytes()`, or on a binding a closure captured (section 13.11) |
+| E006 | assignment to an immutable binding or a constant; since slice 9 also `push`, `append` or `clear` (since 25.4 also `set` and `l[i] = v`) through a `let`, a `for` element or a pattern binding, on `x.to_bytes()`, or on a binding a closure captured (section 13.11) |
 | E010 | effectful call or `spawn` in a pure context: a constant's value or a field default (section 5) |
 | E011 | retired in slice 6 (was: effectful call not awaited) |
 | E012 | retired in slice 6 (was: `await` on a pure call) |
@@ -8733,3 +8733,109 @@ across edits of the source (`story:stable-node-ids`).
   `typed_json::the_reader_fixture_is_the_sample_document` fails when it differs from the
   compiler's output, and `IGNITE_BLESS=1` rewrites it.
 - `apply::plan::CODEGEN_REVISION` is unchanged: no generated code changes.
+
+## 25 Language gaps found by the codespec adapters
+
+**Status: in progress on `story:codespec-friction`, one pull request per part.**
+
+Sources: the planning store's `story:codespec-friction` (its fix list, items 1 to 5);
+`docs/friction.md` rows 47 to 59, which record each gap with the place in
+ignite-lang/ignite-codespec where it bit.
+
+### 25.1 Ordering on `Text` (item 3, friction row 49)
+
+`<`, `>`, `<=` and `>=` take two `Text` operands and give `Bool`. The order is the byte order of
+the UTF-8 encodings: the first differing byte decides, unsigned, and a proper prefix sorts
+first. On valid UTF-8 that is the order of the code points, and it is Go's string order (Go
+compares strings bytewise). It is the order in which a `Map` keeps `Text` keys (14.3), so the
+keys of a map come back in the order `<` sorts them.
+
+| layer | lowering |
+|---|---|
+| typer | `operator` admits the four orderings on `Text` beside `Int` and `Byte`; any other type stays E045 |
+| Rust target | `a < b` on `String`, Rust's `Ord` for `str`, bytewise |
+| LLVM target | `glue::compare` of the two `Text` values (the `ignite.text_cmp` helper a map's search uses: `memcmp` of the common length, then the shorter first), then `icmp` of the result against 0 |
+| evaluator | `Value::Text` ordered by `as_bytes()` |
+
+No locale and no normalisation: `"Z" < "_" < "a"`, `"z" < "é"`, `"é" < "€"`.
+
+### 25.2 Wrapping arithmetic on `Int` (item 5, friction row 51)
+
+Three builtin methods of `Int`, `a.wrapping_add(b)`, `a.wrapping_sub(b)` and
+`a.wrapping_mul(b)`, each `Int -> Int`: the exact result reduced modulo 2^64 into the range of
+`Int` (signed 64-bit, two's complement), which is Go's `int` arithmetic on a 64-bit platform.
+They never fail; `+`, `-` and `*` keep failing on overflow (`docs/vision.md` T6). Builtins
+`IntWrappingAdd`, `IntWrappingSub`, `IntWrappingMul`; their names are in
+`ignite_check::BUILTIN_METHODS`, so on an `Int` receiver the builtin wins over a user fn of
+the same name (13, row 5), and a call `wrapping_add(a, b)` of such a fn is unchanged.
+
+| layer | lowering |
+|---|---|
+| Rust target | `i64::wrapping_add(a, b)` (and `_sub`, `_mul`) |
+| LLVM target | `add`, `sub`, `mul` on `i64` without the overflow check |
+| evaluator | `i64::wrapping_*` |
+
+No wrapping form for `Byte`, `/` or `%`, and no unary negation: `(0).wrapping_sub(x)` negates.
+
+### 25.3 `Stderr` (item 2, friction row 48)
+
+`Stderr.write_all(bytes) -> Result<Unit, IoError>` writes to standard error and flushes, as
+`Stdout.write_all` does for standard output. It needs the ambient effect `stderr.write`;
+`Stderr` is a builtin type name with no values (E040 as a type, like `Stdout`), and `stderr` is
+an ambient head, so a parameter cannot take the name (E056). `log(line)` keeps writing a line to
+the same stream. Builtin `StderrWriteAll`; `ignite_io::Stderr::write_all` on the Rust target,
+`ignite_rt_stderr_write_all` (declared in every LLVM module, as the other runtime entries are)
+on the LLVM target. In `ignite test` the runner captures it per test and shows it under
+`---- <test> stderr ----` when the test fails.
+
+### 25.4 List element assignment (item 4, friction row 50)
+
+`l[i] = v` is a statement: the parser turns it into the builtin method call `l.set(i, v)`
+(`ListSet`), whose span is that of `l[i]`. `set` replaces the element at `i` in place:
+
+- the receiver is a place a mutating builtin may change, as for `push` (E006 through a `let`,
+  a `for` element or a pattern binding; in a closure, E006 for a captured list), so
+  `r.items[i] = v` and `grid[i][j] = v` work;
+- an index outside `0..len` is the `index` failure of a read of `l[i]`, at the same position:
+  `index failed at <file>:<line>:<column>: index <i> out of range for length <n>`;
+- the effect roots of `v` join those of the list, as for `push` (the effects audit probe
+  `a22` now reports E016 for a stream assigned into a list).
+
+`l[i].f = v` stays E001 (friction row 41); the E001 text names the three forms a left side may
+take. `set` is a new builtin method name: on a `List` receiver it wins over a user fn `set`
+(13, row 5).
+
+| layer | lowering |
+|---|---|
+| Rust target | `*ignite_io::checked::at_mut(&mut <place>, i, <site>) = v` after binding `i` and `v` |
+| LLVM target | bounds check (`ignite_rt_fail_index`), then a store of the owned value into the element |
+| evaluator | the element replaced in the local's value; out of range is the `index` failure |
+
+### 25.5 `List + List` (item 4, friction row 50)
+
+`a + b` on two `List<T>` (and `Bytes`) is a new list: the elements of `a`, then those of `b`;
+neither operand changes. `[] + l` takes its element type from `l` (the typer types an empty list
+literal on the left after the right operand). Rust: `[&a[..], &b[..]].concat()`; LLVM: an owned
+copy of `a` with `b`'s elements appended as `append` copies them; evaluator: the two lists
+joined.
+
+### 25.9 Tests
+
+- `ignite_test::codespec_friction_on_both_targets` runs `fixtures/tests/codespec.ignite` on the
+  Rust and LLVM targets, dev and release: the orderings on fresh and literal `Text` (empty,
+  prefix, ASCII case, two-, three- and four-byte UTF-8), an insertion sort with `<` that equals
+  the keys of a `Map<Text, Int>` filled with the same words, and the three wrapping methods at
+  the bounds of `Int`.
+- `eval::evaluator_agrees_with_the_rust_target` and `_llvm_target`: `int_wrapping` and
+  `text_compare` of `fixtures/eval_equivalence.ignite` print the same in the evaluator and on
+  both targets.
+- `ignite_test::codespec_stderr_and_lists_on_both_targets` runs
+  `fixtures/tests/codespec_lists.ignite` on both targets, dev and release: element assignment
+  through a `var`, a field and nested lists, the source list unchanged after a copy is assigned
+  into, an out-of-range assignment that fails with the `index` report at its position, `List +
+  List` (empty operands, chains, `Bytes`, nested lists, the operands unchanged), and a test that
+  writes `to out` to `Stdout` and `to err` to `Stderr` and fails, whose report shows each
+  under its own stream.
+- `list_set_concat` of `fixtures/eval_equivalence.ignite` prints the same in the evaluator and on
+  both targets; `e006_element_assign` (`ignite-check`) is E006 for an element assignment
+  through a `let` and a `for` element.
