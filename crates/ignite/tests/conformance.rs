@@ -911,13 +911,16 @@ fn removing_a_satisfies_from_a_must_is_e090() {
 }
 
 /// Row 2 of 19.0, P2 test 2: the HTTP matrix lists RFC 9112's chunked
-/// coding (section 7.1) and Host (section 3.2) as gaps and claims nothing.
-/// The rows story `http-rfc9112-9110-gaps` closed are satisfied, each by
+/// coding (section 7.1) as a gap and claims nothing; Host (section 3.2) was
+/// a gap until story `http-rfc9112-9110-gaps`. The rows that story `http-rfc9112-9110-gaps` closed are satisfied, each by
 /// its fn and a passing test that names it (19.22).
 #[test]
 fn http_matrix_lists_the_chunked_and_host_gaps() {
     const TRANSFER_ENCODING: &str = "test \"an application Transfer-Encoding is 500 and Http applies no transfer coding\" passed";
-    const CLOSED: [(&str, &str, &str, &str); 12] = [
+    const ABSOLUTE_FORM: &str =
+        "test \"an absolute-form target is accepted and its authority replaces Host\" passed";
+    const HEAD: &str = "test \"HEAD is answered as GET without content\" passed";
+    const CLOSED: [(&str, &str, &str, &str); 18] = [
         (
             "rfc9112",
             "R2_2_8",
@@ -960,17 +963,29 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
             "checked",
             "test \"a response timestamp is an IMF-fixdate with no extra whitespace\" passed",
         ),
+        (
+            "rfc9112",
+            "R3_3",
+            "target_too_long",
+            "test \"a request-target longer than the head limit is 414\" passed",
+        ),
+        (
+            "rfc9112",
+            "R3_2_6",
+            "resolve_host",
+            "test \"an HTTP/1.1 request has exactly one valid Host or is 400\" passed",
+        ),
+        ("rfc9112", "R3_2_2_5", "resolve_host", ABSOLUTE_FORM),
+        ("rfc9112", "R3_2_2_6", "next_request", ABSOLUTE_FORM),
+        ("rfc9110", "R9_1_1", "session", HEAD),
+        ("rfc9110", "R9_3_2_1", "session", HEAD),
     ];
     let mut outputs = Vec::new();
     for target in ["rust", "llvm"] {
         let output = std_conformance("http", target);
         let stdout = text(&output.stdout);
         let rfc9112 = block(&stdout, "rfc9112");
-        for (id, section, level) in [
-            ("R7_1_2", "7.1", "MUST"),
-            ("R3_2_6", "3.2", "MUST"),
-            ("R2_2_1", "2.2", "MUST"),
-        ] {
+        for (id, section, level) in [("R7_1_2", "7.1", "MUST"), ("R2_2_1", "2.2", "MUST")] {
             let row = columns(rfc9112, id);
             assert_eq!(row.len(), 6, "{target}: {row:?}");
             assert_eq!(row[1], section, "{target}: {row:?}");
@@ -994,12 +1009,12 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
         }
         let last = rfc9112.trim_end().lines().last().unwrap_or_default();
         assert_eq!(
-            last, "claim conformance of Http to rfc9112: no (8 gaps, 0 failures, 0 inconclusive)",
+            last, "claim conformance of Http to rfc9112: no (4 gaps, 0 failures, 0 inconclusive)",
             "{target}"
         );
         assert!(
             stdout.contains(
-                "claim conformance of Http to rfc9110: no (4 gaps, 0 failures, 0 inconclusive)\n"
+                "claim conformance of Http to rfc9110: no (2 gaps, 0 failures, 0 inconclusive)\n"
             ),
             "{target}: {stdout}"
         );

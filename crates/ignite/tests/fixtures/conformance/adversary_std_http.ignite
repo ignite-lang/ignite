@@ -73,7 +73,7 @@ test fn served(input: Bytes) -> IoResult<Text> {
 // value invalid.
 test "adversary: a Content-Length beside a Unicode space is 400" {
   for space in ["\u{a0}", "\u{85}", "\u{3000}"] {
-    let input = "POST /n HTTP/1.1\r\nContent-Length: 3{space}\r\n\r\nabc".to_bytes()
+    let input = "POST /n HTTP/1.1\r\nHost: h\r\nContent-Length: 3{space}\r\n\r\nabc".to_bytes()
     let out = served(input)?
     assert out.starts_with("HTTP/1.1 400 Bad Request\r\n")
   }
@@ -85,7 +85,7 @@ test "adversary: a Content-Length beside a Unicode space is 400" {
 // \"close\" connection option." and "The server MUST NOT process any
 // further requests received on that connection."
 test "adversary: a response with the close option ends the connection" {
-  let out = served(b"GET /close HTTP/1.1\r\n\r\nGET /second HTTP/1.1\r\n\r\n")?
+  let out = served(b"GET /close HTTP/1.1\r\nHost: h\r\n\r\nGET /second HTTP/1.1\r\nHost: h\r\n\r\n")?
   assert out.contains("Connection: close\r\n")
   assert !out.contains("/second")
 }
@@ -97,7 +97,7 @@ test "adversary: a response with the close option ends the connection" {
 // not framed by its Content-Length (RFC 9112 6.3: Transfer-Encoding
 // overrides it).
 test "adversary: a response with a transfer coding other than chunked ends the connection" {
-  let out = served(b"GET /gzip HTTP/1.1\r\n\r\nGET /second HTTP/1.1\r\n\r\n")?
+  let out = served(b"GET /gzip HTTP/1.1\r\nHost: h\r\n\r\nGET /second HTTP/1.1\r\nHost: h\r\n\r\n")?
   assert !(out.contains("Transfer-Encoding: gzip\r\n") && out.contains("/second"))
 }
 
@@ -106,7 +106,7 @@ test "adversary: a response with a transfer coding other than chunked ends the c
 // encoding that is a superset of US-ASCII". The obs-text octet 0xE9 in a
 // field value is one octet; the application sees its byte length.
 test "adversary: an obs-text octet reaches the application as one octet" {
-  var input = b"GET /octet HTTP/1.1\r\nX: "
+  var input = b"GET /octet HTTP/1.1\r\nHost: h\r\nX: "
   input.append([0xE9])
   input.append(b"\r\nConnection: close\r\n\r\n")
   let out = served(input)?
