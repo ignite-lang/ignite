@@ -88,3 +88,40 @@ is outside this story's scope and still evaluates a constant per mention.
 | same, against P1 (P9 and P1 applied, constants not), median of 21 (load 7.1 to 7.3) | 262 ms (P1) | 10 ms |
 | wall time, `bench text concat` against P1, median of 11 (load 13.7 to 14.5) | 124 ms (P1) | 121 ms |
 | Rust target, `bench constants`, `ignite test --release`, 5 runs before any change (load 17 to 22) | 5.01 to 6.12 s | not changed by this step (no Rust generator change) |
+
+## P7: join and trim write their result once
+
+PR B's base is `d7d65b43f` (`main` after P9, P1 and P2); its programs are `bench-b.ignite`
+(this directory), timed against base with 21 interleaved rounds.
+
+`text_join` collected the parts in a `Vec`, joined them into a second heap `Vec` and copied
+that into the arena: two `malloc`s and two copies per call. Now it sums the lengths and
+writes parts and separators into one arena block. `text_trim` ran a UTF-8 pass over the
+whole text; now it drops the ASCII whitespace of `White_Space` (tab, LF, VT, FF, CR, space)
+from both ends and decodes only when an end left is a non-ASCII byte, which keeps
+`str::trim`'s answer (unit test `trim_keeps_what_str_trim_keeps` compares the two on
+Unicode spaces, NEL, U+2028/9, NBSP and invalid UTF-8). One difference on invalid UTF-8,
+which no runtime or generated operation produces: a VT at an ASCII end is now dropped (the
+old `trim_ascii` fallback kept it). `text_debug` of printable ASCII with no `"` or `\`
+writes the quoted bytes straight into the arena instead of building a `String`.
+
+The stdout part of the review's P7 (`Stdout::write_from(&[u8])`) is not done: it changes
+`ignite-io`'s `Stdout::write_all`, outside this story's crates.
+
+Both steps are runtime calls with no change to `program.ll`; the counts are runtime calls.
+
+| measure | base | P7 |
+|---|---|---|
+| `bench text join` (1,000,000 joins of 16 words): `malloc` calls, whole process | 2,000,033 | 33 |
+| same: instructions (callgrind `Ir`, whole run) | 1,708,435,891 | 1,370,435,334 |
+| same: `Ir` inside `ignite_rt_text_join` | 1,665,000,147 | 1,327,000,000 |
+| wall time, `bench text join`, median of 21 interleaved (load 11.4 to 11.7) | 112 ms | 87 ms |
+| `bench text trim` (4,000,000 trims of a 24-byte ASCII text): `Ir`, whole run | 1,424,435,537 | 872,435,127 |
+| same: `Ir` inside `ignite_rt_text_trim` | 1,336,000,000 | 784,000,000 |
+| wall time, `bench text trim`, median of 21 interleaved (load 11.2 to 11.4) | 106 ms | 72 ms |
+
+Tests that catch a wrong result: `crates/ignite-rt/tests/abi.rs` (join of multibyte parts
+with a multibyte separator, an empty part, a 70,000-byte part, an empty separator; debug of
+plain, empty and escaped texts) and the copies test "join, trim and their edge cases"
+(NBSP and VT/FF ends, a non-whitespace control byte, empty and all-space texts), run on
+both targets.

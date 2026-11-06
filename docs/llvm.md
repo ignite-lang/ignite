@@ -566,12 +566,12 @@ calling task (section 4). `T*` means a pointer to the section-3 layout;
 | `i32 stdout_write_all(List* bytes, IoError* err)` | write and flush |
 | `void io_error_new(IoError* out, Text* message)` | exit code 1 |
 | `void text_from_bytes_lossy(Text* out, List* bytes)` | invalid UTF-8 sequences become U+FFFD; ASCII is copied without the decoder |
-| `void text_trim(Text* out, Text* text)` | Unicode whitespace, as Rust `str::trim` |
+| `void text_trim(Text* out, Text* text)` | Unicode whitespace, as Rust `str::trim`; when both ends left after the ASCII whitespace are ASCII the text is not decoded |
 | `void text_concat(Text* out, Text* a, Text* b)` | |
 | `i8 text_eq(Text* a, Text* b)` | |
 | `void text_debug(Text* out, Text* text)` | the debug text of `text` (`docs/slice.md` section 13.6): quoted and escaped |
 | `i8 text_starts_with(Text* text, Text* prefix)` | |
-| `void text_join(Text* out, List* texts, Text* separator)` | |
+| `void text_join(Text* out, List* texts, Text* separator)` | one arena block of the summed length, written in place |
 | `void int_to_text(Text* out, i64 value)` | |
 | `i8 int_parse(Text* text, i64* out)` | 1 and `out` when `text` is a decimal `i64` with an optional leading `-` (`ignite_io::parse_int`: what Rust `str::parse` accepts less a leading `+`, read from the bytes without a UTF-8 pass), else 0; `text` may be the `List` of a `Bytes`, as `Int.parse(b.to_text())` passes `b` |
 | `i32 tcp_set_idle_timeout(i64 stream, i64 ms, IoError* err)` | a read that waits longer than `ms` returns `Eof`; 0 or less removes the timeout (`ignite_io::TcpStream::set_idle_timeout`) |

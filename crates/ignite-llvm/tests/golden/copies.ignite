@@ -233,3 +233,20 @@ test "a constant pattern compares with the constant" {
   }
   assert m == 0
 }
+
+test "join, trim and their edge cases" {
+  assert ["a", "b", "c"].join("-") == "a-b-c"
+  assert ["é", "", "ü"].join("→") == "é→→ü"
+  assert ["a"].join("-") == "a"
+  let none: List<Text> = []
+  assert none.join("-") == ""
+  assert ["", ""].join("") == ""
+  assert " \t a b \n".trim() == "a b"
+  let nbsp = Bytes.of([194, 160]).to_text()
+  assert nbsp.concat("x").concat(nbsp).trim() == "x"
+  assert Bytes.of([11, 97, 12]).to_text().trim() == "a"
+  assert Bytes.of([31, 97, 31]).to_text().trim().len() == 3
+  assert "é ".trim() == "é"
+  assert " ".trim() == ""
+  assert "".trim() == ""
+}

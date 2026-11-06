@@ -1,0 +1,110 @@
+fn writer(stream: PipeStream, rounds: Int) -> Result<Unit, IoError> requires [stream.write] {
+  let chunk = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789".to_bytes()
+  var i = 0
+  while i < rounds {
+    stream.write_all(chunk)?
+    i = i + 1
+  }
+  stream.close()
+}
+
+test "bench text join" {
+  let words = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi"]
+  var total = 0
+  var i = 0
+  while i < 1000000 {
+    total = total + words.join(", ").len()
+    i = i + 1
+  }
+  assert total == 1000000 * 98
+}
+
+test "bench text trim" {
+  let padded = " \t hello, wide world \r\n"
+  var total = 0
+  var i = 0
+  while i < 4000000 {
+    total = total + padded.trim().len()
+    i = i + 1
+  }
+  assert total == 4000000 * 17
+}
+
+test "bench pipe reads of 64 KiB" {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(10000)?
+  spawn writer(server, 200000)
+  var total = 0
+  var reads = 0
+  loop {
+    match client.read(65536)? {
+      Eof => break
+      Data(bytes) => {
+        total = total + bytes.len()
+        reads = reads + 1
+      }
+    }
+  }
+  assert total == 200000 * 100
+}
+
+test "bench map with text keys" {
+  var keys: List<Text> = []
+  var k = 0
+  while k < 512 {
+    keys.push("key-number-".concat(Int.to_text(k * 7919 % 512)))
+    k = k + 1
+  }
+  var total = 0
+  var round = 0
+  while round < 400 {
+    var m: Map<Text, Int> = Map.empty()
+    for key in keys {
+      m.put(key, round)
+    }
+    for key in keys {
+      total = total + match m.get(key) {
+        Some(v) => v
+        None => 0
+      }
+    }
+    round = round + 1
+  }
+  assert total > 0
+}
+
+fn answer(stream: PipeStream, rounds: Int) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  let ack = "k".to_bytes()
+  var i = 0
+  while i < rounds {
+    match stream.read(65536)? {
+      Eof => return Ok(())
+      Data(bytes) => {
+        stream.write_all(ack)?
+      }
+    }
+    i = i + 1
+  }
+  stream.close()
+}
+
+test "bench small reads of maximum 64 KiB" {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(10000)?
+  server.set_idle_timeout(10000)?
+  spawn answer(server, 20000)
+  let request = "GET /todos HTTP/1.1\r\nHost: localhost\r\nAccept: */*\r\nUser-Agent: bench\r\nConnection: keep-alive\r\n\r\n".to_bytes()
+  var total = 0
+  var i = 0
+  while i < 20000 {
+    client.write_all(request)?
+    match client.read(65536)? {
+      Eof => break
+      Data(bytes) => {
+        total = total + bytes.len()
+      }
+    }
+    i = i + 1
+  }
+  assert total == 20000
+}

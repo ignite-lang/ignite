@@ -35,14 +35,46 @@ pub extern "C" fn ignite_rt_text_from_bytes_lossy(out: *mut IgniteList, data: *c
 /// no runtime or generated operation produces) loses ASCII whitespace only.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_text_trim(out: *mut IgniteList, text: *const IgniteList) {
-    crate::entry(move || {
-        let text = bytes(text);
-        let trimmed = match std::str::from_utf8(text) {
-            Ok(text) => text.trim().as_bytes(),
-            Err(_) => text.trim_ascii(),
-        };
-        put(out, IgniteList::from_bytes(trimmed));
-    })
+    crate::entry(move || put(out, IgniteList::from_bytes(trim(bytes(text)))))
+}
+
+/// The bytes `str::trim` keeps. The ASCII whitespace of Unicode's
+/// `White_Space` (tab, LF, VT, FF, CR, space) is dropped from both ends
+/// first; when what is left is empty or starts and ends with an ASCII
+/// byte, that is `str::trim`'s answer for valid UTF-8 (an ASCII byte that
+/// is no whitespace stops it), so the UTF-8 pass over the whole text runs
+/// only when an end is a non-ASCII byte.
+fn trim(text: &[u8]) -> &[u8] {
+    let space = |b: &u8| matches!(b, b'\t' | b'\n' | 0x0B | 0x0C | b'\r' | b' ');
+    let start = text.iter().position(|b| !space(b)).unwrap_or(text.len());
+    let end = text
+        .iter()
+        .rposition(|b| !space(b))
+        .map_or(start, |i| i + 1);
+    let inner = &text[start..end];
+    match (inner.first(), inner.last()) {
+        (Some(first), Some(last)) if !first.is_ascii() || !last.is_ascii() => {
+            match std::str::from_utf8(text) {
+                Ok(text) => text.trim().as_bytes(),
+                Err(_) => text.trim_ascii(),
+            }
+        }
+        _ => inner,
+    }
+}
+
+/// A fresh `Text` of `len` bytes in the task's arena, written by `fill`
+/// (which must write all of them).
+fn fresh(len: usize, fill: impl FnOnce(&mut [u8])) -> IgniteList {
+    let ptr = crate::arena::alloc(len, 1);
+    // SAFETY: `ptr` is a fresh arena block of `len` bytes (a dangling,
+    // non-null pointer when `len` is 0); arena memory is initialized.
+    fill(unsafe { std::slice::from_raw_parts_mut(ptr, len) });
+    IgniteList {
+        ptr,
+        len: len as i64,
+        cap: len as i64,
+    }
 }
 
 /// `void text_concat(Text* out, Text* a, Text* b)`.
@@ -70,7 +102,23 @@ pub extern "C" fn ignite_rt_text_eq(a: *const IgniteList, b: *const IgniteList) 
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_text_debug(out: *mut IgniteList, text: *const IgniteList) {
     crate::entry(move || {
-        put(out, IgniteList::from_bytes(debug(bytes(text)).as_bytes()));
+        let text = bytes(text);
+        if text
+            .iter()
+            .all(|&b| (0x20..0x7f).contains(&b) && b != b'"' && b != b'\\')
+        {
+            put(
+                out,
+                fresh(text.len() + 2, |buffer| {
+                    let last = buffer.len() - 1;
+                    buffer[0] = b'"';
+                    buffer[1..last].copy_from_slice(text);
+                    buffer[last] = b'"';
+                }),
+            );
+            return;
+        }
+        put(out, IgniteList::from_bytes(debug(text).as_bytes()));
     })
 }
 
@@ -111,8 +159,25 @@ pub extern "C" fn ignite_rt_text_join(
     separator: *const IgniteList,
 ) {
     crate::entry(move || {
-        let parts: Vec<&[u8]> = texts(list).iter().map(|text| bytes(text)).collect();
-        put(out, IgniteList::from_bytes(&parts.join(bytes(separator))));
+        let parts = texts(list);
+        let separator = bytes(separator);
+        let len = parts.iter().map(|text| bytes(text).len()).sum::<usize>()
+            + separator.len() * parts.len().saturating_sub(1);
+        put(
+            out,
+            fresh(len, |buffer| {
+                let mut at = 0;
+                for (i, part) in parts.iter().enumerate() {
+                    if i > 0 {
+                        buffer[at..at + separator.len()].copy_from_slice(separator);
+                        at += separator.len();
+                    }
+                    let part = bytes(part);
+                    buffer[at..at + part.len()].copy_from_slice(part);
+                    at += part.len();
+                }
+            }),
+        );
     })
 }
 
@@ -187,6 +252,35 @@ pub extern "C" fn ignite_rt_quantity_debug(out: *mut IgniteList, kind: i32, valu
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn trim_keeps_what_str_trim_keeps() {
+        for text in [
+            "",
+            " ",
+            "a",
+            " a b ",
+            "\t\r\n",
+            "\x0b a \x0b",
+            "\x0c\x0bx",
+            "\x1fx\x1f",
+            "\u{a0}x\u{a0}",
+            " \u{3000}é ",
+            "x\u{2003}",
+            "\u{85}y",
+            " é",
+            "é ",
+            "\u{2028} \u{2029}",
+        ] {
+            assert_eq!(
+                super::trim(text.as_bytes()),
+                text.trim().as_bytes(),
+                "{text:?}"
+            );
+        }
+        assert_eq!(super::trim(b" \xff a \xff "), b"\xff a \xff");
+        assert_eq!(super::trim(b" a\xff b "), b"a\xff b");
+    }
+
     #[test]
     fn debug_escapes_as_section_13_6() {
         assert_eq!(
