@@ -8422,3 +8422,129 @@ follows.
 | R26 | 22.4 creates `todos/<id>` before writing; 500 means "not durable" |
 | R27 | 22.2 records the D12 deviation for the steering session to carry into the epic |
 | R28 | 22.9 states that `recover` is repeatable and how a crash in it reconciles |
+
+## 23 Static executables (`--static`)
+
+**Status: implemented 2026-11-06 on `feat/static-linking` (`story:static-linking`). Sizes and
+build times: `docs/performance/static/README.md`.**
+
+Sources: the planning store's `story:static-linking` (decisions D1 to D4, its acceptance);
+this file 6.2 (the Rust target's build) and `docs/llvm.md` section 1 (the LLVM link and the
+runtime archive the driver carries).
+
+### 23.1 The flag
+
+`ignite build`, `ignite test` and `ignite conformance` take `--static` on both targets
+(`BuildOptions::static_link`). Every executable the command writes is then linked against musl:
+no `PT_INTERP` program header, no `DT_NEEDED` entry, so it runs on a host or in a container
+without a libc and with an empty environment. Without `--static` nothing changes: the same link
+commands, the same stamps, the same `CODEGEN_REVISION` (no generated IR or Rust changes; the
+flag changes only how the objects are linked).
+
+`ignite run` and `ignite plan --for-apply` do not take it: their builds are keyed by
+`RunOptions` and the saved plan's artifact identities, which name no link mode; adding one is
+a change to the plan format, out of this story's scope.
+
+### 23.2 The triple (D1)
+
+The musl triple is `--triple` when given, else `<arch>-unknown-linux-musl` for the driver's
+architecture (`std::env::consts::ARCH`). A `--triple` that names no musl target (no
+component starting with `musl`) with `--static` is exit 2: `--static links against musl, and
+--triple T is no musl target; …`. Static glibc is not offered (D1: NSS and `dlopen` break
+under it). On the LLVM target the musl triple is the one clang compiles every module for, so
+the IR is pinned to it (`docs/llvm.md` section 1); on the Rust target it is cargo's
+`--target` (23.5).
+
+### 23.3 The LLVM link and the musl kit (D2)
+
+A static LLVM build links each executable with
+
+```text
+clang -o DIR/bin/<exe> --target=<musl triple> -static -nostdlib
+  KIT/crt1.o KIT/crti.o KIT/crtbegin.o main_<exe>.o program.o std.o <runtime>
+  -Wl,--gc-sections [-Wl,--strip-debug] KIT/libunwind.a KIT/libc.a KIT/crtend.o KIT/crtn.o
+```
+
+and none of `RUNTIME_LIBS`: the runtime archive built for musl needs `-lunwind -lc`
+(`cargo rustc -p ignite-rt --target x86_64-unknown-linux-musl --print native-static-libs`), and
+the kit supplies both. `-nostdlib` keeps clang from adding the host's libraries and start
+files; nothing of the host's libc reaches the executable.
+
+The kit is the runtime archive for the musl triple plus the start files, `libc.a` and
+`libunwind.a` of the Rust target's `self-contained` directory
+(`$(rustc --print target-libdir --target T)/self-contained`), the files rustc itself links a
+musl program with. It is found in this order:
+
+1. the kit the driver carries: `crates/ignite/build.rs` builds `ignite-rt --features runner`
+   for the driver's target and, for a `<arch>-unknown-linux-gnu` driver whose toolchain has the
+   Rust target `<arch>-unknown-linux-musl` installed, for that target too, in the same nested
+   `cargo build` (two `--target` flags); it embeds that archive and the seven kit files
+   (`OUT_DIR/musl_kit.rs`). The first static build writes them, a temporary file and a rename
+   each, to `$XDG_CACHE_HOME/ignite/runtime/<triple>-<hash>/`, as the dynamic runtime is
+   written (`docs/llvm.md` section 1). `--runtime` replaces the carried archive, not the
+   kit's other files;
+2. else the installed Rust target's `self-contained` directory, with the runtime archive from
+   `--runtime`; without `--runtime` exit 2 naming both ways out (pass an archive built with
+   `cargo build -p ignite-rt --features runner --target T`, or rebuild `ignite` where the
+   target is installed).
+
+D2 left open whether the driver carries the musl archive. It does, because a static build
+then needs clang alone, like a dynamic one; the cost is the driver's size and the nested
+build's time, measured in `docs/performance/static/README.md`. A driver built where the musl
+target is not installed carries no kit and builds without error; its `--static` takes path 2.
+
+The link stamp (`docs/llvm.md` section 1) holds the kit's paths, so a switch between a dynamic
+and a static build relinks; the objects recompile because their `--target` differs. Both write
+the same `DIR/bin/<exe>`.
+
+### 23.4 A missing musl target (D4)
+
+`Error::Toolchain` (exit 2) states what is missing and how to get it; no build falls back to a
+dynamic link:
+
+- the Rust target's library directory holds no `libstd-*` (the target is not installed):
+  `--static links against musl and needs the Rust target T, which is not installed: install it
+  with \`rustup target add T\``. Checked before cargo runs on the Rust target, and on the LLVM
+  target when the driver carries no kit for T;
+- the target is installed but a kit file is missing: the path and `rustup target add T`;
+- no runtime archive for T (23.3 path 2).
+
+`static_link::static_without_the_musl_target_exits_2_naming_it` triggers the first with
+`--triple aarch64-unknown-linux-musl` on both targets (the test asserts that target is not
+installed on the host).
+
+### 23.5 The Rust target (D3)
+
+`ignite build --target rust --static` runs `cargo build --target <musl triple> --config
+'target.<musl triple>.rustflags=["-C", "relocation-model=static"]'` on the generated project;
+the executables are in `<target-dir>/<triple>/<profile>/`. Rust's musl targets link statically
+by default (`crt-static`) with the same `self-contained` files, but the x86_64 target writes a
+static PIE, which carries a `PT_DYNAMIC` segment for its own relocations and which `ldd`
+reports as `statically linked` instead of `not a dynamic executable`. The relocation model
+makes it a position-dependent static executable like the LLVM target's, so both targets meet
+the same acceptance (`file`: `statically linked`; `ldd`: `not a dynamic executable`). A
+`RUSTFLAGS` in the environment replaces the configured `rustflags`, as cargo defines; the build
+is then a static PIE, still without `PT_INTERP` and `DT_NEEDED`.
+`ignite test --target rust --static` builds the test project the same way.
+
+### 23.6 Tests
+
+- `static_link::` (`crates/ignite/tests/static_link.rs`): `ignite build
+  examples/todo/todo.ignite --static` on each target; every executable has no `PT_INTERP` and
+  no `DT_NEEDED` (read from the ELF program headers), `file` says `statically linked`, `ldd`
+  says `not a dynamic executable`; `todod`, copied alone into an empty directory and started
+  with an empty environment, answers a POST with 201 and a GET with the list. `ignite test
+  std/json.ignite std/process.ignite --target all --static` passes and both test executables
+  are static. The two exit-2 cases of 23.2 and 23.4.
+- The end-to-end suites that run a compiled program, `todo::` and `terminal::`, run every case
+  on four builds: `rust`, `llvm`, `rust_static`, `llvm_static` (`common::Target`).
+  `terminal::idle_terminald_runs_one_thread` counts threads on all four.
+
+### 23.7 Decisions taken here
+
+- The driver carries the musl kit (D2's open question), 23.3.
+- Both targets write position-dependent static executables, not static PIEs (23.5): the
+  acceptance asks for `ldd`'s `not a dynamic executable`, and one link mode on both targets
+  keeps the end-to-end matrix one behaviour. A static PIE keeps address-space randomisation;
+  offering it is a later flag, not this story.
+- `ignite run` and `ignite plan --for-apply` take no `--static` (23.1).

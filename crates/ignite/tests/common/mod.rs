@@ -2,11 +2,50 @@
 
 pub mod apply;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use ignite_eval::Json;
+
+/// One build of the end-to-end matrix of the suites that run a compiled
+/// program (`todo`, `terminal`): a target, dynamic or `--static`
+/// (`docs/slice.md` 23.6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Target {
+    Rust,
+    Llvm,
+    RustStatic,
+    LlvmStatic,
+}
+
+impl Target {
+    /// The position of the build in a per-build cache.
+    pub fn index(self) -> usize {
+        self as usize
+    }
+
+    /// The options of `ignite::build` writing to `<out><suffix>`: the
+    /// LLVM builds link the runtime of this test binary, or the carried
+    /// musl kit's with `--static`.
+    pub fn options(self, out: &Path) -> ignite::BuildOptions {
+        let (target, static_link, suffix) = match self {
+            Target::Rust => (ignite::Target::Rust, false, ""),
+            Target::Llvm => (ignite::Target::Llvm, false, "-llvm"),
+            Target::RustStatic => (ignite::Target::Rust, true, "-static"),
+            Target::LlvmStatic => (ignite::Target::Llvm, true, "-llvm-static"),
+        };
+        let mut file_name = out.file_name().expect("an out directory").to_os_string();
+        file_name.push(suffix);
+        ignite::BuildOptions {
+            target,
+            static_link,
+            out: Some(out.with_file_name(file_name)),
+            runtime: (target == ignite::Target::Llvm && !static_link).then(runtime_archive),
+            ..Default::default()
+        }
+    }
+}
 
 /// Setup includes compilation and build-lock waits. The first stdout segment
 /// follows build/copy completion; the on-disk journal header can precede it.

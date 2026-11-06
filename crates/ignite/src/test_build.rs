@@ -373,9 +373,11 @@ fn build_group(
     build: &BuildOptions,
 ) -> Result<PathBuf, Error> {
     let programs = &group.programs;
-    let target = match build.target {
-        Target::Rust => "rust",
-        Target::Llvm => "llvm",
+    let target = match (build.target, build.static_link) {
+        (Target::Rust, false) => "rust",
+        (Target::Llvm, false) => "llvm",
+        (Target::Rust, true) => "rust-static",
+        (Target::Llvm, true) => "llvm-static",
     };
     let name = &group.name;
     let out = build
@@ -386,6 +388,10 @@ fn build_group(
         .join(target);
     match build.target {
         Target::Rust => {
+            let triple = crate::musl::triple(build)?;
+            if let Some(triple) = &triple {
+                crate::musl::require_rust_target(triple)?;
+            }
             let options = &group.options;
             let std_modules: Vec<ignite_rustgen::TypedStdModule<'_>> = library
                 .modules
@@ -423,8 +429,7 @@ fn build_group(
                 .clone()
                 .unwrap_or_else(|| out.join("target"));
             claim_target_dir(&out, &target_dir)?;
-            crate::cargo_build(&out, &target_dir, build.release, true)?;
-            let profile = if build.release { "release" } else { "debug" };
+            crate::cargo_build(&out, &target_dir, build.release, triple.as_deref(), true)?;
             let file = format!(
                 "{}{}",
                 ignite_rustgen::TEST_EXECUTABLE,
@@ -433,7 +438,8 @@ fn build_group(
             // Every group's executable has the same name, so in a shared
             // `--target-dir` the next group's build overwrites it: keep a
             // copy in the group's own directory.
-            let built = target_dir.join(profile).join(&file);
+            let built =
+                crate::cargo_output_dir(&target_dir, build.release, triple.as_deref()).join(&file);
             let executable = out.join(&file);
             std::fs::copy(&built, &executable).map_err(io_error(&built))?;
             Ok(executable)
@@ -476,7 +482,7 @@ fn build_group(
                 siblings: Vec::new(),
             };
             let generated = ignite_llvm::generate_tests(&std_inputs, &inputs, &options);
-            let runtime = crate::runtime_or_default(build.runtime.as_ref())?;
+            let runtime = crate::runtime_for(build)?;
             check_runner(&runtime)?;
             let build = BuildOptions {
                 out: Some(out),

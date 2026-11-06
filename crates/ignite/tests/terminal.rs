@@ -3,7 +3,9 @@
 //! `terminald` over a raw socket, the compiled `tn` against `terminald`
 //! and against a scripted listener, and `tn` on a pseudo-terminal.
 //! `docs/slice.md` section 9, items 4 to 9. Every case runs once per
-//! target (`rust::<case>`, `llvm::<case>`; `docs/llvm.md` section 8 item 3).
+//! target (`rust::<case>`, `llvm::<case>`; `docs/llvm.md` section 8 item 3)
+//! and once more per target with `--static` (`rust_static::<case>`,
+//! `llvm_static::<case>`; `docs/slice.md` 23.6).
 
 use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -12,9 +14,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, OnceLock, mpsc};
 use std::time::{Duration, Instant};
 
-use ignite::Target;
-
-use crate::common;
+use crate::common::Target;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const PROMPT: &[u8] = b"terminal> ";
@@ -24,33 +24,15 @@ struct Executables {
     tn: PathBuf,
 }
 
-/// The example, built once per target and test binary under the cargo
-/// target directory: the Rust target with cargo, the LLVM target with clang
-/// and the runtime archive.
+/// The example, built once per build of the matrix and test binary under
+/// the cargo target directory: the Rust target with cargo, the LLVM target
+/// with clang and the runtime archive, each also with `--static`.
 fn executables(target: Target) -> &'static Executables {
-    static RUST: OnceLock<Executables> = OnceLock::new();
-    static LLVM: OnceLock<Executables> = OnceLock::new();
-    let cell = match target {
-        Target::Rust => &RUST,
-        Target::Llvm => &LLVM,
-    };
-    cell.get_or_init(|| {
+    static BUILT: [OnceLock<Executables>; 4] = [const { OnceLock::new() }; 4];
+    BUILT[target.index()].get_or_init(|| {
         let source =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/terminal/terminal.ignite");
-        let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
-        let options = match target {
-            Target::Rust => ignite::BuildOptions {
-                target: Target::Rust,
-                out: Some(tmp.join("terminal")),
-                ..Default::default()
-            },
-            Target::Llvm => ignite::BuildOptions {
-                target: Target::Llvm,
-                out: Some(tmp.join("terminal-llvm")),
-                runtime: Some(common::runtime_archive()),
-                ..Default::default()
-            },
-        };
+        let options = target.options(&Path::new(env!("CARGO_TARGET_TMPDIR")).join("terminal"));
         let output = ignite::build(&source, &options).unwrap_or_else(|e| panic!("{e}"));
         let names: Vec<&str> = output
             .executables
@@ -842,7 +824,12 @@ fn threads(pid: u32) -> u64 {
 #[test]
 fn idle_terminald_runs_one_thread() {
     const IDLE: u64 = 2;
-    for target in [Target::Rust, Target::Llvm] {
+    for target in [
+        Target::Rust,
+        Target::Llvm,
+        Target::RustStatic,
+        Target::LlvmStatic,
+    ] {
         let mut server = Server::start(target);
         let pid = server.process.0.id();
         assert_eq!(threads(pid), IDLE, "{target:?} idle");
@@ -959,15 +946,10 @@ fn a_task_that_cannot_start_closes_only_its_connection(target: Target) {
 const SHORT_IDLE_MS: u64 = 300;
 
 /// `terminald` built against a copy of `std/` whose Telnet idle timeout is
-/// [`SHORT_IDLE_MS`], once per target.
+/// [`SHORT_IDLE_MS`], once per build of the matrix.
 fn short_idle_terminald(target: Target) -> &'static Path {
-    static RUST: OnceLock<PathBuf> = OnceLock::new();
-    static LLVM: OnceLock<PathBuf> = OnceLock::new();
-    let cell = match target {
-        Target::Rust => &RUST,
-        Target::Llvm => &LLVM,
-    };
-    cell.get_or_init(|| {
+    static BUILT: [OnceLock<PathBuf>; 4] = [const { OnceLock::new() }; 4];
+    BUILT[target.index()].get_or_init(|| {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let tmp = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("short-idle-{target:?}"));
         let std = tmp.join("std");
@@ -978,16 +960,10 @@ fn short_idle_terminald(target: Target) -> &'static Path {
         assert!(text.contains(constant), "telnet.ignite has no `{constant}`");
         let short = format!("idle_timeout: Duration = {SHORT_IDLE_MS} ms");
         std::fs::write(&telnet, text.replace(constant, &short)).unwrap();
-        let mut options = ignite::BuildOptions {
-            target: Target::Rust,
-            out: Some(tmp.join("out")),
+        let options = ignite::BuildOptions {
             std: Some(std),
-            ..Default::default()
+            ..target.options(&tmp.join("out"))
         };
-        if target == Target::Llvm {
-            options.target = Target::Llvm;
-            options.runtime = Some(common::runtime_archive());
-        }
         let source = root.join("examples/terminal/terminal.ignite");
         let output = ignite::build(&source, &options).unwrap_or_else(|e| panic!("{e}"));
         output.executables[0].clone()
@@ -1030,19 +1006,31 @@ fn a_silent_session_is_closed_after_the_idle_timeout(target: Target) {
     );
 }
 
-/// One test per target for each case.
+/// One test per build of the matrix for each case.
 macro_rules! both_targets {
     ($($case:ident),* $(,)?) => {
         mod rust {
             $(#[test]
             fn $case() {
-                super::$case(ignite::Target::Rust);
+                super::$case(crate::common::Target::Rust);
             })*
         }
         mod llvm {
             $(#[test]
             fn $case() {
-                super::$case(ignite::Target::Llvm);
+                super::$case(crate::common::Target::Llvm);
+            })*
+        }
+        mod rust_static {
+            $(#[test]
+            fn $case() {
+                super::$case(crate::common::Target::RustStatic);
+            })*
+        }
+        mod llvm_static {
+            $(#[test]
+            fn $case() {
+                super::$case(crate::common::Target::LlvmStatic);
             })*
         }
     };

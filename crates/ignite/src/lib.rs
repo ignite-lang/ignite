@@ -16,6 +16,7 @@ pub mod apply;
 pub mod conformance;
 mod embedded_runtime;
 mod llvm_build;
+mod musl;
 pub mod rfc;
 pub mod run;
 mod test_build;
@@ -44,7 +45,9 @@ pub enum Target {
 }
 
 /// Native libraries `libignite_rt.a` needs (`cargo rustc -p ignite-rt
-/// --print native-static-libs`).
+/// --print native-static-libs`). A `--static` build links none of them:
+/// the musl archive needs `-lunwind -lc`, which its kit supplies
+/// (`docs/slice.md` 23.3).
 pub const RUNTIME_LIBS: &[&str] = &[
     "-lgcc_s",
     "-lutil",
@@ -76,8 +79,13 @@ pub struct BuildOptions {
     /// Root of the standard library. Default: [`default_std_path`].
     pub std: Option<PathBuf>,
     /// Target triple of the LLVM target, passed to clang as `--target`.
-    /// Default: clang's own target (`docs/llvm.md` section 1).
+    /// Default: clang's own target (`docs/llvm.md` section 1). With
+    /// `static_link` it must name a musl target and also selects the Rust
+    /// target's cargo `--target`.
     pub triple: Option<String>,
+    /// `--static`: link against musl, with no program interpreter and no
+    /// shared library (`docs/slice.md` 23).
+    pub static_link: bool,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -93,6 +101,7 @@ impl Default for BuildOptions {
             release: false,
             std: None,
             triple: None,
+            static_link: false,
         }
     }
 }
@@ -190,6 +199,10 @@ pub enum Error {
         path: PathBuf,
         error: std::io::Error,
     },
+    /// Exit 2. A toolchain a build needs is missing or the flags ask for
+    /// one that cannot be (`--static`, `docs/slice.md` 23.4); `message`
+    /// names it and how to get it.
+    Toolchain { message: String },
 }
 
 impl fmt::Display for Error {
@@ -202,6 +215,7 @@ impl fmt::Display for Error {
             Error::Cargo { status } => write!(f, "cargo build failed with status {status}"),
             Error::Clang { status } => write!(f, "clang failed with status {status}"),
             Error::Io { path, error } => write!(f, "{}: {error}", path.display()),
+            Error::Toolchain { message } => f.write_str(message),
         }
     }
 }
@@ -212,7 +226,7 @@ impl Error {
     pub fn exit_status(&self) -> i32 {
         match self {
             Error::Diagnostics { .. } => 1,
-            Error::Cargo { .. } | Error::Clang { .. } => 2,
+            Error::Cargo { .. } | Error::Clang { .. } | Error::Toolchain { .. } => 2,
             Error::Io { .. } => 3,
         }
     }
@@ -1826,6 +1840,10 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
     if options.target == Target::Llvm {
         return llvm_build::build(file, options);
     }
+    let triple = musl::triple(options)?;
+    if let Some(triple) = &triple {
+        musl::require_rust_target(triple)?;
+    }
     let (parsed, library) = load_program_std(file, options.std.as_deref(), &[])?;
     let substrate = options
         .substrate
@@ -1850,13 +1868,13 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
         out.display()
     );
     test_build::claim_target_dir(&out, &target_dir)?;
-    cargo_build(&out, &target_dir, options.release, false)?;
-    let profile = if options.release { "release" } else { "debug" };
+    cargo_build(&out, &target_dir, options.release, triple.as_deref(), false)?;
+    let built = cargo_output_dir(&target_dir, options.release, triple.as_deref());
     let executables = project
         .executables
         .iter()
         .map(|executable| {
-            target_dir.join(profile).join(format!(
+            built.join(format!(
                 "{}{}",
                 executable.name,
                 std::env::consts::EXE_SUFFIX
@@ -1869,9 +1887,36 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
     })
 }
 
-/// `cargo build` of the generated project in `out`, `--quiet` when `quiet`.
+/// Where cargo writes the executables of a build into `target_dir`:
+/// `<target_dir>/<profile>`, or `<target_dir>/<triple>/<profile>` for a
+/// `--target` build.
+fn cargo_output_dir(target_dir: &Path, release: bool, triple: Option<&str>) -> PathBuf {
+    let profile = if release { "release" } else { "debug" };
+    match triple {
+        Some(triple) => target_dir.join(triple).join(profile),
+        None => target_dir.join(profile),
+    }
+}
+
+/// The `rustflags` of a static Rust build: a position-dependent executable,
+/// as the LLVM target links, instead of the static PIE Rust's musl targets
+/// write by default, which has a `PT_DYNAMIC` segment and which `ldd`
+/// reports as statically linked rather than not dynamic (`docs/slice.md`
+/// 23.5). `RUSTFLAGS` in the environment replaces them, as it replaces
+/// every configured `rustflags`.
+const STATIC_RUSTFLAGS: &str = r#"["-C", "relocation-model=static"]"#;
+
+/// `cargo build` of the generated project in `out`, `--quiet` when `quiet`,
+/// `--target <triple>` with [`STATIC_RUSTFLAGS`] for a static build
+/// (`docs/slice.md` 23.5).
 /// Cargo is `$CARGO` when set, else `cargo` from `PATH`.
-fn cargo_build(out: &Path, target_dir: &Path, release: bool, quiet: bool) -> Result<(), Error> {
+fn cargo_build(
+    out: &Path,
+    target_dir: &Path,
+    release: bool,
+    triple: Option<&str>,
+    quiet: bool,
+) -> Result<(), Error> {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut command = Command::new(&cargo);
     command
@@ -1882,6 +1927,13 @@ fn cargo_build(out: &Path, target_dir: &Path, release: bool, quiet: bool) -> Res
         .arg(target_dir);
     if release {
         command.arg("--release");
+    }
+    if let Some(triple) = triple {
+        command
+            .arg("--target")
+            .arg(triple)
+            .arg("--config")
+            .arg(format!("target.{triple}.rustflags={STATIC_RUSTFLAGS}"));
     }
     if quiet {
         command.arg("--quiet");
@@ -1944,6 +1996,15 @@ pub(crate) fn runtime_or_default(runtime: Option<&PathBuf>) -> Result<PathBuf, E
     match runtime {
         Some(runtime) => Ok(runtime.clone()),
         None => default_runtime(),
+    }
+}
+
+/// The runtime archive an LLVM build links: with `--static` the one of
+/// its musl kit (`docs/slice.md` 23.3), else [`runtime_or_default`].
+pub(crate) fn runtime_for(options: &BuildOptions) -> Result<PathBuf, Error> {
+    match musl::triple(options)? {
+        Some(triple) => Ok(musl::kit(options, &triple)?.runtime),
+        None => runtime_or_default(options.runtime.as_ref()),
     }
 }
 

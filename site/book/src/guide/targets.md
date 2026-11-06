@@ -76,6 +76,27 @@ task compile-todo-llvm    # todod into target/ignite-llvm/todo/bin/
 task server TARGET=llvm
 ```
 
+## Static executables
+
+`--static` links every executable against musl, on either target: no dynamic loader, no
+shared library, so the binary runs on a host or in a container that has no libc.
+
+```sh
+ignite build examples/todo/todo.ignite --static
+ignite build examples/todo/todo.ignite --static --target rust
+```
+
+It needs the Rust target `x86_64-unknown-linux-musl` (`rustup target add
+x86_64-unknown-linux-musl`; on another architecture its `<arch>-unknown-linux-musl`). An
+`ignite` built where that target is installed carries the musl runtime and libc, so a static
+LLVM build needs nothing but clang; the Rust target builds with
+`cargo build --target <arch>-unknown-linux-musl`. Without the target the build stops with
+exit 2 and says what to install; it never falls back to a dynamic build. `--triple` with
+`--static` must name a musl target. `ignite test --static` and `ignite conformance --static`
+build their test executables the same way. Sizes and build times against a dynamic build
+are in
+[`docs/performance/static/`](https://github.com/ignite-lang/ignite/tree/main/docs/performance/static).
+
 ## The same behaviour on both
 
 - Integer overflow is a failure on both targets, not a wrap-around:
