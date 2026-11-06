@@ -10,10 +10,9 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use ignite_check::RFC_MODULE;
 use ignite_syntax::ast::{Decl, Expr, ExprKind, Ident, Path, Program, Span, StatusKind};
 use ignite_syntax::diagnostic::Diagnostic;
-use ignite_types::{QualName, QuantityKind, Ty, TypedProgram};
+use ignite_types::{QualName, QuantityKind, RFC_MODULE, Ty, TypedProgram};
 
 use crate::model::eval_diagnostic;
 use crate::{Evaluator, Module, Value};
