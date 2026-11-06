@@ -629,8 +629,8 @@ reasons is in 17.5 "As landed (U5)"; no known gaps.
   is its compiler and runtime build, its inline execution unchanged at 0.33 to 0.35 s
   (measured). todod release falls (0.91 Rust, 0.97 LLVM).
 - Known cost not measured: since wave 3 a pattern binding that is a used branch or arm tail is
-  copied (the analysis does not track pattern bindings; draft story
-  `moves-for-pattern-bindings`).
+  copied. Since PR 67 (`story:moves-for-pattern-bindings`) the analysis moves pattern bindings
+  of a freshly created value; a binding of a borrowed scrutinee is still copied once.
 - No baseline moved. The apply suites stay the slice-13 exception.
 
 ## Slice 17 playground substrate (2026-11-05)
