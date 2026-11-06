@@ -1,0 +1,16 @@
+package examples.typed.sample
+
+// The program whose typed document `reader.ignite` reads (`ignite emit --typed-json`,
+// `docs/slice.md` 24): one record, one fn with parameters of three types, a UFCS call.
+
+import std.text.split
+
+type Box {
+  width: Int
+  label: Text
+}
+
+fn describe(box: Box, scale: Int, separator: Text) -> List<Text> {
+  let area = box.width * scale
+  "{box.label}{separator}{area}".split(separator)
+}

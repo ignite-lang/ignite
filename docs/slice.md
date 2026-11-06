@@ -8548,3 +8548,188 @@ is then a static PIE, still without `PT_INTERP` and `DT_NEEDED`.
   keeps the end-to-end matrix one behaviour. A static PIE keeps address-space randomisation;
   offering it is a later flag, not this story.
 - `ignite run` and `ignite plan --for-apply` take no `--static` (23.1).
+
+## 24 The typed program (`ignite emit --typed-json`)
+
+**Status: implemented 2026-11-06 on `feat/typed-program-json` (`story:typed-program-json`).**
+
+```text
+ignite emit --typed-json FILE [--std DIR]
+```
+
+prints the parsed and typed program of FILE as one JSON document, so that a tool written in
+Ignite reads Ignite programs through `std.json` without a parser of its own (the first reader is
+`codespec-read-ignite` of `ignite-lang/ignite-codespec`, which runs the command through
+`Launcher`). The serialiser is `crates/ignite/src/typed_json.rs` (`ignite::typed_json::emit`,
+`document`, `ty`, `FORMAT_VERSION`).
+
+### 24.1 Pipeline and output
+
+- FILE is loaded as `ignite plan` loads it (`ignite::load`): parsed with its sibling modules,
+  checked and typed against the reachable standard library. The evaluator does not run. A
+  diagnostic is exit 1 with the text form of `ignite check`, a file that cannot be read exit 3;
+  nothing is printed on stdout then.
+- The document covers FILE alone. A sibling module or a standard-library module is a document
+  of its own: run the command on its file.
+- Compact JSON (no whitespace, object keys in byte order, the string escaping of 15.5),
+  followed by a newline. The same inputs give the same bytes; no time, host or absolute path
+  appears unless FILE was given as one (`files` holds FILE as written).
+- `--typed-json` conflicts with `--substrate`; without it `ignite emit` is unchanged.
+
+### 24.2 The document
+
+Statements, expressions and patterns are not nested in their parents: each is one object in a
+flat table, and a parent names a child by its index in that table. The nesting depth of the
+document does not grow with the program's (`std.json.parse` refuses depth over 64). Tables are
+in pre-order: a parent's index is below its children's, siblings in source order.
+
+| key | content |
+|---|---|
+| `formatVersion` | `"ignite-typed/0.1"` |
+| `module` | the module path (`main` for a file without `package`) |
+| `package` | the dotted `package`, or `null` |
+| `files` | the source files spans index; in 0.1 exactly one, FILE as given on the command line |
+| `imports` | `{module, path, names, glob, span}` per `import`, in source order |
+| `decls` | one object per top-level declaration, in source order |
+| `stmts` | every statement of the file |
+| `exprs` | every expression of the file |
+| `patterns` | every pattern of the file |
+
+**Span**, on every declaration, statement, expression and pattern and on parameters, fields,
+variants, arms, properties and blocks: `{file, line, column, endLine, endColumn, start, end}`.
+`file` indexes `files`; lines and columns are 1-based, columns in characters (as section 8);
+`start` and `end` are byte offsets, `end` exclusive.
+
+**Type**, the value of every `type`, `ret`, `bindingType`, `declaredType`, `ownerType` and of the
+items of `args`, `params` and `typeArgs`: `{kind, text, ..}`. `text` is the type in Ignite
+syntax with records and enums unqualified (`List<Text>`, `Bytes`, `Box`). `kind` is the
+constructor:
+
+| `kind` | further keys |
+|---|---|
+| `Int`, `Bool`, `Byte`, `Unit`, `Text`, `Never`, `TcpListener`, `TcpStream`, `PipeStream`, `IoError`, `Input`, `SystemRef`, `Protocol` | none |
+| `List`, `Option`, `Result`, `Map`, `Store`, `Tuple`, `Ref`, `Signal` | `args`: the type arguments (`Bytes` is `List` of `Byte`; `Ref` without a kind has none) |
+| `Record`, `Enum` | `module`, `name` (the declaring module; `""` for a builtin), `args` (empty unless generic) |
+| `Fn` | `params`, `ret`, `requires` (`null` for a pure fn type, else the effect names), `paramNames` with `requires` |
+| `Param` | `name`: a type parameter |
+| `Quantity` | `name`: `Duration`, `ByteSize` or `Ratio` |
+| `Capability` | `name`: `Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting` or `CommandLine` |
+
+Written type expressions (parameters, fields, payloads, `let x: T`) are given as the type they
+denote, aliases resolved. A `type` is `null` only where the typer kept none; no file under
+`std/` or `examples/` has one (`typed_json::every_file_of_std_and_examples_gives_a_complete_document`).
+
+**Declarations**: `kind`, `name`, `span` and
+
+| `kind` | keys |
+|---|---|
+| `fn` | `qualifiedName` (`Owner.name` for an associated fn), `owner`, `typeParams`, `bounds` (`{param, interfaces}`), `params` (`{name, type, span}`), `ret` (`Unit` when not written), `requires` (`null` when not written, else the written effects), `effectful` (written or inferred), `satisfies`, `testOnly`, `body` |
+| `record` | `typeParams`, `fields` (`{name, type, default, satisfies, span}`, `default` an expression index or `null`), `satisfies`, `testOnly` |
+| `enum` | `typeParams`, `variants` (`{name, payload, span}`, `payload` a list of types), `testOnly` |
+| `const` | `type`, `value` (expression index), `testOnly` |
+| `alias` | `typeParams`, `type` |
+| `test` | `body`, `verifies` (the dotted requirement paths); `name` is the test's text |
+| `system` | `resources` (`{name, kind, args, properties, span}`), `components`, `contracts`, `policies` (`{name, kind, properties, span}`); `kind` of a member is the kind's name as written |
+| `protocol` | `roles` (each a `fn` object with `kind` `role`), `conforms`, `scope` (`{parties, sections, span}` or `null`), `statuses` (`{kind, requirement, reason, span}`) |
+| `assembly` | `kindName`, `properties` |
+
+A **block** is `{stmts, span}`, `stmts` the statement indexes. **Properties** and record
+literal fields are `{name, value, span}`, `value` an expression index.
+
+**Statements**: `kind`, `span` and
+
+| `kind` | keys |
+|---|---|
+| `let` | `name`, `mutable` (`var`), `declaredType` (or `null`), `bindingType`, `value` |
+| `letPattern` | `mutable`, `pattern` (pattern index), `value` |
+| `assign` | `target` (`{base, fields, ownerType, span}`, `ownerType` the type of the record whose field is written, `null` without fields), `value` |
+| `return` | `value` (or `null`) |
+| `while` | `cond`, `body` |
+| `loop` | `body` |
+| `for` | `name`, `bindingType`, `iter`, `body` |
+| `forPattern` | `pattern`, `iter`, `body` |
+| `break`, `continue` | none |
+| `expr` | `expr`: an expression in statement position; the last one of a block is its value |
+| `assert` | `cond`, `message` (or `null`) |
+
+**Expressions**: `kind`, `span`, `type` and, for a generic use, `typeArgs`; for a reference,
+signal, system or protocol value (14.4), `reference` (its text). By `kind`:
+
+| `kind` | keys |
+|---|---|
+| `int`, `str`, `bool` | `value` |
+| `name` | `name` |
+| `record` | `name`, `fields` |
+| `recordUpdate` | `name`, `fields`, `base` |
+| `list`, `tuple` | `items` (`()` is a `tuple` without items) |
+| `call` | `function` (the callee expression), `args`, `callee`, `ufcs` (`false`), `namedArgs` |
+| `method` | `receiver`, `name`, `args`, `callee`, `ufcs`, `namedArgs` |
+| `field` | `receiver`, `name` |
+| `tupleField` | `receiver`, `index` |
+| `index` | `receiver`, `index` |
+| `try`, `spawn`, `await` | `operand` |
+| `unary` | `op` (`!` or `-`), `operand` |
+| `binary` | `op` (the operator's symbol), `left`, `right` |
+| `match` | `scrutinee`, `arms` (`{pattern, body, span}`) |
+| `if` | `cond`, `then` (a block), `else` (an expression index or `null`) |
+| `block` | `block` |
+| `closure` | `params` (`{name, declaredType, type, span}`), `ret`, `captures` (`{name, type}`), `body` |
+| `return` | `value` (or `null`) |
+| `break`, `continue` | none |
+| `quantity` | `literal`, `unit`, `quantity` (`{kind, value}`, the value in base units, 14.1) |
+| `namedArg` | `name`, `value` |
+| `brace` | `entries` (`{key, value, span}`, `key` dotted) |
+
+A string with interpolation is the expression the parser makes of it: `+` of `str` parts and
+`to_text` method calls.
+
+`callee` is what a call or method call resolves to (`docs/llvm.md` section 2), or `null`:
+
+| `kind` | keys |
+|---|---|
+| `fn` | `module`, `name` (the fn's qualified name, `Owner.name` for an associated fn) |
+| `const` | `module`, `name`: a constant of fn type called |
+| `role` | `module`, `protocol`, `role` |
+| `variant` | `module`, `enum`, `index`, `variant` (its name): a variant constructor |
+| `builtin` | `name`: the row of the builtin table (sections 6 and 7) by its name in `ignite_types::Builtin` |
+| `local` | none: a local, parameter or binding of fn type |
+| `fieldFn` | `module`, `record`, `field`: a record field of fn type called |
+
+`ufcs` is `true` for a method call `x.f(args)` that calls the free fn `f(x, args)` (section 13);
+a builtin method is `ufcs: false` with a `builtin` callee. `namedArgs` is `null`, or for a call
+with named arguments (14.2) the argument index of each parameter in parameter order.
+
+**Patterns**: `kind`, `span` and
+
+| `kind` | keys |
+|---|---|
+| `wildcard` | none |
+| `int`, `str`, `bool` | `value` |
+| `binding` | `name`, `bindingType` |
+| `rest` | `name` (or `null`), and `bindingType` when named |
+| `or`, `tuple`, `list` | `items` |
+| `variant` | `path` (the names as written), `args`, `constant` (`{module, name}` when the path names a constant, else `null`) |
+| `range` | `start`, `end` (pattern indexes), `bounds` (`[lo, hi]`) |
+
+### 24.3 Versioning
+
+`formatVersion` is `ignite-typed/0.1`. As `ignite-model/0.1` (15.5): a change that removes or
+reinterprets a key bumps it; an added key, an added `kind` value or an added table does not. A
+reader ignores keys it does not know. Node indexes are positions in one document, not stable
+across edits of the source (`story:stable-node-ids`).
+
+### 24.4 Tests
+
+- `typed_json::` (`crates/ignite/tests/typed_json.rs`): every file under `std/` and `examples/`
+  exits 0; each document has the format version; every declaration, role, statement,
+  expression and pattern has a span; every expression a type, and every `type`, `ret` and
+  `bindingType` anywhere is a type object; the counts of declarations, statements, expressions
+  and patterns are those of the parsed file, counted by a walk of the AST in the test; the todo
+  example gives the same bytes twice; `examples/typed/sample.ignite` gives `describe`'s
+  parameters `Box`, `Int`, `Text` and a UFCS `split` resolved to `std.text.split`.
+- `examples/typed/reader.ignite` reads the document of `examples/typed/sample.ignite` with
+  `std.json` and finds `describe`'s parameter names and types (an inline test, both targets).
+  An inline test cannot run the compiler, so the document is checked in as a raw string;
+  `typed_json::the_reader_fixture_is_the_sample_document` fails when it differs from the
+  compiler's output, and `IGNITE_BLESS=1` rewrites it.
+- `apply::plan::CODEGEN_REVISION` is unchanged: no generated code changes.
