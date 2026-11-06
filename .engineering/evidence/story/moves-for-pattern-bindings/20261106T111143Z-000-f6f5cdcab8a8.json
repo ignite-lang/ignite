@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T11:11:43Z",
+  "actor": "human:timo",
+  "artifact": "story:moves-for-pattern-bindings",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 0bb64aa76: 1844 passed, 0 failed, EXIT=0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/67"
+  }
+}
