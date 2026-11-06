@@ -16,9 +16,11 @@ With the default limits:
 
 | the client sends | the server answers |
 |---|---|
+| a request line over 8 KiB (its request-target too long) | 414 |
 | a head (request line and fields) over 8 KiB | 431 |
 | a body over 1 MiB | 413 |
 | a malformed request | 400 |
+| an HTTP/1.1 request without `Host`, or any request with two `Host` lines or an invalid one | 400 |
 | any `Transfer-Encoding` (only `Content-Length` framing is implemented) | 501 |
 | nothing for 30 s | the connection is closed |
 
@@ -49,6 +51,12 @@ The application's response is replaced by 500 when one of its header fields woul
 
 HTTP/1.1 keeps the connection unless the request asks to close; HTTP/1.0 closes it unless the
 request asks to keep it. `Connection: close` wins over `keep-alive`.
+
+A request-target in absolute form (`GET http://example.com:8080/p?q HTTP/1.1`) is accepted: the
+application sees the path and query, and the target's authority as its `host` header in place
+of the received `Host`. A `HEAD` request reaches the application as `GET`; the answer carries
+the head of its response, with the `Content-Length` of the body, but not the body. A rejected
+`HEAD` request gets the head of the rejection only.
 
 ## The protocol and the server
 
@@ -152,7 +160,7 @@ fn render(response: Response, keep_alive: Bool) -> Bytes
 | `Response.plain` | a plain-text response: `Content-Type: text/plain; charset=utf-8` |
 | `status_response` | a plain response whose body is the reason phrase and a newline; 204 has no body |
 | `method_not_allowed` | 405 with the `Allow` header listing the methods the target supports |
-| `reason` | the reason phrase of 200, 201, 204, 400, 404, 405, 413, 431, 500 and 501; `Unknown` for any other |
+| `reason` | the reason phrase of 200, 201, 204, 400, 404, 405, 413, 414, 431, 500 and 501; `Unknown` for any other |
 | `checked` | the response, or 500 when one of its header fields is refused (see Behaviour) |
 | `render` | the bytes of the response: status line, headers, `Content-Length` (not for 204) and `Connection` |
 
@@ -232,7 +240,7 @@ test "three pipelined requests over a pipe are answered in one batch" {
   client.set_idle_timeout(5000)?
   server.set_idle_timeout(5000)?
   spawn Http.serve(server, HttpLimits {}, HttpApp { state = (), handle = answer })
-  client.write_all(b"GET /a HTTP/1.1\r\n\r\nGET /b HTTP/1.1\r\n\r\nGET /c HTTP/1.1\r\nConnection: close\r\n\r\n")?
+  client.write_all(b"GET /a HTTP/1.1\r\nHost: h\r\n\r\nGET /b HTTP/1.1\r\nHost: h\r\n\r\nGET /c HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?
   var out = Bytes.empty()
   loop {
     match client.read(4096)? {
