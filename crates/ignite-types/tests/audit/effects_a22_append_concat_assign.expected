@@ -1,1 +1,6 @@
-effects_a22_append_concat_assign.ignite:28:3: error[E001]: the left side of `=` must be a name or a field path such as `a.b`
+effects_a22_append_concat_assign.ignite:9:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_append`
+effects_a22_append_concat_assign.ignite:14:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_concat`
+effects_a22_append_concat_assign.ignite:21:16: error[E016]: missing effect `s.read` for `t.read`; add it to the `requires` of `via_field_assign`
+effects_a22_append_concat_assign.ignite:29:10: error[E016]: missing effect `s.read` for `read`; add it to the `requires` of `via_index_assign`
+effects_a22_append_concat_assign.ignite:34:10: error[E016]: missing effect `h.read` for `read`; add it to the `requires` of `via_copy`
+effects_a22_append_concat_assign.ignite:37:75: error[E016]: missing effect `ls.read` for `read`; add it to the `requires` of `via_slice`

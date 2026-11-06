@@ -1764,12 +1764,33 @@ impl<'t> Parser<'t> {
             }
             _ => {
                 let expr = self.expr()?;
-                if self.at(&TokenKind::Assign) {
+                if self.at(&TokenKind::Assign)
+                    && let ExprKind::Index { receiver, index } = &expr.kind
+                {
+                    // `l[i] = v` is the builtin `l.set(i, v)` (`docs/slice.md` 25.4):
+                    // the call carries the span of `l[i]`, so an index out of
+                    // range is reported where a read of `l[i]` would be.
+                    self.bump();
+                    self.skip_newlines();
+                    let value = self.expr()?;
+                    let name = Ident {
+                        name: "set".to_string(),
+                        span: index.span,
+                    };
+                    StmtKind::Expr(Expr {
+                        kind: ExprKind::Method {
+                            receiver: receiver.clone(),
+                            name,
+                            args: vec![(**index).clone(), value],
+                        },
+                        span: expr.span,
+                    })
+                } else if self.at(&TokenKind::Assign) {
                     let Some(target) = place(&expr) else {
                         self.report(
                             "E001",
                             expr.span,
-                            "the left side of `=` must be a name or a field path such as `a.b`"
+                            "the left side of `=` must be a name, a field path such as `a.b` or an element such as `l[i]`"
                                 .to_string(),
                         );
                         return Err(Fail);

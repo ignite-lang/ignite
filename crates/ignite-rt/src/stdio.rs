@@ -1,8 +1,9 @@
-//! Standard input and output: the C ABI over `ignite_io::{Stdin, Stdout}`.
+//! Standard input, output and error: the C ABI over
+//! `ignite_io::{Stdin, Stdout, Stderr}`.
 //! Reads, writes and terminal mode are `ignite-io`'s: the same termios
 //! rules, the same saved attributes and the same restore.
 
-use ignite_io::{Stdin, Stdout};
+use ignite_io::{Stderr, Stdin, Stdout};
 
 use crate::{IgniteInput, IgniteIoError, IgniteList, bytes, status};
 
@@ -43,6 +44,18 @@ pub extern "C" fn ignite_rt_stdout_write_all(
 ) -> i32 {
     crate::entry(move || {
         let written = Stdout::write_all(bytes(data).to_vec());
+        status(written, std::ptr::null_mut(), err)
+    })
+}
+
+/// `i32 stderr_write_all(List* bytes, IoError* err)`: write and flush.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_stderr_write_all(
+    data: *const IgniteList,
+    err: *mut IgniteIoError,
+) -> i32 {
+    crate::entry(move || {
+        let written = Stderr::write_all(bytes(data).to_vec());
         status(written, std::ptr::null_mut(), err)
     })
 }

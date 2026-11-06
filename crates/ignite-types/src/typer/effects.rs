@@ -39,6 +39,7 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         StdinIsTerminal => (Effect::Ambient("stdin.mode"), "Stdin.is_terminal"),
         StdinSetRaw => (Effect::Ambient("stdin.mode"), "Stdin.set_raw"),
         StdoutWriteAll => (Effect::Ambient("stdout.write"), "Stdout.write_all"),
+        StderrWriteAll => (Effect::Ambient("stderr.write"), "Stderr.write_all"),
         ProcessExit => (Effect::Ambient("process.exit"), "Process.exit"),
         StoreNew => (Effect::Ambient("store.new"), "Store.new"),
         ClockMonotonic => (Effect::Ambient("clock.read"), "Clock.monotonic"),

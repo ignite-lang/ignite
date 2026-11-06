@@ -1,6 +1,7 @@
 //! Standard input and output. Standard input is read with one blocking
 //! `read(0)` per call, unbuffered, so a raw-mode terminal yields each byte
-//! as it is typed. Standard output is written and flushed on every call.
+//! as it is typed. Standard output and standard error are written and flushed
+//! on every call.
 
 use std::io::Write;
 use std::os::fd::AsFd;
@@ -57,6 +58,22 @@ impl Stdout {
         let mut stdout = std::io::stdout().lock();
         stdout.write_all(&data)?;
         stdout.flush()?;
+        Ok(())
+    }
+}
+
+/// Standard error of the process, as a byte stream (`docs/slice.md` 25.3).
+#[derive(Clone, Copy, Debug)]
+pub struct Stderr;
+
+impl Stderr {
+    /// Write all of `data` to standard error and flush it, as
+    /// [`Stdout::write_all`] does for standard output. `log` writes to the
+    /// same stream.
+    pub fn write_all(data: Vec<u8>) -> Result<(), IoError> {
+        let mut stderr = std::io::stderr().lock();
+        stderr.write_all(&data)?;
+        stderr.flush()?;
         Ok(())
     }
 }

@@ -574,6 +574,9 @@ pub enum Builtin {
     ListAt,
     ListSlice,
     ListPush,
+    /// `l.set(i, x)`, also written `l[i] = x`: replace the element at `i`;
+    /// out of range is the `index` failure of `l[i]` (`docs/slice.md` 25.4).
+    ListSet,
     ListAppend,
     ListClear,
     ListJoin,
@@ -594,6 +597,8 @@ pub enum Builtin {
     StdinIsTerminal,
     StdinSetRaw,
     StdoutWriteAll,
+    /// `Stderr.write_all(bytes)`: standard error, as `StdoutWriteAll` (`docs/slice.md` 25.3).
+    StderrWriteAll,
     ProcessExit,
     IoErrorNew,
     /// `i.to_text()` on an `Int`: decimal (the static `Int.to_text(i)` is `IntToText`).

@@ -912,7 +912,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E003 | unknown name; also wrong arity of a call (a UFCS call counts the receiver), `log` used as a value, a constant with payload patterns, an associated fn whose owner is no record or enum of the module (section 13.8) |
 | E004 | duplicate definition, including a declaration named like a builtin or `Tuple`, a role or record field declared twice, an associated fn declared twice or named like a variant of its owner, and a closure parameter repeated |
 | E005 | ambiguous bare variant (section 4); reported by the type checker since slice 6 |
-| E006 | assignment to an immutable binding or a constant; since slice 9 also `push`, `append` or `clear` through a `let`, a `for` element or a pattern binding, on `x.to_bytes()`, or on a binding a closure captured (section 13.11) |
+| E006 | assignment to an immutable binding or a constant; since slice 9 also `push`, `append` or `clear` (since 25.4 also `set` and `l[i] = v`) through a `let`, a `for` element or a pattern binding, on `x.to_bytes()`, or on a binding a closure captured (section 13.11) |
 | E010 | effectful call or `spawn` in a pure context: a constant's value or a field default (section 5) |
 | E011 | retired in slice 6 (was: effectful call not awaited) |
 | E012 | retired in slice 6 (was: `await` on a pure call) |

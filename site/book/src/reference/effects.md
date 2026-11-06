@@ -17,6 +17,7 @@ An effect is a dotted name. It has one of two roots.
 | `stdin.read` | `Stdin.read(n)` |
 | `stdin.mode` | `Stdin.is_terminal()`, `Stdin.set_raw(on)` |
 | `stdout.write` | `Stdout.write_all(bytes)` |
+| `stderr.write` | `Stderr.write_all(bytes)` |
 | `process.exit` | `Process.exit(code)` |
 | `process.args` | `Endpoint.of(ref)` |
 | `net.listen` | `TcpListener.bind(address, port)` |

@@ -196,6 +196,16 @@ fn list_index_push() -> List<List<Int>> {
   lists
 }
 
+fn list_set_concat() -> (List<List<Int>>, List<Text>) {
+  var grid = [[1, 2], [3]]
+  grid[0][1] = 20
+  grid[1] = grid[1] + [4] + []
+  grid.set(0, [] + grid[0])
+  var names = ["a"] + ["b", "c"]
+  names[2] = names[0] + names[1]
+  (grid, names)
+}
+
 // Map
 
 fn map_literal() -> Map<Text, Int> = { b = 2, a = 1, c = 3 }
@@ -624,6 +634,7 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(list_eq().debug())?
   show(list_mutate_place().debug())?
   show(list_index_push().debug())?
+  show(list_set_concat().debug())?
   show(map_literal().debug())?
   show(map_ops().debug())?
   show(map_queries().debug())?

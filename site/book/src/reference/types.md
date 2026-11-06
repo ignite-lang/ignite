@@ -112,7 +112,9 @@ use.
 | `len()`, `is_empty()` | `Int`, `Bool` | |
 | `l[i]`, `l.at(i)` | `T` | out of range is a failure |
 | `slice(start, end)` | `List<T>` | `end` exclusive; out of range is a failure |
+| `l[i] = x`, `set(i, x)` | `Unit` | replace the element at `i` in place; out of range is a failure, as for `l[i]` |
 | `push(x)`, `append(other)`, `clear()` | `Unit` | change the list in place |
+| `a + b` | `List<T>` | a new list: the elements of `a`, then those of `b` |
 | `map(f)` | `List<U>` | `f: fn(T) -> U`, pure |
 | `join(sep)` | `Text` | on `List<Text>` only |
 | `to_text()` | `Text` | on `Bytes` only |
@@ -121,8 +123,8 @@ use.
 `for x in list { .. }` visits the elements in order.
 
 Lists are values: assigning or passing a list copies it, as far as the program can tell.
-`push`, `append` and `clear` change a place rooted in a `var` or a parameter. Through a `let`
-binding, a `for` element or a pattern binding they are E006.
+`set` (and `l[i] = x`), `push`, `append` and `clear` change a place rooted in a `var` or a
+parameter. Through a `let` binding, a `for` element or a pattern binding they are E006.
 
 ```ignite
 fn squares(n: Int) -> List<Int> {
@@ -539,7 +541,7 @@ declarations. They are listed here for completeness; their operations are in the
 | `PipeStream` | one end of an in-process pipe from `Pipe.pair()` (tests only); the same methods as `TcpStream` plus `received_batches()` |
 | `Input` | the result of a read: `Data(Bytes)` or `Eof` |
 | `Store<T>` | shared in-memory storage keyed by `Int`: `next_id()`, `get(id)`, `put(id, v)`, `remove(id)`, `values()`, `update(id, f)`, `upsert(id, f)`; a `resource`, or `Store.new()` in tests |
-| `Stdin`, `Stdout`, `Process`, `Clock`, `Pipe` | static owners only: `Stdin.read(n)`, `Stdout.write_all(b)`, `Process.exit(code)`, `Clock.monotonic()`, `Pipe.pair()` |
+| `Stdin`, `Stdout`, `Stderr`, `Process`, `Clock`, `Pipe` | static owners only: `Stdin.read(n)`, `Stdout.write_all(b)`, `Stderr.write_all(b)`, `Process.exit(code)`, `Clock.monotonic()`, `Pipe.pair()` |
 | `Ref<K>`, `Ref` | a reference to a member of a system, `System.member`; `Ref` is the kind-erased form |
 | `Signal<T>` | an output field of a component kind |
 | `SystemRef`, `Protocol` | a system or protocol named as a value |

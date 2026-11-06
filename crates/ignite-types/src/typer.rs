@@ -187,6 +187,12 @@ fn is_literal(expr: &Expr) -> bool {
     }
 }
 
+/// `[]`: a left operand typed after the right one, so `[] + l` takes the
+/// element type of `l` (`docs/slice.md` 25.5).
+fn is_empty_list(expr: &Expr) -> bool {
+    matches!(&expr.kind, ExprKind::List(items) if items.is_empty())
+}
+
 /// Whether the value of `expr` needs an expected type to be typed: `None`,
 /// `[]`, `Ok(..)`, `Err(..)`, `List.empty()`, a bare variant `ambiguous`
 /// holds for, or a block or `if` ending in one.
@@ -1238,7 +1244,7 @@ impl<'a> Typer<'a> {
                 }
                 record
             }
-            "Stdin" | "Stdout" => {
+            "Stdin" | "Stdout" | "Stderr" => {
                 self.error(
                     "E040",
                     ty.span,
@@ -3263,7 +3269,9 @@ impl<'a> Typer<'a> {
                 }
             }
             match sig.builtin {
-                Builtin::ListAt => self.fail_site(expr, FailureOp::Index, expr.span.start),
+                Builtin::ListAt | Builtin::ListSet => {
+                    self.fail_site(expr, FailureOp::Index, expr.span.start)
+                }
                 Builtin::ListSlice => self.fail_site(expr, FailureOp::Slice, expr.span.start),
                 _ => {}
             }
@@ -3752,7 +3760,8 @@ impl<'a> Typer<'a> {
         } else {
             None
         };
-        let (left_ty, right_ty) = if is_literal(left) && !is_literal(right) {
+        let (left_ty, right_ty) = if (is_literal(left) || is_empty_list(left)) && !is_literal(right)
+        {
             let right_ty = self.expr(right, Mode::Value(hint));
             let left_ty = match &right_ty {
                 Some(first) => self.second_operand(op, first, left, hint),
@@ -3772,6 +3781,7 @@ impl<'a> Typer<'a> {
 
     /// The type of `left op right` from the operand types: `==` and `!=`
     /// on any comparable type (`docs/slice.md` section 13.5), `+` on
+    /// `List` (concatenation, 25.5) and
     /// numbers and `Text`, the others on numbers (E045 otherwise).
     fn operator(&mut self, expr: &Expr, op: BinaryOp, left_ty: Ty, right_ty: Ty) -> Option<Ty> {
         let arithmetic = matches!(
@@ -3792,7 +3802,10 @@ impl<'a> Typer<'a> {
         }
         let defined = match op {
             BinaryOp::Eq | BinaryOp::Ne => self.equatable(&operand, &mut Vec::new()),
-            BinaryOp::Add => matches!(operand, Ty::Int | Ty::Byte | Ty::Text | Ty::Never),
+            BinaryOp::Add => matches!(
+                operand,
+                Ty::Int | Ty::Byte | Ty::Text | Ty::List(_) | Ty::Never
+            ),
             _ => matches!(operand, Ty::Int | Ty::Byte | Ty::Never),
         };
         if defined && arithmetic && matches!(operand, Ty::Int | Ty::Byte) {
