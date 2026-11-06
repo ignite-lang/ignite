@@ -619,6 +619,10 @@ calling task (section 4). `T*` means a pointer to the section-3 layout;
 | `i32 pipe_close(i64 pipe, IoError* err)` | delivers the buffer, then closes the end's write half |
 | `i32 pipe_set_idle_timeout(i64 pipe, i64 ms, IoError* err)` | as `tcp_set_idle_timeout`, on a pipe end |
 | `i64 pipe_received_batches(i64 pipe)` | the deliveries into the end's queue since `pipe_pair`; 0 for a handle that is not a pipe |
+| `i32 tcp_write_urgent(i64 stream, List* bytes, IoError* err)` | what was written and `bytes` sent at once in one `send` with `MSG_OOB`, the last byte as TCP urgent data (`ignite_io::TcpStream::write_urgent`, `docs/slice.md` 19.21); empty `bytes` marks nothing; declared only in a module that calls it |
+| `i32 tcp_urgent_pending(i64 stream, i8* out, IoError* err)` | 1 at `out` while an urgent byte is ahead of the reader (`POLLPRI`; sockets read urgent data inline, `SO_OOBINLINE`), else 0; declared only in a module that calls it |
+| `i32 pipe_write_urgent(i64 pipe, List* bytes, IoError* err)` | as `tcp_write_urgent`, on a pipe end: the buffer and `bytes` delivered as one batch, the last byte the peer's urgent byte |
+| `i32 pipe_urgent_pending(i64 pipe, i8* out, IoError* err)` | as `tcp_urgent_pending`, on a pipe end |
 | `void test_main(IgniteTest* table, i64 count)` | `ignite_io::test_main_with` over the `count` entries at `table` and the arguments `init` stored: the runner of `docs/slice.md` section 12.7. Only with the feature `runner` (below) |
 
 `ignite-rt` is an adapter: every `tcp_*`, `stdin_*` and `stdout_*` function, `exit`, `log`

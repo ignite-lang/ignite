@@ -29,8 +29,8 @@ name:
 
 | effect | operations on the parameter `x` |
 |---|---|
-| `x.read` | `x.read(n)` on a stream, `x.get(id)` and `x.values()` on a `Store`, `x.received_batches()` on a pipe end |
-| `x.write` | `x.write_all(b)`, `x.close()`, `x.set_idle_timeout(ms)` on a stream; `x.next_id()`, `x.put(..)`, `x.remove(..)`, `x.update(..)`, `x.upsert(..)` on a `Store` |
+| `x.read` | `x.read(n)` and `x.urgent_pending()` on a stream, `x.get(id)` and `x.values()` on a `Store`, `x.received_batches()` on a pipe end |
+| `x.write` | `x.write_all(b)`, `x.close()`, `x.set_idle_timeout(ms)`, `x.write_urgent(b)` on a stream; `x.next_id()`, `x.put(..)`, `x.remove(..)`, `x.update(..)`, `x.upsert(..)` on a `Store` |
 | `x.accept` | `x.accept()` on a `TcpListener` |
 | `x.*` | every effect on `x` |
 

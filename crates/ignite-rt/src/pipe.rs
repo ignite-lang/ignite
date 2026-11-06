@@ -76,6 +76,34 @@ pub extern "C" fn ignite_rt_pipe_set_idle_timeout(
     })
 }
 
+/// `i32 pipe_write_urgent(i64 pipe, List* bytes, IoError* err)`: as
+/// `tcp_write_urgent`, on a pipe end.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_pipe_write_urgent(
+    handle: i64,
+    data: *const IgniteList,
+    err: *mut IgniteIoError,
+) -> i32 {
+    crate::entry(move || {
+        let written = pipe(handle).and_then(|pipe| pipe.write_urgent_from(bytes(data)));
+        status(written, std::ptr::null_mut(), err)
+    })
+}
+
+/// `i32 pipe_urgent_pending(i64 pipe, i8* out, IoError* err)`: as
+/// `tcp_urgent_pending`, on a pipe end.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_pipe_urgent_pending(
+    handle: i64,
+    out: *mut i8,
+    err: *mut IgniteIoError,
+) -> i32 {
+    crate::entry(move || {
+        let pending = pipe(handle).and_then(|pipe| pipe.urgent_pending());
+        status(pending.map(i8::from), out, err)
+    })
+}
+
 /// `i64 pipe_received_batches(i64 pipe)`: the deliveries into the end
 /// since `pipe_pair`; 0 when the handle is not a pipe, as
 /// `tcp_local_port` gives 0 for a handle that is not a listener.
