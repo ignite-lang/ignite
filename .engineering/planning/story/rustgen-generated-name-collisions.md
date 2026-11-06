@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:rustgen-generated-name-collisions
 kind: story
-status: active
+status: implemented
 title: Generator-invented Rust names never collide with program names
 summary: Escape __ locals, x_endpoint, default_field and extern-crate names in the Rust target
 relations:
@@ -18,10 +18,11 @@ scope:
   path: crates/ignite-rustgen/tests/golden
 - confidence: cited
   path: crates/ignite/src/apply/plan.rs
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 6}
 - {from: "proposed", to: "active", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 7}
+- {from: "active", to: "implemented", at: "2026-11-06T22:26:07Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: rustgen-generated-name-collisions
 

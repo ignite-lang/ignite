@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T22:26:07Z",
+  "actor": "human:timo",
+  "artifact": "story:rustgen-generated-name-collisions",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on b80decd1: 1304 passed, 0 failed, 11 ignored; 292 inline per target; EXIT=0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/78"
+  }
+}
