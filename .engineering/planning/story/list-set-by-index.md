@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:list-set-by-index
 kind: story
-status: draft
+status: active
 title: Set a List or Bytes element by index
 summary: xs.set(i, v) with the bounds failure of at, both targets (friction E10)
 scope:
@@ -16,11 +16,18 @@ scope:
   path: crates/ignite-rustgen/src
 - confidence: inferred
   path: crates/ignite-types/src
+- confidence: cited
+  path: crates/ignite/tests/fixtures/tests/codespec_lists.ignite
+- confidence: cited
+  path: crates/ignite/tests/ignite_test.rs
 - confidence: inferred
   path: docs/slice.md
-- confidence: inferred
+- confidence: cited
   path: std/text.ignite
-revision: 9
+revision: 13
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-06T23:50:47Z", actor: "human:timo", revision: 12}
+- {from: "proposed", to: "active", at: "2026-11-06T23:50:48Z", actor: "human:timo", revision: 13}
 ---
 # Story: list-set-by-index
 
@@ -37,6 +44,15 @@ failure as `at`), so a value is changed in place instead of rebuilt.
 - Index failures and their text: `ignite_io::checked::at`, `docs/slice.md` section 7.
 
 ## Acceptance
+
+## Acceptance
+
+Scoped 2026-11-07 on main df7be28c: `Bytes` is `List<Byte>` in the typer (`crates/ignite-types/src/builtins.rs:15`), evaluator and both backends, so `set` on `Bytes` reaches the PR 60 `ListSet` path; no test exercises it. The List out-of-range case is checked by `crates/ignite/tests/fixtures/tests/codespec_lists.ignite:49` and `crates/ignite/tests/ignite_test.rs:691`.
+
+- `b.set(i, v)` and `b[i] = v` on `Bytes` run on both targets and in the evaluator (inline test; an evaluator case if the eval equivalence fixture covers `set`).
+- `to_lower` and `to_upper` (`std/text.ignite:603`, `:612`) change a copy of `text.to_bytes()` in place with `set` instead of pushing into `Bytes.empty()`; their existing tests pass.
+- An out-of-range `set` on `Bytes` fails with `index failed at FILE:L:C: index N out of range for length M` on both targets: a failing-on-purpose test in `codespec_lists.ignite` and its line in `ignite_test.rs`'s `codespec_stderr_and_lists_on_both_targets`.
+- `docs/slice.md` 25.4 says `set` applies to `Bytes`; `task gate` green.
 
 ## Acceptance
 

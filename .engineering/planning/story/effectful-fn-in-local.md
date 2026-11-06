@@ -2,9 +2,21 @@
 format: aep.planning-md/3
 id: story:effectful-fn-in-local
 kind: story
-status: draft
+status: active
 title: A local holding an effectful fn passes to List.map
-revision: 1
+scope:
+- confidence: cited
+  path: crates/ignite-check/src/lib.rs
+- confidence: cited
+  path: crates/ignite-types/src/typer.rs
+- confidence: cited
+  path: docs/slice.md
+- confidence: cited
+  path: std/text.ignite
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-06T23:50:47Z", actor: "human:timo", revision: 4}
+- {from: "proposed", to: "active", at: "2026-11-06T23:50:47Z", actor: "human:timo", revision: 5}
 ---
 # Story: effectful-fn-in-local
 
@@ -19,7 +31,14 @@ A local variable holding an effectful fn can be passed to `List.map` like a clos
 
 ## Acceptance
 
-- The call above checks inside a fn whose `requires` covers the effect and runs on both targets (inline test); E017 outside; `|s| s.get(1)` without annotation types when `map` gives the element type; `task gate` green.
+## Acceptance
+
+Scoped 2026-11-07 on main df7be28c: `map_fn_effects` (`crates/ignite-types/src/typer.rs:3484`) skips locals (E040); an unannotated `|s| s.get(1)` passed to `map` gets E042 because ignite-check records no effect site (`crates/ignite-check/src/lib.rs:2672`).
+
+- Inline test in `std/text.ignite` beside "List.map takes a fn with the effects of its caller": inside `requires [store.read]`, `let g = |id: Int| store.get(id)` then `ids.map(g)` returns the stored values; `ignite test` passes it on LLVM and Rust.
+- Fixture with `.expected` under `crates/ignite-types/tests/fixtures/`: the same code under `requires [store.write]` gives exactly one E016, at the closure literal (today's rule for a let-bound closure).
+- `stores.map(|s| s.get(1))` without annotation gives the 20.4.3 E017 on its parameter and no E042 (added to `e017_effectful_list_map`).
+- `docs/slice.md` 20.4.3 "Not covered" updated; `task gate` green.
 
 ## Out of Scope
 
