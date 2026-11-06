@@ -108,6 +108,64 @@ fn release_of_the_last_handle_closes_the_peer() {
     ignite_rt_tcp_release(second);
 }
 
+/// `*_urgent_pending` of `handle` through `entry`: the flag it writes.
+fn urgent(entry: extern "C" fn(i64, *mut i8, *mut IgniteIoError) -> i32, handle: i64) -> bool {
+    let (mut out, mut err) = (-1i8, no_error());
+    assert_eq!(entry(handle, &mut out, &mut err), 0, "{}", message(&err));
+    assert!(out == 0 || out == 1, "flag {out}");
+    out == 1
+}
+
+/// The urgent entries (`docs/slice.md` 18.9): `write_urgent` sends at once
+/// with the last byte urgent, a read stops before it, and
+/// `urgent_pending` writes 1 until a read returns it; on a pipe and on a
+/// TCP stream, each refusing the other kind of handle.
+#[test]
+fn urgent_data_through_the_abi() {
+    let (first, second) = pair();
+    let mut err = no_error();
+    assert_eq!(ignite_rt_pipe_set_idle_timeout(second, 5000, &mut err), 0);
+    assert!(!urgent(ignite_rt_pipe_urgent_pending, second));
+    write(first, b"ab");
+    let data = IgniteList::from_bytes(&[255, 242]);
+    assert_eq!(ignite_rt_pipe_write_urgent(first, &data, &mut err), 0);
+    assert!(urgent(ignite_rt_pipe_urgent_pending, second));
+    assert_eq!(read(second, 64).as_deref(), Some(&b"ab\xff"[..]));
+    assert!(urgent(ignite_rt_pipe_urgent_pending, second));
+    assert_eq!(read(second, 64).as_deref(), Some(&b"\xf2"[..]));
+    assert!(!urgent(ignite_rt_pipe_urgent_pending, second));
+    assert_eq!(ignite_rt_tcp_write_urgent(first, &data, &mut err), 1);
+    assert_eq!(message(&err), format!("{first} is not a TCP stream"));
+
+    let (mut listener, mut client, mut server) = (0i64, 0i64, 0i64);
+    let address = IgniteList::from_bytes(b"127.0.0.1");
+    assert_eq!(ignite_rt_tcp_bind(&address, 0, &mut listener, &mut err), 0);
+    let port = ignite_rt_tcp_local_port(listener);
+    assert_eq!(
+        ignite_rt_tcp_connect(&address, port, &mut client, &mut err),
+        0
+    );
+    assert_eq!(ignite_rt_tcp_accept(listener, &mut server, &mut err), 0);
+    assert_eq!(ignite_rt_tcp_set_idle_timeout(server, 5000, &mut err), 0);
+    let all = IgniteList::from_bytes(&[b'x', 255, 242]);
+    assert_eq!(ignite_rt_tcp_write_urgent(client, &all, &mut err), 0);
+    let (mut input, mut err) = (no_input(), no_error());
+    assert_eq!(ignite_rt_tcp_read(server, 64, &mut input, &mut err), 0);
+    // SAFETY: produced by the runtime in this task's arena.
+    assert_eq!(unsafe { input.data.as_bytes() }, b"x\xff");
+    assert!(urgent(ignite_rt_tcp_urgent_pending, server));
+    assert_eq!(ignite_rt_tcp_read(server, 64, &mut input, &mut err), 0);
+    // SAFETY: as above.
+    assert_eq!(unsafe { input.data.as_bytes() }, b"\xf2");
+    assert!(!urgent(ignite_rt_tcp_urgent_pending, server));
+    assert_eq!(ignite_rt_pipe_write_urgent(client, &all, &mut err), 1);
+    assert_eq!(message(&err), format!("{client} is not a pipe"));
+
+    for handle in [first, second, listener, client, server] {
+        ignite_rt_tcp_release(handle);
+    }
+}
+
 #[test]
 fn a_pipe_entry_refuses_a_tcp_handle() {
     let (mut listener, mut err) = (0i64, no_error());

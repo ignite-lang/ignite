@@ -18,6 +18,12 @@
 //! the answers with one system call. A failed send is reported by the next
 //! `read`, `write_all` or `close` of that stream. The ends of a pipe
 //! (`crate::pipe`) share the task's pending list and every flush point.
+//!
+//! Urgent data (TCP urgent mode, RFC 9293 3.8.5): `write_urgent` sends at
+//! once, its last byte as the urgent byte (`MSG_OOB`). Sockets have
+//! `SO_OOBINLINE` set, so the urgent byte stays in the stream at its place;
+//! a read stops before it (the kernel's rule), and `urgent_pending` holds
+//! from its arrival until a read has returned it.
 
 use std::cell::RefCell;
 use std::io::{ErrorKind, Read, Write};
@@ -322,6 +328,18 @@ impl TcpListener {
 impl TcpStream {
     fn from_socket(socket: std::net::TcpStream) -> TcpStream {
         let _ = socket.set_nodelay(true);
+        let on: nix::libc::c_int = 1;
+        // SAFETY: the descriptor belongs to `socket`, and `on` outlives the
+        // call with the size given.
+        unsafe {
+            nix::libc::setsockopt(
+                socket.as_raw_fd(),
+                nix::libc::SOL_SOCKET,
+                nix::libc::SO_OOBINLINE,
+                (&raw const on).cast(),
+                std::mem::size_of::<nix::libc::c_int>() as nix::libc::socklen_t,
+            )
+        };
         TcpStream {
             inner: Arc::new(Stream {
                 socket,
@@ -429,6 +447,79 @@ impl TcpStream {
             Err(e) => Err(e.into()),
         }
     }
+
+    /// Write `data` as urgent data (module docs): what was written before
+    /// and `data` are sent at once, in one `send` with `MSG_OOB`, the last
+    /// byte of `data` as the urgent byte. Empty `data` sends what was
+    /// written and marks nothing. Refused after `close` as `write_all` is.
+    pub fn write_urgent(&self, data: Vec<u8>) -> Result<(), IoError> {
+        self.write_urgent_from(&data)
+    }
+
+    /// [`TcpStream::write_urgent`] of a borrowed slice.
+    pub fn write_urgent_from(&self, data: &[u8]) -> Result<(), IoError> {
+        let stream = &self.inner;
+        let mut out = stream.out();
+        if stream.closed.load(Ordering::Acquire) {
+            return Err(IoError::new("write to a closed stream"));
+        }
+        stream.take_failure(&mut out)?;
+        if data.is_empty() {
+            return stream.send(&mut out);
+        }
+        out.buffer.extend_from_slice(data);
+        let sent = send_urgent(&stream.socket, &out.buffer);
+        out.buffer.clear();
+        if out.buffer.capacity() > SEND_BUFFER {
+            out.buffer = Vec::new();
+        }
+        sent
+    }
+
+    /// Whether urgent data is ahead of the reader: an urgent byte has
+    /// arrived and no read has returned it yet. A read stops before the
+    /// urgent byte, so the bytes a read returns while this holds came
+    /// before it. Never waits.
+    pub fn urgent_pending(&self) -> Result<bool, IoError> {
+        use nix::poll::{PollFd, PollFlags, poll};
+        use std::os::fd::AsFd;
+        let mut fds = [PollFd::new(self.inner.socket.as_fd(), PollFlags::POLLPRI)];
+        poll(&mut fds, 0u16).map_err(|e| IoError::new(format!("urgent: {e}")))?;
+        Ok(fds[0]
+            .revents()
+            .is_some_and(|events| events.contains(PollFlags::POLLPRI)))
+    }
+}
+
+/// Send all of `bytes` with `MSG_OOB`, so the urgent pointer is after the
+/// last byte: one call, one segment for a short message, the urgent byte
+/// arriving with the bytes before it. A send cut short by a signal sends
+/// the rest the same way, which moves the pointer to the same last byte.
+fn send_urgent(socket: &std::net::TcpStream, bytes: &[u8]) -> Result<(), IoError> {
+    let mut at = 0;
+    while at < bytes.len() {
+        let rest = &bytes[at..];
+        // SAFETY: the descriptor belongs to `socket`, which the caller's
+        // write lock keeps open, and `rest` is readable for its length.
+        let sent = unsafe {
+            nix::libc::send(
+                socket.as_raw_fd(),
+                rest.as_ptr().cast(),
+                rest.len(),
+                nix::libc::MSG_OOB | nix::libc::MSG_NOSIGNAL,
+            )
+        };
+        match usize::try_from(sent) {
+            Ok(count) => at += count,
+            Err(_) => {
+                let error = std::io::Error::last_os_error();
+                if error.kind() != ErrorKind::Interrupted {
+                    return Err(error.into());
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// `Endpoint.of(ref)` (`docs/slice.md` 16.9, 16.13): the address and port

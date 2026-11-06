@@ -1316,6 +1316,12 @@ impl<'p> Evaluator<'p> {
                 | Builtin::StreamWriteAll
                 | Builtin::StreamClose
                 | Builtin::StreamSetIdleTimeout
+                | Builtin::TcpStreamWriteUrgent
+                | Builtin::TcpStreamUrgentPending
+                | Builtin::PipeStreamWriteUrgent
+                | Builtin::PipeStreamUrgentPending
+                | Builtin::StreamWriteUrgent
+                | Builtin::StreamUrgentPending
                 | Builtin::StoreNextId
                 | Builtin::StoreGet
                 | Builtin::StorePut

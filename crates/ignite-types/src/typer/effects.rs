@@ -57,6 +57,12 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
             (Effect::Receiver("write"), "set_idle_timeout")
         }
         PipeStreamReceivedBatches => (Effect::Receiver("read"), "received_batches"),
+        TcpStreamWriteUrgent | PipeStreamWriteUrgent | StreamWriteUrgent => {
+            (Effect::Receiver("write"), "write_urgent")
+        }
+        TcpStreamUrgentPending | PipeStreamUrgentPending | StreamUrgentPending => {
+            (Effect::Receiver("read"), "urgent_pending")
+        }
         StoreGet => (Effect::Receiver("read"), "get"),
         StoreValues => (Effect::Receiver("read"), "values"),
         StoreNextId => (Effect::Receiver("write"), "next_id"),

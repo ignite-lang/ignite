@@ -3821,10 +3821,18 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     fn stream_entry(&mut self, b: Builtin, receiver: Option<&Expr>, op: &str) -> String {
         use Builtin::*;
         let pipe = match b {
-            TcpStreamRead | TcpStreamWriteAll | TcpStreamClose | TcpStreamSetIdleTimeout => false,
-            PipeStreamRead | PipeStreamWriteAll | PipeStreamClose | PipeStreamSetIdleTimeout => {
-                true
-            }
+            TcpStreamRead
+            | TcpStreamWriteAll
+            | TcpStreamClose
+            | TcpStreamSetIdleTimeout
+            | TcpStreamWriteUrgent
+            | TcpStreamUrgentPending => false,
+            PipeStreamRead
+            | PipeStreamWriteAll
+            | PipeStreamClose
+            | PipeStreamSetIdleTimeout
+            | PipeStreamWriteUrgent
+            | PipeStreamUrgentPending => true,
             _ => match self.ty(receiver.expect("a stream method has a receiver")) {
                 Ty::TcpStream => false,
                 Ty::PipeStream => true,
@@ -4634,6 +4642,35 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let s = self.scalar(&r);
                 let ms = self.scalar_arg(&args[0]);
                 self.rt_result(&entry, &[format!("i64 {s}"), format!("i64 {ms}")], Ty::Unit)
+            }
+            TcpStreamWriteUrgent | PipeStreamWriteUrgent | StreamWriteUrgent => {
+                let entry = self.stream_entry(b, receiver, "write_urgent");
+                let ptr = "ptr".to_string();
+                self.m.declare(
+                    &format!("ignite_rt_{entry}"),
+                    "i32",
+                    &["i64".to_string(), ptr.clone(), ptr],
+                );
+                let r = recv(self);
+                let s = self.scalar(&r);
+                let data = self.read_arg(&args[0]);
+                self.rt_result(
+                    &entry,
+                    &[format!("i64 {s}"), format!("ptr {data}")],
+                    Ty::Unit,
+                )
+            }
+            TcpStreamUrgentPending | PipeStreamUrgentPending | StreamUrgentPending => {
+                let entry = self.stream_entry(b, receiver, "urgent_pending");
+                let ptr = "ptr".to_string();
+                self.m.declare(
+                    &format!("ignite_rt_{entry}"),
+                    "i32",
+                    &["i64".to_string(), ptr.clone(), ptr],
+                );
+                let r = recv(self);
+                let s = self.scalar(&r);
+                self.rt_result(&entry, &[format!("i64 {s}")], Ty::Bool)
             }
             PipeStreamReceivedBatches => {
                 self.m.declare_pipe("ignite_rt_pipe_received_batches");

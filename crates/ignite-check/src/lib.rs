@@ -177,6 +177,8 @@ pub const EFFECTFUL_METHODS: &[&str] = &[
     "close",
     "set_idle_timeout",
     "received_batches",
+    "write_urgent",
+    "urgent_pending",
 ];
 
 /// Every builtin method name (`docs/slice.md` sections 6, 7, 10 and 13).
@@ -225,6 +227,8 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "ppm",
     "with_exit_code",
     "received_batches",
+    "write_urgent",
+    "urgent_pending",
 ];
 
 /// Free builtin functions.
@@ -332,13 +336,14 @@ impl EffectSig {
 }
 
 /// The effect a substrate method needs on the value it is called on, by
-/// method name: `read` and `received_batches` need `<root>.read`,
-/// `write_all` and `close` (which shuts down the write half) need
-/// `<root>.write`, `accept` needs `<root>.accept`.
+/// method name: `read`, `received_batches` and `urgent_pending` need
+/// `<root>.read`, `write_all`, `write_urgent`, `set_idle_timeout` and
+/// `close` (which shuts down the write half) need `<root>.write`,
+/// `accept` needs `<root>.accept`.
 pub fn method_effect(method: &str) -> Option<&'static str> {
     match method {
-        "read" | "received_batches" => Some("read"),
-        "write_all" | "close" | "set_idle_timeout" => Some("write"),
+        "read" | "received_batches" | "urgent_pending" => Some("read"),
+        "write_all" | "close" | "set_idle_timeout" | "write_urgent" => Some("write"),
         "accept" => Some("accept"),
         _ => None,
     }
@@ -3892,7 +3897,10 @@ fn place_root(expr: &Expr) -> Option<&Ident> {
 /// The methods of `ByteStream` (`docs/slice.md` 18.3), which `TcpStream`,
 /// `PipeStream` and a `ByteStream`-bounded type parameter have.
 fn is_stream_method(method: &str) -> bool {
-    matches!(method, "read" | "write_all" | "close" | "set_idle_timeout")
+    matches!(
+        method,
+        "read" | "write_all" | "close" | "set_idle_timeout" | "write_urgent" | "urgent_pending"
+    )
 }
 
 /// Whether the builtin method `method` applies to a receiver of declared

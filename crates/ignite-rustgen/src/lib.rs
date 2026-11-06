@@ -4099,7 +4099,9 @@ impl<'a> Generator<'a> {
                 | Builtin::PipeStreamWriteAll
                 | Builtin::PipeStreamClose
                 | Builtin::PipeStreamSetIdleTimeout
-                | Builtin::PipeStreamReceivedBatches,
+                | Builtin::PipeStreamReceivedBatches
+                | Builtin::PipeStreamWriteUrgent
+                | Builtin::PipeStreamUrgentPending,
             )) => {
                 let r = self.receiver(receiver);
                 let a = self.args(args);
@@ -4124,7 +4126,9 @@ impl<'a> Generator<'a> {
                 Builtin::StreamRead
                 | Builtin::StreamWriteAll
                 | Builtin::StreamClose
-                | Builtin::StreamSetIdleTimeout,
+                | Builtin::StreamSetIdleTimeout
+                | Builtin::StreamWriteUrgent
+                | Builtin::StreamUrgentPending,
             )) => {
                 let stream = self
                     .type_of(receiver)

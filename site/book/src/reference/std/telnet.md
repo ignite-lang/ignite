@@ -30,9 +30,13 @@ protocol Telnet {
 
 - It sets the stream's idle timeout from `limits.idle_timeout`, shows the console's prompt,
   passes each input line to `respond` and sends the reply, each line ending in CR LF, then
-  the next prompt.
+  the next prompt. The prompt and the answer to AYT are each followed by IAC GA (Go Ahead,
+  RFC 854 p5), since the server then waits for input.
 - CR LF, CR NUL, a lone CR and a lone LF each end a line. IAC IAC is the data byte 255.
 - DO is answered WONT and WILL is answered DONT. IAC AYT is answered `[yes]`.
+- A Synch is honoured: when urgent data is pending after a read (`urgent_pending`, see
+  [std.net](net.md)), the line so far is dropped and data is discarded up to the Data Mark
+  (IAC DM), while commands are still obeyed.
 - The session ends on the console's `Close` action, end of input, IAC IP, a line longer than
   the console's `maximum_line` (answered `line too long`), or a subnegotiation longer than
   `limits.maximum_subnegotiation`.
@@ -45,9 +49,10 @@ protocol Telnet {
 - The server's text, with Telnet commands removed and line ends as LF, goes to standard
   output.
 - When standard input is a terminal, it is switched to raw mode and a local line editor
-  sends each line: Enter sends the line, backspace erases the last character, Ctrl+C sends
-  IAC IP, Ctrl+D on an empty line closes the write half, and Ctrl+] opens the local
-  `telnet> ` prompt, which knows `close`, `quit` and `help`.
+  sends each line: Enter sends the line, backspace erases the last character, Ctrl+D on a
+  partial line sends it without a line end, Ctrl+C sends IAC IP followed by the Synch (IAC
+  DM as urgent data), Ctrl+D on an empty line closes the write half, and Ctrl+] opens the
+  local `telnet> ` prompt, which knows `close`, `quit` and `help`.
 - Otherwise standard input is forwarded as NVT lines until it ends.
 - It ends with `Ok` when the server closes the connection, and with `Err` on a subnegotiation
   longer than `MAXIMUM_SUBNEGOTIATION`.
@@ -219,13 +224,14 @@ enum Event {
   EndOfLine,
   Answer(Bytes),
   AreYouThere,
+  DataMark,
   Interrupt,
   SubnegotiationTooLong
 }
 ```
 
-Constants: the command bytes `IAC` (255), `DONT`, `DO`, `WONT`, `WILL`, `SB`, `AYT`, `IP`,
-`SE`, and `MAXIMUM_SUBNEGOTIATION` (1024), the bound of the client and the probe.
+Constants: the command bytes `IAC` (255), `DONT`, `DO`, `WONT`, `WILL`, `SB`, `GA`, `AYT`, `IP`,
+`DM`, `SE`, and `MAXIMUM_SUBNEGOTIATION` (1024), the bound of the client and the probe.
 
 ## Examples
 
@@ -282,8 +288,8 @@ test fn exchange(input: Bytes) -> Result<Bytes, IoError> {
 }
 
 test "the server answers each line and ends on the console's close" {
-  assert exchange(b"hi\r\n\r\nbye\r\nlost\r\n")? == b"> hi\r\n> \r\n> bye\r\n"
-  assert exchange(b"12345678\r\n123456789")? == b"> 12345678\r\n> line too long\r\n"
+  assert exchange(b"hi\r\n\r\nbye\r\nlost\r\n")? == b"> \xff\xf9hi\r\n> \xff\xf9\r\n> \xff\xf9bye\r\n"
+  assert exchange(b"12345678\r\n123456789")? == b"> \xff\xf912345678\r\n> \xff\xf9line too long\r\n"
 }
 ```
 

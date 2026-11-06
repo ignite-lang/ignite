@@ -29,7 +29,8 @@ use crate::common;
 /// The longest a test waits for one line, record or exit.
 const TIMEOUT: Duration = Duration::from_secs(15);
 const DESIGN: &str = "examples/terminal/terminal.design.ignite";
-const PROMPT: &[u8] = b"terminal> ";
+/// The prompt as `std.protocol.telnet` sends it: the text, then IAC GA.
+const PROMPT: &[u8] = b"terminal> \xff\xf9";
 const TARGETS: [&str; 2] = ["rust", "llvm"];
 
 fn repo() -> PathBuf {

@@ -19,7 +19,8 @@ use std::time::{Duration, Instant};
 use ignite_rustgen::{TEST_EXECUTABLE, write_project};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
-const PROMPT: &[u8] = b"terminal> ";
+/// The prompt as `std.protocol.telnet` sends it: the text, then IAC GA.
+const PROMPT: &[u8] = b"terminal> \xff\xf9";
 
 fn target_dir() -> PathBuf {
     std::env::var_os("CARGO_TARGET_DIR")
@@ -396,7 +397,10 @@ fn crashd_survives_failing_handlers() {
 
     let mut stream = server.connect();
     send_line(&mut stream, "status");
-    assert_eq!(read_through_prompt(&mut stream), b"ready\r\nterminal> ");
+    assert_eq!(
+        read_through_prompt(&mut stream),
+        b"ready\r\nterminal> \xff\xf9"
+    );
 
     let failures = [
         (
@@ -430,7 +434,10 @@ fn crashd_survives_failing_handlers() {
 
     let mut stream = server.connect();
     send_line(&mut stream, "status");
-    assert_eq!(read_through_prompt(&mut stream), b"ready\r\nterminal> ");
+    assert_eq!(
+        read_through_prompt(&mut stream),
+        b"ready\r\nterminal> \xff\xf9"
+    );
     send_line(&mut stream, "quit");
     assert_eq!(read_until_closed(&mut stream), b"bye\r\n");
     server.assert_alive();

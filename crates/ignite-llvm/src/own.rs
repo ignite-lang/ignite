@@ -125,6 +125,12 @@ fn keeps_receiver(builtin: Builtin) -> bool {
             | StreamWriteAll
             | StreamClose
             | StreamSetIdleTimeout
+            | TcpStreamWriteUrgent
+            | TcpStreamUrgentPending
+            | PipeStreamWriteUrgent
+            | PipeStreamUrgentPending
+            | StreamWriteUrgent
+            | StreamUrgentPending
             | Debug
     )
 }

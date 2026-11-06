@@ -30,8 +30,8 @@ Operations on streams and listeners need effects on the value they are called on
 | `TcpListener.bind(a, p)` | `net.listen` |
 | `TcpStream.connect(a, p)` | `net.connect` |
 | `x.accept()` | `x.accept` |
-| `x.read(n)`, `x.received_batches()` | `x.read` |
-| `x.write_all(b)`, `x.close()`, `x.set_idle_timeout(ms)` | `x.write` |
+| `x.read(n)`, `x.received_batches()`, `x.urgent_pending()` | `x.read` |
+| `x.write_all(b)`, `x.close()`, `x.set_idle_timeout(ms)`, `x.write_urgent(b)` | `x.write` |
 | `x.local_port()`, `Pipe.pair()` | none |
 | `Endpoint.of(ref)` | `process.args` |
 
@@ -84,6 +84,8 @@ fn read(stream: TcpStream, maximum: Int) -> Result<Input, IoError>
 fn write_all(stream: TcpStream, data: Bytes) -> Result<Unit, IoError>
 fn close(stream: TcpStream) -> Result<Unit, IoError>
 fn set_idle_timeout(stream: TcpStream, ms: Int) -> Result<Unit, IoError>
+fn write_urgent(stream: TcpStream, data: Bytes) -> Result<Unit, IoError>
+fn urgent_pending(stream: TcpStream) -> Result<Bool, IoError>
 ```
 
 | operation | what it does |
@@ -93,9 +95,16 @@ fn set_idle_timeout(stream: TcpStream, ms: Int) -> Result<Unit, IoError>
 | `write_all` | append `data` to the stream's send buffer |
 | `close` | send the buffer and shut down the write half |
 | `set_idle_timeout` | a read that waits longer than `ms` milliseconds ends with `Eof` |
+| `write_urgent` | send the buffer and `data` at once, the last byte of `data` as TCP urgent data |
+| `urgent_pending` | whether an urgent byte has arrived that no read has returned yet; never waits |
 
 A stream is a handle: copies share one connection. A read and a write on the same stream do
 not wait for each other, so one task can read while another writes.
+
+**Urgent data.** Urgent data stays in the stream at its place. A read stops before the urgent
+byte, and the next read starts with it; `urgent_pending()` is true from its arrival until then.
+So after a read that finds `urgent_pending()` true, every byte that read returned came before
+the urgent byte. Telnet's Synch is built on this (`std.protocol.telnet`).
 
 **Writes are batched.** `write_all` only appends to a send buffer. The buffer is sent before
 the writing task waits for anything (any read, `accept`, `connect`), on `close`, when the task
@@ -122,11 +131,13 @@ fn read<S: ByteStream>(stream: S, maximum: Int) -> Result<Input, IoError>
 fn write_all<S: ByteStream>(stream: S, data: Bytes) -> Result<Unit, IoError>
 fn close<S: ByteStream>(stream: S) -> Result<Unit, IoError>
 fn set_idle_timeout<S: ByteStream>(stream: S, ms: Int) -> Result<Unit, IoError>
+fn write_urgent<S: ByteStream>(stream: S, data: Bytes) -> Result<Unit, IoError>
+fn urgent_pending<S: ByteStream>(stream: S) -> Result<Bool, IoError>
 ```
 
 - `TcpStream`, `PipeStream` and a type parameter bounded by `ByteStream` implement it.
   Nothing else does.
-- Inside the function a value of type `S` has these four methods and `copy`; any other method
+- Inside the function a value of type `S` has these six methods and `copy`; any other method
   is E041.
 - Calling the function with a type that does not implement `ByteStream` is E096.
 - `ByteStream` as a type (a parameter, a field, a return type) is E099, and so is a bound
@@ -142,7 +153,7 @@ fn received_batches(stream: PipeStream) -> Int
 
 `Pipe.pair()` makes two connected in-process ends: what is written on one end is read on the
 other. It may be called only in tests and test-only items (E051 elsewhere). A `PipeStream`
-has the four `ByteStream` methods and `received_batches`.
+has the six `ByteStream` methods and `received_batches`.
 
 - **Writing** works as on a `TcpStream`: `write_all` appends to the end's send buffer, and the
   writing task delivers it before its next read, on `close`, when it ends, or at once when the
@@ -163,6 +174,9 @@ has the four `ByteStream` methods and `received_batches`.
 - **A peer that is gone**: when every handle of one end is dropped, the other end's next
   `read`, `write_all` or `close` returns `pipe peer is gone`.
 - `set_idle_timeout(ms)` sets the read timeout of the end; 0 or less removes it.
+- **Urgent data** works as on a `TcpStream`: `write_urgent(b)` delivers the buffer and `b` as
+  one batch, the last byte of `b` the peer's urgent byte; the peer's reads stop before it, and
+  its `urgent_pending()` is true until a read returns it.
 
 A pipe test closes every end whose `Eof` it expects, explicitly: when an end is dropped
 differs between the Rust and LLVM targets. `Telnet.serve` and `Http.serve` close their stream

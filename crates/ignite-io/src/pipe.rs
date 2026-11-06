@@ -17,6 +17,11 @@
 //! `write_all` or `close`; one made by `write_all` at the threshold or by
 //! `close` is that call's error, as for a `TcpStream`.
 //!
+//! Urgent data mirrors a `TcpStream`'s (`crate::net`): `write_urgent`
+//! delivers at once and marks its last byte in the peer's queue; a read
+//! stops before the marked byte, and `urgent_pending` holds until a read
+//! has returned it.
+//!
 //! Every handle of an end is a clone that shares the end: its queue, batch
 //! counter, idle timeout, closed flag and kept failure. A read holds only
 //! the end's read lock and its queue's lock while it waits on the queue's
@@ -77,6 +82,8 @@ struct Received {
     ended: bool,
     /// The reading end is gone: a delivery into the queue fails.
     gone: bool,
+    /// The urgent byte's index in `bytes`, until a read returns it.
+    urgent: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -110,6 +117,13 @@ impl Queue {
     /// Move all of `buffer` into the queue as one batch, or nothing.
     /// `buffer` is empty afterwards either way.
     fn deliver(&self, buffer: &mut Vec<u8>) -> Result<(), IoError> {
+        self.deliver_marked(buffer, false)
+    }
+
+    /// [`Queue::deliver`]; with `urgent`, the last byte of `buffer` becomes
+    /// the queue's urgent byte, replacing an earlier one as a later urgent
+    /// pointer does in TCP.
+    fn deliver_marked(&self, buffer: &mut Vec<u8>, urgent: bool) -> Result<(), IoError> {
         if buffer.is_empty() {
             return Ok(());
         }
@@ -119,6 +133,9 @@ impl Queue {
         } else if state.bytes.len() + buffer.len() > PIPE_CAPACITY {
             Err(IoError::new(QUEUE_FULL))
         } else {
+            if urgent {
+                state.urgent = Some(state.bytes.len() + buffer.len() - 1);
+            }
             state.bytes.extend(buffer.iter());
             state.batches += 1;
             self.ready.notify_all();
@@ -196,6 +213,7 @@ impl Drop for End {
         let mut incoming = lock(&self.incoming.state);
         incoming.gone = true;
         incoming.bytes = VecDeque::new();
+        incoming.urgent = None;
     }
 }
 
@@ -234,7 +252,11 @@ impl PipeStream {
         let mut state = lock(&queue.state);
         loop {
             if !state.bytes.is_empty() {
-                let count = buffer.len().min(state.bytes.len());
+                let mut count = buffer.len().min(state.bytes.len());
+                if let Some(mark) = state.urgent.filter(|mark| *mark > 0) {
+                    count = count.min(mark);
+                }
+                state.urgent = state.urgent.and_then(|mark| mark.checked_sub(count));
                 let (front, back) = state.bytes.as_slices();
                 let split = front.len().min(count);
                 buffer[..split].copy_from_slice(&front[..split]);
@@ -321,6 +343,36 @@ impl PipeStream {
         }
         end.outgoing.end();
         closed
+    }
+
+    /// Write `data` as urgent data, as `TcpStream::write_urgent`: what was
+    /// written before and `data` are delivered at once as one batch, the
+    /// last byte of `data` as the peer's urgent byte. The peer's reads stop
+    /// before it, and its [`PipeStream::urgent_pending`] holds until a read
+    /// returns it. Empty `data` delivers what was written and marks
+    /// nothing. Refused after `close` as `write_all` is.
+    pub fn write_urgent(&self, data: Vec<u8>) -> Result<(), IoError> {
+        self.write_urgent_from(&data)
+    }
+
+    /// [`PipeStream::write_urgent`] of a borrowed slice.
+    pub fn write_urgent_from(&self, data: &[u8]) -> Result<(), IoError> {
+        let end = &self.end;
+        let mut out = end.out();
+        if end.closed.load(Ordering::Acquire) {
+            return Err(IoError::new("write to a closed stream"));
+        }
+        end.take_failure(&mut out)?;
+        out.buffer.extend_from_slice(data);
+        end.outgoing
+            .deliver_marked(&mut out.buffer, !data.is_empty())
+    }
+
+    /// Whether urgent data is ahead of this end's reader: the peer's last
+    /// `write_urgent` was delivered and no read has returned its urgent
+    /// byte yet. Never waits.
+    pub fn urgent_pending(&self) -> Result<bool, IoError> {
+        Ok(lock(&self.end.incoming.state).urgent.is_some())
     }
 
     /// Set the idle timeout of this end to `ms` milliseconds: a read that

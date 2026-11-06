@@ -17,6 +17,11 @@ pub trait ByteStream: Clone + Send + Sync + 'static {
     fn close(&self) -> Result<(), IoError>;
     /// Set the read timeout in milliseconds; 0 or less removes it.
     fn set_idle_timeout(&self, ms: i64) -> Result<(), IoError>;
+    /// Send what was written and `data` at once, the last byte of `data`
+    /// as urgent data.
+    fn write_urgent(&self, data: Vec<u8>) -> Result<(), IoError>;
+    /// Whether an urgent byte is ahead of the reader.
+    fn urgent_pending(&self) -> Result<bool, IoError>;
 }
 
 impl ByteStream for TcpStream {
@@ -35,6 +40,14 @@ impl ByteStream for TcpStream {
     fn set_idle_timeout(&self, ms: i64) -> Result<(), IoError> {
         TcpStream::set_idle_timeout(self, ms)
     }
+
+    fn write_urgent(&self, data: Vec<u8>) -> Result<(), IoError> {
+        TcpStream::write_urgent(self, data)
+    }
+
+    fn urgent_pending(&self) -> Result<bool, IoError> {
+        TcpStream::urgent_pending(self)
+    }
 }
 
 impl ByteStream for PipeStream {
@@ -52,5 +65,13 @@ impl ByteStream for PipeStream {
 
     fn set_idle_timeout(&self, ms: i64) -> Result<(), IoError> {
         PipeStream::set_idle_timeout(self, ms)
+    }
+
+    fn write_urgent(&self, data: Vec<u8>) -> Result<(), IoError> {
+        PipeStream::write_urgent(self, data)
+    }
+
+    fn urgent_pending(&self) -> Result<bool, IoError> {
+        PipeStream::urgent_pending(self)
     }
 }

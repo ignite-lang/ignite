@@ -99,6 +99,14 @@ pub const PIPE_RUNTIME: &[(&str, &str)] = &[
         "ignite_rt_pipe_received_batches",
         "declare i64 @ignite_rt_pipe_received_batches(i64)",
     ),
+    (
+        "ignite_rt_pipe_write_urgent",
+        "declare i32 @ignite_rt_pipe_write_urgent(i64, ptr, ptr)",
+    ),
+    (
+        "ignite_rt_pipe_urgent_pending",
+        "declare i32 @ignite_rt_pipe_urgent_pending(i64, ptr, ptr)",
+    ),
 ];
 
 /// A quoted global symbol: `@"std.console.first_word"`.

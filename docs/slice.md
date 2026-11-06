@@ -4684,6 +4684,8 @@ fn_type_param  := ident (':' ident ('+' ident)*)?
 | `write_all` | `(stream: S, data: Bytes) -> IoResult<Unit>` | `write` |
 | `close` | `(stream: S) -> IoResult<Unit>` | `write` |
 | `set_idle_timeout` | `(stream: S, ms: Int) -> IoResult<Unit>` | `write` |
+| `write_urgent` | `(stream: S, data: Bytes) -> IoResult<Unit>`, added by 19.21 | `write` |
+| `urgent_pending` | `(stream: S) -> IoResult<Bool>`, added by 19.21 | `read` |
 
 The signatures and effects are those of `TcpStream` today. The methods are called as methods
 (`stream.read(n)`) or by UFCS, as `TcpStream`'s are.
@@ -4741,6 +4743,7 @@ where the typer records a generic instance: calls, role calls, UFCS calls and `s
 | `PipeStream.read` | as in `ByteStream` | `read` | anywhere |
 | `PipeStream.write_all`, `.close`, `.set_idle_timeout` | as in `ByteStream` | `write` | anywhere |
 | `PipeStream.received_batches` | `(stream: PipeStream) -> Int` | `read` | anywhere |
+| `PipeStream.write_urgent`, `.urgent_pending` | as in `ByteStream` (19.21) | `write`, `read` | anywhere |
 
 What is written on one end is read on the other. Each end works as follows.
 
@@ -5349,7 +5352,7 @@ of the `protocols.md` P2 row. `STATUS.md` gets one dated row per row of this tab
 |---|---|---|---|---|
 | 1 | P2 test 1: removing one `satisfies` from a MUST is E090 | `cargo test -p ignite --test main conformance::removing_a_satisfies_from_a_must_is_e090` | The test copies `std/` into a fresh directory under `target/`. Unchanged, `ignite check --std <copy> <copy>/protocol/telnet.ignite` exits 0, silent. The test then removes `RFC854.RP14_1` (the IAC-doubling rule, 19.4) from every `satisfies` clause of the copy, deleting a clause it leaves empty. `ignite check` of the copy then exits 1, and stderr is exactly one line, `…/protocol/telnet.ignite:<line>:<col>: error[E090]: …`, naming `RFC854.RP14_1` | U6 |
 | 2 | P2 test 2: the HTTP matrix lists the §7.1 and §3.2 gaps and claims nothing | `cargo test -p ignite --test main conformance::http_matrix_lists_the_chunked_and_host_gaps` | The test runs `ignite conformance std/protocol/http.ignite --target rust`, then the same with `--target llvm`. The `rfc9112` block holds the row of `R7_1_2` (§7.1, "A recipient MUST be able to parse and decode the chunked transfer coding.") and the row of `R3_2_6` (§3.2, "A server MUST respond with a 400 (Bad Request) status code to any HTTP/1.1 request message that lacks a Host header field and to any request message that contains more than one Host header field line or a Host header field with an invalid field value."). Each row has level `MUST`, status `unsupported` and verdict `gap`. The rows of `R2_2_1` (§2.2, `MUST`), `R6_1_2` (§6.1, `MUST NOT`) and `R6_1_4` (§6.1, `MUST`) are `unsupported` and `gap` too (19.14 item 17). The block ends with `claim conformance of Http to rfc9112: no (15 gaps, 0 failures, 0 inconclusive)`, and stdout holds `claim conformance of Http to rfc9110: no (9 gaps, 0 failures, 0 inconclusive)` (19.10). Exit 1. Both targets print byte-identical stdout | U6 |
-| 3 | P2 test 3: the Telnet matrix claims RFC 854 for an NVT that refuses every option | `cargo test -p ignite --test main conformance::telnet_matrix_claims_rfc854_for_an_nvt_that_refuses_every_option` | P2 test 3 is not met in this slice (19.14 item 16); the test keeps its name. `ignite conformance std/protocol/telnet.ignite`, once per target. Stdout holds `claim conformance of Telnet to rfc854: no (4 gaps, 0 failures, 0 inconclusive)` and `claim conformance of Telnet to rfc855: yes (0 gaps, 0 failures, 0 inconclusive)`. In the `rfc854` block the rows `RP5_3`, `RP5_4`, `RP10_2` and `RP12_4` each print status `unsupported`, their reason from `telnet.ignite` in double quotes as evidence, and verdict `gap`; they are the only rows whose verdict is `gap`. The RFC 855 option-negotiation rows `RFC855.RP2_3` (a receiver may find the end of a subnegotiation by IAC SE) and `RFC855.RP2_4` (either party may refuse by sending WON'T or DON'T) each print verdict `pass`. The evidence of each of the two rows names `decode_within`, the fn that answers `DO` with `WONT` and `WILL` with `DONT`, and names both tests, "a subnegotiation is skipped up to IAC SE" and "DO is answered WONT and WILL is answered DONT", as passed. Exit 1, since the RFC 854 claim does not hold. Both targets print byte-identical stdout | U6 |
+| 3 | P2 test 3: the Telnet matrix claims RFC 854 for an NVT that refuses every option | `cargo test -p ignite --test main conformance::telnet_matrix_claims_rfc854_for_an_nvt_that_refuses_every_option` | Met since story `telnet-rfc854-conformance` (19.21; 19.14 item 16). `ignite conformance std/protocol/telnet.ignite`, once per target. Stdout holds `claim conformance of Telnet to rfc854: yes (0 gaps, 0 failures, 0 inconclusive)` and `claim conformance of Telnet to rfc855: yes (0 gaps, 0 failures, 0 inconclusive)`. No row of the `rfc854` block has verdict `gap`. The rows `RP5_3`, `RP5_4`, `RP10_2` and `RP12_4` each print status `satisfied` and verdict `pass`; their evidence names, in that order, `apply_key`, `answer_line`, `interrupt` and `session` among the satisfying fns, and the passed tests "Ctrl+D on a partial line sends it without a line end", "the server sends IAC GA after each prompt and the AYT answer", "an interrupt is IAC IP followed by the Synch" and "a Synch discards the data before its Data Mark". The RFC 855 option-negotiation rows `RFC855.RP2_3` (a receiver may find the end of a subnegotiation by IAC SE) and `RFC855.RP2_4` (either party may refuse by sending WON'T or DON'T) each print verdict `pass`. The evidence of each of the two rows names `decode_within`, the fn that answers `DO` with `WONT` and `WILL` with `DONT`, and names both tests, "a subnegotiation is skipped up to IAC SE" and "DO is answered WONT and WILL is answered DONT", as passed. Exit 0. Both targets print byte-identical stdout | U6 |
 | 4 | the std protocol modules carry complete claims | `cargo test -p ignite --test main conformance::std_protocol_modules_check_silently` | `ignite check std/protocol/telnet.ignite` and `ignite check std/protocol/http.ignite` each exit 0, silent | U6 |
 | 5 | catalogues do not reach compiled programs | `cargo test -p ignite --test main conformance::emitted_programs_carry_no_catalogue` | For `examples/todo/todo.ignite` and `examples/terminal/terminal.ignite`: the stdout of `ignite emit` (the Rust target; `ignite emit` has no `--target`) and every `.ll` file that `ignite build --target llvm` writes (`std.ll`, `program.ll`, `main_<executable>.ll`) contain none of the five `Spec` digests of 19.9 and not the text "parse and decode the chunked transfer coding" | U6 |
 | 6 | inline tests | `target/debug/ignite test std/protocol/telnet.ignite --target all`; the same for `http.ignite` | at least 37 passed per target for Telnet, at least 41 for HTTP, 0 failed | U6 |
@@ -6078,7 +6081,7 @@ run`'s.
 | 13 | D4, `protocols.md` §3.3 | the RFC 9110 subset leaves out §8.6 (Content-Length, 13 marks) and §15 (status codes, 77 marks), which `http.ignite` implements | deferred: §15 alone is more than D4's 75 marks, and §8.6 framing is judged through RFC 9112 §6 in this slice. A later slice widens D4; the `Http` claim of row 2 says nothing about them |
 | 14 | `docs/vision.md` X16, slice 10 acceptance | "`std/protocol/telnet.ignite` at most 400 lines", excluding tests | known deviation, not fixed in this slice: at `296f849` the file has 1,086 lines, 762 outside top-level `test` blocks (the review's awk count; slice 14 item 14 recorded about 655). U6 adds clauses to it. Not split in slice 15; Q4 |
 | 15 | 19.4 "Level words", `std/rfc/rfc854.ignite` | a prose requirement "takes the level of its sentence's strongest word" | known limits of the mechanical classification, kept as written for this slice (steering, 2026-11-03): `RFC854.RP5_3` reads `Must` from "find it necessary", `RP7_1` `Required` from "not required … may treat", `RP12_1` `May` because "the protocol requires" has no word in the table. Two obligations have no word in the table and are not in the catalogue: "is obliged to provide" (p7) and "shall be capable" (p12, whose "reguired" is the RFC's typo). A later slice may widen the table |
-| 16 | `protocols.md` §7 row P2, test 3; 19.0 row 3 | "The Telnet matrix claims RFC 854 for an NVT that refuses every option" | not met in this slice (steering, 2026-11-03): the RFC 854 claim prints `no (4 gaps, …)`, the RFC 855 claim holds. The four MUST-class rows are `unsupported` in `telnet.ignite`, checked against the plain-text RFC 854: `RP5_4` (p5, "the process must transmit the TELNET Go Ahead (GA) command") needs IAC GA after the prompt, or SUPPRESS-GO-AHEAD, which an NVT refusing every option cannot negotiate; `RP10_2` (p10, "must transmit the TELNET SYNCH sequence") and `RP12_4` (p12, "The pair DM-Urgent is to have required meaning") need the Synch, a DM with TCP urgent send and receive, in `ignite-io` and `ignite-rt` on both targets (`tn` sends IAC IP on Ctrl+C without it, and IAC DM is read as a no-op); `RP5_3` (p5, "implementers are cautioned to provide methods of locally signaling that all buffered data should be transmitted immediately") needs a key in `tn`'s line editor that sends a partial line, and its `Must` comes from the word-table limit of item 15. Cost, measured on the U6 tree: GA changes every server transcript (about 20 inline assertions in `telnet.ignite`, the transcript test in `examples/terminal/commands.ignite`, the raw reads in `crates/ignite/tests/terminal.rs`); the Synch adds a substrate operation on both targets, a pipe counterpart and a `CODEGEN_REVISION` step, and changes `tn`'s Ctrl+C transcript in `terminal.rs`; the partial-line key changes the `apply_key` test. A later slice |
+| 16 | `protocols.md` §7 row P2, test 3; 19.0 row 3 | "The Telnet matrix claims RFC 854 for an NVT that refuses every option" | not met in slice 15 (steering, 2026-11-03), met by story `telnet-rfc854-conformance` (2026-11-06, 19.21): the RFC 854 claim prints `yes (0 gaps, …)` on both targets. In slice 15 the four MUST-class rows were `unsupported`, checked against the plain-text RFC 854: `RP5_4` (p5, "the process must transmit the TELNET Go Ahead (GA) command"), `RP10_2` (p10, "must transmit the TELNET SYNCH sequence"), `RP12_4` (p12, "The pair DM-Urgent is to have required meaning") and `RP5_3` (p5, "implementers are cautioned to provide methods of locally signaling that all buffered data should be transmitted immediately", whose `Must` comes from the word-table limit of item 15). Each is now `satisfied` with a passing verifying test on both targets: the server sends IAC GA after every prompt and after its answer to AYT (`RP5_4`); `tn` sends IAC IP followed by the Synch, IAC DM with the DM as TCP urgent data, on Ctrl+C (`RP10_2`); a session that finds urgent data pending discards data up to the Data Mark while still obeying commands (`RP12_4`); Ctrl+D on a partial line in `tn`'s line editor sends the line without a line end (`RP5_3`). The cost slice 15 measured was paid as stated: every server transcript gained IAC GA (the inline tests of `telnet.ignite`, the transcript test of `examples/terminal/commands.ignite`, the raw reads of `crates/ignite/tests/terminal.rs` and the prompt reads of the `run`, `drain`, `apply*`, `rollout_repeat` and rustgen `slice10` suites); the substrate gained `write_urgent` and `urgent_pending` on both streams and both targets, and `CODEGEN_REVISION` stepped to `0.1.0-29`; `tn`'s Ctrl+C and Ctrl+D transcripts in `terminal.rs` changed |
 | 17 | U6's claims of `http.ignite` and `telnet.ignite`; 19.0 rows 2 and 4 | statuses the U6 adversary found wrong (`crates/ignite/tests/conformance.rs`, `adversary_*`) | resolved (steering, 2026-11-03). Fixed in code: `RFC9112.R6_3_4` and `R6_3_5` (a field value is trimmed of SP and HTAB only, RFC 9110 OWS, so `Content-Length: 3` beside U+00A0, U+0085 or U+3000 is 400); `R9_6_6` and `R9_6_7` (a response whose application headers list the `close` option ends the connection); the client role prints CR NUL as a carriage return alone, CR LF and a lone CR as LF (`RFC854.RP11_3`, `RP13_3`; no transcript changed, and of the goldens only `terminal.model.json` and `todo.model.json` move, by the std source positions the claims of `1bc293f` shifted). Restated as `unsupported`, so the `rfc9112` claim counts 15 gaps instead of 12: `R6_1_2` and `R6_1_4` (were `not_applicable`: the application's `Transfer-Encoding` is sent as given on a kept connection), `R2_2_1` (was satisfied by `parse_head` and `read_head`: the head is decoded as lossy UTF-8 before it is parsed). Their adversary tests stay ignored with the gap id; story `http-rfc9112-9110-gaps` |
 
 ### 19.15 Decisions
@@ -6335,6 +6338,73 @@ and refuses the rest", and the adversary tests "an integer of 19 digits that fit
 number" and "minus zero round trips byte-identical"; in `std/protocol/jsonrpc.ignite`, the four
 tests removed in 0b28ae4e and 831b72d4, restored, and "an id of 19 digits that fits Int is a
 NumberId and -0 comes back as sent"; `conformance::json_rpc_matrix_is_labelled_by_its_id_and_holds`.
+
+### 19.21 Telnet conforms to RFC 854 (story `telnet-rfc854-conformance`, 2026-11-06)
+
+`ignite conformance std/protocol/telnet.ignite` prints `claim conformance of Telnet to rfc854:
+yes (0 gaps, 0 failures, 0 inconclusive)` on both targets (19.0 row 3, 19.14 item 16). The four
+rows slice 15 left `unsupported` are satisfied, each with a verifying test that passes on both
+targets.
+
+| row | RFC 854 | satisfied by | verified by |
+|---|---|---|---|
+| `RP5_4` | p5, Go Ahead | `session`, `answer_line` | "the server sends IAC GA after each prompt and the AYT answer" |
+| `RP10_2` | p10, the Synch after IP | `interrupt`, `edit_input` | "an interrupt is IAC IP followed by the Synch" |
+| `RP12_4` | p12, DM-Urgent | `session`, `decode_within` | "a Synch discards the data before its Data Mark" |
+| `RP5_3` | p5, sending buffered data at once | `apply_key`, `edit_input` | "Ctrl+D on a partial line sends it without a line end" |
+
+**Urgent data, a stream capability.** The substrate knows sockets, not Telnet (19.11): it gains
+TCP urgent data as two methods of `ByteStream`, on `TcpStream`, `PipeStream` and a bounded
+parameter (18.3, 18.4). The Telnet logic stays in `std/protocol/telnet.ignite`.
+
+- `write_urgent(data: Bytes) -> IoResult<Unit>`, effect `write`: what was written before and
+  `data` are sent at once, the last byte of `data` as the urgent byte. On TCP that is one
+  `send` with `MSG_OOB`, so a short message is one segment and the urgent byte arrives with the
+  bytes before it. Empty `data` sends what was written and marks nothing. After `close` it is
+  refused as `write_all` is.
+- `urgent_pending() -> IoResult<Bool>`, effect `read`: whether an urgent byte has arrived that no
+  read has returned yet. It never waits. On TCP it is `POLLPRI`.
+- Every TCP stream has `SO_OOBINLINE`, so the urgent byte stays in the stream at its place. A
+  read stops before the urgent byte (the kernel's rule); the next read starts with it and
+  clears the pending flag. A reader that checks `urgent_pending` after a read therefore knows
+  that every byte of that read came before the urgent byte. A later urgent byte replaces an
+  earlier one, as a later urgent pointer does.
+- A pipe end does the same in memory: `write_urgent` delivers its buffer and `data` as one
+  batch and records the last byte's place in the peer's queue; reads stop before it.
+- Runtime ABI, add-only, each declared only in a module that calls it: `ignite_rt_tcp_write_urgent`
+  and `ignite_rt_pipe_write_urgent` `i32 (i64, List* bytes, IoError* err)`,
+  `ignite_rt_tcp_urgent_pending` and `ignite_rt_pipe_urgent_pending`
+  `i32 (i64, i8* out, IoError* err)` (`docs/llvm.md` section 5). Each refuses the other kind of
+  handle as the 18.9 entries do.
+- `Builtin` gains `TcpStreamWriteUrgent`, `TcpStreamUrgentPending`, `PipeStreamWriteUrgent`,
+  `PipeStreamUrgentPending`, `StreamWriteUrgent` and `StreamUrgentPending` (add-only, 18.13). The
+  Rust target calls the inherent method or `<S as ignite_io::ByteStream>::…`; the LLVM target
+  resolves each instance to its `tcp_` or `pipe_` entry (18.11). `CODEGEN_REVISION` is
+  `ignite-codegen/0.1.0-29`.
+
+**Telnet.**
+
+- Go Ahead: the server sends IAC GA after every prompt (the first and each after a reply) and
+  after its answer to AYT, the outputs after which it waits for input. A reply that closes the
+  session has none. Every server transcript changes by these two bytes; the client role and the
+  probe read GA as a command and print nothing for it.
+- The Synch, sent: `tn`'s Ctrl+C calls `interrupt`, which writes IAC IP and then IAC DM by
+  `write_urgent`, so the DM is the urgent byte.
+- The Synch, received: `decode_within` reports IAC DM as `DataMark`. After each read the session
+  asks `urgent_pending`; when it holds, the session drops the line so far and discards data
+  (literals and line ends) until the next `DataMark`, while commands are still obeyed (options
+  are refused, AYT answered, IP ends the session). An IAC DM without urgent data is a mark
+  only and discards nothing.
+- Ctrl+D on a partial line in `tn`'s line editor sends the line as NVT data with no line end and
+  starts an empty line, as a terminal in canonical mode does; on an empty line it still closes
+  the write half. The edit is `Edit.Send(Bytes)`.
+
+**Known limits.**
+
+- The Synch is honoured for urgent data that is pending when a read returns. Data a session read
+  and decoded before the urgent segment arrived is not taken back.
+- `SO_OOBINLINE`, `POLLPRI` for pending urgent data and the stop at the mark are Linux
+  behaviour; the substrate already depends on Linux (`PR_SET_PDEATHSIG`, `close_range`, 21.5).
 
 ## 20 Slice 16: language gaps (wave A)
 

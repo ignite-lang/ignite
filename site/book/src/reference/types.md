@@ -446,8 +446,9 @@ test "generics" {
 - A type parameter of a record, enum or alias that no field, payload or aliased type uses is
   E057.
 - A fn or role type parameter may have the bound `ByteStream`: `<S: ByteStream>`. Inside the
-  fn, a value of type `S` has the stream methods `read`, `write_all`, `close` and
-  `set_idle_timeout`. A call that passes a type that is not a stream is E096. `ByteStream`
+  fn, a value of type `S` has the stream methods `read`, `write_all`, `close`,
+  `set_idle_timeout`, `write_urgent` and `urgent_pending`. A call that passes a type that is
+  not a stream is E096. `ByteStream`
   is the only interface; any other bound, or two bounds, is E099, and `ByteStream` used as a
   type is E099.
 
@@ -553,7 +554,7 @@ declarations. They are listed here for completeness; their operations are in the
 | type | what it is |
 |---|---|
 | `TcpListener` | a bound TCP listening socket: `accept()`, `local_port()`; created by `TcpListener.bind(address, port)` or a `resource` |
-| `TcpStream` | a TCP connection: `read(n)`, `write_all(b)`, `close()`, `set_idle_timeout(ms)`; `TcpStream.connect(address, port)` |
+| `TcpStream` | a TCP connection: `read(n)`, `write_all(b)`, `close()`, `set_idle_timeout(ms)`, `write_urgent(b)`, `urgent_pending()`; `TcpStream.connect(address, port)` |
 | `PipeStream` | one end of an in-process pipe from `Pipe.pair()` (tests only); the same methods as `TcpStream` plus `received_batches()` |
 | `Input` | the result of a read: `Data(Bytes)` or `Eof` |
 | `Store<T>` | shared in-memory storage keyed by `Int`: `next_id()`, `get(id)`, `put(id, v)`, `remove(id)`, `values()`, `update(id, f)`, `upsert(id, f)`; a `resource`, or `Store.new()` in tests |
