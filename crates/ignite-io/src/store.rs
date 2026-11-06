@@ -471,6 +471,110 @@ mod tests {
         assert_eq!(store.get(0), Some(1600));
     }
 
+    std::thread_local! {
+        static PROBE: std::cell::RefCell<Option<Box<dyn Fn() -> bool>>> =
+            const { std::cell::RefCell::new(None) };
+        static PROBED: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+    }
+
+    /// A value whose clone asks another thread to read the store and
+    /// counts whether that read got through: a clone made while the
+    /// cloning task holds the store's lock counts as blocked.
+    #[derive(Debug, PartialEq)]
+    struct Probed(i64);
+
+    impl Clone for Probed {
+        fn clone(&self) -> Probed {
+            let free = PROBE.with(|probe| probe.borrow().as_ref().map(|probe| probe()));
+            if let Some(free) = free {
+                PROBED.with(|n| {
+                    let (passed, blocked) = n.get();
+                    n.set(if free {
+                        (passed + 1, blocked)
+                    } else {
+                        (passed, blocked + 1)
+                    });
+                });
+            }
+            Probed(self.0)
+        }
+    }
+
+    #[test]
+    fn update_and_upsert_copy_no_value_while_holding_the_lock() {
+        let store: Store<Probed> = Store::new();
+        store.put(1, Probed(1));
+        store.put(2, Probed(2));
+        let prober = store.clone();
+        PROBE.with(|probe| {
+            *probe.borrow_mut() = Some(Box::new(move || {
+                let store = prober.clone();
+                let (done, finished) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    let _ = done.send(store.read(2, |v| v.0));
+                });
+                finished
+                    .recv_timeout(std::time::Duration::from_millis(500))
+                    .is_ok()
+            }));
+        });
+        assert_eq!(store.update(1, |v| Probed(v.0 + 1)), Some(Probed(2)));
+        assert_eq!(
+            store.upsert(1, |v| Probed(v.map_or(0, |v| v.0) * 10)),
+            Probed(20)
+        );
+        assert_eq!(store.upsert(3, |v| Probed(v.map_or(7, |v| v.0))), Probed(7));
+        PROBE.with(|probe| *probe.borrow_mut() = None);
+        let (passed, blocked) = PROBED.with(std::cell::Cell::get);
+        assert_eq!(
+            (passed, blocked),
+            (5, 0),
+            "clones made while another task could read the store, and made while it could not"
+        );
+    }
+
+    /// The load of `docs/performance/store-lock/README.md`: 8 threads,
+    /// 100,000 upserts each, over 1,000 ids.
+    #[test]
+    #[ignore]
+    fn contended_upserts_8_threads_1000_ids() {
+        const THREADS: i64 = 8;
+        const UPSERTS: i64 = 100_000;
+        const IDS: i64 = 1_000;
+        let store: Store<Vec<i64>> = Store::new();
+        let start = std::time::Instant::now();
+        let threads: Vec<_> = (0..THREADS)
+            .map(|t| {
+                let store = store.clone();
+                std::thread::spawn(move || {
+                    for i in 0..UPSERTS {
+                        let id = (i * 7 + t * 131) % IDS;
+                        store.upsert_read(
+                            id,
+                            |old| {
+                                let mut v = old.unwrap_or_else(|| vec![0; 8]);
+                                v[0] += 1;
+                                v
+                            },
+                            |_| (),
+                        );
+                    }
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        let elapsed = start.elapsed();
+        let total: i64 = store.read_values(|values| values.map(|v| v[0]).sum());
+        assert_eq!(total, THREADS * UPSERTS);
+        assert_eq!(store.len(), IDS as usize);
+        eprintln!(
+            "contended_upserts: {THREADS} threads x {UPSERTS} upserts on {IDS} ids in {:.3} s",
+            elapsed.as_secs_f64()
+        );
+    }
+
     #[test]
     fn a_panic_in_update_keeps_the_old_value_and_the_store() {
         let store: Store<i64> = Store::new();
