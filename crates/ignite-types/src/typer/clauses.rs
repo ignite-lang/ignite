@@ -5,13 +5,11 @@
 //! `std.rfc.Party`; anything else is E040. Each resolution is recorded by
 //! the span of the reference for `TypedProgram::clause_constant`.
 
+use ignite_check::RFC_MODULE;
 use ignite_syntax::ast::{Decl, Ident, Path, Program};
 
 use super::Typer;
 use crate::{QualName, Ty};
-
-/// The module that declares the clause vocabulary.
-const RFC_MODULE: &str = "std.rfc";
 
 impl Typer<'_> {
     pub(super) fn clauses(&mut self, program: &Program) {
@@ -117,7 +115,7 @@ impl Typer<'_> {
             .and_then(|m| m.enums.get("Party"))
             .is_some_and(|variants| variants.iter().any(|(v, _)| *v == party.name));
         if !known {
-            let message = format!("`{}` is no variant of `std.rfc.Party`", party.name);
+            let message = format!("`{}` is no variant of `{RFC_MODULE}.Party`", party.name);
             self.error("E040", party.span, message);
         }
     }

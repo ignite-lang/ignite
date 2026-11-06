@@ -702,10 +702,7 @@ impl<'p> Evaluator<'p> {
             if let Some(reference) = types.reference(e) {
                 return Ok(Value::Reference(reference.clone()));
             }
-            let endpoint = matches!(
-                types.try_type_of(e),
-                Some(Ty::Record(q)) if q.module == "std.net" && q.name == "Endpoint"
-            );
+            let endpoint = types.try_type_of(e) == Some(&ignite_types::endpoint());
             if endpoint && member.kind == Ty::TcpListener {
                 return self.endpoint_of(cx, member);
             }
@@ -752,7 +749,7 @@ impl<'p> Evaluator<'p> {
             ("port".to_string(), pick("port")?),
         ];
         Ok(Value::Record {
-            name: QualName::new("std.net", "Endpoint"),
+            name: ignite_types::endpoint_name(),
             fields,
         })
     }

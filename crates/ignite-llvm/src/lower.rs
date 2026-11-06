@@ -4007,7 +4007,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             let r = this.expr(receiver.expect("a method has a receiver"), true);
             this.scalar(&r)
         };
-        let child_exit = Ty::Record(QualName::new("std.process", "ChildExit"));
+        let child_exit = ignite_types::child_exit();
         let texts = Ty::List(Box::new(Ty::Text));
         match b {
             DirectoryTemporary => {
@@ -4463,7 +4463,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     &["ptr".to_string(), "ptr".to_string(), "ptr".to_string()],
                 );
                 let reference = self.read_arg(&args[0]);
-                let endpoint = Ty::Record(QualName::new("std.net", "Endpoint"));
+                let endpoint = ignite_types::endpoint();
                 self.rt_result("endpoint_of", &[format!("ptr {reference}")], endpoint)
             }
             BytesOf => {

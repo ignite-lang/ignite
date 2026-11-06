@@ -33,7 +33,17 @@ pub const FORMAT_VERSION: &str = "ignite-model/0.1";
 pub const DISRUPTION: &str = "connections refused between listener close and rebind";
 
 /// The module of the reducer interface (16.6).
-pub const CONTROL_MODULE: &str = "std.control";
+pub use ignite_types::CONTROL_MODULE;
+
+/// The module of the shared probe vocabulary (O45, 22.3): `Window`, which
+/// E123 compares with a probe's interval, and `Sample` and `Verdict`, the
+/// payloads the run driver builds.
+pub const SLI_MODULE: &str = "std.sli";
+
+/// The module whose `admits`, `includes` and `entries` resolve an assembly
+/// (15.6, 16.17), and which declares the `Member` record they are asked
+/// about.
+pub const DEPLOY_MODULE: &str = "std.deploy";
 
 /// `std.control.companions(machine) -> List<Machine>`: the machines a
 /// hook's result brings with it (a supervisor with a rollout policy brings

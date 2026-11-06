@@ -10,7 +10,7 @@ use ignite_types::{
     AssemblyInfo, MemberDeclaration, MemberInfo, QualName, Reference, SystemInfo, Ty, TypedProgram,
 };
 
-use crate::model::{eval_diagnostic, type_name};
+use crate::model::{DEPLOY_MODULE, eval_diagnostic, type_name};
 use crate::{Evaluator, Modules, Value};
 
 /// One entry of `assembly.resolution` (15.6).
@@ -123,7 +123,7 @@ pub(crate) fn binding_key_spans(
 /// The `std.deploy.Member` record `admits` is asked about (15.6).
 fn member_value(member: &MemberInfo, executable: bool) -> Value {
     Value::Record {
-        name: QualName::new("std.deploy", "Member"),
+        name: QualName::new(DEPLOY_MODULE, "Member"),
         fields: vec![
             (
                 "declaration".to_string(),

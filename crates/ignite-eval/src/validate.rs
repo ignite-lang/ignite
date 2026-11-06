@@ -20,7 +20,7 @@ use ignite_types::{
     AssemblyInfo, MemberInfo, QualName, QuantityKind, Reference, SystemInfo, Ty, TypedProgram,
 };
 
-use crate::model::{ModelMember, eval_diagnostic, signal_refs, type_name};
+use crate::model::{ModelMember, SLI_MODULE, eval_diagnostic, signal_refs, type_name};
 use crate::resolve::{binding_key_spans, entries_fn};
 use crate::{Evaluator, Modules, ResolutionEntry, Value};
 
@@ -484,7 +484,7 @@ pub fn validate_system(
                 else {
                     continue;
                 };
-                if name.module != "std.sli" || name.name != "Window" || variant != "Rolling" {
+                if name.module != SLI_MODULE || name.name != "Window" || variant != "Rolling" {
                     continue;
                 }
                 let Some(Value::Quantity(QuantityKind::Duration, span_of_window)) = fields.first()

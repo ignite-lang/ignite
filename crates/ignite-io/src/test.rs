@@ -416,10 +416,10 @@ mod tests {
     #[test]
     fn selection() {
         let mut arguments = parse(&["split"]).unwrap();
-        assert!(arguments.selects("std.text/split_once splits"));
-        assert!(!arguments.selects("std.text/trim"));
+        assert!(arguments.selects("app.text/split_once splits"));
+        assert!(!arguments.selects("app.text/trim"));
         arguments.exact = true;
-        assert!(!arguments.selects("std.text/split_once splits"));
+        assert!(!arguments.selects("app.text/split_once splits"));
         assert!(arguments.selects("split"));
     }
 

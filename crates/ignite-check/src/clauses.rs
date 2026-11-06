@@ -11,10 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ignite_syntax::ast::{BinaryOp, Decl, Expr, ExprKind, Ident, Path, Program, Span, UnaryOp};
 
-use crate::{Checker, Modules, Symbols};
-
-/// The module that declares the clause vocabulary.
-const RFC_MODULE: &str = "std.rfc";
+use crate::{Checker, Modules, RFC_MODULE, Symbols};
 
 /// The enums of `std.rfc` whose variants are literal data.
 const LITERAL_ENUMS: &[&str] = &["Level", "Party", "Source"];
@@ -114,13 +111,10 @@ impl Checker {
     /// value of each `std.rfc.Requirement` or `std.rfc.Spec` constant that
     /// is not literal data.
     pub(super) fn catalogue_literals(&mut self, program: &Program, modules: &Modules) {
-        let own_module = program.package.as_ref().is_some_and(|p| {
-            p.segments
-                .iter()
-                .map(|s| s.name.as_str())
-                .collect::<Vec<_>>()
-                == ["std", "rfc"]
-        });
+        let own_module = program
+            .package
+            .as_ref()
+            .is_some_and(|p| p.dotted() == RFC_MODULE);
         let symbols = &self.symbols;
         let vocabulary = |name: &str| match symbols.imported.get(name) {
             Some(module) => module == RFC_MODULE,

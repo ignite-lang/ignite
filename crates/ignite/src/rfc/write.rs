@@ -6,6 +6,8 @@
 use std::fmt::Write;
 use std::path::Path;
 
+use ignite_check::RFC_MODULE;
+
 use super::ImportOptions;
 use super::extract::Requirement;
 
@@ -49,9 +51,12 @@ pub fn module(catalogue: &Catalogue) -> String {
     let package = options
         .package
         .clone()
-        .unwrap_or_else(|| format!("std.rfc.rfc{number}"));
+        .unwrap_or_else(|| format!("{RFC_MODULE}.rfc{number}"));
     let _ = writeln!(out, "package {package}\n");
-    out.push_str("import std.rfc.{Level, Party, Source, Requirement, Spec}\n\n");
+    let _ = writeln!(
+        out,
+        "import {RFC_MODULE}.{{Level, Party, Source, Requirement, Spec}}\n"
+    );
     let _ = writeln!(out, "const RFC{number}: Spec = Spec {{");
     let _ = writeln!(out, "  rfc = {number}");
     let _ = writeln!(out, "  title = {}", text(title));
