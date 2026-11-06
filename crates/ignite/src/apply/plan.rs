@@ -6,7 +6,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use ignite_eval::Json;
-use ignite_syntax::ast::{Decl, Program};
+#[cfg(test)]
+use ignite_syntax::ast::Program;
 
 use super::digest;
 
@@ -27,8 +28,14 @@ pub const ACTIONS_SCHEMA: &str = "ignite-apply-actions/0.1";
 pub const CODEGEN_OVERRIDE: &str = "IGNITE_DEBUG_CODEGEN_REVISION";
 
 const PLAN_ID: &str = "ignite-apply-plan-id/0.1";
-const OPERATIONAL: &str = "ignite-operational/0.1";
-const IMPLEMENTATION: &str = "ignite-implementation/0.1";
+/// The identity domains name the implementation projection's scheme: `0.2`
+/// is the canonical form of [`super::canonical`], `0.1` was the span-scrubbed
+/// `Debug` text. Bump both when the canonical encoding changes. A plan
+/// committed under another scheme compares as changed, so the first apply
+/// after the change replaces each hosted executable once (`docs/slice.md`
+/// 17.3).
+const OPERATIONAL: &str = "ignite-operational/0.2";
+const IMPLEMENTATION: &str = "ignite-implementation/0.2";
 const REDUCER: &str = "ignite-reducer/0.1";
 const OBSERVED_RESOURCE: &str = "ignite-observed-resource/0.1";
 
@@ -1524,80 +1531,20 @@ pub fn semantic_model(model: &Json) -> Json {
     result
 }
 
-/// Parsed structure, rather than token concatenation: newlines can change a
-/// return statement's meaning even when their removal leaves identical tokens.
+/// The canonical form of every loaded module ([`super::canonical`]): parsed
+/// structure, rather than token concatenation (newlines can change a return
+/// statement's meaning even when their removal leaves identical tokens), with
+/// locations, trivia and private names left out.
 fn implementation_projection(loaded: &crate::Loaded) -> Json {
-    Json::Object(
-        loaded
-            .modules()
-            .iter()
-            .map(|module| (module.path.into(), program_projection(module.program)))
-            .collect(),
-    )
-}
-
-fn program_projection(program: &Program) -> Json {
-    let mut imports: Vec<_> = program
-        .imports
+    let modules = loaded.modules();
+    let modules: Vec<_> = modules
         .iter()
-        .map(|import| without_spans(&format!("{import:?}")))
-        .collect();
-    imports.sort();
-    let declarations = program
-        .decls
-        .iter()
-        .filter(|decl| !decl.is_test_only() && !matches!(decl, Decl::System(_) | Decl::Assembly(_)))
-        .map(|decl| {
-            // Associated fns are keyed `Owner.name`, so `A.run` and `B.run`
-            // (or `Server.main` and `Client.main`) are both kept.
-            let name = match decl {
-                Decl::Fn(function) => function.qualified_name(),
-                _ => decl.name().name.clone(),
-            };
-            (name, text(without_spans(&format!("{decl:?}"))))
+        .map(|module| super::canonical::Module {
+            path: module.path,
+            program: module.program,
         })
         .collect();
-    object([
-        (
-            "imports",
-            Json::Array(imports.into_iter().map(text).collect()),
-        ),
-        ("declarations", Json::Object(declarations)),
-    ])
-}
-
-/// Debug structure is versioned by CODEGEN_REVISION. Strip only actual Span
-/// nodes outside string literals, retaining escaped literal content verbatim.
-fn without_spans(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut remaining = input;
-    let mut quoted = false;
-    let mut escaped = false;
-    while !remaining.is_empty() {
-        if !quoted
-            && remaining.starts_with("Span { start: ")
-            && let Some(end) = remaining.find('}')
-        {
-            out.push_str("Span");
-            remaining = &remaining[end + 1..];
-            continue;
-        }
-        let character = remaining.chars().next().unwrap();
-        out.push(character);
-        remaining = &remaining[character.len_utf8()..];
-        if quoted {
-            if escaped {
-                escaped = false;
-            } else if character == '\\' {
-                escaped = true;
-            } else if character == '"' {
-                quoted = false;
-            }
-        } else if character == '"' {
-            quoted = true;
-        }
-    }
-    out
+    super::canonical::projection(&modules)
 }
 
 #[cfg(test)]
@@ -1636,23 +1583,282 @@ mod tests {
         }
     }
 
-    #[test]
-    fn projection_ignores_locations_and_declaration_order_but_keeps_statement_structure() {
-        let first = parsed("fn one() -> Int { return 1 }\nfn two() -> Int { return 2 }\n");
-        let reformatted = parsed(
-            "// shifted\nfn two() -> Int {\n return 2\n}\n\nfn one() -> Int {\n return 1\n}\n",
+    /// The canonical projection of `files`, each a module path and its source.
+    fn projection_of(files: &[(&str, &str)]) -> Json {
+        let programs: Vec<(&str, Program)> = files
+            .iter()
+            .map(|(path, source)| (*path, parsed(source)))
+            .collect();
+        let modules: Vec<_> = programs
+            .iter()
+            .map(|(path, program)| super::super::canonical::Module { path, program })
+            .collect();
+        super::super::canonical::projection(&modules)
+    }
+
+    fn program_projection(source: &str) -> Json {
+        projection_of(&[("main", source)])
+    }
+
+    /// The plan identity `files` give an empty model: what a saved plan's
+    /// operational identity hashes besides the model.
+    fn plan_identity(files: &[(&str, &str)]) -> String {
+        let identity = identity(
+            &Json::Object(BTreeMap::new()),
+            projection_of(files),
+            crate::Target::Rust,
+            false,
+            CODEGEN_REVISION,
         );
-        assert_eq!(program_projection(&first), program_projection(&reformatted));
-        let changed = parsed("fn one() -> Int { return 3 }\nfn two() -> Int { return 2 }\n");
-        assert_ne!(program_projection(&first), program_projection(&changed));
+        digest::tagged(OPERATIONAL, identity.compact().as_bytes())
+    }
+
+    fn app(source: &str) -> String {
+        plan_identity(&[("app", source)])
+    }
+
+    const APP: &str = r#"package app
+
+type Point {
+  x: Int
+  y: Int
+}
+
+const LIMIT: Int = 10
+
+fn scale(point: Point, factor: Int) -> Point {
+  let x = point.x * factor
+  return Point { x = x, y = point.y * factor }
+}
+
+fn clamp(value: Int) -> Int = if value > LIMIT { LIMIT } else { value }
+
+fn total(points: List<Point>) -> Int {
+  var sum = 0
+  for p in points {
+    sum = sum + clamp(p.x)
+  }
+  return sum
+}
+
+fn main() -> Int {
+  let p = scale(Point { x = 1, y = 2 }, 3)
+  let add = |a, b| a + b
+  return add(clamp(p.x + p.y), total([p]))
+}
+"#;
+
+    #[test]
+    fn a_span_only_edit_keeps_the_plan_identity() {
+        let moved = r#"package app
+
+// The entry point first now.
+fn main() -> Int {
+    let p = scale(Point { x = 1, y = 2 }, 3)
+
+    let add = |a, b| a + b
+    return add(clamp(p.x + p.y), total([p]))
+}
+
+fn clamp(value: Int)  ->  Int  =  if value > LIMIT { LIMIT }  else { value }
+
+fn total(points: List<Point>) -> Int {
+  var sum = 0
+  for p in points { sum = sum + clamp(p.x) }
+  return sum
+}
+
+// constants and types last
+const LIMIT: Int = 10
+fn scale(point: Point, factor: Int) -> Point {
+  let x = point.x * factor
+  return Point { x = x, y = point.y * factor }
+}
+type Point {
+      x: Int
+  y: Int
+}
+"#;
+        assert_eq!(app(APP), app(moved));
     }
 
     #[test]
-    fn literal_span_text_is_not_erased() {
-        let source = r#"Fn { span: Span { start: 1, end: 2 }, text: "Span { start: 3, end: 4 }" }"#;
+    fn a_rename_of_private_helpers_and_locals_keeps_the_plan_identity() {
+        let renamed = APP
+            .replace("Point", "Coordinate")
+            .replace("LIMIT", "CEILING")
+            .replace("scale", "stretch")
+            .replace("clamp", "bounded")
+            .replace("total", "summed")
+            .replace("let x = point.x", "let wide = point.x")
+            .replace("x = x,", "x = wide,")
+            .replace("for p in points", "for each in points")
+            .replace("bounded(p.x)\n", "bounded(each.x)\n")
+            .replace("sum", "acc")
+            .replace("|a, b| a + b", "|left, right| left + right");
+        assert!(renamed.contains("fn stretch(") && renamed.contains("var acc"));
+        assert!(renamed.contains("bounded(each.x)"), "{renamed}");
+        assert_eq!(app(APP), app(&renamed));
+    }
+
+    #[test]
+    fn a_change_of_behaviour_changes_the_plan_identity() {
+        let base = app(APP);
+        for (what, from, to) in [
+            ("a body", "point.y * factor", "point.y + factor"),
+            ("a literal", "LIMIT: Int = 10", "LIMIT: Int = 11"),
+            ("a called helper's body", "value > LIMIT", "value >= LIMIT"),
+            ("a parameter type", "value: Int", "value: Byte"),
+            ("a field type", "  y: Int", "  y: Byte"),
+            ("a public name", "fn main()", "fn start()"),
+            (
+                "a parameter name",
+                "factor: Int) -> Point",
+                "times: Int) -> Point",
+            ),
+            (
+                "which binding a name reads",
+                "let x = point.x",
+                "let x = point.y",
+            ),
+            (
+                "an argument order",
+                "add(clamp(p.x + p.y), total([p]))",
+                "add(total([p]), clamp(p.x + p.y))",
+            ),
+            // A helper renamed to a local it then meets is captured.
+            ("a captured rename", "clamp", "p"),
+        ] {
+            let changed = APP.replace(from, to);
+            assert_ne!(changed, APP, "{what}: the edit applies");
+            assert_ne!(base, app(&changed), "{what} keeps the plan identity");
+        }
+    }
+
+    /// Transitivity: the projection holds every reachable declaration, so a
+    /// helper's body change changes the identity while its caller's own text
+    /// stays the same.
+    #[test]
+    fn a_helper_change_reaches_its_callers_identity() {
+        let declarations = |source: &str| {
+            let projection = projection_of(&[("app", source)]);
+            let Some(Json::Object(declarations)) = projection
+                .get("app")
+                .and_then(|module| module.get("declarations"))
+                .cloned()
+            else {
+                panic!("no declarations: {projection:?}")
+            };
+            declarations
+        };
+        let changed = APP.replace("value > LIMIT", "value >= LIMIT");
+        let (before, after) = (declarations(APP), declarations(&changed));
+        assert_eq!(before.get("main"), after.get("main"));
+        assert_ne!(before, after);
+        assert_ne!(app(APP), app(&changed));
+    }
+
+    /// A name another module imports, or one a `module("p")` literal fills
+    /// an interface record's field with, is public; a helper beside it is
+    /// not.
+    #[test]
+    fn imported_and_interface_names_stay_significant() {
+        let files = |program: &str, commands: &str, util: &str| {
+            plan_identity(&[
+                ("app", program),
+                ("app.commands", commands),
+                ("app.util", util),
+            ])
+        };
+        let program = r#"package app
+import app.util.double
+type Commands {
+  respond: fn(Text) -> Text
+}
+fn main() -> Int = double(2)
+system S {
+  component console: Console {
+    implementation = module("app.commands")
+  }
+}
+"#;
+        let commands = r#"package app.commands
+fn respond(line: Text) -> Text = shout(line)
+fn shout(line: Text) -> Text = line + "!"
+"#;
+        let util =
+            "package app.util\nfn double(x: Int) -> Int = x * 2\nfn half(x: Int) -> Int = x / 2\n";
+        let base = files(program, commands, util);
         assert_eq!(
-            without_spans(source),
-            r#"Fn { span: Span, text: "Span { start: 3, end: 4 }" }"#
+            base,
+            files(program, &commands.replace("shout", "yell"), util),
+            "a helper of an interface module is private"
+        );
+        assert_eq!(
+            base,
+            files(program, commands, &util.replace("half", "third")),
+            "an unimported fn is private"
+        );
+        assert_ne!(
+            base,
+            files(program, &commands.replace("respond", "reply"), util),
+            "the interface fn is public"
+        );
+        assert_ne!(
+            base,
+            files(
+                &program.replace("double", "twice"),
+                commands,
+                &util.replace("double", "twice")
+            ),
+            "an imported fn is public"
+        );
+    }
+
+    #[test]
+    fn projection_ignores_locations_and_declaration_order_but_keeps_statement_structure() {
+        let first =
+            program_projection("fn one() -> Int { return 1 }\nfn two() -> Int { return 2 }\n");
+        let reformatted = program_projection(
+            "// shifted\nfn two() -> Int {\n return 2\n}\n\nfn one() -> Int {\n return 1\n}\n",
+        );
+        assert_eq!(first, reformatted);
+        let changed =
+            program_projection("fn one() -> Int { return 3 }\nfn two() -> Int { return 2 }\n");
+        assert_ne!(first, changed);
+    }
+
+    #[test]
+    fn literal_text_is_kept_verbatim() {
+        let first = program_projection(r#"fn main() -> Text = "Span start 3, end 4""#);
+        let changed = program_projection(r#"fn main() -> Text = "Span start 3, end 5""#);
+        assert_ne!(first, changed);
+    }
+
+    /// The terminal example over the real standard library: the projection
+    /// is deterministic, `respond` (filled into `ConsoleCommands`) keeps its
+    /// name, and the command module's helpers are numbered.
+    #[test]
+    fn the_terminal_example_keeps_its_interface_names() {
+        let file = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/terminal/terminal.design.ignite");
+        let projected = || {
+            let loaded = crate::load_for(&file, None, crate::RUN_ROOTS).expect("the example loads");
+            implementation_projection(&loaded)
+        };
+        let projection = projected();
+        assert_eq!(projection, projected());
+        let Some(Json::Object(commands)) = projection
+            .get("examples.terminal.commands")
+            .and_then(|module| module.get("declarations"))
+        else {
+            panic!("no command module")
+        };
+        assert!(commands.contains_key("respond"), "{:?}", commands.keys());
+        assert!(
+            commands.keys().any(|key| key.starts_with('#')),
+            "{:?}",
+            commands.keys()
         );
     }
 
@@ -2151,11 +2357,11 @@ mod tests {
 
     #[test]
     fn adversary_projection_keys_associated_fns_by_qualified_name() {
-        let first = parsed("fn A.run() -> Int = 1\nfn B.run() -> Int = 2\n");
-        let changed = parsed("fn A.run() -> Int = 3\nfn B.run() -> Int = 2\n");
+        let first = "fn A.run() -> Int = 1\nfn B.run() -> Int = 2\n";
+        let changed = "fn A.run() -> Int = 3\nfn B.run() -> Int = 2\n";
         assert_ne!(
-            program_projection(&first),
-            program_projection(&changed),
+            program_projection(first),
+            program_projection(changed),
             "a changed body of A.run is invisible to the implementation projection"
         );
     }
