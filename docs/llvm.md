@@ -194,7 +194,7 @@ pub enum Callee { Fn(QualName), Role { protocol: QualName, role: String }, Varia
 | generic record or enum `R<A, B>` | the record or enum layout with the type arguments substituted, one layout per argument list; mangled `R<A,B>` | C rules |
 | `Store<T>` | `ptr` to the runtime store of the resource (section 5) | 8, 8 |
 | `Duration`, `ByteSize`, `Ratio` (quantities, `docs/slice.md` section 14.1) | `i64` in the base unit `ignite_io::Quantity` defines; arithmetic is `Int`'s, with the same overflow checks (section 4); debug text through `quantity_debug` (section 5) | 8, 8 |
-| `Map<K, V>` (`docs/slice.md` section 14.3) | `{ ptr, i64 len, i64 cap }` of `(K, V)` pairs sorted by key (`Int` and `Byte` numeric, `Text` bytewise through `text_cmp`, `Bool` false before true, enums by tag), looked up by binary search; copy, drop, equality and debug glue (`{k: v, …}`) as for a list of the pair; `for` visits keys in that order. A B-tree is a later milestone | 24, 8 |
+| `Map<K, V>` (`docs/slice.md` section 14.3) | `{ ptr, i64 len, i64 cap }` of `(K, V)` pairs sorted by key (`Int` and `Byte` numeric, `Text` bytewise through the inline `@ignite.text_cmp` (a `memcmp` of the common length, then the shorter first; the runtime's `text_cmp` gives the same order), `Bool` false before true, enums by tag), looked up by binary search; copy, drop, equality and debug glue (`{k: v, …}`) as for a list of the pair; `for` visits keys in that order. A B-tree is a later milestone | 24, 8 |
 
 Calling convention (all functions the generator emits, and every `ignite_rt_*` function that
 takes or returns Ignite values):
@@ -556,7 +556,7 @@ calling task (section 4). `T*` means a pointer to the section-3 layout;
 | `i32 tcp_accept(i64 listener, i64* out, IoError* err)` | |
 | `i64 tcp_local_port(i64 listener)` | |
 | `i32 tcp_connect(Text* address, i64 port, i64* out, IoError* err)` | |
-| `i32 tcp_read(i64 stream, i64 maximum, Input* out, IoError* err)` | one read, straight into a `maximum`-byte arena block whose unused tail is given back; a concurrent `tcp_write_all` on the same stream from another task does not wait for it |
+| `i32 tcp_read(i64 stream, i64 maximum, Input* out, IoError* err)` | one read: up to 16 KiB straight into a `maximum`-byte arena block whose unused tail is given back; above 16 KiB into a per-thread buffer (kept up to 64 KiB) and then the bytes read copied into the arena, so a large `maximum` costs neither a zeroed block of its own nor the current chunk; a concurrent `tcp_write_all` on the same stream from another task does not wait for it |
 | `i32 tcp_write_all(i64 stream, List* bytes, IoError* err)` | appends to the stream's send buffer (`docs/slice.md` section 7) |
 | `i32 tcp_close(i64 stream, IoError* err)` | shut down the write half |
 | `void tcp_release(i64 handle)` | drop a listener, stream or pipe-end handle, and forget it as owned by the task (`tcp_own`); later use of it is an error |
@@ -566,12 +566,12 @@ calling task (section 4). `T*` means a pointer to the section-3 layout;
 | `i32 stdout_write_all(List* bytes, IoError* err)` | write and flush |
 | `void io_error_new(IoError* out, Text* message)` | exit code 1 |
 | `void text_from_bytes_lossy(Text* out, List* bytes)` | invalid UTF-8 sequences become U+FFFD; ASCII is copied without the decoder |
-| `void text_trim(Text* out, Text* text)` | Unicode whitespace, as Rust `str::trim` |
+| `void text_trim(Text* out, Text* text)` | Unicode whitespace, as Rust `str::trim`; when both ends left after the ASCII whitespace are ASCII the text is not decoded |
 | `void text_concat(Text* out, Text* a, Text* b)` | |
 | `i8 text_eq(Text* a, Text* b)` | |
 | `void text_debug(Text* out, Text* text)` | the debug text of `text` (`docs/slice.md` section 13.6): quoted and escaped |
 | `i8 text_starts_with(Text* text, Text* prefix)` | |
-| `void text_join(Text* out, List* texts, Text* separator)` | |
+| `void text_join(Text* out, List* texts, Text* separator)` | one arena block of the summed length, written in place |
 | `void int_to_text(Text* out, i64 value)` | |
 | `i8 int_parse(Text* text, i64* out)` | 1 and `out` when `text` is a decimal `i64` with an optional leading `-` (`ignite_io::parse_int`: what Rust `str::parse` accepts less a leading `+`, read from the bytes without a UTF-8 pass), else 0; `text` may be the `List` of a `Bytes`, as `Int.parse(b.to_text())` passes `b` |
 | `i32 tcp_set_idle_timeout(i64 stream, i64 ms, IoError* err)` | a read that waits longer than `ms` returns `Eof`; 0 or less removes the timeout (`ignite_io::TcpStream::set_idle_timeout`) |

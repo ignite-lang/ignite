@@ -88,3 +88,94 @@ is outside this story's scope and still evaluates a constant per mention.
 | same, against P1 (P9 and P1 applied, constants not), median of 21 (load 7.1 to 7.3) | 262 ms (P1) | 10 ms |
 | wall time, `bench text concat` against P1, median of 11 (load 13.7 to 14.5) | 124 ms (P1) | 121 ms |
 | Rust target, `bench constants`, `ignite test --release`, 5 runs before any change (load 17 to 22) | 5.01 to 6.12 s | not changed by this step (no Rust generator change) |
+
+## P7: join and trim write their result once
+
+PR B's base is `d7d65b43f` (`main` after P9, P1 and P2); its programs are `bench-b.ignite`
+(this directory), timed against base with 21 interleaved rounds.
+
+`text_join` collected the parts in a `Vec`, joined them into a second heap `Vec` and copied
+that into the arena: two `malloc`s and two copies per call. Now it sums the lengths and
+writes parts and separators into one arena block. `text_trim` ran a UTF-8 pass over the
+whole text; now it drops the ASCII whitespace of `White_Space` (tab, LF, VT, FF, CR, space)
+from both ends and decodes only when an end left is a non-ASCII byte, which keeps
+`str::trim`'s answer (unit test `trim_keeps_what_str_trim_keeps` compares the two on
+Unicode spaces, NEL, U+2028/9, NBSP and invalid UTF-8). One difference on invalid UTF-8,
+which no runtime or generated operation produces: a VT at an ASCII end is now dropped (the
+old `trim_ascii` fallback kept it). `text_debug` of printable ASCII with no `"` or `\`
+writes the quoted bytes straight into the arena instead of building a `String`.
+
+The stdout part of the review's P7 (`Stdout::write_from(&[u8])`) is not done: it changes
+`ignite-io`'s `Stdout::write_all`, outside this story's crates.
+
+Both steps are runtime calls with no change to `program.ll`; the counts are runtime calls.
+
+| measure | base | P7 |
+|---|---|---|
+| `bench text join` (1,000,000 joins of 16 words): `malloc` calls, whole process | 2,000,033 | 33 |
+| same: instructions (callgrind `Ir`, whole run) | 1,708,435,891 | 1,370,435,334 |
+| same: `Ir` inside `ignite_rt_text_join` | 1,665,000,147 | 1,327,000,000 |
+| wall time, `bench text join`, median of 21 interleaved (load 11.4 to 11.7) | 112 ms | 87 ms |
+| `bench text trim` (4,000,000 trims of a 24-byte ASCII text): `Ir`, whole run | 1,424,435,537 | 872,435,127 |
+| same: `Ir` inside `ignite_rt_text_trim` | 1,336,000,000 | 784,000,000 |
+| wall time, `bench text trim`, median of 21 interleaved (load 11.2 to 11.4) | 106 ms | 72 ms |
+
+Tests that catch a wrong result: `crates/ignite-rt/tests/abi.rs` (join of multibyte parts
+with a multibyte separator, an empty part, a 70,000-byte part, an empty separator; debug of
+plain, empty and escaped texts) and the copies test "join, trim and their edge cases"
+(NBSP and VT/FF ends, a non-whitespace control byte, empty and all-space texts), run on
+both targets.
+
+## P6: a read with a large maximum takes only the bytes read
+
+A `read(maximum)` above 16 KiB (the HTTP server reads with 65,536) asked the arena for a
+`maximum`-byte block, which as a large request is a zeroed `calloc` block of its own that is
+not trimmed and ends the task's bump chunk. Now such a read goes into a per-thread buffer
+(kept up to 64 KiB; a fresh `Vec` when the buffer is in use) and only the bytes read are
+copied into the arena; reads up to 16 KiB still go straight into an arena block. The review
+named a per-task buffer: the read does not yield between filling the buffer and copying out
+of it, so one buffer per worker thread is enough.
+
+| measure | base | P6 |
+|---|---|---|
+| `bench small reads of maximum 64 KiB` (20,000 request/answer round trips over a pipe, a 100-byte request and a 1-byte answer, both read with maximum 65,536): `calloc` calls (callgrind) | 40,000 (2,630,240,030 `Ir`) | 0 from reads |
+| same: instructions (callgrind `Ir`, whole run) | 2,714,564,088 | 65,396,310 |
+| same: wall time, median of 21 interleaved (load 16.4 to 17.8) | 311 ms | 179 ms |
+| `bench pipe reads of 64 KiB` (reads that fill the maximum): `calloc` calls | 264 (17,358,280 `Ir`) | 2 (125,265 `Ir`) |
+| same: `Ir`, whole run | 109,138,427 | 108,956,472 |
+| same: wall time, median of 21 interleaved (load 11.2) | 15 ms | 15 ms |
+
+When a read fills its maximum the saved zeroing is spent again on the copy, so that bench
+does not change; a read that returns less than its maximum, the usual case of a server
+reading a request, no longer pays for zeroing the whole maximum. Under callgrind the
+`bench pipe reads of 64 KiB` run stops early on both builds (exit 101 after 264 reads; not traced, likely the
+10 s idle timeout with the writer slowed by valgrind), so its counts cover the same
+264 reads on both; outside valgrind it passes.
+
+Tests that catch a wrong result: the copies test "reads over 16 KiB keep their bytes and
+the texts made between them" (110,017 patterned bytes written as 40,000, 70,000 and 17,
+read with maxima 65,536 and 20,000 alternating; each read checked against its maximum, the
+bytes compared whole, and texts allocated between reads checked afterwards), on both
+targets.
+
+## P8: a map compares Text keys inline
+
+Each probe of a `Map<Text, _>` binary search called `ignite_rt_text_cmp`, which entered the
+runtime (`crate::entry`) to compare two slices. Now `glue::compare` of `Text` calls the
+`alwaysinline` IR helper `@ignite.text_cmp`: `memcmp` of the common length (skipped when it
+is 0, since an empty text's pointer may be null), then the shorter first. That is Rust's
+`[u8]` order, the order `ignite_rt_text_cmp` gives, so a map's keys keep their order. The
+O(n) `memmove` of `Map.put` (the review's known O11) is not changed.
+
+| measure | base | P8 |
+|---|---|---|
+| `bench-b.ignite` `program.ll`: calls of `ignite_rt_text_cmp` | 1 (in `map.find.Map<Text,Int>`) | 0 |
+| `bench map with text keys` (400 rounds of 512 puts and 512 gets): `ignite_rt_text_cmp` calls (callgrind) | 3,197,600 | 0 (3,197,600 `memcmp` calls inline) |
+| same: instructions (callgrind `Ir`, whole run) | 438,246,089 | 276,452,453 |
+| wall time, `bench map with text keys`, median of 21 interleaved (load 11.2) | 53 ms | 39 ms |
+
+Tests that catch a wrong result: the copies test "map keys of multibyte and prefix texts
+sort bytewise" (keys `""`, a prefix and its extensions, `é`, a text with byte 0xFF; `keys()`
+order, `get` of present, absent and equal-but-distinct keys, overwrite and remove), on both
+targets, and `copies::text_keys_compare_inline`, which checks that `map.find` over `Text`
+keys calls `@ignite.text_cmp` and no runtime comparison is left.

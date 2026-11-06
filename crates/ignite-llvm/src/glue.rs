@@ -359,6 +359,41 @@ pub fn value_eq(module: &mut Module<'_>, f: &mut Func, ty: &Ty, a: &str, b: &str
     f.val(format!("icmp eq {mt} {x}, {y}"))
 }
 
+/// `i32 ignite.text_cmp(ptr a, ptr b)`: -1, 0 or 1 as the `Text` at `a`
+/// sorts before, with or after the one at `b`, bytewise (Rust's `[u8]`
+/// order, as `ignite_rt_text_cmp`): `memcmp` of the common length (not
+/// called when it is 0, since an empty value's pointer may be null), then
+/// the shorter first. Inlined into a map's binary search instead of a
+/// runtime call per probe.
+const TEXT_CMP: &str = r#"define internal i32 @ignite.text_cmp(ptr %a, ptr %b) alwaysinline {
+entry:
+  %lenpa = getelementptr inbounds i8, ptr %a, i64 8
+  %lena = load i64, ptr %lenpa, align 8
+  %lenpb = getelementptr inbounds i8, ptr %b, i64 8
+  %lenb = load i64, ptr %lenpb, align 8
+  %shorter = icmp ult i64 %lena, %lenb
+  %common = select i1 %shorter, i64 %lena, i64 %lenb
+  %some = icmp sgt i64 %common, 0
+  br i1 %some, label %bytes, label %lengths
+bytes:
+  %da = load ptr, ptr %a, align 8
+  %db = load ptr, ptr %b, align 8
+  %order = call i32 @memcmp(ptr %da, ptr %db, i64 %common)
+  %differ = icmp ne i32 %order, 0
+  %before = icmp slt i32 %order, 0
+  %sign = select i1 %before, i32 -1, i32 1
+  br i1 %differ, label %done, label %lengths
+lengths:
+  %after = icmp ugt i64 %lena, %lenb
+  %high = select i1 %after, i32 1, i32 0
+  %bylength = select i1 %shorter, i32 -1, i32 %high
+  br label %done
+done:
+  %result = phi i32 [ %sign, %bytes ], [ %bylength, %lengths ]
+  ret i32 %result
+}
+"#;
+
 /// An `i32` that orders the values of `ty` at the pointers `a` and `b`:
 /// negative when `a` sorts before `b`, zero when they are equal, positive
 /// when after. A map keeps its pairs in this order (`docs/slice.md` section
@@ -369,8 +404,9 @@ pub fn compare(module: &mut Module<'_>, f: &mut Func, ty: &Ty, a: &str, b: &str)
     let ty = &repr(ty);
     match ty {
         Ty::Text => {
-            module.declare("ignite_rt_text_cmp", "i32", &["ptr".into(), "ptr".into()]);
-            f.val(format!("call i32 @ignite_rt_text_cmp(ptr {a}, ptr {b})"))
+            module.declare_raw("memcmp", "declare i32 @memcmp(ptr, ptr, i64)");
+            module.helper("ignite.text_cmp", TEXT_CMP);
+            f.val(format!("call i32 @ignite.text_cmp(ptr {a}, ptr {b})"))
         }
         Ty::Option(_) | Ty::Result(..) | Ty::Enum(_) | Ty::GenericEnum(..) | Ty::Input => {
             let x = f.val(format!("load i32, ptr {a}, align 4"));

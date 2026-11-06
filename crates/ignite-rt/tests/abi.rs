@@ -373,6 +373,32 @@ fn text_helpers() {
     assert_eq!(read_text(&out), "a, bc, ");
     ignite_rt_text_join(&mut out, &empty(), &text(", "));
     assert_eq!(read_text(&out), "");
+    let long = "x".repeat(70_000);
+    let parts = [text("é"), text(""), text(&long), text("ü")];
+    let buffer = ignite_rt_alloc(
+        (parts.len() * size_of::<IgniteList>()) as i64,
+        align_of::<IgniteList>() as i64,
+    );
+    unsafe {
+        std::ptr::copy_nonoverlapping(parts.as_ptr(), buffer.cast(), parts.len());
+    }
+    let list = IgniteList {
+        ptr: buffer,
+        len: 4,
+        cap: 4,
+    };
+    ignite_rt_text_join(&mut out, &list, &text("→"));
+    assert_eq!(read_text(&out), format!("é→→{long}→ü"));
+    assert_eq!(out.cap, out.len);
+    ignite_rt_text_join(&mut out, &list, &text(""));
+    assert_eq!(read_text(&out), format!("é{long}ü"));
+
+    ignite_rt_text_debug(&mut out, &text("plain text"));
+    assert_eq!(read_text(&out), "\"plain text\"");
+    ignite_rt_text_debug(&mut out, &text(""));
+    assert_eq!(read_text(&out), "\"\"");
+    ignite_rt_text_debug(&mut out, &text("q\"\\é\n"));
+    assert_eq!(read_text(&out), "\"q\\\"\\\\é\\n\"");
 
     for value in [
         0,
