@@ -1,0 +1,205 @@
+// story:moves-for-pattern-bindings (docs/slice.md 20.3.1): owned pattern
+// bindings, `for` elements and closure parameters move at their last use,
+// at an `if` or `match` tail too. A binding read after the tail keeps its
+// value; a binding of a place (a parameter, a local) is borrowed from it,
+// so a callee that changes it in place leaves the place unchanged; a
+// closure parameter its body moves is passed a copy. Both targets.
+
+type State {
+  items: List<Int>
+  count: Int
+}
+
+fn fresh() -> State = State { items = [], count = 0 }
+
+fn made(n: Int) -> State = State { items = [n], count = n }
+
+fn maybe(n: Int) -> Option<State> = if n > 0 { Some(made(n)) } else { None }
+
+fn states(n: Int) -> List<State> {
+  var out = []
+  var i = 1
+  while i <= n {
+    out.push(made(i))
+    i = i + 1
+  }
+  out
+}
+
+// Moves its parameter into a `var` it changes in place: consumed, so a moved
+// argument is changed where it lies.
+fn bump(s: State) -> State {
+  var t = s
+  t.items.push(9)
+  t.count = t.count + 100
+  t
+}
+
+// Changes an element in place: a callee handed the caller's own buffer would
+// change the caller's value.
+fn poke(s: State) -> State {
+  var t = s
+  t.items.set(0, -1)
+  t
+}
+
+fn arm_tail(n: Int) -> State = match maybe(n) {
+  Some(s) => s
+  None => fresh()
+}
+
+fn arm_into_bump(n: Int) -> State = match maybe(n) {
+  Some(s) => bump(s)
+  None => fresh()
+}
+
+fn tail_then_read(n: Int, c: Bool) -> Int {
+  var seen = 0
+  let kept = match maybe(n) {
+    Some(s) => {
+      let t = if c { s } else { fresh() }
+      seen = s.count + s.items.len()
+      t
+    }
+    None => fresh()
+  }
+  seen + kept.count
+}
+
+fn moved_then_bumped_twice(n: Int) -> Int = match maybe(n) {
+  Some(s) => {
+    let a = bump(s)
+    let b = bump(s)
+    a.count + b.count
+  }
+  None => 0
+}
+
+fn via_borrowed(o: Option<State>) -> State = match o {
+  Some(s) => bump(s)
+  None => fresh()
+}
+
+fn first_or<T>(o: Option<T>, fallback: T) -> T = match o {
+  Some(v) => v
+  None => fallback
+}
+
+fn apply_or<T>(o: Option<T>, f: fn(T) -> T, fallback: T) -> T = match o {
+  Some(v) => f(v)
+  None => fallback
+}
+
+fn elements_bumped(n: Int) -> List<State> {
+  var out = []
+  for s in states(n) {
+    out.push(bump(s))
+  }
+  out
+}
+
+fn element_read_after(n: Int, c: Bool) -> Int {
+  var total = 0
+  for s in states(n) {
+    let t = if c { s } else { fresh() }
+    total = total + s.count + t.count
+  }
+  total
+}
+
+fn pair_tail() -> State {
+  let (a, b) = (made(1), made(2))
+  if a.count < b.count { b } else { a }
+}
+
+test "an owned binding moves at an arm tail and into a callee" {
+  assert arm_tail(3).count == 3
+  assert arm_tail(0).count == 0
+  let b = arm_into_bump(4)
+  assert b.count == 104
+  assert b.items == [4, 9]
+}
+
+test "an owned binding read after the tail keeps its value" {
+  assert tail_then_read(5, true) == 11
+  assert tail_then_read(5, false) == 6
+  assert moved_then_bumped_twice(1) == 202
+}
+
+test "a binding of a borrowed scrutinee is copied, the scrutinee unchanged" {
+  let st = made(7)
+  let o = Some(st)
+  let b = via_borrowed(o)
+  assert b.items == [7, 9]
+  assert o == Some(made(7))
+  let local = Some(made(8))
+  let c = match local {
+    Some(s) => bump(s)
+    None => fresh()
+  }
+  assert c.count == 108
+  assert local == Some(made(8))
+}
+
+test "a binding of a type parameter is copied once" {
+  let xs = [1, 2]
+  let o = Some(xs)
+  assert first_or(o, []) == [1, 2]
+  assert first_or(None, xs) == [1, 2]
+  let pushed = apply_or(o, |l: List<Int>| {
+    l.push(3)
+    l
+  }, [])
+  assert pushed == [1, 2, 3]
+  assert o == Some([1, 2])
+}
+
+test "owned for elements move, an element read after keeps its value" {
+  let bumped = elements_bumped(2)
+  assert bumped.len() == 2
+  assert bumped[0].items == [1, 9]
+  assert bumped[1].count == 102
+  assert element_read_after(3, true) == 12
+  assert element_read_after(3, false) == 6
+}
+
+test "a closure parameter its body moves is passed a copy" {
+  let st = made(5)
+  let f = |s: State| bump(s)
+  let a = f(st)
+  let b = f(st)
+  assert a.count == 105
+  assert b.items == [5, 9]
+  assert st == made(5)
+  let xs = [made(1), made(2)]
+  let ys = xs.map(|s: State| bump(s))
+  assert ys[1].count == 102
+  assert xs == [made(1), made(2)]
+}
+
+test "let pattern bindings of a fresh tuple move" {
+  assert pair_tail().count == 2
+}
+
+test "a callee that changes an element leaves every lent place unchanged" {
+  let o = Some(made(3))
+  let p = match o {
+    Some(s) => poke(s)
+    None => fresh()
+  }
+  assert p.items == [-1]
+  assert o == Some(made(3))
+  let st = made(4)
+  let g = |s: State| poke(s)
+  assert g(st).items == [-1]
+  assert st.items == [4]
+  let xs = [made(1)]
+  let ys = xs.map(|s: State| poke(s))
+  assert ys[0].items == [-1]
+  assert xs[0].items == [1]
+  let owned = match maybe(6) {
+    Some(s) => poke(s)
+    None => fresh()
+  }
+  assert owned.items == [-1]
+}

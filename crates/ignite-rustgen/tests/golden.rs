@@ -419,11 +419,11 @@ fn store_results_read_in_place() {
     let lib = norm(&project.lib_rs);
     for expected in [
         "let _ = s.upsert_read(1, |t: Option<T>| -> T { bump(&t) }, |_| ());",
-        "let _ = s.update_read(1, |t: T| -> T { t.clone() }, |_| ());",
+        "let _ = s.update_read(1, |t: T| -> T { t }, |_| ());",
         "-> i64 { s.upsert_read(1, &*(std::sync::Arc::new(|__a0: Option<T>| bump(&__a0))",
         "Send + Sync>), |__v| __v.n.clone()) }",
         "-> T { s.upsert(1, &*(std::sync::Arc::new(",
-        "-> Option<T> { s.update(1, |t: T| -> T { t.clone() }) }",
+        "-> Option<T> { s.update(1, |t: T| -> T { t }) }",
     ] {
         assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
     }

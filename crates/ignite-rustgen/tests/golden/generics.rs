@@ -40,7 +40,7 @@ pub fn swap<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static>(
 
 pub fn or<T: Clone + Send + Sync + 'static>(value: &Option<T>, fallback: &T) -> T {
     match value {
-        Some(present) => { let present = (present).clone(); present.clone() },
+        Some(present) => present.clone(),
         None => fallback.clone(),
     }
 }

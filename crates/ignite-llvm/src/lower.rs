@@ -768,18 +768,25 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
 
     /// Per parameter of the fn value `f` evaluates to, whether its callee is
     /// known to only read it (`docs/llvm.md` section 3.1): a closure literal
-    /// (or a `let` bound to one) reads every parameter its body does not
-    /// modify (`region::modified_by`; nothing inside a closure body moves,
-    /// so a read that keeps the value copies it), and a named fn reads the
-    /// parameters it does not consume. Empty when the callee is not known.
+    /// (or a `let` bound to one) reads every parameter its body neither
+    /// modifies (`region::modified_by`) nor consumes
+    /// (`TypedProgram::closure_consumed`: only a consumed closure parameter
+    /// moves inside the body), and a named fn reads the parameters it does
+    /// not consume. Empty when the callee is not known.
     fn known_borrows(&mut self, f: &Expr) -> Vec<bool> {
         match &f.kind {
             ExprKind::Closure(closure) => {
+                // A parameter the body consumes (`docs/slice.md` 20.3.1) may
+                // be moved into a callee that changes it in place, so the
+                // caller passes a copy, as it does to a modified one.
                 let modified = crate::region::modified_by(&closure.body, self.cx.types);
                 closure
                     .params
                     .iter()
-                    .map(|p| !modified.contains(&p.name.name))
+                    .enumerate()
+                    .map(|(i, p)| {
+                        !modified.contains(&p.name.name) && !self.cx.types.closure_consumed(f, i)
+                    })
                     .collect()
             }
             ExprKind::Name(id) => {

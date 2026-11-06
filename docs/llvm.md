@@ -269,8 +269,9 @@ call through a fn value loads both words before it evaluates the arguments.
 - A fn value's parameters are owned, as a consumed parameter is, because the caller does
   not know the callee. Where it does, a borrowed place goes as its own pointer to a
   parameter the callee only reads (`Lower::known_borrows`): a closure literal, or a `let`
-  bound to one, reads every parameter its body does not modify (`region::modified_by`;
-  nothing inside a closure body moves, so a read that keeps the value copies it), and a
+  bound to one, reads every parameter its body neither modifies (`region::modified_by`)
+  nor consumes (`TypedProgram::closure_consumed`, `docs/slice.md` 20.3.1: only a consumed
+  closure parameter moves inside the body, so a read that keeps any other copies it), and a
   named fn reads the parameters it does not consume. `list.map` with such an `f` passes
   each element as its own pointer, and a call through such a `let` passes its arguments
   under the borrow rule of a direct call (section 3), also copying an argument whose root a

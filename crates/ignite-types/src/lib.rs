@@ -1398,6 +1398,9 @@ pub struct TypedProgram {
     /// Places in move positions that take their value, by expression
     /// address (`docs/slice.md` 20.3).
     moves: AddressMap<()>,
+    /// The consumed parameters of every closure literal inside a body, by
+    /// the closure's address (`docs/slice.md` 20.3.1).
+    closure_consumed: AddressMap<Vec<bool>>,
 }
 
 fn key(expr: &Expr) -> usize {
@@ -1691,6 +1694,19 @@ impl TypedProgram {
             .unwrap_or(false)
     }
 
+    /// Whether the closure literal `closure` consumes its parameter `index`
+    /// (`docs/slice.md` 20.3.1): its body changes the parameter in place or
+    /// moves it on every path. A backend that lends a caller's place to a
+    /// closure parameter may do so only when this is false. False for any
+    /// other expression and for a closure outside a fn, role or test body.
+    pub fn closure_consumed(&self, closure: &Expr, index: usize) -> bool {
+        self.closure_consumed
+            .get(&key(closure))
+            .and_then(|params| params.get(index))
+            .copied()
+            .unwrap_or(false)
+    }
+
     /// Index and payload types of variant `name` of a value of type `ty`
     /// (an enum, `Option`, `Result` or `Input`), as a pattern on it resolves.
     pub fn variant(&self, ty: &Ty, name: &str) -> Option<(usize, Vec<Ty>)> {
@@ -1953,9 +1969,11 @@ pub fn type_module(
         assemblies: typed.system.assemblies,
         effects: typed.system.effects,
         moves: AddressMap::default(),
+        closure_consumed: AddressMap::default(),
     };
     let found = moves::analyse(program, &program_types, modules);
     program_types.moves = found.moves;
+    program_types.closure_consumed = found.closures;
     if let Some(own) = program_types.modules.get_mut(&program_types.module) {
         own.consumed = found.consumed.clone();
     }

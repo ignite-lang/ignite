@@ -266,6 +266,22 @@ fn untracked_tails_keep_their_values_on_both_targets() {
     );
 }
 
+/// 20.3.1 (story:moves-for-pattern-bindings): owned pattern bindings, `for`
+/// elements and closure parameters move at their last use; one read after
+/// the tail keeps its value, a binding of a place leaves the place
+/// unchanged, and a closure parameter its body moves is passed a copy.
+/// rustc must accept the program and both targets agree.
+#[test]
+fn owned_binding_tails_move_on_both_targets() {
+    let (status, out) = both_targets("moves_tails_owned.ignite");
+    assert_eq!(status, Some(0), "{out}");
+    assert_eq!(
+        out.matches("test result: ok. 8 passed; 0 failed;").count(),
+        2,
+        "{out}"
+    );
+}
+
 /// 20.5 (adversary, U5): rest bindings of texts, records, lists of lists,
 /// variant payloads, closures, bytes and units, and a rest that drives a
 /// loop reassigning its scrutinee, on both targets.

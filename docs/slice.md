@@ -581,7 +581,10 @@ changes in place the variable the place is rooted at, matches `&place` (a refere
 as it is) and copies no scrutinee. A binding of one of those types that is not `Copy` is a
 reference in its arm, read like a reference parameter; any other binding is copied at the
 start of its arm (`{ let n = (n).clone(); .. }`). An arm whose pattern becomes a guard binds
-`__m` to the reference. Every other `match` copies its scrutinee.
+`__m` to the reference. Every other `match` copies its scrutinee. Since
+`story:moves-for-pattern-bindings` a binding of a type parameter is a reference too (`&T`, read
+as a generic fn's reference parameter is), so it is copied once, where a value is taken, and
+not at the start of its arm and again there (20.3.1).
 
 **Builtin methods** are lowered by name; the receiver type is not known, so each name has one
 meaning. The generator emits exactly the Rust on the right.
@@ -6501,6 +6504,42 @@ A place in a move position moves when it is a tracked variable `v` or a field ch
 rooted at one, and that place is dead after the position (20.3.2). A chain through an index
 (`v[i]`), through a boxed field or payload (section 13.4), or rooted at an untracked binding never
 moves.
+
+**Owned bindings (2026-11-06, `story:moves-for-pattern-bindings`).** This replaces the sentence
+"Pattern bindings, `for` elements and closure parameters are not tracked" above, 20.0 row 5's
+"no expression inside a closure body is marked" (its test is now
+`moves::closure_bodies_move_only_their_own_bindings`), and those three of 20.13 item 4:
+
+- A binding of a `match` arm, a pattern `let` or a `for` pattern, and a `for` element, is
+  tracked when it is owned: the value it is bound from (scrutinee, initializer, iterable) is
+  fresh. A value is not fresh when it is a name with a value (a binding or a constant) or reaches
+  one through a field, a tuple field, an index, `?`, `await`, the receiver of a builtin method or
+  a block's last expression; a call of a fn, a role or a variant, a literal, an `if` or a `match`
+  is fresh (their values are copies or moves). The type rule is the variables'. A binding of a
+  value that is not fresh is borrowed from that place (on LLVM it points into it, on Rust it is a
+  reference or a copy): it never moves, and is copied where a value is taken. A binding inside a
+  list pattern is never owned.
+- A pattern binds its names afresh each time it runs: seen backward, their places die there,
+  so a mention in the next loop iteration does not keep this iteration's last use.
+- A closure body is a body of its own, not part of the body that creates it. Its parameters are
+  its variables under the parameter rule: one moves only when the closure consumes it, by
+  20.3.3 applied to the closure body (changed in place on some path, or moved on every path);
+  `TypedProgram::closure_consumed` gives the set. A capture is untracked and never moves (20.13
+  item 3). The LLVM target lends a caller's place to a closure parameter only when the closure
+  neither modifies nor consumes it (`Lower::known_borrows`, `docs/llvm.md` §3.1); on Rust a
+  closure parameter is a value.
+- A handle stays shared and is never moved as an aggregate, with one exception: a `let`/`var`
+  or owned binding of a handle type moves as the value of the block or `match` arm that binds
+  it (directly, or as the value of an `if` branch or `match` arm that is that value), where its
+  scope ends. The move hands on the share the binding drops there, so nothing closes earlier
+  than with a copy; on LLVM a handle is a scalar and the mark changes nothing. A handle
+  parameter is never consumed by a move.
+
+Checks: `moves::owned_pattern_bindings_move`, `moves::owned_for_elements_move`,
+`moves::closure_parameters_move_when_consumed`, `moves::handles_move_only_at_their_scope_tail`
+(`cargo test -p ignite-types --test main moves::`), and `slice16/moves_tails_owned.ignite`
+on both targets (`slice16::owned_binding_tails_move_on_both_targets` in `crates/ignite`,
+`slice16::fixtures_pass` in `ignite-rustgen`).
 
 #### 20.3.2 Liveness
 
