@@ -1203,6 +1203,19 @@ impl<'p> Evaluator<'p> {
             (Builtin::IntToByte, Value::Int(n)) => {
                 plain(Value::option(u8::try_from(*n).ok().map(Value::Byte)))
             }
+            (
+                Builtin::IntWrappingAdd | Builtin::IntWrappingSub | Builtin::IntWrappingMul,
+                Value::Int(a),
+            ) => {
+                let Value::Int(b) = next()? else {
+                    return Err(internal("wrapping arithmetic on a non-Int"));
+                };
+                plain(Value::Int(match builtin {
+                    Builtin::IntWrappingAdd => a.wrapping_add(b),
+                    Builtin::IntWrappingSub => a.wrapping_sub(b),
+                    _ => a.wrapping_mul(b),
+                }))
+            }
             (Builtin::ListLen, Value::List(items)) => plain(Value::Int(items.len() as i64)),
             (Builtin::ListIsEmpty, Value::List(items)) => plain(Value::Bool(items.is_empty())),
             (Builtin::ListAt, Value::List(items)) => {
@@ -1602,6 +1615,7 @@ impl<'p> Evaluator<'p> {
                     (Value::Int(a), Value::Int(b)) => a.cmp(b),
                     (Value::Byte(a), Value::Byte(b)) => a.cmp(b),
                     (Value::Quantity(_, a), Value::Quantity(_, b)) => a.cmp(b),
+                    (Value::Text(a), Value::Text(b)) => a.as_bytes().cmp(b.as_bytes()),
                     _ => {
                         return Err(internal(format!(
                             "`{}` on `{}` and `{}`",

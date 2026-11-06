@@ -56,6 +56,9 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
         (Ty::Bool, "to_text") => sig(BoolToText, vec![], Ty::Text),
         (Ty::Byte, "to_int") => sig(ByteToInt, vec![], Ty::Int),
         (Ty::Int, "to_byte") => sig(IntToByte, vec![], Ty::Option(Box::new(Ty::Byte))),
+        (Ty::Int, "wrapping_add") => sig(IntWrappingAdd, vec![Ty::Int], Ty::Int),
+        (Ty::Int, "wrapping_sub") => sig(IntWrappingSub, vec![Ty::Int], Ty::Int),
+        (Ty::Int, "wrapping_mul") => sig(IntWrappingMul, vec![Ty::Int], Ty::Int),
         (Ty::TcpStream, "set_idle_timeout") => {
             sig(TcpStreamSetIdleTimeout, vec![Ty::Int], io(Ty::Unit))
         }

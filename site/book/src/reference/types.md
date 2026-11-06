@@ -39,7 +39,7 @@ A fn without a return type returns `Unit`. `()` is the Unit type as well as its 
 |---|---|---|---|---|
 | `+ - * / %` | yes | yes | no | `+` joins texts |
 | unary `-` | yes | no | no | no |
-| `< > <= >=` | yes | yes | no | no |
+| `< > <= >=` | yes | yes | no | byte order |
 | `== !=` | yes | yes | yes | yes |
 | `&& \|\| !` | no | no | yes | no |
 
@@ -48,6 +48,8 @@ A fn without a return type returns `Unit`. `()` is the Unit type as well as its 
   0 to 255).
 - Integer division rounds toward zero; `%` is the remainder of that division.
 - `&&` and `||` evaluate their right operand only when needed.
+- `Text` orders by the bytes of its UTF-8 encoding, which is code point order: `"Z" < "a"`,
+  `"z" < "é"`, and a prefix sorts first. A `Map` keeps `Text` keys in the same order.
 - Any other combination is E045.
 
 ### Overflow
@@ -58,6 +60,20 @@ division or remainder by zero, `-` of the smallest `Int`, and the smallest `Int`
 task that ran it with a report of the form
 `<operation> failed at <file>:<line>:<column>: <detail>`. In a test it fails the test; in the
 main task the process exits with status 101. See [Tests and assertions](tests.md#failures).
+
+Arithmetic that is meant to wrap says so: `a.wrapping_add(b)`, `a.wrapping_sub(b)` and
+`a.wrapping_mul(b)` on `Int` return the result modulo 2^64 in two's complement, as Go's `int`
+and Rust's `i64::wrapping_*` do, and never fail.
+
+```ignite
+const MAX: Int = 9223372036854775807
+
+test "wrapping arithmetic" {
+  assert MAX.wrapping_add(1) == -MAX - 1
+  assert (-MAX - 1).wrapping_sub(1) == MAX
+  assert MAX.wrapping_mul(2) == -2
+}
+```
 
 ### Conversions
 

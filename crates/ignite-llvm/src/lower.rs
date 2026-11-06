@@ -3164,6 +3164,22 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 &[format!("ptr {a}"), format!("ptr {b}")],
             );
         }
+        if ty == Ty::Text
+            && matches!(
+                op,
+                BinaryOp::Lt | BinaryOp::Gt | BinaryOp::Le | BinaryOp::Ge
+            )
+        {
+            let (a, b) = (self.ptr(&l), self.ptr(&r));
+            let order = crate::glue::compare(self.m, &mut self.f, &Ty::Text, &a, &b);
+            let predicate = match op {
+                BinaryOp::Lt => "slt",
+                BinaryOp::Gt => "sgt",
+                BinaryOp::Le => "sle",
+                _ => "sge",
+            };
+            return Val::Scalar(self.f.val(format!("icmp {predicate} i32 {order}, 0")));
+        }
         if ty == Ty::Text {
             let (a, b) = (self.ptr(&l), self.ptr(&r));
             let eq = crate::glue::text_eq(self.m, &mut self.f, &a, &b);
@@ -4600,6 +4616,17 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.f
                     .ins(format!("store i8 {byte}, ptr {payload}, align 1"));
                 Val::Ptr(result, true)
+            }
+            IntWrappingAdd | IntWrappingSub | IntWrappingMul => {
+                let r = recv(self);
+                let x = self.scalar(&r);
+                let y = self.scalar_arg(&args[0]);
+                let instr = match b {
+                    IntWrappingAdd => "add",
+                    IntWrappingSub => "sub",
+                    _ => "mul",
+                };
+                Val::Scalar(self.f.val(format!("{instr} i64 {x}, {y}")))
             }
             TcpStreamSetIdleTimeout | PipeStreamSetIdleTimeout | StreamSetIdleTimeout => {
                 let entry = self.stream_entry(b, receiver, "set_idle_timeout");
