@@ -10,7 +10,9 @@
 //! iterated to a fixpoint; the consumed sets of a module's fns are the
 //! least fixpoint over its bodies, read from the typed modules for
 //! imported fns. Names are resolved to bindings first, so a shadowing
-//! binding is its own variable. Closure bodies are never entered.
+//! binding is its own variable. A closure body is walked as a body of its
+//! own, never as part of the body that creates it: its parameters are its
+//! variables, its captures are untracked (20.3.1).
 //!
 //! Two readings the contract leaves open:
 //!
@@ -37,28 +39,31 @@ use crate::{BraceKind, Builtin, Callee, Ty, TypedModules, TypedProgram};
 const ROUNDS: usize = 64;
 
 /// The result of [`analyse`]: the addresses of the expressions that move,
-/// and the consumed parameters of every fn, associated fn and role of the
-/// module.
+/// the consumed parameters of every fn, associated fn and role of the
+/// module, and those of every closure literal inside a body, by the
+/// closure's address.
 pub(crate) struct Moves {
     pub moves: AddressMap<()>,
     pub consumed: BTreeMap<String, Vec<bool>>,
+    pub closures: AddressMap<Vec<bool>>,
 }
 
-/// Analyse every fn, role and test body of `program`, typed as `types`
-/// against the imported `modules`.
+/// Analyse every fn, role, test and closure body of `program`, typed as
+/// `types` against the imported `modules`.
 pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedModules) -> Moves {
     let bodies = bodies(program, types);
     let resolved: Vec<Resolved> = bodies.iter().map(|b| resolve(b, types)).collect();
+    let changed_params = |body: &Body<'_>| -> Vec<bool> {
+        let names = changed_names(body.root, types);
+        body.params
+            .iter()
+            .map(|p| names.contains(p.name.as_str()))
+            .collect()
+    };
     let mut consumed: BTreeMap<String, Vec<bool>> = BTreeMap::new();
     for body in &bodies {
         if let Some(key) = &body.key {
-            let names = changed_names(body.body, types);
-            let changed = body
-                .params
-                .iter()
-                .map(|p| names.contains(p.name.name.as_str()))
-                .collect();
-            consumed.insert(key.clone(), changed);
+            consumed.insert(key.clone(), changed_params(body));
         }
     }
     // Each round that changes something sets at least one more entry and
@@ -69,7 +74,8 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
         let mut changed = false;
         for (body, res) in bodies.iter().zip(&resolved) {
             let Some(key) = &body.key else { continue };
-            let (moved, _) = walk(body, res, types, modules, &consumed, false);
+            let own = consumed[key].clone();
+            let (moved, _) = walk(body, res, types, modules, &consumed, &own, false);
             let entry = consumed
                 .get_mut(key)
                 .expect("every keyed body has an entry");
@@ -85,8 +91,26 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
         }
     }
     let mut marks: AddressMap<bool> = AddressMap::default();
+    let mut closures: AddressMap<Vec<bool>> = AddressMap::default();
     for (body, res) in bodies.iter().zip(&resolved) {
-        let (_, found) = walk(body, res, types, modules, &consumed, true);
+        let own = match (&body.key, body.closure) {
+            (Some(key), _) => consumed[key].clone(),
+            // A closure's parameter is consumed as a fn's is (20.3.3):
+            // changed in place, or moved on every path to the end of the
+            // body. A closure calls nothing of its own, so one walk gives
+            // the moved set; it does not depend on `own`.
+            (None, Some(closure)) => {
+                let mut own = changed_params(body);
+                let (moved, _) = walk(body, res, types, modules, &consumed, &own, false);
+                for i in moved {
+                    own[i] = true;
+                }
+                closures.insert(key(closure), own.clone());
+                own
+            }
+            (None, None) => Vec::new(),
+        };
+        let (_, found) = walk(body, res, types, modules, &consumed, &own, true);
         marks.extend(found);
     }
     Moves {
@@ -96,18 +120,31 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
             .map(|(k, _)| (k, ()))
             .collect(),
         consumed,
+        closures,
     }
 }
 
-/// One body the analysis walks: a fn, an associated fn, a role or a test.
+/// What a body consists of: the block of a fn, role or test, or the
+/// expression of a closure.
+#[derive(Clone, Copy)]
+enum Root<'p> {
+    Block(&'p Block),
+    Expr(&'p Expr),
+}
+
+/// One body the analysis walks: a fn, an associated fn, a role, a test or
+/// a closure literal inside one of them.
 struct Body<'p> {
-    /// The key of [`crate::ModuleTypes::consumed`]; `None` for a test.
+    /// The key of [`crate::ModuleTypes::consumed`]; `None` for a test and a
+    /// closure.
     key: Option<String>,
-    params: &'p [Param],
-    body: &'p Block,
+    params: Vec<&'p Ident>,
+    root: Root<'p>,
     /// Whether the body's value is the result (a return type other than
     /// `Unit`).
     used: bool,
+    /// The closure literal, for a closure body.
+    closure: Option<&'p Expr>,
 }
 
 fn bodies<'p>(program: &'p Program, types: &TypedProgram) -> Vec<Body<'p>> {
@@ -115,30 +152,34 @@ fn bodies<'p>(program: &'p Program, types: &TypedProgram) -> Vec<Body<'p>> {
         None => false,
         Some(ty) => types.resolved_type(ty) != Some(&Ty::Unit),
     };
+    let names = |params: &'p [Param]| params.iter().map(|p| &p.name).collect::<Vec<_>>();
     let mut out = Vec::new();
     for decl in &program.decls {
         match decl {
             Decl::Fn(f) => out.push(Body {
                 key: Some(f.qualified_name()),
-                params: &f.params,
-                body: &f.body,
+                params: names(&f.params),
+                root: Root::Block(&f.body),
                 used: returns(&f.ret),
+                closure: None,
             }),
             Decl::Protocol(p) => {
                 for f in &p.fns {
                     out.push(Body {
                         key: Some(format!("{}.{}", p.name.name, f.name.name)),
-                        params: &f.params,
-                        body: &f.body,
+                        params: names(&f.params),
+                        root: Root::Block(&f.body),
                         used: returns(&f.ret),
+                        closure: None,
                     });
                 }
             }
             Decl::Test(t) => out.push(Body {
                 key: None,
-                params: &[],
-                body: &t.body,
+                params: Vec::new(),
+                root: Root::Block(&t.body),
                 used: false,
+                closure: None,
             }),
             Decl::Record(_)
             | Decl::Enum(_)
@@ -148,6 +189,30 @@ fn bodies<'p>(program: &'p Program, types: &TypedProgram) -> Vec<Body<'p>> {
             | Decl::Assembly(_) => {}
         }
     }
+    let mut stack = Vec::new();
+    for body in &out {
+        match body.root {
+            Root::Block(block) => block_children(block, &mut stack),
+            Root::Expr(e) => stack.push(Node::Expr(e)),
+        }
+    }
+    let mut closures = Vec::new();
+    while let Some(node) = stack.pop() {
+        let Node::Expr(e) = node else { continue };
+        if let ExprKind::Closure(closure) = &e.kind {
+            closures.push(Body {
+                key: None,
+                params: closure.params.iter().map(|p| &p.name).collect(),
+                root: Root::Expr(&closure.body),
+                used: types
+                    .closure(e)
+                    .is_some_and(|info| !matches!(info.ret, Ty::Unit)),
+                closure: Some(e),
+            });
+        }
+        expr_children(e, &mut stack);
+    }
+    out.extend(closures);
     out
 }
 
@@ -180,13 +245,26 @@ fn aggregate(ty: &Ty) -> bool {
     )
 }
 
+/// Whether a value of `ty` is a handle (invariant 3): a resource shared by
+/// copying 8 bytes. A handle binding moves only at the tail of its own
+/// scope ([`Resolved::tails`]).
+fn handle(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::TcpListener | Ty::TcpStream | Ty::PipeStream | Ty::Store(_) | Ty::Capability(_)
+    )
+}
+
 // ---- name resolution -------------------------------------------------------
 
-/// A binding of a body: tracked when it is a single-name `let`/`var` or
-/// a parameter of an aggregate type; `param` is the parameter's index.
+/// A binding of a body: tracked when it is a single-name `let`/`var` or a
+/// parameter of an aggregate type, or an owned binding (20.3.1) of an
+/// aggregate type; `param` is the parameter's index. `handle` marks a
+/// tracked `let`/`var` or owned binding of a handle type.
 struct Var {
     tracked: bool,
     param: Option<usize>,
+    handle: bool,
 }
 
 /// The bindings of one body and what each name use resolves to.
@@ -200,6 +278,11 @@ struct Resolved {
     decls: HashMap<Span, usize>,
     /// Assignment places by address.
     targets: AddressMap<usize>,
+    /// `Name` expressions that are the value of the block or `match` arm
+    /// that binds the name (directly, or through the branches of an `if`
+    /// or the arms of a `match` that is that value): the binding's scope
+    /// ends there.
+    tails: AddressMap<()>,
 }
 
 struct Resolver<'a> {
@@ -214,21 +297,120 @@ fn resolve(body: &Body<'_>, types: &TypedProgram) -> Resolved {
         scopes: vec![Vec::new()],
         out: Resolved::default(),
     };
-    for (i, param) in body.params.iter().enumerate() {
-        let tracked = types.binding_type(param.name.span).is_some_and(aggregate);
-        r.bind(&param.name, tracked, Some(i));
+    let closure = body.closure.and_then(|c| types.closure(c));
+    for (i, name) in body.params.iter().enumerate() {
+        let ty = types
+            .binding_type(name.span)
+            .or_else(|| closure.and_then(|c| c.params.get(i)).map(|(_, ty)| ty));
+        r.bind(name, ty.is_some_and(aggregate), Some(i), false);
     }
-    r.block(body.body);
+    match body.root {
+        Root::Block(block) => r.block(block),
+        Root::Expr(e) => r.expr(e),
+    }
     r.out
 }
 
 impl<'a> Resolver<'a> {
-    fn bind(&mut self, name: &'a Ident, tracked: bool, param: Option<usize>) {
+    fn bind(&mut self, name: &'a Ident, tracked: bool, param: Option<usize>, handle: bool) {
         let id = self.out.vars.len();
-        self.out.vars.push(Var { tracked, param });
+        self.out.vars.push(Var {
+            tracked,
+            param,
+            handle,
+        });
         self.out.decls.insert(name.span, id);
         if let Some(scope) = self.scopes.last_mut() {
             scope.push((name.name.as_str(), id));
+        }
+    }
+
+    /// Bind a `let`/`var` name or an owned binding: tracked when its type
+    /// is an aggregate or a handle.
+    fn bind_owned(&mut self, name: &'a Ident) {
+        let ty = self.types.binding_type(name.span);
+        let handle = ty.is_some_and(handle);
+        self.bind(name, ty.is_some_and(aggregate) || handle, None, handle);
+    }
+
+    /// Whether the value of `e` may point into a binding or a constant:
+    /// `e` is a name with a value, or reaches one through the expressions
+    /// [`root`] follows or the receiver of a builtin method (not the type
+    /// of a static one, `TcpStream.connect`). Any other
+    /// value (a call of a fn, a role or a variant, a literal, an `if` or
+    /// `match`, whose results are copies or moves) is a fresh value its
+    /// pattern bindings or elements own (20.3.1).
+    fn borrowed(&self, e: &Expr) -> bool {
+        let builtin = matches!(self.types.callee(e), Some(Callee::Builtin(_)));
+        match &e.kind {
+            ExprKind::Name(_) => {
+                self.out.refs.contains_key(&key(e)) || self.types.try_type_of(e).is_some()
+            }
+            ExprKind::Field { receiver, .. }
+            | ExprKind::TupleField { receiver, .. }
+            | ExprKind::Index { receiver, .. }
+            | ExprKind::Try(receiver)
+            | ExprKind::Await(receiver) => self.borrowed(receiver),
+            ExprKind::Method { receiver, name, .. } if builtin => {
+                !self.static_receiver(receiver, &name.name) && self.borrowed(receiver)
+            }
+            ExprKind::Call { callee, .. } if builtin => match &callee.kind {
+                ExprKind::Field { receiver, name } => {
+                    !self.static_receiver(receiver, &name.name) && self.borrowed(receiver)
+                }
+                _ => false,
+            },
+            ExprKind::NamedArg { value, .. } => self.borrowed(value),
+            ExprKind::Block(body) => match body.stmts.last().map(|s| &s.kind) {
+                Some(StmtKind::Expr(last)) => self.borrowed(last),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// Whether `receiver.name(..)` is a static builtin (`TcpStream.connect`,
+    /// `Int.parse`): the receiver names a type, not a value.
+    fn static_receiver(&self, receiver: &Expr, name: &str) -> bool {
+        match &receiver.kind {
+            ExprKind::Name(owner) => {
+                !self.out.refs.contains_key(&key(receiver))
+                    && crate::builtins::static_fn(&owner.name, name).is_some()
+            }
+            _ => false,
+        }
+    }
+
+    /// Record `e`, the value of a scope whose bindings are numbered from
+    /// `start`, as a tail of a binding of that scope.
+    fn tail(&mut self, e: &Expr, start: usize) {
+        match &e.kind {
+            ExprKind::Name(_) => {
+                if self.out.refs.get(&key(e)).is_some_and(|&v| v >= start) {
+                    self.out.tails.insert(key(e), ());
+                }
+            }
+            ExprKind::Block(block) => {
+                if let Some(StmtKind::Expr(last)) = block.stmts.last().map(|s| &s.kind) {
+                    self.tail(last, start);
+                }
+            }
+            ExprKind::If {
+                then, otherwise, ..
+            } => {
+                if let Some(StmtKind::Expr(last)) = then.stmts.last().map(|s| &s.kind) {
+                    self.tail(last, start);
+                }
+                if let Some(otherwise) = otherwise {
+                    self.tail(otherwise, start);
+                }
+            }
+            ExprKind::Match { arms, .. } => {
+                for arm in arms {
+                    self.tail(&arm.body, start);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -244,19 +426,34 @@ impl<'a> Resolver<'a> {
 
     fn block(&mut self, block: &'a Block) {
         self.scopes.push(Vec::new());
+        let start = self.out.vars.len();
         for stmt in &block.stmts {
             self.stmt(stmt);
+        }
+        if let Some(StmtKind::Expr(last)) = block.stmts.last().map(|s| &s.kind) {
+            self.tail(last, start);
         }
         self.scopes.pop();
     }
 
-    fn scoped(&mut self, pattern: Option<&'a Pattern>, name: Option<&'a Ident>, body: &'a Block) {
+    /// The body of a `for`: its element is owned when the iterable is.
+    fn scoped(
+        &mut self,
+        pattern: Option<&'a Pattern>,
+        name: Option<&'a Ident>,
+        owned: bool,
+        body: &'a Block,
+    ) {
         self.scopes.push(Vec::new());
         if let Some(pattern) = pattern {
-            self.pattern(pattern);
+            self.pattern(pattern, owned);
         }
         if let Some(name) = name {
-            self.bind(name, false, None);
+            if owned {
+                self.bind_owned(name);
+            } else {
+                self.bind(name, false, None, false);
+            }
         }
         self.block(body);
         self.scopes.pop();
@@ -266,12 +463,12 @@ impl<'a> Resolver<'a> {
         match &stmt.kind {
             StmtKind::Let { name, value, .. } => {
                 self.expr(value);
-                let tracked = self.types.binding_type(name.span).is_some_and(aggregate);
-                self.bind(name, tracked, None);
+                self.bind_owned(name);
             }
             StmtKind::LetPattern { pattern, value, .. } => {
                 self.expr(value);
-                self.pattern(pattern);
+                let owned = !self.borrowed(value);
+                self.pattern(pattern, owned);
             }
             StmtKind::Assign { target, value } => {
                 self.expr(value);
@@ -291,7 +488,8 @@ impl<'a> Resolver<'a> {
             StmtKind::Loop { body } => self.block(body),
             StmtKind::For { name, iter, body } => {
                 self.expr(iter);
-                self.scoped(None, Some(name), body);
+                let owned = !self.borrowed(iter);
+                self.scoped(None, Some(name), owned, body);
             }
             StmtKind::ForPattern {
                 pattern,
@@ -299,7 +497,8 @@ impl<'a> Resolver<'a> {
                 body,
             } => {
                 self.expr(iter);
-                self.scoped(Some(pattern), None, body);
+                let owned = !self.borrowed(iter);
+                self.scoped(Some(pattern), None, owned, body);
             }
             StmtKind::Break | StmtKind::Continue => {}
             StmtKind::Expr(e) => self.expr(e),
@@ -312,18 +511,29 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn pattern(&mut self, pattern: &'a Pattern) {
+    /// Bind the names of `pattern`; `owned` when the matched value is a
+    /// fresh value ([`Resolver::borrowed`]), so its bindings own their
+    /// parts. Bindings under a list pattern are never owned: a list pattern
+    /// takes its elements out of a slice.
+    fn pattern(&mut self, pattern: &'a Pattern, owned: bool) {
         match &pattern.kind {
-            PatternKind::Binding(name) => self.bind(name, false, None),
-            PatternKind::Rest(Some(name)) => self.bind(name, false, None),
-            PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
+            PatternKind::Binding(name) if owned => self.bind_owned(name),
+            PatternKind::Binding(name) | PatternKind::Rest(Some(name)) => {
+                self.bind(name, false, None, false)
+            }
+            PatternKind::Or(items) | PatternKind::Tuple(items) => {
                 for item in items {
-                    self.pattern(item);
+                    self.pattern(item, owned);
+                }
+            }
+            PatternKind::List(items) => {
+                for item in items {
+                    self.pattern(item, false);
                 }
             }
             PatternKind::Variant { args, .. } => {
                 for arg in args {
-                    self.pattern(arg);
+                    self.pattern(arg, owned);
                 }
             }
             PatternKind::Range { .. }
@@ -344,10 +554,13 @@ impl<'a> Resolver<'a> {
             }
             ExprKind::Match { scrutinee, arms } => {
                 self.expr(scrutinee);
+                let owned = !self.borrowed(scrutinee);
                 for arm in arms {
                     self.scopes.push(Vec::new());
-                    self.pattern(&arm.pattern);
+                    let start = self.out.vars.len();
+                    self.pattern(&arm.pattern, owned);
                     self.expr(&arm.body);
+                    self.tail(&arm.body, start);
                     self.scopes.pop();
                 }
             }
@@ -547,10 +760,13 @@ fn root<'a>(e: &'a Expr, types: &TypedProgram) -> Option<&'a str> {
 /// The names a body changes in place, by name and closure bodies
 /// included: the base of every assignment and the root of every receiver
 /// of an in-place builtin (20.3.3).
-fn changed_names<'a>(body: &'a Block, types: &TypedProgram) -> BTreeSet<&'a str> {
+fn changed_names<'a>(body: Root<'a>, types: &TypedProgram) -> BTreeSet<&'a str> {
     let mut names = BTreeSet::new();
     let mut stack = Vec::new();
-    block_children(body, &mut stack);
+    match body {
+        Root::Block(block) => block_children(block, &mut stack),
+        Root::Expr(e) => stack.push(Node::Expr(e)),
+    }
     while let Some(node) = stack.pop() {
         match node {
             Node::Target(target) => {
@@ -750,22 +966,18 @@ struct Held<'a> {
     places: Option<Vec<Place>>,
 }
 
-/// Walk one body; the parameters it moves on every path to an exit (and
-/// on some path), and when `record`, every move position's decision.
+/// Walk one body whose consumed parameters are `own`; the parameters it
+/// moves on every path to an exit (and on some path), and when `record`,
+/// every move position's decision.
 fn walk<'a>(
     body: &Body<'a>,
     res: &'a Resolved,
     types: &'a TypedProgram,
     modules: &'a TypedModules,
     consumed: &'a BTreeMap<String, Vec<bool>>,
+    own: &'a [bool],
     record: bool,
 ) -> (BTreeSet<usize>, AddressMap<bool>) {
-    let own: &[bool] = body
-        .key
-        .as_ref()
-        .and_then(|k| consumed.get(k))
-        .map(Vec::as_slice)
-        .unwrap_or(&[]);
     let mut w = Walk {
         types,
         modules,
@@ -779,7 +991,10 @@ fn walk<'a>(
         any_move: BTreeSet::new(),
         marks: record.then(AddressMap::default),
     };
-    let entry = w.block(body.body, body.used, State::exit());
+    let entry = match body.root {
+        Root::Block(block) => w.block(block, body.used, State::exit()),
+        Root::Expr(e) => w.value(e, body.used, State::exit()),
+    };
     let moved = entry
         .moved
         .intersection(&w.any_move)
@@ -965,6 +1180,33 @@ impl<'a> Walk<'a> {
         })
     }
 
+    /// Forget every place of the bindings `pattern` makes: seen backward,
+    /// the pattern binds them afresh, so a later mention (in the next loop
+    /// iteration) is of another value.
+    fn unbind(&self, pattern: &Pattern, st: &mut State) {
+        match &pattern.kind {
+            PatternKind::Binding(name) | PatternKind::Rest(Some(name)) => {
+                self.unbind_name(name, st)
+            }
+            PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
+                items.iter().for_each(|item| self.unbind(item, st))
+            }
+            PatternKind::Variant { args, .. } => args.iter().for_each(|arg| self.unbind(arg, st)),
+            PatternKind::Range { .. }
+            | PatternKind::Rest(None)
+            | PatternKind::Wildcard
+            | PatternKind::Int(_)
+            | PatternKind::Str(_)
+            | PatternKind::Bool(_) => {}
+        }
+    }
+
+    fn unbind_name(&self, name: &Ident, st: &mut State) {
+        if let Some(&var) = self.res.decls.get(&name.span) {
+            st.live.kill(var);
+        }
+    }
+
     fn record(&mut self, e: &Expr, moves: bool) {
         if let Some(marks) = &mut self.marks {
             marks.insert(key(e), moves);
@@ -979,7 +1221,19 @@ impl<'a> Walk<'a> {
             ExprKind::NamedArg { value, .. } => &**value,
             _ => e,
         };
-        let Some(place) = self.movable(e).filter(|_| self.aggregate_expr(e)) else {
+        // A handle moves only as a whole binding at the tail of the scope
+        // that binds it: the scope ends there, so the move hands on the
+        // one share the binding would have dropped (20.3.1).
+        let handle_tail = |w: &Self, place: &Place| {
+            place.path.is_empty()
+                && w.res.vars[place.var].handle
+                && w.res.tails.contains_key(&key(e))
+                && w.types.try_type_of(e).is_some_and(handle)
+        };
+        let Some(place) = self
+            .movable(e)
+            .filter(|place| self.aggregate_expr(e) || handle_tail(self, place))
+        else {
             return self.expr(e, st);
         };
         let would = !excluded
@@ -1108,10 +1362,11 @@ impl<'a> Walk<'a> {
                     if let Some(pin) = &pin {
                         self.pins.push(pin.clone());
                     }
-                    let before = self.value(&arm.body, used, st.clone());
+                    let mut before = self.value(&arm.body, used, st.clone());
                     if pin.is_some() {
                         self.pins.pop();
                     }
+                    self.unbind(&arm.pattern, &mut before);
                     joined = Some(match joined {
                         None => before,
                         Some(j) => j.join(&before),
@@ -1161,7 +1416,10 @@ impl<'a> Walk<'a> {
                 }
                 self.take(value, st, false)
             }
-            StmtKind::LetPattern { value, .. } => self.expr(value, st),
+            StmtKind::LetPattern { pattern, value, .. } => {
+                self.unbind(pattern, &mut st);
+                self.expr(value, st)
+            }
             StmtKind::Assign { target, value } => {
                 if let Some(place) = self.target_place(target) {
                     st.live.assign(&place);
@@ -1190,9 +1448,14 @@ impl<'a> Walk<'a> {
                     if let Some(pin) = &pin {
                         w.pins.push(pin.clone());
                     }
-                    let body = w.block(body, false, head.clone());
+                    let mut body = w.block(body, false, head.clone());
                     if pin.is_some() {
                         w.pins.pop();
+                    }
+                    match &stmt.kind {
+                        StmtKind::For { name, .. } => w.unbind_name(name, &mut body),
+                        StmtKind::ForPattern { pattern, .. } => w.unbind(pattern, &mut body),
+                        _ => {}
                     }
                     exit.join(&body)
                 });

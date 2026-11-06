@@ -55,7 +55,7 @@ pub struct Echo {
 #[allow(non_snake_case)]
 pub fn Echo__main(self_: &Echo) -> Result<(), ignite_io::IoError> {
     let stream = match ignite_io::TcpStream::connect(self_.target.address.clone(), self_.target.port.clone()) {
-        Ok(stream) => stream.clone(),
+        Ok(stream) => stream,
         Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
     };
     match Line::connect(stream.clone()) {

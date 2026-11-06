@@ -3,7 +3,9 @@
 // element of a `for` over a value, are the tail of an `if` branch whose value
 // is used and are read again afterwards. The analysis never moves them, so
 // the branch must copy them; rustc must accept the program and both targets
-// return the copied values.
+// return the copied values. Since story:moves-for-pattern-bindings the
+// analysis tracks the pattern binding (its scrutinee is a call's result);
+// it is read after the tail, so it still does not move there.
 
 type State {
   items: List<Int>

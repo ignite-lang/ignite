@@ -1992,8 +1992,9 @@ impl<'a> Generator<'a> {
     /// Whether `expr`, a place in a move position, takes its value without
     /// a copy: the moves analysis marks it (`docs/slice.md` 20.3). Rust
     /// cannot move out of a reference or a capture; the analysis marks no
-    /// place rooted at a borrowed parameter, a `for` element or a capture,
-    /// and this keeps the copy should it ever mark one.
+    /// place rooted at a borrowed parameter, a capture, or a pattern
+    /// binding or `for` element of a place (20.3.1), and this keeps the
+    /// copy should it ever mark one.
     fn moves(&self, expr: &Expr) -> bool {
         self.types.is_some_and(|t| t.moves(expr))
             && place_root(expr)
@@ -4507,8 +4508,10 @@ impl<'a> Generator<'a> {
     }
 
     /// The bindings of a native `pattern` matched against a reference,
-    /// where each is a reference: a lendable binding that is not `Copy`
-    /// stays one in the arm, read like a borrowed parameter; any other is
+    /// where each is a reference: a lendable binding that is not `Copy`,
+    /// or one of a type parameter, stays one in the arm, read like a
+    /// borrowed parameter (`&T`, as a generic fn's parameter is), so a
+    /// place that needs the value copies it once there; any other is
     /// copied out at the start of the arm (pushed to `out`).
     fn lend_bindings(&mut self, pattern: &Pattern, out: &mut Vec<(String, String)>) {
         let mut names = Vec::new();
@@ -4519,7 +4522,7 @@ impl<'a> Generator<'a> {
                 continue;
             }
             let ty = self.types.and_then(|t| t.binding_type(id.span));
-            if ty.is_some_and(|ty| lendable(ty) && !rust_copy(ty)) {
+            if ty.is_some_and(|ty| (lendable(ty) || matches!(ty, Ty::Param(_))) && !rust_copy(ty)) {
                 self.borrowed_elements.push((scope, id.name.clone()));
             } else {
                 out.push((id.name.clone(), ident(&id.name)));

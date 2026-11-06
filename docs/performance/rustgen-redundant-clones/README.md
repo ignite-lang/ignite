@@ -86,3 +86,35 @@ fails) and 330 are the store's map nodes for new ids in `write`.
   text is consumed); its 8,000 blocks are the text itself.
 - Pattern bindings copied at a branch tail, `held`'s `Some(found) => found.clone()` (24,000
   blocks, 598,890 B): story:moves-for-pattern-bindings.
+
+## Step 3: moves for pattern bindings (story:moves-for-pattern-bindings)
+
+Before is step 2's run (`5a6f9e1a`); `git diff 5a6f9e1a 9d016913 -- crates std` is empty, so it is
+also `main` at this story's base. After is the story's working tree on `feat/moves-for-pattern-bindings`
+(code of its first commit). Same ember copy, emberload binary and `dhat.sh` as above, port 6437,
+one run.
+
+| tree | total | at t-gmax |
+|---|---|---|
+| step 2 (`5a6f9e1a`, = `main` `9d016913`) | 21,294,885 B in 249,287 blocks | 4,904,194 B in 12,401 blocks |
+| step 3, owned bindings move | 21,296,429 B in 249,289 blocks | 4,905,730 B in 12,403 blocks |
+
+The generated `std` crate is the same apart from the source paths. The program crate drops six
+copies, each of an owned binding (a binding of a call's result) at its last use, in
+`removed_from`, `swapped`, `appended`, `mget`, `deadline_set` and the `Err` arm of `incremented`.
+By the source (inferred, not traced) none of them runs under this load (INCR of integers, SET,
+FLUSHDB); the difference of 2 blocks and 1,544 B is not attributed to a site.
+
+`held` keeps its copy (24,000 blocks, 598,890 B, unchanged):
+
+```rust
+pub fn held(bucket: &Option<Bucket>) -> Bucket {
+    match bucket {
+        Some(found) => found.clone(),
+```
+
+`found` is a binding of the parameter `bucket`, a place, so it is borrowed and copied once where
+its value is taken (`docs/slice.md` 20.3.1). The copy goes only when `held` consumes `bucket`; by
+20.3.3 that needs a move of `bucket` on every path, and the `None` arm moves nothing. The step 2
+note above attributed this site to the story; the story removes the copies of owned bindings, and
+this one is a borrowed binding's.

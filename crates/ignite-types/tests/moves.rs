@@ -9,7 +9,7 @@ use crate::common;
 
 use ignite_check::{Modules, check_module};
 use ignite_syntax::SourceFile;
-use ignite_syntax::ast::{Decl, Expr, Program};
+use ignite_syntax::ast::{Decl, Expr, ExprKind, Program};
 use ignite_types::{Callee, QualName, TypedModules, TypedProgram, type_module};
 
 struct Typed {
@@ -644,8 +644,13 @@ fn fail(n: Int) -> JsonError {
     );
 }
 
+/// Since `story:moves-for-pattern-bindings` a closure body is walked as a
+/// body of its own (`docs/slice.md` 20.3.1, replacing 20.0 row 5's "no
+/// expression inside a closure body is marked"): its own bindings move,
+/// a capture never does, and creating a closure that captures `s` counts
+/// as a read of `s`.
 #[test]
-fn closure_bodies_never_move() {
+fn closure_bodies_move_only_their_own_bindings() {
     let t = with_prelude(
         r#"
 fn closure_body() -> Int {
@@ -662,10 +667,243 @@ fn capture_reads() -> Int {
   let f = |x: Int| s.count + x
   n + f(1)
 }
+
+fn capture_never(s: State) -> Int {
+  let t = fresh()
+  let f = |x: Int| consume(t) + x
+  f(1)
+}
 "#,
     );
-    assert_eq!(t.marked_in("closure_body"), none());
+    assert_eq!(t.marked_in("closure_body"), vec!["s"]);
     assert_eq!(t.marked_in("capture_reads"), none());
+    assert_eq!(t.marked_in("capture_never"), none());
+}
+
+/// The closure literals inside fn `name`, in source order.
+fn closures_in<'t>(t: &'t Typed, name: &str) -> Vec<&'t Expr> {
+    let span = t
+        .program
+        .decls
+        .iter()
+        .find_map(|d| match d {
+            Decl::Fn(f) if f.qualified_name() == name => Some(f.span),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no fn `{name}`"));
+    let mut found: Vec<&Expr> = common::expressions(&t.program)
+        .into_iter()
+        .filter(|e| e.span.start >= span.start && e.span.end <= span.end)
+        .filter(|e| matches!(e.kind, ExprKind::Closure(_)))
+        .collect();
+    found.sort_by_key(|e| e.span.start);
+    found
+}
+
+/// `docs/slice.md` 20.3.1, owned bindings: a pattern binding of a fresh
+/// value (a call's result) moves at its last use, at an arm tail too; one
+/// read after the tail keeps the copy; a binding of a place (a parameter, a
+/// local) is borrowed from it and never moves.
+#[test]
+fn owned_pattern_bindings_move() {
+    let t = with_prelude(
+        r#"
+fn maybe() -> Option<State> = Some(fresh())
+
+fn pair() -> (State, State) = (fresh(), fresh())
+
+fn arm_tail() -> State = match maybe() {
+  Some(s) => s
+  None => fresh()
+}
+
+fn into_call() -> Int = match maybe() {
+  Some(s) => consume(s)
+  None => 0
+}
+
+fn read_after_tail() -> Int = match maybe() {
+  Some(s) => {
+    let t = s
+    t.count + s.count
+  }
+  None => 0
+}
+
+fn tail_read_after(c: Bool) -> Int {
+  let s = match maybe() {
+    Some(found) => if c { found } else { fresh() }
+    None => fresh()
+  }
+  s.count
+}
+
+fn let_pattern() -> List<State> {
+  let (a, b) = pair()
+  [a, b]
+}
+
+fn borrowed_scrutinee(o: Option<State>) -> State = match o {
+  Some(s) => s
+  None => fresh()
+}
+
+fn local_scrutinee() -> State {
+  let o = maybe()
+  match o {
+    Some(s) => s
+    None => fresh()
+  }
+}
+
+fn loop_rebinds(n: Int) -> List<State> {
+  var out = []
+  var i = 0
+  while i < n {
+    match maybe() {
+      Some(s) => out.push(s)
+      None => {}
+    }
+    i = i + 1
+  }
+  out
+}
+"#,
+    );
+    assert_eq!(t.marked_in("arm_tail"), vec!["s"]);
+    assert_eq!(t.marked_in("into_call"), vec!["s"]);
+    assert_eq!(t.marked_in("read_after_tail"), none());
+    assert_eq!(t.marked_in("tail_read_after"), vec!["found"]);
+    assert_eq!(t.marked_in("let_pattern"), vec!["a", "b"]);
+    assert_eq!(t.marked_in("borrowed_scrutinee"), none());
+    assert_eq!(t.marked_in("local_scrutinee"), none());
+    assert_eq!(t.marked_in("loop_rebinds"), vec!["s", "out"]);
+}
+
+/// `docs/slice.md` 20.3.1: a `for` element of a fresh list is owned and
+/// moves at its last use in each iteration; one of a list place is
+/// borrowed from it and never moves.
+#[test]
+fn owned_for_elements_move() {
+    let t = with_prelude(
+        r#"
+fn states() -> List<State> = [fresh(), fresh()]
+
+fn collect() -> List<State> {
+  var out = []
+  for s in states() {
+    out.push(s)
+  }
+  out
+}
+
+fn read_after() -> List<State> {
+  var out = []
+  for s in states() {
+    out.push(s)
+    out.push(s)
+  }
+  out
+}
+
+fn place_iterable() -> List<State> {
+  let xs = states()
+  var out = []
+  for s in xs {
+    out.push(s)
+  }
+  out
+}
+"#,
+    );
+    assert_eq!(t.marked_in("collect"), vec!["s", "out"]);
+    assert_eq!(t.marked_in("read_after"), vec!["s", "out"]);
+    assert_eq!(t.marked_in("place_iterable"), vec!["out"]);
+}
+
+/// `docs/slice.md` 20.3.1: a closure parameter is consumed when the body
+/// changes it in place or moves it on every path (`closure_consumed`), and
+/// only a consumed one moves.
+#[test]
+fn closure_parameters_move_when_consumed() {
+    let t = with_prelude(
+        r#"
+fn moved() -> Int {
+  let f = |s: State| consume(s)
+  f(fresh())
+}
+
+fn read_only() -> Int {
+  let f = |s: State| s.count
+  f(fresh())
+}
+
+fn read_after() -> Int {
+  let f = |s: State| consume(s) + s.count
+  f(fresh())
+}
+
+fn changed() -> Int {
+  let f = |s: State| {
+    s.items.push(1)
+    s.count
+  }
+  f(fresh())
+}
+"#,
+    );
+    let consumed = |name: &str| -> Vec<bool> {
+        closures_in(&t, name)
+            .iter()
+            .map(|c| t.typed.closure_consumed(c, 0))
+            .collect()
+    };
+    assert_eq!(t.marked_in("moved"), vec!["s"]);
+    assert_eq!(consumed("moved"), vec![true]);
+    assert_eq!(t.marked_in("read_only"), none());
+    assert_eq!(consumed("read_only"), vec![false]);
+    assert_eq!(t.marked_in("read_after"), none());
+    assert_eq!(consumed("read_after"), vec![false]);
+    assert_eq!(t.marked_in("changed"), none());
+    assert_eq!(consumed("changed"), vec![true]);
+}
+
+/// `docs/slice.md` 20.3.1: a handle binding (invariant 3) moves only as the
+/// value of the block or arm that binds it, where its scope ends; anywhere
+/// else, and a handle parameter or a binding of a place, it is shared.
+#[test]
+fn handles_move_only_at_their_scope_tail() {
+    let t = typed(
+        r#"
+fn wrap(c: TcpStream) -> Option<TcpStream> = Some(c)
+
+fn keep(c: TcpStream) -> TcpStream = c
+
+fn arm_tail(conn: TcpStream) -> TcpStream = match wrap(conn) {
+  Some(s) => s
+  None => conn
+}
+
+fn block_tail(conn: TcpStream) -> TcpStream {
+  let s = keep(conn)
+  s
+}
+
+fn not_tail(conn: TcpStream) -> TcpStream = match wrap(conn) {
+  Some(s) => keep(s)
+  None => conn
+}
+
+fn borrowed(o: Option<TcpStream>, conn: TcpStream) -> TcpStream = match o {
+  Some(s) => s
+  None => conn
+}
+"#,
+    );
+    assert_eq!(t.marked_in("arm_tail"), vec!["s"]);
+    assert_eq!(t.marked_in("block_tail"), vec!["s"]);
+    assert_eq!(t.marked_in("not_tail"), none());
+    assert_eq!(t.marked_in("borrowed"), none());
 }
 
 /// Stale point S10 of `docs/slice.md` 21.10: the five capability types are
