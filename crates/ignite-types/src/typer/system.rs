@@ -811,9 +811,8 @@ impl Typer<'_> {
             }
             return Some(None);
         };
-        if let Some(endpoint @ Ty::Record(q)) = expected
-            && q.module == "std.net"
-            && q.name == "Endpoint"
+        if let Some(endpoint) = expected
+            && *endpoint == crate::endpoint()
             && ty == Ty::TcpListener
         {
             self.use_member(&name.name, endpoint.clone());
@@ -1671,7 +1670,7 @@ impl Typer<'_> {
             "machine" => (
                 "id: Text",
                 2,
-                Ty::Enum(QualName::new("std.control", "Machine")),
+                Ty::Enum(QualName::new(crate::CONTROL_MODULE, "Machine")),
             ),
             "validate" => ("", 1, Ty::List(Box::new(Ty::Text))),
             "classify" => ("sample: T", 2, Ty::Bool),

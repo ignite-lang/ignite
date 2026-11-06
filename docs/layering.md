@@ -4,7 +4,7 @@ A general layer knows no application protocol and no application. The rule exten
 layout rules of `AGENTS.md` ("The substrate knows sockets and TLS sessions, not application
 protocols", "Nothing named telnet lives under `crates/`") and O45 (`docs/slice.md` 16.2) to
 all of std. The test `layering::` in `crates/ignite-check/tests/layering.rs` enforces it and
-holds the same table; change both together.
+holds the same layer table; change both together. The table of rule 6 it reads from this file.
 
 ## Layers
 
@@ -30,6 +30,11 @@ Rules, each a failure of the test that names the file, line and identifier or im
    every `std.rfc.*`) has a row in the table above.
 5. No file under `crates/*/src` contains a protocol name, in code or in comments, except
    `crates/ignite-load` (below).
+6. No string literal in the code of a file under `crates/*/src` names a std module or an item
+   of one (`std.` and a lowercase segment, as `"std.sli"` or `"std.control.Machine"`) unless
+   the table "Std names in the crates" below lists that name for that file. Comments are not
+   read. A row whose file no longer contains one of its names fails as well, so the list
+   holds only what is used. The test reads the table from this file.
 
 A component kind that speaks one protocol (a server, a client, a probe) lives in that
 protocol's module: `TelnetServer`, `TelnetClient` and `TelnetPrompt` are in
@@ -44,6 +49,29 @@ compiler and the substrate know no protocol, which `ignite-load` does not touch.
 and the fields of `Requirement` and `Spec`) in its claim model (`claims.rs`, `docs/slice.md`
 19.7), as it already names `std.sli.Window.Rolling` (the audit row of
 `crates/ignite-eval/src/validate.rs` below). No protocol name is involved, so rule 5 holds.
+
+## Std names in the crates
+
+The std modules the compiler crates know by name, for rule 6. Each module has one home, a
+constant or a function, and every other crate uses that home: `ignite_check::RFC_MODULE`,
+`ignite_check::SUBSTRATE_MODULES`, `ignite_types::CONTROL_MODULE`, `ignite_types::endpoint`
+and `child_exit`, `ignite_eval::SLI_MODULE` and `DEPLOY_MODULE`. A new name needs a row here
+with its reason, or a derivation from the program.
+
+| file | names | reason |
+|---|---|---|
+| `crates/ignite-check/src/lib.rs` | `std.net`, `std.io`, `std.fs`, `std.process` | `SUBSTRATE_MODULES`, the home modules of the builtins; `std.net` is also the example of the E031 hint |
+| `crates/ignite-check/src/lib.rs` | `std.rfc` | `RFC_MODULE`, the clause vocabulary the checker, the type checker and the evaluator read by name (`docs/slice.md` 19.3) |
+| `crates/ignite-types/src/builtins.rs` | `std.process`, `std.net` | `Invocation`, `ChildExit` and `Endpoint`, record types in builtin signatures (14.14, 21.5) |
+| `crates/ignite-types/src/lib.rs` | `std.control` | `CONTROL_MODULE`: the hook `K.machine` returns `std.control.Machine`, and the run driver calls its reducers (16.6) |
+| `crates/ignite-eval/src/model.rs` | `std.sli` | `SLI_MODULE`: `Window`, which E123 compares with a probe interval, and the `Sample` and `Verdict` the run driver builds (22.3) |
+| `crates/ignite-eval/src/model.rs` | `std.deploy` | `DEPLOY_MODULE`: `admits`, `includes` and `entries` resolve an assembly and are asked about its `Member` (15.6, 16.17) |
+| `crates/ignite/src/run/live.rs` | `std.sli.ProbeAttempt` | unit-test data: a probe line of the terminal example, whose outcome type this is |
+
+The run driver decodes a probe's line by the element type of the observed signal, which the
+model names (22.3); the fallback to `std.sli.ProbeAttempt` that the architecture review of
+2026-11-05 found went with the typed probe outcomes (`f648922`), and no code of the driver
+names that type.
 
 ## Audit of 2026-11-02
 

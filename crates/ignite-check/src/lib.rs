@@ -241,6 +241,11 @@ pub const BUILTIN_FUNCTIONS: &[&str] = &["log", "module"];
 /// that the name is a builtin.
 pub const SUBSTRATE_MODULES: &[&str] = &["std.net", "std.io", "std.fs", "std.process"];
 
+/// The module that declares the clause vocabulary (`docs/slice.md` 19.3):
+/// the checker, the type checker and the evaluator read its records and
+/// enums by name.
+pub const RFC_MODULE: &str = "std.rfc";
+
 /// The protocol roles and their parameter counts.
 pub const PROTOCOL_ROLES: &[(&str, usize)] = &[("serve", 2), ("connect", 1)];
 
@@ -864,7 +869,7 @@ impl Checker {
                 "E031",
                 import.path.span,
                 format!(
-                    "`import {}` names no module; import names from a module, e.g. `import std.console.{{Console}}`",
+                    "`import {}` names no module; import names from a module, e.g. `import std.net.{{Endpoint}}`",
                     import.path.dotted()
                 ),
             );

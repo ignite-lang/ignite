@@ -28,8 +28,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use ignite_eval::{
-    CONTROL_MODULE, EvalError, Evaluator, Json, Limit, Model, Value, parse_type_name, type_name,
-    value_json,
+    CONTROL_MODULE, EvalError, Evaluator, Json, Limit, Model, SLI_MODULE, Value, parse_type_name,
+    type_name, value_json,
 };
 use ignite_types::{QualName, QuantityKind, Ty};
 
@@ -552,7 +552,8 @@ impl<'a, 'p> Core<'a, 'p> {
                     let (next, effects) = match split_step(step) {
                         Some(parts) => parts,
                         None => {
-                            out.push(self.error(at, &id, "step returned no `std.control.Step`"));
+                            let report = format!("step returned no `{CONTROL_MODULE}.Step`");
+                            out.push(self.error(at, &id, &report));
                             continue;
                         }
                     };
@@ -604,7 +605,8 @@ impl<'a, 'p> Core<'a, 'p> {
     ) {
         let id = self.machines[machine].id.clone();
         let Some((variant, fields)) = enum_parts(&effect) else {
-            out.push(self.error(at, &id, "an effect that is no `std.control.Effect`"));
+            let report = format!("an effect that is no `{CONTROL_MODULE}.Effect`");
+            out.push(self.error(at, &id, &report));
             return;
         };
         let variant = variant.to_string();
@@ -747,9 +749,6 @@ impl<'a, 'p> Core<'a, 'p> {
         }
     }
 }
-
-/// The module of `Sample` and `Verdict` (22.3).
-const SLI_MODULE: &str = "std.sli";
 
 /// The report of an evaluation that produced no value (E128).
 fn eval_report(error: EvalError) -> String {
