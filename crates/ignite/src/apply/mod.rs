@@ -1,6 +1,7 @@
 //! Source-bound plans and a foreground local host. Workload effects remain
 //! owned by the existing `run` driver and `std.control` reducers.
 
+mod canonical;
 pub mod digest;
 mod host;
 pub mod plan;
