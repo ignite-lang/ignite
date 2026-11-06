@@ -686,7 +686,7 @@ fn acceptance_copy_is_current() {
 
 /// Write `project` and `std` under the test run's target directory as
 /// `ignite-rustgen-test/<name>` and build them with cargo there.
-fn cargo_build(project: &GeneratedProject, std: &GeneratedProject, name: &str) {
+pub(crate) fn cargo_build(project: &GeneratedProject, std: &GeneratedProject, name: &str) {
     let target = std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| common::workspace().join("target"));
@@ -922,7 +922,7 @@ fn pick<E>(item: E) -> Int {\n\
 
 /// A fresh directory `<target>/ignite-rustgen-test/<name>` holding `files`
 /// (path relative to it, text), for the adversary cases below.
-fn adversary_sources(name: &str, files: &[(&str, &str)]) -> PathBuf {
+pub(crate) fn adversary_sources(name: &str, files: &[(&str, &str)]) -> PathBuf {
     let target = std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| common::workspace().join("target"));
@@ -936,7 +936,7 @@ fn adversary_sources(name: &str, files: &[(&str, &str)]) -> PathBuf {
     dir
 }
 
-fn adversary_substrate() -> PathBuf {
+pub(crate) fn adversary_substrate() -> PathBuf {
     let substrate = common::workspace().join("crates/ignite-io");
     substrate.canonicalize().unwrap_or(substrate)
 }
@@ -1200,7 +1200,11 @@ fn total() -> Int {\n\
 /// as `<name>.ignite`, lowered as a test build against `std_root`, built
 /// with cargo in its own target directory and its `ignite-test` run. Returns
 /// the run's output after asserting the build succeeded.
-fn adversary_run_tests(name: &str, source: &str, std_root: &Path) -> std::process::Output {
+pub(crate) fn adversary_run_tests(
+    name: &str,
+    source: &str,
+    std_root: &Path,
+) -> std::process::Output {
     let file = format!("{name}.ignite");
     let dir = adversary_sources(&format!("{name}-src"), &[(file.as_str(), source)]);
     let (project, std) = common::lower_tests(&dir.join(&file), std_root, &adversary_substrate());
@@ -1234,7 +1238,7 @@ fn adversary_run_tests(name: &str, source: &str, std_root: &Path) -> std::proces
 
 /// [`adversary_run_tests`], asserting that every test passed and that
 /// `passed` of them ran.
-fn adversary_tests_pass(name: &str, source: &str, std_root: &Path, passed: usize) {
+pub(crate) fn adversary_tests_pass(name: &str, source: &str, std_root: &Path, passed: usize) {
     let output = adversary_run_tests(name, source, std_root);
     let shown = format!(
         "{}{}",
@@ -1365,7 +1369,7 @@ test \"params self and self_\" {\n\
 /// `tests/golden/exits.ignite` (a system with one executable) under the
 /// package `examples.<package>`, whose `stop_tried` calls `code()` from the
 /// sibling module `examples.<package>.<sibling>`.
-fn adversary_package_named(package: &str, sibling: &str) -> PathBuf {
+pub(crate) fn adversary_package_named(package: &str, sibling: &str) -> PathBuf {
     let main = include_str!("golden/exits.ignite")
         .replace(
             "package golden.exits",

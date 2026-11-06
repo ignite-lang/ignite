@@ -721,7 +721,8 @@ where an `Endpoint` is expected (section 14.5; `--port` applies to it too); the 
 components' values in dependency order; the component's own value with the kind's defaults
 for omitted fields, `executable` defaulting to the component name and a `Signal` output
 set to its reference text; then `K.main(value)`. A resource whose name is one of `main`'s
-own (`application`, `port`, `stream`, `error`) gets a trailing `_`.
+own (`application`, `port`, `stream`, `error`) or ends in `_endpoint` gets a trailing `_`, so it
+is never the `<name>_endpoint` variable of another resource's `Endpoint` value.
 
 Exit statuses (design section 11.7):
 
