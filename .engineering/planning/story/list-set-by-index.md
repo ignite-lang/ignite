@@ -20,7 +20,7 @@ scope:
   path: docs/slice.md
 - confidence: inferred
   path: std/text.ignite
-revision: 8
+revision: 9
 ---
 # Story: list-set-by-index
 
@@ -38,9 +38,14 @@ failure as `at`), so a value is changed in place instead of rebuilt.
 
 ## Acceptance
 
-- `docs/slice.md` lists the method; an inline test on both targets sets an element, and one out
-  of range fails with the same message, file, line and column on both; `to_lower` uses it; the
-  evaluator interprets it; `task gate` green.
+## Acceptance
+
+Met by PR 60 (checked against main 67dfc7b98 by the devtools session, 2026-11-06): `xs.set(i, v)` and `xs[i] = v` on a `List` (`crates/ignite-types` builtin `ListSet`), the evaluator (`crates/ignite-eval/src/eval.rs:1402`), both backends, `docs/slice.md` 25.4. Remaining:
+
+- `Bytes` has `set` with the same bounds failure as `at`, in the typer, the evaluator and both backends.
+- `to_lower` and `to_upper` (`std/text.ignite:603`, `:612`) use it instead of pushing into a fresh `Bytes`.
+- An out-of-range `set` on a `List` and on `Bytes` fails with the same message, file, line and column on both targets (inline test).
+- `task gate` green.
 
 ## Out of Scope
 
