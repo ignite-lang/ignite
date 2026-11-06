@@ -29,7 +29,7 @@ pub use test_build::{TestGroup, TestOptions, build_tests, test, test_groups, tes
 use ignite_check::{Modules, Symbols};
 use ignite_rustgen::GeneratedProject;
 use ignite_syntax::SourceFile;
-use ignite_syntax::ast::{Import, Program, Span};
+use ignite_syntax::ast::{Ident, Import, Program, Span};
 use ignite_syntax::diagnostic::Diagnostic;
 use ignite_types::{TypedModules, TypedProgram};
 
@@ -952,7 +952,17 @@ fn parse_program_text(file: &Path, text: Option<String>) -> Result<ParsedFile, E
     })
 }
 
-/// Parse the sibling modules of the program at `file`, by module path.
+/// Parse the sibling modules of the program at `file`, by module path
+/// (`docs/slice.md` 14.4 and 25.6): every file `<name>.ignite` beside it
+/// that declares `package <package>.<name>`; and, transitively, each module
+/// one of them imports that is
+///
+/// - `<parent>.<name>`, when the program's own package is
+///   `<parent>.<stem of file>` (the file is itself a sibling module given as
+///   a file), from a file `<name>.ignite` that declares it; or
+/// - `<p>.<name>`, with `<p>` the program's package or that parent, from a
+///   file `<name>.ignite` that declares `package <p>`: another program file
+///   of the same package, loaded as the module `<p>.<name>`.
 fn parse_siblings(file: &Path, program: &Program) -> Result<BTreeMap<String, Parsed>, Error> {
     let mut parsed: BTreeMap<String, Parsed> = BTreeMap::new();
     let Some(package) = program.package.as_ref().map(|p| p.dotted()) else {
@@ -968,23 +978,80 @@ fn parse_siblings(file: &Path, program: &Program) -> Result<BTreeMap<String, Par
         .map(|entry| entry.map(|entry| entry.path()))
         .collect::<Result<_, _>>()
         .map_err(io_error(dir))?;
+    entries.retain(|entry| {
+        entry.extension().is_some_and(|ext| ext == "ignite")
+            && entry.is_file()
+            && entry.canonicalize().ok() != own
+    });
     entries.sort();
-    for entry in entries {
-        if entry.extension().is_none_or(|ext| ext != "ignite")
-            || !entry.is_file()
-            || entry.canonicalize().ok() == own
-        {
-            continue;
-        }
+    for entry in &entries {
         let Some(stem) = entry.file_stem() else {
             continue;
         };
         let path = format!("{package}.{}", stem.to_string_lossy());
-        let source = read_source(&entry)?;
+        let source = read_source(entry)?;
         if !declares_package(&source.text, &path) {
             continue;
         }
         let program = parse(&source)?;
+        parsed.insert(
+            path.clone(),
+            Parsed {
+                path,
+                source,
+                program,
+            },
+        );
+    }
+    let parent = file
+        .file_stem()
+        .and_then(|stem| package.strip_suffix(&format!(".{}", stem.to_string_lossy())))
+        .map(str::to_string);
+    let imports = |program: &Program| -> Vec<String> {
+        program
+            .imports
+            .iter()
+            .map(imported_module)
+            .filter(|path| !path.starts_with("std."))
+            .collect()
+    };
+    let mut wanted = imports(program);
+    wanted.extend(
+        parsed
+            .values()
+            .flat_map(|sibling| imports(&sibling.program)),
+    );
+    while let Some(path) = wanted.pop() {
+        if path == package || parsed.contains_key(&path) {
+            continue;
+        }
+        let Some((prefix, name)) = path.rsplit_once('.') else {
+            continue;
+        };
+        if prefix != package && Some(prefix) != parent.as_deref() {
+            continue;
+        }
+        let entry = dir.join(format!("{name}.ignite"));
+        if !entries.contains(&entry) {
+            continue;
+        }
+        let source = read_source(&entry)?;
+        let program = if prefix != package && declares_package(&source.text, &path) {
+            parse(&source)?
+        } else if declares_package(&source.text, prefix) {
+            let mut program = parse(&source)?;
+            if let Some(declared) = program.package.as_mut() {
+                let span = declared.last().span;
+                declared.segments.push(Ident {
+                    name: name.to_string(),
+                    span,
+                });
+            }
+            program
+        } else {
+            continue;
+        };
+        wanted.extend(imports(&program));
         parsed.insert(
             path.clone(),
             Parsed {

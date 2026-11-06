@@ -1,0 +1,7 @@
+package cs.fmt
+
+fn twice(n: Int) -> Int = n * 2
+
+test "fmt doubles" {
+  assert twice(5) == 10
+}

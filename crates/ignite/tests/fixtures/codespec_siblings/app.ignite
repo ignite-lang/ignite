@@ -1,0 +1,13 @@
+package cs
+
+// `docs/slice.md` 25.6: a program file that imports a sibling module
+// (`util.ignite`) and another program file of its package (`reader.ignite`,
+// loaded as the module `cs.reader`); `ignite test app.ignite` runs the tests
+// of all four files (crates/ignite/tests/siblings.rs).
+
+import cs.util.{quad}
+import cs.reader.{read}
+
+test "app reads and multiplies" {
+  assert quad(read("3")) == 12
+}

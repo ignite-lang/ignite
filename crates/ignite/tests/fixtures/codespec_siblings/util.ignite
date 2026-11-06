@@ -1,0 +1,12 @@
+package cs.util
+
+// A sibling module that imports its sibling `fmt`: given to `ignite test` as
+// a file, it still finds `cs.fmt`.
+
+import cs.fmt.{twice}
+
+fn quad(n: Int) -> Int = twice(twice(n))
+
+test "util quadruples" {
+  assert quad(1) == 4
+}
