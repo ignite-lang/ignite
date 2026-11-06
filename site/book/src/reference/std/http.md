@@ -30,8 +30,22 @@ client reads the reply instead of a reset. Both limits are `HttpLimits` fields (
 The head is parsed strictly, so a proxy in front cannot frame a request differently: a bare CR
 or LF, a header name that is not a token (whitespace before the colon, a line starting with
 whitespace), a control byte in a value, and a repeated `Content-Length` or one that is not 1
-to 18 digits are all 400. A response whose header name or value holds CR or LF is replaced by
-500.
+to 18 digits are all 400.
+
+The application's response is replaced by 500 when one of its header fields would break RFC
+9112 or RFC 9110:
+
+- a name that is not a token, or a value that holds CR or LF;
+- `Transfer-Encoding` or `Content-Length`: Http frames every response by its own
+  `Content-Length` and applies no transfer coding;
+- a repeated name, unless it is a list field of RFC 9110 or RFC 9111 (`Vary`, `Allow`,
+  `Cache-Control`, `Connection`, …) or `Set-Cookie`;
+- an empty element in a list field, such as `Vary: a,,b`;
+- whitespace beside `=` in a parameter of `WWW-Authenticate`, `Proxy-Authenticate`,
+  `Authentication-Info` or `Proxy-Authentication-Info`;
+- a `Date`, `Last-Modified`, `Expires` or `Retry-After` whose value is not exactly an
+  IMF-fixdate such as `Sun, 06 Nov 1994 08:49:37 GMT` (`Retry-After` may also be a number of
+  seconds).
 
 HTTP/1.1 keeps the connection unless the request asks to close; HTTP/1.0 closes it unless the
 request asks to keep it. `Connection: close` wins over `keep-alive`.
@@ -139,7 +153,7 @@ fn render(response: Response, keep_alive: Bool) -> Bytes
 | `status_response` | a plain response whose body is the reason phrase and a newline; 204 has no body |
 | `method_not_allowed` | 405 with the `Allow` header listing the methods the target supports |
 | `reason` | the reason phrase of 200, 201, 204, 400, 404, 405, 413, 431, 500 and 501; `Unknown` for any other |
-| `checked` | the response, or 500 when a header name or value holds CR or LF |
+| `checked` | the response, or 500 when one of its header fields is refused (see Behaviour) |
 | `render` | the bytes of the response: status line, headers, `Content-Length` (not for 204) and `Connection` |
 
 ## A server in a system
