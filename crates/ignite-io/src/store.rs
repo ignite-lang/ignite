@@ -857,6 +857,167 @@ mod tests {
         assert_eq!(store.values(), Vec::<i64>::new());
     }
 
+    fn ids_in_shard(shard: usize, count: usize) -> Vec<i64> {
+        (1..)
+            .filter(|&id| super::shard_of(id) == shard)
+            .take(count)
+            .collect()
+    }
+
+    fn overlapping_updates(
+        store: &Store<i64>,
+        ids: &[i64],
+        until: std::time::Instant,
+    ) -> Vec<std::thread::JoinHandle<()>> {
+        ids.iter()
+            .enumerate()
+            .map(|(i, &id)| {
+                let store = store.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(10 * i as u64));
+                    while std::time::Instant::now() < until {
+                        store.update(id, |v| {
+                            std::thread::sleep(std::time::Duration::from_millis(20));
+                            v + 1
+                        });
+                    }
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn values_returns_while_two_updates_of_one_shard_overlap() {
+        let store: Store<i64> = Store::new();
+        let hot = ids_in_shard(super::SHARDS - 1, 2);
+        for &id in &hot {
+            store.put(id, 0);
+        }
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(2000);
+        let updaters = overlapping_updates(&store, &hot, until);
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let started = std::time::Instant::now();
+        let values = store.values();
+        let waited = started.elapsed();
+        for updater in updaters {
+            updater.join().unwrap();
+        }
+        assert_eq!(values.len(), 2);
+        assert!(
+            waited < std::time::Duration::from_millis(500),
+            "values waited {waited:?}: it returned only when the updates of its shard stopped"
+        );
+    }
+
+    #[test]
+    fn a_pending_values_does_not_stop_a_read_of_an_idle_shard() {
+        let store: Store<i64> = Store::new();
+        let hot = ids_in_shard(super::SHARDS - 1, 2);
+        let idle = ids_in_shard(0, 1)[0];
+        for &id in hot.iter().chain([&idle]) {
+            store.put(id, 0);
+        }
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(2000);
+        let updaters = overlapping_updates(&store, &hot, until);
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let lister = store.clone();
+        let values = std::thread::spawn(move || lister.values().len());
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let started = std::time::Instant::now();
+        let read = store.get(idle);
+        let waited = started.elapsed();
+        for updater in updaters {
+            updater.join().unwrap();
+        }
+        assert_eq!(values.join().unwrap(), 3);
+        assert_eq!(read, Some(0));
+        assert!(
+            waited < std::time::Duration::from_millis(300),
+            "a get of shard 0 waited {waited:?} behind a values call waiting for shard {}",
+            super::SHARDS - 1
+        );
+    }
+
+    #[test]
+    fn update_and_upsert_copy_no_value_while_holding_the_lock_of_their_own_shard() {
+        let [id, neighbour] = ids_in_shard(super::shard_of(1), 2)[..] else {
+            unreachable!()
+        };
+        assert_ne!(super::shard_of(1), super::shard_of(2));
+        let store: Store<Probed> = Store::new();
+        store.put(id, Probed(1));
+        store.put(neighbour, Probed(2));
+        let prober = store.clone();
+        PROBE.with(|probe| {
+            *probe.borrow_mut() = Some(Box::new(move || {
+                let store = prober.clone();
+                let (done, finished) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    let _ = done.send(store.read(neighbour, |v| v.0));
+                });
+                finished
+                    .recv_timeout(std::time::Duration::from_millis(500))
+                    .is_ok()
+            }));
+        });
+        PROBED.with(|n| n.set((0, 0)));
+        assert_eq!(store.update(id, |v| Probed(v.0 + 1)), Some(Probed(2)));
+        assert_eq!(
+            store.upsert(id, |v| Probed(v.map_or(0, |v| v.0) * 10)),
+            Probed(20)
+        );
+        PROBE.with(|probe| *probe.borrow_mut() = None);
+        assert_eq!(
+            PROBED.with(std::cell::Cell::get),
+            (4, 0),
+            "clones made while another task could read the shard, and made while it could not"
+        );
+    }
+
+    #[test]
+    fn a_put_back_wakes_the_task_waiting_for_its_id_when_another_id_of_the_shard_has_a_waiter() {
+        let store: Store<i64> = Store::new();
+        let [first, second] = ids_in_shard(3, 2)[..] else {
+            unreachable!()
+        };
+        let take = |id: i64| {
+            let (taken, started) = std::sync::mpsc::channel();
+            let (go, wait) = std::sync::mpsc::channel::<()>();
+            let taker = store.clone();
+            let upsert = std::thread::spawn(move || {
+                taker.upsert(id, |v| {
+                    taken.send(()).unwrap();
+                    wait.recv().unwrap();
+                    v.unwrap_or(0) + 1
+                })
+            });
+            started.recv().unwrap();
+            (go, upsert)
+        };
+        let get = |id: i64| {
+            let (got, result) = std::sync::mpsc::channel();
+            let reader = store.clone();
+            std::thread::spawn(move || got.send(reader.get(id)));
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            result
+        };
+        let (go_second, second_upsert) = take(second);
+        let (go_first, first_upsert) = take(first);
+        let got_second = get(second);
+        let got_first = get(first);
+        go_first.send(()).unwrap();
+        assert_eq!(first_upsert.join().unwrap(), 1);
+        let woken = got_first.recv_timeout(std::time::Duration::from_millis(1000));
+        go_second.send(()).unwrap();
+        assert_eq!(second_upsert.join().unwrap(), 1);
+        let _ = got_second.recv_timeout(std::time::Duration::from_millis(1000));
+        assert_eq!(
+            woken,
+            Ok(Some(1)),
+            "the get of the put-back id stayed asleep while the other id was taken"
+        );
+    }
+
     #[test]
     fn a_task_waiting_on_a_panicking_upsert_sees_the_old_value() {
         let store: Store<i64> = Store::new();
