@@ -2,15 +2,24 @@
 format: aep.planning-md/3
 id: story:store-lock-contention
 kind: story
-status: draft
+status: active
 title: Store under pipelined load without lock contention
 summary: Shard or split the Store lock; futex calls per request toward the handwritten baseline
 relations:
 - depends_on: story:store-atomic-upsert
 scope:
-- confidence: inferred
+- confidence: cited
   path: crates/ignite-io/src/store.rs
-revision: 4
+- confidence: cited
+  path: crates/ignite-rt/src/store.rs
+- confidence: cited
+  path: docs/performance
+- confidence: cited
+  path: docs/slice.md
+revision: 8
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 7}
+- {from: "proposed", to: "active", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 8}
 ---
 # Story: store-lock-contention
 
@@ -44,8 +53,15 @@ request on the ember server fall toward the handwritten Rust baseline.
 
 ## Acceptance
 
-- futex calls per request and `lock_contended` share measured before and after on the same load,
-  recorded in `docs/performance/`; `values()` keeps ascending id order; `task gate` green.
+## Acceptance
+
+Scoped 2026-11-06 from main 317955736d: `story:store-atomic-upsert` and `story:store-borrowing-reads` are implemented (`crates/ignite-io/src/store.rs:112-188`); still one `Mutex<BTreeMap>` per store (`:36`), and `update`/`upsert` clone the old value under the lock (`:217`, `:239`). Ember is not in this repository, so the measurement uses a load inside it.
+
+- `update` and `upsert` on the Rust target hold the lock only to take and put back the value: no clone of a stored value while the lock is held (read in the diff; a unit test that a panicking `f` leaves the store usable and the old value in place).
+- The map is sharded by id (fixed shard count), and `values()` and `read_values` still yield ascending id order across shards (unit test with ids spread over every shard, and the existing order tests).
+- A `#[ignore]` test in `crates/ignite-io` runs 8 threads × 100,000 upserts on 1,000 ids; its wall time and `strace -f -c -e futex` call count, before (main) and after, 3 runs each, recorded in `docs/performance/store-lock/README.md`; the after futex count is lower.
+- `docs/slice.md` 11.3 describes the store as landed.
+- `task gate` green.
 
 ## Out of Scope
 

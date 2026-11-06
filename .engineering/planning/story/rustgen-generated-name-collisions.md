@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:rustgen-generated-name-collisions
 kind: story
-status: draft
+status: active
 title: Generator-invented Rust names never collide with program names
 summary: Escape __ locals, x_endpoint, default_field and extern-crate names in the Rust target
 relations:
@@ -13,10 +13,15 @@ scope:
 - confidence: cited
   path: crates/ignite-rustgen/src/lib.rs
 - confidence: cited
+  path: crates/ignite-rustgen/tests
+- confidence: cited
   path: crates/ignite-rustgen/tests/golden
 - confidence: cited
   path: crates/ignite/src/apply/plan.rs
-revision: 3
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 6}
+- {from: "proposed", to: "active", at: "2026-11-06T15:04:13Z", actor: "human:timo", revision: 7}
 ---
 # Story: rustgen-generated-name-collisions
 
@@ -38,8 +43,14 @@ well-typed program compiles through cargo.
 
 ## Acceptance
 
-- One golden or end-to-end case per collision above, red before the fix and green after;
-  `CODEGEN_REVISION` bumped; `task gate` green.
+## Acceptance
+
+Scoped 2026-11-06 from main 317955736d: none of the four is guarded (`crates/ignite-rustgen/src/lib.rs:1463` `ident`, `:6344` `endpoint_variable`, `:1476` `default_fn`, `:1315` `crate_name`).
+
+- One case per collision, each its own program: a user name `__x` (and one each of `__m`, `__a0`, `__p0`, `__spawn_0`, `__ignite_x` in the same program), a resource `x_endpoint` beside a resource `x`, a user associated fn `default_f` on a record with a defaulted field `f`, packages named `std`, `core`, `ignite_io`, `ignite_std`.
+- Each case builds with `ignite build --target rust` and, where the collision compiles silently, a test asserts the program's output (the value bound is the user's, not the generator's). Red on main, green after.
+- Existing goldens change only where a user name is escaped.
+- `CODEGEN_REVISION` bumped; `task gate` green.
 
 ## Out of Scope
 
