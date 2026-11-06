@@ -763,7 +763,7 @@ fn cycle_error(
 /// `plan` and `explain` beyond a program's imports (`docs/slice.md`
 /// 16.22): `std.deploy`, whose `admits`, `includes` and `entries` resolve
 /// an assembly (15.6, 16.17; `ignite_eval::resolve` builds its `Member`).
-const EVAL_ROOTS: &[&str] = &["std.deploy"];
+const EVAL_ROOTS: &[&str] = &[ignite_eval::DEPLOY_MODULE];
 
 /// The same for `run` and `replay`, plus the reducers' modules the run
 /// driver names: `std.control` (`ignite_eval::CONTROL_MODULE`: `step`,
@@ -772,7 +772,11 @@ const EVAL_ROOTS: &[&str] = &["std.deploy"];
 /// `Emitted` that `run::engine` builds, `docs/slice.md` 22.3). `std.time`
 /// is reached through `std.control`'s import. A probe's outcome type is
 /// decoded by the module that declares it, which the program imports.
-const RUN_ROOTS: &[&str] = &["std.deploy", "std.control", "std.sli"];
+const RUN_ROOTS: &[&str] = &[
+    ignite_eval::DEPLOY_MODULE,
+    ignite_eval::CONTROL_MODULE,
+    ignite_eval::SLI_MODULE,
+];
 
 /// The program at `file`, parsed with its siblings, and the standard
 /// library at `std` (default [`default_std_path`]) reduced to the modules
@@ -807,7 +811,7 @@ fn load_program_text_std(
     roots.extend(
         extra
             .iter()
-            .filter(|&&module| module != "std.deploy" || has_assembly)
+            .filter(|&&module| module != ignite_eval::DEPLOY_MODULE || has_assembly)
             .map(|module| module.to_string()),
     );
     if let Ok(own) = file.canonicalize()

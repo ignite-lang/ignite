@@ -85,10 +85,10 @@ const SUBSTRATE_OWNERS: &[&str] = &[
     "IoError",
 ];
 
-/// Modules that are the substrate: importing their substrate names emits
-/// nothing. A Ignite declaration in one of them (`std.net.Endpoint`) is an
-/// item of `ignite-std` like any other.
-const SUBSTRATE_MODULES: &[&str] = &["std.net", "std.io", "std.fs", "std.process"];
+// Modules that are the substrate: importing their substrate names emits
+// nothing. A Ignite declaration in one of them (`std.net.Endpoint`) is an
+// item of `ignite-std` like any other.
+use ignite_check::SUBSTRATE_MODULES;
 
 /// The names of [`SUBSTRATE_MODULES`] that are the substrate's own types
 /// and variants, lowered to `ignite_io::` paths rather than imported.
@@ -4044,7 +4044,7 @@ impl<'a> Generator<'a> {
             ("Process", "exit", [code]) => format!("ignite_io::exit(({code}) as i32)"),
             ("Clock", "monotonic", []) => "ignite_io::clock::monotonic()".to_string(),
             ("Endpoint", "of", [reference]) => {
-                let endpoint = self.enum_name(&QualName::new("std.net", "Endpoint"));
+                let endpoint = self.enum_name(&ignite_types::endpoint_name());
                 format!(
                     "ignite_io::endpoint_of({}).map(|(address, port)| {endpoint} {{ address, port }})",
                     borrow(&args[0], reference.clone())
@@ -4195,7 +4195,7 @@ impl<'a> Generator<'a> {
                 if *b == Builtin::LauncherStart {
                     return call;
                 }
-                let exit = self.enum_name(&QualName::new("std.process", "ChildExit"));
+                let exit = self.enum_name(&ignite_types::child_exit_name());
                 return format!("{call}.map(|e| {})", record_from_substrate(&exit, "e"));
             }
             Some(Callee::Builtin(

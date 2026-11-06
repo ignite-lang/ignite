@@ -144,7 +144,8 @@ pub fn import(file: &Path, options: &ImportOptions) -> Result<String, Error> {
         && !is_module_path(package)
     {
         return Err(Error::Usage(format!(
-            "--package `{package}` is no module path (dotted identifiers, `std.rfc.rfc9112`)"
+            "--package `{package}` is no module path (dotted identifiers, `{}.rfc9112`)",
+            ignite_check::RFC_MODULE
         )));
     }
     let bytes = read(file)?;

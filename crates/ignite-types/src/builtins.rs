@@ -216,9 +216,14 @@ pub(crate) fn invocation() -> Ty {
     Ty::Record(crate::QualName::new("std.process", "Invocation"))
 }
 
+/// The name of the record `std.process.ChildExit` (`docs/slice.md` 21.5).
+pub fn child_exit_name() -> crate::QualName {
+    crate::QualName::new("std.process", "ChildExit")
+}
+
 /// The record `std.process.ChildExit` (`docs/slice.md` 21.5).
-pub(crate) fn child_exit() -> Ty {
-    Ty::Record(crate::QualName::new("std.process", "ChildExit"))
+pub fn child_exit() -> Ty {
+    Ty::Record(child_exit_name())
 }
 
 /// `receiver.name(..)` for a receiver whose type is a type parameter bounded
@@ -344,10 +349,15 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
     }
 }
 
-/// The record `std.net.Endpoint` (`docs/slice.md` 14.14 item 5, 16.13):
-/// the result of `Endpoint.of`.
-pub(crate) fn endpoint() -> Ty {
-    Ty::Record(crate::QualName::new("std.net", "Endpoint"))
+/// The name of the record `std.net.Endpoint` (`docs/slice.md` 14.14 item
+/// 5, 16.13).
+pub fn endpoint_name() -> crate::QualName {
+    crate::QualName::new("std.net", "Endpoint")
+}
+
+/// The record `std.net.Endpoint`: the result of `Endpoint.of`.
+pub fn endpoint() -> Ty {
+    Ty::Record(endpoint_name())
 }
 
 /// The builtin free function `log(line: Text)`.

@@ -10,15 +10,13 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use ignite_check::RFC_MODULE;
 use ignite_syntax::ast::{Decl, Expr, ExprKind, Ident, Path, Program, Span, StatusKind};
 use ignite_syntax::diagnostic::Diagnostic;
 use ignite_types::{QualName, QuantityKind, Ty, TypedProgram};
 
 use crate::model::eval_diagnostic;
 use crate::{Evaluator, Module, Value};
-
-/// The module of the clause vocabulary (19.3).
-const RFC_MODULE: &str = "std.rfc";
 
 /// The claims of the checked module's protocols, in declaration order.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
