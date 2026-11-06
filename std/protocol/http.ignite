@@ -25,8 +25,12 @@ import std.control.{Machine, Supervisor}
 // differently (RFC 9112 sections 2.2, 5 and 6.3): a bare CR or LF, a
 // header name that is not a token (whitespace before the colon, a line
 // starting with whitespace), a control byte in a value, a repeated
-// `Content-Length` or one that is not 1 to 18 digits are all 400. A
-// response whose header name or value holds CR or LF is replaced by 500.
+// `Content-Length` or one that is not 1 to 18 digits are all 400. The
+// application's response is replaced by 500 when one of its header fields
+// would break RFC 9112 or RFC 9110 (`checked`): a name that is not a token,
+// a value holding CR or LF, a `Transfer-Encoding` or `Content-Length` (Http
+// frames every response itself), a repeated field that is not a list, an
+// empty list element, BWS, an HTTP-date that is not an IMF-fixdate.
 
 type IoResult<T> = Result<T, IoError>
 
@@ -79,18 +83,11 @@ const MAXIMUM_LENGTH_DIGITS: Int = 18
 // parsing and framing fns, the `verifies` clauses on the tests.
 protocol Http conforms [RFC9112, RFC9110] scope { parties = [Server, Sender, Recipient, Any] } {
   unsupported RFC9112.R2_2_1 "the head is decoded to text before it is parsed: an obs-text octet that is not UTF-8 reaches the application as U+FFFD"
-  unsupported RFC9112.R2_2_8"header names of the application's response are not checked as tokens, so one may start with whitespace"
   unsupported RFC9112.R3_3 "a request-target is bounded only by HttpLimits.head; a longer head is 431, not 414"
   unsupported RFC9112.R3_2_6 "Host is not checked"
   unsupported RFC9112.R3_2_2_5 "only the origin-form is accepted; an absolute-form request-target is 400"
   unsupported RFC9112.R3_2_2_6 "only the origin-form is accepted; an absolute-form request-target is 400"
   unsupported RFC9112.R6_1_1 "only Content-Length framing; any Transfer-Encoding is 501"
-  unsupported RFC9112.R6_1_2 "a Transfer-Encoding header in the application's response is sent as given on a kept connection, also one that applies chunked twice"
-  unsupported RFC9112.R6_1_4 "a Transfer-Encoding header in the application's response is sent as given on a kept connection: a coding other than chunked neither ends in chunked nor closes the connection"
-  unsupported RFC9112.R6_1_7 "a Transfer-Encoding header in the application's response is sent as given"
-  unsupported RFC9112.R6_1_8 "a Transfer-Encoding header in the application's response is sent as given"
-  unsupported RFC9112.R6_1_11 "a Transfer-Encoding header in the application's response is sent as given"
-  unsupported RFC9112.R6_2_1 "a Transfer-Encoding header in the application's response is sent as given, beside the Content-Length Http adds"
   unsupported RFC9112.R6_3_3 "any Transfer-Encoding is 501, also when chunked is not the final coding, where 400 is required"
   unsupported RFC9112.R7_1_2 "only Content-Length framing; any Transfer-Encoding is 501"
   not_applicable RFC9112.R7_1_3 "no chunked message is decoded: any Transfer-Encoding is 501"
@@ -103,14 +100,9 @@ protocol Http conforms [RFC9112, RFC9110] scope { parties = [Server, Sender, Rec
   not_applicable RFC9112.R9_3_3 "Http supports persistent connections"
   not_applicable RFC9112.R9_7_1 "Http runs over a plain byte stream; HTTP over TLS is not implemented"
   not_applicable RFC9112.R9_8_6 "Http runs over a plain byte stream; HTTP over TLS is not implemented"
-  unsupported RFC9110.R5_3_3 "the application's response headers are sent as given: a repeated name, or a Content-Length or Connection beside Http's own, is not refused"
-  unsupported RFC9110.R5_6_1_1_1 "list fields of the application's response are sent as given"
-  unsupported RFC9110.R5_6_3_4 "field values of the application's response are sent as given"
   not_applicable RFC9110.R5_6_3_5 "Http interprets no field whose grammar allows BWS: of a request it reads Connection, Content-Length and whether Transfer-Encoding is present"
   not_applicable RFC9110.R5_6_4_1 "Http interprets no quoted-string: of a request it reads Connection, Content-Length and whether Transfer-Encoding is present"
   not_applicable RFC9110.R5_6_7_1 "Http parses no timestamp"
-  unsupported RFC9110.R5_6_7_2 "Http generates no timestamp; one in the application's headers is sent as given"
-  unsupported RFC9110.R5_6_7_3 "Http generates no timestamp; one in the application's headers is sent as given"
   not_applicable RFC9110.R5_6_7_4 "Http parses no timestamp"
   unsupported RFC9110.R6_2_5 "every response says HTTP/1.1, while the chunked coding (RFC9112.R7_1_2) and the Host check (RFC9112.R3_2_6) are not implemented"
   not_applicable RFC9110.R6_5_1_1 "a response framed by Content-Length has no trailer section"
@@ -226,13 +218,183 @@ fn method_not_allowed(allow: Text) -> Response {
 
 fn has_line_break(text: Text) -> Bool = text.contains("\r") || text.contains("\n")
 
-// `response`, or 500 when a header name or value holds CR or LF and
-// would split the head.
-fn checked(response: Response) -> Response satisfies [RFC9112.R2_2_3, RFC9112.R5_2_1] {
+// The fields of RFC 9110 and RFC 9111 defined as a list (`#rule`, RFC 9110
+// section 5.6.1), by lower-case name: a response may repeat them (section
+// 5.3) and none of their elements may be empty (section 5.6.1.1).
+fn is_list_field(name: Text) -> Bool = match name {
+  "accept" | "accept-charset" | "accept-encoding" | "accept-language" | "accept-ranges" => true
+  "allow" | "authentication-info" | "cache-control" | "connection" | "content-encoding" => true
+  "content-language" | "expect" | "if-match" | "if-none-match" | "proxy-authenticate" => true
+  "proxy-authentication-info" | "te" | "trailer" | "upgrade" | "vary" | "via" | "www-authenticate" => true
+  _ => false
+}
+
+// The fields whose grammar has BWS (RFC 9110 section 5.6.3): the
+// `auth-param`s of the authentication fields (section 11).
+fn is_auth_field(name: Text) -> Bool = match name {
+  "www-authenticate" | "proxy-authenticate" | "authentication-info" | "proxy-authentication-info" => true
+  _ => false
+}
+
+// The fields defined as an HTTP-date (RFC 9110 sections 5.6.7, 6.6.1,
+// 8.8.2 and 10.2.3; RFC 9111 section 5.3).
+fn is_date_field(name: Text) -> Bool = match name {
+  "date" | "last-modified" | "expires" | "retry-after" => true
+  _ => false
+}
+
+// The elements of a list field value (RFC 9110 section 5.6.1): the parts
+// between the commas outside a quoted-string, each without its OWS.
+fn list_elements(value: Text) -> List<Text> {
+  let bytes = value.to_bytes()
+  var out = []
+  var start = 0
+  var quoted = false
+  var escaped = false
+  var at = 0
+  while at < bytes.len() {
+    let b = bytes.at(at)
+    if escaped {
+      escaped = false
+    } else if quoted && b == b'\\' {
+      escaped = true
+    } else if b == b'"' {
+      quoted = !quoted
+    } else if !quoted && b == b',' {
+      out.push(trim_ows(bytes.slice(start, at).to_text()))
+      start = at + 1
+    }
+    at = at + 1
+  }
+  out.push(trim_ows(bytes.slice(start, bytes.len()).to_text()))
+  out
+}
+
+// Whether a list field value holds an empty element; an empty value is
+// the empty list, not an empty element.
+fn has_empty_element(value: Text) -> Bool {
+  if trim_ows(value).is_empty() {
+    return false
+  }
+  for element in list_elements(value) {
+    if element.is_empty() {
+      return true
+    }
+  }
+  false
+}
+
+// Whether `value` has whitespace beside an `=` outside a quoted-string:
+// BWS of an `auth-param` (`token BWS "=" BWS value`). After the `=`
+// padding of a `token68`, whitespace before a comma or the end is OWS.
+fn has_bws(value: Text) -> Bool {
+  let bytes = value.to_bytes()
+  var quoted = false
+  var escaped = false
+  var at = 0
+  while at < bytes.len() {
+    let b = bytes.at(at)
+    if escaped {
+      escaped = false
+    } else if quoted && b == b'\\' {
+      escaped = true
+    } else if b == b'"' {
+      quoted = !quoted
+    } else if !quoted && b == b'=' {
+      if at > 0 && is_ows(bytes.at(at - 1)) {
+        return true
+      }
+      var next = at + 1
+      while next < bytes.len() && is_ows(bytes.at(next)) {
+        next = next + 1
+      }
+      if next > at + 1 && next < bytes.len() && bytes.at(next) != b',' {
+        return true
+      }
+    }
+    at = at + 1
+  }
+  false
+}
+
+fn is_digits(bytes: Bytes) -> Bool {
+  for b in bytes {
+    if !is_digit(b) {
+      return false
+    }
+  }
+  !bytes.is_empty()
+}
+
+// An IMF-fixdate (RFC 9110 section 5.6.7), the one form a sender
+// generates, with no whitespace beyond its single SPs:
+// `Sun, 06 Nov 1994 08:49:37 GMT`.
+fn is_imf_fixdate(value: Text) -> Bool {
+  let bytes = value.to_bytes()
+  if bytes.len() != 29 {
+    return false
+  }
+  let day = match bytes.slice(0, 3).to_text() {
+    "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun" => true
+    _ => false
+  }
+  let month = match bytes.slice(8, 11).to_text() {
+    "Jan" | "Feb" | "Mar" | "Apr" | "May" | "Jun" | "Jul" | "Aug" | "Sep" | "Oct" | "Nov" | "Dec" => true
+    _ => false
+  }
+  let spaces = bytes.slice(3, 5).to_text() == ", " && bytes.at(7) == b' ' && bytes.at(11) == b' ' && bytes.at(16) == b' '
+  let marks = bytes.at(19) == b':' && bytes.at(22) == b':' && bytes.slice(25, 29).to_text() == " GMT"
+  let date = is_digits(bytes.slice(5, 7)) && is_digits(bytes.slice(12, 16))
+  let time = is_digits(bytes.slice(17, 19)) && is_digits(bytes.slice(20, 22)) && is_digits(bytes.slice(23, 25))
+  day && month && spaces && marks && date && time
+}
+
+// Whether the application may send field `name` (lower case) with
+// `value`. Http frames every response by its own `Content-Length` and
+// applies no transfer coding, so `Transfer-Encoding` and `Content-Length`
+// are its own (RFC 9112 sections 6.1 and 6.2; RFC 9110 section 5.3).
+fn is_allowed_field(name: Text, value: Text) -> Bool {
+  if name == "transfer-encoding" || name == "content-length" {
+    return false
+  }
+  if is_list_field(name) && has_empty_element(value) {
+    return false
+  }
+  if is_auth_field(name) && has_bws(value) {
+    return false
+  }
+  if is_date_field(name) {
+    return is_imf_fixdate(value) || name == "retry-after" && is_digits(value.to_bytes())
+  }
+  true
+}
+
+// `response`, or 500 when one of the application's header fields would
+// make the message break RFC 9112 or RFC 9110: a name that is not a token
+// (also one starting with whitespace) or a value holding CR or LF, which
+// would split the head; a `Transfer-Encoding` or `Content-Length`, which
+// are Http's; a name repeated that is neither a list field nor
+// `Set-Cookie`; an empty list element; BWS; an HTTP-date that is not an
+// IMF-fixdate.
+fn checked(response: Response) -> Response satisfies [
+  RFC9112.R2_2_3, RFC9112.R2_2_8, RFC9112.R5_2_1, RFC9112.R6_1_2, RFC9112.R6_1_4, RFC9112.R6_1_7,
+  RFC9112.R6_1_8, RFC9112.R6_1_11, RFC9112.R6_2_1, RFC9110.R5_3_3, RFC9110.R5_6_1_1_1,
+  RFC9110.R5_6_3_4, RFC9110.R5_6_7_2, RFC9110.R5_6_7_3
+] {
+  var names = []
   for header in response.headers {
-    if has_line_break(header.0) || has_line_break(header.1) {
+    let name = header.0.to_lower()
+    if !is_token(header.0) || has_line_break(header.1) || !is_allowed_field(name, header.1) {
       return status_response(500)
     }
+    if !is_list_field(name) && name != "set-cookie" {
+      for seen in names {
+        if seen == name {
+          return status_response(500)
+        }
+      }
+    }
+    names.push(name)
   }
   response
 }
@@ -275,6 +437,96 @@ test "a header holding CR or LF turns the response into 500" verifies [RFC9112.R
   assert checked(Response { status = 200, headers = [("X", "a\nb")] }).status == 500
   assert checked(Response { status = 200, headers = [("X\r", "a")] }).status == 500
   assert checked(Response { status = 200, headers = [("X", "a\tb")] }).status == 200
+}
+
+// The status `checked` leaves of a 200 with `headers`.
+test fn checked_status(headers: List<(Text, Text)>) -> Int = checked(Response { status = 200, headers }).status
+
+test "a response header name that is not a token is 500" verifies [RFC9112.R2_2_8] {
+  assert checked_status([(" X", "a")]) == 500
+  assert checked_status([("\tX", "a")]) == 500
+  assert checked_status([("X Y", "a")]) == 500
+  assert checked_status([("X:", "a")]) == 500
+  assert checked_status([("", "a")]) == 500
+  assert checked_status([("é", "a")]) == 500
+  assert checked_status([("X-Custom_1", "a")]) == 200
+}
+
+test "an application Transfer-Encoding is 500, so Http applies no transfer coding" verifies [
+  RFC9112.R6_1_2, RFC9112.R6_1_4, RFC9112.R6_1_7, RFC9112.R6_1_8, RFC9112.R6_1_11, RFC9112.R6_2_1
+] {
+  for value in ["chunked", "chunked, chunked", "gzip", "gzip, chunked", ""] {
+    assert checked_status([("Transfer-Encoding", value)]) == 500
+    assert checked(Response { status = 204, headers = [("transfer-encoding", value)] }) == status_response(500)
+    assert checked(Response { status = 101, headers = [("TRANSFER-ENCODING", value)] }) == status_response(500)
+  }
+  let served_gzip = served(b"GET /gzip HTTP/1.1\r\n\r\nGET /a HTTP/1.0\r\n\r\n")?
+  assert !served_gzip.to_lower().contains("transfer-encoding")
+  assert served_gzip == render(status_response(500), true).to_text() + reply("GET /a? ", "close")
+}
+
+test "a response's own Content-Length is 500, Http frames it" verifies [RFC9112.R6_2_1, RFC9110.R5_3_3] {
+  assert checked_status([("Content-Length", "2")]) == 500
+  assert checked_status([("content-length", "0")]) == 500
+  let length = render(checked(Response { status = 200, body = "hi" }), true).to_text()
+  assert length.split("\r\n").slice(1, 3) == ["Content-Length: 2", "Connection: keep-alive"]
+}
+
+test "a repeated response field is 500 unless it is a list or Set-Cookie" verifies [RFC9110.R5_3_3] {
+  assert checked_status([("Content-Type", "text/plain"), ("content-type", "text/html")]) == 500
+  assert checked_status([("X", "1"), ("Y", "2"), ("X", "3")]) == 500
+  assert checked_status([("Location", "/a"), ("LOCATION", "/b")]) == 500
+  assert checked_status([("Vary", "Accept"), ("vary", "Origin")]) == 200
+  assert checked_status([("Allow", "GET"), ("Allow", "POST")]) == 200
+  assert checked_status([("Connection", "close"), ("Cache-Control", "no-store"), ("cache-control", "private")]) == 200
+  assert checked_status([("Set-Cookie", "a=1"), ("Set-Cookie", "b=2")]) == 200
+  assert checked_status([("X", "1"), ("Y", "1")]) == 200
+}
+
+test "an empty element of a response list field is 500" verifies [RFC9110.R5_6_1_1_1] {
+  assert list_elements("a, b ,c") == ["a", "b", "c"]
+  assert list_elements("a, \"b, ,c\", d") == ["a", "\"b, ,c\"", "d"]
+  assert list_elements("\"a\\\", ,\", b") == ["\"a\\\", ,\"", "b"]
+  for value in [",", "a,", ", a", "a,,b", "a, ,b", "a,\t,b"] {
+    assert checked_status([("Vary", value)]) == 500
+    assert checked_status([("connection", value)]) == 500
+  }
+  assert checked_status([("Allow", "")]) == 200
+  assert checked_status([("Allow", "GET, HEAD")]) == 200
+  assert checked_status([("WWW-Authenticate", "Basic realm=\"a, ,b\"")]) == 200
+  assert checked_status([("X", "a,,b")]) == 200
+  assert checked(Response { status = 200, headers = [("Connection", "keep-alive")] }).status == 200
+}
+
+test "BWS in a response's auth-param is 500" verifies [RFC9110.R5_6_3_4] {
+  assert checked_status([("WWW-Authenticate", "Basic realm =\"x\"")]) == 500
+  assert checked_status([("WWW-Authenticate", "Basic realm= \"x\"")]) == 500
+  assert checked_status([("Proxy-Authenticate", "Basic realm\t=x")]) == 500
+  assert checked_status([("Authentication-Info", "nextnonce = \"a\"")]) == 500
+  assert checked_status([("WWW-Authenticate", "Basic realm=\"a = b\", charset=\"UTF-8\"")]) == 200
+  assert checked_status([("WWW-Authenticate", "Bearer abc== , Basic realm=x")]) == 200
+  assert checked_status([("WWW-Authenticate", "Bearer abc= ")]) == 200
+  assert checked_status([("X", "a = b")]) == 200
+}
+
+test "a response timestamp is an IMF-fixdate with no extra whitespace" verifies [RFC9110.R5_6_7_2, RFC9110.R5_6_7_3] {
+  assert is_imf_fixdate("Sun, 06 Nov 1994 08:49:37 GMT")
+  for name in ["Date", "last-modified", "Expires", "Retry-After"] {
+    assert checked_status([(name, "Sun, 06 Nov 1994 08:49:37 GMT")]) == 200
+    assert checked_status([(name, "Sunday, 06-Nov-94 08:49:37 GMT")]) == 500
+    assert checked_status([(name, "Sun Nov  6 08:49:37 1994")]) == 500
+    assert checked_status([(name, "Sun,  06 Nov 1994 08:49:37 GMT")]) == 500
+    assert checked_status([(name, "Sun, 06 Nov 1994 08:49:37  GMT")]) == 500
+    assert checked_status([(name, " Sun, 06 Nov 1994 08:49:37 GMT")]) == 500
+    assert checked_status([(name, "Sun, 06 Nov 1994 08:49:37 UTC")]) == 500
+    assert checked_status([(name, "Sun, 6 Nov 1994 08:49:37 GMT ")]) == 500
+    assert checked_status([(name, "Xyz, 06 Nov 1994 08:49:37 GMT")]) == 500
+    assert checked_status([(name, "Sun, 06 Nob 1994 08:49:37 GMT")]) == 500
+    assert checked_status([(name, "Sun, 06 Nov 1994 08-49-37 GMT")]) == 500
+  }
+  assert checked_status([("Retry-After", "120")]) == 200
+  assert checked_status([("Retry-After", "1 20")]) == 500
+  assert checked_status([("Expires", "0")]) == 500
 }
 
 test "render writes the status line, headers, length and connection" verifies [RFC9112.R2_2_3, RFC9112.R4_4] {
@@ -801,9 +1053,12 @@ test "any Transfer-Encoding is 501, also with a Content-Length" verifies [RFC911
 }
 
 // Answers `<method> <path>?<query> <body>`; `/bad` gets a header with a
-// line break, `/close` the header `Connection: Upgrade, Close`.
+// line break, `/close` the header `Connection: Upgrade, Close`, `/gzip`
+// the header `Transfer-Encoding: gzip`.
 test fn answer(state: Unit, request: Request) -> Response = if request.path == "/bad" {
   Response { status = 200, headers = [("X", "a\r\nb")] }
+} else if request.path == "/gzip" {
+  Response { status = 200, headers = [("Transfer-Encoding", "gzip")], body = "gzip" }
 } else if request.path == "/close" {
   Response { status = 200, headers = [("connection", "Upgrade,\tClose ")], body = "closing" }
 } else {

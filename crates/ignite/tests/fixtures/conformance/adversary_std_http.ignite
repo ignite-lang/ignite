@@ -90,8 +90,7 @@ test "adversary: a response with the close option ends the connection" {
   assert !out.contains("/second")
 }
 
-// RFC9112.R6_1_4, marked not_applicable "Http applies no transfer coding:
-// every response is framed by Content-Length": "If any transfer coding
+// RFC9112.R6_1_4, claimed satisfied by `checked`: "If any transfer coding
 // other than chunked is applied to a response's content, the sender MUST
 // either apply chunked as the final transfer coding or terminate the
 // message by closing the connection." A response with Transfer-Encoding is

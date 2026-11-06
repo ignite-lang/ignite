@@ -912,8 +912,55 @@ fn removing_a_satisfies_from_a_must_is_e090() {
 
 /// Row 2 of 19.0, P2 test 2: the HTTP matrix lists RFC 9112's chunked
 /// coding (section 7.1) and Host (section 3.2) as gaps and claims nothing.
+/// The rows story `http-rfc9112-9110-gaps` closed are satisfied, each by
+/// its fn and a passing test that names it (19.22).
 #[test]
 fn http_matrix_lists_the_chunked_and_host_gaps() {
+    const TRANSFER_ENCODING: &str = "test \"an application Transfer-Encoding is 500, so Http applies no transfer coding\" passed";
+    const CLOSED: [(&str, &str, &str, &str); 12] = [
+        (
+            "rfc9112",
+            "R2_2_8",
+            "checked",
+            "test \"a response header name that is not a token is 500\" passed",
+        ),
+        ("rfc9112", "R6_1_2", "checked", TRANSFER_ENCODING),
+        ("rfc9112", "R6_1_4", "checked", TRANSFER_ENCODING),
+        ("rfc9112", "R6_1_7", "checked", TRANSFER_ENCODING),
+        ("rfc9112", "R6_1_8", "checked", TRANSFER_ENCODING),
+        ("rfc9112", "R6_1_11", "checked", TRANSFER_ENCODING),
+        ("rfc9112", "R6_2_1", "checked", TRANSFER_ENCODING),
+        (
+            "rfc9110",
+            "R5_3_3",
+            "checked",
+            "test \"a repeated response field is 500 unless it is a list or Set-Cookie\" passed",
+        ),
+        (
+            "rfc9110",
+            "R5_6_1_1_1",
+            "checked",
+            "test \"an empty element of a response list field is 500\" passed",
+        ),
+        (
+            "rfc9110",
+            "R5_6_3_4",
+            "checked",
+            "test \"BWS in a response's auth-param is 500\" passed",
+        ),
+        (
+            "rfc9110",
+            "R5_6_7_2",
+            "checked",
+            "test \"a response timestamp is an IMF-fixdate with no extra whitespace\" passed",
+        ),
+        (
+            "rfc9110",
+            "R5_6_7_3",
+            "checked",
+            "test \"a response timestamp is an IMF-fixdate with no extra whitespace\" passed",
+        ),
+    ];
     let mut outputs = Vec::new();
     for target in ["rust", "llvm"] {
         let output = std_conformance("http", target);
@@ -923,8 +970,6 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
             ("R7_1_2", "7.1", "MUST"),
             ("R3_2_6", "3.2", "MUST"),
             ("R2_2_1", "2.2", "MUST"),
-            ("R6_1_2", "6.1", "MUST NOT"),
-            ("R6_1_4", "6.1", "MUST"),
         ] {
             let row = columns(rfc9112, id);
             assert_eq!(row.len(), 6, "{target}: {row:?}");
@@ -933,14 +978,28 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
             assert_eq!(row[3], "unsupported", "{target}: {row:?}");
             assert_eq!(row[5], "gap", "{target}: {row:?}");
         }
+        for (rfc, id, satisfier, test) in CLOSED {
+            let row = columns(block(&stdout, rfc), id);
+            assert_eq!(row.len(), 6, "{target}: {row:?}");
+            assert_eq!(row[3], "satisfied", "{target}: {row:?}");
+            assert_eq!(row[5], "pass", "{target}: {row:?}");
+            let (satisfiers, tests) = row[4]
+                .split_once("; ")
+                .unwrap_or_else(|| panic!("{target}: {row:?}"));
+            assert!(
+                satisfiers.split(", ").any(|name| name == satisfier),
+                "{target}: {row:?}"
+            );
+            assert!(tests.split(", ").any(|t| t == test), "{target}: {row:?}");
+        }
         let last = rfc9112.trim_end().lines().last().unwrap_or_default();
         assert_eq!(
-            last, "claim conformance of Http to rfc9112: no (15 gaps, 0 failures, 0 inconclusive)",
+            last, "claim conformance of Http to rfc9112: no (8 gaps, 0 failures, 0 inconclusive)",
             "{target}"
         );
         assert!(
             stdout.contains(
-                "claim conformance of Http to rfc9110: no (9 gaps, 0 failures, 0 inconclusive)\n"
+                "claim conformance of Http to rfc9110: no (4 gaps, 0 failures, 0 inconclusive)\n"
             ),
             "{target}: {stdout}"
         );
@@ -1469,12 +1528,12 @@ fn adversary_http_a_response_with_the_close_option_ends_the_connection() {
 }
 
 /// RFC 9112 6.1, `RFC9112.R6_1_4`: an application's `Transfer-Encoding:
-/// gzip` is sent beside Http's Content-Length on a kept connection. Found
-/// while R6_1_4 was `not_applicable`; it is now `unsupported`, a gap of the
-/// matrix like its siblings R6_1_7, R6_1_8, R6_1_11 and R6_2_1, and this
-/// test stays ignored until the gap is closed.
+/// gzip` was sent beside Http's Content-Length on a kept connection. Found
+/// while R6_1_4 was `not_applicable`; restated `unsupported`, then closed
+/// by story `http-rfc9112-9110-gaps`: `checked` answers 500 to a response
+/// with an application `Transfer-Encoding`, so Http applies no transfer
+/// coding (also R6_1_2, R6_1_7, R6_1_8, R6_1_11 and R6_2_1).
 #[test]
-#[ignore = "gap RFC9112.R6_1_4 (unsupported in http.ignite): an application Transfer-Encoding is sent on a kept connection; story http-rfc9112-9110-gaps"]
 fn adversary_http_a_response_with_a_transfer_coding_ends_the_connection() {
     assert_inline_passes(
         "adversary_std_http",
