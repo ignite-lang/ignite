@@ -607,6 +607,34 @@ fn text_equality_against_literals() {
     });
 }
 
+/// The language gaps of story codespec-friction (`docs/slice.md` 24):
+/// `<`, `<=`, `>`, `>=` on `Text` in byte order, the order of a `Map`'s
+/// `Text` keys, and `wrapping_add`, `wrapping_sub`, `wrapping_mul` on
+/// `Int`, the same on both targets in dev and in release
+/// (`fixtures/tests/codespec.ignite`).
+#[test]
+fn codespec_friction_on_both_targets() {
+    let file = fixture("codespec.ignite");
+    on_both_targets(|target| {
+        for profile in [&[][..], &["--release"][..]] {
+            let mut args = vec![file.as_str()];
+            args.extend(profile.iter().copied());
+            let run = ignite_test(Chain::Fixtures, target, &args);
+            assert_eq!(
+                run.status, 0,
+                "{target} {profile:?}: {}\n{}",
+                run.stdout, run.stderr
+            );
+            assert!(
+                run.stdout
+                    .contains("test result: ok. 6 passed; 0 failed; 0 filtered out"),
+                "{target} {profile:?}: {}",
+                run.stdout
+            );
+        }
+    });
+}
+
 /// Both native targets use one preparation while retaining their normal
 /// runner selection, reports and failure status. A Rust failure must not
 /// prevent the LLVM suite from executing.

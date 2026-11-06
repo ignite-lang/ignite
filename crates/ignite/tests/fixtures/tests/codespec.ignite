@@ -1,0 +1,111 @@
+package fixtures.codespec
+
+// The language gaps of story codespec-friction (`docs/slice.md` 24), run by
+// `ignite test` on both targets in debug and release
+// (crates/ignite/tests/ignite_test.rs `codespec_friction_on_both_targets`).
+
+// The bytes of `text` as a Text that is not a literal.
+fn fresh(text: Text) -> Text {
+  let padded = ("<" + text + ">").to_bytes()
+  padded.slice(1, padded.len() - 1).to_text()
+}
+
+fn before(a: Text, b: Text) -> Bool = a < b
+
+fn after(a: Text, b: Text) -> Bool = a > b
+
+fn at_most(a: Text, b: Text) -> Bool = a <= b
+
+fn at_least(a: Text, b: Text) -> Bool = a >= b
+
+test "Text order is byte order" {
+  assert before(fresh("a"), fresh("b"))
+  assert !before(fresh("b"), fresh("a"))
+  assert !before(fresh("a"), fresh("a"))
+  assert before(fresh(""), fresh("a"))
+  assert !before(fresh("a"), fresh(""))
+  assert before(fresh("ab"), fresh("abc"))
+  assert before(fresh("abc"), fresh("abd"))
+  assert before(fresh("B"), fresh("a"))
+  assert before(fresh("Z"), fresh("_"))
+  assert before(fresh("z"), fresh("é"))
+  assert before(fresh("é"), fresh("€"))
+  assert before(fresh("€"), fresh("😀"))
+  assert before(fresh("\u{FFFF}"), fresh("\u{10000}"))
+  assert after(fresh("b"), fresh("a"))
+  assert after(fresh("abc"), fresh("ab"))
+  assert !after(fresh("a"), fresh("a"))
+  assert at_most(fresh("a"), fresh("a"))
+  assert at_most(fresh("a"), fresh("b"))
+  assert !at_most(fresh("b"), fresh("a"))
+  assert at_least(fresh("a"), fresh("a"))
+  assert at_least(fresh("b"), fresh("a"))
+  assert !at_least(fresh(""), fresh("a"))
+}
+
+test "Text order with literals" {
+  assert "apple" < "banana"
+  assert fresh("apple") < "banana"
+  assert "apple" < fresh("banana")
+  assert !("b" < "a")
+  assert "" <= ""
+  assert "b" >= "a"
+}
+
+// Insertion sort with `<`, the shape of a writer that orders names.
+fn sorted(items: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for item in items {
+    var placed: List<Text> = []
+    var done = false
+    for o in out {
+      if !done && item < o {
+        placed.push(item)
+        done = true
+      }
+      placed.push(o)
+    }
+    if !done {
+      placed.push(item)
+    }
+    out = placed
+  }
+  out
+}
+
+test "Text order agrees with the key order of a Map" {
+  let words = ["pear", "Apple", "apple", "", "äpfel", "zebra", "a", "ab"]
+  var m: Map<Text, Int> = Map.empty()
+  for w in words {
+    m.put(w, 1)
+  }
+  assert sorted(words) == m.keys()
+  assert sorted(words) == ["", "Apple", "a", "ab", "apple", "pear", "zebra", "äpfel"]
+}
+
+const MAX: Int = 9223372036854775807
+
+const MIN: Int = -9223372036854775807 - 1
+
+test "wrapping_add wraps at the Int width" {
+  assert (1).wrapping_add(2) == 3
+  assert MAX.wrapping_add(1) == MIN
+  assert MIN.wrapping_add(-1) == MAX
+  assert MAX.wrapping_add(MAX) == -2
+  assert (-5).wrapping_add(5) == 0
+}
+
+test "wrapping_sub wraps at the Int width" {
+  assert (5).wrapping_sub(7) == -2
+  assert MIN.wrapping_sub(1) == MAX
+  assert MAX.wrapping_sub(-1) == MIN
+  assert (0).wrapping_sub(MIN) == MIN
+}
+
+test "wrapping_mul wraps at the Int width" {
+  assert (6).wrapping_mul(7) == 42
+  assert MAX.wrapping_mul(2) == -2
+  assert MIN.wrapping_mul(-1) == MIN
+  assert (4611686018427387904).wrapping_mul(2) == MIN
+  assert (-3).wrapping_mul(4) == -12
+}

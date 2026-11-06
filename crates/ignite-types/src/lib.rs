@@ -612,6 +612,13 @@ pub enum Builtin {
     ByteToInt,
     /// `i.to_byte() -> Option<Byte>`, `None` outside 0 to 255.
     IntToByte,
+    /// `a.wrapping_add(b) -> Int`: the sum modulo 2^64 in two's complement,
+    /// never a failure (`docs/slice.md` 24.2).
+    IntWrappingAdd,
+    /// `a.wrapping_sub(b) -> Int`: the difference modulo 2^64.
+    IntWrappingSub,
+    /// `a.wrapping_mul(b) -> Int`: the product modulo 2^64.
+    IntWrappingMul,
     /// `s.set_idle_timeout(ms) -> Result<Unit, IoError>`.
     TcpStreamSetIdleTimeout,
     /// `s.next_id() -> Int`.
