@@ -1,0 +1,105 @@
+test type Entry {
+  name: Text
+  scores: List<Int>
+}
+
+test fn idle(xs: List<Int>, s: PipeStream) -> Result<Unit, IoError> requires [s.write] {
+  if xs.len() == 0 {
+    return Err(IoError.new("empty"))
+  }
+  s.close()
+}
+
+test fn size(e: Entry) -> Int {
+  e.name.len() + e.scores.len()
+}
+
+test fn entries(n: Int) -> List<Entry> {
+  var out: List<Entry> = []
+  var i = 0
+  while i < n {
+    var scores: List<Int> = []
+    var j = 0
+    while j < 16 {
+      scores.push(i + j)
+      j = j + 1
+    }
+    out.push(Entry { name = "entry-number-".concat(Int.to_text(i)), scores = scores })
+    i = i + 1
+  }
+  out
+}
+
+test fn numbers(n: Int) -> List<Int> {
+  var out: List<Int> = []
+  var i = 0
+  while i < n {
+    out.push(i)
+    i = i + 1
+  }
+  out
+}
+
+test "bench map with a closure" {
+  let all = entries(1000)
+  var total = 0
+  var round = 0
+  while round < 2000 {
+    let sizes = all.map(|e| e.name.len() + e.scores.len())
+    total = total + sizes[round % 1000]
+    round = round + 1
+  }
+  assert total > 0
+}
+
+test "bench map with a named fn" {
+  let all = entries(1000)
+  var total = 0
+  var round = 0
+  while round < 2000 {
+    let sizes = all.map(size)
+    total = total + sizes[round % 1000]
+    round = round + 1
+  }
+  assert total > 0
+}
+
+test "bench fn value calls" {
+  let xs = numbers(256)
+  let f = |l: List<Int>, k: Int| l.len() + k
+  var total = 0
+  var i = 0
+  while i < 1000000 {
+    total = total + f(xs, i % 3)
+    i = i + 1
+  }
+  assert total > 0
+}
+
+test "bench spawn with a borrowed list" {
+  let xs = numbers(100000)
+  var i = 0
+  while i < 300 {
+    let (client, server) = Pipe.pair()
+    spawn idle(xs, server)
+    client.set_idle_timeout(5000)?
+    match client.read(1)? {
+      Eof => {}
+      Data(bytes) => {}
+    }
+    i = i + 1
+  }
+  assert xs.len() == 100000
+}
+
+test "bench closure capturing a list" {
+  let xs = numbers(1000)
+  var total = 0
+  var i = 0
+  while i < 100000 {
+    let f = || xs.len()
+    total = total + f()
+    i = i + 1
+  }
+  assert total == 100000 * 1000
+}

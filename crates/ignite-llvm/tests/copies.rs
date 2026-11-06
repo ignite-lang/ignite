@@ -68,6 +68,26 @@ fn text_keys_compare_inline() {
     assert!(find.contains("call i32 @ignite.text_cmp("), "{find}");
 }
 
+/// P3: `list.map` with a closure literal or a named fn that only reads
+/// its parameter, and a call through a `let` bound to such a closure,
+/// copy no list in the caller.
+#[test]
+fn readers_and_spawns_take_places() {
+    let (generated, _) = lower_with("copies", true);
+    let program = &generated.program;
+    for symbol in [
+        "tests.copies.lengths",
+        "tests.copies.sums",
+        "tests.copies.measured",
+    ] {
+        let body = function(program, symbol);
+        assert!(
+            !body.contains("call void @\"copy.List"),
+            "{symbol}:\n{body}"
+        );
+    }
+}
+
 #[test]
 fn every_copies_test_runs() {
     let (generated, tests) = lower_with("copies", true);

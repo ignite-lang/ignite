@@ -179,3 +179,65 @@ sort bytewise" (keys `""`, a prefix and its extensions, `é`, a text with byte 0
 order, `get` of present, absent and equal-but-distinct keys, overwrite and remove), on both
 targets, and `copies::text_keys_compare_inline`, which checks that `map.find` over `Text`
 keys calls `@ignite.text_cmp` and no runtime comparison is left.
+
+## P3: a fn value that only reads a parameter gets the place
+
+PR C's base is `586556ad6` (`main` after PR B); its programs are `bench-c.ignite` (this
+directory), timed against base with 21 interleaved rounds.
+
+A call through a fn value copied every borrowed aggregate argument, and `list.map` copied
+each element before passing it, because a fn value's parameters are owned: the caller does
+not know the callee. Now, where the caller does know it, a borrowed place goes as its own
+pointer to a parameter the callee only reads (`Lower::known_borrows`): a closure literal,
+or a `let` bound to one, only reads the parameters its body does not modify
+(`region::modified_by`; nothing inside a closure body moves, so a read that keeps the value
+copies it), and a named fn only reads the parameters it does not consume. `list.map(f)`
+with such an `f` passes each element as its pointer; a call through such a `let` passes a
+borrowed argument as its pointer unless a later argument modifies a variable or mentions
+the place's root.
+
+The review's fix, "borrow unmodified closure-literal parameters", was first tried as a
+change of the fn-value convention (every fn value borrows; a closure copies a modified
+parameter on entry, the `fnval.` thunk copies for a consuming named fn). The golden
+`slice16.program.ll` showed the cost: an actor's state moved into `step` through a fn value
+(`run_actor`) gained a copy in the thunk on every message, where it had none. That version
+was dropped; the one above changes no callee and no convention.
+
+| measure | base | P3 |
+|---|---|---|
+| `bench-c.ignite` `program.ll`: calls of `copy.` glue in the map, named-fn map and fn-value tests | 3 | 0 |
+| `probe.ignite` `program.ll`: calls of `copy.` glue | 174 | 172 ("list map copies and transforms", and a fn-value call with a `Text` argument) |
+| `bench map with a closure` (2,000 maps over 1,000 records of a text and 16 ints): `copy.main.Entry` calls (callgrind) | 2,000,000 | 0 |
+| same: instructions (callgrind `Ir`, whole run) | 350,874,939 | 22,090,500 |
+| same: wall time, median of 21 interleaved (load 12.7) | 34 ms | 2 ms |
+| `bench map with a named fn` (the same with a named fn that reads its record) | 2,000,000 copies, `Ir` 350,874,951, 36 ms | 0, `Ir` 22,090,512, 2 ms |
+| `bench fn value calls` (1,000,000 calls of a `let` closure on a 256-int list): `memcpy` calls | 1,000,007 | 0 (no `malloc` or `memcpy` above the threshold) |
+| same: `Ir` | 272,442,229 | 20,442,283 |
+| same: wall time, median of 21 (load 12.7 to 15.1) | 22 ms | 2 ms |
+
+Tests that catch a wrong result: the copies test "fn values borrow what they only read and
+copy what they change", on both targets: a closure and a named fn that change their
+parameter leave the list's elements unchanged, a closure that returns its parameter gives
+a list independent of the original (each changed afterwards), a later argument that
+changes the variable or moves it into a consuming fn leaves the earlier argument as it was
+evaluated. `copies::readers_and_spawns_take_places` checks the IR of `lengths`, `sums` and
+`measured`: no list copy.
+
+## P4: closure captures moved at their last use (skipped)
+
+A closure copies each capture into its environment when it is created. The review proposed
+a shallow `memcpy` when `TypedProgram::moves` marks the capture's last use. It never does:
+the moves analysis (`crates/ignite-types/src/moves.rs`) records a closure's captures as
+reads, not as move positions, and that crate is outside this story's scope. Deciding the
+move in `ignite-llvm` would duplicate that analysis, and a shallow copy is unsafe for a
+capture that does not own its memory (a borrowed parameter, a `for` element whose list is
+changed in place later), which only the moves analysis knows. Not done; the cost it would
+address, measured on base and P3 alike:
+
+| measure | base | after P3 and P5 |
+|---|---|---|
+| `bench closure capturing a list` (100,000 closures capturing a 1,000-int list): `memcpy` calls, `Ir` share | 100,009, 78,300,923 of 85,157,151 `Ir` (92%) | the same |
+| same: wall time, median of 21 (load 15.1) | 9 ms | 9 ms |
+
+In this bench the list is used again in the next round, so its capture is no last use and
+a move would not apply either; it shows what one capture copy costs.
