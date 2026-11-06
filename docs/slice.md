@@ -8733,3 +8733,57 @@ across edits of the source (`story:stable-node-ids`).
   `typed_json::the_reader_fixture_is_the_sample_document` fails when it differs from the
   compiler's output, and `IGNITE_BLESS=1` rewrites it.
 - `apply::plan::CODEGEN_REVISION` is unchanged: no generated code changes.
+
+## 25 Language gaps found by the codespec adapters
+
+**Status: in progress on `story:codespec-friction`, one pull request per part.**
+
+Sources: the planning store's `story:codespec-friction` (its fix list, items 1 to 5);
+`docs/friction.md` rows 47 to 59, which record each gap with the place in
+ignite-lang/ignite-codespec where it bit.
+
+### 25.1 Ordering on `Text` (item 3, friction row 49)
+
+`<`, `>`, `<=` and `>=` take two `Text` operands and give `Bool`. The order is the byte order of
+the UTF-8 encodings: the first differing byte decides, unsigned, and a proper prefix sorts
+first. On valid UTF-8 that is the order of the code points, and it is Go's string order (Go
+compares strings bytewise). It is the order in which a `Map` keeps `Text` keys (14.3), so the
+keys of a map come back in the order `<` sorts them.
+
+| layer | lowering |
+|---|---|
+| typer | `operator` admits the four orderings on `Text` beside `Int` and `Byte`; any other type stays E045 |
+| Rust target | `a < b` on `String`, Rust's `Ord` for `str`, bytewise |
+| LLVM target | `glue::compare` of the two `Text` values (the `ignite.text_cmp` helper a map's search uses: `memcmp` of the common length, then the shorter first), then `icmp` of the result against 0 |
+| evaluator | `Value::Text` ordered by `as_bytes()` |
+
+No locale and no normalisation: `"Z" < "_" < "a"`, `"z" < "é"`, `"é" < "€"`.
+
+### 25.2 Wrapping arithmetic on `Int` (item 5, friction row 51)
+
+Three builtin methods of `Int`, `a.wrapping_add(b)`, `a.wrapping_sub(b)` and
+`a.wrapping_mul(b)`, each `Int -> Int`: the exact result reduced modulo 2^64 into the range of
+`Int` (signed 64-bit, two's complement), which is Go's `int` arithmetic on a 64-bit platform.
+They never fail; `+`, `-` and `*` keep failing on overflow (`docs/vision.md` T6). Builtins
+`IntWrappingAdd`, `IntWrappingSub`, `IntWrappingMul`; their names are in
+`ignite_check::BUILTIN_METHODS`, so on an `Int` receiver the builtin wins over a user fn of
+the same name (13, row 5), and a call `wrapping_add(a, b)` of such a fn is unchanged.
+
+| layer | lowering |
+|---|---|
+| Rust target | `i64::wrapping_add(a, b)` (and `_sub`, `_mul`) |
+| LLVM target | `add`, `sub`, `mul` on `i64` without the overflow check |
+| evaluator | `i64::wrapping_*` |
+
+No wrapping form for `Byte`, `/` or `%`, and no unary negation: `(0).wrapping_sub(x)` negates.
+
+### 25.9 Tests
+
+- `ignite_test::codespec_friction_on_both_targets` runs `fixtures/tests/codespec.ignite` on the
+  Rust and LLVM targets, dev and release: the orderings on fresh and literal `Text` (empty,
+  prefix, ASCII case, two-, three- and four-byte UTF-8), an insertion sort with `<` that equals
+  the keys of a `Map<Text, Int>` filled with the same words, and the three wrapping methods at
+  the bounds of `Int`.
+- `eval::evaluator_agrees_with_the_rust_target` and `_llvm_target`: `int_wrapping` and
+  `text_compare` of `fixtures/eval_equivalence.ignite` print the same in the evaluator and on
+  both targets.

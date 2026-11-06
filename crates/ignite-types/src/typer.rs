@@ -3771,8 +3771,9 @@ impl<'a> Typer<'a> {
     }
 
     /// The type of `left op right` from the operand types: `==` and `!=`
-    /// on any comparable type (`docs/slice.md` section 13.5), `+` on
-    /// numbers and `Text`, the others on numbers (E045 otherwise).
+    /// on any comparable type (`docs/slice.md` section 13.5), `+` and the
+    /// orderings `<`, `>`, `<=`, `>=` on numbers and `Text` (25.1), the
+    /// others on numbers (E045 otherwise).
     fn operator(&mut self, expr: &Expr, op: BinaryOp, left_ty: Ty, right_ty: Ty) -> Option<Ty> {
         let arithmetic = matches!(
             op,
@@ -3793,6 +3794,9 @@ impl<'a> Typer<'a> {
         let defined = match op {
             BinaryOp::Eq | BinaryOp::Ne => self.equatable(&operand, &mut Vec::new()),
             BinaryOp::Add => matches!(operand, Ty::Int | Ty::Byte | Ty::Text | Ty::Never),
+            BinaryOp::Lt | BinaryOp::Gt | BinaryOp::Le | BinaryOp::Ge => {
+                matches!(operand, Ty::Int | Ty::Byte | Ty::Text | Ty::Never)
+            }
             _ => matches!(operand, Ty::Int | Ty::Byte | Ty::Never),
         };
         if defined && arithmetic && matches!(operand, Ty::Int | Ty::Byte) {
