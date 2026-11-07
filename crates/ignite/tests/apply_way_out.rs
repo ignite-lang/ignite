@@ -988,7 +988,28 @@ fn live_unresolvable(flow: &Flow, host: &Host) -> Live {
         || format!("{}\n{}", flow.inspect().compact(), read(&host.stderr)),
     );
     // Its run settles: the failed restart gave `extra` up.
-    std::thread::sleep(Duration::from_secs(2));
+    let journal = flow.run_directory(&failed).join("journal.jsonl");
+    until(
+        "the run's supervisor of `extra` noted gave_up",
+        || {
+            read(&journal).lines().any(|line| {
+                Json::parse(line).is_ok_and(|record| {
+                    record.get("machine").and_then(Json::as_str)
+                        == Some("Terminal.extra.supervisor")
+                        && record.get("kind").and_then(Json::as_str) == Some("effect")
+                        && record.get("value").is_some_and(|value| {
+                            value.get("variant").and_then(Json::as_str) == Some("Note")
+                                && value.get("fields").and_then(Json::as_array).is_some_and(
+                                    |fields| {
+                                        fields.first().and_then(Json::as_str) == Some("gave_up")
+                                    },
+                                )
+                        })
+                })
+            })
+        },
+        || format!("{}\n{}", read(&journal), read(&host.stderr)),
+    );
     Live {
         failed,
         server,

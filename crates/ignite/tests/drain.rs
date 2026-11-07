@@ -40,6 +40,9 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const BUILD: Duration = common::SETUP;
 /// The longest a process killed and reaped takes to leave `/proc`.
 const GONE: Duration = Duration::from_secs(2);
+/// How long `assert_gone_fails_while_the_peer_holds_the_connection` reads
+/// from a peer that holds its connection open before `assert_gone` fails.
+const HELD: Duration = Duration::from_millis(200);
 const DESIGN: &str = "examples/terminal/terminal.design.ignite";
 /// The prompt as `std.protocol.telnet` sends it: the text, then IAC GA.
 const PROMPT: &[u8] = b"terminal> \xff\xf9";
@@ -194,8 +197,13 @@ impl Session {
     /// The session's peer is gone: the next read ends or the connection
     /// is reset; a read that times out with the connection open fails.
     fn assert_gone(&mut self) {
+        self.assert_gone_within(TIMEOUT);
+    }
+
+    /// [`Session::assert_gone`] with a read timeout of `limit`.
+    fn assert_gone_within(&mut self, limit: Duration) {
         self.stream
-            .set_read_timeout(Some(TIMEOUT))
+            .set_read_timeout(Some(limit))
             .expect("read timeout");
         let mut buffer = [0u8; 64];
         loop {
@@ -711,9 +719,10 @@ fn rollout_drains_the_old_process_and_starts_the_new_llvm() {
 /// Adversary (story `apply-test-deadlines`): `Session::assert_gone` must
 /// fail when the peer keeps the connection open and silent, the state a
 /// session descriptor leaked into the new generation leaves behind. Its
-/// read timeout returns `Err`, which the helper takes for "gone".
+/// read timeout returns `Err`, which the helper once took for "gone"; the
+/// read times out after [`HELD`], not [`TIMEOUT`].
 #[test]
-#[should_panic]
+#[should_panic(expected = "the session is not gone")]
 fn assert_gone_fails_while_the_peer_holds_the_connection() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
     let port = listener.local_addr().expect("port").port();
@@ -723,5 +732,46 @@ fn assert_gone_fails_while_the_peer_holds_the_connection() {
         stream,
         seen: Vec::new(),
     };
+    session.assert_gone_within(HELD);
+}
+
+/// Adversary pass 2 (story `apply-test-deadlines`): the legitimate close
+/// paths of a SIGKILLed peer still count as gone. A peer that closes with
+/// nothing unread sends FIN (`Ok(0)`).
+#[test]
+fn assert_gone_returns_when_the_peer_closes() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("port").port();
+    let stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+    let (peer, _) = listener.accept().expect("accept");
+    let mut session = Session {
+        stream,
+        seen: Vec::new(),
+    };
+    let started = std::time::Instant::now();
+    drop(peer);
     session.assert_gone();
+    assert!(started.elapsed() < Duration::from_secs(5));
+}
+
+/// Adversary pass 2: a peer that closes with bytes unread in its receive
+/// buffer (the old session's input not yet read when SIGKILL arrives)
+/// sends RST, after data the client has not read yet.
+#[test]
+fn assert_gone_returns_when_the_peer_resets_after_data() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("port").port();
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+    let (mut peer, _) = listener.accept().expect("accept");
+    peer.write_all(b"terminal> ").expect("peer write");
+    stream.write_all(b"echo unread\r\n").expect("client write");
+    std::thread::sleep(Duration::from_millis(100));
+    let mut session = Session {
+        stream,
+        seen: Vec::new(),
+    };
+    let started = std::time::Instant::now();
+    drop(peer);
+    session.assert_gone();
+    assert!(started.elapsed() < Duration::from_secs(5));
 }
