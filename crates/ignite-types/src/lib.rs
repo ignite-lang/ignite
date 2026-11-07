@@ -298,6 +298,19 @@ pub fn is_builtin_method(receiver: &Ty, name: &str) -> bool {
     builtins::method(receiver, name).is_some() || (matches!(receiver, Ty::List(_)) && name == "map")
 }
 
+/// The standard-library modules that the builtin methods of the
+/// substrate's streams and listener name, by method name (`stream.peer()`:
+/// `std.net`, `docs/slice.md` 26.1). A program can call such a method on a
+/// stream whose type it never names, so a module that calls one depends on
+/// the modules. Only names with at least one module are keys.
+pub fn builtin_method_std_modules() -> BTreeMap<&'static str, std::collections::BTreeSet<String>> {
+    ignite_check::BUILTIN_METHODS
+        .iter()
+        .map(|method| (*method, builtins::substrate_method_std_modules(method)))
+        .filter(|(_, modules)| !modules.is_empty())
+        .collect()
+}
+
 /// The three quantity types of `docs/slice.md` section 14.1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum QuantityKind {
@@ -804,6 +817,16 @@ pub enum Builtin {
     /// `Process.flush() -> Unit`: send what the calling task wrote (21.20);
     /// pure, as `log`.
     ProcessFlush,
+    /// `s.peer() -> std.net.Endpoint` on a `TcpStream`: the other end's
+    /// address and port; pure (`docs/slice.md` 26.1).
+    TcpStreamPeer,
+    /// `s.timed_out() -> Bool` on a `TcpStream`: whether the last read
+    /// ended because the idle timeout passed; effect `<root>.read` (26.2).
+    TcpStreamTimedOut,
+    /// `TcpStream.connect_within(address, port, timeout: Duration) ->
+    /// Result<TcpStream, IoError>`: `connect` bounded by `timeout`; effect
+    /// `net.connect` (26.3).
+    TcpStreamConnectWithin,
 }
 
 /// What a `Call` or `Method` expression calls.

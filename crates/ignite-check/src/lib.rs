@@ -164,6 +164,7 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Clock", "sleep"),
     ("Clock", "now"),
     ("Process", "flush"),
+    ("TcpStream", "connect_within"),
 ];
 
 /// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
@@ -184,6 +185,7 @@ pub const EFFECTFUL_METHODS: &[&str] = &[
     "received_batches",
     "write_urgent",
     "urgent_pending",
+    "timed_out",
 ];
 
 /// Every builtin method name (`docs/slice.md` sections 6, 7, 10 and 13).
@@ -237,6 +239,8 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "received_batches",
     "write_urgent",
     "urgent_pending",
+    "peer",
+    "timed_out",
 ];
 
 /// Free builtin functions.
@@ -307,6 +311,7 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Clock", "sleep", 1),
     ("Clock", "now", 0),
     ("Process", "flush", 0),
+    ("TcpStream", "connect_within", 3),
 ];
 
 /// Builtin statics that are effectful substrate operations.
@@ -323,6 +328,7 @@ const EFFECTFUL_STATICS: &[(&str, &str)] = &[
     ("Endpoint", "of"),
     ("Clock", "sleep"),
     ("Clock", "now"),
+    ("TcpStream", "connect_within"),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -355,13 +361,13 @@ impl EffectSig {
 }
 
 /// The effect a substrate method needs on the value it is called on, by
-/// method name: `read`, `received_batches` and `urgent_pending` need
+/// method name: `read`, `received_batches`, `urgent_pending` and `timed_out` need
 /// `<root>.read`, `write_all`, `write_urgent`, `set_idle_timeout` and
 /// `close` (which shuts down the write half) need `<root>.write`,
 /// `accept` needs `<root>.accept`.
 pub fn method_effect(method: &str) -> Option<&'static str> {
     match method {
-        "read" | "received_batches" | "urgent_pending" => Some("read"),
+        "read" | "received_batches" | "urgent_pending" | "timed_out" => Some("read"),
         "write_all" | "close" | "set_idle_timeout" | "write_urgent" => Some("write"),
         "accept" => Some("accept"),
         _ => None,
@@ -510,6 +516,7 @@ pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
         ("Clock", "sleep") => Some("clock.sleep"),
         ("Clock", "now") => Some("clock.read"),
         ("Endpoint", "of") => Some("process.args"),
+        ("TcpStream", "connect_within") => Some("net.connect"),
         _ => None,
     }
 }
@@ -4252,7 +4259,7 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
             "next_id" | "get" | "put" | "remove" | "values" | "update" | "upsert"
         ),
         "TcpListener" => matches!(method, "accept" | "local_port"),
-        "TcpStream" => is_stream_method(method),
+        "TcpStream" => is_stream_method(method) || matches!(method, "peer" | "timed_out"),
         "PipeStream" => is_stream_method(method) || method == "received_batches",
         "Map" => matches!(
             method,

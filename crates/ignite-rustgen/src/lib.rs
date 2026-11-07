@@ -4401,6 +4401,13 @@ impl<'a> Generator<'a> {
                     return format!("String::from_utf8_lossy({bytes}).into_owned()");
                 }
             }
+            Some(Callee::Builtin(Builtin::TcpStreamPeer)) => {
+                let endpoint = self.enum_name(&ignite_types::endpoint_name());
+                let r = self.receiver(receiver);
+                return format!(
+                    "{{ let (address, port) = {r}.peer(); {endpoint} {{ address, port }} }}"
+                );
+            }
             _ => {}
         }
         if let Some(owner) = self.qualifier(receiver)

@@ -93,6 +93,8 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         SettingValue => (Effect::Receiver("argument"), "value"),
         CommandLineArguments => (Effect::Receiver("argument"), "arguments"),
         EnvironmentGet => (Effect::Receiver("variable"), "get"),
+        TcpStreamTimedOut => (Effect::Receiver("read"), "timed_out"),
+        TcpStreamConnectWithin => (Effect::Ambient("net.connect"), "TcpStream.connect_within"),
         _ => return None,
     })
 }

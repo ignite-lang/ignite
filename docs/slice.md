@@ -417,6 +417,8 @@ A function without `requires` gets it added to its inferred set.
 | `TcpListener.bind(a, p)` | `net.listen` |
 | `TcpStream.connect(a, p)` | `net.connect` |
 | `f(a, ..)`, `a.f(..)`, `P.role(a, ..)`, called or spawned | each entry `q.op` of the callee's declared or inferred set whose `q` is a parameter of the callee becomes `r.op` for each root `r` of the argument passed for `q` (the receiver of `a.f(..)` is the first argument); every other entry (`stdin.read`) is needed unchanged |
+| `TcpStream.connect_within(a, p, t)` (26.3) | `net.connect` |
+| `x.timed_out()` (26.2) | `r.read` for each root `r` of `x` |
 
 `x.local_port()` is pure and needs nothing. `x.set_idle_timeout(ms)` needs `r.write`; the
 `Store` methods, calls of values of effectful fn type and `x.*` are in section 11.7.
@@ -9438,3 +9440,96 @@ executable. Before, a sibling module was built into the test executable with its
   `Int`, on literal operands and on operands read from text, `None` past a bound and `Some`
   within it; `int_checked` of `fixtures/eval_equivalence.ignite` prints the same in the
   evaluator and on both targets.
+
+## 26 Peer address, timed-out reads and connect timeouts
+
+**Status: implemented on `story:pusher-net-builtins`.**
+
+Sources: `docs/research/pusher-gaps.md` G1, G4 and G5 (the pusher written in Ignite);
+`docs/friction.md` rows 60, 63 and 64. Three builtins of `TcpStream`, all additive: `read`,
+`Input` and `connect` keep their meaning, and no `match` on `Input` gains a variant.
+
+| Ignite | type | effect | builtin |
+|---|---|---|---|
+| `s.peer()` | `Endpoint` (`std.net`) | none | `TcpStreamPeer` |
+| `s.timed_out()` | `Bool` | `r.read` for each root `r` of `s` | `TcpStreamTimedOut` |
+| `TcpStream.connect_within(address, port, timeout)` | `(Text, Int, Duration) -> Result<TcpStream, IoError>` | `net.connect` | `TcpStreamConnectWithin` |
+
+The names are `ignite_check::BUILTIN_METHODS` (`peer`, `timed_out`) and `BUILTIN_STATICS`
+(`connect_within`, arity 3), so on a `TcpStream` receiver the builtin wins over a user fn of the
+same name (13, row 5). They are not `ByteStream` methods: a `PipeStream` and a
+`ByteStream`-bounded receiver have none of them. Being builtin method names, `peer` and
+`timed_out` cannot be called as fn-typed record fields: `hooks.peer(1)` is E041, as
+`hooks.local_port(1)` already is.
+
+### 26.1 `peer`
+
+`s.peer()` is the other end of the connection: `Endpoint { address, port }`, the address as
+text the way its family writes it (`127.0.0.1`, `::1`, `fe80::1`; no brackets, no zone). An
+IPv4 peer of an IPv6 socket (`::ffff:a.b.c.d`) is written as IPv4. The substrate reads it once,
+when `accept` or `connect` made the stream (`getpeername`), so `peer` never fails, never waits,
+and stays the same after `close` and after the peer went away. A stream whose address the
+operating system could not report then has `Endpoint { address = "", port = 0 }`.
+
+A module that calls `peer` depends on `std.net` for `Endpoint`'s fields without importing it:
+`ignite_types::builtin_method_std_modules` names the modules of the builtin methods of
+`TcpStream`, `TcpListener` and `PipeStream`, and the loader's walk of a module's expressions
+(`module_dependencies` in `crates/ignite/src/lib.rs`) adds them for every method call of that
+name, one inside an interpolation included. The token scan of 16.22 does not see a call inside
+an interpolation, and it would load `std.net` for any binding named `peer`.
+
+### 26.2 `timed_out`
+
+A read that waited longer than the idle timeout (`set_idle_timeout`, 11.5) still returns `Eof`.
+`s.timed_out()` holds when the last read of the stream returned because the idle timeout
+passed, and not when the peer closed or data arrived. Every read sets it anew, on any handle of
+the stream (a clone shares it); it is false before the first read. With two tasks reading one
+stream, "last" is the read that ended last: the flag is set under the stream's read lock from
+that read's own outcome. It never fails and never waits; on the LLVM target
+a handle that is no stream gives false.
+
+```ignite
+match stream.read(4096)? {
+  Data(bytes) => handle(bytes)
+  Eof => if stream.timed_out() { ping(stream)? } else { return Ok(()) }
+}
+```
+
+### 26.3 `connect_within`
+
+`TcpStream.connect_within(address, port, timeout)` is `connect` that gives up after `timeout`.
+Each address the name resolves to is tried in turn with the time that is left; resolving the
+name itself is not bounded. Past the deadline the error is `connect <address>:<port>: <the
+operating system's message>` (`connection timed out`, exit code 1); a `timeout` that is not
+positive is refused before any attempt with `connect <address>:<port>: the timeout must be
+positive`. `connect(address, port)` keeps waiting for the kernel's retries.
+
+### 26.4 Lowering
+
+| layer | `peer` | `timed_out` | `connect_within` |
+|---|---|---|---|
+| `ignite-io` | `TcpStream::peer(&self) -> (String, i64)` | `TcpStream::timed_out(&self) -> bool` | `TcpStream::connect_within(String, i64, i64 ns)` |
+| Rust target | `{ let (address, port) = s.peer(); Endpoint { address, port } }` | `s.timed_out()` | `::ignite_io::TcpStream::connect_within(a, p, t)` |
+| LLVM runtime | `void ignite_rt_tcp_peer(Endpoint* out, i64 stream)`, the address in the task's arena | `i8 ignite_rt_tcp_timed_out(i64 stream)` | `i32 ignite_rt_tcp_connect_within(Text* address, i64 port, i64 timeout_ns, i64* out, IoError* err)` |
+| LLVM target | `rt_out` into an `Endpoint` temporary | the `i8` compared with 0 | `rt_result` as `tcp_connect`; the binding owns the stream as one of `connect` (`own.rs`) |
+| evaluator | no value at compile time, as every stream builtin | same | same |
+
+`CODEGEN_REVISION` is `ignite-codegen/0.1.0-40`.
+
+### 26.5 Tests
+
+- `std/net.ignite`: three inline tests over loopback on both targets (`task test-ignite`): the
+  peer of both ends in IPv4 and IPv6 and after `close`; a timed-out `Eof` against a closed one;
+  `connect_within` to `10.255.255.1:80` failing with `connection timed out` after 180 to 300 ms
+  of a 200 ms timeout, and to a loopback listener succeeding.
+- `pusher_net::{rust,llvm}::*` (`crates/ignite/tests/pusher_net.rs`,
+  `fixtures/pusher_net/`): G1, G4 and G5 with these names, built and run as processes. The
+  server logs the address and port the test's client connected from; the two reads of G4 log
+  `Eof timed_out=true` and `Eof timed_out=false`; G5 logs `connection timed out` after 480 to
+  600 ms of a 500 ms timeout.
+- `pusher_net::{rust,llvm}::adversary_edges_pass` runs the eight inline tests of
+  `fixtures/pusher_net/adversary.ignite` (the review's edges) on each target.
+- `ignite-io` `tcp::peer_is_the_other_end_in_both_families`,
+  `tcp::timed_out_tells_an_idle_timeout_from_a_close`, `tcp::connect_within_bounds_the_wait`;
+  `ignite-rt` `abi::peer_timed_out_and_connect_within`; `ignite-types`
+  `builtins::tests::substrate_methods_name_net_for_peer`.
