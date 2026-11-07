@@ -24,6 +24,12 @@ use ignite_eval::Json;
 use crate::common;
 use crate::common::apply::{BUILD, LIVE};
 
+/// Row 17's bound on the restart after a SIGKILL of the server, which the
+/// test asserts and keeps; alone it takes 0.44 to 0.53 s (2 runs,
+/// 2026-11-07). The other deadlines of this file are [`LIVE`] and
+/// [`BUILD`].
+const RESTART: Duration = Duration::from_secs(10);
+
 const FAULT: &str = "IGNITE_DEBUG_HOST_FAULT";
 const SERVER: &str = "TodoService.server";
 const CONTRACT: &str = "TodoService.reachable";
@@ -884,8 +890,8 @@ fn todo_survives_sigkill_and_a_rollout() {
     assert!(ready);
     kill(old, nix::sys::signal::Signal::SIGKILL);
     until(
-        "another server pid ready within 10 s",
-        Duration::from_secs(10),
+        &format!("another server pid ready within {RESTART:?}"),
+        RESTART,
         || {
             flow.status()
                 .and_then(|status| server(&status))

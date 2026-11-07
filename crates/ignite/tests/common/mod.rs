@@ -47,6 +47,15 @@ impl Target {
     }
 }
 
+/// The ceiling of an `ignite run`'s setup, its build included. The Rust
+/// target builds with cargo into `run-cargo`, the target directory every
+/// `run::` and `drain::` test shares, so the wait queues behind the other
+/// tests' builds on cargo's lock; a loaded gate held it past the former
+/// 60 s (`run::exhausted_restarts_give_up_and_stop_exits_1`, 2026-11-07).
+/// Alone that test takes 0.27 to 3.79 s whole, the cold build included
+/// (5 runs, 2026-11-07). The same ceiling as [`apply::BUILD`].
+pub const SETUP: Duration = apply::BUILD;
+
 /// Setup includes compilation and build-lock waits. The first stdout segment
 /// follows build/copy completion; the on-disk journal header can precede it.
 /// Return the original line for the caller's normal record consumption, after
@@ -55,9 +64,11 @@ pub fn wait_run_initial_segment(
     lines: &Receiver<String>,
     stderr: impl FnOnce() -> String,
 ) -> String {
-    const SETUP_TIMEOUT: Duration = Duration::from_secs(60);
-    let line = lines.recv_timeout(SETUP_TIMEOUT).unwrap_or_else(|error| {
-        panic!("ignite run setup did not produce a segment within {SETUP_TIMEOUT:?}: {error}\nstderr:\n{}", stderr())
+    let line = lines.recv_timeout(SETUP).unwrap_or_else(|error| {
+        panic!(
+            "ignite run setup did not produce a segment within {SETUP:?}: {error}\nstderr:\n{}",
+            stderr()
+        )
     });
     let record = Json::parse(&line).unwrap_or_else(|error| panic!("{line}: {error}"));
     assert_eq!(

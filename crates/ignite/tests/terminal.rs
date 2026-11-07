@@ -16,7 +16,13 @@ use std::time::{Duration, Instant};
 
 use crate::common::Target;
 
-const TIMEOUT: Duration = Duration::from_secs(5);
+/// The deadline of this file: the longest a test waits for a line, a
+/// read, a connection or an exit, each a ceiling on a wait that returns at
+/// its event. Alone `llvm::a_task_that_cannot_start_closes_only_its_connection`
+/// takes 0.26 to 0.64 s whole, the cold build included (5 runs,
+/// 2026-11-07); it failed loaded gates of that day under the former 5 s,
+/// its server started under `systemd-run --user --scope`.
+const TIMEOUT: Duration = Duration::from_secs(30);
 /// The prompt as `terminald` sends it: the text, then IAC GA (RFC 854 p5).
 const PROMPT: &[u8] = b"terminal> \xff\xf9";
 /// The prompt as `tn` prints it: the Go Ahead is a command, not text.

@@ -26,8 +26,20 @@ use nix::unistd::Pid;
 
 use crate::common;
 
-/// The longest a test waits for one line, record or exit.
-const TIMEOUT: Duration = Duration::from_secs(15);
+// The deadlines of this file. Each is a ceiling on a wait that returns at
+// its event. Alone, `rollout_drains_the_old_process_and_starts_the_new_rust`
+// takes 1.07 to 1.88 s whole and its `_llvm` twin 1.08 to 1.64 s, the cold
+// builds included (5 runs each, 2026-11-07); both failed loaded gates of
+// that day under the former 15 s.
+
+/// The longest a test waits for one line, record, read or exit.
+const TIMEOUT: Duration = Duration::from_secs(60);
+/// The longest the rollout's `Build` waits for `Built`: the Rust target
+/// builds with cargo in `run-cargo`, shared with `run::`, and queues on
+/// its lock as the run's setup does ([`common::SETUP`]).
+const BUILD: Duration = common::SETUP;
+/// The longest a process killed and reaped takes to leave `/proc`.
+const GONE: Duration = Duration::from_secs(2);
 const DESIGN: &str = "examples/terminal/terminal.design.ignite";
 /// The prompt as `std.protocol.telnet` sends it: the text, then IAC GA.
 const PROMPT: &[u8] = b"terminal> \xff\xf9";
@@ -143,7 +155,7 @@ impl Session {
         let stream = TcpStream::connect(("127.0.0.1", port))
             .unwrap_or_else(|e| panic!("connect to {port}: {e}"));
         stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
+            .set_read_timeout(Some(TIMEOUT))
             .expect("read timeout");
         let mut session = Session {
             stream,
@@ -401,11 +413,23 @@ impl Run {
         self.stdin.flush().expect("flush control line");
     }
 
-    /// Consume records until one satisfies `predicate`; that record.
+    /// Consume records until one satisfies `predicate`, within [`TIMEOUT`];
+    /// that record.
     fn wait_for(&mut self, what: &str, predicate: impl Fn(&Json) -> bool) -> Json {
+        self.wait_within(what, TIMEOUT, predicate)
+    }
+
+    /// Consume records until one satisfies `predicate`, within `limit`;
+    /// that record.
+    fn wait_within(
+        &mut self,
+        what: &str,
+        limit: Duration,
+        predicate: impl Fn(&Json) -> bool,
+    ) -> Json {
         let started = Instant::now();
         loop {
-            let left = TIMEOUT.saturating_sub(started.elapsed());
+            let left = limit.saturating_sub(started.elapsed());
             let line = match self
                 .pending_initial
                 .take()
@@ -414,7 +438,7 @@ impl Run {
             {
                 Ok(line) => line,
                 Err(RecvTimeoutError::Timeout) => panic!(
-                    "no {what} within {TIMEOUT:?}; seen {} records, the last {:?}\nstderr:\n{}",
+                    "no {what} within {limit:?}; seen {} records, the last {:?}\nstderr:\n{}",
                     self.seen.len(),
                     self.seen.last().map(Json::compact),
                     self.stderr()
@@ -551,7 +575,7 @@ fn at_ns(record: &Json) -> i64 {
         .unwrap_or_else(|| panic!("no at in {}", record.compact()))
 }
 
-/// The process of `pid` is gone or a zombie, within 2 s.
+/// The process of `pid` is gone or a zombie, within [`GONE`].
 fn assert_no_process(pid: i64) {
     let proc_dir = PathBuf::from(format!("/proc/{pid}"));
     let started = Instant::now();
@@ -564,7 +588,7 @@ fn assert_no_process(pid: i64) {
             return;
         }
         assert!(
-            started.elapsed() < Duration::from_secs(2),
+            started.elapsed() < GONE,
             "pid {pid} is still alive:\n{status}"
         );
         std::thread::sleep(Duration::from_millis(20));
@@ -594,7 +618,9 @@ fn rollout_drains_and_restarts(target: &str) {
     run.send("rollout Terminal.server");
     let build = run.wait_effect(ROLLOUT, "Build");
     assert_eq!(effect_fields(&build)[0].as_str(), Some("Terminal.server"));
-    let built = run.wait_event(ROLLOUT, "Built");
+    let built = run.wait_within("event Built of the rollout", BUILD, |r| {
+        machine(r) == ROLLOUT && event_variant(r) == Some("Built")
+    });
     let generation = event_fields(&built)[0].as_i64().unwrap_or(0);
     assert!(generation >= 2, "{}", built.compact());
     let term = run.wait_effect(ROLLOUT, "Kill");
