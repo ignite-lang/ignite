@@ -206,7 +206,8 @@ pub enum Ty {
     SystemRef,
     /// `Protocol`: the value of a protocol name (`endpoint(Echo)`).
     Protocol,
-    /// `Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting` or `CommandLine`
+    /// `Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`, `CommandLine` or
+    /// `Environment`
     /// (`docs/slice.md` 21.3): a handle like `TcpListener`, passed in values.
     Capability(Capability),
 }
@@ -226,17 +227,20 @@ pub enum Capability {
     Setting,
     /// The whole command line of the executable (21.19).
     CommandLine,
+    /// The environment variables of the executable (21.20).
+    Environment,
 }
 
 impl Capability {
     /// Every capability, in the order of 21.8.
-    pub const ALL: [Capability; 6] = [
+    pub const ALL: [Capability; 7] = [
         Capability::Directory,
         Capability::Launcher,
         Capability::ChildProcess,
         Capability::Entropy,
         Capability::Setting,
         Capability::CommandLine,
+        Capability::Environment,
     ];
 
     /// The type name.
@@ -248,6 +252,7 @@ impl Capability {
             Capability::Entropy => "Entropy",
             Capability::Setting => "Setting",
             Capability::CommandLine => "CommandLine",
+            Capability::Environment => "Environment",
         }
     }
 
@@ -786,6 +791,19 @@ pub enum Builtin {
     CommandLineOf,
     /// `c.arguments() -> List<Text>`; `<root>.argument`.
     CommandLineArguments,
+    /// `Environment.of(entries) -> Environment`: test-only (21.20).
+    EnvironmentOf,
+    /// `e.get(name) -> Option<Text>`; `<root>.variable`.
+    EnvironmentGet,
+    /// `Clock.sleep(d: Duration) -> Unit`: flush the task's writes, then
+    /// block it for `d` (21.20); effect `clock.sleep`.
+    ClockSleep,
+    /// `Clock.now() -> Duration`: the wall clock since
+    /// 1970-01-01T00:00:00Z (21.20); effect `clock.read`.
+    ClockNow,
+    /// `Process.flush() -> Unit`: send what the calling task wrote (21.20);
+    /// pure, as `log`.
+    ProcessFlush,
 }
 
 /// What a `Call` or `Method` expression calls.

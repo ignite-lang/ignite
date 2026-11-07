@@ -1,0 +1,1 @@
+e051_environment_of.ignite:2:33: error[E051]: `Environment.of()` is test-only; a program's capabilities are `resource`s
