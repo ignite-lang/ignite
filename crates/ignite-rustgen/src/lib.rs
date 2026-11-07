@@ -6273,13 +6273,11 @@ fn lower_store(resource: &ResourceDecl, diagnostics: &mut Vec<Diagnostic>) -> Op
         ));
     }
     (diagnostics.len() == before).then(|| {
-        rust_type(&Type {
-            name: resource.kind.clone(),
-            args: resource.args.clone(),
-            span: resource.kind.span,
-            fn_names: Vec::new(),
-            requires: None,
-        })
+        rust_type(&Type::named(
+            resource.kind.clone(),
+            resource.args.clone(),
+            resource.kind.span,
+        ))
     })
 }
 

@@ -20,7 +20,7 @@ fn id(name: &str) -> Ident {
 }
 
 fn ex(kind: ExprKind) -> Expr {
-    Expr { kind, span: sp() }
+    Expr::new(kind, sp())
 }
 
 fn name(n: &str) -> Expr {
@@ -133,7 +133,7 @@ fn match_(scrutinee: Expr, arms: Vec<(Pattern, Expr)>) -> Expr {
 }
 
 fn pat(kind: PatternKind) -> Pattern {
-    Pattern { kind, span: sp() }
+    Pattern::new(kind, sp())
 }
 
 fn pvariant(path: &[&str], args: Vec<Pattern>) -> Pattern {
@@ -180,6 +180,7 @@ fn ret(value: Expr) -> Stmt {
 fn assign(base: &str, fields: &[&str], value: Expr) -> Stmt {
     st(StmtKind::Assign {
         target: Place {
+            id: NodeId::fresh(),
             base: id(base),
             fields: fields.iter().map(|f| id(f)).collect(),
             span: sp(),
@@ -190,6 +191,7 @@ fn assign(base: &str, fields: &[&str], value: Expr) -> Stmt {
 
 fn ty(n: &str) -> Type {
     Type {
+        id: NodeId::fresh(),
         name: id(n),
         args: Vec::new(),
         span: sp(),
@@ -200,6 +202,7 @@ fn ty(n: &str) -> Type {
 
 fn ty_of(n: &str, args: Vec<Type>) -> Type {
     Type {
+        id: NodeId::fresh(),
         name: id(n),
         args,
         span: sp(),
@@ -382,6 +385,7 @@ fn symbols_for(program: &Program) -> Symbols {
 fn program(decls: Vec<Decl>) -> Program {
     Program {
         package: Some(Path {
+            id: NodeId::fresh(),
             segments: vec![id("examples"), id("demo")],
             span: sp(),
         }),
@@ -1180,6 +1184,7 @@ fn prop(n: &str, value: Expr, start: usize) -> FieldInit {
             span: Span::new(start, start + n.len()),
         },
         value: Expr {
+            id: NodeId::fresh(),
             span: Span::new(start + 100, start + 101),
             kind: value.kind.clone(),
         },
@@ -1303,6 +1308,7 @@ fn e020_components_without_types() {
 fn import(path: &[&str], names: &[&str]) -> Import {
     Import {
         path: Path {
+            id: NodeId::fresh(),
             segments: path.iter().map(|s| id(s)).collect(),
             span: sp(),
         },
@@ -1527,6 +1533,7 @@ fn spawn_lowering() {
 fn generate_std_nests_modules() {
     let console = Program {
         package: Some(Path {
+            id: NodeId::fresh(),
             segments: vec![id("std"), id("console")],
             span: sp(),
         }),
@@ -1535,6 +1542,7 @@ fn generate_std_nests_modules() {
     };
     let telnet = Program {
         package: Some(Path {
+            id: NodeId::fresh(),
             segments: vec![id("std"), id("protocol"), id("telnet")],
             span: sp(),
         }),
