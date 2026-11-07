@@ -9,7 +9,7 @@ scope:
   path: crates/ignite-check/src/lib.rs
 - confidence: inferred
   path: crates/ignite-types/src
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 3}
@@ -18,7 +18,7 @@ transitions:
 
 ## Outcome
 
-A user fn whose name equals a builtin method of its first parameter's type (`set` on `List<T>`) is accepted; only a method-syntax call that would resolve to the builtin is refused or warned, and a plain call `set(o, k, v)` calls the user fn on both targets.
+A user fn whose name equals a builtin method of its first parameter's type (`set` on `List<T>`) is accepted: method syntax on that type still calls the builtin, and a plain call `set(o, k, v)` calls the user fn on both targets.
 
 ## Context
 
