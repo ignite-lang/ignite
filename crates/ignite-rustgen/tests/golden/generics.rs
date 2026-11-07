@@ -87,7 +87,7 @@ pub fn number(line: &String, command: &String) -> ::std::option::Option<i64> {
     }
 }
 
-pub fn respond(counts: ::ignite_io::Store<i64>, line: &String) -> String {
+pub fn respond(mut counts: ::ignite_io::Store<i64>, line: &String) -> String {
     if (*line) == String::from("new") {
         let id = counts.next_id();
         counts.put(id.clone(), 0);

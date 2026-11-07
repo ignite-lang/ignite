@@ -928,7 +928,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E003 | unknown name; also wrong arity of a call (a UFCS call counts the receiver), `log` used as a value, a constant with payload patterns, an associated fn whose owner is no record or enum of the module (section 13.8) |
 | E004 | duplicate definition, including a declaration named like a builtin or `Tuple`, a role or record field declared twice, an associated fn declared twice or named like a variant of its owner, and a closure parameter repeated |
 | E005 | ambiguous bare variant (section 4); reported by the type checker since slice 6 |
-| E006 | assignment to an immutable binding or a constant; since slice 9 also `push`, `append` or `clear` (since 25.4 also `set` and `l[i] = v`) through a `let`, a `for` element or a pattern binding, on `x.to_bytes()`, or on a binding a closure captured (section 13.11) |
+| E006 | assignment to an immutable binding or a constant; since slice 9 also `push`, `append` or `clear` (since 25.4 also `set` and `l[i] = v`) through a `let`, a `for` element or a pattern binding, on `x.to_bytes()`, or on a place rooted at a binding a closure captured (section 13.11; since story:shared-ownership-analysis also `put` and `remove` on a `Map` and a field, index or tuple field of a capture, 20.3.3) |
 | E010 | effectful call or `spawn` in a pure context: a constant's value or a field default (section 5) |
 | E011 | retired in slice 6 (was: effectful call not awaited) |
 | E012 | retired in slice 6 (was: `await` on a pure call) |
@@ -6915,10 +6915,22 @@ not. A handle loop's `a.state = a.handle(a.state, i)` moves `a.state`: the recei
 A parameter `p` is consumed when either holds:
 
 - its fn changes it in place on some path: an assignment to `p` or a place rooted at it, or a
-  `push`, `append`, `clear` (`List`, `Bytes`), `put` or `remove` (`Map`) through a place rooted
-  at it. This set is the union of what `region::mutates` (LLVM) and `mutates_receiver` with
-  `mutated_names` (Rust) count today, which the analysis replaces; `consumed` must be a superset
-  of both, so that no parameter the backends own today becomes borrowed;
+  `push`, `set`, `append`, `clear` (`List`, `Bytes`), `put` or `remove` (`Map`) or a `Store`
+  mutator through a place rooted at it. The builtins that change their receiver are one table,
+  `ignite_check::IN_PLACE` (receiver type, method, and whether the call changes the value or
+  the state behind a `Store` handle), which the checker reads for E006 and
+  `ignite_types::ownership` resolves to builtins; the names a body changes
+  (`ownership::changed_in_block`) and the variable a receiver is rooted at
+  (`ownership::place_root`, `memory_root`) are decided there once, for this analysis and both
+  backends (story:shared-ownership-analysis replaced LLVM's `region::modified` and
+  `region::root` and Rust's `mutated_names`, which disagreed). The names are counted widely, an
+  extra copy and never a missed one: through every expression a backend lowers to a pointer
+  into its operand (`?`, `await`, `at`, a block's result), closure bodies included, and for a
+  method named `push`, `set`, `append` or `clear` whatever its callee. An in-place builtin
+  itself changes a variable only through a place (a name, field, index or tuple field); through
+  `xs.at(0)` or `o?` it changes a copy on both targets, and inside a closure it may not change
+  a place rooted at a capture (E006: from the checker where it can tell the receiver's type, else
+  from the type checker once the callee is resolved, so a user fn named `push` is never refused);
 - its fn moves `p` or a place rooted at it (`p.items`) on every path that reaches a `return`, a
   `?` exit or the end of the body (any move position of 20.3.1, including passing it on to a
   consumed parameter and returning it).

@@ -35,7 +35,7 @@ impl Greeter {
 }
 
 #[allow(non_snake_case)]
-pub fn Greeter__main(self_: Greeter) -> ::std::result::Result<(), ::ignite_io::IoError> {
+pub fn Greeter__main(mut self_: Greeter) -> ::std::result::Result<(), ::ignite_io::IoError> {
     let stream = (self_.listener.accept())?;
     let id = self_.seen.next_id();
     self_.seen.put(id.clone(), self_.banner.text.clone());

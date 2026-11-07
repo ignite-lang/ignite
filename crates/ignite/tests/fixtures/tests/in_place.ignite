@@ -1,0 +1,43 @@
+package fixtures.in_place
+
+// An in-place builtin changes the variable only through a place rooted
+// at it: a name, a field, an index or a tuple field (`docs/slice.md`
+// 20.3.3, `ignite_types::ownership`). Through `at`, `?` or any other
+// value the change goes to a copy, on both targets
+// (crates/ignite/tests/ignite_test.rs `in_place_changes_on_both_targets`).
+
+type Holder { items: List<Int> }
+
+fn through_try() -> Result<List<Int>, Text> {
+  var o: Result<List<Int>, Text> = Ok([1])
+  o?.push(2)
+  o
+}
+
+test "a push through at changes a copy" {
+  var xs = [[1], [2]]
+  xs.at(0).push(9)
+  assert xs == [[1], [2]]
+}
+
+test "a push on a field of at changes a copy" {
+  var hs = [Holder { items = [1] }]
+  hs.at(0).items.push(9)
+  assert hs[0].items == [1]
+}
+
+test "a push through try changes a copy" {
+  assert through_try() == Ok([1])
+}
+
+test "a put through at changes a copy" {
+  var ms: List<Map<Text, Int>> = [Map.empty()]
+  ms.at(0).put("a", 1)
+  assert ms[0].len() == 0
+}
+
+test "a push through an index changes the variable" {
+  var xs = [[1], [2]]
+  xs[0].push(9)
+  assert xs == [[1, 9], [2]]
+}

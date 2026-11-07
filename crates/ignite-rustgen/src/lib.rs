@@ -54,6 +54,7 @@ use ignite_syntax::ast::{
     ResourceDecl, Span, Stmt, StmtKind, SystemDecl, TestDecl, Type, UnaryOp,
 };
 use ignite_syntax::diagnostic::{Diagnostic, SourceFile};
+use ignite_types::ownership;
 use ignite_types::{
     BraceKind, Builtin, Callee, ExecutableInfo, FailureSite, QualName, QuantityKind, Show,
     TestInfo, TestTry, Ty, TypedProgram,
@@ -2103,7 +2104,7 @@ impl<'a> Generator<'a> {
             return false;
         }
         let mut mutated = BTreeSet::new();
-        mutated_names(body, self.types, &mut mutated);
+        mutated.extend(ownership::changed_in_block(body, self.types));
         !mutated.contains(name) && place_root(iter).is_some_and(|root| !mutated.contains(root))
     }
 
@@ -2135,7 +2136,7 @@ impl<'a> Generator<'a> {
         let mut modified = vec![BTreeSet::new(); args.len()];
         for (index, arg) in args.iter().enumerate().rev() {
             modified[index] = later.clone();
-            mutated_in(arg, self.types, &mut later);
+            later.extend(ownership::changed_in(arg, self.types));
         }
         args.iter()
             .zip(modified)
@@ -2728,7 +2729,7 @@ impl<'a> Generator<'a> {
     /// every other fn takes them by reference (section 6, parameters).
     fn function_line(&mut self, w: &mut Writer, decl: &FnDecl, spaced: bool, role: bool) {
         let mut mutated = BTreeSet::new();
-        mutated_names(&decl.body, self.types, &mut mutated);
+        mutated.extend(ownership::changed_in_block(&decl.body, self.types));
         let mut prologue = Vec::new();
         self.borrowed.clear();
         self.type_params = decl.type_params.iter().map(|p| p.name.clone()).collect();
@@ -2746,14 +2747,14 @@ impl<'a> Generator<'a> {
                     return format!("mut {name}: {ty}");
                 }
                 if self.consumes(callee.as_ref(), index) {
-                    let mutability = if mutated.contains(&p.name.name) {
+                    let mutability = if mutated.contains(p.name.name.as_str()) {
                         "mut "
                     } else {
                         ""
                     };
                     return format!("{mutability}{name}: {ty}");
                 }
-                if mutated.contains(&p.name.name) || self.is_copy(&p.ty) {
+                if mutated.contains(p.name.name.as_str()) || self.is_copy(&p.ty) {
                     prologue.push(format!("let mut {name} = {name}.clone();"));
                 } else {
                     self.borrowed.insert(p.name.name.clone());
@@ -3341,7 +3342,7 @@ impl<'a> Generator<'a> {
                 let mut modified = vec![BTreeSet::new(); parts.len()];
                 for (index, part) in parts.iter().enumerate().rev() {
                     modified[index] = later.clone();
-                    mutated_in(part, self.types, &mut later);
+                    later.extend(ownership::changed_in(part, self.types));
                 }
                 let mut template = String::new();
                 let mut texts = Vec::new();
@@ -3417,7 +3418,7 @@ impl<'a> Generator<'a> {
     fn format_part(
         &mut self,
         part: &Expr,
-        modified: &BTreeSet<String>,
+        modified: &BTreeSet<&str>,
         template: &mut String,
         args: &mut Vec<String>,
     ) {
@@ -3458,7 +3459,7 @@ impl<'a> Generator<'a> {
     }
 
     /// `expr` is a place rooted at one of `names`.
-    fn place_in(&self, expr: &Expr, names: &BTreeSet<String>) -> bool {
+    fn place_in(&self, expr: &Expr, names: &BTreeSet<&str>) -> bool {
         self.is_place(expr) && place_root(expr).is_some_and(|root| names.contains(root))
     }
 
@@ -3901,7 +3902,7 @@ impl<'a> Generator<'a> {
         if self.field_of_element(expr) && !self.element_clone(expr).is_empty() {
             let mut changed = BTreeSet::new();
             if let Some(later) = later {
-                mutated_in(later, self.types, &mut changed);
+                changed.extend(ownership::changed_in(later, self.types));
             }
             if self
                 .element_root(expr)
@@ -4146,7 +4147,7 @@ impl<'a> Generator<'a> {
         }
         let mut modified = BTreeSet::new();
         for arg in args {
-            mutated_in(arg, self.types, &mut modified);
+            modified.extend(ownership::changed_in(arg, self.types));
         }
         if !modified.is_empty() {
             return None;
@@ -4279,7 +4280,9 @@ impl<'a> Generator<'a> {
             Some(Callee::Builtin(Builtin::ListSet)) => {
                 return self.indexed_mutation(expr, receiver, name, args);
             }
-            _ if mutates_receiver(expr, &name.name, self.types) && self.indexed_place(receiver) => {
+            _ if ownership::changes_value(expr, &name.name, self.types)
+                && self.indexed_place(receiver) =>
+            {
                 return self.indexed_mutation(expr, receiver, name, args);
             }
             Some(Callee::Builtin(builtin @ (Builtin::ListAt | Builtin::ListSlice)))
@@ -4294,7 +4297,7 @@ impl<'a> Generator<'a> {
                 }
                 let mut modified = BTreeSet::new();
                 for arg in args {
-                    mutated_in(arg, self.types, &mut modified);
+                    modified.extend(ownership::changed_in(arg, self.types));
                 }
                 let list = if self.is_place(receiver)
                     && place_root(receiver).is_some_and(|root| modified.contains(root))
@@ -4559,7 +4562,7 @@ impl<'a> Generator<'a> {
         }
         let mut mutated = BTreeSet::new();
         for arm in arms {
-            mutated_in(&arm.body, self.types, &mut mutated);
+            mutated.extend(ownership::changed_in(&arm.body, self.types));
         }
         !mutated.contains(root)
     }
@@ -5613,13 +5616,13 @@ impl<'a> Generator<'a> {
             }
         }
         let mut mutated = BTreeSet::new();
-        mutated_in(&closure.body, self.types, &mut mutated);
+        mutated.extend(ownership::changed_in(&closure.body, self.types));
         let params: Vec<String> = closure
             .params
             .iter()
             .enumerate()
             .map(|(i, p)| {
-                let mutability = if mutated.contains(&p.name.name) {
+                let mutability = if mutated.contains(p.name.name.as_str()) {
                     "mut "
                 } else {
                     ""
@@ -5899,56 +5902,6 @@ fn and_all(tests: Vec<String>) -> String {
     }
 }
 
-/// Builtin methods that change their receiver in place.
-const MUTATING_METHODS: &[&str] = &["push", "set", "append", "clear"];
-
-/// The names a block may change in place: the base of every assignment
-/// and the root of every receiver of a [`MUTATING_METHODS`] call. A name
-/// shadowed by a binding still counts, so the answer can only be too
-/// large; a parameter outside the set is never changed by the body.
-fn mutated_names(block: &Block, types: Option<&TypedProgram>, out: &mut BTreeSet<String>) {
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            StmtKind::ForPattern { iter, body, .. } => {
-                mutated_in(iter, types, out);
-                mutated_names(body, types, out);
-            }
-            StmtKind::LetPattern { value, .. } | StmtKind::Let { value, .. } => {
-                mutated_in(value, types, out);
-            }
-            StmtKind::Assign { target, value } => {
-                out.insert(target.base.name.clone());
-                mutated_in(value, types, out);
-            }
-            StmtKind::Return(value) => {
-                if let Some(value) = value {
-                    mutated_in(value, types, out);
-                }
-            }
-            StmtKind::While { cond, body } => {
-                mutated_in(cond, types, out);
-                mutated_names(body, types, out);
-            }
-            StmtKind::Loop { body } => mutated_names(body, types, out),
-            StmtKind::For { iter, body, .. } => {
-                mutated_in(iter, types, out);
-                mutated_names(body, types, out);
-            }
-            StmtKind::Break | StmtKind::Continue => {}
-            StmtKind::Expr(expr) => mutated_in(expr, types, out),
-            StmtKind::Assert { cond, message } => {
-                mutated_in(cond, types, out);
-                if let Some(message) = message {
-                    mutated_in(message, types, out);
-                }
-            }
-        }
-    }
-}
-
-/// Whether the method call `expr` named `name` changes its receiver in
-/// place: a [`MUTATING_METHODS`] name, or `put` and `remove` on a `Map`
-/// (known from the types; `Store` has the same names and is a handle).
 /// The fields of `std.process.Invocation` and `std.process.ChildExit` in
 /// declaration order, as `ignite_io::Invocation` and
 /// `ignite_io::ChildExit` name them (`docs/slice.md` 21.5).
@@ -5985,98 +5938,6 @@ fn record_from_substrate(record: &str, value: &str) -> String {
         .map(|f| format!("{}: {value}.{f}", ident(f)))
         .collect();
     format!("{record} {{ {} }}", fields.join(", "))
-}
-
-fn mutates_receiver(expr: &Expr, name: &str, types: Option<&TypedProgram>) -> bool {
-    if MUTATING_METHODS.contains(&name) {
-        return true;
-    }
-    matches!(
-        types.and_then(|t| t.callee(expr)),
-        Some(Callee::Builtin(Builtin::MapPut | Builtin::MapRemove))
-    )
-}
-
-fn mutated_in(expr: &Expr, types: Option<&TypedProgram>, out: &mut BTreeSet<String>) {
-    match &expr.kind {
-        ExprKind::Quantity { .. } => {}
-        ExprKind::NamedArg { value, .. } => mutated_in(value, types, out),
-        ExprKind::Brace { entries } => {
-            entries
-                .iter()
-                .for_each(|entry| mutated_in(&entry.value, types, out));
-        }
-        ExprKind::Closure(closure) => mutated_in(&closure.body, types, out),
-        ExprKind::RecordUpdate { fields, base, .. } => {
-            fields.iter().for_each(|f| mutated_in(&f.value, types, out));
-            mutated_in(base, types, out);
-        }
-        ExprKind::TupleField { receiver, .. } => mutated_in(receiver, types, out),
-        ExprKind::Break | ExprKind::Continue => {}
-        ExprKind::Int(_) | ExprKind::Str(_) | ExprKind::Bool(_) | ExprKind::Name(_) => {}
-        ExprKind::Tuple(items) | ExprKind::List(items) => {
-            items.iter().for_each(|item| mutated_in(item, types, out));
-        }
-        ExprKind::Return(value) => {
-            if let Some(value) = value {
-                mutated_in(value, types, out);
-            }
-        }
-        ExprKind::Record { fields, .. } => {
-            fields.iter().for_each(|f| mutated_in(&f.value, types, out));
-        }
-        ExprKind::Call { callee, args } => {
-            mutated_in(callee, types, out);
-            args.iter().for_each(|arg| mutated_in(arg, types, out));
-        }
-        ExprKind::Method {
-            receiver,
-            name,
-            args,
-        } => {
-            if mutates_receiver(expr, &name.name, types)
-                && let Some(root) = place_root(receiver)
-            {
-                out.insert(root.to_string());
-            }
-            mutated_in(receiver, types, out);
-            args.iter().for_each(|arg| mutated_in(arg, types, out));
-        }
-        ExprKind::Field { receiver, .. } => mutated_in(receiver, types, out),
-        ExprKind::Index { receiver, index } => {
-            mutated_in(receiver, types, out);
-            mutated_in(index, types, out);
-        }
-        ExprKind::Try(inner)
-        | ExprKind::Await(inner)
-        | ExprKind::Spawn(inner)
-        | ExprKind::Unary { operand: inner, .. } => mutated_in(inner, types, out),
-        ExprKind::Binary { .. } => {
-            let mut head = expr;
-            while let ExprKind::Binary { left, right, .. } = &head.kind {
-                mutated_in(right, types, out);
-                head = left;
-            }
-            mutated_in(head, types, out);
-        }
-        ExprKind::Match { scrutinee, arms } => {
-            mutated_in(scrutinee, types, out);
-            arms.iter()
-                .for_each(|arm| mutated_in(&arm.body, types, out));
-        }
-        ExprKind::If {
-            cond,
-            then,
-            otherwise,
-        } => {
-            mutated_in(cond, types, out);
-            mutated_names(then, types, out);
-            if let Some(otherwise) = otherwise {
-                mutated_in(otherwise, types, out);
-            }
-        }
-        ExprKind::Block(block) => mutated_names(block, types, out),
-    }
 }
 
 /// The name a place expression (`x`, `x.a.b`, `x[i]`) starts from.

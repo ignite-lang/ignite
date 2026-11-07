@@ -269,7 +269,7 @@ call through a fn value loads both words before it evaluates the arguments.
 - A fn value's parameters are owned, as a consumed parameter is, because the caller does
   not know the callee. Where it does, a borrowed place goes as its own pointer to a
   parameter the callee only reads (`Lower::known_borrows`): a closure literal, or a `let`
-  bound to one, reads every parameter its body neither modifies (`region::modified_by`)
+  bound to one, reads every parameter its body neither changes (`ignite_types::ownership::changed_in`)
   nor consumes (`TypedProgram::closure_consumed`, `docs/slice.md` 20.3.1: only a consumed
   closure parameter moves inside the body, so a read that keeps any other copies it), and a
   named fn reads the parameters it does not consume. `list.map` with such an `f` passes
@@ -314,7 +314,8 @@ position, even with no buffer.
     the address of the first element and the length, pointing into the receiver.
 
   `push`, `append` and `clear` on a receiver that is not a place rooted at a variable
-  (`region::root` is `None`, such as `f().push(x)`) work on an owned copy. A `var` bound
+  (`ignite_types::ownership::place_root` is `None`, such as `f().push(x)`, `xs.at(0).push(x)` or
+  `o?.push(x)`) work on an owned copy, as on the Rust target. A `var` bound
   to a place is a copy, so pushing to it never changes the place it was read from
   (vision 10.1, M1 to M3; the checker refuses the forms through a `let`, a pattern or a
   `to_bytes()` receiver with E006).
