@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:rustgen-assoc-symbol-collisions
 kind: story
-status: active
+status: implemented
 title: Associated fn symbols never collide in generated Rust
 scope:
 - confidence: cited
@@ -11,10 +11,11 @@ scope:
   path: crates/ignite-rustgen/tests/names.rs
 - confidence: cited
   path: crates/ignite/src/apply/plan.rs
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-06T23:50:47Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-11-06T23:50:47Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-11-07T00:23:13Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: rustgen-assoc-symbol-collisions
 
