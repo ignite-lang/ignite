@@ -132,3 +132,23 @@ fn the_run_command_is_the_recorded_one() {
     let command = run_command(&args, &state, "manual", Some("2026-10-31T22:59:30Z"));
     assert_eq!(command, words);
 }
+
+/// `ignite-perf quality` keeps a real-clock restart outside the readiness
+/// bound as its 5.3 value (a timing row gates nothing on the shared
+/// workstation); any other readiness failure is no value.
+#[test]
+fn quality_reads_the_restart_of_a_refusal_outside_the_bound() {
+    use ignite_perf::quality::outside_bound;
+    assert_eq!(
+        outside_bound("Real restart 743076991 ns outside 100–500 ms"),
+        Some(743_076_991)
+    );
+    assert_eq!(
+        outside_bound("readiness: Real restart 99 ns outside 100–500 ms"),
+        Some(99)
+    );
+    assert_eq!(
+        outside_bound("terminal: Resource temporarily unavailable"),
+        None
+    );
+}

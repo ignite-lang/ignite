@@ -213,6 +213,18 @@ fn program_rows(args: &QualityArgs, out: &mut Vec<Measured>) -> R<()> {
     Ok(())
 }
 
+/// The delay of `readiness::real_scenario`'s refusal `Real restart N ns
+/// outside 100–500 ms`.
+pub fn outside_bound(message: &str) -> Option<i64> {
+    message
+        .split_once("Real restart ")?
+        .1
+        .split_once(" ns outside ")?
+        .0
+        .parse()
+        .ok()
+}
+
 /// 5.3: `verify-llvm-readiness` over the working tree, its real-clock restart.
 fn readiness_row(args: &QualityArgs, out: &mut Vec<Measured>) -> R<()> {
     let work = args.work.join("readiness");
@@ -227,7 +239,7 @@ fn readiness_row(args: &QualityArgs, out: &mut Vec<Measured>) -> R<()> {
     )
     .map_err(io_err(manifest.display()))?;
     let load = loadavg()?;
-    crate::readiness::verify(&ReadinessArgs {
+    let verified = crate::readiness::verify(&ReadinessArgs {
         cli: args.cli(),
         repo: args.repo.clone(),
         runtime: args.runtime.clone(),
@@ -235,14 +247,29 @@ fn readiness_row(args: &QualityArgs, out: &mut Vec<Measured>) -> R<()> {
         candidate: "working tree".to_string(),
         source_manifest: manifest,
         timeout: 15.0,
-    })?;
-    let report = crate::perf::read_json(&work.join("report.json"))?;
-    let ns = report
-        .field("scenarios")
-        .field("real")
-        .field("real_restart_ns")
-        .as_i64()
-        .ok_or("readiness: no real_restart_ns")?;
+    });
+    let ns = match verified {
+        Ok(_) => {
+            let report = crate::perf::read_json(&work.join("report.json"))?;
+            report
+                .field("scenarios")
+                .field("real")
+                .field("real_restart_ns")
+                .as_i64()
+                .ok_or("readiness: no real_restart_ns")?
+        }
+        // A restart outside the readiness bound of 100 to 500 ms is still a
+        // measured restart: 5.3 is a timing row on the shared workstation,
+        // recorded and gating nothing (docs/quality.md), so the value is
+        // kept and the run goes on. Every other readiness failure stops it.
+        Err(error) => match outside_bound(&error.to_string()) {
+            Some(ns) => {
+                eprintln!("5.3: {error} (load {load:.2}); recorded, not gated");
+                ns
+            }
+            None => return Err(error),
+        },
+    };
     out.push(Measured {
         metric: "5.3",
         target: "llvm".to_string(),
