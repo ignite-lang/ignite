@@ -83,3 +83,19 @@ test("UXF-007: the std.fs reference page is found from the landing page", async 
     }
   }
 });
+
+test("UXF-008: the FAQ is reachable from the landing page's main navigation", async ({ browser }) => {
+  const task = tasks().find((t) => t.id === "faq-platforms")!;
+  for (const [width, height] of [
+    [1440, 900],
+    [1280, 800],
+    [1024, 768],
+    [768, 1024],
+    [390, 844],
+  ]) {
+    const { context, tab } = await page(browser, "index.html", width, height);
+    const run = await play(tab, task, "pointer").finally(() => context.close());
+    const step = run.steps.find((s) => s.label.includes("FAQ"))!;
+    expect(step.actions, `${width}x${height}: ${run.log.join(", ")}`).toBeLessThanOrEqual(2);
+  }
+});

@@ -191,6 +191,23 @@ h1, h2, h3 {
   border: 1px solid var(--border);
 }
 
+/* The FAQ in the bar itself, after the theme toggle, while the navigation is
+   folded into the menu. */
+.top-faq {
+  display: none;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 10px;
+}
+
+.top-faq:hover {
+  color: var(--fg);
+  background: var(--surface-2);
+}
+
 .menu-toggle {
   display: none;
   place-items: center;
@@ -1210,6 +1227,10 @@ section h2 {
 @media (max-width: 720px) {
   body {
     font-size: 16px;
+  }
+
+  .top-faq {
+    display: inline-block;
   }
 
   .menu-toggle {

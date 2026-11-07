@@ -124,61 +124,61 @@
     "faq-platforms/1440x900": {
       "glance_cost.median": {
         "tolerance": 0,
-        "value": 3
+        "value": 1
       },
       "glance_cost.p95": {
         "tolerance": 0,
-        "value": 3
+        "value": 1
       },
       "keyboard.actions": {
         "tolerance": 0,
-        "value": 40
+        "value": 8
       },
       "screen_only.actions": {
         "tolerance": 0,
-        "value": 13
+        "value": 1
       },
       "screen_only.looks": {
         "tolerance": 0,
-        "value": 13
+        "value": 1
       },
       "screen_only.steers": {
         "tolerance": 0,
-        "value": 12
+        "value": 0
       },
       "screen_only.time_to_act_steps.max": {
         "tolerance": "5%",
-        "value": 13
+        "value": 1
       }
     },
     "faq-platforms/390x844": {
       "glance_cost.median": {
         "tolerance": 0,
-        "value": 3
+        "value": 1
       },
       "glance_cost.p95": {
         "tolerance": 0,
-        "value": 3
+        "value": 1
       },
       "keyboard.actions": {
         "tolerance": 0,
-        "value": 42
+        "value": 6
       },
       "screen_only.actions": {
         "tolerance": 0,
-        "value": 23
+        "value": 1
       },
       "screen_only.looks": {
         "tolerance": 0,
-        "value": 23
+        "value": 1
       },
       "screen_only.steers": {
         "tolerance": 0,
-        "value": 22
+        "value": 0
       },
       "screen_only.time_to_act_steps.max": {
         "tolerance": "5%",
-        "value": 23
+        "value": 1
       }
     },
     "http-example/1440x900": {
