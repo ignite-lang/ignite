@@ -45,6 +45,8 @@ pub enum Mode {
     Summarize(RunArgs),
     /// Exercise frozen LLVM run/replay without changing benchmark source files
     VerifyLlvmReadiness(ReadinessArgs),
+    /// Measure the timing and size rows of docs/quality.md once on the working tree
+    Quality(crate::quality::QualityArgs),
 }
 
 /// The checkout that built this binary, as `Path(__file__).resolve().parents[1]` was.

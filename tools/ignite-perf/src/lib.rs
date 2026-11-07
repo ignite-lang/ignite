@@ -6,6 +6,7 @@ pub mod cli;
 pub mod cycle;
 pub mod json;
 pub mod perf;
+pub mod quality;
 pub mod readiness;
 
 /// Every source file of this crate. A capture records the SHA256 of [`harness_bundle`] in each
@@ -19,6 +20,7 @@ pub const HARNESS_SOURCE: &[(&str, &str)] = &[
     ("src/lib.rs", include_str!("lib.rs")),
     ("src/main.rs", include_str!("main.rs")),
     ("src/perf.rs", include_str!("perf.rs")),
+    ("src/quality.rs", include_str!("quality.rs")),
     ("src/readiness.rs", include_str!("readiness.rs")),
 ];
 

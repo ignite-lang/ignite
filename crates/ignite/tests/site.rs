@@ -356,6 +356,33 @@ fn pages_name_the_installed_command_not_a_build_path() {
     );
 }
 
+/// The book's quality page (`site/book/src/quality.md`) is generated from
+/// `quality/baseline.json` and `quality/history.jsonl`
+/// ([`crate::quality::render_site_page`]), so it cannot drift from the bars
+/// and the measured values. `IGNITE_BLESS=1` writes it; `task quality` does
+/// after every run.
+#[test]
+fn quality_page_is_generated() {
+    let expected = crate::quality::render_site_page(
+        &crate::quality::load_baseline(),
+        &crate::quality::read_history(),
+    );
+    let path = crate::quality::site_page_path();
+    if std::env::var_os("IGNITE_BLESS").is_some() {
+        std::fs::write(&path, &expected).unwrap();
+    }
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(
+        text == expected,
+        "site/book/src/quality.md is not generated from quality/ (IGNITE_BLESS=1 or task quality writes it)"
+    );
+    let summary = std::fs::read_to_string(workspace().join("site/book/src/SUMMARY.md")).unwrap();
+    assert!(
+        summary.contains("(quality.md)"),
+        "SUMMARY.md does not link the quality page"
+    );
+}
+
 mod ux;
 
 mod round;
