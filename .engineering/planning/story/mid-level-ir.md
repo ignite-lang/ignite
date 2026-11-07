@@ -6,6 +6,7 @@ status: active
 title: One typed mid-level IR for both backends and the evaluator
 relations:
 - depends_on: story:shared-ownership-analysis
+- depends_on: story:quality-ratchet
 scope:
 - confidence: inferred
   path: crates/ignite-eval/src
