@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:effectful-map-escape
 kind: story
-status: active
+status: implemented
 title: No effect passes List.map unchecked through an untyped local
 scope:
 - confidence: cited
@@ -13,10 +13,11 @@ scope:
   path: crates/ignite-types/tests
 - confidence: cited
   path: docs/slice.md
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T02:27:31Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-07T02:27:31Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-07T04:58:45Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: effectful-map-escape
 

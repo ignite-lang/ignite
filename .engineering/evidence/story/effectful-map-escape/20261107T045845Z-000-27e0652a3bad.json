@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T04:58:45Z",
+  "actor": "human:timo",
+  "artifact": "story:effectful-map-escape",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 698b1c36: 1316 passed, 0 failed, 11 ignored; 300 inline per target; EXIT=0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/85"
+  }
+}
