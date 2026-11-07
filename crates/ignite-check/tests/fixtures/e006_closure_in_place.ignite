@@ -1,0 +1,17 @@
+type Holder { items: List<Int> }
+
+fn f() -> Int {
+  var m: Map<Text, Int> = Map.empty()
+  var h = Holder { items = [] }
+  var lists: List<List<Int>> = [[]]
+  let g = |x: Int| {
+    m.put("a", x)
+    m.remove("a")
+    h.items.push(x)
+    lists[0].clear()
+    var own: List<Int> = []
+    own.push(x)
+    own.len()
+  }
+  return g(1)
+}

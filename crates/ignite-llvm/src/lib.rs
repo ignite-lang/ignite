@@ -100,7 +100,7 @@ fn type_env_of(std: &[ModuleInput<'_>], programs: &[ModuleInput<'_>]) -> TypeEnv
 /// without a copy; a consumed parameter is owned (`docs/llvm.md` section 3).
 ///
 /// The consumed set is a superset of the parameters the body modifies
-/// (`region::modified`), which owned a parameter before slice 16; a debug
+/// (`ignite_types::ownership::changed_in_block`), which owned a parameter before slice 16; a debug
 /// build checks it for every function it lowers.
 fn read_only_params(env: &mut TypeEnv, input: &ModuleInput<'_>) {
     let qual = |name: &str| QualName {
@@ -112,10 +112,10 @@ fn read_only_params(env: &mut TypeEnv, input: &ModuleInput<'_>) {
             .map(|i| !input.types.consumed(&callee, i))
             .collect();
         if cfg!(debug_assertions) {
-            let modified = region::modified(&f.body, input.types);
+            let modified = ignite_types::ownership::changed_in_block(&f.body, Some(input.types));
             for (p, borrowed) in f.params.iter().zip(&params) {
                 debug_assert!(
-                    !(*borrowed && modified.contains(&p.name.name)),
+                    !(*borrowed && modified.contains(p.name.name.as_str())),
                     "{symbol}: `{}` is modified but not consumed",
                     p.name.name
                 );

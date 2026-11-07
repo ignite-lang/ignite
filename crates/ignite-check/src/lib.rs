@@ -415,6 +415,70 @@ pub const CAPABILITY_TYPES: &[&str] = &[
     "CommandLine",
 ];
 
+/// What an in-place builtin changes (`docs/slice.md` 20.3.3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Change {
+    /// The receiver's value: the call changes the variable a place
+    /// receiver is rooted at, and nothing else. A closure may not change a
+    /// capture this way (E006), and only a place rooted in a `var` or a
+    /// parameter may be the receiver.
+    Value,
+    /// The state behind the receiver's handle (`Store`), which every copy
+    /// of the handle shares.
+    Handle,
+}
+
+/// One row of [`IN_PLACE`]: `receiver.method(..)` on a receiver of the
+/// builtin type `receiver` changes it in place.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InPlace {
+    pub receiver: &'static str,
+    pub method: &'static str,
+    pub change: Change,
+}
+
+const fn in_place_row(receiver: &'static str, method: &'static str, change: Change) -> InPlace {
+    InPlace {
+        receiver,
+        method,
+        change,
+    }
+}
+
+/// The one table of builtins that change their receiver in place
+/// (`docs/slice.md` 20.3.3). The checker reads it here (E006);
+/// `ignite_types::ownership` resolves each row to its `Builtin`, and the
+/// moves analysis and both backends read it from there.
+pub const IN_PLACE: [InPlace; 15] = [
+    in_place_row("List", "push", Change::Value),
+    in_place_row("List", "set", Change::Value),
+    in_place_row("List", "append", Change::Value),
+    in_place_row("List", "clear", Change::Value),
+    in_place_row("Bytes", "push", Change::Value),
+    in_place_row("Bytes", "set", Change::Value),
+    in_place_row("Bytes", "append", Change::Value),
+    in_place_row("Bytes", "clear", Change::Value),
+    in_place_row("Map", "put", Change::Value),
+    in_place_row("Map", "remove", Change::Value),
+    in_place_row("Store", "next_id", Change::Handle),
+    in_place_row("Store", "put", Change::Handle),
+    in_place_row("Store", "remove", Change::Handle),
+    in_place_row("Store", "update", Change::Handle),
+    in_place_row("Store", "upsert", Change::Handle),
+];
+
+/// What the builtin `method` changes on a receiver of the builtin type
+/// `receiver` ([`IN_PLACE`]). For a receiver whose type is not known, the
+/// change every row of that method name agrees on: `push` is a `Value`
+/// change whatever the receiver, `put` is none (`Map` and `Store` differ).
+pub fn in_place(receiver: Option<&str>, method: &str) -> Option<Change> {
+    let mut rows = IN_PLACE
+        .iter()
+        .filter(|row| row.method == method && receiver.is_none_or(|r| r == row.receiver));
+    let first = rows.next()?.change;
+    rows.all(|row| row.change == first).then_some(first)
+}
+
 /// The heads of ambient effects (`stdin.read`, `net.connect`): no
 /// parameter may take one of these names (E056).
 pub const AMBIENT_HEADS: &[&str] = &["stdin", "stdout", "stderr", "process", "net", "clock"];
@@ -2545,7 +2609,8 @@ impl Checker {
     /// builtin static), a builtin method, a UFCS call of a user fn, or a
     /// call of a fn-typed field, which is pure and which the type checker
     /// resolves.
-    /// E006 unless the receiver of an in-place `push`, `append` or `clear`
+    /// E006 unless the receiver of an in-place builtin (a `Value` row of
+    /// [`IN_PLACE`])
     /// is a place rooted in a `var` or a parameter, whose change stays in
     /// the callee (`docs/slice.md` section 13.11): a `let`, a `for` element
     /// or a pattern binding is a value, and `x.to_bytes()` shares `x`'s
@@ -2619,26 +2684,25 @@ impl Checker {
                 self.map_fn_value(arg);
             }
         }
-        if matches!(name.name.as_str(), "push" | "set" | "append" | "clear")
-            && let ExprKind::Name(list) = &receiver.kind
-            && self.captured(&list.name)
-            && self.builtin_method(receiver, name)
+        let receiver_type = self.static_type(receiver).map(|ty| ty.name.name);
+        let receiver_type = receiver_type
+            .as_deref()
+            .filter(|ty| IN_PLACE.iter().any(|row| row.receiver == *ty));
+        let mutating = in_place(receiver_type, &name.name) == Some(Change::Value)
+            && self.builtin_method(receiver, name);
+        if mutating
+            && let Some(base) = place_root(receiver)
+            && self.captured(&base.name)
         {
             self.error(
                 "E006",
                 expr.span,
                 format!(
                     "cannot change `{}` inside a closure; a closure captures `{}` by copy",
-                    list.name, list.name
+                    base.name, base.name
                 ),
             );
         }
-        let map_receiver = self
-            .static_type(receiver)
-            .is_some_and(|ty| ty.name.name == "Map");
-        let mutating = (matches!(name.name.as_str(), "push" | "set" | "append" | "clear")
-            || (matches!(name.name.as_str(), "put" | "remove") && map_receiver))
-            && self.builtin_method(receiver, name);
         if mutating {
             self.mutable_receiver(expr, receiver, name);
         }

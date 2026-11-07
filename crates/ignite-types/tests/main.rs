@@ -14,6 +14,7 @@ mod inline_tests;
 mod limits;
 mod moves;
 mod moves_adversary;
+mod ownership;
 mod slice9;
 mod surface;
 mod terminal;

@@ -683,6 +683,27 @@ fn checked_arithmetic_on_both_targets() {
     });
 }
 
+/// An in-place builtin changes the variable only through a place rooted at
+/// it, and a copy through `at` or `?`, the same on both targets
+/// (`fixtures/tests/in_place.ignite`, `ignite_types::ownership`). Before
+/// story:shared-ownership-analysis the LLVM target changed the variable
+/// through `at` and `?` (its `region::root` followed them) and the Rust
+/// target a copy.
+#[test]
+fn in_place_changes_on_both_targets() {
+    let file = fixture("in_place.ignite");
+    on_both_targets(|target| {
+        let run = ignite_test(Chain::Fixtures, target, &[file.as_str()]);
+        assert_eq!(run.status, 0, "{target}: {}\n{}", run.stdout, run.stderr);
+        assert!(
+            run.stdout
+                .contains("test result: ok. 5 passed; 0 failed; 0 filtered out"),
+            "{target}: {}",
+            run.stdout
+        );
+    });
+}
+
 /// List and `Bytes` element assignment, `List + List` and `Stderr` (`docs/slice.md`
 /// 25.3 to 25.5) on both targets in dev and in release
 /// (`fixtures/tests/codespec_lists.ignite`): an assignment out of range

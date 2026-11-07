@@ -16,6 +16,7 @@ use ignite_syntax::ast::{
     BinaryOp, Block, BraceEntry, Decl, Expr, ExprKind, Ident, Pattern, PatternKind, Program, Stmt,
     StmtKind, UnaryOp,
 };
+use ignite_types::ownership;
 use ignite_types::{BraceKind, Builtin, Callee, Capability, FnSig, QualName, Ty, TypedProgram};
 
 use crate::ir::{Func, Generic, Glue, Instance, Module, global};
@@ -781,7 +782,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// Per parameter of the fn value `f` evaluates to, whether its callee is
     /// known to only read it (`docs/llvm.md` section 3.1): a closure literal
     /// (or a `let` bound to one) reads every parameter its body neither
-    /// modifies (`region::modified_by`) nor consumes
+    /// changes in place (`ownership::changed_in`) nor consumes
     /// (`TypedProgram::closure_consumed`: only a consumed closure parameter
     /// moves inside the body), and a named fn reads the parameters it does
     /// not consume. Empty when the callee is not known.
@@ -791,13 +792,14 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 // A parameter the body consumes (`docs/slice.md` 20.3.1) may
                 // be moved into a callee that changes it in place, so the
                 // caller passes a copy, as it does to a modified one.
-                let modified = crate::region::modified_by(&closure.body, self.cx.types);
+                let modified = ownership::changed_in(&closure.body, Some(self.cx.types));
                 closure
                     .params
                     .iter()
                     .enumerate()
                     .map(|(i, p)| {
-                        !modified.contains(&p.name.name) && !self.cx.types.closure_consumed(f, i)
+                        !modified.contains(p.name.name.as_str())
+                            && !self.cx.types.closure_consumed(f, i)
                     })
                     .collect()
             }
@@ -837,12 +839,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             if v == Val::Never {
                 return None;
             }
-            let root = crate::region::root(arg, self.cx.types);
+            let root = ownership::memory_root(arg, Some(self.cx.types));
             let borrow = is_aggregate(ty)
                 && borrows.get(i).copied().unwrap_or(false)
                 && matches!(v, Val::Ptr(_, false))
                 && args[i + 1..].iter().all(|later| {
-                    crate::region::modified_by(later, self.cx.types).is_empty()
+                    ownership::changed_in(later, Some(self.cx.types)).is_empty()
                         && root
                             .as_ref()
                             .is_none_or(|n| !crate::region::mentions(later, n))
@@ -973,7 +975,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 && self.env.reads_only(symbol, i)
                 && args[i + 1..]
                     .iter()
-                    .all(|later| crate::region::modified_by(later, self.cx.types).is_empty());
+                    .all(|later| ownership::changed_in(later, Some(self.cx.types)).is_empty());
             if borrow {
                 operands.push(Some(format!("ptr {}", self.ptr(&v))));
             } else {
@@ -1040,7 +1042,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             return false;
         };
         let mut bodies = bodies;
-        bodies.all(|body| !crate::region::modified_by(body, self.cx.types).contains(root))
+        bodies.all(|body| !ownership::changed_in(body, Some(self.cx.types)).contains(root))
     }
 
     /// The symbol and signature `callee` of the call `e` calls: for generic
@@ -1262,7 +1264,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             other => panic!("for over {other:?}"),
         };
         let v = self.expr(iter, true);
-        let names = crate::region::modified(body, self.cx.types);
+        let names = ownership::changed_in_block(body, Some(self.cx.types));
         let keep = Self::root(iter).is_some_and(|root| !names.contains(root));
         let v = if keep { v } else { self.owned(&list_ty, v) };
         let list = self.ptr(&v);
@@ -1325,8 +1327,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             return None;
         }
         let mut carried = Vec::new();
-        for name in crate::region::modified(body, self.cx.types) {
-            if let Some(local) = self.lookup(&name)
+        for name in ownership::changed_in_block(body, Some(self.cx.types)) {
+            if let Some(local) = self.lookup(name)
                 && self.env.needs_glue(&local.ty)
             {
                 let copy = self.temp(&local.ty);
@@ -2743,7 +2745,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 }
                 let l = match l {
                     Val::Ptr(_, false)
-                        if !crate::region::modified_by(right, self.cx.types).is_empty() =>
+                        if !ownership::changed_in(right, Some(self.cx.types)).is_empty() =>
                     {
                         self.owned(&ty, l)
                     }
@@ -3152,7 +3154,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             ty => ty,
         };
         let l = match l {
-            Val::Ptr(_, false) if !crate::region::modified_by(right, self.cx.types).is_empty() => {
+            Val::Ptr(_, false) if !ownership::changed_in(right, Some(self.cx.types)).is_empty() => {
                 self.owned(&ty, l)
             }
             other => other,
@@ -3895,17 +3897,18 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         self.ptr(&v)
     }
 
-    /// The receiver of a builtin that changes it in place (`push`,
-    /// `append`, `clear`). A place the region analysis sees
-    /// ([`crate::region::root`]) rooted at a local is changed in place; one
-    /// rooted at a constant ([`Lower::constant`]), and any other borrowed
-    /// value, such as `x.to_bytes()`, which is `x`'s own memory, is copied
-    /// first, so the change goes to a temporary and never to a variable
-    /// the analysis counts as unmodified (`docs/vision.md` section 10.1,
-    /// M1).
+    /// The receiver of a builtin that changes it in place (a `Value` row
+    /// of `ignite_types::ownership::table`). A place
+    /// ([`ownership::place_root`]: a name, field, index or tuple field)
+    /// rooted at a local is changed in place; one rooted at a constant
+    /// ([`Lower::constant`]), and any other value, such as `x.to_bytes()`,
+    /// which is `x`'s own memory, or `xs.at(0)` and `o?`, which point into
+    /// their operand, is copied first, so the change goes to a temporary,
+    /// as on the Rust target, and never to a variable the analysis counts
+    /// as unmodified (`docs/vision.md` section 10.1, M1).
     fn mutable_receiver(&mut self, receiver: &Expr) -> Val {
         let r = self.expr(receiver, true);
-        if crate::region::root(receiver, self.cx.types).is_some_and(|n| self.lookup(&n).is_some()) {
+        if ownership::place_root(receiver).is_some_and(|n| self.lookup(n).is_some()) {
             return r;
         }
         let ty = self.ty(receiver);
@@ -3929,7 +3932,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         };
         let r = if args
             .iter()
-            .all(|arg| crate::region::modified_by(arg, self.cx.types).is_empty())
+            .all(|arg| ownership::changed_in(arg, Some(self.cx.types)).is_empty())
         {
             self.slice_view(receiver)
         } else {

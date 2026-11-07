@@ -1,0 +1,4 @@
+e006_closure_in_place.ignite:8:5: error[E006]: cannot change `m` inside a closure; a closure captures `m` by copy
+e006_closure_in_place.ignite:9:5: error[E006]: cannot change `m` inside a closure; a closure captures `m` by copy
+e006_closure_in_place.ignite:10:5: error[E006]: cannot change `h` inside a closure; a closure captures `h` by copy
+e006_closure_in_place.ignite:11:5: error[E006]: cannot change `lists` inside a closure; a closure captures `lists` by copy

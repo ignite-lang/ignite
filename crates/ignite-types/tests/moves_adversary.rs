@@ -261,12 +261,11 @@ fn consumed_reaches_the_fixpoint_on_a_long_chain() {
     assert!(missing.is_empty(), "not consumed: {missing:?}");
 }
 
-/// 20.3.3: the in-place half of `consumed` "is the union of what
-/// `region::mutates` (LLVM) and `mutates_receiver` with `mutated_names`
-/// (Rust) count today ... `consumed` must be a superset of both". LLVM's
-/// `region::modified` roots a mutating receiver through `?`, `.at(i)` and a
-/// block's result (`region::root` in `crates/ignite-llvm/src/region.rs`),
-/// so these parameters are owned on LLVM today.
+/// 20.3.3: the in-place half of `consumed` counts a receiver through
+/// every expression a backend lowers to a pointer into its operand
+/// (`ignite_types::ownership::memory_root`: `?`, `.at(i)` and a block's
+/// result), as LLVM's `region::modified` did before
+/// story:shared-ownership-analysis, so these parameters stay owned.
 #[test]
 fn in_place_changes_the_llvm_backend_counts_consume() {
     let t = typed(
