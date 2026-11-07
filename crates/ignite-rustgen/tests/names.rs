@@ -117,7 +117,7 @@ fn user_names_starting_with_two_underscores_keep_their_values() {
     );
 }
 
-/// A listener `x` named as an `Endpoint` target binds `x_endpoint` in the
+/// A listener `x` named as an `Endpoint` target binds `__endpoint_x` in the
 /// generated `main`; a listener resource named `x_endpoint` that the same
 /// component binds must stay a `TcpListener`.
 #[test]
@@ -419,4 +419,44 @@ system PortProto {\n\
         &adversary_substrate(),
     );
     cargo_build(&program, &std, "adv-names-portproto");
+}
+
+/// The class of the case above: a protocol is a Rust struct in the value
+/// namespace only if it is a unit struct, and then every binding spelled
+/// like it is a pattern of that struct. Protocols named `x` and `y` (the
+/// bindings of the generated list and option equality) and `n` (a
+/// parameter of the program) keep the bindings bindings.
+#[test]
+fn protocols_named_like_bindings_keep_the_bindings() {
+    let source = "package examples.protobind\n\
+\n\
+protocol x {\n\
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {\n\
+    stream.close()?\n\
+    Ok(Unit)\n\
+  }\n\
+}\n\
+\n\
+protocol y {\n\
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {\n\
+    stream.close()?\n\
+    Ok(Unit)\n\
+  }\n\
+}\n\
+\n\
+protocol n {\n\
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {\n\
+    stream.close()?\n\
+    Ok(Unit)\n\
+  }\n\
+}\n\
+\n\
+fn twice(n: Int) -> Int = n * 2\n\
+\n\
+test \"bindings spelled like protocols\" {\n\
+  assert [1, 2] == [1, 2]\n\
+  assert Some(3) == Some(3)\n\
+  assert twice(4) == 8\n\
+}\n";
+    adversary_tests_pass("names-protocol-bindings", source, &common::golden_std(), 1);
 }

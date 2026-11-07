@@ -37,12 +37,12 @@ fn the_terminal_calls_the_tcp_instances_of_the_telnet_roles() {
     );
     let server = function(&std.lib_rs, "TelnetServer__main");
     assert!(
-        server.contains("Telnet::serve::<ignite_io::TcpStream>("),
+        server.contains("Telnet::serve::<::ignite_io::TcpStream>("),
         "{server}"
     );
     let client = function(&std.lib_rs, "TelnetClient__main");
     assert!(
-        client.contains("Telnet::connect::<ignite_io::TcpStream>("),
+        client.contains("Telnet::connect::<::ignite_io::TcpStream>("),
         "{client}"
     );
     let mut texts = vec![
@@ -56,7 +56,7 @@ fn the_terminal_calls_the_tcp_instances_of_the_telnet_roles() {
             .map(|e| (e.name.as_str(), e.source.as_str())),
     );
     for (name, text) in texts {
-        assert!(!text.contains("dyn ignite_io::ByteStream"), "{name}");
+        assert!(!text.contains("dyn ::ignite_io::ByteStream"), "{name}");
         assert!(!text.contains("dyn ByteStream"), "{name}");
         let others = other_dyns(text);
         assert!(others.is_empty(), "{name} has {others:?}");

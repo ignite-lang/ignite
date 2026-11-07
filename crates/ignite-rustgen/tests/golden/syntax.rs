@@ -1,6 +1,6 @@
 #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 
-pub type IoResult<T> = Result<T, ignite_io::IoError>;
+pub type IoResult<T> = Result<T, ::ignite_io::IoError>;
 
 #[derive(Clone)]
 pub struct Reply {
@@ -16,7 +16,7 @@ impl Reply {
     }
     #[allow(non_snake_case)]
     pub fn default_code() -> i64 {
-        ignite_io::checked::add(BASE(), 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 12, 15)
+        ::ignite_io::checked::add(BASE(), 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 12, 15)
     }
 }
 
@@ -41,7 +41,7 @@ pub enum Power {
 #[derive(Clone)]
 pub struct Handler {
     pub name: String,
-    pub respond: std::sync::Arc<dyn Fn(String) -> String + Send + Sync>,
+    pub respond: ::std::sync::Arc<dyn Fn(String) -> String + Send + Sync>,
 }
 
 #[allow(non_snake_case)]
@@ -70,7 +70,7 @@ pub fn shout(t: &String) -> String {
 
 pub fn twice(x: &i64) -> i64 {
     let mut x = x.clone();
-    ignite_io::checked::mul(x, 2, "crates/ignite-rustgen/tests/golden/syntax.ignite", 30, 27)
+    ::ignite_io::checked::mul(x, 2, "crates/ignite-rustgen/tests/golden/syntax.ignite", 30, 27)
 }
 
 pub fn lower_case(n: &i64) -> String {
@@ -111,7 +111,7 @@ pub fn nested(v: &Option<(bool, Vec<i64>)>) -> String {
         Some((false, _)) | None => String::from("off or none"),
         Some((true, _)) => String::from("other"),
         #[allow(unreachable_patterns)]
-        _ => ignite_io::fail("match", "crates/ignite-rustgen/tests/golden/syntax.ignite", 63, 3, "no arm matched"),
+        _ => ::ignite_io::fail("match", "crates/ignite-rustgen/tests/golden/syntax.ignite", 63, 3, "no arm matched"),
     }
 }
 
@@ -149,7 +149,7 @@ pub fn count_spaces(bytes: &Vec<u8>) -> i64 {
     for c in (bytes.clone()) {
         match c.clone() {
             __m if (*(&__m) == SPACE()) => {
-                n = ignite_io::checked::add(n, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 99, 13);
+                n = ::ignite_io::checked::add(n, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 99, 13);
             },
             _ => {
             },
@@ -161,13 +161,13 @@ pub fn count_spaces(bytes: &Vec<u8>) -> i64 {
 pub fn show(text: &String) -> IoResult<()> {
     let mut bytes = text.clone().into_bytes();
     bytes.push(10);
-    ignite_io::Stdout::write_all(bytes.clone())
+    ::ignite_io::Stdout::write_all(bytes.clone())
 }
 
-pub struct Syntax;
+pub struct Syntax {}
 
 impl Syntax {
-    pub fn connect(mut stream: ignite_io::TcpStream) -> Result<(), ignite_io::IoError> {
+    pub fn connect(mut stream: ::ignite_io::TcpStream) -> Result<(), ::ignite_io::IoError> {
         let (word, number) = swap(&(7, String::from("seven")));
         (show(&(format!("{} {}", word, number))))?;
         (show(&(format!("{} {} {}", describe(&0), describe(&41), describe(&9)))))?;
@@ -183,13 +183,13 @@ impl Syntax {
         let e = vowel(&String::from("e"));
         let x = vowel(&String::from("x"));
         (show(&(format!("{} {}", e, x))))?;
-        (show(&first_positive(&vec![ignite_io::checked::neg(1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 130, 26), 0, 5, 6]).to_string()))?;
-        (show(&(format!("{}{}{}", sign(&0), sign(&3), sign(&(ignite_io::checked::neg(3, "crates/ignite-rustgen/tests/golden/syntax.ignite", 131, 35)))))))?;
+        (show(&first_positive(&vec![::ignite_io::checked::neg(1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 130, 26), 0, 5, 6]).to_string()))?;
+        (show(&(format!("{}{}{}", sign(&0), sign(&3), sign(&(::ignite_io::checked::neg(3, "crates/ignite-rustgen/tests/golden/syntax.ignite", 131, 35)))))))?;
         (show(&count_spaces(&String::from("a b c ").into_bytes()).to_string()))?;
         let n = 21;
         (show(&twice(&n).to_string()))?;
         (show(&shout(&String::from("hey"))))?;
-        let h = Handler { name: String::from("h"), respond: (std::sync::Arc::new(|__a0: String| shout(&__a0)) as std::sync::Arc<dyn Fn(String) -> String + Send + Sync>) };
+        let h = Handler { name: String::from("h"), respond: (::std::sync::Arc::new(|__a0: String| shout(&__a0)) as ::std::sync::Arc<dyn Fn(String) -> String + Send + Sync>) };
         (show(&(h.respond)(h.name)))?;
         let r = Reply { lines: vec![String::from("l")], action: Reply::default_action(), code: Reply::default_code() };
         (show(&(format!("code {}", r.code))))?;
@@ -204,15 +204,15 @@ impl Syntax {
         let mut i = 0;
         while i < 3000 {
             let (count, text) = pair.clone();
-            pair = (ignite_io::checked::add(count, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 151, 15), format!("{}x", text));
-            i = ignite_io::checked::add(i, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 152, 11);
+            pair = (::ignite_io::checked::add(count, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 151, 15), format!("{}x", text));
+            i = ::ignite_io::checked::add(i, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 152, 11);
         }
         let (count, text) = pair.clone();
         let size = (text.len() as i64);
         (show(&(format!("{} {}", count, size))))?;
         let spare = (1, String::from("a"));
         let (mut p, mut q) = spare.clone();
-        p = ignite_io::checked::add(p, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 159, 9);
+        p = ::ignite_io::checked::add(p, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 159, 9);
         q = format!("{}b", q);
         (show(&(format!("{}{}", p, q))))?;
         let _ = twice(&1);
@@ -234,8 +234,8 @@ pub struct Runner {
 }
 
 #[allow(non_snake_case)]
-pub fn Runner__main(self_: &Runner) -> Result<(), ignite_io::IoError> {
-    let stream = match ignite_io::TcpStream::connect(self_.address.clone(), self_.port.clone()) {
+pub fn Runner__main(self_: &Runner) -> Result<(), ::ignite_io::IoError> {
+    let stream = match ::ignite_io::TcpStream::connect(self_.address.clone(), self_.port.clone()) {
         Ok(stream) => stream,
         Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
     };

@@ -192,7 +192,7 @@ fn emit_prints_the_program_and_the_std_crate() {
     assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
     let stdout = text(&output.stdout);
     assert!(
-        stdout.contains("pub fn serve<S: ignite_io::ByteStream"),
+        stdout.contains("pub fn serve<S: ::ignite_io::ByteStream"),
         "{stdout}"
     );
     assert!(stdout.contains("[[bin]]"));
@@ -251,7 +251,7 @@ fn emit_with_std_fixture() {
     assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
     let stdout = text(&output.stdout);
     assert!(
-        stdout.contains("use ignite_std::greet::Greeting;"),
+        stdout.contains("use ::ignite_std::greet::Greeting;"),
         "{stdout}"
     );
     assert!(stdout.contains("pub mod greet {"), "{stdout}");

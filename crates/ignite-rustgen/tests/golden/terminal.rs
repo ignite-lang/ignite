@@ -1,6 +1,6 @@
 #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
-use ignite_std::console::CommandConsole;
-use ignite_std::protocol::telnet::{TelnetServer, TelnetClient};
+use ::ignite_std::console::CommandConsole;
+use ::ignite_std::protocol::telnet::{TelnetServer, TelnetClient};
 
 pub mod command_schema {
 
@@ -10,7 +10,7 @@ pub mod command_schema {
 }
 
 pub mod commands {
-    use ignite_std::console::{Reply, Action, first_word, rest_after_word};
+    use ::ignite_std::console::{Reply, Action, first_word, rest_after_word};
 
     #[derive(Clone)]
     pub enum Command {

@@ -2,7 +2,7 @@
 use syntax::*;
 
 fn main() {
-    std::process::exit(ignite_io::run(|| {
+    ::std::process::exit(::ignite_io::run(|| {
         let syntax = Runner { address: String::from("127.0.0.1"), port: 1 };
         Runner__main(&syntax)
     }))
