@@ -481,29 +481,53 @@ fn render_head(response: Response, framing: Framing, keep_alive: Bool) -> Bytes 
   head.to_bytes()
 }
 
-// The head and body of `response`, `body` or the bytes of `Binary`. A 204
-// has neither `Content-Length` nor a body (RFC 9110 sections 8.6 and
-// 15.3.5). A `Streamed` response is rendered as `Inline`: its pieces only
-// `Http.serve` sends.
+// The head and body of `response`, `body` or the bytes of `Binary`. A
+// status without content (1xx, 204, 304) has neither `Content-Length` nor
+// a body (RFC 9110 sections 8.6, 15.2, 15.3.5 and 15.4.5). A `Streamed`
+// response is rendered as `Inline`: its pieces only `Http.serve` sends.
 fn render(response: Response, keep_alive: Bool) -> Bytes satisfies [RFC9112.R2_2_3, RFC9112.R4_4] = render_message(response, keep_alive, true)
 
 // `render`, or without the body when `with_body` is false, as the answer
 // to HEAD: the `Content-Length` is the one the body would have had (RFC
 // 9110 sections 8.6 and 9.3.2).
 fn render_message(response: Response, keep_alive: Bool, with_body: Bool) -> Bytes satisfies [RFC9110.R6_2_5] {
-  if response.status == 204 {
-    return render_head(response, NoBody, keep_alive)
-  }
-  let body = match response.content {
-    Binary(bytes) => bytes
-    _ => response.body.to_bytes()
-  }
-  var out = render_head(response, Length(body.len()), keep_alive)
-  if with_body {
-    out.append(body)
+  let framing = if has_no_content(response.status) { NoBody } else { Length(inline_body(response).len()) }
+  render_framed(response, framing, keep_alive, with_body)
+}
+
+// The bytes an `Inline` or `Binary` response carries: `body` or the bytes
+// of `Binary`.
+fn inline_body(response: Response) -> Bytes = match response.content {
+  Binary(bytes) => bytes
+  _ => response.body.to_bytes()
+}
+
+// The head of `response` framed by `framing`, then its body unless
+// `with_body` is false or `framing` is `NoBody`.
+fn render_framed(response: Response, framing: Framing, keep_alive: Bool, with_body: Bool) -> Bytes {
+  var out = render_head(response, framing, keep_alive)
+  if with_body && framing != NoBody {
+    out.append(inline_body(response))
   }
   out
 }
+
+// How an `Inline` or `Binary` response to `request` is framed: none for a
+// status without content; a 2xx answer to CONNECT has no `Content-Length`
+// and ends by closing the connection (RFC 9110 section 9.3.6), as its
+// streamed form does; otherwise its own `Content-Length`.
+fn inline_framing(request: Request, response: Response) -> Framing {
+  if has_no_content(response.status) {
+    return NoBody
+  }
+  if is_connect_success(request, response.status) {
+    return UntilClose
+  }
+  Length(inline_body(response).len())
+}
+
+// Whether a response with `status` is a 2xx answer to a CONNECT `request`.
+fn is_connect_success(request: Request, status: Int) -> Bool = request.method == "CONNECT" && status >= 200 && status < 300
 
 // Whether a response with `status` has no content: 1xx, 204 and 304 (RFC
 // 9110 sections 15.2, 15.3.5 and 15.4.5).
@@ -518,7 +542,7 @@ fn streamed_framing(request: Request, status: Int) -> Framing satisfies [RFC9112
   if has_no_content(status) {
     return NoBody
   }
-  if request.version != "HTTP/1.1" || request.method == "CONNECT" && status < 300 {
+  if request.version != "HTTP/1.1" || is_connect_success(request, status) {
     return UntilClose
   }
   Chunks
@@ -562,7 +586,9 @@ fn chunk(piece: Bytes) -> Bytes {
 // trailer section follow. A response without content or to HEAD is the
 // head only and `piece` is not called. Whether the connection stays open:
 // not after a body that ends by closing it. An `Err` of `piece` is
-// returned before the last chunk, so the client sees the body incomplete.
+// returned at once and the session closes the connection: a chunked body
+// then lacks its last chunk, which a client sees as incomplete; a body
+// that ends by closing looks complete to the client.
 fn send_streamed<T: ByteStream, S>(stream: T, application: HttpApp<S>, request: Request, response: Response, keep_alive: Bool) -> IoResult<Bool> satisfies [RFC9112.R6_1_2] {
   let framing = streamed_framing(request, response.status)
   let keep = keep_alive && framing != UntilClose
@@ -1465,7 +1491,9 @@ fn session<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp
         if response.content == Streamed {
           keep = send_streamed(stream, application, request, response, keep)?
         } else {
-          stream.write_all(render_message(response, keep, request.method != "HEAD"))?
+          let framing = inline_framing(request, response)
+          keep = keep && framing != UntilClose
+          stream.write_all(render_framed(response, framing, keep, request.method != "HEAD"))?
         }
         if !keep {
           return Ok(())
@@ -2097,4 +2125,100 @@ test "Http chunks only an HTTP/1.1 response with content" verifies [RFC9112.R6_1
   assert streamed_with(b"HEAD /stream HTTP/1.0\r\n\r\n", b"abc")? == "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n"
   assert streamed_with(b"GET /stream HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", b"abc")? == "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n3\r\nabc\r\n0\r\n\r\n"
   assert streamed_with(b"GET /stream HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", Bytes.empty())? == "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n0\r\n\r\n"
+}
+
+// Answers `/streamed` with a streamed 200, `/redirect` a streamed 302,
+// `/not-modified` a streamed 304, `/inline-304` `status_response(304)`,
+// and every other path as `answer`.
+test fn edge_answer(state: PipeStream, request: Request) -> Response = if request.path == "/streamed" {
+  Response.streamed(200, [])
+} else if request.path == "/redirect" {
+  Response.streamed(302, [])
+} else if request.path == "/not-modified" {
+  Response.streamed(304, [])
+} else if request.path == "/inline-304" {
+  status_response(304)
+} else {
+  answer((), request)
+}
+
+// One byte of `state` per piece: `.` an empty piece, `!` an error, any
+// other byte itself; `None` once the test closed it.
+test fn byte_piece(state: PipeStream, request: Request) -> IoResult<Option<Bytes>> requires [state.read] = match state.read(1)? {
+  Eof => Ok(None)
+  Data(bytes) => if bytes == b"." {
+    Ok(Some(Bytes.empty()))
+  } else if bytes == b"!" {
+    Err(IoError.new("piece failed"))
+  } else {
+    Ok(Some(bytes))
+  }
+}
+
+// Everything `Http.serve` sends for `input` under `edge_answer` when the
+// pieces are the bytes of `pieces`, one per call of `byte_piece`.
+test fn edge_served(input: Bytes, pieces: Bytes) -> IoResult<Text> {
+  let (client, server) = connected()?
+  let (control, source) = connected()?
+  control.write_all(pieces)?
+  _ = control.close()
+  spawn Http.serve(server, HttpLimits {}, HttpApp { state = source, handle = edge_answer, piece = byte_piece })
+  client.write_all(input)?
+  read_to_end(client)
+}
+
+test "an empty piece is skipped and does not end a chunked body" {
+  let head = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+  assert edge_served(b"GET /streamed HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", b"a.b")? == head + "1\r\na\r\n1\r\nb\r\n0\r\n\r\n"
+  assert edge_served(b"GET /streamed HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", b"..")? == head + "0\r\n\r\n"
+}
+
+test "a streamed 304 is the head only and the connection goes on" {
+  let after = reply("GET /n? ", "close")
+  assert edge_served(b"GET /not-modified HTTP/1.1\r\nHost: h\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", b"abc")? == "HTTP/1.1 304 Not Modified\r\nConnection: keep-alive\r\n\r\n" + after
+}
+
+test "a streamed 3xx answer to CONNECT is chunked" {
+  assert edge_served(b"CONNECT /redirect HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", b"ab")? == "HTTP/1.1 302 Found\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n1\r\na\r\n1\r\nb\r\n0\r\n\r\n"
+}
+
+test "a chunk size over 15 has its hexadecimal digits most significant first" {
+  assert hex(0) == "0"
+  assert hex(16) == "10"
+  assert hex(256) == "100"
+  assert hex(4095) == "fff"
+  assert hex(4096) == "1000"
+  var expected = b"100\r\n"
+  expected.append(every_byte())
+  expected.append(b"\r\n")
+  assert chunk(every_byte()) == expected
+}
+
+test "an error of piece ends a chunked body before its last chunk and the connection with it" {
+  let head = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n"
+  assert edge_served(b"GET /streamed HTTP/1.1\r\nHost: h\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", b"a!b")? == head + "1\r\na\r\n"
+}
+
+test "a 304 answered inline sends no content, so a pipelined response is not misread" {
+  let out = edge_served(b"GET /inline-304 HTTP/1.1\r\nHost: h\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", Bytes.empty())?
+  let after_head = out.split("\r\n\r\n").at(1)
+  assert after_head.split("\r\n").at(0) == "HTTP/1.1 200 OK", "the bytes after the 304 head: {after_head}"
+  assert render(Response.bytes(304, "application/octet-stream", b"x"), true).to_text().ends_with("\r\n\r\n")
+}
+
+test "a 1xx response answered inline has no Content-Length" {
+  assert !render(Response { status = 100 }, true).to_text().contains("Content-Length")
+  assert !render(Response.bytes(103, "application/octet-stream", b"x"), true).to_text().contains("Content-Length")
+}
+
+test "a 2xx answer to CONNECT answered inline has no Content-Length" {
+  let out = served(b"CONNECT /x HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?
+  assert status_line(out) == "HTTP/1.1 200 OK"
+  assert !out.contains("Content-Length"), out
+}
+
+test "a 2xx answer to CONNECT answered inline ends by closing the connection" {
+  let out = served(b"CONNECT /x HTTP/1.1\r\nHost: h\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?
+  assert out == "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\nCONNECT /x? ", out
+  assert served(b"CONNECT /forbidden HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?.contains("Content-Length: 10\r\n")
 }
