@@ -17,7 +17,7 @@ scope:
   path: quality/
 - confidence: inferred
   path: tools/ignite-perf/src
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T21:02:47Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-07T21:02:47Z", actor: "human:timo", revision: 4}
@@ -32,6 +32,7 @@ The timing metrics of `docs/quality.md` are measured on a machine that runs noth
 
 - Timo, 2026-11-07: timing metrics only make sense "on a dedicated machine where we know only this particular thing is running"; option A of the assessment (EC2 bare metal spot over EC2 dedicated tenancy and Fly.io, whose `performance` machines share hosts with other customers, docs.fly.io/machines/cpu-performance).
 - Account: AWS profile `babelforce-dev-admin` (account `523757638725`), region `eu-central-1`. `babelforce-dev` (DeveloperAccess) cannot call EC2. Checked 2026-11-07: `run-instances --dry-run` of `c7i.4xlarge` succeeds; standard on-demand vCPU quota 1920; `c7i.metal-24xl` 96 vCPU, 192 GiB, on-demand 4.89 USD/h, spot 0.96 to 1.49 USD/h by zone.
+- Prior art to read first: the pusher case study builds the same remote mode on this design (session `pusher-2b`, 2026-11-07), GitLab `pusher/benchmark`, `task evaluate:remote`. Reuse its AWS steps; the ignite-lang mode stays Rust in `tools/ignite-perf` (AGENTS.md tooling rule).
 - Builds on `story:quality-ratchet` (`quality/history.jsonl`, `task quality`, the timing modes of `tools/ignite-perf`).
 - Method stays `docs/slice.md` 15.1 / `tools/ignite-perf`: interleaved pairs of base and head on one host; on metal, SMT and turbo pinned where the instance allows it (to be verified on the host, not assumed).
 
