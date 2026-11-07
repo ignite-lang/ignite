@@ -1,0 +1,10 @@
+// `to_text` on a `List<Byte>` is the builtin (`docs/slice.md` 4.8 rule 1,
+// `ignite_types::builtins::list_method`), so a user fn named `to_text` that
+// takes something else is no candidate: the call checks clean.
+type Point {
+  x: Int
+}
+
+fn to_text(p: Point, extra: Int) -> Text = "user"
+
+fn decode_list(b: List<Byte>) -> Text = b.to_text()
