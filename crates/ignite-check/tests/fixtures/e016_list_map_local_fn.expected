@@ -1,0 +1,2 @@
+e016_list_map_local_fn.ignite:6:11: error[E016]: missing effect `store.read` for `closure`; add it to the `requires` of `names`
+e016_list_map_local_fn.ignite:17:66: error[E016]: missing effect `clock.read` for `apply`; add it to the `requires` of `caller`
