@@ -7,24 +7,25 @@ title: Compiler-derived encode and decode for every data type
 relations:
 - decomposes: epic:data-formats
 - depends_on: story:data-value-model
-revision: 1
+- depends_on: story:data-codec-combinators
+revision: 2
 ---
 # Story: data-derived-codec
 
 ## Outcome
 
-`encode`, `decode`, `encode_with` and `decode_with` of `std.data` work for every data type a program uses: the frontend writes one typed encode and one typed decode function per reached type (`docs/serde.md` section 3.2, option A), both backends and the evaluator run them unchanged, and the mapping is the table of section 5.
+`std.data.codec<T>()` returns, for every data type `T` a program uses, the `Codec<T>` that `story:data-codec-combinators`' combinators would build by hand: the frontend writes one `Codec` value per reached type (`docs/serde.md` section 3.2), a program-declared `const` of type `Codec<T>` is used instead for its `T`, and both backends and the evaluator run the result unchanged.
 
 ## Acceptance
 
-- A fixture with a record, a unit enum, a payload enum (positional and record payloads), `Option` fields, `List`, tuple, `Map<Text, _>`, `Map<Int, _>`, a recursive enum and `Bytes` round-trips on the evaluator, Rust and LLVM, and the three `Value`s are equal (differential test).
-- `Shape { keys = Camel }`, `tagging = Internal("type")`, `unknown = Deny` and one `renames` entry each have a fixture with the expected `Value`.
-- `decode` of a wrong member type gives `DecodeError` with the path (`$.items[2].title`).
-- `encode` of a type containing a `TcpStream` or a function is a check diagnostic naming the field path, with a fixture and an `.expected`; a constant `Shape` whose `renames` names no field is a diagnostic too.
-- `ignite emit --typed-json` lists the written functions.
-- `CODEGEN_REVISION` bumped; `docs/slice.md` section; `task gate` green.
+- For each type of the combinators story's fixture (record, unit enum, payload enums, `Option`, `List`, pair, `Map<Text, _>`, recursive enum, `Bytes`, `Duration`) plus `Map<Int, _>` and `Map` keyed by a unit-variant enum, `encode(codec(), x)` equals `encode(hand_codec, x)` on the evaluator, Rust and LLVM.
+- A program-declared `const` `Codec<Duration>` is used by `codec<Record>()` for a `Duration` field (fixture).
+- Check diagnostics, each with a fixture and an `.expected`: `codec()` for a type containing a `TcpStream` or a function (names the field path); a `Map` key type other than `Text`, `Int` or a unit-variant enum; `codec()` with no fixed `T` (design O1).
+- `ignite emit --typed-json` lists the written `Codec` values.
+- `CODEGEN_REVISION` bumped; `docs/slice.md` section; the layering rule 6 row for the `std.data` name in the crate; `task gate` green.
 
 ## Scope
 
-- `crates/ignite-types` (instantiation record and the writing pass), `crates/ignite-check` (diagnostics), `crates/ignite/src/typed_json.rs`, `crates/ignite/src/apply/plan.rs` (`CODEGEN_REVISION`), `std/data.ignite` (builtin declarations), tests in `crates/ignite/tests/`. Inferred.
-- Overlaps `story:mid-level-ir` on `crates/ignite-types` if they share a wave.
+- Own: `crates/ignite-types` (instantiation record, the writing pass), `crates/ignite-check` (diagnostics), `crates/ignite/src/typed_json.rs`, `crates/ignite/src/apply/plan.rs` (`CODEGEN_REVISION`), the builtin declaration in `std/data.ignite`, tests under `crates/ignite/tests/`.
+- Shared: `docs/layering.md` ("Std names in the crates"), `docs/slice.md`, `AGENTS.md`, `crates/ignite/tests/main.rs`.
+- Overlaps `story:mid-level-ir` on `crates/ignite-types`: not in one wave with it.
