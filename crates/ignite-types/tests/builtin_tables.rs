@@ -91,3 +91,100 @@ fn the_checker_table_matches_the_type_checker() {
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+/// Every method name the type checker resolves to a builtin, written out
+/// from `ignite_types::builtins` (`method`, `list_method`, `map_method`,
+/// `store_method`, `capability_method`, `stream_method`) rather than read
+/// from `ignite_check::BUILTIN_METHODS`.
+const TYPE_CHECKER_METHOD_NAMES: &[&str] = &[
+    "copy",
+    "debug",
+    "len",
+    "is_empty",
+    "trim",
+    "starts_with",
+    "strip_prefix",
+    "concat",
+    "to_bytes",
+    "to_text",
+    "to_int",
+    "to_byte",
+    "wrapping_add",
+    "wrapping_sub",
+    "wrapping_mul",
+    "checked_add",
+    "checked_sub",
+    "checked_mul",
+    "set_idle_timeout",
+    "next_id",
+    "get",
+    "put",
+    "remove",
+    "values",
+    "update",
+    "upsert",
+    "at",
+    "slice",
+    "push",
+    "set",
+    "append",
+    "clear",
+    "join",
+    "map",
+    "keys",
+    "contains",
+    "to_ms",
+    "to_ns",
+    "ppm",
+    "with_exit_code",
+    "accept",
+    "local_port",
+    "read",
+    "write_all",
+    "close",
+    "received_batches",
+    "write_urgent",
+    "urgent_pending",
+    "read_file",
+    "write_file",
+    "read_directory",
+    "create_directory",
+    "remove_tree",
+    "absolute_path",
+    "start",
+    "execute",
+    "id",
+    "wait",
+    "kill",
+    "random_bytes",
+    "value",
+    "arguments",
+];
+
+/// `the_checker_table_matches_the_type_checker` iterates only the names the
+/// checker already knows, so a name missing from `BUILTIN_METHODS` (and from
+/// `CAPABILITY_METHODS`) drops out of the comparison instead of failing it.
+/// Here the names come from the type checker's side: each one it resolves
+/// on some receiver must be a name the checker treats as a builtin.
+#[test]
+#[ignore = "story:checker-builtin-table-gaps: next_id, values, update, upsert are missing from BUILTIN_METHODS"]
+fn every_type_checker_builtin_name_is_known_to_the_checker() {
+    let mut unknown = Vec::new();
+    for name in TYPE_CHECKER_METHOD_NAMES {
+        let resolved = cases()
+            .iter()
+            .any(|(ty, _)| ignite_types::is_builtin_method(ty, name));
+        assert!(resolved, "`{name}` resolves on no receiver of `cases()`");
+        let known = ignite_check::BUILTIN_METHODS.contains(name)
+            || ignite_check::CAPABILITY_METHODS
+                .iter()
+                .any(|(_, m, _)| m == name);
+        if !known {
+            unknown.push(*name);
+        }
+    }
+    assert!(
+        unknown.is_empty(),
+        "builtins of the type checker that ignite-check does not know: {unknown:?}"
+    );
+}
