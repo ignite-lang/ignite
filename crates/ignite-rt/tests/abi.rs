@@ -221,6 +221,58 @@ fn tcp_round_trip_with_concurrent_read_and_write() {
     ignite_rt_task_end();
 }
 
+/// `tcp_peer`, `tcp_timed_out` and `tcp_connect_within` (`docs/slice.md`
+/// 26.4): the peer as an `Endpoint` in the task's arena, the flag of the
+/// last read, and a connect that gives up after its timeout.
+#[test]
+fn peer_timed_out_and_connect_within() {
+    let listener = bind();
+    let port = ignite_rt_tcp_local_port(listener);
+    let (mut client, mut server, mut err) = (0i64, 0i64, no_error());
+    assert_eq!(
+        ignite_rt_tcp_connect_within(
+            &text("127.0.0.1"),
+            port,
+            1_000_000_000,
+            &mut client,
+            &mut err
+        ),
+        0
+    );
+    assert_eq!(ignite_rt_tcp_accept(listener, &mut server, &mut err), 0);
+    let mut peer = IgniteEndpoint {
+        address: empty(),
+        port: -1,
+    };
+    ignite_rt_tcp_peer(&mut peer, client);
+    assert_eq!(
+        (read_text(&peer.address), peer.port),
+        ("127.0.0.1".to_string(), port)
+    );
+    ignite_rt_tcp_peer(&mut peer, listener);
+    assert_eq!((read_text(&peer.address), peer.port), (String::new(), 0));
+
+    assert_eq!(ignite_rt_tcp_timed_out(client), 0);
+    assert_eq!(ignite_rt_tcp_set_idle_timeout(client, 50, &mut err), 0);
+    assert_eq!(read(client, 1).tag, 1);
+    assert_eq!(ignite_rt_tcp_timed_out(client), 1);
+    assert_eq!(ignite_rt_tcp_close(server, &mut err), 0);
+    assert_eq!(read(client, 1).tag, 1);
+    assert_eq!(ignite_rt_tcp_timed_out(client), 0);
+
+    let started = std::time::Instant::now();
+    let status = ignite_rt_tcp_connect_within(
+        &text("10.255.255.1"),
+        80,
+        200_000_000,
+        &mut client,
+        &mut err,
+    );
+    assert_eq!(status, 1);
+    assert!(started.elapsed() < Duration::from_millis(300));
+    ignite_rt_task_end();
+}
+
 #[test]
 fn release_closes_the_socket_and_invalidates_the_handle() {
     let listener = bind();

@@ -255,3 +255,61 @@ fn a_write_after_close_is_the_writers_error() {
     peer.write_all(b"x").unwrap();
     assert_eq!(reader.read(16).unwrap(), Input::Data(b"x".to_vec()));
 }
+
+/// `peer` is the other end's address and port, the address as text the
+/// way its family writes it (`docs/slice.md` 26.1).
+#[test]
+fn peer_is_the_other_end_in_both_families() {
+    let (client, server) = pair();
+    assert_eq!(client.peer().0, LOCALHOST);
+    assert_eq!(server.peer().0, LOCALHOST);
+    assert_ne!(server.peer().1, 0);
+    assert_ne!(server.peer().1, client.peer().1);
+    let listener = TcpListener::bind("::1".to_string(), 0).unwrap();
+    let client = TcpStream::connect("::1".to_string(), listener.local_port()).unwrap();
+    let server = listener.accept().unwrap();
+    assert_eq!(server.peer().0, "::1");
+    assert_eq!(client.peer(), ("::1".to_string(), listener.local_port()));
+    server.close().unwrap();
+    assert_eq!(server.peer().0, "::1", "a closed stream keeps its peer");
+}
+
+/// A read the idle timeout ended is `Eof` with `timed_out`; a read that
+/// returned because the peer closed is `Eof` without it (26.2).
+#[test]
+fn timed_out_tells_an_idle_timeout_from_a_close() {
+    let (client, server) = pair();
+    assert!(!client.timed_out());
+    client.set_idle_timeout(100).unwrap();
+    assert_eq!(client.read(1).unwrap(), Input::Eof);
+    assert!(client.timed_out());
+    server.write_all(b"x".to_vec()).unwrap();
+    server.close().unwrap();
+    assert_eq!(client.read(1).unwrap(), Input::Data(b"x".to_vec()));
+    assert!(!client.timed_out(), "a read that returned data clears it");
+    assert_eq!(client.read(1).unwrap(), Input::Eof);
+    assert!(!client.timed_out());
+}
+
+/// `connect_within` gives up on an address that never answers within the
+/// timeout plus 100 ms, and connects as `connect` does otherwise (26.3).
+#[test]
+fn connect_within_bounds_the_wait() {
+    let started = std::time::Instant::now();
+    let refused = TcpStream::connect_within("10.255.255.1".to_string(), 80, 200_000_000);
+    let waited = started.elapsed();
+    assert!(refused.is_err());
+    assert!(waited < Duration::from_millis(300), "waited {waited:?}");
+    let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
+    let port = listener.local_port();
+    let client = TcpStream::connect_within(LOCALHOST.to_string(), port, 1_000_000_000).unwrap();
+    let server = listener.accept().unwrap();
+    client.write_all(b"hi".to_vec()).unwrap();
+    client.close().unwrap();
+    assert_eq!(read_exactly(&server, 2), b"hi");
+    let zero = TcpStream::connect_within(LOCALHOST.to_string(), port, 0);
+    assert_eq!(
+        zero.unwrap_err().message,
+        format!("connect {LOCALHOST}:{port}: the timeout must be positive")
+    );
+}
