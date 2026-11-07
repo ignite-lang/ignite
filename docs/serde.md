@@ -60,16 +60,16 @@ type Rule {
 enum Action { Allow, Deny(Text), Redirect { to: Text, status: Int } }
 
 fn load(text: Text) -> Result<List<Rule>, Text> {
-  let value = yaml.parse(text).map_err(|e| e.message)?
+  let value = yaml.read(text).map_err(|e| e.message)?
   let rules: Codec<List<Rule>> = codec()
   decode(rules, value).map_err(|e| e.describe())
 }
 
 fn wire(rules: List<Rule>) -> Text =
-  json.emit(encode_with(codec(), rules, Shape { keys = Case.Camel, ..Shape.default() }))
+  json.write(encode_with(codec(), rules, Shape { keys = Case.Camel, ..Shape.default() }))
 ```
 
-The block is a sketch: its syntax (closures, `..` record update, `yaml.parse` by module name) is not checked against the parser.
+The block is a sketch: its syntax (closures, `..` record update, `yaml.read` by module name) is not checked against the parser.
 
 Everything a program calls lives in `std` and is written in Ignite (Timo, 2026-11-08: "in std").
 Four layers, each usable alone:
@@ -78,7 +78,7 @@ Four layers, each usable alone:
 |---|---|---|---|
 | value model | `std.data` | `Value`, the tree every format reads into and writes from; `Shape`; `DecodeError`; `DataLimits` | none |
 | codecs | `std.data` | `Codec<T>`, a record of two functions, and combinators that build one for any type by hand (section 3.3) | none |
-| formats | `std.json`, `std.yaml`, `std.toml` | `parse(text) -> Result<Value, FormatError>`, `emit(value) -> Result<Text, FormatError>` | none |
+| formats | `std.json`, `std.yaml`, `std.toml` | `read(text) -> Result<Value, FormatError>`, `write(value) -> Result<Text, FormatError>` | none |
 | derivation | `std.data.codec<T>()`, written by the frontend | the `Codec<T>` a program would otherwise write with the combinators (section 3.2) | one frontend pass |
 
 The first three layers ship with no compiler change and work today; derivation removes the
@@ -97,6 +97,8 @@ fn decode<T>(codec: Codec<T>, value: Value) -> Result<T, DecodeError>
 fn encode_with<T>(codec: Codec<T>, value: T, shape: Shape) -> Value
 fn decode_with<T>(codec: Codec<T>, value: Value, shape: Shape) -> Result<T, DecodeError>
 ```
+
+`std.json` also has an `encode`; a program that uses both imports the names it needs (`import std.data.{encode}`), as `std.option` and `std.result` already require (`AGENTS.md`).
 
 Combinators, all in `std.data`: `int()`, `text()`, `bool()`, `bytes()`, `duration()`,
 `list(c)`, `option(c)`, `text_map(c)`, `pair(a, b)`, `record2` to `record8`
@@ -167,7 +169,7 @@ enum Value {
 ```
 
 - Map keys are `Text`. A format with other key types (YAML's `1: a`) gives their canonical text.
-- `Json` stays: `std.json` gains `to_value(Json) -> Value` and `from_value(Value) -> Json`.
+- `Json` stays: `std.json` gains `to_data(Json) -> Value` and `of_data(Value) -> Json`.
   `Bytes` becomes base64 text, `Moment` its text. `std.protocol.jsonrpc` and ignite-lsp keep
   working unchanged. Whether `Json` later becomes a name for `Value` is open question O3.
 
@@ -177,6 +179,7 @@ enum Value {
 |---|---|---|
 | `Bool`, `Int`, `Text`, `Bytes` | `Bool`, `Int`, `Text`, `Bytes` | the same; `Bytes` also from base64 `Text` |
 | `Duration` | `Text`, `500 ms` | the same text |
+| `Text` | `Text` | also `Decimal` and `Moment`, as their text: TOML floats and datetimes decode into `Text` fields until Ignite has a decimal and a time type |
 | record | `Map` of its fields, in declaration order | members in any order |
 | `Option<T>` field | member left out when `None` | absent or `Null` gives `None` |
 | `Option<T>` elsewhere | `Null` or the value | the same |
@@ -221,28 +224,28 @@ line. The first error ends decoding; collecting every error is open question O4.
 
 ## 6 Formats
 
-Each format is one std module in Ignite: `parse(text: Text) -> Result<Value, FormatError>`,
-`parse_with(text, limits)`, `emit(value: Value) -> Result<Text, FormatError>`.
+Each format is one std module in Ignite: `read(text: Text) -> Result<Value, FormatError>`,
+`read_with(text, limits)`, `write(value: Value) -> Result<Text, FormatError>`.
 `FormatError { message, line, column, offset }` uses the positions `ignite check --json` uses.
-A format declares `conforms` against a catalogue in `std/rfc/` (slice §19.19 allows catalogues
+Later (section 9), a format declares `conforms` against a catalogue in `std/rfc/` (slice §19.19 allows catalogues
 named by a text `id`), so `ignite conformance` reports its coverage.
 
 ### 6.1 JSON (`std.json`, exists)
 
-RFC 8259, unchanged parser. Adds `to_value`, `from_value`, `parse_value`, `emit` (compact) and
-`emit_pretty`.
+RFC 8259, unchanged parser. Adds `to_data`, `of_data`, `read`, `write` (compact) and
+`write_pretty`. `parse` and `encode` keep returning and taking `Json`; `std.json` already has a private `parse_value`, so the new names are `read` and `write`.
 
 ### 6.2 YAML (`std.yaml`, new)
 
 YAML 1.2.2, core schema, a safe subset:
 
 - Block and flow collections; plain, single-quoted, double-quoted, literal (`|`) and folded (`>`)
-  scalars; comments; several documents in one stream (`parse_all`).
+  scalars; comments; several documents in one stream (`read_all`).
 - Core schema only: `true`/`false`, `null`/`~`, decimal, octal `0o` and hex `0x` integers. `yes`,
   `no`, `on`, `off` stay text (YAML 1.1's boolean list is not read).
 - Refused with a `FormatError` naming the line: anchors and aliases (exponential expansion),
   explicit tags except `!!binary`, complex (non-scalar) keys, the `<<` merge key.
-- `emit` writes block style, two-space indent, and quotes any text a reader would take for
+- `write` writes block style, two-space indent, and quotes any text a reader would take for
   another type (`"no"`, `"1.0"`, `"null"`).
 - Tested against the YAML test suite (`yaml/yaml-test-suite`), vendored under `docs/yaml/` like
   `docs/rfc/`; cases using refused features are listed as expected refusals.
@@ -256,7 +259,7 @@ TOML 1.0.0, complete:
 - Tables, inline tables, arrays of tables, dotted keys, all string forms, integers (`_`, `0x`,
   `0o`, `0b`), floats as `Decimal` text, `inf`/`nan` refused on decode into `Int`.
 - Offset date-time, local date-time, local date, local time as `Moment`.
-- The root of a document is a `Map`. `emit` refuses a root that is not a `Map` and a `Null`
+- The root of a document is a `Map`. `write` refuses a root that is not a `Map` and a `Null`
   anywhere (TOML has no null); `None` fields are left out before that.
 - Tested against `toml-lang/toml-test`, vendored.
 
@@ -264,7 +267,7 @@ TOML 1.0.0, complete:
 
 The evaluator runs the format modules and the derived functions like any pure Ignite (slice
 §15). With a declared build input this gives configuration typed at check time:
-`const SETTINGS: Settings = decode(toml.parse(input("settings.toml")))`, a diagnostic for a bad
+`const SETTINGS: Settings = decode(toml.read(input("settings.toml")))`, a diagnostic for a bad
 file at `ignite check`. Declared build inputs do not exist yet (design §3.5); open question O2.
 
 ## 8 Delivery
@@ -288,6 +291,7 @@ over the evaluator and both targets.
 - **Streaming**: `std.json.events(stream)` over a `ByteStream` for documents larger than memory.
 - **Binary formats**: CBOR (RFC 8949) and MessagePack map onto `Value` directly, `Bytes` native.
 - **CSV**: a `List` of records as rows, header from the field names.
+- **Conformance claims**: catalogues `std.rfc.yaml_1_2_2` and `std.rfc.toml_1_0_0` and `conforms` on the format modules, so `ignite conformance` reports them.
 
 ## 10 Open questions
 
