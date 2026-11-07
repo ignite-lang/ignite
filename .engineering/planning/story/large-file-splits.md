@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:large-file-splits
 kind: story
-status: draft
+status: active
 title: Split the largest compiler files into modules without changing public paths
 relations:
 - depends_on: story:mid-level-ir
@@ -11,7 +11,10 @@ scope:
   path: crates/ignite-check/src/lib.rs
 - confidence: inferred
   path: crates/ignite/src/apply/plan.rs
-revision: 3
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-07T12:35:14Z", actor: "human:timo", revision: 4}
+- {from: "proposed", to: "active", at: "2026-11-07T12:35:14Z", actor: "human:timo", revision: 5}
 ---
 # Story: large-file-splits
 

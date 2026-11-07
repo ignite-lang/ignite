@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:rustgen-reserved-names
 kind: story
-status: draft
+status: active
 title: Program names that shadow Rust primitives, crate roots or generator locals still build
 scope:
 - confidence: cited
@@ -21,7 +21,10 @@ scope:
   path: crates/ignite/src/apply/plan.rs
 - confidence: inferred
   path: docs/slice.md
-revision: 9
+revision: 11
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-07T12:35:12Z", actor: "human:timo", revision: 10}
+- {from: "proposed", to: "active", at: "2026-11-07T12:35:12Z", actor: "human:timo", revision: 11}
 ---
 # Story: rustgen-reserved-names
 

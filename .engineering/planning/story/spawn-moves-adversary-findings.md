@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:spawn-moves-adversary-findings
 kind: story
-status: draft
+status: active
 title: Spawned ends close in branches on LLVM, named spawn args in order on Rust
 scope:
 - confidence: cited
@@ -25,7 +25,10 @@ scope:
   path: crates/ignite/tests/stream_ownership.rs
 - confidence: inferred
   path: docs/slice.md
-revision: 11
+revision: 13
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-07T12:35:12Z", actor: "human:timo", revision: 12}
+- {from: "proposed", to: "active", at: "2026-11-07T12:35:12Z", actor: "human:timo", revision: 13}
 ---
 # Story: spawn-moves-adversary-findings
 

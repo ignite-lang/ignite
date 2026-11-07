@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:store-api-gaps
 kind: story
-status: draft
+status: active
 title: Store keyed by text, with conditional remove and a step that returns an outcome
 summary: 'Close ember''s Store gaps E1 to E4: non-Int keys, insert-or-update, conditional remove, update with an outcome'
 scope:
@@ -18,7 +18,10 @@ scope:
   path: crates/ignite-rustgen/src
 - confidence: inferred
   path: crates/ignite-types/src
-revision: 9
+revision: 11
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-07T12:35:14Z", actor: "human:timo", revision: 10}
+- {from: "proposed", to: "active", at: "2026-11-07T12:35:15Z", actor: "human:timo", revision: 11}
 ---
 # Story: store-api-gaps
 

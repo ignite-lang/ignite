@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:http-chunked-adversary-findings
 kind: story
-status: draft
+status: active
 title: 'Chunked decoder: tests that kill its mutants, memory bound and R6_2_5 claim'
 scope:
 - confidence: cited
@@ -17,7 +17,10 @@ scope:
   path: docs/slice.md
 - confidence: cited
   path: std/protocol/http.ignite
-revision: 7
+revision: 9
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-07T12:35:13Z", actor: "human:timo", revision: 8}
+- {from: "proposed", to: "active", at: "2026-11-07T12:35:13Z", actor: "human:timo", revision: 9}
 ---
 # Story: http-chunked-adversary-findings
 

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:shared-ownership-analysis
 kind: story
-status: draft
+status: active
 title: One ownership analysis exported from ignite-types
 scope:
 - confidence: inferred
@@ -13,7 +13,10 @@ scope:
   path: crates/ignite-rustgen/src/lib.rs
 - confidence: inferred
   path: crates/ignite-types/src/moves.rs
-revision: 5
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-07T12:35:13Z", actor: "human:timo", revision: 6}
+- {from: "proposed", to: "active", at: "2026-11-07T12:35:13Z", actor: "human:timo", revision: 7}
 ---
 # Story: shared-ownership-analysis
 

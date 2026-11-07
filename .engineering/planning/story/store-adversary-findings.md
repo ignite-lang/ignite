@@ -2,14 +2,17 @@
 format: aep.planning-md/3
 id: story:store-adversary-findings
 kind: story
-status: draft
+status: active
 title: 'Sharded Store: tests that catch its mutants, values under write load'
 scope:
 - confidence: cited
   path: crates/ignite-io/src/store.rs
 - confidence: inferred
   path: docs/slice.md
-revision: 3
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-07T12:35:13Z", actor: "human:timo", revision: 4}
+- {from: "proposed", to: "active", at: "2026-11-07T12:35:13Z", actor: "human:timo", revision: 5}
 ---
 # Story: store-adversary-findings
 

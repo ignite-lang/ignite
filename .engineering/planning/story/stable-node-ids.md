@@ -2,14 +2,17 @@
 format: aep.planning-md/3
 id: story:stable-node-ids
 kind: story
-status: draft
+status: active
 title: TypedProgram keyed by stable node ids instead of heap addresses
 scope:
 - confidence: inferred
   path: crates/ignite-syntax/src
 - confidence: inferred
   path: crates/ignite-types/src
-revision: 3
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-07T12:35:13Z", actor: "human:timo", revision: 4}
+- {from: "proposed", to: "active", at: "2026-11-07T12:35:13Z", actor: "human:timo", revision: 5}
 ---
 # Story: stable-node-ids
 
