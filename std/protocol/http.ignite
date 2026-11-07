@@ -1304,6 +1304,51 @@ fn read_line<T: ByteStream>(stream: T, data: Bytes, from: Int, maximum: Int) -> 
   }
 }
 
+// How reading one chunk's data ended: the body with the data appended, the
+// input held and the index after the data's CRLF in it; the peer closed
+// first; or the data is not followed by CRLF.
+enum ChunkData { DataRead(Bytes, Bytes, Int), DataClosed, DataMalformed }
+
+// Appends the `size` bytes of chunk data at `at` of `data` to `body` and
+// checks the CRLF after them. Data that `data` does not hold yet is
+// appended to `body` read by read, and only the bytes of the last read after
+// it are kept as input, so a chunk is never held twice.
+fn read_chunk_data<T: ByteStream>(stream: T, limits: HttpLimits, data: Bytes, at: Int, size: Int, body: Bytes) -> IoResult<ChunkData> {
+  var out = body
+  var input = data
+  var from = at + size
+  if data.len() < at + size {
+    let end = out.len() + size
+    out.append(data.slice(at, data.len()))
+    input = Bytes.empty()
+    from = 0
+    while out.len() < end {
+      match stream.read(READ_SIZE)? {
+        Eof => return Ok(DataClosed)
+        Data(more) => {
+          let need = end - out.len()
+          if more.len() <= need {
+            out.append(more)
+          } else {
+            out.append(more.slice(0, need))
+            input = more.slice(need, more.len())
+          }
+        }
+      }
+    }
+  } else {
+    out.append(data.slice(at, at + size))
+  }
+  input = match read_body(stream, limits, input, from + 2)? {
+    None => return Ok(DataClosed)
+    Some(more) => more
+  }
+  if input.at(from) != b'\r' || input.at(from + 1) != b'\n' {
+    return Ok(DataMalformed)
+  }
+  Ok(DataRead(out, input, from + 2))
+}
+
 // How decoding a chunked body ended: the body, the bytes after the message,
 // the peer closed first, or a status to answer.
 enum Chunked { Decoded(Bytes, Bytes), Unfinished, Refused(Int) }
@@ -1344,17 +1389,15 @@ fn read_chunked<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes, sta
     if size == 0 {
       break
     }
-    match read_body(stream, limits, data, at + size + 2)? {
-      None => return Ok(Unfinished)
-      Some(more) => {
-        data = more
+    match read_chunk_data(stream, limits, data, at, size, body)? {
+      DataRead(decoded, input, next) => {
+        body = decoded
+        data = input
+        at = next
       }
+      DataClosed => return Ok(Unfinished)
+      DataMalformed => return Ok(Refused(400))
     }
-    if data.at(at + size) != b'\r' || data.at(at + size + 1) != b'\n' {
-      return Ok(Refused(400))
-    }
-    body.append(data.slice(at, at + size))
-    at = at + size + 2
   }
   let trailer = at
   loop {
@@ -2233,4 +2276,25 @@ test "an unterminated chunk-size line or trailer over the head limit is 431, not
   assert next_with(chunked("1;" + repeat("x", 80)), limits)? == Reject(431)
   assert next_with(chunked("1\r\na\r\n1;" + repeat("x", 80)), limits)? == Reject(431)
   assert next_with(chunked("0\r\nX: " + repeat("x", 80)), limits)? == Reject(431)
+}
+
+test "one chunk of the whole body limit is decoded holding at most one read besides the body" {
+  let limits = HttpLimits {}
+  let size = limits.body.to_int()
+  let (client, server) = connected()?
+  var sent = repeat("a", size).to_bytes()
+  sent.append(b"\r\n0\r\n\r\n")
+  client.write_all(sent)?
+  _ = client.close()
+  match read_chunk_data(server, limits, b"100000\r\n", 8, size, Bytes.empty())? {
+    DataRead(body, input, at) => {
+      assert body.len() == size
+      assert input.len() <= READ_SIZE, "the decoder holds {input.len()} bytes of input besides the body"
+      assert input.slice(at, input.len()) == b"0\r\n\r\n"
+    }
+    _ => {
+      assert false, "one chunk of the body limit is read"
+    }
+  }
+  assert next_of(chunked("100000\r\n" + repeat("a", size) + "\r\n0\r\n\r\n"))? == Got(chunked_request(repeat("a", size)), Bytes.empty())
 }

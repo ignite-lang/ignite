@@ -6535,8 +6535,13 @@ chunk data and the trailer section from the stream.
 
 Limits: the decoded body is bounded by `HttpLimits.body` (413), each chunk-size line and the
 whole trailer section by `HttpLimits.head` (431). The bytes the decoder has consumed are
-dropped as it goes, so a body of many small chunks holds at most the body and one read in
-memory. Not bounded beyond that: the extension bytes over a body's chunks together, at most
+dropped as it goes, and chunk data its input buffer does not hold yet is appended to the body
+read by read (`read_chunk_data`), so a chunk is never held twice: however the body is split
+into chunks, the decoder holds the body and, besides it, input of less than two reads
+(`READ_SIZE`, 64 KiB) and the chunk-size line being read (at most `HttpLimits.head`). The test
+"one chunk of the whole body limit is decoded holding at most one read besides the body" decodes
+one chunk of `HttpLimits.body` bytes and checks that the input kept after it is at most one
+read. Not bounded beyond that: the extension bytes over a body's chunks together, at most
 `HttpLimits.head` per chunk, so a 1 MiB body in 1-byte chunks may carry up to 8 GiB of
 extensions under the default limits, each read still under `idle_timeout`. `todo.rs`'s
 `header_framing` case that expected 501 for a chunked POST now creates a todo from a chunked
