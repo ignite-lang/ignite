@@ -3653,6 +3653,9 @@ The drain on SIGTERM:
   `code` at once; live tasks are not waited for (story `drain-exit`, the pusher's G16). On
   the LLVM target it lowers to the runtime entry `ignite_rt_process_exit`, not to the
   `ignite_rt_exit` the generated main calls when `K.main` returns.
+- Exit's send never waits for another party, as it never waits for standard output: a stream
+  whose write lock another task holds (a task stalled in a send to a peer that does not read)
+  is skipped, and a socket whose buffers are full is sent what fits; the rest is lost.
 - A second SIGTERM exits at once.
 - As landed (P2): a SIGTERM's in-flight guard ends at `released`; a SIGTERM to a program
   without a listener (`tn`) drains too: it waits for `main`, and a second SIGTERM ends it.
