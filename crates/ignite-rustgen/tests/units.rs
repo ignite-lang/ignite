@@ -20,7 +20,7 @@ fn id(name: &str) -> Ident {
 }
 
 fn ex(kind: ExprKind) -> Expr {
-    Expr { kind, span: sp() }
+    Expr::new(kind, sp())
 }
 
 fn name(n: &str) -> Expr {
@@ -133,7 +133,7 @@ fn match_(scrutinee: Expr, arms: Vec<(Pattern, Expr)>) -> Expr {
 }
 
 fn pat(kind: PatternKind) -> Pattern {
-    Pattern { kind, span: sp() }
+    Pattern::new(kind, sp())
 }
 
 fn pvariant(path: &[&str], args: Vec<Pattern>) -> Pattern {
@@ -180,6 +180,7 @@ fn ret(value: Expr) -> Stmt {
 fn assign(base: &str, fields: &[&str], value: Expr) -> Stmt {
     st(StmtKind::Assign {
         target: Place {
+            id: NodeId::fresh(),
             base: id(base),
             fields: fields.iter().map(|f| id(f)).collect(),
             span: sp(),
@@ -190,6 +191,7 @@ fn assign(base: &str, fields: &[&str], value: Expr) -> Stmt {
 
 fn ty(n: &str) -> Type {
     Type {
+        id: NodeId::fresh(),
         name: id(n),
         args: Vec::new(),
         span: sp(),
@@ -200,6 +202,7 @@ fn ty(n: &str) -> Type {
 
 fn ty_of(n: &str, args: Vec<Type>) -> Type {
     Type {
+        id: NodeId::fresh(),
         name: id(n),
         args,
         span: sp(),
@@ -382,6 +385,7 @@ fn symbols_for(program: &Program) -> Symbols {
 fn program(decls: Vec<Decl>) -> Program {
     Program {
         package: Some(Path {
+            id: NodeId::fresh(),
             segments: vec![id("examples"), id("demo")],
             span: sp(),
         }),
@@ -464,7 +468,7 @@ fn header_and_declarations() {
         &out,
         "#[derive(Clone)] pub struct Reply { pub lines: Vec<String>, pub action: Action, }",
     );
-    assert!(!out.contains("use ignite_io::*"));
+    assert!(!out.contains("use ::ignite_io::*"));
 }
 
 #[test]
@@ -494,8 +498,8 @@ fn type_table() {
     assert_has(
         &out,
         "pub fn g(a: &String, b: &Vec<u8>, c: &u8, d: &i64, e: &bool, f: &(), \
-         g: &Vec<i64>, h: &Option<String>, i: &Result<(), ignite_io::IoError>, \
-         j: &ignite_io::TcpListener, k: &ignite_io::TcpStream, m: &ignite_io::Input, \
+         g: &Vec<i64>, h: &::std::option::Option<String>, i: &::std::result::Result<(), ::ignite_io::IoError>, \
+         j: &::ignite_io::TcpListener, k: &::ignite_io::TcpStream, m: &::ignite_io::Input, \
          o: &Reply, p: &Mystery<i64>) -> () { let mut c = c.clone(); let mut d = d.clone(); \
          let mut e = e.clone(); let mut f = f.clone(); }",
     );
@@ -512,7 +516,7 @@ fn effectful_function_is_a_plain_fn() {
     )]);
     assert_has(
         &out,
-        "pub fn h(s: &ignite_io::TcpStream) -> Result<(), ignite_io::IoError> { return Ok(()); }",
+        "pub fn h(s: &::ignite_io::TcpStream) -> ::std::result::Result<(), ::ignite_io::IoError> { return Ok(()); }",
     );
 }
 
@@ -591,14 +595,14 @@ fn builtin_methods() {
         ),
         (
             callf("log", vec![name("x")]),
-            "ignite_io::log(&(x.clone()))",
+            "::ignite_io::log(&(x.clone()))",
         ),
         (
             call(
                 field(name("TcpListener"), "bind"),
                 vec![text("127.0.0.1"), int(0)],
             ),
-            "ignite_io::TcpListener::bind(String::from(\"127.0.0.1\"), 0)",
+            "::ignite_io::TcpListener::bind(String::from(\"127.0.0.1\"), 0)",
         ),
         (
             method(
@@ -606,15 +610,15 @@ fn builtin_methods() {
                 "connect",
                 vec![text("127.0.0.1"), name("n")],
             ),
-            "ignite_io::TcpStream::connect(String::from(\"127.0.0.1\"), n.clone())",
+            "::ignite_io::TcpStream::connect(String::from(\"127.0.0.1\"), n.clone())",
         ),
         (
             method(name("Stdin"), "read", vec![int(4096)]),
-            "ignite_io::Stdin::read(4096)",
+            "::ignite_io::Stdin::read(4096)",
         ),
         (
             call(field(name("Stdout"), "write_all"), vec![name("b")]),
-            "ignite_io::Stdout::write_all(b.clone())",
+            "::ignite_io::Stdout::write_all(b.clone())",
         ),
         (
             method(name("x"), "write_all", vec![name("b")]),
@@ -622,23 +626,23 @@ fn builtin_methods() {
         ),
         (
             method(name("Stdin"), "is_terminal", vec![]),
-            "ignite_io::Stdin::is_terminal()",
+            "::ignite_io::Stdin::is_terminal()",
         ),
         (
             method(name("Stdin"), "set_raw", vec![boolean(true)]),
-            "ignite_io::Stdin::set_raw(true)",
+            "::ignite_io::Stdin::set_raw(true)",
         ),
         (
             method(name("Process"), "exit", vec![int(0)]),
-            "ignite_io::exit((0) as i32)",
+            "::ignite_io::exit((0) as i32)",
         ),
         (
             method(name("IoError"), "new", vec![text("bad")]),
-            "ignite_io::IoError::new(String::from(\"bad\"))",
+            "::ignite_io::IoError::new(String::from(\"bad\"))",
         ),
         (
             call(field(name("IoError"), "new"), vec![name("x")]),
-            "ignite_io::IoError::new(x.clone())",
+            "::ignite_io::IoError::new(x.clone())",
         ),
     ];
     for (expr, expected) in cases {
@@ -928,13 +932,13 @@ fn variant_expressions() {
         (callf("Err", vec![name("x")]), "Err(x.clone())"),
         (
             callf("Data", vec![name("b")]),
-            "ignite_io::Input::Data(b.clone())",
+            "::ignite_io::Input::Data(b.clone())",
         ),
-        (name("Eof"), "ignite_io::Input::Eof"),
-        (field(name("Input"), "Eof"), "ignite_io::Input::Eof"),
+        (name("Eof"), "::ignite_io::Input::Eof"),
+        (field(name("Input"), "Eof"), "::ignite_io::Input::Eof"),
         (
             call(field(name("Input"), "Data"), vec![name("b")]),
-            "ignite_io::Input::Data(b.clone())",
+            "::ignite_io::Input::Data(b.clone())",
         ),
     ];
     for (expr, expected) in cases {
@@ -980,10 +984,10 @@ fn variant_patterns() {
     assert_has(&out, "None => 0,");
     assert_has(&out, "Ok(_) => 0,");
     assert_has(&out, "Err(e) => 0,");
-    assert_has(&out, "ignite_io::Input::Data(bytes) => 0,");
+    assert_has(&out, "::ignite_io::Input::Data(bytes) => 0,");
     assert_has(
         &out,
-        "ignite_io::Input::Eof => 0, ignite_io::Input::Eof => 0,",
+        "::ignite_io::Input::Eof => 0, ::ignite_io::Input::Eof => 0,",
     );
     assert_has(&out, "Command::Help => 0,");
     assert_has(&out, "7 => 0,");
@@ -1020,7 +1024,7 @@ fn qualified_variant_patterns() {
     assert_has(&out, "Command::Echo(None) => 2,");
     assert_has(&out, "Some(v) => 0,");
     assert_has(&out, "Err(e) => 0,");
-    assert_has(&out, "ignite_io::Input::Data(bytes) => 0,");
+    assert_has(&out, "::ignite_io::Input::Data(bytes) => 0,");
 }
 
 fn constant(n: &str, t: Type, value: Expr) -> Decl {
@@ -1180,6 +1184,7 @@ fn prop(n: &str, value: Expr, start: usize) -> FieldInit {
             span: Span::new(start, start + n.len()),
         },
         value: Expr {
+            id: NodeId::fresh(),
             span: Span::new(start + 100, start + 101),
             kind: value.kind.clone(),
         },
@@ -1303,6 +1308,7 @@ fn e020_components_without_types() {
 fn import(path: &[&str], names: &[&str]) -> Import {
     Import {
         path: Path {
+            id: NodeId::fresh(),
             segments: path.iter().map(|s| id(s)).collect(),
             span: sp(),
         },
@@ -1325,7 +1331,7 @@ fn imports_become_use_lines() {
     let out = norm(&project.lib_rs);
     assert_has(
         &out,
-        "clippy::all)] use ignite_std::protocol::telnet::{Telnet, Console}; use ignite_std::console::execute;",
+        "clippy::all)] use ::ignite_std::protocol::telnet::{Telnet, Console}; use ::ignite_std::console::execute;",
     );
     assert!(!out.contains("::net"), "{out}");
     assert!(!out.contains("::io"), "{out}");
@@ -1366,9 +1372,9 @@ fn protocol_lowering() {
     ]);
     assert_has(
         &out,
-        "pub struct Line; impl Line { \
-         pub fn serve(mut stream: ignite_io::TcpStream, mut application: Reply) -> Result<(), ignite_io::IoError> { return Ok(()); } \
-         pub fn connect(mut stream: ignite_io::TcpStream) -> Result<(), ignite_io::IoError> { return Ok(()); } }",
+        "pub struct Line {} impl Line { \
+         pub fn serve(mut stream: ::ignite_io::TcpStream, mut application: Reply) -> ::std::result::Result<(), ::ignite_io::IoError> { return Ok(()); } \
+         pub fn connect(mut stream: ::ignite_io::TcpStream) -> ::std::result::Result<(), ::ignite_io::IoError> { return Ok(()); } }",
     );
     assert_has(&out, "{ Line::serve(s.clone(), r.clone());");
     assert_has(&out, "return Line::connect(s.clone());");
@@ -1456,17 +1462,17 @@ fn function_types_and_values() {
     ]);
     assert_has(
         &out,
-        "pub struct Console { pub respond: std::sync::Arc<dyn Fn(String) -> Reply + Send + Sync>, }",
+        "pub struct Console { pub respond: ::std::sync::Arc<dyn Fn(String) -> Reply + Send + Sync>, }",
     );
     assert_has(
         &out,
-        "pub fn apply(f: &std::sync::Arc<dyn Fn(String) -> Reply + Send + Sync>, g: &std::sync::Arc<dyn Fn() -> () + Send + Sync>, console: &Console) -> Reply { let mut f = f.clone(); let mut g = g.clone();",
+        "pub fn apply(f: &::std::sync::Arc<dyn Fn(String) -> Reply + Send + Sync>, g: &::std::sync::Arc<dyn Fn() -> () + Send + Sync>, console: &Console) -> Reply { let mut f = f.clone(); let mut g = g.clone();",
     );
     assert_has(
         &out,
-        "let made = Console { respond: std::sync::Arc::new(|__a0| answer(&__a0)) };",
+        "let made = Console { respond: ::std::sync::Arc::new(|__a0| answer(&__a0)) };",
     );
-    assert_has(&out, "let h = std::sync::Arc::new(|__a0| answer(&__a0));");
+    assert_has(&out, "let h = ::std::sync::Arc::new(|__a0| answer(&__a0));");
     assert_has(&out, "let respond = console.respond.clone();");
     assert_has(&out, "respond(String::from(\"x\"));");
     assert_has(&out, "h(String::from(\"y\"));");
@@ -1508,16 +1514,16 @@ fn spawn_lowering() {
             ],
         ),
     ]);
-    let log = "ignite_io::log(&format!(\"task ended with error: {}\", error));";
+    let log = "::ignite_io::log(&format!(\"task ended with error: {}\", error));";
     assert_has(
         &out,
         &format!(
-            "{{ let __spawn_0 = s.clone(); let __spawn_1 = 1; ignite_io::spawn(move || {{ \
+            "{{ let __spawn_0 = s.clone(); let __spawn_1 = 1; ::ignite_io::spawn(move || {{ \
              if let Err(error) = worker(&__spawn_0, &__spawn_1) {{ {log} }} }}); }};"
         ),
     );
     let role = format!(
-        "{{ let __spawn_0 = s.clone(); let __spawn_1 = r.clone(); ignite_io::spawn(move || {{ \
+        "{{ let __spawn_0 = s.clone(); let __spawn_1 = r.clone(); ::ignite_io::spawn(move || {{ \
          if let Err(error) = Line::serve(__spawn_0, __spawn_1) {{ {log} }} }}); }};"
     );
     assert_eq!(out.matches(&norm(&role)).count(), 2, "{out}");
@@ -1527,6 +1533,7 @@ fn spawn_lowering() {
 fn generate_std_nests_modules() {
     let console = Program {
         package: Some(Path {
+            id: NodeId::fresh(),
             segments: vec![id("std"), id("console")],
             span: sp(),
         }),
@@ -1535,6 +1542,7 @@ fn generate_std_nests_modules() {
     };
     let telnet = Program {
         package: Some(Path {
+            id: NodeId::fresh(),
             segments: vec![id("std"), id("protocol"), id("telnet")],
             span: sp(),
         }),
@@ -1575,7 +1583,7 @@ fn generate_std_nests_modules() {
     assert_has(
         &out,
         "pub mod protocol { pub mod http { pub fn version() -> i64 { 1 } } \
-         pub mod telnet { use crate::console::{Reply, Action}; pub struct Telnet; impl Telnet {",
+         pub mod telnet { use crate::console::{Reply, Action}; pub struct Telnet {} impl Telnet {",
     );
     let (head, tail) = project
         .cargo_toml

@@ -1,5 +1,5 @@
 #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
-use ignite_std::text::{Mode, SUFFIX, shout};
+use ::ignite_std::text::{Mode, SUFFIX, shout};
 
 #[allow(non_snake_case)]
 pub fn LIMIT() -> i64 {
@@ -8,7 +8,7 @@ pub fn LIMIT() -> i64 {
 
 #[allow(non_snake_case)]
 pub fn DOUBLE_LIMIT() -> i64 {
-    ignite_io::checked::mul(LIMIT(), 2, "crates/ignite-rustgen/tests/golden/consts.ignite", 7, 27)
+    ::ignite_io::checked::mul(LIMIT(), 2, "crates/ignite-rustgen/tests/golden/consts.ignite", 7, 27)
 }
 
 #[allow(non_snake_case)]
@@ -32,7 +32,7 @@ pub fn judge(size: &i64) -> Verdict {
     if size > LIMIT() {
         return Verdict::Reject(format!("{}{}", String::from("too long: "), size.clone().to_string()));
     };
-    return Verdict::Accept(ignite_io::checked::sub(DOUBLE_LIMIT(), size, "crates/ignite-rustgen/tests/golden/consts.ignite", 20, 25));
+    return Verdict::Accept(::ignite_io::checked::sub(DOUBLE_LIMIT(), size, "crates/ignite-rustgen/tests/golden/consts.ignite", 20, 25));
 }
 
 pub fn describe(verdict: &Verdict, mode: &Mode) -> String {
@@ -47,15 +47,15 @@ pub fn describe(verdict: &Verdict, mode: &Mode) -> String {
     }
 }
 
-pub fn admit(size: &i64) -> Result<i64, ignite_io::IoError> {
+pub fn admit(size: &i64) -> ::std::result::Result<i64, ::ignite_io::IoError> {
     let mut size = size.clone();
     match judge(&size) {
         Verdict::Accept(room) => Ok(room.clone()),
-        Verdict::Reject(reason) => Err(ignite_io::IoError::new(reason.clone())),
+        Verdict::Reject(reason) => Err(::ignite_io::IoError::new(reason.clone())),
     }
 }
 
-pub fn or_limit(value: &Option<i64>) -> i64 {
+pub fn or_limit(value: &::std::option::Option<i64>) -> i64 {
     match value.clone() {
         Some(v) => v,
         None => LIMIT(),

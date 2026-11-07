@@ -150,8 +150,8 @@ pub fn load_std(root: &Path) -> Result<Std, String> {
     Ok(std)
 }
 
-/// Type `program` again (addresses are those of `program`, which must stay
-/// where it is while the result is used).
+/// Type `program` again (keys are the node ids of `program`, so the result
+/// also answers for a clone of it).
 pub fn retype(program: &Program, symbols: &Symbols, typed: &TypedModules) -> TypedProgram {
     type_module(program, symbols, typed).expect("module typed before")
 }

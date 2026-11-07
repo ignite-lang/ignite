@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use ignite_check::{BUILTIN_METHODS, SUBSTRATE_MODULES, Symbols};
 use ignite_syntax::ast::{
     AliasDecl, Arm, BinaryOp, Block, Closure, Decl, Expr, ExprKind, FieldInit, FnDecl, Ident,
-    Pattern, PatternKind, Place, Program, Span, Stmt, StmtKind, TestDecl, Type, UnaryOp,
+    NodeId, Pattern, PatternKind, Place, Program, Span, Stmt, StmtKind, TestDecl, Type, UnaryOp,
 };
 use ignite_syntax::diagnostic::Diagnostic;
 
@@ -14,9 +14,9 @@ mod clauses;
 mod effects;
 mod system;
 
-use crate::address::AddressMap;
 use crate::builtins::{self, bytes, io};
 use crate::exhaustive;
+use crate::ids::NodeMap;
 use crate::{
     Alias, AssemblyInfo, AssertCompare, BraceKind, Builtin, Callee, Capability, Capture,
     ClosureInfo, EXPOSURE_VARIANTS, EffectSet, ExecutableInfo, FailureOp, FailureSite, FnEffects,
@@ -27,19 +27,19 @@ use crate::{
 /// What [`Typer::run`] produces for a module without diagnostics.
 pub(crate) struct Typed {
     pub module: String,
-    pub types: AddressMap<Ty>,
-    pub callees: AddressMap<Callee>,
+    pub types: NodeMap<Ty>,
+    pub callees: NodeMap<Callee>,
     pub bindings: HashMap<Span, Ty>,
-    pub pattern_consts: AddressMap<QualName>,
+    pub pattern_consts: NodeMap<QualName>,
     pub clause_consts: HashMap<Span, QualName>,
-    pub type_exprs: AddressMap<Ty>,
+    pub type_exprs: NodeMap<Ty>,
     pub exports: ModuleTypes,
-    pub instances: AddressMap<Vec<Ty>>,
+    pub instances: NodeMap<Vec<Ty>>,
     pub tests: Vec<TestInfo>,
-    pub assert_compares: AddressMap<AssertCompare>,
-    pub test_tries: AddressMap<TestTry>,
-    pub closures: AddressMap<ClosureInfo>,
-    pub ranges: AddressMap<(i64, i64)>,
+    pub assert_compares: NodeMap<AssertCompare>,
+    pub test_tries: NodeMap<TestTry>,
+    pub closures: NodeMap<ClosureInfo>,
+    pub ranges: NodeMap<(i64, i64)>,
     pub places: HashMap<Span, Ty>,
     pub system: SystemTables,
 }
@@ -48,16 +48,16 @@ pub(crate) struct Typed {
 /// walk and moved into [`crate::TypedProgram`].
 #[derive(Default)]
 pub(crate) struct SystemTables {
-    pub quantities: AddressMap<(QuantityKind, i64)>,
-    pub named: AddressMap<Vec<usize>>,
-    pub braces: AddressMap<BraceKind>,
-    pub references: AddressMap<Reference>,
-    pub module_records: AddressMap<ModuleRecord>,
+    pub quantities: NodeMap<(QuantityKind, i64)>,
+    pub named: NodeMap<Vec<usize>>,
+    pub braces: NodeMap<BraceKind>,
+    pub references: NodeMap<Reference>,
+    pub module_records: NodeMap<ModuleRecord>,
     pub executables: Vec<ExecutableInfo>,
-    pub failures: AddressMap<FailureSite>,
+    pub failures: NodeMap<FailureSite>,
     pub systems: Vec<SystemInfo>,
     pub assemblies: Vec<AssemblyInfo>,
-    pub effects: AddressMap<EffectSet>,
+    pub effects: NodeMap<EffectSet>,
 }
 
 /// How an expression is used. `Value(Some(t))` checks it against `t`,
@@ -312,8 +312,8 @@ pub(crate) struct Typer<'a> {
     /// The type parameters of the fn or role being walked that are bounded
     /// by `ByteStream` (`docs/slice.md` 18.3).
     bounded: Vec<String>,
-    /// Type arguments of generic uses, by expression address.
-    instances: AddressMap<Vec<Ty>>,
+    /// Type arguments of generic uses, by expression id.
+    instances: NodeMap<Vec<Ty>>,
     /// Local bindings; `None` when the binding's type is unknown after an
     /// error.
     scopes: Vec<BTreeMap<String, Option<Ty>>>,
@@ -324,14 +324,14 @@ pub(crate) struct Typer<'a> {
     /// Whether the pattern being checked is a `match` arm's: there a bare
     /// name that is a constant is a constant pattern, not a binding.
     in_arm: bool,
-    types: AddressMap<Ty>,
-    callees: AddressMap<Callee>,
+    types: NodeMap<Ty>,
+    callees: NodeMap<Callee>,
     bindings: HashMap<Span, Ty>,
-    pattern_consts: AddressMap<QualName>,
+    pattern_consts: NodeMap<QualName>,
     /// The constant each clause name resolves to, by the span of the
     /// reference (`docs/slice.md` 19.6).
     clause_consts: HashMap<Span, QualName>,
-    type_exprs: AddressMap<Ty>,
+    type_exprs: NodeMap<Ty>,
     diagnostics: Vec<Diagnostic>,
     /// Whether the walk is inside a test body or a test-only declaration,
     /// where test-only items may be used (E051).
@@ -342,13 +342,13 @@ pub(crate) struct Typer<'a> {
     /// The effects of the code being walked, for `List.map`'s fn.
     effect_scope: EffectScope,
     tests: Vec<TestInfo>,
-    assert_compares: AddressMap<AssertCompare>,
+    assert_compares: NodeMap<AssertCompare>,
     /// Complete structural-equality results. Nested coinductive visits must
     /// not be cached, because a parent may still contain an unequal field.
     equatable_cache: HashMap<Ty, bool>,
-    test_tries: AddressMap<TestTry>,
-    closures: AddressMap<ClosureInfo>,
-    ranges: AddressMap<(i64, i64)>,
+    test_tries: NodeMap<TestTry>,
+    closures: NodeMap<ClosureInfo>,
+    ranges: NodeMap<(i64, i64)>,
     /// The type that owns the last field of an assignment place, by
     /// the place's span.
     places: HashMap<Span, Ty>,
@@ -370,7 +370,7 @@ pub(crate) struct Typer<'a> {
     let_hints: HashMap<Span, Ty>,
     /// `NamedArg` nodes a fn call put in parameter order (`docs/slice.md`
     /// section 14.2); any other `NamedArg` is E103.
-    named_ok: HashSet<usize>,
+    named_ok: HashSet<NodeId>,
     /// The members of every system of this module, by system name, in
     /// declaration order (`docs/slice.md` section 14.4).
     system_members: BTreeMap<String, Vec<system::Member>>,
@@ -424,27 +424,27 @@ impl<'a> Typer<'a> {
             alias_params: Vec::new(),
             type_params: Vec::new(),
             bounded: Vec::new(),
-            instances: AddressMap::default(),
+            instances: NodeMap::default(),
             scopes: Vec::new(),
             ret: None,
             loops: Vec::new(),
             in_arm: false,
-            types: AddressMap::default(),
-            callees: AddressMap::default(),
+            types: NodeMap::default(),
+            callees: NodeMap::default(),
             bindings: HashMap::new(),
-            pattern_consts: AddressMap::default(),
+            pattern_consts: NodeMap::default(),
             clause_consts: HashMap::new(),
-            type_exprs: AddressMap::default(),
+            type_exprs: NodeMap::default(),
             diagnostics: Vec::new(),
             in_test: false,
             in_test_body: false,
             effect_scope: EffectScope::Pure,
             tests: Vec::new(),
-            assert_compares: AddressMap::default(),
+            assert_compares: NodeMap::default(),
             equatable_cache: HashMap::new(),
-            test_tries: AddressMap::default(),
-            closures: AddressMap::default(),
-            ranges: AddressMap::default(),
+            test_tries: NodeMap::default(),
+            closures: NodeMap::default(),
+            ranges: NodeMap::default(),
             places: HashMap::new(),
             system: SystemTables::default(),
             binding_spans: HashMap::new(),
@@ -1126,8 +1126,7 @@ impl<'a> Typer<'a> {
     /// `Unit`; the diagnostic makes the module fail.
     fn resolve(&mut self, ty: &Type) -> Ty {
         let resolved = self.resolve_kind(ty);
-        self.type_exprs
-            .insert(ty as *const Type as usize, resolved.clone());
+        self.type_exprs.insert(ty.id, resolved.clone());
         resolved
     }
 
@@ -4083,15 +4082,15 @@ impl<'a> Typer<'a> {
         let consts = &self.pattern_consts;
         let interval = |p: &Pattern| match &p.kind {
             PatternKind::Int(v) => Some((*v, *v)),
-            PatternKind::Range { .. } => self.ranges.get(&(p as *const Pattern as usize)).copied(),
+            PatternKind::Range { .. } => self.ranges.get(&p.id).copied(),
             _ => {
-                let v = self.const_value(consts.get(&(p as *const Pattern as usize))?)?;
+                let v = self.const_value(consts.get(&p.id)?)?;
                 Some((v, v))
             }
         };
         let cx = exhaustive::Context {
             variants: &|t| self.variants(t),
-            is_const: &|p| consts.contains_key(&(p as *const Pattern as usize)),
+            is_const: &|p| consts.contains_key(&p.id),
             interval: &interval,
         };
         let missing = exhaustive::uncovered(&rows, std::slice::from_ref(scrutinee), &cx);
@@ -4272,8 +4271,7 @@ impl<'a> Typer<'a> {
             );
             return;
         }
-        self.ranges
-            .insert(pattern as *const Pattern as usize, (bounds[0], bounds[1]));
+        self.ranges.insert(pattern.id, (bounds[0], bounds[1]));
     }
 
     /// The value of the `Int` or `Byte` constant `q`, when its value is a
@@ -4324,8 +4322,7 @@ impl<'a> Typer<'a> {
             self.unresolved(name.span, &name.name);
             return;
         };
-        self.pattern_consts
-            .insert(pattern as *const Pattern as usize, q);
+        self.pattern_consts.insert(pattern.id, q);
         if !matches!(const_ty, Ty::Int | Ty::Byte | Ty::Bool | Ty::Text) {
             self.error(
                 "E045",

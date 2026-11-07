@@ -1,23 +1,145 @@
 //! Abstract syntax of the Ignite slice, one node per rule of `docs/slice.md`
 //! section 3. Every node carries the byte span it was parsed from.
 
-/// Byte offsets into the source text, `start` inclusive, `end` exclusive.
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Mutex, OnceLock};
+
+/// The source file a span or node belongs to: [`FileId::of_path`] of the
+/// path [`crate::parse`] was given. [`FileId::NONE`] for tokens lexed
+/// without a file and spans made up by a later stage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct FileId(pub u64);
+
+impl FileId {
+    /// No file: [`crate::lexer::lex`] without a path, [`Span::new`].
+    pub const NONE: FileId = FileId(0);
+    /// Nodes built outside the parser ([`NodeId::fresh`]).
+    pub const SYNTHETIC: FileId = FileId(u64::MAX);
+
+    /// The id of the file at `path`. Distinct paths always get distinct
+    /// ids within a process, and one path always the same one: the ids
+    /// are numbered through a process-wide table of every path seen. A
+    /// path's id is the 64-bit FNV-1a hash of its bytes, so it is the same
+    /// in every run and can be cached and serialised; only when another
+    /// path of the process already holds that value (a collision, which
+    /// can be constructed) does the path take the next free value instead.
+    /// Never [`FileId::NONE`] or [`FileId::SYNTHETIC`]. A driver passes a
+    /// path that names one file one way
+    /// ([`crate::SourceFile::with_identity`]).
+    pub fn of_path(path: &str) -> FileId {
+        let mut files = FILES
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(id) = files.by_path.get(path) {
+            return *id;
+        }
+        let mut value = fnv1a(path);
+        while value == FileId::NONE.0
+            || value == FileId::SYNTHETIC.0
+            || files.taken.contains(&value)
+        {
+            value = value.wrapping_add(1);
+        }
+        files.taken.insert(value);
+        files.by_path.insert(path.to_string(), FileId(value));
+        FileId(value)
+    }
+}
+
+/// The paths [`FileId::of_path`] has numbered, and the values taken.
+#[derive(Default)]
+struct FileTable {
+    by_path: HashMap<String, FileId>,
+    taken: HashSet<u64>,
+}
+
+static FILES: OnceLock<Mutex<FileTable>> = OnceLock::new();
+
+/// The 64-bit FNV-1a hash of `path`'s bytes.
+fn fnv1a(path: &str) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in path.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+/// The identity of an [`Expr`], [`Pattern`], [`Type`], [`Path`] or
+/// [`Place`]: the file it was parsed from and its number in that parse.
+/// The parser numbers every such node of a file once; a clone keeps the
+/// ids, so a typed program answers for a clone of the AST it typed. Not
+/// part of a node's equality, which stays structural.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct NodeId {
+    pub file: FileId,
+    pub index: u32,
+}
+
+/// Counter of [`NodeId::fresh`].
+static SYNTHETIC_NODES: AtomicU32 = AtomicU32::new(0);
+
+impl NodeId {
+    /// An id no parse and no [`NodeId::fresh`] gives: for a node that is
+    /// never looked up (a constant pattern built in a `static`).
+    pub const DETACHED: NodeId = NodeId {
+        file: FileId::SYNTHETIC,
+        index: u32::MAX,
+    };
+
+    /// A new id in [`FileId::SYNTHETIC`], distinct from every other id of
+    /// the process, for a node built outside the parser.
+    pub fn fresh() -> NodeId {
+        let index = SYNTHETIC_NODES.fetch_add(1, Ordering::Relaxed);
+        assert!(index != u32::MAX, "synthetic node ids exhausted");
+        NodeId {
+            file: FileId::SYNTHETIC,
+            index,
+        }
+    }
+}
+
+impl std::hash::Hash for NodeId {
+    /// One `u64`, so a hasher that mixes one word sees the whole id: the
+    /// file xor the index times an odd constant, distinct for every index
+    /// of one file.
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(self.file.0 ^ u64::from(self.index).wrapping_mul(0x9e37_79b9_7f4a_7c15));
+    }
+}
+
+/// Byte offsets into the source text, `start` inclusive, `end` exclusive,
+/// and the file they are offsets into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
+    pub file: FileId,
 }
 
 impl Span {
+    /// A span in no file ([`FileId::NONE`]).
     pub fn new(start: usize, end: usize) -> Span {
-        Span { start, end }
+        Span {
+            start,
+            end,
+            file: FileId::NONE,
+        }
     }
 
-    /// The smallest span covering both.
+    /// A span in `file`.
+    pub fn in_file(start: usize, end: usize, file: FileId) -> Span {
+        Span { start, end, file }
+    }
+
+    /// The smallest span covering both, in the file of `self`.
     pub fn to(self, other: Span) -> Span {
         Span {
             start: self.start.min(other.start),
             end: self.end.max(other.end),
+            file: self.file,
         }
     }
 }
@@ -41,13 +163,29 @@ impl Ident {
 }
 
 /// `a.b.c`
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq)]
 pub struct Path {
     pub segments: Vec<Ident>,
     pub span: Span,
+    pub id: NodeId,
+}
+
+impl PartialEq for Path {
+    fn eq(&self, other: &Path) -> bool {
+        self.segments == other.segments && self.span == other.span
+    }
 }
 
 impl Path {
+    /// A path built outside the parser, with a [`NodeId::fresh`] id.
+    pub fn new(segments: Vec<Ident>, span: Span) -> Path {
+        Path {
+            segments,
+            span,
+            id: NodeId::fresh(),
+        }
+    }
+
     pub fn last(&self) -> &Ident {
         self.segments
             .last()
@@ -385,7 +523,7 @@ pub struct Param {
 /// `Name` or `Name<A, B>`, or the function type `fn(A, B) -> R`, which is
 /// `Type { name: "fn", args: [A, B, R] }`: parameters first, return type last
 /// (`Unit` when the source omits `-> R`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq)]
 pub struct Type {
     pub name: Ident,
     pub args: Vec<Type>,
@@ -396,10 +534,22 @@ pub struct Type {
     /// `requires [..]` of an effectful fn type; `None` for a pure fn type
     /// and every other type.
     pub requires: Option<Vec<Path>>,
+    pub id: NodeId,
+}
+
+impl PartialEq for Type {
+    fn eq(&self, other: &Type) -> bool {
+        self.name == other.name
+            && self.args == other.args
+            && self.span == other.span
+            && self.fn_names == other.fn_names
+            && self.requires == other.requires
+    }
 }
 
 impl Type {
-    /// A type `name<args>` without fn-type parts.
+    /// A type `name<args>` without fn-type parts, with a
+    /// [`NodeId::fresh`] id.
     pub fn named(name: Ident, args: Vec<Type>, span: Span) -> Type {
         Type {
             name,
@@ -407,6 +557,7 @@ impl Type {
             span,
             fn_names: Vec::new(),
             requires: None,
+            id: NodeId::fresh(),
         }
     }
 
@@ -502,17 +653,54 @@ pub enum StmtKind {
 }
 
 /// `x` or `x.a.b`
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq)]
 pub struct Place {
     pub base: Ident,
     pub fields: Vec<Ident>,
     pub span: Span,
+    pub id: NodeId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl PartialEq for Place {
+    fn eq(&self, other: &Place) -> bool {
+        self.base == other.base && self.fields == other.fields && self.span == other.span
+    }
+}
+
+impl Place {
+    /// A place built outside the parser, with a [`NodeId::fresh`] id.
+    pub fn new(base: Ident, fields: Vec<Ident>, span: Span) -> Place {
+        Place {
+            base,
+            fields,
+            span,
+            id: NodeId::fresh(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq)]
 pub struct Expr {
     pub kind: ExprKind,
     pub span: Span,
+    pub id: NodeId,
+}
+
+impl PartialEq for Expr {
+    fn eq(&self, other: &Expr) -> bool {
+        self.kind == other.kind && self.span == other.span
+    }
+}
+
+impl Expr {
+    /// An expression built outside the parser, with a [`NodeId::fresh`] id.
+    pub fn new(kind: ExprKind, span: Span) -> Expr {
+        Expr {
+            kind,
+            span,
+            id: NodeId::fresh(),
+        }
+    }
 }
 
 /// Drops the operands of a binary or unary operator chain from a work
@@ -773,10 +961,28 @@ pub struct Arm {
     pub span: Span,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq)]
 pub struct Pattern {
     pub kind: PatternKind,
     pub span: Span,
+    pub id: NodeId,
+}
+
+impl PartialEq for Pattern {
+    fn eq(&self, other: &Pattern) -> bool {
+        self.kind == other.kind && self.span == other.span
+    }
+}
+
+impl Pattern {
+    /// A pattern built outside the parser, with a [`NodeId::fresh`] id.
+    pub fn new(kind: PatternKind, span: Span) -> Pattern {
+        Pattern {
+            kind,
+            span,
+            id: NodeId::fresh(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

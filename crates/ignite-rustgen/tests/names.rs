@@ -117,7 +117,7 @@ fn user_names_starting_with_two_underscores_keep_their_values() {
     );
 }
 
-/// A listener `x` named as an `Endpoint` target binds `x_endpoint` in the
+/// A listener `x` named as an `Endpoint` target binds `__endpoint_x` in the
 /// generated `main`; a listener resource named `x_endpoint` that the same
 /// component binds must stay a `TcpListener`.
 #[test]
@@ -254,4 +254,381 @@ fn a_package_named_ignite_io_builds() {
 #[test]
 fn a_package_named_ignite_std_builds() {
     package_builds("ignite_std");
+}
+
+/// Adversary: a free fn `A__b` (`A__b_` in Rust) beside `fn A.b_`. With
+/// the name half of `assoc_symbol` written raw, `A.b_` is `A__b_` too; the
+/// three cases above keep distinct symbols under that change.
+#[test]
+fn adversary_a_free_fn_beside_an_associated_fn_ending_in_underscore_keeps_its_value() {
+    let source = "package examples.assoctail\n\
+\n\
+type A { x: Int }\n\
+\n\
+fn A__b() -> Int = 1\n\
+\n\
+fn A.b_() -> Int = 2\n\
+\n\
+test \"a free fn A__b beside fn A.b_\" {\n\
+  assert A__b() == 1\n\
+  assert A.b_() == 2\n\
+}\n";
+    adversary_tests_pass("adv-names-assoc-tail", source, &common::golden_std(), 1);
+}
+
+/// Adversary: the generator spells `Int` as the Rust primitive `i64`. A
+/// record the program names `i64` is `pub struct i64` in the same Rust
+/// module, which every `i64` of that module then names.
+#[test]
+fn adversary_a_record_named_i64_beside_an_int_fn_builds() {
+    let source = "package examples.primint\n\
+\n\
+type i64 { v: Int }\n\
+\n\
+fn two() -> Int = 2\n\
+\n\
+test \"a record named i64 beside an Int fn\" {\n\
+  assert two() == 2\n\
+}\n";
+    adversary_tests_pass("adv-names-prim-i64", source, &common::golden_std(), 1);
+}
+
+/// Adversary: the generator spells `Map` as `std::collections::BTreeMap`
+/// and fn values as `std::sync::Arc`, paths that start at the crate `std`.
+/// A record the program names `std` is `pub struct std` in the same Rust
+/// module, so the path starts at the record.
+#[test]
+fn adversary_a_record_named_std_beside_a_map_builds() {
+    let source = "package examples.recstd\n\
+\n\
+type std { w: Int }\n\
+\n\
+fn size(m: Map<Int, Int>) -> Int = 1\n\
+\n\
+test \"a record named std beside a Map\" {\n\
+  assert size(Map.empty()) == 1\n\
+}\n";
+    adversary_tests_pass("adv-names-rec-std", source, &common::golden_std(), 1);
+}
+
+/// Adversary: a type parameter named `bool` is the Rust generic `bool`,
+/// which then names the parameter wherever the generator writes the
+/// primitive for `Bool`.
+#[test]
+fn adversary_a_type_parameter_named_bool_builds() {
+    let source = "package examples.parambool\n\
+\n\
+fn same<bool>(x: bool) -> Bool = 1 == 1\n\
+\n\
+test \"a type parameter named bool\" {\n\
+  assert same(4)\n\
+}\n";
+    adversary_tests_pass("adv-names-param-bool", source, &common::golden_std(), 1);
+}
+
+/// Adversary: a sibling module named `std` is `pub mod std` at the
+/// program crate's root, where the generated `main` and items write
+/// `std::process::exit` and other paths into the crate `std`.
+#[test]
+fn adversary_a_sibling_module_named_std_builds() {
+    let file = adversary_package_named("sibstd", "std");
+    let (program, std) = common::lower_typed(&file, &common::golden_std(), &adversary_substrate());
+    cargo_build(&program, &std, "adv-names-sibling-std");
+}
+
+/// Adversary: a sibling module named `ignite_io` is `pub mod ignite_io`
+/// at the program crate's root, beside every generated
+/// `ignite_io::run`, `ignite_io::args` and `ignite_io::TcpListener`.
+#[test]
+fn adversary_a_sibling_module_named_ignite_io_builds() {
+    let file = adversary_package_named("sibio", "ignite_io");
+    let (program, std) = common::lower_typed(&file, &common::golden_std(), &adversary_substrate());
+    cargo_build(&program, &std, "adv-names-sibling-ignite-io");
+}
+
+/// Adversary: the listener `A_` named as an `Endpoint` target is the
+/// `main` local `A__endpoint` (`endpoint_variable`), which is also the
+/// symbol `assoc_symbol` gives `fn A.endpoint`. A component property that
+/// calls `A.endpoint()` then calls the local.
+#[test]
+fn adversary_an_endpoint_variable_spelled_like_an_associated_fn_builds() {
+    let source = "package examples.endpfn\n\
+\n\
+import std.net.Endpoint\n\
+\n\
+type A { x: Int }\n\
+\n\
+fn A.endpoint() -> Int = 7\n\
+\n\
+type Both {\n\
+  target: Endpoint\n\
+  n: Int\n\
+  executable: Text\n\
+}\n\
+\n\
+fn Both.main(self: Both) -> Result<Unit, IoError> {\n\
+  log(\"{self.target.port} {self.n}\")\n\
+  Ok(Unit)\n\
+}\n\
+\n\
+system Endpfn {\n\
+  resource A_: TcpListener { address = \"127.0.0.1\", port = 7003 }\n\
+  component both: Both { target = A_, n = A.endpoint(), executable = \"both\" }\n\
+}\n";
+    let dir = adversary_sources("adv-names-endpfn-src", &[("endpfn.ignite", source)]);
+    let (program, std) = common::lower_typed(
+        &dir.join("endpfn.ignite"),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-names-endpfn");
+}
+
+/// Adversary: the generated `main` binds `let port = ignite_io::args::port()?`
+/// under `use <crate>::*`. A protocol the program names `port` is the unit
+/// struct `port`, so that `let` is a pattern of the struct.
+#[test]
+fn adversary_a_protocol_named_port_beside_a_listener_builds() {
+    let source = "package examples.portproto\n\
+\n\
+protocol port {\n\
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {\n\
+    stream.close()?\n\
+    Ok(Unit)\n\
+  }\n\
+}\n\
+\n\
+type Srv {\n\
+  listener: TcpListener\n\
+  executable: Text\n\
+}\n\
+\n\
+fn Srv.main(self: Srv) -> Result<Unit, IoError> {\n\
+  log(\"{self.listener.local_port()}\")\n\
+  Ok(Unit)\n\
+}\n\
+\n\
+system PortProto {\n\
+  resource l: TcpListener { address = \"127.0.0.1\", port = 0 }\n\
+  component srv: Srv { listener = l, executable = \"srv\" }\n\
+}\n";
+    let dir = adversary_sources("adv-names-portproto-src", &[("portproto.ignite", source)]);
+    let (program, std) = common::lower_typed(
+        &dir.join("portproto.ignite"),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-names-portproto");
+}
+
+/// The class of the case above: a protocol is a Rust struct in the value
+/// namespace only if it is a unit struct, and then every binding spelled
+/// like it is a pattern of that struct. Protocols named `x` and `y` (the
+/// bindings of the generated list and option equality) and `n` (a
+/// parameter of the program) keep the bindings bindings.
+#[test]
+fn protocols_named_like_bindings_keep_the_bindings() {
+    let source = "package examples.protobind\n\
+\n\
+protocol x {\n\
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {\n\
+    stream.close()?\n\
+    Ok(Unit)\n\
+  }\n\
+}\n\
+\n\
+protocol y {\n\
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {\n\
+    stream.close()?\n\
+    Ok(Unit)\n\
+  }\n\
+}\n\
+\n\
+protocol n {\n\
+  fn connect(stream: TcpStream) -> Result<Unit, IoError> requires [stream.write] {\n\
+    stream.close()?\n\
+    Ok(Unit)\n\
+  }\n\
+}\n\
+\n\
+fn twice(n: Int) -> Int = n * 2\n\
+\n\
+test \"bindings spelled like protocols\" {\n\
+  assert [1, 2] == [1, 2]\n\
+  assert Some(3) == Some(3)\n\
+  assert twice(4) == 8\n\
+}\n";
+    adversary_tests_pass("names-protocol-bindings", source, &common::golden_std(), 1);
+}
+
+/// Adversary (story:rustgen-reserved-names, second pass): the generator
+/// writes the builtin enums as the bare prelude names `Option<..>` and
+/// `Result<..>` (`builtin_enum_path` takes the `::std` path only for a
+/// type parameter of that name). E004 refuses a type, enum or protocol
+/// named `Option` or `Result`, but not a sibling module: `pub mod Option`
+/// at the program crate's root is in the type namespace there, and the
+/// bin's `use <crate>::*` brings it in too, so every bare `Option<i64>`
+/// names the module. `ignite build --target llvm` builds the same program.
+fn sibling_module_named_like_a_builtin_enum_builds(module: &str) {
+    let lower = module.to_lowercase();
+    let main = format!(
+        "package examples.sib{lower}\n\
+\n\
+import examples.sib{lower}.{module}.{{code}}\n\
+\n\
+fn half(n: Int) -> Option<Int> = if n > 0 {{ Some(n / 2) }} else {{ None }}\n\
+\n\
+fn checked(n: Int) -> Result<Int, Text> = if n > 0 {{ Ok(n) }} else {{ Err(\"negative\") }}\n\
+\n\
+fn both() -> Int = match (half(code()), checked(code())) {{\n\
+  (Some(h), Ok(c)) => h + c\n\
+  _ => 0\n\
+}}\n"
+    );
+    let other = format!("package examples.sib{lower}.{module}\n\nfn code() -> Int = 7\n");
+    let dir = adversary_sources(
+        &format!("adv-names-sibling-{lower}-src"),
+        &[
+            (format!("sib{lower}.ignite").as_str(), main.as_str()),
+            (format!("{module}.ignite").as_str(), other.as_str()),
+        ],
+    );
+    let (program, std) = common::lower_typed(
+        &dir.join(format!("sib{lower}.ignite")),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, &format!("adv-names-sibling-{lower}"));
+}
+
+#[test]
+fn adversary_a_sibling_module_named_option_builds() {
+    sibling_module_named_like_a_builtin_enum_builds("Option");
+}
+
+#[test]
+fn adversary_a_sibling_module_named_result_builds() {
+    sibling_module_named_like_a_builtin_enum_builds("Result");
+}
+
+/// Adversary (story:rustgen-reserved-names, second pass): `main` binds a
+/// resource through `resource_variable`, which writes `port`,
+/// `application`, `stream`, `error` and names ending in `_endpoint` with a
+/// trailing `_`, while `ident` leaves a program fn `port_` as `port_`. The
+/// listener `port` is then the local `port_`, and a component property
+/// that calls the program's `port_()` calls the `TcpListener` (E0618).
+/// The names differ in Ignite, so `ignite check` accepts the program and
+/// `ignite build --target llvm` builds it.
+#[test]
+fn adversary_a_listener_named_port_beside_a_fn_named_port_underscore_builds() {
+    let source = "package examples.portfn\n\
+\n\
+fn port_() -> Int = 7\n\
+\n\
+type Srv {\n\
+  listener: TcpListener\n\
+  n: Int\n\
+  executable: Text\n\
+}\n\
+\n\
+fn Srv.main(self: Srv) -> Result<Unit, IoError> {\n\
+  log(\"{self.listener.local_port()} {self.n}\")\n\
+  Ok(Unit)\n\
+}\n\
+\n\
+system PortFn {\n\
+  resource port: TcpListener { address = \"127.0.0.1\", port = 0 }\n\
+  component srv: Srv { listener = port, n = port_(), executable = \"srv\" }\n\
+}\n";
+    let dir = adversary_sources("adv-names-portfn-src", &[("portfn.ignite", source)]);
+    let (program, std) = common::lower_typed(
+        &dir.join("portfn.ignite"),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-names-portfn");
+}
+
+/// Adversary (story:rustgen-reserved-names, third pass): the executable's
+/// `use <crate>::*;` and its paths into sibling modules start at the
+/// program crate's bare name (`crt::other::seven`), the one crate root the
+/// generator does not write as `::<crate>`. A record named like the
+/// package's last segment is `pub struct crt` at that crate's root, which
+/// the glob brings into the bin beside the extern crate `crt` (E0659).
+/// `ignite check` accepts the program and `ignite build --target llvm`
+/// builds it.
+#[test]
+fn adversary_a_record_named_like_the_program_crate_builds() {
+    let main = "package examples.crt\n\
+\n\
+import examples.crt.other.{seven}\n\
+\n\
+type crt { v: Int }\n\
+\n\
+type Srv {\n\
+  listener: TcpListener\n\
+  n: Int\n\
+  executable: Text\n\
+}\n\
+\n\
+fn Srv.main(self: Srv) -> Result<Unit, IoError> {\n\
+  log(\"{self.listener.local_port()} {self.n}\")\n\
+  Ok(Unit)\n\
+}\n\
+\n\
+system Crt {\n\
+  resource l: TcpListener { address = \"127.0.0.1\", port = 0 }\n\
+  component srv: Srv { listener = l, n = seven(), executable = \"srv\" }\n\
+}\n";
+    let other = "package examples.crt.other\n\nfn seven() -> Int = 7\n";
+    let dir = adversary_sources(
+        "adv-names-rec-crate-src",
+        &[("crt.ignite", main), ("other.ignite", other)],
+    );
+    let (program, std) = common::lower_typed(
+        &dir.join("crt.ignite"),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-names-rec-crate");
+}
+
+/// Adversary (story:rustgen-reserved-names, third pass): `main` binds a
+/// resource as its `ident`, and a UFCS call `x.f()` in a component
+/// property is the bare call `f(&x)`. Ignite resolves `x.f()` to the fn
+/// `f` even beside a resource `f`, so `ignite check` accepts the program
+/// and `ignite build --target llvm` builds it; in Rust the local `f`
+/// shadows the fn (E0618), for a program fn and an imported std fn alike.
+#[test]
+fn adversary_a_resource_named_like_a_ufcs_callee_builds() {
+    let source = "package examples.ufcs\n\
+\n\
+import std.text.{to_upper}\n\
+\n\
+fn twice(n: Int) -> Int = n * 2\n\
+\n\
+type Srv {\n\
+  listener: TcpListener\n\
+  name: Text\n\
+  n: Int\n\
+  executable: Text\n\
+}\n\
+\n\
+fn Srv.main(self: Srv) -> Result<Unit, IoError> {\n\
+  log(\"{self.listener.local_port()} {self.name} {self.n}\")\n\
+  Ok(Unit)\n\
+}\n\
+\n\
+system Ufcs {\n\
+  resource to_upper: TcpListener { address = \"127.0.0.1\", port = 0 }\n\
+  resource twice: TcpListener { address = \"127.0.0.1\", port = 0 }\n\
+  component srv: Srv { listener = to_upper, name = \"abc\".to_upper(), n = 3.twice(), executable = \"srv\" }\n\
+}\n";
+    let dir = adversary_sources("adv-names-ufcs-src", &[("ufcs.ignite", source)]);
+    let (program, std) = common::lower_typed(
+        &dir.join("ufcs.ignite"),
+        &common::repository_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-names-ufcs");
 }

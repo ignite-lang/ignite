@@ -80,7 +80,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use ignite_syntax::ast::{
-    Block, Closure, Decl, Expr, ExprKind, FieldInit, FnDecl, Ident, Import, Path, Pattern,
+    Block, Closure, Decl, Expr, ExprKind, FieldInit, FnDecl, Ident, Import, NodeId, Path, Pattern,
     PatternKind, Program, ProtocolDecl, Span, Stmt, StmtKind, SystemDecl, TestDecl, Type,
 };
 use ignite_syntax::diagnostic::Diagnostic;
@@ -2886,6 +2886,7 @@ impl Checker {
                         })
                         .collect(),
                     span: expr.span,
+                    id: NodeId::fresh(),
                 })
                 .collect()
         });
@@ -2898,6 +2899,7 @@ impl Checker {
             span: expr.span,
             fn_names: closure.params.iter().map(|p| p.name.clone()).collect(),
             requires,
+            id: NodeId::fresh(),
         }
     }
 
@@ -4112,7 +4114,7 @@ mod tests {
     }
 
     fn ex(kind: ExprKind) -> Expr {
-        Expr { kind, span: sp() }
+        Expr::new(kind, sp())
     }
 
     fn name(n: &str) -> Expr {
@@ -4162,11 +4164,7 @@ mod tests {
 
     fn assign(n: &str, value: Expr) -> Stmt {
         st(StmtKind::Assign {
-            target: Place {
-                base: id(n),
-                fields: Vec::new(),
-                span: sp(),
-            },
+            target: Place::new(id(n), Vec::new(), sp()),
             value,
         })
     }
@@ -4276,19 +4274,13 @@ mod tests {
     #[test]
     fn arm_bindings_are_scoped_to_their_arm() {
         let arm = |pattern: PatternKind, body: Expr| Arm {
-            pattern: Pattern {
-                kind: pattern,
-                span: sp(),
-            },
+            pattern: Pattern::new(pattern, sp()),
             body,
             span: sp(),
         };
         let some = PatternKind::Variant {
             path: vec![id("Some")],
-            args: vec![Pattern {
-                kind: PatternKind::Binding(id("v")),
-                span: sp(),
-            }],
+            args: vec![Pattern::new(PatternKind::Binding(id("v")), sp())],
         };
         let none = PatternKind::Variant {
             path: vec![id("None")],

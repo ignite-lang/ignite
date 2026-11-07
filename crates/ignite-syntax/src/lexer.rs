@@ -1,6 +1,6 @@
 //! Tokens of the Ignite slice (`docs/slice.md` section 2).
 
-use crate::ast::Span;
+use crate::ast::{FileId, Span};
 use crate::diagnostic::Diagnostic;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -268,6 +268,23 @@ pub fn lex(text: &str) -> Result<Vec<Token>, Diagnostic> {
 
 /// The most string literals an interpolation may nest; one more is E054.
 pub const MAX_INTERPOLATION: usize = 32;
+
+/// Put every span of `tokens`, those inside template parts included, in
+/// `file`. [`crate::parse`] does it with the file's [`FileId::of_path`];
+/// the parser takes the file of its spans and node ids from the first
+/// token.
+pub fn in_file(tokens: &mut [Token], file: FileId) {
+    for token in tokens {
+        token.span.file = file;
+        if let TokenKind::Template(parts) = &mut token.kind {
+            for part in parts {
+                if let TemplatePart::Expr(inner) = part {
+                    in_file(inner, file);
+                }
+            }
+        }
+    }
+}
 
 fn lex_at(text: &str, depth: usize) -> Result<Vec<Token>, Diagnostic> {
     let mut tokens = Vec::new();

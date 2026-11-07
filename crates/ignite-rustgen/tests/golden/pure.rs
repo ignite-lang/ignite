@@ -3,7 +3,7 @@
 pub fn add(a: &i64, b: &i64) -> i64 {
     let mut a = a.clone();
     let mut b = b.clone();
-    ignite_io::checked::add(a, b, "crates/ignite-rustgen/tests/golden/pure.ignite", 4, 3)
+    ::ignite_io::checked::add(a, b, "crates/ignite-rustgen/tests/golden/pure.ignite", 4, 3)
 }
 
 pub fn clamp(x: &i64, low: &i64, high: &i64) -> i64 {
@@ -22,7 +22,7 @@ pub fn clamp(x: &i64, low: &i64, high: &i64) -> i64 {
 pub fn sum(values: &Vec<i64>) -> i64 {
     let mut total = 0;
     for v in (values.clone()) {
-        total = ignite_io::checked::add(total, v, "crates/ignite-rustgen/tests/golden/pure.ignite", 16, 13);
+        total = ::ignite_io::checked::add(total, v, "crates/ignite-rustgen/tests/golden/pure.ignite", 16, 13);
     }
     return total.clone();
 }
@@ -34,7 +34,7 @@ pub fn greet(name: &String) -> String {
 pub fn sign(x: &i64) -> i64 {
     let mut x = x.clone();
     if x < 0 {
-        ignite_io::checked::neg(1, "crates/ignite-rustgen/tests/golden/pure.ignite", 26, 14)
+        ::ignite_io::checked::neg(1, "crates/ignite-rustgen/tests/golden/pure.ignite", 26, 14)
     } else if x == 0 {
         0
     } else {
@@ -48,7 +48,7 @@ pub fn countdown(n: &i64) -> Vec<i64> {
     let mut i = n.clone();
     while i > 0 {
         out.push(i.clone());
-        i = ignite_io::checked::sub(i, 1, "crates/ignite-rustgen/tests/golden/pure.ignite", 34, 9);
+        i = ::ignite_io::checked::sub(i, 1, "crates/ignite-rustgen/tests/golden/pure.ignite", 34, 9);
     }
     return out;
 }

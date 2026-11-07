@@ -57,7 +57,7 @@ fn module_literals_load_transitive_dependencies_before_their_callers() {
         ignite::emit_with_std(&root.join("main.ignite"), None, Some(&root.join("std"))).unwrap();
     assert!(emitted.std.lib_rs.contains("pub mod a"));
     assert!(emitted.std.lib_rs.contains("pub mod z"));
-    assert!(emitted.program.lib_rs.contains("ignite_std::a::value"));
+    assert!(emitted.program.lib_rs.contains("::ignite_std::a::value"));
 }
 
 #[test]
@@ -80,7 +80,7 @@ fn sibling_module_literals_are_standard_library_roots() {
     let emitted =
         ignite::emit_with_std(&root.join("main.ignite"), None, Some(&root.join("std"))).unwrap();
     assert!(emitted.std.lib_rs.contains("pub mod z"));
-    assert!(emitted.program.lib_rs.contains("ignite_std::a::value"));
+    assert!(emitted.program.lib_rs.contains("::ignite_std::a::value"));
 }
 
 #[test]

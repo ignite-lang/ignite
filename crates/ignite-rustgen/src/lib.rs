@@ -233,7 +233,7 @@ impl Layout {
     }
 
     fn in_bin(&self, crate_name: &str) -> Package {
-        Package::new(&self.module, crate_name)
+        Package::new(&self.module, &format!("::{crate_name}"))
     }
 }
 
@@ -277,7 +277,7 @@ fn generate_program(
         return Err(own(diagnostics));
     }
 
-    let uses = use_targets(&program.imports, "ignite_std", &in_lib);
+    let uses = use_targets(&program.imports, "::ignite_std", &in_lib);
     let mut lib = Writer::new();
     if !options.test_modules.is_empty() {
         lib.raw(TEST_HEADER);
@@ -288,7 +288,7 @@ fn generate_program(
         symbols,
         types,
         &uses,
-        "ignite_std",
+        "::ignite_std",
         &ModuleOptions::of(options, &module, &in_lib),
     ));
     let mut errors = Vec::new();
@@ -318,7 +318,7 @@ fn generate_program(
             continue;
         }
         let segments: Vec<&str> = relative.split('.').collect();
-        let sibling_uses = use_targets(&sibling.imports, "ignite_std", &in_lib);
+        let sibling_uses = use_targets(&sibling.imports, "::ignite_std", &in_lib);
         tree.insert(
             &segments,
             module_items(
@@ -326,7 +326,7 @@ fn generate_program(
                 sibling_symbols,
                 Some(sibling_types),
                 &sibling_uses,
-                "ignite_std",
+                "::ignite_std",
                 &ModuleOptions::of(options, path, &in_lib),
             ),
         );
@@ -339,7 +339,7 @@ fn generate_program(
     lib.raw(&siblings_text);
 
     let testing = !options.test_modules.is_empty();
-    let bin_uses = use_targets(&program.imports, "ignite_std", &in_bin);
+    let bin_uses = use_targets(&program.imports, "::ignite_std", &in_bin);
     let mut executables = Vec::new();
     if let Some(types) = types {
         for info in executable_infos {
@@ -1123,9 +1123,9 @@ fn program_module(program: &Program, types: Option<&TypedProgram>) -> String {
 /// `crate_name` whose own module path is `program`.
 fn module_rust_path(crate_name: &str, program: &str, module: &str) -> String {
     if module == program {
-        return crate_name.to_string();
+        return format!("::{crate_name}");
     }
-    let mut path = String::from("ignite_std");
+    let mut path = String::from("::ignite_std");
     for segment in module.split('.').skip(1) {
         path.push_str("::");
         path.push_str(&ident(segment));
@@ -1147,10 +1147,10 @@ fn test_main_with(tests: &[TestInfo], path: impl Fn(&str) -> String) -> String {
     w.raw(FILE_HEADER);
     w.line("");
     w.open("fn main() {");
-    w.open("ignite_io::test_main(&[");
+    w.open("::ignite_io::test_main(&[");
     for test in tests {
         w.line(&format!(
-            "ignite_io::Test {{ name: \"{}\", run: &{}::{} }},",
+            "::ignite_io::Test {{ name: \"{}\", run: &{}::{} }},",
             escape_str(&test.full_name),
             path(&test.module),
             test_fn_name(test.decl)
@@ -1218,7 +1218,7 @@ pub fn generate_tests(
         if !modules.contains(module) {
             return module_rust_path(&crate_name, "", module);
         }
-        let mut path = crate_name.clone();
+        let mut path = format!("::{crate_name}");
         for segment in module.split('.') {
             path.push_str("::");
             path.push_str(&ident(segment));
@@ -1459,8 +1459,18 @@ fn escapes_to(name: &str, mangled: impl Fn(&str) -> bool) -> bool {
     mangled(name.trim_end_matches('_'))
 }
 
+/// The Rust primitive types. A user declaration of one (`type i64`, a type
+/// parameter `bool`) would name the primitive wherever the generated code
+/// spells `Int` or `Bool`, so [`ident`] escapes them as it escapes prelude
+/// names.
+const RUST_PRIMITIVE_NAMES: &[&str] = &[
+    "bool", "char", "str", "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64",
+    "i128", "isize", "f32", "f64",
+];
+
 /// A Ignite identifier as a Rust identifier. A name Rust cannot spell raw
-/// (`self`, `Self`, `crate`, `super`) or a prelude name gets a `_`, and so
+/// (`self`, `Self`, `crate`, `super`), a prelude name or a primitive type
+/// gets a `_`, and so
 /// does every name that is one of them followed by `_`s: `self` is
 /// `self_`, `self_` is `self__`. The mapping is one to one, so two Ignite
 /// names never become one Rust name.
@@ -1468,7 +1478,8 @@ fn escapes_to(name: &str, mangled: impl Fn(&str) -> bool) -> bool {
 /// A name that starts with `__` gets a `_` too, so every such name the
 /// program declares ends in `_` in Rust. The names the generator invents
 /// for its own locals and items (`__m`, `__x`, `__a0`, `__p1`,
-/// `__spawn_0`, `__ignite_*`) start with `__` and never end in `_`, so no
+/// `__spawn_0`, `__ignite_*`, `main`'s `__port`, `__res_*` and `__endpoint_*`) start
+/// with `__` and never end in `_`, so no
 /// program name can capture or duplicate one.
 ///
 /// Every other name that contains `__` gets a `_` as well: [`assoc_symbol`]
@@ -1480,6 +1491,7 @@ fn ident(name: &str) -> String {
         || escapes_to(name, |base| {
             matches!(base, "self" | "Self" | "crate" | "super")
                 || RUST_PRELUDE_NAMES.contains(&base)
+                || RUST_PRIMITIVE_NAMES.contains(&base)
         })
     {
         format!("{name}_")
@@ -1525,8 +1537,8 @@ fn quantity_value(literal: &str, unit: &str) -> Option<i64> {
 fn variant_path(owner: &str, variant: &str) -> String {
     match owner {
         "Option" | "Result" => variant.to_string(),
-        "Input" => format!("ignite_io::Input::{variant}"),
-        "Exposure" => format!("ignite_io::Exposure::{variant}"),
+        "Input" => format!("::ignite_io::Input::{variant}"),
+        "Exposure" => format!("::ignite_io::Exposure::{variant}"),
         _ => format!("{owner}::{}", ident(variant)),
     }
 }
@@ -1539,7 +1551,7 @@ pub fn rust_type(ty: &Type) -> String {
 /// [`rust_type`] of an annotation inside a declaration whose type
 /// parameters are `params`: a bare name among them is the parameter, even
 /// when a builtin type has the same name (`fn keep<Text>(value: Text)`), and
-/// a builtin enum they shadow is spelled by its path
+/// a builtin enum is always spelled by its path
 /// ([`builtin_enum_path`]).
 fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
     let recurse = |t: &Type| rust_type_in(t, params);
@@ -1571,30 +1583,27 @@ fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
         "TcpListener" | "TcpStream" | "PipeStream" | "Stdin" | "Stdout" | "Stderr" | "Input"
         | "IoError" | "Exposure" | "Directory" | "Launcher" | "ChildProcess" | "Entropy"
         | "Setting" | "CommandLine" => {
-            format!("ignite_io::{}", ty.name.name)
+            format!("::ignite_io::{}", ty.name.name)
         }
-        "Store" => generic("ignite_io::Store"),
-        "Map" => generic("std::collections::BTreeMap"),
+        "Store" => generic("::ignite_io::Store"),
+        "Map" => generic("::std::collections::BTreeMap"),
         "Duration" | "ByteSize" | "Ratio" => "i64".to_string(),
         "Ref" | "Signal" | "SystemRef" | "Protocol" => "String".to_string(),
         "Module" if args.len() == 1 => args[0].clone(),
-        name @ ("Option" | "Result") => generic(&builtin_enum_path(name, params)),
+        name @ ("Option" | "Result") => generic(&builtin_enum_path(name)),
         other => generic(&ident(other)),
     }
 }
 
-/// The Rust name of the builtin enum `Option` or `Result`: the bare name,
-/// or its `std` path when a type parameter in `params` has the same name
-/// (Rust would read the bare name as the parameter, E0109). `ident` leaves
-/// both names as they are, so no other spelling of a parameter reaches
-/// them.
-fn builtin_enum_path(name: &str, params: &BTreeSet<String>) -> String {
-    if !params.contains(name) {
-        return name.to_string();
-    }
+/// The Rust name of the builtin enum `Option` or `Result`: always its path
+/// from the extern crate `std`. A bare name could be taken by a type
+/// parameter of the same name (E0109) or by a sibling module `Option` or
+/// `Result` (E004 refuses only types, enums and protocols of these names),
+/// the path by neither.
+fn builtin_enum_path(name: &str) -> String {
     match name {
-        "Option" => "std::option::Option".to_string(),
-        "Result" => "std::result::Result".to_string(),
+        "Option" => "::std::option::Option".to_string(),
+        "Result" => "::std::result::Result".to_string(),
         _ => name.to_string(),
     }
 }
@@ -1603,7 +1612,7 @@ fn builtin_enum_path(name: &str, params: &BTreeSet<String>) -> String {
 /// section 13.3): a shared, thread-safe `dyn Fn`.
 fn fn_value_type(params: &[String], ret: &str) -> String {
     format!(
-        "std::sync::Arc<dyn Fn({}) -> {ret} + Send + Sync>",
+        "::std::sync::Arc<dyn Fn({}) -> {ret} + Send + Sync>",
         params.join(", ")
     )
 }
@@ -1641,7 +1650,7 @@ fn fn_type_params(decl: &FnDecl) -> String {
                 .iter()
                 .filter(|b| b.param.name == p.name)
                 .flat_map(|b| &b.interfaces)
-                .map(|i| format!("ignite_io::{} + ", ident(&i.name)))
+                .map(|i| format!("::ignite_io::{} + ", ident(&i.name)))
                 .collect();
             format!("{}: {interfaces}{PARAM_BOUNDS}", ident(&p.name))
         })
@@ -1863,7 +1872,7 @@ impl<'a> Generator<'a> {
             indent: 0,
             types,
             fresh: 0,
-            root: "ignite_std",
+            root: "::ignite_std",
             renames: BTreeMap::new(),
             renamed_uses: BTreeSet::new(),
             borrowed: BTreeSet::new(),
@@ -1983,7 +1992,7 @@ impl<'a> Generator<'a> {
             _ => "",
         };
         Some((
-            format!("ignite_io::checked::{name}{suffix}"),
+            format!("::ignite_io::checked::{name}{suffix}"),
             self.site_args(site),
         ))
     }
@@ -1993,7 +2002,7 @@ impl<'a> Generator<'a> {
     fn fail_call(&self, expr: &Expr, detail: &str) -> Option<String> {
         let site = self.types?.failure_site(expr)?;
         Some(format!(
-            "ignite_io::fail(\"{}\", {}, \"{}\")",
+            "::ignite_io::fail(\"{}\", {}, \"{}\")",
             site.op.as_str(),
             self.site_args(site),
             escape_str(detail)
@@ -2170,7 +2179,7 @@ impl<'a> Generator<'a> {
         }
         if let Some(bytes) = self.byte_literal(arg) {
             return format!(
-                "{{ static BYTES: std::sync::LazyLock<Vec<u8>> = std::sync::LazyLock::new(|| vec!{}); &*BYTES }}",
+                "{{ static BYTES: ::std::sync::LazyLock<Vec<u8>> = ::std::sync::LazyLock::new(|| vec!{}); &*BYTES }}",
                 byte_items(&bytes)
             );
         }
@@ -2274,12 +2283,12 @@ impl<'a> Generator<'a> {
                     .collect();
                 let types: Vec<String> = params.iter().map(|t| self.rust_ty(t)).collect();
                 format!(
-                    "(std::sync::Arc::new(|{}| {call}) as {})",
+                    "(::std::sync::Arc::new(|{}| {call}) as {})",
                     typed.join(", "),
                     fn_value_type(&types, &self.rust_ty(&ret))
                 )
             }
-            None => format!("std::sync::Arc::new(|{}| {call})", names.join(", ")),
+            None => format!("::std::sync::Arc::new(|{}| {call})", names.join(", ")),
         }
     }
 
@@ -2295,7 +2304,7 @@ impl<'a> Generator<'a> {
         };
         match ty {
             Ty::Map(key, value) => format!(
-                "std::collections::BTreeMap<{}, {}>",
+                "::std::collections::BTreeMap<{}, {}>",
                 self.rust_ty(key),
                 self.rust_ty(value)
             ),
@@ -2307,14 +2316,10 @@ impl<'a> Generator<'a> {
             Ty::Unit | Ty::Never => "()".to_string(),
             Ty::Text => "String".to_string(),
             Ty::List(item) => format!("Vec<{}>", self.rust_ty(item)),
-            Ty::Option(item) => format!(
-                "{}<{}>",
-                builtin_enum_path("Option", &self.type_params),
-                self.rust_ty(item)
-            ),
+            Ty::Option(item) => format!("{}<{}>", builtin_enum_path("Option"), self.rust_ty(item)),
             Ty::Result(ok, err) => format!(
                 "{}<{}, {}>",
-                builtin_enum_path("Result", &self.type_params),
+                builtin_enum_path("Result"),
                 self.rust_ty(ok),
                 self.rust_ty(err)
             ),
@@ -2327,14 +2332,14 @@ impl<'a> Generator<'a> {
                 fn_value_type(&params, &self.rust_ty(ret))
             }
             Ty::Tuple(items) => format!("({})", list(items)),
-            Ty::TcpListener => "ignite_io::TcpListener".to_string(),
-            Ty::Capability(kind) => format!("ignite_io::{}", kind.name()),
-            Ty::TcpStream => "ignite_io::TcpStream".to_string(),
-            Ty::PipeStream => "ignite_io::PipeStream".to_string(),
-            Ty::IoError => "ignite_io::IoError".to_string(),
-            Ty::Input => "ignite_io::Input".to_string(),
+            Ty::TcpListener => "::ignite_io::TcpListener".to_string(),
+            Ty::Capability(kind) => format!("::ignite_io::{}", kind.name()),
+            Ty::TcpStream => "::ignite_io::TcpStream".to_string(),
+            Ty::PipeStream => "::ignite_io::PipeStream".to_string(),
+            Ty::IoError => "::ignite_io::IoError".to_string(),
+            Ty::Input => "::ignite_io::Input".to_string(),
             Ty::Param(name) => ident(name),
-            Ty::Store(item) => format!("ignite_io::Store<{}>", self.rust_ty(item)),
+            Ty::Store(item) => format!("::ignite_io::Store<{}>", self.rust_ty(item)),
         }
     }
 
@@ -2384,7 +2389,7 @@ impl<'a> Generator<'a> {
     fn enum_name(&self, q: &QualName) -> String {
         if q.is_builtin() {
             return match q.name.as_str() {
-                "Exposure" => "ignite_io::Exposure".to_string(),
+                "Exposure" => "::ignite_io::Exposure".to_string(),
                 _ => q.name.clone(),
             };
         }
@@ -2498,10 +2503,15 @@ impl<'a> Generator<'a> {
         w.close("}");
     }
 
+    /// `protocol P` as `pub struct P {}` with its roles as associated fns.
+    /// The struct is braced, not a unit struct, so it names no value: a
+    /// `let`, parameter or closure binding spelled like a protocol (the
+    /// generated `|(address, port)|` beside `protocol port`) stays a binding
+    /// instead of a pattern of the struct.
     fn protocol(&mut self, w: &mut Writer, decl: &ProtocolDecl) {
         let name = ident(&decl.name.name);
         w.line("");
-        w.line(&format!("pub struct {name};"));
+        w.line(&format!("pub struct {name} {{}}"));
         w.line("");
         w.open(&format!("impl {name} {{"));
         for (index, role) in decl.fns.iter().enumerate() {
@@ -2649,9 +2659,9 @@ impl<'a> Generator<'a> {
         let message = message.map(|m| self.value(m));
         let report = |operands: &str| match &message {
             Some(m) => format!(
-                "{{ let __ignite_message: String = {m}; ignite_io::assert_failed(\"{text}\", Some(&__ignite_message), {operands}, \"{at}\") }}"
+                "{{ let __ignite_message: String = {m}; ::ignite_io::assert_failed(\"{text}\", Some(&__ignite_message), {operands}, \"{at}\") }}"
             ),
-            None => format!("ignite_io::assert_failed(\"{text}\", None, {operands}, \"{at}\")"),
+            None => format!("::ignite_io::assert_failed(\"{text}\", None, {operands}, \"{at}\")"),
         };
         let compare = self.types.and_then(|t| t.assert_compare(cond));
         if let (
@@ -2704,11 +2714,11 @@ impl<'a> Generator<'a> {
             Some(error) => {
                 let shown = self.show(test_try.show.as_ref(), error, "__ignite_error");
                 format!(
-                    "(match {value} {{ Ok(__ignite_ok) => __ignite_ok, Err(__ignite_error) => {{ let __ignite_shown: String = {shown}; ignite_io::try_failed(Some(&__ignite_shown), \"{at}\") }} }})"
+                    "(match {value} {{ Ok(__ignite_ok) => __ignite_ok, Err(__ignite_error) => {{ let __ignite_shown: String = {shown}; ::ignite_io::try_failed(Some(&__ignite_shown), \"{at}\") }} }})"
                 )
             }
             None => format!(
-                "(match {value} {{ Some(__ignite_ok) => __ignite_ok, None => ignite_io::try_failed(None, \"{at}\") }})"
+                "(match {value} {{ Some(__ignite_ok) => __ignite_ok, None => ::ignite_io::try_failed(None, \"{at}\") }})"
             ),
         }
     }
@@ -3122,7 +3132,7 @@ impl<'a> Generator<'a> {
                 lets.push(format!("let {temp} = {index_text};"));
                 match self.types.and_then(|t| t.failure_site(expr)) {
                     Some(site) => format!(
-                        "(*ignite_io::checked::at_mut(&mut {list}, {temp}, {}))",
+                        "(*::ignite_io::checked::at_mut(&mut {list}, {temp}, {}))",
                         self.site_args(site)
                     ),
                     None => format!("{list}[({temp}) as usize]"),
@@ -3294,7 +3304,10 @@ impl<'a> Generator<'a> {
                     .expect("a site");
                 let text = self.value(operand);
                 let text = self.deref_if_borrowed(operand, text);
-                format!("ignite_io::checked::neg({text}, {})", self.site_args(site))
+                format!(
+                    "::ignite_io::checked::neg({text}, {})",
+                    self.site_args(site)
+                )
             }
             ExprKind::Unary { op, operand } => {
                 let symbol = match op {
@@ -3570,7 +3583,7 @@ impl<'a> Generator<'a> {
             }
             Some(BraceKind::Map(..)) => {
                 if entries.is_empty() {
-                    return "std::collections::BTreeMap::new()".to_string();
+                    return "::std::collections::BTreeMap::new()".to_string();
                 }
                 let pairs: Vec<String> = entries
                     .iter()
@@ -3583,7 +3596,7 @@ impl<'a> Generator<'a> {
                         format!("(String::from(\"{}\"), {value})", escape_str(&key))
                     })
                     .collect();
-                format!("std::collections::BTreeMap::from([{}])", pairs.join(", "))
+                format!("::std::collections::BTreeMap::from([{}])", pairs.join(", "))
             }
             None => {
                 let fields: Vec<String> = entries
@@ -3697,7 +3710,7 @@ impl<'a> Generator<'a> {
             .collect();
         let types: Vec<String> = params.iter().map(|t| self.rust_ty(t)).collect();
         format!(
-            "(std::sync::Arc::new(|{}| {target}({})) as {})",
+            "(::std::sync::Arc::new(|{}| {target}({})) as {})",
             typed.join(", "),
             refs.join(", "),
             fn_value_type(&types, &self.rust_ty(ret))
@@ -3774,7 +3787,7 @@ impl<'a> Generator<'a> {
         let index_text = self.value(index);
         let index_text = self.deref_if_borrowed(index, index_text);
         format!(
-            "ignite_io::checked::at({list}, {index_text}, {})",
+            "::ignite_io::checked::at({list}, {index_text}, {})",
             self.site_args(site)
         )
     }
@@ -3848,7 +3861,7 @@ impl<'a> Generator<'a> {
         let index_text = self.value(index);
         let index_text = self.deref_if_borrowed(index, index_text);
         format!(
-            "ignite_io::checked::at({list_text}, {index_text}, {})",
+            "::ignite_io::checked::at({list_text}, {index_text}, {})",
             self.site_args(site)
         )
     }
@@ -3905,7 +3918,7 @@ impl<'a> Generator<'a> {
             ExprKind::Name(id) if !self.is_local(&id.name) => {
                 if id.name == "log" && args.len() == 1 {
                     let arg = self.value(&args[0]);
-                    return format!("ignite_io::log(&({arg}))");
+                    return format!("::ignite_io::log(&({arg}))");
                 }
                 let target = format!("{}{}", self.name(id), self.bounded_turbofish(expr));
                 format!("{target}({})", self.args(args).join(", "))
@@ -3960,11 +3973,11 @@ impl<'a> Generator<'a> {
             },
             _ => (None, Vec::new(), false),
         };
-        const LOG: &str = "ignite_io::log(&format!(\"task ended with error: {}\", error));";
+        const LOG: &str = "::ignite_io::log(&format!(\"task ended with error: {}\", error));";
         let Some(target) = target.map(|target| format!("{target}{instance}")) else {
             let task = self.value(operand);
             return format!(
-                "{{ ignite_io::spawn(move || {{ if let Err(error) = ({task}) {{ {LOG} }} }}); }}"
+                "{{ ::ignite_io::spawn(move || {{ if let Err(error) = ({task}) {{ {LOG} }} }}); }}"
             );
         };
         let callee = self.callee(operand);
@@ -3999,7 +4012,7 @@ impl<'a> Generator<'a> {
         }
         let _ = write!(
             out,
-            "ignite_io::spawn(move || {{ if let Err(error) = {target}({}) {{ {LOG} }} }}); }}",
+            "::ignite_io::spawn(move || {{ if let Err(error) = {target}({}) {{ {LOG} }} }}); }}",
             names.join(", ")
         );
         out
@@ -4010,7 +4023,7 @@ impl<'a> Generator<'a> {
     fn role_path(&self, receiver: &Expr, name: &Ident) -> Option<String> {
         let owner = self.qualifier(receiver)?;
         if SUBSTRATE_OWNERS.contains(&owner) {
-            return Some(format!("ignite_io::{owner}::{}", ident(&name.name)));
+            return Some(format!("::ignite_io::{owner}::{}", ident(&name.name)));
         }
         Some(format!("{}::{}", self.unshadowed(owner), ident(&name.name)))
     }
@@ -4053,7 +4066,7 @@ impl<'a> Generator<'a> {
 
     fn static_call(&mut self, owner: &str, name: &str, args: &[Expr]) -> String {
         if let ("Int", "parse", [text]) = (owner, name, args) {
-            return format!("ignite_io::parse_int({})", self.text_bytes(text));
+            return format!("::ignite_io::parse_int({})", self.text_bytes(text));
         }
         if let ("Bytes", "of", [list]) = (owner, name, args)
             && let Some(bytes) = literal_bytes(list)
@@ -4070,30 +4083,32 @@ impl<'a> Generator<'a> {
                 format!("({list}).iter().map(|x| *x as u8).collect::<Vec<u8>>()")
             }
             ("List", "empty", []) => "Vec::new()".to_string(),
-            ("Map", "empty", []) => "std::collections::BTreeMap::new()".to_string(),
-            ("Store", "new", []) => "ignite_io::Store::new()".to_string(),
-            ("Pipe", "pair", []) => "ignite_io::Pipe::pair()".to_string(),
-            ("Directory", "temporary", []) => "ignite_io::Directory::temporary()".to_string(),
-            ("Launcher", "new", []) => "ignite_io::Launcher::new()".to_string(),
-            ("Entropy", "new", []) => "ignite_io::Entropy::new()".to_string(),
-            ("Setting", "of", [flag, value]) => format!("ignite_io::Setting::of({flag}, {value})"),
+            ("Map", "empty", []) => "::std::collections::BTreeMap::new()".to_string(),
+            ("Store", "new", []) => "::ignite_io::Store::new()".to_string(),
+            ("Pipe", "pair", []) => "::ignite_io::Pipe::pair()".to_string(),
+            ("Directory", "temporary", []) => "::ignite_io::Directory::temporary()".to_string(),
+            ("Launcher", "new", []) => "::ignite_io::Launcher::new()".to_string(),
+            ("Entropy", "new", []) => "::ignite_io::Entropy::new()".to_string(),
+            ("Setting", "of", [flag, value]) => {
+                format!("::ignite_io::Setting::of({flag}, {value})")
+            }
             ("CommandLine", "of", [arguments]) => {
-                format!("ignite_io::CommandLine::of({arguments})")
+                format!("::ignite_io::CommandLine::of({arguments})")
             }
             ("Int", "to_text", [value]) => {
                 format!("{}.to_string()", wrap(&args[0], value.clone()))
             }
-            ("Process", "exit", [code]) => format!("ignite_io::exit(({code}) as i32)"),
-            ("Clock", "monotonic", []) => "ignite_io::clock::monotonic()".to_string(),
+            ("Process", "exit", [code]) => format!("::ignite_io::exit(({code}) as i32)"),
+            ("Clock", "monotonic", []) => "::ignite_io::clock::monotonic()".to_string(),
             ("Endpoint", "of", [reference]) => {
                 let endpoint = self.enum_name(&ignite_types::endpoint_name());
                 format!(
-                    "ignite_io::endpoint_of({}).map(|(address, port)| {endpoint} {{ address, port }})",
+                    "::ignite_io::endpoint_of({}).map(|(address, port)| {endpoint} {{ address, port }})",
                     borrow(&args[0], reference.clone())
                 )
             }
             (owner, _, _) if SUBSTRATE_OWNERS.contains(&owner) => {
-                format!("ignite_io::{owner}::{name}({})", texts.join(", "))
+                format!("::ignite_io::{owner}::{name}({})", texts.join(", "))
             }
             _ => format!("{owner}::{name}({})", texts.join(", ")),
         }
@@ -4142,7 +4157,7 @@ impl<'a> Generator<'a> {
             .unwrap_or_else(|| self.ref_arg(receiver));
         let a = self.args(args);
         Some(format!(
-            "ignite_io::checked::slice_ref({list}, {}, {}, {})",
+            "::ignite_io::checked::slice_ref({list}, {}, {}, {})",
             a[0],
             a[1],
             self.site_args(site)
@@ -4178,7 +4193,7 @@ impl<'a> Generator<'a> {
                     .and_then(|t| t.failure_site(expr))
                     .expect("`set` has a failure site");
                 format!(
-                    "*ignite_io::checked::at_mut(&mut {place}, {}, {}) = {};",
+                    "*::ignite_io::checked::at_mut(&mut {place}, {}, {}) = {};",
                     temps[0],
                     self.site_args(site),
                     temps[1]
@@ -4256,7 +4271,7 @@ impl<'a> Generator<'a> {
                 let a = self.args(args);
                 let a: Vec<String> = std::iter::once(format!("&{r}")).chain(a).collect();
                 return format!(
-                    "<{stream} as ignite_io::ByteStream>::{}({})",
+                    "<{stream} as ::ignite_io::ByteStream>::{}({})",
                     ident(&name.name),
                     a.join(", ")
                 );
@@ -4290,7 +4305,7 @@ impl<'a> Generator<'a> {
                 };
                 let a = self.args(args);
                 return format!(
-                    "ignite_io::checked::slice({list}, {}, {}, {})",
+                    "::ignite_io::checked::slice({list}, {}, {}, {})",
                     a[0],
                     a[1],
                     self.site_args(site)
@@ -5126,7 +5141,7 @@ impl<'a> Generator<'a> {
                     QuantityKind::Ratio => "Ratio",
                 };
                 format!(
-                    "{out}.push_str(&ignite_io::quantity_debug(ignite_io::Quantity::{kind}, *{v}));"
+                    "{out}.push_str(&::ignite_io::quantity_debug(::ignite_io::Quantity::{kind}, *{v}));"
                 )
             }
             Ty::Ref(_) | Ty::Signal(_) | Ty::SystemRef | Ty::Protocol => {
@@ -5225,7 +5240,7 @@ impl<'a> Generator<'a> {
             Ty::Input => {
                 let data = self.eq_test(&Ty::List(Box::new(Ty::Byte)), "x", "y");
                 format!(
-                    "match (a, b) {{ (ignite_io::Input::Data(x), ignite_io::Input::Data(y)) => {data}, (ignite_io::Input::Eof, ignite_io::Input::Eof) => true, _ => false }}"
+                    "match (a, b) {{ (::ignite_io::Input::Data(x), ::ignite_io::Input::Data(y)) => {data}, (::ignite_io::Input::Eof, ::ignite_io::Input::Eof) => true, _ => false }}"
                 )
             }
             Ty::Tuple(items) => {
@@ -5336,7 +5351,7 @@ impl<'a> Generator<'a> {
             Ty::Input => {
                 let data = self.debug_write(&Ty::List(Box::new(Ty::Byte)), "x", "out");
                 format!(
-                    "match v {{ ignite_io::Input::Data(x) => {{ out.push_str(\"Data(\"); {data} out.push(')'); }} ignite_io::Input::Eof => out.push_str(\"Eof\"), }}"
+                    "match v {{ ::ignite_io::Input::Data(x) => {{ out.push_str(\"Data(\"); {data} out.push(')'); }} ::ignite_io::Input::Eof => out.push_str(\"Eof\"), }}"
                 )
             }
             Ty::IoError => {
@@ -5648,9 +5663,9 @@ impl<'a> Generator<'a> {
         }
         let function = format!("move |{}|{arrow} {body}", params.join(", "));
         let arc = if lets.is_empty() {
-            format!("std::sync::Arc::new({function})")
+            format!("::std::sync::Arc::new({function})")
         } else {
-            format!("std::sync::Arc::new({{ {lets}{function} }})")
+            format!("::std::sync::Arc::new({{ {lets}{function} }})")
         };
         match (info, ret) {
             (Some(info), Some(ret)) => {
@@ -5957,7 +5972,7 @@ fn substrate_invocation(value: &str) -> String {
         .map(|f| format!("{f}: i.{}", ident(f)))
         .collect();
     format!(
-        "{{ let i = {value}; ignite_io::Invocation {{ {} }} }}",
+        "{{ let i = {value}; ::ignite_io::Invocation {{ {} }} }}",
         fields.join(", ")
     )
 }
@@ -6157,20 +6172,20 @@ impl CapabilityResource {
                     None => "None".to_string(),
                 };
                 format!(
-                    "ignite_io::Setting::launch(\"{}\", {default})?",
+                    "::ignite_io::Setting::launch(\"{}\", {default})?",
                     escape_str(flag)
                 )
             }
             CapabilityResource::Directory { path, create, flag } => format!(
-                "ignite_io::Directory::launch(\"{}\", {create}, \"{}\")?",
+                "::ignite_io::Directory::launch(\"{}\", {create}, \"{}\")?",
                 escape_str(path),
                 escape_str(flag)
             ),
             CapabilityResource::Launcher { maximum_children } => {
-                format!("ignite_io::Launcher::with_maximum({maximum_children})")
+                format!("::ignite_io::Launcher::with_maximum({maximum_children})")
             }
-            CapabilityResource::Entropy => "ignite_io::Entropy::open()?".to_string(),
-            CapabilityResource::CommandLine => "ignite_io::CommandLine::launch()?".to_string(),
+            CapabilityResource::Entropy => "::ignite_io::Entropy::open()?".to_string(),
+            CapabilityResource::CommandLine => "::ignite_io::CommandLine::launch()?".to_string(),
         }
     }
 }
@@ -6273,13 +6288,11 @@ fn lower_store(resource: &ResourceDecl, diagnostics: &mut Vec<Diagnostic>) -> Op
         ));
     }
     (diagnostics.len() == before).then(|| {
-        rust_type(&Type {
-            name: resource.kind.clone(),
-            args: resource.args.clone(),
-            span: resource.kind.span,
-            fn_names: Vec::new(),
-            requires: None,
-        })
+        rust_type(&Type::named(
+            resource.kind.clone(),
+            resource.args.clone(),
+            resource.kind.span,
+        ))
     })
 }
 
@@ -6368,26 +6381,27 @@ fn is_duplicate(properties: &[FieldInit], property: &FieldInit) -> bool {
         .is_some_and(|first| !std::ptr::eq(&properties[first], property))
 }
 
-/// A Rust variable for a resource, kept apart from the names `main` binds,
-/// escaped one to one as [`ident`] escapes `self`: `port` is `port_`,
-/// `port_` is `port__`. A name ending in `_endpoint` is escaped the same
-/// way (`x_endpoint` is `x_endpoint_`), so it is never the
-/// [`endpoint_variable`] of another resource.
+/// The Rust variable of a resource or component in `main`: `__res_` and
+/// the name with every `_` written `_0`. Every local `main` binds
+/// (`__port`, this, [`endpoint_variable`]) starts with `__` and never ends
+/// in `_`, so it is never the Rust name of a program item ([`ident`] ends
+/// every name with `__` in `_`) nor an [`assoc_symbol`] (which never starts
+/// with `__`): a fn a property calls, also as `x.f()` with a resource `f`
+/// beside it, is not shadowed. The three prefixes differ, and the `_0`
+/// spelling is one to one, so no two locals share a name.
 fn resource_variable(name: &str) -> String {
-    if escapes_to(name, |base| {
-        matches!(base, "application" | "port" | "stream" | "error") || base.ends_with("_endpoint")
-    }) {
-        format!("{name}_")
-    } else {
-        ident(name)
-    }
+    format!("__res_{}", name.replace('_', "_0"))
 }
 
 /// The Rust variable holding the `Endpoint` value of a `TcpListener`
-/// resource used as a target: [`resource_variable`] followed by
-/// `_endpoint`, a name no resource variable has.
+/// resource used as a target: `__endpoint_` and the resource name with
+/// every `_` written `_0`. Like the generator's other locals (`__port`) it
+/// starts with `__` and never ends in `_`, so neither a program name
+/// ([`ident`] ends every name with `__` in `_`) nor an [`assoc_symbol`]
+/// (which never starts with `__`) nor another resource's endpoint is
+/// spelled the same.
 fn endpoint_variable(name: &str) -> String {
-    format!("{}_endpoint", resource_variable(name))
+    format!("__endpoint_{}", name.replace('_', "_0"))
 }
 
 /// `src/bin/<executable>.rs` of an executable component (`docs/slice.md`
@@ -6426,11 +6440,11 @@ fn executable_main(
     };
     let mut head = Writer::new();
     head.raw(FILE_HEADER);
-    head.line(&format!("use {crate_name}::*;"));
+    head.line(&format!("use ::{crate_name}::*;"));
     let mut w = Writer::new();
     w.line("");
     w.open("fn main() {");
-    w.open("std::process::exit(ignite_io::run(|| {");
+    w.open("::std::process::exit(::ignite_io::run(|| {");
 
     let mut generator = Generator::new(symbols, program, Some(types), &package.module, source);
     generator.indent = w.indent;
@@ -6455,7 +6469,7 @@ fn executable_main(
             && defined.insert(name.clone())
         {
             w.line(&format!(
-                "let {}: {} = ignite_io::Store::new();",
+                "let {}: {} = ::ignite_io::Store::new();",
                 resource_variable(name),
                 generator.rust_ty(ty)
             ));
@@ -6509,7 +6523,7 @@ fn executable_main(
         }
     }
     if !listeners.is_empty() || !endpoints.is_empty() {
-        w.line("let port = ignite_io::args::port()?;");
+        w.line("let __port = ::ignite_io::args::port()?;");
     }
     for (index, name) in listeners.iter().enumerate() {
         let listener = listener_of(name)?;
@@ -6517,22 +6531,22 @@ fn executable_main(
         let address = escape_str(&listener.address);
         let address_format = escape_str(&listener.address.replace('{', "{{").replace('}', "}}"));
         let port = if index == 0 {
-            format!("port.unwrap_or({})", listener.port)
+            format!("__port.unwrap_or({})", listener.port)
         } else {
             listener.port.to_string()
         };
         w.line(&format!(
-            "let {variable} = ignite_io::TcpListener::bind(String::from(\"{address}\"), {port})?;"
+            "let {variable} = ::ignite_io::TcpListener::bind(String::from(\"{address}\"), {port})?;"
         ));
         w.line(&format!(
-            "ignite_io::log(&format!(\"listening on {address_format}:{{}}\", {variable}.local_port()));"
+            "::ignite_io::log(&format!(\"listening on {address_format}:{{}}\", {variable}.local_port()));"
         ));
         defined.insert((*name).to_string());
     }
     for (name, ty) in &endpoints {
         let listener = listener_of(name)?;
         w.line(&format!(
-            "let {} = {} {{ address: String::from(\"{}\"), port: port.unwrap_or({}) }};",
+            "let {} = {} {{ address: String::from(\"{}\"), port: __port.unwrap_or({}) }};",
             endpoint_variable(name),
             generator.type_path(ty),
             escape_str(&listener.address),
