@@ -563,16 +563,58 @@ fn finding_errors(name: &str, text: &str, exists: &dyn Fn(&str) -> bool) -> Vec<
             errors.push(format!(
                 "{name}: regression_asset names no test: write `{path} :: <test name>`"
             ));
+        } else if !is_test_file(path) {
+            errors.push(format!(
+                "{name}: regression_asset {path} is no test file (ux/tests/*.spec.ts or crates/*/tests/**/*.rs)"
+            ));
         } else {
             let text = std::fs::read_to_string(workspace().join(path)).unwrap_or_default();
-            if !text.contains(test) {
+            if !declares_test(path, &text, test) {
                 errors.push(format!(
-                    "{name}: regression_asset names the test {test:?}, which is not in {path}"
+                    "{name}: regression_asset names {test:?}, which is no test declared in {path}"
                 ));
             }
         }
     }
     errors
+}
+
+/// A file that holds tests: a Playwright spec under `ux/tests/`, or a Rust
+/// file under a crate's `tests/`.
+fn is_test_file(path: &str) -> bool {
+    let parts: Vec<&str> = path.split('/').collect();
+    match parts.as_slice() {
+        ["ux", "tests", .., file] => file.ends_with(".spec.ts"),
+        ["crates", _, "tests", .., file] => file.ends_with(".rs"),
+        _ => false,
+    }
+}
+
+/// Whether `text`, the file at `path`, declares the test `test` by its whole
+/// name: `test("<name>"` (or with `'` or a backquote) in a spec, or a
+/// `fn <name>(` whose attributes hold `#[test]` in a Rust file.
+fn declares_test(path: &str, text: &str, test: &str) -> bool {
+    if path.ends_with(".spec.ts") {
+        return ['"', '\'', '`']
+            .iter()
+            .any(|quote| text.contains(&format!("test({quote}{test}{quote}")));
+    }
+    let name = test.strip_prefix("fn ").unwrap_or(test);
+    if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return false;
+    }
+    let lines: Vec<&str> = text.lines().collect();
+    lines.iter().enumerate().any(|(index, line)| {
+        if !line.trim_start().starts_with(&format!("fn {name}(")) {
+            return false;
+        }
+        lines[..index]
+            .iter()
+            .rev()
+            .map(|above| above.trim())
+            .take_while(|above| above.starts_with("#[") || above.starts_with("///"))
+            .any(|above| above == "#[test]")
+    })
 }
 
 #[test]
@@ -603,7 +645,7 @@ fn a_closed_s2_finding_without_an_asset_is_refused() {
             "---\nid: UXF-900\ntitle: t\nclass: layout\nseverity: {severity}\nmetric: m\nstatus: {status}\nfound_by: L2\nevidence_recording: none\nevidence_screenshot: none\nevidence_lines: none\nregression_asset: {asset}\n---\n\nbody\n"
         )
     };
-    let exists = |path: &str| path == "ux/tests/layout.spec.ts";
+    let exists = |path: &str| path == "ux/tests/regressions.spec.ts";
     let closed = finding_errors("UXF-900.md", &record("S2", "closed", "none"), &exists);
     assert!(
         closed.len() == 1 && closed[0].contains("without a regression_asset"),
@@ -623,7 +665,11 @@ fn a_closed_s2_finding_without_an_asset_is_refused() {
     assert!(
         finding_errors(
             "UXF-900.md",
-            &record("S2", "closed", "ux/tests/layout.spec.ts :: L2"),
+            &record(
+                "S2",
+                "closed",
+                "ux/tests/regressions.spec.ts :: UXF-001: scrolling code blocks and tables take focus",
+            ),
             &exists
         )
         .is_empty()
@@ -632,11 +678,20 @@ fn a_closed_s2_finding_without_an_asset_is_refused() {
         ("ux/tests/layout.spec.ts", "names no test"),
         (
             "ux/tests/layout.spec.ts :: no such test",
-            "not in ux/tests/layout.spec.ts",
+            "no test declared in ux/tests/layout.spec.ts",
         ),
         ("/etc/passwd :: root", "not a plain workspace path"),
         ("ux/../README.md :: Ignite", "not a plain workspace path"),
         ("README.md :: Ignite", "not a test under ux/ or crates/"),
+        (
+            "ux/tests/regressions.spec.ts :: UXF-001",
+            "no test declared in",
+        ),
+        ("ux/lib/layout.ts :: overflow", "is no test file"),
+        (
+            "crates/ignite/tests/site/ux.rs :: fn finding_errors",
+            "no test declared in",
+        ),
     ] {
         let errors = finding_errors("UXF-900.md", &record("S2", "closed", asset), &|_| true);
         assert!(
@@ -644,6 +699,16 @@ fn a_closed_s2_finding_without_an_asset_is_refused() {
             "{asset}: {errors:?}"
         );
     }
+    let rust = record(
+        "S2",
+        "closed",
+        "crates/ignite/tests/site/ux.rs :: fn every_closed_s1_and_s2_finding_has_a_regression_asset",
+    );
+    assert_eq!(
+        finding_errors("UXF-900.md", &rust, &|_| true),
+        Vec::<String>::new(),
+        "a #[test] fn names a test"
+    );
     assert!(finding_errors("UXF-900.md", &record("S2", "open", "none"), &exists).is_empty());
     assert!(finding_errors("UXF-900.md", &record("S3", "closed", "none"), &exists).is_empty());
     let unnamed = finding_errors("UXF-901.md", &record("S3", "open", "none"), &exists);
@@ -686,5 +751,55 @@ fn adversary_a_regression_asset_naming_no_test_is_refused() {
     assert!(
         !errors.is_empty(),
         "a closed S2 finding whose asset is README.md passes the findings check"
+    );
+}
+
+fn adversary2_record(asset: &str) -> String {
+    format!(
+        "---\nid: UXF-900\ntitle: t\nclass: layout\nseverity: S2\nmetric: m\nstatus: closed\nfound_by: L2\nevidence_recording: none\nevidence_screenshot: none\nevidence_lines: none\nregression_asset: {asset}\n---\n\nbody\n"
+    )
+}
+
+/// Adversary, pass 2: the named test must be a test, not words that occur
+/// in a comment of the file.
+#[test]
+fn adversary2_a_test_name_found_only_in_a_comment_is_refused() {
+    let exists = |path: &str| workspace().join(path).exists();
+    let asset = "ux/tests/regressions.spec.ts :: test failed on the site before the finding's fix";
+    let errors = finding_errors("UXF-900.md", &adversary2_record(asset), &exists);
+    assert!(
+        !errors.is_empty(),
+        "a regression asset naming words of a comment, not a test, passes the findings check"
+    );
+}
+
+/// Adversary, pass 2: a fragment of several test titles names no one test.
+#[test]
+fn adversary2_a_fragment_of_test_titles_is_refused() {
+    let exists = |path: &str| workspace().join(path).exists();
+    let errors = finding_errors(
+        "UXF-900.md",
+        &adversary2_record("ux/tests/regressions.spec.ts :: UXF"),
+        &exists,
+    );
+    assert!(
+        !errors.is_empty(),
+        "`UXF`, a fragment of seven test titles, passes as the name of a regression test"
+    );
+}
+
+/// Adversary, pass 2: a source file under crates/ that holds no test is
+/// no regression asset.
+#[test]
+fn adversary2_a_source_file_that_is_no_test_is_refused() {
+    let exists = |path: &str| workspace().join(path).exists();
+    let errors = finding_errors(
+        "UXF-900.md",
+        &adversary2_record("crates/ignite/src/main.rs :: fn main"),
+        &exists,
+    );
+    assert!(
+        !errors.is_empty(),
+        "crates/ignite/src/main.rs :: fn main passes as a regression asset"
     );
 }

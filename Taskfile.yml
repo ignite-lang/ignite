@@ -141,10 +141,10 @@ tasks:
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     status:
-      - test -d ux/node_modules -a ! -L ux/node_modules || test "$(readlink ux/node_modules)" = "{{.CACHE}}/node_modules"
+      - test -e ux/node_modules/.bin/playwright && { test ! -L ux/node_modules || { test "$(readlink ux/node_modules)" = "{{.CACHE}}/node_modules" && test -e {{.CACHE}}/ready; }; }
     cmds:
       - silent: true
-        cmd: 'test -e {{.CACHE}}/ready || (mkdir -p {{.CACHE}} && cp ux/package.json ux/package-lock.json {{.CACHE}}/ && cd {{.CACHE}} && npm ci --offline --no-audit --no-fund --loglevel=error > npm-ci.log 2>&1 && touch ready) || (rm -rf {{.CACHE}}/node_modules; echo "ux: Playwright and axe-core for this lockfile are neither in {{.CACHE}} nor in the npm cache; run once, with network: task ux-install"; exit 1)'
+        cmd: 'test -e {{.CACHE}}/ready -a -e {{.CACHE}}/node_modules/.bin/playwright || (rm -f {{.CACHE}}/ready && mkdir -p {{.CACHE}} && cp ux/package.json ux/package-lock.json {{.CACHE}}/ && cd {{.CACHE}} && npm ci --offline --no-audit --no-fund --loglevel=error > npm-ci.log 2>&1 && touch ready) || (rm -rf {{.CACHE}}/node_modules; echo "ux: Playwright and axe-core for this lockfile are neither in {{.CACHE}} nor in the npm cache; run once, with network: task ux-install"; exit 1)'
       - ln -sfn {{.CACHE}}/node_modules ux/node_modules
 
   ux-install:

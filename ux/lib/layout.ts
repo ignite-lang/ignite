@@ -13,6 +13,8 @@ const TOLERANCE = 1;
 //   regions (a code block, a table, ...): a horizontal page scroll too. On a
 //   book page the reading column, #mdbook-content, scrolls, so a wide block
 //   there scrolls the page as a reader sees it.
+// - Text or a control past the start edge of the page or of any box that
+//   scrolls or clips: content past its box (no scroll reaches it).
 // - A box that clips (overflow hidden or clip) and cuts off text or a
 //   control sideways: content past its box. Decoration (no text, no
 //   control, aria-hidden) may be clipped.
@@ -61,12 +63,64 @@ export async function overflow(page: Page, regions: string = scrollRegions): Pro
         }
         return Array.from(el.childNodes).some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").trim() !== "");
       };
+      // The first text or control that `box` answers for (its own, or in
+      // boxes below it that neither scroll nor clip; the document when
+      // `box` is null) lying past its start edge, or past either edge.
+      const cutBy = (box: HTMLElement | null, edges: "start" | "both"): Element | undefined => {
+        const frame = box ? box.getBoundingClientRect() : { left: 0, right: document.documentElement.clientWidth };
+        const past = (rects: DOMRectList) =>
+          Array.from(rects).some(
+            (rect) =>
+              rect.width > 0 &&
+              (rect.left < frame.left - tolerance || (edges === "both" && rect.right > frame.right + tolerance)),
+          );
+        const answered = (inner: Element) => inner === box || (!boxed(inner) && nearestBox(inner) === box);
+        const root = box ?? document.body;
+        const control = Array.from(root.querySelectorAll("a, button, input, select, textarea, img, [tabindex]")).find(
+          (inner) => rendered(inner) && nearestBox(inner) === box && meaningful(inner) && past(inner.getClientRects()),
+        );
+        if (control) {
+          return control;
+        }
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const parent = node.parentElement;
+          if (!parent || !(node.textContent ?? "").trim() || !rendered(parent) || !meaningful(parent) || !answered(parent)) {
+            continue;
+          }
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          if (past(range.getClientRects())) {
+            return parent;
+          }
+        }
+        return undefined;
+      };
+      // Content past the start edge is never in scrollWidth and no scroll
+      // reaches it: checked for the document and for every box.
+      const startOfPage = cutBy(null, "start");
+      if (startOfPage) {
+        problems.push({
+          check: "element past its box",
+          detail: `${describe(startOfPage)} is cut off at the start edge of the page`,
+        });
+      }
       for (const el of Array.from(document.body.querySelectorAll("*"))) {
         if (!(el instanceof HTMLElement) || !rendered(el)) {
           continue;
         }
         if (getComputedStyle(el).display === "inline" || el.clientWidth === 0) {
           continue;
+        }
+        if (boxed(el)) {
+          const start = cutBy(el, "start");
+          if (start) {
+            problems.push({
+              check: "element past its box",
+              detail: `${describe(start)} is cut off at the start edge of ${describe(el)}`,
+            });
+            continue;
+          }
         }
         if (el.scrollWidth <= el.clientWidth + tolerance) {
           continue;
@@ -88,31 +142,7 @@ export async function overflow(page: Page, regions: string = scrollRegions): Pro
           if (own && full.includes(own)) {
             continue;
           }
-          const box = el.getBoundingClientRect();
-          const past = (rects: DOMRectList | DOMRect[]) =>
-            Array.from(rects).some(
-              (rect) => rect.width > 0 && (rect.right > box.right + tolerance || rect.left < box.left - tolerance),
-            );
-          let cut: Element | undefined = Array.from(el.querySelectorAll("a, button, input, select, textarea, img, [tabindex]")).find(
-            (inner) => rendered(inner) && nearestBox(inner) === el && meaningful(inner) && past(inner.getClientRects()),
-          );
-          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-          for (let node = walker.nextNode(); node && !cut; node = walker.nextNode()) {
-            const parent = node.parentElement;
-            if (!parent || !(node.textContent ?? "").trim() || !rendered(parent) || !meaningful(parent)) {
-              continue;
-            }
-            // Text this box answers for: its own, or in a box that neither
-            // scrolls nor clips below it.
-            if (!(parent === el || (!boxed(parent) && nearestBox(parent) === el))) {
-              continue;
-            }
-            const range = document.createRange();
-            range.selectNodeContents(node);
-            if (past(range.getClientRects())) {
-              cut = parent;
-            }
-          }
+          const cut = cutBy(el, "both");
           if (cut) {
             problems.push({
               check: "element past its box",
@@ -242,22 +272,76 @@ export async function alwaysVisible(page: Page, controls: Control[], width: numb
           });
           continue;
         }
-        // Uncovered as a whole: the centre and a 5 by 5 grid over the
-        // control's central 70 % (a round button's corners are not part of
-        // it), all hit the control.
+        // Uncovered as a whole: the centre and a 5 by 5 grid from 1 px inside
+        // each edge all hit the control. A grid point in a rounded corner,
+        // outside the corner's ellipse, is not part of the control and is
+        // skipped; nothing else is.
+        const length = (part: string, size: number) =>
+          part.endsWith("%") ? (parseFloat(part) / 100) * size : parseFloat(part) || 0;
+        const corner = (property: string, left: boolean, top: boolean) => {
+          const parts = style.getPropertyValue(property).trim().split(/\s+/);
+          const rx = Math.min(length(parts[0], rect.width), rect.width / 2);
+          const ry = Math.min(length(parts[1] ?? parts[0], rect.height), rect.height / 2);
+          return { rx, ry, cx: left ? rect.left + rx : rect.right - rx, cy: top ? rect.top + ry : rect.bottom - ry, left, top };
+        };
+        const corners = [
+          corner("border-top-left-radius", true, true),
+          corner("border-top-right-radius", false, true),
+          corner("border-bottom-left-radius", true, false),
+          corner("border-bottom-right-radius", false, false),
+        ];
+        const inShape = (x: number, y: number) =>
+          corners.every((c) => {
+            if (c.rx <= 0 || c.ry <= 0) {
+              return true;
+            }
+            const inCornerBox = (c.left ? x < c.cx : x > c.cx) && (c.top ? y < c.cy : y > c.cy);
+            return !inCornerBox || ((x - c.cx) / c.rx) ** 2 + ((y - c.cy) / c.ry) ** 2 <= 1;
+          });
         const points: [number, number, string][] = [[rect.left + rect.width / 2, rect.top + rect.height / 2, "its centre"]];
-        const insetX = rect.width * 0.15;
-        const insetY = rect.height * 0.15;
+        const inset = 1;
         for (let i = 0; i < 5; i++) {
           for (let j = 0; j < 5; j++) {
-            const x = rect.left + insetX + ((rect.width - 2 * insetX) * i) / 4;
-            const y = rect.top + insetY + ((rect.height - 2 * insetY) * j) / 4;
-            points.push([x, y, `${Math.round(x)},${Math.round(y)}`]);
+            const x = rect.left + inset + ((rect.width - 2 * inset) * i) / 4;
+            const y = rect.top + inset + ((rect.height - 2 * inset) * j) / 4;
+            if (inShape(x, y)) {
+              points.push([x, y, `${Math.round(x)},${Math.round(y)}`]);
+            }
           }
         }
+        // Clipped: a box above it that clips cuts more than 1 px off it.
+        let clipper: Element | null = null;
+        for (let up = el.parentElement; up && !clipper; up = up.parentElement) {
+          const s = getComputedStyle(up);
+          if (s.overflowX === "visible" && s.overflowY === "visible") {
+            continue;
+          }
+          const box = up.getBoundingClientRect();
+          const left = box.left + up.clientLeft;
+          const top = box.top + up.clientTop;
+          if (
+            rect.left < left - tolerance ||
+            rect.top < top - tolerance ||
+            rect.right > left + up.clientWidth + tolerance ||
+            rect.bottom > top + up.clientHeight + tolerance
+          ) {
+            clipper = up;
+          }
+        }
+        if (clipper) {
+          problems.push({
+            check: "always visible",
+            detail: `${control.label} is clipped by ${clipper.tagName.toLowerCase()}${clipper.id ? "#" + clipper.id : ""}`,
+          });
+          continue;
+        }
+        // Covered: the element hit at a point is neither the control, inside
+        // it, nor a box it sits in (a hit on such a box is a point where the
+        // control paints nothing, like the 1 px a clipping parent's border
+        // takes; a box below cannot paint over it).
         for (const [x, y, where] of points) {
           const hit = document.elementFromPoint(x, y);
-          if (!hit || !(hit === el || el.contains(hit))) {
+          if (!hit || !(hit === el || el.contains(hit) || hit.contains(el))) {
             problems.push({
               check: "always visible",
               detail: `${control.label} is covered at ${where} by ${hit ? hit.tagName.toLowerCase() + (hit.id ? "#" + hit.id : "") : "nothing"}`,

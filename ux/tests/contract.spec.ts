@@ -39,6 +39,12 @@ test("always visible: out of view and covered controls are refused", async ({ pa
   expect((await alwaysVisible(page, controls, 400))[0].detail).toContain("not fully in view");
   await page.setContent(`<div id="bar" style="height:40px;width:100px">bar</div><div style="position:fixed;top:0;left:0;width:200px;height:60px;background:#000"></div>`);
   expect((await alwaysVisible(page, controls, 400))[0].detail).toContain("covered at its centre");
+  await page.setContent(`<div style="height:20px;overflow:hidden"><div id="bar" style="height:40px;width:100px">bar</div></div>`);
+  expect((await alwaysVisible(page, controls, 400))[0].detail).toContain("clipped");
+  await page.setContent(`<body style="margin:0"><div id="bar" style="height:40px;width:100px">bar</div><div style="position:fixed;top:0;left:98px;width:5px;height:60px;background:#000"></div></body>`);
+  expect((await alwaysVisible(page, controls, 400))[0].detail, "a 1 px cover at the edge").toContain("covered at");
+  await page.setContent(`<div id="bar" style="height:40px;width:100px;border-radius:20px;background:#ccc">bar</div>`);
+  expect(await alwaysVisible(page, controls, 400), "rounded corners are no cover").toEqual([]);
   await page.setContent(`<div id="bar" style="height:40px;width:100px">bar</div>`);
   expect(await alwaysVisible(page, controls, 400)).toEqual([]);
   expect(await alwaysVisible(page, [{ label: "wide only", selector: "#none", when: (w) => w > 1000 }], 400)).toEqual([]);

@@ -68,11 +68,14 @@ async function quiet(page: Page) {
 }
 
 // The first candidate usable by the screen-only user, or null.
-async function usable(page: Page, all: Locator, primary: string): Promise<Seen | null> {
+async function usable(page: Page, all: Locator, primary: string, focusedOnly = false): Promise<Seen | null> {
   const count = await all.count();
   for (let index = 0; index < count; index++) {
     const seen = await all.nth(index).evaluate(
-      (el, primary) => {
+      (el, { primary, focusedOnly }) => {
+        if (focusedOnly && el !== document.activeElement) {
+          return null;
+        }
         const style = getComputedStyle(el);
         const rect = el.getBoundingClientRect();
         if (style.visibility === "hidden" || rect.width === 0 || rect.height === 0) {
@@ -97,7 +100,7 @@ async function usable(page: Page, all: Locator, primary: string): Promise<Seen |
         const link = el.closest("a");
         return { x, y, primary: el.closest(primary) !== null, href: link ? link.href : null };
       },
-      primary,
+      { primary, focusedOnly },
     );
     if (seen) {
       return { index, ...seen };
@@ -232,19 +235,12 @@ async function typeText(page: Page, text: string, run: Run) {
   await quiet(page);
 }
 
-async function focused(all: Locator): Promise<boolean> {
-  const count = await all.count();
-  for (let index = 0; index < count; index++) {
-    const seen = await all
-      .nth(index)
-      .evaluate(
-        (el) => el === document.activeElement && el.checkVisibility({ opacityProperty: true, visibilityProperty: true }),
-      );
-    if (seen) {
-      return true;
-    }
-  }
-  return false;
+// Whether one of `all` has the focus and is usable as the pointer user
+// requires: visible, opaque, fully in the viewport and uncovered. A
+// keyboard user who cannot see the focused control does not press Enter.
+async function focused(page: Page, all: Locator): Promise<boolean> {
+  const kind = pageKind(currentPath(page));
+  return (await usable(page, all, primaryRegions[kind], true)) !== null;
 }
 
 async function rendered(all: Locator): Promise<boolean> {
@@ -260,7 +256,7 @@ async function rendered(all: Locator): Promise<boolean> {
 async function keyboardClick(page: Page, step: { role: "link" | "button"; name: string }, run: Run) {
   const all = candidates(page, step);
   for (let tabs = 0; tabs <= MAX_TABS; tabs++) {
-    if (await focused(all)) {
+    if (await focused(page, all)) {
       const href = await page.evaluate(() => {
         const link = document.activeElement?.closest("a");
         return link ? link.href : null;
@@ -274,7 +270,7 @@ async function keyboardClick(page: Page, step: { role: "link" | "button"; name: 
       const kind = pageKind(currentPath(page));
       for (const disclosure of disclosures[kind]) {
         const open = await page.evaluate((selector) => document.querySelector(selector) !== null, disclosure.open);
-        if (!open && (await focused(page.getByRole(disclosure.role, { name: disclosure.name, exact: true })))) {
+        if (!open && (await focused(page, page.getByRole(disclosure.role, { name: disclosure.name, exact: true })))) {
           await page.keyboard.press("Enter");
           run.actions++;
           run.steers++;
