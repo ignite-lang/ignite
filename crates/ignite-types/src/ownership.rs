@@ -162,8 +162,11 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | TcpListenerLocalPort
         | TcpStreamClose
         | TcpStreamConnect
+        | TcpStreamConnectWithin
+        | TcpStreamPeer
         | TcpStreamRead
         | TcpStreamSetIdleTimeout
+        | TcpStreamTimedOut
         | TcpStreamUrgentPending
         | TcpStreamWriteAll
         | TcpStreamWriteUrgent
