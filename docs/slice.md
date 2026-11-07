@@ -357,8 +357,12 @@ this order:
 3. a module-level fn `f` in scope (own or imported, not a local) whose first parameter
    accepts the receiver: it is called with `(x, args..)` (uniform function call syntax).
 
-A builtin method name (`len`, `to_text`, ...) is never resolved by 2 or 3: on a receiver type
-without that builtin it is E041. A field of fn type and a fn with the same name both
+A builtin method name (`len`, `to_text`, `set`, ...) on a receiver type that has that builtin
+is always resolved by 1; on a receiver type without it, it is resolved by 3 when a module-level
+fn of that name is in scope (section 13.1 row 5) and is E041 otherwise. A user fn may share the
+name of a builtin method of its first parameter's type: no declaration is refused for it,
+method syntax on that type calls the builtin (`pairs.set(0, p)` and `l[i] = v` on a `List`),
+and a plain call `set(pairs, k, v)` calls the user fn. A field of fn type and a fn with the same name both
 matching is E041 (ambiguous). A fn whose first parameter does not accept the receiver, or no
 candidate at all, is E041. `ignite-check` checks the arity of a call by 3 (E003, receiver
 counted) and its effects; the type checker decides between 2 and 3.
@@ -961,7 +965,7 @@ record-literal field names.
 Codes of the type stage (`docs/llvm.md` section 7), reported by `ignite check` and both build
 targets: E003 bare variant of an enum out of scope that the expected type does not decide,
 or a payload variant used bare (section 4), E005 ambiguous variant, E040 type mismatch,
-E041 unknown method or field for the receiver type (also an ambiguous or inapplicable method call, section 4.8; a tuple index past the tuple; a fn named like a builtin method of its first parameter's type, section 13.1 row 5), E042 type cannot
+E041 unknown method or field for the receiver type (also an ambiguous or inapplicable method call, section 4.8; a tuple index past the tuple), E042 type cannot
 be inferred (also a type parameter neither the expected type nor later uses in the body decide, a closure parameter without type, and an effectful operation
 whose effects `ignite-check` could not check, section 11.7), E043 wrong number of arguments (also a range pattern whose start is above its end), E044 integer literal out of range for `Byte`,
 E045 operator not defined for the operand type (also `==` on a type that is not comparable, section 13.5, a constant pattern of a type without
@@ -1448,7 +1452,8 @@ and `to_text`.
   fixtures are under `crates/ignite-types/tests/fixtures`.
 - `ignite-check` finds Store receivers and the fn types of called values from declared types:
   parameter types, `let` annotations, record field types (generic arguments substituted,
-  aliases expanded), `x.f`, `x.copy()`, `e?`, `l[i]`, Store results, `for` over a list. Where
+  aliases expanded), `x.f`, `x.copy()`, `e?`, `l[i]`, Store results, `for` over a list, a
+  literal of a record without type parameters (`let w = World { .. }`, pusher gap G15). Where
   it cannot, the type checker reports E042 at the call (``cannot check the effects of `get`:
   the type of its receiver is not declared; annotate the binding``).
 
@@ -1744,7 +1749,7 @@ unless a row below changes them.
 | 2 | `r"…"`, `r#"…"#` (any number of `#`, closed by `"` and as many `#`), `br"…"` | no escapes, no interpolation, line breaks kept; a raw byte string is ASCII (E001) | none: `ExprKind::Str` and the byte-string desugaring |
 | 3 | none | `[]`, `List.empty()`, `Store.new()`, `None`, `Ok(x)` and `Err(e)` bound by a `let`/`var` without annotation take the type later uses in the same body give them: an argument, a `return`, an assignment, a pushed element, any position with an expected type. The typer walks such a body once more with inference holes and then types the `let` as if annotated; E042 only when neither the expected type nor a use decides | none: every `Ty` the backends read is resolved |
 | 4 | `break` and `continue` in expression position (`None => break`) | `ExprKind::Break`/`Continue`, type `Never`; `break` marks the innermost loop as broken | as the statements |
-| 5 | none | `x.f(..)` is the builtin `f` when it applies to `x`'s type, else a UFCS call of the user fn `f` (`Callee::Fn`). A user fn whose first parameter type has a builtin method of the fn's name is E041 at the declaration | none: `callee()` says which |
+| 5 | none | `x.f(..)` is the builtin `f` when it applies to `x`'s type, else a UFCS call of the user fn `f` (`Callee::Fn`). A user fn may share the name of a builtin method of its first parameter's type: method syntax on that type calls the builtin, a plain call `f(x, ..)` the user fn (pusher gap G14; until 0.13 it was E041 at the declaration) | none: `callee()` says which |
 | 6 | `import std.text.*` | every non-test public item of the module; an explicit import and an own declaration win; a name two globs provide is E041 at its use | `Import::is_glob()`, `Import::module()`; a Rust `use` of every item (or of the names `Symbols::imported` lists from that module) |
 | 7 | none | `==`/`!=` on every comparable type (13.5); E045 otherwise | general equality glue, the slice-8 assert glue generalised |
 | 8 | `b'0'..=b'9' => …`, `LIMIT..=99` | 13.7 | `range_bounds(pattern)`: `lo <= v && v <= hi` |
@@ -1915,7 +1920,7 @@ target's symbol writes every `_` of owner and name as `_0` and joins them with `
 | E056 | new: a parameter named like an ambient capability (13.11) |
 | E057 | new: an unused type parameter of a generic record, enum or alias (13.11) |
 | E017 | also: an effectful closure where a pure fn type, or an effectful fn type not covering its effects, is expected |
-| E041 | also: a name two glob imports provide; a fn whose first parameter type has a builtin method of the fn's name; a tuple index past the tuple |
+| E041 | also: a name two glob imports provide; a tuple index past the tuple |
 | E042 | also: a closure parameter without annotation or expected type; no longer for a generic value later uses decide (row 3) |
 | E043 | also: a range pattern whose start is above its end |
 | E045 | `==`/`!=` on a type that is not comparable; a range bound that is neither a literal nor a constant with a literal value |
