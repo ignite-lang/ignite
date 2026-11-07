@@ -21,6 +21,15 @@ use ignite_eval::Json;
 
 use crate::common::apply::{BUILD as BUILD_TIMEOUT, LIVE as LIVE_TIMEOUT};
 
+// The deadlines of this file besides `LIVE_TIMEOUT` and `BUILD_TIMEOUT`.
+
+/// How long a `Host` dropped without `stop` gets to stop before it is
+/// killed; cleanup, no assertion.
+const STOP_ON_DROP: Duration = Duration::from_secs(10);
+/// How long the start of the copied `sleep` retries while the copy is still
+/// open for writing elsewhere (`ExecutableFileBusy`).
+const BUSY_RETRY: Duration = Duration::from_secs(2);
+
 const ARTIFACT_DIFFERS: &str = "ready process artifact differs from the admitted desired artifact";
 
 fn repo() -> PathBuf {
@@ -135,7 +144,7 @@ impl Drop for Host {
                 let _ = writeln!(stdin, "stop");
                 let _ = stdin.flush();
             }
-            if wait(&mut child, Duration::from_secs(10)).is_none() {
+            if wait(&mut child, STOP_ON_DROP).is_none() {
                 let _ = child.kill();
                 let _ = child.wait();
             }
@@ -783,7 +792,7 @@ fn recover_refuses_an_unaccounted_process() {
     fs::create_dir_all(&bin).unwrap();
     let sleep = bin.join("sleep");
     fs::copy("/bin/sleep", &sleep).unwrap();
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + BUSY_RETRY;
     let mut foreign = loop {
         match Command::new(&sleep).arg("300").spawn() {
             Err(error)
@@ -979,7 +988,28 @@ fn live_unresolvable(flow: &Flow, host: &Host) -> Live {
         || format!("{}\n{}", flow.inspect().compact(), read(&host.stderr)),
     );
     // Its run settles: the failed restart gave `extra` up.
-    std::thread::sleep(Duration::from_secs(2));
+    let journal = flow.run_directory(&failed).join("journal.jsonl");
+    until(
+        "the run's supervisor of `extra` noted gave_up",
+        || {
+            read(&journal).lines().any(|line| {
+                Json::parse(line).is_ok_and(|record| {
+                    record.get("machine").and_then(Json::as_str)
+                        == Some("Terminal.extra.supervisor")
+                        && record.get("kind").and_then(Json::as_str) == Some("effect")
+                        && record.get("value").is_some_and(|value| {
+                            value.get("variant").and_then(Json::as_str) == Some("Note")
+                                && value.get("fields").and_then(Json::as_array).is_some_and(
+                                    |fields| {
+                                        fields.first().and_then(Json::as_str) == Some("gave_up")
+                                    },
+                                )
+                        })
+                })
+            })
+        },
+        || format!("{}\n{}", read(&journal), read(&host.stderr)),
+    );
     Live {
         failed,
         server,

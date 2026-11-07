@@ -12,7 +12,7 @@
 //! what remains (`disconnect_remaining`, `retired forced`). No test
 //! sleeps for a policy duration: the deadline is `advance`d (item 9).
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
@@ -26,8 +26,23 @@ use nix::unistd::Pid;
 
 use crate::common;
 
-/// The longest a test waits for one line, record or exit.
-const TIMEOUT: Duration = Duration::from_secs(15);
+// The deadlines of this file. Each is a ceiling on a wait that returns at
+// its event. Alone, `rollout_drains_the_old_process_and_starts_the_new_rust`
+// takes 1.07 to 1.88 s whole and its `_llvm` twin 1.08 to 1.64 s, the cold
+// builds included (5 runs each, 2026-11-07); both failed loaded gates of
+// that day under the former 15 s.
+
+/// The longest a test waits for one line, record, read or exit.
+const TIMEOUT: Duration = Duration::from_secs(60);
+/// The longest the rollout's `Build` waits for `Built`: the Rust target
+/// builds with cargo in `run-cargo`, shared with `run::`, and queues on
+/// its lock as the run's setup does ([`common::SETUP`]).
+const BUILD: Duration = common::SETUP;
+/// The longest a process killed and reaped takes to leave `/proc`.
+const GONE: Duration = Duration::from_secs(2);
+/// How long `assert_gone_fails_while_the_peer_holds_the_connection` reads
+/// from a peer that holds its connection open before `assert_gone` fails.
+const HELD: Duration = Duration::from_millis(200);
 const DESIGN: &str = "examples/terminal/terminal.design.ignite";
 /// The prompt as `std.protocol.telnet` sends it: the text, then IAC GA.
 const PROMPT: &[u8] = b"terminal> \xff\xf9";
@@ -143,7 +158,7 @@ impl Session {
         let stream = TcpStream::connect(("127.0.0.1", port))
             .unwrap_or_else(|e| panic!("connect to {port}: {e}"));
         stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
+            .set_read_timeout(Some(TIMEOUT))
             .expect("read timeout");
         let mut session = Session {
             stream,
@@ -179,15 +194,23 @@ impl Session {
         let _ = self.stream.write_all(b"quit\r\n");
     }
 
-    /// The session's peer is gone: the next read ends or fails.
+    /// The session's peer is gone: the next read ends or the connection
+    /// is reset; a read that times out with the connection open fails.
     fn assert_gone(&mut self) {
+        self.assert_gone_within(TIMEOUT);
+    }
+
+    /// [`Session::assert_gone`] with a read timeout of `limit`.
+    fn assert_gone_within(&mut self, limit: Duration) {
         self.stream
-            .set_read_timeout(Some(TIMEOUT))
+            .set_read_timeout(Some(limit))
             .expect("read timeout");
         let mut buffer = [0u8; 64];
         loop {
             match self.stream.read(&mut buffer) {
-                Ok(0) | Err(_) => return,
+                Ok(0) => return,
+                Err(e) if e.kind() == ErrorKind::ConnectionReset => return,
+                Err(e) => panic!("the session is not gone ({e}); seen {:?}", text(&self.seen)),
                 Ok(_) => continue,
             }
         }
@@ -401,11 +424,23 @@ impl Run {
         self.stdin.flush().expect("flush control line");
     }
 
-    /// Consume records until one satisfies `predicate`; that record.
+    /// Consume records until one satisfies `predicate`, within [`TIMEOUT`];
+    /// that record.
     fn wait_for(&mut self, what: &str, predicate: impl Fn(&Json) -> bool) -> Json {
+        self.wait_within(what, TIMEOUT, predicate)
+    }
+
+    /// Consume records until one satisfies `predicate`, within `limit`;
+    /// that record.
+    fn wait_within(
+        &mut self,
+        what: &str,
+        limit: Duration,
+        predicate: impl Fn(&Json) -> bool,
+    ) -> Json {
         let started = Instant::now();
         loop {
-            let left = TIMEOUT.saturating_sub(started.elapsed());
+            let left = limit.saturating_sub(started.elapsed());
             let line = match self
                 .pending_initial
                 .take()
@@ -414,7 +449,7 @@ impl Run {
             {
                 Ok(line) => line,
                 Err(RecvTimeoutError::Timeout) => panic!(
-                    "no {what} within {TIMEOUT:?}; seen {} records, the last {:?}\nstderr:\n{}",
+                    "no {what} within {limit:?}; seen {} records, the last {:?}\nstderr:\n{}",
                     self.seen.len(),
                     self.seen.last().map(Json::compact),
                     self.stderr()
@@ -551,7 +586,7 @@ fn at_ns(record: &Json) -> i64 {
         .unwrap_or_else(|| panic!("no at in {}", record.compact()))
 }
 
-/// The process of `pid` is gone or a zombie, within 2 s.
+/// The process of `pid` is gone or a zombie, within [`GONE`].
 fn assert_no_process(pid: i64) {
     let proc_dir = PathBuf::from(format!("/proc/{pid}"));
     let started = Instant::now();
@@ -564,7 +599,7 @@ fn assert_no_process(pid: i64) {
             return;
         }
         assert!(
-            started.elapsed() < Duration::from_secs(2),
+            started.elapsed() < GONE,
             "pid {pid} is still alive:\n{status}"
         );
         std::thread::sleep(Duration::from_millis(20));
@@ -594,7 +629,9 @@ fn rollout_drains_and_restarts(target: &str) {
     run.send("rollout Terminal.server");
     let build = run.wait_effect(ROLLOUT, "Build");
     assert_eq!(effect_fields(&build)[0].as_str(), Some("Terminal.server"));
-    let built = run.wait_event(ROLLOUT, "Built");
+    let built = run.wait_within("event Built of the rollout", BUILD, |r| {
+        machine(r) == ROLLOUT && event_variant(r) == Some("Built")
+    });
     let generation = event_fields(&built)[0].as_i64().unwrap_or(0);
     assert!(generation >= 2, "{}", built.compact());
     let term = run.wait_effect(ROLLOUT, "Kill");
@@ -677,4 +714,64 @@ fn rollout_drains_the_old_process_and_starts_the_new_rust() {
 #[test]
 fn rollout_drains_the_old_process_and_starts_the_new_llvm() {
     rollout_drains_and_restarts("llvm");
+}
+
+/// Adversary (story `apply-test-deadlines`): `Session::assert_gone` must
+/// fail when the peer keeps the connection open and silent, the state a
+/// session descriptor leaked into the new generation leaves behind. Its
+/// read timeout returns `Err`, which the helper once took for "gone"; the
+/// read times out after [`HELD`], not [`TIMEOUT`].
+#[test]
+#[should_panic(expected = "the session is not gone")]
+fn assert_gone_fails_while_the_peer_holds_the_connection() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("port").port();
+    let stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+    let (_peer, _) = listener.accept().expect("accept");
+    let mut session = Session {
+        stream,
+        seen: Vec::new(),
+    };
+    session.assert_gone_within(HELD);
+}
+
+/// Adversary pass 2 (story `apply-test-deadlines`): the legitimate close
+/// paths of a SIGKILLed peer still count as gone. A peer that closes with
+/// nothing unread sends FIN (`Ok(0)`).
+#[test]
+fn assert_gone_returns_when_the_peer_closes() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("port").port();
+    let stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+    let (peer, _) = listener.accept().expect("accept");
+    let mut session = Session {
+        stream,
+        seen: Vec::new(),
+    };
+    let started = std::time::Instant::now();
+    drop(peer);
+    session.assert_gone();
+    assert!(started.elapsed() < Duration::from_secs(5));
+}
+
+/// Adversary pass 2: a peer that closes with bytes unread in its receive
+/// buffer (the old session's input not yet read when SIGKILL arrives)
+/// sends RST, after data the client has not read yet.
+#[test]
+fn assert_gone_returns_when_the_peer_resets_after_data() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("port").port();
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+    let (mut peer, _) = listener.accept().expect("accept");
+    peer.write_all(b"terminal> ").expect("peer write");
+    stream.write_all(b"echo unread\r\n").expect("client write");
+    std::thread::sleep(Duration::from_millis(100));
+    let mut session = Session {
+        stream,
+        seen: Vec::new(),
+    };
+    let started = std::time::Instant::now();
+    drop(peer);
+    session.assert_gone();
+    assert!(started.elapsed() < Duration::from_secs(5));
 }

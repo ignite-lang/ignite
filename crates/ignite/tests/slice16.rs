@@ -126,31 +126,52 @@ fn finished_in(stdout: &str) -> f64 {
         .unwrap_or_else(|e| panic!("{line}: {e}"))
 }
 
+/// The rounds of [`llvm_state_threading_is_linear`] after its warm-up
+/// round; each runs both filters once.
+const LINEAR_ROUNDS: usize = 5;
+
+/// The least 50,000-step time [`llvm_state_threading_is_linear`] compares
+/// against: five steps of the runner's 0.01 s resolution. Alone the
+/// 50,000 steps take 0.00 to 0.01 s and the 200,000 steps 0.01 to 0.02 s
+/// (10 rounds, 2026-11-07), so the old floor of one step, a bound of
+/// 0.08 s for the larger filter, was reached by one slow run at load 10
+/// to 36 (slice 18's cold gate). A copy per step copies 25,000 items on
+/// average 50,000 times, about 10 GB at 50,000 steps, which takes seconds
+/// (inferred, not measured), far over the floor, and stays caught.
+const LINEAR_FLOOR: f64 = 0.05;
+
 /// Row 10 (20.3.5): R1's state threaded through a call is linear on the
-/// LLVM target. Each filter runs twice and the second run's time counts;
-/// 200,000 steps take under 8 times the time of 50,000 (linear is about
+/// LLVM target. A warm-up round runs both filters, then
+/// [`LINEAR_ROUNDS`] rounds run them one after the other, and each
+/// filter's fastest round counts, so a burst of load slows one round of
+/// both rather than one filter alone; 200,000 steps take under 8 times the
+/// time of 50,000, counted as at least [`LINEAR_FLOOR`] (linear is about
 /// 4, a copy per step about 16 or more).
 #[test]
 fn llvm_state_threading_is_linear() {
     let dir = out_dir("moves_scale_llvm");
-    let mut times = Vec::new();
-    for filter in ["50000 steps through a call", "200000 steps through a call"] {
-        let mut last = 0.0;
-        for _ in 0..2 {
+    let filters = ["50000 steps through a call", "200000 steps through a call"];
+    let mut fastest = [f64::INFINITY; 2];
+    let mut rounds = [[0.0; 2]; LINEAR_ROUNDS + 1];
+    for (round, times) in rounds.iter_mut().enumerate() {
+        for (at, filter) in filters.iter().enumerate() {
             let (status, stdout) = llvm_test(&dir, &["moves_scale.ignite"], &[filter]);
             assert_eq!(status, Some(0), "{filter}:\n{stdout}");
             assert!(
                 stdout.contains("test result: ok. 1 passed; 0 failed; 1 filtered out;"),
                 "{filter}:\n{stdout}"
             );
-            last = finished_in(&stdout);
+            times[at] = finished_in(&stdout);
+            if round > 0 {
+                fastest[at] = fastest[at].min(times[at]);
+            }
         }
-        times.push(last);
     }
-    let (small, large) = (times[0], times[1]);
+    let [small, large] = fastest;
     assert!(
-        large < 8.0 * small.max(0.01),
-        "200000 steps took {large:.2} s, 50000 steps {small:.2} s"
+        large < 8.0 * small.max(LINEAR_FLOOR),
+        "200000 steps took {large:.2} s, 50000 steps {small:.2} s at their fastest; rounds (50000, 200000) after the warm-up: {:?}",
+        &rounds[1..]
     );
 }
 

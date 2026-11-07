@@ -17,7 +17,15 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::common::Target;
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+// The deadlines of this file, each a ceiling on a wait that returns at its
+// event. Alone `todo_w3_adversary::llvm::the_65537th_todo_survives_a_restart`
+// takes 10.60 to 14.39 s whole, writing its 65,536 entries and the cold
+// build included (5 runs, 2026-11-07); it failed loaded gates of that day.
+
+/// The longest a test waits for the listening line or one reply.
+const TIMEOUT: Duration = Duration::from_secs(30);
+/// The longest one reply waits while `todod` loads 65,536 entries.
+const LOADING: Duration = Duration::from_secs(300);
 
 /// `source` built once per build of the matrix and test binary under the
 /// cargo target directory; the executable named `name`.
@@ -757,10 +765,9 @@ fn the_65537th_todo_survives_a_restart(target: Target) {
         )
         .unwrap();
     }
-    let slow = Duration::from_secs(120);
     let server = Server::start_in(target, &dir);
     let mut client = server.connect();
-    client.stream.set_read_timeout(Some(slow)).unwrap();
+    client.stream.set_read_timeout(Some(LOADING)).unwrap();
     let before = client.send("GET", "/todos", None);
     let created = client.send("POST", "/todos", Some(r#"{"title":"kept"}"#));
     drop(client);
@@ -768,7 +775,7 @@ fn the_65537th_todo_survives_a_restart(target: Target) {
 
     let server = Server::start_in(target, &dir);
     let mut client = server.connect();
-    client.stream.set_read_timeout(Some(slow)).unwrap();
+    client.stream.set_read_timeout(Some(LOADING)).unwrap();
     let after = client.send("GET", "/todos", None);
     let health = client.send("GET", "/health", None);
     drop(client);

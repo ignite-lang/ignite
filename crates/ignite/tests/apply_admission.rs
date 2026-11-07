@@ -17,6 +17,11 @@ use ignite_eval::Json;
 
 use crate::common::apply::{BUILD as BUILD_TIMEOUT, LIVE as LIVE_TIMEOUT};
 
+/// The deadline of this file besides `LIVE_TIMEOUT` and `BUILD_TIMEOUT`:
+/// how long a `Host` dropped without `stop` gets to stop before it is
+/// killed; cleanup, no assertion.
+const STOP_ON_DROP: Duration = Duration::from_secs(10);
+
 /// Two loopback listeners and a helper function; nothing to build or run.
 const EDGE: &str = "package admission
 
@@ -295,7 +300,7 @@ impl Drop for Host {
                 let _ = writeln!(stdin, "stop");
                 let _ = stdin.flush();
             }
-            if wait(&mut child, Duration::from_secs(10)).is_none() {
+            if wait(&mut child, STOP_ON_DROP).is_none() {
                 let _ = child.kill();
                 let _ = child.wait();
             }
