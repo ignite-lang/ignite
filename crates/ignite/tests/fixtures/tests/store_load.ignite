@@ -1,0 +1,73 @@
+package fixtures.store_load
+
+// `Store<T>` under write load on both targets (story
+// `store-adversary-findings`): tasks update two ids of one shard (8 and 21
+// are both in shard 15 of `ignite_io::store::shard_of`, 13 is in shard 0)
+// while the test lists the values. Every list holds the three ids, each
+// value only grows, no list waits for the writers to stop, and no write is
+// lost.
+
+// `v + 1` after some work, so that the updates of one shard overlap.
+fn slow_increment(v: Int) -> Int {
+  var i = 0
+  var acc = 0
+  while i < 20000 {
+    acc = acc + i % 7
+    i = i + 1
+  }
+  if acc < 0 {
+    v
+  } else {
+    v + 1
+  }
+}
+
+fn hammer(s: Store<Int>, times: Int, done: PipeStream) -> Result<Unit, IoError> requires [s.write, done.write] {
+  var i = 0
+  while i < times {
+    _ = s.update(8, slow_increment)
+    _ = s.update(21, slow_increment)
+    i = i + 1
+  }
+  done.write_all(b"x")
+}
+
+test "values under updates of one shard: every id, values grow, no long wait, no lost write" {
+  let s: Store<Int> = Store.new()
+  s.put(8, 0)
+  s.put(13, 0)
+  s.put(21, 0)
+  let (a, b) = Pipe.pair()
+  var started = 0
+  while started < 4 {
+    spawn hammer(s, 200, b)
+    started = started + 1
+  }
+  var lists = 0
+  var last8 = 0
+  var last21 = 0
+  while lists < 300 {
+    let before = Clock.monotonic()
+    let values = s.values()
+    assert Clock.monotonic() - before < 500 ms, "values waited for the writers of its shard"
+    assert values.len() == 3, "values held {values.len()} ids"
+    assert values[1] == 0
+    assert values[0] >= last8, "id 8 went back from {last8} to {values[0]}"
+    assert values[2] >= last21, "id 21 went back from {last21} to {values[2]}"
+    last8 = values[0]
+    last21 = values[2]
+    lists = lists + 1
+  }
+  var ended = 0
+  while ended < 4 {
+    match a.read(16)? {
+      Data(bytes) => {
+        ended = ended + bytes.len()
+      }
+      Eof => {
+        assert false, "the pipe closed after {ended} tasks"
+      }
+    }
+  }
+  assert s.values() == [800, 0, 800]
+}

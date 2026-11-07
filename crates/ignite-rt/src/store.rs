@@ -54,11 +54,16 @@ struct HeapValue {
 }
 
 // SAFETY: a heap copy shares no memory with any other value or task; the
-// glue only reads it (clone) or frees it (drop), and the store's lock
-// orders every access.
+// glue only reads it (clone) or frees it (drop). A drop happens only once
+// no task can reach the value: the store's lock orders it against every
+// read through `read`, `read_values`, `replace_with` and `upsert_with`, and
+// `ignite_io::Store`'s `update` and `upsert` (unused here) drop a taken
+// value only after its last shared reference is gone.
 unsafe impl Send for HeapValue {}
 // SAFETY: as for `Send`; `&HeapValue` only allows a clone or a copy into an
-// arena, which both read.
+// arena, which both only read, so two tasks may hold one at once: a value
+// `ignite_io::Store`'s `update` or `upsert` has taken is read by its taker
+// with no lock held while `values` reads it under the shard's lock.
 unsafe impl Sync for HeapValue {}
 
 impl Clone for HeapValue {

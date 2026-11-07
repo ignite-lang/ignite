@@ -436,6 +436,25 @@ fn store_upsert_is_atomic_on_both_targets() {
     });
 }
 
+/// `Store.values` while tasks update two ids of one shard, on both targets
+/// (`fixtures/tests/store_load.ignite`, story `store-adversary-findings`):
+/// every list holds every id, no value goes back, no list waits 500 ms
+/// for the writers, and no write is lost.
+#[test]
+#[ignore = "story:llvm-store-update-off-lock: red on LLVM under load, base and head"]
+fn store_values_under_updates_of_one_shard_on_both_targets() {
+    let file = fixture("store_load.ignite");
+    on_both_targets(|target| {
+        let run = ignite_test(Chain::Groups, target, &[&file]);
+        assert_eq!(run.status, 0, "{target}: {}\n{}", run.stdout, run.stderr);
+        assert!(
+            run.stdout.contains("test result: ok. 1 passed; 0 failed;"),
+            "{target}: {}",
+            run.stdout
+        );
+    });
+}
+
 /// Fields of list elements on both targets (`fixtures/tests/fields.ignite`):
 /// read, passed by reference and compared (the Rust target borrows the
 /// field from the list, `ignite-rustgen` `element_field`), nested, read from
@@ -680,6 +699,27 @@ fn checked_arithmetic_on_both_targets() {
                 run.stdout
             );
         }
+    });
+}
+
+/// An in-place builtin changes the variable only through a place rooted at
+/// it, and a copy through `at` or `?`, the same on both targets
+/// (`fixtures/tests/in_place.ignite`, `ignite_types::ownership`). Before
+/// story:shared-ownership-analysis the LLVM target changed the variable
+/// through `at` and `?` (its `region::root` followed them) and the Rust
+/// target a copy.
+#[test]
+fn in_place_changes_on_both_targets() {
+    let file = fixture("in_place.ignite");
+    on_both_targets(|target| {
+        let run = ignite_test(Chain::Fixtures, target, &[file.as_str()]);
+        assert_eq!(run.status, 0, "{target}: {}\n{}", run.stdout, run.stderr);
+        assert!(
+            run.stdout
+                .contains("test result: ok. 5 passed; 0 failed; 0 filtered out"),
+            "{target}: {}",
+            run.stdout
+        );
     });
 }
 

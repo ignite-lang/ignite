@@ -20,8 +20,8 @@
 //!   fn whose every path loops forever moves nothing, so its parameters
 //!   are not consumed by the vacuous "every path that reaches an exit".
 //! * The in-place changes that consume a parameter are counted by name,
-//!   closure bodies included, as the backends count them today, so the
-//!   set is a superset of both (20.3.3).
+//!   closure bodies included (`crate::ownership::changed_in_block`, which
+//!   both backends read too), an extra copy and never a missed one (20.3.3).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -54,7 +54,10 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
     let bodies = bodies(program, types);
     let resolved: Vec<Resolved> = bodies.iter().map(|b| resolve(b, types)).collect();
     let changed_params = |body: &Body<'_>| -> Vec<bool> {
-        let names = changed_names(body.root, types);
+        let names = match body.root {
+            Root::Block(block) => crate::ownership::changed_in_block(block, Some(types)),
+            Root::Expr(e) => crate::ownership::changed_in(e, Some(types)),
+        };
         body.params
             .iter()
             .map(|p| names.contains(p.name.as_str()))
@@ -601,14 +604,14 @@ impl<'a> Resolver<'a> {
 // ---- traversal helpers -----------------------------------------------------
 
 /// A node of the generic traversal: an expression or an assignment place.
-enum Node<'a> {
+pub(crate) enum Node<'a> {
     Expr(&'a Expr),
     Target(&'a Target),
 }
 
 /// The direct sub-expressions of `e` (a block's statements' expressions
 /// and assignment places included; a closure's body included).
-fn expr_children<'a>(e: &'a Expr, out: &mut Vec<Node<'a>>) {
+pub(crate) fn expr_children<'a>(e: &'a Expr, out: &mut Vec<Node<'a>>) {
     let mut push = |e: &'a Expr| out.push(Node::Expr(e));
     match &e.kind {
         ExprKind::Int(_)
@@ -670,7 +673,7 @@ fn expr_children<'a>(e: &'a Expr, out: &mut Vec<Node<'a>>) {
     }
 }
 
-fn block_children<'a>(block: &'a Block, out: &mut Vec<Node<'a>>) {
+pub(crate) fn block_children<'a>(block: &'a Block, out: &mut Vec<Node<'a>>) {
     for stmt in &block.stmts {
         match &stmt.kind {
             StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => {
@@ -704,94 +707,6 @@ fn block_children<'a>(block: &'a Block, out: &mut Vec<Node<'a>>) {
             }
         }
     }
-}
-
-/// Whether a builtin changes its receiver in place: the set of
-/// `region::mutates` (LLVM), which holds `mutates_receiver`'s `Map` entries
-/// (Rust).
-fn mutates(builtin: Builtin) -> bool {
-    matches!(
-        builtin,
-        Builtin::ListPush
-            | Builtin::ListSet
-            | Builtin::ListAppend
-            | Builtin::ListClear
-            | Builtin::MapPut
-            | Builtin::MapRemove
-            | Builtin::StoreNextId
-            | Builtin::StorePut
-            | Builtin::StoreRemove
-            | Builtin::StoreUpdate
-            | Builtin::StoreUpsert
-    )
-}
-
-/// Method names the Rust target counts as in-place changes whatever the
-/// callee (`MUTATING_METHODS` in `ignite-rustgen`).
-const MUTATING_METHODS: [&str; 4] = ["push", "set", "append", "clear"];
-
-/// The variable a place expression is rooted at, through every expression
-/// `region::root` (LLVM) follows: fields, tuple fields, indexes, `?`,
-/// `await`, the builtin `at` and a block's last expression. It is a
-/// superset of `place_root` (Rust), so the in-place set is a superset of
-/// both backends' (20.3.3).
-fn root<'a>(e: &'a Expr, types: &TypedProgram) -> Option<&'a str> {
-    let at = || matches!(types.callee(e), Some(Callee::Builtin(Builtin::ListAt)));
-    match &e.kind {
-        ExprKind::Name(id) => Some(&id.name),
-        ExprKind::Field { receiver, .. }
-        | ExprKind::TupleField { receiver, .. }
-        | ExprKind::Index { receiver, .. }
-        | ExprKind::Try(receiver)
-        | ExprKind::Await(receiver) => root(receiver, types),
-        ExprKind::Method { receiver, .. } if at() => root(receiver, types),
-        ExprKind::Call { callee, .. } if at() => match &callee.kind {
-            ExprKind::Field { receiver, .. } => root(receiver, types),
-            _ => None,
-        },
-        ExprKind::Block(body) => match body.stmts.last().map(|s| &s.kind) {
-            Some(StmtKind::Expr(last)) => root(last, types),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-/// The names a body changes in place, by name and closure bodies
-/// included: the base of every assignment and the root of every receiver
-/// of an in-place builtin (20.3.3).
-fn changed_names<'a>(body: Root<'a>, types: &TypedProgram) -> BTreeSet<&'a str> {
-    let mut names = BTreeSet::new();
-    let mut stack = Vec::new();
-    match body {
-        Root::Block(block) => block_children(block, &mut stack),
-        Root::Expr(e) => stack.push(Node::Expr(e)),
-    }
-    while let Some(node) = stack.pop() {
-        match node {
-            Node::Target(target) => {
-                names.insert(target.base.name.as_str());
-            }
-            Node::Expr(e) => {
-                let builtin = matches!(types.callee(e), Some(Callee::Builtin(b)) if mutates(*b));
-                match &e.kind {
-                    ExprKind::Method { receiver, name, .. }
-                        if builtin || MUTATING_METHODS.contains(&name.name.as_str()) =>
-                    {
-                        names.extend(root(receiver, types));
-                    }
-                    ExprKind::Call { callee, .. } if builtin => {
-                        if let ExprKind::Field { receiver, .. } = &callee.kind {
-                            names.extend(root(receiver, types));
-                        }
-                    }
-                    _ => {}
-                }
-                expr_children(e, &mut stack);
-            }
-        }
-    }
-    names
 }
 
 // ---- places and liveness ---------------------------------------------------

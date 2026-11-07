@@ -415,6 +415,70 @@ pub const CAPABILITY_TYPES: &[&str] = &[
     "CommandLine",
 ];
 
+/// What an in-place builtin changes (`docs/slice.md` 20.3.3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Change {
+    /// The receiver's value: the call changes the variable a place
+    /// receiver is rooted at, and nothing else. A closure may not change a
+    /// capture this way (E006), and only a place rooted in a `var` or a
+    /// parameter may be the receiver.
+    Value,
+    /// The state behind the receiver's handle (`Store`), which every copy
+    /// of the handle shares.
+    Handle,
+}
+
+/// One row of [`IN_PLACE`]: `receiver.method(..)` on a receiver of the
+/// builtin type `receiver` changes it in place.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InPlace {
+    pub receiver: &'static str,
+    pub method: &'static str,
+    pub change: Change,
+}
+
+const fn in_place_row(receiver: &'static str, method: &'static str, change: Change) -> InPlace {
+    InPlace {
+        receiver,
+        method,
+        change,
+    }
+}
+
+/// The one table of builtins that change their receiver in place
+/// (`docs/slice.md` 20.3.3). The checker reads it here (E006);
+/// `ignite_types::ownership` resolves each row to its `Builtin`, and the
+/// moves analysis and both backends read it from there.
+pub const IN_PLACE: [InPlace; 15] = [
+    in_place_row("List", "push", Change::Value),
+    in_place_row("List", "set", Change::Value),
+    in_place_row("List", "append", Change::Value),
+    in_place_row("List", "clear", Change::Value),
+    in_place_row("Bytes", "push", Change::Value),
+    in_place_row("Bytes", "set", Change::Value),
+    in_place_row("Bytes", "append", Change::Value),
+    in_place_row("Bytes", "clear", Change::Value),
+    in_place_row("Map", "put", Change::Value),
+    in_place_row("Map", "remove", Change::Value),
+    in_place_row("Store", "next_id", Change::Handle),
+    in_place_row("Store", "put", Change::Handle),
+    in_place_row("Store", "remove", Change::Handle),
+    in_place_row("Store", "update", Change::Handle),
+    in_place_row("Store", "upsert", Change::Handle),
+];
+
+/// What the builtin `method` changes on a receiver of the builtin type
+/// `receiver` ([`IN_PLACE`]). For a receiver whose type is not known, the
+/// change every row of that method name agrees on: `push` is a `Value`
+/// change whatever the receiver, `put` is none (`Map` and `Store` differ).
+pub fn in_place(receiver: Option<&str>, method: &str) -> Option<Change> {
+    let mut rows = IN_PLACE
+        .iter()
+        .filter(|row| row.method == method && receiver.is_none_or(|r| r == row.receiver));
+    let first = rows.next()?.change;
+    rows.all(|row| row.change == first).then_some(first)
+}
+
 /// The heads of ambient effects (`stdin.read`, `net.connect`): no
 /// parameter may take one of these names (E056).
 pub const AMBIENT_HEADS: &[&str] = &["stdin", "stdout", "stderr", "process", "net", "clock"];
@@ -508,6 +572,10 @@ pub struct Symbols {
     /// Own systems, name to their member names (resources, components,
     /// contracts, policies) in declaration order.
     pub systems: BTreeMap<String, Vec<String>>,
+    /// The declared return type of each non-generic fn, own and imported
+    /// by name. Read only by the closure rule of E006 for a local bound to
+    /// a call (`docs/slice.md` 20.3.3).
+    pub fn_returns: BTreeMap<String, Type>,
 }
 
 /// Checked standard-library modules by module path (`"std.console"`), each
@@ -598,6 +666,11 @@ struct Local {
     /// The declared type of the value, where the checker can tell it
     /// (`Checker::static_type`); `None` otherwise.
     ty: Option<Type>,
+    /// Where `ty` is `None` and the value is a non-generic record literal
+    /// or a call of a non-generic fn: that record, or the fn's declared
+    /// return type. Read only by the closure rule of E006
+    /// (`Checker::in_place_type`), so that no other rule changes.
+    result: Option<Type>,
 }
 
 /// What the walk is inside, for the effect rules.
@@ -976,6 +1049,11 @@ impl Checker {
                 .functions
                 .insert(name.to_string(), info.clone());
         }
+        if let Some(ret) = exports.fn_returns.get(name) {
+            self.symbols
+                .fn_returns
+                .insert(name.to_string(), ret.clone());
+        }
         if let Some(roles) = exports.protocols.get(name) {
             self.symbols
                 .protocols
@@ -1161,6 +1239,13 @@ impl Checker {
                 }
                 Decl::Fn(decl) => {
                     self.type_params_of(&name.name, &decl.type_params);
+                    if decl.type_params.is_empty()
+                        && let Some(ret) = &decl.ret
+                    {
+                        self.symbols
+                            .fn_returns
+                            .insert(name.name.clone(), ret.clone());
+                    }
                     self.symbols.functions.insert(
                         name.name.clone(),
                         FnInfo {
@@ -1979,7 +2064,15 @@ impl Checker {
         ty: Option<Type>,
     ) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name.name.clone(), Local { binding, roots, ty });
+            scope.insert(
+                name.name.clone(),
+                Local {
+                    binding,
+                    roots,
+                    ty,
+                    result: None,
+                },
+            );
         }
     }
 
@@ -2350,7 +2443,32 @@ impl Checker {
                     Some(ty) => Some(self.expand(ty)),
                     None => self.static_type(value),
                 };
+                let result = match (&declared, &value.kind) {
+                    (None, ExprKind::Call { callee, .. }) => match &callee.kind {
+                        ExprKind::Name(f) if self.local(&f.name).is_none() => self
+                            .symbols
+                            .fn_returns
+                            .get(&f.name)
+                            .cloned()
+                            .map(|ret| self.expand(&ret)),
+                        _ => None,
+                    },
+                    (None, ExprKind::Record { name: record, .. })
+                        if self.symbols.records.contains(&record.name)
+                            && !self.symbols.type_params.contains_key(&record.name) =>
+                    {
+                        Some(Type::named(record.clone(), Vec::new(), record.span))
+                    }
+                    _ => None,
+                };
                 self.bind_typed(name, binding, roots, declared);
+                if let Some(local) = self
+                    .scopes
+                    .last_mut()
+                    .and_then(|scope| scope.get_mut(&name.name))
+                {
+                    local.result = result;
+                }
             }
             StmtKind::Assign { target, value } => {
                 self.expr(value);
@@ -2545,7 +2663,8 @@ impl Checker {
     /// builtin static), a builtin method, a UFCS call of a user fn, or a
     /// call of a fn-typed field, which is pure and which the type checker
     /// resolves.
-    /// E006 unless the receiver of an in-place `push`, `append` or `clear`
+    /// E006 unless the receiver of an in-place builtin (a `Value` row of
+    /// [`IN_PLACE`])
     /// is a place rooted in a `var` or a parameter, whose change stays in
     /// the callee (`docs/slice.md` section 13.11): a `let`, a `for` element
     /// or a pattern binding is a value, and `x.to_bytes()` shares `x`'s
@@ -2619,26 +2738,32 @@ impl Checker {
                 self.map_fn_value(arg);
             }
         }
-        if matches!(name.name.as_str(), "push" | "set" | "append" | "clear")
-            && let ExprKind::Name(list) = &receiver.kind
-            && self.captured(&list.name)
-            && self.builtin_method(receiver, name)
+        let receiver_type = self.static_type(receiver).map(|ty| ty.name.name);
+        let receiver_type = receiver_type
+            .as_deref()
+            .filter(|ty| IN_PLACE.iter().any(|row| row.receiver == *ty));
+        let mutating = in_place(receiver_type, &name.name) == Some(Change::Value)
+            && self.builtin_method(receiver, name);
+        // Inside a closure only a receiver whose type is known here: a user
+        // fn named like a builtin is no change, and the type checker reports
+        // the rest once the callee is resolved (`docs/slice.md` 20.3.3).
+        let captured_change = self.in_place_type(receiver).is_some_and(|ty| {
+            !self.type_params.contains(&ty.name.name)
+                && in_place(Some(&ty.name.name), &name.name) == Some(Change::Value)
+        });
+        if captured_change
+            && let Some(base) = place_root(receiver)
+            && self.captured(&base.name)
         {
             self.error(
                 "E006",
                 expr.span,
                 format!(
                     "cannot change `{}` inside a closure; a closure captures `{}` by copy",
-                    list.name, list.name
+                    base.name, base.name
                 ),
             );
         }
-        let map_receiver = self
-            .static_type(receiver)
-            .is_some_and(|ty| ty.name.name == "Map");
-        let mutating = (matches!(name.name.as_str(), "push" | "set" | "append" | "clear")
-            || (matches!(name.name.as_str(), "put" | "remove") && map_receiver))
-            && self.builtin_method(receiver, name);
         if mutating {
             self.mutable_receiver(expr, receiver, name);
         }
@@ -3067,6 +3192,37 @@ impl Checker {
             _ => return None,
         };
         Some(self.expand(&ty))
+    }
+
+    /// [`Checker::static_type`] of a place, where a local bound to a call
+    /// of a non-generic fn also has that fn's declared return type
+    /// (`Local::result`). Read only by the closure rule of E006.
+    fn in_place_type(&self, expr: &Expr) -> Option<Type> {
+        match &expr.kind {
+            ExprKind::Name(name) => {
+                let local = self.local(&name.name)?;
+                local.ty.clone().or_else(|| local.result.clone())
+            }
+            ExprKind::Field { receiver, name } if self.path_head(receiver).is_none() => {
+                let record = self.in_place_type(receiver)?;
+                self.field_type(&record, &name.name)
+            }
+            ExprKind::Index { receiver, .. } => {
+                let list = self.in_place_type(receiver)?;
+                match list.name.name.as_str() {
+                    "List" => list.args.first().map(|t| self.expand(t)),
+                    _ => None,
+                }
+            }
+            ExprKind::TupleField { receiver, index } => {
+                let tuple = self.in_place_type(receiver)?;
+                if !tuple.is_tuple() {
+                    return None;
+                }
+                tuple.args.get(*index).map(|t| self.expand(t))
+            }
+            _ => self.static_type(expr),
+        }
     }
 
     /// Whether `receiver.method(..)` on a receiver of declared type

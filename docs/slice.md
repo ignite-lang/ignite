@@ -928,7 +928,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E003 | unknown name; also wrong arity of a call (a UFCS call counts the receiver), `log` used as a value, a constant with payload patterns, an associated fn whose owner is no record or enum of the module (section 13.8) |
 | E004 | duplicate definition, including a declaration named like a builtin or `Tuple`, a role or record field declared twice, an associated fn declared twice or named like a variant of its owner, and a closure parameter repeated |
 | E005 | ambiguous bare variant (section 4); reported by the type checker since slice 6 |
-| E006 | assignment to an immutable binding or a constant; since slice 9 also `push`, `append` or `clear` (since 25.4 also `set` and `l[i] = v`) through a `let`, a `for` element or a pattern binding, on `x.to_bytes()`, or on a binding a closure captured (section 13.11) |
+| E006 | assignment to an immutable binding or a constant; since slice 9 also `push`, `append` or `clear` (since 25.4 also `set` and `l[i] = v`) through a `let`, a `for` element or a pattern binding, on `x.to_bytes()`, or on a place rooted at a binding a closure captured (section 13.11; since story:shared-ownership-analysis also `put` and `remove` on a `Map` and a field, index or tuple field of a capture, 20.3.3) |
 | E010 | effectful call or `spawn` in a pure context: a constant's value or a field default (section 5) |
 | E011 | retired in slice 6 (was: effectful call not awaited) |
 | E012 | retired in slice 6 (was: `await` on a pure call) |
@@ -1286,15 +1286,19 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
 | `s.upsert(id, f: fn(Option<T>) -> T)` | `T` (the stored value): `f` of the current value, `None` when `id` holds nothing, atomic, `f` pure | `s.write` |
 
 - Value semantics: `get`/`values` return copies; `put` stores a copy.
-- One implementation in `ignite-io`: `Store<T: Clone + Send>` over an `Arc` of 16 shards,
+- One implementation in `ignite-io`: `Store<T: Clone + Send + Sync>` over an `Arc` of 16 shards
+  (`Sync` because a value an `update` or `upsert` has taken stays shared with the readers of
+  `len` and `values` while the taker copies it),
   each a `Mutex<BTreeMap<i64, _>>` with a `Condvar`, chosen by a Fibonacci hash of the id,
   plus an `AtomicI64` counter (story `store-lock-contention`). Every method is atomic for the
   ids it touches; `len` and `values` lock every shard in shard order, and `values` merges the
   shards into ascending id order. The Rust target uses it directly: its `update` and `upsert`
-  hold the shard's lock only to take the value out of its slot (marked taken) and to put the
-  new value back, and copy the old value, run `f` and drop the old value with no lock held; a
-  task that reaches a taken id (or, for `len` and `values`, a shard with one) waits until it
-  is put back, and a panic in `f` puts the old value back. `ignite-rt` exposes `ignite_rt_store_*` over a `Store<HeapValue>`, where
+  hold the shard's lock only to take the value out of its slot (marked taken, the value shared
+  with the slot) and to put the new value back, and copy the old value, run `f` and drop the old
+  value with no lock held; a task that reaches a taken id waits until it is put back, and a
+  panic in `f` puts the old value back. `len` and `values` wait for no taken slot: they read a
+  taken slot's value from before the update (an absent id an `upsert` took is absent), so a
+  task waits for another's `f` only on the same id (story `store-adversary-findings`). `ignite-rt` exposes `ignite_rt_store_*` over a `Store<HeapValue>`, where
   `HeapValue` is a pointer to a malloc'd deep copy made and freed by generator glue
   (`copy_to_heap.<T>`, `copy_from_heap.<T>`, `free_heap.<T>`), passed to `store_new`.
   `get`, `values` and `update`'s result use the store's borrowing reads (`read`,
@@ -6911,10 +6915,22 @@ not. A handle loop's `a.state = a.handle(a.state, i)` moves `a.state`: the recei
 A parameter `p` is consumed when either holds:
 
 - its fn changes it in place on some path: an assignment to `p` or a place rooted at it, or a
-  `push`, `append`, `clear` (`List`, `Bytes`), `put` or `remove` (`Map`) through a place rooted
-  at it. This set is the union of what `region::mutates` (LLVM) and `mutates_receiver` with
-  `mutated_names` (Rust) count today, which the analysis replaces; `consumed` must be a superset
-  of both, so that no parameter the backends own today becomes borrowed;
+  `push`, `set`, `append`, `clear` (`List`, `Bytes`), `put` or `remove` (`Map`) or a `Store`
+  mutator through a place rooted at it. The builtins that change their receiver are one table,
+  `ignite_check::IN_PLACE` (receiver type, method, and whether the call changes the value or
+  the state behind a `Store` handle), which the checker reads for E006 and
+  `ignite_types::ownership` resolves to builtins; the names a body changes
+  (`ownership::changed_in_block`) and the variable a receiver is rooted at
+  (`ownership::place_root`, `memory_root`) are decided there once, for this analysis and both
+  backends (story:shared-ownership-analysis replaced LLVM's `region::modified` and
+  `region::root` and Rust's `mutated_names`, which disagreed). The names are counted widely, an
+  extra copy and never a missed one: through every expression a backend lowers to a pointer
+  into its operand (`?`, `await`, `at`, a block's result), closure bodies included, and for a
+  method named `push`, `set`, `append` or `clear` whatever its callee. An in-place builtin
+  itself changes a variable only through a place (a name, field, index or tuple field); through
+  `xs.at(0)` or `o?` it changes a copy on both targets, and inside a closure it may not change
+  a place rooted at a capture (E006: from the checker where it can tell the receiver's type, else
+  from the type checker once the callee is resolved, so a user fn named `push` is never refused);
 - its fn moves `p` or a place rooted at it (`p.items`) on every path that reaches a `return`, a
   `?` exit or the end of the body (any move position of 20.3.1, including passing it on to a
   consumed parameter and returning it).

@@ -73,6 +73,7 @@
 mod builtins;
 mod exhaustive;
 mod moves;
+pub mod ownership;
 mod typer;
 
 mod ids;
