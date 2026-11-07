@@ -21,8 +21,9 @@
 //! ignite conformance <file.ignite> [--target llvm|rust] [--std DIR] [--out DIR] [--clang PATH] [--runtime PATH] [--target-dir DIR] [--release] [--triple TRIPLE] [--static]
 //! ```
 //!
-//! `--std` is the standard-library root (default: the repository's `std/`
-//! next to this crate). Exit statuses: 0 success, 1 diagnostics (printed to
+//! `--std` is the standard-library root (default: `share/ignite/std` beside
+//! the driver's `bin/` when it exists, as `task dist` packs it, else the
+//! repository's `std/` next to this crate).Exit statuses: 0 success, 1 diagnostics (printed to
 //! stderr, one per line, in the `SourceFile::render` format, with the path
 //! of the file they are in), 2 cargo or clang failed (its output passed through) or
 //! invalid arguments, 3 a file could not be read or the project could not be

@@ -4,7 +4,7 @@
 
 # Guide
 
-- [Install from source](guide/install.md)
+- [Install](guide/install.md)
 - [Your first program](guide/first-program.md)
 - [The terminal walkthrough](guide/terminal.md)
 - [Testing with ignite test](guide/testing.md)

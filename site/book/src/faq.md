@@ -15,8 +15,9 @@ portable bundle and no stateful migration. See the [roadmap](roadmap.md).
 
 ## How do I install it?
 
-From source: clone the repository and run `cargo install --locked --path crates/ignite`.
-There are no binary releases. [Install from source](guide/install.md) has the details.
+On Linux x86_64, download the archive of a release (`ignite-X.Y.Z-x86_64-linux.tar.gz`, from
+v0.13.0 on) and unpack it; elsewhere, from source with `cargo install --locked --path
+crates/ignite`. [Install](guide/install.md) has the details.
 
 ## Which platforms does it run on?
 

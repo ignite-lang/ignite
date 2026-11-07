@@ -328,6 +328,43 @@ fn default_runtime_is_next_to_the_driver_or_in_its_parent() {
     );
 }
 
+#[test]
+fn default_std_is_share_ignite_std_beside_the_driver_when_it_exists() {
+    let dir = tmp("std-lookup");
+    let bin = dir.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let driver = bin.join("ignite");
+    std::fs::copy(env!("CARGO_BIN_EXE_ignite"), &driver).unwrap();
+    let source = dir.join("main.ignite");
+    std::fs::write(
+        &source,
+        "package main\n\nimport std.text.split\n\nfn words(line: Text) -> List<Text> = line.split(\" \")\n",
+    )
+    .unwrap();
+    let check = || run_copied(&driver, &["check".as_ref(), source.as_os_str()], &dir, &dir);
+    assert_eq!(ignite::installed_std_path(&driver), None);
+    let repository = check();
+    assert!(
+        repository.status.success(),
+        "without share/ignite/std the repository's std is used: {}",
+        String::from_utf8_lossy(&repository.stderr)
+    );
+
+    let installed = dir.join("share/ignite/std");
+    std::fs::create_dir_all(&installed).unwrap();
+    assert_eq!(
+        ignite::installed_std_path(&driver),
+        Some(installed.canonicalize().unwrap())
+    );
+    let empty = check();
+    assert_eq!(
+        empty.status.code(),
+        Some(1),
+        "an empty share/ignite/std has no std.text: {}",
+        String::from_utf8_lossy(&empty.stderr)
+    );
+}
+
 /// Run `driver` with `args`, the runtime cache under `cache` and `HOME`
 /// under `home`, retrying an exec that fails with ETXTBSY (a copied
 /// driver's write descriptor held for an instant by another test thread's

@@ -1,9 +1,32 @@
-# Install from source
+# Install
 
-Ignite is installed from source. There are no binary releases yet; the releases (v0.1.0 to
-v0.13.0) are tags of the repository.
+From v0.13.0 on, each [release](https://github.com/ignite-lang/ignite/releases) carries a
+pre-built `ignite` for Linux x86_64; on any other system, install from source.
 
-## What you need
+## Pre-built binary
+
+The archive `ignite-X.Y.Z-x86_64-linux.tar.gz` holds `bin/ignite` (glibc, linked statically)
+and `share/ignite/std`, the standard library it reads. Unpack it into a prefix whose `bin` is on
+your `PATH`, here `~/.local`:
+
+```sh
+curl -LO https://github.com/ignite-lang/ignite/releases/download/v0.13.0/ignite-0.13.0-x86_64-linux.tar.gz
+tar -xzf ignite-0.13.0-x86_64-linux.tar.gz
+cp ignite-0.13.0-x86_64-linux/bin/ignite ~/.local/bin/
+mkdir -p ~/.local/share/ignite
+cp -R ignite-0.13.0-x86_64-linux/share/ignite/std ~/.local/share/ignite/
+```
+
+A driver at `PREFIX/bin/ignite` reads `PREFIX/share/ignite/std` when it exists. It carries the
+runtime archive of the LLVM target, so `check`, `build` and `test` on the default target need
+only clang. The Rust target (`--target rust`) also needs the IO substrate crate of a clone,
+`--substrate CLONE/crates/ignite-io`.
+
+## Install from source
+
+The releases are also tags of the repository (v0.1.0 to v0.13.0).
+
+### What you need
 
 | tool | needed for |
 |---|---|
@@ -12,7 +35,7 @@ v0.13.0) are tags of the repository.
 | clang | every build on the LLVM target, the default |
 | [go-task](https://taskfile.dev) | optional: the `task` shortcuts of the repository |
 
-## Install
+### Install
 
 ```sh
 git clone https://github.com/ignite-lang/ignite

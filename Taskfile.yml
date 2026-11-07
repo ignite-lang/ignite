@@ -86,6 +86,27 @@ tasks:
       - cargo build -q -p ignite-rt --features runner --target-dir {{.T}}/ignite-test/rt
       - cargo run -q -p ignite -- build {{.TODO}} --target llvm --out {{.TODO_OUT_LLVM}} --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a
 
+  dist:
+    desc: Build the release ignite for Linux x86_64 (glibc, statically linked) and pack it with std/ as T/dist/ignite-VERSION-x86_64-linux.tar.gz (bin/ignite, share/ignite/std)
+    vars:
+      T: '{{.CARGO_TARGET_DIR | default "target"}}'
+      VERSION:
+        sh: cargo pkgid -p ignite | sed 's/.*[#@]//'
+      NAME: ignite-{{.VERSION}}-x86_64-linux
+      DIR: '{{.T}}/dist/{{.NAME}}'
+    env:
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C target-feature=+crt-static
+    cmds:
+      - cargo build --release --locked -p ignite --target x86_64-unknown-linux-gnu
+      - rm -rf '{{.DIR}}' '{{.DIR}}.tar.gz'
+      - mkdir -p '{{.DIR}}/bin' '{{.DIR}}/share/ignite'
+      - cp '{{.T}}/x86_64-unknown-linux-gnu/release/ignite' '{{.DIR}}/bin/ignite'
+      - cp -R std '{{.DIR}}/share/ignite/std'
+      - cp README.md '{{.DIR}}/'
+      - tar -czf '{{.DIR}}.tar.gz' -C '{{.T}}/dist' '{{.NAME}}'
+      - '''{{.DIR}}/bin/ignite'' --version'
+      - echo 'built {{.DIR}}.tar.gz'
+
   todo-server:
     desc: Run the compiled todod on 127.0.0.1:8080 (PORT=n to override, TARGET=llvm for the LLVM build)
     vars:
