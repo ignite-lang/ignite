@@ -1,0 +1,21 @@
+package peer
+
+// `docs/research/pusher-gaps/G1.ignite` with the chosen name: the server
+// logs the peer of the one connection it accepts (`docs/slice.md` 26.1).
+// No `Endpoint` is named or imported; `peer()` makes `std.net` a
+// dependency, and the call sits in an interpolation.
+type Echo {
+  ingress: TcpListener
+  executable: Text
+}
+
+fn Echo.main(self: Echo) -> Result<Unit, IoError> {
+  let stream = self.ingress.accept()?
+  log("peer {stream.peer().address} {stream.peer().port}")
+  stream.close()
+}
+
+system Peer {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  component echo: Echo { ingress = ingress, executable = "peer" }
+}

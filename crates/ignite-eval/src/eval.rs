@@ -1355,7 +1355,9 @@ impl<'p> Evaluator<'p> {
                 | Builtin::EntropyRandomBytes
                 | Builtin::SettingValue
                 | Builtin::CommandLineArguments
-                | Builtin::EnvironmentGet,
+                | Builtin::EnvironmentGet
+                | Builtin::TcpStreamPeer
+                | Builtin::TcpStreamTimedOut,
                 _,
             ) => Err(internal(format!(
                 "builtin `{builtin:?}` has no value at compile time"
@@ -2201,6 +2203,7 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::ClockSleep
             | Builtin::ClockNow
             | Builtin::ProcessFlush
+            | Builtin::TcpStreamConnectWithin
     )
 }
 

@@ -357,6 +357,52 @@ pub extern "C" fn ignite_rt_tcp_connect(
     })
 }
 
+/// `i32 tcp_connect_within(Text* address, i64 port, i64 timeout_ns, i64*
+/// out, IoError* err)`: `tcp_connect` that gives up after `timeout_ns`
+/// nanoseconds (`ignite_io::TcpStream::connect_within`, `docs/slice.md`
+/// 26.3).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_tcp_connect_within(
+    address: *const IgniteList,
+    port: i64,
+    timeout_ns: i64,
+    out: *mut i64,
+    err: *mut IgniteIoError,
+) -> i32 {
+    crate::entry(move || {
+        let connected = TcpStream::connect_within(text(address), port, timeout_ns);
+        status(connected.map(|s| register(Handle::Stream(s))), out, err)
+    })
+}
+
+/// `void tcp_peer(Endpoint* out, i64 stream)`: the other end of the
+/// stream, its address allocated in the task's arena
+/// (`ignite_io::TcpStream::peer`, `docs/slice.md` 26.1); an empty address
+/// and port 0 when the handle is not a stream, as `tcp_local_port` gives 0
+/// for one that is not a listener.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_tcp_peer(out: *mut crate::IgniteEndpoint, handle: i64) {
+    crate::entry(move || {
+        let (address, port) = stream(handle).map(|s| s.peer()).unwrap_or_default();
+        crate::put(
+            out,
+            crate::IgniteEndpoint {
+                address: IgniteList::from_bytes(address.as_bytes()),
+                port,
+            },
+        );
+    })
+}
+
+/// `i8 tcp_timed_out(i64 stream)`: 1 when the last read of the stream
+/// ended because the idle timeout passed, else 0, also for a handle that
+/// is not a stream (`ignite_io::TcpStream::timed_out`, `docs/slice.md`
+/// 26.2).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_tcp_timed_out(handle: i64) -> i8 {
+    crate::entry(move || i8::from(stream(handle).is_ok_and(|s| s.timed_out())))
+}
+
 /// Largest buffer a single read allocates, as in `ignite-io`.
 const MAX_READ: usize = 1024 * 1024;
 

@@ -32,7 +32,11 @@ pub fn owned(stmts: &[Stmt], index: usize, types: &TypedProgram) -> Vec<String> 
         StmtKind::Let { name, value, .. } => {
             let created = matches!(&value.kind, ExprKind::Try(inner) if matches!(
                 types.callee(inner),
-                Some(Callee::Builtin(Builtin::TcpListenerAccept | Builtin::TcpStreamConnect))
+                Some(Callee::Builtin(
+                    Builtin::TcpListenerAccept
+                        | Builtin::TcpStreamConnect
+                        | Builtin::TcpStreamConnectWithin
+                ))
             ));
             if created { vec![name] } else { Vec::new() }
         }
@@ -314,6 +318,8 @@ fn keeps_receiver(builtin: Builtin) -> bool {
             | PipeStreamUrgentPending
             | StreamWriteUrgent
             | StreamUrgentPending
+            | TcpStreamPeer
+            | TcpStreamTimedOut
             | Debug
     )
 }

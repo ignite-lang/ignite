@@ -132,6 +132,12 @@ struct Stream {
     /// `close` was called on some handle: a later `write_all` is the
     /// writer's error, not a failed send kept for the next reader.
     closed: AtomicBool,
+    /// The last read ended because the idle timeout passed
+    /// ([`TcpStream::timed_out`]).
+    timed_out: AtomicBool,
+    /// The other end's address and port, read once when the stream was
+    /// made ([`TcpStream::peer`]).
+    peer: (String, i64),
 }
 
 /// The write side of a stream: bytes written and not yet sent.
@@ -423,6 +429,10 @@ impl TcpStream {
                 std::mem::size_of::<nix::libc::c_int>() as nix::libc::socklen_t,
             )
         };
+        let peer = socket
+            .peer_addr()
+            .map(|peer| (peer.ip().to_canonical().to_string(), i64::from(peer.port())))
+            .unwrap_or_default();
         TcpStream {
             inner: Arc::new(Stream {
                 socket,
@@ -430,6 +440,8 @@ impl TcpStream {
                 writing: Mutex::new(Out::default()),
                 failed: AtomicBool::new(false),
                 closed: AtomicBool::new(false),
+                timed_out: AtomicBool::new(false),
+                peer,
             }),
         }
     }
@@ -455,25 +467,95 @@ impl TcpStream {
     }
 
     /// One read into `buffer`, as [`TcpStream::read`]: the number of bytes
-    /// read, 0 at end of stream.
+    /// read, 0 at end of stream and when the idle timeout passed, which
+    /// [`TcpStream::timed_out`] tells apart.
     pub fn read_into(&self, buffer: &mut [u8]) -> Result<usize, IoError> {
         flush();
-        self.inner.check_failure()?;
+        if let Err(error) = self.inner.check_failure() {
+            self.inner.timed_out.store(false, Ordering::Release);
+            return Err(error);
+        }
         let _reading = self
             .inner
             .reading
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
+        // Set under the read lock from this read's own outcome, so the flag
+        // is that of the read that ended last, also with readers queued on
+        // the lock (`docs/slice.md` 26.2).
+        let ended = |timed_out: bool| self.inner.timed_out.store(timed_out, Ordering::Release);
         loop {
             match (&self.inner.socket).read(buffer) {
-                Ok(count) => return Ok(count),
+                Ok(count) => {
+                    ended(false);
+                    return Ok(count);
+                }
                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                    ended(true);
                     return Ok(0);
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => {
+                    ended(false);
+                    return Err(e.into());
+                }
             }
         }
+    }
+
+    /// Whether the last read of the stream, on any handle, returned end of
+    /// stream because the idle timeout passed rather than because the peer
+    /// closed (`docs/slice.md` 26.2). False before the first read; every
+    /// read sets it anew. Never waits.
+    pub fn timed_out(&self) -> bool {
+        self.inner.timed_out.load(Ordering::Acquire)
+    }
+
+    /// The other end's address and port (`docs/slice.md` 26.1): the
+    /// address as text the way its family writes it (`127.0.0.1`, `::1`;
+    /// an IPv4 peer of an IPv6 socket as IPv4), read when the stream was
+    /// accepted or connected and kept after `close`. `("", 0)` when the
+    /// operating system could not report it then.
+    pub fn peer(&self) -> (String, i64) {
+        self.inner.peer.clone()
+    }
+
+    /// [`TcpStream::connect`] that gives up after `timeout_ns`
+    /// nanoseconds (`docs/slice.md` 26.3). Each address the name resolves
+    /// to is tried in turn with the time left; resolving the name is not
+    /// bounded. A timeout that is not positive is refused.
+    pub fn connect_within(
+        address: String,
+        port: i64,
+        timeout_ns: i64,
+    ) -> Result<TcpStream, IoError> {
+        use std::net::ToSocketAddrs;
+        use std::time::Instant;
+        flush();
+        let target = socket_address("connect", &address, port)?;
+        let fail = |e: &dyn std::fmt::Display| IoError::new(format!("connect {target}: {e}"));
+        let timeout = u64::try_from(timeout_ns)
+            .ok()
+            .filter(|ns| *ns > 0)
+            .map(Duration::from_nanos)
+            .ok_or_else(|| fail(&"the timeout must be positive"))?;
+        let deadline = Instant::now() + timeout;
+        let mut last: Option<std::io::Error> = None;
+        for candidate in target.to_socket_addrs().map_err(|e| fail(&e))? {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                last = Some(ErrorKind::TimedOut.into());
+                break;
+            }
+            match std::net::TcpStream::connect_timeout(&candidate, left) {
+                Ok(socket) => return Ok(TcpStream::from_socket(socket)),
+                Err(e) => last = Some(e),
+            }
+        }
+        Err(match last {
+            Some(e) => fail(&e),
+            None => fail(&"no address"),
+        })
     }
 
     /// Write all of `data`: append it to the send buffer (module docs).
