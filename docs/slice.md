@@ -1882,7 +1882,11 @@ declare (E003 otherwise); a second `Owner.name` or a variant `Owner.name` is E00
 `Symbols.effects` is `Owner.name`; the call's callee is `Callee::Fn` of that `QualName`.
 Importing `Owner` (explicitly or by glob) brings its associated fns. Backends turn the `.` into
 a valid symbol of their own (Rust: an inherent `impl Owner { fn name }` or a mangled free fn;
-LLVM: a mangled symbol); a free fn `name` of the same module is a different fn.
+LLVM: a mangled symbol); a free fn `name` of the same module is a different fn. The Rust
+target's symbol writes every `_` of owner and name as `_0` and joins them with `__`
+(`fn A_._b` is `A_0___0b`, `fn A.b__c` is `A__b_0_0c`); every other Ignite name that contains
+`__` gets a trailing `_` in Rust (a free `fn A__b` is `A__b_`), so no two fns share a symbol
+(story `rustgen-assoc-symbol-collisions`).
 
 ### 13.9 Diagnostics changed in slice 9
 

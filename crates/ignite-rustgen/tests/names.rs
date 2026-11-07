@@ -168,6 +168,66 @@ test \"a default beside an associated fn default_f\" {\n\
     adversary_tests_pass("names-default", source, &common::golden_std(), 1);
 }
 
+/// story:rustgen-assoc-symbol-collisions: a free fn `A__b` beside the
+/// associated fn `A.b`. Both were the Rust fn `A__b`, so the crate did not
+/// build; each keeps its own value.
+#[test]
+fn a_free_fn_named_like_an_associated_fn_keeps_its_value() {
+    let source = "package examples.assocfree\n\
+\n\
+type A { x: Int }\n\
+\n\
+fn A__b() -> Int = 1\n\
+\n\
+fn A.b() -> Int = 2\n\
+\n\
+test \"a free fn A__b beside fn A.b\" {\n\
+  assert A__b() == 1\n\
+  assert A.b() == 2\n\
+}\n";
+    adversary_tests_pass("names-assoc-free", source, &common::golden_std(), 1);
+}
+
+/// `fn A_._b` beside `fn A.__b`: both were the Rust fn `A___b`.
+#[test]
+fn associated_fns_whose_underscores_meet_keep_their_values() {
+    let source = "package examples.assocunder\n\
+\n\
+type A_ { x: Int }\n\
+\n\
+type A { x: Int }\n\
+\n\
+fn A_._b() -> Int = 1\n\
+\n\
+fn A.__b() -> Int = 2\n\
+\n\
+test \"fn A_._b beside fn A.__b\" {\n\
+  assert A_._b() == 1\n\
+  assert A.__b() == 2\n\
+}\n";
+    adversary_tests_pass("names-assoc-under", source, &common::golden_std(), 1);
+}
+
+/// `fn A__b.c` beside `fn A.b__c`: both were the Rust fn `A__b__c`.
+#[test]
+fn associated_fns_whose_separators_meet_keep_their_values() {
+    let source = "package examples.assocsep\n\
+\n\
+type A__b { x: Int }\n\
+\n\
+type A { x: Int }\n\
+\n\
+fn A__b.c() -> Int = 1\n\
+\n\
+fn A.b__c() -> Int = 2\n\
+\n\
+test \"fn A__b.c beside fn A.b__c\" {\n\
+  assert A__b.c() == 1\n\
+  assert A.b__c() == 2\n\
+}\n";
+    adversary_tests_pass("names-assoc-sep", source, &common::golden_std(), 1);
+}
+
 /// A package whose crate name would be an extern crate every generated
 /// crate names: `std`, `core`, `ignite_io`, `ignite_std`.
 fn package_builds(package: &str) {
