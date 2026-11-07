@@ -167,6 +167,19 @@ tasks:
       - cd ux && npx --no-install playwright test
       - cargo test -q -p ignite --test main -- --ignored --exact site::ux::ratchet || exit 1
 
+  ux-round:
+    desc: Write ux/rounds/ROUND (task ux-round ROUND=R-01) from the gating suite and the trial of the scenario cards; not part of the gate
+    requires:
+      vars: [ROUND]
+    cmds:
+      - task: site
+      - task: ux-deps
+      - rm -rf target/ux/metrics.json target/ux/gating.json target/ux/missed
+      - cmd: cd ux && npx --no-install playwright test
+        ignore_error: true
+      - cd ux && UX_ROUND={{.ROUND}} npx --no-install playwright test --config round.config.ts
+      - UX_ROUND={{.ROUND}} cargo test -q -p ignite --test main -- --ignored --exact site::round::write
+
   site-serve:
     desc: Build the website and serve target/site on http://127.0.0.1:8765/
     cmds:

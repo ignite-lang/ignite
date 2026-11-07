@@ -83,3 +83,75 @@ test("UXF-007: the std.fs reference page is found from the landing page", async 
     }
   }
 });
+
+test("UXF-008: the FAQ is reachable from the landing page's main navigation", async ({ browser }) => {
+  const task = tasks().find((t) => t.id === "faq-platforms")!;
+  for (const [width, height] of [
+    [1440, 900],
+    [1280, 800],
+    [1024, 768],
+    [768, 1024],
+    [390, 844],
+  ]) {
+    const { context, tab } = await page(browser, "index.html", width, height);
+    const run = await play(tab, task, "pointer").finally(() => context.close());
+    const step = run.steps.find((s) => s.label.includes("FAQ"))!;
+    expect(step.actions, `${width}x${height}: ${run.log.join(", ")}`).toBeLessThanOrEqual(2);
+  }
+});
+
+test("UXF-009: on a wide book page the menu bar is reached within 5 Tabs", async ({ browser }) => {
+  for (const path of ["book/reference/std/fs.html", "book/design/index.html", "book/guide/install.html"]) {
+    const { context, tab } = await page(browser, path, 1440, 900);
+    const home = tab.getByRole("link", { name: "Ignite home", exact: true });
+    const search = tab.getByRole("button", { name: "Toggle Searchbar", exact: true });
+    let tabs = 0;
+    let reached = "";
+    while (tabs < 5 && !reached) {
+      await tab.keyboard.press("Tab");
+      tabs++;
+      for (const [name, control] of [
+        ["Ignite home", home],
+        ["Toggle Searchbar", search],
+      ] as const) {
+        if (await control.evaluate((el) => el === document.activeElement)) {
+          reached = name;
+        }
+      }
+    }
+    await context.close();
+    expect(reached, `${path}: the menu bar's home link or search after ${tabs} Tabs`).not.toBe("");
+  }
+});
+
+test("UXF-010: field names, code and status badges are at least 14 px", async ({ browser }) => {
+  const selectors = ["pre code", ":not(pre) > code", ".tag", ".badge"].join(", ");
+  const small: string[] = [];
+  for (const [width, height] of [
+    [1440, 900],
+    [1280, 800],
+    [1024, 768],
+    [768, 1024],
+    [390, 844],
+  ]) {
+    for (const path of ["index.html", "book/reference/std/fs.html", "book/roadmap.html", "book/reference/diagnostics.html"]) {
+      const { context, tab } = await page(browser, path, width, height);
+      const found = await tab.evaluate((selectors) => {
+        const out: string[] = [];
+        for (const el of Array.from(document.querySelectorAll(selectors))) {
+          if (!el.textContent?.trim() || !el.checkVisibility()) {
+            continue;
+          }
+          const size = parseFloat(getComputedStyle(el).fontSize);
+          if (size < 13.95) {
+            out.push(`${el.tagName.toLowerCase()}.${Array.from(el.classList).join(".")} "${el.textContent.trim().slice(0, 20)}" ${size.toFixed(2)}px`);
+          }
+        }
+        return out;
+      }, selectors);
+      await context.close();
+      small.push(...found.slice(0, 3).map((line) => `${width}x${height} ${path}: ${line}`));
+    }
+  }
+  expect(small).toEqual([]);
+});

@@ -35,6 +35,21 @@ export async function chooseTheme(context: BrowserContext, theme: Theme) {
   }, theme.storage);
 }
 
+// The theme a session starts in: written before the first page's scripts
+// run and only while storage holds no choice, so a reader's switch stays
+// on the next page.
+export async function seedTheme(context: BrowserContext, theme: Theme) {
+  await context.addInitScript((storage) => {
+    try {
+      if (localStorage.getItem("mdbook-theme") === null) {
+        localStorage.setItem("mdbook-theme", storage);
+      }
+    } catch {
+      // storage refused: the site's default applies
+    }
+  }, theme.storage);
+}
+
 export async function open(page: Page, path: string) {
   await page.goto(baseUrl() + path, { waitUntil: "load" });
   await page.evaluate(() => document.fonts.ready);
