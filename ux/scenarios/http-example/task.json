@@ -1,0 +1,11 @@
+{
+  "id": "http-example",
+  "goal": "Find an example of an HTTP server.",
+  "start": "index.html",
+  "truth": { "path": "book/reference/std/http.html", "text": "A server in a system" },
+  "route": [
+    { "click": { "role": "link", "name": "^Reference$" } },
+    { "click": { "role": "link", "name": "^Standard library$" } },
+    { "click": { "role": "link", "name": "^std\\.protocol\\.http$" } }
+  ]
+}

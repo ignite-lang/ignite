@@ -56,6 +56,7 @@ tasks:
     cmds:
       - task: check
       - task: test
+      - task: ux
 
   compile:
     desc: Compile the terminal example with ignite --target rust into target/ignite/terminal
@@ -126,10 +127,29 @@ tasks:
   site:
     desc: Build the website into target/site, the landing page at the root and the book under book/
     cmds:
+      - rm -rf target/site
       - mkdir -p target/site
       - cp -R site/index.html site/assets target/site/
       - mdbook build site/book --dest-dir target/site/book
       - cp target/site/book/404.html target/site/404.html
+
+  ux-deps:
+    desc: Install the pinned Playwright and axe-core into ux/node_modules once, from ux/package-lock.json
+    dir: ux
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    status:
+      - test -d node_modules
+    cmds:
+      - npm ci --no-audit --no-fund
+
+  ux:
+    desc: Build the website, run the layout contract (L2) and the screen-only user (L3) on it, then the ratchet against ux/baseline.json
+    cmds:
+      - task: site
+      - task: ux-deps
+      - cd ux && npx --no-install playwright test
+      - cargo test -q -p ignite --test main -- --ignored --exact site::ux::ratchet || exit 1
 
   site-serve:
     desc: Build the website and serve target/site on http://127.0.0.1:8765/

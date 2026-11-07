@@ -1,0 +1,481 @@
+{
+  "about": "The ratchet of the website (story docs-site-ui-loop, ux/README.md): one entry per scenario and metric, every value lower-is-better. Scenarios <task>/<viewport> are the screen-only user (L3) on a task from the landing page; pages/<viewport> sums the layout contract (L2) over every page and theme. Written by IGNITE_BLESS=1 cargo test -p ignite --test main -- --ignored --exact site::ux::ratchet; a value made worse needs a decision.",
+  "scenarios": {
+    "design/1440x900": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 5
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 1
+      }
+    },
+    "design/390x844": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 7
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 2
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 2
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 2
+      }
+    },
+    "diagnostic-search/1440x900": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 66
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 7
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 1
+      }
+    },
+    "diagnostic-search/390x844": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 16
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 8
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 4
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 2
+      }
+    },
+    "faq-platforms/1440x900": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 40
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 13
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 13
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 12
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 13
+      }
+    },
+    "faq-platforms/390x844": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 42
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 23
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 23
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 22
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 23
+      }
+    },
+    "http-example/1440x900": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 76
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 4
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 4
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 2
+      }
+    },
+    "http-example/390x844": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 53
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 6
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 6
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 2
+      }
+    },
+    "install/1440x900": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 4
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 1
+      }
+    },
+    "install/390x844": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 6
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 2
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 2
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 2
+      }
+    },
+    "pages/1440x900": {
+      "always_visible.misses": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "axe.serious_critical": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "external_requests": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "layout.overflow": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "layout.truncated": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "reduced_motion.violations": {
+        "tolerance": 0,
+        "value": 0
+      }
+    },
+    "pages/390x844": {
+      "always_visible.misses": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "axe.serious_critical": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "external_requests": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "layout.overflow": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "layout.truncated": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "reduced_motion.violations": {
+        "tolerance": 0,
+        "value": 0
+      }
+    },
+    "roadmap/1440x900": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 7
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 0
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 1
+      }
+    },
+    "roadmap/390x844": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 9
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 2
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 2
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 2
+      }
+    },
+    "std-fs/1440x900": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 72
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 4
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 4
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 1
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 2
+      }
+    },
+    "std-fs/390x844": {
+      "glance_cost.median": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "glance_cost.p95": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "keyboard.actions": {
+        "tolerance": 0,
+        "value": 43
+      },
+      "screen_only.actions": {
+        "tolerance": 0,
+        "value": 6
+      },
+      "screen_only.looks": {
+        "tolerance": 0,
+        "value": 6
+      },
+      "screen_only.steers": {
+        "tolerance": 0,
+        "value": 3
+      },
+      "screen_only.time_to_act_steps.max": {
+        "tolerance": "5%",
+        "value": 2
+      }
+    }
+  },
+  "tolerances": {
+    "counts": 0,
+    "steps": "5%"
+  }
+}

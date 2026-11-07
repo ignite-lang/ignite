@@ -1,0 +1,12 @@
+{
+  "id": "diagnostic-search",
+  "goal": "Find what the diagnostic E046 means, through the book search.",
+  "start": "index.html",
+  "truth": { "path": "book/reference/diagnostics.html", "text": "E046 Match not exhaustive" },
+  "route": [
+    { "click": { "role": "link", "name": "^Guide$" } },
+    { "click": { "role": "button", "name": "^Toggle Searchbar$" } },
+    { "type": "E046" },
+    { "click": { "role": "link", "name": "E046" } }
+  ]
+}

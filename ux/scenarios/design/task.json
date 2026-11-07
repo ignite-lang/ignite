@@ -1,0 +1,9 @@
+{
+  "id": "design",
+  "goal": "Find the language design.",
+  "start": "index.html",
+  "truth": { "path": "book/design/index.html", "text": "Ignite is an intent-oriented language" },
+  "route": [
+    { "click": { "role": "link", "name": "^Design$" } }
+  ]
+}
