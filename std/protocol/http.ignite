@@ -2222,3 +2222,15 @@ test "a 2xx answer to CONNECT answered inline ends by closing the connection" {
   assert out == "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\nCONNECT /x? ", out
   assert served(b"CONNECT /forbidden HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?.contains("Content-Length: 10\r\n")
 }
+
+test "a chunk whose data ends in CR and another byte instead of CR LF is 400" {
+  assert next_of(chunked("5\r\nhello\rX0\r\n\r\n"))? == Reject(400)
+  assert next_of(chunked("2\r\nhi\r\r\n0\r\n\r\n"))? == Reject(400)
+}
+
+test "an unterminated chunk-size line or trailer over the head limit is 431, not read until the peer closes" {
+  let limits = HttpLimits { head = 64 bytes }
+  assert next_with(chunked("1;" + repeat("x", 80)), limits)? == Reject(431)
+  assert next_with(chunked("1\r\na\r\n1;" + repeat("x", 80)), limits)? == Reject(431)
+  assert next_with(chunked("0\r\nX: " + repeat("x", 80)), limits)? == Reject(431)
+}
