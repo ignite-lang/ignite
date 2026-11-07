@@ -3,8 +3,9 @@ package fixtures.codespec_lists
 // List element assignment, `List + List` and `Stderr` (story codespec-friction,
 // `docs/slice.md` 25.3 to 25.5), run by `ignite test` on both targets in debug and
 // release (crates/ignite/tests/ignite_test.rs `codespec_stderr_and_lists_on_both_targets`).
-// Two tests fail on purpose: the out-of-range assignment and the one that shows
-// what it wrote to each stream.
+// Three tests fail on purpose: the two out-of-range assignments (a List, Bytes)
+// and the one that shows what it wrote to each stream. The out-of-range tests on
+// Bytes stay at the end of the file, so the List test's line is unchanged.
 
 type Cell {
   name: Text
@@ -71,4 +72,28 @@ test "Stderr is a stream of its own" {
   Stdout.write_all(b"to out\n")?
   Stderr.write_all(b"to err\n")?
   assert false
+}
+
+fn upper_first(text: Text) -> Text {
+  var bytes = text.to_bytes()
+  bytes.set(0, bytes[0] - 32)
+  bytes.to_text()
+}
+
+test "Bytes element assignment replaces one byte" {
+  var bs = b"abc"
+  bs[0] = b'x'
+  bs.set(2, bs[1] + 1)
+  assert bs == b"xbc"
+  let source = "hi".to_bytes()
+  var copy = source
+  copy[1] = 255
+  assert source == b"hi"
+  assert copy == b"h\xff"
+  assert upper_first("ok") == "Ok"
+}
+
+test "Bytes element assignment out of range fails as indexing does" {
+  var bs = b"ab"
+  bs.set(2, 0)
 }

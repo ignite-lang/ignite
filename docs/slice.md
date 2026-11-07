@@ -9079,7 +9079,10 @@ on the LLVM target. In `ignite test` the runner captures it per test and shows i
 ### 25.4 List element assignment (item 4, friction row 50)
 
 `l[i] = v` is a statement: the parser turns it into the builtin method call `l.set(i, v)`
-(`ListSet`), whose span is that of `l[i]`. `set` replaces the element at `i` in place:
+(`ListSet`), whose span is that of `l[i]`. `set` replaces the element at `i` in place. It
+applies to `Bytes` as to any list, since `Bytes` is `List<Byte>` in the typer, the evaluator and
+both backends (`b[i] = v`, `b.set(i, v)`; `std.text`'s `to_lower` and `to_upper` change a copy
+of `text.to_bytes()` with it):
 
 - the receiver is a place a mutating builtin may change, as for `push` (E006 through a `let`,
   a `for` element or a pattern binding; in a closure, E006 for a captured list), so

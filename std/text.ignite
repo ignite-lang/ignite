@@ -597,22 +597,31 @@ test "trim_start and trim_end drop ASCII whitespace" {
   assert trim_start("\n€") == "€"
 }
 
-// ASCII letters in lower case; every other byte unchanged. A loop and
-// not `map` with a closure: on the Rust target short text (command and
-// header names) takes one allocation fewer.
+// ASCII letters in lower case; every other byte unchanged. The bytes of
+// `text` are changed in place with `set`, one copy and no growing buffer.
 fn to_lower(text: Text) -> Text {
-  var out = Bytes.empty()
-  for b in text.to_bytes() {
-    out.push(if b >= b'A' && b <= b'Z' { b + 32 } else { b })
+  var out = text.to_bytes()
+  var i = 0
+  while i < out.len() {
+    let b = out[i]
+    if b >= b'A' && b <= b'Z' {
+      out[i] = b + 32
+    }
+    i = i + 1
   }
   out.to_text()
 }
 
 // ASCII letters in upper case; every other byte unchanged.
 fn to_upper(text: Text) -> Text {
-  var out = Bytes.empty()
-  for b in text.to_bytes() {
-    out.push(if b >= b'a' && b <= b'z' { b - 32 } else { b })
+  var out = text.to_bytes()
+  var i = 0
+  while i < out.len() {
+    let b = out[i]
+    if b >= b'a' && b <= b'z' {
+      out[i] = b - 32
+    }
+    i = i + 1
   }
   out.to_text()
 }
