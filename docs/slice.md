@@ -1286,15 +1286,19 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
 | `s.upsert(id, f: fn(Option<T>) -> T)` | `T` (the stored value): `f` of the current value, `None` when `id` holds nothing, atomic, `f` pure | `s.write` |
 
 - Value semantics: `get`/`values` return copies; `put` stores a copy.
-- One implementation in `ignite-io`: `Store<T: Clone + Send>` over an `Arc` of 16 shards,
+- One implementation in `ignite-io`: `Store<T: Clone + Send + Sync>` over an `Arc` of 16 shards
+  (`Sync` because a value an `update` or `upsert` has taken stays shared with the readers of
+  `len` and `values` while the taker copies it),
   each a `Mutex<BTreeMap<i64, _>>` with a `Condvar`, chosen by a Fibonacci hash of the id,
   plus an `AtomicI64` counter (story `store-lock-contention`). Every method is atomic for the
   ids it touches; `len` and `values` lock every shard in shard order, and `values` merges the
   shards into ascending id order. The Rust target uses it directly: its `update` and `upsert`
-  hold the shard's lock only to take the value out of its slot (marked taken) and to put the
-  new value back, and copy the old value, run `f` and drop the old value with no lock held; a
-  task that reaches a taken id (or, for `len` and `values`, a shard with one) waits until it
-  is put back, and a panic in `f` puts the old value back. `ignite-rt` exposes `ignite_rt_store_*` over a `Store<HeapValue>`, where
+  hold the shard's lock only to take the value out of its slot (marked taken, the value shared
+  with the slot) and to put the new value back, and copy the old value, run `f` and drop the old
+  value with no lock held; a task that reaches a taken id waits until it is put back, and a
+  panic in `f` puts the old value back. `len` and `values` wait for no taken slot: they read a
+  taken slot's value from before the update (an absent id an `upsert` took is absent), so a
+  task waits for another's `f` only on the same id (story `store-adversary-findings`). `ignite-rt` exposes `ignite_rt_store_*` over a `Store<HeapValue>`, where
   `HeapValue` is a pointer to a malloc'd deep copy made and freed by generator glue
   (`copy_to_heap.<T>`, `copy_from_heap.<T>`, `free_heap.<T>`), passed to `store_new`.
   `get`, `values` and `update`'s result use the store's borrowing reads (`read`,
