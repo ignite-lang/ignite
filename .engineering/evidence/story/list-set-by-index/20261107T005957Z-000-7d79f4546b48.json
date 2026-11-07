@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T00:59:57Z",
+  "actor": "human:timo",
+  "artifact": "story:list-set-by-index",
+  "kind": "story",
+  "revision": 13,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on e41a82d3: 1307 passed, 0 failed, 11 ignored; 295 inline per target; EXIT=0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/82"
+  }
+}

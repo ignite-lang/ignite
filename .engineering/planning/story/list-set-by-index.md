@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:list-set-by-index
 kind: story
-status: active
+status: implemented
 title: Set a List or Bytes element by index
 summary: xs.set(i, v) with the bounds failure of at, both targets (friction E10)
 scope:
@@ -24,10 +24,11 @@ scope:
   path: docs/slice.md
 - confidence: cited
   path: std/text.ignite
-revision: 13
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-06T23:50:47Z", actor: "human:timo", revision: 12}
 - {from: "proposed", to: "active", at: "2026-11-06T23:50:48Z", actor: "human:timo", revision: 13}
+- {from: "active", to: "implemented", at: "2026-11-07T00:59:58Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: list-set-by-index
 

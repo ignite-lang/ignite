@@ -130,6 +130,15 @@ fn bytes_text() -> List<Text> {
 
 fn bytes_literal() -> Bytes = "ok".to_bytes()
 
+fn bytes_set() -> (Bytes, Text) {
+  var bs = b"abc"
+  bs[0] = b'x'
+  bs.set(2, bs[1] + 1)
+  var word = "ok".to_bytes()
+  word.set(0, word[0] - 32)
+  (bs, word.to_text())
+}
+
 // Text
 
 fn text_ops() -> List<Text> = ["  pad ".trim(), "pre-fix".strip_prefix("pre-").unwrap_or("?"), "abc".concat("def"), "Hello".to_lower(), "x".repeat(3), "a-b".replace("-", "+")]
@@ -628,6 +637,7 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(text_compare().debug())?
   show(bytes_text().debug())?
   show(bytes_literal().debug())?
+  show(bytes_set().debug())?
   show(text_ops().debug())?
   show(text_split().debug())?
   show(text_find().debug())?

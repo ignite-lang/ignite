@@ -1882,7 +1882,11 @@ declare (E003 otherwise); a second `Owner.name` or a variant `Owner.name` is E00
 `Symbols.effects` is `Owner.name`; the call's callee is `Callee::Fn` of that `QualName`.
 Importing `Owner` (explicitly or by glob) brings its associated fns. Backends turn the `.` into
 a valid symbol of their own (Rust: an inherent `impl Owner { fn name }` or a mangled free fn;
-LLVM: a mangled symbol); a free fn `name` of the same module is a different fn.
+LLVM: a mangled symbol); a free fn `name` of the same module is a different fn. The Rust
+target's symbol writes every `_` of owner and name as `_0` and joins them with `__`
+(`fn A_._b` is `A_0___0b`, `fn A.b__c` is `A__b_0_0c`); every other Ignite name that contains
+`__` gets a trailing `_` in Rust (a free `fn A__b` is `A__b_`), so no two fns share a symbol
+(story `rustgen-assoc-symbol-collisions`).
 
 ### 13.9 Diagnostics changed in slice 9
 
@@ -9141,7 +9145,10 @@ on the LLVM target. In `ignite test` the runner captures it per test and shows i
 ### 25.4 List element assignment (item 4, friction row 50)
 
 `l[i] = v` is a statement: the parser turns it into the builtin method call `l.set(i, v)`
-(`ListSet`), whose span is that of `l[i]`. `set` replaces the element at `i` in place:
+(`ListSet`), whose span is that of `l[i]`. `set` replaces the element at `i` in place. It
+applies to `Bytes` as to any list, since `Bytes` is `List<Byte>` in the typer, the evaluator and
+both backends (`b[i] = v`, `b.set(i, v)`; `std.text`'s `to_lower` and `to_upper` change a copy
+of `text.to_bytes()` with it):
 
 - the receiver is a place a mutating builtin may change, as for `push` (E006 through a `let`,
   a `for` element or a pattern binding; in a closure, E006 for a captured list), so
