@@ -2,11 +2,14 @@
 format: aep.planning-md/3
 id: story:record-literal-receiver-type
 kind: story
-status: draft
+status: active
 title: Effects of a method call read the receiver's inferred type
 relations:
 - informed_by: story:immutable-binding-e006
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 3}
 ---
 # Story: record-literal-receiver-type
 

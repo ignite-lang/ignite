@@ -2,9 +2,12 @@
 format: aep.planning-md/3
 id: story:drain-exit
 kind: story
-status: draft
+status: active
 title: Process.exit during the drain exits with its code, without waiting for tasks
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 3}
 ---
 # Story: drain-exit
 
