@@ -6537,11 +6537,16 @@ Limits: the decoded body is bounded by `HttpLimits.body` (413), each chunk-size 
 whole trailer section by `HttpLimits.head` (431). The bytes the decoder has consumed are
 dropped as it goes, and chunk data its input buffer does not hold yet is appended to the body
 read by read (`read_chunk_data`), so a chunk is never held twice: however the body is split
-into chunks, the decoder holds the body and, besides it, input of less than two reads
-(`READ_SIZE`, 64 KiB) and the chunk-size line being read (at most `HttpLimits.head`). The test
-"one chunk of the whole body limit is decoded holding at most one read besides the body" decodes
-one chunk of `HttpLimits.body` bytes and checks that the input kept after it is at most one
-read. Not bounded beyond that: the extension bytes over a body's chunks together, at most
+into chunks, the decoder holds the body and, besides it, input of less than three reads
+(`READ_SIZE`, 64 KiB) and the chunk-size line being read (at most `HttpLimits.head`): consumed
+bytes are dropped only once they reach one read, so as not to copy the buffer per chunk; the
+read that completed the chunk-size line and the chunk; and the read that brings the CRLF after
+the chunk. The test "one chunk of the whole body limit is decoded holding at most one read
+besides the body" decodes one chunk of `HttpLimits.body` bytes and checks that the input kept
+after it is at most one read; "adversary: a chunk read whole but for its LF keeps less than
+three reads of input and the line" builds the worst case (196,598 bytes) and checks the bound.
+The input buffer is moved, never copied, from chunk to chunk: "adversary: the body limit in
+one-byte chunks is decoded in under 8 s". Not bounded beyond that: the extension bytes over a body's chunks together, at most
 `HttpLimits.head` per chunk, so a 1 MiB body in 1-byte chunks may carry up to 8 GiB of
 extensions under the default limits, each read still under `idle_timeout`. `todo.rs`'s
 `header_framing` case that expected 501 for a chunked POST now creates a todo from a chunked
@@ -6556,6 +6561,10 @@ of CR LF is 400" (the LF half of the check after chunk data) and "an unterminate
 line or trailer over the head limit is 431, not read until the peer closes" (`read_line`'s
 length guard before the next read). PR C held a single large chunk twice, in the input buffer
 and in the body, until the next compaction; the bound above is the one the decoder now keeps.
+The first `read_chunk_data` read its borrowed input after copying it, so the buffer was copied
+once per chunk; it now takes the buffer by move. The body limit in one-byte chunks, median of
+three runs at load 21 to 32: 0.79 s Rust and 1.13 s LLVM on `b23f827e`,
+2.39 s and 25.8 s with the copy, 0.60 s and 1.58 s after the move.
 `RFC9110.R6_2_5` ("A server MUST NOT send a version to which it is not conformant") is restated
 as `unsupported`: every response says `HTTP/1.1` while `RFC9112.R2_2_1`, a MUST of that version,
 is a gap, so the claim cannot hold until story `http-octet-head-and-date` closes it. The claims

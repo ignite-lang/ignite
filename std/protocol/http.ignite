@@ -1318,9 +1318,9 @@ fn read_chunk_data<T: ByteStream>(stream: T, limits: HttpLimits, data: Bytes, at
   var out = body
   var input = data
   var from = at + size
-  if data.len() < at + size {
+  if input.len() < at + size {
     let end = out.len() + size
-    out.append(data.slice(at, data.len()))
+    out.append(input.slice(at, input.len()))
     input = Bytes.empty()
     from = 0
     while out.len() < end {
@@ -1338,7 +1338,7 @@ fn read_chunk_data<T: ByteStream>(stream: T, limits: HttpLimits, data: Bytes, at
       }
     }
   } else {
-    out.append(data.slice(at, at + size))
+    out.append(input.slice(at, at + size))
   }
   input = match read_body(stream, limits, input, from + 2)? {
     None => return Ok(DataClosed)
@@ -2298,4 +2298,42 @@ test "one chunk of the whole body limit is decoded holding at most one read besi
     }
   }
   assert next_of(chunked("100000\r\n" + repeat("a", size) + "\r\n0\r\n\r\n"))? == Got(chunked_request(repeat("a", size)), Bytes.empty())
+}
+
+// Adversary (story http-chunked-adversary-findings, pass 1). `read_chunked`
+// compacts only once `at >= READ_SIZE`, so it can hand `read_chunk_data` an
+// input holding READ_SIZE - 1 consumed bytes; a chunk-size line and a chunk
+// that one read delivered whole but for its LF; the CRLF check then appends
+// one more read. 19.22: "input of less than three reads and the chunk-size line".
+test "adversary: a chunk read whole but for its LF keeps less than three reads of input and the line" {
+  let limits = HttpLimits {}
+  let (client, server) = connected()?
+  let line = "FFF0\r\n"
+  let data = (repeat("p", READ_SIZE - 1) + line + repeat("a", 65520) + "\r").to_bytes()
+  client.write_all(("\n0\r\n\r\n" + repeat("x", READ_SIZE - 6)).to_bytes())?
+  _ = client.close()
+  match read_chunk_data(server, limits, data, READ_SIZE - 1 + line.len(), 65520, Bytes.empty())? {
+    DataRead(body, input, _) => {
+      assert body.len() == 65520
+      assert input.len() < 3 * READ_SIZE + line.len(), "the decoder holds {input.len()} bytes of input besides the body"
+    }
+    _ => {
+      assert false, "the chunk is read"
+    }
+  }
+}
+
+// Adversary (story http-chunked-adversary-findings, pass 1). The body limit
+// in one-byte chunks, the worst case 19.22 names. `read_chunk_data` takes
+// `data` by reference and copies it into `input` for every chunk, so each
+// one-byte chunk costs a copy of up to two reads. At b23f827e this took
+// 0.66 s (Rust) and 1.15 s (LLVM); at 54cbcadc 3.1 s and 20.9 s.
+test "adversary: the body limit in one-byte chunks is decoded in under 8 s" {
+  let size = HttpLimits {}.body.to_int()
+  let input = chunked(repeat("1\r\na\r\n", size) + "0\r\n\r\n")
+  let started = Clock.monotonic()
+  let got = next_of(input)?
+  let took = Clock.monotonic() - started
+  assert got == Got(chunked_request(repeat("a", size)), Bytes.empty())
+  assert took < 8000 ms, "{size} one-byte chunks took {took.to_ms()} ms"
 }
