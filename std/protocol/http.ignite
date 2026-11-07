@@ -1784,3 +1784,15 @@ test "a Transfer-Encoding Http cannot frame is 400 and an unknown coding 501" ve
   assert served(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\n\r\n")? == bad_request
   assert served(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\n\r\n")? == render(status_response(501), false).to_text()
 }
+
+test "a chunk whose data ends in CR and another byte instead of CR LF is 400" {
+  assert next_of(chunked("5\r\nhello\rX0\r\n\r\n"))? == Reject(400)
+  assert next_of(chunked("2\r\nhi\r\r\n0\r\n\r\n"))? == Reject(400)
+}
+
+test "an unterminated chunk-size line or trailer over the head limit is 431, not read until the peer closes" {
+  let limits = HttpLimits { head = 64 bytes }
+  assert next_with(chunked("1;" + repeat("x", 80)), limits)? == Reject(431)
+  assert next_with(chunked("1\r\na\r\n1;" + repeat("x", 80)), limits)? == Reject(431)
+  assert next_with(chunked("0\r\nX: " + repeat("x", 80)), limits)? == Reject(431)
+}
