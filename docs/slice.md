@@ -475,7 +475,7 @@ Every generated file starts with
 | `Bool` | `bool` |
 | `Unit` (type) | `()` |
 | `List<T>` | `Vec<T>` |
-| `Option<T>`, `Result<T, E>` | same |
+| `Option<T>`, `Result<T, E>` | `::std::option::Option<T>`, `::std::result::Result<T, E>`; the variants `Some`, `None`, `Ok`, `Err` bare |
 | `fn(A, B) -> R` | `::std::sync::Arc<dyn Fn(A, B) -> R + Send + Sync>` (13.3) |
 | `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError` | `::ignite_io::` same name |
 | record `type R { a: T }` | `#[derive(Clone, Debug)] pub struct R { pub a: T }` |
@@ -504,11 +504,6 @@ Every generated file starts with
 | `spawn f(a, b)` | `{ let __spawn_0 = a; let __spawn_1 = b; ::ignite_io::spawn(move || { if let Err(error) = f(__spawn_0, __spawn_1) { ::ignite_io::log(&format!("task ended with error: {}", error)); } }); }` |
 | `match e { p => v }` | `match e { p => v, }` |
 | `if c { a } else { b }` | same |
-
-Every generated path into the standard library, the substrate and the `ignite-std` crate
-starts at the extern crate (`::std::`, `::ignite_io::`, `::ignite_std::`), so a program record or
-sibling module named `std`, `ignite_io` or `ignite_std` cannot shadow it. A program name that is
-a Rust primitive type (`i64`, `bool`, `u8`, `str`, …) gets a trailing `_`, as a prelude name does.
 | `while`, `loop`, `for x in e`, `break`, `continue`, `return` | same |
 | `a + b` etc. | same on numbers |
 | `a + b + c` on `Text` | `format!("{}{}{}", a, b, c)` (one call per left-folded chain); `format!` borrows each part, a literal part is inlined into the template with its braces doubled, and a part `x.to_text()` of Text, Int, Byte or Bool (each `{x}` of an interpolation) passes `x` |
@@ -524,6 +519,13 @@ a Rust primitive type (`i64`, `bool`, `u8`, `str`, …) gets a trailing `_`, as 
 | `x.respond(a)`, fn field (`Callee::FieldFn`) | `(x.respond)(a)` |
 | `V` resolved by expected type | `E::V` from the callee the typer records |
 | patterns `true`, `p \| q`, `(p, q)` | same |
+
+Every generated path into the standard library, the substrate and the `ignite-std` crate
+starts at the extern crate (`::std::`, `::ignite_io::`, `::ignite_std::`), and the builtin enums
+are written `::std::option::Option` and `::std::result::Result`, so no program record, type
+parameter or sibling module (`std`, `ignite_io`, `ignite_std`, `Option`, `Result`) can shadow them.
+A program name that is a Rust primitive type (`i64`, `bool`, `u8`, `str`, …) gets a trailing `_`,
+as a prelude name does.
 
 The `spawn` arguments are evaluated (and cloned, ownership rule) before the task starts, so
 the spawning function keeps its own copies; an argument the moves analysis marks (dead after the
@@ -726,11 +728,12 @@ and the line reports it); the `Endpoint` value of every `TcpListener` resource i
 where an `Endpoint` is expected (section 14.5; `--port` applies to it too); the embedded
 components' values in dependency order; the component's own value with the kind's defaults
 for omitted fields, `executable` defaulting to the component name and a `Signal` output
-set to its reference text; then `K.main(value)`. `main`'s own locals start with `__` and
-never end in `_` (`__port`, and `__endpoint_<name>` with every `_` of the resource name written
-`_0`), so no program name, associated fn symbol or other resource's endpoint is spelled the
-same. A resource whose name is `application`, `port`, `stream` or `error` or ends in `_endpoint`
-still gets a trailing `_` (one to one, as `ident` escapes `self`).
+set to its reference text; then `K.main(value)`. A resource or component is bound under its
+name as every program name is spelled in Rust (`ident`), so it is spelled like a program item
+only when both have one Ignite name. `main`'s own locals start with `__` and never end in `_`
+(`__port`, and `__endpoint_<name>` with every `_` of the resource name written `_0`); a program
+name with `__` in it ends in `_` in Rust and an associated fn symbol never starts with `__`, so
+neither is spelled like one of them, and no two resources share an endpoint variable.
 
 Exit statuses (design section 11.7):
 

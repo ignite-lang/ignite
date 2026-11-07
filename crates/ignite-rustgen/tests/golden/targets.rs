@@ -10,7 +10,7 @@ pub enum Color {
 #[derive(Clone)]
 pub struct Box_ {
     pub label: String,
-    pub inner: Box<Option<Box_>>,
+    pub inner: Box<::std::option::Option<Box_>>,
 }
 
 #[derive(Clone)]

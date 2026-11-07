@@ -1551,7 +1551,7 @@ pub fn rust_type(ty: &Type) -> String {
 /// [`rust_type`] of an annotation inside a declaration whose type
 /// parameters are `params`: a bare name among them is the parameter, even
 /// when a builtin type has the same name (`fn keep<Text>(value: Text)`), and
-/// a builtin enum they shadow is spelled by its path
+/// a builtin enum is always spelled by its path
 /// ([`builtin_enum_path`]).
 fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
     let recurse = |t: &Type| rust_type_in(t, params);
@@ -1590,20 +1590,17 @@ fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
         "Duration" | "ByteSize" | "Ratio" => "i64".to_string(),
         "Ref" | "Signal" | "SystemRef" | "Protocol" => "String".to_string(),
         "Module" if args.len() == 1 => args[0].clone(),
-        name @ ("Option" | "Result") => generic(&builtin_enum_path(name, params)),
+        name @ ("Option" | "Result") => generic(&builtin_enum_path(name)),
         other => generic(&ident(other)),
     }
 }
 
-/// The Rust name of the builtin enum `Option` or `Result`: the bare name,
-/// or its `std` path when a type parameter in `params` has the same name
-/// (Rust would read the bare name as the parameter, E0109). `ident` leaves
-/// both names as they are, so no other spelling of a parameter reaches
-/// them.
-fn builtin_enum_path(name: &str, params: &BTreeSet<String>) -> String {
-    if !params.contains(name) {
-        return name.to_string();
-    }
+/// The Rust name of the builtin enum `Option` or `Result`: always its path
+/// from the extern crate `std`. A bare name could be taken by a type
+/// parameter of the same name (E0109) or by a sibling module `Option` or
+/// `Result` (E004 refuses only types, enums and protocols of these names),
+/// the path by neither.
+fn builtin_enum_path(name: &str) -> String {
     match name {
         "Option" => "::std::option::Option".to_string(),
         "Result" => "::std::result::Result".to_string(),
@@ -2319,14 +2316,10 @@ impl<'a> Generator<'a> {
             Ty::Unit | Ty::Never => "()".to_string(),
             Ty::Text => "String".to_string(),
             Ty::List(item) => format!("Vec<{}>", self.rust_ty(item)),
-            Ty::Option(item) => format!(
-                "{}<{}>",
-                builtin_enum_path("Option", &self.type_params),
-                self.rust_ty(item)
-            ),
+            Ty::Option(item) => format!("{}<{}>", builtin_enum_path("Option"), self.rust_ty(item)),
             Ty::Result(ok, err) => format!(
                 "{}<{}, {}>",
-                builtin_enum_path("Result", &self.type_params),
+                builtin_enum_path("Result"),
                 self.rust_ty(ok),
                 self.rust_ty(err)
             ),
@@ -6390,19 +6383,13 @@ fn is_duplicate(properties: &[FieldInit], property: &FieldInit) -> bool {
         .is_some_and(|first| !std::ptr::eq(&properties[first], property))
 }
 
-/// A Rust variable for a resource, kept apart from the names `main` binds,
-/// escaped one to one as [`ident`] escapes `self`: `port` is `port_`,
-/// `port_` is `port__`. A name ending in `_endpoint` is escaped the same
-/// way (`x_endpoint` is `x_endpoint_`), so it is never the
-/// [`endpoint_variable`] of another resource.
+/// The Rust variable of a resource or component in `main`: its [`ident`],
+/// the scheme every program name goes through, so a resource is spelled
+/// like a program item only when the two have one Ignite name. `main`'s
+/// own locals (`__port`, [`endpoint_variable`]) start with `__` and never
+/// end in `_`, which no [`ident`] is.
 fn resource_variable(name: &str) -> String {
-    if escapes_to(name, |base| {
-        matches!(base, "application" | "port" | "stream" | "error") || base.ends_with("_endpoint")
-    }) {
-        format!("{name}_")
-    } else {
-        ident(name)
-    }
+    ident(name)
 }
 
 /// The Rust variable holding the `Endpoint` value of a `TcpListener`

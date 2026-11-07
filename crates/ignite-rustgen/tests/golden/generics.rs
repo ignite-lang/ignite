@@ -1,6 +1,6 @@
 #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 
-pub type IoResult<T> = Result<T, ::ignite_io::IoError>;
+pub type IoResult<T> = ::std::result::Result<T, ::ignite_io::IoError>;
 
 #[derive(Clone)]
 pub struct Pair<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static> {
@@ -38,7 +38,7 @@ pub fn swap<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static>(
     Pair { first: p.second, second: p.first }
 }
 
-pub fn or<T: Clone + Send + Sync + 'static>(value: &Option<T>, fallback: &T) -> T {
+pub fn or<T: Clone + Send + Sync + 'static>(value: &::std::option::Option<T>, fallback: &T) -> T {
     match value {
         Some(present) => present.clone(),
         None => fallback.clone(),
@@ -80,7 +80,7 @@ pub fn generic_line() -> String {
     format!("{} {} {} {} {}", pair.first, labelled.value, labelled.label, count(&choice), twice(&(::std::sync::Arc::new(|__a0: i64| bump(&__a0)) as ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>), id(5)))
 }
 
-pub fn number(line: &String, command: &String) -> Option<i64> {
+pub fn number(line: &String, command: &String) -> ::std::option::Option<i64> {
     match line.strip_prefix(&command.clone()).map(|s| s.to_string()) {
         Some(rest) => ::ignite_io::parse_int(&rest),
         None => None,

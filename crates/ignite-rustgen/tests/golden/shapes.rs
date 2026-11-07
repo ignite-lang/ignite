@@ -33,8 +33,8 @@ pub fn unit_square() -> Labelled {
     Labelled { label: String::from("unit"), shape: Shape::Rect(1, 1) }
 }
 
-pub fn largest(items: &Vec<Labelled>) -> Option<Labelled> {
-    let mut best: Option<Labelled> = None;
+pub fn largest(items: &Vec<Labelled>) -> ::std::option::Option<Labelled> {
+    let mut best: ::std::option::Option<Labelled> = None;
     let mut best_area = ::ignite_io::checked::sub(0, 1, "crates/ignite-rustgen/tests/golden/shapes.ignite", 36, 19);
     for item in (items).iter() {
         let a = area(&item.shape);

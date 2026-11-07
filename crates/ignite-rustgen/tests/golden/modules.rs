@@ -19,14 +19,14 @@ pub fn apply_twice(f: &::std::sync::Arc<dyn Fn(String) -> String + Send + Sync>,
     return f(f(line));
 }
 
-pub fn relay(stream: &::ignite_io::TcpStream, handler: &Handler) -> Result<(), ::ignite_io::IoError> {
+pub fn relay(stream: &::ignite_io::TcpStream, handler: &Handler) -> ::std::result::Result<(), ::ignite_io::IoError> {
     let copy = handler.clone();
     { let __spawn_0 = stream.clone(); let __spawn_1 = copy; ::ignite_io::spawn(move || { if let Err(error) = Line::serve(__spawn_0, __spawn_1) { ::ignite_io::log(&format!("task ended with error: {}", error)); } }); };
     { let __spawn_0 = stream.clone(); let __spawn_1 = handler.name.clone(); ::ignite_io::spawn(move || { if let Err(error) = relay_log(&__spawn_0, &__spawn_1) { ::ignite_io::log(&format!("task ended with error: {}", error)); } }); };
     return Line::serve(stream.clone(), handler.clone());
 }
 
-pub fn relay_log(stream: &::ignite_io::TcpStream, name: &String) -> Result<(), ::ignite_io::IoError> {
+pub fn relay_log(stream: &::ignite_io::TcpStream, name: &String) -> ::std::result::Result<(), ::ignite_io::IoError> {
     ::ignite_io::log(&(name.clone()));
     return Ok(());
 }
@@ -39,7 +39,7 @@ pub struct Echod {
 }
 
 #[allow(non_snake_case)]
-pub fn Echod__main(self_: &Echod) -> Result<(), ::ignite_io::IoError> {
+pub fn Echod__main(self_: &Echod) -> ::std::result::Result<(), ::ignite_io::IoError> {
     loop {
         let stream = (self_.listener.accept())?;
         { let __spawn_0 = stream; let __spawn_1 = self_.application.clone(); ::ignite_io::spawn(move || { if let Err(error) = Line::serve(__spawn_0, __spawn_1) { ::ignite_io::log(&format!("task ended with error: {}", error)); } }); };
@@ -53,7 +53,7 @@ pub struct Echo {
 }
 
 #[allow(non_snake_case)]
-pub fn Echo__main(self_: &Echo) -> Result<(), ::ignite_io::IoError> {
+pub fn Echo__main(self_: &Echo) -> ::std::result::Result<(), ::ignite_io::IoError> {
     let stream = match ::ignite_io::TcpStream::connect(self_.target.address.clone(), self_.target.port.clone()) {
         Ok(stream) => stream,
         Err(error) => return Err(error.clone().with_exit_code((3) as i32)),

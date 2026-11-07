@@ -17,7 +17,7 @@ pub mod protocol {
         pub struct Line {}
 
         impl Line {
-            pub fn serve(mut stream: ::ignite_io::TcpStream, mut handler: Handler) -> Result<(), ::ignite_io::IoError> {
+            pub fn serve(mut stream: ::ignite_io::TcpStream, mut handler: Handler) -> ::std::result::Result<(), ::ignite_io::IoError> {
                 let apply = handler.apply.clone();
                 loop {
                     let input = (stream.read(1024))?;
@@ -33,7 +33,7 @@ pub mod protocol {
                 }
             }
 
-            pub fn connect(mut stream: ::ignite_io::TcpStream) -> Result<(), ::ignite_io::IoError> {
+            pub fn connect(mut stream: ::ignite_io::TcpStream) -> ::std::result::Result<(), ::ignite_io::IoError> {
                 { let __spawn_0 = stream.clone(); ::ignite_io::spawn(move || { if let Err(error) = pump(&__spawn_0) { ::ignite_io::log(&format!("task ended with error: {}", error)); } }); };
                 loop {
                     let input = (stream.read(1024))?;
@@ -49,7 +49,7 @@ pub mod protocol {
             }
         }
 
-        pub fn pump(stream: &::ignite_io::TcpStream) -> Result<(), ::ignite_io::IoError> {
+        pub fn pump(stream: &::ignite_io::TcpStream) -> ::std::result::Result<(), ::ignite_io::IoError> {
             loop {
                 let input = (::ignite_io::Stdin::read(1024))?;
                 match input.clone() {

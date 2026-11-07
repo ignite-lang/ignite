@@ -47,13 +47,13 @@ pub fn ufcs() -> State {
 pub struct Counter {}
 
 impl Counter {
-    pub fn serve(mut stream: ::ignite_io::TcpStream, mut application: State) -> Result<(), ::ignite_io::IoError> {
+    pub fn serve(mut stream: ::ignite_io::TcpStream, mut application: State) -> ::std::result::Result<(), ::ignite_io::IoError> {
         application.items.push(1);
         stream.write_all((application.items.len() as i64).to_string().into_bytes())
     }
 }
 
-pub fn served(stream: &::ignite_io::TcpStream) -> Result<(), ::ignite_io::IoError> {
+pub fn served(stream: &::ignite_io::TcpStream) -> ::std::result::Result<(), ::ignite_io::IoError> {
     let s = fresh();
     Counter::serve(stream.clone(), s)
 }

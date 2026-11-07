@@ -494,7 +494,7 @@ fn type_table() {
     assert_has(
         &out,
         "pub fn g(a: &String, b: &Vec<u8>, c: &u8, d: &i64, e: &bool, f: &(), \
-         g: &Vec<i64>, h: &Option<String>, i: &Result<(), ::ignite_io::IoError>, \
+         g: &Vec<i64>, h: &::std::option::Option<String>, i: &::std::result::Result<(), ::ignite_io::IoError>, \
          j: &::ignite_io::TcpListener, k: &::ignite_io::TcpStream, m: &::ignite_io::Input, \
          o: &Reply, p: &Mystery<i64>) -> () { let mut c = c.clone(); let mut d = d.clone(); \
          let mut e = e.clone(); let mut f = f.clone(); }",
@@ -512,7 +512,7 @@ fn effectful_function_is_a_plain_fn() {
     )]);
     assert_has(
         &out,
-        "pub fn h(s: &::ignite_io::TcpStream) -> Result<(), ::ignite_io::IoError> { return Ok(()); }",
+        "pub fn h(s: &::ignite_io::TcpStream) -> ::std::result::Result<(), ::ignite_io::IoError> { return Ok(()); }",
     );
 }
 
@@ -1367,8 +1367,8 @@ fn protocol_lowering() {
     assert_has(
         &out,
         "pub struct Line {} impl Line { \
-         pub fn serve(mut stream: ::ignite_io::TcpStream, mut application: Reply) -> Result<(), ::ignite_io::IoError> { return Ok(()); } \
-         pub fn connect(mut stream: ::ignite_io::TcpStream) -> Result<(), ::ignite_io::IoError> { return Ok(()); } }",
+         pub fn serve(mut stream: ::ignite_io::TcpStream, mut application: Reply) -> ::std::result::Result<(), ::ignite_io::IoError> { return Ok(()); } \
+         pub fn connect(mut stream: ::ignite_io::TcpStream) -> ::std::result::Result<(), ::ignite_io::IoError> { return Ok(()); } }",
     );
     assert_has(&out, "{ Line::serve(s.clone(), r.clone());");
     assert_has(&out, "return Line::connect(s.clone());");

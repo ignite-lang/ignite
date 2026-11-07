@@ -421,12 +421,12 @@ fn store_results_read_in_place() {
     .unwrap();
     let lib = norm(&project.lib_rs);
     for expected in [
-        "let _ = s.upsert_read(1, |t: Option<T>| -> T { bump(&t) }, |_| ());",
+        "let _ = s.upsert_read(1, |t: ::std::option::Option<T>| -> T { bump(&t) }, |_| ());",
         "let _ = s.update_read(1, |t: T| -> T { t }, |_| ());",
-        "-> i64 { s.upsert_read(1, &*(::std::sync::Arc::new(|__a0: Option<T>| bump(&__a0))",
+        "-> i64 { s.upsert_read(1, &*(::std::sync::Arc::new(|__a0: ::std::option::Option<T>| bump(&__a0))",
         "Send + Sync>), |__v| __v.n.clone()) }",
         "-> T { s.upsert(1, &*(::std::sync::Arc::new(",
-        "-> Option<T> { s.update(1, |t: T| -> T { t }) }",
+        "-> ::std::option::Option<T> { s.update(1, |t: T| -> T { t }) }",
     ] {
         assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
     }
@@ -466,8 +466,8 @@ const ECHO: &str = "import std.net.TcpStream\nimport std.io.IoError\n\
 
 /// Every `TcpListener` the component uses is bound before its value is
 /// built (`docs/slice.md` section 14.5), also when the listener is named
-/// inside another property's expression. A resource named like one of
-/// `main`'s own bindings gets a trailing `_`.
+/// inside another property's expression. A resource named `port` keeps its
+/// name: `main`'s own binding is `__port`.
 #[test]
 fn listeners_are_bound_before_the_component_value() {
     let project = common::generate_source(
@@ -483,10 +483,10 @@ fn listeners_are_bound_before_the_component_value() {
     let project = project.unwrap_or_else(|d| panic!("{d:?}"));
     let main = norm(&project.executables[0].source);
     let bind = main
-        .find("let port_ = ::ignite_io::TcpListener::bind(")
+        .find("let port = ::ignite_io::TcpListener::bind(")
         .expect(&main);
     let value = main
-        .find("let c = Server { listener: port_.clone(), port: bound(&(Holder { listener: port_.clone() })) };")
+        .find("let c = Server { listener: port.clone(), port: bound(&(Holder { listener: port.clone() })) };")
         .expect(&main);
     assert!(bind < value, "{main}");
 }
@@ -495,7 +495,7 @@ fn listeners_are_bound_before_the_component_value() {
 /// indexed receiver writes through `ignite_io::checked::at_mut`; an enum
 /// without payloads derives the `BTreeMap` key traits; `Exposure` is
 /// `ignite_io::Exposure`; a record named `Box` is `Box_`, so the boxed
-/// field stays `Box<Option<Box_>>`.
+/// field stays `Box<::std::option::Option<Box_>>`.
 #[test]
 fn target_bugs_of_slice_11b() {
     let project = check_program("targets", &common::golden_std(), false);
@@ -510,7 +510,7 @@ fn target_bugs_of_slice_11b() {
         "::ignite_io::Exposure::Loopback =>",
         "pub fn pick(open: &bool) -> ::ignite_io::Exposure {",
         "pub struct Box_ {",
-        "pub inner: Box<Option<Box_>>,",
+        "pub inner: Box<::std::option::Option<Box_>>,",
         "pub fn boxed() -> Box_ {",
         "Box_ { label: String::from(\"outer\"), inner: Box::new(Some(Box_ {",
     ] {
@@ -534,7 +534,7 @@ fn last_use_moves_and_expression_calls() {
         "pub fn total(state: &State) -> i64",
         "let t = step(s.clone(), &1);",
         "pub fn ufcs() -> State { let s = fresh(); step(s, &2) }",
-        "pub fn serve(mut stream: ::ignite_io::TcpStream, mut application: State) -> Result<(), ::ignite_io::IoError> { application.items.push(1);",
+        "pub fn serve(mut stream: ::ignite_io::TcpStream, mut application: State) -> ::std::result::Result<(), ::ignite_io::IoError> { application.items.push(1);",
         "let s = fresh(); Counter::serve(stream.clone(), s) }",
         "pub fn publish(o: Out) -> Out { let mut p = o;",
         "pub fn advance(st: Pair) -> Pair { Pair { state: st.state, out: publish(st.out) } }",

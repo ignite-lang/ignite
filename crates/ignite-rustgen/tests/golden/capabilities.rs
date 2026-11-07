@@ -18,7 +18,7 @@ impl Bench {
 }
 
 #[allow(non_snake_case)]
-pub fn Bench__main(self_: &Bench) -> Result<(), ::ignite_io::IoError> {
+pub fn Bench__main(self_: &Bench) -> ::std::result::Result<(), ::ignite_io::IoError> {
     let data = (self_.files.read_file(String::from("in.txt")))?;
     (self_.files.write_file(String::from("out.txt"), data.clone()))?;
     let names = (self_.files.read_directory(String::from("")))?;

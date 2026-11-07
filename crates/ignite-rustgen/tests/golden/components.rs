@@ -35,7 +35,7 @@ impl Greeter {
 }
 
 #[allow(non_snake_case)]
-pub fn Greeter__main(self_: Greeter) -> Result<(), ::ignite_io::IoError> {
+pub fn Greeter__main(self_: Greeter) -> ::std::result::Result<(), ::ignite_io::IoError> {
     let stream = (self_.listener.accept())?;
     let id = self_.seen.next_id();
     self_.seen.put(id.clone(), self_.banner.text.clone());
@@ -64,7 +64,7 @@ impl Pinger {
 }
 
 #[allow(non_snake_case)]
-pub fn Pinger__main(self_: &Pinger) -> Result<(), ::ignite_io::IoError> {
+pub fn Pinger__main(self_: &Pinger) -> ::std::result::Result<(), ::ignite_io::IoError> {
     let stream = (::ignite_io::TcpStream::connect(self_.target.address.clone(), self_.target.port.clone()))?;
     match (stream.read(4096))? {
         ::ignite_io::Input::Eof => Err(::ignite_io::IoError::new(String::from("no banner"))),

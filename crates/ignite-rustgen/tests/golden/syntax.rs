@@ -1,6 +1,6 @@
 #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 
-pub type IoResult<T> = Result<T, ::ignite_io::IoError>;
+pub type IoResult<T> = ::std::result::Result<T, ::ignite_io::IoError>;
 
 #[derive(Clone)]
 pub struct Reply {
@@ -105,7 +105,7 @@ pub fn classify(words: &Vec<String>) -> String {
     }
 }
 
-pub fn nested(v: &Option<(bool, Vec<i64>)>) -> String {
+pub fn nested(v: &::std::option::Option<(bool, Vec<i64>)>) -> String {
     match v {
         __m if (match __m { Some(__p6) => { let (__p7, __p8) = __p6; (*__p7 == true) && (__p8.len() == 2) }, _ => false }) => { let x = ((&(&(match __m { Some(__x) => __x, _ => unreachable!() }).1)[0])).clone(); let y = ((&(&(match __m { Some(__x) => __x, _ => unreachable!() }).1)[1])).clone(); format!("pair {} {}", x, y) },
         Some((false, _)) | None => String::from("off or none"),
@@ -167,7 +167,7 @@ pub fn show(text: &String) -> IoResult<()> {
 pub struct Syntax {}
 
 impl Syntax {
-    pub fn connect(mut stream: ::ignite_io::TcpStream) -> Result<(), ::ignite_io::IoError> {
+    pub fn connect(mut stream: ::ignite_io::TcpStream) -> ::std::result::Result<(), ::ignite_io::IoError> {
         let (word, number) = swap(&(7, String::from("seven")));
         (show(&(format!("{} {}", word, number))))?;
         (show(&(format!("{} {} {}", describe(&0), describe(&41), describe(&9)))))?;
@@ -234,7 +234,7 @@ pub struct Runner {
 }
 
 #[allow(non_snake_case)]
-pub fn Runner__main(self_: &Runner) -> Result<(), ::ignite_io::IoError> {
+pub fn Runner__main(self_: &Runner) -> ::std::result::Result<(), ::ignite_io::IoError> {
     let stream = match ::ignite_io::TcpStream::connect(self_.address.clone(), self_.port.clone()) {
         Ok(stream) => stream,
         Err(error) => return Err(error.clone().with_exit_code((3) as i32)),

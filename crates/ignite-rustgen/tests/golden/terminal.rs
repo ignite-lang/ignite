@@ -29,7 +29,7 @@ pub mod commands {
         }
     }
 
-    pub fn parse(line: &String) -> Option<Command> {
+    pub fn parse(line: &String) -> ::std::option::Option<Command> {
         match first_word(line) {
             __m if (*(&__m) == "help") => Some(Command::Help),
             __m if (*(&__m) == "status") => Some(Command::Status),

@@ -47,7 +47,7 @@ pub fn describe(verdict: &Verdict, mode: &Mode) -> String {
     }
 }
 
-pub fn admit(size: &i64) -> Result<i64, ::ignite_io::IoError> {
+pub fn admit(size: &i64) -> ::std::result::Result<i64, ::ignite_io::IoError> {
     let mut size = size.clone();
     match judge(&size) {
         Verdict::Accept(room) => Ok(room.clone()),
@@ -55,7 +55,7 @@ pub fn admit(size: &i64) -> Result<i64, ::ignite_io::IoError> {
     }
 }
 
-pub fn or_limit(value: &Option<i64>) -> i64 {
+pub fn or_limit(value: &::std::option::Option<i64>) -> i64 {
     match value.clone() {
         Some(v) => v,
         None => LIMIT(),
