@@ -13,14 +13,18 @@ const MAX_LOOKS = 40;
 const MAX_TABS = 400;
 
 // One step of a route as the user took it: the moment (frame) at which it
-// began to look, how many looks (pointer) or Tab presses (keyboard) it
-// took, its glance cost (pointer only, 0 for the keyboard) and its actions.
+// began to look, the frame on which it found the control (the last screen
+// before the click; for the keyboard the screen with the focus on it,
+// before Enter), how many looks (pointer) or Tab presses (keyboard) it
+// took, its glance cost (pointer only, null for the keyboard) and its
+// actions.
 export type StepRecord = {
   label: string;
   page: string;
   frame: number;
+  found: number;
   looks: number;
-  glance: number;
+  glance: number | null;
   actions: number;
 };
 
@@ -234,13 +238,14 @@ async function pointerClick(page: Page, step: { role: "link" | "button"; name: s
     const seen = await usable(page, all, primaryRegions[kind]);
     if (seen) {
       const page0 = currentPath(page);
+      const found = run.moments;
       run.glances.push(revealed ? 3 : seen.primary ? 1 : 2);
       run.timeToAct.push(looks);
       run.actions++;
       run.log.push(`click ${step.role} /${step.name}/`);
       await act(page, seen.href, () => page.mouse.click(seen.x, seen.y));
       await moment(run, run.log[run.log.length - 1]);
-      run.steps.push({ label: run.log[run.log.length - 1], page: page0, frame, looks, glance: revealed ? 3 : seen.primary ? 1 : 2, actions: run.actions - before });
+      run.steps.push({ label: run.log[run.log.length - 1], page: page0, frame, found, looks, glance: revealed ? 3 : seen.primary ? 1 : 2, actions: run.actions - before });
       return;
     }
     revealed = true;
@@ -305,11 +310,15 @@ async function keyboardClick(page: Page, step: { role: "link" | "button"; name: 
       // where the focus went.
       run.looks += tabs;
       run.timeToAct.push(tabs);
+      // The screen with the focus on the control, before Enter: a moment
+      // of its own, since a Tab press is none.
+      await moment(run, `focus on ${step.role} /${step.name}/ after ${tabs} tabs`);
+      const found = run.moments;
       run.actions++;
       run.log.push(`enter on ${step.role} /${step.name}/ after ${tabs} tabs`);
       await act(page, href, () => page.keyboard.press("Enter"));
       await moment(run, run.log[run.log.length - 1]);
-      run.steps.push({ label: run.log[run.log.length - 1], page: page0, frame, looks: tabs, glance: 0, actions: run.actions - before });
+      run.steps.push({ label: run.log[run.log.length - 1], page: page0, frame, found, looks: tabs, glance: null, actions: run.actions - before });
       return;
     }
     if (!(await rendered(all))) {

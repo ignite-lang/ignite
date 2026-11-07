@@ -174,6 +174,7 @@ tasks:
     cmds:
       - task: site
       - task: ux-deps
+      - rm -rf target/ux/metrics.json target/ux/gating.json target/ux/missed
       - cmd: cd ux && npx --no-install playwright test
         ignore_error: true
       - cd ux && UX_ROUND={{.ROUND}} npx --no-install playwright test --config round.config.ts

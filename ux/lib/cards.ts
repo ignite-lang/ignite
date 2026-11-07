@@ -14,6 +14,7 @@ export type Twist = { id: string; before: string; why: string; route: Step[] };
 export type Card = {
   id: string;
   kind: "anchor" | "rotating";
+  theme: "light" | "dark";
   round?: string;
   persona: string;
   facts: string;

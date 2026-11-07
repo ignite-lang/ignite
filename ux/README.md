@@ -75,19 +75,25 @@ A round (SKILL.md section 3) starts with
 task ux-round ROUND=R-01
 ```
 
-It is not part of `task gate`, and it needs no network and no keys. It runs the gating suite
-(for `target/ux/metrics.json`; a failure there is reported, not fatal), then the trial
-`round/sessions.spec.ts` with `round.config.ts`, then `site::round::write`, and writes
-`rounds/R-nn/`:
+It is not part of `task gate`, and it needs no network and no keys. It runs the gating suite,
+then the trial `round/sessions.spec.ts` with `round.config.ts`, then `site::round::write`, and
+writes `rounds/R-nn/`:
 
-- `report.md`: the bars, the ratchet against `baseline.json` and the last round, the sessions,
-  the worst moments, the contact sheets and the missing inputs;
+- `report.md`: the gating suite's result, the bars (each missed gating bar with its
+  screenshot), the ratchet against `baseline.json` and the last round, the sessions, the worst
+  moments per viewport, the contact sheets and the missing inputs;
 - `round.json`: the same numbers;
-- `shots/`: the worst moments and one contact sheet per viewport;
+- `shots/`: the worst moments, the missed bars and one contact sheet per viewport;
 - `rounds/trend.md`: one row per round.
 
-The command replaces only `report.md`, `round.json` and `shots/`. Triage and the review
-agents' reports in the round directory stay.
+A failed gating suite is reported, not fatal. Its result is `target/ux/gating.json`, written
+by `lib/summary-reporter.ts`. The round uses `target/ux/metrics.json` only next to that file,
+and both are deleted before the suite runs, so an earlier run's metrics are never reported.
+A page that misses an L2 bar, and a task the L3 suite does not finish, leave a screenshot in
+`target/ux/missed/<viewport>/<bar>/`.
+
+The command replaces only `report.md`, `round.json` and the shots its last `round.json`
+names. The triage, the review agents' reports and their shots stay.
 
 The trial has no person. The screen-only user of `lib/bot.ts` drives one session per
 scenario card and viewport. That covers every gating viewport and every measured-only one
@@ -96,15 +102,19 @@ scenario card and viewport. That covers every gating viewport and every measured
 - two anchors (`"kind": "anchor"`), kept fixed from round to round;
 - one rotating card (`"kind": "rotating"`, `"round": "R-nn"`) per round.
 
-A card names a persona, a mode (`pointer` or `keyboard`) and its tasks in order. It also
+A card names a persona, a mode (`pointer` or `keyboard`), the theme it starts in (`light` or
+`dark`, set once per session, so a switch stays on later pages) and its tasks in order. It also
 names the route home between tasks and its twists, each a route that runs before a named
 task (a wrong turn, a theme switch).
 
-Each moment is a frame taken 0.75 s after it. A moment is the start, or a click, wheel turn,
-opened menu, typed text or Enter. Each session is recorded as a Playwright trace in
-`target/ux/round/traces/`, because rrweb is not in the lockfile. Traces are not committed.
-`site::round::round_dirs_hold_what_they_name` checks that every committed round holds the
-files its `report.md` and `round.json` name.
+Each moment is a frame taken 0.75 s after it. A moment is the start, a click, a wheel turn,
+an opened menu, typed text, an Enter, or the focus reaching a control before Enter. Each
+session is recorded as a Playwright trace in `target/ux/round/traces/`, because rrweb is not
+in the lockfile. Traces are not committed. Contact-sheet tiles are half the viewport wide, so
+body text stays readable. `site::round::round_dirs_hold_what_they_name` checks that every
+committed round holds the files its `report.md` and `round.json` name, and that every shot is
+named by one of the round's notes. `tests/round-tools.spec.ts` and `site::round::rules::`
+cover the round's tools.
 
 ## Findings
 

@@ -1,6 +1,7 @@
 {
   "id": "anchor-newcomer",
   "kind": "anchor",
+  "theme": "light",
   "persona": "A developer who heard of Ignite, uses a mouse, reads on whatever screen is at hand.",
   "facts": "Wants to install it, understand the idea, and see what comes next.",
   "mode": "pointer",

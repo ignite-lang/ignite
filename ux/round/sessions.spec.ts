@@ -4,6 +4,8 @@ import { type Page, test } from "@playwright/test";
 import { gatingViewports, measuredViewports, themes, type Viewport } from "../adapter";
 import { follow, type Mode, nearestRank, newRun, play, type Run, start } from "../lib/bot";
 import { chooseTheme, hermetic } from "../lib/browse";
+import { thumbWidth, tilesPerRow } from "../lib/contact";
+import { sessionContext } from "../lib/session";
 import { ROUND_OUT, roundCards, roundId } from "../lib/cards";
 import { REPO, type Step, type Task, tasks } from "../lib/pages";
 
@@ -20,7 +22,6 @@ import { REPO, type Step, type Task, tasks } from "../lib/pages";
 // contact/<viewport>.json and sheets/contact-<viewport>.jpg.
 
 const MOMENT_DELAY_MS = 750;
-const THUMB_WIDTH = 320;
 
 const round = roundId();
 const cards = roundCards(round);
@@ -99,12 +100,7 @@ for (const card of cards) {
     test(`session ${card.id} ${viewport.name}`, async ({ browser }) => {
       const session = `${card.id}-${viewport.name}`;
       const refused: string[] = [];
-      const context = await browser.newContext({
-        viewport: { width: viewport.width, height: viewport.height },
-        reducedMotion: "reduce",
-      });
-      await hermetic(context, refused);
-      await chooseTheme(context, themes[0]);
+      const context = await sessionContext(browser, card, viewport, refused);
       await context.tracing.start({ screenshots: true, snapshots: true, title: `${round} ${session}` });
       const page = await context.newPage();
       const frameDir = out("frames", session);
@@ -143,6 +139,7 @@ for (const card of cards) {
         card: card.id,
         kind: card.kind,
         mode: card.mode,
+        theme: card.theme,
         viewport: viewport.name,
         group,
         completed,
@@ -152,8 +149,8 @@ for (const card of cards) {
         looks: run.looks,
         steers: run.steers,
         time_to_act_max: Math.max(0, ...run.timeToAct),
-        glance_median: nearestRank(run.glances, 0.5),
-        glance_p95: nearestRank(run.glances, 0.95),
+        glance_median: card.mode === "pointer" ? nearestRank(run.glances, 0.5) : null,
+        glance_p95: card.mode === "pointer" ? nearestRank(run.glances, 0.95) : null,
         step_actions_max: Math.max(0, ...run.steps.map((step) => step.actions)),
         external_requests: refused.length,
         trace: rel(trace),
@@ -219,20 +216,22 @@ for (const { viewport } of viewports) {
         : `<div class="missing">not reached: ${escapeHtml(tile.error ?? "")}</div>`;
       return `<figure>${image}<figcaption>${escapeHtml(tile.task)}<br>${escapeHtml(tile.page)}</figcaption></figure>`;
     };
+    const width = thumbWidth(viewport);
+    const sheetWidth = tilesPerRow(viewport) * (width + 12) + 24;
     const rows = themes
-      .map((theme) => `<div class="row"><h2>${theme.name}</h2>${tiles.filter((t) => t.theme === theme.name).map(cell).join("")}</div>`)
+      .map((theme) => `<h2>${theme.name}</h2><div class="row">${tiles.filter((t) => t.theme === theme.name).map(cell).join("")}</div>`)
       .join("");
     const html = `<!doctype html><html><head><style>
-      body { margin: 0; padding: 12px; background: #fff; font: 13px/1.3 sans-serif; color: #111; }
-      h1 { font-size: 16px; margin: 0 0 8px; }
-      .row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
-      h2 { writing-mode: vertical-rl; font-size: 14px; margin: 0; }
-      figure { margin: 0; width: ${THUMB_WIDTH}px; }
-      img { width: ${THUMB_WIDTH}px; border: 1px solid #888; display: block; }
-      .missing { width: ${THUMB_WIDTH}px; height: 120px; border: 2px dashed #c00; color: #c00; padding: 4px; box-sizing: border-box; }
+      body { margin: 0; padding: 12px; background: #fff; font: 15px/1.3 sans-serif; color: #111; width: ${sheetWidth - 24}px; }
+      h1 { font-size: 18px; margin: 0 0 8px; }
+      h2 { font-size: 16px; margin: 8px 0; }
+      .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+      figure { margin: 0; width: ${width}px; }
+      img { width: ${width}px; border: 1px solid #888; display: block; }
+      .missing { width: ${width}px; height: 120px; border: 2px dashed #c00; color: #c00; padding: 4px; box-sizing: border-box; }
       figcaption { margin-top: 4px; word-break: break-all; }
-    </style></head><body><h1>${round} key pages at ${viewport.name}, each 0.75 s after it was reached</h1>${rows}</body></html>`;
-    const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+    </style></head><body><h1>${round} key pages at ${viewport.name}, each 0.75 s after it was reached, at half size</h1>${rows}</body></html>`;
+    const context = await browser.newContext({ viewport: { width: sheetWidth, height: 800 } });
     const page = await context.newPage();
     await page.setContent(html, { waitUntil: "load" });
     await page.screenshot({ path: sheet, fullPage: true, type: "jpeg", quality: 80 });

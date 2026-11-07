@@ -1,6 +1,7 @@
 {
   "id": "anchor-keyboard-reference",
   "kind": "anchor",
+  "theme": "light",
   "persona": "A developer writing an Ignite program who works by keyboard alone.",
   "facts": "Needs the files API, an HTTP server example and the meaning of a diagnostic.",
   "mode": "keyboard",

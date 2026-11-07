@@ -2,18 +2,13 @@
   "id": "r01-faq-reader",
   "kind": "rotating",
   "round": "R-01",
-  "persona": "An evaluator deciding whether Ignite fits, in a dark room, starting from the questions.",
+  "theme": "dark",
+  "persona": "An evaluator deciding whether Ignite fits, in a dark room, starting from the questions; the site is dark from the first page.",
   "facts": "Wants the platforms first, then the install command, then the files API.",
   "mode": "pointer",
   "tasks": ["faq-platforms", "install", "std-fs"],
   "between": [{ "click": { "role": "link", "name": "^Ignite home$" } }],
   "twists": [
-    {
-      "id": "dark-from-the-start",
-      "before": "faq-platforms",
-      "why": "Switches to the dark theme before reading anything.",
-      "route": [{ "click": { "role": "button", "name": "^Switch between dark and light theme$" } }]
-    },
     {
       "id": "wrong-turn-roadmap",
       "before": "std-fs",
