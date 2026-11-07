@@ -145,6 +145,9 @@ pub struct Metric {
     /// metric without a number.
     pub source: Option<String>,
     pub tolerance: Tolerance,
+    /// The decision that loosened `tolerance` against `main`'s; a later
+    /// loosening needs a decision of its own.
+    pub tolerance_decision: Option<String>,
     /// The hill-climbing target, where one is set.
     pub goal: Option<String>,
     /// Why the metric has no number, when it has none.
@@ -172,6 +175,10 @@ pub struct Baseline {
     pub metrics: BTreeMap<String, Metric>,
     pub known_differences: BTreeMap<String, Known>,
     pub eval_cannot_run: BTreeMap<String, String>,
+    /// The units of `eval_cannot_run` listed as over the evaluator's time
+    /// limit, which a merge run does not evaluate, each with the decision
+    /// that listed it.
+    pub eval_slow: BTreeMap<String, String>,
 }
 
 fn object<'a>(value: &'a Json, what: &str) -> Result<&'a BTreeMap<String, Json>, String> {
@@ -283,6 +290,7 @@ pub fn read_baseline(json: &Json) -> Result<Baseline, String> {
                         .ok_or_else(|| format!("{id}: no `tolerance`"))?,
                 )
                 .map_err(|e| format!("{id}: {e}"))?,
+                tolerance_decision: optional(fields, "tolerance_decision"),
                 goal: optional(fields, "goal"),
                 unmeasured,
                 bars,
@@ -318,12 +326,25 @@ pub fn read_baseline(json: &Json) -> Result<Baseline, String> {
                 .ok_or_else(|| format!("{unit}: the reason is no text"))
         })
         .collect::<Result<_, _>>()?;
+    let eval_slow = match root.get("eval_slow") {
+        None => BTreeMap::new(),
+        Some(slow) => object(slow, "`eval_slow`")?
+            .iter()
+            .map(|(unit, decision)| {
+                decision
+                    .as_str()
+                    .map(|d| (unit.clone(), d.to_string()))
+                    .ok_or_else(|| format!("{unit}: the decision is no text"))
+            })
+            .collect::<Result<_, _>>()?,
+    };
     Ok(Baseline {
         about: text(root, "about", "the baseline")?,
         areas,
         metrics,
         known_differences,
         eval_cannot_run,
+        eval_slow,
     })
 }
 
@@ -341,6 +362,9 @@ pub fn write_baseline(baseline: &Baseline) -> String {
             fields.insert("unit".to_string(), s(&m.unit));
             fields.insert("instrument".to_string(), s(&m.instrument));
             fields.insert("tolerance".to_string(), m.tolerance.json());
+            if let Some(decision) = &m.tolerance_decision {
+                fields.insert("tolerance_decision".to_string(), s(decision));
+            }
             if let Some(source) = &m.source {
                 fields.insert("source".to_string(), s(source));
             }
@@ -397,6 +421,16 @@ pub fn write_baseline(baseline: &Baseline) -> String {
         ("metrics".to_string(), Json::Object(metrics)),
         ("known_differences".to_string(), Json::Object(known)),
         ("eval_cannot_run".to_string(), Json::Object(cannot)),
+        (
+            "eval_slow".to_string(),
+            Json::Object(
+                baseline
+                    .eval_slow
+                    .iter()
+                    .map(|(unit, decision)| (unit.clone(), s(decision)))
+                    .collect(),
+            ),
+        ),
     ]);
     let mut out = String::new();
     Json::Object(root).write(&mut out, 0);
@@ -453,7 +487,7 @@ pub fn check(
         .map(|(id, target, value)| ((id.as_str(), target.as_str()), *value))
         .collect();
     for (id, metric) in &baseline.metrics {
-        if metric.source.as_deref() != Some(source) || is_timing(metric) {
+        if metric.source.as_deref() != Some(source) || is_timing(id) {
             continue;
         }
         let climbing = metric.kind == "hill-climb";
@@ -482,7 +516,7 @@ pub fn check(
     for ((id, target), value) in &values {
         match baseline.metrics.get(*id) {
             None => errors.push(format!("{id}: measured but not in quality/baseline.json")),
-            Some(metric) if is_timing(metric) => {}
+            Some(_) if is_timing(id) => {}
             Some(metric) if metric.source.as_deref() != Some(source) => errors.push(format!(
                 "{id}: measured by `{source}`, the baseline names {:?}",
                 metric.source
@@ -494,38 +528,74 @@ pub fn check(
         }
     }
     if let Some(main) = main {
-        for (id, metric) in &baseline.metrics {
-            if metric.source.as_deref() != Some(source) || is_timing(metric) {
-                continue;
-            }
-            let Some(old) = main.metrics.get(id) else {
+        errors.extend(against_main(baseline, source, main));
+    }
+    errors
+}
+
+/// Whether `decision` is a decision taken in this change: present, not
+/// blank, and not the one `main` already holds in its place.
+fn new_decision(decision: Option<&str>, on_main: Option<&str>) -> bool {
+    decision.is_some_and(|d| !d.trim().is_empty() && Some(d) != on_main)
+}
+
+/// The refusals of `baseline` against `main`'s for the metrics `source`
+/// measures (on either side): a bar made worse or a tolerance loosened
+/// without a decision of its own, and a metric whose source, unit or
+/// direction changed (a different measure is a new metric id).
+fn against_main(baseline: &Baseline, source: &str, main: &Baseline) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (id, old) in &main.metrics {
+        let Some(metric) = baseline.metrics.get(id) else {
+            continue;
+        };
+        let measured_here = metric.source.as_deref() == Some(source);
+        if !measured_here && old.source.as_deref() != Some(source) {
+            continue;
+        }
+        if metric.source != old.source
+            || metric.unit != old.unit
+            || metric.direction != old.direction
+        {
+            errors.push(format!(
+                "{id}: source, unit or direction changed against main ({:?} {} {} to {:?} {} {}); a different measure is a new metric id",
+                old.source,
+                old.unit,
+                old.direction.word(),
+                metric.source,
+                metric.unit,
+                metric.direction.word()
+            ));
+            continue;
+        }
+        if is_timing(id) {
+            continue;
+        }
+        for (target, bar) in &metric.bars {
+            let Some(old_bar) = old.bars.get(target) else {
                 continue;
             };
-            for (target, bar) in &metric.bars {
-                let decided = bar
-                    .decision
-                    .as_deref()
-                    .is_some_and(|d| !d.trim().is_empty());
-                if let Some(old_bar) = old.bars.get(target)
-                    && old
-                        .direction
-                        .worse(old_bar.value, bar.value, Tolerance::Count(0))
-                    && !decided
-                {
-                    errors.push(format!(
-                        "{id} {target}: the bar moved from {} on main to {} without a `decision`",
-                        old_bar.value, bar.value
-                    ));
-                }
-            }
-            if metric.tolerance.looser_than(old.tolerance)
-                && !metric.bars.values().any(|b| b.decision.is_some())
+            if old
+                .direction
+                .worse(old_bar.value, bar.value, Tolerance::Count(0))
+                && !new_decision(bar.decision.as_deref(), old_bar.decision.as_deref())
             {
                 errors.push(format!(
-                    "{id}: the tolerance loosened from {:?} on main to {:?} without a `decision`",
-                    old.tolerance, metric.tolerance
+                    "{id} {target}: the bar moved from {} on main to {} without a `decision` of its own",
+                    old_bar.value, bar.value
                 ));
             }
+        }
+        if metric.tolerance.looser_than(old.tolerance)
+            && !new_decision(
+                metric.tolerance_decision.as_deref(),
+                old.tolerance_decision.as_deref(),
+            )
+        {
+            errors.push(format!(
+                "{id}: the tolerance loosened from {:?} on main to {:?} without a `tolerance_decision` of its own",
+                old.tolerance, metric.tolerance
+            ));
         }
     }
     errors
@@ -539,7 +609,7 @@ pub fn bless(baseline: &Baseline, source: &str, measured: &Measured) -> Baseline
         let Some(metric) = out.metrics.get_mut(id) else {
             continue;
         };
-        if metric.source.as_deref() != Some(source) || is_timing(metric) {
+        if metric.source.as_deref() != Some(source) || is_timing(id) {
             continue;
         }
         let direction = metric.direction;
@@ -652,20 +722,59 @@ pub fn check_differential(outcome: &differential::Outcome) -> Vec<String> {
         baseline = bless(&baseline, "differential", &metrics);
         save_baseline(&baseline);
     }
+    let main = main_baseline();
     let mut errors = differential_lists(&baseline, outcome);
-    errors.extend(check(
-        &baseline,
-        "differential",
-        &metrics,
-        main_baseline().as_ref(),
-    ));
+    if let Some(main) = &main {
+        errors.extend(slow_against_main(&baseline, main));
+    }
+    errors.extend(check(&baseline, "differential", &metrics, main.as_ref()));
     errors
+}
+
+/// A unit listed as over the evaluator's time limit is not evaluated in a
+/// merge run, so listing it is a decision: a unit slow here that `main` does
+/// not list as slow needs an `eval_slow` decision that is not `main`'s.
+fn slow_against_main(baseline: &Baseline, main: &Baseline) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (unit, reason) in &baseline.eval_cannot_run {
+        if !is_slow(reason) {
+            continue;
+        }
+        let was_slow = main.eval_cannot_run.get(unit).is_some_and(|r| r == reason);
+        if was_slow {
+            continue;
+        }
+        if !new_decision(
+            baseline.eval_slow.get(unit).map(String::as_str),
+            main.eval_slow.get(unit).map(String::as_str),
+        ) {
+            errors.push(format!(
+                "{unit}: listed as {reason:?}, which a merge run does not evaluate, without an `eval_slow` decision of its own"
+            ));
+        }
+    }
+    errors
+}
+
+/// A reason of `eval_cannot_run` that keeps the unit out of a merge run.
+pub fn is_slow(reason: &str) -> bool {
+    reason.starts_with("over the time limit")
+}
+
+/// Whether the planning store holds `story` (`story:<id>`).
+fn story_exists(story: &str) -> bool {
+    story.strip_prefix("story:").is_some_and(|id| {
+        workspace()
+            .join(".engineering/planning/story")
+            .join(format!("{id}.md"))
+            .is_file()
+    })
 }
 
 /// The runner's metrics with 1.1 counting only the steady differences: a
 /// known difference marked `intermittent` (a timing assertion under the
 /// machine's load) is left out whether or not it showed in this run.
-fn steady(baseline: &Baseline, outcome: &differential::Outcome) -> Measured {
+pub fn steady(baseline: &Baseline, outcome: &differential::Outcome) -> Measured {
     let count = |consumer: &str, differs: &BTreeMap<String, String>| {
         differs
             .keys()
@@ -677,7 +786,7 @@ fn steady(baseline: &Baseline, outcome: &differential::Outcome) -> Measured {
             })
             .count() as i64
     };
-    outcome
+    let mut metrics: Measured = outcome
         .metrics
         .iter()
         .map(|(id, target, value)| {
@@ -688,7 +797,19 @@ fn steady(baseline: &Baseline, outcome: &differential::Outcome) -> Measured {
             };
             (id.clone(), target.clone(), value)
         })
-        .collect()
+        .collect();
+    // 1.7: the intermittent entries themselves, a gate that may only go down,
+    // so no regression hides under the mark for good.
+    metrics.push((
+        "1.7".to_string(),
+        "all".to_string(),
+        baseline
+            .known_differences
+            .values()
+            .filter(|k| k.intermittent)
+            .count() as i64,
+    ));
+    metrics
 }
 
 fn differential_lists(baseline: &Baseline, outcome: &differential::Outcome) -> Vec<String> {
@@ -719,11 +840,38 @@ fn differential_lists(baseline: &Baseline, outcome: &differential::Outcome) -> V
             ));
         }
     }
-    for (unit, reason) in &outcome.eval_cannot {
-        if !baseline.eval_cannot_run.contains_key(unit) {
+    for (unit, known) in &baseline.known_differences {
+        if known.intermittent && !story_exists(&known.story) {
             errors.push(format!(
-                "{unit}: the evaluator cannot run it ({reason}); not in `eval_cannot_run` (IGNITE_BLESS=1 after a decision)"
+                "{unit}: an intermittent difference names {}, which is no story of .engineering/planning/story/",
+                known.story
             ));
+        }
+    }
+    for (unit, what) in &outcome.no_run {
+        errors.push(format!("{unit}: {what}, and no `not run:` reason lists it"));
+    }
+    for (unit, reason) in &outcome.eval_cannot {
+        match baseline.eval_cannot_run.get(unit) {
+            None => errors.push(format!(
+                "{unit}: the evaluator cannot run it ({reason}); not in `eval_cannot_run` (IGNITE_BLESS=1 after a decision)"
+            )),
+            Some(listed) if listed != reason => errors.push(format!(
+                "{unit}: the evaluator cannot run it for another reason than listed: {reason:?}, listed {listed:?} (IGNITE_BLESS=1 after a decision)"
+            )),
+            Some(_) => {}
+        }
+    }
+    for (unit, reason) in &baseline.eval_cannot_run {
+        if is_slow(reason) != baseline.eval_slow.contains_key(unit) {
+            errors.push(format!(
+                "{unit}: `eval_slow` lists exactly the units of `eval_cannot_run` over the time limit"
+            ));
+        }
+    }
+    for unit in baseline.eval_slow.keys() {
+        if !baseline.eval_cannot_run.contains_key(unit) {
+            errors.push(format!("{unit}: in `eval_slow`, not in `eval_cannot_run`"));
         }
     }
     for unit in baseline.eval_cannot_run.keys() {
@@ -1044,7 +1192,20 @@ fn conformance_metrics(target: ignite::Target) -> Measured {
             },
             runner: Vec::new(),
         };
-        let report = ignite::conformance::report(&workspace().join(file), &options)
+        // A test executable just written can be held open for an instant by
+        // another test thread's fork (ETXTBSY, `Text file busy`); the report
+        // is then taken again, as `llvm_build::run_copied` retries.
+        let mut attempts = 0;
+        let report = loop {
+            match ignite::conformance::report(&workspace().join(file), &options) {
+                Err(e) if e.to_string().contains("os error 26") && attempts < 20 => {
+                    attempts += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                other => break other,
+            }
+        };
+        let report = report
             .unwrap_or_else(|e| panic!("{file} on {name}: {e}"))
             .unwrap_or_else(|| panic!("{file}: no conforming protocol"));
         for line in report.text.lines() {
@@ -1197,12 +1358,17 @@ fn runs(history: &[Record]) -> Runs {
     out
 }
 
-/// A timing row: measured by `ignite-perf quality` in ms (the sizes it
-/// measures are deterministic and held as any count). Until the dedicated
-/// timing host of story:quality-timing-host exists, these rows are recorded
-/// with `host: local` and gate nothing: no merge, no release.
-fn is_timing(metric: &Metric) -> bool {
-    metric.source.as_deref() == Some("perf") && metric.unit == "ms"
+/// The timing rows: measured by `ignite-perf quality` in ms (the sizes it
+/// measures, 3.2, are deterministic and held as any count). Until the
+/// dedicated timing host of story:quality-timing-host exists, these rows are
+/// recorded with `host: local` and gate nothing: no merge, no release. The
+/// list is fixed here, not read from the baseline's labels, so a relabelled
+/// metric is not exempted (`the_baseline_is_well_formed` holds the labels to
+/// it, `check` refuses a relabel against `main`).
+const TIMING: [&str; 3] = ["5.3", "6.1", "6.2"];
+
+fn is_timing(id: &str) -> bool {
+    TIMING.contains(&id)
 }
 
 /// A value with its unit.
@@ -1242,10 +1408,7 @@ pub fn render_trend(baseline: &Baseline, history: &[Record]) -> String {
         if !(run == "bar" || run.starts_with('v')) {
             continue;
         }
-        let timing = values
-            .keys()
-            .filter(|(id, _)| baseline.metrics.get(id).is_some_and(is_timing))
-            .count();
+        let timing = values.keys().filter(|(id, _)| is_timing(id)).count();
         let timing = if timing == 0 {
             String::new()
         } else {
@@ -1260,7 +1423,7 @@ pub fn render_trend(baseline: &Baseline, history: &[Record]) -> String {
                 ) else {
                     continue;
                 };
-                if old == value || is_timing(metric) {
+                if old == value || is_timing(id) {
                     continue;
                 }
                 if metric.direction.worse(*old, *value, metric.tolerance) {
@@ -1404,7 +1567,7 @@ measures them.\n\n",
                 let key = (id.clone(), target.clone());
                 let now = current.get(&key);
                 let trend = match (now, reference.as_ref().and_then(|r| r.get(&key))) {
-                    _ if is_timing(m) => "local, not comparable".to_string(),
+                    _ if is_timing(id) => "local, not comparable".to_string(),
                     (Some(now), Some(then)) => change(m, *then, *now),
                     _ => String::new(),
                 };
@@ -1478,7 +1641,7 @@ pub fn release_refusals(baseline: &Baseline, history: &[Record], values: &[Value
             continue;
         };
         if metric.kind != "hill-climb"
-            && !is_timing(metric)
+            && !is_timing(&v.metric)
             && metric.direction.worse(*then, v.value, metric.tolerance)
         {
             errors.push(format!(
@@ -1523,7 +1686,7 @@ fn record() {
         baseline = bless(&baseline, "perf", &perf);
         for v in values.iter().filter(|v| v.load.is_some()) {
             if let Some(metric) = baseline.metrics.get_mut(&v.metric)
-                && is_timing(metric)
+                && is_timing(&v.metric)
             {
                 metric.bars.entry(v.target.clone()).or_insert(Bar {
                     value: v.value,
@@ -1603,6 +1766,12 @@ fn the_baseline_is_well_formed() {
         if metric.source.is_some() {
             assert!(!metric.bars.is_empty(), "{id}: measured, without a bar");
         }
+        let timing_labels = metric.source.as_deref() == Some("perf") && metric.unit == "ms";
+        assert_eq!(
+            timing_labels,
+            is_timing(id),
+            "{id}: the timing rows are exactly {TIMING:?}, labelled `source: perf`, `unit: ms`"
+        );
         if metric.kind == "hill-climb" {
             assert!(
                 metric.goal.is_some(),
@@ -1660,6 +1829,7 @@ fn metric(direction: Direction, tolerance: Tolerance, bars: &[(&str, i64)]) -> M
         instrument: "i".to_string(),
         source: Some("static".to_string()),
         tolerance,
+        tolerance_decision: None,
         goal: None,
         unmeasured: None,
         bars: bars
@@ -1687,6 +1857,7 @@ fn baseline_of(metrics: &[(&str, Metric)]) -> Baseline {
             .collect(),
         known_differences: BTreeMap::new(),
         eval_cannot_run: BTreeMap::new(),
+        eval_slow: BTreeMap::new(),
     }
 }
 
@@ -1742,22 +1913,22 @@ fn the_ratchet_refuses_worse_missing_new_and_untaken_values() {
     let more = check(&higher, "static", &one("4.3", "rust", 310), None);
     assert!(more.len() == 1 && more[0].contains("improved"), "{more:?}");
 
-    let timed = baseline_of(&[(
-        "6.1",
+    let percent = baseline_of(&[(
+        "6.9",
         metric(
             Direction::Lower,
             Tolerance::Percent(10),
             &[("all/check", 100)],
         ),
     )]);
-    assert!(check(&timed, "static", &one("6.1", "all/check", 109), None).is_empty());
-    assert!(check(&timed, "static", &one("6.1", "all/check", 91), None).is_empty());
+    assert!(check(&percent, "static", &one("6.9", "all/check", 109), None).is_empty());
+    assert!(check(&percent, "static", &one("6.9", "all/check", 91), None).is_empty());
     assert_eq!(
-        check(&timed, "static", &one("6.1", "all/check", 111), None).len(),
+        check(&percent, "static", &one("6.9", "all/check", 111), None).len(),
         1
     );
     assert_eq!(
-        check(&timed, "static", &one("6.1", "all/check", 89), None).len(),
+        check(&percent, "static", &one("6.9", "all/check", 89), None).len(),
         1
     );
 
@@ -1937,6 +2108,7 @@ fn the_differential_lists_refuse_unknown_gone_and_unlisted_units() {
             .collect(),
         build_failed: BTreeMap::new(),
         unchecked: BTreeMap::new(),
+        no_run: BTreeMap::new(),
         metrics: Measured::new(),
     };
     assert!(differential_lists(&baseline, &outcome(&["a.ignite::t"], &["b.ignite::u"])).is_empty());
@@ -1968,7 +2140,7 @@ fn the_differential_lists_refuse_unknown_gone_and_unlisted_units() {
         "load.ignite::timed".to_string(),
         Known {
             consumer: "llvm".to_string(),
-            story: "story:y".to_string(),
+            story: "story:llvm-store-update-off-lock".to_string(),
             what: "a timing assertion".to_string(),
             intermittent: true,
         },
@@ -1997,13 +2169,219 @@ fn the_differential_lists_refuse_unknown_gone_and_unlisted_units() {
         ("1.1".to_string(), "llvm".to_string(), 0),
         ("1.1".to_string(), "eval".to_string(), 2),
         ("1.2".to_string(), "llvm".to_string(), 7),
+        ("1.7".to_string(), "all".to_string(), 1),
     ];
     assert_eq!(steady(&baseline, &flaky), expected);
     assert_eq!(steady(&baseline, &quiet), expected);
 }
 
 #[test]
+fn the_differential_refuses_a_missing_run_a_slow_listing_without_a_decision_and_an_unknown_story() {
+    let empty = differential::Outcome {
+        units: BTreeMap::new(),
+        llvm_differs: BTreeMap::new(),
+        eval_differs: BTreeMap::new(),
+        eval_cannot: BTreeMap::new(),
+        build_failed: BTreeMap::new(),
+        unchecked: BTreeMap::new(),
+        no_run: BTreeMap::new(),
+        metrics: Measured::new(),
+    };
+    let baseline = baseline_of(&[]);
+    assert!(differential_lists(&baseline, &empty).is_empty());
+
+    let mut missing = empty.clone();
+    missing
+        .no_run
+        .insert("a.ignite::t".to_string(), "no run on LLVM".to_string());
+    let errors = differential_lists(&baseline, &missing);
+    assert!(
+        errors.len() == 1 && errors[0].contains("no run on LLVM"),
+        "{errors:?}"
+    );
+
+    let slow_unit = "s.ignite::slow".to_string();
+    let slow_reason = "over the time limit of 60 s".to_string();
+    let mut slow = baseline.clone();
+    slow.eval_cannot_run
+        .insert(slow_unit.clone(), slow_reason.clone());
+    let mut ran_slow = empty.clone();
+    ran_slow
+        .eval_cannot
+        .insert(slow_unit.clone(), slow_reason.clone());
+    let errors = differential_lists(&slow, &ran_slow);
+    assert!(
+        errors.len() == 1 && errors[0].contains("`eval_slow`"),
+        "{errors:?}"
+    );
+    let main = baseline.clone();
+    let errors = slow_against_main(&slow, &main);
+    assert!(
+        errors.len() == 1 && errors[0].contains("without an `eval_slow` decision"),
+        "{errors:?}"
+    );
+    let mut decided = slow.clone();
+    decided
+        .eval_slow
+        .insert(slow_unit.clone(), "story:x, measured 185 s".to_string());
+    assert!(differential_lists(&decided, &ran_slow).is_empty());
+    assert!(slow_against_main(&decided, &main).is_empty());
+    let mut stale = decided.clone();
+    stale
+        .eval_cannot_run
+        .insert("s.ignite::other".to_string(), slow_reason.clone());
+    stale.eval_slow.insert(
+        "s.ignite::other".to_string(),
+        "story:x, measured 185 s".to_string(),
+    );
+    let mut main_with = main.clone();
+    main_with.eval_slow.insert(
+        "s.ignite::other".to_string(),
+        "story:x, measured 185 s".to_string(),
+    );
+    let errors = slow_against_main(&stale, &main_with);
+    assert!(
+        errors.len() == 1 && errors[0].contains("s.ignite::other"),
+        "main's decision for a unit main does not list as slow: {errors:?}"
+    );
+
+    let mut unknown = baseline.clone();
+    unknown.known_differences.insert(
+        "l.ignite::t".to_string(),
+        Known {
+            consumer: "llvm".to_string(),
+            story: "story:no-such-story-anywhere".to_string(),
+            what: "w".to_string(),
+            intermittent: true,
+        },
+    );
+    let errors = differential_lists(&unknown, &empty);
+    assert!(
+        errors.len() == 1 && errors[0].contains("no story"),
+        "{errors:?}"
+    );
+    assert_eq!(
+        steady(&unknown, &empty),
+        vec![("1.7".to_string(), "all".to_string(), 1)]
+    );
+}
+
+#[test]
 fn civil_dates() {
     assert_eq!(civil_date(0), "1970-01-01");
     assert_eq!(civil_date(1_794_009_600), "2026-11-07");
+}
+
+// ---- adversary, story quality-ratchet pass 1 ----------------------------
+
+/// A decision is taken for one move of a bar. Once a bar carries one, the
+/// bar must not get worse again against `main` on the same decision: the
+/// check reads only that a decision is present, not that it is new.
+#[test]
+fn adversary_a_stale_decision_does_not_let_a_bar_worsen_again() {
+    let decided = |value: i64| {
+        let mut b = baseline_of(&[(
+            "7.2",
+            metric(Direction::Lower, Tolerance::Count(0), &[("all", value)]),
+        )]);
+        b.metrics
+            .get_mut("7.2")
+            .unwrap()
+            .bars
+            .get_mut("all")
+            .unwrap()
+            .decision = Some("story:x, 2026-11-07".to_string());
+        b
+    };
+    let main = decided(18);
+    let worse_again = decided(30);
+    let errors = check(&worse_again, "static", &one("7.2", "all", 30), Some(&main));
+    assert!(
+        errors.iter().any(|e| e.contains("without a `decision`")),
+        "the bar moved 18 -> 30 on main's own decision and passed: {errors:?}"
+    );
+}
+
+/// The tolerance of a metric loosened against `main` is accepted when any
+/// bar of the metric carries any decision, also one taken earlier for
+/// another target.
+#[test]
+fn adversary_a_tolerance_loosened_needs_its_own_decision() {
+    let with_old_decision = |tolerance: Tolerance| {
+        let mut b = baseline_of(&[(
+            "3.1",
+            metric(Direction::Lower, tolerance, &[("llvm", 90), ("rust", 168)]),
+        )]);
+        b.metrics
+            .get_mut("3.1")
+            .unwrap()
+            .bars
+            .get_mut("rust")
+            .unwrap()
+            .decision = Some("story:old, 2026-11-07".to_string());
+        b
+    };
+    let main = with_old_decision(Tolerance::Count(0));
+    let loose = with_old_decision(Tolerance::Count(50));
+    let values = vec![
+        ("3.1".to_string(), "llvm".to_string(), 90),
+        ("3.1".to_string(), "rust".to_string(), 168),
+    ];
+    let errors = check(&loose, "static", &values, Some(&main));
+    assert!(
+        errors.iter().any(|e| e.contains("tolerance loosened")),
+        "tolerance 0 -> 50 passed on main's old decision: {errors:?}"
+    );
+}
+
+/// A count metric relabelled as a timing row (`source: perf`, `unit: ms`)
+/// in the baseline is skipped by every check, so the instrument that still
+/// measures it can report any value.
+#[test]
+fn adversary_a_metric_relabelled_as_timing_is_not_silently_ungated() {
+    let main = baseline_of(&[(
+        "7.2",
+        metric(Direction::Lower, Tolerance::Count(0), &[("all", 21)]),
+    )]);
+    let mut relabelled = main.clone();
+    let m = relabelled.metrics.get_mut("7.2").unwrap();
+    m.source = Some("perf".to_string());
+    m.unit = "ms".to_string();
+    let errors = check(&relabelled, "static", &one("7.2", "all", 500), Some(&main));
+    assert!(
+        !errors.is_empty(),
+        "7.2 measured 500 against a bar of 21 and nothing refused it"
+    );
+}
+
+/// docs/quality.md: "The units the evaluator cannot run are listed in
+/// `eval_cannot_run` with the reason, exactly". The reason is not compared,
+/// so a unit listed for an IO builtin that now fails for another reason
+/// (a fuel overrun, an evaluator defect reported as `evaluation failed`)
+/// passes.
+#[test]
+fn adversary_eval_cannot_run_reasons_are_held_exactly() {
+    let mut baseline = baseline_of(&[]);
+    baseline.eval_cannot_run.insert(
+        "b.ignite::u".to_string(),
+        "builtin `PipePair` has no value at compile time".to_string(),
+    );
+    let outcome = differential::Outcome {
+        units: BTreeMap::new(),
+        llvm_differs: BTreeMap::new(),
+        eval_differs: BTreeMap::new(),
+        eval_cannot: BTreeMap::from([(
+            "b.ignite::u".to_string(),
+            "`module(\"demo.ops\")` has no field `greeting`".to_string(),
+        )]),
+        build_failed: BTreeMap::new(),
+        unchecked: BTreeMap::new(),
+        no_run: BTreeMap::new(),
+        metrics: Measured::new(),
+    };
+    let errors = differential_lists(&baseline, &outcome);
+    assert!(
+        !errors.is_empty(),
+        "a changed reason for a unit the evaluator cannot run passed"
+    );
 }

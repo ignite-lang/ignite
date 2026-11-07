@@ -8,4 +8,4 @@ workstation, are not comparable between runs: they are left out of `worse`, `bet
 
 | run | commit | date | worse | better | timing | changes |
 |---|---|---|---|---|---|---|
-| bar | b23f827e | 2026-11-07 | 0 | 0 | 5 local, not comparable | 54 values, the bar |
+| bar | 9a775116 | 2026-11-07 | 0 | 0 | 5 local, not comparable | 55 values, the bar |

@@ -1,5 +1,5 @@
 {
-  "about": "The quality bar (docs/quality.md, story quality-ratchet): one entry per metric with its kind, direction, tolerance and source, and one bar per target. The bars are the first assessment's values; a value worse than its bar beyond the tolerance is refused, an improvement is written into the bar in the same change (IGNITE_BLESS=1), and a bar made worse than main's needs a decision. known_differences lists differences of the differential runner accepted until a story fixes them; eval_cannot_run lists the units the evaluator cannot run, with the reason.",
+  "about": "The quality bar (docs/quality.md, story quality-ratchet): one entry per metric with its kind, direction, tolerance and source, and one bar per target. The bars are the first assessment's values; a value worse than its bar beyond the tolerance is refused, an improvement is written into the bar in the same change (IGNITE_BLESS=1), and a bar made worse than main's needs a decision. known_differences lists differences of the differential runner accepted until a story fixes them; eval_cannot_run lists the units the evaluator cannot run, with the reason; eval_slow names the decision that keeps a unit over the evaluator's time limit out of merge runs.",
   "areas": [
     "Semantics: one meaning across the three consumers",
     "Front end: the checker refuses exactly the wrong programs",
@@ -206,6 +206,10 @@
     "std/text.ignite::List.map takes a local holding an effectful fn": "builtin `StoreNew` has no value at compile time",
     "std/text.ignite::a slice that is kept, stored or put does not see later changes of its receiver": "builtin `StoreNew` has no value at compile time"
   },
+  "eval_slow": {
+    "crates/ignite/tests/fixtures/slice16/moves_scale.ignite::200000 steps through a call": "value-semantics copies make the evaluator quadratic here (50,000 steps measured 185 s); story:quality-ratchet, 2026-11-07: run by task quality only, with the 60 s limit",
+    "crates/ignite/tests/fixtures/slice16/moves_scale.ignite::50000 steps through a call": "value-semantics copies make the evaluator quadratic here (50,000 steps measured 185 s); story:quality-ratchet, 2026-11-07: run by task quality only, with the 60 s limit"
+  },
   "known_differences": {
     "crates/ignite/tests/fixtures/tests/basics.ignite::try on err fails": {
       "consumer": "eval",
@@ -260,10 +264,10 @@
           "value": 420
         },
         "llvm": {
-          "value": 428
+          "value": 614
         },
         "rust": {
-          "value": 428
+          "value": 614
         }
       },
       "direction": "higher",
@@ -341,6 +345,21 @@
       "instrument": "the differential runner: units the evaluator has no rule for (IO, tasks, fuel), each listed with its reason in `quality/baseline.json` `eval_cannot_run`",
       "kind": "ratchet",
       "name": "corpus units the evaluator cannot run",
+      "source": "differential",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "1.7": {
+      "area": "Semantics: one meaning across the three consumers",
+      "bars": {
+        "all": {
+          "value": 1
+        }
+      },
+      "direction": "lower",
+      "instrument": "`quality::check_differential` (every merge): entries of `known_differences` marked `intermittent`, each naming a story of the planning store; a difference so marked may show or not in a run",
+      "kind": "gate",
+      "name": "known differences marked intermittent",
       "source": "differential",
       "tolerance": 0,
       "unit": "count"

@@ -255,7 +255,19 @@ fn run_command(mut command: Command) -> Run {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let mut child = match command.spawn() {
+    // ETXTBSY: an executable just written is held open for an instant by
+    // another test thread's fork (as `llvm_build::run_copied` retries).
+    let mut attempts = 0;
+    let spawned = loop {
+        match command.spawn() {
+            Err(e) if e.raw_os_error() == Some(26) && attempts < 100 => {
+                attempts += 1;
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            other => break other,
+        }
+    };
+    let mut child = match spawned {
         Ok(child) => child,
         Err(e) => {
             return Run {
@@ -383,31 +395,102 @@ fn build_options(target: Target, out: PathBuf) -> ignite::BuildOptions {
     }
 }
 
-/// The test executables of `files` on `target`; a file that does not build
-/// with the others is built alone, and one that does not build alone is
-/// returned with its error.
-fn test_executables(
-    files: &[PathBuf],
+/// Give the generated Rust project at `project` the workspace's
+/// `Cargo.lock` before its first build. The project's dependencies are
+/// `ignite-io` and its crates, which the workspace lock pins, so cargo
+/// resolves from the lock and the local registry cache and never updates the
+/// crates.io index: the gate stays off the network. A lock the project
+/// already has (from an earlier run) is kept.
+fn seed_lock(target: Target, project: &Path) {
+    if target != Target::Rust || project.join("Cargo.lock").exists() {
+        return;
+    }
+    std::fs::create_dir_all(project).unwrap();
+    std::fs::copy(workspace().join("Cargo.lock"), project.join("Cargo.lock")).unwrap();
+}
+
+/// The directory `ignite::build_tests` writes the Rust project of its
+/// `index`-th group to under `out` (`test_build::group_dir`).
+fn group_project(out: &Path, index: usize) -> PathBuf {
+    let dir = if index == 0 {
+        "tests".to_string()
+    } else {
+        format!("tests-{}", index + 1)
+    };
+    out.join(dir).join("rust")
+}
+
+/// The groups `ignite::build_tests` builds `entries` into, in its order
+/// (`test_build::group_files`): the standard-library modules in the first,
+/// every program in the first group that does not hold its module path yet.
+/// Two programs with one module path (every file without a `module` line is
+/// `main`) are in two groups, so two executables.
+fn test_groups<'a>(entries: &[&'a Entry]) -> Vec<Vec<&'a Entry>> {
+    let mut groups: Vec<Vec<&Entry>> = Vec::new();
+    for entry in entries {
+        let index = if entry.std {
+            0
+        } else {
+            groups
+                .iter()
+                .position(|g| g.iter().all(|e| e.module != entry.module))
+                .unwrap_or(groups.len())
+        };
+        if index == groups.len() {
+            groups.push(Vec::new());
+        }
+        groups[index].push(entry);
+    }
+    groups
+}
+
+/// A test executable with the entries whose tests it holds.
+type Built<'a> = (PathBuf, Vec<&'a Entry>);
+
+/// The test executables of `entries` on `target`, each with the entries it
+/// holds; a file that does not build with the others is built alone, and
+/// one that does not build alone is returned with its error.
+fn test_executables<'a>(
+    entries: &[&'a Entry],
     target: Target,
-) -> (Vec<PathBuf>, BTreeMap<PathBuf, String>) {
+) -> (Vec<Built<'a>>, BTreeMap<PathBuf, String>) {
     let out = scratch_root().join(format!("tests-{}", target_name(target)));
     let options = |out: PathBuf| ignite::TestOptions {
         build: build_options(target, out),
         runner: Vec::new(),
     };
-    if let Ok(executables) = ignite::build_tests(files, &options(out.clone())) {
-        return (executables, BTreeMap::new());
+    let files: Vec<PathBuf> = entries.iter().map(|e| e.path.clone()).collect();
+    let groups = test_groups(entries);
+    for index in 0..groups.len() {
+        seed_lock(target, &group_project(&out, index));
+    }
+    if let Ok(executables) = ignite::build_tests(&files, &options(out.clone())) {
+        assert_eq!(
+            executables.len(),
+            groups.len(),
+            "ignite::build_tests built {} executables for {} groups",
+            executables.len(),
+            groups.len()
+        );
+        return (
+            executables.into_iter().zip(groups).collect(),
+            BTreeMap::new(),
+        );
     }
     let mut executables = Vec::new();
     let mut failed = BTreeMap::new();
-    for (index, file) in files.iter().enumerate() {
+    for (index, entry) in entries.iter().enumerate() {
+        seed_lock(
+            target,
+            &group_project(&out.join(format!("alone-{index}")), 0),
+        );
         match ignite::build_tests(
-            std::slice::from_ref(file),
+            std::slice::from_ref(&entry.path),
             &options(out.join(format!("alone-{index}"))),
         ) {
-            Ok(built) => executables.extend(built),
+            Ok(built) => executables.extend(built.into_iter().map(|exe| (exe, vec![*entry]))),
             Err(e) => {
-                failed.insert(file.clone(), e.to_string());
+                failed.insert(entry.path.clone(), e.to_string());
             }
         }
     }
@@ -420,16 +503,8 @@ fn run_tests(
     target: Target,
     jobs: &mut BTreeMap<String, Job>,
 ) -> BTreeMap<String, Run> {
-    let files: Vec<PathBuf> = entries
-        .iter()
-        .filter(|e| !e.tests.is_empty())
-        .map(|e| e.path.clone())
-        .collect();
-    let (executables, failed) = test_executables(&files, target);
-    let mut by_module: BTreeMap<&str, &Entry> = BTreeMap::new();
-    for entry in entries {
-        by_module.entry(&entry.module).or_insert(entry);
-    }
+    let with_tests: Vec<&Entry> = entries.iter().filter(|e| !e.tests.is_empty()).collect();
+    let (executables, failed) = test_executables(&with_tests, target);
     let mut results = BTreeMap::new();
     for entry in entries {
         if let Some(error) = failed.get(&entry.path) {
@@ -446,36 +521,25 @@ fn run_tests(
         }
     }
     let mut mine = BTreeMap::new();
-    let mut seen = BTreeSet::new();
-    for exe in executables {
-        let listed = Command::new(&exe)
-            .arg("--list")
-            .output()
-            .unwrap_or_else(|e| panic!("{}: {e}", exe.display()));
-        for line in String::from_utf8_lossy(&listed.stdout).lines() {
-            let Some(full) = line.strip_suffix(": test") else {
-                continue;
-            };
-            let Some((module, name)) = full.split_once('/') else {
-                continue;
-            };
-            let Some(entry) = by_module.get(module) else {
-                continue;
-            };
-            let key = format!("{}::{name}", entry.rel);
-            if !seen.insert(key.clone()) {
-                continue;
+    // Each test of each file runs by its own name in the executable built
+    // for that file (`--run-one <module>/<name>`), not by the lines of
+    // `--list`: a test name may hold a line break
+    // (`fixtures/conformance/adversary_forged_result.ignite`).
+    for (exe, held) in executables {
+        for entry in held {
+            for name in &entry.tests {
+                let key = format!("{}::{name}", entry.rel);
+                let scratch = scratch_root()
+                    .join(format!("scratch-{}", target_name(target)))
+                    .join(mine.len().to_string());
+                let job = Job {
+                    program: exe.clone(),
+                    args: vec!["--run-one".to_string(), format!("{}/{name}", entry.module)],
+                    scratch,
+                    test: true,
+                };
+                mine.insert(key, job);
             }
-            let scratch = scratch_root()
-                .join(format!("scratch-{}", target_name(target)))
-                .join(seen.len().to_string());
-            let job = Job {
-                program: exe.clone(),
-                args: vec!["--run-one".to_string(), full.to_string()],
-                scratch,
-                test: true,
-            };
-            mine.insert(key, job);
         }
     }
     results.extend(run_all(&mine));
@@ -496,6 +560,7 @@ fn run_mains(
             continue;
         }
         let out = scratch_root().join(format!("mains-{}/{index}", target_name(target)));
+        seed_lock(target, &out);
         match ignite::build(&entry.path, &build_options(target, out)) {
             Ok(built) => {
                 for (name, _) in &entry.mains {
@@ -659,6 +724,9 @@ pub struct Outcome {
     /// Programs excluded because they do not check, with the first line of
     /// the error.
     pub unchecked: BTreeMap<String, String>,
+    /// Units with no run on a target and no listed reason (a main a
+    /// `not run:` line names): each one fails the runner.
+    pub no_run: BTreeMap<String, String>,
     /// Units run per consumer and inline tests of std/ and examples/ per
     /// target: the metrics.
     pub metrics: Vec<(String, String, i64)>,
@@ -671,7 +739,7 @@ pub fn run_corpus() -> Outcome {
     let slow: BTreeMap<String, String> = quality::load_baseline()
         .eval_cannot_run
         .into_iter()
-        .filter(|(_, reason)| reason.starts_with("over the time limit"))
+        .filter(|(_, reason)| quality::is_slow(reason))
         .collect();
     let std_root = ignite::default_std_path();
     let library = ignite::load_std(&std_root).unwrap_or_else(|e| panic!("std: {e}"));
@@ -826,6 +894,7 @@ pub fn run_corpus() -> Outcome {
     let mut llvm_differs = BTreeMap::new();
     let mut eval_differs = BTreeMap::new();
     let mut eval_cannot = BTreeMap::new();
+    let mut no_run = BTreeMap::new();
     let mut build_failed: BTreeMap<&'static str, BTreeSet<String>> = BTreeMap::new();
     let mut ran: BTreeMap<&str, i64> = BTreeMap::new();
     let mut inline: BTreeMap<&str, i64> = BTreeMap::new();
@@ -837,8 +906,8 @@ pub fn run_corpus() -> Outcome {
         let rust = rust_runs.get(key);
         let llvm = llvm_runs.get(key);
         let eval = evaluated.get(key);
-        if rust.is_none() && llvm.is_none() && eval.is_none() {
-            let reason = entry.mains_not_run.unwrap_or("not run");
+        let listed = entry.mains_not_run.filter(|_| key.contains("::main "));
+        if let (None, None, None, Some(reason)) = (rust, llvm, eval, listed) {
             record.insert("not_run".to_string(), Json::Str(reason.to_string()));
             units.insert(key.clone(), Json::Object(record));
             continue;
@@ -875,8 +944,13 @@ pub fn run_corpus() -> Outcome {
                 };
                 llvm_differs.insert(key.clone(), what);
             }
-            (Some(_), None) | (None, Some(_)) => {
-                llvm_differs.insert(key.clone(), "run on one target only".to_string());
+            (Some(_), None) | (None, Some(_)) | (None, None) => {
+                let on: Vec<&str> = [("Rust", rust), ("LLVM", llvm)]
+                    .iter()
+                    .filter(|(_, run)| run.is_none())
+                    .map(|(name, _)| *name)
+                    .collect();
+                no_run.insert(key.clone(), format!("no run on {}", on.join(" and ")));
             }
             _ => {}
         }
@@ -962,6 +1036,7 @@ pub fn run_corpus() -> Outcome {
         eval_cannot,
         build_failed,
         unchecked,
+        no_run,
         metrics,
     }
 }
@@ -1003,7 +1078,12 @@ fn write_outcome(outcome: &Outcome) {
     Json::Object(root).write(&mut text, 0);
     text.push('\n');
     std::fs::write(dir.join("differential.json"), text).unwrap();
-    quality::write_measured(&dir.join("differential-metrics.json"), &outcome.metrics);
+    // The values `quality::check_differential` holds: 1.1 without the
+    // intermittent units, and 1.7.
+    quality::write_measured(
+        &dir.join("differential-metrics.json"),
+        &quality::steady(&quality::load_baseline(), outcome),
+    );
 }
 
 /// Metric 1.1: one result across Rust, LLVM and the evaluator.
@@ -1136,4 +1216,40 @@ fn the_evaluator_reads_a_receiver_before_its_arguments() {
     ] {
         assert_eq!(evaluator.run_test("std.text", test), Ok(()), "{test}");
     }
+}
+
+/// Adversary (story quality-ratchet, pass 1): two fixtures without a
+/// `module` declaration both have the module path `main`. `run_tests` keys
+/// a listed test by the first entry of its module, so every test of the
+/// second file gets no run on the target, and `run_corpus` then compares
+/// none of its units (neither LLVM with Rust nor the evaluator with Rust).
+/// In the committed corpus that is 186 units (slice9/, slice16/, streams/).
+#[test]
+fn adversary_every_test_of_two_files_with_one_module_path_runs_on_a_target() {
+    let entry = |name: &str| {
+        let path = fixture(name);
+        let loaded = ignite::load(&path, None).unwrap_or_else(|e| panic!("{e}"));
+        Entry {
+            rel: relative(&path),
+            module: loaded.types().module.clone(),
+            tests: test_names(loaded.program()),
+            mains: Vec::new(),
+            mains_not_run: None,
+            std: false,
+            path,
+        }
+    };
+    let entries = vec![entry("slice16/holds.ignite"), entry("slice16/moves.ignite")];
+    assert_eq!(entries[0].module, entries[1].module, "one module path");
+    let mut jobs = BTreeMap::new();
+    let runs = run_tests(&entries, Target::Llvm, &mut jobs);
+    let missing: Vec<String> = entries
+        .iter()
+        .flat_map(|e| e.tests.iter().map(move |t| format!("{}::{t}", e.rel)))
+        .filter(|key| !runs.contains_key(key))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "units with no run on LLVM: {missing:#?}"
+    );
 }

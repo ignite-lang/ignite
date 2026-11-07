@@ -20,7 +20,7 @@ Timing rows (build, check and restart times, sizes) are measured on a shared wor
 (`host: local`): they are recorded and shown, but not compared or gated until a dedicated host
 measures them.
 
-Current values: run `bar` on 2026-11-07, commit `b23f827e`.
+Current values: run `bar` on 2026-11-07, commit `9a775116`.
 
 ## 1 Semantics: one meaning across the three consumers
 
@@ -29,8 +29,8 @@ Current values: run `bar` on 2026-11-07, commit `b23f827e`.
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 |  |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 0 |  |
 | 1.2 | differential corpus size | ratchet | eval | 420 | 420 |  |
-| 1.2 | differential corpus size | ratchet | llvm | 428 | 428 |  |
-| 1.2 | differential corpus size | ratchet | rust | 428 | 428 |  |
+| 1.2 | differential corpus size | ratchet | llvm | 614 | 614 |  |
+| 1.2 | differential corpus size | ratchet | rust | 614 | 614 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 112 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 12 |  |
@@ -40,6 +40,7 @@ Current values: run `bar` on 2026-11-07, commit `b23f827e`.
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | all | 0 | 0 |  |
 | 1.5 | random programs on which the consumers disagree | gate | | unmeasured: no program generator yet (out of scope of story:quality-ratchet) | | |
 | 1.6 | corpus units the evaluator cannot run | ratchet | eval | 194 | 194 |  |
+| 1.7 | known differences marked intermittent | gate | all | 1 | 1 |  |
 
 ## 2 Front end: the checker refuses exactly the wrong programs
 
@@ -100,17 +101,17 @@ Current values: run `bar` on 2026-11-07, commit `b23f827e`.
 |---|---|---|---|---|---|---|
 | 5.1 | replay mismatches (E127) on recorded journals | gate | | unmeasured: no number: the named suites gate it in task gate | | |
 | 5.2 | crash-recovery matrix rows failing (docs/slice.md 17.7) | gate | | unmeasured: no number: the named suites gate it in task gate | | |
-| 5.3 | restart readiness, real clock | ratchet | llvm | 384 ms | 384 ms | local, not comparable |
+| 5.3 | restart readiness, real clock | ratchet | llvm | 384 ms | 133 ms | local, not comparable |
 | 5.4 | apply cycle time of the todo, per target | ratchet | | unmeasured: not in task quality: `ignite-perf apply-cycle` exports and builds the benchmark trees and runs about 15 minutes; it is measured per slice (docs/performance/) | | |
 
 ## 6 Compiler speed
 
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
-| 6.1 | check and plan of the design file | ratchet | all/check | 176 ms | 176 ms | local, not comparable |
-| 6.1 | check and plan of the design file | ratchet | all/plan | 153 ms | 153 ms | local, not comparable |
-| 6.2 | todo build, dev profile | ratchet | llvm | 993 ms | 993 ms | local, not comparable |
-| 6.2 | todo build, dev profile | ratchet | rust | 3081 ms | 3081 ms | local, not comparable |
+| 6.1 | check and plan of the design file | ratchet | all/check | 176 ms | 317 ms | local, not comparable |
+| 6.1 | check and plan of the design file | ratchet | all/plan | 153 ms | 241 ms | local, not comparable |
+| 6.2 | todo build, dev profile | ratchet | llvm | 993 ms | 1203 ms | local, not comparable |
+| 6.2 | todo build, dev profile | ratchet | rust | 3081 ms | 2907 ms | local, not comparable |
 | 6.3 | `task gate` wall time | ratchet | | unmeasured: no instrument records the gate's wall time; waves note it in their close (AGENTS.md § Gate time) | | |
 
 ## 7 Engineering health
