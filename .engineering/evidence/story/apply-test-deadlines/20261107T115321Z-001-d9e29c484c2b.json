@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T11:53:21Z",
+  "actor": "human:timo",
+  "artifact": "story:apply-test-deadlines",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p ignite --test main -- --exact <the story's 10 tests>, base 0ce668d6 deadlines vs 7d095a9f",
+    "reference": "unit scratch measure-base.out vs gate1-test.log (run 1 at load 15.24-16.24 passed every listed test)"
+  }
+}

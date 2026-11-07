@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T11:53:21Z",
+  "actor": "human:timo",
+  "artifact": "story:apply-test-deadlines",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate steps x3 on 7d095a9f (fmt, clippy, cargo test --workspace --no-fail-fast, task test-ignite): all exit 0, 1319 passed 0 failed 11 ignored each; start loads 15.24, 9.87, 6.55",
+    "reference": "https://github.com/ignite-lang/ignite/pull/88"
+  }
+}

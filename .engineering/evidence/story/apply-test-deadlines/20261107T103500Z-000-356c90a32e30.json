@@ -1,0 +1,14 @@
+{
+  "at": "2026-11-07T10:35:00Z",
+  "actor": "human:timo",
+  "artifact": "story:apply-test-deadlines",
+  "kind": "story",
+  "revision": 12,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adversary-apply-test-deadlines-pass-2",
+    "review": "review-result:adversary-apply-test-deadlines-pass-2",
+    "outcome": "fixed"
+  }
+}

@@ -23,7 +23,11 @@ scope:
   path: crates/ignite/tests/slice18.rs
 - confidence: cited
   path: crates/ignite/tests/terminal.rs
-revision: 12
+- confidence: cited
+  path: crates/ignite/tests/todo.rs
+- confidence: cited
+  path: docs/slice.md
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T09:16:05Z", actor: "human:timo", revision: 11}
 - {from: "proposed", to: "active", at: "2026-11-07T09:16:05Z", actor: "human:timo", revision: 12}
