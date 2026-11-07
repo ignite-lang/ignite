@@ -13,7 +13,7 @@ scope:
   path: site
 - confidence: cited
   path: ux
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T13:44:00Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-07T13:44:00Z", actor: "human:timo", revision: 3}
@@ -39,7 +39,7 @@ The public website (`site/`: landing page `site/index.html` and the mdBook under
 | scenarios | `ux/scenarios/<name>/`: the page list from the built `target/site` (landing page and every book page) and tasks such as "find the install command", "find the reference page of `std.fs`", "find the HTTP example" |
 | gating viewports | 1440x900, 390x844 |
 | measured-only viewports | 1280x800, 1024x768, 768x1024 |
-| themes | every theme the site ships (mdBook light, rust, coal, navy, ayu; the landing page's own) |
+| themes | every theme the site ships: light and dark (the book menu offers Auto, Light and Dark, `coal`; the landing page maps `coal` to dark) |
 | always-visible | landing page navigation; book: menu bar, search toggle, theme toggle; sidebar at desktop sizes |
 | guidance cue | none: no L0, no gate 6 |
 | baseline | `ux/baseline.json` |

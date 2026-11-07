@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T16:30:00Z",
+  "actor": "human:timo",
+  "artifact": "story:docs-site-ui-loop",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 38054aa8 (PR 91), exit 0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/91"
+  }
+}
