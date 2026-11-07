@@ -78,6 +78,10 @@ async function usable(page: Page, all: Locator, primary: string): Promise<Seen |
         if (style.visibility === "hidden" || rect.width === 0 || rect.height === 0) {
           return null;
         }
+        // A control nobody can see (opacity 0 on it or above it) is not used.
+        if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) {
+          return null;
+        }
         if (rect.left < 0 || rect.top < 0 || rect.right > innerWidth || rect.bottom > innerHeight) {
           return null;
         }
@@ -231,7 +235,12 @@ async function typeText(page: Page, text: string, run: Run) {
 async function focused(all: Locator): Promise<boolean> {
   const count = await all.count();
   for (let index = 0; index < count; index++) {
-    if (await all.nth(index).evaluate((el) => el === document.activeElement)) {
+    const seen = await all
+      .nth(index)
+      .evaluate(
+        (el) => el === document.activeElement && el.checkVisibility({ opacityProperty: true, visibilityProperty: true }),
+      );
+    if (seen) {
       return true;
     }
   }

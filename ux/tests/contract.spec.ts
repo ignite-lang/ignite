@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { alwaysVisible, motion, overflow, truncation } from "../lib/layout";
+import { hermetic, open } from "../lib/browse";
 
 // Break-tests of the layout contract: each check fires on a page built to
 // break it and stays quiet on its fixed twin, so a green L2 run means the
@@ -14,7 +15,11 @@ test("overflow: a wide line breaks the page, a scroll box holds it", async ({ pa
   expect(checks).toContain("horizontal page scroll");
   expect(broken.filter((p) => p.check === "element past its box").map((p) => p.detail.split(" ")[0])).toContain("p");
   await page.setContent(`<body style="margin:0"><div style="width:300px;overflow-x:auto"><p style="white-space:nowrap">${"x".repeat(200)}</p></div></body>`);
+  expect((await overflow(page)).map((p) => p.check), "a sideways scroller that is no scroll region").toEqual(["horizontal page scroll"]);
+  await page.setContent(`<body style="margin:0"><pre style="width:300px;overflow-x:auto">${"x".repeat(200)}</pre></body>`);
   expect(await overflow(page)).toEqual([]);
+  await page.setContent(`<body style="margin:0"><div style="width:300px;overflow:hidden"><p style="white-space:nowrap">${"x".repeat(200)}</p></div></body>`);
+  expect((await overflow(page)).map((p) => p.check), "text cut off by a clipping box").toEqual(["element past its box"]);
 });
 
 test("truncation: an ellipsis needs the full text in title", async ({ page }) => {
@@ -46,4 +51,26 @@ test("reduced motion: a running animation is refused", async ({ page }) => {
   expect((await motion(page)).map((p) => p.check)).toEqual(["reduced motion"]);
   await page.setContent(`<style>${css} @media (prefers-reduced-motion: reduce){.s{animation:none}}</style><div class="s">x</div>`);
   expect(await motion(page)).toEqual([]);
+});
+
+test("overflow: a 2400 px block on a built book page is refused at both gating widths", async ({ browser }) => {
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ]) {
+    const context = await browser.newContext({ viewport: { width, height } });
+    await hermetic(context, []);
+    const page = await context.newPage();
+    await open(page, "book/faq.html");
+    expect(await overflow(page), `book/faq.html at ${width}x${height} before the block`).toEqual([]);
+    await page.evaluate(() => {
+      const block = document.createElement("div");
+      block.style.width = "2400px";
+      block.textContent = "wide";
+      document.querySelector("main")!.prepend(block);
+    });
+    const problems = await overflow(page);
+    await context.close();
+    expect(problems.map((p) => p.check), `${width}x${height}`).toContain("horizontal page scroll");
+  }
 });

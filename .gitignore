@@ -4,4 +4,4 @@ core.*
 .idea/
 __pycache__/
 /target-runner/
-/ux/node_modules/
+/ux/node_modules

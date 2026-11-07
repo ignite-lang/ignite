@@ -54,6 +54,16 @@ impl Tolerance {
             Tolerance::Percent(p) => value * 100 > base * (100 + p),
         }
     }
+
+    /// Whether this tolerance admits more than `other`; a change of kind
+    /// (count to percentage or back) counts as looser.
+    fn looser_than(self, other: Tolerance) -> bool {
+        match (self, other) {
+            (Tolerance::Count(a), Tolerance::Count(b)) => a > b,
+            (Tolerance::Percent(a), Tolerance::Percent(b)) => a > b,
+            _ => true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -185,6 +195,12 @@ fn check(baseline: &Baseline, values: &Values, main: Option<&Baseline>) -> Vec<S
                     errors.push(format!(
                         "{scenario} {key}: the baseline moved from {} on main to {} without a `decision`",
                         old.value, entry.value
+                    ));
+                }
+                if entry.tolerance.looser_than(old.tolerance) && !decided {
+                    errors.push(format!(
+                        "{scenario} {key}: the tolerance loosened from {:?} on main to {:?} without a `decision`",
+                        old.tolerance, entry.tolerance
                     ));
                 }
             }
@@ -419,6 +435,29 @@ fn a_baseline_made_worse_than_mains_needs_a_decision() {
         .unwrap()
         .decision = Some("R-01-D1".to_string());
     assert!(check(&decided, &values, Some(&main)).is_empty());
+
+    let loose = base(
+        "t/1440x900",
+        "keyboard.actions",
+        entry(4, Tolerance::Count(1)),
+    );
+    let strict = base(
+        "t/1440x900",
+        "keyboard.actions",
+        entry(4, Tolerance::Count(0)),
+    );
+    let percent = base(
+        "t/1440x900",
+        "keyboard.actions",
+        entry(4, Tolerance::Percent(5)),
+    );
+    let four = one("t/1440x900", "keyboard.actions", 4);
+    assert!(check(&strict, &four, Some(&loose)).is_empty(), "tightened");
+    assert_eq!(
+        check(&percent, &four, Some(&strict)).len(),
+        1,
+        "kind changed"
+    );
 }
 
 const FINDING_FIELDS: [&str; 11] = [
@@ -501,14 +540,36 @@ fn finding_errors(name: &str, text: &str, exists: &dyn Fn(&str) -> bool) -> Vec<
     }
     if field("status") == "closed" && ["S1", "S2"].contains(&field("severity")) {
         let asset = field("regression_asset");
-        let path = asset.split_whitespace().next().unwrap_or("");
+        let (path, test) = match asset.split_once(" :: ") {
+            Some((path, test)) => (path.trim(), test.trim()),
+            None => (asset.trim(), ""),
+        };
         if path.is_empty() || path == "none" {
             errors.push(format!(
                 "{name}: closed {} finding without a regression_asset",
                 field("severity")
             ));
+        } else if path.starts_with('/') || path.split('/').any(|part| part == "..") {
+            errors.push(format!(
+                "{name}: regression_asset {path} is not a plain workspace path"
+            ));
+        } else if !(path.starts_with("ux/") || path.starts_with("crates/")) {
+            errors.push(format!(
+                "{name}: regression_asset {path} is not a test under ux/ or crates/"
+            ));
         } else if !exists(path) {
             errors.push(format!("{name}: regression_asset {path} does not exist"));
+        } else if test.is_empty() {
+            errors.push(format!(
+                "{name}: regression_asset names no test: write `{path} :: <test name>`"
+            ));
+        } else {
+            let text = std::fs::read_to_string(workspace().join(path)).unwrap_or_default();
+            if !text.contains(test) {
+                errors.push(format!(
+                    "{name}: regression_asset names the test {test:?}, which is not in {path}"
+                ));
+            }
         }
     }
     errors
@@ -567,11 +628,63 @@ fn a_closed_s2_finding_without_an_asset_is_refused() {
         )
         .is_empty()
     );
+    for (asset, reason) in [
+        ("ux/tests/layout.spec.ts", "names no test"),
+        (
+            "ux/tests/layout.spec.ts :: no such test",
+            "not in ux/tests/layout.spec.ts",
+        ),
+        ("/etc/passwd :: root", "not a plain workspace path"),
+        ("ux/../README.md :: Ignite", "not a plain workspace path"),
+        ("README.md :: Ignite", "not a test under ux/ or crates/"),
+    ] {
+        let errors = finding_errors("UXF-900.md", &record("S2", "closed", asset), &|_| true);
+        assert!(
+            errors.len() == 1 && errors[0].contains(reason),
+            "{asset}: {errors:?}"
+        );
+    }
     assert!(finding_errors("UXF-900.md", &record("S2", "open", "none"), &exists).is_empty());
     assert!(finding_errors("UXF-900.md", &record("S3", "closed", "none"), &exists).is_empty());
     let unnamed = finding_errors("UXF-901.md", &record("S3", "open", "none"), &exists);
     assert!(
         unnamed.len() == 1 && unnamed[0].contains("not the file name"),
         "{unnamed:?}"
+    );
+}
+
+/// Adversary: a branch that raises an entry's `tolerance` instead of its
+/// `value` lets a worse run pass, with no `decision`, against `main`'s
+/// baseline.
+#[test]
+fn adversary_a_tolerance_raised_against_mains_needs_a_decision() {
+    let main = base(
+        "pages/1440x900",
+        "axe.serious_critical",
+        entry(0, Tolerance::Count(0)),
+    );
+    let loosened = base(
+        "pages/1440x900",
+        "axe.serious_critical",
+        entry(0, Tolerance::Count(50)),
+    );
+    let values = one("pages/1440x900", "axe.serious_critical", 7);
+    let errors = check(&loosened, &values, Some(&main));
+    assert!(
+        !errors.is_empty(),
+        "7 serious axe violations pass against main's 0 by a raised tolerance and no decision"
+    );
+}
+
+/// Adversary: the regression asset of a closed S2 finding must name
+/// something that exists in the file it points at, not only the file.
+#[test]
+fn adversary_a_regression_asset_naming_no_test_is_refused() {
+    let record = "---\nid: UXF-900\ntitle: t\nclass: layout\nseverity: S2\nmetric: m\nstatus: closed\nfound_by: L2\nevidence_recording: none\nevidence_screenshot: none\nevidence_lines: none\nregression_asset: README.md :: a test that is nowhere\n---\n\nbody\n";
+    let exists = |path: &str| workspace().join(path).exists();
+    let errors = finding_errors("UXF-900.md", record, &exists);
+    assert!(
+        !errors.is_empty(),
+        "a closed S2 finding whose asset is README.md passes the findings check"
     );
 }

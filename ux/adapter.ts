@@ -46,6 +46,20 @@ export const themes: Theme[] = [
   { name: "dark", storage: "coal" },
 ];
 
+// The boxes meant to scroll sideways: code blocks, tables and the landing
+// page's example panels, tab row and build-speed figure. Any other box
+// whose content scrolls sideways is a horizontal page scroll: on a book
+// page that is the reading column, #mdbook-content.
+export const scrollRegions = [
+  "pre",
+  "pre > code",
+  "table",
+  ".table-wrapper",
+  ".panel",
+  ".tabs",
+  ".speed-figure",
+].join(", ");
+
 const LANDING_NAV_WIDTH = 721;
 const BOOK_SIDEBAR_WIDTH = 1080;
 

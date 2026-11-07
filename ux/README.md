@@ -6,16 +6,22 @@ ratcheted baseline, and every finding becomes a regression test.
 
 ## Run it
 
-Once, after a clone (installs the pinned Playwright and axe-core from `package-lock.json`;
-no browser download, Playwright uses the Chromium in `~/.cache/ms-playwright`):
+`task ux` never touches the network. Its `ux-deps` step links `ux/node_modules` to one
+shared install per lockfile, `$XDG_CACHE_HOME/ignite/ux/<hash>/node_modules` (default
+`~/.cache`; `<hash>` the first 16 hex digits of the SHA-256 of `package-lock.json`), so every
+worktree uses the same copy. When that copy is missing it is made with
+`npm ci --offline` from the npm cache. When the npm cache does not hold the packages either,
+the step fails with one line naming the one-time command, run once per machine and lockfile,
+with network:
 
 ```sh
-cd ux && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci
+task ux-install
 ```
 
-`task ux` does this itself when `ux/node_modules` is missing and never touches the network
-when it exists. Playwright 1.65.0 needs Chromium revision 1254
-(`npx playwright install chromium` fetches it when it is missing).
+A `ux/node_modules` that is a real directory (a manual `npm ci` in `ux/`) is used as it is.
+No browser is downloaded: Playwright 1.65.0 uses Chromium revision 1254 in
+`~/.cache/ms-playwright` (`cd ux && npx playwright install chromium` fetches it, with
+network, when it is missing).
 
 Then:
 
@@ -30,10 +36,11 @@ specs and then the ratchet. `task gate` runs it.
 
 | level | file | checks |
 |---|---|---|
-| L2 layout contract | `tests/layout.spec.ts` | every page of the site at the gating viewports and in every theme: no horizontal page scroll, no element past its box, the always-visible controls fully in view and uncovered at their centre, axe-core 0 serious or critical violations (`wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`), no truncated text without its full value, no motion under `prefers-reduced-motion: reduce`, no request off the local server |
+| L2 layout contract | `tests/layout.spec.ts` | every page of the site at the gating viewports and in every theme: no horizontal page scroll (the document, or any box that scrolls sideways and is not one of `adapter.ts`'s `scrollRegions`: on a book page the reading column), no text or control cut off or past its box, the always-visible controls opaque, fully in view and uncovered at every point of a 5 by 5 grid over their central 70 %, axe-core 0 serious or critical violations (`wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`), no truncated text without its full value, no motion under `prefers-reduced-motion: reduce`, no request off the local server |
 | L3 screen-only user | `tests/screen-only.spec.ts`, `lib/bot.ts` | every task under `scenarios/`, from the landing page, with the pointer and with the keyboard alone |
 | ratchet | `crates/ignite/tests/site/ux.rs` (`site::ux::`) | `target/ux/metrics.json` against `baseline.json` |
-| findings | same | a closed S1 or S2 finding under `findings/` names its regression asset |
+| findings | same | a closed S1 or S2 finding under `findings/` names its regression asset as `<path> :: <test name>`, a relative path under `ux/` or `crates/` whose file holds that test; `tests/regressions.spec.ts` holds one test per finding |
+| break-tests | `tests/contract.spec.ts`, `tests/adversary.spec.ts` | each check of L2 and the screen-only user fires on a page built to break it |
 
 The adapter (viewports, themes, always-visible controls, navigation disclosures) is
 `adapter.ts`. Measured-only viewports are reported at the end of the Playwright run and in
