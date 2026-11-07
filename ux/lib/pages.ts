@@ -1,5 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { Page } from "@playwright/test";
+import { OUT_DIR } from "../adapter";
 
 export const UX_DIR = path.resolve(__dirname, "..");
 export const REPO = path.resolve(UX_DIR, "..");
@@ -58,6 +60,14 @@ export function tasks(): Task[] {
       }
       return task;
     });
+}
+
+// The screen of a page that missed a gating bar, for the round's report:
+// target/ux/missed/<viewport>/<bar>/<name>.jpg.
+export async function missedShot(page: Page, viewport: string, bar: string, name: string) {
+  const dir = path.join(REPO, OUT_DIR, "missed", viewport, bar);
+  fs.mkdirSync(dir, { recursive: true });
+  await page.screenshot({ path: path.join(dir, `${name.replace(/[^A-Za-z0-9._-]/g, "_")}.jpg`), type: "jpeg", quality: 80 });
 }
 
 // One raw record per test, gathered into target/ux/metrics.json by the

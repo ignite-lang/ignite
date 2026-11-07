@@ -1,0 +1,3277 @@
+{
+  "bars": [
+    {
+      "bar": "L2: no horizontal page scroll, nothing past its box",
+      "cells": [
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "layout.overflow",
+      "limit": "0"
+    },
+    {
+      "bar": "L2: no text or control cut off",
+      "cells": [
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "layout.truncated",
+      "limit": "0"
+    },
+    {
+      "bar": "L2: always-visible controls in view, opaque, uncovered",
+      "cells": [
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "always_visible.misses",
+      "limit": "0"
+    },
+    {
+      "bar": "L2: axe-core serious or critical violations",
+      "cells": [
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": null,
+          "value": null,
+          "verdict": "not measured",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": null,
+          "value": null,
+          "verdict": "not measured",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": null,
+          "value": null,
+          "verdict": "not measured",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "axe.serious_critical",
+      "limit": "0"
+    },
+    {
+      "bar": "L2: motion under reduced motion",
+      "cells": [
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": null,
+          "value": null,
+          "verdict": "not measured",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": null,
+          "value": null,
+          "verdict": "not measured",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": null,
+          "value": null,
+          "verdict": "not measured",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "reduced_motion.violations",
+      "limit": "0"
+    },
+    {
+      "bar": "L2: requests off the local server",
+      "cells": [
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "external_requests",
+      "limit": "0"
+    },
+    {
+      "bar": "trial: requests off the local server",
+      "cells": [
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "trial.external_requests",
+      "limit": "0"
+    },
+    {
+      "bar": "L3 suite: the screen-only user reaches each task's truth, pointer and keyboard",
+      "cells": [
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "7/7",
+          "value": 7,
+          "verdict": "met",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "7/7",
+          "value": 7,
+          "verdict": "met",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": null,
+          "value": null,
+          "verdict": "not measured",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": null,
+          "value": null,
+          "verdict": "not measured",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": null,
+          "value": null,
+          "verdict": "not measured",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "suite.tasks_reached",
+      "limit": "all"
+    },
+    {
+      "bar": "trial: sessions that reach every task's truth",
+      "cells": [
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "3/3",
+          "value": 3,
+          "verdict": "met",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "3/3",
+          "value": 3,
+          "verdict": "met",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "3/3",
+          "value": 3,
+          "verdict": "reported",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "3/3",
+          "value": 3,
+          "verdict": "reported",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "3/3",
+          "value": 3,
+          "verdict": "reported",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "trial.sessions_completed",
+      "limit": "all"
+    },
+    {
+      "bar": "trial: keyboard-alone sessions that reach every task's truth",
+      "cells": [
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "1/1",
+          "value": 1,
+          "verdict": "met",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "1/1",
+          "value": 1,
+          "verdict": "met",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "1/1",
+          "value": 1,
+          "verdict": "reported",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "1/1",
+          "value": 1,
+          "verdict": "reported",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "1/1",
+          "value": 1,
+          "verdict": "reported",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "trial.keyboard_completed",
+      "limit": "all"
+    },
+    {
+      "bar": "trial: actions one pointer step takes, max (every fix at most 2 actions)",
+      "cells": [
+        {
+          "gating": true,
+          "shot": "shots/worst-1-found.jpg",
+          "shown": "13",
+          "value": 13,
+          "verdict": "missed",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": "shots/worst-3-found.jpg",
+          "shown": "23",
+          "value": 23,
+          "verdict": "missed",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "14",
+          "value": 14,
+          "verdict": "reported",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "15",
+          "value": 15,
+          "verdict": "reported",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "13",
+          "value": 13,
+          "verdict": "reported",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "trial.step_actions.max",
+      "limit": "≤ 2"
+    }
+  ],
+  "cards": [
+    {
+      "file": "ux/scenarios/cards/anchor-keyboard-reference.json",
+      "id": "anchor-keyboard-reference",
+      "kind": "anchor",
+      "mode": "keyboard",
+      "theme": "light"
+    },
+    {
+      "file": "ux/scenarios/cards/anchor-newcomer.json",
+      "id": "anchor-newcomer",
+      "kind": "anchor",
+      "mode": "pointer",
+      "theme": "light"
+    },
+    {
+      "file": "ux/scenarios/cards/r01-faq-reader.json",
+      "id": "r01-faq-reader",
+      "kind": "rotating",
+      "mode": "pointer",
+      "theme": "dark"
+    }
+  ],
+  "command": "task ux-round ROUND=R-01",
+  "contact_sheets": [
+    {
+      "gating": true,
+      "shot": "shots/contact-1440x900.jpg",
+      "viewport": "1440x900"
+    },
+    {
+      "gating": true,
+      "shot": "shots/contact-390x844.jpg",
+      "viewport": "390x844"
+    },
+    {
+      "gating": false,
+      "shot": "shots/contact-1280x800.jpg",
+      "viewport": "1280x800"
+    },
+    {
+      "gating": false,
+      "shot": "shots/contact-1024x768.jpg",
+      "viewport": "1024x768"
+    },
+    {
+      "gating": false,
+      "shot": "shots/contact-768x1024.jpg",
+      "viewport": "768x1024"
+    }
+  ],
+  "files": [
+    "report.md",
+    "shots/worst-1-start.jpg",
+    "shots/worst-1-found.jpg",
+    "shots/worst-2-start.jpg",
+    "shots/worst-2-found.jpg",
+    "shots/worst-3-start.jpg",
+    "shots/worst-3-found.jpg",
+    "shots/worst-4-start.jpg",
+    "shots/worst-4-found.jpg",
+    "shots/worst-5-start.jpg",
+    "shots/worst-5-found.jpg",
+    "shots/worst-6-start.jpg",
+    "shots/worst-6-found.jpg",
+    "shots/worst-7-start.jpg",
+    "shots/worst-7-found.jpg",
+    "shots/worst-8-start.jpg",
+    "shots/worst-8-found.jpg",
+    "shots/worst-9-start.jpg",
+    "shots/worst-9-found.jpg",
+    "shots/worst-10-start.jpg",
+    "shots/worst-10-found.jpg",
+    "shots/contact-1440x900.jpg",
+    "shots/contact-390x844.jpg",
+    "shots/contact-1280x800.jpg",
+    "shots/contact-1024x768.jpg",
+    "shots/contact-768x1024.jpg"
+  ],
+  "frame_delay_ms": 750,
+  "gating_suite": {
+    "failed": 0,
+    "failed_tests": [],
+    "flaky": 0,
+    "passed": 276,
+    "skipped": 0,
+    "status": "passed"
+  },
+  "l5_probe": "not run (no person, no keys)",
+  "last_round": null,
+  "measured": {
+    "pages/1024x768": {
+      "always_visible.misses": 0,
+      "external_requests": 0,
+      "layout.overflow": 0,
+      "layout.truncated": 0
+    },
+    "pages/1280x800": {
+      "always_visible.misses": 0,
+      "external_requests": 0,
+      "layout.overflow": 0,
+      "layout.truncated": 0
+    },
+    "pages/768x1024": {
+      "always_visible.misses": 0,
+      "external_requests": 0,
+      "layout.overflow": 0,
+      "layout.truncated": 0
+    }
+  },
+  "missing_inputs": [
+    "questionnaire: not run (no person, no keys)",
+    "L5 probe: not run (no person, no keys)",
+    "L4 keyed replay: not run (no keys)",
+    "person: none; the screen-only user of `ux/lib/bot.ts` drove every session (SKILL.md section 3.1, a driver bot)",
+    "free session: not run (optional)",
+    "rrweb: not in `ux/package-lock.json`; every session is recorded as a Playwright trace instead, `target/ux/round/traces/<session>.zip` (`npx playwright show-trace`), not committed for its size; `task ux-round` records it again",
+    "review agents: `review-heuristics.md` and `review-report.md` are written into this directory after this command",
+    "last round: none, R-01 is the first"
+  ],
+  "questionnaire": "not run (no person, no keys)",
+  "ratchet": [
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "design/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "design/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 5,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "design/1440x900",
+      "tolerance": 0,
+      "value": 5,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "design/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "design/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "design/1440x900",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "design/1440x900",
+      "tolerance": "5%",
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "design/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "design/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 7,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "design/390x844",
+      "tolerance": 0,
+      "value": 7,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "design/390x844",
+      "tolerance": 0,
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "design/390x844",
+      "tolerance": 0,
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "design/390x844",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "design/390x844",
+      "tolerance": "5%",
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "diagnostic-search/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "diagnostic-search/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 66,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "diagnostic-search/1440x900",
+      "tolerance": 0,
+      "value": 66,
+      "verdict": "same"
+    },
+    {
+      "baseline": 7,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "diagnostic-search/1440x900",
+      "tolerance": 0,
+      "value": 7,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "diagnostic-search/1440x900",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "diagnostic-search/1440x900",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "diagnostic-search/1440x900",
+      "tolerance": "5%",
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "diagnostic-search/390x844",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "diagnostic-search/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 16,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "diagnostic-search/390x844",
+      "tolerance": 0,
+      "value": 16,
+      "verdict": "same"
+    },
+    {
+      "baseline": 8,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "diagnostic-search/390x844",
+      "tolerance": 0,
+      "value": 8,
+      "verdict": "same"
+    },
+    {
+      "baseline": 4,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "diagnostic-search/390x844",
+      "tolerance": 0,
+      "value": 4,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "diagnostic-search/390x844",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "diagnostic-search/390x844",
+      "tolerance": "5%",
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "faq-platforms/1440x900",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "faq-platforms/1440x900",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 40,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "faq-platforms/1440x900",
+      "tolerance": 0,
+      "value": 40,
+      "verdict": "same"
+    },
+    {
+      "baseline": 13,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "faq-platforms/1440x900",
+      "tolerance": 0,
+      "value": 13,
+      "verdict": "same"
+    },
+    {
+      "baseline": 13,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "faq-platforms/1440x900",
+      "tolerance": 0,
+      "value": 13,
+      "verdict": "same"
+    },
+    {
+      "baseline": 12,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "faq-platforms/1440x900",
+      "tolerance": 0,
+      "value": 12,
+      "verdict": "same"
+    },
+    {
+      "baseline": 13,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "faq-platforms/1440x900",
+      "tolerance": "5%",
+      "value": 13,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "faq-platforms/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "faq-platforms/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 42,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "faq-platforms/390x844",
+      "tolerance": 0,
+      "value": 42,
+      "verdict": "same"
+    },
+    {
+      "baseline": 23,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "faq-platforms/390x844",
+      "tolerance": 0,
+      "value": 23,
+      "verdict": "same"
+    },
+    {
+      "baseline": 23,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "faq-platforms/390x844",
+      "tolerance": 0,
+      "value": 23,
+      "verdict": "same"
+    },
+    {
+      "baseline": 22,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "faq-platforms/390x844",
+      "tolerance": 0,
+      "value": 22,
+      "verdict": "same"
+    },
+    {
+      "baseline": 23,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "faq-platforms/390x844",
+      "tolerance": "5%",
+      "value": 23,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "http-example/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "http-example/1440x900",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 76,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "http-example/1440x900",
+      "tolerance": 0,
+      "value": 76,
+      "verdict": "same"
+    },
+    {
+      "baseline": 4,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "http-example/1440x900",
+      "tolerance": 0,
+      "value": 4,
+      "verdict": "same"
+    },
+    {
+      "baseline": 4,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "http-example/1440x900",
+      "tolerance": 0,
+      "value": 4,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "http-example/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "http-example/1440x900",
+      "tolerance": "5%",
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "http-example/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "http-example/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 53,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "http-example/390x844",
+      "tolerance": 0,
+      "value": 53,
+      "verdict": "same"
+    },
+    {
+      "baseline": 6,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "http-example/390x844",
+      "tolerance": 0,
+      "value": 6,
+      "verdict": "same"
+    },
+    {
+      "baseline": 6,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "http-example/390x844",
+      "tolerance": 0,
+      "value": 6,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "http-example/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "http-example/390x844",
+      "tolerance": "5%",
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "install/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "install/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 4,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "install/1440x900",
+      "tolerance": 0,
+      "value": 4,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "install/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "install/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "install/1440x900",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "install/1440x900",
+      "tolerance": "5%",
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "install/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "install/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 6,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "install/390x844",
+      "tolerance": 0,
+      "value": 6,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "install/390x844",
+      "tolerance": 0,
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "install/390x844",
+      "tolerance": 0,
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "install/390x844",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "install/390x844",
+      "tolerance": "5%",
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "always_visible.misses",
+      "scenario": "pages/1440x900",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "axe.serious_critical",
+      "scenario": "pages/1440x900",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "external_requests",
+      "scenario": "pages/1440x900",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "layout.overflow",
+      "scenario": "pages/1440x900",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "layout.truncated",
+      "scenario": "pages/1440x900",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "reduced_motion.violations",
+      "scenario": "pages/1440x900",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "always_visible.misses",
+      "scenario": "pages/390x844",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "axe.serious_critical",
+      "scenario": "pages/390x844",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "external_requests",
+      "scenario": "pages/390x844",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "layout.overflow",
+      "scenario": "pages/390x844",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "layout.truncated",
+      "scenario": "pages/390x844",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "reduced_motion.violations",
+      "scenario": "pages/390x844",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "roadmap/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "roadmap/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 7,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "roadmap/1440x900",
+      "tolerance": 0,
+      "value": 7,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "roadmap/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "roadmap/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 0,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "roadmap/1440x900",
+      "tolerance": 0,
+      "value": 0,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "roadmap/1440x900",
+      "tolerance": "5%",
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "roadmap/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "roadmap/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 9,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "roadmap/390x844",
+      "tolerance": 0,
+      "value": 9,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "roadmap/390x844",
+      "tolerance": 0,
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "roadmap/390x844",
+      "tolerance": 0,
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "roadmap/390x844",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "roadmap/390x844",
+      "tolerance": "5%",
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "std-fs/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "std-fs/1440x900",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 72,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "std-fs/1440x900",
+      "tolerance": 0,
+      "value": 72,
+      "verdict": "same"
+    },
+    {
+      "baseline": 4,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "std-fs/1440x900",
+      "tolerance": 0,
+      "value": 4,
+      "verdict": "same"
+    },
+    {
+      "baseline": 4,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "std-fs/1440x900",
+      "tolerance": 0,
+      "value": 4,
+      "verdict": "same"
+    },
+    {
+      "baseline": 1,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "std-fs/1440x900",
+      "tolerance": 0,
+      "value": 1,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "std-fs/1440x900",
+      "tolerance": "5%",
+      "value": 2,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.median",
+      "scenario": "std-fs/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "glance_cost.p95",
+      "scenario": "std-fs/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 43,
+      "last": null,
+      "metric": "keyboard.actions",
+      "scenario": "std-fs/390x844",
+      "tolerance": 0,
+      "value": 43,
+      "verdict": "same"
+    },
+    {
+      "baseline": 6,
+      "last": null,
+      "metric": "screen_only.actions",
+      "scenario": "std-fs/390x844",
+      "tolerance": 0,
+      "value": 6,
+      "verdict": "same"
+    },
+    {
+      "baseline": 6,
+      "last": null,
+      "metric": "screen_only.looks",
+      "scenario": "std-fs/390x844",
+      "tolerance": 0,
+      "value": 6,
+      "verdict": "same"
+    },
+    {
+      "baseline": 3,
+      "last": null,
+      "metric": "screen_only.steers",
+      "scenario": "std-fs/390x844",
+      "tolerance": 0,
+      "value": 3,
+      "verdict": "same"
+    },
+    {
+      "baseline": 2,
+      "last": null,
+      "metric": "screen_only.time_to_act_steps.max",
+      "scenario": "std-fs/390x844",
+      "tolerance": "5%",
+      "value": 2,
+      "verdict": "same"
+    }
+  ],
+  "recording": "playwright-trace",
+  "round": "R-01",
+  "sessions": [
+    {
+      "actions": 435,
+      "card": "anchor-keyboard-reference",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": null,
+      "glance_p95": null,
+      "group": "gating",
+      "kind": "anchor",
+      "last_actions": null,
+      "looks": 417,
+      "mode": "keyboard",
+      "segments": [
+        {
+          "actions": 72,
+          "completed": true,
+          "first_step": 0,
+          "id": "std-fs",
+          "kind": "task",
+          "looks": 69,
+          "steers": 0,
+          "steps": 3
+        },
+        {
+          "actions": 56,
+          "completed": true,
+          "first_step": 3,
+          "id": "home",
+          "kind": "between",
+          "looks": 55,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 63,
+          "completed": true,
+          "first_step": 4,
+          "id": "wrong-turn-design",
+          "kind": "twist",
+          "looks": 61,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 76,
+          "completed": true,
+          "first_step": 6,
+          "id": "http-example",
+          "kind": "task",
+          "looks": 73,
+          "steers": 0,
+          "steps": 3
+        },
+        {
+          "actions": 58,
+          "completed": true,
+          "first_step": 9,
+          "id": "home",
+          "kind": "between",
+          "looks": 57,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 9,
+          "completed": true,
+          "first_step": 10,
+          "id": "switches-theme",
+          "kind": "twist",
+          "looks": 8,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 101,
+          "completed": true,
+          "first_step": 11,
+          "id": "diagnostic-search",
+          "kind": "task",
+          "looks": 94,
+          "steers": 0,
+          "steps": 3
+        }
+      ],
+      "session": "anchor-keyboard-reference-1440x900",
+      "steers": 0,
+      "step_actions_max": 58,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "light",
+      "time_to_act_max": 57,
+      "trace": "target/ux/round/traces/anchor-keyboard-reference-1440x900.zip",
+      "viewport": "1440x900"
+    },
+    {
+      "actions": 180,
+      "card": "anchor-keyboard-reference",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": null,
+      "glance_p95": null,
+      "group": "gating",
+      "kind": "anchor",
+      "last_actions": null,
+      "looks": 158,
+      "mode": "keyboard",
+      "segments": [
+        {
+          "actions": 43,
+          "completed": true,
+          "first_step": 0,
+          "id": "std-fs",
+          "kind": "task",
+          "looks": 39,
+          "steers": 1,
+          "steps": 3
+        },
+        {
+          "actions": 5,
+          "completed": true,
+          "first_step": 3,
+          "id": "home",
+          "kind": "between",
+          "looks": 4,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 12,
+          "completed": true,
+          "first_step": 4,
+          "id": "wrong-turn-design",
+          "kind": "twist",
+          "looks": 9,
+          "steers": 1,
+          "steps": 2
+        },
+        {
+          "actions": 53,
+          "completed": true,
+          "first_step": 6,
+          "id": "http-example",
+          "kind": "task",
+          "looks": 49,
+          "steers": 1,
+          "steps": 3
+        },
+        {
+          "actions": 5,
+          "completed": true,
+          "first_step": 9,
+          "id": "home",
+          "kind": "between",
+          "looks": 4,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 5,
+          "completed": true,
+          "first_step": 10,
+          "id": "switches-theme",
+          "kind": "twist",
+          "looks": 4,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 57,
+          "completed": true,
+          "first_step": 11,
+          "id": "diagnostic-search",
+          "kind": "task",
+          "looks": 49,
+          "steers": 1,
+          "steps": 3
+        }
+      ],
+      "session": "anchor-keyboard-reference-390x844",
+      "steers": 4,
+      "step_actions_max": 47,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "light",
+      "time_to_act_max": 45,
+      "trace": "target/ux/round/traces/anchor-keyboard-reference-390x844.zip",
+      "viewport": "390x844"
+    },
+    {
+      "actions": 435,
+      "card": "anchor-keyboard-reference",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": null,
+      "glance_p95": null,
+      "group": "measured",
+      "kind": "anchor",
+      "last_actions": null,
+      "looks": 417,
+      "mode": "keyboard",
+      "segments": [
+        {
+          "actions": 72,
+          "completed": true,
+          "first_step": 0,
+          "id": "std-fs",
+          "kind": "task",
+          "looks": 69,
+          "steers": 0,
+          "steps": 3
+        },
+        {
+          "actions": 56,
+          "completed": true,
+          "first_step": 3,
+          "id": "home",
+          "kind": "between",
+          "looks": 55,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 63,
+          "completed": true,
+          "first_step": 4,
+          "id": "wrong-turn-design",
+          "kind": "twist",
+          "looks": 61,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 76,
+          "completed": true,
+          "first_step": 6,
+          "id": "http-example",
+          "kind": "task",
+          "looks": 73,
+          "steers": 0,
+          "steps": 3
+        },
+        {
+          "actions": 58,
+          "completed": true,
+          "first_step": 9,
+          "id": "home",
+          "kind": "between",
+          "looks": 57,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 9,
+          "completed": true,
+          "first_step": 10,
+          "id": "switches-theme",
+          "kind": "twist",
+          "looks": 8,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 101,
+          "completed": true,
+          "first_step": 11,
+          "id": "diagnostic-search",
+          "kind": "task",
+          "looks": 94,
+          "steers": 0,
+          "steps": 3
+        }
+      ],
+      "session": "anchor-keyboard-reference-1280x800",
+      "steers": 0,
+      "step_actions_max": 58,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "light",
+      "time_to_act_max": 57,
+      "trace": "target/ux/round/traces/anchor-keyboard-reference-1280x800.zip",
+      "viewport": "1280x800"
+    },
+    {
+      "actions": 169,
+      "card": "anchor-keyboard-reference",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": null,
+      "glance_p95": null,
+      "group": "measured",
+      "kind": "anchor",
+      "last_actions": null,
+      "looks": 151,
+      "mode": "keyboard",
+      "segments": [
+        {
+          "actions": 40,
+          "completed": true,
+          "first_step": 0,
+          "id": "std-fs",
+          "kind": "task",
+          "looks": 37,
+          "steers": 0,
+          "steps": 3
+        },
+        {
+          "actions": 5,
+          "completed": true,
+          "first_step": 3,
+          "id": "home",
+          "kind": "between",
+          "looks": 4,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 10,
+          "completed": true,
+          "first_step": 4,
+          "id": "wrong-turn-design",
+          "kind": "twist",
+          "looks": 8,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 50,
+          "completed": true,
+          "first_step": 6,
+          "id": "http-example",
+          "kind": "task",
+          "looks": 47,
+          "steers": 0,
+          "steps": 3
+        },
+        {
+          "actions": 5,
+          "completed": true,
+          "first_step": 9,
+          "id": "home",
+          "kind": "between",
+          "looks": 4,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 9,
+          "completed": true,
+          "first_step": 10,
+          "id": "switches-theme",
+          "kind": "twist",
+          "looks": 8,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 50,
+          "completed": true,
+          "first_step": 11,
+          "id": "diagnostic-search",
+          "kind": "task",
+          "looks": 43,
+          "steers": 0,
+          "steps": 3
+        }
+      ],
+      "session": "anchor-keyboard-reference-1024x768",
+      "steers": 0,
+      "step_actions_max": 40,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "light",
+      "time_to_act_max": 39,
+      "trace": "target/ux/round/traces/anchor-keyboard-reference-1024x768.zip",
+      "viewport": "1024x768"
+    },
+    {
+      "actions": 167,
+      "card": "anchor-keyboard-reference",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": null,
+      "glance_p95": null,
+      "group": "measured",
+      "kind": "anchor",
+      "last_actions": null,
+      "looks": 149,
+      "mode": "keyboard",
+      "segments": [
+        {
+          "actions": 40,
+          "completed": true,
+          "first_step": 0,
+          "id": "std-fs",
+          "kind": "task",
+          "looks": 37,
+          "steers": 0,
+          "steps": 3
+        },
+        {
+          "actions": 5,
+          "completed": true,
+          "first_step": 3,
+          "id": "home",
+          "kind": "between",
+          "looks": 4,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 10,
+          "completed": true,
+          "first_step": 4,
+          "id": "wrong-turn-design",
+          "kind": "twist",
+          "looks": 8,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 50,
+          "completed": true,
+          "first_step": 6,
+          "id": "http-example",
+          "kind": "task",
+          "looks": 47,
+          "steers": 0,
+          "steps": 3
+        },
+        {
+          "actions": 5,
+          "completed": true,
+          "first_step": 9,
+          "id": "home",
+          "kind": "between",
+          "looks": 4,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 9,
+          "completed": true,
+          "first_step": 10,
+          "id": "switches-theme",
+          "kind": "twist",
+          "looks": 8,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 48,
+          "completed": true,
+          "first_step": 11,
+          "id": "diagnostic-search",
+          "kind": "task",
+          "looks": 41,
+          "steers": 0,
+          "steps": 3
+        }
+      ],
+      "session": "anchor-keyboard-reference-768x1024",
+      "steers": 0,
+      "step_actions_max": 38,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "light",
+      "time_to_act_max": 37,
+      "trace": "target/ux/round/traces/anchor-keyboard-reference-768x1024.zip",
+      "viewport": "768x1024"
+    },
+    {
+      "actions": 8,
+      "card": "anchor-newcomer",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": 1,
+      "glance_p95": 1,
+      "group": "gating",
+      "kind": "anchor",
+      "last_actions": null,
+      "looks": 8,
+      "mode": "pointer",
+      "segments": [
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 0,
+          "id": "install",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 1,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 2,
+          "id": "switches-to-dark",
+          "kind": "twist",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 3,
+          "id": "design",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 4,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 5,
+          "id": "wrong-turn-reference",
+          "kind": "twist",
+          "looks": 2,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 7,
+          "id": "roadmap",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        }
+      ],
+      "session": "anchor-newcomer-1440x900",
+      "steers": 0,
+      "step_actions_max": 1,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "light",
+      "time_to_act_max": 1,
+      "trace": "target/ux/round/traces/anchor-newcomer-1440x900.zip",
+      "viewport": "1440x900"
+    },
+    {
+      "actions": 12,
+      "card": "anchor-newcomer",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": 1,
+      "glance_p95": 3,
+      "group": "gating",
+      "kind": "anchor",
+      "last_actions": null,
+      "looks": 12,
+      "mode": "pointer",
+      "segments": [
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 0,
+          "id": "install",
+          "kind": "task",
+          "looks": 2,
+          "steers": 1,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 1,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 2,
+          "id": "switches-to-dark",
+          "kind": "twist",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 3,
+          "id": "design",
+          "kind": "task",
+          "looks": 2,
+          "steers": 1,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 4,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 3,
+          "completed": true,
+          "first_step": 5,
+          "id": "wrong-turn-reference",
+          "kind": "twist",
+          "looks": 3,
+          "steers": 1,
+          "steps": 2
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 7,
+          "id": "roadmap",
+          "kind": "task",
+          "looks": 2,
+          "steers": 1,
+          "steps": 1
+        }
+      ],
+      "session": "anchor-newcomer-390x844",
+      "steers": 4,
+      "step_actions_max": 2,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "light",
+      "time_to_act_max": 2,
+      "trace": "target/ux/round/traces/anchor-newcomer-390x844.zip",
+      "viewport": "390x844"
+    },
+    {
+      "actions": 8,
+      "card": "anchor-newcomer",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": 1,
+      "glance_p95": 1,
+      "group": "measured",
+      "kind": "anchor",
+      "last_actions": null,
+      "looks": 8,
+      "mode": "pointer",
+      "segments": [
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 0,
+          "id": "install",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 1,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 2,
+          "id": "switches-to-dark",
+          "kind": "twist",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 3,
+          "id": "design",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 4,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 5,
+          "id": "wrong-turn-reference",
+          "kind": "twist",
+          "looks": 2,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 7,
+          "id": "roadmap",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        }
+      ],
+      "session": "anchor-newcomer-1280x800",
+      "steers": 0,
+      "step_actions_max": 1,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "light",
+      "time_to_act_max": 1,
+      "trace": "target/ux/round/traces/anchor-newcomer-1280x800.zip",
+      "viewport": "1280x800"
+    },
+    {
+      "actions": 8,
+      "card": "anchor-newcomer",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": 1,
+      "glance_p95": 1,
+      "group": "measured",
+      "kind": "anchor",
+      "last_actions": null,
+      "looks": 8,
+      "mode": "pointer",
+      "segments": [
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 0,
+          "id": "install",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 1,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 2,
+          "id": "switches-to-dark",
+          "kind": "twist",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 3,
+          "id": "design",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 4,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 5,
+          "id": "wrong-turn-reference",
+          "kind": "twist",
+          "looks": 2,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 7,
+          "id": "roadmap",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        }
+      ],
+      "session": "anchor-newcomer-1024x768",
+      "steers": 0,
+      "step_actions_max": 1,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "light",
+      "time_to_act_max": 1,
+      "trace": "target/ux/round/traces/anchor-newcomer-1024x768.zip",
+      "viewport": "1024x768"
+    },
+    {
+      "actions": 8,
+      "card": "anchor-newcomer",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": 1,
+      "glance_p95": 1,
+      "group": "measured",
+      "kind": "anchor",
+      "last_actions": null,
+      "looks": 8,
+      "mode": "pointer",
+      "segments": [
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 0,
+          "id": "install",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 1,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 2,
+          "id": "switches-to-dark",
+          "kind": "twist",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 3,
+          "id": "design",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 4,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 5,
+          "id": "wrong-turn-reference",
+          "kind": "twist",
+          "looks": 2,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 7,
+          "id": "roadmap",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        }
+      ],
+      "session": "anchor-newcomer-768x1024",
+      "steers": 0,
+      "step_actions_max": 1,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "light",
+      "time_to_act_max": 1,
+      "trace": "target/ux/round/traces/anchor-newcomer-768x1024.zip",
+      "viewport": "768x1024"
+    },
+    {
+      "actions": 22,
+      "card": "r01-faq-reader",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": 1,
+      "glance_p95": 3,
+      "group": "gating",
+      "kind": "rotating",
+      "last_actions": null,
+      "looks": 22,
+      "mode": "pointer",
+      "segments": [
+        {
+          "actions": 13,
+          "completed": true,
+          "first_step": 0,
+          "id": "faq-platforms",
+          "kind": "task",
+          "looks": 13,
+          "steers": 12,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 1,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 2,
+          "id": "install",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 3,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 4,
+          "id": "wrong-turn-roadmap",
+          "kind": "twist",
+          "looks": 2,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 4,
+          "completed": true,
+          "first_step": 6,
+          "id": "std-fs",
+          "kind": "task",
+          "looks": 4,
+          "steers": 1,
+          "steps": 3
+        }
+      ],
+      "session": "r01-faq-reader-1440x900",
+      "steers": 13,
+      "step_actions_max": 13,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "dark",
+      "time_to_act_max": 13,
+      "trace": "target/ux/round/traces/r01-faq-reader-1440x900.zip",
+      "viewport": "1440x900"
+    },
+    {
+      "actions": 36,
+      "card": "r01-faq-reader",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": 3,
+      "glance_p95": 3,
+      "group": "gating",
+      "kind": "rotating",
+      "last_actions": null,
+      "looks": 36,
+      "mode": "pointer",
+      "segments": [
+        {
+          "actions": 23,
+          "completed": true,
+          "first_step": 0,
+          "id": "faq-platforms",
+          "kind": "task",
+          "looks": 23,
+          "steers": 22,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 1,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 2,
+          "id": "install",
+          "kind": "task",
+          "looks": 2,
+          "steers": 1,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 3,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 3,
+          "completed": true,
+          "first_step": 4,
+          "id": "wrong-turn-roadmap",
+          "kind": "twist",
+          "looks": 3,
+          "steers": 1,
+          "steps": 2
+        },
+        {
+          "actions": 6,
+          "completed": true,
+          "first_step": 6,
+          "id": "std-fs",
+          "kind": "task",
+          "looks": 6,
+          "steers": 3,
+          "steps": 3
+        }
+      ],
+      "session": "r01-faq-reader-390x844",
+      "steers": 27,
+      "step_actions_max": 23,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "dark",
+      "time_to_act_max": 23,
+      "trace": "target/ux/round/traces/r01-faq-reader-390x844.zip",
+      "viewport": "390x844"
+    },
+    {
+      "actions": 23,
+      "card": "r01-faq-reader",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": 1,
+      "glance_p95": 3,
+      "group": "measured",
+      "kind": "rotating",
+      "last_actions": null,
+      "looks": 23,
+      "mode": "pointer",
+      "segments": [
+        {
+          "actions": 14,
+          "completed": true,
+          "first_step": 0,
+          "id": "faq-platforms",
+          "kind": "task",
+          "looks": 14,
+          "steers": 13,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 1,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 2,
+          "id": "install",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 3,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 4,
+          "id": "wrong-turn-roadmap",
+          "kind": "twist",
+          "looks": 2,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 4,
+          "completed": true,
+          "first_step": 6,
+          "id": "std-fs",
+          "kind": "task",
+          "looks": 4,
+          "steers": 1,
+          "steps": 3
+        }
+      ],
+      "session": "r01-faq-reader-1280x800",
+      "steers": 14,
+      "step_actions_max": 14,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "dark",
+      "time_to_act_max": 14,
+      "trace": "target/ux/round/traces/r01-faq-reader-1280x800.zip",
+      "viewport": "1280x800"
+    },
+    {
+      "actions": 24,
+      "card": "r01-faq-reader",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": 1,
+      "glance_p95": 3,
+      "group": "measured",
+      "kind": "rotating",
+      "last_actions": null,
+      "looks": 24,
+      "mode": "pointer",
+      "segments": [
+        {
+          "actions": 15,
+          "completed": true,
+          "first_step": 0,
+          "id": "faq-platforms",
+          "kind": "task",
+          "looks": 15,
+          "steers": 14,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 1,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 2,
+          "id": "install",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 3,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 4,
+          "id": "wrong-turn-roadmap",
+          "kind": "twist",
+          "looks": 2,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 4,
+          "completed": true,
+          "first_step": 6,
+          "id": "std-fs",
+          "kind": "task",
+          "looks": 4,
+          "steers": 1,
+          "steps": 3
+        }
+      ],
+      "session": "r01-faq-reader-1024x768",
+      "steers": 15,
+      "step_actions_max": 15,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "dark",
+      "time_to_act_max": 15,
+      "trace": "target/ux/round/traces/r01-faq-reader-1024x768.zip",
+      "viewport": "1024x768"
+    },
+    {
+      "actions": 22,
+      "card": "r01-faq-reader",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": 1,
+      "glance_p95": 3,
+      "group": "measured",
+      "kind": "rotating",
+      "last_actions": null,
+      "looks": 22,
+      "mode": "pointer",
+      "segments": [
+        {
+          "actions": 13,
+          "completed": true,
+          "first_step": 0,
+          "id": "faq-platforms",
+          "kind": "task",
+          "looks": 13,
+          "steers": 12,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 1,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 2,
+          "id": "install",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 3,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 4,
+          "id": "wrong-turn-roadmap",
+          "kind": "twist",
+          "looks": 2,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 4,
+          "completed": true,
+          "first_step": 6,
+          "id": "std-fs",
+          "kind": "task",
+          "looks": 4,
+          "steers": 1,
+          "steps": 3
+        }
+      ],
+      "session": "r01-faq-reader-768x1024",
+      "steers": 13,
+      "step_actions_max": 13,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "dark",
+      "time_to_act_max": 13,
+      "trace": "target/ux/round/traces/r01-faq-reader-768x1024.zip",
+      "viewport": "768x1024"
+    }
+  ],
+  "trend": {
+    "bars_missed": 2,
+    "gating_suite": "passed",
+    "l5_probe": "not run (no person, no keys)",
+    "questionnaire": "not run (no person, no keys)",
+    "ratchet_better": 0,
+    "ratchet_worse": 0,
+    "round": "R-01",
+    "sessions": 15,
+    "sessions_completed": 15,
+    "trial_keyboard_actions": 615,
+    "trial_pointer_actions": 78,
+    "worst_keyboard_tabs": 57,
+    "worst_pointer_looks": 23
+  },
+  "viewports": [
+    {
+      "gating": true,
+      "name": "1440x900"
+    },
+    {
+      "gating": true,
+      "name": "390x844"
+    },
+    {
+      "gating": false,
+      "name": "1280x800"
+    },
+    {
+      "gating": false,
+      "name": "1024x768"
+    },
+    {
+      "gating": false,
+      "name": "768x1024"
+    }
+  ],
+  "worst": [
+    {
+      "actions": 13,
+      "glance": 3,
+      "label": "click link /^FAQ$/",
+      "looks": 13,
+      "mode": "pointer",
+      "page": "index.html",
+      "rank": 1,
+      "segment": "task faq-platforms",
+      "session": "r01-faq-reader-1440x900",
+      "shots": [
+        {
+          "frame": 1,
+          "shot": "shots/worst-1-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 13,
+          "shot": "shots/worst-1-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "1440x900"
+    },
+    {
+      "actions": 58,
+      "glance": null,
+      "label": "enter on link /^Ignite home$/ after 57 tabs",
+      "looks": 57,
+      "mode": "keyboard",
+      "page": "book/design/index.html",
+      "rank": 2,
+      "segment": "twist wrong-turn-design",
+      "session": "anchor-keyboard-reference-1440x900",
+      "shots": [
+        {
+          "frame": 11,
+          "shot": "shots/worst-2-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 12,
+          "shot": "shots/worst-2-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "1440x900"
+    },
+    {
+      "actions": 23,
+      "glance": 3,
+      "label": "click link /^FAQ$/",
+      "looks": 23,
+      "mode": "pointer",
+      "page": "index.html",
+      "rank": 3,
+      "segment": "task faq-platforms",
+      "session": "r01-faq-reader-390x844",
+      "shots": [
+        {
+          "frame": 1,
+          "shot": "shots/worst-3-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 23,
+          "shot": "shots/worst-3-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "390x844"
+    },
+    {
+      "actions": 47,
+      "glance": null,
+      "label": "enter on link /^Guide$/ after 45 tabs",
+      "looks": 45,
+      "mode": "keyboard",
+      "page": "index.html",
+      "rank": 4,
+      "segment": "task diagnostic-search",
+      "session": "anchor-keyboard-reference-390x844",
+      "shots": [
+        {
+          "frame": 26,
+          "shot": "shots/worst-4-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 28,
+          "shot": "shots/worst-4-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "390x844"
+    },
+    {
+      "actions": 14,
+      "glance": 3,
+      "label": "click link /^FAQ$/",
+      "looks": 14,
+      "mode": "pointer",
+      "page": "index.html",
+      "rank": 5,
+      "segment": "task faq-platforms",
+      "session": "r01-faq-reader-1280x800",
+      "shots": [
+        {
+          "frame": 1,
+          "shot": "shots/worst-5-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 14,
+          "shot": "shots/worst-5-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "1280x800"
+    },
+    {
+      "actions": 58,
+      "glance": null,
+      "label": "enter on link /^Ignite home$/ after 57 tabs",
+      "looks": 57,
+      "mode": "keyboard",
+      "page": "book/design/index.html",
+      "rank": 6,
+      "segment": "twist wrong-turn-design",
+      "session": "anchor-keyboard-reference-1280x800",
+      "shots": [
+        {
+          "frame": 11,
+          "shot": "shots/worst-6-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 12,
+          "shot": "shots/worst-6-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "1280x800"
+    },
+    {
+      "actions": 15,
+      "glance": 3,
+      "label": "click link /^FAQ$/",
+      "looks": 15,
+      "mode": "pointer",
+      "page": "index.html",
+      "rank": 7,
+      "segment": "task faq-platforms",
+      "session": "r01-faq-reader-1024x768",
+      "shots": [
+        {
+          "frame": 1,
+          "shot": "shots/worst-7-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 15,
+          "shot": "shots/worst-7-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "1024x768"
+    },
+    {
+      "actions": 40,
+      "glance": null,
+      "label": "enter on link /^Guide$/ after 39 tabs",
+      "looks": 39,
+      "mode": "keyboard",
+      "page": "index.html",
+      "rank": 8,
+      "segment": "task diagnostic-search",
+      "session": "anchor-keyboard-reference-1024x768",
+      "shots": [
+        {
+          "frame": 23,
+          "shot": "shots/worst-8-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 24,
+          "shot": "shots/worst-8-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "1024x768"
+    },
+    {
+      "actions": 13,
+      "glance": 3,
+      "label": "click link /^FAQ$/",
+      "looks": 13,
+      "mode": "pointer",
+      "page": "index.html",
+      "rank": 9,
+      "segment": "task faq-platforms",
+      "session": "r01-faq-reader-768x1024",
+      "shots": [
+        {
+          "frame": 1,
+          "shot": "shots/worst-9-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 13,
+          "shot": "shots/worst-9-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "768x1024"
+    },
+    {
+      "actions": 38,
+      "glance": null,
+      "label": "enter on link /^Guide$/ after 37 tabs",
+      "looks": 37,
+      "mode": "keyboard",
+      "page": "index.html",
+      "rank": 10,
+      "segment": "task diagnostic-search",
+      "session": "anchor-keyboard-reference-768x1024",
+      "shots": [
+        {
+          "frame": 23,
+          "shot": "shots/worst-10-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 24,
+          "shot": "shots/worst-10-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "768x1024"
+    }
+  ]
+}

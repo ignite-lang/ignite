@@ -9,7 +9,7 @@ export default defineConfig({
   forbidOnly: true,
   retries: 0,
   timeout: 120_000,
-  reporter: [["list"]],
+  reporter: [["list"], ["./lib/summary-reporter.ts"]],
   use: {
     browserName: "chromium",
     headless: true,

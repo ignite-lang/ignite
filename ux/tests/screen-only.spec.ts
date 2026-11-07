@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { gatingViewports, OUT_DIR, themes } from "../adapter";
 import { nearestRank, play } from "../lib/bot";
 import { chooseTheme, hermetic } from "../lib/browse";
-import { tasks, writeRecord } from "../lib/pages";
+import { missedShot, tasks, writeRecord } from "../lib/pages";
 
 for (const viewport of gatingViewports) {
   test.describe(`L3 ${viewport.name}`, () => {
@@ -20,6 +20,9 @@ for (const viewport of gatingViewports) {
           const page = await context.newPage();
           try {
             results.push(await play(page, task, mode));
+          } catch (error) {
+            await missedShot(page, viewport.name, "suite.tasks_reached", `${task.id}-${mode}`);
+            throw error;
           } finally {
             await context.close();
           }

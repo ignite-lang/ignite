@@ -11,7 +11,7 @@ import {
 } from "../adapter";
 import { chooseTheme, hermetic, open } from "../lib/browse";
 import { alwaysVisible, motion, overflow, type Problem, truncation } from "../lib/layout";
-import { sitePages, writeRecord } from "../lib/pages";
+import { missedShot, sitePages, writeRecord } from "../lib/pages";
 
 const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
@@ -56,11 +56,13 @@ function run(viewport: Viewport, gating: boolean) {
           counts["layout.truncated"] += cuts.length;
           counts["always_visible.misses"] += hidden.length;
           const problems = [...flows, ...cuts, ...hidden];
+          let axeNodes = 0;
           if (gating) {
             const axe = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
             for (const violation of axe.violations) {
               if (violation.impact === "serious" || violation.impact === "critical") {
                 counts["axe.serious_critical"] += violation.nodes.length;
+                axeNodes += violation.nodes.length;
                 for (const node of violation.nodes) {
                   problems.push({
                     check: `axe ${violation.id} (${violation.impact})`,
@@ -68,6 +70,18 @@ function run(viewport: Viewport, gating: boolean) {
                   });
                 }
               }
+            }
+          }
+          const missed: [string, number][] = [
+            ["layout.overflow", flows.length],
+            ["layout.truncated", cuts.length],
+            ["always_visible.misses", hidden.length],
+            ["axe.serious_critical", axeNodes],
+            ["external_requests", refused.length],
+          ];
+          for (const [bar, count] of missed) {
+            if (count) {
+              await missedShot(page, viewport.name, bar, `${theme.name}-${path}`);
             }
           }
           await context.close();
@@ -90,6 +104,9 @@ function run(viewport: Viewport, gating: boolean) {
           const page = await context.newPage();
           await open(page, path);
           const moving = await motion(page);
+          if (moving.length) {
+            await missedShot(page, viewport.name, "reduced_motion.violations", path);
+          }
           await context.close();
           counts["reduced_motion.violations"] += moving.length;
           if (moving.length) {
