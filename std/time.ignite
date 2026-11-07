@@ -3,8 +3,9 @@ package std.time
 // Civil time for calendar windows (design section 4.1: "Window: rolling or
 // calendar interval, timezone, and boundary rules"; `docs/slice.md` 16.4,
 // 16.10, O36). An instant is a Duration since 1970-01-01T00:00:00Z: the
-// journal's epoch plus an event's `at`. Zones are a closed set, `UTC` and
-// `Europe/Berlin`; the latter follows the EU rule, summer time from the
+// journal's epoch plus an event's `at`, or a program's `Clock.now()`
+// (21.20). Zones are a closed set, `UTC` and `Europe/Berlin`; the latter
+// follows the EU rule, summer time from the
 // last Sunday of March 01:00 UTC to the last Sunday of October 01:00 UTC.
 // Any other zone is unknown and refused by the kinds' `validate` (E120).
 // A leaf module: `std.control` reads it for the period boundaries of a

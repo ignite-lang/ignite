@@ -7530,6 +7530,7 @@ the receiver's declared type as `Store` methods are (F5):
 | `ChildProcess` | `kill` | `kill` |
 | `Entropy` | `random_bytes` | `draw` |
 | `Setting` | `value` | `argument` |
+| `Environment` (21.20) | `get` | `variable` |
 
 - The op is `launch`, not `spawn`, because `spawn` is a keyword.
 - The ops differ per kind (`read`, `write`, `launch`, `draw`, `argument`), so `requires
@@ -8144,6 +8145,114 @@ Tests: `slice17::{rust,llvm}::the_command_line_reaches_the_program` and
 `slice17::the_command_line_parse_runs_inline_on_both_targets` runs that file's inline tests,
 which parse `CommandLine.of(..)`; the inline test "a command line keeps its arguments in order"
 in `std/process.ignite`; `e051_command_line_of` (ignite-check).
+
+### 21.20 Environment, sleep, wall clock and flush, added after the slice
+
+Added 2026-11-07 by `story:pusher-process-builtins`. The pusher case study
+(`docs/research/pusher-gaps.md` G2, G3 (sleep only), G8, G13; `docs/friction.md` rows 61, 62,
+67, 72) needed environment variables, a sleep, a wall clock and an explicit flush.
+
+| builtin | type | effect | behaviour |
+|---|---|---|---|
+| `environment.get(name: Text)` | `Option<Text>` | `<root>.variable` | the value of the variable `name` when the program was launched; `None` when it was not set |
+| `Environment.of(entries: List<Text>)` | `Environment` | test-only (E051) | entries `NAME=value`, split at the first `=`; the last entry of a name wins; an entry without `=` or with an empty name is skipped |
+| `Clock.sleep(duration: Duration)` | `Unit` | `clock.sleep` | sends what the calling task wrote, then blocks the task for `duration`; zero or less does not block |
+| `Clock.now()` | `Duration` | `clock.read` | the wall clock since 1970-01-01T00:00:00Z in nanoseconds, the instant of `std.time`; `Clock.now().to_ms()` is epoch milliseconds |
+| `Process.flush()` | `Unit` | none | sends what the calling task wrote (section 7), as a wait or the end of the task would |
+
+Resource kind `Environment`, no properties (E047 for any):
+
+```ignite
+type Pusher {
+  environment: Environment
+  executable: Text
+}
+
+fn Pusher.main(self: Pusher) -> Result<Unit, IoError> {
+  let store = self.environment.get("PUSHER_SESSION_STORE").unwrap_or("memory")
+  ...
+}
+
+system PusherService {
+  resource environment: Environment
+  component pusher: Pusher { environment = environment, executable = "pusher" }
+}
+```
+
+- The generated `main` reads the environment once at launch, in the first group of 21.8's
+  order (settings, command lines and environments; directories; launchers; entropy). Later
+  changes to the process environment are not seen.
+- A variable whose name or value is not UTF-8 is skipped: it cannot be a `Text`, and refusing
+  it would end a program over a variable it never reads. The launch never fails.
+- `ignite run` and `ignite apply` start an executable with the environment of the driver or of
+  the host process, unchanged.
+
+Decisions:
+
+- `Environment` is a capability, not an ambient static (G2 guessed `Env.get`): 21.3 (P3) and D11
+  hold, so there is no new ambient head, and a handler reaches the environment only through its
+  state. Its op is `variable`, not `argument`: the environment and the command line are
+  separate authorities (D2), and `requires [b.argument]` grants no variable.
+- `get` returns `Option<Text>`, so an unset variable differs from an empty one.
+- `Environment.of` takes the `NAME=value` form of `Invocation.environment` (21.5).
+- `Clock.sleep` and `Clock.now` are statics of `Clock`, beside `Clock.monotonic`, with ambient
+  effects under the existing head `clock` (E056 already names it). `Clock.now` needs
+  `clock.read`, as `Clock.monotonic` does: both read a clock. `Clock.sleep` needs
+  `clock.sleep`. As with `Clock.monotonic`, an `HttpApp` handler cannot call them: its fn type
+  grants `state.*` only (E017, probe p2 of 21.0). A program sleeps in `K.main` or in a spawned
+  task.
+- `Clock.now` returns a `Duration`, not a new instant type: `std.time` already reads an instant
+  as a `Duration` since 1970-01-01T00:00:00Z, so `month_start(zone, Clock.now())` works. It is
+  negative before 1970 and saturates at the bounds of `Int`.
+- `Clock.sleep` flushes first. Section 7 sends a task's writes before every operation that may
+  wait, and a sleep is one. G3's waiter that writes and then sleeps sends its bytes.
+- The flush is `Process.flush()`, not a free `flush()`. A builtin free function name is E004 for
+  every user fn of that name (`BUILTIN_FUNCTIONS`), and programs declare `fn flush`: the
+  examples repository's ember does. `Process` is already a static owner, so the new name breaks
+  nothing.
+- `Process.flush()` is pure, as `log` is: it grants no authority and only sends bytes that the
+  task was already allowed to write. So a handler may call it, and the evaluator returns `Unit`.
+- The manual clock. `ignite run --clock manual` (16.4) times the reducers; no program reads it.
+  - Under either `--clock`, a program's `Clock.sleep` waits in real time, and `Clock.now`
+    reads the real wall clock. `Clock.monotonic` already behaved this way.
+  - The journal holds only what the driver observes, at the manual instant at which it
+    observes it. A member that sleeps changes when its exit is seen in real time, not the
+    exit's `at`.
+  - Replay re-steps the journal and reads no program clock, so `ignite run --clock manual`
+    and `ignite replay` stay deterministic.
+  - A probe attempt that sleeps longer than the settle wait stays in flight (16.4).
+
+Layers:
+
+- `ignite-io`: `clock::sleep`, `clock::now`, and `environment::Environment` (`of`, `launch`,
+  `from_os_vars`, `get`), re-exported as `ignite_io::Environment`.
+- `ignite-rt`: the `Handle` variant `Environment` and the entries
+  `ignite_rt_environment_launch`, `ignite_rt_environment_of`, `ignite_rt_environment_get`,
+  `ignite_rt_clock_sleep`, `ignite_rt_clock_now` and `ignite_rt_flush`.
+- `ignite-types`: `Capability::Environment` and the builtins `EnvironmentOf`,
+  `EnvironmentGet`, `ClockSleep`, `ClockNow` and `ProcessFlush`.
+- `ignite-check`: the rows of `BUILTIN_TYPES`, `BUILTIN_STATICS`, `EFFECTFUL_STATICS`,
+  `static_effect`, `CAPABILITY_METHODS` and `CAPABILITY_TYPES`.
+- E020's resource text ends ``…, `Setting`, `CommandLine` or `Environment` ``.
+- `apply::plan::CODEGEN_REVISION` becomes `ignite-codegen/0.1.0-40`.
+- The model (15.5) is unchanged in format.
+
+Out of scope: timers, condition variables and channels (the rest of G3, `docs/actors.md`), and
+`setrlimit` (G10).
+
+Tests:
+
+- The inline tests "an environment gives a variable's value, …", "a sleep waits at least its
+  duration, …", "the wall clock is an instant of std.time …", "a flush sends what the task
+  wrote …" and "a sleep sends what the task wrote first" in `std/process.ignite`, on both
+  targets.
+- `process_builtins::{rust,llvm}::g2_reads_an_environment_variable`, `g3_sleeps` and
+  `g8_reads_the_wall_clock`, and `process_builtins::g13_flush_is_callable_on_both_targets`.
+  These run the reproducers adapted to these names (`fixtures/process_builtins/pusher_gaps.ignite`).
+- `run::a_member_sleeps_and_reads_the_wall_clock_in_real_time_under_the_manual_clock`
+  (fixture `run_clock.ignite`).
+- The ignite-check fixtures `e016_process_builtins` and `e051_environment_of`.
+- The ignite-io and ignite-rt unit tests of the new functions.
 
 ## 22 Slice 18: one service operated end to end (F5)
 

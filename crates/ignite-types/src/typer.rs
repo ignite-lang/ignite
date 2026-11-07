@@ -1224,6 +1224,7 @@ impl<'a> Typer<'a> {
             "Entropy" => Ty::Capability(Capability::Entropy),
             "Setting" => Ty::Capability(Capability::Setting),
             "CommandLine" => Ty::Capability(Capability::CommandLine),
+            "Environment" => Ty::Capability(Capability::Environment),
             "TcpStream" => Ty::TcpStream,
             "PipeStream" => Ty::PipeStream,
             "IoError" => Ty::IoError,

@@ -174,7 +174,12 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | TextStripPrefix
         | TextToBytes
         | TextToText
-        | TextTrim => None,
+        | TextTrim
+        | EnvironmentOf
+        | EnvironmentGet
+        | ClockSleep
+        | ClockNow
+        | ProcessFlush => None,
     }
 }
 

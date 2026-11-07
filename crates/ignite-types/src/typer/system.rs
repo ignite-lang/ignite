@@ -83,8 +83,8 @@ pub(crate) struct CapabilityField {
 
 /// The properties of the resource kind `kind`, in field order: `Directory`
 /// `path`, `create`, `flag`; `Launcher` `maximum_children`; `Setting`
-/// `flag`, `default`; `Entropy` and `CommandLine` none. Every value must be a
-/// literal (E104).
+/// `flag`, `default`; `Entropy`, `CommandLine` and `Environment` none. Every
+/// value must be a literal (E104).
 pub(crate) fn capability_fields(kind: Capability) -> Vec<CapabilityField> {
     let field = |name, ty, defaulted, required| CapabilityField {
         name,
@@ -103,13 +103,15 @@ pub(crate) fn capability_fields(kind: Capability) -> Vec<CapabilityField> {
             field("flag", Ty::Text, false, true),
             field("default", Ty::Text, false, false),
         ],
-        Capability::Entropy | Capability::ChildProcess | Capability::CommandLine => Vec::new(),
+        Capability::Entropy
+        | Capability::ChildProcess
+        | Capability::CommandLine
+        | Capability::Environment => Vec::new(),
     }
 }
 
 /// The resource kinds a system may declare, for E020.
-const RESOURCE_KINDS: &str =
-    "`TcpListener`, `Store`, `Directory`, `Launcher`, `Entropy`, `Setting` or `CommandLine`";
+const RESOURCE_KINDS: &str = "`TcpListener`, `Store`, `Directory`, `Launcher`, `Entropy`, `Setting`, `CommandLine` or `Environment`";
 
 /// The value of an integer literal, negated or not (`-1`): a literal for
 /// E104 (`docs/slice.md` 21.9), so its range is checked.
@@ -1445,7 +1447,7 @@ impl Typer<'_> {
         }
     }
 
-    /// A `Directory`, `Launcher`, `Entropy`, `Setting` or `CommandLine` resource
+    /// A `Directory`, `Launcher`, `Entropy`, `Setting`, `CommandLine` or `Environment` resource
     /// (`docs/slice.md` 21.4 to 21.7, 21.9): E047 for a repeated or unknown
     /// property, E104 for a missing required one, a value that is not a
     /// literal, or a literal out of its range.

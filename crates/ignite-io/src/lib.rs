@@ -1074,6 +1074,9 @@ pub use args::{CommandLine, Setting};
 pub use child::{ChildExit, ChildProcess, Invocation, Launcher};
 pub use entropy::Entropy;
 pub use fs::Directory;
+// `docs/slice.md` 21.20: the capability `Environment`.
+pub mod environment;
+pub use environment::Environment;
 
 static EXIT_HOOKS: std::sync::Mutex<Vec<fn()>> = std::sync::Mutex::new(Vec::new());
 

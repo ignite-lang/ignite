@@ -31,6 +31,7 @@ mod llvm;
 mod llvm_build;
 mod llvm_memory;
 mod plan;
+mod process_builtins;
 mod reachability;
 mod rfc;
 mod rollout_repeat;

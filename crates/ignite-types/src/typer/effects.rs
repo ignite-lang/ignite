@@ -75,6 +75,9 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         EntropyNew => (Effect::Ambient("entropy.new"), "Entropy.new"),
         SettingOf => (Effect::Ambient("setting.new"), "Setting.of"),
         CommandLineOf => (Effect::Ambient("command_line.new"), "CommandLine.of"),
+        EnvironmentOf => (Effect::Ambient("environment.new"), "Environment.of"),
+        ClockSleep => (Effect::Ambient("clock.sleep"), "Clock.sleep"),
+        ClockNow => (Effect::Ambient("clock.read"), "Clock.now"),
         DirectoryReadFile => (Effect::Receiver("read"), "read_file"),
         DirectoryReadDirectory => (Effect::Receiver("read"), "read_directory"),
         DirectoryAbsolutePath => (Effect::Receiver("read"), "absolute_path"),
@@ -89,6 +92,7 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         EntropyRandomBytes => (Effect::Receiver("draw"), "random_bytes"),
         SettingValue => (Effect::Receiver("argument"), "value"),
         CommandLineArguments => (Effect::Receiver("argument"), "arguments"),
+        EnvironmentGet => (Effect::Receiver("variable"), "get"),
         _ => return None,
     })
 }
