@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T13:39:19Z",
+  "actor": "human:timo",
+  "artifact": "story:spawn-moves-adversary-findings",
+  "kind": "story",
+  "revision": 13,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p ignite --test main -- stream_ownership::: base f4261010 red (named_spawn E0308 on Rust; nested_spawn, adversary adv1/adv3, adversary2 b1-b3 time out on LLVM) vs ceea7996 21 passed",
+    "reference": "/home/timo/.cache/scratch/e18a99fc-f99c-4987-93c9-e5de2080b61a/unit-spawn-moves/red.log vs /home/timo/.cache/scratch/e18a99fc-f99c-4987-93c9-e5de2080b61a/unit-spawn-moves/r2.log"
+  }
+}

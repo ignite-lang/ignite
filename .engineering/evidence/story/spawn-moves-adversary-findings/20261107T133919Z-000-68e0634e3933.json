@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T13:39:19Z",
+  "actor": "human:timo",
+  "artifact": "story:spawn-moves-adversary-findings",
+  "kind": "story",
+  "revision": 13,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate steps on ceea7996: fmt 0, clippy 0, cargo test --workspace --no-fail-fast 0 (1327 passed, 0 failed, 11 ignored), task test-ignite 0 (309 per target)",
+    "reference": "https://github.com/ignite-lang/ignite/pull/89"
+  }
+}

@@ -2,13 +2,17 @@
 format: aep.planning-md/3
 id: story:spawn-moves-adversary-findings
 kind: story
-status: active
+status: implemented
 title: Spawned ends close in branches on LLVM, named spawn args in order on Rust
 scope:
 - confidence: cited
   path: crates/ignite-llvm/src/lower.rs
 - confidence: inferred
   path: crates/ignite-llvm/src/own.rs
+- confidence: cited
+  path: crates/ignite-llvm/src/region.rs
+- confidence: cited
+  path: crates/ignite-rt/src/net.rs
 - confidence: cited
   path: crates/ignite-rustgen/src/lib.rs
 - confidence: inferred
@@ -22,13 +26,18 @@ scope:
 - confidence: cited
   path: crates/ignite/tests/fixtures/streams/nested_spawn.ignite
 - confidence: cited
+  path: crates/ignite/tests/fixtures/streams/nested_spawn_arms.ignite
+- confidence: cited
   path: crates/ignite/tests/stream_ownership.rs
+- confidence: cited
+  path: docs/llvm.md
 - confidence: inferred
   path: docs/slice.md
-revision: 13
+revision: 18
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T12:35:12Z", actor: "human:timo", revision: 12}
 - {from: "proposed", to: "active", at: "2026-11-07T12:35:12Z", actor: "human:timo", revision: 13}
+- {from: "active", to: "implemented", at: "2026-11-07T13:39:20Z", actor: "human:timo", revision: 18, decided_on: {"recorded":{"test_result":1,"review_outcome":3,"verification":1}}}
 ---
 # Story: spawn-moves-adversary-findings
 
