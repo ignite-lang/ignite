@@ -4,7 +4,16 @@ id: story:drain-exit
 kind: story
 status: active
 title: Process.exit during the drain exits with its code, without waiting for tasks
-revision: 3
+scope:
+- confidence: inferred
+  path: crates/ignite-io/src
+- confidence: inferred
+  path: crates/ignite-llvm/src
+- confidence: inferred
+  path: crates/ignite-rt/src/process.rs
+- confidence: inferred
+  path: docs/slice.md
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 3}
