@@ -104,7 +104,28 @@ both_targets!(
     g2_reads_an_environment_variable,
     g3_sleeps,
     g8_reads_the_wall_clock,
+    g2_launch_skips_a_variable_that_is_not_utf8,
 );
+
+/// 21.20, adversary: "A variable whose name or value is not UTF-8 is
+/// skipped ... The launch never fails." Every other launch test runs in an
+/// environment of UTF-8 variables only, so a launch that refused or
+/// panicked on one (`std::env::vars()` instead of `vars_os()`) stayed
+/// green. The executable is started with a non-UTF-8 value and a
+/// non-UTF-8 name beside the variable it reads.
+fn g2_launch_skips_a_variable_that_is_not_utf8(target: Target) {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let path = executable("g2", target);
+    let output = Command::new(&path)
+        .stdin(Stdio::null())
+        .env("PUSHER_SESSION_STORE", "redis://sessions:6379")
+        .env("ADVERSARY_ODD_VALUE", OsStr::from_bytes(b"a\xffb"))
+        .env(OsStr::from_bytes(b"ADVERSARY_ODD\xffNAME"), "x")
+        .output()
+        .unwrap_or_else(|e| panic!("run {}: {e}", path.display()));
+    assert_eq!(stderr(&output), "Some(\"redis://sessions:6379\")\n");
+}
 
 /// G2: the `Environment` resource holds the process environment at launch.
 fn g2_reads_an_environment_variable(target: Target) {
