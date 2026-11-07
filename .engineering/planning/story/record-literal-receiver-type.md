@@ -1,0 +1,25 @@
+---
+format: aep.planning-md/3
+id: story:record-literal-receiver-type
+kind: story
+status: draft
+title: Effects of a method call read the receiver's inferred type
+relations:
+- informed_by: story:immutable-binding-e006
+revision: 1
+---
+# Story: record-literal-receiver-type
+
+## Outcome
+
+The effect check of a method call reads the receiver's inferred type, so `let w = World { … }` followed by `w.numbers.put(..)` checks without an annotation.
+
+## Context
+
+- Found by the pusher case study (session `pusher-2b`, G15 in `docs/research/pusher-gaps.md`), ignite v0.13.0, LLVM; reproducer `docs/research/pusher-gaps/G15.ignite`: `error[E042]: cannot check the effects of `put`: the type of its receiver is not declared; annotate the binding` (and the same for `get`).
+- Same cause as `story:immutable-binding-e006`: `crates/ignite-check` decides from the declared (`static_type`) type only, before the type checker infers it. Both stories move the decision to where the type is known.
+
+## Acceptance
+
+- G15 passes `ignite test` on both targets without the annotation; E042 stays for a receiver whose type is unknown after inference.
+- `task gate` green.
