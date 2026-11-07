@@ -99,3 +99,27 @@ test("UXF-008: the FAQ is reachable from the landing page's main navigation", as
     expect(step.actions, `${width}x${height}: ${run.log.join(", ")}`).toBeLessThanOrEqual(2);
   }
 });
+
+test("UXF-009: on a wide book page the menu bar is reached within 5 Tabs", async ({ browser }) => {
+  for (const path of ["book/reference/std/fs.html", "book/design/index.html", "book/guide/install.html"]) {
+    const { context, tab } = await page(browser, path, 1440, 900);
+    const home = tab.getByRole("link", { name: "Ignite home", exact: true });
+    const search = tab.getByRole("button", { name: "Toggle Searchbar", exact: true });
+    let tabs = 0;
+    let reached = "";
+    while (tabs < 5 && !reached) {
+      await tab.keyboard.press("Tab");
+      tabs++;
+      for (const [name, control] of [
+        ["Ignite home", home],
+        ["Toggle Searchbar", search],
+      ] as const) {
+        if (await control.evaluate((el) => el === document.activeElement)) {
+          reached = name;
+        }
+      }
+    }
+    await context.close();
+    expect(reached, `${path}: the menu bar's home link or search after ${tabs} Tabs`).not.toBe("");
+  }
+});
