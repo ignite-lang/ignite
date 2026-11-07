@@ -13,7 +13,69 @@ package std.net
 // `Exposure`, and since slice 14 (18.3, 18.4) the interface `ByteStream`
 // (implemented by `TcpStream`, `PipeStream` and a type parameter bounded
 // by it), the test-only `Pipe.pair()` and its ends, `PipeStream`.
+//
+// Since story `pusher-net-builtins` (`docs/slice.md` 26) a `TcpStream`
+// also has:
+//
+// - `stream.peer() -> Endpoint`: the other end of the connection, its
+//   address as text the way the family writes it (`10.0.0.7`, `::1`).
+//   Pure; known from `accept` or `connect` on, kept after `close`.
+// - `stream.timed_out() -> Bool`, effect `stream.read`: whether the last
+//   read of the stream returned `Eof` because the idle timeout passed,
+//   not because the peer closed. `read` itself is unchanged.
+// - `TcpStream.connect_within(address, port, timeout: Duration) ->
+//   Result<TcpStream, IoError>`, effect `net.connect`: `connect` that
+//   gives up after `timeout` (a timeout that is not positive is refused).
 type Endpoint {
   address: Text
   port: Int
+}
+
+test "the peer of a stream is the other end, in both families" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  assert client.peer() == Endpoint { address = "127.0.0.1", port = listener.local_port() }
+  assert server.peer().address == "127.0.0.1"
+  assert server.peer().port > 0
+  assert server.peer().port != listener.local_port()
+  let six = TcpListener.bind("::1", 0)?
+  let near = TcpStream.connect("::1", six.local_port())?
+  let far = six.accept()?
+  assert near.peer() == Endpoint { address = "::1", port = six.local_port() }
+  assert far.peer().address == "::1"
+  far.close()?
+  assert far.peer().address == "::1"
+}
+
+test "a read the idle timeout ended is told from a close" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  assert !client.timed_out()
+  client.set_idle_timeout(100)?
+  assert client.read(1)? == Eof
+  assert client.timed_out()
+  server.write_all(b"x")?
+  server.close()?
+  assert client.read(1)? == Data(b"x")
+  assert !client.timed_out()
+  assert client.read(1)? == Eof
+  assert !client.timed_out()
+}
+
+test "connect_within gives up within its timeout" {
+  let started = Clock.monotonic()
+  let unreachable = TcpStream.connect_within("10.255.255.1", 80, 200 ms)
+  assert Clock.monotonic() - started < 300 ms
+  assert match unreachable {
+    Ok(_) => false
+    Err(_) => true
+  }
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect_within("127.0.0.1", listener.local_port(), 1 seconds)?
+  let server = listener.accept()?
+  client.write_all(b"hi")?
+  client.close()?
+  assert server.read(2)? == Data(b"hi")
 }

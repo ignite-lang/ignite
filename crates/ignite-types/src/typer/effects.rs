@@ -89,6 +89,8 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         EntropyRandomBytes => (Effect::Receiver("draw"), "random_bytes"),
         SettingValue => (Effect::Receiver("argument"), "value"),
         CommandLineArguments => (Effect::Receiver("argument"), "arguments"),
+        TcpStreamTimedOut => (Effect::Receiver("read"), "timed_out"),
+        TcpStreamConnectWithin => (Effect::Ambient("net.connect"), "TcpStream.connect_within"),
         _ => return None,
     })
 }
