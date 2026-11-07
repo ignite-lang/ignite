@@ -99,9 +99,9 @@ fn type_env_of(std: &[ModuleInput<'_>], programs: &[ModuleInput<'_>]) -> TypeEnv
 /// `docs/slice.md` 20.3.3). Callers pass a borrowed parameter's place
 /// without a copy; a consumed parameter is owned (`docs/llvm.md` section 3).
 ///
-/// The consumed set is a superset of the parameters the body modifies
-/// (`ignite_types::ownership::changed_in_block`), which owned a parameter before slice 16; a debug
-/// build checks it for every function it lowers.
+/// The consumed set holds every parameter the body changes in place, by
+/// construction: `TypedProgram::consumed` is computed from
+/// `ignite_types::ownership::changed_in_block`.
 fn read_only_params(env: &mut TypeEnv, input: &ModuleInput<'_>) {
     let qual = |name: &str| QualName {
         module: input.path.to_string(),
@@ -111,16 +111,6 @@ fn read_only_params(env: &mut TypeEnv, input: &ModuleInput<'_>) {
         let params: Vec<bool> = (0..f.params.len())
             .map(|i| !input.types.consumed(&callee, i))
             .collect();
-        if cfg!(debug_assertions) {
-            let modified = ignite_types::ownership::changed_in_block(&f.body, Some(input.types));
-            for (p, borrowed) in f.params.iter().zip(&params) {
-                debug_assert!(
-                    !(*borrowed && modified.contains(p.name.name.as_str())),
-                    "{symbol}: `{}` is modified but not consumed",
-                    p.name.name
-                );
-            }
-        }
         env.set_read_only(symbol, params);
     };
     for decl in &input.program.decls {

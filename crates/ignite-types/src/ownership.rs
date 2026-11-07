@@ -45,6 +45,14 @@ static TABLE: LazyLock<Vec<(InPlace, Builtin)>> = LazyLock::new(|| {
         .map(|row| {
             let sig = builtins::method(&receiver_type(row.receiver), row.method)
                 .unwrap_or_else(|| panic!("`{}.{}` is no builtin", row.receiver, row.method));
+            assert_eq!(
+                change(sig.builtin),
+                Some(row.change),
+                "`{}.{}` ({:?}) is classified differently by `ownership::change`",
+                row.receiver,
+                row.method,
+                sig.builtin
+            );
             (*row, sig.builtin)
         })
         .collect()
@@ -57,12 +65,117 @@ pub fn table() -> &'static [(InPlace, Builtin)] {
 }
 
 /// What `builtin` changes in place, `None` for one that only reads its
-/// receiver.
+/// receiver. The match has no wildcard, so a new builtin fails the build
+/// until it is classified here; [`table`] checks every row of
+/// `ignite_check::IN_PLACE` against it, and `ownership::the_one_table`
+/// pins both.
 pub fn change(builtin: Builtin) -> Option<Change> {
-    table()
-        .iter()
-        .find(|(_, b)| *b == builtin)
-        .map(|(row, _)| row.change)
+    use Builtin::*;
+    match builtin {
+        ListPush | ListSet | ListAppend | ListClear | MapPut | MapRemove => Some(Change::Value),
+        StoreNextId | StorePut | StoreRemove | StoreUpdate | StoreUpsert => Some(Change::Handle),
+        BoolToText
+        | BytesEmpty
+        | ByteSizeToInt
+        | BytesOf
+        | BytesToText
+        | ByteToInt
+        | ByteToText
+        | ChildProcessId
+        | ChildProcessKill
+        | ChildProcessWait
+        | ClockMonotonic
+        | CommandLineArguments
+        | CommandLineOf
+        | Copy
+        | Debug
+        | DirectoryAbsolutePath
+        | DirectoryCreateDirectory
+        | DirectoryReadDirectory
+        | DirectoryReadFile
+        | DirectoryRemove
+        | DirectoryRemoveTree
+        | DirectoryTemporary
+        | DirectoryWriteFile
+        | DurationToMs
+        | DurationToNs
+        | EndpointOf
+        | EntropyNew
+        | EntropyRandomBytes
+        | IntCheckedAdd
+        | IntCheckedMul
+        | IntCheckedSub
+        | IntParse
+        | IntToByte
+        | IntToText
+        | IntToTextMethod
+        | IntWrappingAdd
+        | IntWrappingMul
+        | IntWrappingSub
+        | IoErrorNew
+        | IoErrorWithExitCode
+        | LauncherExecute
+        | LauncherNew
+        | LauncherStart
+        | ListAt
+        | ListEmpty
+        | ListIsEmpty
+        | ListJoin
+        | ListLen
+        | ListMap
+        | ListSlice
+        | Log
+        | MapContains
+        | MapEmpty
+        | MapGet
+        | MapKeys
+        | MapLen
+        | ModuleRecord
+        | PipePair
+        | PipeStreamClose
+        | PipeStreamRead
+        | PipeStreamReceivedBatches
+        | PipeStreamSetIdleTimeout
+        | PipeStreamUrgentPending
+        | PipeStreamWriteAll
+        | PipeStreamWriteUrgent
+        | ProcessExit
+        | RatioPpm
+        | SettingOf
+        | SettingValue
+        | StderrWriteAll
+        | StdinIsTerminal
+        | StdinRead
+        | StdinSetRaw
+        | StdoutWriteAll
+        | StoreGet
+        | StoreNew
+        | StoreValues
+        | StreamClose
+        | StreamRead
+        | StreamSetIdleTimeout
+        | StreamUrgentPending
+        | StreamWriteAll
+        | StreamWriteUrgent
+        | TcpListenerAccept
+        | TcpListenerBind
+        | TcpListenerLocalPort
+        | TcpStreamClose
+        | TcpStreamConnect
+        | TcpStreamRead
+        | TcpStreamSetIdleTimeout
+        | TcpStreamUrgentPending
+        | TcpStreamWriteAll
+        | TcpStreamWriteUrgent
+        | TextConcat
+        | TextIsEmpty
+        | TextLen
+        | TextStartsWith
+        | TextStripPrefix
+        | TextToBytes
+        | TextToText
+        | TextTrim => None,
+    }
 }
 
 /// Whether `builtin` changes its receiver in place.

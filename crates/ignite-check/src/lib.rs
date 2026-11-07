@@ -572,6 +572,10 @@ pub struct Symbols {
     /// Own systems, name to their member names (resources, components,
     /// contracts, policies) in declaration order.
     pub systems: BTreeMap<String, Vec<String>>,
+    /// The declared return type of each non-generic fn, own and imported
+    /// by name. Read only by the closure rule of E006 for a local bound to
+    /// a call (`docs/slice.md` 20.3.3).
+    pub fn_returns: BTreeMap<String, Type>,
 }
 
 /// Checked standard-library modules by module path (`"std.console"`), each
@@ -662,6 +666,11 @@ struct Local {
     /// The declared type of the value, where the checker can tell it
     /// (`Checker::static_type`); `None` otherwise.
     ty: Option<Type>,
+    /// Where `ty` is `None` and the value is a non-generic record literal
+    /// or a call of a non-generic fn: that record, or the fn's declared
+    /// return type. Read only by the closure rule of E006
+    /// (`Checker::in_place_type`), so that no other rule changes.
+    result: Option<Type>,
 }
 
 /// What the walk is inside, for the effect rules.
@@ -1040,6 +1049,11 @@ impl Checker {
                 .functions
                 .insert(name.to_string(), info.clone());
         }
+        if let Some(ret) = exports.fn_returns.get(name) {
+            self.symbols
+                .fn_returns
+                .insert(name.to_string(), ret.clone());
+        }
         if let Some(roles) = exports.protocols.get(name) {
             self.symbols
                 .protocols
@@ -1225,6 +1239,13 @@ impl Checker {
                 }
                 Decl::Fn(decl) => {
                     self.type_params_of(&name.name, &decl.type_params);
+                    if decl.type_params.is_empty()
+                        && let Some(ret) = &decl.ret
+                    {
+                        self.symbols
+                            .fn_returns
+                            .insert(name.name.clone(), ret.clone());
+                    }
                     self.symbols.functions.insert(
                         name.name.clone(),
                         FnInfo {
@@ -2043,7 +2064,15 @@ impl Checker {
         ty: Option<Type>,
     ) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name.name.clone(), Local { binding, roots, ty });
+            scope.insert(
+                name.name.clone(),
+                Local {
+                    binding,
+                    roots,
+                    ty,
+                    result: None,
+                },
+            );
         }
     }
 
@@ -2414,7 +2443,32 @@ impl Checker {
                     Some(ty) => Some(self.expand(ty)),
                     None => self.static_type(value),
                 };
+                let result = match (&declared, &value.kind) {
+                    (None, ExprKind::Call { callee, .. }) => match &callee.kind {
+                        ExprKind::Name(f) if self.local(&f.name).is_none() => self
+                            .symbols
+                            .fn_returns
+                            .get(&f.name)
+                            .cloned()
+                            .map(|ret| self.expand(&ret)),
+                        _ => None,
+                    },
+                    (None, ExprKind::Record { name: record, .. })
+                        if self.symbols.records.contains(&record.name)
+                            && !self.symbols.type_params.contains_key(&record.name) =>
+                    {
+                        Some(Type::named(record.clone(), Vec::new(), record.span))
+                    }
+                    _ => None,
+                };
                 self.bind_typed(name, binding, roots, declared);
+                if let Some(local) = self
+                    .scopes
+                    .last_mut()
+                    .and_then(|scope| scope.get_mut(&name.name))
+                {
+                    local.result = result;
+                }
             }
             StmtKind::Assign { target, value } => {
                 self.expr(value);
@@ -2690,7 +2744,14 @@ impl Checker {
             .filter(|ty| IN_PLACE.iter().any(|row| row.receiver == *ty));
         let mutating = in_place(receiver_type, &name.name) == Some(Change::Value)
             && self.builtin_method(receiver, name);
-        if mutating
+        // Inside a closure only a receiver whose type is known here: a user
+        // fn named like a builtin is no change, and the type checker reports
+        // the rest once the callee is resolved (`docs/slice.md` 20.3.3).
+        let captured_change = self.in_place_type(receiver).is_some_and(|ty| {
+            !self.type_params.contains(&ty.name.name)
+                && in_place(Some(&ty.name.name), &name.name) == Some(Change::Value)
+        });
+        if captured_change
             && let Some(base) = place_root(receiver)
             && self.captured(&base.name)
         {
@@ -3131,6 +3192,37 @@ impl Checker {
             _ => return None,
         };
         Some(self.expand(&ty))
+    }
+
+    /// [`Checker::static_type`] of a place, where a local bound to a call
+    /// of a non-generic fn also has that fn's declared return type
+    /// (`Local::result`). Read only by the closure rule of E006.
+    fn in_place_type(&self, expr: &Expr) -> Option<Type> {
+        match &expr.kind {
+            ExprKind::Name(name) => {
+                let local = self.local(&name.name)?;
+                local.ty.clone().or_else(|| local.result.clone())
+            }
+            ExprKind::Field { receiver, name } if self.path_head(receiver).is_none() => {
+                let record = self.in_place_type(receiver)?;
+                self.field_type(&record, &name.name)
+            }
+            ExprKind::Index { receiver, .. } => {
+                let list = self.in_place_type(receiver)?;
+                match list.name.name.as_str() {
+                    "List" => list.args.first().map(|t| self.expand(t)),
+                    _ => None,
+                }
+            }
+            ExprKind::TupleField { receiver, index } => {
+                let tuple = self.in_place_type(receiver)?;
+                if !tuple.is_tuple() {
+                    return None;
+                }
+                tuple.args.get(*index).map(|t| self.expand(t))
+            }
+            _ => self.static_type(expr),
+        }
     }
 
     /// Whether `receiver.method(..)` on a receiver of declared type

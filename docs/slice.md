@@ -6925,7 +6925,8 @@ A parameter `p` is consumed when either holds:
   method named `push`, `set`, `append` or `clear` whatever its callee. An in-place builtin
   itself changes a variable only through a place (a name, field, index or tuple field); through
   `xs.at(0)` or `o?` it changes a copy on both targets, and inside a closure it may not change
-  a place rooted at a capture (E006);
+  a place rooted at a capture (E006: from the checker where it can tell the receiver's type, else
+  from the type checker once the callee is resolved, so a user fn named `push` is never refused);
 - its fn moves `p` or a place rooted at it (`p.items`) on every path that reaches a `return`, a
   `?` exit or the end of the body (any move position of 20.3.1, including passing it on to a
   consumed parameter and returning it).

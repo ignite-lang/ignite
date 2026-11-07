@@ -1415,6 +1415,38 @@ impl<'a> Typer<'a> {
         }
     }
 
+    /// E006 when `builtin`, called at `expr`, changes the value of a place
+    /// rooted at a binding the innermost closure being walked captures: a
+    /// closure captures by copy (`docs/slice.md` 13.11, 20.3.3). The
+    /// checker reports the same where it knows the receiver's type; here
+    /// the callee is resolved, so a capture of any type is covered, and a
+    /// UFCS call of a user fn named like a builtin never is.
+    fn captured_change(&mut self, expr: &Expr, receiver: &Expr, builtin: Builtin) {
+        if crate::ownership::change(builtin) != Some(crate::ownership::Change::Value) {
+            return;
+        }
+        let Some(&(outside, _)) = self.closure_frames.last() else {
+            return;
+        };
+        let Some(base) = crate::ownership::place_root(receiver) else {
+            return;
+        };
+        let captured = self
+            .scopes
+            .iter()
+            .rposition(|scope| scope.contains_key(base))
+            .is_some_and(|index| index < outside);
+        if captured {
+            self.error(
+                "E006",
+                expr.span,
+                format!(
+                    "cannot change `{base}` inside a closure; a closure captures `{base}` by copy"
+                ),
+            );
+        }
+    }
+
     /// [`Typer::lookup`] for a use of a local as a value: a binding of a
     /// scope outside a closure being walked is recorded as its capture.
     fn use_local(&mut self, name: &str) -> Option<Option<Ty>> {
@@ -3304,6 +3336,7 @@ impl<'a> Typer<'a> {
                 Builtin::ListSlice => self.fail_site(expr, FailureOp::Slice, expr.span.start),
                 _ => {}
             }
+            self.captured_change(expr, receiver, sig.builtin);
             self.callees.insert(key(expr), Callee::Builtin(sig.builtin));
             self.arguments(expr.span, &name.name, &sig.params, args);
             return Some(sig.ret);
