@@ -31,7 +31,7 @@ use std::net::Shutdown;
 use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, TryLockError, Weak};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::{Input, IoError, read_input, socket_address};
 
@@ -146,9 +146,9 @@ struct Out {
 pub(crate) trait Buffered: Send + Sync {
     /// Send the buffer, keeping a failure for the stream's next operation.
     fn flush_kept(&self);
-    /// [`flush_at_exit`] of this stream: skipped when another task holds
-    /// its write lock, sent without waiting for room.
-    fn flush_at_exit(&self);
+    /// [`flush_at_exit`] of this stream: waits for its write lock and for
+    /// room until `deadline` at most.
+    fn flush_at_exit(&self, deadline: Instant);
 }
 
 /// Streams a thread wrote to since it last flushed; sent when the thread
@@ -190,25 +190,35 @@ pub(crate) fn register<T: Buffered + 'static>(stream: &Arc<T>) -> bool {
         .is_ok()
 }
 
-/// Exit's flush ([`crate::exit`]): send what the current task wrote
-/// without waiting for anything another party controls. A stream whose
-/// write lock another task holds is skipped, and a socket whose buffers
-/// are full is sent what fits; the rest is lost with the process.
+/// How long [`flush_at_exit`] waits in all, across every stream, for write
+/// locks other tasks hold and for room in socket buffers.
+pub(crate) const EXIT_FLUSH: Duration = Duration::from_millis(100);
+
+/// Exit's flush ([`crate::exit`]): send what the current task wrote,
+/// waiting for other tasks' write locks and for room in socket buffers
+/// only until [`EXIT_FLUSH`] after the call. A stream whose lock is still
+/// held then (a task stalled in a send to a peer that does not read) is
+/// skipped; a socket that still has no room keeps what was not sent. The
+/// rest is lost with the process.
 pub(crate) fn flush_at_exit() {
+    let deadline = Instant::now() + EXIT_FLUSH;
     let pending = PENDING
         .try_with(|pending| std::mem::take(&mut pending.borrow_mut().0))
         .unwrap_or_default();
     for stream in pending.into_iter().filter_map(|weak| weak.upgrade()) {
-        stream.flush_at_exit();
+        stream.flush_at_exit(deadline);
     }
 }
 
-/// The write lock of `mutex` if no other task holds it.
-pub(crate) fn try_lock<T>(mutex: &Mutex<T>) -> Option<MutexGuard<'_, T>> {
-    match mutex.try_lock() {
-        Ok(guard) => Some(guard),
-        Err(TryLockError::Poisoned(poisoned)) => Some(poisoned.into_inner()),
-        Err(TryLockError::WouldBlock) => None,
+/// The lock of `mutex`, waited for until `deadline` at most.
+pub(crate) fn lock_until<T>(mutex: &Mutex<T>, deadline: Instant) -> Option<MutexGuard<'_, T>> {
+    loop {
+        match mutex.try_lock() {
+            Ok(guard) => return Some(guard),
+            Err(TryLockError::Poisoned(poisoned)) => return Some(poisoned.into_inner()),
+            Err(TryLockError::WouldBlock) if Instant::now() >= deadline => return None,
+            Err(TryLockError::WouldBlock) => std::thread::sleep(Duration::from_micros(100)),
+        }
     }
 }
 
@@ -227,6 +237,25 @@ pub fn flush() {
 impl Stream {
     fn out(&self) -> MutexGuard<'_, Out> {
         self.writing.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Wait until the socket has room to send or `deadline` passes;
+    /// whether it may have room (an interrupted wait counts as room, so
+    /// the caller tries the send again).
+    fn writable_before(&self, deadline: Instant) -> bool {
+        use nix::poll::{PollFd, PollFlags, poll};
+        use std::os::fd::AsFd;
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return false;
+        }
+        let millis = u16::try_from(left.as_millis().max(1)).unwrap_or(u16::MAX);
+        let mut fds = [PollFd::new(self.socket.as_fd(), PollFlags::POLLOUT)];
+        match poll(&mut fds, millis) {
+            Ok(ready) => ready > 0,
+            Err(nix::errno::Errno::EINTR) => true,
+            Err(_) => false,
+        }
     }
 
     /// Send the buffer; the caller holds the write lock.
@@ -274,8 +303,8 @@ impl Buffered for Stream {
         }
     }
 
-    fn flush_at_exit(&self) {
-        let Some(mut out) = try_lock(&self.writing) else {
+    fn flush_at_exit(&self, deadline: Instant) {
+        let Some(mut out) = lock_until(&self.writing, deadline) else {
             return;
         };
         let mut at = 0;
@@ -293,8 +322,11 @@ impl Buffered for Stream {
             };
             match usize::try_from(sent) {
                 Ok(count) => at += count,
-                Err(_) if std::io::Error::last_os_error().kind() == ErrorKind::Interrupted => {}
-                Err(_) => break,
+                Err(_) => match std::io::Error::last_os_error().kind() {
+                    ErrorKind::Interrupted => {}
+                    ErrorKind::WouldBlock if self.writable_before(deadline) => {}
+                    _ => break,
+                },
             }
         }
         out.buffer.clear();
@@ -700,21 +732,27 @@ mod tests {
         assert_eq!(&received, b"bye");
     }
 
-    /// Story `drain-exit`: the exit's flush does not wait for a write lock
-    /// another task holds (a task stalled in its send); it skips the
-    /// stream.
+    /// Story `drain-exit`: the exit's flush waits at most its deadline for
+    /// a write lock another task holds (a task stalled in its send), then
+    /// skips the stream. The holder takes the lock only after `write_all`,
+    /// inside `between`, so the write itself never waits for it.
     #[test]
     fn the_exit_flush_skips_a_stream_another_task_is_writing() {
         let (stream, _peer) = pair();
         let held = stream.clone();
+        let (go, take) = std::sync::mpsc::channel::<()>();
         let (locked, is_locked) = std::sync::mpsc::channel();
         let (release, released) = std::sync::mpsc::channel::<()>();
         let holder = std::thread::spawn(move || {
+            take.recv().unwrap();
             let _out = held.inner.out();
             locked.send(()).unwrap();
             let _ = released.recv();
         });
-        let flushed = exit_flush_returns(&stream, move || is_locked.recv().unwrap());
+        let flushed = exit_flush_returns(&stream, move || {
+            go.send(()).unwrap();
+            is_locked.recv().unwrap();
+        });
         assert!(flushed, "the exit's flush waited");
         release.send(()).unwrap();
         holder.join().unwrap();
@@ -726,6 +764,15 @@ mod tests {
     #[test]
     fn the_exit_flush_does_not_wait_for_a_peer_that_does_not_read() {
         let (stream, _peer) = pair();
+        fill(&stream);
+        assert!(
+            exit_flush_returns(&stream, || {}),
+            "the exit's flush waited"
+        );
+    }
+
+    /// Fill the socket's buffers with zeros until a send would block.
+    fn fill(stream: &super::TcpStream) {
         let chunk = [0u8; 65536];
         loop {
             // SAFETY: the descriptor belongs to `stream`, which outlives
@@ -742,9 +789,62 @@ mod tests {
                 break;
             }
         }
+    }
+
+    /// Story `drain-exit`, ADV2-2: a writer that holds the lock briefly
+    /// (one append, well inside the deadline) is waited for, and the
+    /// task's write is sent.
+    #[test]
+    fn the_exit_flush_waits_for_a_lock_held_briefly() {
+        let (stream, mut peer) = pair();
+        let held = stream.clone();
+        let (go, take) = std::sync::mpsc::channel::<()>();
+        let (locked, is_locked) = std::sync::mpsc::channel();
+        let holder = std::thread::spawn(move || {
+            take.recv().unwrap();
+            let out = held.inner.out();
+            locked.send(()).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            drop(out);
+        });
+        let flushed = exit_flush_returns(&stream, move || {
+            go.send(()).unwrap();
+            is_locked.recv().unwrap();
+        });
+        assert!(flushed, "the exit's flush did not return");
+        holder.join().unwrap();
+        let mut received = [0u8; 3];
+        peer.set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        std::io::Read::read_exact(&mut peer, &mut received)
+            .unwrap_or_else(|e| panic!("the peer did not receive `bye`: {e}"));
+        assert_eq!(&received, b"bye");
+    }
+
+    /// Story `drain-exit`, ADV2-2: a peer that reads, only later than the
+    /// first send, gets everything when it reads within the deadline.
+    #[test]
+    fn the_exit_flush_sends_everything_to_a_peer_that_reads_late() {
+        let (stream, mut peer) = pair();
+        fill(&stream);
+        let reader = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            peer.set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                .unwrap();
+            let mut received = Vec::new();
+            let mut buffer = [0u8; 65536];
+            while let Ok(count @ 1..) = std::io::Read::read(&mut peer, &mut buffer) {
+                received.extend_from_slice(&buffer[..count]);
+                if received.ends_with(b"bye") {
+                    break;
+                }
+            }
+            received.ends_with(b"bye")
+        });
         assert!(
             exit_flush_returns(&stream, || {}),
             "the exit's flush waited"
         );
+        assert!(reader.join().unwrap(), "the peer did not receive `bye`");
     }
 }

@@ -308,13 +308,15 @@ pub extern "C" fn ignite_rt_process_exit(code: i32) -> ! {
     crate::entry_never(move || ignite_io::exit(code))
 }
 
-/// `void exit(i32 code)`: `ignite_io::exit`: restore the terminal, flush
-/// standard output, exit. Called by the generated main when `K.main`
-/// returns `Ok`; while the process drains (`docs/slice.md` 16.13) it
-/// waits for the live tasks first and exits 0, as `ignite_io::run` does.
+/// `void exit(i32 code)`: send what `main`'s task wrote, waiting for the
+/// write locks (`ignite_io::flush`, as `ignite_io::run` does), then
+/// `ignite_io::exit`: restore the terminal, exit. Called by the generated
+/// main when `K.main` returns `Ok`; while the process drains
+/// (`docs/slice.md` 16.13) it waits for the live tasks first and exits 0.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_exit(code: i32) -> ! {
     crate::entry_never(move || {
+        ignite_io::flush();
         if ignite_io::draining() {
             drained();
         }
@@ -323,10 +325,12 @@ pub extern "C" fn ignite_rt_exit(code: i32) -> ! {
 }
 
 /// `void fail(IoError* error)`: `error: <message>` to stderr, restore the
-/// terminal, exit with the error's exit code. Called by the generated main
-/// when `K.main` returns `Err`; while the process drains, an error other
-/// than `draining` (the refused `accept`) is printed, then the live tasks
-/// are waited for and the status is 0 (16.13).
+/// terminal, exit with the error's exit code; what `main`'s task wrote
+/// is sent first (`ignite_io::flush`, as `ignite_io::run` does). Called by
+/// the generated main when `K.main` returns `Err`; while the process
+/// drains, an error other than `draining` (the refused `accept`) is
+/// printed, then the live tasks are waited for and the status is 0
+/// (16.13).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
     crate::entry_never(move || {
@@ -335,6 +339,7 @@ pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
             Some(error) => (unsafe { error.message.as_bytes() }, error.exit_code),
             None => (&b""[..], 1),
         };
+        ignite_io::flush();
         if ignite_io::draining() {
             if message != ignite_io::DRAINING.as_bytes() {
                 let mut line = b"error: ".to_vec();
@@ -350,10 +355,9 @@ pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
     })
 }
 
-/// The end of a drained process: send what `main`'s task wrote, wait for
-/// the live tasks, exit 0, as `ignite_io::run` does.
+/// The end of a drained process: wait for the live tasks, exit 0, as
+/// `ignite_io::run` does; the caller has sent what `main`'s task wrote.
 fn drained() -> ! {
-    ignite_io::flush();
     ignite_io::wait_for_tasks();
     ignite_io::exit(0)
 }

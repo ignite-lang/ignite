@@ -168,15 +168,19 @@ impl Process {
     }
 }
 
-/// Send the current task's pending writes without waiting
+/// Send the current task's pending writes with a bound
 /// (`net::flush_at_exit`), restore the terminal attributes saved by
-/// [`Stdin::set_raw`] and end the process at once with status `code`. Other
-/// tasks and pending reads are not waited for, and standard output is not
+/// [`Stdin::set_raw`] and end the process with status `code`. Other tasks
+/// and pending reads are not waited for, and standard output is not
 /// locked: `Stdout::write_all` flushes on every call, so there is nothing to
-/// send, and a task stalled in one must not hold up the exit. The same
-/// rule holds for streams: one whose write lock another task holds (a task
-/// stalled in a send to a peer that does not read) is skipped, and a socket
-/// whose buffers are full is sent what fits; the rest is lost.
+/// send, and a task stalled in one must not hold up the exit. Streams
+/// follow the same rule with a deadline: exit waits for a write lock
+/// another task holds and for room in a socket's buffers, in all at most
+/// 100 ms (`net::EXIT_FLUSH`) after the call; a stream whose lock is still
+/// held then (a task stalled in a send to a peer that does not read) is
+/// skipped, and what a socket still has no room for is lost. This is
+/// `Process.exit`; `run`, and the LLVM runtime when `main` returns, send
+/// with [`flush`], which waits.
 pub fn exit(code: i32) -> ! {
     run_exit_hooks();
     net::flush_at_exit();
