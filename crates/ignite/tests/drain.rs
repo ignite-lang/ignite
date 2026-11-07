@@ -460,6 +460,90 @@ fn a_write_before_main_returns_during_the_drain_reaches_the_peer() {
     });
 }
 
+/// Adversary, story `drain-exit`: `Process.exit(263)` from a spawned task
+/// during the drain, while `main` waits in an idle read, ends the process
+/// with status 7 (263 modulo 256) on both targets within [`EXIT`], and the
+/// child started after the drain began is killed (`at_exit`).
+#[test]
+fn adversary_process_exit_from_a_task_during_the_drain() {
+    on_both_targets(|target| {
+        let binary = build_fixture("drain_exit_task", "drainexittask", target);
+        let mut server = Server::start(&binary);
+        let _reading = TcpStream::connect(("127.0.0.1", server.port)).expect("connect reading");
+        let mut trigger = TcpStream::connect(("127.0.0.1", server.port)).expect("connect trigger");
+        wait_line(&server.stderr, "waiting", &mut server.skipped, |l| {
+            l == "waiting"
+        });
+        signal(server.pid(), Signal::SIGTERM);
+        let child = wait_line(&server.stderr, "child", &mut server.skipped, |l| {
+            l.starts_with("child ")
+        });
+        let child: i32 = child["child ".len()..]
+            .parse()
+            .unwrap_or_else(|e| panic!("{target}: {child}: {e}"));
+        trigger.write_all(b"go\n").expect("trigger");
+        wait_line(&server.stderr, "task exiting", &mut server.skipped, |l| {
+            l == "task exiting"
+        });
+        let exiting = Instant::now();
+        let status = loop {
+            if let Some(status) = server.child.try_wait().expect("wait") {
+                break status;
+            }
+            assert!(
+                exiting.elapsed() < EXIT,
+                "{target}: still running {EXIT:?} after `task exiting`; lines:\n{}",
+                server.skipped.join("\n")
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(status.code(), Some(7), "{target}: {status:?}");
+        let gone = Instant::now();
+        while kill(Pid::from_raw(child), None).is_ok() {
+            assert!(
+                gone.elapsed() < GONE,
+                "{target}: child {child} still alive {GONE:?} after the exit"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    });
+}
+
+/// Adversary, story `drain-exit`: `Process.exit(3)` during the drain ends
+/// the process within 5 s (five times [`EXIT`], for load) although a task
+/// that floods the same stream to a peer that never reads is stalled in
+/// its send. `main`'s own line `bye` is pending on that stream, so the
+/// exit's flush waits for the write lock the stalled task holds.
+#[test]
+fn adversary_process_exit_during_the_drain_with_a_stalled_writer() {
+    on_both_targets(|target| {
+        let binary = build_fixture("drain_exit_stall", "drainexitstall", target);
+        let mut server = Server::start(&binary);
+        let _slow = TcpStream::connect(("127.0.0.1", server.port)).expect("connect slow");
+        wait_line(&server.stderr, "waiting", &mut server.skipped, |l| {
+            l == "waiting"
+        });
+        signal(server.pid(), Signal::SIGTERM);
+        wait_line(&server.stderr, "exiting", &mut server.skipped, |l| {
+            l == "exiting"
+        });
+        let exiting = Instant::now();
+        let limit = EXIT * 5;
+        let status = loop {
+            if let Some(status) = server.child.try_wait().expect("wait") {
+                break status;
+            }
+            assert!(
+                exiting.elapsed() < limit,
+                "{target}: still running {limit:?} after `exiting`; lines:\n{}",
+                server.skipped.join("\n")
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(status.code(), Some(3), "{target}: {status:?}");
+    });
+}
+
 // ---- 16.0 item 6: DrainRollout under `ignite run` -------------------------
 
 /// A running `ignite run` with its journal records as they arrive.
