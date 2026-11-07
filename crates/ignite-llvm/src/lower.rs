@@ -4607,7 +4607,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             ProcessExit => {
                 let code = self.scalar_arg(&args[0]);
                 let c = self.f.val(format!("trunc i64 {code} to i32"));
-                self.f.ins(format!("call void @ignite_rt_exit(i32 {c})"));
+                self.m.declare_raw(
+                    "ignite_rt_process_exit",
+                    "declare void @ignite_rt_process_exit(i32) noreturn",
+                );
+                self.f
+                    .ins(format!("call void @ignite_rt_process_exit(i32 {c})"));
                 self.f.term("unreachable");
                 Val::Never
             }

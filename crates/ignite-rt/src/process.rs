@@ -299,6 +299,15 @@ pub extern "C" fn ignite_rt_endpoint_of(
     })
 }
 
+/// `void process_exit(i32 code)`: `Process.exit(code)`, which is
+/// `ignite_io::exit` on both targets: the calling task's writes are sent
+/// and the process ends with `code` at once, draining or not; live tasks
+/// are not waited for (`docs/slice.md` 16.13).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_process_exit(code: i32) -> ! {
+    crate::entry_never(move || ignite_io::exit(code))
+}
+
 /// `void exit(i32 code)`: `ignite_io::exit`: restore the terminal, flush
 /// standard output, exit. Called by the generated main when `K.main`
 /// returns `Ok`; while the process drains (`docs/slice.md` 16.13) it
@@ -341,8 +350,10 @@ pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
     })
 }
 
-/// The end of a drained process: wait for the live tasks, exit 0.
+/// The end of a drained process: send what `main`'s task wrote, wait for
+/// the live tasks, exit 0, as `ignite_io::run` does.
 fn drained() -> ! {
+    ignite_io::flush();
     ignite_io::wait_for_tasks();
     ignite_io::exit(0)
 }
