@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T05:13:50Z",
+  "actor": "human:timo",
+  "artifact": "story:http-inline-no-content",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 080ba611: 1307 passed, 0 failed, 11 ignored; 309 inline per target; EXIT=0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/86"
+  }
+}
