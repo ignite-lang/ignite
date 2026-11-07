@@ -1,0 +1,45 @@
+package tests.streams
+
+// Run on both targets by tests/stream_ownership.rs: a pattern-bound pipe
+// end whose last use is a spawn inside a branch, or whose name a later
+// binding shadows, belongs to the task, so the task's failure closes it
+// while the test body still runs. The Rust target moves it there
+// (docs/slice.md 20.3.1).
+
+import std.net.{Pipe, PipeStream}
+import std.io.IoError
+
+type IoResult<T> = Result<T, IoError>
+
+fn fails(stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
+  let values = [1, 2]
+  assert values.len() == 3
+  stream.write_all(b"never")?
+  Ok(())
+}
+
+test fn rest(client: PipeStream) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test "a failing task closes a pipe end spawned inside an if branch" {
+  let (client, server) = Pipe.pair()
+  if client.received_batches() == 0 {
+    spawn fails(server)
+  }
+  assert rest(client)? == b""
+}
+
+test "a failing task closes a spawned pipe end whose name a later binding shadows" {
+  let (client, server) = Pipe.pair()
+  spawn fails(server)
+  let (other, server) = Pipe.pair()
+  server.write_all(b"x")?
+  assert rest(client)? == b""
+}

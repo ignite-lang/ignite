@@ -1,0 +1,31 @@
+package tests.streams
+
+// Run on both targets by tests/stream_ownership.rs: named arguments of a
+// spawned call written in another order than the parameters.
+
+import std.net.{Pipe, PipeStream}
+import std.io.IoError
+
+type IoResult<T> = Result<T, IoError>
+
+fn greets(stream: PipeStream, word: Text) -> IoResult<Unit> requires [stream.write] {
+  stream.write_all(word.to_bytes())?
+  Ok(())
+}
+
+test fn exactly(client: PipeStream, count: Int) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  while out.len() < count {
+    match client.read(count - out.len())? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out)
+}
+
+test "named spawn arguments in another order reach their parameters" {
+  let (client, server) = Pipe.pair()
+  spawn greets(word = "cd", stream = server)
+  assert exactly(client, 2)? == b"cd"
+}

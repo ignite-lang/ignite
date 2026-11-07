@@ -73,6 +73,16 @@ fn a_spawn_in_a_test_body_hands_the_pattern_bound_end_over() {
     ignite_test("test_body_spawn.ignite", "all", 2, 2);
 }
 
+#[test]
+fn a_spawn_in_a_branch_or_before_a_shadowing_binding_closes_the_end_on_both_targets() {
+    ignite_test("nested_spawn.ignite", "all", 2, 2);
+}
+
+#[test]
+fn named_spawn_arguments_in_another_order_build_and_pass_on_both_targets() {
+    ignite_test("named_spawn.ignite", "all", 1, 2);
+}
+
 /// A running `inlined`, killed on drop.
 struct Server {
     child: Child,
