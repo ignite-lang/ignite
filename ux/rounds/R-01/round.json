@@ -5,6 +5,7 @@
       "cells": [
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -12,6 +13,7 @@
         },
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -19,6 +21,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -26,6 +29,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -33,6 +37,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -47,6 +52,7 @@
       "cells": [
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -54,6 +60,7 @@
         },
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -61,6 +68,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -68,6 +76,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -75,6 +84,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -89,6 +99,7 @@
       "cells": [
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -96,6 +107,7 @@
         },
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -103,6 +115,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -110,6 +123,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -117,6 +131,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -131,6 +146,7 @@
       "cells": [
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -138,6 +154,7 @@
         },
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -145,6 +162,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": null,
           "value": null,
           "verdict": "not measured",
@@ -152,6 +170,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": null,
           "value": null,
           "verdict": "not measured",
@@ -159,6 +178,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": null,
           "value": null,
           "verdict": "not measured",
@@ -173,6 +193,7 @@
       "cells": [
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -180,6 +201,7 @@
         },
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -187,6 +209,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": null,
           "value": null,
           "verdict": "not measured",
@@ -194,6 +217,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": null,
           "value": null,
           "verdict": "not measured",
@@ -201,6 +225,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": null,
           "value": null,
           "verdict": "not measured",
@@ -211,10 +236,11 @@
       "limit": "0"
     },
     {
-      "bar": "requests off the local server (L2 and the trial)",
+      "bar": "L2: requests off the local server",
       "cells": [
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -222,6 +248,7 @@
         },
         {
           "gating": true,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "met",
@@ -229,6 +256,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -236,6 +264,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -243,6 +272,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "0",
           "value": 0,
           "verdict": "reported",
@@ -253,10 +283,58 @@
       "limit": "0"
     },
     {
+      "bar": "trial: requests off the local server",
+      "cells": [
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "1440x900"
+        },
+        {
+          "gating": true,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "met",
+          "viewport": "390x844"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1280x800"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "1024x768"
+        },
+        {
+          "gating": false,
+          "shot": null,
+          "shown": "0",
+          "value": 0,
+          "verdict": "reported",
+          "viewport": "768x1024"
+        }
+      ],
+      "id": "trial.external_requests",
+      "limit": "0"
+    },
+    {
       "bar": "L3 suite: the screen-only user reaches each task's truth, pointer and keyboard",
       "cells": [
         {
           "gating": true,
+          "shot": null,
           "shown": "7/7",
           "value": 7,
           "verdict": "met",
@@ -264,6 +342,7 @@
         },
         {
           "gating": true,
+          "shot": null,
           "shown": "7/7",
           "value": 7,
           "verdict": "met",
@@ -271,6 +350,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": null,
           "value": null,
           "verdict": "not measured",
@@ -278,6 +358,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": null,
           "value": null,
           "verdict": "not measured",
@@ -285,6 +366,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": null,
           "value": null,
           "verdict": "not measured",
@@ -299,6 +381,7 @@
       "cells": [
         {
           "gating": true,
+          "shot": null,
           "shown": "3/3",
           "value": 3,
           "verdict": "met",
@@ -306,6 +389,7 @@
         },
         {
           "gating": true,
+          "shot": null,
           "shown": "3/3",
           "value": 3,
           "verdict": "met",
@@ -313,6 +397,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "3/3",
           "value": 3,
           "verdict": "reported",
@@ -320,6 +405,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "3/3",
           "value": 3,
           "verdict": "reported",
@@ -327,6 +413,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "3/3",
           "value": 3,
           "verdict": "reported",
@@ -341,6 +428,7 @@
       "cells": [
         {
           "gating": true,
+          "shot": null,
           "shown": "1/1",
           "value": 1,
           "verdict": "met",
@@ -348,6 +436,7 @@
         },
         {
           "gating": true,
+          "shot": null,
           "shown": "1/1",
           "value": 1,
           "verdict": "met",
@@ -355,6 +444,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "1/1",
           "value": 1,
           "verdict": "reported",
@@ -362,6 +452,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "1/1",
           "value": 1,
           "verdict": "reported",
@@ -369,6 +460,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "1/1",
           "value": 1,
           "verdict": "reported",
@@ -383,6 +475,7 @@
       "cells": [
         {
           "gating": true,
+          "shot": "shots/worst-1-found.jpg",
           "shown": "13",
           "value": 13,
           "verdict": "missed",
@@ -390,6 +483,7 @@
         },
         {
           "gating": true,
+          "shot": "shots/worst-3-found.jpg",
           "shown": "23",
           "value": 23,
           "verdict": "missed",
@@ -397,6 +491,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "14",
           "value": 14,
           "verdict": "reported",
@@ -404,6 +499,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "15",
           "value": 15,
           "verdict": "reported",
@@ -411,6 +507,7 @@
         },
         {
           "gating": false,
+          "shot": null,
           "shown": "13",
           "value": 13,
           "verdict": "reported",
@@ -426,19 +523,22 @@
       "file": "ux/scenarios/cards/anchor-keyboard-reference.json",
       "id": "anchor-keyboard-reference",
       "kind": "anchor",
-      "mode": "keyboard"
+      "mode": "keyboard",
+      "theme": "light"
     },
     {
       "file": "ux/scenarios/cards/anchor-newcomer.json",
       "id": "anchor-newcomer",
       "kind": "anchor",
-      "mode": "pointer"
+      "mode": "pointer",
+      "theme": "light"
     },
     {
       "file": "ux/scenarios/cards/r01-faq-reader.json",
       "id": "r01-faq-reader",
       "kind": "rotating",
-      "mode": "pointer"
+      "mode": "pointer",
+      "theme": "dark"
     }
   ],
   "command": "task ux-round ROUND=R-01",
@@ -478,8 +578,19 @@
     "shots/worst-3-start.jpg",
     "shots/worst-3-found.jpg",
     "shots/worst-4-start.jpg",
+    "shots/worst-4-found.jpg",
     "shots/worst-5-start.jpg",
+    "shots/worst-5-found.jpg",
     "shots/worst-6-start.jpg",
+    "shots/worst-6-found.jpg",
+    "shots/worst-7-start.jpg",
+    "shots/worst-7-found.jpg",
+    "shots/worst-8-start.jpg",
+    "shots/worst-8-found.jpg",
+    "shots/worst-9-start.jpg",
+    "shots/worst-9-found.jpg",
+    "shots/worst-10-start.jpg",
+    "shots/worst-10-found.jpg",
     "shots/contact-1440x900.jpg",
     "shots/contact-390x844.jpg",
     "shots/contact-1280x800.jpg",
@@ -487,6 +598,14 @@
     "shots/contact-768x1024.jpg"
   ],
   "frame_delay_ms": 750,
+  "gating_suite": {
+    "failed": 0,
+    "failed_tests": [],
+    "flaky": 0,
+    "passed": 276,
+    "skipped": 0,
+    "status": "passed"
+  },
   "l5_probe": "not run (no person, no keys)",
   "last_round": null,
   "measured": {
@@ -1520,8 +1639,8 @@
       "card": "anchor-keyboard-reference",
       "completed": true,
       "external_requests": 0,
-      "glance_median": 0,
-      "glance_p95": 0,
+      "glance_median": null,
+      "glance_p95": null,
       "group": "gating",
       "kind": "anchor",
       "last_actions": null,
@@ -1604,6 +1723,7 @@
       "step_actions_max": 58,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "light",
       "time_to_act_max": 57,
       "trace": "target/ux/round/traces/anchor-keyboard-reference-1440x900.zip",
       "viewport": "1440x900"
@@ -1613,8 +1733,8 @@
       "card": "anchor-keyboard-reference",
       "completed": true,
       "external_requests": 0,
-      "glance_median": 0,
-      "glance_p95": 0,
+      "glance_median": null,
+      "glance_p95": null,
       "group": "gating",
       "kind": "anchor",
       "last_actions": null,
@@ -1697,6 +1817,7 @@
       "step_actions_max": 47,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "light",
       "time_to_act_max": 45,
       "trace": "target/ux/round/traces/anchor-keyboard-reference-390x844.zip",
       "viewport": "390x844"
@@ -1706,8 +1827,8 @@
       "card": "anchor-keyboard-reference",
       "completed": true,
       "external_requests": 0,
-      "glance_median": 0,
-      "glance_p95": 0,
+      "glance_median": null,
+      "glance_p95": null,
       "group": "measured",
       "kind": "anchor",
       "last_actions": null,
@@ -1790,6 +1911,7 @@
       "step_actions_max": 58,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "light",
       "time_to_act_max": 57,
       "trace": "target/ux/round/traces/anchor-keyboard-reference-1280x800.zip",
       "viewport": "1280x800"
@@ -1799,8 +1921,8 @@
       "card": "anchor-keyboard-reference",
       "completed": true,
       "external_requests": 0,
-      "glance_median": 0,
-      "glance_p95": 0,
+      "glance_median": null,
+      "glance_p95": null,
       "group": "measured",
       "kind": "anchor",
       "last_actions": null,
@@ -1883,6 +2005,7 @@
       "step_actions_max": 40,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "light",
       "time_to_act_max": 39,
       "trace": "target/ux/round/traces/anchor-keyboard-reference-1024x768.zip",
       "viewport": "1024x768"
@@ -1892,8 +2015,8 @@
       "card": "anchor-keyboard-reference",
       "completed": true,
       "external_requests": 0,
-      "glance_median": 0,
-      "glance_p95": 0,
+      "glance_median": null,
+      "glance_p95": null,
       "group": "measured",
       "kind": "anchor",
       "last_actions": null,
@@ -1976,6 +2099,7 @@
       "step_actions_max": 38,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "light",
       "time_to_act_max": 37,
       "trace": "target/ux/round/traces/anchor-keyboard-reference-768x1024.zip",
       "viewport": "768x1024"
@@ -2069,6 +2193,7 @@
       "step_actions_max": 1,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "light",
       "time_to_act_max": 1,
       "trace": "target/ux/round/traces/anchor-newcomer-1440x900.zip",
       "viewport": "1440x900"
@@ -2162,6 +2287,7 @@
       "step_actions_max": 2,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "light",
       "time_to_act_max": 2,
       "trace": "target/ux/round/traces/anchor-newcomer-390x844.zip",
       "viewport": "390x844"
@@ -2255,6 +2381,7 @@
       "step_actions_max": 1,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "light",
       "time_to_act_max": 1,
       "trace": "target/ux/round/traces/anchor-newcomer-1280x800.zip",
       "viewport": "1280x800"
@@ -2348,6 +2475,7 @@
       "step_actions_max": 1,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "light",
       "time_to_act_max": 1,
       "trace": "target/ux/round/traces/anchor-newcomer-1024x768.zip",
       "viewport": "1024x768"
@@ -2441,12 +2569,13 @@
       "step_actions_max": 1,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "light",
       "time_to_act_max": 1,
       "trace": "target/ux/round/traces/anchor-newcomer-768x1024.zip",
       "viewport": "768x1024"
     },
     {
-      "actions": 23,
+      "actions": 22,
       "card": "r01-faq-reader",
       "completed": true,
       "external_requests": 0,
@@ -2455,23 +2584,13 @@
       "group": "gating",
       "kind": "rotating",
       "last_actions": null,
-      "looks": 23,
+      "looks": 22,
       "mode": "pointer",
       "segments": [
         {
-          "actions": 1,
-          "completed": true,
-          "first_step": 0,
-          "id": "dark-from-the-start",
-          "kind": "twist",
-          "looks": 1,
-          "steers": 0,
-          "steps": 1
-        },
-        {
           "actions": 13,
           "completed": true,
-          "first_step": 1,
+          "first_step": 0,
           "id": "faq-platforms",
           "kind": "task",
           "looks": 13,
@@ -2481,7 +2600,7 @@
         {
           "actions": 1,
           "completed": true,
-          "first_step": 2,
+          "first_step": 1,
           "id": "home",
           "kind": "between",
           "looks": 1,
@@ -2491,7 +2610,7 @@
         {
           "actions": 1,
           "completed": true,
-          "first_step": 3,
+          "first_step": 2,
           "id": "install",
           "kind": "task",
           "looks": 1,
@@ -2501,7 +2620,7 @@
         {
           "actions": 1,
           "completed": true,
-          "first_step": 4,
+          "first_step": 3,
           "id": "home",
           "kind": "between",
           "looks": 1,
@@ -2511,7 +2630,7 @@
         {
           "actions": 2,
           "completed": true,
-          "first_step": 5,
+          "first_step": 4,
           "id": "wrong-turn-roadmap",
           "kind": "twist",
           "looks": 2,
@@ -2521,7 +2640,7 @@
         {
           "actions": 4,
           "completed": true,
-          "first_step": 7,
+          "first_step": 6,
           "id": "std-fs",
           "kind": "task",
           "looks": 4,
@@ -2534,12 +2653,13 @@
       "step_actions_max": 13,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "dark",
       "time_to_act_max": 13,
       "trace": "target/ux/round/traces/r01-faq-reader-1440x900.zip",
       "viewport": "1440x900"
     },
     {
-      "actions": 37,
+      "actions": 36,
       "card": "r01-faq-reader",
       "completed": true,
       "external_requests": 0,
@@ -2548,23 +2668,13 @@
       "group": "gating",
       "kind": "rotating",
       "last_actions": null,
-      "looks": 37,
+      "looks": 36,
       "mode": "pointer",
       "segments": [
         {
-          "actions": 1,
-          "completed": true,
-          "first_step": 0,
-          "id": "dark-from-the-start",
-          "kind": "twist",
-          "looks": 1,
-          "steers": 0,
-          "steps": 1
-        },
-        {
           "actions": 23,
           "completed": true,
-          "first_step": 1,
+          "first_step": 0,
           "id": "faq-platforms",
           "kind": "task",
           "looks": 23,
@@ -2574,7 +2684,7 @@
         {
           "actions": 1,
           "completed": true,
-          "first_step": 2,
+          "first_step": 1,
           "id": "home",
           "kind": "between",
           "looks": 1,
@@ -2584,7 +2694,7 @@
         {
           "actions": 2,
           "completed": true,
-          "first_step": 3,
+          "first_step": 2,
           "id": "install",
           "kind": "task",
           "looks": 2,
@@ -2594,7 +2704,7 @@
         {
           "actions": 1,
           "completed": true,
-          "first_step": 4,
+          "first_step": 3,
           "id": "home",
           "kind": "between",
           "looks": 1,
@@ -2604,7 +2714,7 @@
         {
           "actions": 3,
           "completed": true,
-          "first_step": 5,
+          "first_step": 4,
           "id": "wrong-turn-roadmap",
           "kind": "twist",
           "looks": 3,
@@ -2614,7 +2724,7 @@
         {
           "actions": 6,
           "completed": true,
-          "first_step": 7,
+          "first_step": 6,
           "id": "std-fs",
           "kind": "task",
           "looks": 6,
@@ -2627,9 +2737,94 @@
       "step_actions_max": 23,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "dark",
       "time_to_act_max": 23,
       "trace": "target/ux/round/traces/r01-faq-reader-390x844.zip",
       "viewport": "390x844"
+    },
+    {
+      "actions": 23,
+      "card": "r01-faq-reader",
+      "completed": true,
+      "external_requests": 0,
+      "glance_median": 1,
+      "glance_p95": 3,
+      "group": "measured",
+      "kind": "rotating",
+      "last_actions": null,
+      "looks": 23,
+      "mode": "pointer",
+      "segments": [
+        {
+          "actions": 14,
+          "completed": true,
+          "first_step": 0,
+          "id": "faq-platforms",
+          "kind": "task",
+          "looks": 14,
+          "steers": 13,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 1,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 2,
+          "id": "install",
+          "kind": "task",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 1,
+          "completed": true,
+          "first_step": 3,
+          "id": "home",
+          "kind": "between",
+          "looks": 1,
+          "steers": 0,
+          "steps": 1
+        },
+        {
+          "actions": 2,
+          "completed": true,
+          "first_step": 4,
+          "id": "wrong-turn-roadmap",
+          "kind": "twist",
+          "looks": 2,
+          "steers": 0,
+          "steps": 2
+        },
+        {
+          "actions": 4,
+          "completed": true,
+          "first_step": 6,
+          "id": "std-fs",
+          "kind": "task",
+          "looks": 4,
+          "steers": 1,
+          "steps": 3
+        }
+      ],
+      "session": "r01-faq-reader-1280x800",
+      "steers": 14,
+      "step_actions_max": 14,
+      "tasks": 3,
+      "tasks_done": 3,
+      "theme": "dark",
+      "time_to_act_max": 14,
+      "trace": "target/ux/round/traces/r01-faq-reader-1280x800.zip",
+      "viewport": "1280x800"
     },
     {
       "actions": 24,
@@ -2645,112 +2840,9 @@
       "mode": "pointer",
       "segments": [
         {
-          "actions": 1,
-          "completed": true,
-          "first_step": 0,
-          "id": "dark-from-the-start",
-          "kind": "twist",
-          "looks": 1,
-          "steers": 0,
-          "steps": 1
-        },
-        {
-          "actions": 14,
-          "completed": true,
-          "first_step": 1,
-          "id": "faq-platforms",
-          "kind": "task",
-          "looks": 14,
-          "steers": 13,
-          "steps": 1
-        },
-        {
-          "actions": 1,
-          "completed": true,
-          "first_step": 2,
-          "id": "home",
-          "kind": "between",
-          "looks": 1,
-          "steers": 0,
-          "steps": 1
-        },
-        {
-          "actions": 1,
-          "completed": true,
-          "first_step": 3,
-          "id": "install",
-          "kind": "task",
-          "looks": 1,
-          "steers": 0,
-          "steps": 1
-        },
-        {
-          "actions": 1,
-          "completed": true,
-          "first_step": 4,
-          "id": "home",
-          "kind": "between",
-          "looks": 1,
-          "steers": 0,
-          "steps": 1
-        },
-        {
-          "actions": 2,
-          "completed": true,
-          "first_step": 5,
-          "id": "wrong-turn-roadmap",
-          "kind": "twist",
-          "looks": 2,
-          "steers": 0,
-          "steps": 2
-        },
-        {
-          "actions": 4,
-          "completed": true,
-          "first_step": 7,
-          "id": "std-fs",
-          "kind": "task",
-          "looks": 4,
-          "steers": 1,
-          "steps": 3
-        }
-      ],
-      "session": "r01-faq-reader-1280x800",
-      "steers": 14,
-      "step_actions_max": 14,
-      "tasks": 3,
-      "tasks_done": 3,
-      "time_to_act_max": 14,
-      "trace": "target/ux/round/traces/r01-faq-reader-1280x800.zip",
-      "viewport": "1280x800"
-    },
-    {
-      "actions": 25,
-      "card": "r01-faq-reader",
-      "completed": true,
-      "external_requests": 0,
-      "glance_median": 1,
-      "glance_p95": 3,
-      "group": "measured",
-      "kind": "rotating",
-      "last_actions": null,
-      "looks": 25,
-      "mode": "pointer",
-      "segments": [
-        {
-          "actions": 1,
-          "completed": true,
-          "first_step": 0,
-          "id": "dark-from-the-start",
-          "kind": "twist",
-          "looks": 1,
-          "steers": 0,
-          "steps": 1
-        },
-        {
           "actions": 15,
           "completed": true,
-          "first_step": 1,
+          "first_step": 0,
           "id": "faq-platforms",
           "kind": "task",
           "looks": 15,
@@ -2760,7 +2852,7 @@
         {
           "actions": 1,
           "completed": true,
-          "first_step": 2,
+          "first_step": 1,
           "id": "home",
           "kind": "between",
           "looks": 1,
@@ -2770,7 +2862,7 @@
         {
           "actions": 1,
           "completed": true,
-          "first_step": 3,
+          "first_step": 2,
           "id": "install",
           "kind": "task",
           "looks": 1,
@@ -2780,7 +2872,7 @@
         {
           "actions": 1,
           "completed": true,
-          "first_step": 4,
+          "first_step": 3,
           "id": "home",
           "kind": "between",
           "looks": 1,
@@ -2790,7 +2882,7 @@
         {
           "actions": 2,
           "completed": true,
-          "first_step": 5,
+          "first_step": 4,
           "id": "wrong-turn-roadmap",
           "kind": "twist",
           "looks": 2,
@@ -2800,7 +2892,7 @@
         {
           "actions": 4,
           "completed": true,
-          "first_step": 7,
+          "first_step": 6,
           "id": "std-fs",
           "kind": "task",
           "looks": 4,
@@ -2813,12 +2905,13 @@
       "step_actions_max": 15,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "dark",
       "time_to_act_max": 15,
       "trace": "target/ux/round/traces/r01-faq-reader-1024x768.zip",
       "viewport": "1024x768"
     },
     {
-      "actions": 23,
+      "actions": 22,
       "card": "r01-faq-reader",
       "completed": true,
       "external_requests": 0,
@@ -2827,23 +2920,13 @@
       "group": "measured",
       "kind": "rotating",
       "last_actions": null,
-      "looks": 23,
+      "looks": 22,
       "mode": "pointer",
       "segments": [
         {
-          "actions": 1,
-          "completed": true,
-          "first_step": 0,
-          "id": "dark-from-the-start",
-          "kind": "twist",
-          "looks": 1,
-          "steers": 0,
-          "steps": 1
-        },
-        {
           "actions": 13,
           "completed": true,
-          "first_step": 1,
+          "first_step": 0,
           "id": "faq-platforms",
           "kind": "task",
           "looks": 13,
@@ -2853,7 +2936,7 @@
         {
           "actions": 1,
           "completed": true,
-          "first_step": 2,
+          "first_step": 1,
           "id": "home",
           "kind": "between",
           "looks": 1,
@@ -2863,7 +2946,7 @@
         {
           "actions": 1,
           "completed": true,
-          "first_step": 3,
+          "first_step": 2,
           "id": "install",
           "kind": "task",
           "looks": 1,
@@ -2873,7 +2956,7 @@
         {
           "actions": 1,
           "completed": true,
-          "first_step": 4,
+          "first_step": 3,
           "id": "home",
           "kind": "between",
           "looks": 1,
@@ -2883,7 +2966,7 @@
         {
           "actions": 2,
           "completed": true,
-          "first_step": 5,
+          "first_step": 4,
           "id": "wrong-turn-roadmap",
           "kind": "twist",
           "looks": 2,
@@ -2893,7 +2976,7 @@
         {
           "actions": 4,
           "completed": true,
-          "first_step": 7,
+          "first_step": 6,
           "id": "std-fs",
           "kind": "task",
           "looks": 4,
@@ -2906,6 +2989,7 @@
       "step_actions_max": 13,
       "tasks": 3,
       "tasks_done": 3,
+      "theme": "dark",
       "time_to_act_max": 13,
       "trace": "target/ux/round/traces/r01-faq-reader-768x1024.zip",
       "viewport": "768x1024"
@@ -2913,6 +2997,7 @@
   ],
   "trend": {
     "bars_missed": 2,
+    "gating_suite": "passed",
     "l5_probe": "not run (no person, no keys)",
     "questionnaire": "not run (no person, no keys)",
     "ratchet_better": 0,
@@ -2921,7 +3006,7 @@
     "sessions": 15,
     "sessions_completed": 15,
     "trial_keyboard_actions": 615,
-    "trial_pointer_actions": 80,
+    "trial_pointer_actions": 78,
     "worst_keyboard_tabs": 57,
     "worst_pointer_looks": 23
   },
@@ -2949,71 +3034,71 @@
   ],
   "worst": [
     {
+      "actions": 13,
+      "glance": 3,
+      "label": "click link /^FAQ$/",
+      "looks": 13,
+      "mode": "pointer",
+      "page": "index.html",
+      "rank": 1,
+      "segment": "task faq-platforms",
+      "session": "r01-faq-reader-1440x900",
+      "shots": [
+        {
+          "frame": 1,
+          "shot": "shots/worst-1-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 13,
+          "shot": "shots/worst-1-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "1440x900"
+    },
+    {
+      "actions": 58,
+      "glance": null,
+      "label": "enter on link /^Ignite home$/ after 57 tabs",
+      "looks": 57,
+      "mode": "keyboard",
+      "page": "book/design/index.html",
+      "rank": 2,
+      "segment": "twist wrong-turn-design",
+      "session": "anchor-keyboard-reference-1440x900",
+      "shots": [
+        {
+          "frame": 11,
+          "shot": "shots/worst-2-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 12,
+          "shot": "shots/worst-2-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "1440x900"
+    },
+    {
       "actions": 23,
       "glance": 3,
       "label": "click link /^FAQ$/",
       "looks": 23,
       "mode": "pointer",
       "page": "index.html",
-      "rank": 1,
+      "rank": 3,
       "segment": "task faq-platforms",
       "session": "r01-faq-reader-390x844",
       "shots": [
         {
-          "frame": 2,
-          "shot": "shots/worst-1-start.jpg",
-          "what": "start"
-        },
-        {
-          "frame": 24,
-          "shot": "shots/worst-1-found.jpg",
-          "what": "found"
-        }
-      ],
-      "viewport": "390x844"
-    },
-    {
-      "actions": 2,
-      "glance": 3,
-      "label": "click link /^Guide$/",
-      "looks": 2,
-      "mode": "pointer",
-      "page": "index.html",
-      "rank": 2,
-      "segment": "task install",
-      "session": "anchor-newcomer-390x844",
-      "shots": [
-        {
           "frame": 1,
-          "shot": "shots/worst-2-start.jpg",
-          "what": "start"
-        },
-        {
-          "frame": 2,
-          "shot": "shots/worst-2-found.jpg",
-          "what": "found"
-        }
-      ],
-      "viewport": "390x844"
-    },
-    {
-      "actions": 2,
-      "glance": 3,
-      "label": "click link /^Design$/",
-      "looks": 2,
-      "mode": "pointer",
-      "page": "index.html",
-      "rank": 3,
-      "segment": "task design",
-      "session": "anchor-newcomer-390x844",
-      "shots": [
-        {
-          "frame": 5,
           "shot": "shots/worst-3-start.jpg",
           "what": "start"
         },
         {
-          "frame": 6,
+          "frame": 23,
           "shot": "shots/worst-3-found.jpg",
           "what": "found"
         }
@@ -3021,61 +3106,172 @@
       "viewport": "390x844"
     },
     {
+      "actions": 47,
+      "glance": null,
+      "label": "enter on link /^Guide$/ after 45 tabs",
+      "looks": 45,
+      "mode": "keyboard",
+      "page": "index.html",
+      "rank": 4,
+      "segment": "task diagnostic-search",
+      "session": "anchor-keyboard-reference-390x844",
+      "shots": [
+        {
+          "frame": 26,
+          "shot": "shots/worst-4-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 28,
+          "shot": "shots/worst-4-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "390x844"
+    },
+    {
+      "actions": 14,
+      "glance": 3,
+      "label": "click link /^FAQ$/",
+      "looks": 14,
+      "mode": "pointer",
+      "page": "index.html",
+      "rank": 5,
+      "segment": "task faq-platforms",
+      "session": "r01-faq-reader-1280x800",
+      "shots": [
+        {
+          "frame": 1,
+          "shot": "shots/worst-5-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 14,
+          "shot": "shots/worst-5-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "1280x800"
+    },
+    {
       "actions": 58,
-      "glance": 0,
+      "glance": null,
       "label": "enter on link /^Ignite home$/ after 57 tabs",
       "looks": 57,
       "mode": "keyboard",
       "page": "book/design/index.html",
-      "rank": 4,
-      "segment": "twist wrong-turn-design",
-      "session": "anchor-keyboard-reference-1440x900",
-      "shots": [
-        {
-          "frame": 6,
-          "shot": "shots/worst-4-start.jpg",
-          "what": "start"
-        }
-      ],
-      "viewport": "1440x900"
-    },
-    {
-      "actions": 58,
-      "glance": 0,
-      "label": "enter on link /^Ignite home$/ after 57 tabs",
-      "looks": 57,
-      "mode": "keyboard",
-      "page": "book/reference/std/http.html",
-      "rank": 5,
-      "segment": "between home",
-      "session": "anchor-keyboard-reference-1440x900",
-      "shots": [
-        {
-          "frame": 10,
-          "shot": "shots/worst-5-start.jpg",
-          "what": "start"
-        }
-      ],
-      "viewport": "1440x900"
-    },
-    {
-      "actions": 56,
-      "glance": 0,
-      "label": "enter on link /^Ignite home$/ after 55 tabs",
-      "looks": 55,
-      "mode": "keyboard",
-      "page": "book/reference/std/fs.html",
       "rank": 6,
-      "segment": "between home",
-      "session": "anchor-keyboard-reference-1440x900",
+      "segment": "twist wrong-turn-design",
+      "session": "anchor-keyboard-reference-1280x800",
       "shots": [
         {
-          "frame": 4,
+          "frame": 11,
           "shot": "shots/worst-6-start.jpg",
           "what": "start"
+        },
+        {
+          "frame": 12,
+          "shot": "shots/worst-6-found.jpg",
+          "what": "found"
         }
       ],
-      "viewport": "1440x900"
+      "viewport": "1280x800"
+    },
+    {
+      "actions": 15,
+      "glance": 3,
+      "label": "click link /^FAQ$/",
+      "looks": 15,
+      "mode": "pointer",
+      "page": "index.html",
+      "rank": 7,
+      "segment": "task faq-platforms",
+      "session": "r01-faq-reader-1024x768",
+      "shots": [
+        {
+          "frame": 1,
+          "shot": "shots/worst-7-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 15,
+          "shot": "shots/worst-7-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "1024x768"
+    },
+    {
+      "actions": 40,
+      "glance": null,
+      "label": "enter on link /^Guide$/ after 39 tabs",
+      "looks": 39,
+      "mode": "keyboard",
+      "page": "index.html",
+      "rank": 8,
+      "segment": "task diagnostic-search",
+      "session": "anchor-keyboard-reference-1024x768",
+      "shots": [
+        {
+          "frame": 23,
+          "shot": "shots/worst-8-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 24,
+          "shot": "shots/worst-8-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "1024x768"
+    },
+    {
+      "actions": 13,
+      "glance": 3,
+      "label": "click link /^FAQ$/",
+      "looks": 13,
+      "mode": "pointer",
+      "page": "index.html",
+      "rank": 9,
+      "segment": "task faq-platforms",
+      "session": "r01-faq-reader-768x1024",
+      "shots": [
+        {
+          "frame": 1,
+          "shot": "shots/worst-9-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 13,
+          "shot": "shots/worst-9-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "768x1024"
+    },
+    {
+      "actions": 38,
+      "glance": null,
+      "label": "enter on link /^Guide$/ after 37 tabs",
+      "looks": 37,
+      "mode": "keyboard",
+      "page": "index.html",
+      "rank": 10,
+      "segment": "task diagnostic-search",
+      "session": "anchor-keyboard-reference-768x1024",
+      "shots": [
+        {
+          "frame": 23,
+          "shot": "shots/worst-10-start.jpg",
+          "what": "start"
+        },
+        {
+          "frame": 24,
+          "shot": "shots/worst-10-found.jpg",
+          "what": "found"
+        }
+      ],
+      "viewport": "768x1024"
     }
   ]
 }

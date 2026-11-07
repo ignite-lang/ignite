@@ -1018,7 +1018,7 @@ fn render(inputs: &Inputs, exists: &dyn Fn(&str) -> bool) -> Output {
     );
     let _ = writeln!(
         md,
-        "- Gating suite: {gating_line}.\n- Last round: {}.\n- Questionnaire: {NOT_RUN}.\n- L5 probe: {NOT_RUN}.\n- Recording: Playwright traces (rrweb is not in the lockfile).\n- Gating viewports: {}. Measured only, reported and not gated: {}.\n- Frames: each taken 0.75 s after its moment (the start and every click, wheel turn, opened menu, typed text or Enter), at `prefers-reduced-motion: reduce`.\n",
+        "- Gating suite: {gating_line}.\n- Last round: {}.\n- Questionnaire: {NOT_RUN}.\n- L5 probe: {NOT_RUN}.\n- Recording: Playwright traces (rrweb is not in the lockfile).\n- Gating viewports: {}. Measured only, reported and not gated: {}.\n- Frames: each taken 0.75 s after its moment (the start, every click, wheel turn, opened menu, typed text and Enter, and the keyboard focus reaching a control before Enter), at `prefers-reduced-motion: reduce`.\n",
         last_name.clone().unwrap_or_else(|| "none".to_string()),
         views
             .iter()
