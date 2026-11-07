@@ -1,0 +1,11 @@
+package g14
+
+fn set(o: List<(Text, Text)>, key: Text, raw: Text) -> List<(Text, Text)> {
+  var out = o
+  out.push((key, raw))
+  out
+}
+
+test "a plain call" {
+  assert set([], "a", "1") == [("a", "1")]
+}

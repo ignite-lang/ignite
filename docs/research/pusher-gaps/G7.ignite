@@ -1,0 +1,5 @@
+package g7
+
+test "xor" {
+  assert (0x0f ^ 0xff) == 0xf0
+}

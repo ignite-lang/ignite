@@ -1,0 +1,14 @@
+package g8
+
+type App {
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  log(Clock.now().to_ms().to_text())
+  Ok(())
+}
+
+system G8 {
+  component app: App { executable = "g8" }
+}

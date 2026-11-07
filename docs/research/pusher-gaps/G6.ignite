@@ -1,0 +1,27 @@
+package g6
+
+type App {
+  ingress: TcpListener
+  internal: TcpListener
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  match self.ingress.accept() {
+    Ok(_) => Ok(())
+    Err(e) => {
+      log("ingress accept: {e.message}")
+      match self.internal.accept() {
+        Ok(_) => log("internal still accepts")
+        Err(e2) => log("internal accept: {e2.message}")
+      }
+      Ok(())
+    }
+  }
+}
+
+system G6 {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  resource internal: TcpListener { address = "127.0.0.1", port = 0 }
+  component app: App { ingress = ingress, internal = internal, executable = "g6" }
+}

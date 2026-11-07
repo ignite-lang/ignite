@@ -1,0 +1,5 @@
+package g13
+
+test "flush is not callable" {
+  flush()
+}

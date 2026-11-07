@@ -1,0 +1,15 @@
+package g15
+
+type World {
+  numbers: Store<Int>
+}
+
+fn bump(w: World) -> Unit {
+  w.numbers.put(1, 1)
+}
+
+test "an unannotated record binding calls a Store method" {
+  let w = World { numbers = Store.new() }
+  w.numbers.put(1, 2)
+  assert w.numbers.get(1) == Some(2)
+}

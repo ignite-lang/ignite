@@ -1,0 +1,14 @@
+package g2
+
+type App {
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  log(Env.get("PUSHER_SESSION_STORE").debug())
+  Ok(())
+}
+
+system G2 {
+  component app: App { executable = "g2" }
+}

@@ -1,0 +1,31 @@
+package g16
+
+type Server {
+  listener: TcpListener
+  other: TcpListener
+  executable: Text
+}
+
+fn idle(listener: TcpListener) -> Result<Unit, IoError> {
+  loop {
+    match listener.accept() {
+      Ok(s) => {}
+      Err(_) => return Ok(())
+    }
+  }
+}
+
+fn Server.main(self: Server) -> Result<Unit, IoError> {
+  let accepted = self.listener.accept()
+  log("drain began")
+  let again = TcpListener.bind("127.0.0.1", 0)?
+  spawn idle(again)
+  log("calling Process.exit(3)")
+  Process.exit(3)
+}
+
+system G16 {
+  resource listener: TcpListener { address = "127.0.0.1", port = 0 }
+  resource other: TcpListener { address = "127.0.0.1", port = 0 }
+  component g16: Server { listener = listener, other = other, executable = "g16" }
+}

@@ -1,0 +1,7 @@
+package g9
+
+import std.yaml.{parse}
+
+test "yaml" {
+  assert parse("a: 1") != None
+}
