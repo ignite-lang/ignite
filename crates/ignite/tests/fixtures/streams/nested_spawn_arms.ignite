@@ -1,0 +1,65 @@
+package tests.streams
+
+// Run on both targets by tests/stream_ownership.rs: the rest of
+// nested_spawn.ignite's class. A pattern-bound pipe end whose last use is a
+// spawn inside a match arm or an else branch, or a named
+// spawn argument, belongs to the task, so the task's failure closes it
+// while the test body still runs (docs/slice.md 20.3.1).
+
+import std.net.{Pipe, PipeStream}
+import std.io.IoError
+
+type IoResult<T> = Result<T, IoError>
+
+fn fails(stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
+  let values = [1, 2]
+  assert values.len() == 3
+  stream.write_all(b"never")?
+  Ok(())
+}
+
+fn fails_named(tag: Text, stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
+  let values = [1, 2]
+  assert values.len() == 3
+  stream.write_all(tag.to_bytes())?
+  Ok(())
+}
+
+test fn rest(client: PipeStream) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test "a failing task closes a pipe end spawned inside a match arm" {
+  let (client, server) = Pipe.pair()
+  match client.received_batches() {
+    0 => {
+      spawn fails(server)
+    }
+    _ => {}
+  }
+  assert rest(client)? == b""
+}
+
+test "a failing task closes a pipe end spawned inside an else branch" {
+  let (client, server) = Pipe.pair()
+  if client.received_batches() > 0 {
+    server.write_all(b"x")?
+  } else {
+    spawn fails(server)
+  }
+  assert rest(client)? == b""
+}
+
+test "a failing task closes a pipe end passed by name inside a branch" {
+  let (client, server) = Pipe.pair()
+  if client.received_batches() == 0 {
+    spawn fails_named(stream = server, tag = "x")
+  }
+  assert rest(client)? == b""
+}

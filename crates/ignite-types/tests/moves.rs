@@ -1000,3 +1000,51 @@ fn pass(files: Directory, tools: Launcher, child: ChildProcess, entropy: Entropy
     );
     assert_eq!(t.marked_in("pass"), none());
 }
+
+#[test]
+fn a_spawned_ufcs_call_moves_its_receiver_at_its_last_use() {
+    let t = with_prelude(
+        r#"
+fn keep(c: TcpStream) -> TcpStream = c
+
+fn serve(c: TcpStream) -> Result<Unit, IoError> requires [stdout.write] = Stdout.write_all("x".to_bytes())
+
+fn work_on(s: State) -> Result<Unit, IoError> requires [stdout.write] = Stdout.write_all("x".to_bytes())
+
+fn handle_receiver(conn: TcpStream) -> Result<Unit, IoError> requires [stdout.write] {
+  let c = keep(conn)
+  spawn c.serve()
+  Ok(())
+}
+
+fn aggregate_receiver() -> Result<Unit, IoError> requires [stdout.write] {
+  let s = fresh()
+  spawn s.work_on()
+  Ok(())
+}
+"#,
+    );
+    assert_eq!(t.marked_in("handle_receiver"), vec!["c"]);
+    assert_eq!(t.marked_in("aggregate_receiver"), vec!["s"]);
+}
+
+#[test]
+fn a_later_spawn_argument_does_not_move_a_place_an_earlier_one_reads() {
+    let t = with_prelude(
+        r#"
+fn grow(a: List<Int>) -> Int {
+  a.push(1)
+  a.len()
+}
+
+fn work(s: State, n: Int) -> Result<Unit, IoError> requires [stdout.write] = Stdout.write_all("x".to_bytes())
+
+fn held() -> Result<Unit, IoError> requires [stdout.write] {
+  let s = fresh()
+  spawn work(s, grow(s.items))
+  Ok(())
+}
+"#,
+    );
+    assert_eq!(t.marked_in("held"), none());
+}

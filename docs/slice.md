@@ -6827,11 +6827,21 @@ moves.
   also moves as a `spawn` argument at its last use (above): the task holds the share from then
   on, so the stream closes when the task ends or fails, not when the spawning body ends
   (`stream_ownership::a_spawn_in_a_test_body_hands_the_pattern_bound_end_over`, both targets).
+  That holds for a spawn inside an `if` branch, a block or a `match` arm that is the binding's
+  last use, and for a spawn followed by a binding that shadows the name
+  (`stream_ownership::a_spawn_in_a_branch_or_before_a_shadowing_binding_closes_the_end_on_both_targets`);
+  a spawn inside a loop body does not hand over. On LLVM `own::handovers` finds these spawns at
+  the binding's `let`; the end is kept instead when a block between the binding's and the
+  spawn's took an owner mark before the spawn (`docs/llvm.md` section 4). Named `spawn`
+  arguments are evaluated in source order and passed in parameter order on both targets
+  (`stream_ownership::named_spawn_arguments_in_another_order_build_and_pass_on_both_targets`).
   A handle parameter is never consumed by a move.
 
 Checks: `moves::owned_pattern_bindings_move`, `moves::owned_for_elements_move`,
 `moves::closure_parameters_move_when_consumed`, `moves::handles_move_only_at_their_scope_tail`,
-`moves::spawn_arguments_move_at_their_last_use`
+`moves::spawn_arguments_move_at_their_last_use`,
+`moves::a_spawned_ufcs_call_moves_its_receiver_at_its_last_use`,
+`moves::a_later_spawn_argument_does_not_move_a_place_an_earlier_one_reads`
 (`cargo test -p ignite-types --test main moves::`), and `slice16/moves_tails_owned.ignite`
 on both targets (`slice16::owned_binding_tails_move_on_both_targets` in `crates/ignite`,
 `slice16::fixtures_pass` in `ignite-rustgen`).

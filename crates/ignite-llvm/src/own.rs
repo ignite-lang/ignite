@@ -64,24 +64,95 @@ pub fn owned(stmts: &[Stmt], index: usize, types: &TypedProgram) -> Vec<String> 
         .collect()
 }
 
-/// The plain-name arguments of the `spawn f(args)` at `stmts[index]` that
-/// no later statement of the block mentions: an owned binding among them
-/// is handed over to the task there.
-pub fn last_use(stmts: &[Stmt], index: usize, call: &Expr) -> Vec<String> {
-    let args: Vec<&Expr> = match &call.kind {
+/// The calls of the `spawn` statements that hand the binding `name` over to
+/// their task: `stmts` are the statements after its `let`, and a spawn
+/// hands it over where it is the binding's last use. That is a `spawn`
+/// statement that takes `name` as an argument and after which nothing in
+/// the binding's scope mentions it, in the binding's own block or nested
+/// in blocks, `if` branches and `match` arms that are themselves the
+/// binding's last use (the other branches keep the binding, which the
+/// block releases when it is left). A later binding of the same name ends
+/// the scope: mentions after it are of the new binding. A spawn inside a
+/// loop runs again, so a loop body is not searched; a shadowing `let`
+/// inside a branch or a match arm that binds the name ends the search too.
+pub fn handovers<'s>(stmts: &'s [Stmt], name: &str) -> Vec<&'s Expr> {
+    let mut out = Vec::new();
+    block_handovers(stmts, name, &mut out);
+    out
+}
+
+fn block_handovers<'s>(stmts: &'s [Stmt], name: &str, out: &mut Vec<&'s Expr>) {
+    // The rebinding statement itself still reads the binding in its value.
+    let (scope, rebinding) = match stmts.iter().position(|stmt| rebinds(stmt, name)) {
+        Some(at) => (&stmts[..at], Some(&stmts[at])),
+        None => (stmts, None),
+    };
+    if rebinding.is_some_and(|stmt| match &stmt.kind {
+        StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => {
+            crate::region::mentions(value, name)
+        }
+        _ => false,
+    }) {
+        return;
+    }
+    let Some(last) = scope
+        .iter()
+        .rposition(|stmt| crate::region::mentioned(std::slice::from_ref(stmt), name))
+    else {
+        return;
+    };
+    if let StmtKind::Expr(e) = &scope[last].kind {
+        tail_handovers(e, name, out);
+    }
+}
+
+fn tail_handovers<'s>(e: &'s Expr, name: &str, out: &mut Vec<&'s Expr>) {
+    use crate::region::mentions;
+    match &e.kind {
+        ExprKind::Spawn(call) if spawn_args(call).iter().any(|arg| is_name(arg, name)) => {
+            out.push(call);
+        }
+        ExprKind::Block(body) => block_handovers(&body.stmts, name, out),
+        ExprKind::If {
+            cond,
+            then,
+            otherwise,
+        } if !mentions(cond, name) => {
+            block_handovers(&then.stmts, name, out);
+            if let Some(otherwise) = otherwise {
+                tail_handovers(otherwise, name, out);
+            }
+        }
+        ExprKind::Match { scrutinee, arms } if !mentions(scrutinee, name) => {
+            for arm in arms {
+                if !crate::region::pattern_binds(&arm.pattern, name) {
+                    tail_handovers(&arm.body, name, out);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Whether `stmt` binds `name` anew in its block.
+fn rebinds(stmt: &Stmt, name: &str) -> bool {
+    match &stmt.kind {
+        StmtKind::Let { name: bound, .. } => bound.name == name,
+        StmtKind::LetPattern { pattern, .. } => crate::region::pattern_binds(pattern, name),
+        _ => false,
+    }
+}
+
+/// The arguments of a spawned call, the receiver of a method call first,
+/// as `Lower::spawn` reads them.
+pub fn spawn_args(call: &Expr) -> Vec<&Expr> {
+    match &call.kind {
         ExprKind::Call { args, .. } => args.iter().collect(),
         ExprKind::Method { receiver, args, .. } => {
             std::iter::once(&**receiver).chain(args).collect()
         }
         _ => Vec::new(),
-    };
-    args.iter()
-        .filter_map(|arg| match &arg.kind {
-            ExprKind::Name(id) => Some(id.name.clone()),
-            _ => None,
-        })
-        .filter(|name| !crate::region::mentioned(&stmts[index + 1..], name))
-        .collect()
+    }
 }
 
 /// Whether a result of type `ty` can hold a stream handle. Records, enums,
