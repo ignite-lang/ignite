@@ -83,6 +83,7 @@ Rules of the layout:
 | all tests | `task test` |
 | format and lint | `task check` |
 | merge gate | `task gate` |
+| pack the release binary | `task dist` (release `ignite` for Linux x86_64, glibc linked statically, with `std/` as `target/dist/ignite-VERSION-x86_64-linux.tar.gz`: `bin/ignite`, `share/ignite/std`; a driver at `<prefix>/bin/ignite` reads `<prefix>/share/ignite/std` first when it exists) |
 | compile the example | `task compile` (`ignite build --target rust`; writes `target/ignite/terminal/`, prints `built …/terminald` and `built …/tn`) |
 | run the compiled server | `task server` |
 | run the compiled client | `task client` |
@@ -474,6 +475,12 @@ without waiting for a person.
   green `task gate`, merged; tag `vX.Y.Z` on the merge commit; `gh release create vX.Y.Z` with
   notes in the shape of `v0.12.0`'s: one bullet per merged PR, behaviour changes (a
   `CODEGEN_REVISION` bump means the first `ignite apply` rebuilds), what is not yet covered.
+- Binary: on the tagged commit run `task dist` and upload its archive with `gh release upload vX.Y.Z
+  target/dist/ignite-X.Y.Z-x86_64-linux.tar.gz`: Linux x86_64, glibc linked statically (a musl driver
+  would carry a musl runtime archive that the default, dynamic LLVM link cannot use), `bin/ignite`
+  with `share/ignite/std`, the standard library a driver at `<prefix>/bin/ignite` reads first;
+  the Rust target still needs a clone (`--substrate`). The VS Code extension of `ignite-lsp`
+  downloads it.
 - Announce: send the release's tag, URL and notes to the `brain` session (Claude session named
   `brain`, `SendMessage`), asking it to forward the announcement to AI autodev. Send the path of
   a ready file, not the text: Slack mrkdwn (`<url|label>` links), every line at most 200

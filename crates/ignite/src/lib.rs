@@ -284,11 +284,28 @@ pub struct Emitted {
     pub std: GeneratedProject,
 }
 
-/// The repository's `std/` next to this driver's crate
-/// (`CARGO_MANIFEST_DIR/../../std`, canonicalized when it exists).
+/// The standard library of an installed driver, `<prefix>/share/ignite/std`
+/// for a driver at `<prefix>/bin/ignite` (the layout `task dist` packs),
+/// when that directory exists; otherwise the repository's `std/` next to
+/// this driver's crate (`CARGO_MANIFEST_DIR/../../std`, canonicalized when
+/// it exists), where `cargo install` leaves it.
 pub fn default_std_path() -> PathBuf {
+    if let Some(path) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| installed_std_path(&exe))
+    {
+        return path;
+    }
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../std");
     path.canonicalize().unwrap_or(path)
+}
+
+/// `<prefix>/share/ignite/std` for a driver at `<prefix>/bin/<name>`, the
+/// driver's symbolic links resolved, when it is a directory.
+pub fn installed_std_path(driver: &Path) -> Option<PathBuf> {
+    let driver = driver.canonicalize().ok()?;
+    let path = driver.parent()?.parent()?.join("share/ignite/std");
+    path.is_dir().then_some(path)
 }
 
 /// The `ignite-io` crate this driver was built next to.
