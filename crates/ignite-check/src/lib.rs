@@ -2806,19 +2806,25 @@ impl Checker {
     /// E017, the type checker's, as is an uncovered one in a fn with
     /// `requires`; `docs/slice.md` 20.4.3). A local names an effectful fn
     /// when its declared type is an effectful fn type (a parameter, a
-    /// let-bound closure), as for a call of it.
+    /// let-bound closure), as for a call of it; `arg` is then an effect
+    /// site in every context, so the type checker reports E042 for a local
+    /// of effectful fn type whose type the checker cannot tell (a call's
+    /// result, a pattern binding) where it would be charged here.
     fn map_fn_value(&mut self, arg: &Expr) {
         let ExprKind::Name(name) = &arg.kind else {
             return;
         };
-        if !matches!(self.ctx, Ctx::Inferred) {
-            return;
-        }
         if let Some(local) = self.local(&name.name) {
             let ty = local.ty.as_ref().map(|ty| self.expand(ty));
             if let Some(needed) = ty.and_then(|ty| self.fn_value_effects(&ty, &[])) {
-                self.effectful_op(needed, arg.span, &name.name);
+                if matches!(self.ctx, Ctx::Inferred) {
+                    self.effectful_op(needed, arg.span, &name.name);
+                }
+                self.symbols.effect_sites.insert(arg.span);
             }
+            return;
+        }
+        if !matches!(self.ctx, Ctx::Inferred) {
             return;
         }
         if self.lookup(&name.name).is_some()

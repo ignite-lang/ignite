@@ -1009,7 +1009,9 @@ Fixtures: E091 (literal data) under `crates/ignite-check/tests/fixtures`; E090, 
 Codes of slice 16 (section 20.7): E076 above. Changed meanings: E003 is no longer reported for a
 callee that is an expression (`not callable`); E040 also for a callee whose type is no fn type;
 E042 also for a call of an effectful fn-typed expression that is no name and that `ignite-check`
-gives no type (a call's result); E046 splits a list
+gives no type (a call's result), and, since story `effectful-map-escape`, for a local of
+effectful fn type without a type `ignite-check` can tell passed to `List.map` where the caller has
+no `requires` (20.4.3); E046 splits a list
 column by length and names the missing lengths as list patterns. Fixtures: `e076_rest` and
 `e001_rest_outside_list` under `crates/ignite-syntax/tests/fixtures`; `e040_not_callable`,
 `e043_expression_call_arity`, `e042_effectful_expression_callee`, `e040_rest_binding` and
@@ -6997,6 +6999,14 @@ effects of the code that calls `map`. The rule, as landed:
   its parameters) at the `map` call, so a caller whose `requires` lacks them is E016 (fixtures
   `e016_list_map_fn_value`, `e016_list_map_local_fn`). A test body and a closure body accept
   them as they accept any effect.
+- A local of effectful fn type whose type `ignite-check` cannot tell (bound from a call
+  `let g = make()`, from a field of a call's result, or by a pattern `Some(g)`) is E042 at `f`
+  where the caller has no `requires` (a fn without one, a test body, a closure body), as a call
+  `g(n)` of it is: ``cannot check the effects of `g` passed to `map`: its type is not declared;
+  bind it with its type: `let g: fn(id: Int) -> Int requires [clock.read] = …` `` (story
+  `effectful-map-escape`). `ignite-check` lists the argument as an effect site wherever the
+  local's declared type is an effectful fn type; under a `requires` the type checker checks the
+  local's effects itself, so no E042 there. Tests: `effectful_map_adversary::` (`ignite-types`).
 - Both backends and the evaluator lower an effectful fn value as a pure one; nothing changes
   there. Tests: fixtures `valid_effectful_list_map` and `e017_effectful_list_map`
   (`ignite-types`), the inline tests "List.map takes a fn with the effects of its caller" and

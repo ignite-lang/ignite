@@ -6,6 +6,7 @@
 mod adversary_bounds;
 mod audit;
 mod common;
+mod effectful_map_adversary;
 mod fixtures;
 mod generics;
 mod inline_tests;

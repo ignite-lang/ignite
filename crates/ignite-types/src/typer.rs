@@ -3441,6 +3441,7 @@ impl<'a> Typer<'a> {
             EffectScope::Pure => None,
             _ => self.map_fn_effects(f),
         };
+        self.map_local_site(f, own.is_some());
         let wanted = |ret: Ty| match &own {
             Some(effects) => Ty::EffectFn(vec![element.clone()], Box::new(ret), effects.clone()),
             None => fn_ty(vec![element.clone()], ret),
@@ -3476,6 +3477,35 @@ impl<'a> Typer<'a> {
                 None
             }
         }
+    }
+
+    /// E042 for `map`'s argument `f`, a local of effectful fn type, where
+    /// the caller's effects are inferred (no `requires`) and `ignite-check`
+    /// could not charge them because it cannot tell the local's type (bound
+    /// from a call, a field of a call's result, a pattern; `docs/slice.md`
+    /// 20.4.3), as for a call of the local. Under a `requires` the type
+    /// checker checks the effects itself (`map_effects_fit`).
+    fn map_local_site(&mut self, f: &Expr, effectful: bool) {
+        let ExprKind::Name(name) = &f.kind else {
+            return;
+        };
+        if !effectful
+            || !matches!(self.effect_scope, EffectScope::Open)
+            || !self.unchecked_effects(f)
+        {
+            return;
+        }
+        let Some(Some(ty)) = self.lookup(&name.name) else {
+            return;
+        };
+        self.error(
+            "E042",
+            f.span,
+            format!(
+                "cannot check the effects of `{}` passed to `map`: its type is not declared; bind it with its type: `let {}: {ty} = …`",
+                name.name, name.name
+            ),
+        );
     }
 
     /// The effects of `map`'s argument `f` when it is an effectful closure
