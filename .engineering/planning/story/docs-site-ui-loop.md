@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:docs-site-ui-loop
 kind: story
-status: active
+status: implemented
 title: The public website runs the measured UI improvement loop
 scope:
 - confidence: cited
@@ -13,10 +13,11 @@ scope:
   path: site
 - confidence: cited
   path: ux
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T13:44:00Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-07T13:44:00Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-07T17:29:45Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":2}}}
 ---
 # Story: docs-site-ui-loop
 

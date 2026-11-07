@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T19:00:00Z",
+  "actor": "human:timo",
+  "artifact": "task:r01-min-text-size",
+  "kind": "task",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 40f2510a (PR 92), exit 0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/92"
+  }
+}
