@@ -544,6 +544,77 @@ fn adversary_process_exit_during_the_drain_with_a_stalled_writer() {
     });
 }
 
+/// Runs of a `flood_*` fixture per target.
+const FLOOD_RUNS: usize = 30;
+
+/// Run `binary` [`FLOOD_RUNS`] times with a peer that reads everything at
+/// full speed; the runs whose peer never received `MARK\n`, and the exit
+/// statuses seen.
+fn flood_runs_losing_mark(binary: &Path) -> (usize, Vec<Option<i32>>) {
+    let mut lost = 0;
+    let mut codes = Vec::new();
+    for _ in 0..FLOOD_RUNS {
+        let mut server = Server::start(binary);
+        let mut peer = TcpStream::connect(("127.0.0.1", server.port)).expect("connect peer");
+        peer.set_read_timeout(Some(TIMEOUT)).expect("read timeout");
+        let reader = std::thread::spawn(move || {
+            let mut received = Vec::new();
+            let _ = peer.read_to_end(&mut received);
+            received
+        });
+        let status = wait_exit(&mut server.child, "flood");
+        codes.push(status.code());
+        let received = reader.join().expect("reader");
+        if !received.windows(5).any(|w| w == b"MARK\n") {
+            lost += 1;
+        }
+    }
+    (lost, codes)
+}
+
+/// Adversary, story `drain-exit`, pass 2: `Process.exit(3)` after `main`
+/// wrote `MARK` on a stream that another task writes to in a loop, with a
+/// peer that reads everything. The other task holds the write lock for
+/// one append at a time, not stalled; before round 2 exit's flush waited
+/// for the lock and sent `MARK`. `flush_at_exit` skips the stream when the
+/// lock is held at that instant.
+#[test]
+fn adversary_process_exit_sends_main_s_write_beside_a_busy_writer() {
+    on_both_targets(|target| {
+        let binary = build_fixture("flood_exit", "floodexit", target);
+        let (lost, codes) = flood_runs_losing_mark(&binary);
+        assert!(
+            codes.iter().all(|code| *code == Some(3)),
+            "{target}: {codes:?}"
+        );
+        assert_eq!(
+            lost, 0,
+            "{target}: MARK lost in {lost} of {FLOOD_RUNS} runs with a reading peer"
+        );
+    });
+}
+
+/// Adversary, story `drain-exit`, pass 2: the same, but `main` returns
+/// `Ok` (no drain). The Rust target's `run` waits for the lock
+/// (`ignite_io::flush`); the LLVM target's `ignite_rt_exit` ends in
+/// `ignite_io::exit`, now `flush_at_exit`, which skips a held lock. The
+/// targets must agree.
+#[test]
+fn adversary_main_return_sends_main_s_write_beside_a_busy_writer() {
+    on_both_targets(|target| {
+        let binary = build_fixture("flood_return", "floodreturn", target);
+        let (lost, codes) = flood_runs_losing_mark(&binary);
+        assert!(
+            codes.iter().all(|code| *code == Some(0)),
+            "{target}: {codes:?}"
+        );
+        assert_eq!(
+            lost, 0,
+            "{target}: MARK lost in {lost} of {FLOOD_RUNS} runs with a reading peer"
+        );
+    });
+}
+
 // ---- 16.0 item 6: DrainRollout under `ignite run` -------------------------
 
 /// A running `ignite run` with its journal records as they arrive.
