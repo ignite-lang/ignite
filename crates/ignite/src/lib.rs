@@ -539,15 +539,52 @@ fn read_source(file: &Path) -> Result<SourceFile, Error> {
     Ok(source_file(file, text))
 }
 
-/// `text` as the file at `file`: its path printed as given, its
-/// `FileId` (`ignite_syntax::ast::FileId`) that of the canonical path when
-/// the file exists, so one file reached by different paths has one id.
+/// `text` as the file at `file`: its path printed as given, its `FileId`
+/// (`ignite_syntax::ast::FileId`) that of [`file_identity`].
 fn source_file(file: &Path, text: String) -> SourceFile {
-    let source = SourceFile::new(file.display().to_string(), text);
-    match file.canonicalize() {
-        Ok(canonical) => source.with_identity(&canonical.to_string_lossy()),
-        Err(_) => source,
+    SourceFile::new(file.display().to_string(), text).with_identity(&file_identity(file))
+}
+
+/// The path that names the module file `file` one way: its directory
+/// canonicalised and its own name joined, so `x/a.ignite`, `./x/a.ignite`,
+/// `x/../x/a.ignite` and the absolute path agree, also for a file not yet
+/// saved (`--stdin-for`); the last component is not resolved, so a
+/// sibling that is a symlink to another sibling stays a file, and a module,
+/// of its own. Of a directory that does not exist, the deepest existing
+/// ancestor is canonicalised and the rest joined with `.` and `..`
+/// resolved by name.
+fn file_identity(file: &Path) -> String {
+    let absolute = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+    let (Some(directory), Some(name)) = (absolute.parent(), absolute.file_name()) else {
+        return absolute.to_string_lossy().into_owned();
+    };
+    let mut missing = Vec::new();
+    let mut existing = directory;
+    let mut identity = loop {
+        if let Ok(canonical) = existing.canonicalize() {
+            break canonical;
+        }
+        match (existing.parent(), existing.components().next_back()) {
+            (Some(parent), Some(component)) => {
+                missing.push(component.as_os_str());
+                existing = parent;
+            }
+            _ => break existing.to_path_buf(),
+        }
+    };
+    for component in missing.into_iter().rev().map(Path::new) {
+        for part in component.components() {
+            match part {
+                std::path::Component::CurDir => {}
+                std::path::Component::ParentDir => {
+                    identity.pop();
+                }
+                part => identity.push(part),
+            }
+        }
     }
+    identity.push(name);
+    identity.to_string_lossy().into_owned()
 }
 
 fn parse(source: &SourceFile) -> Result<Program, Error> {

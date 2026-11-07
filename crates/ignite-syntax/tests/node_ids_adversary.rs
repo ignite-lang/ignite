@@ -1,7 +1,7 @@
 //! Adversarial cases for story `stable-node-ids`: node ids of distinct
 //! files, and the stack a nesting level costs the debug parser.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use ignite_syntax::SourceFile;
 use ignite_syntax::ast::FileId;
@@ -17,26 +17,14 @@ fn ids(debug: &str) -> HashSet<String> {
         .collect()
 }
 
-/// The paths searched for a collision: a 32-bit id collides within them
-/// (the first pair is at 749,192), a 64-bit one with a chance of about
-/// 2e-7.
-const SEARCHED: u32 = 2_000_000;
-
-fn sibling(i: u32) -> String {
-    format!("/work/project/examples/app/m{i}.ignite")
-}
-
-/// Two distinct paths of sibling modules beside one program whose
-/// `FileId::of_path` is the same, among the first [`SEARCHED`]; `None`
-/// when there is none.
-fn colliding_paths() -> Option<(String, String)> {
-    let mut seen: HashMap<FileId, u32> = HashMap::with_capacity(SEARCHED as usize);
-    for i in 0..SEARCHED {
-        if let Some(other) = seen.insert(FileId::of_path(&sibling(i)), i) {
-            return Some((sibling(other), sibling(i)));
-        }
-    }
-    None
+/// Two distinct sibling module paths whose 64-bit FNV-1a hashes are equal
+/// (`0x8c90799f98ec11cb`), found by a rho search in 30 s: a collision is
+/// constructed, not searched for, so it is a fixture.
+fn colliding_paths() -> (String, String) {
+    (
+        "/work/project/examples/app/m28f332a082b5e328.ignite".to_string(),
+        "/work/project/examples/app/m3b4caa5b359d6895.ignite".to_string(),
+    )
 }
 
 /// Node ids are what the typed tables are keyed by, and the story's outcome
@@ -44,9 +32,8 @@ fn colliding_paths() -> Option<(String, String)> {
 /// files of one compilation must not share a node id.
 #[test]
 fn distinct_paths_never_share_node_ids() {
-    let Some((a, b)) = colliding_paths() else {
-        return;
-    };
+    let (a, b) = colliding_paths();
+    assert_ne!(FileId::of_path(&a), FileId::of_path(&b));
     let first = ignite_syntax::parse(&SourceFile::new(a.clone(), "fn f() -> Int = 1 + 2\n"))
         .expect("parses");
     let second = ignite_syntax::parse(&SourceFile::new(b.clone(), "fn g() -> Text = \"x\"\n"))

@@ -1,7 +1,9 @@
 //! Abstract syntax of the Ignite slice, one node per rule of `docs/slice.md`
 //! section 3. Every node carries the byte span it was parsed from.
 
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 /// The source file a span or node belongs to: [`FileId::of_path`] of the
 /// path [`crate::parse`] was given. [`FileId::NONE`] for tokens lexed
@@ -15,25 +17,54 @@ impl FileId {
     /// Nodes built outside the parser ([`NodeId::fresh`]).
     pub const SYNTHETIC: FileId = FileId(u64::MAX);
 
-    /// The id of the file at `path`: the 64-bit FNV-1a hash of the path's
-    /// bytes, never [`FileId::NONE`] or [`FileId::SYNTHETIC`]. The same path
-    /// gives the same id in every run, so ids can be cached and serialised;
-    /// two of a million distinct paths share one with a chance of about
-    /// 3e-8. A driver passes the canonical path of a file on disk
-    /// ([`crate::SourceFile::with_identity`]), so every way of naming the
-    /// file gives one id.
+    /// The id of the file at `path`. Distinct paths always get distinct
+    /// ids within a process, and one path always the same one: the ids
+    /// are numbered through a process-wide table of every path seen. A
+    /// path's id is the 64-bit FNV-1a hash of its bytes, so it is the same
+    /// in every run and can be cached and serialised; only when another
+    /// path of the process already holds that value (a collision, which
+    /// can be constructed) does the path take the next free value instead.
+    /// Never [`FileId::NONE`] or [`FileId::SYNTHETIC`]. A driver passes a
+    /// path that names one file one way
+    /// ([`crate::SourceFile::with_identity`]).
     pub fn of_path(path: &str) -> FileId {
-        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-        for byte in path.bytes() {
-            hash ^= u64::from(byte);
-            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        let mut files = FILES
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(id) = files.by_path.get(path) {
+            return *id;
         }
-        match hash {
-            0 => FileId(1),
-            u64::MAX => FileId(u64::MAX - 1),
-            hash => FileId(hash),
+        let mut value = fnv1a(path);
+        while value == FileId::NONE.0
+            || value == FileId::SYNTHETIC.0
+            || files.taken.contains(&value)
+        {
+            value = value.wrapping_add(1);
         }
+        files.taken.insert(value);
+        files.by_path.insert(path.to_string(), FileId(value));
+        FileId(value)
     }
+}
+
+/// The paths [`FileId::of_path`] has numbered, and the values taken.
+#[derive(Default)]
+struct FileTable {
+    by_path: HashMap<String, FileId>,
+    taken: HashSet<u64>,
+}
+
+static FILES: OnceLock<Mutex<FileTable>> = OnceLock::new();
+
+/// The 64-bit FNV-1a hash of `path`'s bytes.
+fn fnv1a(path: &str) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in path.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
 }
 
 /// The identity of an [`Expr`], [`Pattern`], [`Type`], [`Path`] or

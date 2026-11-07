@@ -24,6 +24,7 @@ mod drain;
 mod eval;
 mod failover;
 mod file_ids;
+mod file_ids_adversary;
 mod generics;
 mod ignite_test;
 mod llvm;
