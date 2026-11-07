@@ -30,7 +30,7 @@ use std::io::{ErrorKind, Read, Write};
 use std::net::Shutdown;
 use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, TryLockError, Weak};
 use std::time::Duration;
 
 use crate::{Input, IoError, read_input, socket_address};
@@ -146,6 +146,9 @@ struct Out {
 pub(crate) trait Buffered: Send + Sync {
     /// Send the buffer, keeping a failure for the stream's next operation.
     fn flush_kept(&self);
+    /// [`flush_at_exit`] of this stream: skipped when another task holds
+    /// its write lock, sent without waiting for room.
+    fn flush_at_exit(&self);
 }
 
 /// Streams a thread wrote to since it last flushed; sent when the thread
@@ -185,6 +188,28 @@ pub(crate) fn register<T: Buffered + 'static>(stream: &Arc<T>) -> bool {
             }
         })
         .is_ok()
+}
+
+/// Exit's flush ([`crate::exit`]): send what the current task wrote
+/// without waiting for anything another party controls. A stream whose
+/// write lock another task holds is skipped, and a socket whose buffers
+/// are full is sent what fits; the rest is lost with the process.
+pub(crate) fn flush_at_exit() {
+    let pending = PENDING
+        .try_with(|pending| std::mem::take(&mut pending.borrow_mut().0))
+        .unwrap_or_default();
+    for stream in pending.into_iter().filter_map(|weak| weak.upgrade()) {
+        stream.flush_at_exit();
+    }
+}
+
+/// The write lock of `mutex` if no other task holds it.
+pub(crate) fn try_lock<T>(mutex: &Mutex<T>) -> Option<MutexGuard<'_, T>> {
+    match mutex.try_lock() {
+        Ok(guard) => Some(guard),
+        Err(TryLockError::Poisoned(poisoned)) => Some(poisoned.into_inner()),
+        Err(TryLockError::WouldBlock) => None,
+    }
 }
 
 /// Send everything the current task wrote and has not sent yet, to
@@ -247,6 +272,32 @@ impl Buffered for Stream {
             out.failed = Some(error);
             self.failed.store(true, Ordering::Release);
         }
+    }
+
+    fn flush_at_exit(&self) {
+        let Some(mut out) = try_lock(&self.writing) else {
+            return;
+        };
+        let mut at = 0;
+        while at < out.buffer.len() {
+            let rest = &out.buffer[at..];
+            // SAFETY: the descriptor belongs to `self.socket`, which the
+            // write lock keeps open, and `rest` is readable for its length.
+            let sent = unsafe {
+                nix::libc::send(
+                    self.socket.as_raw_fd(),
+                    rest.as_ptr().cast(),
+                    rest.len(),
+                    nix::libc::MSG_DONTWAIT | nix::libc::MSG_NOSIGNAL,
+                )
+            };
+            match usize::try_from(sent) {
+                Ok(count) => at += count,
+                Err(_) if std::io::Error::last_os_error().kind() == ErrorKind::Interrupted => {}
+                Err(_) => break,
+            }
+        }
+        out.buffer.clear();
     }
 }
 
@@ -534,6 +585,8 @@ pub fn endpoint_of(reference: &str) -> Result<(String, i64), IoError> {
 
 #[cfg(test)]
 mod tests {
+    use std::os::fd::AsRawFd;
+
     use super::transient;
 
     #[test]
@@ -606,5 +659,92 @@ mod tests {
         assert_eq!(again.local_port(), port);
         assert_eq!(listener.slot.release(), None);
         assert!(again.slot.release().is_some());
+    }
+
+    /// A connected pair: the stream under test and its peer, which never
+    /// reads unless the test does.
+    fn pair() -> (super::TcpStream, std::net::TcpStream) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (peer, _) = listener.accept().unwrap();
+        (super::TcpStream::from_socket(client), peer)
+    }
+
+    /// `write_all(b"bye")`, then `between`, then `flush_at_exit`, on a
+    /// thread of its own (the pending list is the thread's); whether the
+    /// flush returned within 5 s.
+    fn exit_flush_returns(
+        stream: &super::TcpStream,
+        between: impl FnOnce() + Send + 'static,
+    ) -> bool {
+        let stream = stream.clone();
+        let (done, returned) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            stream.write_all(b"bye".to_vec()).unwrap();
+            between();
+            super::flush_at_exit();
+            let _ = done.send(());
+        });
+        returned
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .is_ok()
+    }
+
+    /// Story `drain-exit`: the exit's flush sends what the task wrote.
+    #[test]
+    fn the_exit_flush_sends_the_pending_writes() {
+        let (stream, mut peer) = pair();
+        assert!(exit_flush_returns(&stream, || {}));
+        let mut received = [0u8; 3];
+        std::io::Read::read_exact(&mut peer, &mut received).unwrap();
+        assert_eq!(&received, b"bye");
+    }
+
+    /// Story `drain-exit`: the exit's flush does not wait for a write lock
+    /// another task holds (a task stalled in its send); it skips the
+    /// stream.
+    #[test]
+    fn the_exit_flush_skips_a_stream_another_task_is_writing() {
+        let (stream, _peer) = pair();
+        let held = stream.clone();
+        let (locked, is_locked) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel::<()>();
+        let holder = std::thread::spawn(move || {
+            let _out = held.inner.out();
+            locked.send(()).unwrap();
+            let _ = released.recv();
+        });
+        let flushed = exit_flush_returns(&stream, move || is_locked.recv().unwrap());
+        assert!(flushed, "the exit's flush waited");
+        release.send(()).unwrap();
+        holder.join().unwrap();
+    }
+
+    /// Story `drain-exit`: the exit's flush does not wait for a peer that
+    /// does not read: with the socket's buffers full it sends what fits
+    /// and returns.
+    #[test]
+    fn the_exit_flush_does_not_wait_for_a_peer_that_does_not_read() {
+        let (stream, _peer) = pair();
+        let chunk = [0u8; 65536];
+        loop {
+            // SAFETY: the descriptor belongs to `stream`, which outlives
+            // the call, and `chunk` is readable for its length.
+            let sent = unsafe {
+                nix::libc::send(
+                    stream.socket().as_raw_fd(),
+                    chunk.as_ptr().cast(),
+                    chunk.len(),
+                    nix::libc::MSG_DONTWAIT | nix::libc::MSG_NOSIGNAL,
+                )
+            };
+            if sent < 0 {
+                break;
+            }
+        }
+        assert!(
+            exit_flush_returns(&stream, || {}),
+            "the exit's flush waited"
+        );
     }
 }
