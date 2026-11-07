@@ -1,0 +1,16 @@
+package g5
+
+type App {
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  let t0 = Clock.monotonic()
+  let s = TcpStream.connect("10.255.255.1", 80)
+  log("connect returned after {(Clock.monotonic() - t0).to_ms()} ms")
+  Ok(())
+}
+
+system G5 {
+  component app: App { executable = "g5" }
+}

@@ -1,0 +1,14 @@
+package g3
+
+type App {
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  Clock.sleep(5 seconds)
+  Ok(())
+}
+
+system G3 {
+  component app: App { executable = "g3" }
+}

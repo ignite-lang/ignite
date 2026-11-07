@@ -1,0 +1,17 @@
+package g1
+
+type Echo {
+  ingress: TcpListener
+  executable: Text
+}
+
+fn Echo.main(self: Echo) -> Result<Unit, IoError> {
+  let stream = self.ingress.accept()?
+  log(stream.peer_address())
+  stream.close()
+}
+
+system G1 {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  component echo: Echo { ingress = ingress, executable = "g1" }
+}

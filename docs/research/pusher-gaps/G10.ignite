@@ -1,0 +1,14 @@
+package g10
+
+type App {
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  Process.set_open_files_limit(65536)?
+  Ok(())
+}
+
+system G10 {
+  component app: App { executable = "g10" }
+}

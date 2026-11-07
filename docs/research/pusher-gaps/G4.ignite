@@ -1,0 +1,24 @@
+package g4
+
+type App {
+  bell: TcpListener
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  let s = TcpStream.connect("127.0.0.1", self.bell.local_port())?
+  let peer = self.bell.accept()?
+  s.set_idle_timeout(200)?
+  let t0 = Clock.monotonic()
+  let first = s.read(1)?
+  log("after {(Clock.monotonic() - t0).to_ms()} ms: {first.debug()}")
+  peer.close()?
+  let second = s.read(1)?
+  log("peer closed: {second.debug()}")
+  Ok(())
+}
+
+system G4 {
+  resource bell: TcpListener { address = "127.0.0.1", port = 0 }
+  component app: App { bell = bell, executable = "g4" }
+}
