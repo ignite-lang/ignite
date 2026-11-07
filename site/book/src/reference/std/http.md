@@ -1,9 +1,10 @@
 # std.protocol.http
 
 An HTTP/1.1 server (RFC 9112) over one byte stream, written in Ignite. It reads requests with
-a `Content-Length` body, keeps the connection alive until the client asks to close, and
-enforces the limits of `HttpLimits`. The module holds `protocol Http` with its server role, the
-`Request` and `Response` records, response helpers, and the component kind `HttpServer`.
+a `Content-Length` or chunked body, answers with a text, binary or streamed body, keeps the
+connection alive until the client asks to close, and enforces the limits of `HttpLimits`. The
+module holds `protocol Http` with its server role, the `Request` and `Response` records,
+response helpers, and the component kind `HttpServer`.
 
 - Layer: protocol.
 - Source: [`std/protocol/http.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/protocol/http.ignite).
@@ -46,8 +47,8 @@ The application's response is replaced by 500 when one of its header fields woul
 9112 or RFC 9110:
 
 - a name that is not a token, or a value that holds CR or LF;
-- `Transfer-Encoding` or `Content-Length`: Http frames every response by its own
-  `Content-Length` and applies no transfer coding;
+- `Transfer-Encoding` or `Content-Length`: Http frames every response itself (see
+  [Responses](#responses));
 - a repeated name, unless it is a list field of RFC 9110 or RFC 9111 (`Vary`, `Allow`,
   `Cache-Control`, `Connection`, …) or `Set-Cookie`;
 - an empty element in a list field, such as `Vary: a,,b`;
@@ -80,6 +81,7 @@ protocol Http {
 type HttpApp<S> {
   state: S
   handle: fn(state: S, request: Request) -> Response requires [state.*]
+  piece: fn(state: S, request: Request) -> IoResult<Option<Bytes>> requires [state.*] = no_piece
 }
 
 type HttpLimits {
@@ -103,7 +105,9 @@ fn HttpServer.main<S>(self: HttpServer<S>) -> IoResult<Unit>
 - `Http.serve` sets the stream's idle timeout, answers requests until the connection ends,
   and closes the stream.
 - `HttpApp<S>` is what a server runs: shared state, and the handler called once per request
-  with that state. The handler may use effects on the state, such as a `Store`.
+  with that state. The handler may use effects on the state, such as a `Store`. `piece` gives
+  the body of a streamed response (see [Responses](#responses)); it defaults to `no_piece`,
+  which ends every body at once.
 - `HttpLimits` bounds a connection: the longest head (else 431) and body (else 413), the idle
   time after which the connection is closed, and how much input a lingering close drains, each
   read waiting at most `drain_timeout`.
@@ -151,10 +155,16 @@ type Response {
   status: Int
   headers: List<(Text, Text)> = []
   body: Text = ""
+  content: Content = Inline
 }
+
+enum Content { Inline, Binary(Bytes), Streamed }
 
 fn Response.json(status: Int, value: Json) -> Response
 fn Response.plain(status: Int, body: Text) -> Response
+fn Response.bytes(status: Int, content_type: Text, body: Bytes) -> Response
+fn Response.streamed(status: Int, headers: List<(Text, Text)>) -> Response
+fn no_piece<S>(state: S, request: Request) -> IoResult<Option<Bytes>>
 fn status_response(status: Int) -> Response
 fn method_not_allowed(allow: Text) -> Response
 fn reason(status: Int) -> Text
@@ -166,11 +176,33 @@ fn render(response: Response, keep_alive: Bool) -> Bytes
 |---|---|
 | `Response.json` | a JSON response: `Content-Type: application/json`, the body [`encode`](json.md)d |
 | `Response.plain` | a plain-text response: `Content-Type: text/plain; charset=utf-8` |
+| `Response.bytes` | a binary response: `Content-Type` as given, the bytes sent as they are |
+| `Response.streamed` | a streamed response with `headers`: its body is what `HttpApp.piece` returns |
+| `no_piece` | the default `HttpApp.piece`: `Ok(None)`, an empty streamed body |
 | `status_response` | a plain response whose body is the reason phrase and a newline; 204 has no body |
 | `method_not_allowed` | 405 with the `Allow` header listing the methods the target supports |
-| `reason` | the reason phrase of 200, 201, 204, 400, 404, 405, 413, 414, 431, 500 and 501; `Unknown` for any other |
+| `reason` | the reason phrase of every status code RFC 9110 section 15 defines (`HTTP/1.1 403 Forbidden`) and of 428, 429, 431 and 511 (RFC 6585); `Unknown` for any other |
 | `checked` | the response, or 500 when one of its header fields is refused (see Behaviour) |
-| `render` | the bytes of the response: status line, headers, `Content-Length` (not for 204) and `Connection` |
+| `render` | the bytes of an `Inline` or `Binary` response: status line, headers, `Content-Length` (not for 204) and `Connection`, then the body |
+
+`content` says where the body is. `Inline`, the default, sends `body`; `Binary(bytes)` sends
+the bytes in place of `body`. Both go out with a `Content-Length`, so `Response.plain` and
+`Response.json` are unchanged on the wire.
+
+`Streamed` sends a body whose length is not known in advance, such as a process's output while
+it runs. `Http.serve` writes the head at once, then calls `HttpApp.piece` with the state and
+the request until it returns `Ok(None)`, and sends each piece as it comes:
+
+| the request, the status | framing of the streamed body |
+|---|---|
+| HTTP/1.1, a status with content | `Transfer-Encoding: chunked`: one chunk per non-empty piece, then the last chunk `0` and an empty trailer section; the connection stays open as usual |
+| HTTP/1.0, or a 2xx answer to `CONNECT` | no `Transfer-Encoding`: the pieces as they are, then the connection is closed (`Connection: close`) |
+| a 1xx, 204 or 304 status | the head only, without `Transfer-Encoding` or `Content-Length`; `piece` is not called |
+| `HEAD` | the head GET would get, without the body; `piece` is not called |
+
+An `Err` from `piece` ends the connection without the last chunk, so the client sees the body
+as incomplete. Http never sends a `Transfer-Encoding` in a 1xx or 204 response, in a 2xx
+response to `CONNECT`, or to an HTTP/1.0 request (RFC 9112 section 6.1).
 
 ## A server in a system
 
@@ -212,6 +244,7 @@ import std.json.Json
 
 test "responses carry their reason, type and body" {
   assert reason(431) == "Request Header Fields Too Large"
+  assert reason(403) == "Forbidden"
   assert Response.plain(200, "hi") == Response { status = 200, headers = [("Content-Type", "text/plain; charset=utf-8")], body = "hi" }
   assert status_response(404).body == "Not Found\n"
   let created = render(Response.json(201, Object([])), true).to_text()
@@ -258,5 +291,48 @@ test "three pipelined requests over a pipe are answered in one batch" {
   }
   assert out.to_text() == reply("GET /a? ", "keep-alive") + reply("GET /b? ", "keep-alive") + reply("GET /c? ", "close")
   assert client.received_batches() == 1
+}
+```
+
+A streamed body: the state is a pipe whose other end the test writes to, and `piece` reads
+the next piece from it. The client reads the head and the first chunk before the second piece
+exists:
+
+```ignite
+import std.protocol.http.*
+
+fn stream(state: PipeStream, request: Request) -> Response =
+  Response.streamed(200, [("Content-Type", "text/plain")])
+
+fn next_piece(state: PipeStream, request: Request) -> IoResult<Option<Bytes>> requires [state.read] =
+  match state.read(4096)? {
+    Eof => Ok(None)
+    Data(bytes) => Ok(Some(bytes))
+  }
+
+fn read_at_least(client: PipeStream, length: Int) -> IoResult<Text> requires [client.read] {
+  var out = Bytes.empty()
+  while out.len() < length {
+    match client.read(4096)? {
+      Eof => break
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out.to_text())
+}
+
+test "a streamed body is sent in chunks as its pieces come" {
+  let (client, server) = Pipe.pair()
+  let (control, source) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  source.set_idle_timeout(5000)?
+  spawn Http.serve(server, HttpLimits {}, HttpApp { state = source, handle = stream, piece = next_piece })
+  control.write_all(b"first")?
+  client.write_all(b"GET /run HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?
+  let head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+  assert read_at_least(client, head.len() + 10)? == head + "5\r\nfirst\r\n"
+  control.write_all(b"second")?
+  _ = control.close()
+  assert read_at_least(client, 16)? == "6\r\nsecond\r\n0\r\n\r\n"
 }
 ```

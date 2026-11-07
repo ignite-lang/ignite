@@ -6524,6 +6524,72 @@ body with an extension and a trailer (201) and adds a 400 and a 501 case. The cl
 inconclusive)` on both targets: `RFC9112.R2_2_1` and `RFC9110.R6_6_1_2` (story
 `http-octet-head-and-date`).
 
+### 19.23 Streamed and binary responses, every reason phrase (story `http-server-responses`, 2026-11-07)
+
+Before the story every response was a `Text` body framed by `Content-Length`, and `reason`
+named 11 codes (a 403 went out as `HTTP/1.1 403 Unknown`). The shape adds fields and fns and
+renames none:
+
+```ignite,fragment
+type Response {
+  status: Int
+  headers: List<(Text, Text)> = []
+  body: Text = ""
+  content: Content = Inline
+}
+
+enum Content { Inline, Binary(Bytes), Streamed }
+
+type HttpApp<S> {
+  state: S
+  handle: fn(state: S, request: Request) -> Response requires [state.*]
+  piece: fn(state: S, request: Request) -> IoResult<Option<Bytes>> requires [state.*] = no_piece
+}
+
+fn Response.bytes(status: Int, content_type: Text, body: Bytes) -> Response
+fn Response.streamed(status: Int, headers: List<(Text, Text)>) -> Response
+fn no_piece<S>(state: S, request: Request) -> IoResult<Option<Bytes>>
+```
+
+- `Inline` sends `body`, `Binary(bytes)` the bytes in place of `body`; both through
+  `render_message` with a `Content-Length` (none for 204, as before). `Response.plain`,
+  `Response.json` and `status_response` are unchanged byte for byte: `content` defaults to
+  `Inline`, so a record literal without it still equals theirs.
+- `Streamed`: the producer is a field of `HttpApp`, not of `Response`, because a closure that
+  reads a captured handle is effectful and a fn type can name effects only on its own
+  parameters (13.3, E017): `fn() -> Option<Bytes>` on `Response` could not read a pipe or a
+  store. `piece` gets the state and therefore the authority `handle` has. `send_streamed`
+  writes the head at once, then calls `piece(state, asked(request))` until `Ok(None)` and
+  writes each non-empty piece as it comes. An `Err` of `piece` ends the session before the
+  last chunk.
+- Framing of a streamed body, `streamed_framing`: a status without content (1xx, 204, 304)
+  gets the head only, without `Transfer-Encoding` or `Content-Length`, and `piece` is not
+  called; an HTTP/1.0 request, or a 2xx answer to `CONNECT`, gets the pieces as they are and
+  the connection closed after them (`Connection: close`, also when the request asked to keep
+  it); otherwise `Transfer-Encoding: chunked`, one chunk per piece (lower-case hexadecimal
+  size), the last chunk `0` and an empty trailer section, and the connection is kept as for any
+  response. HEAD gets the head GET would get and no body.
+- `reason` names every status code of RFC 9110 section 15 and the four of RFC 6585 (428, 429,
+  431, 511); `Unknown` for any other, 306 and 418 included.
+
+| row | section | satisfied by | behaviour | verified by |
+|---|---|---|---|---|
+| `RFC9112.R6_1_7`, `R6_1_8`, `R6_1_11` | 6.1 | `streamed_framing` (and `checked`, which still refuses an application `Transfer-Encoding`) | no `Transfer-Encoding` in a 1xx or 204 response, in a 2xx answer to `CONNECT` or to an HTTP/1.0 request | "Http chunks only an HTTP/1.1 response with content" |
+| `RFC9112.R6_1_2` | 6.1 | `checked`, `send_streamed` | the chunked coding is applied once, by Http only | "an application Transfer-Encoding is 500" |
+| `RFC9110.R6_5_1_1` | 6.5.1 | not applicable | Http generates no trailer field: a chunked response ends with an empty trailer section | |
+
+Until this story those three rows of 6.1 held only because Http never sent a
+`Transfer-Encoding`; the test that named them, "an application Transfer-Encoding is 500 and
+Http applies no transfer coding", is renamed "an application Transfer-Encoding is 500" and
+still verifies `R6_1_2`, `R6_1_4` and `R6_2_1`. The claims stay `rfc9112: no (1 gaps, 0
+failures, 0 inconclusive)` and `rfc9110: no (1 gaps, 0 failures, 0 inconclusive)` on both
+targets. Other tests: "a streamed response is sent in chunks as its pieces come" (the
+producer waits on a pipe the test controls; the client reads the head and the first chunk
+before the second piece exists, then a pipelined request is answered), "a binary body is sent
+as its bytes" (0 to 255, `Content-Length: 256`), "every status of RFC 9110 has its reason
+phrase" (with `HTTP/1.1 403 Forbidden` on the wire). Not bounded: a streamed body's length and
+duration.
+
 ## 20 Slice 16: language gaps (wave A)
 
 **Status: contract written 2026-11-04. The independent review (`docs/slice16-review.md`, 4
