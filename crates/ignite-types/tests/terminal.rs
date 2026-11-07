@@ -68,7 +68,7 @@ fn binding(typed: &TypedProgram, source: &SourceFile, context: &str, name: &str)
         .find(context)
         .unwrap_or_else(|| panic!("`{context}` not in source"));
     let start = at + context.find(name).expect("name inside context");
-    let span = ignite_syntax::ast::Span::new(start, start + name.len());
+    let span = ignite_syntax::ast::Span::in_file(start, start + name.len(), source.id());
     typed
         .binding_type(span)
         .unwrap_or_else(|| panic!("no binding type for `{name}` at {start}"))

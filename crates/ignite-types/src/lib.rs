@@ -75,15 +75,15 @@ mod exhaustive;
 mod moves;
 mod typer;
 
-mod address;
-use address::AddressMap;
+mod ids;
+use ids::NodeMap;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 
 use ignite_check::Symbols;
 use ignite_syntax::ast::{
-    AssemblyDecl, Decl, Expr, FieldInit, Pattern, Place, Program, Span, SystemDecl, Type,
+    AssemblyDecl, Decl, Expr, FieldInit, NodeId, Pattern, Place, Program, Span, SystemDecl, Type,
 };
 use ignite_syntax::diagnostic::Diagnostic;
 
@@ -1361,72 +1361,73 @@ impl EffectSet {
     }
 }
 
-/// The result of typing one module. Expression keys are addresses: the
-/// `Program` passed to [`type_module`] must be the same object (not a clone)
-/// that later stages look expressions up in.
+/// The result of typing one module. Expressions, patterns, type
+/// expressions and paths are keyed by their `NodeId`, never by address:
+/// the result answers for the `Program` passed to [`type_module`] and for
+/// any clone of it, wherever it lives.
 #[derive(Clone, Debug, Default)]
 pub struct TypedProgram {
     pub module: String,
-    types: AddressMap<Ty>,
-    callees: AddressMap<Callee>,
+    types: NodeMap<Ty>,
+    callees: NodeMap<Callee>,
     bindings: HashMap<Span, Ty>,
-    /// Constant patterns, keyed by pattern address.
-    pattern_consts: AddressMap<QualName>,
+    /// Constant patterns, keyed by pattern id.
+    pattern_consts: NodeMap<QualName>,
     /// The constant each `conforms` entry and requirement reference names,
     /// by the span of the reference (`docs/slice.md` 19.6).
     clause_consts: HashMap<Span, QualName>,
-    /// Resolved type expressions, keyed by `Type` address.
-    type_exprs: AddressMap<Ty>,
+    /// Resolved type expressions, keyed by `Type` id.
+    type_exprs: NodeMap<Ty>,
     exports: ModuleTypes,
     /// Owned query metadata of the imported modules and this one: only
     /// records, enums, defaults and generics. See `ModuleTypes::query_snapshot`;
     /// full signatures remain in `exports` and in the caller's typing inputs.
     modules: TypedModules,
-    /// Type arguments of generic uses, keyed by expression address.
-    instances: AddressMap<Vec<Ty>>,
+    /// Type arguments of generic uses, keyed by expression id.
+    instances: NodeMap<Vec<Ty>>,
     /// The module's tests in declaration order.
     tests: Vec<TestInfo>,
-    /// `==`/`!=` assert conditions, keyed by the condition's address.
-    assert_compares: AddressMap<AssertCompare>,
-    /// `?` inside test bodies, keyed by the `Try` expression's address.
-    test_tries: AddressMap<TestTry>,
-    /// Closure literals, keyed by expression address.
-    closures: AddressMap<ClosureInfo>,
-    /// Bounds of range patterns, keyed by pattern address.
-    ranges: AddressMap<(i64, i64)>,
+    /// `==`/`!=` assert conditions, keyed by the condition's id.
+    assert_compares: NodeMap<AssertCompare>,
+    /// `?` inside test bodies, keyed by the `Try` expression's id.
+    test_tries: NodeMap<TestTry>,
+    /// Closure literals, keyed by expression id.
+    closures: NodeMap<ClosureInfo>,
+    /// Bounds of range patterns, keyed by pattern id.
+    ranges: NodeMap<(i64, i64)>,
     /// Owners of the last field of assignment places, by place span.
     places: HashMap<Span, Ty>,
-    /// Quantity literals, keyed by expression address.
-    quantities: AddressMap<(QuantityKind, i64)>,
+    /// Quantity literals, keyed by expression id.
+    quantities: NodeMap<(QuantityKind, i64)>,
     /// Calls with named arguments: parameter index to argument index.
-    named: AddressMap<Vec<usize>>,
-    /// Brace literals, keyed by expression address.
-    braces: AddressMap<BraceKind>,
+    named: NodeMap<Vec<usize>>,
+    /// Brace literals, keyed by expression id.
+    braces: NodeMap<BraceKind>,
     /// References, signals, system and protocol values, keyed by
-    /// expression address (or by brace-key path address).
-    references: AddressMap<Reference>,
-    /// `module("p")` calls, keyed by expression address.
-    module_records: AddressMap<ModuleRecord>,
+    /// expression id (or by brace-key path id).
+    references: NodeMap<Reference>,
+    /// `module("p")` calls, keyed by expression id.
+    module_records: NodeMap<ModuleRecord>,
     executables: Vec<ExecutableInfo>,
-    /// Failure sites, keyed by expression address.
-    failures: AddressMap<FailureSite>,
+    /// Failure sites, keyed by expression id.
+    failures: NodeMap<FailureSite>,
     /// The module's systems in declaration order (slice 11).
     systems: Vec<SystemInfo>,
     /// The module's assemblies in declaration order (slice 11).
     assemblies: Vec<AssemblyInfo>,
     /// Effect sets of property expressions, constant values and field
-    /// defaults and their sub-expressions, keyed by expression address.
-    effects: AddressMap<EffectSet>,
-    /// Places in move positions that take their value, by expression
-    /// address (`docs/slice.md` 20.3).
-    moves: AddressMap<()>,
+    /// defaults and their sub-expressions, keyed by expression id.
+    effects: NodeMap<EffectSet>,
+    /// Places in move positions that take their value, by expression id
+    /// (`docs/slice.md` 20.3).
+    moves: NodeMap<()>,
     /// The consumed parameters of every closure literal inside a body, by
-    /// the closure's address (`docs/slice.md` 20.3.1).
-    closure_consumed: AddressMap<Vec<bool>>,
+    /// the closure's id (`docs/slice.md` 20.3.1).
+    closure_consumed: NodeMap<Vec<bool>>,
 }
 
-fn key(expr: &Expr) -> usize {
-    expr as *const Expr as usize
+fn key(expr: &Expr) -> NodeId {
+    expr.id
 }
 
 impl TypedProgram {
@@ -1445,8 +1446,7 @@ impl TypedProgram {
     /// The constant a `PatternKind::Variant` pattern names, when it names a
     /// constant rather than a variant (`docs/slice.md` section 3).
     pub fn pattern_const(&self, pattern: &Pattern) -> Option<&QualName> {
-        self.pattern_consts
-            .get(&(pattern as *const Pattern as usize))
+        self.pattern_consts.get(&(pattern.id))
     }
 
     /// The constant a clause name resolves to (`docs/slice.md` 19.6), by
@@ -1471,7 +1471,7 @@ impl TypedProgram {
     /// resolved (`docs/slice.md` section 10.1). `None` for a type
     /// expression the checker never saw.
     pub fn resolved_type(&self, ty: &Type) -> Option<&Ty> {
-        self.type_exprs.get(&(ty as *const Type as usize))
+        self.type_exprs.get(&(ty.id))
     }
 
     /// Whether field `field` of record `record` (of this module or a module
@@ -1578,9 +1578,7 @@ impl TypedProgram {
     /// Both inclusive bounds of a range pattern (`PatternKind::Range`),
     /// constants evaluated; `None` for any other pattern.
     pub fn range_bounds(&self, pattern: &Pattern) -> Option<(i64, i64)> {
-        self.ranges
-            .get(&(pattern as *const Pattern as usize))
-            .copied()
+        self.ranges.get(&(pattern.id)).copied()
     }
 
     /// The type of the record whose field the assignment place `a.b.c`
@@ -1633,8 +1631,7 @@ impl TypedProgram {
     /// The reference a qualified key of a map brace literal denotes
     /// (`Terminal.ingress`); `None` for an identifier key, which is `Text`.
     pub fn brace_key(&self, key_path: &ignite_syntax::ast::Path) -> Option<&Reference> {
-        self.references
-            .get(&(key_path as *const ignite_syntax::ast::Path as usize))
+        self.references.get(&key_path.id)
     }
 
     /// The constant an expression of type `Ref`, `Signal`, `SystemRef` or
@@ -1990,8 +1987,8 @@ pub fn type_module(
         systems: typed.system.systems,
         assemblies: typed.system.assemblies,
         effects: typed.system.effects,
-        moves: AddressMap::default(),
-        closure_consumed: AddressMap::default(),
+        moves: NodeMap::default(),
+        closure_consumed: NodeMap::default(),
     };
     let found = moves::analyse(program, &program_types, modules);
     program_types.moves = found.moves;

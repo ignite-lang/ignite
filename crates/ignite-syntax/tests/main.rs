@@ -5,5 +5,6 @@
 
 mod fixtures;
 mod grammar;
+mod node_ids;
 mod parse_terminal;
 mod robustness;

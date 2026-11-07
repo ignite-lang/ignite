@@ -637,7 +637,7 @@ impl Typer<'_> {
         };
         let ty = Ty::Ref(found.ty.clone().map(Box::new));
         self.system.references.insert(
-            path as *const Path as usize,
+            path.id,
             Reference::Member {
                 system: system.name.clone(),
                 member: member.name.clone(),

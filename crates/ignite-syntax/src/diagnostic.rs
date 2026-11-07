@@ -3,7 +3,7 @@
 use std::fmt;
 use std::sync::OnceLock;
 
-use crate::ast::Span;
+use crate::ast::{FileId, Span};
 
 /// One error. `code` is a stable identifier from `docs/slice.md` section 8.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,6 +50,12 @@ impl SourceFile {
             text: text.into(),
             lines: OnceLock::new(),
         }
+    }
+
+    /// The id of the file, carried by the spans and node ids of its parse:
+    /// [`FileId::of_path`] of `path`.
+    pub fn id(&self) -> FileId {
+        FileId::of_path(&self.path)
     }
 
     /// The line table, computed once per file.

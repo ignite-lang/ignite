@@ -839,7 +839,11 @@ fn protocol_declares_roles() {
     assert_eq!(program.decls[0].name().name, "Echo");
     assert_eq!(
         protocol.span,
-        ignite_syntax::ast::Span::new(0, text.trim_end().len())
+        ignite_syntax::ast::Span::in_file(
+            0,
+            text.trim_end().len(),
+            SourceFile::new("t.ignite", "").id()
+        )
     );
 }
 
