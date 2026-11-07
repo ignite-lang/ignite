@@ -1312,3 +1312,22 @@ section h2 {
     opacity: 0.5;
   }
 }
+
+/* Code, code windows and version tags are at least 14 px computed at every
+   width (UXF-010); after the media queries, which shrink them. */
+
+code {
+  font-size: max(0.9em, 14px);
+}
+
+.window pre {
+  font-size: max(0.84rem, 14px);
+}
+
+.steps pre {
+  font-size: max(0.86rem, 14px);
+}
+
+.tag {
+  font-size: max(0.78rem, 14px);
+}

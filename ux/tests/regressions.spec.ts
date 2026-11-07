@@ -123,3 +123,35 @@ test("UXF-009: on a wide book page the menu bar is reached within 5 Tabs", async
     expect(reached, `${path}: the menu bar's home link or search after ${tabs} Tabs`).not.toBe("");
   }
 });
+
+test("UXF-010: field names, code and status badges are at least 14 px", async ({ browser }) => {
+  const selectors = ["pre code", ":not(pre) > code", ".tag", ".badge"].join(", ");
+  const small: string[] = [];
+  for (const [width, height] of [
+    [1440, 900],
+    [1280, 800],
+    [1024, 768],
+    [768, 1024],
+    [390, 844],
+  ]) {
+    for (const path of ["index.html", "book/reference/std/fs.html", "book/roadmap.html", "book/reference/diagnostics.html"]) {
+      const { context, tab } = await page(browser, path, width, height);
+      const found = await tab.evaluate((selectors) => {
+        const out: string[] = [];
+        for (const el of Array.from(document.querySelectorAll(selectors))) {
+          if (!el.textContent?.trim() || !el.checkVisibility()) {
+            continue;
+          }
+          const size = parseFloat(getComputedStyle(el).fontSize);
+          if (size < 13.95) {
+            out.push(`${el.tagName.toLowerCase()}.${Array.from(el.classList).join(".")} "${el.textContent.trim().slice(0, 20)}" ${size.toFixed(2)}px`);
+          }
+        }
+        return out;
+      }, selectors);
+      await context.close();
+      small.push(...found.slice(0, 3).map((line) => `${width}x${height} ${path}: ${line}`));
+    }
+  }
+  expect(small).toEqual([]);
+});
