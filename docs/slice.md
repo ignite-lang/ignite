@@ -6555,8 +6555,17 @@ fn Response.streamed(status: Int, headers: List<(Text, Text)>) -> Response
 fn no_piece<S>(state: S, request: Request) -> IoResult<Option<Bytes>>
 ```
 
-- `Inline` sends `body`, `Binary(bytes)` the bytes in place of `body`; both through
-  `render_message` with a `Content-Length` (none for 204, as before). `Response.plain`,
+- `Inline` sends `body`, `Binary(bytes)` the bytes in place of `body`, framed by
+  `inline_framing`: its own `Content-Length` except where RFC 9110 forbids content or that
+  field. A status without content (1xx, 204, 304; `has_no_content`, the rule the streamed path
+  uses) gets the head only, without `Content-Length` or body (RFC 9110 sections 8.6, 15.2,
+  15.3.5, 15.4.5); a 2xx answer to `CONNECT` gets no `Content-Length`, its body as it is and
+  the connection closed after it (`Connection: close`; RFC 9110 section 9.3.6), as its
+  streamed form does. Until story `http-inline-no-content` (2026-11-07) only 204 was
+  exempt, so `status_response(304)` sent `Content-Length: 13` and `Not Modified`, which a
+  client does not read as part of a 304 and misreads as the start of the next response. A
+  rejection (`reject`) and `render` go through `render_message`, which applies the rule for
+  statuses without content; the CONNECT case needs the request. `Response.plain`,
   `Response.json` and `status_response` are unchanged byte for byte: `content` defaults to
   `Inline`, so a record literal without it still equals theirs.
 - `Streamed`: the producer is a field of `HttpApp`, not of `Response`, because a closure that
@@ -6564,8 +6573,12 @@ fn no_piece<S>(state: S, request: Request) -> IoResult<Option<Bytes>>
   parameters (13.3, E017): `fn() -> Option<Bytes>` on `Response` could not read a pipe or a
   store. `piece` gets the state and therefore the authority `handle` has. `send_streamed`
   writes the head at once, then calls `piece(state, asked(request))` until `Ok(None)` and
-  writes each non-empty piece as it comes. An `Err` of `piece` ends the session before the
-  last chunk.
+  writes each non-empty piece as it comes. An `Err` of `piece` ends the session and closes
+  the connection at once. What the client sees depends on the framing: a chunked body lacks
+  its last chunk `0` and the empty trailer section, so the client sees it incomplete (RFC 9112
+  section 7.1); a body that ends by closing the connection (HTTP/1.0, a 2xx answer to
+  `CONNECT`) cannot be told from a complete one, since the close is its only end (RFC 9112
+  section 6.3). Http has no way to signal the failure on such a body.
 - Framing of a streamed body, `streamed_framing`: a status without content (1xx, 204, 304)
   gets the head only, without `Transfer-Encoding` or `Content-Length`, and `piece` is not
   called; an HTTP/1.0 request, or a 2xx answer to `CONNECT`, gets the pieces as they are and
@@ -6593,6 +6606,19 @@ before the second piece exists, then a pipelined request is answered), "a binary
 as its bytes" (0 to 255, `Content-Length: 256`), "every status of RFC 9110 has its reason
 phrase" (with `HTTP/1.1 403 Forbidden` on the wire). Not bounded: a streamed body's length and
 duration.
+
+Story `http-inline-no-content` (2026-11-07, from the adversary review of PR 84) adds nine
+tests. Four decide the inline rule above and failed before it on both targets: "a 304
+answered inline sends no content, so a pipelined response is not misread", "a 1xx response
+answered inline has no Content-Length", "a 2xx answer to CONNECT answered inline has no
+Content-Length" (the adversary's), "a 2xx answer to CONNECT answered inline ends by closing
+the connection" (the unit's: no keep-alive, the pipelined request unanswered, a 403 to CONNECT
+still framed by `Content-Length`). Five cover branches of the streamed path no test decided:
+"an empty piece is skipped and does not end a chunked body", "a streamed 304 is the head only
+and the connection goes on", "a streamed 3xx answer to CONNECT is chunked", "a chunk size over
+15 has its hexadecimal digits most significant first", "an error of piece ends a chunked body
+before its last chunk and the connection with it". No claim changes: the catalogue of RFC 9110 holds no
+requirement of sections 8.6, 9.3.6 or 15.
 
 ## 20 Slice 16: language gaps (wave A)
 
