@@ -457,6 +457,23 @@ Standing rule (Timo, 2026-11-04): finished work goes to `main` without waiting f
 - Planning-store commits (`.engineering/` only) go to `main` directly as fast-forwards.
 - No force-push to `main`, no rewrite of its history, no moved or deleted release tag.
 
+## Releases
+
+Standing rule (Timo, 2026-11-07): a release is cut after every third wave a coordinator closes,
+without waiting for a person.
+
+- Count: waves closed on `main` since the last release tag; the wave pages under
+  `.engineering/waves/` name them. At the third, the next minor version is released.
+- Steps, as `v0.12.0` (`29f656f2`): one `chore(release): version X.Y.Z` commit bumping the
+  workspace crates in `Cargo.toml` and `Cargo.lock` and the version the site names
+  (`site/book/src/README.md`, `faq.md`, `guide/install.md`, `design/related-work.md`,
+  `design/inspirations.md`, a `roadmap.md` row, a milestone in `site/index.html`); a PR with a
+  green `task gate`, merged; tag `vX.Y.Z` on the merge commit; `gh release create vX.Y.Z` with
+  notes in the shape of `v0.12.0`'s: one bullet per merged PR, behaviour changes (a
+  `CODEGEN_REVISION` bump means the first `ignite apply` rebuilds), what is not yet covered.
+- Announce: send the release's tag, URL and notes to the `brain` session (Claude session named
+  `brain`, `SendMessage`), asking it to forward the announcement to AI autodev.
+
 ## Lifecycle ownership
 
 - `ignite build` owns the generated project directory it was given; it overwrites it.
