@@ -79,10 +79,21 @@ fn a_spawn_in_a_branch_or_before_a_shadowing_binding_closes_the_end_on_both_targ
 }
 
 /// The rest of the class of the test above: a spawn inside a `match` arm
-/// or an `else` branch, and an end passed as a named argument.
+/// or an `else` branch, an end passed as a named argument, and a branch
+/// that owns a pipe of its own and still closes it at its end.
 #[test]
 fn a_spawn_in_a_match_arm_or_else_branch_closes_the_end_on_both_targets() {
-    ignite_test("nested_spawn_arms.ignite", "all", 3, 2);
+    ignite_test("nested_spawn_arms.ignite", "all", 4, 2);
+}
+
+/// Adversary of story spawn-moves-adversary-findings: a spawn before a
+/// binding that shadows the name in an inner block only, a spawn in a
+/// branch that owns a pipe of its own before it, a match nested in an
+/// `if`, a UFCS receiver with named arguments, an `else if` chain, and
+/// the evaluation and passing order of named spawn arguments.
+#[test]
+fn adversary_nested_spawns_close_the_end_on_both_targets() {
+    ignite_test("nested_spawn_adversary.ignite", "all", 6, 2);
 }
 
 #[test]

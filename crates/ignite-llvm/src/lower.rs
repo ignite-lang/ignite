@@ -175,13 +175,10 @@ pub struct Lower<'a, 'm, 'e> {
 }
 
 /// An owned stream binding `name` whose last use is the spawned call with
-/// the key `call` ([`expr_key`]); `depth` is the length of `own_marks`
-/// when the binding was made, so the blocks from `depth` on are nested in
-/// the binding's block.
+/// the key `call` ([`expr_key`]).
 struct Handover {
     call: usize,
     name: String,
-    depth: usize,
 }
 
 /// The identity of an expression of the AST being lowered.
@@ -1091,13 +1088,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let owned = crate::own::owned(&block.stmts, i, self.cx.types);
                 if !owned.is_empty() {
                     self.own_streams(&owned);
-                    let depth = self.own_marks.len();
                     for name in owned {
                         for call in crate::own::handovers(&block.stmts[i + 1..], &name) {
                             self.handovers.push(Handover {
                                 call: expr_key(call),
                                 name: name.clone(),
-                                depth,
                             });
                         }
                     }
@@ -5047,12 +5042,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         // nested in it) is handed over: the task becomes an owner like for
         // any other argument, and the block releases its own owner right
         // after the spawn, so the task holds the last one. The release
-        // drops the binding's registration from the task's owner list; a
-        // block between the binding's and this one that took its own mark
-        // before the spawn would then release one registration too few, so
-        // the binding is kept there. An unowned binding that
-        // `region::moved_to_task` names moves its handle to the task as
-        // before.
+        // leaves a tombstone in the task's owner list (`ignite-rt`'s
+        // `release`), so the mark a block between the binding's and this
+        // one took before the spawn still releases that block's own
+        // streams. An unowned binding that `region::moved_to_task` names
+        // moves its handle to the task as before.
         let moved = std::mem::take(&mut self.moved_streams);
         let name_of = |arg: &Expr| match &arg.kind {
             ExprKind::Name(n) => Some(n.name.clone()),
@@ -5065,12 +5059,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let key = expr_key(call);
         let mut owned: Vec<String> = Vec::new();
         for handover in self.handovers.iter().filter(|h| h.call == key) {
-            let marks_free = self
-                .own_marks
-                .get(handover.depth..)
-                .is_none_or(|marks| marks.iter().all(Option::is_none));
-            if marks_free
-                && self.lookup(&handover.name).is_some_and(|l| l.owned)
+            if self.lookup(&handover.name).is_some_and(|l| l.owned)
                 && !owned.contains(&handover.name)
             {
                 owned.push(handover.name.clone());

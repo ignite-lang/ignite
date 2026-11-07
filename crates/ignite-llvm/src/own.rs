@@ -88,17 +88,12 @@ fn block_handovers<'s>(stmts: &'s [Stmt], name: &str, out: &mut Vec<&'s Expr>) {
         None => (stmts, None),
     };
     if rebinding.is_some_and(|stmt| match &stmt.kind {
-        StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => {
-            crate::region::mentions(value, name)
-        }
+        StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => refers(value, name),
         _ => false,
     }) {
         return;
     }
-    let Some(last) = scope
-        .iter()
-        .rposition(|stmt| crate::region::mentioned(std::slice::from_ref(stmt), name))
-    else {
+    let Some(last) = scope.iter().rposition(|stmt| stmt_refers(stmt, name)) else {
         return;
     };
     if let StmtKind::Expr(e) = &scope[last].kind {
@@ -106,8 +101,127 @@ fn block_handovers<'s>(stmts: &'s [Stmt], name: &str, out: &mut Vec<&'s Expr>) {
     }
 }
 
+/// Whether `stmts`, a block's statements from some point on, refer to the
+/// binding `name` that is in scope before them: a mention counts up to a
+/// statement that binds the name anew (its value included), and not inside
+/// a `for`, a `match` arm or a closure whose own binding is `name`. Unlike
+/// `region::mentioned`, which counts every mention of the name.
+fn referred(stmts: &[Stmt], name: &str) -> bool {
+    for stmt in stmts {
+        if rebinds(stmt, name) {
+            return match &stmt.kind {
+                StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => {
+                    refers(value, name)
+                }
+                _ => false,
+            };
+        }
+        if stmt_refers(stmt, name) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Whether one statement refers to the binding `name` in scope before it
+/// (see [`referred`]); a `let` of `name` refers only through its value.
+fn stmt_refers(stmt: &Stmt, name: &str) -> bool {
+    use crate::region::pattern_binds;
+    match &stmt.kind {
+        StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => refers(value, name),
+        StmtKind::Assign { target, value } => target.base.name == name || refers(value, name),
+        StmtKind::Return(value) => value.as_ref().is_some_and(|v| refers(v, name)),
+        StmtKind::While { cond, body } => refers(cond, name) || referred(&body.stmts, name),
+        StmtKind::Loop { body } => referred(&body.stmts, name),
+        StmtKind::For {
+            name: bound,
+            iter,
+            body,
+        } => refers(iter, name) || (bound.name != name && referred(&body.stmts, name)),
+        StmtKind::ForPattern {
+            pattern,
+            iter,
+            body,
+        } => refers(iter, name) || (!pattern_binds(pattern, name) && referred(&body.stmts, name)),
+        StmtKind::Break | StmtKind::Continue => false,
+        StmtKind::Expr(e) => refers(e, name),
+        StmtKind::Assert { cond, message } => {
+            refers(cond, name) || message.as_ref().is_some_and(|m| refers(m, name))
+        }
+    }
+}
+
+/// Whether `e` refers to the binding `name` in scope around it (see
+/// [`referred`]).
+fn refers(e: &Expr, name: &str) -> bool {
+    let any = |items: &mut dyn Iterator<Item = &Expr>| {
+        for item in items {
+            if refers(item, name) {
+                return true;
+            }
+        }
+        false
+    };
+    match &e.kind {
+        ExprKind::Name(id) => id.name == name,
+        ExprKind::Int(_)
+        | ExprKind::Str(_)
+        | ExprKind::Bool(_)
+        | ExprKind::Quantity { .. }
+        | ExprKind::Break
+        | ExprKind::Continue => false,
+        ExprKind::NamedArg { value, .. } => refers(value, name),
+        ExprKind::Brace { entries } => any(&mut entries.iter().map(|entry| &entry.value)),
+        ExprKind::Closure(closure) => {
+            closure.params.iter().all(|p| p.name.name != name) && refers(&closure.body, name)
+        }
+        ExprKind::RecordUpdate { fields, base, .. } => {
+            any(&mut fields.iter().map(|init| &init.value)) || refers(base, name)
+        }
+        ExprKind::Record { fields, .. } => any(&mut fields.iter().map(|init| &init.value)),
+        ExprKind::TupleField { receiver, .. } | ExprKind::Field { receiver, .. } => {
+            refers(receiver, name)
+        }
+        ExprKind::Tuple(items) | ExprKind::List(items) => any(&mut items.iter()),
+        ExprKind::Return(value) => value.as_ref().is_some_and(|v| refers(v, name)),
+        ExprKind::Call { callee, args } => refers(callee, name) || any(&mut args.iter()),
+        ExprKind::Method { receiver, args, .. } => refers(receiver, name) || any(&mut args.iter()),
+        ExprKind::Index { receiver, index } => refers(receiver, name) || refers(index, name),
+        ExprKind::Try(inner)
+        | ExprKind::Await(inner)
+        | ExprKind::Spawn(inner)
+        | ExprKind::Unary { operand: inner, .. } => refers(inner, name),
+        ExprKind::Binary { .. } => {
+            let mut cur = e;
+            while let ExprKind::Binary { left, right, .. } = &cur.kind {
+                if refers(right, name) {
+                    return true;
+                }
+                cur = left;
+            }
+            refers(cur, name)
+        }
+        ExprKind::Match { scrutinee, arms } => {
+            refers(scrutinee, name)
+                || arms.iter().any(|arm| {
+                    !crate::region::pattern_binds(&arm.pattern, name) && refers(&arm.body, name)
+                })
+        }
+        ExprKind::If {
+            cond,
+            then,
+            otherwise,
+        } => {
+            refers(cond, name)
+                || referred(&then.stmts, name)
+                || otherwise.as_ref().is_some_and(|o| refers(o, name))
+        }
+        ExprKind::Block(body) => referred(&body.stmts, name),
+    }
+}
+
 fn tail_handovers<'s>(e: &'s Expr, name: &str, out: &mut Vec<&'s Expr>) {
-    use crate::region::mentions;
+    let mentions = refers;
     match &e.kind {
         ExprKind::Spawn(call) if spawn_args(call).iter().any(|arg| is_name(arg, name)) => {
             out.push(call);

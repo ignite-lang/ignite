@@ -63,3 +63,42 @@ test "a failing task closes a pipe end passed by name inside a branch" {
   }
   assert rest(client)? == b""
 }
+
+// Reads `stream` to its end, then writes `eof` to `report`.
+fn watch(stream: PipeStream, report: PipeStream) -> IoResult<Unit> requires [stream.read, report.write] {
+  loop {
+    match stream.read(4096)? {
+      Eof => {
+        report.write_all(b"eof")?
+        return Ok(())
+      }
+      Data(bytes) => {}
+    }
+  }
+}
+
+test fn exactly(client: PipeStream, count: Int) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  while out.len() < count {
+    match client.read(count - out.len())? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out)
+}
+
+// The branch owns `far` from before the spawns that hand `near`,
+// `report_out` and the outer `server` over; it still closes `far` when it
+// is left, so `watch` sees the end of `near` while the body runs.
+test "a branch that owns a pipe of its own closes it at its end after handing an outer end over" {
+  let (client, server) = Pipe.pair()
+  let (report_in, report_out) = Pipe.pair()
+  if client.received_batches() == 0 {
+    let (near, far) = Pipe.pair()
+    spawn watch(near, report_out)
+    spawn fails(server)
+  }
+  assert exactly(report_in, 3)? == b"eof"
+  assert rest(client)? == b""
+}
