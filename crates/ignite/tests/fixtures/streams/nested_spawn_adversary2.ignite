@@ -1,0 +1,99 @@
+package tests.streams
+
+// Run on both targets by tests/stream_ownership.rs (second adversary pass
+// of story spawn-moves-adversary-findings). docs/slice.md 20.3.1 claims a
+// spawned end is handed over "for a spawn followed by a binding that
+// shadows the name, in the same block or in a later branch". b1 to b3 bind
+// the name after the spawn in a match arm, a for loop and a closure
+// parameter. b4 and b5 use the outer name after an inner shadowing, so the
+// end must stay the body's and stay usable.
+
+import std.net.{Pipe, PipeStream}
+import std.io.IoError
+
+type IoResult<T> = Result<T, IoError>
+
+fn fails(stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
+  let values = [1, 2]
+  assert values.len() == 3
+  stream.write_all(b"never")?
+  Ok(())
+}
+
+test fn rest(client: PipeStream) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test fn exactly(client: PipeStream, count: Int) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  while out.len() < count {
+    match client.read(count - out.len())? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out)
+}
+
+test "b1 a failing task closes a spawned end whose name a later match arm binds" {
+  let (client, server) = Pipe.pair()
+  spawn fails(server)
+  let seen = match client.received_batches() {
+    7 => 0
+    server => server + 1
+  }
+  assert seen == 1
+  assert rest(client)? == b""
+}
+
+test "b2 a failing task closes a spawned end whose name a later for loop binds" {
+  let (client, server) = Pipe.pair()
+  spawn fails(server)
+  var total = 0
+  for server in [1, 2] {
+    total = total + server
+  }
+  assert total == 3
+  assert rest(client)? == b""
+}
+
+test "b3 a failing task closes a spawned end whose name a later closure parameter binds" {
+  let (client, server) = Pipe.pair()
+  spawn fails(server)
+  let twice = |server: Int| server * 2
+  assert twice(2) == 4
+  assert rest(client)? == b""
+}
+
+fn quiet(stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
+  Ok(())
+}
+
+test "b4 an end used after an inner shadowing stays the body's and writable" {
+  let (client, server) = Pipe.pair()
+  spawn quiet(server)
+  if client.received_batches() == 0 {
+    let (other, server) = Pipe.pair()
+    server.write_all(b"x")?
+  }
+  server.write_all(b"ok")?
+  assert exactly(client, 2)? == b"ok"
+}
+
+test "b5 an end used after a match arm that binds its name stays the body's and writable" {
+  let (client, server) = Pipe.pair()
+  spawn quiet(server)
+  let seen = match client.received_batches() {
+    7 => 0
+    server => server + 1
+  }
+  server.write_all(b"ok")?
+  assert seen == 1
+  assert exactly(client, 2)? == b"ok"
+}

@@ -6829,11 +6829,14 @@ moves.
   (`stream_ownership::a_spawn_in_a_test_body_hands_the_pattern_bound_end_over`, both targets).
   That holds for a spawn inside an `if` or `else` branch or a `match` arm that is the binding's
   last use, also in a branch that owns streams of its own, and for a spawn followed by a binding
-  that shadows the name, in the same block or in a later branch
+  that shadows the name: a `let` in the same block or in a later branch, a later `match` arm,
+  `for` loop or closure parameter
   (`stream_ownership::a_spawn_in_a_branch_or_before_a_shadowing_binding_closes_the_end_on_both_targets`,
-  `…_in_a_match_arm_or_else_branch_…`, `adversary_nested_spawns_close_the_end_on_both_targets`);
-  a spawn inside a loop body does not hand over. On LLVM `own::handovers` finds these spawns at
-  the binding's `let`, counting a mention only where the name still denotes that binding; the
+  `…_in_a_match_arm_or_else_branch_…`, `adversary_nested_spawns_close_the_end_on_both_targets`,
+  `adversary2_later_bindings_of_the_name_agree_on_both_targets`);
+  a spawn inside a loop body does not hand over. On LLVM both whether the block owns the binding
+  (`own::owned`) and where `own::handovers` finds these spawns count a mention only where the
+  name still denotes that binding; the
   hand-over's release leaves a tombstone in the task's owner list, so the marks of the blocks
   in between stay valid and each still closes its own streams when it is left. Named `spawn`
   arguments are evaluated in source order and passed in parameter order on both targets

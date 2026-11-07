@@ -13,8 +13,10 @@
 //! whose result cannot hold a stream ([`may_hold_stream`]). Any other
 //! mention (a result, a field, an element, a capture, an assignment, a
 //! `copy()`) leaves the binding unowned, as before: never released, an
-//! extra open descriptor and never an early close. Shadowing is not
-//! resolved, so a mention of a shadowing binding counts too.
+//! extra open descriptor and never an early close. Only mentions that
+//! denote the binding count: a later `let` of the name ends its scope, and
+//! a `for`, `match` arm or closure that binds the name hides it in its body
+//! ([`referred`]).
 //!
 //! A callee that keeps the stream after it returns other than through its
 //! result (in a `Store`) would see it closed; no std module or example
@@ -55,11 +57,7 @@ pub fn owned(stmts: &[Stmt], index: usize, types: &TypedProgram) -> Vec<String> 
     };
     bound
         .into_iter()
-        .filter(|id| {
-            stmts[index + 1..]
-                .iter()
-                .all(|stmt| stmt_keeps(stmt, &id.name, types))
-        })
+        .filter(|id| block_keeps(&stmts[index + 1..], &id.name, types))
         .map(|id| id.name.clone())
         .collect()
 }
@@ -328,18 +326,47 @@ fn is_name(e: &Expr, name: &str) -> bool {
     }
 }
 
+/// Whether `stmts`, a block's statements from some point on, keep the
+/// binding `name` in scope before them inside the block: up to a statement
+/// that binds the name anew, whose value still counts (the scope rule of
+/// [`referred`]).
+fn block_keeps(stmts: &[Stmt], name: &str, types: &TypedProgram) -> bool {
+    for stmt in stmts {
+        if rebinds(stmt, name) {
+            return match &stmt.kind {
+                StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => {
+                    keeps(value, name, types)
+                }
+                _ => true,
+            };
+        }
+        if !stmt_keeps(stmt, name, types) {
+            return false;
+        }
+    }
+    true
+}
+
 fn stmt_keeps(stmt: &Stmt, name: &str, types: &TypedProgram) -> bool {
+    use crate::region::pattern_binds;
     let keeps = |e: &Expr| keeps(e, name, types);
-    let block = |b: &Block| b.stmts.iter().all(|s| stmt_keeps(s, name, types));
+    let block = |b: &Block| block_keeps(&b.stmts, name, types);
     match &stmt.kind {
         StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => keeps(value),
         StmtKind::Assign { target, value } => target.base.name != name && keeps(value),
         StmtKind::Return(value) => value.as_ref().is_none_or(keeps),
         StmtKind::While { cond, body } => keeps(cond) && block(body),
         StmtKind::Loop { body } => block(body),
-        StmtKind::For { iter, body, .. } | StmtKind::ForPattern { iter, body, .. } => {
-            keeps(iter) && block(body)
-        }
+        StmtKind::For {
+            name: bound,
+            iter,
+            body,
+        } => keeps(iter) && (bound.name == name || block(body)),
+        StmtKind::ForPattern {
+            pattern,
+            iter,
+            body,
+        } => keeps(iter) && (pattern_binds(pattern, name) || block(body)),
         StmtKind::Break | StmtKind::Continue => true,
         StmtKind::Expr(e) => keeps(e),
         StmtKind::Assert { cond, message } => keeps(cond) && message.as_ref().is_none_or(keeps),
@@ -371,7 +398,7 @@ fn all_keep<'x>(
 /// Whether every mention of `name` in `e` keeps the stream inside the
 /// block (see the module documentation).
 fn keeps(e: &Expr, name: &str, types: &TypedProgram) -> bool {
-    let block = |b: &Block| b.stmts.iter().all(|s| stmt_keeps(s, name, types));
+    let block = |b: &Block| block_keeps(&b.stmts, name, types);
     match &e.kind {
         ExprKind::Name(id) => id.name != name,
         ExprKind::Int(_)
@@ -380,7 +407,9 @@ fn keeps(e: &Expr, name: &str, types: &TypedProgram) -> bool {
         | ExprKind::Quantity { .. }
         | ExprKind::Break
         | ExprKind::Continue => true,
-        ExprKind::Closure(closure) => !crate::region::mentions(&closure.body, name),
+        ExprKind::Closure(closure) => {
+            closure.params.iter().any(|p| p.name.name == name) || !refers(&closure.body, name)
+        }
         ExprKind::Spawn(call) => {
             let args = call_args(call, types);
             let callee = match &call.kind {
@@ -458,7 +487,11 @@ fn keeps(e: &Expr, name: &str, types: &TypedProgram) -> bool {
             keeps(cur, name, types)
         }
         ExprKind::Match { scrutinee, arms } => {
-            keeps(scrutinee, name, types) && arms.iter().all(|arm| keeps(&arm.body, name, types))
+            keeps(scrutinee, name, types)
+                && arms.iter().all(|arm| {
+                    crate::region::pattern_binds(&arm.pattern, name)
+                        || keeps(&arm.body, name, types)
+                })
         }
         ExprKind::If {
             cond,

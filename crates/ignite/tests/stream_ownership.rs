@@ -96,6 +96,15 @@ fn adversary_nested_spawns_close_the_end_on_both_targets() {
     ignite_test("nested_spawn_adversary.ignite", "all", 6, 2);
 }
 
+/// Second adversary pass: the name bound again after the spawn by a match
+/// arm, a for loop or a closure parameter (the end is handed over on both
+/// targets), and the outer name used after an inner shadowing (the end
+/// stays the body's and writable on both targets).
+#[test]
+fn adversary2_later_bindings_of_the_name_agree_on_both_targets() {
+    ignite_test("nested_spawn_adversary2.ignite", "all", 5, 2);
+}
+
 #[test]
 fn named_spawn_arguments_in_another_order_build_and_pass_on_both_targets() {
     ignite_test("named_spawn.ignite", "all", 1, 2);
