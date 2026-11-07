@@ -388,22 +388,34 @@ impl TcpStream {
     /// [`TcpStream::timed_out`] tells apart.
     pub fn read_into(&self, buffer: &mut [u8]) -> Result<usize, IoError> {
         flush();
-        self.inner.timed_out.store(false, Ordering::Release);
-        self.inner.check_failure()?;
+        if let Err(error) = self.inner.check_failure() {
+            self.inner.timed_out.store(false, Ordering::Release);
+            return Err(error);
+        }
         let _reading = self
             .inner
             .reading
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
+        // Set under the read lock from this read's own outcome, so the flag
+        // is that of the read that ended last, also with readers queued on
+        // the lock (`docs/slice.md` 26.2).
+        let ended = |timed_out: bool| self.inner.timed_out.store(timed_out, Ordering::Release);
         loop {
             match (&self.inner.socket).read(buffer) {
-                Ok(count) => return Ok(count),
+                Ok(count) => {
+                    ended(false);
+                    return Ok(count);
+                }
                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-                    self.inner.timed_out.store(true, Ordering::Release);
+                    ended(true);
                     return Ok(0);
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => {
+                    ended(false);
+                    return Err(e.into());
+                }
             }
         }
     }

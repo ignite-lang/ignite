@@ -9334,7 +9334,9 @@ Sources: `docs/research/pusher-gaps.md` G1, G4 and G5 (the pusher written in Ign
 The names are `ignite_check::BUILTIN_METHODS` (`peer`, `timed_out`) and `BUILTIN_STATICS`
 (`connect_within`, arity 3), so on a `TcpStream` receiver the builtin wins over a user fn of the
 same name (13, row 5). They are not `ByteStream` methods: a `PipeStream` and a
-`ByteStream`-bounded receiver have none of them.
+`ByteStream`-bounded receiver have none of them. Being builtin method names, `peer` and
+`timed_out` cannot be called as fn-typed record fields: `hooks.peer(1)` is E041, as
+`hooks.local_port(1)` already is.
 
 ### 26.1 `peer`
 
@@ -9358,7 +9360,8 @@ A read that waited longer than the idle timeout (`set_idle_timeout`, 11.5) still
 `s.timed_out()` holds when the last read of the stream returned because the idle timeout
 passed, and not when the peer closed or data arrived. Every read sets it anew, on any handle of
 the stream (a clone shares it); it is false before the first read. With two tasks reading one
-stream, "last" is the read that ended last. It never fails and never waits; on the LLVM target
+stream, "last" is the read that ended last: the flag is set under the stream's read lock from
+that read's own outcome. It never fails and never waits; on the LLVM target
 a handle that is no stream gives false.
 
 ```ignite
@@ -9393,13 +9396,15 @@ positive`. `connect(address, port)` keeps waiting for the kernel's retries.
 
 - `std/net.ignite`: three inline tests over loopback on both targets (`task test-ignite`): the
   peer of both ends in IPv4 and IPv6 and after `close`; a timed-out `Eof` against a closed one;
-  `connect_within` to `10.255.255.1:80` failing within 300 ms of a 200 ms timeout, and to a
-  loopback listener succeeding.
+  `connect_within` to `10.255.255.1:80` failing with `connection timed out` after 180 to 300 ms
+  of a 200 ms timeout, and to a loopback listener succeeding.
 - `pusher_net::{rust,llvm}::*` (`crates/ignite/tests/pusher_net.rs`,
   `fixtures/pusher_net/`): G1, G4 and G5 with these names, built and run as processes. The
   server logs the address and port the test's client connected from; the two reads of G4 log
-  `Eof timed_out=true` and `Eof timed_out=false`; G5 logs the failed connect within 600 ms of
-  a 500 ms timeout.
+  `Eof timed_out=true` and `Eof timed_out=false`; G5 logs `connection timed out` after 480 to
+  600 ms of a 500 ms timeout.
+- `pusher_net::{rust,llvm}::adversary_edges_pass` runs the eight inline tests of
+  `fixtures/pusher_net/adversary.ignite` (the review's edges) on each target.
 - `ignite-io` `tcp::peer_is_the_other_end_in_both_families`,
   `tcp::timed_out_tells_an_idle_timeout_from_a_close`, `tcp::connect_within_bounds_the_wait`;
   `ignite-rt` `abi::peer_timed_out_and_connect_within`; `ignite-types`
