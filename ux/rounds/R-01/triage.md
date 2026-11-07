@@ -6,6 +6,7 @@ Applied by rule (SKILL.md § 3.3) by the coordinating session, 2026-11-07.
 
 - No person and no keys: the questionnaire, L4 and L5 did not run. Every session was driven by the screen-only user.
 - T1 (`review-report.md` § 3): the trial reset every page to the light theme, so the dark-theme steps of `r01-faq-reader` and `anchor-newcomer` were not measured. The site keeps the choice (`shots/review-theme-kept-faq-1440x900.png`). The tool defects T1 to T8 are fixed before R-01 is written again. They are tool changes and are not counted among the 5 changes.
+- R-01 was written twice: first at ac1d7c88, again after the T1 to T8 fixes (aa2fc7a1). `review-heuristics.md`, `review-report.md`, UXF-008 and UXF-009 were written against the first write. The `shots/worst-N-*.jpg` names they cite now hold the second write's moments; the first write's frames are in git at ac1d7c88. The `shots/review-*.png` files are unchanged.
 - Frequency = sessions affected ÷ 15 sessions (3 cards × 5 viewports, `round.json` `sessions`).
 
 ## Did the last change sets move their metrics?
