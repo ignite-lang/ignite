@@ -1,0 +1,17 @@
+// A local holding an effectful fn passed to `List.map`: a let-bound
+// closure's effects are charged where it is created (one E016 at the
+// literal, none at `map`); a parameter of effectful fn type is charged at
+// the `map` call of a fn without `requires`.
+fn names(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires [store.write] {
+  let g = |id: Int| store.get(id)
+  return ids.map(g)
+}
+
+fn apply(g: fn(id: Int) -> Int requires [clock.read], ids: List<Int>) -> List<Int> = ids.map(g)
+
+fn stamp(id: Int) -> Int requires [clock.read] {
+  let now = Clock.monotonic()
+  return id
+}
+
+fn caller(ids: List<Int>) -> List<Int> requires [stdout.write] = apply(stamp, ids)

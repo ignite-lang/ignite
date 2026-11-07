@@ -3479,11 +3479,18 @@ impl<'a> Typer<'a> {
     }
 
     /// The effects of `map`'s argument `f` when it is an effectful closure
-    /// literal or the name of an effectful fn (not a local binding): what
-    /// `ignite-check` inferred or the fn declares.
+    /// literal, a local of effectful fn type or the name of an effectful
+    /// fn: what `ignite-check` inferred, the local's type or the fn
+    /// declares.
     fn map_fn_effects(&self, f: &Expr) -> Option<FnEffects> {
         let sig = match &f.kind {
             ExprKind::Closure(_) => self.symbols.closure_effects.get(&f.span)?,
+            ExprKind::Name(name) if self.lookup(&name.name).is_some() => {
+                return match self.lookup(&name.name)?? {
+                    Ty::EffectFn(_, _, effects) => Some(effects),
+                    _ => None,
+                };
+            }
             ExprKind::Name(name) if self.lookup(&name.name).is_none() => {
                 let q = self.fns.get(&name.name)?;
                 if !self.sig_of(q)?.effectful {
@@ -3511,6 +3518,9 @@ impl<'a> Typer<'a> {
     /// `requires` of the fn that calls `map`. E017 at `f` otherwise.
     fn map_effects_fit(&mut self, f: &Expr, effects: &FnEffects) -> bool {
         let what = match &f.kind {
+            ExprKind::Name(name) if self.lookup(&name.name).is_some() => {
+                format!("effectful fn value `{}`", name.name)
+            }
             ExprKind::Name(name) => format!("effectful function `{}`", name.name),
             _ => "effectful closure".to_string(),
         };

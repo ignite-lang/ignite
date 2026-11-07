@@ -4,3 +4,6 @@ e017_effectful_list_map.ignite:14:60: error[E017]: effectful function `stamp` pa
 e017_effectful_list_map.ignite:17:21: error[E017]: effectful closure passed to `map` needs `s.read` on its parameter `s`, the list's element; `map` passes on only its caller's effects
 e017_effectful_list_map.ignite:22:102: error[E017]: effectful function `first` passed to `map` needs `s.read` on its parameter `s`, the list's element; `map` passes on only its caller's effects
 e017_effectful_list_map.ignite:24:82: error[E017]: effectful closure passed to `map` needs `s.read` on its parameter `s`, the list's element; `map` passes on only its caller's effects
+e017_effectful_list_map.ignite:26:108: error[E017]: effectful closure passed to `map` needs `s.read` on its parameter `s`, the list's element; `map` passes on only its caller's effects
+e017_effectful_list_map.ignite:28:118: error[E017]: effectful fn value `g` passed to `map` needs `clock.read`, which the `requires` of `apply` does not cover
+e017_effectful_list_map.ignite:32:21: error[E017]: effectful fn value `g` passed to `map` needs `s.read` on its parameter `s`, the list's element; `map` passes on only its caller's effects

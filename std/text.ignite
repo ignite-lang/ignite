@@ -762,3 +762,20 @@ test "List.map takes a fn with the effects of its caller" {
   assert [3, 1].map(|id| store.get(id)) == [Some("three"), Some("one")]
   assert stamp_all([4, 5]) == ["4", "5"]
 }
+
+test fn names_by_local(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires [store.read] {
+  let g = |id: Int| store.get(id)
+  return ids.map(g)
+}
+
+test fn stamp_through(f: fn(n: Int) -> Text requires [clock.read], ns: List<Int>) -> List<Text> requires [clock.read] = ns.map(f)
+
+test "List.map takes a local holding an effectful fn" {
+  let store: Store<Text> = Store.new()
+  store.put(1, "one")
+  store.put(3, "three")
+  assert names_by_local(store, [3, 2, 1]) == [Some("three"), None, Some("one")]
+  let g = |id: Int| store.get(id)
+  assert [1, 3].map(g) == [Some("one"), Some("three")]
+  assert stamp_through(stamped, [6, 7]) == ["6", "7"]
+}
