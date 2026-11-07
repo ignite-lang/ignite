@@ -8,4 +8,5 @@ mod fixtures;
 mod layering;
 mod limits;
 mod modules;
+mod ownership_adversary;
 mod terminal;
