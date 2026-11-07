@@ -32,7 +32,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use crate::net::{Buffered, register, try_lock};
+use crate::net::{Buffered, lock_until, register};
 use crate::{Input, IoError, SEND_BUFFER, flush, read_input};
 
 /// Unread bytes a receive queue holds before a delivery into it fails.
@@ -200,8 +200,8 @@ impl Buffered for End {
 
     /// A delivery never waits for room (a full queue is an error), so
     /// only the write lock could hold up the exit.
-    fn flush_at_exit(&self) {
-        if let Some(mut out) = try_lock(&self.writing) {
+    fn flush_at_exit(&self, deadline: Instant) {
+        if let Some(mut out) = lock_until(&self.writing, deadline) {
             let _ = self.send(&mut out);
         }
     }
