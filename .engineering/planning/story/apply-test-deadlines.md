@@ -2,9 +2,31 @@
 format: aep.planning-md/3
 id: story:apply-test-deadlines
 kind: story
-status: draft
+status: active
 title: Live apply and rollout tests pass a loaded gate on the first run
-revision: 1
+scope:
+- confidence: cited
+  path: crates/ignite/tests/apply_admission.rs
+- confidence: cited
+  path: crates/ignite/tests/apply_way_out.rs
+- confidence: cited
+  path: crates/ignite/tests/common/apply.rs
+- confidence: cited
+  path: crates/ignite/tests/common/mod.rs
+- confidence: cited
+  path: crates/ignite/tests/drain.rs
+- confidence: cited
+  path: crates/ignite/tests/run.rs
+- confidence: cited
+  path: crates/ignite/tests/slice16.rs
+- confidence: cited
+  path: crates/ignite/tests/slice18.rs
+- confidence: cited
+  path: crates/ignite/tests/terminal.rs
+revision: 12
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-07T09:16:05Z", actor: "human:timo", revision: 11}
+- {from: "proposed", to: "active", at: "2026-11-07T09:16:05Z", actor: "human:timo", revision: 12}
 ---
 # Story: apply-test-deadlines
 
