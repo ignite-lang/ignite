@@ -1286,7 +1286,9 @@ frontend (T1: `ignite-syntax`, `ignite-check`, `ignite-types`), the backends and
 | `s.upsert(id, f: fn(Option<T>) -> T)` | `T` (the stored value): `f` of the current value, `None` when `id` holds nothing, atomic, `f` pure | `s.write` |
 
 - Value semantics: `get`/`values` return copies; `put` stores a copy.
-- One implementation in `ignite-io`: `Store<T: Clone + Send>` over an `Arc` of 16 shards,
+- One implementation in `ignite-io`: `Store<T: Clone + Send + Sync>` over an `Arc` of 16 shards
+  (`Sync` because a value an `update` or `upsert` has taken stays shared with the readers of
+  `len` and `values` while the taker copies it),
   each a `Mutex<BTreeMap<i64, _>>` with a `Condvar`, chosen by a Fibonacci hash of the id,
   plus an `AtomicI64` counter (story `store-lock-contention`). Every method is atomic for the
   ids it touches; `len` and `values` lock every shard in shard order, and `values` merges the

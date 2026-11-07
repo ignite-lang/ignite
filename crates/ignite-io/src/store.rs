@@ -223,6 +223,15 @@ impl<'a, T> Taken<'a, T> {
     fn put_back(mut self, new: T) -> Option<Arc<T>> {
         self.done = true;
         self.shard.put_back(self.id, || Some(new));
+        // The slot's share went with the put-back, under the lock; the
+        // taker's is now the last, so the caller's drop of it drops the old
+        // value with no lock held.
+        debug_assert!(
+            self.old
+                .as_ref()
+                .is_none_or(|old| Arc::strong_count(old) == 1),
+            "the slot still shares the old value after its put-back"
+        );
         self.old.take()
     }
 
@@ -1102,5 +1111,107 @@ mod tests {
         }
         assert_eq!(store.upsert(1, |v| v.unwrap_or(0) * 2), 12);
         assert_eq!(store.len(), 1);
+    }
+
+    std::thread_local! {
+        static DROP_PROBE: std::cell::RefCell<Option<Box<dyn Fn() -> bool>>> =
+            const { std::cell::RefCell::new(None) };
+        static DROP_PROBED: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+    }
+
+    /// A value whose drop asks another thread to read the store and counts
+    /// whether that read got through: a drop made while the dropping task
+    /// holds the shard's lock counts as blocked.
+    #[derive(Clone, Debug, PartialEq)]
+    struct DropProbed(i64);
+
+    impl Drop for DropProbed {
+        fn drop(&mut self) {
+            let free = DROP_PROBE
+                .try_with(|probe| probe.borrow().as_ref().map(|probe| probe()))
+                .ok()
+                .flatten();
+            if let Some(free) = free {
+                DROP_PROBED.with(|n| {
+                    let (passed, blocked) = n.get();
+                    n.set(if free {
+                        (passed + 1, blocked)
+                    } else {
+                        (passed, blocked + 1)
+                    });
+                });
+            }
+        }
+    }
+
+    /// The module doc: `update` and `upsert` drop the old value with no
+    /// lock held. Red against a `Taken::put_back` that drops `old` before
+    /// it puts the new value back (the slot's share is then the last one
+    /// and the value is dropped under the shard's lock).
+    #[test]
+    fn update_and_upsert_drop_the_old_value_with_no_lock_held_of_their_own_shard() {
+        let [id, neighbour] = ids_in_shard(super::shard_of(1), 2)[..] else {
+            unreachable!()
+        };
+        let store: Store<DropProbed> = Store::new();
+        store.put(id, DropProbed(1));
+        store.put(neighbour, DropProbed(2));
+        let prober = store.clone();
+        DROP_PROBE.with(|probe| {
+            *probe.borrow_mut() = Some(Box::new(move || {
+                let store = prober.clone();
+                let (done, finished) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    let _ = done.send(store.read(neighbour, |v| v.0));
+                });
+                finished
+                    .recv_timeout(std::time::Duration::from_millis(500))
+                    .is_ok()
+            }));
+        });
+        DROP_PROBED.with(|n| n.set((0, 0)));
+        let updated = store.update(id, |v| DropProbed(v.0 + 1)).map(|v| v.0);
+        let upserted = store
+            .upsert(id, |v| DropProbed(v.map_or(0, |v| v.0) * 10))
+            .0;
+        DROP_PROBE.with(|probe| *probe.borrow_mut() = None);
+        let (passed, blocked) = DROP_PROBED.with(std::cell::Cell::get);
+        assert_eq!((updated, upserted), (Some(2), 20));
+        assert!(passed >= 4, "the probe ran {passed} times");
+        assert_eq!(
+            blocked, 0,
+            "values dropped while the task held its shard's lock ({passed} without)"
+        );
+    }
+
+    /// `read_values` during an upsert of an absent id: the iterator's
+    /// length counts what it yields. Red against `Values::new` counting
+    /// `slots.len()` (the taken absent id), which `values` (a `collect`)
+    /// does not notice.
+    #[test]
+    fn read_values_len_counts_no_absent_id_an_upsert_took() {
+        let store: Store<i64> = Store::new();
+        let [absent, held] = ids_in_shard(7, 2)[..] else {
+            unreachable!()
+        };
+        store.put(held, 7);
+        let (taken, started) = std::sync::mpsc::channel();
+        let (go, wait) = std::sync::mpsc::channel::<()>();
+        let taker = store.clone();
+        let upsert = std::thread::spawn(move || {
+            taker.upsert(absent, |v| {
+                taken.send(()).unwrap();
+                wait.recv().unwrap();
+                v.unwrap_or(0) + 1
+            })
+        });
+        started.recv().unwrap();
+        let (len, yielded) = store.read_values(|values| {
+            let len = values.len();
+            (len, values.count())
+        });
+        go.send(()).unwrap();
+        assert_eq!(upsert.join().unwrap(), 1);
+        assert_eq!((len, yielded), (1, 1));
     }
 }
