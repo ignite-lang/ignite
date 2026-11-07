@@ -171,6 +171,10 @@ pub struct Evaluator<'p> {
     closures: HashMap<String, HashMap<usize, &'p Expr>>,
     /// A model operation may share its stack across independent evaluations.
     on_stack: bool,
+    /// The wall-clock limit of one evaluation ([`Evaluator::set_time_limit`]).
+    time_limit: Option<std::time::Duration>,
+    /// When the current evaluation passes its time limit.
+    deadline: Option<std::time::Instant>,
 }
 
 impl<'p> Evaluator<'p> {
@@ -191,7 +195,20 @@ impl<'p> Evaluator<'p> {
             stack: Vec::new(),
             closures: HashMap::new(),
             on_stack: false,
+            time_limit: None,
+            deadline: None,
         }
+    }
+
+    /// Bound each later evaluation by wall-clock time as well as fuel: past
+    /// `limit` it ends with `evaluation failed: over the time limit of N s`.
+    /// Fuel counts expressions, not the copies of value semantics, so a
+    /// loop that copies a growing list is quadratic within its fuel; the
+    /// differential runner (`crates/ignite/tests/differential.rs`) sets a
+    /// limit so such a test is a unit the evaluator cannot run. `None` (the
+    /// default) is no limit. Checked every 4,096 units of fuel.
+    pub fn set_time_limit(&mut self, limit: Option<std::time::Duration>) {
+        self.time_limit = limit;
     }
 
     pub fn modules(&self) -> &'p Modules<'p> {
@@ -246,6 +263,35 @@ impl<'p> Evaluator<'p> {
         self.run(move |ev| ev.call_fn(&fn_name, args))
     }
 
+    /// Run the inline test `name` of the loaded module `module` (its body,
+    /// as the test runner of `docs/slice.md` 12.7 does on a target), with a
+    /// fresh fuel budget: `Ok` when it passed, the 14.8 report of the
+    /// failing `assert`, `?` or arithmetic as [`EvalError::Failed`], and an
+    /// `evaluation failed: …` report for a body the interpreter has no rule
+    /// for (an IO builtin, a task). The differential runner
+    /// (`crates/ignite/tests/differential.rs`) compares it with both targets.
+    pub fn run_test(&mut self, module: &str, name: &str) -> Result<(), EvalError> {
+        let Some(m) = self.modules.get(module) else {
+            return Err(EvalError::Failed {
+                report: format!("evaluation failed: module `{module}` is not loaded"),
+            });
+        };
+        let Some(test) = m.program.decls.iter().find_map(|decl| match decl {
+            Decl::Test(t) if t.name.name == name => Some(t),
+            _ => None,
+        }) else {
+            return Err(EvalError::Failed {
+                report: format!("evaluation failed: test `{name}` is not declared in `{module}`"),
+            });
+        };
+        let cx = Cx {
+            module: m,
+            system: None,
+        };
+        self.run(move |ev| ev.block_body(&cx, &test.body).map(|_| Value::Unit))
+            .map(|_| ())
+    }
+
     /// One evaluation: fresh budgets on the evaluation stack, flows
     /// mapped to errors and the result checked for encodability (E118).
     fn run(
@@ -253,6 +299,9 @@ impl<'p> Evaluator<'p> {
         f: impl FnOnce(&mut Evaluator<'p>) -> Eval<Value> + Send,
     ) -> Result<Value, EvalError> {
         self.units_left = self.fuel.units;
+        self.deadline = self
+            .time_limit
+            .map(|limit| std::time::Instant::now() + limit);
         self.allocated = 0;
         self.frames.clear();
         self.frames.push(Frame::default());
@@ -303,6 +352,15 @@ impl<'p> Evaluator<'p> {
     fn tick(&mut self) -> Eval<()> {
         if self.units_left == 0 {
             return Err(self.limit(Limit::Fuel(self.fuel.units)));
+        }
+        if self.units_left.is_multiple_of(4096)
+            && let (Some(deadline), Some(limit)) = (self.deadline, self.time_limit)
+            && std::time::Instant::now() > deadline
+        {
+            return Err(internal(format!(
+                "over the time limit of {} s",
+                limit.as_secs()
+            )));
         }
         self.units_left -= 1;
         Ok(())
