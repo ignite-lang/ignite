@@ -2,9 +2,9 @@
 //!
 //! The ids are the parser's, so a clone of a `Program` answers the same
 //! lookups and a typed module does not depend on where its AST lives.
-//! [`NodeId`] hashes as one `u64` (file in the high half, index in the
-//! low); the hasher mixes both halves so the bucket index and the
-//! hash-table fingerprint each see every bit.
+//! [`NodeId`] hashes as one `u64` (its file xor its scrambled index); the
+//! hasher mixes that word so the bucket index and the hash-table
+//! fingerprint each see every bit.
 
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};

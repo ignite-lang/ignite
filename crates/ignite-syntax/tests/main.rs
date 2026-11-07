@@ -6,5 +6,6 @@
 mod fixtures;
 mod grammar;
 mod node_ids;
+mod node_ids_adversary;
 mod parse_terminal;
 mod robustness;

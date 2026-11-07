@@ -536,7 +536,18 @@ fn module_dependencies(program: &Program, source: &SourceFile) -> BTreeSet<Strin
 
 fn read_source(file: &Path) -> Result<SourceFile, Error> {
     let text = std::fs::read_to_string(file).map_err(io_error(file))?;
-    Ok(SourceFile::new(file.display().to_string(), text))
+    Ok(source_file(file, text))
+}
+
+/// `text` as the file at `file`: its path printed as given, its
+/// `FileId` (`ignite_syntax::ast::FileId`) that of the canonical path when
+/// the file exists, so one file reached by different paths has one id.
+fn source_file(file: &Path, text: String) -> SourceFile {
+    let source = SourceFile::new(file.display().to_string(), text);
+    match file.canonicalize() {
+        Ok(canonical) => source.with_identity(&canonical.to_string_lossy()),
+        Err(_) => source,
+    }
 }
 
 fn parse(source: &SourceFile) -> Result<Program, Error> {
@@ -944,7 +955,7 @@ pub(crate) fn parse_program(file: &Path) -> Result<ParsedFile, Error> {
 /// are read from disk either way.
 fn parse_program_text(file: &Path, text: Option<String>) -> Result<ParsedFile, Error> {
     let source = match text {
-        Some(text) => SourceFile::new(file.display().to_string(), text),
+        Some(text) => source_file(file, text),
         None => read_source(file)?,
     };
     let program = parse(&source)?;

@@ -7,26 +7,30 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// path [`crate::parse`] was given. [`FileId::NONE`] for tokens lexed
 /// without a file and spans made up by a later stage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct FileId(pub u32);
+pub struct FileId(pub u64);
 
 impl FileId {
     /// No file: [`crate::lexer::lex`] without a path, [`Span::new`].
     pub const NONE: FileId = FileId(0);
     /// Nodes built outside the parser ([`NodeId::fresh`]).
-    pub const SYNTHETIC: FileId = FileId(u32::MAX);
+    pub const SYNTHETIC: FileId = FileId(u64::MAX);
 
-    /// The id of the file at `path`: FNV-1a of the path's bytes, never
-    /// [`FileId::NONE`] or [`FileId::SYNTHETIC`]. The same path gives the
-    /// same id in every run, so ids can be cached and serialised.
+    /// The id of the file at `path`: the 64-bit FNV-1a hash of the path's
+    /// bytes, never [`FileId::NONE`] or [`FileId::SYNTHETIC`]. The same path
+    /// gives the same id in every run, so ids can be cached and serialised;
+    /// two of a million distinct paths share one with a chance of about
+    /// 3e-8. A driver passes the canonical path of a file on disk
+    /// ([`crate::SourceFile::with_identity`]), so every way of naming the
+    /// file gives one id.
     pub fn of_path(path: &str) -> FileId {
-        let mut hash: u32 = 0x811c_9dc5;
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
         for byte in path.bytes() {
-            hash ^= u32::from(byte);
-            hash = hash.wrapping_mul(0x0100_0193);
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
         match hash {
             0 => FileId(1),
-            u32::MAX => FileId(u32::MAX - 1),
+            u64::MAX => FileId(u64::MAX - 1),
             hash => FileId(hash),
         }
     }
@@ -67,9 +71,11 @@ impl NodeId {
 }
 
 impl std::hash::Hash for NodeId {
-    /// One `u64`, so a hasher that mixes one word sees the whole id.
+    /// One `u64`, so a hasher that mixes one word sees the whole id: the
+    /// file xor the index times an odd constant, distinct for every index
+    /// of one file.
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64((u64::from(self.file.0) << 32) | u64::from(self.index));
+        state.write_u64(self.file.0 ^ u64::from(self.index).wrapping_mul(0x9e37_79b9_7f4a_7c15));
     }
 }
 

@@ -23,6 +23,7 @@ mod default_target;
 mod drain;
 mod eval;
 mod failover;
+mod file_ids;
 mod generics;
 mod ignite_test;
 mod llvm;

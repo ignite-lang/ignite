@@ -33,6 +33,9 @@ pub struct SourceFile {
     /// the first position lookup and kept: a failure site per expression
     /// of a 100,000-term program asks 100,000 times.
     lines: OnceLock<Vec<usize>>,
+    /// [`SourceFile::id`]: [`FileId::of_path`] of `path`, or of the
+    /// identity given to [`SourceFile::with_identity`].
+    id: FileId,
 }
 
 impl PartialEq for SourceFile {
@@ -45,17 +48,29 @@ impl Eq for SourceFile {}
 
 impl SourceFile {
     pub fn new(path: impl Into<String>, text: impl Into<String>) -> SourceFile {
+        let path = path.into();
         SourceFile {
-            path: path.into(),
+            id: FileId::of_path(&path),
+            path,
             text: text.into(),
             lines: OnceLock::new(),
         }
     }
 
+    /// The file with its id taken from `identity` instead of `path`: a
+    /// driver passes the canonical path of a file on disk, so `x/a.ignite`,
+    /// `./x/a.ignite` and the absolute path give one id while diagnostics
+    /// still print `path` as given.
+    pub fn with_identity(mut self, identity: &str) -> SourceFile {
+        self.id = FileId::of_path(identity);
+        self
+    }
+
     /// The id of the file, carried by the spans and node ids of its parse:
-    /// [`FileId::of_path`] of `path`.
+    /// [`FileId::of_path`] of `path`, or of the identity given to
+    /// [`SourceFile::with_identity`].
     pub fn id(&self) -> FileId {
-        FileId::of_path(&self.path)
+        self.id
     }
 
     /// The line table, computed once per file.

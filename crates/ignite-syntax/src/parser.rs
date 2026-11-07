@@ -1853,13 +1853,31 @@ impl<'t> Parser<'t> {
         self.or()
     }
 
+    // Each binary level parses its first operand and hands the operators
+    // after it to a function of its own: a nested expression is reached
+    // through the first operand, and a debug build's frame of the level
+    // then holds only that operand (see [`Parser::primary`]).
+
     fn binary_left(
         &mut self,
         next: fn(&mut Self) -> PResult<Expr>,
         op_of: fn(&TokenKind) -> Option<BinaryOp>,
     ) -> PResult<Expr> {
         let start = self.start();
-        let mut left = next(self)?;
+        let left = next(self)?;
+        if op_of(self.peek()).is_none() {
+            return Ok(left);
+        }
+        self.binary_left_rest(start, left, next, op_of)
+    }
+
+    fn binary_left_rest(
+        &mut self,
+        start: usize,
+        mut left: Expr,
+        next: fn(&mut Self) -> PResult<Expr>,
+        op_of: fn(&TokenKind) -> Option<BinaryOp>,
+    ) -> PResult<Expr> {
         while let Some(op) = op_of(self.peek()) {
             self.bump();
             self.skip_newlines();
@@ -1876,6 +1894,19 @@ impl<'t> Parser<'t> {
     ) -> PResult<Expr> {
         let start = self.start();
         let left = next(self)?;
+        if op_of(self.peek()).is_none() {
+            return Ok(left);
+        }
+        self.binary_non_assoc_rest(start, left, next, op_of)
+    }
+
+    fn binary_non_assoc_rest(
+        &mut self,
+        start: usize,
+        left: Expr,
+        next: fn(&mut Self) -> PResult<Expr>,
+        op_of: fn(&TokenKind) -> Option<BinaryOp>,
+    ) -> PResult<Expr> {
         let Some(op) = op_of(self.peek()) else {
             return Ok(left);
         };
@@ -1942,6 +1973,13 @@ impl<'t> Parser<'t> {
     fn compare(&mut self) -> PResult<Expr> {
         let start = self.start();
         let left = self.additive()?;
+        if self.compare_op().is_none() {
+            return Ok(left);
+        }
+        self.compare_rest(start, left)
+    }
+
+    fn compare_rest(&mut self, start: usize, left: Expr) -> PResult<Expr> {
         let Some((op, len)) = self.compare_op() else {
             return Ok(left);
         };
