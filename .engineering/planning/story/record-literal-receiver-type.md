@@ -6,7 +6,12 @@ status: active
 title: Effects of a method call read the receiver's inferred type
 relations:
 - informed_by: story:immutable-binding-e006
-revision: 3
+scope:
+- confidence: inferred
+  path: crates/ignite-check/src/lib.rs
+- confidence: inferred
+  path: crates/ignite-types/src
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 3}
