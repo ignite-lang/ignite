@@ -39,7 +39,7 @@ fn golden_reachable(roots: &[&str]) -> String {
 
 #[test]
 fn keeps_what_the_roots_name_and_what_that_names() {
-    let out = golden_reachable(&["fn main() { ignite_std::text::shout(&String::from(\"a\")); }"]);
+    let out = golden_reachable(&["fn main() { ::ignite_std::text::shout(&String::from(\"a\")); }"]);
     assert!(out.contains("pub fn shout("), "{out}");
     assert!(out.contains("pub fn SUFFIX()"), "{out}");
     assert!(!out.contains("Handler"), "{out}");
@@ -56,8 +56,8 @@ fn keeps_what_the_roots_name_and_what_that_names() {
 
 #[test]
 fn follows_roles_into_their_module_and_its_imports() {
-    let out = golden_reachable(&["ignite_std::protocol::line::Line::connect"]);
-    assert!(out.contains("pub struct Line;"), "{out}");
+    let out = golden_reachable(&["::ignite_std::protocol::line::Line::connect"]);
+    assert!(out.contains("pub struct Line {}"), "{out}");
     assert!(out.contains("pub fn pump("), "{out}");
     assert!(out.contains("use crate::text::Handler;"), "{out}");
     assert!(out.contains("pub struct Handler"), "{out}");
@@ -144,8 +144,8 @@ fn a_prepared_template_renders_independent_roots_and_substrates() {
         ..options()
     };
     let prepared = prepare_std_typed(&inputs, &options).unwrap();
-    let shout = ["ignite_std::text::shout"];
-    let line = ["ignite_std::protocol::line::Line::connect"];
+    let shout = ["::ignite_std::text::shout"];
+    let line = ["::ignite_std::protocol::line::Line::connect"];
     let first = prepared.generate_reachable(&options.substrate_path, &shout);
     let second = prepared.generate_reachable(Path::new("another-substrate"), &line);
     let again = prepared.generate_reachable(&options.substrate_path, &shout);

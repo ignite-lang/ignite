@@ -127,7 +127,7 @@ fn generate_tests_lays_a_program_out_by_its_module_path() {
     };
     assert!(
         main.source
-            .contains("&ignite_tests::fixtures::features::__ignite_test_"),
+            .contains("&::ignite_tests::fixtures::features::__ignite_test_"),
         "{}",
         main.source
     );

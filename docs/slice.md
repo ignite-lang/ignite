@@ -475,19 +475,19 @@ Every generated file starts with
 | `Bool` | `bool` |
 | `Unit` (type) | `()` |
 | `List<T>` | `Vec<T>` |
-| `Option<T>`, `Result<T, E>` | same |
-| `fn(A, B) -> R` | `std::sync::Arc<dyn Fn(A, B) -> R + Send + Sync>` (13.3) |
-| `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError` | `ignite_io::` same name |
+| `Option<T>`, `Result<T, E>` | `::std::option::Option<T>`, `::std::result::Result<T, E>`; the variants `Some`, `None`, `Ok`, `Err` bare |
+| `fn(A, B) -> R` | `::std::sync::Arc<dyn Fn(A, B) -> R + Send + Sync>` (13.3) |
+| `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError` | `::ignite_io::` same name |
 | record `type R { a: T }` | `#[derive(Clone, Debug)] pub struct R { pub a: T }` |
 | `enum E { A, B(T) }` | `#[derive(Clone, Debug)] pub enum E { A, B(T) }` |
 | `fn f(p: T) -> U` | `pub fn f(p: &T) -> U`, or `pub fn f(p: T) -> U` when `f` consumes `p` (parameters, below) |
 | `fn f(...) requires [...]` | `pub fn f(...)` |
 | `type R<A> {..}`, `enum E<A> {..}`, `fn f<A>(..)`, a role `fn serve<A>(..)` | `pub struct R<A: Clone + Send + Sync + 'static>` and so on: every type parameter carries these bounds (11.1) |
-| `Store<T>` | `ignite_io::Store<T>` |
-| `fn(p: A) -> R requires [p.*]` | `std::sync::Arc<dyn Fn(A) -> R + Send + Sync>` |
-| `protocol P { fn serve ... fn connect ... }` | `pub struct P;` and `impl P { pub fn serve ... pub fn connect ... }` |
+| `Store<T>` | `::ignite_io::Store<T>` |
+| `fn(p: A) -> R requires [p.*]` | `::std::sync::Arc<dyn Fn(A) -> R + Send + Sync>` |
+| `protocol P { fn serve ... fn connect ... }` | `pub struct P {}` (braced, so it names no value a binding could match) and `impl P { pub fn serve ... pub fn connect ... }` |
 | `P.serve(a, b)` | `P::serve(a, b)` |
-| `import std.a.b.{X, Y}` in a program | `use ignite_std::a::b::{X, Y};` |
+| `import std.a.b.{X, Y}` in a program | `use ::ignite_std::a::b::{X, Y};` |
 | `import std.a.b.{X, Y}` in a std module | `use crate::a::b::{X, Y};` |
 | `import std.net...`, `import std.io...` | nothing |
 | `let x = e` / `var x = e` | `let x = e;` / `let mut x = e;` |
@@ -497,11 +497,11 @@ Every generated file starts with
 | `Unit` (value) | `()` |
 | `E.V`, `V`, `E.V(x)` | `E::V`, `E::V(x)` |
 | `Some(x)`, `None`, `Ok(x)`, `Err(e)` | same |
-| `Data(b)`, `Eof` | `ignite_io::Input::Data(b)`, `ignite_io::Input::Eof` |
+| `Data(b)`, `Eof` | `::ignite_io::Input::Data(b)`, `::ignite_io::Input::Eof` |
 | `x.f` | `x.f` |
 | `e?` | `(e)?` |
 | `await e` | `(e)` |
-| `spawn f(a, b)` | `{ let __spawn_0 = a; let __spawn_1 = b; ignite_io::spawn(move || { if let Err(error) = f(__spawn_0, __spawn_1) { ignite_io::log(&format!("task ended with error: {}", error)); } }); }` |
+| `spawn f(a, b)` | `{ let __spawn_0 = a; let __spawn_1 = b; ::ignite_io::spawn(move || { if let Err(error) = f(__spawn_0, __spawn_1) { ::ignite_io::log(&format!("task ended with error: {}", error)); } }); }` |
 | `match e { p => v }` | `match e { p => v, }` |
 | `if c { a } else { b }` | same |
 | `while`, `loop`, `for x in e`, `break`, `continue`, `return` | same |
@@ -519,6 +519,13 @@ Every generated file starts with
 | `x.respond(a)`, fn field (`Callee::FieldFn`) | `(x.respond)(a)` |
 | `V` resolved by expected type | `E::V` from the callee the typer records |
 | patterns `true`, `p \| q`, `(p, q)` | same |
+
+Every generated path into the standard library, the substrate and the `ignite-std` crate
+starts at the extern crate (`::std::`, `::ignite_io::`, `::ignite_std::`), and the builtin enums
+are written `::std::option::Option` and `::std::result::Result`, so no program record, type
+parameter or sibling module (`std`, `ignite_io`, `ignite_std`, `Option`, `Result`) can shadow them.
+A program name that is a Rust primitive type (`i64`, `bool`, `u8`, `str`, …) gets a trailing `_`,
+as a prelude name does.
 
 The `spawn` arguments are evaluated (and cloned, ownership rule) before the task starts, so
 the spawning function keeps its own copies; an argument the moves analysis marks (dead after the
@@ -542,7 +549,7 @@ has no entry copy. A protocol role's parameters are `mut name: T` by value, cons
 (a generated `main` calls a role with owned values). Every other parameter is a reference
 `p: &T`, so a call copies nothing: an argument that is a place is passed as `&place`, a
 parameter that is itself a reference as it is, any other argument as `&(value)`; `l.at(i)`
-on a place `l` passes the element borrowed from the list, `ignite_io::checked::at(&l, i,
+on a place `l` passes the element borrowed from the list, `::ignite_io::checked::at(&l, i,
 <site>)`, unless another argument of the call changes `l`. Such a parameter of type `Int`,
 `Byte`, `Bool`, `Unit` or a fn type (an `Arc`, copied by a reference count) is copied once on entry: `let mut p = p.clone();`. An argument to a
 consumed parameter or to a role parameter is a value: a place that moves is emitted bare,
@@ -552,7 +559,7 @@ dereferenced as an operand of an operator, a condition or an index (`(*p)`), and
 where it is the result of a block, arm or branch. A fn of the module or an imported one used
 as a value is a closure in an `Arc` cast to the fn value type (13.3); it takes its arguments
 by value and passes each as its parameter is declared:
-`(std::sync::Arc::new(|__a0: i64| f(&__a0)) as std::sync::Arc<dyn Fn(i64) -> i64 + Send +
+`(::std::sync::Arc::new(|__a0: i64| f(&__a0)) as ::std::sync::Arc<dyn Fn(i64) -> i64 + Send +
 Sync>)`, and `step(__a0, &__a1)` for a `step` that consumes its first parameter. The calls
 the generator writes itself follow the same rule: `spawn f(a)` calls `f(&__spawn_0)`, or
 `f(__spawn_0)` when `f` consumes the parameter; a generated `main` calls `K.main(&value)`,
@@ -600,14 +607,14 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.concat(u)` | `format!("{}{}", t, u)` | |
 | `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | |
 | `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
-| `b.slice(i, j).to_text()` | `String::from_utf8_lossy(ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
+| `b.slice(i, j).to_text()` | `String::from_utf8_lossy(::ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
 | `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List |
 | `b.to_int()` | `(b as i64)` | Byte |
 | `i.to_byte()` | `u8::try_from(i).ok()` | Int |
-| `Int.parse(t)` | `ignite_io::parse_int(&t)`: decimal digits with an optional leading `-`, `None` for a leading `+` and for anything `str::parse::<i64>` rejects; the LLVM runtime's `int_parse` calls the same function | static |
-| `Int.parse(b.to_text())`, `Int.parse(b.slice(i, j).to_text())` | `ignite_io::parse_int(&b)`, `ignite_io::parse_int(ignite_io::checked::slice_ref(&b, i, j, <site>))`: no `Text` is built; bytes that are not UTF-8 give `None`, as their lossy text does. The LLVM target passes `b` (or the slice) to `int_parse` without `text_from_bytes_lossy` | static |
-| `s.next_id()`, `s.get(id)`, `s.put(id, v)`, `s.remove(id)`, `s.values()`, `s.update(id, f)`, `s.upsert(id, f)` | the same `ignite_io::Store` method | Store |
+| `Int.parse(t)` | `::ignite_io::parse_int(&t)`: decimal digits with an optional leading `-`, `None` for a leading `+` and for anything `str::parse::<i64>` rejects; the LLVM runtime's `int_parse` calls the same function | static |
+| `Int.parse(b.to_text())`, `Int.parse(b.slice(i, j).to_text())` | `::ignite_io::parse_int(&b)`, `::ignite_io::parse_int(::ignite_io::checked::slice_ref(&b, i, j, <site>))`: no `Text` is built; bytes that are not UTF-8 give `None`, as their lossy text does. The LLVM target passes `b` (or the slice) to `int_parse` without `text_from_bytes_lossy` | static |
+| `s.next_id()`, `s.get(id)`, `s.put(id, v)`, `s.remove(id)`, `s.values()`, `s.update(id, f)`, `s.upsert(id, f)` | the same `::ignite_io::Store` method | Store |
 | `s.set_idle_timeout(ms)` | `s.set_idle_timeout(ms)` | TcpStream |
 | `b.slice(i, j)` | `b[(i) as usize..(j) as usize].to_vec()` | |
 | `b.push(x)` | `b.push(x)` | Bytes, List |
@@ -620,7 +627,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `Bytes.of([])`, `b""` | `Vec::<u8>::new()` | static; an empty list has no element type to infer |
 | `List.empty()` | `Vec::new()` | static |
 | `Int.to_text(i)` | `i.to_string()` | static |
-| `log(t)` | `ignite_io::log(&t)` | free function, writes a line to stderr |
+| `log(t)` | `::ignite_io::log(&t)` | free function, writes a line to stderr |
 
 `rest_after_word` and `first_word` are not builtins: `std.console` defines both in Ignite, with
 the same whitespace rule (ASCII space, tab, CR, LF, FF, VT).
@@ -629,7 +636,7 @@ the same whitespace rule (ASCII space, tab, CR, LF, FF, VT).
 |---|---|
 | `const N: T = e` | `#[allow(non_snake_case)] pub fn N() -> T { e }` |
 | `N` (a constant, own or imported) in any expression | `N()` |
-| `IoError.new(m)` | `ignite_io::IoError::new(m)` |
+| `IoError.new(m)` | `::ignite_io::IoError::new(m)` |
 | `Enum.Variant(p)` pattern | `Enum::Variant(p)` |
 | `x.to_text()` on `Int`, `Byte`, `Bool` | `x.to_string()` |
 | `t.to_text()` on `Text` | `t.clone()` |
@@ -651,14 +658,14 @@ Any other method name is passed through unchanged (`x.m(a)` → `x.m(a)`), so su
 methods need no table entry. Substrate methods are written in Ignite with the same names as in
 Rust: `bind`, `accept`, `connect`, `read`, `write_all`, `close`, `local_port`. Substrate
 statics: `TcpListener.bind`, `TcpStream.connect`, `Stdin.read`, `Stdout.write_all` lower to
-`ignite_io::<Owner>::<name>(args)`.
+`::ignite_io::<Owner>::<name>(args)`.
 
-`Process.exit(c)` lowers to `ignite_io::exit((c) as i32)`, which returns `!`, so it has type
+`Process.exit(c)` lowers to `::ignite_io::exit((c) as i32)`, which returns `!`, so it has type
 Never in Rust as in Ignite and needs no `?`. `e?` where `e` has type Never lowers to `e`
 alone (without types: where `e` is a `Process.exit` call).
 
 A bare variant whose enum the module neither declares nor imports (resolved by expected type,
-section 4) lowers to the enum's path in `ignite-std`: `ignite_std::console::Action::Close` in a
+section 4) lowers to the enum's path in `ignite-std`: `::ignite_std::console::Action::Close` in a
 program, `crate::console::Action::Close` inside `ignite-std`, in expressions and patterns.
 
 ### 6.1 System lowering
@@ -689,41 +696,45 @@ section 6):
 
 ```rust
 // src/bin/terminald.rs
-use terminal::*;
-use ignite_std::protocol::telnet::TelnetServer;      // the program's imports are repeated here
+use ::terminal::*;
+use ::ignite_std::protocol::telnet::TelnetServer;      // the program's imports are repeated here
 fn main() {
-    std::process::exit(ignite_io::run(|| {
-        let port = ignite_io::args::port()?;
-        let ingress = ignite_io::TcpListener::bind(String::from("127.0.0.1"), port.unwrap_or(2323))?;
-        ignite_io::log(&format!("listening on 127.0.0.1:{}", ingress.local_port()));
-        let console = CommandConsole { prompt: String::from("terminal> "), commands: ConsoleCommands { respond: ... }, .. };
-        let server = TelnetServer { listener: ingress, application: console.clone(), executable: String::from("terminald"), .. };
-        TelnetServer__main(&server)
+    ::std::process::exit(::ignite_io::run(|| {
+        let __port = ::ignite_io::args::port()?;
+        let __res_ingress = ::ignite_io::TcpListener::bind(String::from("127.0.0.1"), __port.unwrap_or(2323))?;
+        ::ignite_io::log(&format!("listening on 127.0.0.1:{}", __res_ingress.local_port()));
+        let __res_console = CommandConsole { prompt: String::from("terminal> "), commands: ConsoleCommands { respond: ... }, .. };
+        let __res_server = TelnetServer { listener: __res_ingress, application: __res_console.clone(), executable: String::from("terminald"), .. };
+        TelnetServer__main(&__res_server)
     }))
 }
 
 // src/bin/tn.rs
 fn main() {
-    std::process::exit(ignite_io::run(|| {
-        let port = ignite_io::args::port()?;
-        let ingress_endpoint = Endpoint { address: String::from("127.0.0.1"), port: port.unwrap_or(2323) };
-        let client = TelnetClient { target: ingress_endpoint.clone(), executable: String::from("tn") };
-        TelnetClient__main(&client)
+    ::std::process::exit(::ignite_io::run(|| {
+        let __port = ::ignite_io::args::port()?;
+        let __endpoint_ingress = Endpoint { address: String::from("127.0.0.1"), port: __port.unwrap_or(2323) };
+        let __res_client = TelnetClient { target: __endpoint_ingress.clone(), executable: String::from("tn") };
+        TelnetClient__main(&__res_client)
     }))
 }
 ```
 
-In order: `ignite_io::run`; every `Store` resource the component (or an embedded component)
-uses, created first (`let s: ignite_io::Store<T> = ignite_io::Store::new();`); every
+In order: `::ignite_io::run`; every `Store` resource the component (or an embedded component)
+uses, created first (`let s: ::ignite_io::Store<T> = ::ignite_io::Store::new();`); every
 `TcpListener` resource it uses as a listener, bound and logged as `listening on
 <address>:<port>` (the first one takes the `--port` override; `--port 0` binds a free port
 and the line reports it); the `Endpoint` value of every `TcpListener` resource it names
 where an `Endpoint` is expected (section 14.5; `--port` applies to it too); the embedded
 components' values in dependency order; the component's own value with the kind's defaults
 for omitted fields, `executable` defaulting to the component name and a `Signal` output
-set to its reference text; then `K.main(value)`. A resource whose name is one of `main`'s
-own (`application`, `port`, `stream`, `error`) or ends in `_endpoint` gets a trailing `_`, so it
-is never the `<name>_endpoint` variable of another resource's `Endpoint` value.
+set to its reference text; then `K.main(value)`. Every local `main` binds is `__port`,
+`__res_<name>` (a resource or component) or `__endpoint_<name>` (an `Endpoint` value), with
+every `_` of the name written `_0`: each starts with `__` and never ends in `_`. The Rust name of
+a program item that contains `__` ends in `_`, and an associated fn symbol never starts with
+`__`, so no local of `main` is spelled like a fn a property calls. The program crate is named
+from the extern root (`use ::<crate>::*;`, `::<crate>::<module>::…`), so a program item named
+like the crate does not shadow it.
 
 Exit statuses (design section 11.7):
 
