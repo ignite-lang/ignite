@@ -683,7 +683,7 @@ fn checked_arithmetic_on_both_targets() {
     });
 }
 
-/// List element assignment, `List + List` and `Stderr` (`docs/slice.md`
+/// List and `Bytes` element assignment, `List + List` and `Stderr` (`docs/slice.md`
 /// 25.3 to 25.5) on both targets in dev and in release
 /// (`fixtures/tests/codespec_lists.ignite`): an assignment out of range
 /// fails with the report of an index out of range, and what a test wrote to
@@ -700,9 +700,12 @@ fn codespec_stderr_and_lists_on_both_targets() {
             assert_eq!(run.status, 1, "{label}: {}\n{}", run.stdout, run.stderr);
             let name = "fixtures.codespec_lists";
             for line in [
-                "test result: FAILED. 4 passed; 2 failed; 0 filtered out".to_string(),
+                "test result: FAILED. 5 passed; 3 failed; 0 filtered out".to_string(),
                 format!(
-                    "---- {name}/element assignment out of range fails as indexing does stderr ----\nerror: index failed at {file}:51:3: index 3 out of range for length 3\n"
+                    "---- {name}/element assignment out of range fails as indexing does stderr ----\nerror: index failed at {file}:52:3: index 3 out of range for length 3\n"
+                ),
+                format!(
+                    "---- {name}/Bytes element assignment out of range fails as indexing does stderr ----\nerror: index failed at {file}:98:3: index 2 out of range for length 2\n"
                 ),
                 format!("---- {name}/Stderr is a stream of its own stdout ----\nto out\n"),
                 format!("---- {name}/Stderr is a stream of its own stderr ----\nto err\n"),
