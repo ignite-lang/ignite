@@ -475,7 +475,9 @@ without waiting for a person.
   notes in the shape of `v0.12.0`'s: one bullet per merged PR, behaviour changes (a
   `CODEGEN_REVISION` bump means the first `ignite apply` rebuilds), what is not yet covered.
 - Announce: send the release's tag, URL and notes to the `brain` session (Claude session named
-  `brain`, `SendMessage`), asking it to forward the announcement to AI autodev.
+  `brain`, `SendMessage`), asking it to forward the announcement to AI autodev. Send the path of
+  a ready file, not the text: Slack mrkdwn (`<url|label>` links), every line at most 200
+  characters; `brain` posts it as is (asked by `brain`, 2026-11-07).
 
 ## Lifecycle ownership
 
