@@ -696,16 +696,16 @@ section 6):
 
 ```rust
 // src/bin/terminald.rs
-use terminal::*;
+use ::terminal::*;
 use ::ignite_std::protocol::telnet::TelnetServer;      // the program's imports are repeated here
 fn main() {
     ::std::process::exit(::ignite_io::run(|| {
         let __port = ::ignite_io::args::port()?;
-        let ingress = ::ignite_io::TcpListener::bind(String::from("127.0.0.1"), __port.unwrap_or(2323))?;
-        ::ignite_io::log(&format!("listening on 127.0.0.1:{}", ingress.local_port()));
-        let console = CommandConsole { prompt: String::from("terminal> "), commands: ConsoleCommands { respond: ... }, .. };
-        let server = TelnetServer { listener: ingress, application: console.clone(), executable: String::from("terminald"), .. };
-        TelnetServer__main(&server)
+        let __res_ingress = ::ignite_io::TcpListener::bind(String::from("127.0.0.1"), __port.unwrap_or(2323))?;
+        ::ignite_io::log(&format!("listening on 127.0.0.1:{}", __res_ingress.local_port()));
+        let __res_console = CommandConsole { prompt: String::from("terminal> "), commands: ConsoleCommands { respond: ... }, .. };
+        let __res_server = TelnetServer { listener: __res_ingress, application: __res_console.clone(), executable: String::from("terminald"), .. };
+        TelnetServer__main(&__res_server)
     }))
 }
 
@@ -714,8 +714,8 @@ fn main() {
     ::std::process::exit(::ignite_io::run(|| {
         let __port = ::ignite_io::args::port()?;
         let __endpoint_ingress = Endpoint { address: String::from("127.0.0.1"), port: __port.unwrap_or(2323) };
-        let client = TelnetClient { target: __endpoint_ingress.clone(), executable: String::from("tn") };
-        TelnetClient__main(&client)
+        let __res_client = TelnetClient { target: __endpoint_ingress.clone(), executable: String::from("tn") };
+        TelnetClient__main(&__res_client)
     }))
 }
 ```
@@ -728,12 +728,13 @@ and the line reports it); the `Endpoint` value of every `TcpListener` resource i
 where an `Endpoint` is expected (section 14.5; `--port` applies to it too); the embedded
 components' values in dependency order; the component's own value with the kind's defaults
 for omitted fields, `executable` defaulting to the component name and a `Signal` output
-set to its reference text; then `K.main(value)`. A resource or component is bound under its
-name as every program name is spelled in Rust (`ident`), so it is spelled like a program item
-only when both have one Ignite name. `main`'s own locals start with `__` and never end in `_`
-(`__port`, and `__endpoint_<name>` with every `_` of the resource name written `_0`); a program
-name with `__` in it ends in `_` in Rust and an associated fn symbol never starts with `__`, so
-neither is spelled like one of them, and no two resources share an endpoint variable.
+set to its reference text; then `K.main(value)`. Every local `main` binds is `__port`,
+`__res_<name>` (a resource or component) or `__endpoint_<name>` (an `Endpoint` value), with
+every `_` of the name written `_0`: each starts with `__` and never ends in `_`. The Rust name of
+a program item that contains `__` ends in `_`, and an associated fn symbol never starts with
+`__`, so no local of `main` is spelled like a fn a property calls. The program crate is named
+from the extern root (`use ::<crate>::*;`, `::<crate>::<module>::…`), so a program item named
+like the crate does not shadow it.
 
 Exit statuses (design section 11.7):
 

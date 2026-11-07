@@ -223,8 +223,8 @@ fn executable_components() {
     for expected in [
         "let __port = ::ignite_io::args::port()?;",
         "let __endpoint_ingress = Endpoint { address: String::from(\"127.0.0.1\"), port: __port.unwrap_or(2500) };",
-        "let client = Pinger { target: __endpoint_ingress.clone(), executable: String::from(\"pinger\") };",
-        "(&client) }))",
+        "let __res_client = Pinger { target: __endpoint_ingress.clone(), executable: String::from(\"pinger\") };",
+        "(&__res_client) }))",
     ] {
         assert!(
             pinger.contains(expected),
@@ -234,21 +234,21 @@ fn executable_components() {
     assert!(!pinger.contains("TcpListener::bind"), "{pinger}");
     let main = norm(&project.executables[0].source);
     for expected in [
-        "let seen: ::ignite_io::Store<String> = ::ignite_io::Store::new();",
+        "let __res_seen: ::ignite_io::Store<String> = ::ignite_io::Store::new();",
         "let __port = ::ignite_io::args::port()?;",
-        "let ingress = ::ignite_io::TcpListener::bind(String::from(\"127.0.0.1\"), __port.unwrap_or(2500))?;",
-        "::ignite_io::log(&format!(\"listening on 127.0.0.1:{}\", ingress.local_port()));",
-        "let banner = Banner {",
-        "let server = Greeter {",
+        "let __res_ingress = ::ignite_io::TcpListener::bind(String::from(\"127.0.0.1\"), __port.unwrap_or(2500))?;",
+        "::ignite_io::log(&format!(\"listening on 127.0.0.1:{}\", __res_ingress.local_port()));",
+        "let __res_banner = Banner {",
+        "let __res_server = Greeter {",
         "executable: String::from(\"greeterd\")",
-        "Greeter__main(server) }))",
+        "Greeter__main(__res_server) }))",
     ] {
         assert!(main.contains(expected), "missing `{expected}` in\n{main}");
     }
     let store = main.find("Store::new()").expect(&main);
     let bind = main.find("TcpListener::bind").expect(&main);
-    let banner = main.find("let banner").expect(&main);
-    let server = main.find("let server").expect(&main);
+    let banner = main.find("let __res_banner").expect(&main);
+    let server = main.find("let __res_server").expect(&main);
     assert!(store < bind && bind < banner && banner < server, "{main}");
 }
 
@@ -282,13 +282,13 @@ fn generics_stores_and_builtins() {
         assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
     }
     let store = main
-        .find("let counts: ::ignite_io::Store<i64> = ::ignite_io::Store::new();")
+        .find("let __res_counts: ::ignite_io::Store<i64> = ::ignite_io::Store::new();")
         .expect(&main);
     let bind = main.find("TcpListener::bind").expect(&main);
     let server = main
-        .find("let server = Server::<::ignite_io::Store<i64>> { listener: ingress.clone(), application: App { state: counts.clone(), handle: (::std::sync::Arc::new(|__a0: ::ignite_io::Store<i64>, __a1: String| respond(__a0, &__a1)) as ::std::sync::Arc<dyn Fn(::ignite_io::Store<i64>, String) -> String + Send + Sync>) }, executable: String::from(\"countersd\") };")
+        .find("let __res_server = Server::<::ignite_io::Store<i64>> { listener: __res_ingress.clone(), application: App { state: __res_counts.clone(), handle: (::std::sync::Arc::new(|__a0: ::ignite_io::Store<i64>, __a1: String| respond(__a0, &__a1)) as ::std::sync::Arc<dyn Fn(::ignite_io::Store<i64>, String) -> String + Send + Sync>) }, executable: String::from(\"countersd\") };")
         .expect(&main);
-    let call = main.find("Server__main(&server)").expect(&main);
+    let call = main.find("Server__main(&__res_server)").expect(&main);
     assert!(store < bind && bind < server && server < call, "{main}");
 }
 
@@ -483,10 +483,10 @@ fn listeners_are_bound_before_the_component_value() {
     let project = project.unwrap_or_else(|d| panic!("{d:?}"));
     let main = norm(&project.executables[0].source);
     let bind = main
-        .find("let port = ::ignite_io::TcpListener::bind(")
+        .find("let __res_port = ::ignite_io::TcpListener::bind(")
         .expect(&main);
     let value = main
-        .find("let c = Server { listener: port.clone(), port: bound(&(Holder { listener: port.clone() })) };")
+        .find("let __res_c = Server { listener: __res_port.clone(), port: bound(&(Holder { listener: __res_port.clone() })) };")
         .expect(&main);
     assert!(bind < value, "{main}");
 }
@@ -599,7 +599,7 @@ fn capabilities() {
         "::ignite_io::Directory::launch(\"workspace\", true, \"--root\")?",
         "::ignite_io::Launcher::with_maximum(4)",
         "::ignite_io::Entropy::open()?",
-        "let bench = Bench {",
+        "let __res_bench = Bench {",
     ];
     let mut at = 0;
     for expected in order {

@@ -233,7 +233,7 @@ impl Layout {
     }
 
     fn in_bin(&self, crate_name: &str) -> Package {
-        Package::new(&self.module, crate_name)
+        Package::new(&self.module, &format!("::{crate_name}"))
     }
 }
 
@@ -1123,7 +1123,7 @@ fn program_module(program: &Program, types: Option<&TypedProgram>) -> String {
 /// `crate_name` whose own module path is `program`.
 fn module_rust_path(crate_name: &str, program: &str, module: &str) -> String {
     if module == program {
-        return crate_name.to_string();
+        return format!("::{crate_name}");
     }
     let mut path = String::from("::ignite_std");
     for segment in module.split('.').skip(1) {
@@ -1218,7 +1218,7 @@ pub fn generate_tests(
         if !modules.contains(module) {
             return module_rust_path(&crate_name, "", module);
         }
-        let mut path = crate_name.clone();
+        let mut path = format!("::{crate_name}");
         for segment in module.split('.') {
             path.push_str("::");
             path.push_str(&ident(segment));
@@ -1478,7 +1478,7 @@ const RUST_PRIMITIVE_NAMES: &[&str] = &[
 /// A name that starts with `__` gets a `_` too, so every such name the
 /// program declares ends in `_` in Rust. The names the generator invents
 /// for its own locals and items (`__m`, `__x`, `__a0`, `__p1`,
-/// `__spawn_0`, `__ignite_*`, `main`'s `__port` and `__endpoint_*`) start
+/// `__spawn_0`, `__ignite_*`, `main`'s `__port`, `__res_*` and `__endpoint_*`) start
 /// with `__` and never end in `_`, so no
 /// program name can capture or duplicate one.
 ///
@@ -6383,13 +6383,16 @@ fn is_duplicate(properties: &[FieldInit], property: &FieldInit) -> bool {
         .is_some_and(|first| !std::ptr::eq(&properties[first], property))
 }
 
-/// The Rust variable of a resource or component in `main`: its [`ident`],
-/// the scheme every program name goes through, so a resource is spelled
-/// like a program item only when the two have one Ignite name. `main`'s
-/// own locals (`__port`, [`endpoint_variable`]) start with `__` and never
-/// end in `_`, which no [`ident`] is.
+/// The Rust variable of a resource or component in `main`: `__res_` and
+/// the name with every `_` written `_0`. Every local `main` binds
+/// (`__port`, this, [`endpoint_variable`]) starts with `__` and never ends
+/// in `_`, so it is never the Rust name of a program item ([`ident`] ends
+/// every name with `__` in `_`) nor an [`assoc_symbol`] (which never starts
+/// with `__`): a fn a property calls, also as `x.f()` with a resource `f`
+/// beside it, is not shadowed. The three prefixes differ, and the `_0`
+/// spelling is one to one, so no two locals share a name.
 fn resource_variable(name: &str) -> String {
-    ident(name)
+    format!("__res_{}", name.replace('_', "_0"))
 }
 
 /// The Rust variable holding the `Endpoint` value of a `TcpListener`
@@ -6439,7 +6442,7 @@ fn executable_main(
     };
     let mut head = Writer::new();
     head.raw(FILE_HEADER);
-    head.line(&format!("use {crate_name}::*;"));
+    head.line(&format!("use ::{crate_name}::*;"));
     let mut w = Writer::new();
     w.line("");
     w.open("fn main() {");
