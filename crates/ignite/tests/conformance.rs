@@ -927,7 +927,7 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
     const HEAD: &str = "test \"HEAD is answered as GET without content\" passed";
     const CHUNKED: &str = "test \"a chunked request body is decoded\" passed";
     const TRAILER: &str = "test \"trailer fields are checked and discarded and never merged into the header section\" passed";
-    const CLOSED: [(&str, &str, &str, &str); 27] = [
+    const CLOSED: [(&str, &str, &str, &str); 26] = [
         (
             "rfc9112",
             "R2_2_8",
@@ -1009,7 +1009,6 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
         ("rfc9112", "R7_1_2_2", "read_chunked", TRAILER),
         ("rfc9112", "R7_1_2_3", "read_chunked", TRAILER),
         ("rfc9110", "R6_5_1_2", "read_chunked", TRAILER),
-        ("rfc9110", "R6_2_5", "render_message", CHUNKED),
     ];
     let mut outputs = Vec::new();
     for target in ["rust", "llvm"] {
@@ -1019,6 +1018,7 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
         for (rfc, id, section, level) in [
             ("rfc9112", "R2_2_1", "2.2", "MUST"),
             ("rfc9110", "R6_6_1_2", "6.6.1", "MUST"),
+            ("rfc9110", "R6_2_5", "6.2", "MUST NOT"),
         ] {
             let row = columns(block(&stdout, rfc), id);
             assert_eq!(row.len(), 6, "{target}: {row:?}");
@@ -1048,7 +1048,7 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
         );
         assert!(
             stdout.contains(
-                "claim conformance of Http to rfc9110: no (1 gaps, 0 failures, 0 inconclusive)\n"
+                "claim conformance of Http to rfc9110: no (2 gaps, 0 failures, 0 inconclusive)\n"
             ),
             "{target}: {stdout}"
         );

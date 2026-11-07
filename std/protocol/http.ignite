@@ -115,6 +115,7 @@ protocol Http conforms [RFC9112, RFC9110] scope { parties = [Server, Sender, Rec
   not_applicable RFC9110.R5_6_4_1 "Http interprets no quoted-string: of a request it reads Connection, Content-Length and the coding names of Transfer-Encoding, a coding with parameters being refused, not interpreted; chunk extensions are ignored"
   not_applicable RFC9110.R5_6_7_1 "Http parses no timestamp"
   not_applicable RFC9110.R5_6_7_4 "Http parses no timestamp"
+  unsupported RFC9110.R6_2_5 "every response says HTTP/1.1 while RFC9112.R2_2_1, a MUST of that version, is unsupported"
   not_applicable RFC9110.R6_5_1_1 "Http generates no trailer field: a chunked response ends with an empty trailer section"
   not_applicable RFC9110.R6_5_2_1 "addresses the definition of trailer fields; Http defines none"
   unsupported RFC9110.R6_6_1_2 "no Date header is generated"
@@ -490,7 +491,7 @@ fn render(response: Response, keep_alive: Bool) -> Bytes satisfies [RFC9112.R2_2
 // `render`, or without the body when `with_body` is false, as the answer
 // to HEAD: the `Content-Length` is the one the body would have had (RFC
 // 9110 sections 8.6 and 9.3.2).
-fn render_message(response: Response, keep_alive: Bool, with_body: Bool) -> Bytes satisfies [RFC9110.R6_2_5] {
+fn render_message(response: Response, keep_alive: Bool, with_body: Bool) -> Bytes {
   let framing = if has_no_content(response.status) { NoBody } else { Length(inline_body(response).len()) }
   render_framed(response, framing, keep_alive, with_body)
 }
@@ -1943,7 +1944,7 @@ test fn chunked(chunks: Text) -> Bytes = "POST /c HTTP/1.1\r\nHost: h\r\nTransfe
 test fn chunked_request(body: Text) -> Request =
   Request { method = "POST", path = "/c", query = "", version = "HTTP/1.1", headers = [("host", "h"), ("transfer-encoding", "chunked")], body }
 
-test "a chunked request body is decoded" verifies [RFC9112.R6_1_1, RFC9112.R7_1_2, RFC9110.R6_2_5] {
+test "a chunked request body is decoded" verifies [RFC9112.R6_1_1, RFC9112.R7_1_2] {
   assert next_of(chunked("5\r\nhello\r\n6\r\n world\r\n0\r\n\r\nGET /"))? == Got(chunked_request("hello world"), b"GET /")
   assert next_of(chunked("A\r\n0123456789\r\na\r\nabcdefghij\r\n0000\r\n\r\n"))? == Got(chunked_request("0123456789abcdefghij"), Bytes.empty())
   assert next_of(chunked("0\r\n\r\n"))? == Got(chunked_request(""), Bytes.empty())
