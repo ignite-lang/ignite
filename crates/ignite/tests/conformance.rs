@@ -915,10 +915,13 @@ fn removing_a_satisfies_from_a_must_is_e090() {
 /// `http-rfc9112-9110-gaps`; one gap of each RFC stays, RFC 9112's octet head
 /// (section 2.2) and RFC 9110's Date (section 6.6.1). The rows that story
 /// closed are satisfied, each by its fn and a passing test that names it
-/// (19.22).
+/// (19.22); since story `http-server-responses` Http chunks a streamed
+/// response, and the rows that forbid it a `Transfer-Encoding` are satisfied by
+/// `streamed_framing` (19.23).
 #[test]
 fn http_matrix_lists_the_chunked_and_host_gaps() {
-    const TRANSFER_ENCODING: &str = "test \"an application Transfer-Encoding is 500 and Http applies no transfer coding\" passed";
+    const TRANSFER_ENCODING: &str = "test \"an application Transfer-Encoding is 500\" passed";
+    const CHUNKS: &str = "test \"Http chunks only an HTTP/1.1 response with content\" passed";
     const ABSOLUTE_FORM: &str =
         "test \"an absolute-form target is accepted and its authority replaces Host\" passed";
     const HEAD: &str = "test \"HEAD is answered as GET without content\" passed";
@@ -933,9 +936,9 @@ fn http_matrix_lists_the_chunked_and_host_gaps() {
         ),
         ("rfc9112", "R6_1_2", "checked", TRANSFER_ENCODING),
         ("rfc9112", "R6_1_4", "checked", TRANSFER_ENCODING),
-        ("rfc9112", "R6_1_7", "checked", TRANSFER_ENCODING),
-        ("rfc9112", "R6_1_8", "checked", TRANSFER_ENCODING),
-        ("rfc9112", "R6_1_11", "checked", TRANSFER_ENCODING),
+        ("rfc9112", "R6_1_7", "streamed_framing", CHUNKS),
+        ("rfc9112", "R6_1_8", "streamed_framing", CHUNKS),
+        ("rfc9112", "R6_1_11", "streamed_framing", CHUNKS),
         ("rfc9112", "R6_2_1", "checked", TRANSFER_ENCODING),
         (
             "rfc9110",

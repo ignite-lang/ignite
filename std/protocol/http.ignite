@@ -12,7 +12,8 @@ import std.control.{Machine, Supervisor}
 
 // HTTP/1.1 server (RFC 9112) over one byte stream (a `TcpStream`, or a
 // `PipeStream` in tests): requests with a `Content-Length` or a chunked
-// body, keep-alive until the client asks to close, and the limits of
+// body, responses with a text, binary or streamed body (`Content`),
+// keep-alive until the client asks to close, and the limits of
 // `HttpLimits`. By default a head over 8 KiB is answered 431 (414 when the
 // request line alone is over it), a body over 1 MiB 413, a malformed
 // request 400, an HTTP/1.1 request without `Host` or with a repeated or
@@ -54,18 +55,31 @@ type Request {
   body: Text
 }
 
+// One response. `content` says where its body is: `body` by default.
 type Response {
   status: Int
   headers: List<(Text, Text)> = []
   body: Text = ""
+  content: Content = Inline
 }
 
-// What a server runs: shared state, and the handler called once per
-// request with that state.
+// Where a response's body is (`docs/slice.md` 19.23): `Inline` is
+// `body`; `Binary` the bytes sent in place of `body`, both framed by
+// `Content-Length`; `Streamed` the pieces `HttpApp.piece` returns, sent as
+// they come (`send_streamed`).
+enum Content { Inline, Binary(Bytes), Streamed }
+
+// What a server runs: shared state, the handler called once per request
+// with that state, and `piece`, called with the state and the request
+// for the next piece of a `Streamed` body until it returns `Ok(None)`.
 type HttpApp<S> {
   state: S
   handle: fn(state: S, request: Request) -> Response requires [state.*]
+  piece: fn(state: S, request: Request) -> IoResult<Option<Bytes>> requires [state.*] = no_piece
 }
+
+// The default `piece`: every streamed body is empty.
+fn no_piece<S>(state: S, request: Request) -> IoResult<Option<Bytes>> = Ok(None)
 
 // The limits of a server's connections (`docs/slice.md` 18.5): the
 // longest head (request line and fields, else 431) and body (else 413),
@@ -101,7 +115,7 @@ protocol Http conforms [RFC9112, RFC9110] scope { parties = [Server, Sender, Rec
   not_applicable RFC9110.R5_6_4_1 "Http interprets no quoted-string: of a request it reads Connection, Content-Length and the coding names of Transfer-Encoding, a coding with parameters being refused, not interpreted; chunk extensions are ignored"
   not_applicable RFC9110.R5_6_7_1 "Http parses no timestamp"
   not_applicable RFC9110.R5_6_7_4 "Http parses no timestamp"
-  not_applicable RFC9110.R6_5_1_1 "a response framed by Content-Length has no trailer section"
+  not_applicable RFC9110.R6_5_1_1 "Http generates no trailer field: a chunked response ends with an empty trailer section"
   not_applicable RFC9110.R6_5_2_1 "addresses the definition of trailer fields; Http defines none"
   unsupported RFC9110.R6_6_1_2 "no Date header is generated"
   not_applicable RFC9110.R6_6_1_3 "applies to an origin server without a clock; the host has one, see RFC9110.R6_6_1_2"
@@ -176,18 +190,57 @@ test "a server refuses limits that admit no request" {
 
 // ---- responses ----------------------------------------------------------
 
+// The reason phrase of every status code RFC 9110 section 15 defines, and
+// of the four of RFC 6585; `Unknown` for any other.
 fn reason(status: Int) -> Text = match status {
+  100 => "Continue"
+  101 => "Switching Protocols"
   200 => "OK"
   201 => "Created"
+  202 => "Accepted"
+  203 => "Non-Authoritative Information"
   204 => "No Content"
+  205 => "Reset Content"
+  206 => "Partial Content"
+  300 => "Multiple Choices"
+  301 => "Moved Permanently"
+  302 => "Found"
+  303 => "See Other"
+  304 => "Not Modified"
+  305 => "Use Proxy"
+  307 => "Temporary Redirect"
+  308 => "Permanent Redirect"
   400 => "Bad Request"
+  401 => "Unauthorized"
+  402 => "Payment Required"
+  403 => "Forbidden"
   404 => "Not Found"
   405 => "Method Not Allowed"
+  406 => "Not Acceptable"
+  407 => "Proxy Authentication Required"
+  408 => "Request Timeout"
+  409 => "Conflict"
+  410 => "Gone"
+  411 => "Length Required"
+  412 => "Precondition Failed"
   413 => "Content Too Large"
   414 => "URI Too Long"
+  415 => "Unsupported Media Type"
+  416 => "Range Not Satisfiable"
+  417 => "Expectation Failed"
+  421 => "Misdirected Request"
+  422 => "Unprocessable Content"
+  426 => "Upgrade Required"
+  428 => "Precondition Required"
+  429 => "Too Many Requests"
   431 => "Request Header Fields Too Large"
   500 => "Internal Server Error"
   501 => "Not Implemented"
+  502 => "Bad Gateway"
+  503 => "Service Unavailable"
+  504 => "Gateway Timeout"
+  505 => "HTTP Version Not Supported"
+  511 => "Network Authentication Required"
   _ => "Unknown"
 }
 
@@ -198,6 +251,14 @@ fn Response.json(status: Int, value: Json) -> Response =
 // A plain-text response.
 fn Response.plain(status: Int, body: Text) -> Response =
   Response { status, headers = [("Content-Type", "text/plain; charset=utf-8")], body }
+
+// A binary response: `body` sent as it is, of type `content_type`.
+fn Response.bytes(status: Int, content_type: Text, body: Bytes) -> Response =
+  Response { status, headers = [("Content-Type", content_type)], content = Binary(body) }
+
+// A streamed response: its body is what `HttpApp.piece` returns.
+fn Response.streamed(status: Int, headers: List<(Text, Text)>) -> Response =
+  Response { status, headers, content = Streamed }
 
 // A response whose body is the reason phrase; 204 has no body.
 fn status_response(status: Int) -> Response =
@@ -344,9 +405,10 @@ fn is_imf_fixdate(value: Text) -> Bool {
 }
 
 // Whether the application may send field `name` (lower case) with
-// `value`. Http frames every response by its own `Content-Length` and
-// applies no transfer coding, so `Transfer-Encoding` and `Content-Length`
-// are its own (RFC 9112 sections 6.1 and 6.2; RFC 9110 section 5.3).
+// `value`. Http frames every response itself, by its own `Content-Length`
+// or, for a streamed body, its own chunked coding, so `Transfer-Encoding`
+// and `Content-Length` are its own (RFC 9112 sections 6.1 and 6.2; RFC
+// 9110 section 5.3).
 fn is_allowed_field(name: Text, value: Text) -> Bool {
   if name == "transfer-encoding" || name == "content-length" {
     return false
@@ -393,29 +455,134 @@ fn checked(response: Response) -> Response satisfies [
   response
 }
 
-// The head and body of `response`. A 204 has neither `Content-Length` nor
-// a body (RFC 9110 sections 8.6 and 15.3.5).
+// How the body of a response is delimited on the wire: by a
+// `Content-Length`, by the chunked coding, by closing the connection, or
+// not at all since the response has none.
+enum Framing { Length(Int), Chunks, UntilClose, NoBody }
+
+// The status line, the application's header fields, the field `framing`
+// needs and `Connection`, then the blank line.
+fn render_head(response: Response, framing: Framing, keep_alive: Bool) -> Bytes {
+  var head = "HTTP/1.1 {response.status} {reason(response.status)}\r\n"
+  for header in response.headers {
+    head = head + "{header.0}: {header.1}\r\n"
+  }
+  match framing {
+    Length(length) => {
+      head = head + "Content-Length: {length}\r\n"
+    }
+    Chunks => {
+      head = head + "Transfer-Encoding: chunked\r\n"
+    }
+    _ => {}
+  }
+  let connection = if keep_alive { "keep-alive" } else { "close" }
+  head = head + "Connection: {connection}\r\n\r\n"
+  head.to_bytes()
+}
+
+// The head and body of `response`, `body` or the bytes of `Binary`. A 204
+// has neither `Content-Length` nor a body (RFC 9110 sections 8.6 and
+// 15.3.5). A `Streamed` response is rendered as `Inline`: its pieces only
+// `Http.serve` sends.
 fn render(response: Response, keep_alive: Bool) -> Bytes satisfies [RFC9112.R2_2_3, RFC9112.R4_4] = render_message(response, keep_alive, true)
 
 // `render`, or without the body when `with_body` is false, as the answer
 // to HEAD: the `Content-Length` is the one the body would have had (RFC
 // 9110 sections 8.6 and 9.3.2).
 fn render_message(response: Response, keep_alive: Bool, with_body: Bool) -> Bytes satisfies [RFC9110.R6_2_5] {
-  var head = "HTTP/1.1 {response.status} {reason(response.status)}\r\n"
-  for header in response.headers {
-    head = head + "{header.0}: {header.1}\r\n"
+  if response.status == 204 {
+    return render_head(response, NoBody, keep_alive)
   }
-  let body = if response.status == 204 { "" } else { response.body }
-  if response.status != 204 {
-    head = head + "Content-Length: {body.len()}\r\n"
+  let body = match response.content {
+    Binary(bytes) => bytes
+    _ => response.body.to_bytes()
   }
-  let connection = if keep_alive { "keep-alive" } else { "close" }
-  head = head + "Connection: {connection}\r\n\r\n"
-  var out = head.to_bytes()
+  var out = render_head(response, Length(body.len()), keep_alive)
   if with_body {
-    out.append(body.to_bytes())
+    out.append(body)
   }
   out
+}
+
+// Whether a response with `status` has no content: 1xx, 204 and 304 (RFC
+// 9110 sections 15.2, 15.3.5 and 15.4.5).
+fn has_no_content(status: Int) -> Bool = status < 200 || status == 204 || status == 304
+
+// How a streamed response to `request` with `status` is framed: none for a
+// status without content; the chunked coding only for an HTTP/1.1 request,
+// and not for a 2xx answer to CONNECT, which ends by closing the
+// connection, as does every answer to HTTP/1.0 (RFC 9112 sections 6.1 and
+// 6.3).
+fn streamed_framing(request: Request, status: Int) -> Framing satisfies [RFC9112.R6_1_7, RFC9112.R6_1_8, RFC9112.R6_1_11] {
+  if has_no_content(status) {
+    return NoBody
+  }
+  if request.version != "HTTP/1.1" || request.method == "CONNECT" && status < 300 {
+    return UntilClose
+  }
+  Chunks
+}
+
+const HEX_DIGITS: Text = "0123456789abcdef"
+
+// `n` in lower-case hexadecimal, the chunk-size of RFC 9112 section 7.1.
+fn hex(n: Int) -> Text {
+  let digits = HEX_DIGITS.to_bytes()
+  var out = Bytes.empty()
+  var rest = n
+  loop {
+    out.push(digits.at(rest % 16))
+    rest = rest / 16
+    if rest == 0 {
+      break
+    }
+  }
+  var reversed = Bytes.empty()
+  var at = out.len()
+  while at > 0 {
+    at = at - 1
+    reversed.push(out.at(at))
+  }
+  reversed.to_text()
+}
+
+// `piece` as one chunk: its size in hexadecimal, CRLF, the piece, CRLF.
+fn chunk(piece: Bytes) -> Bytes {
+  var out = "{hex(piece.len())}\r\n".to_bytes()
+  out.append(piece)
+  out.append(b"\r\n")
+  out
+}
+
+// Sends the `Streamed` `response` to `request` (`asked` for the
+// application): the head at once, then each non-empty piece
+// `application.piece` returns as it comes, framed by `streamed_framing`;
+// with the chunked coding, applied once, the last chunk and an empty
+// trailer section follow. A response without content or to HEAD is the
+// head only and `piece` is not called. Whether the connection stays open:
+// not after a body that ends by closing it. An `Err` of `piece` is
+// returned before the last chunk, so the client sees the body incomplete.
+fn send_streamed<T: ByteStream, S>(stream: T, application: HttpApp<S>, request: Request, response: Response, keep_alive: Bool) -> IoResult<Bool> satisfies [RFC9112.R6_1_2] {
+  let framing = streamed_framing(request, response.status)
+  let keep = keep_alive && framing != UntilClose
+  stream.write_all(render_head(response, framing, keep))?
+  if framing == NoBody || request.method == "HEAD" {
+    return Ok(keep)
+  }
+  let asked_request = asked(request)
+  loop {
+    match application.piece(application.state, asked_request)? {
+      None => break
+      Some(piece) => if !piece.is_empty() {
+        stream.write_all(if framing == Chunks { chunk(piece) } else { piece })?
+      }
+    }
+  }
+  if framing == Chunks {
+    stream.write_all(b"0\r\n\r\n")?
+  }
+  Ok(keep)
 }
 
 test "responses carry their reason, type and body" {
@@ -453,7 +620,7 @@ test "a response header name that is not a token is 500" verifies [RFC9112.R2_2_
   assert checked_status([("X-Custom_1", "a")]) == 200
 }
 
-test "an application Transfer-Encoding is 500 and Http applies no transfer coding" verifies [
+test "an application Transfer-Encoding is 500" verifies [
   RFC9112.R6_1_2, RFC9112.R6_1_4, RFC9112.R6_1_7, RFC9112.R6_1_8, RFC9112.R6_1_11, RFC9112.R6_2_1
 ] {
   for value in ["chunked", "chunked, chunked", "gzip", "gzip, chunked", ""] {
@@ -1294,8 +1461,12 @@ fn session<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp
       RejectHead(status) => return reject(stream, limits, status, true)
       Got(request, rest) => {
         let response = checked(application.handle(application.state, asked(request)))
-        let keep = keep_alive(request) && !response_closes(response)
-        stream.write_all(render_message(response, keep, request.method != "HEAD"))?
+        var keep = keep_alive(request) && !response_closes(response)
+        if response.content == Streamed {
+          keep = send_streamed(stream, application, request, response, keep)?
+        } else {
+          stream.write_all(render_message(response, keep, request.method != "HEAD"))?
+        }
         if !keep {
           return Ok(())
         }
@@ -1395,9 +1566,14 @@ test "a malformed head or Content-Length is 400" verifies [RFC9112.R6_3_4, RFC91
 
 // Answers `<method> <path>?<query> <body>`; `/bad` gets a header with a
 // line break, `/close` the header `Connection: Upgrade, Close`, `/gzip`
-// the header `Transfer-Encoding: gzip`.
+// the header `Transfer-Encoding: gzip`, `/forbidden` 403, `/bytes` the
+// bytes 0 to 255.
 test fn answer(state: Unit, request: Request) -> Response = if request.path == "/bad" {
   Response { status = 200, headers = [("X", "a\r\nb")] }
+} else if request.path == "/forbidden" {
+  status_response(403)
+} else if request.path == "/bytes" {
+  Response.bytes(200, "application/octet-stream", every_byte())
 } else if request.path == "/gzip" {
   Response { status = 200, headers = [("Transfer-Encoding", "gzip")], body = "gzip" }
 } else if request.path == "/close" {
@@ -1783,4 +1959,142 @@ test "a Transfer-Encoding Http cannot frame is 400 and an unknown coding 501" ve
   assert served(b"POST / HTTP/1.0\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nGET /n HTTP/1.0\r\n\r\n")? == bad_request
   assert served(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\n\r\n")? == bad_request
   assert served(b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\n\r\n")? == render(status_response(501), false).to_text()
+}
+
+test "every status of RFC 9110 has its reason phrase" {
+  let phrases = [
+    (100, "Continue"), (101, "Switching Protocols"),
+    (200, "OK"), (201, "Created"), (202, "Accepted"), (203, "Non-Authoritative Information"), (204, "No Content"),
+    (205, "Reset Content"), (206, "Partial Content"),
+    (300, "Multiple Choices"), (301, "Moved Permanently"), (302, "Found"), (303, "See Other"), (304, "Not Modified"),
+    (305, "Use Proxy"), (307, "Temporary Redirect"), (308, "Permanent Redirect"),
+    (400, "Bad Request"), (401, "Unauthorized"), (402, "Payment Required"), (403, "Forbidden"), (404, "Not Found"),
+    (405, "Method Not Allowed"), (406, "Not Acceptable"), (407, "Proxy Authentication Required"), (408, "Request Timeout"),
+    (409, "Conflict"), (410, "Gone"), (411, "Length Required"), (412, "Precondition Failed"), (413, "Content Too Large"),
+    (414, "URI Too Long"), (415, "Unsupported Media Type"), (416, "Range Not Satisfiable"), (417, "Expectation Failed"),
+    (421, "Misdirected Request"), (422, "Unprocessable Content"), (426, "Upgrade Required"),
+    (500, "Internal Server Error"), (501, "Not Implemented"), (502, "Bad Gateway"), (503, "Service Unavailable"),
+    (504, "Gateway Timeout"), (505, "HTTP Version Not Supported")
+  ]
+  for (status, phrase) in phrases {
+    assert reason(status) == phrase, "the reason phrase of {status}"
+  }
+  assert reason(431) == "Request Header Fields Too Large"
+  assert reason(306) == "Unknown"
+  assert reason(418) == "Unknown"
+  assert status_line(served(b"GET /forbidden HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?) == "HTTP/1.1 403 Forbidden"
+}
+
+// The bytes 0 to 255 in order.
+test fn every_byte() -> Bytes {
+  var out = Bytes.empty()
+  var value = 0
+  while value < 256 {
+    match value.to_byte() {
+      Some(b) => out.push(b)
+      None => {}
+    }
+    value = value + 1
+  }
+  out
+}
+
+// Everything `client` reads until the end of the stream, as bytes.
+test fn read_bytes_to_end<T: ByteStream>(client: T) -> IoResult<Bytes> requires [client.read] {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test "a binary body is sent as its bytes" {
+  assert every_byte().len() == 256
+  let (client, server) = connected()?
+  spawn Http.serve(server, HttpLimits {}, HttpApp { state = (), handle = answer })
+  client.write_all(b"GET /bytes HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?
+  let out = read_bytes_to_end(client)?
+  var expected = b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: 256\r\nConnection: close\r\n\r\n"
+  expected.append(every_byte())
+  assert out == expected
+  let head = render_message(Response.bytes(200, "application/octet-stream", every_byte()), true, false).to_text()
+  assert head == "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: 256\r\nConnection: keep-alive\r\n\r\n"
+  assert render(Response { status = 204, content = Binary(b"x") }, true).to_text() == "HTTP/1.1 204 No Content\r\nConnection: keep-alive\r\n\r\n"
+}
+
+// Answers `/stream` with a body streamed from the pipe `state`, `/empty`
+// likewise with 204, `/continue` with 100, and every other path as
+// `answer`.
+test fn stream_answer(state: PipeStream, request: Request) -> Response = if request.path == "/stream" {
+  Response.streamed(200, [("Content-Type", "text/plain")])
+} else if request.path == "/empty" {
+  Response.streamed(204, [])
+} else if request.path == "/continue" {
+  Response.streamed(100, [])
+} else {
+  answer((), request)
+}
+
+// The next piece of a streamed body: what the test wrote to `state`, `None`
+// once the test closed it.
+test fn stream_piece(state: PipeStream, request: Request) -> IoResult<Option<Bytes>> requires [state.read] = match state.read(READ_SIZE)? {
+  Eof => Ok(None)
+  Data(bytes) => Ok(Some(bytes))
+}
+
+// Reads from `client` until it holds at least `length` bytes.
+test fn read_at_least<T: ByteStream>(client: T, length: Int) -> IoResult<Text> requires [client.read] {
+  var out = Bytes.empty()
+  while out.len() < length {
+    match client.read(4096)? {
+      Eof => return Ok(out.to_text())
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out.to_text())
+}
+
+// Everything `Http.serve` sends for `input` when the streamed body's pieces
+// are `pieces`, written before the request and the pipe then closed.
+test fn streamed_with(input: Bytes, pieces: Bytes) -> IoResult<Text> {
+  let (client, server) = connected()?
+  let (control, source) = connected()?
+  control.write_all(pieces)?
+  _ = control.close()
+  spawn Http.serve(server, HttpLimits {}, HttpApp { state = source, handle = stream_answer, piece = stream_piece })
+  client.write_all(input)?
+  read_to_end(client)
+}
+
+test "a streamed response is sent in chunks as its pieces come" {
+  let (client, server) = connected()?
+  let (control, source) = connected()?
+  spawn Http.serve(server, HttpLimits {}, HttpApp { state = source, handle = stream_answer, piece = stream_piece })
+  control.write_all(b"first")?
+  client.write_all(b"GET /stream HTTP/1.1\r\nHost: h\r\n\r\nGET /after HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?
+  let head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n"
+  let first = head + "5\r\nfirst\r\n"
+  assert read_at_least(client, first.len())? == first
+  control.write_all(b"second piece")?
+  _ = control.close()
+  assert read_to_end(client)? == "c\r\nsecond piece\r\n0\r\n\r\n" + reply("GET /after? ", "close")
+}
+
+test "Http chunks only an HTTP/1.1 response with content" verifies [RFC9112.R6_1_7, RFC9112.R6_1_8, RFC9112.R6_1_11] {
+  let close_delimited = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nabc"
+  assert streamed_with(b"GET /stream HTTP/1.0\r\n\r\n", b"abc")? == close_delimited
+  assert streamed_with(b"GET /stream HTTP/1.0\r\nConnection: keep-alive\r\n\r\nGET /n HTTP/1.0\r\n\r\n", b"abc")? == close_delimited
+  assert streamed_with(b"CONNECT /stream HTTP/1.1\r\nHost: h\r\n\r\n", b"abc")? == close_delimited
+  let after = reply("GET /n? ", "close")
+  let no_content = "HTTP/1.1 204 No Content\r\nConnection: keep-alive\r\n\r\n"
+  assert streamed_with(b"GET /empty HTTP/1.1\r\nHost: h\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", b"abc")? == no_content + after
+  let informational = "HTTP/1.1 100 Continue\r\nConnection: keep-alive\r\n\r\n"
+  assert streamed_with(b"GET /continue HTTP/1.1\r\nHost: h\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", b"abc")? == informational + after
+  let head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n"
+  assert streamed_with(b"HEAD /stream HTTP/1.1\r\nHost: h\r\n\r\nGET /n HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", b"abc")? == head + after
+  assert streamed_with(b"HEAD /stream HTTP/1.0\r\n\r\n", b"abc")? == "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n"
+  assert streamed_with(b"GET /stream HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", b"abc")? == "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n3\r\nabc\r\n0\r\n\r\n"
+  assert streamed_with(b"GET /stream HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", Bytes.empty())? == "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n0\r\n\r\n"
 }
