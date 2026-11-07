@@ -6,7 +6,52 @@ status: draft
 title: Http parses the head as octets and sends Date
 relations:
 - informed_by: story:http-rfc9112-9110-gaps
-revision: 1
+scope:
+- confidence: cited
+  path: STATUS.md
+- confidence: inferred
+  path: crates/ignite-check/src/lib.rs
+- confidence: inferred
+  path: crates/ignite-eval/src/eval.rs
+- confidence: inferred
+  path: crates/ignite-io/src/clock.rs
+- confidence: inferred
+  path: crates/ignite-llvm/src/lower.rs
+- confidence: inferred
+  path: crates/ignite-llvm/src/region.rs
+- confidence: inferred
+  path: crates/ignite-rt/src/clock.rs
+- confidence: inferred
+  path: crates/ignite-rt/src/lib.rs
+- confidence: inferred
+  path: crates/ignite-rustgen/src/lib.rs
+- confidence: inferred
+  path: crates/ignite-types/src/builtins.rs
+- confidence: cited
+  path: crates/ignite-types/src/lib.rs
+- confidence: inferred
+  path: crates/ignite-types/src/typer/effects.rs
+- confidence: cited
+  path: crates/ignite/src/apply/plan.rs
+- confidence: cited
+  path: crates/ignite/tests/conformance.rs
+- confidence: cited
+  path: crates/ignite/tests/fixtures/conformance/adversary_std_http.ignite
+- confidence: inferred
+  path: crates/ignite/tests/run.rs
+- confidence: inferred
+  path: crates/ignite/tests/static_link.rs
+- confidence: cited
+  path: docs/slice.md
+- confidence: inferred
+  path: examples/todo/health.ignite
+- confidence: inferred
+  path: site/book/src/reference/std/http.md
+- confidence: cited
+  path: std/protocol/http.ignite
+- confidence: inferred
+  path: std/time.ignite
+revision: 23
 ---
 # Story: http-octet-head-and-date
 

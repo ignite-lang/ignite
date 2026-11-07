@@ -1,11 +1,12 @@
-# Wave 1 of 2: apply-test-deadlines (2026-11-07)
+# Wave 1 of 6: apply-test-deadlines (2026-11-07)
+
+Plan: [plan-2026-11-07.md](plan-2026-11-07.md)
 
 ## Plan
 
 | wave | stories | objective | state |
 |---|---|---|---|
 | 1 | `story:apply-test-deadlines` | gates pass on the first run | dispatched |
-| 2 | `story:spawn-moves-adversary-findings`, `story:rustgen-reserved-names`, `story:http-chunked-adversary-findings`, `story:store-adversary-findings`, `story:store-api-gaps`, `story:text-case-one-allocation` (option A, inferred from the draft list; still draft) | the six drafts | not proposed |
 
 - Approval: `approval-record:wave-apply-test-deadlines-2026-11-07` (option B; "then dispatch first /aep:wave").
 - Check path: one story; scope typed by the coordinator from the story's test names (`crates/ignite/tests/<file>.rs` per harness name `<file>::<test>`, AGENTS.md).

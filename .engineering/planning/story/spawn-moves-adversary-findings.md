@@ -4,7 +4,28 @@ id: story:spawn-moves-adversary-findings
 kind: story
 status: draft
 title: Spawned ends close in branches on LLVM, named spawn args in order on Rust
-revision: 1
+scope:
+- confidence: cited
+  path: crates/ignite-llvm/src/lower.rs
+- confidence: inferred
+  path: crates/ignite-llvm/src/own.rs
+- confidence: cited
+  path: crates/ignite-rustgen/src/lib.rs
+- confidence: inferred
+  path: crates/ignite-types/src/moves.rs
+- confidence: cited
+  path: crates/ignite-types/tests/moves.rs
+- confidence: cited
+  path: crates/ignite/src/apply/plan.rs
+- confidence: cited
+  path: crates/ignite/tests/fixtures/streams/named_spawn.ignite
+- confidence: cited
+  path: crates/ignite/tests/fixtures/streams/nested_spawn.ignite
+- confidence: cited
+  path: crates/ignite/tests/stream_ownership.rs
+- confidence: inferred
+  path: docs/slice.md
+revision: 11
 ---
 # Story: spawn-moves-adversary-findings
 

@@ -4,7 +4,38 @@ id: story:text-case-one-allocation
 kind: story
 status: draft
 title: to_lower and to_upper allocate once; Bytes set guard tests
-revision: 1
+scope:
+- confidence: inferred
+  path: crates/ignite-llvm/src/ir.rs
+- confidence: cited
+  path: crates/ignite-llvm/src/lower.rs
+- confidence: inferred
+  path: crates/ignite-llvm/tests/golden
+- confidence: inferred
+  path: crates/ignite-rt/src/lib.rs
+- confidence: inferred
+  path: crates/ignite-rt/src/text.rs
+- confidence: cited
+  path: crates/ignite-rustgen/src/lib.rs
+- confidence: inferred
+  path: crates/ignite-rustgen/tests/golden
+- confidence: inferred
+  path: crates/ignite-types/src/lib.rs
+- confidence: inferred
+  path: crates/ignite-types/src/moves.rs
+- confidence: inferred
+  path: crates/ignite/src/apply/plan.rs
+- confidence: cited
+  path: crates/ignite/tests/fixtures/eval_equivalence.ignite
+- confidence: cited
+  path: crates/ignite/tests/fixtures/tests/bytes_set.ignite
+- confidence: cited
+  path: crates/ignite/tests/ignite_test.rs
+- confidence: inferred
+  path: docs/slice.md
+- confidence: inferred
+  path: std/text.ignite
+revision: 16
 ---
 # Story: text-case-one-allocation
 

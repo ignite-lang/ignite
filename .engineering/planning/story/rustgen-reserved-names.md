@@ -4,7 +4,24 @@ id: story:rustgen-reserved-names
 kind: story
 status: draft
 title: Program names that shadow Rust primitives, crate roots or generator locals still build
-revision: 1
+scope:
+- confidence: cited
+  path: crates/ignite-rustgen/src/lib.rs
+- confidence: inferred
+  path: crates/ignite-rustgen/tests/golden
+- confidence: inferred
+  path: crates/ignite-rustgen/tests/golden.rs
+- confidence: cited
+  path: crates/ignite-rustgen/tests/names.rs
+- confidence: inferred
+  path: crates/ignite-rustgen/tests/streams.rs
+- confidence: inferred
+  path: crates/ignite-rustgen/tests/units.rs
+- confidence: cited
+  path: crates/ignite/src/apply/plan.rs
+- confidence: inferred
+  path: docs/slice.md
+revision: 9
 ---
 # Story: rustgen-reserved-names
 

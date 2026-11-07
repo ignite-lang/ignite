@@ -4,7 +4,20 @@ id: story:http-chunked-adversary-findings
 kind: story
 status: draft
 title: 'Chunked decoder: tests that kill its mutants, memory bound and R6_2_5 claim'
-revision: 1
+scope:
+- confidence: cited
+  path: STATUS.md
+- confidence: cited
+  path: crates/ignite/tests/conformance.rs
+- confidence: inferred
+  path: crates/ignite/tests/golden/studio.model.json
+- confidence: inferred
+  path: crates/ignite/tests/golden/todo.model.json
+- confidence: cited
+  path: docs/slice.md
+- confidence: cited
+  path: std/protocol/http.ignite
+revision: 7
 ---
 # Story: http-chunked-adversary-findings
 

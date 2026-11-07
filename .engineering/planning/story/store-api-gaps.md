@@ -9,6 +9,8 @@ scope:
 - confidence: inferred
   path: crates/ignite-io/src
 - confidence: inferred
+  path: crates/ignite-io/src/store.rs
+- confidence: inferred
   path: crates/ignite-llvm/src
 - confidence: inferred
   path: crates/ignite-rt/src
@@ -16,7 +18,7 @@ scope:
   path: crates/ignite-rustgen/src
 - confidence: inferred
   path: crates/ignite-types/src
-revision: 8
+revision: 9
 ---
 # Story: store-api-gaps
 

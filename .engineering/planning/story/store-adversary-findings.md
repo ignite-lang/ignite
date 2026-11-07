@@ -4,7 +4,12 @@ id: story:store-adversary-findings
 kind: story
 status: draft
 title: 'Sharded Store: tests that catch its mutants, values under write load'
-revision: 1
+scope:
+- confidence: cited
+  path: crates/ignite-io/src/store.rs
+- confidence: inferred
+  path: docs/slice.md
+revision: 3
 ---
 # Story: store-adversary-findings
 
