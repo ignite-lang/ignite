@@ -139,6 +139,14 @@ fn bytes_set() -> (Bytes, Text) {
   (bs, word.to_text())
 }
 
+fn bytes_case_views() -> List<Text> {
+  let bytes = "ABCDEF".concat("G").to_bytes()
+  let low = bytes.slice(1, 4).to_text().to_lower()
+  let name = "Mi".concat("XeD")
+  let up = name.to_upper()
+  [low, bytes.to_text(), up, name, "ÀÉ€ßAz".to_lower(), "àé€ßaZ".to_upper(), "".to_lower()]
+}
+
 // Text
 
 fn text_ops() -> List<Text> = ["  pad ".trim(), "pre-fix".strip_prefix("pre-").unwrap_or("?"), "abc".concat("def"), "Hello".to_lower(), "x".repeat(3), "a-b".replace("-", "+")]
@@ -638,6 +646,7 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(bytes_text().debug())?
   show(bytes_literal().debug())?
   show(bytes_set().debug())?
+  show(bytes_case_views().debug())?
   show(text_ops().debug())?
   show(text_split().debug())?
   show(text_find().debug())?
